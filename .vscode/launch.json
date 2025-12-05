@@ -1,0 +1,69 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "启动后端服务 (Dev Core)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dev_core/src/index.js",
+      "cwd": "${workspaceFolder}/dev_core",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "restart": true,
+      "runtimeExecutable": "node",
+      "skipFiles": ["<node_internals>/**"],
+      "outputCapture": "std"
+    },
+    {
+      "name": "调试后端服务 (使用 nodemon)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/dev_core",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"],
+      "outputCapture": "std"
+    },
+    {
+      "name": "附加到后端进程",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "localRoot": "${workspaceFolder}/dev_core",
+      "remoteRoot": "${workspaceFolder}/dev_core",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "启动 IDE 前端 (pnpm dev)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm dev",
+      "cwd": "${workspaceFolder}/dev_ide"
+    },
+    {
+      "name": "启动数据中心前端 (pnpm dev)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm dev",
+      "cwd": "${workspaceFolder}/datacenter"
+    },
+    {
+      "name": "启动设计中心前端 (pnpm dev)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm dev",
+      "cwd": "${workspaceFolder}/designer"
+    }
+  ],
+  "compounds": []
+}

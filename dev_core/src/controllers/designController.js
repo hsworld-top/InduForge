@@ -1,0 +1,261 @@
+/**
+ * Design Controller - 设计中心控制器
+ * 处理设计页面的 HTTP 请求
+ * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5
+ */
+const designService = require('../services/designService');
+const { Project } = require('../models');
+const AppError = require('../utils/AppError');
+const ErrorCodes = require('../constants/errorCodes');
+
+/**
+ * 检查用户是否有权限访问指定工程
+ * @param {Object} req - Express 请求对象
+ * @param {string} projectId - 工程ID
+ */
+async function checkProjectAccess(req, projectId) {
+  // 超级管理员和系统管理员可以访问所有工程
+  if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'SYSTEM_ADMIN') {
+    return;
+  }
+
+  // 检查工程是否属于用户的租户
+  const project = await Project.findOne({
+    where: { id: projectId, tenantId: req.user.tenantId },
+  });
+
+  if (!project) {
+    throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+      message: '无权访问此工程',
+    });
+  }
+}
+
+/**
+ * 获取项目的页面列表
+ * GET /api/v1/projects/:projectId/design/pages
+ * Requirements: 7.1
+ */
+async function getPages(req, res, next) {
+  try {
+    const { projectId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const pages = await designService.getPages(projectId);
+
+    res.json({
+      success: true,
+      data: pages,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+
+/**
+ * 获取单个页面的完整 Schema
+ * GET /api/v1/projects/:projectId/design/pages/:pageId
+ * Requirements: 7.2
+ */
+async function getPage(req, res, next) {
+  try {
+    const { projectId, pageId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const page = await designService.getPage(pageId);
+
+    // 验证页面属于该工程
+    if (page.projectId !== projectId) {
+      throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+        message: '页面不属于此工程',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: page,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 创建新页面
+ * POST /api/v1/projects/:projectId/design/pages
+ * Requirements: 7.3
+ */
+async function createPage(req, res, next) {
+  try {
+    const { projectId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const { name, type, parentId } = req.body;
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: '页面名称不能为空',
+      });
+    }
+
+    const page = await designService.createPage(
+      projectId,
+      { name: name.trim(), type, parentId },
+      req.user.id
+    );
+
+    res.status(201).json({
+      success: true,
+      message: '页面创建成功',
+      data: page,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 更新页面 Schema
+ * PUT /api/v1/projects/:projectId/design/pages/:pageId
+ * Requirements: 7.4
+ */
+async function updatePage(req, res, next) {
+  try {
+    const { projectId, pageId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const { schema } = req.body;
+
+    if (!schema || typeof schema !== 'object') {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: 'Schema 不能为空',
+      });
+    }
+
+    // 先验证页面属于该工程
+    const existingPage = await designService.getPage(pageId);
+    if (existingPage.projectId !== projectId) {
+      throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+        message: '页面不属于此工程',
+      });
+    }
+
+    const page = await designService.updatePage(pageId, schema, req.user.id);
+
+    res.json({
+      success: true,
+      message: '页面更新成功',
+      data: page,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 删除页面
+ * DELETE /api/v1/projects/:projectId/design/pages/:pageId
+ * Requirements: 7.5
+ */
+async function deletePage(req, res, next) {
+  try {
+    const { projectId, pageId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    // 先验证页面属于该工程
+    const existingPage = await designService.getPage(pageId);
+    if (existingPage.projectId !== projectId) {
+      throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+        message: '页面不属于此工程',
+      });
+    }
+
+    await designService.deletePage(pageId);
+
+    res.json({
+      success: true,
+      message: '页面删除成功',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 重命名页面
+ * PATCH /api/v1/projects/:projectId/design/pages/:pageId/rename
+ */
+async function renamePage(req, res, next) {
+  try {
+    const { projectId, pageId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const { name } = req.body;
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: '页面名称不能为空',
+      });
+    }
+
+    // 先验证页面属于该工程
+    const existingPage = await designService.getPage(pageId);
+    if (existingPage.projectId !== projectId) {
+      throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+        message: '页面不属于此工程',
+      });
+    }
+
+    const page = await designService.renamePage(pageId, name.trim(), req.user.id);
+
+    res.json({
+      success: true,
+      message: '页面重命名成功',
+      data: page,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 移动页面
+ * PATCH /api/v1/projects/:projectId/design/pages/:pageId/move
+ */
+async function movePage(req, res, next) {
+  try {
+    const { projectId, pageId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const { parentId, sortOrder } = req.body;
+
+    // 先验证页面属于该工程
+    const existingPage = await designService.getPage(pageId);
+    if (existingPage.projectId !== projectId) {
+      throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+        message: '页面不属于此工程',
+      });
+    }
+
+    const page = await designService.movePage(pageId, { parentId, sortOrder }, req.user.id);
+
+    res.json({
+      success: true,
+      message: '页面移动成功',
+      data: page,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = {
+  getPages,
+  getPage,
+  createPage,
+  updatePage,
+  deletePage,
+  renamePage,
+  movePage,
+};

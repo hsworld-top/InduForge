@@ -1,0 +1,866 @@
+<template>
+  <div class="dashboard" :class="{ 'dashboard-maximized': isTabMaximized }">
+    <!-- 页面头部 -->
+    <div
+      v-if="!isTabMaximized"
+      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 px-6 py-2"
+    >
+      <div class="flex items-center justify-between">
+        <!-- Logo 图片 -->
+        <div class="flex items-center">
+          <img :src="tenantLogoUrl" :alt="currentTenant?.name || 'Logo'" class="h-6 w-auto mr-3" />
+          <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+            {{ currentTenant?.name || '多租户管理系统' }}
+          </h1>
+        </div>
+        <div class="flex items-center space-x-4">
+          <!-- 语言切换 -->
+          <div class="relative language-menu">
+            <button
+              @click="showLanguageMenu = !showLanguageMenu"
+              class="flex items-center space-x-2 p-2 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
+                />
+              </svg>
+              <span class="text-sm">{{ languageName }}</span>
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            <!-- 语言选择下拉菜单 -->
+            <div
+              v-if="showLanguageMenu"
+              class="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10"
+            >
+              <button
+                @click="changeLanguage('zh')"
+                :class="[
+                  'block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
+                  currentLanguage === 'zh'
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                    : 'text-gray-700 dark:text-gray-300',
+                ]"
+              >
+                中文
+              </button>
+              <button
+                @click="changeLanguage('en')"
+                :class="[
+                  'block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
+                  currentLanguage === 'en'
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                    : 'text-gray-700 dark:text-gray-300',
+                ]"
+              >
+                English
+              </button>
+            </div>
+          </div>
+
+          <!-- 主题切换 -->
+          <button
+            @click="toggleTheme"
+            class="p-2 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <svg
+              v-if="isDark"
+              class="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+              />
+            </svg>
+            <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+              />
+            </svg>
+          </button>
+
+          <!-- 用户菜单 -->
+          <div class="relative user-menu">
+            <button
+              @click="showUserMenu = !showUserMenu"
+              class="flex items-center space-x-2 p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <div
+                class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium"
+              >
+                {{ userInitials }}
+              </div>
+              <span class="text-sm">{{ username }}</span>
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            <!-- 下拉菜单 -->
+            <div
+              v-if="showUserMenu"
+              class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10"
+            >
+              <router-link
+                to="/profile"
+                class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                个人资料
+              </router-link>
+              <button
+                @click="handleLogout"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                登出
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 主要内容区域 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 左侧菜单栏 -->
+      <div
+        v-if="!isTabMaximized"
+        :class="[
+          'bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 flex flex-col',
+          sidebarCollapsed ? 'w-16' : 'w-48'
+        ]"
+      >
+        <div :class="[sidebarCollapsed ? 'p-2 flex-1 overflow-y-auto' : 'p-4 flex-1 overflow-y-auto']">
+          <nav class="space-y-2">
+            <button
+              v-if="isSystemAdmin"
+              @click="openTab('dashboard')"
+              :class="[
+                'w-full flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
+                activeTab === 'dashboard'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+              ]"
+            >
+              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"
+                />
+              </svg>
+              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">仪表盘</span>
+            </button>
+
+            <button
+              v-if="isSuperAdmin"
+              @click="openTab('tenant-management')"
+              :class="[
+                'w-full flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
+                activeTab === 'tenant-management'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+              ]"
+            >
+              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                />
+              </svg>
+              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">租户管理</span>
+            </button>
+
+            <button
+              v-if="isSuperAdmin || isSystemAdmin"
+              @click="openTab('user-management')"
+              :class="[
+                'w-full flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
+                activeTab === 'user-management'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+              ]"
+            >
+              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+                />
+              </svg>
+              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">用户管理</span>
+            </button>
+
+            <button
+              v-if="isSuperAdmin || isSystemAdmin || isProjectAdmin"
+              @click="openTab('project-management')"
+              :class="[
+                'w-full flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
+                activeTab === 'project-management'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+              ]"
+            >
+              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">工程管理</span>
+            </button>
+
+            <button
+              v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin"
+              @click="openTab('ops-management')"
+              :class="[
+                'w-full flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
+                activeTab === 'ops-management'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+              ]"
+            >
+              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
+              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">运维管理</span>
+            </button>
+
+            <button
+              v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin"
+              @click="openTab('system-logs')"
+              :class="[
+                'w-full flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
+                activeTab === 'system-logs'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+              ]"
+            >
+              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">系统日志</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- 折叠/展开按钮 -->
+        <div :class="[sidebarCollapsed ? 'p-2 border-t border-gray-200 dark:border-gray-700' : 'p-4 border-t border-gray-200 dark:border-gray-700']">
+          <div class="flex justify-start">
+            <button
+              @click="toggleSidebar"
+              :class="[
+                'p-1 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                sidebarCollapsed ? 'mx-auto' : ''
+              ]"
+            >
+              <svg
+                :class="['w-5 h-5 transition-transform duration-300', sidebarCollapsed ? 'rotate-180' : '']"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧标签页区域 -->
+      <div :class="['flex-1 overflow-hidden', isTabMaximized ? '' : 'pl-2']">
+        <div v-if="tabs.length > 0" class="h-full">
+          <!-- 最大化时的工具栏 -->
+          <div v-if="isTabMaximized" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ getCurrentTabTitle() }}</span>
+            </div>
+            <el-button size="small" circle @click="restoreTab">
+              <el-icon><FullScreen /></el-icon>
+            </el-button>
+          </div>
+          <el-tabs
+            v-model="activeTab"
+            type="card"
+            :closable="(tab) => tab.key !== 'dashboard'"
+            @tab-remove="closeTab"
+            :class="['dashboard-tabs h-full', isTabMaximized ? 'dashboard-tabs-maximized' : '']"
+          >
+            <el-tab-pane
+              v-for="tab in tabs"
+              :key="tab.key"
+              :name="tab.key"
+              :v-show="isTabVisible(tab.key)"
+            >
+              <template #label>
+                <div class="flex items-center space-x-2">
+                  <span>{{ tab.title }}</span>
+                  <el-button
+                    v-if="!isTabMaximized && tab.key !== 'dashboard'"
+                    size="small"
+                    text
+                    circle
+                    class="!p-0 !w-4 !h-4"
+                    @click.stop="maximizeTab(tab.key)"
+                  >
+                    <el-icon class="text-xs"><FullScreen /></el-icon>
+                  </el-button>
+                </div>
+              </template>
+              <div class="h-full overflow-hidden">
+                <component :is="tab.component" @open-tab="openTab" v-bind="tab.props" />
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
+import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { useAuthStore, useAppStore, useTenantStore } from '@/store'
+import { ElMessage, ElMessageBox } from 'element-plus'
+
+// 标签页组件懒加载，提升首次加载速度
+const DashboardContent = defineAsyncComponent(() => import('@/views/DashboardContent.vue'))
+const TenantManagement = defineAsyncComponent(() => import('@/views/admin/TenantManagement.vue'))
+const UserManagement = defineAsyncComponent(() => import('@/views/tenant/UserManagement.vue'))
+const ProjectManagement = defineAsyncComponent(() => import('@/views/tenant/ProjectManagement.vue'))
+const OpsManagement = defineAsyncComponent(() => import('@/views/tenant/OpsManagement.vue'))
+const SystemLogs = defineAsyncComponent(() => import('@/views/tenant/SystemLogs.vue'))
+
+// 导入默认Logo图片
+import defaultLogo from '@/assets/images/demo.png'
+
+export default {
+  name: 'Dashboard',
+  setup() {
+    const router = useRouter()
+    const { t, locale } = useI18n()
+    const authStore = useAuthStore()
+    const appStore = useAppStore()
+    const tenantStore = useTenantStore()
+
+    const showUserMenu = ref(false)
+    const showLanguageMenu = ref(false)
+
+    // 侧边栏折叠状态
+    const sidebarCollapsed = ref(false)
+
+    // 标签页状态
+    const tabs = ref([])
+    const activeTab = ref('')
+    const isTabMaximized = ref(false)
+
+    // 标签页配置
+    const tabConfigs = {
+      dashboard: {
+        title: '仪表盘',
+        component: DashboardContent,
+        icon: 'dashboard',
+      },
+      'tenant-management': {
+        title: '租户管理',
+        component: TenantManagement,
+        icon: 'building',
+      },
+      'user-management': {
+        title: '用户管理',
+        component: UserManagement,
+        icon: 'users',
+      },
+      'project-management': {
+        title: '工程管理',
+        component: ProjectManagement,
+        icon: 'folder',
+      },
+      'ops-management': {
+        title: '运维管理',
+        component: OpsManagement,
+        icon: 'cog',
+      },
+      'system-logs': {
+        title: '系统日志',
+        component: SystemLogs,
+        icon: 'clipboard',
+      },
+    }
+
+    const isDark = computed(() => appStore.isDark)
+    const username = computed(() => authStore.username)
+    const userInitials = computed(() => {
+      const name = username.value || 'U'
+      return name.charAt(0).toUpperCase()
+    })
+    const isAdmin = computed(() => authStore.isAdmin)
+    const isSuperAdmin = computed(() => authStore.userInfo?.role === 'SUPER_ADMIN')
+    const isSystemAdmin = computed(() => authStore.userInfo?.role === 'SYSTEM_ADMIN')
+    const isOpsAdmin = computed(() => authStore.userInfo?.role === 'OPS_ADMIN')
+    const isProjectAdmin = computed(() => authStore.userInfo?.role === 'PROJECT_ADMIN')
+
+    // 检查标签页是否可见
+    const isTabVisible = (tabKey) => {
+      switch (tabKey) {
+        case 'tenant-management':
+          return isSuperAdmin.value
+        case 'user-management':
+          return isSuperAdmin.value || isSystemAdmin.value
+        case 'project-management':
+          return isSuperAdmin.value || isSystemAdmin.value || isProjectAdmin.value
+        case 'ops-management':
+        case 'system-logs':
+          return isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value
+        case 'dashboard':
+        default:
+          return true
+      }
+    }
+
+    // 监听超级管理员状态变化，如果不是超级管理员且当前激活的是租户管理，切换到dashboard
+    watch(isSuperAdmin, (newVal) => {
+      if (!newVal && activeTab.value === 'tenant-management') {
+        activeTab.value = 'dashboard'
+      }
+    })
+
+    // 监听标签页变化，当打开数据中心或设计中心时自动折叠侧边栏
+    watch(() => activeTab.value, (newTabKey) => {
+      if (newTabKey && (newTabKey.startsWith('data-center-') || newTabKey.startsWith('design-center-'))) {
+        sidebarCollapsed.value = true
+      }
+    })
+
+    // 租户相关计算属性
+    const currentTenant = computed(() => tenantStore.currentTenant)
+    const tenantLogoUrl = computed(() => {
+      // 优先使用租户的logo，然后使用默认的demo.png
+      const tenantLogo = currentTenant.value?.logoUrl
+      if (tenantLogo) {
+        // 如果是完整URL，直接使用；如果是相对路径，拼接public路径
+        return tenantLogo.startsWith('http') ? tenantLogo : tenantLogo
+      }
+      return defaultLogo
+    })
+
+    const toggleTheme = () => {
+      appStore.setTheme(isDark.value ? 'light' : 'dark')
+    }
+
+    const changeLanguage = (lang) => {
+      locale.value = lang
+      appStore.setLanguage(lang)
+      showLanguageMenu.value = false
+    }
+
+    const currentLanguage = computed(() => appStore.language || 'zh')
+    const languageName = computed(() => {
+      return currentLanguage.value === 'zh' ? '中文' : 'English'
+    })
+
+    const handleLogout = async () => {
+      try {
+        await ElMessageBox.confirm('确定要登出吗？', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning',
+        })
+
+        authStore.logout()
+        router.push({ name: 'login' })
+      } catch {
+        // 用户取消操作
+      }
+    }
+
+    // 打开标签页
+    const openTab = (tabData) => {
+      console.log('Dashboard: openTab called with:', tabData)
+      console.log('Dashboard: tabData type:', typeof tabData)
+      console.log('Dashboard: tabData keys:', tabData && typeof tabData === 'object' ? Object.keys(tabData) : 'N/A')
+
+      // 支持两种调用方式：字符串key或对象
+      const isObject = typeof tabData === 'object'
+      const tabKey = isObject ? tabData.key : tabData
+      const customTitle = isObject ? tabData.title : null
+      const customComponent = isObject ? tabData.component : null
+      const customProps = isObject ? tabData.props : null
+
+      console.log('Dashboard: isObject:', isObject)
+      console.log('Dashboard: tabKey:', tabKey)
+      console.log('Dashboard: customComponent exists:', !!customComponent)
+
+      let config
+      if (isObject && customComponent) {
+        // 自定义标签页配置
+        // 如果组件是函数（可能是动态导入），使用 defineAsyncComponent 包装以确保正确处理
+        const component = typeof customComponent === 'function' 
+          ? defineAsyncComponent(customComponent)
+          : customComponent
+        config = {
+          title: customTitle,
+          component: component,
+          icon: tabData.icon || 'folder',
+        }
+        console.log('Dashboard: Custom tab config created:', config)
+        console.log('Dashboard: Component type:', typeof config.component)
+      } else {
+        // 标准标签页配置
+        config = tabConfigs[tabKey]
+        if (!config) {
+          console.warn('Dashboard: No config found for tab:', tabKey)
+          return
+        }
+      }
+
+      // 权限检查（仅对标准标签页）
+      if (!isObject) {
+        if (tabKey === 'tenant-management' && !isSuperAdmin.value) {
+          ElMessage.warning('只有超级管理员才能访问租户管理')
+          return
+        }
+
+        if (tabKey === 'user-management' && !(isSuperAdmin.value || isSystemAdmin.value)) {
+          ElMessage.warning('只有系统管理员才能访问用户管理')
+          return
+        }
+
+        if (
+          tabKey === 'project-management' &&
+          !(isSuperAdmin.value || isSystemAdmin.value || isProjectAdmin.value)
+        ) {
+          ElMessage.warning('您没有权限访问工程管理')
+          return
+        }
+
+        if (
+          (tabKey === 'ops-management' || tabKey === 'system-logs') &&
+          !(isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value)
+        ) {
+          ElMessage.warning('只有运维管理员才能访问系统功能')
+          return
+        }
+      }
+
+      // 检查标签页是否已存在
+      const existingTab = tabs.value.find((tab) => tab.key === tabKey)
+      if (existingTab) {
+        // 如果已存在，激活它
+        activeTab.value = tabKey
+        return
+      }
+
+      // 添加新标签页
+      const newTab = {
+        key: tabKey,
+        title: config.title,
+        component: config.component,
+        icon: config.icon,
+        props: customProps,
+      }
+
+      console.log('Dashboard: Adding new tab:', newTab)
+      console.log('Dashboard: Tab component:', newTab.component)
+      console.log('Dashboard: Tab props:', newTab.props)
+
+      tabs.value.push(newTab)
+      console.log('Dashboard: Tabs array after push:', tabs.value)
+
+      // 激活新标签页
+      activeTab.value = tabKey
+      console.log('Dashboard: Active tab set to:', activeTab.value)
+    }
+
+    // 关闭标签页
+    const closeTab = (tabKey) => {
+      const index = tabs.value.findIndex((tab) => tab.key === tabKey)
+      if (index === -1) return
+
+      tabs.value.splice(index, 1)
+
+      // 如果关闭的是当前激活的标签页，选择其他标签页
+      if (activeTab.value === tabKey) {
+        if (tabs.value.length > 0) {
+          // 优先选择有权限的标签页
+          let newTabKey = null
+          for (let i = tabs.value.length - 1; i >= 0; i--) {
+            if (isTabVisible(tabs.value[i].key)) {
+              newTabKey = tabs.value[i].key
+              break
+            }
+          }
+
+          // 如果没有找到有权限的标签页，则选择相邻的标签页（虽然可能没有权限）
+          if (!newTabKey) {
+            const newIndex = Math.min(index, tabs.value.length - 1)
+            newTabKey = tabs.value[newIndex].key
+          }
+
+          activeTab.value = newTabKey
+        } else {
+          // 如果没有标签页了，清空激活状态
+          activeTab.value = ''
+        }
+      }
+    }
+
+    // 点击外部关闭菜单
+    const handleClickOutside = (event) => {
+      const userMenu = event.target.closest('.user-menu')
+      const languageMenu = event.target.closest('.language-menu')
+
+      if (!userMenu) {
+        showUserMenu.value = false
+      }
+      if (!languageMenu) {
+        showLanguageMenu.value = false
+      }
+    }
+
+    onMounted(async () => {
+      // 添加全局点击事件监听
+      document.addEventListener('click', handleClickOutside)
+
+      // 根据用户角色决定默认打开的标签页
+      // 系统管理员和超级管理员默认打开仪表盘
+      // 其他用户默认打开他们有权限访问的功能
+      if (isSuperAdmin.value || isSystemAdmin.value) {
+        openTab('dashboard')
+      } else if (isProjectAdmin.value) {
+        openTab('project-management')
+      } else if (isOpsAdmin.value) {
+        openTab('system-logs')
+      } else {
+        // 如果没有任何权限，打开仪表盘（虽然看不到菜单，但至少有内容）
+        openTab('dashboard')
+      }
+
+      // 异步获取租户信息（如果用户属于某个租户），不阻塞页面渲染
+      if (authStore.userInfo?.tenantId) {
+        tenantStore.fetchTenants().then(() => {
+          // 设置当前租户
+          const userTenant = tenantStore.tenants.find((t) => t.id === authStore.userInfo.tenantId)
+          if (userTenant) {
+            tenantStore.setCurrentTenant(userTenant)
+          }
+        }).catch(error => {
+          console.error('Failed to fetch tenants:', error)
+        })
+      }
+    })
+
+    // 组件卸载时移除事件监听
+    const onUnmounted = () => {
+      document.removeEventListener('click', handleClickOutside)
+    }
+
+    // 切换侧边栏折叠状态
+    const toggleSidebar = () => {
+      sidebarCollapsed.value = !sidebarCollapsed.value
+    }
+
+    // 最大化标签页
+    const maximizeTab = (tabKey) => {
+      if (tabKey === 'dashboard') return
+      isTabMaximized.value = true
+      activeTab.value = tabKey
+    }
+
+    // 还原标签页
+    const restoreTab = () => {
+      isTabMaximized.value = false
+    }
+
+    // 获取当前标签页标题
+    const getCurrentTabTitle = () => {
+      const tab = tabs.value.find(t => t.key === activeTab.value)
+      return tab ? tab.title : ''
+    }
+
+    return {
+      showUserMenu,
+      showLanguageMenu,
+      sidebarCollapsed,
+      tabs,
+      activeTab,
+      isDark,
+      username,
+      userInitials,
+      isAdmin,
+      isSuperAdmin,
+      isSystemAdmin,
+      isOpsAdmin,
+      isProjectAdmin,
+      isTabVisible,
+      currentTenant,
+      tenantLogoUrl,
+      toggleTheme,
+      toggleSidebar,
+      changeLanguage,
+      currentLanguage,
+      languageName,
+      handleLogout,
+      openTab,
+      closeTab,
+      maximizeTab,
+      restoreTab,
+      getCurrentTabTitle,
+      isTabMaximized,
+      onUnmounted,
+    }
+  },
+}
+</script>
+
+<style scoped>
+.dashboard {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 标签页样式 */
+.dashboard-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  padding: 8px 8px 0 8px;
+}
+
+.dashboard-tabs :deep(.el-tabs__nav-wrap) {
+  margin-bottom: 0;
+}
+
+.dashboard-tabs :deep(.el-tabs__nav) {
+  border-radius: 6px;
+}
+
+.dashboard-tabs :deep(.el-tabs__item) {
+  border-radius: 4px 4px 0 0;
+  margin-right: 4px;
+  color: rgb(55 65 81);
+  padding: 8px 16px;
+  height: 36px;
+  line-height: 20px;
+  font-size: 13px;
+}
+
+.dashboard-tabs :deep(.el-tabs__item:hover) {
+  color: rgb(59 130 246);
+  background-color: rgb(239 246 255);
+}
+
+.dashboard-tabs :deep(.el-tabs__item.is-active) {
+  color: rgb(59 130 246);
+  background-color: rgb(239 246 255);
+  border-bottom-color: rgb(239 246 255);
+}
+
+.dashboard-tabs :deep(.dark .el-tabs__item) {
+  color: rgb(209 213 219);
+}
+
+.dashboard-tabs :deep(.dark .el-tabs__item:hover) {
+  color: rgb(96 165 250);
+  background-color: rgb(30 58 138 / 0.3);
+}
+
+.dashboard-tabs :deep(.dark .el-tabs__item.is-active) {
+  color: rgb(96 165 250);
+  background-color: rgb(30 58 138 / 0.3);
+  border-bottom-color: rgb(30 58 138 / 0.3);
+}
+
+.dashboard-tabs :deep(.el-tabs__content) {
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dashboard-tabs :deep(.el-tab-pane) {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 最大化状态下的样式 */
+.dashboard-maximized {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
+.dashboard-tabs-maximized :deep(.el-tabs__header) {
+  display: none;
+}
+
+.dashboard-tabs-maximized :deep(.el-tabs__content) {
+  height: 100%;
+}
+</style>
