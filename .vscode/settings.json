@@ -1,10 +1,10 @@
 {
-  "files.exclude": {
-    "**/node_modules": true,
-    "**/dist": true,
-    "**/.vite": true,
-    "**/pnpm-lock.yaml": false
-  },
+  // "files.exclude": {
+  //   "**/node_modules": true,
+  //   "**/dist": true,
+  //   "**/.vite": true,
+  //   "**/pnpm-lock.yaml": false
+  // },
   "search.exclude": {
     "**/node_modules": true,
     "**/dist": true,

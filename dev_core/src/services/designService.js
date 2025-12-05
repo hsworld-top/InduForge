@@ -3,55 +3,32 @@
  * 处理设计页面的 CRUD 操作
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6
  */
-const { DesignPage, Project, User } = require('../models');
+const { DesignPage, Project } = require('../models');
 const { validatePageSchema } = require('../dsl/validators');
 const AppError = require('../utils/AppError');
 const ErrorCodes = require('../constants/errorCodes');
 
 /**
- * 创建默认的 Page Schema
- * @param {string} pageId - 页面ID
- * @param {string} name - 页面名称
- * @returns {Object} 默认 Page Schema
+ * 设计服务类
+ * 提供页面管理的业务逻辑
  */
-function createDefaultPageSchema(pageId, name) {
-  return {
-    version: '2.0.0',
-    meta: {
-      id: pageId,
-      name: name,
-      screenshot: null,
-      lockedBy: null,
-      lockedAt: null,
-    },
-    config: {
-      width: 1920,
-      height: 1080,
-      scaleMode: 'fit',
-      backgroundColor: '#ffffff',
-      backgroundImage: null,
-      gridSize: 8,
-      snapToGrid: true,
-      theme: 'light',
-    },
-    variables: {},
-    dataSources: [],
-    components: [],
-    permissions: {
-      roles: [],
-      componentAcl: [],
-    },
-  };
-}
-
 class DesignService {
   /**
    * 获取项目的页面列表
    * Requirements: 7.1
-   * @param {string} projectId - 工程ID
-   * @returns {Promise<Array>} 页面列表 (id, name, type, parentId, sortOrder)
+   * @param {string} projectId - 项目ID
+   * @returns {Promise<Array>} 页面列表，包含 id, name, type, parentId
    */
   async getPages(projectId) {
+    // 验证项目是否存在
+    const project = await Project.findByPk(projectId);
+    if (!project) {
+      throw new AppError(ErrorCodes.PROJECT_NOT_FOUND, 404, {
+        resource: 'Project',
+        id: projectId,
+      });
+    }
+
     const pages = await DesignPage.findAll({
       where: { projectId },
       attributes: ['id', 'name', 'type', 'parentId', 'sortOrder', 'lockedBy', 'lockedAt', 'createdAt', 'updatedAt'],
@@ -60,84 +37,65 @@ class DesignService {
         ['sortOrder', 'ASC'],
         ['createdAt', 'ASC'],
       ],
-      include: [
-        {
-          model: User,
-          as: 'locker',
-          attributes: ['id', 'username', 'fullName'],
-          required: false,
-        },
-      ],
     });
 
     return pages;
   }
 
-
   /**
    * 获取单个页面的完整 Schema
    * Requirements: 7.2
    * @param {string} pageId - 页面ID
-   * @returns {Promise<Object>} 页面 Schema
+   * @returns {Promise<Object>} 完整的 Page Schema
    */
   async getPage(pageId) {
-    const page = await DesignPage.findByPk(pageId, {
-      include: [
-        {
-          model: User,
-          as: 'creator',
-          attributes: ['id', 'username', 'fullName'],
-        },
-        {
-          model: User,
-          as: 'updater',
-          attributes: ['id', 'username', 'fullName'],
-          required: false,
-        },
-        {
-          model: User,
-          as: 'locker',
-          attributes: ['id', 'username', 'fullName'],
-          required: false,
-        },
-      ],
-    });
-
+    const page = await DesignPage.findByPk(pageId);
+    
     if (!page) {
       throw new AppError(ErrorCodes.DESIGN_PAGE_NOT_FOUND, 404, {
-        message: '页面不存在',
-        pageId,
+        resource: 'DesignPage',
+        id: pageId,
       });
     }
 
-    return page;
+    return page.schemaContent;
   }
+
 
   /**
    * 创建新页面
    * Requirements: 7.3
-   * @param {string} projectId - 工程ID
-   * @param {Object} data - 页面数据 { name, type, parentId }
-   * @param {string} userId - 创建者ID
-   * @returns {Promise<Object>} 创建的页面
+   * @param {string} projectId - 项目ID
+   * @param {Object} data - 页面数据 { name, type, parentId, schemaContent }
+   * @param {string} userId - 创建者用户ID
+   * @returns {Promise<Object>} 创建的页面数据
    */
   async createPage(projectId, data, userId) {
-    const { name, type = 'page', parentId = null } = data;
+    const { name, type = 'page', parentId = null, schemaContent = null } = data;
 
-    // 验证父页面存在且为文件夹
+    // 验证项目是否存在
+    const project = await Project.findByPk(projectId);
+    if (!project) {
+      throw new AppError(ErrorCodes.PROJECT_NOT_FOUND, 404, {
+        resource: 'Project',
+        id: projectId,
+      });
+    }
+
+    // 如果指定了父页面，验证父页面是否存在且为文件夹
     if (parentId) {
-      const parent = await DesignPage.findOne({
+      const parentPage = await DesignPage.findOne({
         where: { id: parentId, projectId },
       });
-
-      if (!parent) {
+      
+      if (!parentPage) {
         throw new AppError(ErrorCodes.DESIGN_INVALID_PARENT, 400, {
           message: '父页面不存在',
           parentId,
         });
       }
-
-      if (parent.type !== 'folder') {
+      
+      if (parentPage.type !== 'folder') {
         throw new AppError(ErrorCodes.DESIGN_INVALID_PARENT, 400, {
           message: '父页面必须是文件夹类型',
           parentId,
@@ -145,11 +103,22 @@ class DesignService {
       }
     }
 
-    // 计算排序顺序
+    // 计算排序顺序（放在同级最后）
     const maxSortOrder = await DesignPage.max('sortOrder', {
       where: { projectId, parentId: parentId || null },
     });
     const sortOrder = (maxSortOrder || 0) + 1;
+
+    // 如果提供了 schemaContent，验证其格式
+    if (schemaContent && type === 'page') {
+      const validation = validatePageSchema(schemaContent);
+      if (!validation.valid) {
+        throw new AppError(ErrorCodes.DESIGN_SCHEMA_VALIDATION_FAILED, 400, {
+          message: 'Schema 验证失败',
+          errors: validation.errors,
+        });
+      }
+    }
 
     // 创建页面记录
     const page = await DesignPage.create({
@@ -157,53 +126,56 @@ class DesignService {
       parentId,
       name,
       type,
+      schemaContent: type === 'folder' ? null : schemaContent,
       sortOrder,
       createdBy: userId,
-      // 文件夹不需要 schema，页面和对话框需要默认 schema
-      schemaContent: type === 'folder' ? null : null, // schema 在创建后设置
+      updatedBy: userId,
     });
 
-    // 为非文件夹类型创建默认 schema
-    if (type !== 'folder') {
-      const defaultSchema = createDefaultPageSchema(page.id, name);
-      await page.update({ schemaContent: defaultSchema });
-    }
-
-    // 重新获取完整数据
-    return this.getPage(page.id);
+    return {
+      id: page.id,
+      projectId: page.projectId,
+      parentId: page.parentId,
+      name: page.name,
+      type: page.type,
+      sortOrder: page.sortOrder,
+      createdAt: page.createdAt,
+      updatedAt: page.updatedAt,
+    };
   }
+
 
   /**
    * 更新页面 Schema
    * Requirements: 7.4
    * @param {string} pageId - 页面ID
-   * @param {Object} schema - 新的 Page Schema
-   * @param {string} userId - 更新者ID
-   * @returns {Promise<Object>} 更新后的页面
+   * @param {Object} schema - 更新的 Page Schema
+   * @param {string} userId - 更新者用户ID
+   * @returns {Promise<void>}
    */
   async updatePage(pageId, schema, userId) {
     const page = await DesignPage.findByPk(pageId);
-
+    
     if (!page) {
       throw new AppError(ErrorCodes.DESIGN_PAGE_NOT_FOUND, 404, {
-        message: '页面不存在',
-        pageId,
+        resource: 'DesignPage',
+        id: pageId,
       });
     }
 
-    // 文件夹不能更新 schema
+    // 文件夹类型不能更新 schema
     if (page.type === 'folder') {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: '文件夹不支持 Schema 更新',
+        message: '文件夹类型不支持 Schema 更新',
       });
     }
 
-    // 验证 Schema
-    const validationResult = validatePageSchema(schema);
-    if (!validationResult.valid) {
+    // 验证 Schema 格式
+    const validation = validatePageSchema(schema);
+    if (!validation.valid) {
       throw new AppError(ErrorCodes.DESIGN_SCHEMA_VALIDATION_FAILED, 400, {
         message: 'Schema 验证失败',
-        errors: validationResult.errors,
+        errors: validation.errors,
       });
     }
 
@@ -212,8 +184,6 @@ class DesignService {
       schemaContent: schema,
       updatedBy: userId,
     });
-
-    return this.getPage(pageId);
   }
 
   /**
@@ -224,20 +194,21 @@ class DesignService {
    */
   async deletePage(pageId) {
     const page = await DesignPage.findByPk(pageId);
-
+    
     if (!page) {
       throw new AppError(ErrorCodes.DESIGN_PAGE_NOT_FOUND, 404, {
-        message: '页面不存在',
-        pageId,
+        resource: 'DesignPage',
+        id: pageId,
       });
     }
 
-    // 检查是否有子页面（文件夹保护）
+    // 如果是文件夹，检查是否有子页面
+    // Requirements: 7.6 - 文件夹删除保护
     if (page.type === 'folder') {
       const childCount = await DesignPage.count({
         where: { parentId: pageId },
       });
-
+      
       if (childCount > 0) {
         throw new AppError(ErrorCodes.DESIGN_FOLDER_NOT_EMPTY, 400, {
           message: '文件夹不为空，请先删除或移动子页面',
@@ -246,6 +217,7 @@ class DesignService {
       }
     }
 
+    // 删除页面
     await page.destroy();
   }
 
@@ -253,27 +225,26 @@ class DesignService {
    * 重命名页面
    * @param {string} pageId - 页面ID
    * @param {string} name - 新名称
-   * @param {string} userId - 更新者ID
-   * @returns {Promise<Object>} 更新后的页面
+   * @param {string} userId - 更新者用户ID
+   * @returns {Promise<void>}
    */
   async renamePage(pageId, name, userId) {
     const page = await DesignPage.findByPk(pageId);
-
+    
     if (!page) {
       throw new AppError(ErrorCodes.DESIGN_PAGE_NOT_FOUND, 404, {
-        message: '页面不存在',
-        pageId,
+        resource: 'DesignPage',
+        id: pageId,
       });
     }
 
-    // 更新页面名称
     await page.update({
       name,
       updatedBy: userId,
     });
 
-    // 如果有 schema，同步更新 meta.name
-    if (page.schemaContent && page.type !== 'folder') {
+    // 如果页面有 schemaContent，同步更新 meta.name
+    if (page.schemaContent && page.schemaContent.meta) {
       const updatedSchema = {
         ...page.schemaContent,
         meta: {
@@ -283,49 +254,72 @@ class DesignService {
       };
       await page.update({ schemaContent: updatedSchema });
     }
-
-    return this.getPage(pageId);
   }
 
   /**
-   * 移动页面（更改父级或排序）
+   * 获取页面详情（包含完整信息）
    * @param {string} pageId - 页面ID
-   * @param {Object} data - { parentId, sortOrder }
-   * @param {string} userId - 更新者ID
-   * @returns {Promise<Object>} 更新后的页面
+   * @returns {Promise<Object>} 页面完整信息
    */
-  async movePage(pageId, data, userId) {
-    const { parentId, sortOrder } = data;
-    const page = await DesignPage.findByPk(pageId);
-
+  async getPageDetail(pageId) {
+    const page = await DesignPage.findByPk(pageId, {
+      include: [
+        { association: 'creator', attributes: ['id', 'username'] },
+        { association: 'updater', attributes: ['id', 'username'] },
+        { association: 'locker', attributes: ['id', 'username'] },
+      ],
+    });
+    
     if (!page) {
       throw new AppError(ErrorCodes.DESIGN_PAGE_NOT_FOUND, 404, {
-        message: '页面不存在',
-        pageId,
+        resource: 'DesignPage',
+        id: pageId,
       });
     }
 
-    // 验证新父级
+    return page;
+  }
+
+  /**
+   * 移动页面
+   * @param {string} pageId - 页面ID
+   * @param {Object} data - 移动数据 { parentId, sortOrder }
+   * @param {string} userId - 更新者用户ID
+   * @returns {Promise<void>}
+   */
+  async movePage(pageId, data, userId) {
+    const { parentId, sortOrder } = data;
+    
+    const page = await DesignPage.findByPk(pageId);
+    
+    if (!page) {
+      throw new AppError(ErrorCodes.DESIGN_PAGE_NOT_FOUND, 404, {
+        resource: 'DesignPage',
+        id: pageId,
+      });
+    }
+
+    // 如果指定了新的父页面，验证父页面是否存在且为文件夹
     if (parentId !== undefined && parentId !== null) {
-      const parent = await DesignPage.findOne({
+      const parentPage = await DesignPage.findOne({
         where: { id: parentId, projectId: page.projectId },
       });
-
-      if (!parent) {
+      
+      if (!parentPage) {
         throw new AppError(ErrorCodes.DESIGN_INVALID_PARENT, 400, {
-          message: '目标父页面不存在',
+          message: '父页面不存在',
+          parentId,
+        });
+      }
+      
+      if (parentPage.type !== 'folder') {
+        throw new AppError(ErrorCodes.DESIGN_INVALID_PARENT, 400, {
+          message: '父页面必须是文件夹类型',
           parentId,
         });
       }
 
-      if (parent.type !== 'folder') {
-        throw new AppError(ErrorCodes.DESIGN_INVALID_PARENT, 400, {
-          message: '目标父页面必须是文件夹类型',
-          parentId,
-        });
-      }
-
-      // 防止循环引用
+      // 防止循环引用：不能将页面移动到自己或自己的子页面下
       if (parentId === pageId) {
         throw new AppError(ErrorCodes.DESIGN_INVALID_PARENT, 400, {
           message: '不能将页面移动到自身',
@@ -333,13 +327,17 @@ class DesignService {
       }
     }
 
-    const updates = { updatedBy: userId };
-    if (parentId !== undefined) updates.parentId = parentId;
-    if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+    const updateData = { updatedBy: userId };
+    
+    if (parentId !== undefined) {
+      updateData.parentId = parentId;
+    }
+    
+    if (sortOrder !== undefined) {
+      updateData.sortOrder = sortOrder;
+    }
 
-    await page.update(updates);
-
-    return this.getPage(pageId);
+    await page.update(updateData);
   }
 }
 
