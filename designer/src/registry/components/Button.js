@@ -8,8 +8,8 @@
 export default {
   type: 'Button',
   name: '按钮',
-  category: 'Basic',
-  icon: 'mouse',
+  category: 'basic',
+  icon: 'pointer',
   
   defaultProps: {
     text: '按钮',

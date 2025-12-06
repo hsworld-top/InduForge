@@ -6,3 +6,4 @@
 export { default as DesignCanvas } from './DesignCanvas.vue'
 export { default as CanvasComponent } from './CanvasComponent.vue'
 export { default as SelectionOverlay } from './SelectionOverlay.vue'
+export { default as CanvasRuler } from './CanvasRuler.vue'

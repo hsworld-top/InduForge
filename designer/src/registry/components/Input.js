@@ -8,8 +8,8 @@
 export default {
   type: 'Input',
   name: '输入框',
-  category: 'Form',
-  icon: 'edit',
+  category: 'form',
+  icon: 'edit-pen',
   
   defaultProps: {
     value: '',

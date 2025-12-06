@@ -24,3 +24,8 @@ pids                   # 进程ID文件目录
 *.pid                  # 进程ID文件
 *.seed                 # 随机种子文件
 *.pid.lock             # 进程ID锁文件（防止进程重复启动）
+
+
+
+.kiro
+.kiro/

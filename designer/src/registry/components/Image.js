@@ -8,7 +8,7 @@
 export default {
   type: 'Image',
   name: '图片',
-  category: 'Basic',
+  category: 'basic',
   icon: 'picture',
   
   defaultProps: {

@@ -8,7 +8,7 @@
 export default {
   type: 'Container',
   name: '容器',
-  category: 'Layout',
+  category: 'container',
   icon: 'folder',
   
   defaultProps: {

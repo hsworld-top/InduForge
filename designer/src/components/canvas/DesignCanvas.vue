@@ -93,22 +93,16 @@ const selectedComponent = computed(() => designStore.selectedComponent)
  */
 const canvasStyle = computed(() => {
   const config = pageConfig.value
-  if (!config) {
-    return {
-      width: '1920px',
-      height: '1080px',
-      backgroundColor: '#ffffff',
-      transform: `scale(${canvasState.scale})`,
-      transformOrigin: 'center center',
-    }
-  }
+  const width = config?.width || 1200
+  const height = config?.height || 800
+  const bgColor = config?.backgroundColor || '#ffffff'
   
   return {
-    width: `${config.width || 1920}px`,
-    height: `${config.height || 1080}px`,
-    backgroundColor: config.backgroundColor || '#ffffff',
+    width: `${width}px`,
+    height: `${height}px`,
+    backgroundColor: bgColor,
     transform: `scale(${canvasState.scale})`,
-    transformOrigin: 'center center',
+    transformOrigin: 'top left',
   }
 })
 
@@ -122,8 +116,8 @@ const gridStyle = computed(() => {
   return {
     backgroundSize: `${scaledGridSize}px ${scaledGridSize}px`,
     backgroundImage: `
-      linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px)
+      linear-gradient(to right, #e0e0e0 1px, transparent 1px),
+      linear-gradient(to bottom, #e0e0e0 1px, transparent 1px)
     `,
   }
 })
@@ -211,18 +205,21 @@ onUnmounted(() => {
 .design-canvas-viewport {
   width: 100%;
   height: 100%;
-  overflow: auto;
-  background-color: #f0f2f5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: visible;
+  background-color: transparent;
+  display: block;
   position: relative;
+  padding: 40px;
+  padding-top: 60px;
+  padding-left: 60px;
 }
 
 .design-canvas {
   position: relative;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: transform 0.1s ease-out;
+  background-color: #ffffff;
+  transform-origin: 0 0;
 }
 
 .canvas-grid {

@@ -1,43 +1,20 @@
 <template>
   <div
+    ref="targetRef"
     class="selection-overlay"
     :style="overlayStyle"
   >
-    <!-- 选择边框 - 可拖拽区域 -->
-    <div 
-      class="selection-border" 
-      @mousedown.stop="handleMouseDown"
-    />
-    
-    <!-- 调整大小手柄 -->
-    <!-- Requirements: 2.5 - 显示选中组件的调整手柄 -->
-    <div
-      v-for="handle in resizeHandles"
-      :key="handle.position"
-      class="resize-handle"
-      :class="`handle-${handle.position}`"
-      :style="handle.style"
-      @mousedown.stop="(e) => handleResizeStart(e, handle.position)"
-    />
-    
-    <!-- 组件信息提示 -->
-    <div class="component-info">
-      <span class="component-type">{{ component.type }}</span>
-      <span class="component-size">{{ Math.round(component.style?.width || 0) }} × {{ Math.round(component.style?.height || 0) }}</span>
-    </div>
+    <!-- Moveable 会自动添加控制手柄 -->
   </div>
 </template>
 
 <script setup>
 /**
- * SelectionOverlay - 选择覆盖层组件
- * 显示选中组件的边框和调整手柄
- * Requirements: 2.5, 3.4, 3.5
+ * SelectionOverlay - 选择覆盖层
+ * 使用 Moveable 库实现拖拽、缩放、旋转等功能
  */
-import { computed, onUnmounted } from 'vue'
-import { useDragDrop } from '@/composables/useDragDrop'
-import { useCanvas } from '@/composables/useCanvas'
-import { useDesignStore } from '@/store/design'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import Moveable from 'moveable'
 
 // Props
 const props = defineProps({
@@ -52,240 +29,154 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['drag', 'resize'])
+const emit = defineEmits(['drag', 'resize', 'rotate'])
 
-// Store
-const designStore = useDesignStore()
-
-// Composables
-const { canvasState, applySnapToGrid } = useCanvas()
-const {
-  isDragging,
-  isResizing,
-  startDrag,
-  startResize,
-  updateDrag,
-  endDrag,
-  getDragResult,
-  getResizeResult,
-} = useDragDrop({
-  gridSize: canvasState.gridSize,
-  snapEnabled: canvasState.snapToGrid,
-})
+// Refs
+const targetRef = ref(null)
+let moveableInstance = null
 
 // Computed
-
-/**
- * 覆盖层样式
- * Requirements: 2.5 - 显示选中组件的边框
- */
 const overlayStyle = computed(() => {
   const style = props.component.style || {}
-  
   return {
     position: 'absolute',
-    left: typeof style.left === 'number' ? `${style.left}px` : style.left || '0px',
-    top: typeof style.top === 'number' ? `${style.top}px` : style.top || '0px',
-    width: typeof style.width === 'number' ? `${style.width}px` : style.width || '100px',
-    height: typeof style.height === 'number' ? `${style.height}px` : style.height || '100px',
-    zIndex: 9999,
-    pointerEvents: 'auto',
+    left: `${style.left || 0}px`,
+    top: `${style.top || 0}px`,
+    width: `${style.width || 100}px`,
+    height: `${style.height || 100}px`,
+    pointerEvents: 'none',
   }
-})
-
-/**
- * 调整大小手柄配置
- */
-const resizeHandles = computed(() => {
-  const handleSize = 8
-  const halfSize = handleSize / 2
-  
-  return [
-    // 四角
-    { position: 'nw', style: { top: `-${halfSize}px`, left: `-${halfSize}px`, cursor: 'nw-resize' } },
-    { position: 'ne', style: { top: `-${halfSize}px`, right: `-${halfSize}px`, cursor: 'ne-resize' } },
-    { position: 'sw', style: { bottom: `-${halfSize}px`, left: `-${halfSize}px`, cursor: 'sw-resize' } },
-    { position: 'se', style: { bottom: `-${halfSize}px`, right: `-${halfSize}px`, cursor: 'se-resize' } },
-    // 四边中点
-    { position: 'n', style: { top: `-${halfSize}px`, left: '50%', transform: 'translateX(-50%)', cursor: 'n-resize' } },
-    { position: 's', style: { bottom: `-${halfSize}px`, left: '50%', transform: 'translateX(-50%)', cursor: 's-resize' } },
-    { position: 'w', style: { top: '50%', left: `-${halfSize}px`, transform: 'translateY(-50%)', cursor: 'w-resize' } },
-    { position: 'e', style: { top: '50%', right: `-${halfSize}px`, transform: 'translateY(-50%)', cursor: 'e-resize' } },
-  ]
 })
 
 // Methods
+function initMoveable() {
+  if (!targetRef.value) return
 
-/**
- * 处理鼠标按下（开始拖拽）
- * Requirements: 3.4 - 拖拽选中组件更新位置
- */
-function handleMouseDown(event) {
-  // 锁定的组件不能拖拽
-  if (props.component.locked) {
-    return
+  // 销毁旧实例
+  if (moveableInstance) {
+    moveableInstance.destroy()
   }
-  
-  const style = props.component.style || {}
-  startDrag(event, {
-    left: style.left || 0,
-    top: style.top || 0,
-    width: style.width || 100,
-    height: style.height || 100,
+
+  // 创建 Moveable 实例
+  moveableInstance = new Moveable(document.body, {
+    target: targetRef.value,
+    draggable: !props.component.locked,
+    resizable: !props.component.locked,
+    rotatable: false, // 暂时禁用旋转
+    snappable: true,
+    snapThreshold: 5,
+    isDisplaySnapDigit: true,
+    snapGap: true,
+    snapElement: true,
+    snapVertical: true,
+    snapHorizontal: true,
+    snapCenter: true,
+    bounds: { left: 0, top: 0, right: 0, bottom: 0, position: 'css' },
+    origin: false,
+    keepRatio: false,
+    edge: false,
+    throttleDrag: 0,
+    throttleResize: 0,
+    renderDirections: ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'],
   })
-  
-  // 添加全局事件监听
-  document.addEventListener('mousemove', handleMouseMove)
-  document.addEventListener('mouseup', handleMouseUp)
-}
 
-/**
- * 处理调整大小开始
- * Requirements: 3.5 - 调整大小更新尺寸
- */
-function handleResizeStart(event, handle) {
-  // 锁定的组件不能调整大小
-  if (props.component.locked) {
-    return
-  }
-  
-  const style = props.component.style || {}
-  startResize(event, {
-    left: style.left || 0,
-    top: style.top || 0,
-    width: style.width || 100,
-    height: style.height || 100,
-  }, handle)
-  
-  // 添加全局事件监听
-  document.addEventListener('mousemove', handleMouseMove)
-  document.addEventListener('mouseup', handleMouseUp)
-}
+  // 拖拽事件
+  moveableInstance.on('drag', ({ target, left, top, transform }) => {
+    target.style.left = `${left}px`
+    target.style.top = `${top}px`
+  })
 
-/**
- * 处理鼠标移动
- */
-function handleMouseMove(event) {
-  updateDrag(event)
-  
-  if (isDragging.value) {
-    // 实时更新位置（可选：用于显示预览）
-    const result = getDragResult(canvasState.snapToGrid)
+  moveableInstance.on('dragEnd', ({ target }) => {
+    const left = parseFloat(target.style.left)
+    const top = parseFloat(target.style.top)
     emit('drag', {
       componentId: props.component.id,
-      left: result.left,
-      top: result.top,
+      left: Math.round(left),
+      top: Math.round(top),
     })
-  } else if (isResizing.value) {
-    // 实时更新尺寸
-    const result = getResizeResult(canvasState.snapToGrid)
+  })
+
+  // 缩放事件
+  moveableInstance.on('resize', ({ target, width, height, drag }) => {
+    target.style.width = `${width}px`
+    target.style.height = `${height}px`
+    target.style.left = `${drag.left}px`
+    target.style.top = `${drag.top}px`
+  })
+
+  moveableInstance.on('resizeEnd', ({ target }) => {
+    const left = parseFloat(target.style.left)
+    const top = parseFloat(target.style.top)
+    const width = parseFloat(target.style.width)
+    const height = parseFloat(target.style.height)
+    
     emit('resize', {
       componentId: props.component.id,
-      left: result.left,
-      top: result.top,
-      width: result.width,
-      height: result.height,
+      left: Math.round(left),
+      top: Math.round(top),
+      width: Math.round(width),
+      height: Math.round(height),
     })
-  }
+  })
 }
 
-/**
- * 处理鼠标释放
- */
-function handleMouseUp() {
-  if (isDragging.value) {
-    const result = getDragResult(canvasState.snapToGrid)
-    emit('drag', {
-      componentId: props.component.id,
-      left: result.left,
-      top: result.top,
-    })
-  } else if (isResizing.value) {
-    const result = getResizeResult(canvasState.snapToGrid)
-    emit('resize', {
-      componentId: props.component.id,
-      left: result.left,
-      top: result.top,
-      width: result.width,
-      height: result.height,
-    })
+// Watchers
+watch(() => props.component, () => {
+  nextTick(() => {
+    initMoveable()
+  })
+}, { deep: true })
+
+watch(() => props.component.locked, (locked) => {
+  if (moveableInstance) {
+    moveableInstance.draggable = !locked
+    moveableInstance.resizable = !locked
   }
-  
-  endDrag()
-  
-  // 移除全局事件监听
-  document.removeEventListener('mousemove', handleMouseMove)
-  document.removeEventListener('mouseup', handleMouseUp)
-}
+})
 
 // Lifecycle
+onMounted(() => {
+  nextTick(() => {
+    initMoveable()
+  })
+})
+
 onUnmounted(() => {
-  // 确保清理事件监听
-  document.removeEventListener('mousemove', handleMouseMove)
-  document.removeEventListener('mouseup', handleMouseUp)
+  if (moveableInstance) {
+    moveableInstance.destroy()
+    moveableInstance = null
+  }
 })
 </script>
 
 <style scoped>
 .selection-overlay {
-  pointer-events: none;
+  box-sizing: border-box;
+  border: 2px solid #5e7ce0;
+  background-color: rgba(94, 124, 224, 0.05);
+  z-index: 1000;
 }
 
-.selection-border {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border: 2px solid #409eff;
-  pointer-events: auto;
-  cursor: move;
+/* Moveable 样式覆盖 */
+:deep(.moveable-control-box) {
+  --moveable-color: #5e7ce0;
 }
 
-.resize-handle {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background-color: #409eff;
-  border: 1px solid #ffffff;
-  border-radius: 1px;
-  pointer-events: auto;
+:deep(.moveable-line) {
+  background-color: #5e7ce0 !important;
 }
 
-.resize-handle:hover {
-  background-color: #66b1ff;
+:deep(.moveable-control) {
+  width: 8px !important;
+  height: 8px !important;
+  margin-top: -4px !important;
+  margin-left: -4px !important;
+  background-color: #fff !important;
+  border: 2px solid #5e7ce0 !important;
+  border-radius: 50% !important;
 }
 
-/* 手柄位置样式 */
-.handle-nw { cursor: nw-resize; }
-.handle-ne { cursor: ne-resize; }
-.handle-sw { cursor: sw-resize; }
-.handle-se { cursor: se-resize; }
-.handle-n { cursor: n-resize; }
-.handle-s { cursor: s-resize; }
-.handle-w { cursor: w-resize; }
-.handle-e { cursor: e-resize; }
-
-.component-info {
-  position: absolute;
-  top: -24px;
-  left: 0;
-  display: flex;
-  gap: 8px;
-  font-size: 11px;
-  color: #ffffff;
-  background-color: #409eff;
-  padding: 2px 6px;
-  border-radius: 2px;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.component-type {
-  font-weight: 500;
-}
-
-.component-size {
-  opacity: 0.8;
+:deep(.moveable-direction) {
+  background-color: #5e7ce0 !important;
 }
 </style>

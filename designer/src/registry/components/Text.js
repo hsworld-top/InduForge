@@ -8,7 +8,7 @@
 export default {
   type: 'Text',
   name: '文本',
-  category: 'Basic',
+  category: 'basic',
   icon: 'document',
   
   defaultProps: {

@@ -1,6 +1,6 @@
 <template>
   <div class="design-center">
-    <!-- 顶部工具栏 -->
+    <!-- 顶部工具栏 - 参考 OpenTiny 风格 -->
     <div class="design-toolbar">
       <div class="toolbar-left">
         <span class="project-name">{{ projectName }}</span>
@@ -11,15 +11,80 @@
         </el-tag>
       </div>
       <div class="toolbar-center">
-        <!-- 撤销/重做按钮 -->
+        <!-- 撤销/重做 -->
         <el-button-group>
           <el-tooltip content="撤销 (Ctrl+Z)" placement="bottom">
-            <el-button :icon="RefreshLeft" :disabled="!canUndo" @click="handleUndo" />
+            <el-button :icon="RefreshLeft" :disabled="!canUndo" size="small" @click="handleUndo" />
           </el-tooltip>
           <el-tooltip content="重做 (Ctrl+Y)" placement="bottom">
-            <el-button :icon="RefreshRight" :disabled="!canRedo" @click="handleRedo" />
+            <el-button :icon="RefreshRight" :disabled="!canRedo" size="small" @click="handleRedo" />
           </el-tooltip>
         </el-button-group>
+        
+        <el-divider direction="vertical" />
+        
+        <!-- 锁定/解锁 -->
+        <el-tooltip :content="isLocked ? '解锁画布' : '锁定画布'" placement="bottom">
+          <el-button 
+            :icon="isLocked ? Lock : Unlock" 
+            :type="isLocked ? 'warning' : ''" 
+            size="small" 
+            @click="isLocked = !isLocked"
+          />
+        </el-tooltip>
+        
+        <!-- 设备类型 -->
+        <el-button-group>
+          <el-tooltip content="桌面设备" placement="bottom">
+            <el-button 
+              :icon="Monitor" 
+              :type="deviceType === 'desktop' ? 'primary' : ''" 
+              size="small" 
+              @click="handleDeviceChange('desktop')"
+            />
+          </el-tooltip>
+          <el-tooltip content="移动设备" placement="bottom">
+            <el-button 
+              :icon="Iphone" 
+              :type="deviceType === 'mobile' ? 'primary' : ''" 
+              size="small" 
+              @click="handleDeviceChange('mobile')"
+            />
+          </el-tooltip>
+        </el-button-group>
+        
+        <!-- 方向切换 -->
+        <el-tooltip :content="orientation === 'portrait' ? '竖屏' : '横屏'" placement="bottom">
+          <el-button 
+            :icon="Rank" 
+            size="small" 
+            @click="toggleOrientation"
+          />
+        </el-tooltip>
+        
+        <el-divider direction="vertical" />
+        
+        <!-- 画布宽度显示 - 点击打开设置 -->
+        <el-tooltip content="点击设置画布" placement="bottom">
+          <div class="canvas-info" @click="showCanvasSettings = true">
+            <span class="canvas-width">{{ canvasWidth }}px</span>
+            <span class="canvas-scale">{{ Math.round(canvasScale * 100) }}%</span>
+          </div>
+        </el-tooltip>
+        
+        <el-divider direction="vertical" />
+        
+        <!-- 视图选项 -->
+        <el-tooltip content="显示/隐藏标尺" placement="bottom">
+          <el-button 
+            :icon="Grid" 
+            :type="showRuler ? 'primary' : ''" 
+            size="small" 
+            @click="showRuler = !showRuler"
+          >
+            标尺
+          </el-button>
+        </el-tooltip>
       </div>
       <div class="toolbar-right">
         <!-- 保存按钮 -->
@@ -28,6 +93,7 @@
           :icon="Check" 
           :loading="saving"
           :disabled="!isDirty"
+          size="small"
           @click="handleSave"
         >
           保存
@@ -38,48 +104,107 @@
     <!-- 主内容区域 -->
     <div class="design-main">
       <!-- 左侧面板 -->
-      <div class="left-panel">
+      <div class="left-panel" :style="{ width: leftPanelWidth + 'px' }">
         <el-tabs v-model="leftActiveTab" class="panel-tabs">
           <el-tab-pane label="页面" name="pages">
             <PageTree />
-          </el-tab-pane>
-          <el-tab-pane label="组件树" name="tree">
-            <ComponentTree />
           </el-tab-pane>
           <el-tab-pane label="组件库" name="library">
             <ComponentLibrary @drag-start="handleDragStart" @drag-end="handleDragEnd" />
           </el-tab-pane>
         </el-tabs>
+        <!-- 调整宽度的拖拽条 -->
+        <div class="resize-handle resize-handle-right" @mousedown="startResizeLeft"></div>
       </div>
 
       <!-- 中间画布区域 -->
       <div 
+        ref="canvasAreaRef"
         class="canvas-area"
+        :class="{ 'with-ruler': showRuler }"
         @dragover.prevent="handleDragOver"
         @drop="handleDrop"
+        @scroll="handleCanvasScroll"
       >
+        <!-- 标尺 -->
+        <CanvasRuler 
+          v-if="showRuler && currentPage"
+          :scale="canvasScale"
+          :scroll-left="canvasScrollLeft"
+          :scroll-top="canvasScrollTop"
+        />
+        
         <DesignCanvas v-if="currentPage" :show-grid="showGrid" />
         <div v-else class="canvas-empty">
           <el-empty description="请从左侧选择一个页面开始设计" />
         </div>
+        
+        <!-- 左下角缩放控制 -->
+        <div class="canvas-zoom-control" :style="{ left: zoomControlLeft + 'px' }">
+          <el-button-group size="small">
+            <el-tooltip content="缩小" placement="top">
+              <el-button :icon="ZoomOut" @click="handleZoomOut" />
+            </el-tooltip>
+            <el-button disabled>{{ Math.round(canvasScale * 100) }}%</el-button>
+            <el-tooltip content="放大" placement="top">
+              <el-button :icon="ZoomIn" @click="handleZoomIn" />
+            </el-tooltip>
+            <el-tooltip content="适应画布" placement="top">
+              <el-button :icon="FullScreen" @click="handleFitCanvas" />
+            </el-tooltip>
+          </el-button-group>
+        </div>
       </div>
 
-      <!-- 右侧属性面板 -->
-      <div class="right-panel">
-        <PropertyPanel />
+      <!-- 右侧面板 -->
+      <div class="right-panel" :style="{ width: rightPanelWidth + 'px' }">
+        <!-- 调整宽度的拖拽条 -->
+        <div class="resize-handle resize-handle-left" @mousedown="startResizeRight"></div>
+        <el-tabs v-model="rightActiveTab" class="panel-tabs">
+          <el-tab-pane label="组件树" name="tree">
+            <ComponentTree />
+          </el-tab-pane>
+          <el-tab-pane label="属性" name="properties">
+            <PropertyPanel />
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </div>
 
     <!-- 底部状态栏 -->
     <div class="design-statusbar">
       <span class="status-item">
-        缩放: {{ Math.round(canvasScale * 100) }}%
-      </span>
-      <el-divider direction="vertical" />
-      <span class="status-item">
         组件: {{ componentCount }}
       </span>
     </div>
+    
+    <!-- 画布设置对话框 -->
+    <el-dialog
+      v-model="showCanvasSettings"
+      title="画布设置"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="80px" label-position="left">
+        <el-form-item label="宽度">
+          <el-input v-model.number="canvasWidth" type="number" suffix-icon="px">
+            <template #append>px</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="缩放">
+          <el-input v-model.number="canvasScalePercent" type="number">
+            <template #append>%</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="自由布局">
+          <el-switch v-model="freeLayout" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCanvasSettings = false">取消</el-button>
+        <el-button type="primary" @click="handleCanvasSettingsConfirm">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -92,11 +217,24 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { RefreshLeft, RefreshRight, Check } from '@element-plus/icons-vue'
+import { 
+  RefreshLeft, 
+  RefreshRight, 
+  Check,
+  ZoomIn,
+  ZoomOut,
+  FullScreen,
+  Grid,
+  Lock,
+  Unlock,
+  Monitor,
+  Iphone,
+  Rank
+} from '@element-plus/icons-vue'
 import { useDesignStore } from '@/store/design'
 import { useCanvas } from '@/composables/useCanvas'
 import { PageTree, ComponentTree, ComponentLibrary, PropertyPanel } from '@/components/panels'
-import { DesignCanvas } from '@/components/canvas'
+import { DesignCanvas, CanvasRuler } from '@/components/canvas'
 import { registerBasicComponents } from '@/registry/components'
 
 // Route
@@ -110,8 +248,28 @@ const { canvasState } = useCanvas()
 
 // State
 const leftActiveTab = ref('pages')
+const rightActiveTab = ref('tree')
 const showGrid = ref(true)
+const showRuler = ref(true)
 const draggingComponent = ref(null)
+const canvasScrollLeft = ref(0)
+const canvasScrollTop = ref(0)
+const canvasAreaRef = ref(null)
+
+// 面板宽度
+const leftPanelWidth = ref(280)
+const rightPanelWidth = ref(300)
+const isResizingLeft = ref(false)
+const isResizingRight = ref(false)
+
+// 画布控制
+const isLocked = ref(false)
+const deviceType = ref('desktop')
+const orientation = ref('portrait')
+const canvasWidth = ref(1200)
+const showCanvasSettings = ref(false)
+const freeLayout = ref(true)
+const canvasScalePercent = ref(100)
 
 // 撤销/重做功能（预留）
 const canUndo = ref(false)
@@ -137,6 +295,10 @@ const componentCount = computed(() => {
     return count
   }
   return countComponents(designStore.components)
+})
+
+const zoomControlLeft = computed(() => {
+  return leftPanelWidth.value + 20
 })
 
 // Methods
@@ -187,6 +349,30 @@ function handleUndo() {
 function handleRedo() {
   // TODO: 实现重做功能
   ElMessage.info('重做功能开发中')
+}
+
+/**
+ * 缩小画布
+ */
+function handleZoomOut() {
+  const newScale = Math.max(0.1, canvasScale.value - 0.1)
+  canvasState.scale = newScale
+}
+
+/**
+ * 放大画布
+ */
+function handleZoomIn() {
+  const newScale = Math.min(2, canvasScale.value + 0.1)
+  canvasState.scale = newScale
+}
+
+/**
+ * 适应画布
+ */
+function handleFitCanvas() {
+  canvasState.scale = 1
+  ElMessage.success('已重置缩放')
 }
 
 /**
@@ -250,6 +436,89 @@ function handleDrop(event) {
 }
 
 /**
+ * 处理画布滚动
+ */
+function handleCanvasScroll(event) {
+  canvasScrollLeft.value = event.target.scrollLeft
+  canvasScrollTop.value = event.target.scrollTop
+}
+
+/**
+ * 开始调整左侧面板宽度
+ */
+function startResizeLeft(event) {
+  isResizingLeft.value = true
+  event.preventDefault()
+}
+
+/**
+ * 开始调整右侧面板宽度
+ */
+function startResizeRight(event) {
+  isResizingRight.value = true
+  event.preventDefault()
+}
+
+/**
+ * 处理鼠标移动（调整面板宽度）
+ */
+function handleMouseMove(event) {
+  if (isResizingLeft.value) {
+    const newWidth = event.clientX
+    if (newWidth >= 200 && newWidth <= 500) {
+      leftPanelWidth.value = newWidth
+    }
+  } else if (isResizingRight.value) {
+    const newWidth = window.innerWidth - event.clientX
+    if (newWidth >= 200 && newWidth <= 500) {
+      rightPanelWidth.value = newWidth
+    }
+  }
+}
+
+/**
+ * 停止调整面板宽度
+ */
+function stopResize() {
+  isResizingLeft.value = false
+  isResizingRight.value = false
+}
+
+/**
+ * 切换设备类型
+ */
+function handleDeviceChange(type) {
+  deviceType.value = type
+  if (type === 'desktop') {
+    canvasWidth.value = 1200
+    orientation.value = 'landscape'
+  } else {
+    canvasWidth.value = 375
+    orientation.value = 'portrait'
+  }
+}
+
+/**
+ * 切换方向
+ */
+function toggleOrientation() {
+  if (orientation.value === 'portrait') {
+    orientation.value = 'landscape'
+  } else {
+    orientation.value = 'portrait'
+  }
+}
+
+/**
+ * 确认画布设置
+ */
+function handleCanvasSettingsConfirm() {
+  canvasState.scale = canvasScalePercent.value / 100
+  showCanvasSettings.value = false
+  ElMessage.success('画布设置已更新')
+}
+
+/**
  * 处理键盘快捷键
  */
 function handleKeydown(event) {
@@ -285,19 +554,24 @@ function handleKeydown(event) {
 
 // Lifecycle
 onMounted(() => {
-  // 注册基础组件
-  registerBasicComponents()
-  
   // 加载项目
   loadProject()
   
   // 添加键盘事件监听
   window.addEventListener('keydown', handleKeydown)
+  
+  // 添加鼠标事件监听（用于调整面板宽度）
+  window.addEventListener('mousemove', handleMouseMove)
+  window.addEventListener('mouseup', stopResize)
 })
 
 onUnmounted(() => {
   // 移除键盘事件监听
   window.removeEventListener('keydown', handleKeydown)
+  
+  // 移除鼠标事件监听
+  window.removeEventListener('mousemove', handleMouseMove)
+  window.removeEventListener('mouseup', stopResize)
   
   // 重置 store
   designStore.reset()
@@ -308,6 +582,11 @@ watch(() => route.query.pid || route.query.id, (newPid) => {
   if (newPid) {
     loadProject()
   }
+})
+
+// 同步缩放百分比
+watch(() => canvasState.scale, (newScale) => {
+  canvasScalePercent.value = Math.round(newScale * 100)
 })
 </script>
 
@@ -322,33 +601,35 @@ watch(() => route.query.pid || route.query.id, (newPid) => {
   overflow: hidden;
 }
 
-/* 顶部工具栏 */
+/* 顶部工具栏 - 参考 OpenTiny 风格 */
 .design-toolbar {
-  height: 48px;
+  height: 56px;
   background-color: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid #dcdfe6;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  flex: 1;
 }
 
 .project-name {
   font-size: 14px;
-  font-weight: 500;
-  color: #303133;
+  font-weight: 600;
+  color: #252b3a;
 }
 
 .page-name {
-  font-size: 14px;
-  color: #606266;
+  font-size: 13px;
+  color: #575d6c;
 }
 
 .dirty-tag {
@@ -359,12 +640,41 @@ watch(() => route.query.pid || route.query.id, (newPid) => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 2;
+  justify-content: center;
+}
+
+.canvas-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.canvas-info:hover {
+  background-color: #f5f7fa;
+}
+
+.canvas-width {
+  font-size: 14px;
+  color: #575d6c;
+  font-weight: 500;
+}
+
+.canvas-scale {
+  font-size: 13px;
+  color: #909399;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  flex: 1;
+  justify-content: flex-end;
 }
 
 /* 主内容区域 */
@@ -376,12 +686,14 @@ watch(() => route.query.pid || route.query.id, (newPid) => {
 
 /* 左侧面板 */
 .left-panel {
-  width: 280px;
+  min-width: 200px;
+  max-width: 500px;
   background-color: #fff;
   border-right: 1px solid #e4e7ed;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: relative;
 }
 
 .panel-tabs {
@@ -410,9 +722,17 @@ watch(() => route.query.pid || route.query.id, (newPid) => {
 /* 中间画布区域 */
 .canvas-area {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   position: relative;
-  background-color: #f0f2f5;
+  background-color: #f5f5f5;
+  background-image: 
+    linear-gradient(to right, #e0e0e0 1px, transparent 1px),
+    linear-gradient(to bottom, #e0e0e0 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+.canvas-area.with-ruler {
+  /* 标尺会覆盖在画布上，不需要 padding */
 }
 
 .canvas-empty {
@@ -423,13 +743,58 @@ watch(() => route.query.pid || route.query.id, (newPid) => {
   justify-content: center;
 }
 
-/* 右侧属性面板 */
+/* 左下角缩放控制 */
+.canvas-zoom-control {
+  position: fixed;
+  bottom: 40px;
+  z-index: 100;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  transition: left 0.1s;
+}
+
+.canvas-zoom-control :deep(.el-button-group) {
+  display: flex;
+}
+
+.canvas-zoom-control :deep(.el-button[disabled]) {
+  color: #575d6c;
+  background-color: #fff;
+  border-color: #dcdfe6;
+  cursor: default;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+/* 右侧面板 */
 .right-panel {
-  width: 300px;
+  min-width: 200px;
+  max-width: 500px;
   background-color: #fff;
   border-left: 1px solid #e4e7ed;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+:deep(.right-panel .el-tabs__header) {
+  margin: 0;
+  padding: 0 8px;
+  background-color: #fafafa;
+}
+
+:deep(.right-panel .el-tabs__content) {
+  flex: 1;
   overflow: hidden;
+  padding: 0;
+}
+
+:deep(.right-panel .el-tab-pane) {
+  height: 100%;
+  overflow: auto;
 }
 
 /* 底部状态栏 */
@@ -450,14 +815,37 @@ watch(() => route.query.pid || route.query.id, (newPid) => {
   align-items: center;
 }
 
+/* 调整宽度的拖拽条 */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background-color 0.2s;
+}
+
+.resize-handle:hover {
+  background-color: #5e7ce0;
+}
+
+.resize-handle-right {
+  right: -2px;
+}
+
+.resize-handle-left {
+  left: -2px;
+}
+
 /* 响应式调整 */
 @media (max-width: 1200px) {
   .left-panel {
-    width: 240px;
+    min-width: 200px;
   }
   
   .right-panel {
-    width: 260px;
+    min-width: 200px;
   }
 }
 </style>

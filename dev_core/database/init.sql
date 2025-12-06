@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `phone` varchar(20) DEFAULT NULL COMMENT '手机号',
   `fullName` varchar(100) DEFAULT NULL COMMENT '真实姓名',
   `avatar` varchar(500) DEFAULT NULL COMMENT '头像URL',
-  `role` enum('SUPER_ADMIN','TENANT_ADMIN','PROJECT_ADMIN','DEVELOPER','OPERATOR','VIEWER') NOT NULL COMMENT '系统角色',
+  `role` enum('SUPER_ADMIN','SYSTEM_ADMIN','PROJECT_ADMIN','DEVELOPER','OPERATOR','VIEWER') NOT NULL COMMENT '系统角色',
   `status` enum('active','inactive','suspended') NOT NULL DEFAULT 'active' COMMENT '用户状态',
   `preferences` json DEFAULT NULL COMMENT '用户偏好设置(主题/语言/布局)',
   `lastLoginAt` datetime(6) DEFAULT NULL COMMENT '最后登录时间',

@@ -31,7 +31,10 @@ function createDefaultPageSchema(name) {
     variables: {},
     dataSources: [],
     components: [],
-    permissions: {},
+    permissions: {
+      roles: [],
+      componentAcl: [],
+    },
   }
 }
 
@@ -195,6 +198,10 @@ export const useDesignStore = defineStore('design', {
      * @param {string} pageId - 页面ID
      */
     async loadPage(pageId) {
+      if (!this.projectId) {
+        throw new Error('未选择项目')
+      }
+
       // 如果有未保存的更改，提示用户
       if (this.isDirty) {
         // 这里可以触发确认对话框，暂时直接加载
@@ -204,7 +211,7 @@ export const useDesignStore = defineStore('design', {
       this.loading = true
       this.error = null
       try {
-        const response = await designAPI.getPage(pageId)
+        const response = await designAPI.getPage(this.projectId, pageId)
         this.currentPageId = pageId
         this.currentPage = response.data || response
         this.selectedComponentId = null
@@ -222,14 +229,14 @@ export const useDesignStore = defineStore('design', {
      * Requirements: 6.2
      */
     async savePage() {
-      if (!this.currentPageId || !this.currentPage) {
+      if (!this.projectId || !this.currentPageId || !this.currentPage) {
         throw new Error('没有可保存的页面')
       }
 
       this.saving = true
       this.error = null
       try {
-        await designAPI.updatePage(this.currentPageId, this.currentPage)
+        await designAPI.updatePage(this.projectId, this.currentPageId, this.currentPage)
         // Requirements: 6.5 - 保存成功后清除未保存标记
         this.isDirty = false
       } catch (error) {
@@ -280,10 +287,14 @@ export const useDesignStore = defineStore('design', {
      * @param {string} pageId - 页面ID
      */
     async deletePage(pageId) {
+      if (!this.projectId) {
+        throw new Error('未选择项目')
+      }
+
       this.loading = true
       this.error = null
       try {
-        await designAPI.deletePage(pageId)
+        await designAPI.deletePage(this.projectId, pageId)
         // 从列表中移除
         this.pages = this.pages.filter((p) => p.id !== pageId)
         // 如果删除的是当前页面，清除当前页面状态
@@ -308,9 +319,13 @@ export const useDesignStore = defineStore('design', {
      * @param {string} name - 新名称
      */
     async renamePage(pageId, name) {
+      if (!this.projectId) {
+        throw new Error('未选择项目')
+      }
+
       this.error = null
       try {
-        await designAPI.renamePage(pageId, name)
+        await designAPI.renamePage(this.projectId, pageId, name)
         // 更新本地状态
         const page = this.pages.find((p) => p.id === pageId)
         if (page) {
@@ -323,6 +338,30 @@ export const useDesignStore = defineStore('design', {
         }
       } catch (error) {
         this.error = error.message || '重命名页面失败'
+        throw error
+      }
+    },
+
+    /**
+     * 移动页面到指定页面组
+     * @param {string} pageId - 页面ID
+     * @param {string|null} targetGroupId - 目标页面组ID，null 表示移动到根目录
+     */
+    async movePageToGroup(pageId, targetGroupId) {
+      if (!this.projectId) {
+        throw new Error('未选择项目')
+      }
+
+      this.error = null
+      try {
+        await designAPI.movePageToGroup(this.projectId, pageId, targetGroupId)
+        // 更新本地状态
+        const page = this.pages.find((p) => p.id === pageId)
+        if (page) {
+          page.parentId = targetGroupId
+        }
+      } catch (error) {
+        this.error = error.message || '移动页面失败'
         throw error
       }
     },

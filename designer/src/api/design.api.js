@@ -22,11 +22,12 @@ export const designAPI = {
   /**
    * 获取单个页面的完整 Schema
    * Requirements: 7.2
+   * @param {string} projectId - 项目ID
    * @param {string} pageId - 页面ID
    * @returns {Promise<Object>} 完整的 Page Schema
    */
-  getPage(pageId) {
-    return request.get(`/design/pages/${pageId}`)
+  getPage(projectId, pageId) {
+    return request.get(`/design/projects/${projectId}/pages/${pageId}`)
   },
 
   /**
@@ -43,32 +44,48 @@ export const designAPI = {
   /**
    * 更新页面 Schema
    * Requirements: 7.4
+   * @param {string} projectId - 项目ID
    * @param {string} pageId - 页面ID
    * @param {Object} schema - 更新的 Page Schema
    * @returns {Promise<void>}
    */
-  updatePage(pageId, schema) {
-    return request.put(`/design/pages/${pageId}`, schema)
+  updatePage(projectId, pageId, schema) {
+    return request.put(`/design/projects/${projectId}/pages/${pageId}`, { schema })
   },
 
   /**
    * 删除页面
    * Requirements: 7.5
+   * @param {string} projectId - 项目ID
    * @param {string} pageId - 页面ID
    * @returns {Promise<void>}
    */
-  deletePage(pageId) {
-    return request.delete(`/design/pages/${pageId}`)
+  deletePage(projectId, pageId) {
+    return request.delete(`/design/projects/${projectId}/pages/${pageId}`)
   },
 
   /**
    * 重命名页面
+   * @param {string} projectId - 项目ID
    * @param {string} pageId - 页面ID
    * @param {string} name - 新名称
    * @returns {Promise<void>}
    */
-  renamePage(pageId, name) {
-    return request.patch(`/design/pages/${pageId}/rename`, { name })
+  renamePage(projectId, pageId, name) {
+    return request.patch(`/design/projects/${projectId}/pages/${pageId}/rename`, { name })
+  },
+
+  /**
+   * 移动页面到指定页面组
+   * @param {string} projectId - 项目ID
+   * @param {string} pageId - 页面ID
+   * @param {string|null} targetGroupId - 目标页面组ID，null 表示移动到根目录
+   * @returns {Promise<void>}
+   */
+  movePageToGroup(projectId, pageId, targetGroupId) {
+    return request.patch(`/design/projects/${projectId}/pages/${pageId}/move`, { 
+      parentId: targetGroupId 
+    })
   },
 }
 

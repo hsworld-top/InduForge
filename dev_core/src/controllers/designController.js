@@ -3,10 +3,10 @@
  * 处理设计页面的 HTTP 请求
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5
  */
-const designService = require('../services/designService');
-const { Project } = require('../models');
-const AppError = require('../utils/AppError');
-const ErrorCodes = require('../constants/errorCodes');
+const designService = require("../services/designService");
+const { Project } = require("../models");
+const AppError = require("../utils/AppError");
+const ErrorCodes = require("../constants/errorCodes");
 
 /**
  * 检查用户是否有权限访问指定工程
@@ -15,7 +15,7 @@ const ErrorCodes = require('../constants/errorCodes');
  */
 async function checkProjectAccess(req, projectId) {
   // 超级管理员和系统管理员可以访问所有工程
-  if (req.user.role === 'SUPER_ADMIN' || req.user.role === 'SYSTEM_ADMIN') {
+  if (req.user.role === "SUPER_ADMIN" || req.user.role === "SYSTEM_ADMIN") {
     return;
   }
 
@@ -26,14 +26,14 @@ async function checkProjectAccess(req, projectId) {
 
   if (!project) {
     throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-      message: '无权访问此工程',
+      message: "无权访问此工程",
     });
   }
 }
 
 /**
  * 获取项目的页面列表
- * GET /api/v1/projects/:projectId/design/pages
+ * GET /api/v1/design/projects/:projectId/pages
  * Requirements: 7.1
  */
 async function getPages(req, res, next) {
@@ -52,10 +52,9 @@ async function getPages(req, res, next) {
   }
 }
 
-
 /**
  * 获取单个页面的完整 Schema
- * GET /api/v1/projects/:projectId/design/pages/:pageId
+ * GET /api/v1/design/projects/:projectId/pages/:pageId
  * Requirements: 7.2
  */
 async function getPage(req, res, next) {
@@ -67,7 +66,7 @@ async function getPage(req, res, next) {
     const pageDetail = await designService.getPageDetail(pageId);
     if (pageDetail.projectId !== projectId) {
       throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-        message: '页面不属于此工程',
+        message: "页面不属于此工程",
       });
     }
 
@@ -83,7 +82,7 @@ async function getPage(req, res, next) {
 
 /**
  * 创建新页面
- * POST /api/v1/projects/:projectId/design/pages
+ * POST /api/v1/design/projects/:projectId/pages
  * Requirements: 7.3
  */
 async function createPage(req, res, next) {
@@ -93,9 +92,9 @@ async function createPage(req, res, next) {
 
     const { name, type, parentId } = req.body;
 
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: '页面名称不能为空',
+        message: "页面名称不能为空",
       });
     }
 
@@ -107,7 +106,7 @@ async function createPage(req, res, next) {
 
     res.status(201).json({
       success: true,
-      message: '页面创建成功',
+      message: "页面创建成功",
       data: page,
     });
   } catch (error) {
@@ -117,7 +116,7 @@ async function createPage(req, res, next) {
 
 /**
  * 更新页面 Schema
- * PUT /api/v1/projects/:projectId/design/pages/:pageId
+ * PUT /api/v1/design/projects/:projectId/pages/:pageId
  * Requirements: 7.4
  */
 async function updatePage(req, res, next) {
@@ -127,9 +126,9 @@ async function updatePage(req, res, next) {
 
     const { schema } = req.body;
 
-    if (!schema || typeof schema !== 'object') {
+    if (!schema || typeof schema !== "object") {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: 'Schema 不能为空',
+        message: "Schema 不能为空",
       });
     }
 
@@ -137,7 +136,7 @@ async function updatePage(req, res, next) {
     const existingPage = await designService.getPageDetail(pageId);
     if (existingPage.projectId !== projectId) {
       throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-        message: '页面不属于此工程',
+        message: "页面不属于此工程",
       });
     }
 
@@ -145,7 +144,7 @@ async function updatePage(req, res, next) {
 
     res.json({
       success: true,
-      message: '页面更新成功',
+      message: "页面更新成功",
     });
   } catch (error) {
     next(error);
@@ -154,7 +153,7 @@ async function updatePage(req, res, next) {
 
 /**
  * 删除页面
- * DELETE /api/v1/projects/:projectId/design/pages/:pageId
+ * DELETE /api/v1/design/projects/:projectId/pages/:pageId
  * Requirements: 7.5
  */
 async function deletePage(req, res, next) {
@@ -166,7 +165,7 @@ async function deletePage(req, res, next) {
     const existingPage = await designService.getPageDetail(pageId);
     if (existingPage.projectId !== projectId) {
       throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-        message: '页面不属于此工程',
+        message: "页面不属于此工程",
       });
     }
 
@@ -174,7 +173,7 @@ async function deletePage(req, res, next) {
 
     res.json({
       success: true,
-      message: '页面删除成功',
+      message: "页面删除成功",
     });
   } catch (error) {
     next(error);
@@ -183,7 +182,7 @@ async function deletePage(req, res, next) {
 
 /**
  * 重命名页面
- * PATCH /api/v1/projects/:projectId/design/pages/:pageId/rename
+ * PATCH /api/v1/design/projects/:projectId/pages/:pageId/rename
  */
 async function renamePage(req, res, next) {
   try {
@@ -192,9 +191,9 @@ async function renamePage(req, res, next) {
 
     const { name } = req.body;
 
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: '页面名称不能为空',
+        message: "页面名称不能为空",
       });
     }
 
@@ -202,7 +201,7 @@ async function renamePage(req, res, next) {
     const existingPage = await designService.getPageDetail(pageId);
     if (existingPage.projectId !== projectId) {
       throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-        message: '页面不属于此工程',
+        message: "页面不属于此工程",
       });
     }
 
@@ -210,7 +209,7 @@ async function renamePage(req, res, next) {
 
     res.json({
       success: true,
-      message: '页面重命名成功',
+      message: "页面重命名成功",
     });
   } catch (error) {
     next(error);
@@ -219,7 +218,7 @@ async function renamePage(req, res, next) {
 
 /**
  * 移动页面
- * PATCH /api/v1/projects/:projectId/design/pages/:pageId/move
+ * PATCH /api/v1/design/projects/:projectId/pages/:pageId/move
  */
 async function movePage(req, res, next) {
   try {
@@ -232,7 +231,7 @@ async function movePage(req, res, next) {
     const existingPage = await designService.getPageDetail(pageId);
     if (existingPage.projectId !== projectId) {
       throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-        message: '页面不属于此工程',
+        message: "页面不属于此工程",
       });
     }
 
@@ -240,7 +239,7 @@ async function movePage(req, res, next) {
 
     res.json({
       success: true,
-      message: '页面移动成功',
+      message: "页面移动成功",
     });
   } catch (error) {
     next(error);
