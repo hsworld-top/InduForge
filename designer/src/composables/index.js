@@ -6,3 +6,4 @@
 export { useCanvas, calculateScale, snapToGrid } from './useCanvas'
 export { useSelection } from './useSelection'
 export { useDragDrop, calculateDragPosition, calculateResizeDimensions } from './useDragDrop'
+export { useHistory } from './useHistory'

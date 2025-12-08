@@ -6,6 +6,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import router from './router'
 import App from './App.vue'
 import './assets/styles/main.css'
+import { initMessageHandler } from './utils/messageHandler'
 
 const app = createApp(App)
 
@@ -19,4 +20,7 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 }
 
 app.mount('#app')
+
+// 初始化消息处理器（用于与Designer通信）
+initMessageHandler()
 

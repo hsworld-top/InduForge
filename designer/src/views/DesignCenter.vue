@@ -235,7 +235,7 @@ import { useDesignStore } from '@/store/design'
 import { useCanvas } from '@/composables/useCanvas'
 import { PageTree, ComponentTree, ComponentLibrary, PropertyPanel } from '@/components/panels'
 import { DesignCanvas, CanvasRuler } from '@/components/canvas'
-import { registerBasicComponents } from '@/registry/components'
+import { registerAllComponents } from '@/registry/components'
 
 // Route
 const route = useRoute()
@@ -271,9 +271,9 @@ const showCanvasSettings = ref(false)
 const freeLayout = ref(true)
 const canvasScalePercent = ref(100)
 
-// 撤销/重做功能（预留）
-const canUndo = ref(false)
-const canRedo = ref(false)
+// 撤销/重做功能
+const canUndo = computed(() => designStore.canUndo)
+const canRedo = computed(() => designStore.canRedo)
 
 // Computed
 const projectId = computed(() => route.query.pid || route.query.id)
@@ -336,19 +336,19 @@ async function handleSave() {
 }
 
 /**
- * 撤销操作（预留）
+ * 撤销操作
  */
 function handleUndo() {
-  // TODO: 实现撤销功能
-  ElMessage.info('撤销功能开发中')
+  designStore.undo()
+  ElMessage.success('已撤销')
 }
 
 /**
- * 重做操作（预留）
+ * 重做操作
  */
 function handleRedo() {
-  // TODO: 实现重做功能
-  ElMessage.info('重做功能开发中')
+  designStore.redo()
+  ElMessage.success('已重做')
 }
 
 /**
@@ -554,6 +554,9 @@ function handleKeydown(event) {
 
 // Lifecycle
 onMounted(() => {
+  // 注册所有组件
+  registerAllComponents()
+  
   // 加载项目
   loadProject()
   

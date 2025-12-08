@@ -2,57 +2,25 @@
   <div 
     ref="viewportRef"
     class="design-canvas-viewport"
-    @click.self="handleCanvasClick"
-    @mousedown.self="handleCanvasMouseDown"
   >
-    <!-- 画布容器 -->
+    <!-- Konva Canvas 容器 -->
     <div 
-      ref="canvasRef"
-      class="design-canvas"
-      :style="canvasStyle"
-    >
-      <!-- 网格背景 -->
-      <div 
-        v-if="showGrid && pageConfig?.snapToGrid"
-        class="canvas-grid"
-        :style="gridStyle"
-      />
-      
-      <!-- 组件渲染区域 -->
-      <div class="canvas-content">
-        <CanvasComponent
-          v-for="component in components"
-          :key="component.id"
-          :component="component"
-          :scale="canvasState.scale"
-          @select="handleComponentSelect"
-        />
-      </div>
-      
-      <!-- 选择覆盖层 -->
-      <SelectionOverlay
-        v-if="selectedComponent"
-        :component="selectedComponent"
-        :scale="canvasState.scale"
-        @drag="handleDrag"
-        @resize="handleResize"
-      />
-    </div>
+      ref="canvasContainerRef"
+      class="design-canvas-container"
+    />
   </div>
 </template>
 
 <script setup>
 /**
- * DesignCanvas - 设计画布组件
- * 实现画布容器，支持缩放和平移
- * Requirements: 2.3, 2.4
+ * DesignCanvas - 设计画布组件（Konva 版本）
+ * 使用 Konva.js 实现高性能 Canvas 渲染
+ * Requirements: 2.3, 2.4, 8.2
  */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useDesignStore } from '@/store/design'
 import { useCanvas } from '@/composables/useCanvas'
-import { useSelection } from '@/composables/useSelection'
-import CanvasComponent from './CanvasComponent.vue'
-import SelectionOverlay from './SelectionOverlay.vue'
+import { CanvasEngine } from '@/engine/canvas'
 
 // Props
 const props = defineProps({
@@ -66,138 +34,161 @@ const props = defineProps({
 const designStore = useDesignStore()
 
 // Composables
-const { 
-  canvasState, 
-  updateViewportSize, 
-  updateCanvasSize, 
-  updateScaleMode,
-  setGridSize,
-  setSnapToGrid,
-} = useCanvas()
-
-const { deselect } = useSelection()
+const { canvasState } = useCanvas()
 
 // Refs
 const viewportRef = ref(null)
-const canvasRef = ref(null)
+const canvasContainerRef = ref(null)
+
+// Canvas Engine
+let canvasEngine = null
 
 // Computed
 const pageConfig = computed(() => designStore.pageConfig)
 const components = computed(() => designStore.components)
-const selectedComponent = computed(() => designStore.selectedComponent)
+const selectedComponentId = computed(() => designStore.selectedComponentId)
 
 /**
- * 画布样式
- * Requirements: 2.3 - 渲染 page config 指定的宽高和背景
- * Requirements: 2.4 - 支持缩放
+ * 初始化 Canvas 引擎
  */
-const canvasStyle = computed(() => {
-  const config = pageConfig.value
-  const width = config?.width || 1200
-  const height = config?.height || 800
-  const bgColor = config?.backgroundColor || '#ffffff'
+async function initCanvasEngine() {
+  if (!canvasContainerRef.value) return
   
-  return {
-    width: `${width}px`,
-    height: `${height}px`,
-    backgroundColor: bgColor,
-    transform: `scale(${canvasState.scale})`,
-    transformOrigin: 'top left',
-  }
-})
-
-/**
- * 网格样式
- */
-const gridStyle = computed(() => {
-  const gridSize = pageConfig.value?.gridSize || 10
-  const scaledGridSize = gridSize * canvasState.scale
+  await nextTick()
   
-  return {
-    backgroundSize: `${scaledGridSize}px ${scaledGridSize}px`,
-    backgroundImage: `
-      linear-gradient(to right, #e0e0e0 1px, transparent 1px),
-      linear-gradient(to bottom, #e0e0e0 1px, transparent 1px)
-    `,
-  }
-})
-
-// Methods
-
-/**
- * 处理画布空白区域点击
- * Requirements: 3.2 - 点击空白区域取消选择
- */
-function handleCanvasClick() {
-  deselect()
-}
-
-/**
- * 处理画布鼠标按下（用于平移等）
- */
-function handleCanvasMouseDown(event) {
-  // 预留平移功能
-}
-
-/**
- * 处理组件选择
- */
-function handleComponentSelect(componentId) {
-  designStore.selectComponent(componentId)
-}
-
-/**
- * 处理组件拖拽
- */
-function handleDrag({ componentId, left, top }) {
-  designStore.updateComponent(componentId, {
-    style: { left, top },
+  const config = pageConfig.value || {}
+  
+  // 创建 Canvas 引擎
+  canvasEngine = new CanvasEngine(canvasContainerRef.value, {
+    width: config.width || 1920,
+    height: config.height || 1080,
   })
-}
-
-/**
- * 处理组件调整大小
- */
-function handleResize({ componentId, left, top, width, height }) {
-  designStore.updateComponent(componentId, {
-    style: { left, top, width, height },
+  
+  // 监听选择变化事件
+  canvasEngine.on('selection:change', ({ ids }) => {
+    if (ids.length === 1) {
+      designStore.selectComponent(ids[0])
+    } else if (ids.length === 0) {
+      designStore.selectComponent(null)
+    }
   })
+  
+  // 监听组件更新事件
+  canvasEngine.on('component:update', ({ id, updates }) => {
+    designStore.updateComponent(id, updates)
+    // 保存历史记录
+    designStore.saveHistory(`更新组件 ${id}`)
+  })
+  
+  // 监听组件点击事件
+  canvasEngine.on('component:click', ({ id }) => {
+    designStore.selectComponent(id)
+  })
+  
+  // 渲染所有组件
+  renderAllComponents()
+  
+  // 设置吸附
+  canvasEngine.setSnapEnabled(config.snapToGrid !== false)
+  canvasEngine.setSnapThreshold(config.gridSize || 10)
+  
+  console.log('✅ Canvas Engine initialized')
 }
 
 /**
- * 更新视口尺寸
+ * 渲染所有组件
  */
-function updateViewport() {
-  if (viewportRef.value) {
-    const rect = viewportRef.value.getBoundingClientRect()
-    updateViewportSize({ width: rect.width, height: rect.height })
+function renderAllComponents() {
+  if (!canvasEngine) return
+  
+  // 清空画布
+  canvasEngine.clear()
+  
+  // 渲染所有组件
+  const comps = components.value || []
+  comps.forEach(component => {
+    canvasEngine.renderComponent(component)
+  })
+  
+  // 恢复选择
+  if (selectedComponentId.value) {
+    canvasEngine.selectComponents(selectedComponentId.value)
   }
 }
 
 /**
- * 同步页面配置到画布状态
+ * 更新画布配置
  */
-function syncPageConfig() {
-  const config = pageConfig.value
-  if (config) {
-    updateCanvasSize({ width: config.width || 1920, height: config.height || 1080 })
-    updateScaleMode(config.scaleMode || 'fit')
-    setGridSize(config.gridSize || 10)
-    setSnapToGrid(config.snapToGrid !== false)
-  }
+function updateCanvasConfig() {
+  if (!canvasEngine) return
+  
+  const config = pageConfig.value || {}
+  
+  // 更新画布大小
+  canvasEngine.resize(config.width || 1920, config.height || 1080)
+  
+  // 更新吸附设置
+  canvasEngine.setSnapEnabled(config.snapToGrid !== false)
+  canvasEngine.setSnapThreshold(config.gridSize || 10)
+}
+
+/**
+ * 更新缩放
+ */
+function updateScale() {
+  if (!canvasEngine) return
+  canvasEngine.setScale(canvasState.scale)
 }
 
 // Watchers
-watch(pageConfig, syncPageConfig, { immediate: true, deep: true })
+
+// 监听页面配置变化
+watch(pageConfig, () => {
+  updateCanvasConfig()
+}, { deep: true })
+
+// 监听组件列表变化
+watch(components, (newComponents, oldComponents) => {
+  if (!canvasEngine) return
+  
+  // 简单策略：重新渲染所有组件
+  // TODO: 优化为增量更新
+  renderAllComponents()
+}, { deep: true })
+
+// 监听选中组件变化
+watch(selectedComponentId, (newId, oldId) => {
+  if (!canvasEngine) return
+  
+  if (newId) {
+    canvasEngine.selectComponents(newId)
+  } else {
+    canvasEngine.clearSelection()
+  }
+})
+
+// 监听缩放变化
+watch(() => canvasState.scale, () => {
+  updateScale()
+})
 
 // Lifecycle
-onMounted(() => {
-  updateViewport()
-  window.addEventListener('resize', updateViewport)
+onMounted(async () => {
+  await initCanvasEngine()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', updateViewport)
+  if (canvasEngine) {
+    canvasEngine.destroy()
+    canvasEngine = null
+  }
+})
+
+// 暴露方法给父组件
+defineExpose({
+  canvasEngine,
+  renderAllComponents,
+  updateCanvasConfig,
 })
 </script>
 
@@ -205,35 +196,20 @@ onUnmounted(() => {
 .design-canvas-viewport {
   width: 100%;
   height: 100%;
-  overflow: visible;
-  background-color: transparent;
-  display: block;
-  position: relative;
+  overflow: auto;
+  background-color: #f5f5f5;
+  background-image: 
+    linear-gradient(to right, #e0e0e0 1px, transparent 1px),
+    linear-gradient(to bottom, #e0e0e0 1px, transparent 1px);
+  background-size: 20px 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
   padding: 40px;
-  padding-top: 60px;
-  padding-left: 60px;
 }
 
-.design-canvas {
-  position: relative;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: transform 0.1s ease-out;
+.design-canvas-container {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   background-color: #ffffff;
-  transform-origin: 0 0;
-}
-
-.canvas-grid {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-}
-
-.canvas-content {
-  position: relative;
-  width: 100%;
-  height: 100%;
 }
 </style>

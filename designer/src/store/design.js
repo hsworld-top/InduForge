@@ -5,6 +5,10 @@
  */
 import { defineStore } from 'pinia'
 import { designAPI } from '@/api/design.api'
+import { useHistory } from '@/composables/useHistory'
+import { DataBinder } from '@/engine/binding/DataBinder'
+import { AnimationManager } from '@/engine/animation/AnimationManager'
+import { DataSourceManager } from '@/engine/datasource/DataSourceManager'
 
 /**
  * 生成默认的 Page Schema
@@ -99,6 +103,18 @@ function removeComponentById(components, componentId) {
   return false
 }
 
+// 创建历史记录管理器
+const history = useHistory(50)
+
+// 创建数据绑定管理器（延迟初始化）
+let dataBinder = null
+
+// 创建动画管理器
+const animationManager = new AnimationManager()
+
+// 创建数据源管理器（延迟初始化）
+let dataSourceManager = null
+
 export const useDesignStore = defineStore('design', {
   state: () => ({
     // 当前项目 ID
@@ -122,6 +138,14 @@ export const useDesignStore = defineStore('design', {
     saving: false,
     // 错误信息
     error: null,
+    // 数据源数据
+    dataSources: {},
+    // 数据源配置
+    dataSourceConfigs: [],
+    // 用户信息
+    user: null,
+    // 数据源管理器
+    dataSourceManager: null,
   }),
 
   getters: {
@@ -163,6 +187,20 @@ export const useDesignStore = defineStore('design', {
      */
     pageConfig: (state) => {
       return state.currentPage?.config || null
+    },
+    
+    /**
+     * 是否可以撤销
+     */
+    canUndo: () => {
+      return history.canUndo.value
+    },
+    
+    /**
+     * 是否可以重做
+     */
+    canRedo: () => {
+      return history.canRedo.value
     },
   },
 
@@ -211,11 +249,26 @@ export const useDesignStore = defineStore('design', {
       this.loading = true
       this.error = null
       try {
+        // 清理旧页面的数据源
+        if (dataSourceManager) {
+          dataSourceManager.clear()
+        }
+        
         const response = await designAPI.getPage(this.projectId, pageId)
         this.currentPageId = pageId
         this.currentPage = response.data || response
         this.selectedComponentId = null
         this.isDirty = false
+        
+        // 初始化数据源管理器
+        await this.initDataSourceManager()
+        
+        // 加载页面的数据源
+        if (this.currentPage.dataSources && Array.isArray(this.currentPage.dataSources)) {
+          this.currentPage.dataSources.forEach(dsConfig => {
+            dataSourceManager.register(dsConfig)
+          })
+        }
       } catch (error) {
         this.error = error.message || '加载页面失败'
         throw error
@@ -484,6 +537,108 @@ export const useDesignStore = defineStore('design', {
     },
 
     /**
+     * 保存历史记录
+     */
+    saveHistory(description = '') {
+      if (this.currentPage) {
+        history.push(this.currentPage, description)
+      }
+    },
+    
+    /**
+     * 撤销操作
+     */
+    undo() {
+      const previousState = history.undo()
+      if (previousState) {
+        this.currentPage = JSON.parse(JSON.stringify(previousState))
+        this.isDirty = true
+      }
+    },
+    
+    /**
+     * 重做操作
+     */
+    redo() {
+      const nextState = history.redo()
+      if (nextState) {
+        this.currentPage = JSON.parse(JSON.stringify(nextState))
+        this.isDirty = true
+      }
+    },
+    
+    /**
+     * 初始化数据绑定器
+     */
+    initDataBinder() {
+      if (!dataBinder) {
+        dataBinder = new DataBinder(this)
+      }
+      return dataBinder
+    },
+    
+    /**
+     * 初始化数据源管理器
+     * @param {Object} options - 配置选项
+     * @param {string} options.mode - 模式：'api'（默认）或 'bridge'
+     */
+    async initDataSourceManager(options = {}) {
+      if (!dataSourceManager) {
+        // 默认使用API模式，不依赖iframe
+        const mode = options.mode || 'api'
+        dataSourceManager = new DataSourceManager(this, { mode })
+        this.dataSourceManager = dataSourceManager
+        
+        // 初始化
+        const success = await dataSourceManager.init(options.iframeId)
+        if (!success && mode === 'bridge') {
+          console.warn('DataSourceManager: Failed to initialize in bridge mode, falling back to API mode')
+          // 降级到API模式
+          dataSourceManager = new DataSourceManager(this, { mode: 'api' })
+          this.dataSourceManager = dataSourceManager
+          await dataSourceManager.init()
+        }
+      }
+      return dataSourceManager
+    },
+    
+    /**
+     * 绑定组件数据
+     */
+    bindComponent(componentId, bindings) {
+      const binder = this.initDataBinder()
+      binder.bind(componentId, bindings)
+    },
+    
+    /**
+     * 解绑组件数据
+     */
+    unbindComponent(componentId) {
+      if (dataBinder) {
+        dataBinder.unbind(componentId)
+      }
+    },
+    
+    /**
+     * 播放组件动画
+     */
+    playAnimation(componentId, animationConfig) {
+      animationManager.play(componentId, animationConfig, (condition) => {
+        if (dataBinder) {
+          return dataBinder.evaluateExpression(condition)
+        }
+        return true
+      })
+    },
+    
+    /**
+     * 停止组件动画
+     */
+    stopAnimation(componentId, animationId = null) {
+      animationManager.stop(componentId, animationId)
+    },
+
+    /**
      * 清除错误状态
      */
     clearError() {
@@ -504,6 +659,24 @@ export const useDesignStore = defineStore('design', {
       this.loading = false
       this.saving = false
       this.error = null
+      this.dataSources = {}
+      this.dataSourceConfigs = []
+      
+      // 清理历史记录
+      history.clear()
+      
+      // 清理数据绑定
+      if (dataBinder) {
+        dataBinder.clear()
+      }
+      
+      // 清理动画
+      animationManager.clear()
+      
+      // 清理数据源
+      if (dataSourceManager) {
+        dataSourceManager.clear()
+      }
     },
   },
 })
