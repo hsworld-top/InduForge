@@ -13,9 +13,9 @@
 - 多种画布缩放模式
 
 ### 2. 组件库
-- **基础组件**: 矩形、圆形、文本、图片等
-- **UI 组件**: 按钮、输入框、表格、图表等
-- **工业组件**: 电机、泵、阀门、管道等
+- **基础组件**: 按钮、视频、图片、开关、多选组、下拉框、单选组
+- **UI 组件**: 输入框、表格、图表、标签、对话框等
+- **布局组件**: Container、Flex、Grid、Row/Col、CenterLayout
 - **自定义组件**: 支持组件封装和复用
 
 ### 3. 数据绑定
@@ -24,34 +24,127 @@
 - 多数据源支持
 - 数据转换和计算
 
-### 4. Canvas 渲染
-- 基于 Konva.js 的高性能渲染
-- 支持大量组件
-- 流畅的交互体验
-- 智能对齐和吸附
+### 4. 选中与辅助线
+- 多选支持（单选/多选/框选/全选）
+- 选择框和控制点（缩放、旋转）
+- 智能对齐辅助线
+- 自动吸附功能
 
 ### 5. 历史记录
-- 撤销/重做
-- 操作历史追踪
-- 快照管理
+- 撤销/重做（Ctrl+Z/Y）
+- 操作历史追踪（最多50条）
+- 事务支持（批量操作合并）
+
+### 6. 高级功能
+- 画布缩放（10%-500%，Ctrl+Plus/Minus/0）
+- 完整的快捷键系统
+- 批量操作（移动、删除、复制）
 
 ## 技术架构
 
+### 混合渲染架构 (DOM + Canvas 双层) ✨ 核心创新
+
+设计中心采用创新的混合渲染架构，完美结合 DOM 和 Canvas 的优势：
+
+- **DOM Layer (z-index: 1)**: 渲染所有组件和布局容器
+  - Vue 组件 + CSS 原生布局（Flexbox/Grid）
+  - 完整的事件支持和交互
+  - 支持任意嵌套的容器结构
+  
+- **Canvas Layer (z-index: 100)**: 渲染辅助功能
+  - 选择框和控制点（缩放、旋转）
+  - 对齐辅助线和插入线
+  - 拖拽预览和框选矩形
+  - 标尺和参考线（可选）
+
 ```
-Designer
-├── engine/                 # 核心引擎
-│   ├── canvas/            # Canvas 渲染引擎
-│   ├── binding/           # 数据绑定引擎
-│   ├── animation/         # 动画引擎
-│   └── datasource/        # 数据源管理
-├── registry/              # 组件注册系统
-│   └── components/        # 组件定义
-├── components/            # Vue 组件
-│   ├── canvas/           # 画布组件
-│   └── panels/           # 面板组件
-├── store/                # 状态管理
-└── views/                # 页面视图
+Designer/
+├── engine/                      # 核心引擎
+│   ├── canvas/                 # Canvas 辅助渲染（Konva）
+│   │   ├── SelectionBox.js         # 选择框和控制点
+│   │   ├── AlignmentGuides.js      # 对齐辅助线和吸附
+│   │   ├── SelectionRect.js        # 框选矩形
+│   │   ├── InsertLine.js           # 插入线
+│   │   └── DragPreview.js          # 拖拽预览
+│   ├── binding/                # 数据绑定引擎
+│   ├── animation/              # 动画引擎（GSAP）
+│   └── datasource/             # 数据源管理
+│
+├── registry/                    # 组件注册系统
+│   ├── ComponentFactory.js         # 组件工厂（核心）
+│   ├── layout/                     # 布局组件（DOM）
+│   │   ├── Container.vue              # 容器（Flex/Grid/Block）
+│   │   ├── Row.vue / Col.vue          # 24栅格系统
+│   │   ├── Flex.vue                   # Flexbox布局
+│   │   ├── Grid.vue                   # Grid布局
+│   │   └── CenterLayout.vue           # 居中布局
+│   ├── basic/                      # 基础组件
+│   ├── ui/                         # UI组件
+│   └── charts/                     # 图表组件
+│
+├── components/                  # Vue 组件
+│   ├── canvas/                     # 画布组件
+│   │   ├── DesignCanvas.vue           # 主画布（混合架构核心）
+│   │   ├── DomRenderer.vue            # DOM层递归渲染器
+│   │   ├── CanvasAuxiliary.vue        # Canvas层辅助功能
+│   │   └── ComponentWrapper.vue       # 组件包装器（拖拽/选中）
+│   ├── panels/                     # 面板组件
+│   │   ├── PropertyPanel.vue          # 属性面板（支持多选）
+│   │   ├── ComponentLibrary.vue       # 组件库
+│   │   └── ComponentTree.vue          # 组件树
+│   └── editors/                    # 属性编辑器
+│       ├── PositionEditor.vue         # 位置与尺寸
+│       ├── SpacingEditor.vue          # 间距（Margin/Padding）
+│       ├── TransformEditor.vue        # 变换（旋转/缩放/透明度）
+│       ├── FlexEditor.vue             # Flexbox属性
+│       ├── GridEditor.vue             # Grid属性
+│       └── TextComponentEditor.vue    # 文本组件属性
+│
+├── composables/                 # 组合式函数
+│   ├── useCoordinateSync.js        # 坐标系统同步
+│   ├── useCanvas.js                # Canvas状态管理
+│   ├── useZoom.js                  # 缩放功能（10%-500%）
+│   ├── useHistory.js               # 历史记录（撤销/重做）
+│   └── useDragDrop.js              # 拖拽功能
+│
+├── utils/                       # 工具函数
+│   ├── styleConverter.js           # DSL样式→CSS转换
+│   └── dropZoneCalculator.js       # 插入位置计算
+│
+├── store/                       # 状态管理（Pinia）
+│   └── design.js                   # 设计画布状态
+│
+└── views/                       # 页面视图
+    └── DesignCenter.vue            # 设计中心主页面
 ```
+
+### 架构优势
+
+1. **性能优化**: DOM渲染组件，Canvas渲染辅助图形，各司其职
+   - DOM Layer: 利用浏览器原生渲染和事件处理
+   - Canvas Layer: 高性能绘制辅助图形（Konva.js）
+   
+2. **原生布局**: 使用CSS Flexbox/Grid，布局更精确可靠
+   - 支持任意嵌套的容器结构
+   - 完整的响应式布局能力
+   - 无需手动计算布局位置
+   
+3. **易于维护**: Vue组件开发，代码结构清晰
+   - 组件化架构，每个组件职责单一
+   - 完整的TypeScript类型支持（可选）
+   - 测试覆盖率高（Vitest + Property-based Testing）
+   
+4. **坐标同步**: 自动同步DOM和Canvas坐标系统
+   - ResizeObserver监听尺寸变化
+   - 实时更新选择框和辅助线位置
+   - 支持缩放和滚动同步
+
+5. **用户体验**: 完整的交互功能
+   - 拖拽系统（库→画布、画布内、容器内、排序）
+   - 多选支持（单选/Ctrl+点击/框选/Ctrl+A）
+   - 撤销/重做（Ctrl+Z/Y）
+   - 画布缩放（Ctrl+Plus/Minus/0）
+   - 智能对齐和自动吸附
 
 ## 快速开始
 
@@ -73,6 +166,35 @@ pnpm dev
 4. 配置组件属性
 5. 保存页面
 
+### 快捷键列表 ⌨️
+
+**选择操作**：
+- `单击` - 选中组件
+- `Ctrl + 单击` - 多选/取消选中
+- `Ctrl + A` - 全选
+- `Esc` - 取消选择
+
+**编辑操作**：
+- `Ctrl + C` - 复制
+- `Ctrl + V` - 粘贴
+- `Ctrl + D` - 复制并粘贴
+- `Delete / Backspace` - 删除
+
+**历史操作**：
+- `Ctrl + Z` - 撤销
+- `Ctrl + Y` - 重做
+- `Ctrl + Shift + Z` - 重做（Mac风格）
+
+**缩放操作**：
+- `Ctrl + Plus` - 放大
+- `Ctrl + Minus` - 缩小
+- `Ctrl + 0` - 重置缩放（100%）
+
+**拖拽操作**：
+- `拖拽组件` - 从组件库拖到画布
+- `拖拽画布内组件` - 移动位置或改变父容器
+- `拖拽到容器` - 添加为容器子组件
+
 ## 文档导航
 
 ### 核心功能文档
@@ -88,11 +210,11 @@ pnpm dev
   - 性能对比
   - 最佳实践
 
-- **[Canvas 渲染引擎](./canvas-engine.md)** - Konva 渲染引擎
-  - 渲染原理
-  - 组件渲染
-  - 选择和变换
-  - 对齐和吸附
+- **[Canvas 辅助层](./canvas-engine.md)** - Canvas Layer 辅助功能
+  - 选择框和控制点（SelectionBox）
+  - 对齐辅助线和吸附（AlignmentGuides）
+  - 框选矩形（SelectionRect）
+  - 插入线和拖拽预览
 
 - **[组件开发指南](./component-development.md)** - 自定义组件开发
   - 组件结构
@@ -262,7 +384,42 @@ A: 减少轮询频率，使用数据转换器减少数据量，优化表达式�
 3. 测试: 添加单元测试
 4. 文档: 更新相关文档
 
+## 最新更新 (2025-12-08)
+
+### Phase 1-3 完成：混合渲染架构重构
+
+✅ **Phase 1: 画布主架构搭建**
+- 实现 DOM + Canvas 双层渲染架构
+- 创建 DesignCanvas、DomRenderer、CanvasAuxiliary 组件
+- 实现坐标系统同步（ResizeObserver + MutationObserver）
+- 实现缩放和滚动同步，支持缩放中心点保持
+- 完成单元测试和Property-based测试
+
+✅ **Phase 2: 组件注册机制**
+- 创建 ComponentFactory 组件工厂类
+- 定义组件定义规范（schema）
+- 重构现有组件注册使用 ComponentFactory
+- 在 DomRenderer 中集成 ComponentFactory
+- 实现未注册组件占位符和错误处理
+
+✅ **Phase 3: 基础布局组件 DOM 实现**
+- 实现 Container 组件（支持 Flex/Grid/Block 三种布局模式）
+- 实现 Row/Col 组件（24栅格系统）
+- 实现 Flex 组件（完整的 Flexbox 属性）
+- 实现 Grid 组件（完整的 Grid 属性）
+- 实现 CenterLayout 组件（水平/垂直居中）
+- 增强 styleConverter 支持所有布局属性
+
+### 待实现功能
+
+- Phase 4: 拖拽系统
+- Phase 5: 选中与辅助线系统
+- Phase 6: 右侧属性面板
+- Phase 7: 高级功能（撤销/重做、标尺、快捷键等）
+- Phase 8: 代码清理和文档更新
+- Phase 9: 测试和验收
+
 ---
 
-**版本**: 2.0.0  
+**版本**: 2.1.0  
 **最后更新**: 2025-12-08

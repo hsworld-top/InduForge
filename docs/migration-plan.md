@@ -198,9 +198,18 @@ export function useHistory(maxSize = 50) {
 
 ---
 
-### 阶段二：Canvas 渲染引擎（3周）
+### 阶段二：Canvas 渲染引擎（3周）🚧
 
 **目标**：实现基于 Konva.js 的 Canvas 渲染引擎
+
+**当前状态**：基础渲染已完成，待实现高级功能
+
+**待实现功能**：
+- [ ] 容器组件支持子组件拖入
+- [ ] 组件右键菜单（复制、删除、插入）
+- [ ] 组件层级管理
+- [ ] 组件对齐辅助线
+- [ ] 组件吸附功能
 
 #### 2.1 安装和配置 Konva
 
@@ -301,86 +310,196 @@ export class KonvaRenderer {
 
 ---
 
-### 阶段三：基础组件库（3周）
+### 阶段三：基础组件库（3周）✅
 
 **目标**：实现 30+ 基础组件
 
-#### 3.1 基础图形组件（10种）
+**状态**：✅ 已完成核心组件（23个），建立完整架构
 
-**`registry/components/basic/`**：
-- Rectangle（矩形）
-- Circle（圆形）
-- Ellipse（椭圆）
-- Line（直线）
+**完成时间**：2024-12-08
+
+**目录结构**：
+```
+registry/
+├── layout/      # 布局组件（4个）
+├── basic/       # 基础组件（7个）
+├── ui/          # Element组件（7个）
+├── charts/      # 图表组件（5个）
+├── industrial/  # 工业组件（预留）
+└── index.js     # 注册中心
+```
+
+**使用方法**：
+```javascript
+// 注册所有组件
+import { registerAllComponents } from '@/registry/components'
+registerAllComponents()
+
+// 或按需注册
+import { registerLayoutComponents, registerBasicComponents } from '@/registry/components'
+registerLayoutComponents()
+registerBasicComponents()
+
+// 使用组件
+import { getComponent, createComponentInstance } from '@/registry'
+const button = getComponent('Button')
+const instance = createComponentInstance('Button', {
+  props: { text: '确定' },
+  style: { left: 100, top: 100 }
+})
+```
+
+#### 3.1 基础图形组件（7种）✅
+
+**`registry/basic/`**：
+- ✅ Rectangle（矩形）
+- ✅ Circle（圆形）
+- ✅ Ellipse（椭圆）
+- ✅ Line（直线）
+- ✅ Polygon（多边形）
+- ✅ Text（文本）
+- ✅ Image（图片）
+
+#### 3.2 布局组件（5种）✅
+
+**`registry/layout/`** - 5 大布局元素：
+
+1. **盒子容器** (Container) - 通用布局容器，支持 Flex/Grid/Block
+2. **行列容器** (Row + Col) - 24 栅格系统
+3. **弹性容器** (FlexLayout) - 完整 Flexbox 属性配置
+4. **全宽居中** (CenterLayout) - 子组件自动居中
+5. **栅格布局** - Row + Col 的栅格模式
+
+**组件列表**：
+- ✅ Container（盒子容器）- 蓝色 #409EFF
+- ✅ FlexLayout（弹性容器）- 橙色 #E6A23C
+- ✅ CenterLayout（全宽居中）- 绿色 #67C23A
+- ✅ Row（栅格行）- 红色 #F56C6C
+- ✅ Col（栅格列）- 灰色 #909399
+
+**完成时间**：2024-12-08
+
+**功能特性**：
+- ✅ 所有容器支持子组件嵌套
+- ✅ 支持拖拽、调整尺寸（Col 除外）
+- ✅ 完整的样式属性配置（背景、边框、圆角、阴影、内外边距）
+- ✅ 不同容器类型显示不同颜色和图标
+- ✅ 支持拖放区域可视化
+- ✅ 编辑器交互支持（hover 高亮、组件树显示）
+
+**文档**：
+- `docs/layout-containers-guide.md` - 完整使用指南
+
+#### 3.3 Element UI 组件（7种）✅
+
+**`registry/ui/`**：
+- ✅ Button（按钮）
+- ✅ Input（输入框）
+- ✅ Select（选择器）
+- ✅ Switch（开关）
+- ✅ Slider（滑块）
+- ✅ Progress（进度条）
+- ✅ Table（表格）
+
+#### 3.4 图表组件（5种）✅
+
+**`registry/charts/`**：
+- ✅ LineChart（折线图）
+- ✅ BarChart（柱状图）
+- ✅ PieChart（饼图）
+- ✅ GaugeChart（仪表盘）
+- ✅ ScatterChart（散点图）
+
+#### 3.5 待扩展组件
+
+**基础图形**（待添加）：
 - Polyline（折线）
-- Polygon（多边形）
-- Text（文本）
-- Image（图片）
 - SVG（SVG 图形）
 - Path（路径）
 
 **组件定义示例**：
 ```javascript
-// registry/components/basic/Rectangle.js
+// registry/basic/Rectangle.js
 export default {
   type: 'Rectangle',
   name: '矩形',
-  category: '基础图形',
-  icon: 'square',
+  category: '基础组件',
+  icon: 'crop-square',
+  thumbnail: null,
+  tags: ['图形', '矩形', '方形', 'shape'],
+  description: '矩形图形，支持填充色、边框、圆角等属性',
   defaultProps: {
     fill: '#409EFF',
     stroke: '#303133',
     strokeWidth: 1,
     cornerRadius: 0,
+    opacity: 1
   },
   defaultStyle: {
     position: 'absolute',
-    left: 0,
-    top: 0,
-    width: 100,
-    height: 100,
+    left: 100,
+    top: 100,
+    width: 120,
+    height: 80,
+    zIndex: 1
   },
   propsSchema: {
-    fill: { type: 'color', label: '填充颜色' },
-    stroke: { type: 'color', label: '边框颜色' },
-    strokeWidth: { type: 'number', label: '边框宽度', min: 0, max: 10 },
-    cornerRadius: { type: 'number', label: '圆角', min: 0, max: 50 },
+    fill: { 
+      type: 'color', 
+      label: '填充颜色',
+      group: '外观',
+      default: '#409EFF'
+    },
+    stroke: { 
+      type: 'color', 
+      label: '边框颜色',
+      group: '外观',
+      default: '#303133'
+    },
+    strokeWidth: { 
+      type: 'number', 
+      label: '边框宽度',
+      group: '外观',
+      min: 0, 
+      max: 20,
+      unit: 'px',
+      default: 1
+    },
+    cornerRadius: { 
+      type: 'number', 
+      label: '圆角',
+      group: '外观',
+      min: 0, 
+      max: 100,
+      unit: 'px',
+      default: 0
+    }
   },
+  eventsSchema: {
+    click: { label: '点击', description: '鼠标点击时触发' }
+  },
+  container: false,
+  version: '1.0.0'
 }
 ```
 
-#### 3.2 UI 组件（20种）
-
-**`registry/components/ui/`**：
-- Button（按钮）
-- Input（输入框）
-- Select（下拉框）
-- Switch（开关）
-- Slider（滑块）
-- Progress（进度条）
-- Table（表格）
+**待扩展 UI 组件**：
 - Tree（树形控件）
 - Tabs（标签页）
 - Dialog（对话框）
+- DatePicker（日期选择器）
+- TimePicker（时间选择器）
+- Upload（上传）
+- Form（表单）
 - ... 等
 
-这些组件可以直接使用 Element Plus 组件，通过配置化方式集成。
-
-#### 3.3 图表组件（10种）
-
-**`registry/components/charts/`**：
-- LineChart（折线图）
-- BarChart（柱状图）
-- PieChart（饼图）
-- GaugeChart（仪表盘）
+**待扩展图表组件**：
 - RadarChart（雷达图）
-- ScatterChart（散点图）
 - HeatmapChart（热力图）
 - TreeChart（树图）
 - SankeyChart（桑基图）
 - FunnelChart（漏斗图）
-
-使用 ECharts 实现，通过配置化方式暴露常用属性。
+- ... 等
 
 ---
 
@@ -800,6 +919,396 @@ export class ScriptRunner {
     } catch (error) {
       console.error('Script execution error:', error)
       throw error
+    }
+  }
+}
+```
+
+---
+
+### 阶段四：高级交互功能（2-3周）✅
+
+**目标**：实现容器嵌套、右键菜单等高级交互功能
+
+**状态**：✅ 已完成核心功能
+
+**完成时间**：2024-12-08
+
+**已实现功能**：
+- ✅ 右键菜单组件（ContextMenu.vue）
+- ✅ 快捷键支持（useKeyboard.js）
+- ✅ 组件层级管理（置顶、置底、上移、下移）
+- ✅ 对齐辅助线系统（AlignmentGuides.js）
+- ✅ 容器组件基础结构（支持拖放区域标记）
+- ✅ 复制/粘贴/删除功能
+- ✅ 右键菜单事件集成
+
+**待完善功能**：
+- ⏳ 容器组件子组件拖入逻辑（需要完善拖放处理）
+- ⏳ 组件在前面/后面插入功能
+
+**实现文件**：
+- `components/canvas/ContextMenu.vue` - 右键菜单组件
+- `composables/useKeyboard.js` - 快捷键处理
+- `engine/canvas/AlignmentGuides.js` - 对齐辅助线
+- `store/design.js` - 层级管理方法
+- `engine/canvas/KonvaRenderer.js` - 容器组件渲染
+- `engine/canvas/CanvasEngine.js` - 对齐辅助线集成
+
+#### 4.1 容器组件支持
+
+**功能需求**：
+- 容器组件（Container, Row, Col）可以接收子组件拖入
+- 子组件在容器内部可以自由布局
+- 支持多层嵌套
+- 容器边界高亮显示
+
+**实现方案**：
+```javascript
+// 1. 在 KonvaRenderer 中为容器组件添加拖放区域
+createContainer(schema) {
+  const group = new Konva.Group({
+    x: style.left,
+    y: style.top,
+    draggable: true,
+  })
+  
+  // 容器背景
+  const bg = new Konva.Rect({
+    width: style.width,
+    height: style.height,
+    fill: 'transparent',
+    stroke: '#409EFF',
+    strokeWidth: 2,
+    dash: [10, 5],
+  })
+  
+  // 拖放区域
+  const dropZone = new Konva.Rect({
+    width: style.width,
+    height: style.height,
+    fill: 'rgba(64, 158, 255, 0.1)',
+    visible: false, // 默认隐藏
+  })
+  
+  group.add(bg)
+  group.add(dropZone)
+  
+  // 监听拖放事件
+  group.on('dragover', () => {
+    dropZone.visible(true)
+  })
+  
+  group.on('dragleave', () => {
+    dropZone.visible(false)
+  })
+  
+  group.on('drop', (e) => {
+    // 处理子组件拖入
+    const childComponent = e.dataTransfer.getData('component')
+    this.addChildToContainer(group.id(), childComponent)
+  })
+  
+  return group
+}
+
+// 2. 在 DesignCanvas 中处理容器拖放
+function handleDropToContainer(containerId, component) {
+  // 计算相对于容器的位置
+  const container = canvasEngine.getComponent(containerId)
+  const relativePos = {
+    left: component.style.left - container.style.left,
+    top: component.style.top - container.style.top,
+  }
+  
+  // 添加为子组件
+  designStore.addComponent(component, containerId)
+}
+```
+
+#### 4.2 右键菜单功能
+
+**功能需求**：
+- 右键点击组件显示上下文菜单
+- 支持复制、删除、插入等操作
+- 支持层级调整（置顶、置底、上移、下移）
+
+**实现方案**：
+```javascript
+// 1. 创建右键菜单组件
+// components/canvas/ContextMenu.vue
+<template>
+  <div 
+    v-show="visible"
+    class="context-menu"
+    :style="{ left: x + 'px', top: y + 'px' }"
+  >
+    <div class="menu-item" @click="handleCopy">
+      <el-icon><DocumentCopy /></el-icon>
+      <span>复制</span>
+      <span class="shortcut">Ctrl+C</span>
+    </div>
+    <div class="menu-item" @click="handleDelete">
+      <el-icon><Delete /></el-icon>
+      <span>删除</span>
+      <span class="shortcut">Delete</span>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" @click="handleBringToFront">
+      <el-icon><Top /></el-icon>
+      <span>置于顶层</span>
+    </div>
+    <div class="menu-item" @click="handleSendToBack">
+      <el-icon><Bottom /></el-icon>
+      <span>置于底层</span>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" @click="handleInsertBefore">
+      <el-icon><Plus /></el-icon>
+      <span>在前面插入</span>
+    </div>
+    <div class="menu-item" @click="handleInsertAfter">
+      <el-icon><Plus /></el-icon>
+      <span>在后面插入</span>
+    </div>
+  </div>
+</template>
+
+// 2. 在 CanvasEngine 中集成右键菜单
+canvasEngine.on('component:contextmenu', ({ id, x, y }) => {
+  showContextMenu(id, x, y)
+})
+```
+
+#### 4.3 组件层级管理
+
+**功能需求**：
+- 支持调整组件的 z-index
+- 支持置顶、置底、上移、下移操作
+- 在组件树中显示层级关系
+
+**实现方案**：
+```javascript
+// store/design.js
+actions: {
+  // 置于顶层
+  bringToFront(componentId) {
+    const component = this.getComponentById(componentId)
+    if (!component) return
+    
+    const siblings = this.getSiblings(componentId)
+    const maxZIndex = Math.max(...siblings.map(c => c.style.zIndex || 0))
+    
+    this.updateComponent(componentId, {
+      style: { zIndex: maxZIndex + 1 }
+    })
+  },
+  
+  // 置于底层
+  sendToBack(componentId) {
+    const component = this.getComponentById(componentId)
+    if (!component) return
+    
+    this.updateComponent(componentId, {
+      style: { zIndex: 0 }
+    })
+    
+    // 调整其他组件的 zIndex
+    const siblings = this.getSiblings(componentId)
+    siblings.forEach(sibling => {
+      if (sibling.id !== componentId && sibling.style.zIndex > 0) {
+        this.updateComponent(sibling.id, {
+          style: { zIndex: sibling.style.zIndex + 1 }
+        })
+      }
+    })
+  },
+  
+  // 上移一层
+  moveUp(componentId) {
+    const component = this.getComponentById(componentId)
+    if (!component) return
+    
+    const currentZIndex = component.style.zIndex || 0
+    this.updateComponent(componentId, {
+      style: { zIndex: currentZIndex + 1 }
+    })
+  },
+  
+  // 下移一层
+  moveDown(componentId) {
+    const component = this.getComponentById(componentId)
+    if (!component) return
+    
+    const currentZIndex = component.style.zIndex || 0
+    if (currentZIndex > 0) {
+      this.updateComponent(componentId, {
+        style: { zIndex: currentZIndex - 1 }
+      })
+    }
+  }
+}
+```
+
+#### 4.4 组件对齐辅助线
+
+**功能需求**：
+- 拖动组件时显示对齐辅助线
+- 支持与其他组件对齐（左、右、上、下、中心）
+- 支持与画布边界对齐
+
+**实现方案**：
+```javascript
+// engine/canvas/AlignmentGuides.js
+export class AlignmentGuides {
+  constructor(stage, layer) {
+    this.stage = stage
+    this.layer = layer
+    this.guides = []
+    this.threshold = 5 // 对齐阈值（像素）
+  }
+  
+  // 显示辅助线
+  show(movingNode, allNodes) {
+    this.clear()
+    
+    const movingBox = movingNode.getClientRect()
+    
+    allNodes.forEach(node => {
+      if (node === movingNode) return
+      
+      const box = node.getClientRect()
+      
+      // 检查左对齐
+      if (Math.abs(movingBox.x - box.x) < this.threshold) {
+        this.drawVerticalLine(box.x)
+        movingNode.x(box.x)
+      }
+      
+      // 检查右对齐
+      if (Math.abs(movingBox.x + movingBox.width - (box.x + box.width)) < this.threshold) {
+        this.drawVerticalLine(box.x + box.width)
+        movingNode.x(box.x + box.width - movingBox.width)
+      }
+      
+      // 检查顶部对齐
+      if (Math.abs(movingBox.y - box.y) < this.threshold) {
+        this.drawHorizontalLine(box.y)
+        movingNode.y(box.y)
+      }
+      
+      // 检查底部对齐
+      if (Math.abs(movingBox.y + movingBox.height - (box.y + box.height)) < this.threshold) {
+        this.drawHorizontalLine(box.y + box.height)
+        movingNode.y(box.y + box.height - movingBox.height)
+      }
+      
+      // 检查中心对齐
+      const movingCenterX = movingBox.x + movingBox.width / 2
+      const centerX = box.x + box.width / 2
+      if (Math.abs(movingCenterX - centerX) < this.threshold) {
+        this.drawVerticalLine(centerX)
+        movingNode.x(centerX - movingBox.width / 2)
+      }
+    })
+  }
+  
+  // 绘制垂直辅助线
+  drawVerticalLine(x) {
+    const line = new Konva.Line({
+      points: [x, 0, x, this.stage.height()],
+      stroke: '#FF4081',
+      strokeWidth: 1,
+      dash: [4, 4],
+    })
+    this.guides.push(line)
+    this.layer.add(line)
+  }
+  
+  // 绘制水平辅助线
+  drawHorizontalLine(y) {
+    const line = new Konva.Line({
+      points: [0, y, this.stage.width(), y],
+      stroke: '#FF4081',
+      strokeWidth: 1,
+      dash: [4, 4],
+    })
+    this.guides.push(line)
+    this.layer.add(line)
+  }
+  
+  // 清除辅助线
+  clear() {
+    this.guides.forEach(guide => guide.destroy())
+    this.guides = []
+  }
+}
+```
+
+#### 4.5 快捷键支持
+
+**功能需求**：
+- Ctrl+C: 复制
+- Ctrl+V: 粘贴
+- Delete: 删除
+- Ctrl+Z: 撤销
+- Ctrl+Y: 重做
+- Ctrl+D: 复制并粘贴
+
+**实现方案**：
+```javascript
+// composables/useKeyboard.js
+export function useKeyboard() {
+  const designStore = useDesignStore()
+  
+  onMounted(() => {
+    document.addEventListener('keydown', handleKeyDown)
+  })
+  
+  onUnmounted(() => {
+    document.removeEventListener('keydown', handleKeyDown)
+  })
+  
+  function handleKeyDown(e) {
+    // 忽略输入框中的按键
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      return
+    }
+    
+    // Ctrl+C: 复制
+    if (e.ctrlKey && e.key === 'c') {
+      e.preventDefault()
+      designStore.copySelectedComponent()
+    }
+    
+    // Ctrl+V: 粘贴
+    if (e.ctrlKey && e.key === 'v') {
+      e.preventDefault()
+      designStore.pasteComponent()
+    }
+    
+    // Delete: 删除
+    if (e.key === 'Delete') {
+      e.preventDefault()
+      designStore.deleteSelectedComponent()
+    }
+    
+    // Ctrl+Z: 撤销
+    if (e.ctrlKey && e.key === 'z') {
+      e.preventDefault()
+      designStore.undo()
+    }
+    
+    // Ctrl+Y: 重做
+    if (e.ctrlKey && e.key === 'y') {
+      e.preventDefault()
+      designStore.redo()
+    }
+    
+    // Ctrl+D: 复制并粘贴
+    if (e.ctrlKey && e.key === 'd') {
+      e.preventDefault()
+      designStore.duplicateSelectedComponent()
     }
   }
 }

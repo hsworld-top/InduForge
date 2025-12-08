@@ -1,228 +1,248 @@
 /**
  * Component Registry - 组件注册中心
- * 
- * 管理所有可用组件的注册、检索和实例化
- * 支持组件分类、搜索、预览等功能
+ *
+ * 职责：
+ * - 管理所有组件的注册和获取
+ * - 提供组件定义查询接口
+ * - 支持组件搜索和分类
+ *
+ * Requirements:
+ * - Requirement 12: 组件注册机制
+ *
+ * Task 2.3: 重构现有组件注册使用 ComponentFactory
  */
 
-// Internal registry storage
-const componentRegistry = new Map()
-
-// 组件分类索引
-const categoryIndex = new Map()
-
-// 组件标签索引
-const tagIndex = new Map()
+import componentFactory from './ComponentFactory.js';
 
 /**
- * Register a component definition
- * @param {Object} definition - Component definition
- * @param {string} definition.type - Unique component type identifier
- * @param {string} definition.name - Display name
- * @param {string} definition.category - Category for grouping
- * @param {string} definition.icon - Icon identifier
- * @param {string} definition.thumbnail - Thumbnail image URL
- * @param {Array<string>} definition.tags - Search tags
- * @param {Object} definition.defaultProps - Default property values
- * @param {Object} definition.defaultStyle - Default style values
- * @param {Object} definition.propsSchema - Schema for property editing
- * @param {Object} definition.eventsSchema - Schema for event configuration
- * @param {Function} definition.render - Custom render function
- * @param {boolean} definition.container - Whether component can contain children
+ * 注册组件
+ *
+ * @param {Object} definition - 组件定义
+ * @param {string} definition.type - 组件类型
+ * @param {string} definition.name - 组件名称
+ * @param {string} definition.category - 组件分类
+ * @param {Component} definition.component - Vue 组件
+ * @param {boolean} definition.container - 是否为容器组件
+ * @param {Object} definition.defaultProps - 默认属性
+ * @param {Object} definition.defaultStyle - 默认样式
+ *
+ * @example
+ * register({
+ *   type: 'Button',
+ *   name: '按钮',
+ *   category: 'basic',
+ *   component: ButtonComponent,
+ *   container: false,
+ *   defaultProps: { text: '按钮' },
+ *   defaultStyle: { width: 80, height: 32 }
+ * })
  */
-export function registerComponent(definition) {
-  if (!definition || !definition.type) {
-    throw new Error('Component definition must have a type')
-  }
-  
-  if (componentRegistry.has(definition.type)) {
-    console.warn(`Component type "${definition.type}" is already registered. Overwriting.`)
-  }
-  
-  const component = {
-    type: definition.type,
-    name: definition.name || definition.type,
-    category: definition.category || 'Other',
-    icon: definition.icon || 'component',
-    thumbnail: definition.thumbnail || null,
-    tags: definition.tags || [],
-    description: definition.description || '',
-    defaultProps: definition.defaultProps || {},
-    defaultStyle: definition.defaultStyle || {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      width: 100,
-      height: 100
-    },
-    propsSchema: definition.propsSchema || {},
-    eventsSchema: definition.eventsSchema || {},
-    render: definition.render || null,
-    container: definition.container || false,
-    version: definition.version || '1.0.0'
-  }
-  
-  componentRegistry.set(definition.type, component)
-  
-  // 更新分类索引
-  updateCategoryIndex(component)
-  
-  // 更新标签索引
-  updateTagIndex(component)
+export function register(definition) {
+    componentFactory.register(definition);
 }
 
 /**
- * 更新分类索引
- */
-function updateCategoryIndex(component) {
-  const category = component.category
-  if (!categoryIndex.has(category)) {
-    categoryIndex.set(category, [])
-  }
-  const components = categoryIndex.get(category)
-  const existingIndex = components.findIndex(c => c.type === component.type)
-  if (existingIndex >= 0) {
-    components[existingIndex] = component
-  } else {
-    components.push(component)
-  }
-}
-
-/**
- * 更新标签索引
- */
-function updateTagIndex(component) {
-  component.tags.forEach(tag => {
-    if (!tagIndex.has(tag)) {
-      tagIndex.set(tag, [])
-    }
-    const components = tagIndex.get(tag)
-    if (!components.find(c => c.type === component.type)) {
-      components.push(component)
-    }
-  })
-}
-
-/**
- * Get a component definition by type
- * @param {string} type - Component type identifier
- * @returns {Object|null} Component definition or null if not found
+ * 获取组件定义
+ *
+ * @param {string} type - 组件类型
+ * @returns {Object|null} 组件定义或 null
+ *
+ * @example
+ * const definition = getComponent('Button')
+ * console.log(definition.name) // '按钮'
  */
 export function getComponent(type) {
-  return componentRegistry.get(type) || null
+    return componentFactory.get(type);
 }
 
 /**
- * Get all registered components
- * @returns {Object[]} Array of all component definitions
+ * 获取所有组件
+ *
+ * @returns {Array} 所有组件定义
  */
 export function getAllComponents() {
-  return Array.from(componentRegistry.values())
+    return componentFactory.getAllTypes().map((type) => componentFactory.get(type));
 }
 
 /**
- * Get components grouped by category
- * @returns {Object} Object with category names as keys and arrays of components as values
+ * 获取所有组件（按分类）
+ *
+ * @returns {Object} 按分类分组的组件
+ *
+ * @example
+ * const categories = getAllComponentsByCategory()
+ * console.log(categories.layout) // [Container, Row, Col, ...]
  */
-export function getComponentsByCategory() {
-  return Object.fromEntries(categoryIndex.entries())
+export function getAllComponentsByCategory() {
+    return componentFactory.getAllByCategory();
 }
 
 /**
- * Search components by keyword
- * @param {string} keyword - Search keyword
- * @returns {Object[]} Matching components
+ * 搜索组件
+ *
+ * @param {string} keyword - 搜索关键词
+ * @returns {Array} 匹配的组件列表
+ *
+ * @example
+ * const results = searchComponents('按钮')
+ * console.log(results) // [{ type: 'Button', name: '按钮', ... }]
  */
 export function searchComponents(keyword) {
-  if (!keyword) {
-    return getAllComponents()
-  }
-  
-  const lowerKeyword = keyword.toLowerCase()
-  return getAllComponents().filter(component => {
-    return (
-      component.name.toLowerCase().includes(lowerKeyword) ||
-      component.type.toLowerCase().includes(lowerKeyword) ||
-      component.description.toLowerCase().includes(lowerKeyword) ||
-      component.tags.some(tag => tag.toLowerCase().includes(lowerKeyword))
-    )
-  })
+    if (!keyword) {
+        return getAllComponents();
+    }
+
+    return componentFactory.search(keyword);
 }
 
 /**
- * Get components by tag
- * @param {string} tag - Tag name
- * @returns {Object[]} Components with the specified tag
- */
-export function getComponentsByTag(tag) {
-  return tagIndex.get(tag) || []
-}
-
-/**
- * Get all categories
- * @returns {string[]} Array of category names
- */
-export function getAllCategories() {
-  return Array.from(categoryIndex.keys())
-}
-
-/**
- * Create a new component instance with default values
- * @param {string} type - Component type identifier
- * @param {Object} overrides - Optional property/style overrides
- * @returns {Object|null} New component instance or null if type not found
+ * 创建组件实例
+ *
+ * @param {string} type - 组件类型
+ * @param {Object} overrides - 覆盖的属性
+ * @returns {Object|null} 组件实例或 null
+ *
+ * @example
+ * const instance = createComponentInstance('Button', {
+ *   props: { text: '确定' },
+ *   style: { left: 100, top: 100 }
+ * })
  */
 export function createComponentInstance(type, overrides = {}) {
-  const definition = getComponent(type)
-  if (!definition) {
-    return null
-  }
-  
-  return {
-    id: generateId(),
-    type: definition.type,
-    label: definition.name,
-    locked: false,
-    visible: true,
-    style: {
-      ...definition.defaultStyle,
-      ...(overrides.style || {})
-    },
-    props: {
-      ...definition.defaultProps,
-      ...(overrides.props || {})
-    },
-    bindings: {},
-    events: {},
-    animations: [],
-    children: []
-  }
+    try {
+        const instance = componentFactory.createInstance(type, overrides);
+
+        // 添加额外的字段以保持向后兼容
+        return {
+            ...instance,
+            events: overrides.events || {},
+            bindings: overrides.bindings || {},
+        };
+    } catch (error) {
+        console.warn(`[Registry] ${error.message}`);
+        return null;
+    }
 }
 
 /**
- * Generate a unique ID for components
- * @returns {string} UUID v4
+ * 注册所有组件
+ * 这个函数将在应用初始化时调用
+ *
+ * Task 2.3: 重构现有组件注册
  */
-function generateId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0
-    const v = c === 'x' ? r : (r & 0x3 | 0x8)
-    return v.toString(16)
-  })
+export function registerAllComponents() {
+    console.log('[Registry] Registering all components...');
+
+    // 导入布局组件
+    import('./layout/index.js').then((module) => {
+        const layoutComponents = module.default;
+        layoutComponents.forEach((component) => {
+            register(component);
+        });
+        console.log(`[Registry] Registered ${layoutComponents.length} layout components`);
+    });
+
+    // 导入基础组件
+    import('./basic/index.js').then((module) => {
+        const basicComponents = module.default;
+        basicComponents.forEach((component) => {
+            register(component);
+        });
+        console.log(`[Registry] Registered ${basicComponents.length} basic components`);
+    });
+
+    // 导入 UI 组件
+    import('./ui/index.js').then((module) => {
+        const uiComponents = module.default;
+        uiComponents.forEach((component) => {
+            register(component);
+        });
+        console.log(`[Registry] Registered ${uiComponents.length} UI components`);
+    });
+
+    // 导入图表组件
+    import('./charts/index.js').then((module) => {
+        const chartComponents = module.default;
+        chartComponents.forEach((component) => {
+            register(component);
+        });
+        console.log(`[Registry] Registered ${chartComponents.length} chart components`);
+    });
+
+    console.log(`[Registry] Total registered: ${componentFactory.getCount()} components`);
 }
 
 /**
- * Clear all registered components (useful for testing)
+ * 同步注册所有组件（用于测试和开发）
+ *
+ * @param {Array} layoutComponents - 布局组件数组
+ * @param {Array} basicComponents - 基础组件数组
+ * @param {Array} uiComponents - UI组件数组
+ * @param {Array} chartComponents - 图表组件数组
+ */
+export function registerAllComponentsSync(layoutComponents = [], basicComponents = [], uiComponents = [], chartComponents = []) {
+    console.log('[Registry] Registering all components (sync)...');
+
+    // 注册布局组件
+    layoutComponents.forEach((component) => {
+        register(component);
+    });
+
+    // 注册基础组件
+    basicComponents.forEach((component) => {
+        register(component);
+    });
+
+    // 注册 UI 组件
+    uiComponents.forEach((component) => {
+        register(component);
+    });
+
+    // 注册图表组件
+    chartComponents.forEach((component) => {
+        register(component);
+    });
+
+    console.log(`[Registry] Total registered: ${componentFactory.getCount()} components`);
+    console.log(`[Registry] - Layout: ${layoutComponents.length}`);
+    console.log(`[Registry] - Basic: ${basicComponents.length}`);
+    console.log(`[Registry] - UI: ${uiComponents.length}`);
+    console.log(`[Registry] - Chart: ${chartComponents.length}`);
+}
+
+/**
+ * 获取所有分类
+ *
+ * @returns {Array} 分类名称数组
+ */
+export function getAllCategories() {
+    return componentFactory.getAllCategories();
+}
+
+/**
+ * 获取所有组件（按分类）- 别名函数
+ *
+ * @returns {Object} 按分类分组的组件
+ */
+export function getComponentsByCategory() {
+    return getAllComponentsByCategory();
+}
+
+/**
+ * 注册组件 - 别名函数
+ *
+ * @param {Object} definition - 组件定义
+ */
+export function registerComponent(definition) {
+    return register(definition);
+}
+
+/**
+ * 清空注册表
  */
 export function clearRegistry() {
-  componentRegistry.clear()
+    componentFactory.clear();
 }
 
-/**
- * Check if a component type is registered
- * @param {string} type - Component type identifier
- * @returns {boolean} True if registered
- */
-export function hasComponent(type) {
-  return componentRegistry.has(type)
-}
+// 导出 ComponentFactory 实例（用于调试和高级用法）
+export { componentFactory };

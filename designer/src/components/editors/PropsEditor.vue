@@ -1,84 +1,52 @@
 <template>
-  <div class="props-editor">
-    <el-form 
-      v-if="hasProps" 
-      label-position="left" 
-      label-width="80px" 
-      size="small"
-    >
-      <template v-for="(schema, key) in propsSchema" :key="key">
-        <el-form-item 
-          v-if="isPropVisible(schema)"
-          :label="schema.label || key"
-        >
-          <!-- Boolean 类型 - Requirements: 4.4 -->
-          <el-switch
-            v-if="schema.type === 'boolean'"
-            :model-value="getPropValue(key, schema)"
-            @change="(val) => handlePropChange(key, val)"
-          />
-          
-          <!-- Number 类型 - Requirements: 4.5 -->
-          <el-input-number
-            v-else-if="schema.type === 'number'"
-            :model-value="getPropValue(key, schema)"
-            :min="schema.min"
-            :max="schema.max"
-            :step="schema.step || 1"
-            @change="(val) => handlePropChange(key, val)"
-          />
-          
-          <!-- Enum 类型 - Requirements: 4.7 -->
-          <el-select
-            v-else-if="schema.type === 'enum'"
-            :model-value="getPropValue(key, schema)"
-            @change="(val) => handlePropChange(key, val)"
-          >
-            <el-option
-              v-for="opt in schema.options"
-              :key="opt.value"
-              :label="opt.label"
-              :value="opt.value"
-            />
-          </el-select>
-          
-          <!-- String 类型 (多行) - Requirements: 4.6 -->
-          <el-input
-            v-else-if="schema.type === 'string' && schema.multiline"
-            type="textarea"
-            :rows="3"
-            :model-value="getPropValue(key, schema)"
-            @change="(val) => handlePropChange(key, val)"
-          />
-          
-          <!-- String 类型 (颜色) -->
-          <el-color-picker
-            v-else-if="schema.type === 'string' && schema.format === 'color'"
-            :model-value="getPropValue(key, schema)"
-            @change="(val) => handlePropChange(key, val)"
-          />
-          
-          <!-- String 类型 (默认) - Requirements: 4.6 -->
-          <el-input
-            v-else
-            :model-value="getPropValue(key, schema)"
-            :placeholder="schema.description"
-            @change="(val) => handlePropChange(key, val)"
-          />
-          
-          <!-- 描述信息 -->
-          <div v-if="schema.description" class="prop-description">
-            {{ schema.description }}
-          </div>
-        </el-form-item>
-      </template>
-    </el-form>
-    
-    <!-- 空状态 -->
-    <div v-else class="empty-state">
-      <span class="empty-text">无可编辑属性</span>
+    <div class="props-editor">
+        <el-form v-if="hasProps" label-position="left" label-width="80px" size="small">
+            <template v-for="(schema, key) in propsSchema" :key="key">
+                <el-form-item v-if="isPropVisible(schema)" :label="schema.label || key">
+                    <!-- Boolean 类型 - Requirements: 4.4 -->
+                    <el-switch v-if="schema.type === 'boolean'" :model-value="getPropValue(key, schema)" @change="(val) => handlePropChange(key, val)" />
+
+                    <!-- Number 类型 - Requirements: 4.5 -->
+                    <el-input-number
+                        v-else-if="schema.type === 'number'"
+                        :model-value="getPropValue(key, schema)"
+                        :min="schema.min"
+                        :max="schema.max"
+                        :step="schema.step || 1"
+                        @change="(val) => handlePropChange(key, val)" />
+
+                    <!-- Enum 类型 - Requirements: 4.7 -->
+                    <el-select v-else-if="schema.type === 'enum'" :model-value="getPropValue(key, schema)" @change="(val) => handlePropChange(key, val)">
+                        <el-option v-for="opt in schema.options" :key="opt.value" :label="opt.label" :value="opt.value" />
+                    </el-select>
+
+                    <!-- String 类型 (多行) - Requirements: 4.6 -->
+                    <el-input
+                        v-else-if="schema.type === 'string' && schema.multiline"
+                        type="textarea"
+                        :rows="3"
+                        :model-value="getPropValue(key, schema)"
+                        @change="(val) => handlePropChange(key, val)" />
+
+                    <!-- String 类型 (颜色) -->
+                    <el-color-picker v-else-if="schema.type === 'string' && schema.format === 'color'" :model-value="getPropValue(key, schema)" @change="(val) => handlePropChange(key, val)" />
+
+                    <!-- String 类型 (默认) - Requirements: 4.6 -->
+                    <el-input v-else :model-value="getPropValue(key, schema)" :placeholder="schema.description" @change="(val) => handlePropChange(key, val)" />
+
+                    <!-- 描述信息 -->
+                    <div v-if="schema.description" class="prop-description">
+                        {{ schema.description }}
+                    </div>
+                </el-form-item>
+            </template>
+        </el-form>
+
+        <!-- 空状态 -->
+        <div v-else class="empty-state">
+            <span class="empty-text">无可编辑属性</span>
+        </div>
     </div>
-  </div>
 </template>
 
 <script setup>
@@ -88,34 +56,34 @@
  * 支持 boolean/number/string/enum 类型
  * Requirements: 4.1, 4.2, 4.4, 4.5, 4.6, 4.7
  */
-import { computed } from 'vue'
+import { computed } from 'vue';
 
 const props = defineProps({
-  /**
-   * 组件属性对象
-   */
-  props: {
-    type: Object,
-    default: () => ({})
-  },
-  /**
-   * 属性 Schema 定义
-   * Requirements: 4.1 - 显示组件属性表单
-   */
-  propsSchema: {
-    type: Object,
-    default: () => ({})
-  }
-})
+    /**
+     * 组件属性对象
+     */
+    props: {
+        type: Object,
+        default: () => ({}),
+    },
+    /**
+     * 属性 Schema 定义
+     * Requirements: 4.1 - 显示组件属性表单
+     */
+    propsSchema: {
+        type: Object,
+        default: () => ({}),
+    },
+});
 
-const emit = defineEmits(['update:props', 'change'])
+const emit = defineEmits(['update:props', 'change']);
 
 /**
  * 是否有可编辑的属性
  */
 const hasProps = computed(() => {
-  return props.propsSchema && Object.keys(props.propsSchema).length > 0
-})
+    return props.propsSchema && Object.keys(props.propsSchema).length > 0;
+});
 
 /**
  * 获取属性值
@@ -124,12 +92,12 @@ const hasProps = computed(() => {
  * @returns {any} 属性值
  */
 function getPropValue(key, schema) {
-  const value = props.props?.[key]
-  // 如果值为 undefined，返回默认值
-  if (value === undefined && schema?.default !== undefined) {
-    return schema.default
-  }
-  return value
+    const value = props.props?.[key];
+    // 如果值为 undefined，返回默认值
+    if (value === undefined && schema?.default !== undefined) {
+        return schema.default;
+    }
+    return value;
 }
 
 /**
@@ -138,10 +106,10 @@ function getPropValue(key, schema) {
  * @returns {boolean} 是否可见
  */
 function isPropVisible(schema) {
-  if (typeof schema.visible === 'function') {
-    return schema.visible(props.props || {})
-  }
-  return true
+    if (typeof schema.visible === 'function') {
+        return schema.visible(props.props || {});
+    }
+    return true;
 }
 
 /**
@@ -151,54 +119,54 @@ function isPropVisible(schema) {
  * @param {any} value - 新值
  */
 function handlePropChange(key, value) {
-  const newProps = { ...props.props, [key]: value }
-  emit('update:props', newProps)
-  emit('change', key, value)
+    const newProps = { ...props.props, [key]: value };
+    emit('update:props', newProps);
+    emit('change', key, value);
 }
 </script>
 
 <style scoped>
 .props-editor {
-  padding: 12px;
+    padding: 12px;
 }
 
 .empty-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
 }
 
 .empty-text {
-  font-size: 12px;
-  color: #909399;
+    font-size: 12px;
+    color: #909399;
 }
 
 .prop-description {
-  font-size: 11px;
-  color: #909399;
-  margin-top: 4px;
-  line-height: 1.4;
+    font-size: 11px;
+    color: #909399;
+    margin-top: 4px;
+    line-height: 1.4;
 }
 
 :deep(.el-form-item) {
-  margin-bottom: 12px;
+    margin-bottom: 12px;
 }
 
 :deep(.el-form-item:last-child) {
-  margin-bottom: 0;
+    margin-bottom: 0;
 }
 
 :deep(.el-form-item__label) {
-  font-size: 12px;
-  color: #606266;
+    font-size: 12px;
+    color: #606266;
 }
 
 :deep(.el-input-number) {
-  width: 100%;
+    width: 100%;
 }
 
 :deep(.el-select) {
-  width: 100%;
+    width: 100%;
 }
 </style>

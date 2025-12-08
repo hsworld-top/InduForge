@@ -1,0 +1,216 @@
+/**
+ * Container - 容器组件
+ *
+ * 布局容器，支持 Flex/Grid 布局
+ * 分类：布局组件
+ *
+ * Task 2.3: 重构布局组件注册
+ */
+
+import ContainerComponent from './Container.vue';
+
+export default {
+    type: 'Container',
+    component: ContainerComponent,
+    name: '盒子容器',
+    category: '布局组件',
+    icon: 'folder',
+    thumbnail: null,
+    tags: ['布局', '容器', 'container', 'flex', 'grid'],
+    description: '布局容器，支持 Flex/Grid 布局，可包含子组件',
+
+    defaultProps: {
+        layout: 'flex',
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        alignItems: 'stretch',
+        flexWrap: 'nowrap',
+        gap: 0,
+        padding: 16,
+        margin: 0,
+        overflow: 'visible',
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: '#409EFF',
+        borderRadius: 4,
+        boxShadow: 'none',
+    },
+
+    defaultStyle: {
+        position: 'absolute',
+        left: 40,      // 对齐画布左侧（考虑 padding）
+        top: 100,
+        width: '95%',  // 使用百分比，自适应画布宽度
+        height: 200,
+        zIndex: 1,
+    },
+
+    propsSchema: {
+        layout: {
+            type: 'enum',
+            label: '布局模式',
+            group: '布局',
+            options: [
+                { value: 'flex', label: 'Flex' },
+                { value: 'grid', label: 'Grid' },
+                { value: 'block', label: 'Block' },
+            ],
+            default: 'flex',
+        },
+        flexDirection: {
+            type: 'enum',
+            label: '排列方向',
+            group: '布局',
+            options: [
+                { value: 'row', label: '水平' },
+                { value: 'row-reverse', label: '水平反向' },
+                { value: 'column', label: '垂直' },
+                { value: 'column-reverse', label: '垂直反向' },
+            ],
+            default: 'row',
+            visible: (props) => props.layout === 'flex',
+        },
+        justifyContent: {
+            type: 'enum',
+            label: '主轴对齐',
+            group: '布局',
+            options: [
+                { value: 'flex-start', label: '起始' },
+                { value: 'flex-end', label: '结束' },
+                { value: 'center', label: '居中' },
+                { value: 'space-between', label: '两端对齐' },
+                { value: 'space-around', label: '均匀分布' },
+                { value: 'space-evenly', label: '等间距' },
+            ],
+            default: 'flex-start',
+            visible: (props) => props.layout === 'flex',
+        },
+        alignItems: {
+            type: 'enum',
+            label: '交叉轴对齐',
+            group: '布局',
+            options: [
+                { value: 'flex-start', label: '起始' },
+                { value: 'flex-end', label: '结束' },
+                { value: 'center', label: '居中' },
+                { value: 'stretch', label: '拉伸' },
+                { value: 'baseline', label: '基线' },
+            ],
+            default: 'stretch',
+            visible: (props) => props.layout === 'flex',
+        },
+        flexWrap: {
+            type: 'enum',
+            label: '换行',
+            group: '布局',
+            options: [
+                { value: 'nowrap', label: '不换行' },
+                { value: 'wrap', label: '换行' },
+                { value: 'wrap-reverse', label: '反向换行' },
+            ],
+            default: 'nowrap',
+            visible: (props) => props.layout === 'flex',
+        },
+        gap: {
+            type: 'number',
+            label: '间距',
+            group: '布局',
+            default: 0,
+            min: 0,
+            max: 100,
+            unit: 'px',
+        },
+        padding: {
+            type: 'number',
+            label: '内边距',
+            group: '布局',
+            default: 16,
+            min: 0,
+            max: 100,
+            unit: 'px',
+        },
+        margin: {
+            type: 'number',
+            label: '外边距',
+            group: '布局',
+            default: 0,
+            min: 0,
+            max: 100,
+            unit: 'px',
+        },
+        overflow: {
+            type: 'enum',
+            label: '溢出处理',
+            group: '布局',
+            options: [
+                { value: 'visible', label: '可见' },
+                { value: 'hidden', label: '隐藏' },
+                { value: 'scroll', label: '滚动' },
+                { value: 'auto', label: '自动' },
+            ],
+            default: 'visible',
+        },
+        backgroundColor: {
+            type: 'color',
+            label: '背景颜色',
+            group: '外观',
+            default: 'transparent',
+        },
+        borderWidth: {
+            type: 'number',
+            label: '边框宽度',
+            group: '外观',
+            min: 0,
+            max: 20,
+            default: 1,
+            unit: 'px',
+        },
+        borderStyle: {
+            type: 'enum',
+            label: '边框样式',
+            group: '外观',
+            options: [
+                { value: 'solid', label: '实线' },
+                { value: 'dashed', label: '虚线' },
+                { value: 'dotted', label: '点线' },
+                { value: 'none', label: '无边框' },
+            ],
+            default: 'dashed',
+        },
+        borderColor: {
+            type: 'color',
+            label: '边框颜色',
+            group: '外观',
+            default: '#409EFF',
+        },
+        borderRadius: {
+            type: 'number',
+            label: '圆角',
+            group: '外观',
+            min: 0,
+            max: 100,
+            default: 4,
+            unit: 'px',
+        },
+        boxShadow: {
+            type: 'enum',
+            label: '阴影',
+            group: '外观',
+            options: [
+                { value: 'none', label: '无阴影' },
+                { value: '0 2px 4px rgba(0,0,0,0.1)', label: '浅阴影' },
+                { value: '0 4px 8px rgba(0,0,0,0.15)', label: '中阴影' },
+                { value: '0 8px 16px rgba(0,0,0,0.2)', label: '深阴影' },
+            ],
+            default: 'none',
+        },
+    },
+
+    eventsSchema: {
+        click: { label: '点击', description: '鼠标点击时触发' },
+    },
+
+    container: true,
+    version: '1.0.0',
+};

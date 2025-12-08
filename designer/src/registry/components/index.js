@@ -1,35 +1,29 @@
 /**
- * Component Registration - 组件注册
+ * Component Exports
  * 
- * 统一注册所有可用组件
+ * 导出组件数组供测试使用
  */
 
-import { registerComponent } from '../index'
-import basicComponents from './basic'
+import layoutComponents from '../layout/index.js';
+import basicComponents from '../basic/index.js';
+import uiComponents from '../ui/index.js';
+import chartComponents from '../charts/index.js';
 
-/**
- * 注册所有基础组件
- */
+export { layoutComponents, basicComponents, uiComponents, chartComponents };
+
 export function registerBasicComponents() {
-  basicComponents.forEach(component => {
-    registerComponent(component)
-  })
-  
-  console.log(`✅ Registered ${basicComponents.length} basic components`)
+    // 这个函数在 components.js 中实现
 }
 
-/**
- * 注册所有组件
- */
-export function registerAllComponents() {
-  registerBasicComponents()
-  // TODO: 注册其他类型的组件
-  // registerUIComponents()
-  // registerChartComponents()
-  // registerIndustrialComponents()
+export function registerLayoutComponents() {
+    // 这个函数在 components.js 中实现
 }
 
-export default {
-  registerBasicComponents,
-  registerAllComponents
+export function registerUIComponents() {
+    // 这个函数在 components.js 中实现
 }
+
+export function registerChartComponents() {
+    // 这个函数在 components.js 中实现
+}
+

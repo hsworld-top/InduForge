@@ -4,10 +4,10 @@
  */
 
 // Canvas 组件
-export * from './canvas'
+export * from './canvas';
 
 // Panel 组件
-export * from './panels'
+export * from './panels';
 
 // Editor 组件
-export * from './editors'
+export * from './editors';
