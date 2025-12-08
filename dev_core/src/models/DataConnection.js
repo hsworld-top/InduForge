@@ -33,6 +33,12 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'connectionId',
         as: 'relationalConfig'
       });
+
+      // 与SQL配置关联
+      DataConnection.hasMany(models.DataSqlConfig, {
+        foreignKey: 'connectionId',
+        as: 'sqlConfigs'
+      });
     }
   }
 
@@ -53,25 +59,52 @@ module.exports = (sequelize, DataTypes) => {
       comment: '连接名称'
     },
     type: {
-      type: DataTypes.ENUM('relational', 'mqtt', 'websocket', 'opcua', 'http'),
+      type: DataTypes.ENUM('relational', 'mqtt', 'websocket', 'opcua', 'modbus', 'http', 's7'),
       allowNull: false,
       comment: '连接类型'
     },
     category: {
-      type: DataTypes.ENUM('internal', 'external'),
+      type: DataTypes.ENUM('database', 'message', 'protocol', 'api'),
       allowNull: false,
-      defaultValue: 'external',
+      defaultValue: 'api',
       comment: '连接类别'
     },
     status: {
-      type: DataTypes.ENUM('active', 'inactive', 'error'),
+      type: DataTypes.ENUM('connected', 'disconnected', 'error', 'unknown'),
       allowNull: false,
-      defaultValue: 'active',
+      defaultValue: 'unknown',
       comment: '连接状态'
     },
-    lastConnected: {
+    isEnabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+      comment: '是否启用'
+    },
+    retryCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 3,
+      comment: '重连次数'
+    },
+    retryInterval: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 5000,
+      comment: '重连间隔(ms)'
+    },
+    healthCheckInterval: {
+      type: DataTypes.INTEGER,
+      defaultValue: 30000,
+      comment: '健康检查间隔(ms)'
+    },
+    lastConnectedAt: {
       type: DataTypes.DATE,
       comment: '最后连接时间'
+    },
+    lastErrorMessage: {
+      type: DataTypes.TEXT,
+      comment: '最后错误信息'
     },
     createdBy: {
       type: DataTypes.CHAR(36),

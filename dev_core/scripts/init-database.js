@@ -220,10 +220,7 @@ async function resetDatabase() {
       'DROP TABLE IF EXISTS `data_relational_configs`',
       'DROP TABLE IF EXISTS `data_connections`',
       // 低代码平台相关表
-      'DROP TABLE IF EXISTS `pages`',
-      'DROP TABLE IF EXISTS `blocks`',
-      'DROP TABLE IF EXISTS `block_groups`',
-      'DROP TABLE IF EXISTS `block_categories`',
+      'DROP TABLE IF EXISTS `design_pages`',
       // 基础表
       'DROP TABLE IF EXISTS `logs`',
       'DROP TABLE IF EXISTS `projects`',

@@ -28,12 +28,6 @@ module.exports = (sequelize, DataTypes) => {
         as: 'updater'
       });
 
-      // 与SQL配置关联
-      DataQuery.hasOne(models.DataSqlConfig, {
-        foreignKey: 'queryId',
-        as: 'sqlConfig'
-      });
-
       // 与查询日志关联
       DataQuery.hasMany(models.DataQueryLog, {
         foreignKey: 'queryId',
@@ -72,15 +66,29 @@ module.exports = (sequelize, DataTypes) => {
       comment: '查询分类'
     },
     queryType: {
-      type: DataTypes.ENUM('sql', 'http_get', 'http_post', 'mqtt_publish', 'mqtt_subscribe', 'websocket', 'opcua_read', 'opcua_write'),
+      type: DataTypes.ENUM('sql', 'tags', 'http', 'mqtt_pub', 'mqtt_sub'),
       allowNull: false,
       comment: '查询类型'
     },
-    isActive: {
+    config: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      comment: '查询配置(SQL/参数/URL等)'
+    },
+    transformer: {
+      type: DataTypes.TEXT,
+      comment: '数据转换脚本'
+    },
+    isEnabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
-      comment: '是否激活'
+      comment: '是否启用'
+    },
+    timeout: {
+      type: DataTypes.INTEGER,
+      defaultValue: 30000,
+      comment: '执行超时(ms)'
     },
     cacheEnabled: {
       type: DataTypes.BOOLEAN,

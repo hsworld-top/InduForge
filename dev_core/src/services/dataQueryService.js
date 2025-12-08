@@ -1,4 +1,4 @@
-const { DataQuery, DataSqlConfig, DataQueryLog, DataConnection, DataRelationalConfig } = require('../models');
+const { DataQuery, DataQueryLog, DataConnection, DataRelationalConfig } = require('../models');
 const DriverFactory = require('./drivers/DriverFactory');
 const AppError = require('../utils/AppError');
 const ErrorCodes = require('../constants/errorCodes');
@@ -30,11 +30,6 @@ class DataQueryService {
           model: DataConnection,
           as: 'connection',
           attributes: ['id', 'name', 'type']
-        },
-        {
-          model: DataSqlConfig,
-          as: 'sqlConfig',
-          required: false
         }
       ],
       limit: parseInt(limit),
@@ -82,17 +77,9 @@ class DataQueryService {
       description,
       category,
       queryType,
+      config,
       createdBy: userId
     });
-
-    // 如果是SQL查询，创建对应的配置
-    if (queryType === 'sql' && config) {
-      await DataSqlConfig.create({
-        queryId: query.id,
-        sql: config.sql,
-        parameters: config.parameters
-      });
-    }
 
     // 重新获取完整数据
     const fullQuery = await DataQuery.findByPk(query.id, {
@@ -101,11 +88,6 @@ class DataQueryService {
           model: DataConnection,
           as: 'connection',
           attributes: ['id', 'name', 'type']
-        },
-        {
-          model: DataSqlConfig,
-          as: 'sqlConfig',
-          required: false
         }
       ]
     });
@@ -133,11 +115,6 @@ class DataQueryService {
               required: false
             }
           ]
-        },
-        {
-          model: DataSqlConfig,
-          as: 'sqlConfig',
-          required: false
         }
       ]
     });
@@ -149,7 +126,7 @@ class DataQueryService {
       });
     }
 
-    if (!query.isActive) {
+    if (!query.isEnabled) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
         message: '查询已被禁用'
       });
@@ -161,7 +138,7 @@ class DataQueryService {
     let status = 'success';
 
     try {
-      if (query.queryType === 'sql' && query.sqlConfig) {
+      if (query.queryType === 'sql' && query.config) {
         result = await this.executeSqlQuery(query, parameters);
       } else {
         status = 'error';
@@ -206,8 +183,8 @@ class DataQueryService {
    * @returns {Promise<Object>} 查询结果
    */
   async executeSqlQuery(query, parameters) {
-    const sql = query.sqlConfig.sql;
-    const paramDefs = query.sqlConfig.parameters || [];
+    const sql = query.config.sql;
+    const paramDefs = query.config.parameters || [];
 
     // 构建参数数组
     const replacements = paramDefs.map(param => {
@@ -239,7 +216,7 @@ class DataQueryService {
       password: relationalConfig.password,
       database: relationalConfig.database,
       charset: relationalConfig.charset,
-      timeout: relationalConfig.timeout
+      timeout: relationalConfig.queryTimeout
     });
 
     return await driver.executeQuery(sql, replacements);

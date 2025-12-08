@@ -354,7 +354,27 @@ CREATE TABLE IF NOT EXISTS `data_queries` (
 CREATE UNIQUE INDEX `queries_project_name_uq` ON `data_queries` (`projectId`, `name`);
 CREATE INDEX `queries_type_idx` ON `data_queries` (`queryType`);
 
--- 2.9 查询执行日志表
+-- 2.9 SQL配置表（用于存储预定义SQL语句）
+CREATE TABLE IF NOT EXISTS `data_sql_configs` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `connectionId` char(36) NOT NULL COMMENT '连接ID',
+  `name` varchar(100) NOT NULL COMMENT 'SQL配置名称',
+  `description` text COMMENT '描述',
+  `sqlStatement` text NOT NULL COMMENT 'SQL语句',
+  `parameters` json DEFAULT NULL COMMENT '参数定义',
+  `isEnabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+  `createdBy` char(36) NOT NULL COMMENT '创建者ID',
+  `updatedBy` char(36) DEFAULT NULL COMMENT '更新者ID',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `sql_configs_fk_conn` FOREIGN KEY (`connectionId`) REFERENCES `data_connections` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `sql_configs_fk_creator` FOREIGN KEY (`createdBy`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='SQL配置表';
+
+CREATE UNIQUE INDEX `sql_configs_conn_name_uq` ON `data_sql_configs` (`connectionId`, `name`);
+
+-- 2.10 查询执行日志表
 CREATE TABLE IF NOT EXISTS `data_query_logs` (
   `id` char(36) NOT NULL DEFAULT (uuid()),
   `queryId` char(36) NOT NULL COMMENT '查询ID',
@@ -456,53 +476,7 @@ CREATE TABLE IF NOT EXISTS `alarm_notifications` (
 -- 第四部分：设计中心相关表
 -- ============================================
 
--- 4.1 资源文件夹表
-CREATE TABLE IF NOT EXISTS `design_asset_folders` (
-  `id` char(36) NOT NULL DEFAULT (uuid()),
-  `projectId` char(36) NOT NULL COMMENT '所属工程ID',
-  `parentId` char(36) DEFAULT NULL COMMENT '父文件夹ID',
-  `name` varchar(100) NOT NULL COMMENT '文件夹名称',
-  `sortOrder` int DEFAULT 0 COMMENT '排序',
-  `createdAt` datetime(6) NOT NULL,
-  `updatedAt` datetime(6) NOT NULL,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `asset_folders_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `asset_folders_fk_parent` FOREIGN KEY (`parentId`) REFERENCES `design_asset_folders` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='资源文件夹表';
-
-CREATE UNIQUE INDEX `asset_folders_name_uq` ON `design_asset_folders` (`projectId`, `parentId`, `name`);
-
--- 4.2 资源文件表
-CREATE TABLE IF NOT EXISTS `design_assets` (
-  `id` char(36) NOT NULL DEFAULT (uuid()),
-  `projectId` char(36) NOT NULL COMMENT '所属工程ID',
-  `folderId` char(36) DEFAULT NULL COMMENT '文件夹ID',
-  `name` varchar(200) NOT NULL COMMENT '资源名称',
-  `originalName` varchar(200) DEFAULT NULL COMMENT '原始文件名',
-  `type` enum('image','svg','video','audio','model_3d','font','json','other') NOT NULL COMMENT '资源类型',
-  `mimeType` varchar(100) DEFAULT NULL COMMENT 'MIME类型',
-  `url` varchar(1000) NOT NULL COMMENT '资源访问路径',
-  `thumbnailUrl` varchar(1000) DEFAULT NULL COMMENT '缩略图路径',
-  `size` bigint DEFAULT 0 COMMENT '文件大小(字节)',
-  `width` int DEFAULT NULL COMMENT '宽度(图片/视频)',
-  `height` int DEFAULT NULL COMMENT '高度(图片/视频)',
-  `duration` int DEFAULT NULL COMMENT '时长(视频/音频,秒)',
-  `metadata` json DEFAULT NULL COMMENT '扩展元数据',
-  `tags` json DEFAULT NULL COMMENT '标签数组',
-  `usageCount` int DEFAULT 0 COMMENT '使用次数',
-  `uploadedBy` char(36) NOT NULL COMMENT '上传者ID',
-  `createdAt` datetime(6) NOT NULL,
-  `updatedAt` datetime(6) NOT NULL,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `assets_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `assets_fk_folder` FOREIGN KEY (`folderId`) REFERENCES `design_asset_folders` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `assets_fk_uploader` FOREIGN KEY (`uploadedBy`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='资源文件表';
-
-CREATE INDEX `assets_project_type_idx` ON `design_assets` (`projectId`, `type`);
-CREATE INDEX `assets_folder_idx` ON `design_assets` (`folderId`);
-
--- 4.3 页面表
+-- 4.1 设计页面表
 CREATE TABLE IF NOT EXISTS `design_pages` (
   `id` char(36) NOT NULL DEFAULT (uuid()),
   `projectId` char(36) NOT NULL COMMENT '所属工程ID',
@@ -531,18 +505,64 @@ CREATE TABLE IF NOT EXISTS `design_pages` (
   `createdAt` datetime(6) NOT NULL,
   `updatedAt` datetime(6) NOT NULL,
   PRIMARY KEY (`id`),
-  CONSTRAINT `pages_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `pages_fk_parent` FOREIGN KEY (`parentId`) REFERENCES `design_pages` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `pages_fk_creator` FOREIGN KEY (`createdBy`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设计中心页面表';
+  CONSTRAINT `design_pages_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `design_pages_fk_parent` FOREIGN KEY (`parentId`) REFERENCES `design_pages` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `design_pages_fk_creator` FOREIGN KEY (`createdBy`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设计页面表';
 
-CREATE INDEX `pages_project_idx` ON `design_pages` (`projectId`);
-CREATE INDEX `pages_parent_idx` ON `design_pages` (`parentId`);
-CREATE INDEX `pages_type_idx` ON `design_pages` (`type`);
-CREATE INDEX `pages_status_idx` ON `design_pages` (`status`);
-CREATE INDEX `pages_locked_idx` ON `design_pages` (`lockedBy`);
-CREATE INDEX `pages_sort_idx` ON `design_pages` (`projectId`, `parentId`, `sortOrder`);
-CREATE UNIQUE INDEX `pages_project_path_uq` ON `design_pages` (`projectId`, `path`);
+CREATE INDEX `design_pages_project_idx` ON `design_pages` (`projectId`);
+CREATE INDEX `design_pages_parent_idx` ON `design_pages` (`parentId`);
+CREATE INDEX `design_pages_type_idx` ON `design_pages` (`type`);
+CREATE INDEX `design_pages_status_idx` ON `design_pages` (`status`);
+CREATE INDEX `design_pages_locked_idx` ON `design_pages` (`lockedBy`);
+CREATE INDEX `design_pages_sort_idx` ON `design_pages` (`projectId`, `parentId`, `sortOrder`);
+CREATE UNIQUE INDEX `design_pages_project_path_uq` ON `design_pages` (`projectId`, `path`);
+
+-- 4.2 资源文件夹表
+CREATE TABLE IF NOT EXISTS `design_asset_folders` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `projectId` char(36) NOT NULL COMMENT '所属工程ID',
+  `parentId` char(36) DEFAULT NULL COMMENT '父文件夹ID',
+  `name` varchar(100) NOT NULL COMMENT '文件夹名称',
+  `sortOrder` int DEFAULT 0 COMMENT '排序',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `asset_folders_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `asset_folders_fk_parent` FOREIGN KEY (`parentId`) REFERENCES `design_asset_folders` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='资源文件夹表';
+
+CREATE UNIQUE INDEX `asset_folders_name_uq` ON `design_asset_folders` (`projectId`, `parentId`, `name`);
+
+-- 4.3 资源文件表
+CREATE TABLE IF NOT EXISTS `design_assets` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `projectId` char(36) NOT NULL COMMENT '所属工程ID',
+  `folderId` char(36) DEFAULT NULL COMMENT '文件夹ID',
+  `name` varchar(200) NOT NULL COMMENT '资源名称',
+  `originalName` varchar(200) DEFAULT NULL COMMENT '原始文件名',
+  `type` enum('image','svg','video','audio','model_3d','font','json','other') NOT NULL COMMENT '资源类型',
+  `mimeType` varchar(100) DEFAULT NULL COMMENT 'MIME类型',
+  `url` varchar(1000) NOT NULL COMMENT '资源访问路径',
+  `thumbnailUrl` varchar(1000) DEFAULT NULL COMMENT '缩略图路径',
+  `size` bigint DEFAULT 0 COMMENT '文件大小(字节)',
+  `width` int DEFAULT NULL COMMENT '宽度(图片/视频)',
+  `height` int DEFAULT NULL COMMENT '高度(图片/视频)',
+  `duration` int DEFAULT NULL COMMENT '时长(视频/音频,秒)',
+  `metadata` json DEFAULT NULL COMMENT '扩展元数据',
+  `tags` json DEFAULT NULL COMMENT '标签数组',
+  `usageCount` int DEFAULT 0 COMMENT '使用次数',
+  `uploadedBy` char(36) NOT NULL COMMENT '上传者ID',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `assets_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `assets_fk_folder` FOREIGN KEY (`folderId`) REFERENCES `design_asset_folders` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `assets_fk_uploader` FOREIGN KEY (`uploadedBy`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='资源文件表';
+
+CREATE INDEX `assets_project_type_idx` ON `design_assets` (`projectId`, `type`);
+CREATE INDEX `assets_folder_idx` ON `design_assets` (`folderId`);
 
 -- 4.4 页面历史版本表
 CREATE TABLE IF NOT EXISTS `design_page_histories` (

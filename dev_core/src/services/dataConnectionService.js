@@ -171,7 +171,7 @@ class DataConnectionService {
       password: relationalConfig.password,
       database: relationalConfig.database,
       charset: relationalConfig.charset,
-      timeout: relationalConfig.timeout
+      timeout: relationalConfig.queryTimeout
     });
 
     return await driver.getTables();
@@ -220,7 +220,7 @@ class DataConnectionService {
       password: relationalConfig.password,
       database: relationalConfig.database,
       charset: relationalConfig.charset,
-      timeout: relationalConfig.timeout
+      timeout: relationalConfig.queryTimeout
     });
 
     return await driver.getTableData(tableName, options);
@@ -274,7 +274,7 @@ class DataConnectionService {
       password: relationalConfig.password,
       database: relationalConfig.database,
       charset: relationalConfig.charset,
-      timeout: relationalConfig.timeout
+      timeout: relationalConfig.queryTimeout
     });
 
     const startTime = Date.now();

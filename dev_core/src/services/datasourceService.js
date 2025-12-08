@@ -1,4 +1,4 @@
-const { Project, DataQuery, DataSqlConfig, DataConnection } = require('../models');
+const { Project, DataQuery, DataConnection } = require('../models');
 const { getResponseData } = require('../utils/mockResponse');
 const AppError = require('../utils/AppError');
 const ErrorCodes = require('../constants/errorCodes');
@@ -45,12 +45,7 @@ class DatasourceService {
           model: DataConnection,
           as: 'connection',
           attributes: ['id', 'name', 'type'],
-        },
-        {
-          model: DataSqlConfig,
-          as: 'sqlConfig',
-          required: false,
-        },
+        }
       ],
       limit: parseInt(limit, 10),
       offset,
@@ -77,12 +72,7 @@ class DatasourceService {
           model: DataConnection,
           as: 'connection',
           attributes: ['id', 'name', 'type', 'projectId'],
-        },
-        {
-          model: DataSqlConfig,
-          as: 'sqlConfig',
-          required: false,
-        },
+        }
       ],
     });
 
@@ -141,17 +131,10 @@ class DatasourceService {
       description,
       category,
       queryType,
+      config,
       createdBy: userId,
-      isActive: true,
+      isEnabled: true,
     });
-
-    if (queryType === 'sql' && config && config.sql) {
-      await DataSqlConfig.create({
-        queryId: query.id,
-        sql: config.sql,
-        parameters: config.parameters || [],
-      });
-    }
 
     const fullQuery = await DataQuery.findByPk(query.id, {
       include: [
@@ -159,12 +142,7 @@ class DatasourceService {
           model: DataConnection,
           as: 'connection',
           attributes: ['id', 'name', 'type'],
-        },
-        {
-          model: DataSqlConfig,
-          as: 'sqlConfig',
-          required: false,
-        },
+        }
       ],
     });
 
@@ -175,9 +153,7 @@ class DatasourceService {
    * 更新数据源
    */
   async update(id, body, userId, tenantId) {
-    const query = await DataQuery.findByPk(id, {
-      include: [{ model: DataSqlConfig, as: 'sqlConfig', required: false }],
-    });
+    const query = await DataQuery.findByPk(id);
     if (!query) {
       throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { resource: 'Datasource', id });
     }
@@ -191,8 +167,8 @@ class DatasourceService {
       category,
       connectionId,
       queryType,
-      isActive,
-      config = {},
+      isEnabled,
+      config,
     } = body;
 
     if (connectionId && connectionId !== query.connectionId) {
@@ -209,27 +185,11 @@ class DatasourceService {
     if (description !== undefined) query.description = description;
     if (category !== undefined) query.category = category;
     if (queryType !== undefined) query.queryType = queryType;
-    if (isActive !== undefined) query.isActive = !!isActive;
+    if (isEnabled !== undefined) query.isEnabled = !!isEnabled;
+    if (config !== undefined) query.config = config;
     if (userId) query.updatedBy = userId;
 
     await query.save();
-
-    // 维护 SQL 配置
-    if (query.queryType === 'sql') {
-      if (!query.sqlConfig) {
-        if (config && config.sql) {
-          await DataSqlConfig.create({
-            queryId: query.id,
-            sql: config.sql,
-            parameters: config.parameters || [],
-          });
-        }
-      } else if (config) {
-        if (config.sql !== undefined) query.sqlConfig.sql = config.sql;
-        if (config.parameters !== undefined) query.sqlConfig.parameters = config.parameters;
-        await query.sqlConfig.save();
-      }
-    }
 
     const fullQuery = await DataQuery.findByPk(query.id, {
       include: [
@@ -237,12 +197,7 @@ class DatasourceService {
           model: DataConnection,
           as: 'connection',
           attributes: ['id', 'name', 'type'],
-        },
-        {
-          model: DataSqlConfig,
-          as: 'sqlConfig',
-          required: false,
-        },
+        }
       ],
     });
 
@@ -261,7 +216,6 @@ class DatasourceService {
     await this.ensureProjectOfTenant(query.projectId, tenantId);
 
     const data = query.toJSON();
-    await DataSqlConfig.destroy({ where: { queryId: id } });
     await query.destroy();
     return getResponseData(data);
   }

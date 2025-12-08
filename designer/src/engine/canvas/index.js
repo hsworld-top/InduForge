@@ -2,9 +2,10 @@
  * Canvas Engine - 导出
  */
 
-export { KonvaRenderer } from './KonvaRenderer'
-export { SelectionManager } from './SelectionManager'
-export { GuideLineManager } from './GuideLineManager'
-export { CanvasEngine } from './CanvasEngine'
+import { KonvaRenderer } from './KonvaRenderer.js'
+import { SelectionManager } from './SelectionManager.js'
+import { GuideLineManager } from './GuideLineManager.js'
+import { CanvasEngine } from './CanvasEngine.js'
 
+export { KonvaRenderer, SelectionManager, GuideLineManager, CanvasEngine }
 export default CanvasEngine

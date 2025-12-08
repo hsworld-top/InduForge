@@ -189,17 +189,6 @@ DataQuery.belongsTo(User, {
   as: 'updater',
 });
 
-// 数据查询和SQL配置：一对一
-DataQuery.hasOne(DataSqlConfig, {
-  foreignKey: 'queryId',
-  as: 'sqlConfig',
-});
-
-DataSqlConfig.belongsTo(DataQuery, {
-  foreignKey: 'queryId',
-  as: 'query',
-});
-
 // 数据查询和查询日志：一对多
 DataQuery.hasMany(DataQueryLog, {
   foreignKey: 'queryId',

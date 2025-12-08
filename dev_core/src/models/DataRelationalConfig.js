@@ -16,7 +16,8 @@ module.exports = (sequelize, DataTypes) => {
     id: {
       type: DataTypes.CHAR(36),
       primaryKey: true,
-      defaultValue: DataTypes.UUIDV4
+      defaultValue: DataTypes.UUIDV4,
+      comment: '主键ID'
     },
     connectionId: {
       type: DataTypes.CHAR(36),
@@ -25,7 +26,7 @@ module.exports = (sequelize, DataTypes) => {
       comment: '连接ID'
     },
     dbType: {
-      type: DataTypes.ENUM('mysql', 'postgresql', 'sqlserver', 'oracle', 'sqlite'),
+      type: DataTypes.ENUM('mysql', 'postgresql', 'sqlserver', 'oracle', 'sqlite', 'clickhouse'),
       allowNull: false,
       comment: '数据库类型'
     },
@@ -52,24 +53,51 @@ module.exports = (sequelize, DataTypes) => {
     password: {
       type: DataTypes.TEXT,
       allowNull: false,
-      comment: '密码（加密存储）'
+      comment: '密码(加密存储)'
+    },
+    schema: {
+      type: DataTypes.STRING(100),
+      comment: 'Schema名(PostgreSQL/Oracle)'
     },
     charset: {
       type: DataTypes.STRING(50),
       defaultValue: 'utf8mb4',
       comment: '字符集'
     },
-    connectionLimit: {
+    timezone: {
+      type: DataTypes.STRING(50),
+      comment: '时区'
+    },
+    ssl: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: '是否启用SSL'
+    },
+    sslConfig: {
+      type: DataTypes.JSON,
+      comment: 'SSL配置'
+    },
+    poolMin: {
+      type: DataTypes.INTEGER,
+      defaultValue: 2,
+      comment: '连接池最小连接数'
+    },
+    poolMax: {
       type: DataTypes.INTEGER,
       defaultValue: 10,
-      comment: '连接池大小'
+      comment: '连接池最大连接数'
     },
     acquireTimeout: {
       type: DataTypes.INTEGER,
       defaultValue: 60000,
       comment: '获取连接超时(ms)'
     },
-    timeout: {
+    idleTimeout: {
+      type: DataTypes.INTEGER,
+      defaultValue: 30000,
+      comment: '空闲超时(ms)'
+    },
+    queryTimeout: {
       type: DataTypes.INTEGER,
       defaultValue: 60000,
       comment: '查询超时(ms)'
