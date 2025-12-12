@@ -1,163 +1,126 @@
-# 数据中心 (DataCenter) 文档
+# DataCenter 数据中心
 
-## 概述
-
-数据中心是 InduForge 平台的数据管理模块，提供数据连接管理、SQL 查询、数据预览等功能。
+DataCenter 是 InduForge 平台的数据管理模块，提供统一的数据库连接管理、SQL 查询和数据源配置功能。
 
 ## 核心功能
 
-### 1. 数据连接管理
-- 支持多种数据库类型
-  - MySQL
-  - PostgreSQL
-  - SQL Server
-- 连接配置和测试
-- 连接池管理
-- 连接状态监控
+### 1. 连接管理
+- 支持多种关系型数据库（MySQL、PostgreSQL、SQL Server）
+- 可视化连接配置和测试
+- 连接状态实时监控
+- 连接树形展示，支持展开/折叠
 
-### 2. SQL 查询管理
-- 查询编辑器（Monaco Editor）
-- SQL 语法高亮
-- 查询执行和结果预览
-- 查询历史记录
-- 参数化查询
+### 2. 查询管理
+- 保存和管理 SQL 查询
+- 查询列表展示和快速访问
+- 支持参数化查询
+- 查询结果分页展示
 
-### 3. 数据预览
-- 表结构查看
-- 数据浏览
-- 分页加载
-- 数据导出
+### 3. SQL 编辑器
+- 基于 Monaco Editor 的代码编辑器
+- SQL 语法高亮和自动补全
+- SQL 美化功能
+- 支持切换数据库连接
+- 表选择器快速生成查询
 
-### 4. 点位订阅（工业场景）
-- PLC 数据订阅
-- 实时数据推送
-- 数据缓存
-- 订阅管理
+### 4. 表管理
+- 表列表展示（显示行数）
+- 双击表快速创建查询
+- 表列表固定标签页
+- 表数据预览
 
 ## 技术架构
 
+### 前端技术栈
+- **框架**: Vue 3 Composition API
+- **UI 组件**: Element Plus
+- **代码编辑器**: Monaco Editor
+- **SQL 解析**: node-sql-parser
+- **图标**: unplugin-icons (Tabler Icons)
+- **样式**: Tailwind CSS
+
+### 组件架构
+采用模块化设计，按功能领域拆分：
+- **连接组件**: 负责连接的展示和管理
+- **数据库组件**: 按数据库类型拆分（MySQL、PostgreSQL、SQL Server）
+- **对话框组件**: 统一的对话框管理
+- **共享组件**: 可复用的通用组件
+
+### 状态管理
+- 使用 Composables 管理业务逻辑
+- `useConnection`: 连接管理
+- `useMysql`: MySQL 专用逻辑
+- `useDatabase`: 数据库通用逻辑
+
+## 用户界面
+
+### 布局结构
 ```
-DataCenter
-├── src/
-│   ├── api/              # API 接口
-│   ├── components/       # Vue 组件
-│   ├── constants/        # 常量定义
-│   ├── router/           # 路由配置
-│   ├── utils/            # 工具函数
-│   └── views/            # 页面视图
-├── public/               # 静态资源
-└── vite.config.js        # Vite 配置
-```
-
-## 快速开始
-
-### 启动数据中心
-
-```bash
-cd InduForge/datacenter
-pnpm install
-pnpm dev
-```
-
-访问: http://localhost:9092/datacenter/
-
-### 创建数据连接
-
-1. 点击"新建连接"
-2. 选择数据库类型
-3. 填写连接信息
-4. 测试连接
-5. 保存
-
-### 创建查询
-
-1. 点击"新建查询"
-2. 选择数据连接
-3. 编写 SQL 查询
-4. 运行查询
-5. 保存查询
-
-## 文档导航
-
-- **[数据连接管理](./connections.md)** - 数据库连接配置和管理
-- **[查询管理](./queries.md)** - SQL 查询编辑和执行
-
-## API 接口
-
-### 连接管理
-
-```
-GET    /api/v1/data/projects/:projectId/connections
-POST   /api/v1/data/projects/:projectId/connections
-PUT    /api/v1/data/projects/:projectId/connections/:id
-DELETE /api/v1/data/projects/:projectId/connections/:id
-POST   /api/v1/data/projects/:projectId/connections/:id/test
+┌─────────────────────────────────────────────────┐
+│  左侧连接树  │        右侧内容区域              │
+│             │                                   │
+│  连接1      │  ┌─ 标签页 ─────────────────┐   │
+│  ├─ 查询    │  │ 表列表 │ 查询1 │ 查询2  │   │
+│  │  ├─ Q1  │  └────────────────────────────┘   │
+│  │  └─ Q2  │                                   │
+│  └─ 表      │  ┌─ SQL 编辑器 ─────────────┐   │
+│     ├─ T1  │  │ [连接选择] [表选择]       │   │
+│     └─ T2  │  │                            │   │
+│             │  │ SELECT * FROM ...         │   │
+│  连接2      │  │                            │   │
+│  ...        │  └────────────────────────────┘   │
+│             │                                   │
+│             │  ┌─ 查询结果 ─────────────────┐  │
+│             │  │ 表格数据展示              │  │
+│             │  │ [分页控件]                │  │
+│             │  └────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
 ```
 
-### 查询管理
+### 视觉设计
+- **查询区域**: 蓝色主题，表示已保存的查询
+- **表区域**: 绿色主题，表示数据库表
+- **Hover 效果**: 背景高亮 + 轻微右移动画
+- **状态指示**: 连接状态用颜色标识（绿色=已连接，红色=错误，灰色=未连接）
 
-```
-GET    /api/v1/data/projects/:projectId/queries
-POST   /api/v1/data/projects/:projectId/queries
-PUT    /api/v1/data/projects/:projectId/queries/:id
-DELETE /api/v1/data/projects/:projectId/queries/:id
-POST   /api/v1/data/queries/:id/execute
-```
+## 工作流程
 
-### 数据操作
+### 创建和使用连接
+1. 点击"新建"按钮创建连接
+2. 填写连接信息（主机、端口、数据库、用户名、密码）
+3. 测试连接确保配置正确
+4. 保存连接
+5. 双击连接展开，查看表和查询列表
 
-```
-POST   /api/v1/data/projects/:projectId/connections/:id/execute-sql
-GET    /api/v1/data/projects/:projectId/connections/:id/tables
-GET    /api/v1/data/projects/:projectId/connections/:id/tables/:tableName/data
-```
+### 执行 SQL 查询
+1. 双击表创建查询，或点击"新建查询"
+2. 在 SQL 编辑器中编写 SQL
+3. 可选：切换数据库连接或选择表
+4. 点击"运行"执行查询
+5. 查看结果并可选保存查询
 
-## 使用场景
+### 管理已保存的查询
+1. 查询保存后显示在左侧树的"查询"区域
+2. 双击查询打开编辑
+3. 修改后可重新保存
+4. 右键或 hover 显示删除按钮
 
-### 场景1: 数据报表
-1. 创建数据连接
-2. 编写查询 SQL
-3. 在 Designer 中配置数据源
-4. 绑定到表格组件
+## 扩展性
 
-### 场景2: 实时监控
-1. 创建 PLC 连接
-2. 配置点位订阅
-3. 在 Designer 中配置数据源
-4. 绑定到仪表盘组件
+### 添加新数据库类型
+1. 在 `components/database/` 下创建新目录（如 `postgres/`）
+2. 实现对应的组件（Content、QueryEditor、TableList 等）
+3. 在 `composables/database/` 下创建专用逻辑（如 `usePostgres.js`）
+4. 在 `config/connectionTypes.js` 中注册新类型
+5. 在 `components/connection/forms/` 下创建连接表单
 
-### 场景3: 数据分析
-1. 创建数据连接
-2. 编写聚合查询
-3. 在 Designer 中配置数据源
-4. 绑定到图表组件
+### 自定义 SQL 方言
+使用 `node-sql-parser` 支持不同的 SQL 方言：
+- MySQL: `mysql`
+- PostgreSQL: `postgresql`
+- SQL Server: `transactsql`
 
-## 常见问题
-
-### Q: 如何配置数据库连接？
-A: 参考 [数据连接管理](./connections.md) 文档。
-
-### Q: 如何编写参数化查询？
-A: 使用 `?` 占位符，在查询配置中定义参数。
-
-### Q: 如何导出查询结果？
-A: 在查询结果页面点击"导出"按钮，选择格式（CSV/Excel）。
-
-### Q: 如何优化查询性能？
-A: 
-1. 添加合适的索引
-2. 限制返回行数
-3. 避免 SELECT *
-4. 使用查询缓存
-
-## 相关资源
-
-- [后端 API 文档](../backend/README.md)
-- [设计中心文档](../designer/README.md)
-- [DSL 设计规范](../dsl-design.md)
-- [Monaco Editor 文档](https://microsoft.github.io/monaco-editor/)
-
----
-
-**版本**: 2.0.0  
-**最后更新**: 2025-12-08
+## 相关文档
+- [后端 API 文档](../backend/data-api.md)
+- [组件开发指南](./component-guide.md)
+- [SQL 解析器使用](./sql-parser.md)

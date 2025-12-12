@@ -48,6 +48,8 @@ dev_core/
 │   ├── api/           # API 客户端模块
 │   ├── assets/        # 图片、样式
 │   ├── components/    # Vue 组件
+│   ├── composables/   # Vue 组合式函数
+│   ├── config/        # 配置文件
 │   ├── constants/     # 常量和枚举
 │   ├── router/        # Vue Router 配置
 │   ├── store/         # Pinia 状态管理
@@ -59,6 +61,46 @@ dev_core/
 ├── vite.config.js     # Vite 配置
 ├── tailwind.config.js # Tailwind 配置
 └── package.json       # 依赖配置
+```
+
+## DataCenter 特有结构
+
+数据中心应用采用模块化架构：
+
+```
+datacenter/src/
+├── components/
+│   ├── connection/          # 连接管理组件
+│   │   ├── ConnectionList.vue       # 连接列表（左侧树）
+│   │   ├── ConnectionItem.vue       # 连接项
+│   │   ├── ConnectionContextMenu.vue # 右键菜单
+│   │   └── forms/                   # 连接表单
+│   │       ├── MysqlConnectionForm.vue
+│   │       ├── PostgresConnectionForm.vue
+│   │       └── SqlServerConnectionForm.vue
+│   ├── database/            # 数据库操作组件
+│   │   └── mysql/           # MySQL 组件
+│   │       ├── MysqlContent.vue      # MySQL 主容器
+│   │       ├── MysqlQueryEditor.vue  # SQL 编辑器
+│   │       ├── MysqlQueryTabs.vue    # 查询标签页
+│   │       ├── MysqlTableList.vue    # 表列表
+│   │       └── MysqlTableDataView.vue # 表数据视图
+│   ├── dialogs/             # 对话框组件
+│   │   ├── ConnectionDialog.vue
+│   │   └── ConnectionDetailsDialog.vue
+│   └── shared/              # 共享组件
+│       ├── MonacoEditor.vue
+│       └── StatusIndicator.vue
+├── composables/             # 组合式函数
+│   ├── useConnection.js     # 连接管理
+│   └── database/
+│       ├── useDatabase.js   # 数据库通用逻辑
+│       └── useMysql.js      # MySQL 专用逻辑
+├── config/                  # 配置
+│   └── connectionTypes.js   # 连接类型配置
+└── utils/                   # 工具函数
+    ├── sqlParser.js         # SQL 解析器
+    └── request.js           # HTTP 请求封装
 ```
 
 ## Designer 特有结构
