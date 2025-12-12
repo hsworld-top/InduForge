@@ -29,3 +29,5 @@ pids                   # 进程ID文件目录
 
 .kiro
 .kiro/
+
+docker/images/*

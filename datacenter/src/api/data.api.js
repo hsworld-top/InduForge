@@ -55,12 +55,13 @@ export const getTableData = (projectId, connectionId, tableName, params = {}) =>
 
 /**
  * 更新数据连接
- * @param {string} id - 连接ID
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
  * @param {object} data - 更新数据
  */
-export const updateConnection = (id, data) => {
+export const updateConnection = (projectId, connectionId, data) => {
   return request({
-    url: `/data/connections/${id}`,
+    url: `/data/projects/${projectId}/connections/${connectionId}`,
     method: 'put',
     data
   })
@@ -68,12 +69,27 @@ export const updateConnection = (id, data) => {
 
 /**
  * 删除数据连接
- * @param {string} id - 连接ID
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
  */
-export const deleteConnection = (id) => {
+export const deleteConnection = (projectId, connectionId) => {
   return request({
-    url: `/data/connections/${id}`,
+    url: `/data/projects/${projectId}/connections/${connectionId}`,
     method: 'delete'
+  })
+}
+
+/**
+ * 更新连接状态
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
+ * @param {string} status - 状态 (connected, disconnected, error, unknown)
+ */
+export const updateConnectionStatus = (projectId, connectionId, status) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/status`,
+    method: 'patch',
+    data: { status }
   })
 }
 
@@ -181,6 +197,7 @@ export default {
   getTableData,
   updateConnection,
   deleteConnection,
+  updateConnectionStatus,
   getQueries,
   createQuery,
   updateQuery,

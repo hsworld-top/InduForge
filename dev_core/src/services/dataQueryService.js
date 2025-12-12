@@ -165,7 +165,7 @@ class DataQueryService {
     });
 
     if (status === 'error') {
-      throw new AppError(ErrorCodes.DATABASE_ERROR, {
+      throw new AppError(ErrorCodes.DATABASE_ERROR, 500, {
         message: errorMessage
       });
     }

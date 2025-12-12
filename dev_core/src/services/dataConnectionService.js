@@ -57,13 +57,36 @@ class DataConnectionService {
   async createConnection(projectId, data, userId) {
     const { name, type, category, config } = data;
 
+    // 根据 type 自动推断 category（如果未提供）
+    let finalCategory = category;
+    if (!finalCategory) {
+      const categoryMap = {
+        'relational': 'database',
+        'mqtt': 'message',
+        'websocket': 'message',
+        'opcua': 'protocol',
+        'modbus': 'protocol',
+        's7': 'protocol',
+        'http': 'api'
+      };
+      finalCategory = categoryMap[type] || 'api';
+    }
+
+    // 验证 category 值是否合法
+    const validCategories = ['database', 'message', 'protocol', 'api'];
+    if (!validCategories.includes(finalCategory)) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: `无效的 category 值: ${finalCategory}，必须是 ${validCategories.join(', ')} 之一`
+      });
+    }
+
     // 创建数据连接
     const connection = await DataConnection.create({
       projectId,
       name,
       type,
-      category: category || 'external',
-      status: 'active',
+      category: finalCategory,
+      status: 'unknown',
       createdBy: userId
     });
 
@@ -130,7 +153,7 @@ class DataConnectionService {
       
       return await driver.testConnection();
     } catch (error) {
-      throw new AppError(ErrorCodes.DATABASE_ERROR, {
+      throw new AppError(ErrorCodes.DATABASE_ERROR, 500, {
         message: '数据库连接失败，请检查配置信息',
         error: error.message
       });
@@ -227,6 +250,145 @@ class DataConnectionService {
   }
 
   /**
+   * 更新数据连接
+   * @param {string} projectId - 工程ID
+   * @param {string} connectionId - 连接ID
+   * @param {Object} data - 更新数据 { name, type, config }
+   * @param {string} userId - 用户ID
+   * @returns {Promise<Object>} 更新后的连接对象
+   */
+  async updateConnection(projectId, connectionId, data, userId) {
+    const { name, type, config } = data;
+
+    // 查找连接
+    const connection = await DataConnection.findOne({
+      where: { id: connectionId, projectId }
+    });
+
+    if (!connection) {
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        resource: 'DataConnection',
+        id: connectionId
+      });
+    }
+
+    // 更新基本信息
+    if (name) connection.name = name;
+    if (type) connection.type = type;
+    connection.updatedBy = userId;
+    await connection.save();
+
+    // 如果是关系库类型，更新配置
+    if (type === 'relational' && config) {
+      const relationalConfig = await DataRelationalConfig.findOne({
+        where: { connectionId }
+      });
+
+      if (relationalConfig) {
+        // 更新现有配置
+        await relationalConfig.update(config);
+      } else {
+        // 创建新配置
+        await DataRelationalConfig.create({
+          connectionId,
+          ...config
+        });
+      }
+    }
+
+    // 重新获取完整数据
+    const fullConnection = await DataConnection.findByPk(connectionId, {
+      include: [
+        {
+          model: DataRelationalConfig,
+          as: 'relationalConfig',
+          required: false
+        }
+      ]
+    });
+
+    return fullConnection;
+  }
+
+  /**
+   * 删除数据连接
+   * @param {string} projectId - 工程ID
+   * @param {string} connectionId - 连接ID
+   * @returns {Promise<boolean>} 是否删除成功
+   */
+  async deleteConnection(projectId, connectionId) {
+    // 查找连接
+    const connection = await DataConnection.findOne({
+      where: { id: connectionId, projectId }
+    });
+
+    if (!connection) {
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        resource: 'DataConnection',
+        id: connectionId
+      });
+    }
+
+    // 删除关联的配置
+    if (connection.type === 'relational') {
+      await DataRelationalConfig.destroy({
+        where: { connectionId }
+      });
+    }
+
+    // 删除连接
+    await connection.destroy();
+
+    return true;
+  }
+
+  /**
+   * 更新连接状态
+   * @param {string} projectId - 工程ID
+   * @param {string} connectionId - 连接ID
+   * @param {string} status - 状态 (connected, disconnected, error, unknown)
+   * @returns {Promise<Object>} 更新后的连接对象
+   */
+  async updateConnectionStatus(projectId, connectionId, status) {
+    // 验证状态值
+    const validStatuses = ['connected', 'disconnected', 'error', 'unknown'];
+    if (!validStatuses.includes(status)) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: `无效的状态值: ${status}，必须是 ${validStatuses.join(', ')} 之一`
+      });
+    }
+
+    // 查找连接
+    const connection = await DataConnection.findOne({
+      where: { id: connectionId, projectId }
+    });
+
+    if (!connection) {
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        resource: 'DataConnection',
+        id: connectionId
+      });
+    }
+
+    // 更新状态
+    connection.status = status;
+    await connection.save();
+
+    // 重新获取完整数据
+    const fullConnection = await DataConnection.findByPk(connectionId, {
+      include: [
+        {
+          model: DataRelationalConfig,
+          as: 'relationalConfig',
+          required: false
+        }
+      ]
+    });
+
+    return fullConnection;
+  }
+
+  /**
    * 执行 SQL 查询
    * @param {string} projectId - 工程ID
    * @param {string} connectionId - 连接ID
@@ -287,7 +449,7 @@ class DataConnectionService {
         executionTime
       };
     } catch (error) {
-      throw new AppError(ErrorCodes.DATABASE_ERROR, {
+      throw new AppError(ErrorCodes.DATABASE_ERROR, 500, {
         message: '执行SQL失败',
         error: error.message
       });

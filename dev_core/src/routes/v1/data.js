@@ -89,6 +89,89 @@ router.post('/projects/:projectId/connections', authenticateToken, async (req, r
 });
 
 /**
+ * 更新数据连接
+ * PUT /api/v1/projects/:projectId/connections/:connectionId
+ */
+router.put('/projects/:projectId/connections/:connectionId', authenticateToken, async (req, res, next) => {
+  try {
+    const { projectId, connectionId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const connection = await dataConnectionService.updateConnection(
+      projectId,
+      connectionId,
+      req.body,
+      req.user.id
+    );
+
+    res.json({
+      success: true,
+      message: '数据连接更新成功',
+      data: connection
+    });
+  } catch (error) {
+    console.error('更新数据连接失败:', error);
+    next(error);
+  }
+});
+
+/**
+ * 删除数据连接
+ * DELETE /api/v1/projects/:projectId/connections/:connectionId
+ */
+router.delete('/projects/:projectId/connections/:connectionId', authenticateToken, async (req, res, next) => {
+  try {
+    const { projectId, connectionId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    await dataConnectionService.deleteConnection(projectId, connectionId);
+
+    res.json({
+      success: true,
+      message: '数据连接删除成功'
+    });
+  } catch (error) {
+    console.error('删除数据连接失败:', error);
+    next(error);
+  }
+});
+
+/**
+ * 更新连接状态
+ * PATCH /api/v1/projects/:projectId/connections/:connectionId/status
+ */
+router.patch('/projects/:projectId/connections/:connectionId/status', authenticateToken, async (req, res, next) => {
+  try {
+    const { projectId, connectionId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少状态参数'
+      });
+    }
+
+    const connection = await dataConnectionService.updateConnectionStatus(
+      projectId,
+      connectionId,
+      status
+    );
+
+    res.json({
+      success: true,
+      message: '连接状态更新成功',
+      data: connection
+    });
+  } catch (error) {
+    console.error('更新连接状态失败:', error);
+    next(error);
+  }
+});
+
+/**
  * 测试数据连接
  * POST /api/v1/projects/:projectId/connections/test
  */

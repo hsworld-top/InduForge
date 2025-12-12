@@ -5,7 +5,24 @@
       class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
       <div class="p-4 flex-1 overflow-y-auto min-h-0">
         <div class="space-y-2">
-          <h3 class="text-sm font-medium text-gray-900 dark:text-white mb-3">数据连接</h3>
+          <!-- 标题和操作按钮 -->
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">数据连接</h3>
+            <div class="flex items-center space-x-2">
+              <el-button type="primary" size="small" @click="openCreateConnectionDialog">
+                <el-icon class="mr-1">
+                  <Plus />
+                </el-icon>
+                新建
+              </el-button>
+              <el-button size="small" circle @click="refreshConnections"
+                class="!border-gray-300 dark:!border-gray-600 hover:!bg-gray-50 dark:hover:!bg-gray-700">
+                <el-icon>
+                  <Refresh />
+                </el-icon>
+              </el-button>
+            </div>
+          </div>
 
           <div class="connection-list">
             <div v-for="connection in connections" :key="connection.id" :class="[
@@ -13,7 +30,8 @@
               selectedConnectionId === connection.id
                 ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600'
                 : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-            ]" @click="selectConnection(connection)" @dblclick.stop="handleConnectionDblClick(connection)">
+            ]" @click="selectConnection(connection)" @dblclick.stop="handleConnectionDblClick(connection)"
+              @contextmenu.prevent="handleConnectionContextMenu($event, connection)">
               <!-- 连接图标 -->
               <div class="flex items-center justify-between">
                 <div class="flex items-center flex-1">
@@ -40,8 +58,14 @@
                 <div class="flex-shrink-0 flex items-center space-x-1">
                   <span :class="[
                     'w-2 h-2 rounded-full',
-                    connection.status === 'active' ? 'bg-green-500' : 'bg-red-500'
-                  ]" :title="connection.status === 'active' ? '连接正常' : '连接异常'"></span>
+                    connection.status === 'connected' ? 'bg-green-500' : 
+                    connection.status === 'error' ? 'bg-red-500' : 
+                    connection.status === 'disconnected' ? 'bg-gray-400' : 'bg-gray-400'
+                  ]" :title="
+                    connection.status === 'connected' ? '已连接' : 
+                    connection.status === 'error' ? '连接错误' : 
+                    connection.status === 'disconnected' ? '已断开' : '未知状态'
+                  "></span>
                   <el-icon class="text-gray-400" v-if="connection.type === 'relational'">
                     <component :is="getConnectionState(connection.id).expanded ? 'CaretBottom' : 'CaretRight'" />
                   </el-icon>
@@ -139,27 +163,6 @@
 
     <!-- 右侧内容区域 -->
     <div class="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden">
-      <!-- 顶部工具栏 -->
-      <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2.5 flex-shrink-0">
-        <div class="flex items-center justify-start space-x-2">
-          <!-- 新建连接 -->
-          <el-button type="primary" size="small" @click="() => showCreateConnectionDialog = true">
-            <el-icon class="mr-1">
-              <Plus />
-            </el-icon>
-            新建连接
-          </el-button>
-          <!-- 刷新 -->
-          <el-button size="small" circle @click="refreshConnections"
-            class="!border-gray-300 dark:!border-gray-600 hover:!bg-gray-50 dark:hover:!bg-gray-700">
-            <el-icon>
-              <Refresh />
-            </el-icon>
-          </el-button>
-
-        </div>
-      </div>
-
       <!-- 主体内容区 -->
       <div class="flex-1 overflow-hidden min-h-0">
         <!-- 标签页区域 -->
@@ -385,8 +388,52 @@
       </div>
     </div>
 
-    <!-- 新建连接对话框 -->
-    <el-dialog v-model="showCreateConnectionDialog" title="新建数据连接" width="600px" :close-on-click-modal="false">
+    <!-- 右键菜单 -->
+    <div v-show="showContextMenu" 
+      :style="{ position: 'fixed', left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px', zIndex: 9999 }"
+      class="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[150px]">
+      <div @click="openConnection" 
+        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center">
+        <el-icon class="mr-2">
+          <Connection />
+        </el-icon>
+        打开连接
+      </div>
+      <div @click="disconnectConnection" 
+        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center">
+        <el-icon class="mr-2">
+          <Close />
+        </el-icon>
+        断开连接
+      </div>
+      <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+      <div @click="viewConnectionDetails" 
+        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center">
+        <el-icon class="mr-2">
+          <View />
+        </el-icon>
+        查看详情
+      </div>
+      <div @click="editConnection" 
+        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center">
+        <el-icon class="mr-2">
+          <Edit />
+        </el-icon>
+        编辑连接
+      </div>
+      <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+      <div @click="deleteConnection" 
+        class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center">
+        <el-icon class="mr-2">
+          <Delete />
+        </el-icon>
+        删除连接
+      </div>
+    </div>
+
+    <!-- 新建/编辑连接对话框 -->
+    <el-dialog v-model="showConnectionDialog" :title="connectionDialogMode === 'create' ? '新建数据连接' : '编辑数据连接'"
+      width="600px" :close-on-click-modal="false">
       <el-form ref="connectionFormRef" :model="connectionForm" :rules="connectionFormRules" label-width="120px">
         <el-form-item label="连接名称" prop="name">
           <el-input v-model="connectionForm.name" placeholder="请输入连接名称" />
@@ -428,11 +475,44 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="showCreateConnectionDialog = false">取消</el-button>
+        <el-button @click="showConnectionDialog = false">取消</el-button>
         <el-button @click="testConnection" :loading="testingConnection">测试连接</el-button>
-        <el-button type="primary" @click="createConnection" :loading="creatingConnection">
-          创建连接
+        <el-button type="primary" @click="saveConnection" :loading="creatingConnection">
+          {{ connectionDialogMode === 'create' ? '创建连接' : '保存修改' }}
         </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 查看连接详情对话框 -->
+    <el-dialog v-model="showViewConnectionDialog" title="连接详情" width="600px">
+      <el-descriptions :column="1" border v-if="currentConnection">
+        <el-descriptions-item label="连接名称">{{ currentConnection.name }}</el-descriptions-item>
+        <el-descriptions-item label="连接类型">{{ getConnectionTypeLabel(currentConnection.type) }}</el-descriptions-item>
+        <el-descriptions-item label="连接状态">
+          <el-tag :type="
+            currentConnection.status === 'connected' ? 'success' : 
+            currentConnection.status === 'error' ? 'danger' : 
+            currentConnection.status === 'disconnected' ? 'warning' : 'info'
+          ">
+            {{ 
+              currentConnection.status === 'connected' ? '已连接' : 
+              currentConnection.status === 'error' ? '连接错误' : 
+              currentConnection.status === 'disconnected' ? '已断开' : '未知状态'
+            }}
+          </el-tag>
+        </el-descriptions-item>
+        <template v-if="currentConnection.type === 'relational' && currentConnection.relationalConfig">
+          <el-descriptions-item label="数据库类型">{{ currentConnection.relationalConfig.dbType }}</el-descriptions-item>
+          <el-descriptions-item label="主机地址">{{ currentConnection.relationalConfig.host }}</el-descriptions-item>
+          <el-descriptions-item label="端口">{{ currentConnection.relationalConfig.port }}</el-descriptions-item>
+          <el-descriptions-item label="数据库名">{{ currentConnection.relationalConfig.database }}</el-descriptions-item>
+          <el-descriptions-item label="用户名">{{ currentConnection.relationalConfig.username }}</el-descriptions-item>
+        </template>
+        <el-descriptions-item label="创建时间">{{ formatDate(currentConnection.createdAt) }}</el-descriptions-item>
+        <el-descriptions-item label="更新时间">{{ formatDate(currentConnection.updatedAt) }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="showViewConnectionDialog = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -442,7 +522,7 @@
 import { ref, reactive, onMounted, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, VideoPlay, DocumentChecked, CaretRight, CaretBottom, Loading, Warning, List, Delete } from '@element-plus/icons-vue'
+import { Plus, Refresh, VideoPlay, DocumentChecked, CaretRight, CaretBottom, Loading, Warning, List, Delete, View, Edit, Close, Connection } from '@element-plus/icons-vue'
 import { format } from 'sql-formatter'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import dataAPI from '@/api/data.api'
@@ -476,9 +556,18 @@ const tablePagination = reactive({
   totalPages: 0
 })
 const activeTab = ref('new-query')
-const showCreateConnectionDialog = ref(false)
+const showConnectionDialog = ref(false)
+const showViewConnectionDialog = ref(false)
+const connectionDialogMode = ref('create') // 'create' | 'edit'
+const currentConnection = ref(null)
 const creatingConnection = ref(false)
 const testingConnection = ref(false)
+
+// 右键菜单相关
+const showContextMenu = ref(false)
+const contextMenuPosition = reactive({ x: 0, y: 0 })
+const contextMenuConnection = ref(null)
+const contextMenuRef = ref(null)
 const executingQuery = ref(null)
 const queryResults = ref({})
 const queryParameters = ref({})
@@ -753,7 +842,41 @@ const refreshConnections = () => {
   loadConnections()
 }
 
-const handleConnectionDblClick = (connection) => {
+const handleConnectionDblClick = async (connection) => {
+  // 测试连接并更新状态
+  try {
+    if (connection.type === 'relational' && connection.relationalConfig) {
+      const config = connection.relationalConfig
+      const response = await dataAPI.testConnection(project.value.id, {
+        type: connection.type,
+        config: {
+          dbType: config.dbType,
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          username: config.username,
+          password: config.password
+        }
+      })
+
+      if (response.success) {
+        // 更新连接状态为已连接
+        await dataAPI.updateConnectionStatus(project.value.id, connection.id, 'connected')
+        ElMessage.success('连接测试成功')
+        // 刷新连接列表以显示最新状态
+        await loadConnections()
+      }
+    }
+  } catch (error) {
+    // 更新连接状态为错误
+    await dataAPI.updateConnectionStatus(project.value.id, connection.id, 'error')
+    ElMessage.error('连接测试失败：' + (error.response?.data?.message || error.message))
+    // 刷新连接列表以显示最新状态
+    await loadConnections()
+    return
+  }
+
+  // 测试成功后，展开表列表
   toggleConnectionTables(connection)
 }
 
@@ -908,7 +1031,7 @@ const createConnection = async () => {
     const response = await dataAPI.createConnection(project.value.id, {
       name: connectionForm.name,
       type: connectionForm.type,
-      category: 'external',
+      // category 由后端根据 type 自动推断
       config
     })
 
@@ -978,6 +1101,208 @@ const resetConnectionForm = () => {
   if (connectionFormRef.value) {
     connectionFormRef.value?.clearValidate()
   }
+}
+
+// 打开创建连接对话框
+const openCreateConnectionDialog = () => {
+  connectionDialogMode.value = 'create'
+  currentConnection.value = null
+  resetConnectionForm()
+  showConnectionDialog.value = true
+}
+
+// 保存连接（创建或更新）
+const saveConnection = async () => {
+  if (connectionDialogMode.value === 'create') {
+    await createConnection()
+  } else {
+    await updateConnection()
+  }
+}
+
+// 更新连接
+const updateConnection = async () => {
+  if (!connectionFormRef.value || !currentConnection.value) return
+
+  try {
+    await connectionFormRef.value.validate()
+  } catch (error) {
+    return
+  }
+
+  creatingConnection.value = true
+  try {
+    const config = {
+      dbType: connectionForm.dbType,
+      host: connectionForm.host,
+      port: connectionForm.port,
+      database: connectionForm.database,
+      username: connectionForm.username,
+      password: connectionForm.password
+    }
+
+    const response = await dataAPI.updateConnection(project.value.id, currentConnection.value.id, {
+      name: connectionForm.name,
+      type: connectionForm.type,
+      config
+    })
+
+    if (response.success) {
+      ElMessage.success('数据连接更新成功')
+      showConnectionDialog.value = false
+      resetConnectionForm()
+      loadConnections()
+    }
+  } catch (error) {
+    ElMessage.error('更新连接失败：' + (error.response?.data?.message || error.message))
+  } finally {
+    creatingConnection.value = false
+  }
+}
+
+// 处理右键菜单
+const handleConnectionContextMenu = (event, connection) => {
+  event.preventDefault()
+  contextMenuConnection.value = connection
+  contextMenuPosition.x = event.clientX
+  contextMenuPosition.y = event.clientY
+  showContextMenu.value = true
+  
+  // 点击其他地方关闭菜单
+  const closeMenu = () => {
+    showContextMenu.value = false
+    document.removeEventListener('click', closeMenu)
+  }
+  setTimeout(() => {
+    document.addEventListener('click', closeMenu)
+  }, 100)
+}
+
+// 查看连接详情
+const viewConnectionDetails = () => {
+  if (!contextMenuConnection.value) return
+  currentConnection.value = contextMenuConnection.value
+  showViewConnectionDialog.value = true
+  showContextMenu.value = false
+}
+
+// 编辑连接
+const editConnection = () => {
+  if (!contextMenuConnection.value) return
+  
+  connectionDialogMode.value = 'edit'
+  currentConnection.value = contextMenuConnection.value
+  
+  // 填充表单数据
+  connectionForm.name = currentConnection.value.name
+  connectionForm.type = currentConnection.value.type
+  
+  if (currentConnection.value.type === 'relational' && currentConnection.value.relationalConfig) {
+    const config = currentConnection.value.relationalConfig
+    connectionForm.dbType = config.dbType
+    connectionForm.host = config.host
+    connectionForm.port = config.port
+    connectionForm.database = config.database
+    connectionForm.username = config.username
+    connectionForm.password = config.password || ''
+  }
+  
+  showConnectionDialog.value = true
+  showContextMenu.value = false
+}
+
+// 打开连接（与双击效果一致）
+const openConnection = async () => {
+  if (!contextMenuConnection.value) return
+  showContextMenu.value = false
+  await handleConnectionDblClick(contextMenuConnection.value)
+}
+
+// 断开连接
+const disconnectConnection = async () => {
+  if (!contextMenuConnection.value) return
+  
+  const connectionId = contextMenuConnection.value.id
+  
+  try {
+    const response = await dataAPI.updateConnectionStatus(
+      project.value.id, 
+      connectionId, 
+      'disconnected'
+    )
+    
+    if (response.success) {
+      ElMessage.success('连接已断开')
+      
+      // 折叠左侧树
+      const state = getConnectionState(connectionId)
+      state.expanded = false
+      state.tablesExpanded = false
+      state.queriesExpanded = false
+      
+      // 如果当前显示的是该连接的表列表，清空右侧内容
+      if (currentTableListConnectionId.value === connectionId) {
+        currentTableListConnectionId.value = null
+        resetTableView()
+      }
+      
+      // 刷新连接列表以显示最新状态
+      await loadConnections()
+    }
+  } catch (error) {
+    ElMessage.error('断开连接失败：' + (error.response?.data?.message || error.message))
+  } finally {
+    showContextMenu.value = false
+  }
+}
+
+// 删除连接
+const deleteConnection = async () => {
+  if (!contextMenuConnection.value) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除连接 "${contextMenuConnection.value.name}" 吗？此操作不可恢复。`,
+      '删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    const response = await dataAPI.deleteConnection(project.value.id, contextMenuConnection.value.id)
+    
+    if (response.success) {
+      ElMessage.success('连接删除成功')
+      loadConnections()
+      
+      // 如果删除的是当前选中的连接，清空选择
+      if (selectedConnectionId.value === contextMenuConnection.value.id) {
+        selectedConnectionId.value = null
+      }
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除连接失败：' + (error.response?.data?.message || error.message))
+    }
+  } finally {
+    showContextMenu.value = false
+  }
+}
+
+// 格式化日期
+const formatDate = (dateString) => {
+  if (!dateString) return '-'
+  const date = new Date(dateString)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
 }
 
 // 关系型连接列表
@@ -1364,6 +1689,19 @@ const onQueryTabChange = (tabId) => {
   activeQueryTab.value = tabId
   // Monaco Editor 组件会自动处理初始化，无需手动处理
 }
+
+// 监听数据库类型变化，自动更新默认端口
+watch(() => connectionForm.dbType, (newDbType) => {
+  // 只在创建模式下自动更新端口，编辑模式保留原端口
+  if (connectionDialogMode.value === 'create') {
+    const defaultPorts = {
+      'mysql': 3306,
+      'postgresql': 5432,
+      'sqlserver': 1433
+    }
+    connectionForm.port = defaultPorts[newDbType] || 3306
+  }
+})
 
 // 组件挂载时加载数据
 onMounted(() => {
