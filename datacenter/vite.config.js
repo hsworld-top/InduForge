@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import Icons from 'unplugin-icons/vite'
 import { fileURLToPath, URL } from 'node:url'
 import path from 'path'
 
@@ -10,7 +11,14 @@ export default defineConfig(({ mode }) => {
   
   return {
     base: '/datacenter/', // 部署到 /datacenter/ 路径
-    plugins: [vue()],
+    plugins: [
+      vue(),
+      Icons({
+        autoInstall: true,
+        compiler: 'vue3',
+        defaultStyle: 'display: inline-block; vertical-align: middle;',
+      }),
+    ],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

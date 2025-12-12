@@ -1,7 +1,8 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { Storage } from "@/utils/storage";
 import { STORAGE_KEYS } from "@/constants";
-import DataCenter from "../views/DataCenter.vue";
+// import DataCenter from "../views/DataCenter.vue"; // 原版本
+import DataCenter from "../views/DataCenterNew.vue"; // 重构版本
 
 const routes = [
   {
