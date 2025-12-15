@@ -58,8 +58,14 @@ export const CONNECTION_TYPES = {
       database: '',
       username: 'postgres',
       password: '',
-      charset: 'UTF8',
+      schema: 'public',
+      sslMode: 'disable',
+      sslCa: '',
+      sslCert: '',
+      sslKey: '',
+      connectionTimeout: 3000,
       queryTimeout: 30000,
+      maxConnections: 10,
     }
   },
 
@@ -89,8 +95,10 @@ export const CONNECTION_TYPES = {
       database: '',
       username: 'sa',
       password: '',
+      timeout: 60000,
       queryTimeout: 30000,
-      encrypt: true,
+      encrypt: false,
+      trustServerCertificate: true,
     }
   },
 }

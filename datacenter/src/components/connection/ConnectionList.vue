@@ -40,6 +40,7 @@
                   <div
                     class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded"
                     @dblclick.stop
+                    @contextmenu.prevent.stop="handleQueriesSectionContextMenu($event, connection)"
                   >
                     <div 
                       class="flex items-center space-x-2 flex-1 cursor-pointer"
@@ -52,6 +53,14 @@
                       <span class="text-blue-700 dark:text-blue-300">查询</span>
                     </div>
                     <div class="flex items-center space-x-1">
+                      <el-tooltip content="刷新查询列表" placement="top">
+                        <button
+                          class="p-1 hover:bg-blue-200 dark:hover:bg-blue-700 rounded"
+                          @click.stop="refreshQueries(connection.id)"
+                        >
+                          <IconTablerRefresh class="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                        </button>
+                      </el-tooltip>
                       <span v-if="!getConnectionState(connection.id).loadingQueries" class="text-blue-600 dark:text-blue-400">
                         {{ getConnectionState(connection.id).queries.length }}
                       </span>
@@ -70,6 +79,7 @@
                         :key="query.id"
                         class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-blue-800 dark:hover:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800/60 cursor-pointer group px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5 hover:shadow-sm"
                         @dblclick.stop="handleQueryDblClick(connection, query)"
+                        @contextmenu.prevent.stop="handleQueryContextMenu($event, connection, query)"
                       >
                         <el-tooltip :content="query.name" placement="top" :show-after="500">
                           <span class="truncate flex-1 font-medium">{{ query.name }}</span>
@@ -92,6 +102,7 @@
                   <div
                     class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded"
                     @dblclick.stop
+                    @contextmenu.prevent.stop="handleTablesSectionContextMenu($event, connection)"
                   >
                     <div 
                       class="flex items-center space-x-2 flex-1 cursor-pointer"
@@ -104,6 +115,14 @@
                       <span class="text-green-700 dark:text-green-300">表</span>
                     </div>
                     <div class="flex items-center space-x-1">
+                      <el-tooltip content="刷新表列表" placement="top">
+                        <button
+                          class="p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded"
+                          @click.stop="refreshTables(connection.id)"
+                        >
+                          <IconTablerRefresh class="w-3 h-3 text-green-600 dark:text-green-400" />
+                        </button>
+                      </el-tooltip>
                       <el-tooltip content="查看表列表" placement="top">
                         <button
                           class="p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded"
@@ -130,6 +149,7 @@
                         :key="table.name"
                         class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 cursor-pointer px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5"
                         @dblclick.stop="handleTableDblClick(connection, table)"
+                        @contextmenu.prevent.stop="handleTableContextMenu($event, connection, table)"
                       >
                         <el-tooltip :content="table.name" placement="top" :show-after="500">
                           <span class="truncate font-medium">{{ table.name }}</span>
@@ -190,8 +210,10 @@ const emit = defineEmits([
   'create',
   'refresh',
   'table-dblclick',
+  'table-contextmenu',
   'view-table-list',
   'query-dblclick',
+  'query-contextmenu',
   'query-deleted'
 ])
 
@@ -235,6 +257,10 @@ const handleRefresh = () => {
 
 const handleTableDblClick = (connection, table) => {
   emit('table-dblclick', connection, table)
+}
+
+const handleTableContextMenu = (event, connection, table) => {
+  emit('table-contextmenu', event, connection, table)
 }
 
 const handleViewTableList = (connection) => {
@@ -297,6 +323,10 @@ const handleQueryDblClick = (connection, query) => {
   emit('query-dblclick', connection, query)
 }
 
+const handleQueryContextMenu = (event, connection, query) => {
+  emit('query-contextmenu', event, connection, query)
+}
+
 const handleDeleteQuery = async (connection, query) => {
   try {
     await ElMessageBox.confirm(
@@ -325,6 +355,99 @@ const handleDeleteQuery = async (connection, query) => {
       ElMessage.error('删除查询失败：' + (error.response?.data?.message || error.message))
     }
   }
+}
+
+/**
+ * 刷新表列表
+ */
+const refreshTables = async (connectionId) => {
+  await loadTables(connectionId)
+  ElMessage.success('表列表已刷新')
+}
+
+/**
+ * 刷新查询列表
+ */
+const refreshQueries = async (connectionId) => {
+  await loadQueries(connectionId)
+  ElMessage.success('查询列表已刷新')
+}
+
+/**
+ * 查询列表标题栏右键菜单
+ */
+const handleQueriesSectionContextMenu = (event, connection) => {
+  // 创建简单的右键菜单
+  const menu = document.createElement('div')
+  menu.className = 'fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[150px]'
+  menu.style.cssText = `position: fixed; left: ${event.clientX}px; top: ${event.clientY}px; z-index: 9999;`
+  
+  const refreshItem = document.createElement('div')
+  refreshItem.className = 'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center'
+  refreshItem.innerHTML = '<span class="mr-2">🔄</span>刷新查询列表'
+  refreshItem.onclick = () => {
+    refreshQueries(connection.id)
+    document.body.removeChild(menu)
+  }
+  
+  menu.appendChild(refreshItem)
+  document.body.appendChild(menu)
+  
+  // 点击外部关闭菜单
+  const closeMenu = (e) => {
+    if (!menu.contains(e.target)) {
+      if (document.body.contains(menu)) {
+        document.body.removeChild(menu)
+      }
+      document.removeEventListener('click', closeMenu)
+    }
+  }
+  setTimeout(() => {
+    document.addEventListener('click', closeMenu)
+  }, 0)
+}
+
+/**
+ * 表列表标题栏右键菜单
+ */
+const handleTablesSectionContextMenu = (event, connection) => {
+  // 创建简单的右键菜单
+  const menu = document.createElement('div')
+  menu.className = 'fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[150px]'
+  menu.style.cssText = `position: fixed; left: ${event.clientX}px; top: ${event.clientY}px; z-index: 9999;`
+  
+  const refreshItem = document.createElement('div')
+  refreshItem.className = 'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center'
+  refreshItem.innerHTML = '<span class="mr-2">🔄</span>刷新表列表'
+  refreshItem.onclick = () => {
+    refreshTables(connection.id)
+    document.body.removeChild(menu)
+  }
+  
+  const viewItem = document.createElement('div')
+  viewItem.className = 'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center'
+  viewItem.innerHTML = '<span class="mr-2">📋</span>查看表列表'
+  viewItem.onclick = () => {
+    handleViewTableList(connection)
+    document.body.removeChild(menu)
+  }
+  
+  menu.appendChild(refreshItem)
+  menu.appendChild(viewItem)
+  document.body.appendChild(menu)
+  
+  // 点击外部关闭菜单
+  const closeMenu = (e) => {
+    if (!menu.contains(e.target)) {
+      if (document.body.contains(menu)) {
+        document.body.removeChild(menu)
+      }
+      document.removeEventListener('click', closeMenu)
+    }
+  }
+  setTimeout(() => {
+    document.addEventListener('click', closeMenu)
+  }, 0)
 }
 
 // 暴露方法给父组件

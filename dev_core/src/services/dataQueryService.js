@@ -69,30 +69,51 @@ class DataQueryService {
       });
     }
 
-    // 创建数据查询
-    const query = await DataQuery.create({
-      projectId,
-      connectionId,
-      name,
-      description,
-      category,
-      queryType,
-      config,
-      createdBy: userId
+    // 检查查询名称是否已存在
+    const existingQuery = await DataQuery.findOne({
+      where: { projectId, name }
     });
 
-    // 重新获取完整数据
-    const fullQuery = await DataQuery.findByPk(query.id, {
-      include: [
-        {
-          model: DataConnection,
-          as: 'connection',
-          attributes: ['id', 'name', 'type']
-        }
-      ]
-    });
+    if (existingQuery) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: `查询名称 "${name}" 已存在，请使用其他名称`
+      });
+    }
 
-    return fullQuery;
+    try {
+      // 创建数据查询
+      const query = await DataQuery.create({
+        projectId,
+        connectionId,
+        name,
+        description,
+        category,
+        queryType,
+        config,
+        createdBy: userId
+      });
+
+      // 重新获取完整数据
+      const fullQuery = await DataQuery.findByPk(query.id, {
+        include: [
+          {
+            model: DataConnection,
+            as: 'connection',
+            attributes: ['id', 'name', 'type']
+          }
+        ]
+      });
+
+      return fullQuery;
+    } catch (error) {
+      // 处理数据库唯一键冲突错误
+      if (error.name === 'SequelizeUniqueConstraintError' || error.code === 'ER_DUP_ENTRY') {
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: `查询名称 "${name}" 已存在，请使用其他名称`
+        });
+      }
+      throw error;
+    }
   }
 
   /**

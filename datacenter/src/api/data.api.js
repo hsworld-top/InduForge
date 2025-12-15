@@ -54,6 +54,19 @@ export const getTableData = (projectId, connectionId, tableName, params = {}) =>
 }
 
 /**
+ * 获取表结构信息
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
+ * @param {string} tableName - 表名
+ */
+export const getTableStructure = (projectId, connectionId, tableName) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/structure`,
+    method: 'get'
+  })
+}
+
+/**
  * 更新数据连接
  * @param {string} projectId - 工程ID
  * @param {string} connectionId - 连接ID
@@ -195,6 +208,7 @@ export default {
   testConnection,
   getConnectionTables,
   getTableData,
+  getTableStructure,
   updateConnection,
   deleteConnection,
   updateConnectionStatus,

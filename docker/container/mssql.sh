@@ -48,9 +48,15 @@ else
     
     # 创建数据库
     echo "创建数据库 tenant_management..."
-    docker exec -it $CONTAINER_NAME /opt/mssql-tools/bin/sqlcmd \
-        -S localhost -U sa -P "$MSSQL_SA_PASSWORD" \
+    docker exec $CONTAINER_NAME /opt/mssql-tools18/bin/sqlcmd \
+        -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C \
         -Q "CREATE DATABASE tenant_management;"
+    
+    if [ $? -eq 0 ]; then
+        echo "数据库 tenant_management 创建成功"
+    else
+        echo "警告: 数据库创建失败，可能已存在或命令执行出错"
+    fi
 fi
 
 echo ""
@@ -63,7 +69,7 @@ echo "SA 密码: $MSSQL_SA_PASSWORD"
 echo "数据卷: induforge-mssql-data"
 echo ""
 echo "连接命令:"
-echo "  docker exec -it $CONTAINER_NAME /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P '$MSSQL_SA_PASSWORD'"
+echo "  docker exec -it $CONTAINER_NAME /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P '$MSSQL_SA_PASSWORD' -C"
 echo ""
 echo "查看日志:"
 echo "  docker logs -f $CONTAINER_NAME"

@@ -88,10 +88,11 @@ request.interceptors.response.use(
           }
           break
         case 500:
-          ElMessage.error('服务器内部错误')
+          // 服务器错误，不在拦截器中显示，让业务代码处理
           break
         default:
-          ElMessage.error(data.message || '请求失败')
+          // 其他错误，不在拦截器中显示，让业务代码处理
+          break
       }
     } else {
       // 网络错误

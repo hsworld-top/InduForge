@@ -279,6 +279,31 @@ router.get('/projects/:projectId/connections/:connectionId/tables/:tableName/dat
   }
 });
 
+/**
+ * 获取表结构信息
+ * GET /api/v1/projects/:projectId/connections/:connectionId/tables/:tableName/structure
+ */
+router.get('/projects/:projectId/connections/:connectionId/tables/:tableName/structure', authenticateToken, async (req, res, next) => {
+  try {
+    const { projectId, connectionId, tableName } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const result = await dataConnectionService.getTableStructure(
+      projectId,
+      connectionId,
+      tableName
+    );
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('获取表结构失败:', error);
+    next(error);
+  }
+});
+
 // ===========================================
 // 数据查询相关API
 // ===========================================

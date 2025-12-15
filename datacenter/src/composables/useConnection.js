@@ -36,7 +36,13 @@ export function useConnection(projectId) {
       }
     } catch (error) {
       console.error('加载连接列表失败:', error)
-      ElMessage.error('加载连接列表失败：' + (error.response?.data?.message || error.message))
+      ElMessage({
+        type: 'error',
+        message: '加载连接列表失败：' + (error.response?.data?.message || error.message),
+        offset: 60,
+        duration: 5000,
+        showClose: true
+      })
     } finally {
       loading.value = false
     }
@@ -51,12 +57,23 @@ export function useConnection(projectId) {
     try {
       const response = await dataAPI.createConnection(projectId.value, data)
       if (response.success) {
-        ElMessage.success('连接创建成功')
+        ElMessage({
+          type: 'success',
+          message: '连接创建成功',
+          offset: 60,
+          duration: 3000
+        })
         await loadConnections()
         return response.data
       }
     } catch (error) {
-      ElMessage.error('创建连接失败：' + (error.response?.data?.message || error.message))
+      ElMessage({
+        type: 'error',
+        message: '创建连接失败：' + (error.response?.data?.message || error.message),
+        offset: 60,
+        duration: 5000,
+        showClose: true
+      })
       throw error
     }
   }
@@ -70,12 +87,23 @@ export function useConnection(projectId) {
     try {
       const response = await dataAPI.updateConnection(projectId.value, connectionId, data)
       if (response.success) {
-        ElMessage.success('连接更新成功')
+        ElMessage({
+          type: 'success',
+          message: '连接更新成功',
+          offset: 60,
+          duration: 3000
+        })
         await loadConnections()
         return response.data
       }
     } catch (error) {
-      ElMessage.error('更新连接失败：' + (error.response?.data?.message || error.message))
+      ElMessage({
+        type: 'error',
+        message: '更新连接失败：' + (error.response?.data?.message || error.message),
+        offset: 60,
+        duration: 5000,
+        showClose: true
+      })
       throw error
     }
   }
@@ -89,7 +117,12 @@ export function useConnection(projectId) {
     try {
       const response = await dataAPI.deleteConnection(projectId.value, connectionId)
       if (response.success) {
-        ElMessage.success('连接删除成功')
+        ElMessage({
+          type: 'success',
+          message: '连接删除成功',
+          offset: 60,
+          duration: 3000
+        })
         await loadConnections()
         
         // 如果删除的是当前选中的连接，清空选择
@@ -99,7 +132,13 @@ export function useConnection(projectId) {
         return true
       }
     } catch (error) {
-      ElMessage.error('删除连接失败：' + (error.response?.data?.message || error.message))
+      ElMessage({
+        type: 'error',
+        message: '删除连接失败：' + (error.response?.data?.message || error.message),
+        offset: 60,
+        duration: 5000,
+        showClose: true
+      })
       throw error
     }
   }
@@ -113,12 +152,23 @@ export function useConnection(projectId) {
     try {
       const response = await dataAPI.testConnection(projectId.value, { type, config })
       if (response.success) {
-        ElMessage.success(response.message || '连接测试成功')
+        ElMessage({
+          type: 'success',
+          message: response.message || '连接测试成功',
+          offset: 60,
+          duration: 3000
+        })
         return true
       }
       return false
     } catch (error) {
-      ElMessage.error('连接测试失败：' + (error.response?.data?.message || error.message))
+      ElMessage({
+        type: 'error',
+        message: '连接测试失败：' + (error.response?.data?.message || error.message),
+        offset: 60,
+        duration: 5000,
+        showClose: true
+      })
       throw error
     }
   }
@@ -136,7 +186,13 @@ export function useConnection(projectId) {
         return response.data
       }
     } catch (error) {
-      ElMessage.error('更新连接状态失败：' + (error.response?.data?.message || error.message))
+      ElMessage({
+        type: 'error',
+        message: '更新连接状态失败：' + (error.response?.data?.message || error.message),
+        offset: 60,
+        duration: 5000,
+        showClose: true
+      })
       throw error
     }
   }

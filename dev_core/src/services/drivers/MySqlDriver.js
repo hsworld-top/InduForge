@@ -143,6 +143,135 @@ class MySqlDriver extends BaseDriver {
   }
 
   /**
+   * 获取表结构信息
+   */
+  async getTableStructure(tableName) {
+    const connection = await this.createConnection();
+    try {
+      const database = this.config.database;
+      
+      // 获取字段信息
+      const [columns] = await connection.query(
+        `SELECT 
+          COLUMN_NAME as name,
+          COLUMN_TYPE as type,
+          IS_NULLABLE as nullable,
+          COLUMN_DEFAULT as defaultValue,
+          COLUMN_KEY as \`key\`,
+          EXTRA as extra,
+          COLUMN_COMMENT as comment,
+          CHARACTER_MAXIMUM_LENGTH as maxLength,
+          NUMERIC_PRECISION as numericPrecision,
+          NUMERIC_SCALE as numericScale
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+        ORDER BY ORDINAL_POSITION`,
+        [database, tableName]
+      );
+
+      // 获取索引信息
+      const [indexes] = await connection.query(
+        `SELECT 
+          INDEX_NAME as name,
+          COLUMN_NAME as columnName,
+          NON_UNIQUE as nonUnique,
+          INDEX_TYPE as type,
+          SEQ_IN_INDEX as sequence
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+        ORDER BY INDEX_NAME, SEQ_IN_INDEX`,
+        [database, tableName]
+      );
+
+      // 获取外键信息
+      const [foreignKeys] = await connection.query(
+        `SELECT 
+          CONSTRAINT_NAME as name,
+          COLUMN_NAME as columnName,
+          REFERENCED_TABLE_NAME as referencedTable,
+          REFERENCED_COLUMN_NAME as referencedColumn
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL`,
+        [database, tableName]
+      );
+
+      // 获取外键的更新和删除规则
+      const [foreignKeyRules] = await connection.query(
+        `SELECT 
+          CONSTRAINT_NAME as name,
+          UPDATE_RULE as updateRule,
+          DELETE_RULE as deleteRule
+        FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ?`,
+        [database, tableName]
+      );
+
+      // 处理字段信息
+      const formattedColumns = columns.map(col => ({
+        name: col.name,
+        type: col.type,
+        nullable: col.nullable === 'YES',
+        defaultValue: col.defaultValue,
+        isPrimary: col.key === 'PRI',
+        isUnique: col.key === 'UNI',
+        autoIncrement: col.extra.includes('auto_increment'),
+        comment: col.comment || '',
+        maxLength: col.maxLength,
+        numericPrecision: col.numericPrecision,
+        numericScale: col.numericScale
+      }));
+
+      // 处理索引信息（按索引名分组）
+      const indexMap = new Map();
+      indexes.forEach(idx => {
+        if (!indexMap.has(idx.name)) {
+          indexMap.set(idx.name, {
+            name: idx.name,
+            type: idx.name === 'PRIMARY' ? 'PRIMARY' : (idx.nonUnique === 0 ? 'UNIQUE' : 'INDEX'),
+            method: idx.type,
+            columns: []
+          });
+        }
+        indexMap.get(idx.name).columns.push(idx.columnName);
+      });
+      const formattedIndexes = Array.from(indexMap.values());
+
+      // 处理外键信息（合并规则）
+      const foreignKeyMap = new Map();
+      foreignKeys.forEach(fk => {
+        if (!foreignKeyMap.has(fk.name)) {
+          foreignKeyMap.set(fk.name, {
+            name: fk.name,
+            columnName: fk.columnName,
+            referencedTable: fk.referencedTable,
+            referencedColumn: fk.referencedColumn,
+            updateRule: 'NO ACTION',
+            deleteRule: 'NO ACTION'
+          });
+        }
+      });
+      
+      foreignKeyRules.forEach(rule => {
+        if (foreignKeyMap.has(rule.name)) {
+          const fk = foreignKeyMap.get(rule.name);
+          fk.updateRule = rule.updateRule;
+          fk.deleteRule = rule.deleteRule;
+        }
+      });
+      
+      const formattedForeignKeys = Array.from(foreignKeyMap.values());
+
+      return {
+        columns: formattedColumns,
+        indexes: formattedIndexes,
+        foreignKeys: formattedForeignKeys
+      };
+    } finally {
+      await this.closeConnection(connection);
+    }
+  }
+
+  /**
    * 关闭数据库连接
    */
   async closeConnection(connection) {

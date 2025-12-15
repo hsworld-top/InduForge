@@ -92,10 +92,29 @@ class DataConnectionService {
 
     // 如果是关系库类型，创建对应的配置
     if (type === 'relational' && config) {
-      await DataRelationalConfig.create({
+      // 提取 SSL 相关字段到 sslConfig
+      const { sslMode, sslCa, sslCert, sslKey, ...otherConfig } = config;
+      
+      const relationalConfig = {
         connectionId: connection.id,
-        ...config
-      });
+        ...otherConfig
+      };
+
+      // 如果有 SSL 配置，整合到 sslConfig 字段
+      if (sslMode && sslMode !== 'disable') {
+        relationalConfig.ssl = true;
+        relationalConfig.sslConfig = {
+          mode: sslMode,
+          ca: sslCa || null,
+          cert: sslCert || null,
+          key: sslKey || null
+        };
+      } else {
+        relationalConfig.ssl = false;
+        relationalConfig.sslConfig = null;
+      }
+
+      await DataRelationalConfig.create(relationalConfig);
     }
 
     // 重新获取完整数据
@@ -143,13 +162,8 @@ class DataConnectionService {
     }
 
     try {
-      const driver = DriverFactory.createDriver(dbType, {
-        host,
-        port,
-        username,
-        password,
-        database
-      });
+      // 传递完整的配置对象，包括 SQL Server 的 encrypt、trustServerCertificate 等参数
+      const driver = DriverFactory.createDriver(dbType, config);
       
       return await driver.testConnection();
     } catch (error) {
@@ -187,7 +201,9 @@ class DataConnectionService {
     }
 
     const relationalConfig = connection.relationalConfig;
-    const driver = DriverFactory.createDriver(relationalConfig.dbType, {
+    
+    // 构建驱动配置
+    const driverConfig = {
       host: relationalConfig.host,
       port: relationalConfig.port,
       username: relationalConfig.username,
@@ -195,9 +211,37 @@ class DataConnectionService {
       database: relationalConfig.database,
       charset: relationalConfig.charset,
       timeout: relationalConfig.queryTimeout
-    });
+    };
 
-    return await driver.getTables();
+    // 添加 PostgreSQL 特有配置
+    if (relationalConfig.dbType === 'postgresql') {
+      if (relationalConfig.schema) {
+        driverConfig.schema = relationalConfig.schema;
+      }
+      
+      // 添加 SSL 配置
+      if (relationalConfig.ssl && relationalConfig.sslConfig) {
+        driverConfig.sslConfig = relationalConfig.sslConfig;
+      }
+    }
+
+    // 添加 SQL Server 特有配置
+    if (relationalConfig.dbType === 'sqlserver') {
+      driverConfig.encrypt = relationalConfig.encrypt !== undefined ? relationalConfig.encrypt : false;
+      driverConfig.trustServerCertificate = relationalConfig.trustServerCertificate !== undefined 
+        ? relationalConfig.trustServerCertificate 
+        : true;
+    }
+
+    try {
+      const driver = DriverFactory.createDriver(relationalConfig.dbType, driverConfig);
+      return await driver.getTables();
+    } catch (error) {
+      // 将数据库错误包装成 AppError，以便前端能获取详细错误信息
+      throw new AppError(ErrorCodes.DATABASE_ERROR, 400, {
+        message: error.message
+      });
+    }
   }
 
   /**
@@ -236,7 +280,9 @@ class DataConnectionService {
     }
 
     const relationalConfig = connection.relationalConfig;
-    const driver = DriverFactory.createDriver(relationalConfig.dbType, {
+    
+    // 构建驱动配置
+    const driverConfig = {
       host: relationalConfig.host,
       port: relationalConfig.port,
       username: relationalConfig.username,
@@ -244,9 +290,37 @@ class DataConnectionService {
       database: relationalConfig.database,
       charset: relationalConfig.charset,
       timeout: relationalConfig.queryTimeout
-    });
+    };
 
-    return await driver.getTableData(tableName, options);
+    // 添加 PostgreSQL 特有配置
+    if (relationalConfig.dbType === 'postgresql') {
+      if (relationalConfig.schema) {
+        driverConfig.schema = relationalConfig.schema;
+      }
+      
+      // 添加 SSL 配置
+      if (relationalConfig.ssl && relationalConfig.sslConfig) {
+        driverConfig.sslConfig = relationalConfig.sslConfig;
+      }
+    }
+
+    // 添加 SQL Server 特有配置
+    if (relationalConfig.dbType === 'sqlserver') {
+      driverConfig.encrypt = relationalConfig.encrypt !== undefined ? relationalConfig.encrypt : false;
+      driverConfig.trustServerCertificate = relationalConfig.trustServerCertificate !== undefined 
+        ? relationalConfig.trustServerCertificate 
+        : true;
+    }
+
+    try {
+      const driver = DriverFactory.createDriver(relationalConfig.dbType, driverConfig);
+      return await driver.getTableData(tableName, options);
+    } catch (error) {
+      // 将数据库错误包装成 AppError
+      throw new AppError(ErrorCodes.DATABASE_ERROR, 400, {
+        message: error.message
+      });
+    }
   }
 
   /**
@@ -280,18 +354,37 @@ class DataConnectionService {
 
     // 如果是关系库类型，更新配置
     if (type === 'relational' && config) {
+      // 提取 SSL 相关字段到 sslConfig
+      const { sslMode, sslCa, sslCert, sslKey, ...otherConfig } = config;
+      
+      const configToSave = { ...otherConfig };
+
+      // 如果有 SSL 配置，整合到 sslConfig 字段
+      if (sslMode && sslMode !== 'disable') {
+        configToSave.ssl = true;
+        configToSave.sslConfig = {
+          mode: sslMode,
+          ca: sslCa || null,
+          cert: sslCert || null,
+          key: sslKey || null
+        };
+      } else {
+        configToSave.ssl = false;
+        configToSave.sslConfig = null;
+      }
+
       const relationalConfig = await DataRelationalConfig.findOne({
         where: { connectionId }
       });
 
       if (relationalConfig) {
         // 更新现有配置
-        await relationalConfig.update(config);
+        await relationalConfig.update(configToSave);
       } else {
         // 创建新配置
         await DataRelationalConfig.create({
           connectionId,
-          ...config
+          ...configToSave
         });
       }
     }
@@ -389,6 +482,84 @@ class DataConnectionService {
   }
 
   /**
+   * 获取表结构信息
+   * @param {string} projectId - 工程ID
+   * @param {string} connectionId - 连接ID
+   * @param {string} tableName - 表名
+   * @returns {Promise<Object>} 表结构信息
+   */
+  async getTableStructure(projectId, connectionId, tableName) {
+    // 验证表名格式（防止 SQL 注入）
+    if (!/^[A-Za-z0-9_]+$/.test(tableName)) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: '不支持的表名格式'
+      });
+    }
+
+    // 获取连接配置
+    const connection = await DataConnection.findOne({
+      where: { id: connectionId, projectId, type: 'relational' },
+      include: [
+        {
+          model: DataRelationalConfig,
+          as: 'relationalConfig',
+          required: true
+        }
+      ]
+    });
+
+    if (!connection) {
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        resource: 'DataConnection',
+        id: connectionId
+      });
+    }
+
+    const relationalConfig = connection.relationalConfig;
+    
+    // 构建驱动配置
+    const driverConfig = {
+      host: relationalConfig.host,
+      port: relationalConfig.port,
+      username: relationalConfig.username,
+      password: relationalConfig.password,
+      database: relationalConfig.database,
+      charset: relationalConfig.charset,
+      timeout: relationalConfig.queryTimeout
+    };
+
+    // 添加 PostgreSQL 特有配置
+    if (relationalConfig.dbType === 'postgresql') {
+      if (relationalConfig.schema) {
+        driverConfig.schema = relationalConfig.schema;
+      }
+      
+      // 添加 SSL 配置
+      if (relationalConfig.ssl && relationalConfig.sslConfig) {
+        driverConfig.sslConfig = relationalConfig.sslConfig;
+      }
+    }
+
+    // 添加 SQL Server 特有配置
+    if (relationalConfig.dbType === 'sqlserver') {
+      driverConfig.encrypt = relationalConfig.encrypt !== undefined ? relationalConfig.encrypt : false;
+      driverConfig.trustServerCertificate = relationalConfig.trustServerCertificate !== undefined 
+        ? relationalConfig.trustServerCertificate 
+        : true;
+    }
+
+    try {
+      const driver = DriverFactory.createDriver(relationalConfig.dbType, driverConfig);
+      return await driver.getTableStructure(tableName);
+    } catch (error) {
+      // 将数据库错误包装成 AppError
+      throw new AppError(ErrorCodes.DATABASE_ERROR, 400, {
+        message: error.message
+      });
+    }
+  }
+
+  /**
    * 执行 SQL 查询
    * @param {string} projectId - 工程ID
    * @param {string} connectionId - 连接ID
@@ -429,7 +600,9 @@ class DataConnectionService {
     }
 
     const relationalConfig = connection.relationalConfig;
-    const driver = DriverFactory.createDriver(relationalConfig.dbType, {
+    
+    // 构建驱动配置
+    const driverConfig = {
       host: relationalConfig.host,
       port: relationalConfig.port,
       username: relationalConfig.username,
@@ -437,7 +610,29 @@ class DataConnectionService {
       database: relationalConfig.database,
       charset: relationalConfig.charset,
       timeout: relationalConfig.queryTimeout
-    });
+    };
+
+    // 添加 PostgreSQL 特有配置
+    if (relationalConfig.dbType === 'postgresql') {
+      if (relationalConfig.schema) {
+        driverConfig.schema = relationalConfig.schema;
+      }
+      
+      // 添加 SSL 配置
+      if (relationalConfig.ssl && relationalConfig.sslConfig) {
+        driverConfig.sslConfig = relationalConfig.sslConfig;
+      }
+    }
+
+    // 添加 SQL Server 特有配置
+    if (relationalConfig.dbType === 'sqlserver') {
+      driverConfig.encrypt = relationalConfig.encrypt !== undefined ? relationalConfig.encrypt : false;
+      driverConfig.trustServerCertificate = relationalConfig.trustServerCertificate !== undefined 
+        ? relationalConfig.trustServerCertificate 
+        : true;
+    }
+
+    const driver = DriverFactory.createDriver(relationalConfig.dbType, driverConfig);
 
     const startTime = Date.now();
     try {
@@ -449,9 +644,9 @@ class DataConnectionService {
         executionTime
       };
     } catch (error) {
-      throw new AppError(ErrorCodes.DATABASE_ERROR, 500, {
-        message: '执行SQL失败',
-        error: error.message
+      // 直接抛出数据库的原始错误信息
+      throw new AppError(ErrorCodes.DATABASE_ERROR, 400, {
+        message: error.message
       });
     }
   }

@@ -14,19 +14,39 @@ class SqlServerDriver extends BaseDriver {
    * 创建 SQL Server 连接配置
    */
   createConfig() {
+    // SQL Server 2022+ 默认需要加密或信任证书
+    const encrypt = this.config.encrypt !== undefined ? this.config.encrypt : false;
+    const trustServerCertificate = this.config.trustServerCertificate !== undefined 
+      ? this.config.trustServerCertificate 
+      : true; // 默认信任证书，适合开发环境
+    
+    // 处理 localhost 和 127.0.0.1
+    let server = this.config.host;
+    if (server === '127.0.0.1') {
+      server = 'localhost';
+    }
+    
     return {
-      server: this.config.host,
+      server: server,
       port: Number(this.config.port),
       user: this.config.username,
       password: this.config.password,
       database: this.config.database,
       options: {
-        encrypt: this.config.encrypt !== false, // 默认加密
-        trustServerCertificate: this.config.trustServerCertificate || false,
-        enableArithAbort: true
+        encrypt: encrypt,
+        trustServerCertificate: trustServerCertificate,
+        enableArithAbort: true,
+        // 添加这些选项可能有助于连接
+        instanceName: '', // 默认实例
+        useUTC: false,
       },
       connectionTimeout: this.config.timeout || 60000,
-      requestTimeout: this.config.requestTimeout || 60000
+      requestTimeout: this.config.requestTimeout || 60000,
+      pool: {
+        max: 10,
+        min: 0,
+        idleTimeoutMillis: 30000
+      }
     };
   }
 
@@ -44,10 +64,13 @@ class SqlServerDriver extends BaseDriver {
   async testConnection() {
     let pool;
     try {
+      const config = this.createConfig();
+      console.log('SQL Server 连接配置:', JSON.stringify(config, null, 2));
       pool = await this.createConnection();
       await pool.request().query('SELECT 1');
       return true;
     } catch (error) {
+      console.error('SQL Server 连接错误:', error.message);
       throw error;
     } finally {
       if (pool) {

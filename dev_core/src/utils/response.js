@@ -43,7 +43,7 @@ class ApiResponse {
    * 错误响应
    * @param {object} res - Express 响应对象
    * @param {string} errorCode - 错误码
-   * @param {object} options - 插值选项（可选）
+   * @param {object} options - 插值选项（可选），如果包含 message 字段则直接使用
    * @param {number} statusCode - HTTP 状态码（默认 400）
    */
   static error(res, errorCode, options = {}, statusCode = 400) {
@@ -58,10 +58,13 @@ class ApiResponse {
     // 设置响应头中的语言信息
     res.setHeader('Content-Language', language);
     
+    // 如果 options 中提供了 message，直接使用；否则从国际化文件中获取
+    const message = options.message || getErrorMessage(language, errorCode, options);
+    
     const response = {
       success: false,
       errorCode,
-      message: getErrorMessage(language, errorCode, options),
+      message,
       requestId,
     };
 

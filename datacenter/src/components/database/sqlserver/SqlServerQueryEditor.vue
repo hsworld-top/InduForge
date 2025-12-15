@@ -1,5 +1,5 @@
 <template>
-  <div class="mysql-query-editor flex flex-col h-full">
+  <div class="sqlserver-query-editor flex flex-col h-full">
     <!-- 工具栏 -->
     <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-200 dark:border-gray-700">
       <div class="flex items-center space-x-3">
@@ -58,16 +58,15 @@
     <div class="mb-2 flex items-center justify-between">
       <div class="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
         <IconTablerInfoCircle class="w-4 h-4" />
-        <span>提示：使用 <code class="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">?</code> 作为参数占位符，例如：<code class="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">WHERE id = ?</code></span>
+        <span>提示：使用 <code class="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">@param1, @param2, ...</code> 作为参数占位符，例如：<code class="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">WHERE id = @id</code></span>
       </div>
     </div>
 
     <!-- SQL编辑器 -->
     <div class="flex-shrink-0 border border-gray-200 dark:border-gray-700 rounded overflow-hidden mb-4" style="height: 300px;">
       <MonacoEditor
-        ref="editorRef"
         v-model="localTab.sql"
-        language="mysql"
+        language="sql"
         :theme="isDark ? 'vs-dark' : 'vs'"
         height="300px"
         :options="{
@@ -113,16 +112,16 @@
       <div v-show="localTab.parametersExpanded" class="space-y-2 mt-2">
         <div v-for="(param, index) in localTab.parameters" :key="index" class="flex items-center space-x-2">
           <div class="w-24 text-sm text-gray-600 dark:text-gray-400 flex-shrink-0">
-            参数 {{ index + 1 }}:
+            {{ param.name }}:
           </div>
           <el-input
             v-model="param.value"
-            :placeholder="`请输入参数 ${index + 1} 的值`"
+            :placeholder="`请输入 ${param.name} 的值`"
             size="small"
             class="flex-1"
           >
             <template #prepend>
-              <span class="text-xs text-gray-500">?</span>
+              <span class="text-xs text-gray-500">@{{ param.name }}</span>
             </template>
           </el-input>
         </div>
@@ -180,7 +179,7 @@ import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerInfoCircle from '~icons/tabler/info-circle'
 import MonacoEditor from '@/components/MonacoEditor.vue'
-import { useMysql } from '@/composables/database/useMysql'
+import { useSqlServer } from '@/composables/database/useSqlServer'
 import { useConnection } from '@/composables/useConnection'
 import { registerSqlCompletionProvider, unregisterSqlCompletionProvider } from '@/utils/sqlCompletion'
 import * as monaco from 'monaco-editor'
@@ -197,37 +196,27 @@ const emit = defineEmits(['execute', 'save', 'update:tab', 'connection-change'])
 const projectId = inject('projectId')
 const isDark = computed(() => document.documentElement.classList.contains('dark'))
 
-// 直接使用 props.tab，不创建本地副本
 const localTab = computed(() => props.tab)
-
-// 当前选中的连接ID
 const currentConnectionId = ref(props.tab.connectionId)
 
-// 获取所有连接
 const { connections, loadConnections } = useConnection(projectId)
 
-// 过滤出关系型数据库连接
 const relationalConnections = computed(() => {
   return connections.value.filter(conn => conn.type === 'relational')
 })
 
-const { tables, loadTables, formatSql, extractSqlParameters } = useMysql(
+const { tables, loadTables, formatSql, extractSqlParameters } = useSqlServer(
   projectId,
   computed(() => currentConnectionId.value)
 )
 
-const editorRef = ref(null)
-
 onMounted(async () => {
-  // 加载连接列表
   await loadConnections()
   
-  // 加载表列表
   if (localTab.value.connectionId) {
     await loadTables()
   }
   
-  // 注册 SQL 自动补全
   try {
     registerSqlCompletionProvider(monaco)
     console.log('SQL 自动补全已注册')
@@ -237,7 +226,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  // 清理自动补全提供器
   unregisterSqlCompletionProvider()
 })
 
@@ -249,22 +237,18 @@ const paginatedRows = computed(() => {
 })
 
 const handleConnectionChange = async (connectionId) => {
-  // 更新标签页的连接ID
   props.tab.connectionId = connectionId
   props.tab.modified = true
   
-  // 重新加载表列表
   await loadTables()
   
-  // 清空当前选中的表
   props.tab.table = ''
   
-  // 通知父组件连接已更改
   emit('connection-change', connectionId)
 }
 
 const handleTableChange = (tableName) => {
-  const sql = `SELECT * FROM \`${tableName}\` LIMIT 100`
+  const sql = `SELECT * FROM [${tableName}] ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY`
   props.tab.sql = sql
   props.tab.modified = true
   updateParameters()
@@ -294,9 +278,8 @@ const updateParameters = () => {
   const newParams = extractSqlParameters(props.tab.sql)
   const oldParams = props.tab.parameters || []
   
-  // 保留已有参数的值
-  const mergedParams = newParams.map((newParam, index) => {
-    const oldParam = oldParams[index]
+  const mergedParams = newParams.map((newParam) => {
+    const oldParam = oldParams.find(p => p.name === newParam.name)
     return {
       ...newParam,
       value: oldParam?.value || newParam.value || ''

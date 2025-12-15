@@ -51,9 +51,8 @@ import { ref, computed, watch, markRaw } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getDatabaseTypes, getDefaultConfig } from '@/config/connectionTypes'
 import MysqlConnectionForm from '../connection/forms/MysqlConnectionForm.vue'
-// 未来导入其他表单组件
-// import PostgresConnectionForm from '../connection/forms/PostgresConnectionForm.vue'
-// import SqlServerConnectionForm from '../connection/forms/SqlServerConnectionForm.vue'
+import PostgresConnectionForm from '../connection/forms/PostgresConnectionForm.vue'
+import SqlServerConnectionForm from '../connection/forms/SqlServerConnectionForm.vue'
 
 const props = defineProps({
   modelValue: {
@@ -95,8 +94,8 @@ const formComponent = computed(() => {
   if (connectionType.value === 'relational') {
     const componentMap = {
       mysql: markRaw(MysqlConnectionForm),
-      // postgresql: markRaw(PostgresConnectionForm),
-      // sqlserver: markRaw(SqlServerConnectionForm),
+      postgresql: markRaw(PostgresConnectionForm),
+      sqlserver: markRaw(SqlServerConnectionForm),
     }
     return componentMap[dbType.value] || null
   }
@@ -167,9 +166,11 @@ const handleTest = async () => {
     const config = { ...formData.value }
     delete config.name // 测试连接不需要名称
     
+    // 将 dbType 添加到 config 中
+    config.dbType = dbType.value
+    
     emit('test', {
       type: connectionType.value,
-      dbType: dbType.value,
       config
     })
   } finally {
@@ -193,10 +194,12 @@ const handleSubmit = async () => {
     const name = config.name
     delete config.name
     
+    // 将 dbType 添加到 config 中
+    config.dbType = dbType.value
+    
     emit('submit', {
       name,
       type: connectionType.value,
-      dbType: dbType.value,
       config
     })
   } finally {
