@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import SliderComponent from './Slider.vue';
+
 export default {
     type: 'Slider',
     name: '滑块',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['滑块', 'slider', 'range', 'UI', 'element', '表单'],
     description: 'Element Plus 滑块组件，用于数值选择',
+    component: SliderComponent,
 
     defaultProps: {
         value: 0,

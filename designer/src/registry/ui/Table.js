@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import TableComponent from './Table.vue';
+
 export default {
     type: 'Table',
     name: '表格',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['表格', 'table', 'grid', 'UI', 'element', '数据'],
     description: 'Element Plus 表格组件，用于展示结构化数据',
+    component: TableComponent,
 
     defaultProps: {
         data: [

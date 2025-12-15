@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import ProgressComponent from './Progress.vue';
+
 export default {
     type: 'Progress',
     name: '进度条',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['进度条', 'progress', 'UI', 'element'],
     description: 'Element Plus 进度条组件，用于显示操作进度',
+    component: ProgressComponent,
 
     defaultProps: {
         percentage: 0,

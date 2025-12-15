@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import ButtonComponent from './Button.vue';
+
 export default {
     type: 'Button',
     name: '按钮',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['按钮', 'button', 'UI', 'element'],
     description: 'Element Plus 按钮组件，支持多种类型和尺寸',
+    component: ButtonComponent,
 
     defaultProps: {
         text: '按钮',

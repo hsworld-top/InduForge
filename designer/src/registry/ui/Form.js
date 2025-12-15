@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import FormComponent from './Form.vue';
+
 export default {
     type: 'Form',
     name: '表单',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['表单', 'form', 'UI', 'element'],
     description: 'Element Plus 表单组件，用于数据收集和验证',
+    component: FormComponent,
 
     defaultProps: {
         model: {},

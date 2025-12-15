@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import SelectComponent from './Select.vue';
+
 export default {
     type: 'Select',
     name: '选择器',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['选择器', 'select', 'dropdown', 'UI', 'element', '表单'],
     description: 'Element Plus 选择器组件，支持单选和多选',
+    component: SelectComponent,
 
     defaultProps: {
         value: '',

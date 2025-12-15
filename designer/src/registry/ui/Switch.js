@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import SwitchComponent from './Switch.vue';
+
 export default {
     type: 'Switch',
     name: '开关',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['开关', 'switch', 'toggle', 'UI', 'element', '表单'],
     description: 'Element Plus 开关组件，用于切换状态',
+    component: SwitchComponent,
 
     defaultProps: {
         value: false,

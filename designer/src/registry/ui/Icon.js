@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import IconComponent from './Icon.vue';
+
 export default {
     type: 'Icon',
     name: '图标',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['图标', 'icon', 'UI', 'element'],
     description: 'Element Plus 图标组件，支持 Element Plus Icons',
+    component: IconComponent,
 
     defaultProps: {
         name: 'star',
