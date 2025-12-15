@@ -711,7 +711,6 @@ defineExpose({
     top: 40px;
     left: 40px;
     pointer-events: none;
-    z-index: 100;
     /* Konva Stage 将在这里初始化 */
 }
 
