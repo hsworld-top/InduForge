@@ -159,7 +159,17 @@ function createPlaceholderComponent(type, errorMessage = null) {
  */
 function convertStyle(dslStyle) {
     if (!dslStyle) return {};
-    return convertDslStyleToCss(dslStyle);
+    const style = convertDslStyleToCss(dslStyle);
+
+    // Remove layout-related fields because ComponentWrapper already handles positioning
+    const layoutKeys = ['position', 'left', 'top', 'right', 'bottom', 'zIndex'];
+    layoutKeys.forEach((key) => {
+        if (key in style) {
+            delete style[key];
+        }
+    });
+
+    return style;
 }
 
 /**

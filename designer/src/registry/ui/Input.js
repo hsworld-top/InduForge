@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import InputComponent from './Input.vue';
+
 export default {
     type: 'Input',
     name: '输入框',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['输入框', 'input', 'UI', 'element', '表单'],
     description: 'Element Plus 输入框组件，支持多种类型和验证',
+    component: InputComponent,
 
     defaultProps: {
         value: '',

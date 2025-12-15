@@ -5,6 +5,8 @@
  * 分类：Element 组件
  */
 
+import DatePickerComponent from './DatePicker.vue';
+
 export default {
     type: 'DatePicker',
     name: '日期选择器',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['日期', 'datepicker', 'calendar', 'UI', 'element', '表单'],
     description: 'Element Plus 日期选择器组件，支持日期、日期范围选择',
+    component: DatePickerComponent,
 
     defaultProps: {
         value: '',

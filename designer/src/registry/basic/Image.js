@@ -5,6 +5,8 @@
  * 分类：基础组件
  */
 
+import ImageComponent from './Image.vue';
+
 export default {
     type: 'Image',
     name: '图片',
@@ -13,6 +15,7 @@ export default {
     thumbnail: null,
     tags: ['图片', 'image', '图像'],
     description: '图片组件，支持本地图片和网络图片',
+    component: ImageComponent,
 
     defaultProps: {
         src: 'https://via.placeholder.com/150',
