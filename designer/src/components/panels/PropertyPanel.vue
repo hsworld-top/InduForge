@@ -12,7 +12,6 @@
             </div>
 
             <el-tabs v-model="activeTab" class="panel-tabs">
-                <!-- 通用样式编辑 -->
                 <el-tab-pane label="样式" name="style">
                     <el-scrollbar>
                         <PositionEditor :style="commonStyle" @change="handleBatchStyleChange" />
@@ -26,110 +25,183 @@
         <!-- 单选状态 -->
         <template v-else-if="selectedComponent">
             <!-- 组件信息 -->
-            <div class="panel-header">
-                <span class="component-type">{{ componentDef?.name || selectedComponent.type }}</span>
-                <span class="component-id">{{ selectedComponent.id.slice(0, 8) }}</span>
+            <div class="panel-header panel-header-with-tabs" :class="{ 'no-tabs': !propsDef.showTabs }">
+                <div class="panel-title">
+                    <span class="component-type">{{ componentDef?.name || selectedComponent.type }}</span>
+                    <span class="component-id">{{ selectedComponent.id.slice(0, 8) }}</span>
+                </div>
+                <div v-if="propsDef.showTabs" class="panel-tabs-bar">
+                    <el-tabs v-model="activeTab" class="panel-tabs inline-tabs" type="card">
+                        <el-tab-pane label="属性" name="props" />
+                        <el-tab-pane label="样式" name="style" />
+                        <el-tab-pane v-if="eventsSchema && Object.keys(eventsSchema).length" label="连接" name="events" />
+                    </el-tabs>
+                </div>
             </div>
 
-            <!-- 标签页 -->
-            <el-tabs v-model="activeTab" class="panel-tabs">
-                <!-- 属性标签页 -->
-                <el-tab-pane label="属性" name="props">
-                    <el-scrollbar>
-                        <!-- 基础属性 -->
-                        <div class="section-group">
-                            <div class="section-title">基础</div>
-                            <el-form label-position="left" label-width="80px" size="small">
-                                <el-form-item label="标签">
-                                    <el-input v-model="componentLabel" @change="handleLabelChange" />
+            <!-- 标签页内容 -->
+            <div class="panel-tab-content" v-if="activeTab === 'props'">
+                <el-scrollbar>
+                    <!-- 基础属性 -->
+                    <div class="section-group">
+                        <div class="section-title">基础</div>
+                        <el-form label-position="left" label-width="80px" size="small">
+                            <el-form-item label="标签">
+                                <el-input v-model="componentLabel" @change="handleLabelChange" />
+                            </el-form-item>
+                            <el-form-item label="可见">
+                                <el-switch v-model="componentVisible" @change="handleVisibleChange" />
+                            </el-form-item>
+                            <el-form-item label="锁定">
+                                <el-switch v-model="componentLocked" @change="handleLockedChange" />
+                            </el-form-item>
+                        </el-form>
+                    </div>
+
+                    <!-- 组件专有属性编辑器 -->
+                    <component
+                        v-if="componentEditorName"
+                        :is="componentEditorName"
+                        :props="selectedComponent.props"
+                        :style="selectedComponent.style"
+                        @change-props="handlePropsChange"
+                        @change-style="handleStyleObjectChange" />
+
+                    <!-- 布局属性编辑器 -->
+                    <FlexEditor v-if="isFlexContainer" :props="selectedComponent.props" @change="handlePropsChange" />
+                    <GridEditor v-if="isGridContainer" :props="selectedComponent.props" @change="handlePropsChange" />
+
+                    <!-- 通用属性 -->
+                    <div v-if="propsSchema && Object.keys(propsSchema).length && !componentEditorName" class="section-group">
+                        <div class="section-title">组件属性</div>
+                        <PropsEditor :props="selectedComponent.props" :props-schema="propsSchema" @change="handlePropChange" />
+                    </div>
+                </el-scrollbar>
+            </div>
+
+            <div class="panel-tab-content" v-else-if="activeTab === 'style'">
+                <el-scrollbar>
+                    <PositionEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
+                    <SpacingEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
+                    <TransformEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
+                    <StyleEditor v-if="selectedComponent" :style="selectedComponent.style" @change="handleStyleChange" />
+                </el-scrollbar>
+            </div>
+
+            <div class="panel-tab-content" v-else-if="activeTab === 'events'">
+                <el-scrollbar>
+                    <div class="section-group">
+                        <div class="section-title">事件</div>
+                        <el-form label-position="left" label-width="160px" size="small">
+                            <template v-for="(meta, eventName) in eventsSchema" :key="eventName">
+                                <el-form-item :label="meta.label || eventName">
+                                    <template #label>
+                                        <span class="event-name">{{ displayEventLabel(meta, eventName) }}</span>
+                                    </template>
+                                    <div class="event-row">
+                                        <el-button
+                                            class="event-config-button"
+                                            size="small"
+                                            :type="isEventConfigured(eventName) ? 'success' : 'primary'"
+                                            @click="openEventDialog(eventName)">
+                                            {{ isEventConfigured(eventName) ? '已配置' : '配置' }}
+                                        </el-button>
+                                    </div>
                                 </el-form-item>
-                                <el-form-item label="可见">
-                                    <el-switch v-model="componentVisible" @change="handleVisibleChange" />
-                                </el-form-item>
-                                <el-form-item label="锁定">
-                                    <el-switch v-model="componentLocked" @change="handleLockedChange" />
-                                </el-form-item>
-                            </el-form>
-                        </div>
+                            </template>
+                        </el-form>
+                    </div>
+                </el-scrollbar>
+            </div>
 
-                        <!-- 组件专有属性编辑器 -->
-                        <component
-                            v-if="componentEditorName"
-                            :is="componentEditorName"
-                            :props="selectedComponent.props"
-                            :style="selectedComponent.style"
-                            @change-props="handlePropsChange"
-                            @change-style="handleStyleObjectChange" />
-
-                        <!-- 布局属性编辑器 -->
-                        <FlexEditor v-if="isFlexContainer" :props="selectedComponent.props" @change="handlePropsChange" />
-                        <GridEditor v-if="isGridContainer" :props="selectedComponent.props" @change="handlePropsChange" />
-
-                        <!-- 通用属性 - 使用 PropsEditor 组件 -->
-                        <div v-if="propsSchema && Object.keys(propsSchema).length && !componentEditorName" class="section-group">
-                            <div class="section-title">组件属性</div>
-                            <PropsEditor :props="selectedComponent.props" :props-schema="propsSchema" @change="handlePropChange" />
-                        </div>
-                    </el-scrollbar>
-                </el-tab-pane>
-
-                <!-- 样式标签页 -->
-                <el-tab-pane label="样式" name="style">
-                    <el-scrollbar>
-                        <PositionEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
-                        <SpacingEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
-                        <TransformEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
-                        <!-- 旧的通用样式编辑器（兜底） -->
-                        <StyleEditor v-if="selectedComponent" :style="selectedComponent.style" @change="handleStyleChange" />
-                    </el-scrollbar>
-                </el-tab-pane>
-            </el-tabs>
+            <!-- 事件配置弹窗 -->
+            <el-dialog v-model="eventDialogVisible" title="事件配置" width="720px">
+                <div class="event-config-dialog">
+                    <div class="event-config-header">
+                        <span class="event-config-name">{{ currentEventKey }}</span>
+                    </div>
+                    <MonacoEditor v-model="eventCode" language="javascript" :theme="monacoTheme" height="360px" />
+                    <div v-if="eventError" class="error-tip">{{ eventError }}</div>
+                </div>
+                <template #footer>
+                    <el-button @click="eventDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="handleEventSave">确定</el-button>
+                </template>
+            </el-dialog>
         </template>
     </div>
 </template>
 
 <script setup>
-/**
- * PropertyPanel - 属性面板组件（重构版）
- * Task 6.1: 重构 PropertyPanel.vue
- *
- * 新增功能：
- * - 支持多选时显示通用属性编辑器
- * - 集成专用编辑器（PositionEditor, SpacingEditor, TransformEditor等）
- * - 根据组件类型显示对应的专有属性编辑器
- * - 支持布局组件的特殊编辑器（FlexEditor, GridEditor）
- *
- * Requirements: 3.3, 4.1
- */
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { useDesignStore } from '@/store/design';
 import { getComponent } from '@/registry';
 import { StyleEditor, PropsEditor } from '@/components/editors';
-
-// 导入新的编辑器
+import MonacoEditor from '@/components/common/MonacoEditor.vue';
 import PositionEditor from '@/components/editors/PositionEditor.vue';
 import SpacingEditor from '@/components/editors/SpacingEditor.vue';
 import TransformEditor from '@/components/editors/TransformEditor.vue';
 import FlexEditor from '@/components/editors/FlexEditor.vue';
 import GridEditor from '@/components/editors/GridEditor.vue';
 import TextComponentEditor from '@/components/editors/TextComponentEditor.vue';
+import ButtonComponentEditor from '@/components/editors/ButtonComponentEditor.vue';
+import InputComponentEditor from '@/components/editors/InputComponentEditor.vue';
+import ImageComponentEditor from '@/components/editors/ImageComponentEditor.vue';
+import ChartComponentEditor from '@/components/editors/ChartComponentEditor.vue';
 
-// Store
 const designStore = useDesignStore();
 
-// State
-const activeTab = ref('props');
+const propsDef = defineProps({
+    initialTab: { type: String, default: 'props' },
+    showTabs: { type: Boolean, default: true },
+});
 
-// Computed
-/**
- * 选中的组件（单选）
- */
+const activeTab = ref(propsDef.initialTab || 'props');
+watch(
+    () => propsDef.initialTab,
+    (val) => {
+        if (val) activeTab.value = val;
+    },
+);
+
+const eventDialogVisible = ref(false);
+const currentEventKey = ref('');
+const eventCode = ref('');
+const eventError = ref('');
+const monacoTheme = ref('vs');
+let mediaQuery;
+let mediaHandler;
+
+function detectTheme() {
+    if (typeof document !== 'undefined') {
+        const html = document.documentElement;
+        const body = document.body;
+        const isDark = (el) => el && (el.classList?.contains('dark') || el.dataset?.theme === 'dark');
+        if (isDark(html) || isDark(body)) return 'vs-dark';
+    }
+    if (typeof window !== 'undefined' && window.matchMedia) {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs';
+    }
+    return 'vs';
+}
+
+monacoTheme.value = detectTheme();
+if (typeof window !== 'undefined' && window.matchMedia) {
+    mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaHandler = (e) => {
+        monacoTheme.value = e.matches ? 'vs-dark' : 'vs';
+    };
+    mediaQuery.addEventListener('change', mediaHandler);
+}
+
+onBeforeUnmount(() => {
+    if (mediaQuery && mediaHandler) {
+        mediaQuery.removeEventListener('change', mediaHandler);
+    }
+});
+
 const selectedComponent = computed(() => designStore.selectedComponent);
 
-/**
- * 选中的组件列表（多选）
- * Task 6.1: 支持多选
- */
 const selectedComponents = computed(() => {
     const ids = designStore.selectedComponentIds || [];
     if (ids.length === 0) return [];
@@ -151,30 +223,19 @@ const selectedComponents = computed(() => {
         .filter(Boolean);
 });
 
-/**
- * 多选时的通用样式（取第一个组件的样式）
- */
 const commonStyle = computed(() => {
     if (selectedComponents.value.length === 0) return {};
     return selectedComponents.value[0].style || {};
 });
 
-/**
- * 组件定义
- */
 const componentDef = computed(() => {
     if (!selectedComponent.value) return null;
     return getComponent(selectedComponent.value.type);
 });
 
-/**
- * 属性 Schema
- */
 const propsSchema = computed(() => componentDef.value?.propsSchema || {});
+const eventsSchema = computed(() => componentDef.value?.eventsSchema || {});
 
-/**
- * 判断是否为 Flex 容器
- */
 const isFlexContainer = computed(() => {
     if (!selectedComponent.value) return false;
     return (
@@ -183,9 +244,6 @@ const isFlexContainer = computed(() => {
     );
 });
 
-/**
- * 判断是否为 Grid 容器
- */
 const isGridContainer = computed(() => {
     if (!selectedComponent.value) return false;
     return (
@@ -194,80 +252,61 @@ const isGridContainer = computed(() => {
     );
 });
 
-/**
- * 获取组件专有编辑器名称
- * Task 6.3: 根据组件类型返回对应的编辑器
- */
 const componentEditorName = computed(() => {
     if (!selectedComponent.value) return null;
 
     const editorMap = {
-        Text: 'TextComponentEditor',
-        // 后续添加其他组件的编辑器
-        // Image: 'ImageComponentEditor',
-        // Button: 'ButtonComponentEditor',
-        // Input: 'InputComponentEditor',
-        // Table: 'TableComponentEditor',
-        // LineChart: 'ChartComponentEditor',
-        // BarChart: 'ChartComponentEditor',
+        Text: TextComponentEditor,
+        Button: ButtonComponentEditor,
+        Input: InputComponentEditor,
+        Image: ImageComponentEditor,
+        LineChart: ChartComponentEditor,
+        BarChart: ChartComponentEditor,
     };
 
     return editorMap[selectedComponent.value.type] || null;
 });
 
-/**
- * 组件标签
- */
 const componentLabel = computed({
     get: () => selectedComponent.value?.label || '',
     set: () => {},
 });
 
-/**
- * 组件可见性
- */
 const componentVisible = computed({
     get: () => selectedComponent.value?.visible !== false,
     set: () => {},
 });
 
-/**
- * 组件锁定状态
- */
 const componentLocked = computed({
     get: () => selectedComponent.value?.locked === true,
     set: () => {},
 });
 
-// Methods
+const eventBindings = computed(() => selectedComponent.value?.props?.events || {});
 
-/**
- * 处理标签变更
- */
+const isEventConfigured = (eventName) => Boolean(eventBindings.value?.[eventName]);
+
+const displayEventLabel = (meta, eventName) => {
+    const label = meta?.label;
+    if (label && label !== eventName) return `${label} ${eventName}`;
+    return label || eventName;
+};
+
 function handleLabelChange(value) {
     if (!selectedComponent.value) return;
     designStore.updateComponent(selectedComponent.value.id, { label: value });
 }
 
-/**
- * 处理可见性变更
- */
 function handleVisibleChange(value) {
     if (!selectedComponent.value) return;
     designStore.updateComponent(selectedComponent.value.id, { visible: value });
 }
 
-/**
- * 处理锁定状态变更
- */
 function handleLockedChange(value) {
     if (!selectedComponent.value) return;
     designStore.updateComponent(selectedComponent.value.id, { locked: value });
 }
 
-/**
- * 处理属性变更（单个属性）
- */
 function handlePropChange(key, value) {
     if (!selectedComponent.value) return;
     designStore.updateComponent(selectedComponent.value.id, {
@@ -275,18 +314,41 @@ function handlePropChange(key, value) {
     });
 }
 
-/**
- * 处理属性变更（整个 props 对象）
- * Task 6.2 & 6.4: 支持编辑器返回完整的 props 对象
- */
 function handlePropsChange(props) {
     if (!selectedComponent.value) return;
     designStore.updateComponent(selectedComponent.value.id, { props });
 }
 
-/**
- * 处理样式变更（单个样式）
- */
+function handleEventChange(eventName, val) {
+    if (!selectedComponent.value) return;
+    const current = selectedComponent.value.props?.events || {};
+    const next = { ...current, [eventName]: val };
+    handlePropsChange({ ...selectedComponent.value.props, events: next });
+    designStore.saveHistory('更新组件事件');
+}
+
+function openEventDialog(eventName) {
+    const current = eventBindings.value?.[eventName] || '';
+    currentEventKey.value = eventName;
+    eventCode.value = current;
+    eventError.value = '';
+    eventDialogVisible.value = true;
+}
+
+function handleEventSave() {
+    if (!currentEventKey.value) return;
+    try {
+        // 校验代码可编译，避免运行期直接报错
+        // eslint-disable-next-line no-new-func
+        new Function('event', 'emit', 'props', eventCode.value || '');
+    } catch (err) {
+        eventError.value = err?.message || '事件脚本存在语法错误';
+        return;
+    }
+    handleEventChange(currentEventKey.value, eventCode.value);
+    eventDialogVisible.value = false;
+}
+
 function handleStyleChange(key, value) {
     if (!selectedComponent.value) return;
     designStore.updateComponent(selectedComponent.value.id, {
@@ -294,19 +356,11 @@ function handleStyleChange(key, value) {
     });
 }
 
-/**
- * 处理样式变更（整个 style 对象）
- * Task 6.2: 支持编辑器返回完整的 style 对象
- */
 function handleStyleObjectChange(style) {
     if (!selectedComponent.value) return;
     designStore.updateComponent(selectedComponent.value.id, { style });
 }
 
-/**
- * 处理批量样式变更（多选）
- * Task 6.1: 多选时批量更新样式
- */
 function handleBatchStyleChange(style) {
     if (selectedComponents.value.length === 0) return;
 
@@ -338,6 +392,30 @@ function handleBatchStyleChange(style) {
     justify-content: space-between;
 }
 
+.panel-header-with-tabs {
+    align-items: flex-end;
+    gap: 12px;
+    padding-bottom: 8px;
+}
+
+.panel-header-with-tabs.no-tabs {
+    align-items: center;
+    padding-bottom: 12px;
+}
+
+.panel-title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.panel-tabs-bar {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+
 .component-type {
     font-size: 14px;
     font-weight: 500;
@@ -357,6 +435,20 @@ function handleBatchStyleChange(style) {
     overflow: hidden;
 }
 
+.panel-tab-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+:deep(.inline-tabs .el-tabs__header) {
+    margin: 0;
+}
+
+:deep(.inline-tabs .el-tabs__nav-wrap::after) {
+    height: 0;
+}
+
 :deep(.el-tabs__content) {
     flex: 1;
     overflow: auto;
@@ -373,7 +465,7 @@ function handleBatchStyleChange(style) {
 }
 
 .section-group {
-    margin-bottom: 16px;
+    padding: 12px;
 }
 
 .section-group:last-child {
@@ -385,7 +477,6 @@ function handleBatchStyleChange(style) {
     font-weight: 500;
     color: #909399;
     margin-bottom: 8px;
-    text-transform: uppercase;
 }
 
 :deep(.el-form-item) {
@@ -438,8 +529,28 @@ function handleBatchStyleChange(style) {
     flex-direction: column;
 }
 
-.section-group {
-    padding: 12px;
-    margin-bottom: 0;
+.event-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    width: 100%;
+}
+
+.event-name {
+    font-size: 12px;
+    color: #909399;
+    white-space: nowrap;
+}
+
+.event-config-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.error-tip {
+    color: #f56c6c;
+    font-size: 12px;
 }
 </style>

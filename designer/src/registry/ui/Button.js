@@ -1,8 +1,5 @@
 /**
- * Button - 按钮组件
- *
- * Element Plus 按钮组件
- * 分类：Element 组件
+ * Button - Element Plus 按钮组件
  */
 
 import ButtonComponent from './Button.vue';
@@ -27,6 +24,10 @@ export default {
         round: false,
         circle: false,
         icon: '',
+        domId: '',
+        styleConfig: '',
+        advancedConfig: '',
+        events: {},
     },
 
     defaultStyle: {
@@ -106,13 +107,36 @@ export default {
             group: '内容',
             default: '',
         },
+        domId: {
+            type: 'string',
+            label: 'DOM ID',
+            group: '外观',
+            default: '',
+            description: '用于样式定制范围；也可在样式配置中使用 domId: xxx 设置',
+        },
+        styleConfig: {
+            type: 'string',
+            label: '样式配置',
+            group: '外观',
+            default: '',
+        },
+        advancedConfig: {
+            type: 'string',
+            label: '详细配置',
+            group: '配置',
+            default: '',
+            description: 'JSON 或对象字面量，覆盖文本/类型/尺寸/禁用等按钮属性，支持 styleConfig',
+        },
     },
 
     eventsSchema: {
-        click: {
-            label: '点击',
-            description: '按钮被点击时触发',
-        },
+        click: { label: '点击', description: '按钮被点击时触发' },
+        mousedown: { label: '鼠标按下', description: '鼠标按下按钮时触发' },
+        mouseup: { label: '鼠标抬起', description: '鼠标在按钮上抬起时触发' },
+        mouseenter: { label: '鼠标进入', description: '鼠标移入按钮区域时触发' },
+        mouseleave: { label: '鼠标离开', description: '鼠标移出按钮区域时触发' },
+        focus: { label: '获得焦点', description: '按钮获得焦点时触发' },
+        blur: { label: '失去焦点', description: '按钮失去焦点时触发' },
     },
 
     container: false,

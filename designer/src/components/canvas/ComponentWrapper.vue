@@ -10,11 +10,11 @@
         }"
         :style="wrapperStyle"
         :draggable="!component.locked"
-        @click.stop="handleClick($event)"
+        @click.capture.stop="handleClick($event)"
         @contextmenu.stop="handleContextMenu($event)"
-        @dragstart="handleDragStart"
-        @drag="handleDrag"
-        @dragend="handleDragEnd"
+        @dragstart.capture.stop="handleDragStart"
+        @drag.capture.stop="handleDrag"
+        @dragend.capture.stop="handleDragEnd"
         @dragover.prevent="handleDragOver"
         @dragleave="handleDragLeave"
         @drop.prevent="handleDrop">
@@ -80,13 +80,13 @@ const isContainer = computed(() => {
  */
 const wrapperStyle = computed(() => {
     const style = props.component.style || {};
-    // 提取定位相关的属性
+    // 提取定位相关的属性，避免 0 被判定为 falsy
     return {
-        position: style.position,
-        left: style.left ? `${style.left}px` : undefined,
-        top: style.top ? `${style.top}px` : undefined,
-        width: style.width ? `${style.width}px` : undefined,
-        height: style.height ? `${style.height}px` : undefined,
+        position: style.position || 'absolute',
+        left: style.left !== undefined && style.left !== null ? `${style.left}px` : undefined,
+        top: style.top !== undefined && style.top !== null ? `${style.top}px` : undefined,
+        width: style.width !== undefined && style.width !== null && typeof style.width === 'number' ? `${style.width}px` : style.width,
+        height: style.height !== undefined && style.height !== null && typeof style.height === 'number' ? `${style.height}px` : style.height,
         zIndex: style.zIndex,
     };
 });
@@ -124,15 +124,28 @@ function handleDragStart(event) {
         return;
     }
 
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
     isDragging.value = true;
 
     // 设置拖拽数据
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('application/x-designer-component', JSON.stringify({
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    const offsetY = event.clientY - rect.top;
+    const payload = {
         id: props.component.id,
         type: props.component.type,
         source: 'canvas', // 标记来源是画布内
-    }));
+        offsetX,
+        offsetY,
+    };
+    const payloadStr = JSON.stringify(payload);
+    event.dataTransfer.setData('application/x-designer-component', payloadStr);
+    // 兼容只有 application/json 的读取场景（画布内拖动也能被 DesignCanvas 识别）
+    event.dataTransfer.setData('application/json', payloadStr);
+    // 再写入 text/plain，避免部分浏览器丢失自定义 MIME 导致拖动失败
+    event.dataTransfer.setData('text/plain', payloadStr);
 
     // 设置拖拽图像（使用当前元素的克隆）
     const dragImage = event.currentTarget.cloneNode(true);
@@ -184,7 +197,8 @@ function handleDragOver(event) {
     if (!isContainer.value) return;
 
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    // 显式允许放置，兼容库拖拽（copy）与画布内拖拽（move）
+    event.dataTransfer.dropEffect = event.dataTransfer.effectAllowed === 'copy' ? 'copy' : 'move';
     
     isDropTarget.value = true;
 
@@ -220,29 +234,31 @@ function handleDragLeave(event) {
 function handleDrop(event) {
     if (!isContainer.value) return;
 
-    // 重要：阻止事件冒泡，防止 DesignCanvas 也处理此事件
-    event.stopPropagation();
-    
     isDropTarget.value = false;
 
     try {
-        // 尝试两种数据源：
-        // 1. 画布内移动组件
         let data = event.dataTransfer.getData('application/x-designer-component');
         let source = 'canvas';
-        
-        // 2. 从组件库拖拽
+
         if (!data) {
             data = event.dataTransfer.getData('application/json');
             source = 'library';
         }
-        
+
         if (!data) {
             console.warn('[ComponentWrapper] No drag data found');
             return;
         }
 
         const dragData = JSON.parse(data);
+
+        // 画布内拖动（source === 'canvas'）交给父级 DesignCanvas 处理位置更新，直接放行
+        if (source === 'canvas') {
+            return;
+        }
+
+        // 只有真正向容器投递新子节点时才阻止冒泡
+        event.stopPropagation();
 
         console.log('🎯 [ComponentWrapper] Drop to container:', props.component.type, props.component.id);
 
@@ -276,6 +292,7 @@ defineExpose({
     box-sizing: border-box;
     cursor: pointer;
     transition: outline 0.2s ease;
+    user-select: none;
 }
 
 /**

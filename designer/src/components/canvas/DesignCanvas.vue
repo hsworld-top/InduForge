@@ -1,52 +1,66 @@
 <template>
-    <div ref="viewportRef" class="design-canvas-viewport" :class="{ 'show-grid': showGrid }" @dragenter="handleDragEnter" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop" @contextmenu="handleContextMenu">
-        <!-- Canvas Layer (Konva) - 辅助功能层 -->
-        <!-- z-index: 100, pointer-events: none -->
-        <div
-            class="canvas-layer"
-            :style="{
-                width: `${canvasWidth}px`,
-                height: `${canvasHeight}px`,
-            }">
-            <CanvasAuxiliary
-                ref="canvasAuxiliaryRef"
-                :width="canvasWidth"
-                :height="canvasHeight"
-                :zoom="zoom"
-                :scroll-x="scrollX"
-                :scroll-y="scrollY"
-                @canvas-click="handleCanvasClick"
-                @canvas-ready="handleCanvasReady" />
-        </div>
-
-        <!-- DOM Layer (Vue Components) - 组件渲染层 -->
-        <!-- z-index: 1 -->
-        <!-- Task 1.5: DOM Layer 缩放 - 使用 CSS transform: scale() -->
-        <div
-            ref="domLayerRef"
-            class="dom-layer"
-            :style="{
-                width: `${canvasWidth}px`,
-                height: `${canvasHeight}px`,
-                backgroundColor: backgroundColor,
-                transform: `scale(${zoom})`,
-                transformOrigin: 'top left',
-            }">
-            <DomRenderer
-                v-if="currentPage"
-                :components="components"
-                :selected-id="selectedComponentId"
-                :canvas-width="canvasWidth"
-                :canvas-height="canvasHeight"
-                @select="handleSelect"
-                @update="handleUpdate"
-                @contextmenu="handleContextMenu"
-                @drop="handleContainerDrop" />
-        </div>
-
-        <!-- Context Menu - 右键菜单 -->
-        <ContextMenu ref="contextMenuRef" :component-id="contextMenuComponentId" />
+  <div
+    ref="viewportRef"
+    class="design-canvas-viewport"
+    :class="{ 'show-grid': showGrid }"
+    @dragenter="handleDragEnter"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @dragend="handleDragEnd"
+    @drop="handleDrop"
+    @contextmenu="handleContextMenu"
+  >
+    <!-- Canvas Layer (Konva) - 辅助功能层 -->
+    <!-- z-index: 100, pointer-events: none -->
+    <div
+      class="canvas-layer"
+      :style="{
+        width: `${canvasWidth}px`,
+        height: `${canvasHeight}px`,
+      }"
+    >
+      <CanvasAuxiliary
+        ref="canvasAuxiliaryRef"
+        :width="canvasWidth"
+        :height="canvasHeight"
+        :zoom="zoom"
+        :scroll-x="scrollX"
+        :scroll-y="scrollY"
+        @canvas-click="handleCanvasClick"
+        @canvas-ready="handleCanvasReady"
+      />
     </div>
+
+    <!-- DOM Layer (Vue Components) - 组件渲染层 -->
+    <!-- z-index: 1 -->
+    <!-- Task 1.5: DOM Layer 缩放 - 使用 CSS transform: scale() -->
+    <div
+      ref="domLayerRef"
+      class="dom-layer"
+      :style="{
+        width: `${canvasWidth}px`,
+        height: `${canvasHeight}px`,
+        backgroundColor: backgroundColor,
+        transform: `scale(${zoom})`,
+        transformOrigin: 'top left',
+      }"
+    >
+      <DomRenderer
+        v-if="currentPage"
+        :components="components"
+        :selected-id="selectedComponentId"
+        :canvas-width="canvasWidth"
+        :canvas-height="canvasHeight"
+        @select="handleSelect"
+        @update="handleUpdate"
+        @contextmenu="handleContextMenu"
+        @drop="handleContainerDrop"
+      />
+    </div>
+
+    <!-- Context Menu - 右键菜单 -->
+    <ContextMenu ref="contextMenuRef" :component-id="contextMenuComponentId" />
+  </div>
 </template>
 
 <script setup>
@@ -66,24 +80,24 @@
  * - Acceptance Criteria 1.1: 创建两个独立的渲染层
  * - Acceptance Criteria 1.4: 确保两层坐标系统同步且事件不冲突
  */
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { useDesignStore } from '@/store/design';
-import { useCanvas } from '@/composables/useCanvas';
-import { useCoordinateSync } from '@/composables/useCoordinateSync';
-import DomRenderer from './DomRenderer.vue';
-import CanvasAuxiliary from './CanvasAuxiliary.vue';
-import ContextMenu from './ContextMenu.vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { useDesignStore } from "@/store/design";
+import { useCanvas, snapToGrid as snapPositionToGrid } from "@/composables/useCanvas";
+import { useCoordinateSync } from "@/composables/useCoordinateSync";
+import DomRenderer from "./DomRenderer.vue";
+import CanvasAuxiliary from "./CanvasAuxiliary.vue";
+import ContextMenu from "./ContextMenu.vue";
 
 // Props
 const props = defineProps({
-    showGrid: {
-        type: Boolean,
-        default: true,
-    },
+  showGrid: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 // Emits
-const emit = defineEmits(['contextmenu']);
+const emit = defineEmits(["contextmenu"]);
 
 // Store
 const designStore = useDesignStore();
@@ -100,6 +114,7 @@ const contextMenuRef = ref(null);
 // Drag state
 const isDragging = ref(false);
 const draggedComponent = ref(null);
+const lastDragPoint = ref(null);
 
 // Context menu state
 const contextMenuComponentId = ref(null);
@@ -115,10 +130,10 @@ const zoomCenterY = ref(0);
 
 // 坐标系统同步
 const coordinateSync = useCoordinateSync({
-    canvasContainerRef: viewportRef,
-    zoom,
-    scrollX,
-    scrollY,
+  canvasContainerRef: viewportRef,
+  zoom,
+  scrollX,
+  scrollY,
 });
 
 // Computed
@@ -129,7 +144,68 @@ const selectedComponentId = computed(() => designStore.selectedComponentId);
 
 const canvasWidth = computed(() => pageConfig.value?.width || 1920);
 const canvasHeight = computed(() => pageConfig.value?.height || 1080);
-const backgroundColor = computed(() => pageConfig.value?.backgroundColor || '#ffffff');
+const backgroundColor = computed(
+  () => pageConfig.value?.backgroundColor || "#ffffff"
+);
+
+const snapEnabled = computed(() => {
+  if (pageConfig.value && typeof pageConfig.value.snapToGrid === "boolean") {
+    return pageConfig.value.snapToGrid;
+  }
+  return canvasState.snapToGrid;
+});
+
+const gridSize = computed(() => {
+  if (pageConfig.value && typeof pageConfig.value.gridSize === "number") {
+    return pageConfig.value.gridSize;
+  }
+  return canvasState.gridSize || 10;
+});
+
+const CANVAS_PADDING = 40;
+
+function findComponentById(list, componentId) {
+  for (const item of list || []) {
+    if (item.id === componentId) return item;
+    if (item.children) {
+      const found = findComponentById(item.children, componentId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function getCanvasPoint(event) {
+  if (!viewportRef.value) return { x: 0, y: 0 };
+  const rect = viewportRef.value.getBoundingClientRect();
+  const x = (event.clientX - rect.left - CANVAS_PADDING + scrollX.value) / zoom.value;
+  const y = (event.clientY - rect.top - CANVAS_PADDING + scrollY.value) / zoom.value;
+  return { x, y };
+}
+
+function parseDragData(event) {
+  if (!event?.dataTransfer) return null;
+  const dt = event.dataTransfer;
+  const candidates = [
+    dt.getData("application/json"),
+    dt.getData("text/plain"),
+    dt.getData("application/x-designer-component"),
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      // ignore and try next
+    }
+  }
+  return null;
+}
+
+function getSelectedComponent() {
+  if (!designStore.selectedComponentId) return null;
+  return findComponentById(components.value, designStore.selectedComponentId);
+}
 
 /**
  * 处理组件选择
@@ -141,13 +217,13 @@ const backgroundColor = computed(() => pageConfig.value?.backgroundColor || '#ff
  * @param {boolean} isMultiSelect - 是否多选模式（Ctrl+点击）
  */
 function handleSelect(id, isMultiSelect = false) {
-    if (isMultiSelect) {
-        // 多选模式：切换选中状态
-        designStore.toggleComponentSelection(id);
-    } else {
-        // 单选模式
-        designStore.selectComponent(id);
-    }
+  if (isMultiSelect) {
+    // 多选模式：切换选中状态
+    designStore.toggleComponentSelection(id);
+  } else {
+    // 单选模式
+    designStore.selectComponent(id);
+  }
 }
 
 /**
@@ -157,20 +233,20 @@ function handleSelect(id, isMultiSelect = false) {
  * @param {string} componentId - 组件ID（可选）
  */
 function handleContextMenu(event, componentId = null) {
-    event.preventDefault();
+  event.preventDefault();
 
-    // 如果右键点击的是组件，且该组件未被选中，则先选中它
-    if (componentId && !designStore.selectedComponentIds.includes(componentId)) {
-        designStore.selectComponent(componentId);
-    }
+  // 如果右键点击的是组件，且该组件未被选中，则先选中它
+  if (componentId && !designStore.selectedComponentIds.includes(componentId)) {
+    designStore.selectComponent(componentId);
+  }
 
-    // 设置右键菜单的组件ID
-    contextMenuComponentId.value = componentId;
+  // 设置右键菜单的组件ID
+  contextMenuComponentId.value = componentId;
 
-    // 显示右键菜单
-    if (contextMenuRef.value) {
-        contextMenuRef.value.show(event);
-    }
+  // 显示右键菜单
+  if (contextMenuRef.value) {
+    contextMenuRef.value.show(event);
+  }
 }
 
 /**
@@ -180,142 +256,151 @@ function handleContextMenu(event, componentId = null) {
  * @param {KeyboardEvent} event - 键盘事件
  */
 function handleKeyDown(event) {
-    // Ctrl+Z 或 Cmd+Z：撤销
-    if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
-        event.preventDefault();
-        designStore.undo();
-        console.log('↩️ Undo');
-        return;
-    }
+  // Ctrl+Z 或 Cmd+Z：撤销
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    event.key === "z" &&
+    !event.shiftKey
+  ) {
+    event.preventDefault();
+    designStore.undo();
+    console.log("↩️ Undo");
+    return;
+  }
 
-    // Ctrl+Y 或 Cmd+Shift+Z：重做
-    if (
-        ((event.ctrlKey || event.metaKey) && event.key === 'y') ||
-        ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z')
-    ) {
-        event.preventDefault();
-        designStore.redo();
-        console.log('↪️ Redo');
-        return;
-    }
+  // Ctrl+Y 或 Cmd+Shift+Z：重做
+  if (
+    ((event.ctrlKey || event.metaKey) && event.key === "y") ||
+    ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === "z")
+  ) {
+    event.preventDefault();
+    designStore.redo();
+    console.log("↪️ Redo");
+    return;
+  }
 
-    // Ctrl+A 或 Cmd+A：全选
-    if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
-        event.preventDefault();
-        designStore.selectAllComponents();
-        console.log('📋 Select all components');
-    }
+  // Ctrl+A 或 Cmd+A：全选
+  if ((event.ctrlKey || event.metaKey) && event.key === "a") {
+    event.preventDefault();
+    designStore.selectAllComponents();
+    console.log("📋 Select all components");
+  }
 
-    // Delete 或 Backspace：删除选中的组件
-    if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (designStore.selectedComponentIds.length > 1) {
-            // 多选：批量删除
-            event.preventDefault();
-            designStore.batchDeleteComponents(designStore.selectedComponentIds);
-            designStore.saveHistory('批量删除组件');
-            console.log('🗑️ Batch delete selected components');
-        } else if (designStore.selectedComponentId) {
-            // 单选：删除单个
-            event.preventDefault();
-            designStore.deleteSelectedComponent();
-            designStore.saveHistory('删除组件');
-        }
+  // Delete 或 Backspace：删除选中的组件
+  if (event.key === "Delete" || event.key === "Backspace") {
+    if (designStore.selectedComponentIds.length > 1) {
+      // 多选：批量删除
+      event.preventDefault();
+      designStore.batchDeleteComponents(designStore.selectedComponentIds);
+      designStore.saveHistory("批量删除组件");
+      console.log("🗑️ Batch delete selected components");
+    } else if (designStore.selectedComponentId) {
+      // 单选：删除单个
+      event.preventDefault();
+      designStore.deleteSelectedComponent();
+      designStore.saveHistory("删除组件");
     }
+  }
 
-    // Ctrl+C 或 Cmd+C：复制
-    if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
-        if (designStore.selectedComponentIds.length > 0) {
-            event.preventDefault();
-            designStore.copySelectedComponent();
-            console.log('📋 Copy selected components');
-        }
+  // Ctrl+C 或 Cmd+C：复制
+  if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+    if (designStore.selectedComponentIds.length > 0) {
+      event.preventDefault();
+      designStore.copySelectedComponent();
+      console.log("📋 Copy selected components");
     }
+  }
 
-    // Ctrl+V 或 Cmd+V：粘贴
-    if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-        if (designStore.selectedComponentIds.length > 1) {
-            event.preventDefault();
-            const newIds = designStore.batchCopyComponents(designStore.selectedComponentIds);
-            designStore.saveHistory('批量复制组件');
-            console.log('📋 Paste selected components');
-        } else if (designStore.clipboard) {
-            event.preventDefault();
-            designStore.pasteComponent();
-            designStore.saveHistory('粘贴组件');
-        }
+  // Ctrl+V 或 Cmd+V：粘贴
+  if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+    if (designStore.selectedComponentIds.length > 1) {
+      event.preventDefault();
+      const newIds = designStore.batchCopyComponents(
+        designStore.selectedComponentIds
+      );
+      designStore.saveHistory("批量复制组件");
+      console.log("📋 Paste selected components");
+    } else if (designStore.clipboard) {
+      event.preventDefault();
+      designStore.pasteComponent();
+      designStore.saveHistory("粘贴组件");
     }
+  }
 
-    // Ctrl+D 或 Cmd+D：复制并粘贴
-    if ((event.ctrlKey || event.metaKey) && event.key === 'd') {
-        event.preventDefault();
-        if (designStore.selectedComponentIds.length > 1) {
-            designStore.batchCopyComponents(designStore.selectedComponentIds);
-            designStore.saveHistory('批量复制组件');
-        } else if (designStore.selectedComponentId) {
-            designStore.duplicateSelectedComponent();
-            designStore.saveHistory('复制组件');
-        }
-        console.log('📋 Duplicate selected components');
+  // Ctrl+D 或 Cmd+D：复制并粘贴
+  if ((event.ctrlKey || event.metaKey) && event.key === "d") {
+    event.preventDefault();
+    if (designStore.selectedComponentIds.length > 1) {
+      designStore.batchCopyComponents(designStore.selectedComponentIds);
+      designStore.saveHistory("批量复制组件");
+    } else if (designStore.selectedComponentId) {
+      designStore.duplicateSelectedComponent();
+      designStore.saveHistory("复制组件");
     }
+    console.log("📋 Duplicate selected components");
+  }
 
-    // Ctrl+Plus/Equal：放大
-    if ((event.ctrlKey || event.metaKey) && (event.key === '+' || event.key === '=')) {
-        event.preventDefault();
-        const newZoom = Math.min(zoom.value + 0.1, 5); // 最大500%
-        setZoom(newZoom);
-        console.log(`🔍 Zoom in: ${Math.round(newZoom * 100)}%`);
-    }
+  // Ctrl+Plus/Equal：放大
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    (event.key === "+" || event.key === "=")
+  ) {
+    event.preventDefault();
+    const newZoom = Math.min(zoom.value + 0.1, 5); // 最大500%
+    setZoom(newZoom);
+    console.log(`🔍 Zoom in: ${Math.round(newZoom * 100)}%`);
+  }
 
-    // Ctrl+Minus：缩小
-    if ((event.ctrlKey || event.metaKey) && event.key === '-') {
-        event.preventDefault();
-        const newZoom = Math.max(zoom.value - 0.1, 0.1); // 最小10%
-        setZoom(newZoom);
-        console.log(`🔍 Zoom out: ${Math.round(newZoom * 100)}%`);
-    }
+  // Ctrl+Minus：缩小
+  if ((event.ctrlKey || event.metaKey) && event.key === "-") {
+    event.preventDefault();
+    const newZoom = Math.max(zoom.value - 0.1, 0.1); // 最小10%
+    setZoom(newZoom);
+    console.log(`🔍 Zoom out: ${Math.round(newZoom * 100)}%`);
+  }
 
-    // Ctrl+0：重置缩放（100%）
-    if ((event.ctrlKey || event.metaKey) && event.key === '0') {
-        event.preventDefault();
-        setZoom(1);
-        console.log('🔍 Reset zoom: 100%');
-    }
+  // Ctrl+0：重置缩放（100%）
+  if ((event.ctrlKey || event.metaKey) && event.key === "0") {
+    event.preventDefault();
+    setZoom(1);
+    console.log("🔍 Reset zoom: 100%");
+  }
 
-    // Escape：取消选择
-    if (event.key === 'Escape') {
-        designStore.clearSelection();
-        console.log('❌ Clear selection');
-    }
+  // Escape：取消选择
+  if (event.key === "Escape") {
+    designStore.clearSelection();
+    console.log("❌ Clear selection");
+  }
 }
 
 /**
  * 处理组件更新
  */
 function handleUpdate(id, updates) {
-    designStore.updateComponent(id, updates);
-    // 保存历史记录
-    designStore.saveHistory(`更新组件 ${id}`);
+  designStore.updateComponent(id, updates);
+  // 保存历史记录
+  designStore.saveHistory(`更新组件 ${id}`);
 }
 
 /**
  * 处理 Canvas 空白区域点击
  */
 function handleCanvasClick(event) {
-    console.log('Canvas blank area clicked:', event);
-    // 取消选择所有组件
-    designStore.selectComponent(null);
+  console.log("Canvas blank area clicked:", event);
+  // 取消选择所有组件
+  designStore.selectComponent(null);
 }
 
 /**
  * 处理 Canvas 准备就绪
  */
 function handleCanvasReady(canvasLayers) {
-    console.log('✅ Canvas layers ready:', canvasLayers);
-    // 可以在这里保存 Canvas 图层的引用，用于后续的辅助功能渲染
-    // 例如：绘制标尺、对齐线、选择框等
+  console.log("✅ Canvas layers ready:", canvasLayers);
+  // 可以在这里保存 Canvas 图层的引用，用于后续的辅助功能渲染
+  // 例如：绘制标尺、对齐线、选择框等
 
-    // Task 1.4: 初始化坐标系统同步
-    initCoordinateSync();
+  // Task 1.4: 初始化坐标系统同步
+  initCoordinateSync();
 }
 
 /**
@@ -323,8 +408,27 @@ function handleCanvasReady(canvasLayers) {
  * Task 4.1: 在 Canvas Layer 显示拖拽预览
  */
 function handleDragEnter(event) {
-    event.preventDefault();
-    console.log('Drag enter canvas');
+  event.preventDefault();
+  if (!isDragging.value || !draggedComponent.value) {
+    const parsed = parseDragData(event);
+    if (parsed) {
+      if (parsed?.source === "canvas" && parsed.id) {
+        draggedComponent.value = findComponentById(components.value, parsed.id) || parsed;
+      } else {
+        draggedComponent.value = parsed;
+      }
+      isDragging.value = true;
+    } else {
+      const selected = getSelectedComponent();
+      if (selected) {
+        draggedComponent.value = { ...selected, source: "canvas", offsetX: 0, offsetY: 0 };
+        isDragging.value = true;
+      }
+    }
+  }
+  const point = getCanvasPoint(event);
+  lastDragPoint.value = point;
+  console.log("Drag enter canvas");
 }
 
 /**
@@ -332,48 +436,97 @@ function handleDragEnter(event) {
  * Task 4.1: 实现拖拽预览跟随鼠标
  */
 function handleDragOver(event) {
-    event.preventDefault();
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
 
-    if (!isDragging.value || !draggedComponent.value) {
-        // 尝试从 dataTransfer 获取拖拽数据
-        try {
-            const data = event.dataTransfer.getData('application/json');
-            if (data) {
-                draggedComponent.value = JSON.parse(data);
-                isDragging.value = true;
-            }
-        } catch (error) {
-            // 无法获取数据，可能是浏览器安全限制
-        }
+  if (!isDragging.value || !draggedComponent.value) {
+    const parsed = parseDragData(event);
+    if (parsed) {
+      if (parsed?.source === "canvas" && parsed.id) {
+        draggedComponent.value = findComponentById(components.value, parsed.id) || parsed;
+      } else {
+        draggedComponent.value = parsed;
+      }
+      isDragging.value = true;
+      console.info("[DesignCanvas] dragover: start dragging", parsed);
+    } else {
+      // dataTransfer 为空时兜底使用当前选中组件
+      const selected = getSelectedComponent();
+      if (selected) {
+        draggedComponent.value = { ...selected, source: "canvas", offsetX: 0, offsetY: 0 };
+        isDragging.value = true;
+        console.info("[DesignCanvas] dragover: fallback selected", selected.id);
+      }
     }
+  }
 
-    // 更新拖拽预览位置
-    if (isDragging.value && canvasAuxiliaryRef.value) {
-        const dragPreview = canvasAuxiliaryRef.value.getDragPreview();
-        if (dragPreview) {
-            // 计算鼠标在画布中的位置（考虑缩放和滚动）
-            const rect = viewportRef.value.getBoundingClientRect();
-            const x = (event.clientX - rect.left - 40 + scrollX.value) / zoom.value;
-            const y = (event.clientY - rect.top - 40 + scrollY.value) / zoom.value;
+  // 更新拖拽预览位置
+  if (isDragging.value) {
+    const point = getCanvasPoint(event);
+    lastDragPoint.value = point;
 
-            // 如果预览未显示，先显示
-            if (!dragPreview.isVisible && draggedComponent.value) {
-                dragPreview.show(draggedComponent.value, x, y);
-            } else {
-                dragPreview.updatePosition(x, y);
-            }
+    if (canvasAuxiliaryRef.value) {
+      const dragPreview = canvasAuxiliaryRef.value.getDragPreview();
+      if (dragPreview) {
+        const { x, y } = point;
+        // 如果预览未显示，先显示
+        if (!dragPreview.isVisible && draggedComponent.value) {
+          dragPreview.show(draggedComponent.value, x, y);
+        } else {
+          dragPreview.updatePosition(x, y);
         }
+      }
     }
+  }
 }
 
 /**
  * 处理拖拽离开画布
  */
 function handleDragLeave(event) {
-    // 只在真正离开画布时隐藏预览
-    if (!event.currentTarget.contains(event.relatedTarget)) {
-        hideDragPreview();
+  // 只在真正离开画布时隐藏预览
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    hideDragPreview();
+  }
+}
+
+function handleDragEnd(event) {
+  // 如果 drop 未触发，但已有拖拽信息，按最后位置补救更新
+  if (isDragging.value && draggedComponent.value) {
+    console.info("[DesignCanvas] dragend fallback");
+    const component = draggedComponent.value;
+    const point = lastDragPoint.value || getCanvasPoint(event);
+    const { x, y } = point;
+
+    if (component?.source === "canvas" && component.id) {
+      const offsetX = (component.offsetX || 0) / zoom.value;
+      const offsetY = (component.offsetY || 0) / zoom.value;
+      let newLeft = x - offsetX;
+      let newTop = y - offsetY;
+
+      if (snapEnabled.value) {
+        const snapped = snapPositionToGrid({ x: newLeft, y: newTop }, gridSize.value);
+        newLeft = snapped.x;
+        newTop = snapped.y;
+      }
+
+      designStore.updateComponent(component.id, {
+        style: {
+          left: Math.round(newLeft),
+          top: Math.round(newTop),
+        },
+      });
+      designStore.saveHistory(`移动组件 ${component.id}`);
+      designStore.selectComponent(component.id);
     }
+  }
+
+  hideDragPreview();
+  isDragging.value = false;
+  draggedComponent.value = null;
+  lastDragPoint.value = null;
 }
 
 /**
@@ -381,64 +534,123 @@ function handleDragLeave(event) {
  * Task 4.2: 实现画布接收拖放
  */
 function handleDrop(event) {
-    event.preventDefault();
-    event.stopPropagation(); // 阻止事件冒泡，防止 DesignCenter 也处理此事件
+  event.preventDefault();
+  event.stopPropagation(); // 阻止事件冒泡，防止 DesignCenter 也处理此事件
 
-    try {
-        // 获取拖拽数据
-        const data = event.dataTransfer.getData('application/json');
-        if (!data) {
-            console.warn('No drag data found');
-            return;
-        }
+  try {
+    console.info("[DesignCanvas] drop received");
+    // 获取拖拽数据
+    const component =
+      parseDragData(event) ||
+      (() => {
+        const selected = getSelectedComponent();
+        return selected ? { ...selected, source: "canvas", offsetX: 0, offsetY: 0 } : null;
+      })();
 
-        const component = JSON.parse(data);
-
-        // 计算放置位置（画布坐标系）
-        const rect = viewportRef.value.getBoundingClientRect();
-        const x = (event.clientX - rect.left - 40 + scrollX.value) / zoom.value;
-        const y = (event.clientY - rect.top - 40 + scrollY.value) / zoom.value;
-
-        // 更新组件位置
-        component.style = {
-            ...component.style,
-            left: x,
-            top: y,
-            position: 'absolute',
-        };
-        
-        // 如果是容器组件且宽度是百分比字符串，计算实际像素值
-        if (component.type === 'Container' && typeof component.style.width === 'string' && component.style.width.includes('%')) {
-            const percentage = parseFloat(component.style.width) / 100;
-            const canvasWidth = pageConfig.value?.width || 1920;
-            component.style.width = Math.round(canvasWidth * percentage - 80); // 减去左右 padding
-        }
-
-        // 添加组件到 Store
-        designStore.addComponent(component);
-        designStore.saveHistory(`添加组件 ${component.name}`);
-
-        console.log('✅ Component dropped:', component);
-    } catch (error) {
-        console.error('❌ Failed to drop component:', error);
-    } finally {
-        // 清理拖拽状态
-        hideDragPreview();
-        isDragging.value = false;
-        draggedComponent.value = null;
+    if (!component) {
+      console.warn("No drag data found");
+      return;
     }
+
+    // 计算放置位置（画布坐标系）
+    const point = getCanvasPoint(event);
+    lastDragPoint.value = point;
+    const { x, y } = point;
+
+    // 本地拖拽移动：只更新组件位置不重新创建
+    if (component?.source === "canvas" && component.id) {
+      const target = findComponentById(components.value, component.id);
+      if (!target) {
+        console.warn("[DesignCanvas] Cannot move component, id not found:", component.id);
+      } else {
+        const offsetX = (component.offsetX || 0) / zoom.value;
+        const offsetY = (component.offsetY || 0) / zoom.value;
+        let newLeft = x - offsetX;
+        let newTop = y - offsetY;
+
+        // 容器百分比宽度转换为像素，避免落点偏移
+        if (
+          target.type === "Container" &&
+          typeof target.style?.width === "string" &&
+          target.style.width.includes("%")
+        ) {
+          const percentage = parseFloat(target.style.width) / 100;
+          const canvasWidth = pageConfig.value?.width || 1920;
+          const pxWidth = Math.round(canvasWidth * percentage - CANVAS_PADDING * 2);
+          designStore.updateComponent(component.id, {
+            style: { width: pxWidth },
+          });
+        }
+
+        if (snapEnabled.value) {
+          const snapped = snapPositionToGrid({ x: newLeft, y: newTop }, gridSize.value);
+          newLeft = snapped.x;
+          newTop = snapped.y;
+        }
+
+        designStore.updateComponent(component.id, {
+          style: {
+            left: Math.round(newLeft),
+            top: Math.round(newTop),
+          },
+        });
+        designStore.saveHistory(`移动组件 ${target.name || target.type}`);
+        designStore.selectComponent(component.id);
+      }
+      return;
+    }
+
+    // 更新组件位置
+    component.style = {
+      ...component.style,
+      left: x,
+      top: y,
+      position: "absolute",
+    };
+
+    if (snapEnabled.value) {
+      const snapped = snapPositionToGrid({ x: component.style.left, y: component.style.top }, gridSize.value);
+      component.style.left = snapped.x;
+      component.style.top = snapped.y;
+    }
+
+    // 如果是容器组件且宽度是百分比字符串，计算实际像素值
+    if (
+      component.type === "Container" &&
+      typeof component.style.width === "string" &&
+      component.style.width.includes("%")
+    ) {
+      const percentage = parseFloat(component.style.width) / 100;
+      const canvasWidth = pageConfig.value?.width || 1920;
+      component.style.width = Math.round(canvasWidth * percentage - 80); // 减去左右 padding
+    }
+
+    // 添加组件到 Store
+    designStore.addComponent(component);
+    designStore.saveHistory(`添加组件 ${component.name}`);
+
+    console.log("✅ Component dropped:", component);
+  } catch (error) {
+    console.error("❌ Failed to drop component:", error);
+  } finally {
+    // 清理拖拽状态
+    hideDragPreview();
+    isDragging.value = false;
+    draggedComponent.value = null;
+    lastDragPoint.value = null;
+  }
 }
 
 /**
  * 隐藏拖拽预览
  */
 function hideDragPreview() {
-    if (canvasAuxiliaryRef.value) {
-        const dragPreview = canvasAuxiliaryRef.value.getDragPreview();
-        if (dragPreview) {
-            dragPreview.hide();
-        }
+  if (canvasAuxiliaryRef.value) {
+    const dragPreview = canvasAuxiliaryRef.value.getDragPreview();
+    if (dragPreview) {
+      dragPreview.hide();
     }
+  }
 }
 
 /**
@@ -446,48 +658,54 @@ function hideDragPreview() {
  * Task 4.3: 实现拖拽到容器内
  */
 function handleContainerDrop(payload) {
-    try {
-        const { container, dragData, source, event } = payload;
-        
-        console.log('✨ Drop to container:', container.type, container.id);
-        console.log('  Drag data:', dragData);
-        console.log('  Source:', source);
+  try {
+    const { container, dragData, source, event } = payload;
 
-        let component;
-        
-        if (source === 'library') {
-            // 从组件库拖拽，dragData 已经是完整的组件实例
-            component = dragData;
-            
-            // 对于布局容器，子组件使用相对定位
-            if (container.type === 'Container' || container.type === 'FlexLayout' || container.type === 'Grid') {
-                component.style = {
-                    ...component.style,
-                    position: 'relative',
-                    left: 'auto',
-                    top: 'auto',
-                };
-            }
-        } else {
-            // 从画布内移动，dragData 只包含 id 和 type
-            // TODO: 实现画布内组件移动到容器的逻辑
-            console.log('  Moving component from canvas to container (not implemented yet)');
-            return;
-        }
+    console.log("✨ Drop to container:", container.type, container.id);
+    console.log("  Drag data:", dragData);
+    console.log("  Source:", source);
 
-        // 添加组件到容器
-        designStore.addComponent(component, container.id);
-        designStore.saveHistory(`添加组件 ${component.type} 到容器`);
+    let component;
 
-        console.log('✅ Component added to container');
-    } catch (error) {
-        console.error('❌ Failed to drop component to container:', error);
-    } finally {
-        // 清理拖拽状态
-        hideDragPreview();
-        isDragging.value = false;
-        draggedComponent.value = null;
+    if (source === "library") {
+      // 从组件库拖拽，dragData 已经是完整的组件实例
+      component = dragData;
+
+      // 对于布局容器，子组件使用相对定位
+      if (
+        container.type === "Container" ||
+        container.type === "FlexLayout" ||
+        container.type === "Grid"
+      ) {
+        component.style = {
+          ...component.style,
+          position: "relative",
+          left: "auto",
+          top: "auto",
+        };
+      }
+    } else {
+      // 从画布内移动，dragData 只包含 id 和 type
+      // TODO: 实现画布内组件移动到容器的逻辑
+      console.log(
+        "  Moving component from canvas to container (not implemented yet)"
+      );
+      return;
     }
+
+    // 添加组件到容器
+    designStore.addComponent(component, container.id);
+    designStore.saveHistory(`添加组件 ${component.type} 到容器`);
+
+    console.log("✅ Component added to container");
+  } catch (error) {
+    console.error("❌ Failed to drop component to container:", error);
+  } finally {
+    // 清理拖拽状态
+    hideDragPreview();
+    isDragging.value = false;
+    draggedComponent.value = null;
+  }
 }
 
 /**
@@ -495,99 +713,107 @@ function handleContainerDrop(payload) {
  * Task 1.4: 实现坐标系统同步
  */
 function initCoordinateSync() {
-    if (!domLayerRef.value) {
-        console.warn('[DesignCanvas] DOM Layer not ready for coordinate sync');
-        return;
+  if (!domLayerRef.value) {
+    console.warn("[DesignCanvas] DOM Layer not ready for coordinate sync");
+    return;
+  }
+
+  // 获取所有组件 ID
+  const componentIds = components.value.map((comp) => comp.id);
+
+  // 初始化所有组件的边界
+  coordinateSync.updateAllComponentBounds(componentIds);
+
+  // 监听组件尺寸变化
+  coordinateSync.observeComponentResize(componentIds, (componentId, bounds) => {
+    console.log(`[CoordinateSync] Component ${componentId} resized:`, bounds);
+    // TODO: 更新 Canvas Layer 的选择框、对齐线等
+  });
+
+  // 监听组件位置变化
+  coordinateSync.observeComponentPosition(
+    domLayerRef.value,
+    (componentId, bounds) => {
+      console.log(`[CoordinateSync] Component ${componentId} moved:`, bounds);
+      // TODO: 更新 Canvas Layer 的选择框、对齐线等
     }
+  );
 
-    // 获取所有组件 ID
-    const componentIds = components.value.map((comp) => comp.id);
-
-    // 初始化所有组件的边界
-    coordinateSync.updateAllComponentBounds(componentIds);
-
-    // 监听组件尺寸变化
-    coordinateSync.observeComponentResize(componentIds, (componentId, bounds) => {
-        console.log(`[CoordinateSync] Component ${componentId} resized:`, bounds);
-        // TODO: 更新 Canvas Layer 的选择框、对齐线等
-    });
-
-    // 监听组件位置变化
-    coordinateSync.observeComponentPosition(domLayerRef.value, (componentId, bounds) => {
-        console.log(`[CoordinateSync] Component ${componentId} moved:`, bounds);
-        // TODO: 更新 Canvas Layer 的选择框、对齐线等
-    });
-
-    console.log('✅ Coordinate sync initialized');
+  console.log("✅ Coordinate sync initialized");
 }
 
 /**
  * 更新坐标同步（当组件列表变化时）
  */
 function updateCoordinateSync() {
-    if (!domLayerRef.value) return;
+  if (!domLayerRef.value) return;
 
-    const componentIds = components.value.map((comp) => comp.id);
+  const componentIds = components.value.map((comp) => comp.id);
 
-    // 重新监听组件
-    coordinateSync.observeComponentResize(componentIds, (componentId, bounds) => {
-        console.log(`[CoordinateSync] Component ${componentId} resized:`, bounds);
-    });
+  // 重新监听组件
+  coordinateSync.observeComponentResize(componentIds, (componentId, bounds) => {
+    console.log(`[CoordinateSync] Component ${componentId} resized:`, bounds);
+  });
 
-    // 更新所有组件边界
-    coordinateSync.updateAllComponentBounds(componentIds);
+  // 更新所有组件边界
+  coordinateSync.updateAllComponentBounds(componentIds);
 }
 
 // Watch components changes to update coordinate sync
 watch(
-    components,
-    () => {
-        nextTick(() => {
-            updateCoordinateSync();
-        });
-    },
-    { deep: true },
+  components,
+  () => {
+    nextTick(() => {
+      updateCoordinateSync();
+    });
+  },
+  { deep: true }
 );
 
 // Lifecycle
 onMounted(async () => {
-    console.log('✅ DesignCanvas mounted - Hybrid Rendering Architecture');
-    console.log('  - DOM Layer: Rendering components and layout containers');
-    console.log('  - Canvas Layer: Auxiliary features (rulers, guides, selection box)');
+  console.log("✅ DesignCanvas mounted - Hybrid Rendering Architecture");
+  console.log("  - DOM Layer: Rendering components and layout containers");
+  console.log(
+    "  - Canvas Layer: Auxiliary features (rulers, guides, selection box)"
+  );
 
-    // ✅ Task 1.3 - 初始化 Konva Stage 和 Layer (完成)
-    // ✅ Task 1.4 - 实现坐标系统同步 (完成)
-    // TODO: Task 1.5 - 实现缩放和滚动同步
+  // ✅ Task 1.3 - 初始化 Konva Stage 和 Layer (完成)
+  // ✅ Task 1.4 - 实现坐标系统同步 (完成)
+  // TODO: Task 1.5 - 实现缩放和滚动同步
 
-    // 监听滚动事件
-    if (viewportRef.value) {
-        viewportRef.value.addEventListener('scroll', handleScroll);
-    }
+  // 监听滚动事件
+  if (viewportRef.value) {
+    viewportRef.value.addEventListener("scroll", handleScroll);
+    // 补充全局 dragend 监听，避免某些浏览器未在视口上触发
+    window.addEventListener("dragend", handleDragEnd);
+  }
 
-    // Task 5.1: 监听键盘事件（全选）
-    window.addEventListener('keydown', handleKeyDown);
+  // Task 5.1: 监听键盘事件（全选）
+  window.addEventListener("keydown", handleKeyDown);
 });
 
 onUnmounted(() => {
-    console.log('👋 DesignCanvas unmounted');
+  console.log("👋 DesignCanvas unmounted");
 
-    // 清理滚动事件监听器
-    if (viewportRef.value) {
-        viewportRef.value.removeEventListener('scroll', handleScroll);
-    }
+  // 清理滚动事件监听器
+  if (viewportRef.value) {
+    viewportRef.value.removeEventListener("scroll", handleScroll);
+  }
 
-    // 清理键盘事件监听器
-    window.removeEventListener('keydown', handleKeyDown);
+  // 清理键盘事件监听器
+  window.removeEventListener("keydown", handleKeyDown);
+  window.removeEventListener("dragend", handleDragEnd);
 });
 
 /**
  * 处理滚动事件
  */
 function handleScroll(event) {
-    if (!viewportRef.value) return;
+  if (!viewportRef.value) return;
 
-    scrollX.value = viewportRef.value.scrollLeft;
-    scrollY.value = viewportRef.value.scrollTop;
+  scrollX.value = viewportRef.value.scrollLeft;
+  scrollY.value = viewportRef.value.scrollTop;
 }
 
 /**
@@ -608,65 +834,71 @@ function handleScroll(event) {
  * @param {number} centerY - 缩放中心点 Y 坐标（相对于视口，可选）
  */
 function setZoom(newZoom, centerX = null, centerY = null) {
-    if (!viewportRef.value) {
-        console.warn('[DesignCanvas] Viewport not ready for zoom');
-        return;
-    }
+  if (!viewportRef.value) {
+    console.warn("[DesignCanvas] Viewport not ready for zoom");
+    return;
+  }
 
-    // 限制缩放范围 (10% ~ 500%)
-    const clampedZoom = Math.max(0.1, Math.min(5.0, newZoom));
+  // 限制缩放范围 (10% ~ 500%)
+  const clampedZoom = Math.max(0.1, Math.min(5.0, newZoom));
 
-    if (clampedZoom === zoom.value) {
-        return; // 缩放比例未变化，无需处理
-    }
+  if (clampedZoom === zoom.value) {
+    return; // 缩放比例未变化，无需处理
+  }
 
-    const oldZoom = zoom.value;
-    const viewport = viewportRef.value;
+  const oldZoom = zoom.value;
+  const viewport = viewportRef.value;
 
-    // 如果未指定缩放中心点，使用视口中心
-    const viewportWidth = viewport.clientWidth;
-    const viewportHeight = viewport.clientHeight;
+  // 如果未指定缩放中心点，使用视口中心
+  const viewportWidth = viewport.clientWidth;
+  const viewportHeight = viewport.clientHeight;
 
-    const zoomCenterXPos = centerX !== null ? centerX : viewportWidth / 2;
-    const zoomCenterYPos = centerY !== null ? centerY : viewportHeight / 2;
+  const zoomCenterXPos = centerX !== null ? centerX : viewportWidth / 2;
+  const zoomCenterYPos = centerY !== null ? centerY : viewportHeight / 2;
 
-    // 计算缩放中心点在画布坐标系中的位置（缩放前）
-    const canvasX = (viewport.scrollLeft + zoomCenterXPos) / oldZoom;
-    const canvasY = (viewport.scrollTop + zoomCenterYPos) / oldZoom;
+  // 计算缩放中心点在画布坐标系中的位置（缩放前）
+  const canvasX = (viewport.scrollLeft + zoomCenterXPos) / oldZoom;
+  const canvasY = (viewport.scrollTop + zoomCenterYPos) / oldZoom;
 
-    // 更新缩放比例
-    zoom.value = clampedZoom;
+  // 更新缩放比例
+  zoom.value = clampedZoom;
 
-    // 等待 DOM 更新后调整滚动位置
-    nextTick(() => {
-        // 计算新的滚动位置，使得缩放中心点在画布坐标系中的位置保持不变
-        const newScrollLeft = canvasX * clampedZoom - zoomCenterXPos;
-        const newScrollTop = canvasY * clampedZoom - zoomCenterYPos;
+  // 等待 DOM 更新后调整滚动位置
+  nextTick(() => {
+    // 计算新的滚动位置，使得缩放中心点在画布坐标系中的位置保持不变
+    const newScrollLeft = canvasX * clampedZoom - zoomCenterXPos;
+    const newScrollTop = canvasY * clampedZoom - zoomCenterYPos;
 
-        // 更新滚动位置
-        viewport.scrollLeft = newScrollLeft;
-        viewport.scrollTop = newScrollTop;
+    // 更新滚动位置
+    viewport.scrollLeft = newScrollLeft;
+    viewport.scrollTop = newScrollTop;
 
-        // 更新滚动状态（触发 Canvas Layer 同步）
-        scrollX.value = newScrollLeft;
-        scrollY.value = newScrollTop;
+    // 更新滚动状态（触发 Canvas Layer 同步）
+    scrollX.value = newScrollLeft;
+    scrollY.value = newScrollTop;
 
-        console.log(`🔍 Zoom updated: ${oldZoom.toFixed(2)} → ${clampedZoom.toFixed(2)}`);
-        console.log(`  Center point preserved at canvas (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)})`);
-        console.log(`  Scroll adjusted: (${newScrollLeft.toFixed(1)}, ${newScrollTop.toFixed(1)})`);
-    });
+    console.log(
+      `🔍 Zoom updated: ${oldZoom.toFixed(2)} → ${clampedZoom.toFixed(2)}`
+    );
+    console.log(
+      `  Center point preserved at canvas (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)})`
+    );
+    console.log(
+      `  Scroll adjusted: (${newScrollLeft.toFixed(1)}, ${newScrollTop.toFixed(1)})`
+    );
+  });
 }
 
 // 暴露方法给父组件
 defineExpose({
-    canvasAuxiliaryRef,
-    zoom,
-    scrollX,
-    scrollY,
-    setZoom,
-    coordinateSync,
-    updateCoordinateSync,
-    hideDragPreview,
+  canvasAuxiliaryRef,
+  zoom,
+  scrollX,
+  scrollY,
+  setZoom,
+  coordinateSync,
+  updateCoordinateSync,
+  hideDragPreview,
 });
 </script>
 
@@ -678,15 +910,15 @@ defineExpose({
  * - 包含 Canvas Layer 和 DOM Layer
  */
 .design-canvas-viewport {
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: #f5f5f5;
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
-    padding: 40px;
-    position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: #f5f5f5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 40px;
+  position: relative;
 }
 
 /**
@@ -695,8 +927,10 @@ defineExpose({
  * - 浅灰色线条
  */
 .design-canvas-viewport.show-grid {
-    background-image: linear-gradient(to right, #e0e0e0 1px, transparent 1px), linear-gradient(to bottom, #e0e0e0 1px, transparent 1px);
-    background-size: 20px 20px;
+  background-image:
+    linear-gradient(to right, #e0e0e0 1px, transparent 1px),
+    linear-gradient(to bottom, #e0e0e0 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 /**
@@ -707,11 +941,12 @@ defineExpose({
  * - 用于渲染辅助功能：标尺、对齐线、选择框、拖拽预览
  */
 .canvas-layer {
-    position: absolute;
-    top: 40px;
-    left: 40px;
-    pointer-events: none;
-    /* Konva Stage 将在这里初始化 */
+  position: absolute;
+  top: 40px;
+  left: 40px;
+  pointer-events: none;
+  /* z-index: 100; */
+  /* Konva Stage 将在这里初始化 */
 }
 
 /**
@@ -722,8 +957,8 @@ defineExpose({
  * - 使用 Vue 组件 + CSS 原生布局
  */
 .dom-layer {
-    position: relative;
-    z-index: 1;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 </style>

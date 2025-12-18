@@ -2,7 +2,6 @@
   <div class="chart-component-editor">
     <div class="editor-section">
       <div class="section-title">图表属性</div>
-      
       <!-- 图表类型 -->
       <div class="form-item">
         <label>图表类型</label>
@@ -104,7 +103,7 @@
  * ChartComponentEditor.vue - 图表组件属性编辑器
  * Task 6.3: 实现组件专有属性编辑器
  */
-import { computed } from 'vue';
+import { computed } from "vue";
 
 const props = defineProps({
   component: {
@@ -113,7 +112,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['update']);
+const emit = defineEmits(["update"]);
 
 /**
  * 组件 props
@@ -124,66 +123,76 @@ const componentProps = computed(() => props.component?.props || {});
  * 图表类型
  */
 const chartType = computed(() => {
-  const type = props.component?.type || '';
-  if (type.includes('LineChart')) return 'line';
-  if (type.includes('BarChart')) return 'bar';
-  if (type.includes('PieChart')) return 'pie';
-  if (type.includes('ScatterChart')) return 'scatter';
-  if (type.includes('RadarChart')) return 'radar';
-  return 'line';
+  const type = props.component?.type || "";
+  if (type.includes("LineChart")) return "line";
+  if (type.includes("BarChart")) return "bar";
+  if (type.includes("PieChart")) return "pie";
+  if (type.includes("ScatterChart")) return "scatter";
+  if (type.includes("RadarChart")) return "radar";
+  return "line";
 });
 
 /**
  * 图表标题
  */
-const chartTitle = computed(() => componentProps.value.option?.title?.text || '');
+const chartTitle = computed(
+  () => componentProps.value.option?.title?.text || ""
+);
 
 /**
  * 数据源类型
  */
-const dataSourceType = computed(() => componentProps.value.dataSource?.type || 'static');
+const dataSourceType = computed(
+  () => componentProps.value.dataSource?.type || "static"
+);
 
 /**
  * 静态数据
  */
 const staticData = computed(() => {
   const data = componentProps.value.dataSource?.data;
-  return data ? JSON.stringify(data, null, 2) : '';
+  return data ? JSON.stringify(data, null, 2) : "";
 });
 
 /**
  * API URL
  */
-const apiUrl = computed(() => componentProps.value.dataSource?.url || '');
+const apiUrl = computed(() => componentProps.value.dataSource?.url || "");
 
 /**
  * 刷新间隔
  */
-const refreshInterval = computed(() => componentProps.value.dataSource?.refreshInterval || 0);
+const refreshInterval = computed(
+  () => componentProps.value.dataSource?.refreshInterval || 0
+);
 
 /**
  * 显示图例
  */
-const showLegend = computed(() => componentProps.value.option?.legend?.show !== false);
+const showLegend = computed(
+  () => componentProps.value.option?.legend?.show !== false
+);
 
 /**
  * 显示工具栏
  */
-const showToolbox = computed(() => componentProps.value.option?.toolbox?.show === true);
+const showToolbox = computed(
+  () => componentProps.value.option?.toolbox?.show === true
+);
 
 /**
  * 处理图表类型变化
  */
 function handleChartTypeChange(type) {
   const typeMap = {
-    line: 'LineChart',
-    bar: 'BarChart',
-    pie: 'PieChart',
-    scatter: 'ScatterChart',
-    radar: 'RadarChart',
+    line: "LineChart",
+    bar: "BarChart",
+    pie: "PieChart",
+    scatter: "ScatterChart",
+    radar: "RadarChart",
   };
 
-  emit('update', {
+  emit("update", {
     type: typeMap[type],
   });
 }
@@ -196,7 +205,7 @@ function handleTitleChange(value) {
   if (!option.title) option.title = {};
   option.title.text = value;
 
-  emit('update', {
+  emit("update", {
     props: { option },
   });
 }
@@ -208,7 +217,7 @@ function handleDataSourceTypeChange(type) {
   const dataSource = { ...componentProps.value.dataSource };
   dataSource.type = type;
 
-  emit('update', {
+  emit("update", {
     props: { dataSource },
   });
 }
@@ -222,11 +231,11 @@ function handleStaticDataChange(value) {
     const dataSource = { ...componentProps.value.dataSource };
     dataSource.data = data;
 
-    emit('update', {
+    emit("update", {
       props: { dataSource },
     });
   } catch (error) {
-    console.error('Invalid JSON:', error);
+    console.error("Invalid JSON:", error);
   }
 }
 
@@ -237,7 +246,7 @@ function handleApiUrlChange(value) {
   const dataSource = { ...componentProps.value.dataSource };
   dataSource.url = value;
 
-  emit('update', {
+  emit("update", {
     props: { dataSource },
   });
 }
@@ -249,7 +258,7 @@ function handleRefreshIntervalChange(value) {
   const dataSource = { ...componentProps.value.dataSource };
   dataSource.refreshInterval = value;
 
-  emit('update', {
+  emit("update", {
     props: { dataSource },
   });
 }
@@ -262,7 +271,7 @@ function handleShowLegendChange(value) {
   if (!option.legend) option.legend = {};
   option.legend.show = value;
 
-  emit('update', {
+  emit("update", {
     props: { option },
   });
 }
@@ -275,7 +284,7 @@ function handleShowToolboxChange(value) {
   if (!option.toolbox) option.toolbox = {};
   option.toolbox.show = value;
 
-  emit('update', {
+  emit("update", {
     props: { option },
   });
 }
@@ -322,4 +331,3 @@ function handleShowToolboxChange(value) {
   margin-top: 4px;
 }
 </style>
-

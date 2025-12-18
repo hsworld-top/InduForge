@@ -154,6 +154,51 @@
 详细内容请参考：
 - [阶段四完成报告](../../designer/PHASE4_COMPLETED.md)
 - [阶段四总结](../../designer/PHASE4_SUMMARY.md)
+
+---
+
+## 阶段更新：组件渲染可视化与交互修复
+
+### 完成时间
+
+2025-12-15
+
+### 核心成果
+
+- 组件渲染落地：为 UI / 基础 / 图表组件补充实际 Vue 渲染实现并在 registry 绑定，拖入画布即可看到 Element Plus 控件、图片占位与图表占位。
+- 样式隔离：新增 `styleHelpers` 去除定位相关样式，避免与 ComponentWrapper 的定位叠加；新增图标解析 helper 支持 Element Plus Icons。
+- 交互修复：组件点击切换到捕获阶段，避免子组件阻止冒泡导致无法选中；移除 canvas-layer 强制 z-index，减少遮挡问题。
+- 拖拽修复：容器自身拖动时不再被子级 drop 逻辑拦截，画布可正常移动已有组件。
+- 拖拽兼容：画布内拖动组件同时写入 `application/json` 数据，DesignCanvas 可统一解析拖拽来源并更新位置。
+- 拖拽判定优化：拖拽负载包含 `source` 字段时优先作为画布内移动处理，避免误判为新增组件。
+- 拖拽兜底：当 dataTransfer 为空但已有选中组件时，按照指针位置移动选中组件，避免浏览器丢失拖拽数据导致无法拖动。
+- 拖拽 MIME 兼容：画布内拖动同时写入 `text/plain`，DesignCanvas 增加 text/plain 读取兜底，提升跨浏览器稳定性。
+- 拖拽光标：Canvas dragenter/dragover 设置 dropEffect 为 move，避免出现禁用光标。
+- 拖拽落点兜底：监听子组件 dragend，按指针位置更新组件样式，即便 drop 事件丢失也能完成拖动。
+- 容器移动适配：画布内拖动容器时将百分比宽度转换为像素宽度，确保落点与指针一致。
+- 拖拽偏移：拖拽时记录指针相对组件左上角的偏移，在落点时扣除偏移，防止组件跟随鼠标时“乱跑”。
+- 拖拽体验：拖拽开始停止事件冒泡、强制 dropEffect=move，并禁用组件内文字选择，避免局部区域无法触发拖拽。
+- 定位精度：ComponentWrapper 计算样式时不再将 0 判定为 falsy，确保左上角坐标与宽高为 0/数字时正常应用。
+- 拖拽事件捕获：dragstart/drag/dragend 改为捕获阶段并阻止默认，确保嵌套容器内任意区域都能触发拖拽。
+- 回退阻止默认：dragstart/drag/dragend 不再 prevent default，仅在捕获阶段 stop 事件，恢复浏览器拖拽流程。
+- 容器放置提示：dragover 显式设置 dropEffect（copy/move），避免拖入容器时被误判为禁止。
+- 组件进容器：支持画布内已存在组件移动到容器，移动前重置为相对定位并调用 moveComponent 追加到容器末尾。
+- 组件进容器优化：画布内组件入容器改为“删除旧节点 + 复制为相对定位再插入”，防止原节点引用导致移动失败。
+- 组件进容器回退：改用 updateComponent 调整为相对定位 + moveComponent 直接移动原节点，避免复制导致的状态丢失。
+- 组件进容器兜底：画布内移动缺少 id 时回退使用当前选中组件，提升拖入容器的鲁棒性。
+- 组件进容器稳定化：画布内移动改为“查找原组件 → 改相对定位 →remove→add”路径，确保真正插入目标容器。
+- 拖拽定位容器：记录 hover 容器 id，canvas drop/dragend 兜底移入 hover 容器。
+- 组件进容器回滚：再次改为相对定位 + moveComponent 路径，避免重建节点导致状态丢失。
+- 组件进容器再次回滚：克隆为相对定位、删除原节点再 add，确保一定写入容器末尾。
+- 组件进容器再优化：新增 detachComponentById，先拆下原节点再相对定位 add 到容器，保证引用正确。
+- 按钮样式配置校验：按钮属性面板新增样式配置对话框，支持 key:value 逐行解析并校验格式（缺冒号/空属性提示错误），样式写入 styleConfig 供渲染层生效。
+- 样式配置编辑器：按钮样式配置弹窗嵌入 Monaco Editor（CSS 高亮/补全/折叠/校验），引入官方样式并配置 CSS 校验；监听系统/IDE 深浅色自动切换 `vs/vs-dark`；保存前按 key:value 规则校验，错误提示并阻断提交，合规后写入 styleConfig 应用于按钮。
+- 容器兜底落点：DesignCanvas 在 hover 容器时直接按容器逻辑落点处理（即使容器 drop 未触发），并统一相对定位后 moveComponent，修复画布内组件拖入容器异常。
+
+### 影响范围
+
+- 前端：`designer/src/components/canvas/*`、`designer/src/registry/ui/*`、`designer/src/registry/basic/Image.*`、`designer/src/registry/charts/*`。
+- 文档：补充本阶段更新记录。
 - [快速开始指南](../../designer/PHASE4_QUICKSTART.md)
 - [数据绑定系统](./data-binding.md)
 - [数据绑定架构](./data-binding-architecture.md)
@@ -269,4 +314,9 @@ DataCenter 集成 + API 模式
 ---
 
 **版本**: 2.0.0  
-**最后更新**: 2025-12-08
+**最后更新**: 2025-12-18
+
+## 更新记录
+
+- 右侧面板 Tabs 合并为组件树/属性/样式/连接，PropertyPanel 通过 initialTab 与 showTabs 复用内容。
+- 连接（事件）配置改为配置按钮 + 编辑器弹窗，支持在 Monaco 中编写组件事件脚本。

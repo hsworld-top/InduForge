@@ -122,7 +122,13 @@
                         <ComponentTree />
                     </el-tab-pane>
                     <el-tab-pane label="属性" name="properties">
-                        <PropertyPanel />
+                        <PropertyPanel :show-tabs="false" initial-tab="props" />
+                    </el-tab-pane>
+                    <el-tab-pane label="样式" name="style">
+                        <PropertyPanel :show-tabs="false" initial-tab="style" />
+                    </el-tab-pane>
+                    <el-tab-pane label="连接" name="events">
+                        <PropertyPanel :show-tabs="false" initial-tab="events" />
                     </el-tab-pane>
                 </el-tabs>
             </div>
@@ -383,10 +389,37 @@ function handleDrop(event) {
     }
 
     try {
-        const data = event.dataTransfer.getData('application/json');
+        console.info('[DesignCenter] drop');
+        const data =
+            event.dataTransfer.getData('application/json') ||
+            event.dataTransfer.getData('text/plain') ||
+            event.dataTransfer.getData('application/x-designer-component');
         if (!data) return;
 
         const component = JSON.parse(data);
+
+        // 画布内拖动：直接移动位置而不是新增
+        if (component?.source === 'canvas' && component.id) {
+            const canvasArea = event.currentTarget;
+            const rect = canvasArea.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const offsetX = component.offsetX || 0;
+            const offsetY = component.offsetY || 0;
+            const newLeft = Math.round(x / canvasState.scale - offsetX);
+            const newTop = Math.round(y / canvasState.scale - offsetY);
+
+            designStore.updateComponent(component.id, {
+                style: {
+                    left: newLeft,
+                    top: newTop,
+                },
+            });
+            designStore.saveHistory(`移动组件 ${component.name || component.type}`);
+            designStore.selectComponent(component.id);
+            return;
+        }
 
         // 计算放置位置（相对于画布）
         const canvasArea = event.currentTarget;

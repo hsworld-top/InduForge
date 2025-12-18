@@ -561,6 +561,46 @@ A: 在组件定义中添加 `render` 方法，自定义渲染逻辑。
 ### Q: 如何支持动画？
 A: 使用动画系统，在组件定义中添加 `animations` 配置。
 
+## Button 组件（Element Plus）
+
+- 类型：`Button`，定义于 `src/registry/ui/Button.js`
+- 支持扩展配置：
+  - `styleConfig`：
+    - 支持 CSS JSON 或逐行 `key: value` 文本。
+    - 支持直接粘贴标准 CSS 代码块（含 `{}`），会注入到 `<head>` 生效，例如：
+      ```css
+      #myBtn {
+        color: red;
+      }
+      #myBtn span {
+        color: red;
+      }
+      ```
+    - 若 CSS 中包含 `#xxx` 且未单独设置 `domId`，会自动提取 `xxx` 赋给按钮 DOM，便于对子级写选择器；也可在 JSON/逐行写法用 `domId: xxx` 显式指定。
+  - `advancedConfig`：JSON 或对象字面量，优先级高于属性面板字段，可覆盖按钮属性（`text`、`type`、`size`、`disabled`、`loading`、`plain`、`round`、`circle`、`icon`、`styleConfig` 等）。
+  - 其他属性：新增 `domId` 字段，用于显式设置按钮根 DOM 的 `id`（优先级高于 `styleConfig` 自动提取）。
+  - 配置弹窗：样式配置 / 详细配置弹窗支持拖拽，可移动到任意位置。
+  - `eventsSchema`：开放 Element Plus Button 的常用事件（click、mousedown、mouseup、mouseenter、mouseleave、focus、blur），可在“连接”面板中绑定。
+
+示例（advancedConfig）：
+
+```json
+{
+  "text": "确认",
+  "type": "primary",
+  "size": "large",
+  "disabled": false,
+  "icon": "CircleCheck",
+  "styleConfig": {
+    "color": "#fff",
+    "background": "#409eff",
+    "borderRadius": "6px"
+  }
+}
+```
+
+> 解析顺序：属性面板字段 < advancedConfig。请避免在 advancedConfig 中写危险语句，仅使用 JSON/对象字面量。
+
 ## 相关资源
 
 - [DSL 设计规范](../dsl-design.md)
@@ -570,5 +610,5 @@ A: 使用动画系统，在组件定义中添加 `animations` 配置。
 
 ---
 
-**版本**: 2.0.0  
-**最后更新**: 2025-12-08
+**版本**: 2.0.1  
+**最后更新**: 2025-12-18
