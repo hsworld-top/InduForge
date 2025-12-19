@@ -2,6 +2,7 @@
   <el-button
     class="ui-button-component"
     :id="resolvedDomId || null"
+    :data-dom-id="styleDomId || null"
     :type="mergedProps.type"
     :size="mergedProps.size"
     :disabled="mergedProps.disabled"
@@ -36,6 +37,9 @@ defineOptions({
 });
 
 const emit = defineEmits(['click', 'mousedown', 'mouseup', 'mouseenter', 'mouseleave', 'focus', 'blur']);
+
+// Stable random DOM id to avoid duplicates when multiple buttons are rendered
+const randomDomId = `ui-button-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
 const props = defineProps({
   text: { type: String, default: '按钮' },
@@ -151,7 +155,9 @@ const resolvedIcon = computed(() => {
   return match ? ElementPlusIconsVue[match] : null;
 });
 
-const resolvedDomId = computed(() => mergedProps.value.domId || customStyle.value.domId || '');
+// domId from props/style config works as a styling alias; the real DOM id stays unique and random
+const styleDomId = computed(() => mergedProps.value.domId || customStyle.value.domId || '');
+const resolvedDomId = randomDomId;
 
 const mergedStyle = computed(() => {
   const styleAttr = attrs.style || {};
@@ -165,6 +171,19 @@ const mergedStyle = computed(() => {
 });
 
 const styleEl = ref(null);
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const resolveCssText = (cssText) => {
+  if (!cssText) return '';
+  if (!styleDomId.value) return cssText;
+  const escaped = escapeRegExp(styleDomId.value);
+  const replacements = [
+    { reg: new RegExp(`#${escaped}\\b`, 'g'), value: `#${resolvedDomId}` },
+    { reg: new RegExp(`\\[id=['"]${escaped}['"]\\]`, 'g'), value: `[id="${resolvedDomId}"]` },
+  ];
+  return replacements.reduce((text, item) => text.replace(item.reg, item.value), cssText);
+};
 
 const applyCssText = (cssText) => {
   if (typeof document === 'undefined') return;
@@ -182,8 +201,8 @@ const applyCssText = (cssText) => {
 };
 
 watch(
-  () => customStyle.value.cssText,
-  (css) => applyCssText(css),
+  () => [customStyle.value.cssText, styleDomId.value],
+  ([css]) => applyCssText(resolveCssText(css)),
   { immediate: true },
 );
 

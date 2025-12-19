@@ -48,6 +48,13 @@
 - ✅ **Badge** - 徽章
 - ✅ **Alert** - 提示
 - ✅ **Progress** - 进度条
+- ✅ **Element 系列**（按 Element Plus 官方分类）：
+  - 布局：Container/Header/Aside/Main/Footer/Row/Col/Space
+  - 基础：Button/Icon/Divider/Card/Link/Text
+  - 表单：Input/InputNumber/Select/Switch/Slider/DatePicker/TimePicker/TimeSelect/Cascader/ColorPicker/Rate/Transfer/Upload/Form/RadioGroup/CheckboxGroup
+  - 数据：Table/Tree/Calendar/Descriptions/Skeleton/Image/Empty/Statistic/Tag/Badge/Avatar/Timeline/Collapse/Carousel/Pagination/Card
+  - 导航：Breadcrumb/Tabs/Steps/Menu/Dropdown/Backtop/Affix
+  - 反馈：Tooltip/Popover/Popconfirm/Dialog/Drawer/Alert/Result
 
 **特点**：
 - 基于 Element Plus 组件库

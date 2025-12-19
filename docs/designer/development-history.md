@@ -318,5 +318,15 @@ DataCenter 集成 + API 模式
 
 ## 更新记录
 
+- Button 组件 DOM id 调整：实际渲染的 id 现在使用随机生成，避免多个按钮重复；样式配置中的 `domId` 通过 `data-dom-id` 作为选择器占位，继续可以使用 domId 来配置样式。
 - 右侧面板 Tabs 合并为组件树/属性/样式/连接，PropertyPanel 通过 initialTab 与 showTabs 复用内容。
 - 连接（事件）配置改为配置按钮 + 编辑器弹窗，支持在 Monaco 中编写组件事件脚本。
+- Element Plus 组件全集接入：新增通用包装组件并批量注册官方组件（如 Link、Row/Col、Menu、Tabs、Dialog、Upload 等），支持直接拖入画布并通过 JSON 属性或示例 Slot 查看效果。
+- 组件展示优化：Element Plus 组件在面板中统一使用中文名称；对话框/抽屉示例取消遮罩与 body 附着，避免拖入后遮挡画布；组件属性默认以 JSON 字符串存储，属性面板编辑更稳定。
+- Element Plus 组件类型去重：新增组件的类型前缀统一改为 `El*`，避免与已有基础/布局组件（如 Row、Text、Link）冲突导致属性面板空白或错配。
+- 修复动态组件渲染：Element Plus 自动包装使用 `resolveDynamicComponent`，避免在属性面板切换或选择组件时出现 `resolveComponent can only be used in render()` 警告并导致组件空白。
+- Element Plus 表单类组件规范化（批次一）：为输入框/计数器/选择器/级联/时间日期/开关/滑块/取色器/评分/穿梭框/上传等补充独立属性表单（非 JSON），预设示例数据与完整事件元数据，保持与按钮/输入框一致的配置体验。
+- Element Plus 表单类组件拆分（批次一）：去除通用包装，新增独立 `.vue` + `.js`（ElInput、ElInputNumber、ElSelect、ElCascader、ElTimePicker、ElTimeSelect、ElDatePicker、ElColorPicker、ElSwitch、ElSlider、ElRate、ElTransfer、ElUpload），按按钮规范注册到 UI registry，属性/事件面板与现有组件一致。
+- Element Plus 布局/基础组件拆分（批次二部分）：新增行/列/容器/头部/侧边栏/主体/底部、间距、分割线、卡片、面包屑的独立 `.vue` + `.js`，并从自动注册中排除；UI registry 按按钮规范注册，避免重复注册和属性冲突。
+- Element Plus 导航组件拆分（批次二继续）：新增选项卡、步骤条、菜单、下拉菜单、分页的独立 `.vue` + `.js`，注册到 UI registry 并从自动注册中过滤，属性/事件按官方映射并提供示例配置。
+- Element Plus 反馈/展示/数据组件拆分（批次三）：新增徽章、头像、标签、提示、树、时间线、折叠面板、走马灯、描述列表、结果、骨架屏、图片、日历、单选组、多选组、气泡/文字提示、气泡确认、对话框、抽屉等的独立 `.vue` + `.js`，全部按按钮规范注册并从自动注册中过滤，提供示例数据和事件映射，属性面板为结构化表单。

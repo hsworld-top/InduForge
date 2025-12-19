@@ -91,11 +91,38 @@ const hasProps = computed(() => {
  * @param {Object} schema - 属性 schema
  * @returns {any} 属性值
  */
+function getByPath(obj, path) {
+    if (!obj) return undefined;
+    return path.split('.').reduce((acc, k) => (acc && acc[k] !== undefined ? acc[k] : undefined), obj);
+}
+
+function setByPath(obj, path, value) {
+    const parts = path.split('.');
+    const next = { ...(obj || {}) };
+    let cur = next;
+    parts.forEach((p, idx) => {
+        if (idx === parts.length - 1) {
+            cur[p] = value;
+        } else {
+            cur[p] = { ...(cur[p] || {}) };
+            cur = cur[p];
+        }
+    });
+    return next;
+}
+
 function getPropValue(key, schema) {
-    const value = props.props?.[key];
+    const value = getByPath(props.props, key);
     // 如果值为 undefined，返回默认值
     if (value === undefined && schema?.default !== undefined) {
         return schema.default;
+    }
+    if (schema?.format === 'json' && typeof value === 'object') {
+        try {
+            return JSON.stringify(value, null, 2);
+        } catch (err) {
+            return '';
+        }
     }
     return value;
 }
@@ -119,7 +146,17 @@ function isPropVisible(schema) {
  * @param {any} value - 新值
  */
 function handlePropChange(key, value) {
-    const newProps = { ...props.props, [key]: value };
+    let finalValue = value;
+    const schema = props.propsSchema[key];
+    if (schema?.format === 'json' && typeof value === 'string') {
+        try {
+            finalValue = value ? JSON.parse(value) : {};
+        } catch (err) {
+            // 保留原始字符串，避免直接清空
+            finalValue = value;
+        }
+    }
+    const newProps = setByPath(props.props, key, finalValue);
     emit('update:props', newProps);
     emit('change', key, value);
 }

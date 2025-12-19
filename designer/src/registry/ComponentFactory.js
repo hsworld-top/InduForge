@@ -43,17 +43,35 @@ class ComponentFactory {
             console.warn(`Component type "${definition.type}" is already registered. Overwriting...`);
         }
 
+        // 归一化：补充 styleConfig 属性以符合按钮组件规范
+        const normalized = {
+            ...definition,
+            defaultProps: { ...(definition.defaultProps || {}) },
+            propsSchema: { ...(definition.propsSchema || {}) },
+        };
+        if (normalized.defaultProps.styleConfig === undefined) {
+            normalized.defaultProps.styleConfig = '';
+        }
+        if (!normalized.propsSchema.styleConfig) {
+            normalized.propsSchema.styleConfig = {
+                type: 'string',
+                label: '样式配置',
+                group: '外观',
+                default: '',
+            };
+        }
+
         // 存储组件定义
-        this.components.set(definition.type, definition);
+        this.components.set(normalized.type, normalized);
 
         // 按分类存储
-        const category = definition.category || 'uncategorized';
+        const category = normalized.category || 'uncategorized';
         if (!this.categories.has(category)) {
             this.categories.set(category, new Set());
         }
-        this.categories.get(category).add(definition.type);
+        this.categories.get(category).add(normalized.type);
 
-        console.log(`✅ Registered component: ${definition.type} (${category})`);
+        console.log(`✅ Registered component: ${normalized.type} (${category})`);
     }
 
     /**

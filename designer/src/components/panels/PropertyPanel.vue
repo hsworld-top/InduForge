@@ -71,10 +71,23 @@
                     <FlexEditor v-if="isFlexContainer" :props="selectedComponent.props" @change="handlePropsChange" />
                     <GridEditor v-if="isGridContainer" :props="selectedComponent.props" @change="handlePropsChange" />
 
+                    <!-- 样式配置（按钮同款弹窗） -->
+                    <div v-if="showStyleConfigInProps" class="section-group">
+                        <div class="section-title title-row space-between">
+                            <span>样式配置</span>
+                            <el-button
+                                size="small"
+                                :type="isStyleConfigured ? 'success' : 'primary'"
+                                @click="openStyleDialog">
+                                {{ isStyleConfigured ? '已配置' : '配置' }}
+                            </el-button>
+                        </div>
+                    </div>
+
                     <!-- 通用属性 -->
-                    <div v-if="propsSchema && Object.keys(propsSchema).length && !componentEditorName" class="section-group">
+                    <div v-if="filteredPropsSchema && Object.keys(filteredPropsSchema).length && !componentEditorName" class="section-group">
                         <div class="section-title">组件属性</div>
-                        <PropsEditor :props="selectedComponent.props" :props-schema="propsSchema" @change="handlePropChange" />
+                        <PropsEditor :props="selectedComponent.props" :props-schema="filteredPropsSchema" @change="handlePropChange" />
                     </div>
                 </el-scrollbar>
             </div>
@@ -91,7 +104,16 @@
             <div class="panel-tab-content" v-else-if="activeTab === 'events'">
                 <el-scrollbar>
                     <div class="section-group">
-                        <div class="section-title">事件</div>
+                        <div class="section-title title-row space-between">
+                            <span>事件</span>
+                            <el-button
+                                v-if="hasStyleConfigProp"
+                                size="small"
+                                :type="isStyleConfigured ? 'success' : 'primary'"
+                                @click="openStyleDialog">
+                                {{ isStyleConfigured ? '已配置' : '配置' }}
+                            </el-button>
+                        </div>
                         <el-form label-position="left" label-width="160px" size="small">
                             <template v-for="(meta, eventName) in eventsSchema" :key="eventName">
                                 <el-form-item :label="meta.label || eventName">
@@ -126,6 +148,18 @@
                 <template #footer>
                     <el-button @click="eventDialogVisible = false">取消</el-button>
                     <el-button type="primary" @click="handleEventSave">确定</el-button>
+                </template>
+            </el-dialog>
+
+            <!-- 样式配置弹窗（通用，按钮同款） -->
+            <el-dialog v-model="styleDialogVisible" title="样式配置" width="720px" draggable>
+                <div class="style-config-dialog">
+                    <MonacoEditor v-model="styleInput" language="css" :theme="monacoTheme" height="320px" />
+                    <div v-if="styleError" class="error-tip">{{ styleError }}</div>
+                </div>
+                <template #footer>
+                    <el-button @click="styleDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="handleStyleSave">确定</el-button>
                 </template>
             </el-dialog>
         </template>
@@ -169,6 +203,9 @@ const currentEventKey = ref('');
 const eventCode = ref('');
 const eventError = ref('');
 const monacoTheme = ref('vs');
+const styleDialogVisible = ref(false);
+const styleInput = ref('');
+const styleError = ref('');
 let mediaQuery;
 let mediaHandler;
 
@@ -234,6 +271,12 @@ const componentDef = computed(() => {
 });
 
 const propsSchema = computed(() => componentDef.value?.propsSchema || {});
+const filteredPropsSchema = computed(() => {
+    const schema = propsSchema.value || {};
+    const rest = { ...schema };
+    delete rest.styleConfig;
+    return rest;
+});
 const eventsSchema = computed(() => componentDef.value?.eventsSchema || {});
 
 const isFlexContainer = computed(() => {
@@ -266,6 +309,59 @@ const componentEditorName = computed(() => {
 
     return editorMap[selectedComponent.value.type] || null;
 });
+
+const hasStyleConfigProp = computed(
+    () => selectedComponent.value?.props?.styleConfig !== undefined || propsSchema.value?.styleConfig !== undefined,
+);
+const isStyleConfigured = computed(() => {
+    const val = selectedComponent.value?.props?.styleConfig;
+    return Boolean(val && String(val).trim());
+});
+const showStyleConfigInProps = computed(() => {
+    if (componentEditorName.value === ButtonComponentEditor) return false;
+    return hasStyleConfigProp.value;
+});
+
+const styleTagCache = new Map();
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const resolveCssText = (cssText, domId, realId) => {
+    if (!cssText) return '';
+    const target = domId || '';
+    if (!target) return cssText;
+    const escaped = escapeRegExp(target);
+    const replacements = [
+        { reg: new RegExp(`#${escaped}\\b`, 'g'), value: `#${realId}` },
+        { reg: new RegExp(`\\[id=['"]${escaped}['"]\\]`, 'g'), value: `[id="${realId}"]` },
+    ];
+    return replacements.reduce((text, item) => text.replace(item.reg, item.value), cssText);
+};
+
+function applyCssText(componentId, cssText, domId) {
+    if (typeof document === 'undefined') return;
+    const existing = styleTagCache.get(componentId);
+    if (existing) {
+        existing.remove();
+        styleTagCache.delete(componentId);
+    }
+    if (!cssText) return;
+    const resolved = resolveCssText(cssText, domId, componentId);
+    const el = document.createElement('style');
+    el.setAttribute('data-style-config', componentId);
+    el.textContent = resolved;
+    document.head.appendChild(el);
+    styleTagCache.set(componentId, el);
+}
+
+watch(
+    () => selectedComponent.value?.props?.styleConfig,
+    (val) => {
+        styleInput.value = val || '';
+        styleError.value = '';
+    },
+    { immediate: true },
+);
 
 const componentLabel = computed({
     get: () => selectedComponent.value?.label || '',
@@ -366,6 +462,78 @@ function handleBatchStyleChange(style) {
 
     const ids = selectedComponents.value.map((comp) => comp.id);
     designStore.batchUpdateComponents(ids, { style });
+}
+
+function openStyleDialog() {
+    styleInput.value = selectedComponent.value?.props?.styleConfig || '';
+    styleError.value = '';
+    styleDialogVisible.value = true;
+}
+
+function handleStyleSave() {
+    try {
+        const parsed = parseStyleInput(styleInput.value);
+        styleError.value = '';
+        if (!selectedComponent.value) return;
+        const nextProps = { ...selectedComponent.value.props, styleConfig: styleInput.value };
+        const nextStyle =
+            parsed && parsed.style ? { ...(selectedComponent.value.style || {}), ...parsed.style } : selectedComponent.value.style;
+
+        designStore.updateComponent(selectedComponent.value.id, {
+            props: nextProps,
+            style: nextStyle,
+        });
+
+        applyCssText(selectedComponent.value.id, parsed.cssText, parsed.domId);
+
+        styleDialogVisible.value = false;
+    } catch (err) {
+        styleError.value = err?.message || '样式解析失败，请检查格式（key: value）';
+    }
+}
+
+function parseStyleInput(input) {
+    const text = (input || '').trim();
+    if (!text) return { style: {}, domId: '', cssText: '' };
+
+    // JSON 对象或对象字面量
+    try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object') {
+            const { domId = '', ...rest } = parsed;
+            return { style: rest, domId, cssText: '' };
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    if (text.includes('{') && text.includes('}')) {
+        const idMatch = text.match(/#([\w-]+)/);
+        return { style: {}, domId: idMatch ? idMatch[1] : '', cssText: text };
+    }
+
+    const lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('//') && !l.startsWith('/*') && !l.startsWith('*'));
+
+    const style = {};
+    let domId = '';
+    for (const line of lines) {
+        const idx = line.indexOf(':');
+        if (idx === -1) throw new Error(`格式错误：缺少冒号 -> "${line}"`);
+        const key = line.slice(0, idx).trim();
+        const value = line.slice(idx + 1).replace(/;$/, '').trim();
+        if (!key) throw new Error(`格式错误：属性名为空 -> "${line}"`);
+        if (!value) throw new Error(`格式错误：属性值为空 -> "${line}"`);
+        if (key === 'domId') {
+            domId = value;
+        } else {
+            style[key] = value;
+        }
+    }
+
+    return { style, domId, cssText: '' };
 }
 </script>
 
@@ -477,6 +645,16 @@ function handleBatchStyleChange(style) {
     font-weight: 500;
     color: #909399;
     margin-bottom: 8px;
+}
+
+.title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.space-between {
+    justify-content: space-between;
 }
 
 :deep(.el-form-item) {
