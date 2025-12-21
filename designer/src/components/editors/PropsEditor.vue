@@ -3,8 +3,17 @@
         <el-form v-if="hasProps" label-position="left" label-width="80px" size="small">
             <template v-for="(schema, key) in propsSchema" :key="key">
                 <el-form-item v-if="isPropVisible(schema)" :label="schema.label || key">
+                    <div v-if="schema.format === 'json'" class="json-config-row">
+                        <el-button
+                            size="small"
+                            :type="isJsonConfigured(key) ? 'success' : 'primary'"
+                            @click="openJsonDialog(key, schema)">
+                            {{ isJsonConfigured(key) ? '已配置' : '配置' }}
+                        </el-button>
+                    </div>
+
                     <!-- Boolean 类型 - Requirements: 4.4 -->
-                    <el-switch v-if="schema.type === 'boolean'" :model-value="getPropValue(key, schema)" @change="(val) => handlePropChange(key, val)" />
+                    <el-switch v-else-if="schema.type === 'boolean'" :model-value="getPropValue(key, schema)" @change="(val) => handlePropChange(key, val)" />
 
                     <!-- Number 类型 - Requirements: 4.5 -->
                     <el-input-number
@@ -46,6 +55,17 @@
         <div v-else class="empty-state">
             <span class="empty-text">无可编辑属性</span>
         </div>
+
+        <el-dialog v-model="jsonDialogVisible" :title="jsonDialogTitle" width="720px" draggable :lock-scroll="false">
+            <div class="json-config-dialog">
+                <MonacoEditor v-model="jsonInput" language="json" :theme="monacoTheme" height="320px" />
+                <div v-if="jsonError" class="error-tip">{{ jsonError }}</div>
+            </div>
+            <template #footer>
+                <el-button @click="jsonDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="handleJsonSave">确定</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -56,7 +76,8 @@
  * 支持 boolean/number/string/enum 类型
  * Requirements: 4.1, 4.2, 4.4, 4.5, 4.6, 4.7
  */
-import { computed } from 'vue';
+import { computed, ref, watch, onBeforeUnmount } from 'vue';
+import MonacoEditor from '@/components/common/MonacoEditor.vue';
 
 const props = defineProps({
     /**
@@ -78,11 +99,60 @@ const props = defineProps({
 
 const emit = defineEmits(['update:props', 'change']);
 
+const jsonDialogVisible = ref(false);
+const jsonDialogKey = ref('');
+const jsonDialogLabel = ref('');
+const jsonInput = ref('');
+const jsonError = ref('');
+const monacoTheme = ref('vs');
+let mediaQuery;
+let mediaHandler;
+
+function detectTheme() {
+    if (typeof document !== 'undefined') {
+        const html = document.documentElement;
+        const body = document.body;
+        const isDark = (el) => el && (el.classList?.contains('dark') || el.dataset?.theme === 'dark');
+        if (isDark(html) || isDark(body)) return 'vs-dark';
+    }
+    if (typeof window !== 'undefined' && window.matchMedia) {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs';
+    }
+    return 'vs';
+}
+
+monacoTheme.value = detectTheme();
+if (typeof window !== 'undefined' && window.matchMedia) {
+    mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaHandler = (e) => {
+        monacoTheme.value = e.matches ? 'vs-dark' : 'vs';
+    };
+    mediaQuery.addEventListener('change', mediaHandler);
+}
+
+onBeforeUnmount(() => {
+    if (mediaQuery && mediaHandler) {
+        mediaQuery.removeEventListener('change', mediaHandler);
+    }
+});
+
+watch(
+    () => jsonInput.value,
+    () => {
+        jsonError.value = '';
+    },
+);
+
 /**
  * 是否有可编辑的属性
  */
 const hasProps = computed(() => {
     return props.propsSchema && Object.keys(props.propsSchema).length > 0;
+});
+
+const jsonDialogTitle = computed(() => {
+    if (jsonDialogLabel.value) return `${jsonDialogLabel.value} 配置`;
+    return 'JSON 配置';
 });
 
 /**
@@ -127,6 +197,61 @@ function getPropValue(key, schema) {
     return value;
 }
 
+function getJsonEditorValue(key, schema) {
+    const value = getByPath(props.props, key);
+    if ((value === undefined || value === null) && schema?.default !== undefined) {
+        if (typeof schema.default === 'string') return schema.default;
+        try {
+            return JSON.stringify(schema.default, null, 2);
+        } catch (err) {
+            return '';
+        }
+    }
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'string') return value;
+    try {
+        return JSON.stringify(value, null, 2);
+    } catch (err) {
+        return '';
+    }
+}
+
+function isJsonConfigured(key) {
+    const value = getByPath(props.props, key);
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return Boolean(value.trim());
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+}
+
+function openJsonDialog(key, schema) {
+    jsonDialogKey.value = key;
+    jsonDialogLabel.value = schema?.label || key;
+    jsonInput.value = getJsonEditorValue(key, schema);
+    jsonError.value = '';
+    jsonDialogVisible.value = true;
+}
+
+function handleJsonSave() {
+    if (!jsonDialogKey.value) return;
+    const text = (jsonInput.value || '').trim();
+    if (!text) {
+        jsonError.value = '';
+        handlePropChange(jsonDialogKey.value, '');
+        jsonDialogVisible.value = false;
+        return;
+    }
+    try {
+        const parsed = JSON.parse(text);
+        jsonError.value = '';
+        handlePropChange(jsonDialogKey.value, parsed);
+        jsonDialogVisible.value = false;
+    } catch (err) {
+        jsonError.value = err?.message || 'JSON 解析失败，请输入有效的 JSON';
+    }
+}
+
 /**
  * 判断属性是否可见
  * @param {Object} schema - 属性 schema
@@ -149,16 +274,21 @@ function handlePropChange(key, value) {
     let finalValue = value;
     const schema = props.propsSchema[key];
     if (schema?.format === 'json' && typeof value === 'string') {
-        try {
-            finalValue = value ? JSON.parse(value) : {};
-        } catch (err) {
-            // 保留原始字符串，避免直接清空
-            finalValue = value;
+        const trimmed = value.trim();
+        if (!trimmed) {
+            finalValue = '';
+        } else {
+            try {
+                finalValue = JSON.parse(trimmed);
+            } catch (err) {
+                // 保留原始字符串，避免直接清空
+                finalValue = value;
+            }
         }
     }
     const newProps = setByPath(props.props, key, finalValue);
     emit('update:props', newProps);
-    emit('change', key, value);
+    emit('change', key, finalValue);
 }
 </script>
 
@@ -184,6 +314,23 @@ function handlePropChange(key, value) {
     color: #909399;
     margin-top: 4px;
     line-height: 1.4;
+}
+
+.json-config-row {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+}
+
+.json-config-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.error-tip {
+    color: #f56c6c;
+    font-size: 12px;
 }
 
 :deep(.el-form-item) {

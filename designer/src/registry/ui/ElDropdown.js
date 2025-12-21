@@ -44,7 +44,7 @@ export default {
     text: { type: 'string', label: '按钮文本', group: '组件属性', default: '下拉菜单' },
     items: {
       type: 'string',
-      label: '菜单项 (JSON)',
+      label: '菜单项',
       group: '组件属性',
       multiline: true,
       format: 'json',

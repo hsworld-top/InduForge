@@ -65,7 +65,7 @@
             </div>
         </div>
 
-        <el-dialog v-model="styleDialogVisible" title="样式配置" width="720px" draggable>
+        <el-dialog v-model="styleDialogVisible" title="样式配置" width="720px" draggable :lock-scroll="false">
             <div class="style-config-dialog">
                 <MonacoEditor v-model="styleInput" language="css" :theme="monacoTheme" height="320px" />
                 <div v-if="styleError" class="error-tip">{{ styleError }}</div>
@@ -76,7 +76,7 @@
             </template>
         </el-dialog>
 
-        <el-dialog v-model="advancedDialogVisible" title="详细配置" width="720px" draggable>
+        <el-dialog v-model="advancedDialogVisible" title="详细配置" width="720px" draggable :lock-scroll="false">
             <div class="style-config-dialog">
                 <MonacoEditor v-model="advancedInput" language="javascript" :theme="monacoTheme" height="320px" />
                 <div v-if="advancedError" class="error-tip">{{ advancedError }}</div>

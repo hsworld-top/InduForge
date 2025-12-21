@@ -44,7 +44,7 @@ export default {
     lazy: { type: 'boolean', label: '懒加载', group: '组件属性', default: false },
     previewSrcList: {
       type: 'string',
-      label: '预览列表 (JSON)',
+      label: '预览列表',
       group: '组件属性',
       multiline: true,
       format: 'json',

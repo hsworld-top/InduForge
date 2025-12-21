@@ -1027,7 +1027,7 @@ const buildDefinition = (item) => {
       ...autoSchema,
       advancedProps: {
         type: 'string',
-        label: '高级属性 (JSON)',
+        label: '高级属性',
         group: '配置',
         multiline: true,
         format: 'json',

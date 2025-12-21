@@ -31,7 +31,7 @@ export default {
   },
 
   propsSchema: {
-    modelValue: { type: 'string', label: '选中值 (JSON)', group: '组件属性', default: '["A"]', format: 'json' },
+    modelValue: { type: 'string', label: '选中值', group: '组件属性', default: '["A"]', format: 'json' },
     size: {
       type: 'enum',
       label: '尺寸',
@@ -47,7 +47,7 @@ export default {
     disabled: { type: 'boolean', label: '禁用', group: '组件属性', default: false },
     options: {
       type: 'string',
-      label: '选项 (JSON)',
+      label: '选项',
       group: '组件属性',
       multiline: true,
       format: 'json',

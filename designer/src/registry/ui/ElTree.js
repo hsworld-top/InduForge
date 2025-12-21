@@ -33,7 +33,7 @@ export default {
   propsSchema: {
     data: {
       type: 'string',
-      label: '数据 (JSON)',
+      label: '数据',
       group: '组件属性',
       multiline: true,
       format: 'json',
@@ -48,7 +48,7 @@ export default {
     },
     treeProps: {
       type: 'string',
-      label: '字段映射 (JSON)',
+      label: '字段映射',
       group: '组件属性',
       multiline: true,
       format: 'json',

@@ -41,7 +41,7 @@ export default {
     autoplay: { type: 'boolean', label: '自动播放', group: '组件属性', default: false },
     items: {
       type: 'string',
-      label: '轮播项 (JSON)',
+      label: '轮播项',
       group: '组件属性',
       multiline: true,
       format: 'json',

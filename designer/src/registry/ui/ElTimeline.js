@@ -30,7 +30,7 @@ export default {
   propsSchema: {
     items: {
       type: 'string',
-      label: '时间线数据 (JSON)',
+      label: '时间线数据',
       group: '组件属性',
       multiline: true,
       format: 'json',

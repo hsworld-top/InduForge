@@ -64,7 +64,7 @@ export default {
     stretch: { type: 'boolean', label: '拉伸充满', group: '组件属性', default: false },
     panes: {
       type: 'string',
-      label: '选项卡列表 (JSON)',
+      label: '选项卡列表',
       group: '组件属性',
       multiline: true,
       format: 'json',

@@ -32,10 +32,10 @@ export default {
   },
 
   propsSchema: {
-    modelValue: { type: 'string', label: '选中项 (JSON)', group: '组件属性', multiline: true, format: 'json', default: '[1,4]' },
+    modelValue: { type: 'string', label: '选中项', group: '组件属性', multiline: true, format: 'json', default: '[1,4]' },
     data: {
       type: 'string',
-      label: '数据源 (JSON)',
+      label: '数据源',
       group: '组件属性',
       multiline: true,
       format: 'json',
@@ -52,7 +52,7 @@ export default {
     },
     titles: {
       type: 'string',
-      label: '标题 (JSON)',
+      label: '标题',
       group: '组件属性',
       multiline: true,
       format: 'json',

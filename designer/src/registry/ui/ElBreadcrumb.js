@@ -30,7 +30,7 @@ export default {
     separatorClass: { type: 'string', label: '分隔符类名', group: '组件属性', default: '' },
     items: {
       type: 'string',
-      label: '节点 (JSON)',
+      label: '节点',
       group: '组件属性',
       multiline: true,
       format: 'json',

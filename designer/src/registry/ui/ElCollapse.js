@@ -31,7 +31,7 @@ export default {
     modelValue: { type: 'string', label: '默认展开', group: '组件属性', default: '["1"]', format: 'json' },
     items: {
       type: 'string',
-      label: '面板列表 (JSON)',
+      label: '面板列表',
       group: '组件属性',
       multiline: true,
       format: 'json',

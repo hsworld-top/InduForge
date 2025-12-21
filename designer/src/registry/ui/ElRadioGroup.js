@@ -47,7 +47,7 @@ export default {
     disabled: { type: 'boolean', label: '禁用', group: '组件属性', default: false },
     options: {
       type: 'string',
-      label: '选项 (JSON)',
+      label: '选项',
       group: '组件属性',
       multiline: true,
       format: 'json',

@@ -54,7 +54,7 @@ export default {
     collapse: { type: 'boolean', label: '折叠', group: '组件属性', default: false },
     items: {
       type: 'string',
-      label: '菜单项 (JSON)',
+      label: '菜单项',
       group: '组件属性',
       multiline: true,
       format: 'json',

@@ -32,7 +32,7 @@ export default {
     max: { type: 'number', label: '最大分', group: '组件属性', default: 5 },
     allowHalf: { type: 'boolean', label: '允许半星', group: '组件属性', default: false },
     showScore: { type: 'boolean', label: '显示分值', group: '组件属性', default: false },
-    texts: { type: 'string', label: '文字提示 (JSON)', group: '组件属性', multiline: true, format: 'json', default: '[]' },
+    texts: { type: 'string', label: '文字提示', group: '组件属性', multiline: true, format: 'json', default: '[]' },
   },
 
   eventsSchema: {

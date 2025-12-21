@@ -36,7 +36,7 @@ export default {
     column: { type: 'number', label: '列数', group: '组件属性', default: 2 },
     items: {
       type: 'string',
-      label: '条目 (JSON)',
+      label: '条目',
       group: '组件属性',
       multiline: true,
       format: 'json',

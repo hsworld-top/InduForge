@@ -137,7 +137,7 @@
             </div>
 
             <!-- 事件配置弹窗 -->
-            <el-dialog v-model="eventDialogVisible" title="事件配置" width="720px">
+            <el-dialog v-model="eventDialogVisible" title="事件配置" width="720px" :lock-scroll="false">
                 <div class="event-config-dialog">
                     <div class="event-config-header">
                         <span class="event-config-name">{{ currentEventKey }}</span>
@@ -152,7 +152,7 @@
             </el-dialog>
 
             <!-- 样式配置弹窗（通用，按钮同款） -->
-            <el-dialog v-model="styleDialogVisible" title="样式配置" width="720px" draggable>
+            <el-dialog v-model="styleDialogVisible" title="样式配置" width="720px" draggable :lock-scroll="false">
                 <div class="style-config-dialog">
                     <MonacoEditor v-model="styleInput" language="css" :theme="monacoTheme" height="320px" />
                     <div v-if="styleError" class="error-tip">{{ styleError }}</div>

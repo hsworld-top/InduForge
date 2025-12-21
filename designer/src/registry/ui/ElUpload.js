@@ -45,8 +45,8 @@ export default {
       ],
       default: 'text',
     },
-    headers: { type: 'string', label: '请求头 (JSON)', group: '组件属性', multiline: true, format: 'json', default: '{}' },
-    data: { type: 'string', label: '额外参数 (JSON)', group: '组件属性', multiline: true, format: 'json', default: '{}' },
+    headers: { type: 'string', label: '请求头', group: '组件属性', multiline: true, format: 'json', default: '{}' },
+    data: { type: 'string', label: '额外参数', group: '组件属性', multiline: true, format: 'json', default: '{}' },
   },
 
   eventsSchema: {

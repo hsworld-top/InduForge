@@ -49,7 +49,7 @@ export default {
     processStatus: { type: 'string', label: '进行状态', group: '组件属性', default: 'process' },
     steps: {
       type: 'string',
-      label: '步骤列表 (JSON)',
+      label: '步骤列表',
       group: '组件属性',
       multiline: true,
       format: 'json',

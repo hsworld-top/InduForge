@@ -42,7 +42,7 @@
 
       <!-- 静态数据编辑 -->
       <div v-if="dataSourceType === 'static'" class="form-item">
-        <label>静态数据 (JSON)</label>
+        <label>静态数据</label>
         <el-input
           type="textarea"
           :model-value="staticData"

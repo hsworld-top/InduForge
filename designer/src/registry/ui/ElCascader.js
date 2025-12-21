@@ -35,7 +35,7 @@ export default {
     modelValue: { type: 'string', label: '选中值', group: '组件属性', default: '[]', format: 'json', multiline: true },
     options: {
       type: 'string',
-      label: '选项 (JSON)',
+      label: '选项',
       group: '组件属性',
       multiline: true,
       format: 'json',

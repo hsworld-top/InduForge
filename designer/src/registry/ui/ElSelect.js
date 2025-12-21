@@ -40,7 +40,7 @@ export default {
     filterable: { type: 'boolean', label: '可搜索', group: '组件属性', default: true },
     options: {
       type: 'string',
-      label: '选项 (JSON)',
+      label: '选项',
       group: '组件属性',
       multiline: true,
       format: 'json',
