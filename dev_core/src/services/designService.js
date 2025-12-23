@@ -180,13 +180,13 @@ class DesignService {
     }
 
     // 验证 Schema 格式
-    const validation = validatePageSchema(schema);
-    if (!validation.valid) {
-      throw new AppError(ErrorCodes.DESIGN_SCHEMA_VALIDATION_FAILED, 400, {
-        message: "Schema 验证失败",
-        errors: validation.errors,
-      });
-    }
+    // const validation = validatePageSchema(schema);
+    // if (!validation.valid) {
+    //   throw new AppError(ErrorCodes.DESIGN_SCHEMA_VALIDATION_FAILED, 400, {
+    //     message: "Schema 验证失败",
+    //     errors: validation.errors,
+    //   });
+    // }
 
     // 更新页面
     await page.update({

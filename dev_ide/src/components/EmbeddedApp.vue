@@ -33,7 +33,7 @@ const appUrl = computed(() => {
   if (props.project.tenantId) params.set("tenant", props.project.tenantId);
 
   if (props.appType === "designer") {
-    params.set("pageid", "1");
+    // params.set("pageid", "1");
     params.set("type", "app");
     return `/designer/?${params.toString()}`;
   } else {
