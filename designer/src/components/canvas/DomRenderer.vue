@@ -17,6 +17,7 @@
             <component
                 :is="getComponentType(comp.type)"
                 v-bind="comp.props"
+                :draggable="!comp.locked"
                 :style="convertStyle(comp.style)"
                 :is-empty="!comp.children || comp.children.length === 0">
                 <!-- 递归渲染子组件 -->

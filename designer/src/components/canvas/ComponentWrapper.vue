@@ -127,6 +127,10 @@ function handleDragStart(event) {
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
     isDragging.value = true;
+    if (event.currentTarget) {
+        event.currentTarget.style.outline = '2px dashed #5e7ce0';
+        event.currentTarget.style.outlineOffset = '2px';
+    }
 
     // 设置拖拽数据
     event.dataTransfer.effectAllowed = 'move';
@@ -150,8 +154,13 @@ function handleDragStart(event) {
     // 设置拖拽图像（使用当前元素的克隆）
     const dragImage = event.currentTarget.cloneNode(true);
     dragImage.style.opacity = '0.5';
+    dragImage.style.position = 'absolute';
+    dragImage.style.left = '-1000px';
+    dragImage.style.top = '-1000px';
+    dragImage.style.outline = '2px dashed #5e7ce0';
+    dragImage.style.outlineOffset = '2px';
     document.body.appendChild(dragImage);
-    event.dataTransfer.setDragImage(dragImage, 0, 0);
+    event.dataTransfer.setDragImage(dragImage, offsetX, offsetY);
     setTimeout(() => document.body.removeChild(dragImage), 0);
 
     // 触发拖拽开始事件
@@ -182,6 +191,10 @@ function handleDrag(event) {
  */
 function handleDragEnd(event) {
     isDragging.value = false;
+    if (event.currentTarget) {
+        event.currentTarget.style.outline = '';
+        event.currentTarget.style.outlineOffset = '';
+    }
 
     emit('dragend', {
         component: props.component,
@@ -194,6 +207,7 @@ function handleDragEnd(event) {
  * 当拖拽经过容器组件时触发
  */
 function handleDragOver(event) {
+    event.dataTransfer.dropEffect = event.dataTransfer.effectAllowed === 'copy' ? 'copy' : 'move';
     if (!isContainer.value) return;
 
     event.preventDefault();
@@ -354,6 +368,8 @@ defineExpose({
 .component-wrapper.is-dragging {
     opacity: 0.5;
     cursor: move;
+    outline: 2px dashed #5e7ce0;
+    outline-offset: 2px;
 }
 
 /**

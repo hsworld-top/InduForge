@@ -54,6 +54,9 @@
         @select="handleSelect"
         @update="handleUpdate"
         @contextmenu="handleContextMenu"
+        @dragstart="handleWrapperDragStart"
+        @drag="handleWrapperDrag"
+        @dragend="handleWrapperDragEnd"
         @drop="handleContainerDrop"
       />
     </div>
@@ -115,6 +118,7 @@ const contextMenuRef = ref(null);
 const isDragging = ref(false);
 const draggedComponent = ref(null);
 const lastDragPoint = ref(null);
+const didDrop = ref(false);
 
 // Context menu state
 const contextMenuComponentId = ref(null);
@@ -175,12 +179,83 @@ function findComponentById(list, componentId) {
   return null;
 }
 
+function findParentComponent(list, componentId, parent = null) {
+  for (const item of list || []) {
+    if (item.id === componentId) return parent;
+    if (item.children) {
+      const found = findParentComponent(item.children, componentId, item);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
+function getDropContainerId(target) {
+  if (!target || typeof target.closest !== "function") return null;
+  const containerEl = target.closest(".component-wrapper.is-container");
+  return containerEl ? containerEl.id : null;
+}
+
+function ensureRootComponent(componentId) {
+  const parent = findParentComponent(components.value, componentId);
+  if (parent && parent.id) {
+    designStore.moveComponent(componentId, null, components.value.length);
+  }
+}
+
 function getCanvasPoint(event) {
   if (!viewportRef.value) return { x: 0, y: 0 };
   const rect = viewportRef.value.getBoundingClientRect();
   const x = (event.clientX - rect.left - CANVAS_PADDING + scrollX.value) / zoom.value;
   const y = (event.clientY - rect.top - CANVAS_PADDING + scrollY.value) / zoom.value;
   return { x, y };
+}
+
+function setDropEffect(event) {
+  const dt = event?.dataTransfer;
+  if (!dt) return;
+  const allowed = (dt.effectAllowed || "").toLowerCase();
+  if (!allowed || allowed === "uninitialized") {
+    dt.dropEffect = "move";
+    return;
+  }
+  if (allowed.includes("move")) {
+    dt.dropEffect = "move";
+    return;
+  }
+  if (allowed.includes("copy")) {
+    dt.dropEffect = "copy";
+    return;
+  }
+  dt.dropEffect = "none";
+}
+
+function getPreviewPoint(point, component) {
+  if (!point) return null;
+  if (!component || component.source !== "canvas") return point;
+  const offsetX = Number.isFinite(component.offsetX) ? component.offsetX / zoom.value : 0;
+  const offsetY = Number.isFinite(component.offsetY) ? component.offsetY / zoom.value : 0;
+  return { x: point.x - offsetX, y: point.y - offsetY };
+}
+
+function updateLastDragPoint(event) {
+  if (!event || !viewportRef.value) return null;
+  const rect = viewportRef.value.getBoundingClientRect();
+  const clientX = event.clientX;
+  const clientY = event.clientY;
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+  if (
+    clientX < rect.left ||
+    clientX > rect.right ||
+    clientY < rect.top ||
+    clientY > rect.bottom
+  ) {
+    return null;
+  }
+  const point = getCanvasPoint(event);
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+  lastDragPoint.value = point;
+  return point;
 }
 
 function parseDragData(event) {
@@ -205,6 +280,37 @@ function parseDragData(event) {
 function getSelectedComponent() {
   if (!designStore.selectedComponentId) return null;
   return findComponentById(components.value, designStore.selectedComponentId);
+}
+
+function handleWrapperDragStart(payload) {
+  const event = payload?.event;
+  const component = payload?.component;
+  if (!event || !component) return;
+
+  didDrop.value = false;
+  const rect = event.currentTarget?.getBoundingClientRect?.();
+  const offsetX = rect ? event.clientX - rect.left : 0;
+  const offsetY = rect ? event.clientY - rect.top : 0;
+
+  draggedComponent.value = {
+    ...component,
+    source: "canvas",
+    offsetX,
+    offsetY,
+  };
+  isDragging.value = true;
+  updateLastDragPoint(event);
+}
+
+function handleWrapperDrag(payload) {
+  if (!isDragging.value) return;
+  const event = payload?.event;
+  if (!event) return;
+  updateLastDragPoint(event);
+}
+
+function handleWrapperDragEnd(payload) {
+  handleDragEnd(payload?.event || payload);
 }
 
 /**
@@ -409,6 +515,8 @@ function handleCanvasReady(canvasLayers) {
  */
 function handleDragEnter(event) {
   event.preventDefault();
+  setDropEffect(event);
+  didDrop.value = false;
   if (!isDragging.value || !draggedComponent.value) {
     const parsed = parseDragData(event);
     if (parsed) {
@@ -426,8 +534,7 @@ function handleDragEnter(event) {
       }
     }
   }
-  const point = getCanvasPoint(event);
-  lastDragPoint.value = point;
+  updateLastDragPoint(event);
   console.log("Drag enter canvas");
 }
 
@@ -437,9 +544,7 @@ function handleDragEnter(event) {
  */
 function handleDragOver(event) {
   event.preventDefault();
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = "move";
-  }
+  setDropEffect(event);
 
   if (!isDragging.value || !draggedComponent.value) {
     const parsed = parseDragData(event);
@@ -464,13 +569,15 @@ function handleDragOver(event) {
 
   // 更新拖拽预览位置
   if (isDragging.value) {
-    const point = getCanvasPoint(event);
-    lastDragPoint.value = point;
+    const point = updateLastDragPoint(event);
+    if (!point) return;
 
     if (canvasAuxiliaryRef.value) {
       const dragPreview = canvasAuxiliaryRef.value.getDragPreview();
       if (dragPreview) {
-        const { x, y } = point;
+        const previewPoint = getPreviewPoint(point, draggedComponent.value);
+        if (!previewPoint) return;
+        const { x, y } = previewPoint;
         // 如果预览未显示，先显示
         if (!dragPreview.isVisible && draggedComponent.value) {
           dragPreview.show(draggedComponent.value, x, y);
@@ -493,18 +600,43 @@ function handleDragLeave(event) {
 }
 
 function handleDragEnd(event) {
+  if (didDrop.value) {
+    didDrop.value = false;
+    hideDragPreview();
+    isDragging.value = false;
+    draggedComponent.value = null;
+    lastDragPoint.value = null;
+    return;
+  }
+
   // 如果 drop 未触发，但已有拖拽信息，按最后位置补救更新
   if (isDragging.value && draggedComponent.value) {
     console.info("[DesignCanvas] dragend fallback");
     const component = draggedComponent.value;
-    const point = lastDragPoint.value || getCanvasPoint(event);
+    const point = lastDragPoint.value;
+    if (!point) {
+      hideDragPreview();
+      isDragging.value = false;
+      draggedComponent.value = null;
+      lastDragPoint.value = null;
+      return;
+    }
     const { x, y } = point;
 
     if (component?.source === "canvas" && component.id) {
+      ensureRootComponent(component.id);
       const offsetX = (component.offsetX || 0) / zoom.value;
       const offsetY = (component.offsetY || 0) / zoom.value;
       let newLeft = x - offsetX;
       let newTop = y - offsetY;
+
+      if (!Number.isFinite(newLeft) || !Number.isFinite(newTop)) {
+        hideDragPreview();
+        isDragging.value = false;
+        draggedComponent.value = null;
+        lastDragPoint.value = null;
+        return;
+      }
 
       if (snapEnabled.value) {
         const snapped = snapPositionToGrid({ x: newLeft, y: newTop }, gridSize.value);
@@ -514,6 +646,7 @@ function handleDragEnd(event) {
 
       designStore.updateComponent(component.id, {
         style: {
+          position: "absolute",
           left: Math.round(newLeft),
           top: Math.round(newTop),
         },
@@ -536,6 +669,7 @@ function handleDragEnd(event) {
 function handleDrop(event) {
   event.preventDefault();
   event.stopPropagation(); // 阻止事件冒泡，防止 DesignCenter 也处理此事件
+  didDrop.value = true;
 
   try {
     console.info("[DesignCanvas] drop received");
@@ -563,6 +697,14 @@ function handleDrop(event) {
       if (!target) {
         console.warn("[DesignCanvas] Cannot move component, id not found:", component.id);
       } else {
+        const parent = findParentComponent(components.value, component.id);
+        const dropContainerId = getDropContainerId(event.target);
+        if (parent?.id && dropContainerId === parent.id) {
+          designStore.selectComponent(component.id);
+          return;
+        }
+        ensureRootComponent(component.id);
+
         const offsetX = (component.offsetX || 0) / zoom.value;
         const offsetY = (component.offsetY || 0) / zoom.value;
         let newLeft = x - offsetX;
@@ -590,6 +732,7 @@ function handleDrop(event) {
 
         designStore.updateComponent(component.id, {
           style: {
+            position: "absolute",
             left: Math.round(newLeft),
             top: Math.round(newTop),
           },
