@@ -18,7 +18,7 @@
  * @param {string} flexDirection - flex 方向 ('row' | 'column')
  * @returns {Object} 插入信息 { index, insertLine }
  */
-export function calculateFlexInsertPosition(containerRect, childrenRects, mousePosition, flexDirection = 'row') {
+export function calculateFlexInsertPosition(containerRect, childrenRects, mousePosition, flexDirection = 'row', flexWrap = 'nowrap') {
     const { x, y } = mousePosition;
     
     // 如果没有子组件，插入到开始位置
@@ -31,6 +31,10 @@ export function calculateFlexInsertPosition(containerRect, childrenRects, mouseP
     
     const isHorizontal = flexDirection === 'row' || flexDirection === 'row-reverse';
     const isReverse = flexDirection.includes('reverse');
+
+    if (flexWrap && flexWrap !== 'nowrap' && !isReverse) {
+        return calculateWrappedInsertPosition(containerRect, childrenRects, mousePosition, isHorizontal);
+    }
     
     // 计算每个子组件到鼠标的距离
     const distances = childrenRects.map((rect, index) => {
@@ -86,7 +90,6 @@ export function calculateFlexInsertPosition(containerRect, childrenRects, mouseP
  * @returns {Object} 插入信息 { index, insertLine, gridPosition }
  */
 export function calculateGridInsertPosition(containerRect, childrenRects, mousePosition, gridConfig = {}) {
-    const { x, y } = mousePosition;
     const { gap = 0 } = gridConfig;
     
     // 如果没有子组件，插入到第一个网格
@@ -103,30 +106,11 @@ export function calculateGridInsertPosition(containerRect, childrenRects, mouseP
         };
     }
     
-    // 找到最接近鼠标的网格单元
-    const distances = childrenRects.map((rect, index) => {
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
-        return { index, distance, rect };
-    });
-    
-    distances.sort((a, b) => a.distance - b.distance);
-    const nearest = distances[0];
-    
-    // 确定插入在前面还是后面
-    const insertAfter = x > nearest.rect.left + nearest.rect.width / 2;
-    const insertIndex = insertAfter ? nearest.index + 1 : nearest.index;
-    
-    return {
-        index: insertIndex,
-        insertLine: {
-            x: insertAfter ? nearest.rect.right + gap / 2 : nearest.rect.left - gap / 2,
-            y: nearest.rect.top,
-            width: 0,
-            height: nearest.rect.height,
-        },
-    };
+    const wrappedResult = calculateWrappedInsertPosition(containerRect, childrenRects, mousePosition, true);
+    if (gap && wrappedResult?.insertLine && wrappedResult.insertLine.width === 0) {
+        wrappedResult.insertLine.x += gap / 2;
+    }
+    return wrappedResult;
 }
 
 /**
@@ -194,9 +178,157 @@ export function calculateBlockInsertPosition(containerRect, childrenRects, mouse
  * @param {number} gutter - 间距
  * @returns {Object} 插入信息 { index, insertLine }
  */
-export function calculateRowColInsertPosition(containerRect, childrenRects, mousePosition, gutter = 0) {
+export function calculateRowColInsertPosition(containerRect, childrenRects, mousePosition, gutter = 0, flexWrap = 'nowrap') {
     // Row 布局类似 Flex row
-    return calculateFlexInsertPosition(containerRect, childrenRects, mousePosition, 'row');
+    return calculateFlexInsertPosition(containerRect, childrenRects, mousePosition, 'row', flexWrap);
+}
+
+function buildAxisItems(childrenRects, isHorizontal) {
+    return childrenRects.map((rect, index) => ({
+        index,
+        rect,
+        mainStart: isHorizontal ? rect.left : rect.top,
+        mainEnd: isHorizontal ? rect.right : rect.bottom,
+        mainCenter: isHorizontal ? rect.left + rect.width / 2 : rect.top + rect.height / 2,
+        crossStart: isHorizontal ? rect.top : rect.left,
+        crossEnd: isHorizontal ? rect.bottom : rect.right,
+        crossCenter: isHorizontal ? rect.top + rect.height / 2 : rect.left + rect.width / 2,
+        crossSize: isHorizontal ? rect.height : rect.width,
+    }));
+}
+
+function groupItemsByCrossAxis(items) {
+    const sorted = [...items].sort((a, b) => {
+        if (a.crossCenter === b.crossCenter) {
+            return a.mainStart - b.mainStart;
+        }
+        return a.crossCenter - b.crossCenter;
+    });
+
+    const lines = [];
+    for (const item of sorted) {
+        const lastLine = lines[lines.length - 1];
+        const tolerance = Math.max(6, item.crossSize * 0.6);
+        if (lastLine && Math.abs(item.crossCenter - lastLine.crossCenter) <= tolerance) {
+            lastLine.items.push(item);
+            lastLine.crossCenter =
+                (lastLine.crossCenter * (lastLine.items.length - 1) + item.crossCenter) / lastLine.items.length;
+            lastLine.crossSize = Math.max(lastLine.crossSize, item.crossSize);
+            lastLine.crossStart = Math.min(lastLine.crossStart, item.crossStart);
+            lastLine.crossEnd = Math.max(lastLine.crossEnd, item.crossEnd);
+            lastLine.mainStart = Math.min(lastLine.mainStart, item.mainStart);
+            lastLine.mainEnd = Math.max(lastLine.mainEnd, item.mainEnd);
+        } else {
+            lines.push({
+                items: [item],
+                crossCenter: item.crossCenter,
+                crossSize: item.crossSize,
+                crossStart: item.crossStart,
+                crossEnd: item.crossEnd,
+                mainStart: item.mainStart,
+                mainEnd: item.mainEnd,
+            });
+        }
+    }
+
+    lines.forEach((line) => {
+        line.items.sort((a, b) => a.mainStart - b.mainStart);
+    });
+
+    return lines;
+}
+
+function calculateWrappedInsertPosition(containerRect, childrenRects, mousePosition, isHorizontal) {
+    if (!childrenRects || childrenRects.length === 0) {
+        return {
+            index: 0,
+            insertLine: getContainerStartLine(containerRect, isHorizontal ? 'row' : 'column'),
+        };
+    }
+
+    const items = buildAxisItems(childrenRects, isHorizontal);
+    const lines = groupItemsByCrossAxis(items);
+    if (!lines.length) {
+        return {
+            index: childrenRects.length,
+            insertLine: getContainerStartLine(containerRect, isHorizontal ? 'row' : 'column'),
+        };
+    }
+
+    const crossPos = isHorizontal ? mousePosition.y : mousePosition.x;
+    const mainPos = isHorizontal ? mousePosition.x : mousePosition.y;
+
+    let lineIndex = lines.length - 1;
+    for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        const boundary = (line.crossStart + line.crossEnd) / 2;
+        if (crossPos < boundary) {
+            lineIndex = i;
+            break;
+        }
+    }
+
+    const line = lines[lineIndex];
+    let insertPosInLine = line.items.length;
+    for (let i = 0; i < line.items.length; i += 1) {
+        if (mainPos < line.items[i].mainCenter) {
+            insertPosInLine = i;
+            break;
+        }
+    }
+
+    const visualOrder = [];
+    for (const row of lines) {
+        for (const item of row.items) {
+            visualOrder.push(item.index);
+        }
+    }
+
+    const prefixCount = lines.slice(0, lineIndex).reduce((sum, row) => sum + row.items.length, 0);
+    const visualInsertPos = prefixCount + insertPosInLine;
+    const insertIndex =
+        visualInsertPos >= visualOrder.length ? childrenRects.length : visualOrder[visualInsertPos];
+
+    let insertLine = null;
+    if (line.items.length > 0) {
+        if (isHorizontal) {
+            const targetIndex = Math.min(insertPosInLine, line.items.length - 1);
+            const targetRect = line.items[targetIndex].rect;
+            const lineTop = line.crossStart;
+            const lineHeight = line.crossEnd - line.crossStart;
+            const lineX =
+                insertPosInLine === 0
+                    ? targetRect.left
+                    : insertPosInLine >= line.items.length
+                      ? line.items[line.items.length - 1].rect.right
+                      : targetRect.left;
+            insertLine = {
+                x: lineX,
+                y: lineTop,
+                width: 0,
+                height: lineHeight,
+            };
+        } else {
+            const targetIndex = Math.min(insertPosInLine, line.items.length - 1);
+            const targetRect = line.items[targetIndex].rect;
+            const lineLeft = line.crossStart;
+            const lineWidth = line.crossEnd - line.crossStart;
+            const lineY =
+                insertPosInLine === 0
+                    ? targetRect.top
+                    : insertPosInLine >= line.items.length
+                      ? line.items[line.items.length - 1].rect.bottom
+                      : targetRect.top;
+            insertLine = {
+                x: lineLeft,
+                y: lineY,
+                width: lineWidth,
+                height: 0,
+            };
+        }
+    }
+
+    return { index: insertIndex, insertLine };
 }
 
 /**
@@ -292,7 +424,8 @@ export function calculateInsertPosition(container, childrenRects, mousePosition)
                 rect,
                 childrenRects,
                 mousePosition,
-                props.flexDirection || 'row'
+                props.flexDirection || 'row',
+                props.flexWrap || 'nowrap'
             );
         
         case 'grid':
@@ -310,16 +443,22 @@ export function calculateInsertPosition(container, childrenRects, mousePosition)
             return calculateBlockInsertPosition(rect, childrenRects, mousePosition);
         
         case 'row':
-            return calculateRowColInsertPosition(
-                rect,
-                childrenRects,
-                mousePosition,
-                props.gutter || 0
-            );
+            {
+                const rowWrap =
+                    typeof props.wrap === 'boolean'
+                        ? (props.wrap ? 'wrap' : 'nowrap')
+                        : (props.flexWrap || 'nowrap');
+                return calculateRowColInsertPosition(
+                    rect,
+                    childrenRects,
+                    mousePosition,
+                    props.gutter || 0,
+                    rowWrap
+                );
+            }
         
         default:
             // 默认使用 flex row
             return calculateFlexInsertPosition(rect, childrenRects, mousePosition, 'row');
     }
 }
-

@@ -57,7 +57,14 @@
         @dragstart="handleWrapperDragStart"
         @drag="handleWrapperDrag"
         @dragend="handleWrapperDragEnd"
+        @dragover="handleContainerDragOver"
+        @dragleave="handleContainerDragLeave"
         @drop="handleContainerDrop"
+      />
+      <div
+        v-if="insertPlaceholder"
+        class="insert-placeholder"
+        :style="insertPlaceholderStyle"
       />
     </div>
 
@@ -87,6 +94,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useDesignStore } from "@/store/design";
 import { useCanvas, snapToGrid as snapPositionToGrid } from "@/composables/useCanvas";
 import { useCoordinateSync } from "@/composables/useCoordinateSync";
+import { calculateInsertPosition } from "@/utils/dropZoneCalculator";
 import DomRenderer from "./DomRenderer.vue";
 import CanvasAuxiliary from "./CanvasAuxiliary.vue";
 import ContextMenu from "./ContextMenu.vue";
@@ -118,7 +126,10 @@ const contextMenuRef = ref(null);
 const isDragging = ref(false);
 const draggedComponent = ref(null);
 const lastDragPoint = ref(null);
+const lastDragClient = ref(null);
+const lastDragTarget = ref(null);
 const didDrop = ref(false);
+const insertPlaceholder = ref(null);
 
 // Context menu state
 const contextMenuComponentId = ref(null);
@@ -151,6 +162,16 @@ const canvasHeight = computed(() => pageConfig.value?.height || 1080);
 const backgroundColor = computed(
   () => pageConfig.value?.backgroundColor || "#ffffff"
 );
+const insertPlaceholderStyle = computed(() => {
+  if (!insertPlaceholder.value) return {};
+  const { x, y, width, height } = insertPlaceholder.value;
+  return {
+    left: `${Math.round(x)}px`,
+    top: `${Math.round(y)}px`,
+    width: `${Math.max(0, Math.round(width))}px`,
+    height: `${Math.max(0, Math.round(height))}px`,
+  };
+});
 
 const snapEnabled = computed(() => {
   if (pageConfig.value && typeof pageConfig.value.snapToGrid === "boolean") {
@@ -190,10 +211,105 @@ function findParentComponent(list, componentId, parent = null) {
   return undefined;
 }
 
+function isDescendantComponent(component, targetId) {
+  if (!component?.children?.length) return false;
+  for (const child of component.children) {
+    if (child.id === targetId) return true;
+    if (isDescendantComponent(child, targetId)) return true;
+  }
+  return false;
+}
+
+function normalizeContainerChildStyle(style = {}) {
+  return {
+    ...style,
+    position: "relative",
+    left: null,
+    top: null,
+    right: null,
+    bottom: null,
+  };
+}
+
+function resolveContainerLayoutMode(container) {
+  if (!container) return "flex";
+  if (container.type === "Row" || container.type === "ElRow") return "row";
+  if (container.type === "Grid") return "grid";
+  if (container.type === "FlexLayout" || container.type === "CenterLayout") return "flex";
+  if (container.type === "Col" || container.type === "ElCol") return "block";
+  const layoutMode = container.props?.layoutMode || container.props?.layout;
+  return layoutMode || "flex";
+}
+
+function getContainerInsertInfo(container, event, excludeId = null) {
+  const children = Array.isArray(container?.children) ? container.children : [];
+  const targetChildren = excludeId
+    ? children.filter((child) => child.id !== excludeId)
+    : children;
+  if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+    return { index: targetChildren.length, insertLine: null, rect: null, childRects: [] };
+  }
+
+  const targetEl =
+    event?.currentTarget?.id === container?.id
+      ? event.currentTarget
+      : document.getElementById(container?.id || "");
+  if (!targetEl) {
+    return { index: targetChildren.length, insertLine: null, rect: null, childRects: [] };
+  }
+
+  const rect = targetEl.getBoundingClientRect();
+  if (!rect) {
+    return { index: targetChildren.length, insertLine: null, rect: null, childRects: [] };
+  }
+
+  const childRects = [];
+  for (const child of targetChildren) {
+    const el = document.getElementById(child.id);
+    if (!el) {
+      return { index: targetChildren.length, insertLine: null, rect, childRects: [] };
+    }
+    childRects.push(el.getBoundingClientRect());
+  }
+
+  const containerInfo = {
+    rect,
+    layoutMode: resolveContainerLayoutMode(container),
+    props: container?.props || {},
+  };
+  const result = calculateInsertPosition(containerInfo, childRects, {
+    x: event.clientX,
+    y: event.clientY,
+  });
+  const index = Number.isFinite(result?.index) ? result.index : targetChildren.length;
+  return {
+    index: Math.max(0, Math.min(index, targetChildren.length)),
+    insertLine: result?.insertLine || null,
+    rect,
+    childRects,
+  };
+}
+
+function getContainerInsertIndex(container, event, excludeId = null) {
+  return getContainerInsertInfo(container, event, excludeId).index;
+}
+
 function getDropContainerId(target) {
   if (!target || typeof target.closest !== "function") return null;
   const containerEl = target.closest(".component-wrapper.is-container");
   return containerEl ? containerEl.id : null;
+}
+
+function getDropContainerIdFromPoint(clientX, clientY) {
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+  if (typeof document?.elementsFromPoint !== "function") return null;
+  const elements = document.elementsFromPoint(clientX, clientY);
+  for (const el of elements) {
+    if (!el || typeof el.closest !== "function") continue;
+    const containerEl = el.closest(".component-wrapper.is-container");
+    if (containerEl?.id) return containerEl.id;
+  }
+  return null;
 }
 
 function ensureRootComponent(componentId) {
@@ -209,6 +325,126 @@ function getCanvasPoint(event) {
   const x = (event.clientX - rect.left - CANVAS_PADDING + scrollX.value) / zoom.value;
   const y = (event.clientY - rect.top - CANVAS_PADDING + scrollY.value) / zoom.value;
   return { x, y };
+}
+
+function getCanvasPointFromClient(clientX, clientY) {
+  if (!viewportRef.value) return { x: 0, y: 0 };
+  const rect = viewportRef.value.getBoundingClientRect();
+  const x = (clientX - rect.left - CANVAS_PADDING + scrollX.value) / zoom.value;
+  const y = (clientY - rect.top - CANVAS_PADDING + scrollY.value) / zoom.value;
+  return { x, y };
+}
+
+function toCanvasRectFromClient(rect) {
+  if (!rect) return null;
+  const start = getCanvasPointFromClient(rect.x, rect.y);
+  const end = getCanvasPointFromClient(rect.x + rect.width, rect.y + rect.height);
+  if (
+    !Number.isFinite(start.x) ||
+    !Number.isFinite(start.y) ||
+    !Number.isFinite(end.x) ||
+    !Number.isFinite(end.y)
+  ) {
+    return null;
+  }
+  return {
+    x: start.x,
+    y: start.y,
+    width: end.x - start.x,
+    height: end.y - start.y,
+  };
+}
+
+function parseSizeValue(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.endsWith("px")) {
+      const num = Number(trimmed.slice(0, -2));
+      return Number.isFinite(num) ? num : null;
+    }
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : null;
+  }
+  return null;
+}
+
+function clampValue(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function resolvePlaceholderSize(info, dragData) {
+  const dragStyle = dragData?.style || {};
+  let width = parseSizeValue(dragStyle.width);
+  let height = parseSizeValue(dragStyle.height);
+
+  const refRect = info?.childRects?.length
+    ? info.childRects[Math.min(info.index, info.childRects.length - 1)]
+    : info?.rect;
+
+  if (!Number.isFinite(width)) width = refRect?.width || 80;
+  if (!Number.isFinite(height)) height = refRect?.height || 32;
+
+  const maxWidth = info?.rect?.width || width;
+  const maxHeight = info?.rect?.height || height;
+  width = Math.min(Math.max(width, 16), maxWidth);
+  height = Math.min(Math.max(height, 16), maxHeight);
+
+  return { width, height };
+}
+
+function buildPlaceholderClientRect(info, dragData, event) {
+  if (!info?.rect) return null;
+  const { width, height } = resolvePlaceholderSize(info, dragData);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+
+  const line = info.insertLine;
+  let x;
+  let y;
+
+  if (line) {
+    const isVertical = Math.abs(line.height) > Math.abs(line.width);
+    if (isVertical) {
+      x = line.x - width / 2;
+      y = line.y + (line.height - height) / 2;
+    } else {
+      x = line.x + (line.width - width) / 2;
+      y = line.y - height / 2;
+    }
+  } else if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+    x = event.clientX - width / 2;
+    y = event.clientY - height / 2;
+  } else {
+    x = info.rect.left + 8;
+    y = info.rect.top + 8;
+  }
+
+  const maxX = info.rect.right - width;
+  const maxY = info.rect.bottom - height;
+  x = clampValue(x, info.rect.left, maxX);
+  y = clampValue(y, info.rect.top, maxY);
+
+  return { x, y, width, height };
+}
+
+function showInsertPlaceholder(rect) {
+  if (!rect) {
+    insertPlaceholder.value = null;
+    return;
+  }
+  insertPlaceholder.value = rect;
+  const insertLine = canvasAuxiliaryRef.value?.getInsertLine?.();
+  if (insertLine) {
+    insertLine.hide();
+  }
+}
+
+function hideInsertLine() {
+  const insertLine = canvasAuxiliaryRef.value?.getInsertLine?.();
+  if (insertLine) {
+    insertLine.hide();
+  }
+  insertPlaceholder.value = null;
 }
 
 function setDropEffect(event) {
@@ -255,6 +491,8 @@ function updateLastDragPoint(event) {
   const point = getCanvasPoint(event);
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
   lastDragPoint.value = point;
+  lastDragClient.value = { x: clientX, y: clientY };
+  lastDragTarget.value = event.target || null;
   return point;
 }
 
@@ -546,6 +784,11 @@ function handleDragOver(event) {
   event.preventDefault();
   setDropEffect(event);
 
+  const hoverContainerId = getDropContainerId(event.target);
+  if (!hoverContainerId) {
+    hideInsertLine();
+  }
+
   if (!isDragging.value || !draggedComponent.value) {
     const parsed = parseDragData(event);
     if (parsed) {
@@ -596,6 +839,7 @@ function handleDragLeave(event) {
   // 只在真正离开画布时隐藏预览
   if (!event.currentTarget.contains(event.relatedTarget)) {
     hideDragPreview();
+    hideInsertLine();
   }
 }
 
@@ -603,9 +847,12 @@ function handleDragEnd(event) {
   if (didDrop.value) {
     didDrop.value = false;
     hideDragPreview();
+    hideInsertLine();
     isDragging.value = false;
     draggedComponent.value = null;
     lastDragPoint.value = null;
+    lastDragClient.value = null;
+    lastDragTarget.value = null;
     return;
   }
 
@@ -613,12 +860,45 @@ function handleDragEnd(event) {
   if (isDragging.value && draggedComponent.value) {
     console.info("[DesignCanvas] dragend fallback");
     const component = draggedComponent.value;
+    const client = lastDragClient.value || { x: event?.clientX, y: event?.clientY };
+    const fallbackContainerId =
+      getDropContainerId(lastDragTarget.value) ||
+      getDropContainerIdFromPoint(client?.x, client?.y);
+    if (fallbackContainerId) {
+      const container = findComponentById(components.value, fallbackContainerId);
+      if (container) {
+        const inferredSource = component?.source === "canvas" ? "canvas" : "library";
+        const containerEl = document.getElementById(fallbackContainerId);
+        handleContainerDrop({
+          container,
+          dragData: component,
+          source: inferredSource,
+          event: {
+            currentTarget: containerEl,
+            clientX: client?.x,
+            clientY: client?.y,
+          },
+        });
+        didDrop.value = true;
+        hideDragPreview();
+        hideInsertLine();
+        isDragging.value = false;
+        draggedComponent.value = null;
+        lastDragPoint.value = null;
+        lastDragClient.value = null;
+        lastDragTarget.value = null;
+        return;
+      }
+    }
     const point = lastDragPoint.value;
     if (!point) {
       hideDragPreview();
+      hideInsertLine();
       isDragging.value = false;
       draggedComponent.value = null;
       lastDragPoint.value = null;
+      lastDragClient.value = null;
+      lastDragTarget.value = null;
       return;
     }
     const { x, y } = point;
@@ -632,6 +912,7 @@ function handleDragEnd(event) {
 
       if (!Number.isFinite(newLeft) || !Number.isFinite(newTop)) {
         hideDragPreview();
+        hideInsertLine();
         isDragging.value = false;
         draggedComponent.value = null;
         lastDragPoint.value = null;
@@ -657,9 +938,12 @@ function handleDragEnd(event) {
   }
 
   hideDragPreview();
+  hideInsertLine();
   isDragging.value = false;
   draggedComponent.value = null;
   lastDragPoint.value = null;
+  lastDragClient.value = null;
+  lastDragTarget.value = null;
 }
 
 /**
@@ -684,6 +968,18 @@ function handleDrop(event) {
     if (!component) {
       console.warn("No drag data found");
       return;
+    }
+
+    const dropContainerId =
+      getDropContainerId(event.target) ||
+      getDropContainerIdFromPoint(event.clientX, event.clientY);
+    if (dropContainerId) {
+      const container = findComponentById(components.value, dropContainerId);
+      if (container) {
+        const inferredSource = component?.source === "canvas" ? "canvas" : "library";
+        handleContainerDrop({ container, dragData: component, source: inferredSource, event });
+        return;
+      }
     }
 
     // 计算放置位置（画布坐标系）
@@ -778,9 +1074,12 @@ function handleDrop(event) {
   } finally {
     // 清理拖拽状态
     hideDragPreview();
+    hideInsertLine();
     isDragging.value = false;
     draggedComponent.value = null;
     lastDragPoint.value = null;
+    lastDragClient.value = null;
+    lastDragTarget.value = null;
   }
 }
 
@@ -796,6 +1095,37 @@ function hideDragPreview() {
   }
 }
 
+function handleContainerDragOver(payload) {
+  const { container, event } = payload || {};
+  if (!container || !event) return;
+  if (container.locked) {
+    hideInsertLine();
+    return;
+  }
+
+  const dragData = parseDragData(event) || draggedComponent.value;
+  if (dragData?.source === "canvas" && dragData?.id) {
+    if (dragData.id === container.id) {
+      hideInsertLine();
+      return;
+    }
+    const movingComponent = findComponentById(components.value, dragData.id);
+    if (isDescendantComponent(movingComponent, container.id)) {
+      hideInsertLine();
+      return;
+    }
+  }
+
+  const excludeId = dragData?.source === "canvas" ? dragData.id : null;
+  const info = getContainerInsertInfo(container, event, excludeId);
+  const placeholderClientRect = buildPlaceholderClientRect(info, dragData, event);
+  showInsertPlaceholder(toCanvasRectFromClient(placeholderClientRect));
+}
+
+function handleContainerDragLeave() {
+  hideInsertLine();
+}
+
 /**
  * 处理放置到容器
  * Task 4.3: 实现拖拽到容器内
@@ -804,48 +1134,88 @@ function handleContainerDrop(payload) {
   try {
     const { container, dragData, source, event } = payload;
 
-    console.log("✨ Drop to container:", container.type, container.id);
+    console.log("? Drop to container:", container.type, container.id);
     console.log("  Drag data:", dragData);
     console.log("  Source:", source);
 
     let component;
 
+    if (source === "canvas") {
+      const componentId = dragData?.id;
+      if (!componentId) {
+        console.warn("[DesignCanvas] Missing drag component id");
+        return;
+      }
+
+      if (componentId === container.id) {
+        console.warn("[DesignCanvas] Cannot drop component into itself");
+        return;
+      }
+
+      const movingComponent = findComponentById(components.value, componentId);
+      if (!movingComponent) {
+        console.warn("[DesignCanvas] Cannot move component, id not found:", componentId);
+        return;
+      }
+
+      if (isDescendantComponent(movingComponent, container.id)) {
+        console.warn("[DesignCanvas] Cannot move component into its descendant:", componentId, container.id);
+        return;
+      }
+
+      const parent = findParentComponent(components.value, componentId);
+      if (parent?.id === container.id) {
+        designStore.selectComponent(componentId);
+        return;
+      }
+
+      const { index: insertIndex } = getContainerInsertInfo(container, event, componentId);
+      didDrop.value = true;
+      designStore.moveComponent(componentId, container.id, insertIndex);
+      designStore.updateComponent(componentId, {
+        style: normalizeContainerChildStyle(movingComponent.style || {}),
+      });
+      designStore.saveHistory(`???? ${movingComponent.name || movingComponent.type} ???`);
+      designStore.selectComponent(componentId);
+      console.log("? Component moved into container");
+      return;
+    }
+
     if (source === "library") {
-      // 从组件库拖拽，dragData 已经是完整的组件实例
+      // ???????dragData ??????????
       component = dragData;
 
-      // 对于布局容器，子组件使用相对定位
+      if (!component) {
+        console.warn("[DesignCanvas] Missing component data from library");
+        return;
+      }
+
+      // ????????????????
       if (
         container.type === "Container" ||
         container.type === "FlexLayout" ||
         container.type === "Grid"
       ) {
-        component.style = {
-          ...component.style,
-          position: "relative",
-          left: "auto",
-          top: "auto",
-        };
+        component.style = normalizeContainerChildStyle(component.style || {});
       }
     } else {
-      // 从画布内移动，dragData 只包含 id 和 type
-      // TODO: 实现画布内组件移动到容器的逻辑
-      console.log(
-        "  Moving component from canvas to container (not implemented yet)"
-      );
+      console.warn("[DesignCanvas] Unknown drag source:", source);
       return;
     }
 
-    // 添加组件到容器
-    designStore.addComponent(component, container.id);
-    designStore.saveHistory(`添加组件 ${component.type} 到容器`);
+    const { index: insertIndex } = getContainerInsertInfo(container, event);
+    didDrop.value = true;
+    // ???????
+    designStore.addComponent(component, container.id, insertIndex);
+    designStore.saveHistory(`???? ${component.type} ???`);
 
-    console.log("✅ Component added to container");
+    console.log("? Component added to container");
   } catch (error) {
-    console.error("❌ Failed to drop component to container:", error);
+    console.error("? Failed to drop component to container:", error);
   } finally {
-    // 清理拖拽状态
+    // ??????
     hideDragPreview();
+    hideInsertLine();
     isDragging.value = false;
     draggedComponent.value = null;
   }
@@ -1103,5 +1473,14 @@ defineExpose({
   position: relative;
   z-index: 1;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.insert-placeholder {
+  position: absolute;
+  border: 2px dashed #f56c6c;
+  background-color: rgba(245, 108, 108, 0.08);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 5;
 }
 </style>

@@ -60,7 +60,7 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['select', 'update', 'contextmenu', 'dragstart', 'drag', 'dragend', 'dragover', 'drop']);
+const emit = defineEmits(['select', 'update', 'contextmenu', 'dragstart', 'drag', 'dragend', 'dragover', 'dragleave', 'drop']);
 
 // 拖拽状态
 const isDragging = ref(false);
@@ -69,9 +69,31 @@ const isDropTarget = ref(false);
 /**
  * 是否为容器组件
  */
+const FALLBACK_CONTAINER_TYPES = new Set([
+    'Container',
+    'Row',
+    'Col',
+    'FlexLayout',
+    'Grid',
+    'CenterLayout',
+    'ElContainer',
+    'ElRow',
+    'ElCol',
+    'ElMain',
+    'ElAside',
+    'ElHeader',
+    'ElFooter',
+    'ElTabs',
+    'ElCard',
+    'ElDialog',
+    'ElDrawer',
+    'Form',
+]);
+
 const isContainer = computed(() => {
     const definition = getComponent(props.component.type);
-    return definition?.container || false;
+    if (definition?.container) return true;
+    return FALLBACK_CONTAINER_TYPES.has(props.component.type);
 });
 
 /**
@@ -209,6 +231,11 @@ function handleDragEnd(event) {
 function handleDragOver(event) {
     event.dataTransfer.dropEffect = event.dataTransfer.effectAllowed === 'copy' ? 'copy' : 'move';
     if (!isContainer.value) return;
+    if (props.component.locked) {
+        isDropTarget.value = false;
+        event.dataTransfer.dropEffect = 'none';
+        return;
+    }
 
     event.preventDefault();
     // 显式允许放置，兼容库拖拽（copy）与画布内拖拽（move）
@@ -238,6 +265,12 @@ function handleDragLeave(event) {
 
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
         isDropTarget.value = false;
+        emit('dragleave', {
+            container: props.component,
+            event,
+            clientX: event.clientX,
+            clientY: event.clientY,
+        });
     }
 }
 
@@ -247,6 +280,10 @@ function handleDragLeave(event) {
  */
 function handleDrop(event) {
     if (!isContainer.value) return;
+    if (props.component.locked) {
+        isDropTarget.value = false;
+        return;
+    }
 
     isDropTarget.value = false;
 
@@ -258,6 +295,10 @@ function handleDrop(event) {
             data = event.dataTransfer.getData('application/json');
             source = 'library';
         }
+        if (!data) {
+            data = event.dataTransfer.getData('text/plain');
+            source = 'library';
+        }
 
         if (!data) {
             console.warn('[ComponentWrapper] No drag data found');
@@ -265,13 +306,9 @@ function handleDrop(event) {
         }
 
         const dragData = JSON.parse(data);
+        const resolvedSource = dragData?.source || source;
 
-        // 画布内拖动（source === 'canvas'）交给父级 DesignCanvas 处理位置更新，直接放行
-        if (source === 'canvas') {
-            return;
-        }
-
-        // 只有真正向容器投递新子节点时才阻止冒泡
+        // 只有真正向容器投递子节点时才阻止冒泡
         event.stopPropagation();
 
         console.log('🎯 [ComponentWrapper] Drop to container:', props.component.type, props.component.id);
@@ -279,7 +316,7 @@ function handleDrop(event) {
         emit('drop', {
             container: props.component,
             dragData,
-            source, // 标记数据来源
+            source: resolvedSource, // 标记数据来源
             event,
             clientX: event.clientX,
             clientY: event.clientY,
@@ -381,4 +418,5 @@ defineExpose({
     outline-offset: 2px;
     background-color: rgba(76, 175, 80, 0.05);
 }
+
 </style>

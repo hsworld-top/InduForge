@@ -12,6 +12,7 @@
             @drag="handleDrag"
             @dragend="handleDragEnd"
             @dragover="handleDragOver"
+            @dragleave="handleDragLeave"
             @drop="handleDrop">
             <!-- 动态渲染组件 -->
             <component
@@ -32,6 +33,7 @@
                     @drag="handleDrag"
                     @dragend="handleDragEnd"
                     @dragover="handleDragOver"
+                    @dragleave="handleDragLeave"
                     @drop="handleDrop" />
             </component>
         </ComponentWrapper>
@@ -85,7 +87,7 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['select', 'update', 'contextmenu', 'dragstart', 'drag', 'dragend', 'dragover', 'drop']);
+const emit = defineEmits(['select', 'update', 'contextmenu', 'dragstart', 'drag', 'dragend', 'dragover', 'dragleave', 'drop']);
 
 /**
  * 获取组件类型
@@ -235,6 +237,13 @@ function handleDragEnd(payload) {
  */
 function handleDragOver(payload) {
     emit('dragover', payload);
+}
+
+/**
+ * 处理拖拽离开容器
+ */
+function handleDragLeave(payload) {
+    emit('dragleave', payload);
 }
 
 /**
