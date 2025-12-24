@@ -3,6 +3,7 @@
     ref="viewportRef"
     class="design-canvas-viewport"
     :class="{ 'show-grid': showGrid }"
+    @click="handleViewportClick"
     @dragenter="handleDragEnter"
     @dragover="handleDragOver"
     @dragleave="handleDragLeave"
@@ -744,6 +745,11 @@ function handleUpdate(id, updates) {
 function handleCanvasClick(event) {
   console.log("Canvas blank area clicked:", event);
   // 取消选择所有组件
+  designStore.selectComponent(null);
+}
+
+function handleViewportClick(event) {
+  if (event?.target?.closest?.(".component-wrapper")) return;
   designStore.selectComponent(null);
 }
 

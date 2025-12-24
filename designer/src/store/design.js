@@ -35,6 +35,7 @@ function createDefaultPageSchema(name) {
         variables: {},
         dataSources: [],
         components: [],
+        events: {},
         permissions: {
             roles: [],
             componentAcl: [],
@@ -259,6 +260,9 @@ export const useDesignStore = defineStore('design', {
                 const response = await designAPI.getPage(this.projectId, pageId);
                 this.currentPageId = pageId;
                 this.currentPage = response.data || response;
+                if (!this.currentPage.events) {
+                    this.currentPage.events = {};
+                }
                 this.selectedComponentId = null;
                 this.isDirty = false;
 
@@ -506,6 +510,20 @@ export const useDesignStore = defineStore('design', {
             });
 
             // Requirements: 6.1 - 标记为有未保存更改
+            this.isDirty = true;
+        },
+
+        /**
+         * 更新页面事件
+         * @param {string} eventName - 事件名称
+         * @param {string} value - 事件脚本
+         */
+        updatePageEvent(eventName, value) {
+            if (!this.currentPage) return;
+            if (!this.currentPage.events) {
+                this.currentPage.events = {};
+            }
+            this.currentPage.events = { ...this.currentPage.events, [eventName]: value };
             this.isDirty = true;
         },
 
