@@ -313,6 +313,18 @@ function getDropContainerIdFromPoint(clientX, clientY) {
   return null;
 }
 
+function resolveDropContainerId(event, dragData) {
+  if (!event) return null;
+  const byPoint = getDropContainerIdFromPoint(event.clientX, event.clientY);
+  if (byPoint) return byPoint;
+  const byTarget = getDropContainerId(event.target);
+  if (!byTarget || !dragData?.id) return byTarget;
+  if (typeof document === "undefined") return byTarget;
+  const dragEl = document.getElementById(dragData.id);
+  if (dragEl && dragEl.contains(event.target)) return null;
+  return byTarget;
+}
+
 function ensureRootComponent(componentId) {
   const parent = findParentComponent(components.value, componentId);
   if (parent && parent.id) {
@@ -802,7 +814,7 @@ function handleDragOver(event) {
   event.preventDefault();
   setDropEffect(event);
 
-  const hoverContainerId = getDropContainerId(event.target);
+  const hoverContainerId = getDropContainerIdFromPoint(event.clientX, event.clientY) || getDropContainerId(event.target);
   if (!hoverContainerId) {
     hideInsertLine();
   }
@@ -879,9 +891,10 @@ function handleDragEnd(event) {
     console.info("[DesignCanvas] dragend fallback");
     const component = draggedComponent.value;
     const client = lastDragClient.value || { x: event?.clientX, y: event?.clientY };
-    const fallbackContainerId =
-      getDropContainerId(lastDragTarget.value) ||
-      getDropContainerIdFromPoint(client?.x, client?.y);
+    const fallbackContainerId = resolveDropContainerId(
+      { clientX: client?.x, clientY: client?.y, target: lastDragTarget.value },
+      component,
+    );
     if (fallbackContainerId) {
       const container = findComponentById(components.value, fallbackContainerId);
       if (container) {
@@ -989,8 +1002,7 @@ function handleDrop(event) {
     }
 
     const dropContainerId =
-      getDropContainerId(event.target) ||
-      getDropContainerIdFromPoint(event.clientX, event.clientY);
+      resolveDropContainerId(event, component);
     if (dropContainerId) {
       const container = findComponentById(components.value, dropContainerId);
       if (container) {
@@ -1011,12 +1023,6 @@ function handleDrop(event) {
       if (!target) {
         console.warn("[DesignCanvas] Cannot move component, id not found:", component.id);
       } else {
-        const parent = findParentComponent(components.value, component.id);
-        const dropContainerId = getDropContainerId(event.target);
-        if (parent?.id && dropContainerId === parent.id) {
-          designStore.selectComponent(component.id);
-          return;
-        }
         ensureRootComponent(component.id);
 
         const offsetX = (component.offsetX || 0) / zoom.value;

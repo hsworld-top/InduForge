@@ -21,7 +21,7 @@
                             @click="removeSelectedCanvasEvent" />
                     </div>
                     <el-form label-position="left" label-width="160px" size="small">
-                        <template v-for="entry in canvasEventEntries" :key="entry.key">
+                        <template v-for="entry in baseCanvasEventEntries" :key="entry.key">
                             <el-form-item :label="entry.label">
                                 <template #label>
                                     <span
@@ -41,6 +41,54 @@
                                     </el-button>
                                 </div>
                             </el-form-item>
+                        </template>
+                        <template v-if="variableCanvasEventEntries.length">
+                            <div class="event-group-title">变量改变</div>
+                            <template v-for="entry in variableCanvasEventEntries" :key="entry.key">
+                                <el-form-item :label="entry.label">
+                                    <template #label>
+                                        <span
+                                            class="event-name canvas-event-name"
+                                            :class="{ 'is-selected': entry.removable && entry.id === selectedCanvasEventId }"
+                                            @click="selectCanvasEvent(entry)">
+                                            {{ entry.label }}
+                                        </span>
+                                    </template>
+                                    <div class="event-row">
+                                        <el-button
+                                            class="event-config-button"
+                                            size="small"
+                                            :type="isEventConfigured(entry.eventName, 'canvas', entry.itemId) ? 'success' : 'primary'"
+                                            @click="openEventDialog(entry.eventName, 'canvas', entry.itemId)">
+                                            {{ isEventConfigured(entry.eventName, 'canvas', entry.itemId) ? '已配置' : '配置' }}
+                                        </el-button>
+                                    </div>
+                                </el-form-item>
+                            </template>
+                        </template>
+                        <template v-if="timerCanvasEventEntries.length">
+                            <div class="event-group-title">定时器</div>
+                            <template v-for="entry in timerCanvasEventEntries" :key="entry.key">
+                                <el-form-item :label="entry.label">
+                                    <template #label>
+                                        <span
+                                            class="event-name canvas-event-name"
+                                            :class="{ 'is-selected': entry.removable && entry.id === selectedCanvasEventId }"
+                                            @click="selectCanvasEvent(entry)">
+                                            {{ entry.label }}
+                                        </span>
+                                    </template>
+                                    <div class="event-row">
+                                        <el-button
+                                            class="event-config-button"
+                                            size="small"
+                                            :type="isEventConfigured(entry.eventName, 'canvas', entry.itemId) ? 'success' : 'primary'"
+                                            @click="openEventDialog(entry.eventName, 'canvas', entry.itemId)">
+                                            {{ isEventConfigured(entry.eventName, 'canvas', entry.itemId) ? '已配置' : '配置' }}
+                                        </el-button>
+                                    </div>
+                                </el-form-item>
+                            </template>
                         </template>
                     </el-form>
                 </div>
@@ -152,13 +200,6 @@
                     <div class="section-group">
                         <div class="section-title title-row space-between">
                             <span>事件</span>
-                            <el-button
-                                v-if="hasStyleConfigProp"
-                                size="small"
-                                :type="isStyleConfigured ? 'success' : 'primary'"
-                                @click="openStyleDialog">
-                                {{ isStyleConfigured ? '已配置' : '配置' }}
-                            </el-button>
                         </div>
                         <el-form label-position="left" label-width="160px" size="small">
                             <template v-for="(meta, eventName) in eventsSchema" :key="eventName">
@@ -383,46 +424,46 @@ const canvasEventBindings = computed(() => currentPage.value?.events || {});
 const showCanvasEvents = computed(
     () => activeTab.value === 'events' && !selectedComponent.value && selectedComponents.value.length === 0 && currentPage.value,
 );
-const canvasEventEntries = computed(() => {
-    const entries = [];
-    baseCanvasEvents.forEach((eventName) => {
+const baseCanvasEventEntries = computed(() =>
+    baseCanvasEvents.map((eventName) => {
         const meta = canvasEventsSchema[eventName];
-        entries.push({
+        return {
             key: `static:${eventName}`,
             id: eventName,
             itemId: null,
             eventName,
             label: displayEventLabel(meta, eventName),
             removable: false,
-        });
-    });
-
+        };
+    }),
+);
+const variableCanvasEventEntries = computed(() => {
     const variableItems = getCanvasEventList('variableChange');
-    variableItems.forEach((item) => {
-        entries.push({
-            key: `variableChange:${item.id}`,
-            id: item.id,
-            itemId: item.id,
-            eventName: 'variableChange',
-            label: item.variable || '变量改变',
-            removable: true,
-        });
-    });
-
-    const timerItems = getCanvasEventList('timer');
-    timerItems.forEach((item) => {
-        entries.push({
-            key: `timer:${item.id}`,
-            id: item.id,
-            itemId: item.id,
-            eventName: 'timer',
-            label: item.name || '定时器',
-            removable: true,
-        });
-    });
-
-    return entries;
+    return variableItems.map((item) => ({
+        key: `variableChange:${item.id}`,
+        id: item.id,
+        itemId: item.id,
+        eventName: 'variableChange',
+        label: item.variable || '变量改变',
+        removable: true,
+    }));
 });
+const timerCanvasEventEntries = computed(() => {
+    const timerItems = getCanvasEventList('timer');
+    return timerItems.map((item) => ({
+        key: `timer:${item.id}`,
+        id: item.id,
+        itemId: item.id,
+        eventName: 'timer',
+        label: item.name || '定时器',
+        removable: true,
+    }));
+});
+const canvasEventEntries = computed(() => [
+    ...baseCanvasEventEntries.value,
+    ...variableCanvasEventEntries.value,
+    ...timerCanvasEventEntries.value,
+]);
 const selectedCanvasEvent = computed(() =>
     canvasEventEntries.value.find((entry) => entry.removable && entry.id === selectedCanvasEventId.value),
 );
@@ -1008,6 +1049,22 @@ function parseStyleInput(input) {
     font-size: 12px;
     color: #909399;
     white-space: nowrap;
+}
+
+.event-config-button {
+    min-width: 64px;
+    justify-content: center;
+}
+
+.event-group-title {
+    margin: 10px 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #909399;
+    background-color: #f5f7fa;
+    padding: 6px 8px;
+    border: 1px solid #e4e7ed;
+    border-radius: 4px;
 }
 
 .canvas-event-toolbar {

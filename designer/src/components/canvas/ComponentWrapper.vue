@@ -12,9 +12,9 @@
         :draggable="!component.locked"
         @click.capture.stop="handleClick($event)"
         @contextmenu.stop="handleContextMenu($event)"
-        @dragstart.capture.stop="handleDragStart"
-        @drag.capture.stop="handleDrag"
-        @dragend.capture.stop="handleDragEnd"
+        @dragstart.capture="handleDragStart"
+        @drag.capture="handleDrag"
+        @dragend.capture="handleDragEnd"
         @dragover.prevent="handleDragOver"
         @dragleave="handleDragLeave"
         @drop.prevent="handleDrop">
@@ -65,6 +65,14 @@ const emit = defineEmits(['select', 'update', 'contextmenu', 'dragstart', 'drag'
 // 拖拽状态
 const isDragging = ref(false);
 const isDropTarget = ref(false);
+
+function isInnermostWrapperEvent(event) {
+    const current = event?.currentTarget;
+    const target = event?.target;
+    if (!current || !target) return true;
+    if (typeof target.closest !== 'function') return current === target;
+    return target.closest('.component-wrapper') === current;
+}
 
 /**
  * 是否为容器组件
@@ -141,6 +149,7 @@ function handleContextMenu(event) {
  * Task 4.4: 实现 @dragstart 事件处理
  */
 function handleDragStart(event) {
+    if (!isInnermostWrapperEvent(event)) return;
     if (props.component.locked) {
         event.preventDefault();
         return;
@@ -197,6 +206,7 @@ function handleDragStart(event) {
  * Task 4.4: 实现 @drag 事件处理（更新位置）
  */
 function handleDrag(event) {
+    if (!isInnermostWrapperEvent(event)) return;
     if (!isDragging.value) return;
 
     emit('drag', {
@@ -212,6 +222,7 @@ function handleDrag(event) {
  * Task 4.4: 实现 @dragend 事件处理（保存历史）
  */
 function handleDragEnd(event) {
+    if (!isInnermostWrapperEvent(event)) return;
     isDragging.value = false;
     if (event.currentTarget) {
         event.currentTarget.style.outline = '';

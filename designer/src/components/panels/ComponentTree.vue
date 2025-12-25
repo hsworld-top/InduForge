@@ -32,7 +32,10 @@
                         <Lock v-if="data.locked" />
                         <component :is="getComponentIcon(data.type)" v-else />
                     </el-icon>
-                    <span class="node-label">{{ data.label || data.type }}</span>
+                    <span class="node-label">
+                        <span class="node-label-text">{{ getNodeLabel(data) }}</span>
+                        <span v-if="shouldShowNodeIndex(data)" class="node-label-suffix">{{ getNodeIndex(data) }}</span>
+                    </span>
                     <el-icon v-if="data.locked" class="lock-icon" title="已锁定">
                         <Lock />
                     </el-icon>
@@ -71,6 +74,25 @@ const treeProps = {
  * Requirements: 5.1 - 显示组件层级结构
  */
 const components = computed(() => designStore.components);
+const labelStats = computed(() => {
+    const counts = new Map();
+    const indexMap = new Map();
+    const walk = (items) => {
+        (items || []).forEach((item) => {
+            const label = getNodeLabel(item);
+            const nextIndex = (counts.get(label) || 0) + 1;
+            counts.set(label, nextIndex);
+            if (item?.id) {
+                indexMap.set(item.id, nextIndex);
+            }
+            if (item.children && item.children.length > 0) {
+                walk(item.children);
+            }
+        });
+    };
+    walk(components.value);
+    return { counts, indexMap };
+});
 
 /**
  * 当前选中的组件 ID
@@ -91,6 +113,21 @@ function getComponentIcon(type) {
         Input: EditPen,
     };
     return iconMap[type] || Document;
+}
+
+function getNodeLabel(data) {
+    const rawLabel = typeof data?.label === 'string' ? data.label.trim() : '';
+    return rawLabel || data?.type || 'Component';
+}
+
+function shouldShowNodeIndex(data) {
+    const label = getNodeLabel(data);
+    return (labelStats.value.counts.get(label) || 0) > 1;
+}
+
+function getNodeIndex(data) {
+    if (!data?.id) return '';
+    return labelStats.value.indexMap.get(data.id) || '';
 }
 
 /**
@@ -211,9 +248,24 @@ watch(selectedComponentId, (newId) => {
 
 .node-label {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.node-label-text {
+    flex: 0 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.node-label-suffix {
+    flex-shrink: 0;
+    color: inherit;
+    font-size: inherit;
 }
 
 .lock-icon {
