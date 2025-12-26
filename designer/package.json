@@ -27,7 +27,8 @@
     "vue-echarts": "^8.0.1",
     "vue-konva": "^3.2.6",
     "vue-router": "^4.6.3",
-    "vue3-sketch-ruler": "^2.3.1"
+    "vue3-sketch-ruler": "^2.3.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
