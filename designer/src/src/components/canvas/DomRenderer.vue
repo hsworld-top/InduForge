@@ -7,6 +7,8 @@
             :selected="comp.id === selectedId"
             @select="handleSelect"
             @update="handleUpdate"
+            @resize="handleResize"
+            @resize-end="handleResizeEnd"
             @contextmenu="handleContextMenu"
             @dragstart="handleDragStart"
             @drag="handleDrag"
@@ -28,6 +30,8 @@
                     :selected-id="selectedId"
                     @select="handleSelect"
                     @update="handleUpdate"
+                    @resize="handleResize"
+                    @resize-end="handleResizeEnd"
                     @contextmenu="handleContextMenu"
                     @dragstart="handleDragStart"
                     @drag="handleDrag"
@@ -87,7 +91,7 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['select', 'update', 'contextmenu', 'dragstart', 'drag', 'dragend', 'dragover', 'dragleave', 'drop']);
+const emit = defineEmits(['select', 'update', 'resize', 'resize-end', 'contextmenu', 'dragstart', 'drag', 'dragend', 'dragover', 'dragleave', 'drop']);
 
 /**
  * 获取组件类型
@@ -208,6 +212,25 @@ function handleContextMenu(event, componentId) {
  */
 function handleUpdate(id, updates) {
     emit('update', id, updates);
+}
+
+/**
+ * 处理组件缩放
+ *
+ * @param {string} id - 组件 ID
+ * @param {Object} updates - 更新内容
+ */
+function handleResize(id, updates) {
+    emit('resize', id, updates);
+}
+
+/**
+ * 处理组件缩放结束
+ *
+ * @param {string} id - 组件 ID
+ */
+function handleResizeEnd(id) {
+    emit('resize-end', id);
 }
 
 /**

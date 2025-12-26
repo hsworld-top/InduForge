@@ -5,7 +5,7 @@
       frameborder="0"
       class="embedded-iframe"
       allow="cookies"
-      sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-top-navigation"
+      sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-top-navigation allow-downloads"
     >
       您的浏览器不支持 iframe。
     </iframe>
@@ -33,7 +33,6 @@ const appUrl = computed(() => {
   if (props.project.tenantId) params.set("tenant", props.project.tenantId);
 
   if (props.appType === "designer") {
-    // params.set("pageid", "1");
     params.set("type", "app");
     return `/designer/?${params.toString()}`;
   } else {

@@ -49,7 +49,7 @@
         </div>
 
         <!-- 添加绑定对话框 -->
-        <el-dialog v-model="showAddDialog" title="添加数据绑定" width="500px" :close-on-click-modal="false">
+        <el-dialog v-model="showAddDialog" title="添加数据绑定" width="500px" :close-on-click-modal="false" :lock-scroll="false">
             <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
                 <el-form-item label="属性路径" prop="path">
                     <el-select v-model="form.path" placeholder="选择或输入属性路径" class="w-full" filterable allow-create>

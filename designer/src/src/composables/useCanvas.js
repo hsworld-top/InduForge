@@ -69,27 +69,27 @@ export function snapToGrid(position, gridSize) {
     };
 }
 
+const sharedCanvasState = reactive({
+    scale: 1,
+    offset: { x: 0, y: 0 },
+    gridSize: 10,
+    snapToGrid: true,
+});
+
+const sharedViewportSize = ref({ width: 0, height: 0 });
+const sharedCanvasSize = ref({ width: 1920, height: 1080 });
+const sharedScaleMode = ref('fit');
+
 /**
  * useCanvas Composable
  * 提供画布状态和操作方法
  */
 export function useCanvas() {
-    // 画布状态
-    const canvasState = reactive({
-        scale: 1,
-        offset: { x: 0, y: 0 },
-        gridSize: 10,
-        snapToGrid: true,
-    });
+    const canvasState = sharedCanvasState;
+    const viewportSize = sharedViewportSize;
+    const canvasSize = sharedCanvasSize;
+    const scaleMode = sharedScaleMode;
 
-    // 视口尺寸
-    const viewportSize = ref({ width: 0, height: 0 });
-
-    // 画布尺寸（来自页面配置）
-    const canvasSize = ref({ width: 1920, height: 1080 });
-
-    // 缩放模式
-    const scaleMode = ref('fit');
 
     /**
      * 更新视口尺寸并重新计算缩放

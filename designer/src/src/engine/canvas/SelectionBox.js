@@ -81,12 +81,12 @@ export class SelectionBox {
         this.layer.add(this.group);
 
         // 事件回调
-        this.onResizeStart = null;
-        this.onResize = null;
-        this.onResizeEnd = null;
-        this.onRotateStart = null;
-        this.onRotate = null;
-        this.onRotateEnd = null;
+        this.onResizeStart = options.onResizeStart || null;
+        this.onResize = options.onResize || null;
+        this.onResizeEnd = options.onResizeEnd || null;
+        this.onRotateStart = options.onRotateStart || null;
+        this.onRotate = options.onRotate || null;
+        this.onRotateEnd = options.onRotateEnd || null;
     }
 
     /**
@@ -434,4 +434,3 @@ export class SelectionBox {
 }
 
 export default SelectionBox;
-

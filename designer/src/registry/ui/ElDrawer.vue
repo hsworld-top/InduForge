@@ -7,6 +7,7 @@
       :with-header="withHeader"
       :modal="modal"
       :append-to-body="appendToBody"
+      :lock-scroll="false"
       v-bind="listeners"
       @open="() => emit('open')"
       @close="() => emit('close')"

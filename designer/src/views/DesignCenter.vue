@@ -117,7 +117,7 @@
             <div class="right-panel" :style="{ width: rightPanelWidth + 'px' }">
                 <!-- 调整宽度的拖拽条 -->
                 <div class="resize-handle resize-handle-left" @mousedown="startResizeRight"></div>
-                <el-tabs v-model="rightActiveTab" class="panel-tabs">
+                <el-tabs v-model="rightActiveTab" class="panel-tabs right-panel-tabs">
                     <el-tab-pane label="组件树" name="tree">
                         <ComponentTree />
                     </el-tab-pane>
@@ -130,6 +130,12 @@
                     <el-tab-pane label="连接" name="events">
                         <PropertyPanel :show-tabs="false" initial-tab="events" />
                     </el-tab-pane>
+                    <el-tab-pane name="variables">
+                        <template #label>
+                            <span class="variable-tab-label">变量</span>
+                        </template>
+                        <VariablePanel />
+                    </el-tab-pane>
                 </el-tabs>
             </div>
         </div>
@@ -140,7 +146,7 @@
         </div>
 
         <!-- 画布设置对话框 -->
-        <el-dialog v-model="showCanvasSettings" title="画布设置" width="500px" :close-on-click-modal="false">
+        <el-dialog v-model="showCanvasSettings" title="画布设置" width="500px" :close-on-click-modal="false" :lock-scroll="false">
             <el-form label-width="80px" label-position="left">
                 <el-form-item label="宽度">
                     <el-input v-model.number="canvasWidth" type="number" suffix-icon="px">
@@ -188,7 +194,7 @@ import IconTablerStack from '~icons/tabler/stack';
 import { useDesignStore } from '@/store/design';
 import { useCanvas } from '@/composables/useCanvas';
 import { useKeyboard } from '@/composables/useKeyboard';
-import { PageTree, ComponentTree, ComponentLibrary, PropertyPanel } from '@/components/panels';
+import { PageTree, ComponentTree, ComponentLibrary, PropertyPanel, VariablePanel } from '@/components/panels';
 import { DesignCanvas, CanvasRuler } from '@/components/canvas';
 import ContextMenu from '@/components/canvas/ContextMenu.vue';
 import { registerAllComponents } from '@/registry/components';
@@ -837,6 +843,15 @@ watch(
     margin: 0;
     padding: 0 8px;
     background-color: #fafafa;
+}
+
+:deep(.right-panel-tabs .el-tabs__item) {
+    padding: 0 17px;
+}
+
+:deep(.right-panel-tabs .variable-tab-label) {
+    display: inline-block;
+    margin-right: 10px;
 }
 
 :deep(.right-panel .el-tabs__content) {

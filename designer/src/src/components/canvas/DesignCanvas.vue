@@ -54,6 +54,8 @@
         :canvas-height="canvasHeight"
         @select="handleSelect"
         @update="handleUpdate"
+        @resize="handleResize"
+        @resize-end="handleResizeEnd"
         @contextmenu="handleContextMenu"
         @dragstart="handleWrapperDragStart"
         @drag="handleWrapperDrag"
@@ -727,6 +729,15 @@ function handleUpdate(id, updates) {
   designStore.saveHistory(`更新组件 ${id}`);
 }
 
+function handleResize(id, updates) {
+  designStore.updateComponent(id, updates);
+}
+
+function handleResizeEnd(id) {
+  if (!id) return;
+  designStore.saveHistory(`resize component ${id}`);
+}
+
 /**
  * 处理 Canvas 空白区域点击
  */
@@ -1289,6 +1300,19 @@ watch(
   { deep: true }
 );
 
+watch(
+  () => canvasState.scale,
+  (nextScale) => {
+    if (!Number.isFinite(nextScale) || nextScale <= 0) return;
+    if (Math.abs(nextScale - zoom.value) < 0.0001) return;
+    if (!viewportRef.value) {
+      zoom.value = nextScale;
+      return;
+    }
+    setZoom(nextScale);
+  }
+);
+
 // Lifecycle
 onMounted(async () => {
   console.log("✅ DesignCanvas mounted - Hybrid Rendering Architecture");
@@ -1304,6 +1328,7 @@ onMounted(async () => {
   // 监听滚动事件
   if (viewportRef.value) {
     viewportRef.value.addEventListener("scroll", handleScroll);
+    viewportRef.value.addEventListener("wheel", handleZoomWheel, { passive: false });
     // 补充全局 dragend 监听，避免某些浏览器未在视口上触发
     window.addEventListener("dragend", handleDragEnd);
   }
@@ -1318,6 +1343,7 @@ onUnmounted(() => {
   // 清理滚动事件监听器
   if (viewportRef.value) {
     viewportRef.value.removeEventListener("scroll", handleScroll);
+    viewportRef.value.removeEventListener("wheel", handleZoomWheel);
   }
 
   // 清理键盘事件监听器
@@ -1333,6 +1359,21 @@ function handleScroll(event) {
 
   scrollX.value = viewportRef.value.scrollLeft;
   scrollY.value = viewportRef.value.scrollTop;
+}
+
+function handleZoomWheel(event) {
+  if (!event?.ctrlKey && !event?.metaKey) return;
+  if (!viewportRef.value) return;
+  event.preventDefault();
+
+  const rect = viewportRef.value.getBoundingClientRect();
+  const centerX = event.clientX - rect.left;
+  const centerY = event.clientY - rect.top;
+  const direction = event.deltaY > 0 ? -1 : 1;
+  const step = 0.1;
+  const nextZoom = zoom.value + direction * step;
+
+  setZoom(nextZoom, centerX, centerY);
 }
 
 /**
@@ -1381,6 +1422,9 @@ function setZoom(newZoom, centerX = null, centerY = null) {
 
   // 更新缩放比例
   zoom.value = clampedZoom;
+  if (canvasState.scale !== clampedZoom) {
+    canvasState.scale = clampedZoom;
+  }
 
   // 等待 DOM 更新后调整滚动位置
   nextTick(() => {

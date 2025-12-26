@@ -358,6 +358,7 @@ async function handleDelete() {
             confirmButtonText: '删除',
             cancelButtonText: '取消',
             type: 'warning',
+            lockScroll: false,
         });
 
         await designStore.deletePage(node.id);

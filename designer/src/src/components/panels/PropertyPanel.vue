@@ -244,7 +244,7 @@
         </template>
 
         <!-- 添加画布事件弹窗 -->
-        <el-dialog v-model="addCanvasEventDialogVisible" title="添加事件" width="520px" :close-on-click-modal="false">
+        <el-dialog v-model="addCanvasEventDialogVisible" title="添加事件" width="520px" :close-on-click-modal="false" :lock-scroll="false">
             <div class="add-canvas-event-dialog">
                 <el-radio-group v-model="addCanvasEventType" class="add-canvas-event-group">
                     <div class="event-option-row">

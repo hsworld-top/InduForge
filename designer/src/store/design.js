@@ -43,6 +43,117 @@ function createDefaultPageSchema(name) {
     };
 }
 
+function normalizeComponentSchema(component) {
+    if (!component || typeof component !== 'object') return;
+    if (!component.id || typeof component.id !== 'string') {
+        component.id = crypto.randomUUID();
+    }
+    if (!component.type || typeof component.type !== 'string') {
+        component.type = 'Unknown';
+    }
+    if (!component.label || typeof component.label !== 'string') {
+        component.label = component.name || component.type;
+    }
+    if (typeof component.locked !== 'boolean') {
+        component.locked = false;
+    }
+    if (typeof component.visible !== 'boolean') {
+        component.visible = true;
+    }
+    if (!component.style || typeof component.style !== 'object') {
+        component.style = {};
+    }
+    if (!component.props || typeof component.props !== 'object') {
+        component.props = {};
+    }
+    if (!component.bindings || typeof component.bindings !== 'object') {
+        component.bindings = {};
+    }
+    if (!component.events || typeof component.events !== 'object') {
+        component.events = {};
+    }
+    if (!Array.isArray(component.animations)) {
+        component.animations = [];
+    }
+    if (!Array.isArray(component.children)) {
+        component.children = [];
+    }
+    component.children.forEach(normalizeComponentSchema);
+}
+
+function normalizePageSchema(page) {
+    if (!page || typeof page !== 'object') return;
+    if (typeof page.version !== 'string') {
+        page.version = '2.0.0';
+    }
+    if (!page.meta || typeof page.meta !== 'object') {
+        page.meta = {};
+    }
+    if (!page.meta.id || typeof page.meta.id !== 'string') {
+        page.meta.id = crypto.randomUUID();
+    }
+    if (!page.meta.name || typeof page.meta.name !== 'string') {
+        page.meta.name = '页面';
+    }
+    if (typeof page.meta.description !== 'string') {
+        page.meta.description = '';
+    }
+    if (!page.config || typeof page.config !== 'object') {
+        page.config = {};
+    }
+    if (typeof page.config.width !== 'number') {
+        page.config.width = 1920;
+    }
+    if (typeof page.config.height !== 'number') {
+        page.config.height = 1080;
+    }
+    if (typeof page.config.gridSize !== 'number') {
+        page.config.gridSize = 10;
+    }
+    if (typeof page.config.snapToGrid !== 'boolean') {
+        page.config.snapToGrid = true;
+    }
+    if (!page.config.backgroundColor || typeof page.config.backgroundColor !== 'string') {
+        page.config.backgroundColor = '#ffffff';
+    }
+    if (!['fit', 'fill', 'fixed'].includes(page.config.scaleMode)) {
+        page.config.scaleMode = 'fit';
+    }
+    if (!['light', 'dark'].includes(page.config.theme)) {
+        page.config.theme = 'light';
+    }
+    if (!page.variables || typeof page.variables !== 'object' || Array.isArray(page.variables)) {
+        page.variables = {};
+    }
+    if (!Array.isArray(page.dataSources)) {
+        page.dataSources = [];
+    }
+    if (!Array.isArray(page.components)) {
+        page.components = [];
+    }
+    page.components.forEach(normalizeComponentSchema);
+    if (!page.permissions || typeof page.permissions !== 'object') {
+        page.permissions = {};
+    }
+    if (!Array.isArray(page.permissions.roles)) {
+        page.permissions.roles = [];
+    }
+    if (!Array.isArray(page.permissions.componentAcl)) {
+        page.permissions.componentAcl = [];
+    }
+    if (!page.events || typeof page.events !== 'object') {
+        page.events = {};
+    }
+    if (page.variableMeta && typeof page.variableMeta === 'object') {
+        Object.entries(page.variableMeta).forEach(([name, meta]) => {
+            if (!name || Object.prototype.hasOwnProperty.call(page.variables, name)) return;
+            if (meta && Object.prototype.hasOwnProperty.call(meta, 'defaultValue')) {
+                page.variables[name] = meta.defaultValue;
+            }
+        });
+    }
+}
+
 /**
  * 递归查找组件
  * @param {Array} components - 组件数组
@@ -260,6 +371,7 @@ export const useDesignStore = defineStore('design', {
                 const response = await designAPI.getPage(this.projectId, pageId);
                 this.currentPageId = pageId;
                 this.currentPage = response.data || response;
+                normalizePageSchema(this.currentPage);
                 if (!this.currentPage.events) {
                     this.currentPage.events = {};
                 }
@@ -295,6 +407,7 @@ export const useDesignStore = defineStore('design', {
             this.saving = true;
             this.error = null;
             try {
+                normalizePageSchema(this.currentPage);
                 await designAPI.updatePage(this.projectId, this.currentPageId, this.currentPage);
                 // Requirements: 6.5 - 保存成功后清除未保存标记
                 this.isDirty = false;

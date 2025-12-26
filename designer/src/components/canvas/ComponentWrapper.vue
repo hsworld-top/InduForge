@@ -1,5 +1,6 @@
 <template>
     <div
+        ref="wrapperRef"
         :id="component.id"
         class="component-wrapper"
         :class="{
@@ -9,7 +10,7 @@
             'is-drop-target': isDropTarget,
         }"
         :style="wrapperStyle"
-        :draggable="!component.locked"
+        :draggable="!component.locked && !isResizing"
         @click.capture.stop="handleClick($event)"
         @contextmenu.stop="handleContextMenu($event)"
         @dragstart.capture="handleDragStart"
@@ -19,6 +20,18 @@
         @dragleave="handleDragLeave"
         @drop.prevent="handleDrop">
         <slot />
+        <template v-if="selected && !component.locked">
+            <span
+                v-for="handle in resizeHandles"
+                :key="handle"
+                class="resize-handle"
+                :class="`resize-${handle}`"
+                draggable="false"
+                @mousedown.stop.prevent="startResize(handle, $event)"
+                @touchstart.stop.prevent="startResize(handle, $event)"
+                @dragstart.stop.prevent="noop"
+                @click.stop="noop" />
+        </template>
     </div>
 </template>
 
@@ -38,8 +51,9 @@
  *
  * Task: 1.2 - 创建 DomRenderer.vue (依赖组件)
  */
-import { computed, ref } from 'vue';
+import { computed, ref, onUnmounted } from 'vue';
 import { getComponent } from '@/registry';
+import { useCanvas } from '@/composables/useCanvas';
 
 // Props
 const props = defineProps({
@@ -60,10 +74,20 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['select', 'update', 'contextmenu', 'dragstart', 'drag', 'dragend', 'dragover', 'dragleave', 'drop']);
+const emit = defineEmits(['select', 'update', 'resize', 'resize-end', 'contextmenu', 'dragstart', 'drag', 'dragend', 'dragover', 'dragleave', 'drop']);
+
+const { canvasState } = useCanvas();
+
+const wrapperRef = ref(null);
+const resizeHandles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+const MIN_RESIZE_SIZE = 20;
+const noop = () => {};
 
 // 拖拽状态
+// drag state
 const isDragging = ref(false);
+const isResizing = ref(false);
+const resizeState = ref(null);
 const isDropTarget = ref(false);
 
 function isInnermostWrapperEvent(event) {
@@ -121,6 +145,150 @@ const wrapperStyle = computed(() => {
     };
 });
 
+function getEventPoint(event) {
+    if (!event) return null;
+    const touch = event.touches?.[0] || event.changedTouches?.[0];
+    if (touch) {
+        return { x: touch.clientX, y: touch.clientY };
+    }
+    if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
+        return { x: event.clientX, y: event.clientY };
+    }
+    return null;
+}
+
+function cleanupResize() {
+    window.removeEventListener('mousemove', handleResizeMove);
+    window.removeEventListener('mouseup', handleResizeEnd);
+    window.removeEventListener('touchmove', handleResizeMove);
+    window.removeEventListener('touchend', handleResizeEnd);
+    isResizing.value = false;
+    resizeState.value = null;
+}
+
+function startResize(handle, event) {
+    if (props.component.locked) return;
+    const point = getEventPoint(event);
+    if (!point) return;
+
+    const zoom = canvasState.scale || 1;
+    const style = props.component.style || {};
+    const rect = wrapperRef.value?.getBoundingClientRect?.();
+
+    const startWidth =
+        Number.isFinite(style.width) ? style.width : rect ? rect.width / zoom : 0;
+    const startHeight =
+        Number.isFinite(style.height) ? style.height : rect ? rect.height / zoom : 0;
+    const startLeft = Number.isFinite(style.left) ? style.left : 0;
+    const startTop = Number.isFinite(style.top) ? style.top : 0;
+    const position = style.position || 'absolute';
+    const canUpdateLeft = position === 'absolute' || Number.isFinite(style.left);
+    const canUpdateTop = position === 'absolute' || Number.isFinite(style.top);
+
+    resizeState.value = {
+        componentId: props.component.id,
+        handle,
+        startX: point.x,
+        startY: point.y,
+        startWidth,
+        startHeight,
+        startLeft,
+        startTop,
+        canUpdateLeft,
+        canUpdateTop,
+        zoom,
+    };
+    isResizing.value = true;
+
+    window.addEventListener('mousemove', handleResizeMove);
+    window.addEventListener('mouseup', handleResizeEnd);
+    window.addEventListener('touchmove', handleResizeMove, { passive: false });
+    window.addEventListener('touchend', handleResizeEnd);
+}
+
+function handleResizeMove(event) {
+    if (!resizeState.value) return;
+    const point = getEventPoint(event);
+    if (!point) return;
+    if (event.cancelable) event.preventDefault();
+
+    const {
+        handle,
+        startX,
+        startY,
+        startWidth,
+        startHeight,
+        startLeft,
+        startTop,
+        canUpdateLeft,
+        canUpdateTop,
+        zoom,
+    } = resizeState.value;
+
+    const dx = (point.x - startX) / zoom;
+    const dy = (point.y - startY) / zoom;
+
+    let newWidth = startWidth;
+    let newHeight = startHeight;
+    let newLeft = startLeft;
+    let newTop = startTop;
+
+    if (handle.includes('e')) {
+        newWidth = startWidth + dx;
+    }
+    if (handle.includes('s')) {
+        newHeight = startHeight + dy;
+    }
+    if (handle.includes('w')) {
+        newWidth = startWidth - dx;
+        if (canUpdateLeft) {
+            newLeft = startLeft + dx;
+        }
+    }
+    if (handle.includes('n')) {
+        newHeight = startHeight - dy;
+        if (canUpdateTop) {
+            newTop = startTop + dy;
+        }
+    }
+
+    if (newWidth < MIN_RESIZE_SIZE) {
+        if (handle.includes('w') && canUpdateLeft) {
+            newLeft = startLeft + (startWidth - MIN_RESIZE_SIZE);
+        }
+        newWidth = MIN_RESIZE_SIZE;
+    }
+    if (newHeight < MIN_RESIZE_SIZE) {
+        if (handle.includes('n') && canUpdateTop) {
+            newTop = startTop + (startHeight - MIN_RESIZE_SIZE);
+        }
+        newHeight = MIN_RESIZE_SIZE;
+    }
+
+    const updates = {
+        width: Math.round(newWidth),
+        height: Math.round(newHeight),
+    };
+    if (canUpdateLeft) {
+        updates.left = Math.round(newLeft);
+    }
+    if (canUpdateTop) {
+        updates.top = Math.round(newTop);
+    }
+
+    emit('resize', props.component.id, { style: updates });
+}
+
+function handleResizeEnd() {
+    if (!resizeState.value) return;
+    const componentId = resizeState.value.componentId;
+    cleanupResize();
+    emit('resize-end', componentId);
+}
+
+onUnmounted(() => {
+    cleanupResize();
+});
 /**
  * 处理点击事件
  * Task 5.1: 实现单选和多选
@@ -150,6 +318,10 @@ function handleContextMenu(event) {
  */
 function handleDragStart(event) {
     if (!isInnermostWrapperEvent(event)) return;
+    if (isResizing.value || event?.target?.closest?.('.resize-handle')) {
+        event.preventDefault();
+        return;
+    }
     if (props.component.locked) {
         event.preventDefault();
         return;
@@ -207,6 +379,7 @@ function handleDragStart(event) {
  */
 function handleDrag(event) {
     if (!isInnermostWrapperEvent(event)) return;
+    if (isResizing.value) return;
     if (!isDragging.value) return;
 
     emit('drag', {
@@ -223,6 +396,7 @@ function handleDrag(event) {
  */
 function handleDragEnd(event) {
     if (!isInnermostWrapperEvent(event)) return;
+    if (isResizing.value) return;
     isDragging.value = false;
     if (event.currentTarget) {
         event.currentTarget.style.outline = '';
@@ -381,6 +555,70 @@ defineExpose({
     outline: 2px dashed #409eff;
     outline-offset: 2px;
 }
+
+/* Resize handles */
+.resize-handle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: #ffffff;
+    border: 1px solid #409eff;
+    box-sizing: border-box;
+    z-index: 2;
+}
+
+.resize-nw {
+    top: -4px;
+    left: -4px;
+    cursor: nw-resize;
+}
+
+.resize-n {
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: n-resize;
+}
+
+.resize-ne {
+    top: -4px;
+    right: -4px;
+    cursor: ne-resize;
+}
+
+.resize-e {
+    top: 50%;
+    right: -4px;
+    transform: translateY(-50%);
+    cursor: e-resize;
+}
+
+.resize-se {
+    right: -4px;
+    bottom: -4px;
+    cursor: se-resize;
+}
+
+.resize-s {
+    left: 50%;
+    bottom: -4px;
+    transform: translateX(-50%);
+    cursor: s-resize;
+}
+
+.resize-sw {
+    left: -4px;
+    bottom: -4px;
+    cursor: sw-resize;
+}
+
+.resize-w {
+    top: 50%;
+    left: -4px;
+    transform: translateY(-50%);
+    cursor: w-resize;
+}
+
 
 /**
  * 容器组件样式

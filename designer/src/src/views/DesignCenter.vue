@@ -117,7 +117,7 @@
             <div class="right-panel" :style="{ width: rightPanelWidth + 'px' }">
                 <!-- 调整宽度的拖拽条 -->
                 <div class="resize-handle resize-handle-left" @mousedown="startResizeRight"></div>
-                <el-tabs v-model="rightActiveTab" class="panel-tabs">
+                <el-tabs v-model="rightActiveTab" class="panel-tabs right-panel-tabs">
                     <el-tab-pane label="组件树" name="tree">
                         <ComponentTree />
                     </el-tab-pane>
@@ -140,7 +140,7 @@
         </div>
 
         <!-- 画布设置对话框 -->
-        <el-dialog v-model="showCanvasSettings" title="画布设置" width="500px" :close-on-click-modal="false">
+        <el-dialog v-model="showCanvasSettings" title="画布设置" width="500px" :close-on-click-modal="false" :lock-scroll="false">
             <el-form label-width="80px" label-position="left">
                 <el-form-item label="宽度">
                     <el-input v-model.number="canvasWidth" type="number" suffix-icon="px">
@@ -837,6 +837,15 @@ watch(
     margin: 0;
     padding: 0 8px;
     background-color: #fafafa;
+}
+
+:deep(.right-panel-tabs .el-tabs__item) {
+    padding: 0 17px;
+}
+
+:deep(.right-panel-tabs .variable-tab-label) {
+    display: inline-block;
+    margin-right: 10px;
 }
 
 :deep(.right-panel .el-tabs__content) {

@@ -80,6 +80,10 @@ let selectionBox = null;
 let alignmentGuides = null;
 let selectionRect = null;
 let insertLine = null;
+let resizeState = null;
+
+const RESIZE_MIN_WIDTH = 20;
+const RESIZE_MIN_HEIGHT = 20;
 
 /**
  * 初始化 Konva Stage 和 Layer
@@ -228,27 +232,112 @@ function updateStageScroll() {
 /**
  * Phase 5: 缩放事件处理
  */
-function handleResizeStart() {
+function getHandleSize() {
+    return selectionBox?.options?.handleSize || 8;
+}
+
+function getResizeRect(startRect, handleType, handlePosition) {
+    if (!startRect || !handleType || !handlePosition) return null;
+
+    const handleSize = getHandleSize();
+    const halfHandle = handleSize / 2;
+    const handleCenterX = handlePosition.x + halfHandle;
+    const handleCenterY = handlePosition.y + halfHandle;
+
+    let left = startRect.x;
+    let right = startRect.x + startRect.width;
+    let top = startRect.y;
+    let bottom = startRect.y + startRect.height;
+
+    if (handleType.includes('w')) left = handleCenterX;
+    if (handleType.includes('e')) right = handleCenterX;
+    if (handleType.includes('n')) top = handleCenterY;
+    if (handleType.includes('s')) bottom = handleCenterY;
+
+    if (right - left < RESIZE_MIN_WIDTH) {
+        if (handleType.includes('w') && !handleType.includes('e')) {
+            left = right - RESIZE_MIN_WIDTH;
+        } else {
+            right = left + RESIZE_MIN_WIDTH;
+        }
+    }
+
+    if (bottom - top < RESIZE_MIN_HEIGHT) {
+        if (handleType.includes('n') && !handleType.includes('s')) {
+            top = bottom - RESIZE_MIN_HEIGHT;
+        } else {
+            bottom = top + RESIZE_MIN_HEIGHT;
+        }
+    }
+
+    return {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    };
+}
+
+function handleResizeStart(payload) {
+    if (!payload?.rect || !payload?.handleType) return;
+    if (!designStore.selectedComponentId) return;
+    if (designStore.selectedComponentIds?.length !== 1) return;
+
+    const component = designStore.selectedComponent;
+    if (!component || component.locked) return;
+
+    const position = component.style?.position || 'absolute';
+    const canUpdateLeft = position === 'absolute' || Number.isFinite(component.style?.left);
+    const canUpdateTop = position === 'absolute' || Number.isFinite(component.style?.top);
+
+    resizeState = {
+        componentId: component.id,
+        handleType: payload.handleType,
+        startRect: { ...payload.rect },
+        canUpdateLeft,
+        canUpdateTop,
+    };
+
     console.log('🔧 Resize start');
 }
 
-function handleResize(newSize) {
-    // 更新选中组件的尺寸
-    if (designStore.selectedComponentId) {
-        designStore.updateComponent(designStore.selectedComponentId, {
-            style: {
-                width: Math.round(newSize.width),
-                height: Math.round(newSize.height),
-            },
-        });
+function handleResize(payload) {
+    if (!resizeState || !payload?.position) return;
+    if (resizeState.componentId !== designStore.selectedComponentId) return;
+
+    const nextRect = getResizeRect(resizeState.startRect, resizeState.handleType, payload.position);
+    if (!nextRect) return;
+
+    const updates = {
+        width: Math.round(nextRect.width),
+        height: Math.round(nextRect.height),
+    };
+
+    if (resizeState.canUpdateLeft) {
+        updates.left = Math.round(nextRect.x);
+    }
+
+    if (resizeState.canUpdateTop) {
+        updates.top = Math.round(nextRect.y);
+    }
+
+    designStore.updateComponent(resizeState.componentId, { style: updates });
+
+    if (selectionBox && typeof selectionBox.updatePosition === 'function') {
+        selectionBox.selectedRect = nextRect;
+        selectionBox.updatePosition(nextRect);
+        selectionLayer?.batchDraw?.();
     }
 }
 
 function handleResizeEnd() {
+    if (resizeState?.componentId) {
+        designStore.saveHistory(`resize component ${resizeState.componentId}`);
+    }
+    resizeState = null;
     console.log('✅ Resize end');
-    // 可以在这里保存历史记录
+    // History snapshot is recorded on resize end.
 }
-
 /**
  * Phase 5: 旋转事件处理
  */

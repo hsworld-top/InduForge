@@ -11,6 +11,7 @@
       :draggable="draggable"
       :style="dialogStyle"
       v-bind="listeners"
+      :lock-scroll="false"
       @open="() => emit('open')"
       @close="() => emit('close')"
     >

@@ -62,7 +62,7 @@
         </div>
 
         <!-- 添加/编辑数据源对话框 -->
-        <el-dialog v-model="showAddDialog" :title="editingDataSource ? '编辑数据源' : '添加数据源'" width="600px" :close-on-click-modal="false">
+        <el-dialog v-model="showAddDialog" :title="editingDataSource ? '编辑数据源' : '添加数据源'" width="600px" :close-on-click-modal="false" :lock-scroll="false">
             <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
                 <el-form-item label="数据源ID" prop="id">
                     <el-input v-model="form.id" placeholder="ds_example" :disabled="!!editingDataSource" />
@@ -321,6 +321,7 @@ const removeDataSource = async (id) => {
     try {
         await ElMessageBox.confirm('确定要删除此数据源吗？', '确认删除', {
             type: 'warning',
+            lockScroll: false,
         });
 
         store.dataSourceManager.unregister(id);

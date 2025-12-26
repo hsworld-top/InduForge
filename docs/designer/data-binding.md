@@ -175,6 +175,15 @@ DataCenter端的消息处理器，处理来自Designer的请求。
 - 实时预览绑定值
 - 快速选择数据源
 
+### 6. VariablePanel
+**文件**: `src/components/panels/VariablePanel.vue`
+
+变量管理面板，用于维护页面变量。
+
+**功能**:
+- 新增/编辑/删除变量，编辑时会回填变量信息并更新原变量
+- 变量重命名会同步更新页面事件、数据源配置与组件绑定引用
+
 ## API文档
 
 ### DataSourceConfig
