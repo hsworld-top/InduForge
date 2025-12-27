@@ -18,7 +18,25 @@ export const designAPI = {
     getPages(projectId) {
         return request.get(`/design/projects/${projectId}/pages`);
     },
-
+    /*************  ✨ Windsurf Command ⭐  *************/
+    /**
+     * 获取数据查询列表
+     * @param {string} projectId - 项目ID
+     * @param {object} params - 查询参数
+     * @returns {Promise<Array>} 查询列表，包含 id, name, type, parentId
+     */
+    /*******  72b8e79b-2198-4a64-b1d5-c3926a1d9801  *******/
+    getQueries(projectId, params = {}) {
+        return request.get(`/data/projects/${projectId}/queries`, { params });
+    },
+    /**
+    * 获取数据连接列表
+    * @param {string} projectId - 工程ID
+    * @param {object} params - 查询参数
+    */
+    getConnections(projectId) {
+        return request.get(`/data/projects/${projectId}/connections`);
+    },
     /**
      * 获取单个页面的完整 Schema
      * Requirements: 7.2

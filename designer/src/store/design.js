@@ -256,10 +256,14 @@ export const useDesignStore = defineStore('design', {
         dataSources: {},
         // 数据源配置
         dataSourceConfigs: [],
+        // 数据中心配置
+        dataCenterConfig: [],
         // 用户信息
         user: null,
         // 数据源管理器
         dataSourceManager: null,
+        // 项目级全局变量（区别于页面级 variables）
+        projectVariables: {},
     }),
 
     getters: {
@@ -336,6 +340,8 @@ export const useDesignStore = defineStore('design', {
                 this.currentPage = null;
                 this.selectedComponentId = null;
                 this.isDirty = false;
+                const responses = await designAPI.getConnections(projectId);
+                this.dataCenterConfig = responses.data?.connections || responses;
             } catch (error) {
                 this.error = error.message || '加载项目失败';
                 throw error;
@@ -1131,6 +1137,7 @@ export const useDesignStore = defineStore('design', {
             this.error = null;
             this.dataSources = {};
             this.dataSourceConfigs = [];
+            this.dataCenterConfig = [];
 
             // 清理历史记录
             history.clear();
