@@ -270,17 +270,120 @@
         </el-dialog>
 
         <!-- 事件配置弹窗 -->
-        <el-dialog v-model="eventDialogVisible" title="事件配置" width="720px" :lock-scroll="false">
+        <el-dialog
+            v-model="eventDialogVisible"
+            :title="eventDialogTitle"
+            :width="eventDialogWidth"
+            :fullscreen="eventDialogFullscreen"
+            :show-close="false"
+            :lock-scroll="false">
+            <template #header="{ close, titleId, titleClass }">
+                <div class="event-dialog-header">
+                    <span :id="titleId" :class="titleClass">{{ eventDialogTitle }}</span>
+                    <div class="event-dialog-tools">
+                        <el-button text class="event-dialog-tool" @click="toggleEventDialogFullscreen">
+                            <el-icon>
+                                <component :is="eventDialogFullscreen ? ScaleToOriginal : FullScreen" />
+                            </el-icon>
+                        </el-button>
+                        <el-button text class="event-dialog-tool" @click="close">
+                            <el-icon>
+                                <Close />
+                            </el-icon>
+                        </el-button>
+                    </div>
+                </div>
+            </template>
             <div class="event-config-dialog">
                 <div class="event-config-header">
-                    <span class="event-config-name">{{ currentEventLabel }}</span>
+                    <div class="event-config-left">
+                        <span v-if="showCurrentPageName" class="event-config-page">当前页面：{{ currentPageName }}</span>
+                    </div>
+                    <div class="event-config-actions">
+                        <el-button size="small" class="event-format-button" @click="formatEventCode">格式化</el-button>
+                        <el-button size="small" class="event-variable-button" @click="openVariableDialog">变量</el-button>
+                    </div>
                 </div>
-                <MonacoEditor v-model="eventCode" language="javascript" :theme="monacoTheme" height="360px" />
-                <div v-if="eventError" class="error-tip">{{ eventError }}</div>
+                <div class="event-config-body">
+                    <div class="event-config-editor">
+                        <MonacoEditor
+                            ref="eventEditorRef"
+                            v-model="eventCode"
+                            language="javascript"
+                            :theme="monacoTheme"
+                            :height="eventEditorHeight"
+                            :options="eventEditorOptions"
+                            :completions="eventEditorCompletions"
+                            @markers="updateEventMarkers" />
+                        <div v-if="eventError" class="error-tip">{{ eventError }}</div>
+                        <div v-if="eventEditorErrors.length" class="event-marker-list">
+                            <div v-for="marker in eventEditorErrors" :key="markerKey(marker)" class="event-marker-item">
+                                <span class="event-marker-badge">{{ markerSeverityLabel(marker.severity) }}</span>
+                                <span class="event-marker-loc">Ln {{ marker.startLineNumber }}, Col {{ marker.startColumn }}</span>
+                                <span class="event-marker-msg">{{ marker.message }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="showComponentSidebar" class="event-config-sidebar">
+                        <div class="event-config-sidebar-title">组件</div>
+                        <el-scrollbar class="event-config-sidebar-list" :style="{ height: eventEditorHeight }">
+                            <button
+                                v-for="item in canvasComponentRows"
+                                :key="item.id"
+                                type="button"
+                                class="event-component-item"
+                                @click="insertComponentName(item)">
+                                <span class="event-component-name" :style="{ paddingLeft: `${item.depth * 12}px` }">
+                                    {{ item.label }}
+                                </span>
+                                <span class="event-component-type">{{ item.type }}</span>
+                            </button>
+                        </el-scrollbar>
+                    </div>
+                </div>
             </div>
             <template #footer>
                 <el-button @click="eventDialogVisible = false">取消</el-button>
                 <el-button type="primary" @click="handleEventSave">确定</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 变量选择器 -->
+        <el-dialog v-model="variableDialogVisible" title="变量选择器" width="1000px" :close-on-click-modal="false" :lock-scroll="false">
+            <div class="variable-picker">
+                <div class="variable-picker-sidebar">
+                    <el-menu :default-active="activeVariableCategory" class="variable-picker-menu" @select="handleVariableCategoryChange">
+                        <el-menu-item index="project">工程变量</el-menu-item>
+                        <el-menu-item index="page">页面变量</el-menu-item>
+                    </el-menu>
+                </div>
+                <div class="variable-picker-content">
+                    <div class="variable-picker-toolbar">
+                        <el-input
+                            v-model="variableSearch"
+                            size="small"
+                            clearable
+                            placeholder="变量名模糊搜索(不区分大小写)" />
+                    </div>
+                    <el-table
+                        v-if="filteredVariableRows.length"
+                        :data="filteredVariableRows"
+                        size="small"
+                        highlight-current-row
+                        @row-click="selectVariableRow"
+                        @row-dblclick="confirmVariableSelection">
+                        <el-table-column prop="name" label="名称" min-width="160" />
+                        <el-table-column prop="type" label="类型" width="120" />
+                        <el-table-column prop="description" label="描述" />
+                    </el-table>
+                    <div v-else class="variable-picker-empty">
+                        <el-empty description="暂无变量" :image-size="60" />
+                    </div>
+                </div>
+            </div>
+            <template #footer>
+                <el-button @click="variableDialogVisible = false">关闭</el-button>
+                <el-button type="primary" :disabled="!selectedVariableRow" @click="confirmVariableSelection">确定</el-button>
             </template>
         </el-dialog>
     </div>
@@ -289,7 +392,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Plus, Delete } from '@element-plus/icons-vue';
+import { Plus, Delete, FullScreen, ScaleToOriginal, Close } from '@element-plus/icons-vue';
 import { useDesignStore } from '@/store/design';
 import { getComponent } from '@/registry';
 import { StyleEditor, PropsEditor } from '@/components/editors';
@@ -326,6 +429,9 @@ const currentEventScope = ref('component');
 const currentEventItemId = ref('');
 const eventCode = ref('');
 const eventError = ref('');
+const eventEditorRef = ref(null);
+const eventDialogFullscreen = ref(false);
+const eventEditorMarkers = ref([]);
 const monacoTheme = ref('vs');
 const styleDialogVisible = ref(false);
 const styleInput = ref('');
@@ -335,6 +441,10 @@ const addCanvasEventType = ref('variableChange');
 const addCanvasEventVariable = ref('');
 const addCanvasEventTimerName = ref('');
 const selectedCanvasEventId = ref('');
+const variableDialogVisible = ref(false);
+const activeVariableCategory = ref('page');
+const variableSearch = ref('');
+const selectedVariableRow = ref(null);
 let mediaQuery;
 let mediaHandler;
 
@@ -481,6 +591,88 @@ const currentEventLabel = computed(() => {
     }
     return currentEventKey.value;
 });
+const eventDialogTitle = computed(() => {
+    const label = currentEventLabel.value;
+    return label ? `${label}配置` : '事件配置';
+});
+const eventDialogWidth = computed(() => (eventDialogFullscreen.value ? '100%' : '960px'));
+const eventEditorHeight = computed(() => (eventDialogFullscreen.value ? 'calc(100vh - 260px)' : '360px'));
+const eventEditorOptions = computed(() => ({
+    lineNumbersMinChars: 2,
+    lineDecorationsWidth: 8,
+    glyphMargin: false,
+    hover: { enabled: false },
+}));
+const eventEditorErrors = computed(() =>
+    (eventEditorMarkers.value || []).filter((marker) => marker.severity >= 4),
+);
+const dataSourceIds = computed(() => {
+    const ids = new Set();
+    (currentPage.value?.dataSources || []).forEach((source) => {
+        if (source?.id) ids.add(source.id);
+    });
+    Object.keys(designStore.dataSources || {}).forEach((id) => ids.add(id));
+    return Array.from(ids);
+});
+const eventEditorCompletions = computed(() => {
+    const items = [
+        { label: 'event', insertText: 'event', kind: 'Variable', detail: 'Event object' },
+        { label: 'emit', insertText: 'emit', kind: 'Function', detail: 'Emit event' },
+        { label: 'props', insertText: 'props', kind: 'Variable', detail: 'Component props' },
+        { label: 'vars', insertText: 'vars.', kind: 'Module', detail: 'Page variables' },
+        { label: '$global', insertText: '$global.', kind: 'Module', detail: 'Project variables' },
+        { label: 'data', insertText: 'data.', kind: 'Module', detail: 'Data sources' },
+        { label: '$user', insertText: '$user', kind: 'Variable', detail: 'User info' },
+        { label: '$route', insertText: '$route', kind: 'Variable', detail: 'Route info' },
+        { label: '$env', insertText: '$env', kind: 'Variable', detail: 'Env info' },
+    ];
+
+    pageVariableRows.value.forEach((row) => {
+        items.push({
+            label: row.name,
+            insertText: row.name,
+            kind: 'Variable',
+            detail: 'Page variable',
+            prefix: 'vars.',
+        });
+    });
+
+    projectVariableRows.value.forEach((row) => {
+        items.push({
+            label: row.name,
+            insertText: row.name,
+            kind: 'Variable',
+            detail: 'Project variable',
+            prefix: '$global.',
+        });
+    });
+
+    dataSourceIds.value.forEach((id) => {
+        items.push({
+            label: id,
+            insertText: id,
+            kind: 'Variable',
+            detail: 'Data source',
+            prefix: 'data.',
+        });
+    });
+
+    if (currentEventScope.value === 'canvas') {
+        canvasComponentRows.value.forEach((row) => {
+            items.push({
+                label: row.label,
+                insertText: row.label,
+                kind: 'Class',
+                detail: row.type ? `Component ${row.type}` : 'Component',
+            });
+        });
+    }
+
+    return items;
+});
+const currentPageName = computed(() => currentPage.value?.meta?.name || currentPage.value?.name || '');
+const showCurrentPageName = computed(() => currentEventScope.value === 'canvas' && Boolean(currentPageName.value));
+const showComponentSidebar = computed(() => currentEventScope.value === 'canvas');
 
 watch(canvasEventEntries, (entries) => {
     if (!selectedCanvasEventId.value) return;
@@ -754,6 +946,8 @@ function openEventDialog(eventName, scope = 'component', itemId = '') {
     currentEventKey.value = eventName;
     eventCode.value = current;
     eventError.value = '';
+    eventEditorMarkers.value = [];
+    eventDialogFullscreen.value = false;
     eventDialogVisible.value = true;
 }
 
@@ -773,6 +967,212 @@ function handleEventSave() {
         handleEventChange(currentEventKey.value, eventCode.value);
     }
     eventDialogVisible.value = false;
+}
+
+async function formatEventCode() {
+    const editor = eventEditorRef.value;
+    const code = editor?.getValue?.() ?? eventCode.value ?? '';
+    if (!code.trim()) return;
+    let formatted = '';
+    let usedPrettier = false;
+    try {
+        const prettier = await import('prettier/standalone');
+        let babelPlugin = null;
+        let estreePlugin = null;
+        try {
+            babelPlugin = await import('prettier/plugins/babel');
+        } catch (error) {
+            babelPlugin = await import('prettier/parser-babel');
+        }
+        try {
+            estreePlugin = await import('prettier/plugins/estree');
+        } catch (error) {
+            estreePlugin = null;
+        }
+        const plugins = [babelPlugin, estreePlugin]
+            .map((plugin) => plugin?.default || plugin)
+            .filter(Boolean);
+        formatted = await prettier.format(code, {
+            parser: 'babel',
+            plugins,
+            semi: true,
+            singleQuote: true,
+            trailingComma: 'es5',
+            printWidth: 100,
+            tabWidth: 2,
+        });
+        usedPrettier = true;
+        if (formatted && formatted !== code) {
+            eventCode.value = formatted;
+            editor?.setValue?.(formatted);
+        }
+    } catch (error) {
+        // Ignore and fall back to Monaco.
+    }
+    if (!usedPrettier || formatted === code) {
+        if (editor?.format) {
+            await editor.format();
+        }
+    }
+}
+
+function updateEventMarkers(markers) {
+    eventEditorMarkers.value = Array.isArray(markers) ? markers : [];
+}
+
+function markerSeverityLabel(severity) {
+    switch (severity) {
+        case 8:
+            return '错误';
+        case 4:
+            return '警告';
+        case 2:
+            return '提示';
+        case 1:
+            return '建议';
+        default:
+            return '提示';
+    }
+}
+
+function markerKey(marker) {
+    return `${marker.startLineNumber}-${marker.startColumn}-${marker.message}`;
+}
+
+function toggleEventDialogFullscreen() {
+    eventDialogFullscreen.value = !eventDialogFullscreen.value;
+}
+
+const getComponentLabel = (data) => {
+    const rawLabel = typeof data?.label === 'string' ? data.label.trim() : '';
+    return rawLabel || data?.type || 'Component';
+};
+
+const componentLabelStats = computed(() => {
+    const counts = new Map();
+    const indexMap = new Map();
+    const walk = (items) => {
+        (items || []).forEach((item) => {
+            const label = getComponentLabel(item);
+            const nextIndex = (counts.get(label) || 0) + 1;
+            counts.set(label, nextIndex);
+            if (item?.id) {
+                indexMap.set(item.id, nextIndex);
+            }
+            if (item.children && item.children.length > 0) {
+                walk(item.children);
+            }
+        });
+    };
+    walk(currentPage.value?.components || []);
+    return { counts, indexMap };
+});
+
+const shouldShowComponentIndex = (data) => {
+    const label = getComponentLabel(data);
+    return (componentLabelStats.value.counts.get(label) || 0) > 1;
+};
+
+const getComponentIndex = (data) => {
+    if (!data?.id) return '';
+    return componentLabelStats.value.indexMap.get(data.id) || '';
+};
+
+const flattenComponents = (components = [], depth = 0, list = []) => {
+    components.forEach((component) => {
+        if (!component) return;
+        const label = getComponentLabel(component);
+        const displayLabel = `${label}${shouldShowComponentIndex(component) ? getComponentIndex(component) : ''}`;
+        list.push({
+            id: component.id,
+            label: displayLabel,
+            type: component.type || 'Unknown',
+            depth,
+        });
+        if (Array.isArray(component.children) && component.children.length > 0) {
+            flattenComponents(component.children, depth + 1, list);
+        }
+    });
+    return list;
+};
+
+const canvasComponentRows = computed(() => flattenComponents(currentPage.value?.components || []));
+
+const insertEditorText = (text) => {
+    if (!text) return;
+    if (eventEditorRef.value?.insertText) {
+        eventEditorRef.value.insertText(text);
+    } else {
+        eventCode.value = `${eventCode.value || ''}${text}`;
+    }
+};
+
+function insertComponentName(component) {
+    insertEditorText(component?.label || '');
+}
+
+const inferVariableType = (value) => {
+    if (Array.isArray(value)) return 'Array';
+    if (value === null || value === undefined) return 'String';
+    if (typeof value === 'object') return 'Object';
+    if (typeof value === 'number') return 'Number';
+    if (typeof value === 'boolean') return 'Boolean';
+    return 'String';
+};
+
+const pageVariableRows = computed(() => {
+    const vars = currentPage.value?.variables || {};
+    const meta = currentPage.value?.variableMeta || {};
+    return Object.entries(vars).map(([name, value]) => ({
+        name,
+        type: meta[name]?.type || inferVariableType(value),
+        description: meta[name]?.description || '',
+    }));
+});
+
+const projectVariableRows = computed(() => {
+    const vars = designStore.projectVariables || {};
+    return Object.entries(vars).map(([name, detail]) => ({
+        name,
+        type: detail?.type || inferVariableType(detail?.value),
+        description: detail?.description || '',
+    }));
+});
+
+const filteredVariableRows = computed(() => {
+    const list = activeVariableCategory.value === 'project' ? projectVariableRows.value : pageVariableRows.value;
+    const keyword = variableSearch.value.trim().toLowerCase();
+    if (!keyword) return list;
+    return list.filter((item) => item.name.toLowerCase().includes(keyword));
+});
+
+const buildVariableExpression = (name) => {
+    if (!name) return '';
+    if (activeVariableCategory.value === 'project') return `$global.${name}`;
+    return `vars.${name}`;
+};
+
+function openVariableDialog() {
+    variableDialogVisible.value = true;
+    activeVariableCategory.value = 'page';
+    variableSearch.value = '';
+    selectedVariableRow.value = null;
+}
+
+function handleVariableCategoryChange(value) {
+    activeVariableCategory.value = value;
+    selectedVariableRow.value = null;
+}
+
+function selectVariableRow(row) {
+    selectedVariableRow.value = row || null;
+}
+
+function confirmVariableSelection() {
+    const expression = buildVariableExpression(selectedVariableRow.value?.name);
+    if (!expression) return;
+    insertEditorText(expression);
+    variableDialogVisible.value = false;
 }
 
 function handleStyleChange(key, value) {
@@ -1146,6 +1546,193 @@ function parseStyleInput(input) {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.event-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+}
+
+.event-dialog-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.event-dialog-tool {
+    padding: 4px;
+}
+
+.event-config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.event-config-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.event-config-page {
+    font-size: 13px;
+    font-weight: var(--el-font-weight-primary, 600);
+    color: var(--el-text-color-primary, #303133);
+    white-space: nowrap;
+}
+
+.event-config-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.event-format-button {
+    min-width: 64px;
+}
+
+.event-config-body {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+}
+
+.event-config-editor {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+
+.event-config-sidebar {
+    width: 220px;
+    border-left: 1px solid #e4e7ed;
+    padding-left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.event-config-sidebar-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #606266;
+}
+
+.event-config-sidebar-list {
+    height: 360px;
+}
+
+.event-component-item {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 6px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    color: #303133;
+}
+
+.event-component-item:hover {
+    background-color: #f5f7fa;
+}
+
+.event-component-name {
+    font-size: 12px;
+    color: #303133;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.event-component-type {
+    font-size: 11px;
+    color: #909399;
+    flex-shrink: 0;
+}
+
+.variable-picker {
+    display: flex;
+    gap: 12px;
+    min-height: 420px;
+}
+
+.variable-picker-sidebar {
+    width: 160px;
+    padding-right: 8px;
+    border-right: 1px solid #e4e7ed;
+}
+
+.variable-picker-menu {
+    border-right: 0;
+}
+
+.variable-picker-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.variable-picker-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.variable-picker-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.event-marker-list {
+    border: 1px solid #fde2e2;
+    background: #fef0f0;
+    border-radius: 4px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.event-marker-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12px;
+    color: #606266;
+}
+
+.event-marker-badge {
+    color: #f56c6c;
+    font-weight: 600;
+}
+
+.event-marker-loc {
+    color: #909399;
+    white-space: nowrap;
+}
+
+.event-marker-msg {
+    color: #606266;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .error-tip {

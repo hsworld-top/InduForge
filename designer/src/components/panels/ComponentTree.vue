@@ -26,21 +26,21 @@
             :allow-drag="allowDrag"
             @node-click="handleNodeClick"
             @node-drop="handleNodeDrop">
-            <template #default="{ node, data }">
-                <div class="tree-node" :class="{ 'tree-node--locked': data.locked }">
-                    <el-icon class="node-icon">
-                        <Lock v-if="data.locked" />
-                        <component :is="getComponentIcon(data.type)" v-else />
-                    </el-icon>
-                    <span class="node-label">
-                        <span class="node-label-text">{{ getNodeLabel(data) }}</span>
-                        <span v-if="shouldShowNodeIndex(data)" class="node-label-suffix">{{ getNodeIndex(data) }}</span>
-                    </span>
-                    <el-icon v-if="data.locked" class="lock-icon" title="已锁定">
-                        <Lock />
-                    </el-icon>
-                </div>
-            </template>
+<template #default="{ node, data }">
+    <div class="tree-node" :class="{ 'tree-node--locked': data.locked }">
+        <el-icon class="node-icon">
+            <Lock v-if="data.locked" />
+            <component :is="getComponentIcon(data.type)" v-else />
+        </el-icon>
+        <span class="node-label">
+            <span class="node-label-text">{{ getNodeLabel(data) }}</span>
+            <span v-if="shouldShowNodeIndex(data)" class="node-label-suffix">{{ getNodeIndex(data) }}</span>
+        </span>
+        <el-icon v-if="data.locked" class="lock-icon" title="已锁定">
+            <Lock />
+        </el-icon>
+    </div>
+</template>
         </el-tree>
     </div>
 </template>

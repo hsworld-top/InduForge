@@ -2,8 +2,8 @@
   <div class="global-vars">
     <!-- 顶部操作 -->
     <div class="toolbar">
-      <el-button type="primary" size="small" @click="openCreate">新增变量</el-button>
-      <el-button size="small" @click="openQuickAdd">快速添加数据源变量</el-button>
+      <el-button class="toolbar-button" type="primary" size="small" @click="openCreate">新增变量</el-button>
+      <el-button class="toolbar-button toolbar-button--ghost" size="small" @click="openQuickAdd">快速添加数据源变量</el-button>
     </div>
 
     <!-- 变量列表 -->
@@ -68,8 +68,8 @@
 
     <!-- 快速添加变量 -->
     <el-dialog v-model="quickVisible" title="快速添加数据源变量" width="900px">
-      <el-form :inline="true" class="quick-form" label-width="60px">
-        <el-row :gutter="12" style="margin-bottom:10px;">
+      <el-form :inline="true" class="quick-form" label-width="60px" size="small">
+        <el-row :gutter="12" class="quick-form-row">
           <el-col :span="6">
             <el-form-item label="数据源">
               <el-select v-model="quickDs" placeholder="请选择数据源" @change="loadFields">
@@ -93,9 +93,10 @@
             </el-form-item>
           </el-col>
           <el-col :span="6">
-            <el-form-item label="替换">
-              <el-input v-model="replaceFrom" placeholder="替换" style="width:90px" /> →
-              <el-input v-model="replaceTo" placeholder="为" style="width:90px" />
+            <el-form-item label="替换" class="quick-replace">
+              <el-input v-model="replaceFrom" placeholder="替换" />
+              <span class="quick-arrow">→</span>
+              <el-input v-model="replaceTo" placeholder="为" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -286,6 +287,19 @@ function confirmQuickAdd(){
 
 <style scoped>
 .global-vars{padding:12px;}
-.toolbar{margin-bottom:12px; display:flex; gap:8px;}
-.quick-form .el-form-item{margin-bottom:8px;}
+.toolbar{margin-bottom:12px; display:flex; align-items:center; gap:10px;}
+.toolbar-button{height:28px; padding:0 12px; border-radius:4px; font-weight:600;}
+.toolbar-button--ghost{color:var(--el-color-primary); border-color:var(--el-color-primary-light-5); background-color:var(--el-color-primary-light-9);}
+.toolbar-button--ghost:hover{color:var(--el-color-primary); border-color:var(--el-color-primary); background-color:var(--el-color-primary-light-8);}
+.quick-form{--quick-control-height:var(--el-component-size-small, 28px);}
+.quick-form-row{margin-bottom:10px;}
+.quick-form :deep(.el-form-item){width:100%; margin-bottom:8px; align-items:center;}
+.quick-form :deep(.el-form-item__label){line-height:var(--quick-control-height);}
+.quick-form :deep(.el-form-item__content){flex:1; min-width:0;}
+.quick-form :deep(.el-input), .quick-form :deep(.el-select){width:100%;}
+.quick-form :deep(.el-input__wrapper), .quick-form :deep(.el-select .el-input__wrapper){height:var(--quick-control-height); min-height:var(--quick-control-height);}
+.quick-form :deep(.el-input__inner), .quick-form :deep(.el-select .el-input__inner){height:var(--quick-control-height); line-height:var(--quick-control-height);}
+.quick-replace :deep(.el-form-item__content){display:flex; align-items:center; gap:6px;}
+.quick-replace :deep(.el-input){flex:1;}
+.quick-arrow{color:#909399; flex:0 0 auto;}
 </style>
