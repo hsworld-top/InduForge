@@ -17,6 +17,11 @@ const Project = sequelize.define('Project', {
     allowNull: true,
     comment: '工程描述',
   },
+  projectVariables: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: '工程级别全局变量',
+  },
   colorTag: {
     type: DataTypes.ENUM('#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'),
     defaultValue: '#3b82f6',

@@ -71,4 +71,12 @@ router.patch(
   designController.movePage
 );
 
+/**
+ * 工程级别全局变量
+ * GET /api/v1/design/projects/:projectId/variables
+ * PUT /api/v1/design/projects/:projectId/variables
+ */
+router.get("/projects/:projectId/variables", designController.getProjectVariables);
+router.put("/projects/:projectId/variables", designController.updateProjectVariables);
+
 module.exports = router;

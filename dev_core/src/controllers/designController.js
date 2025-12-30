@@ -246,6 +246,71 @@ async function movePage(req, res, next) {
   }
 }
 
+/**
+ * 获取工程级别全局变量
+ * GET /api/v1/design/projects/:projectId/variables
+ */
+async function getProjectVariables(req, res, next) {
+  try {
+    const { projectId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const project = await Project.findByPk(projectId);
+    if (!project) {
+      throw new AppError(ErrorCodes.PROJECT_NOT_FOUND, 404, {
+        resource: "Project",
+        id: projectId,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: project.projectVariables || {},
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 更新工程级别全局变量
+ * PUT /api/v1/design/projects/:projectId/variables
+ */
+async function updateProjectVariables(req, res, next) {
+  try {
+    const { projectId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const { variables } = req.body;
+    if (!variables || typeof variables !== "object" || Array.isArray(variables)) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "variables 必须是对象",
+      });
+    }
+
+    const project = await Project.findByPk(projectId);
+    if (!project) {
+      throw new AppError(ErrorCodes.PROJECT_NOT_FOUND, 404, {
+        resource: "Project",
+        id: projectId,
+      });
+    }
+
+    await project.update({
+      projectVariables: variables,
+      updatedBy: req.user.id,
+    });
+
+    res.json({
+      success: true,
+      message: "工程变量已更新",
+      data: project.projectVariables || {},
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getPages,
   getPage,
@@ -254,4 +319,6 @@ module.exports = {
   deletePage,
   renamePage,
   movePage,
+  getProjectVariables,
+  updateProjectVariables,
 };

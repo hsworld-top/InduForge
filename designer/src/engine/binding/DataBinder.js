@@ -128,7 +128,7 @@ export class DataBinder {
       },
 
       // 全局变量（预留）
-      $global: {},
+      $global: this.store.projectVariables || {},
     };
   }
 

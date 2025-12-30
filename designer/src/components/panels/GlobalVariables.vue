@@ -178,7 +178,16 @@ function resetEditValue(){ editValue.value = defaultEditValue(editType.value) }
 
 async function loadDataSourcesForMapping(){ dataSources.value = store.dataCenterConfig || [] }
 
-function saveEdit(){
+async function persistProjectVariables() {
+  try {
+    await store.saveProjectVariables()
+  } catch (error) {
+    const message = error?.message ? String(error.message) : 'Unknown error'
+    ElMessage.error(`Failed to save project variables: ${message}`)
+  }
+}
+
+async function saveEdit(){
   const name = editName.value.trim()
   if(!name) return ElMessage.warning('变量名不能为空')
   if(editMode.value && name!==originalName.value) delete store.projectVariables[originalName.value]
@@ -189,9 +198,14 @@ function saveEdit(){
   }
   store.isDirty = true
   editVisible.value=false
+  await persistProjectVariables()
 }
 
-function removeVar(name){ delete store.projectVariables[name]; store.isDirty=true }
+async function removeVar(name){
+  delete store.projectVariables[name]
+  store.isDirty=true
+  await persistProjectVariables()
+}
 
 async function openCreate(){
   editMode.value=false; editName.value=''; editType.value='string'; resetEditValue()
@@ -270,7 +284,7 @@ function buildMappedExpression(field){
   return `{{${quickDs.value.name}.${field}}}`
 }
 
-function confirmQuickAdd(){
+async function confirmQuickAdd(){
   selectedFields.value.forEach(f=>{
     const name=buildVarName(f.name)
     if(store.projectVariables[name]) return
@@ -282,6 +296,7 @@ function confirmQuickAdd(){
   })
   store.isDirty=true
   quickVisible.value=false
+  await persistProjectVariables()
 }
 </script>
 

@@ -33,6 +33,7 @@ function createDefaultPageSchema(name) {
             theme: 'light',
         },
         variables: {},
+        projectVariables: {},
         dataSources: [],
         components: [],
         events: {},
@@ -124,6 +125,11 @@ function normalizePageSchema(page) {
     }
     if (!page.variables || typeof page.variables !== 'object' || Array.isArray(page.variables)) {
         page.variables = {};
+    }
+    if (Object.prototype.hasOwnProperty.call(page, 'projectVariables')) {
+        if (!page.projectVariables || typeof page.projectVariables !== 'object' || Array.isArray(page.projectVariables)) {
+            page.projectVariables = {};
+        }
     }
     if (!Array.isArray(page.dataSources)) {
         page.dataSources = [];
@@ -342,6 +348,13 @@ export const useDesignStore = defineStore('design', {
                 this.isDirty = false;
                 const responses = await designAPI.getConnections(projectId);
                 this.dataCenterConfig = responses.data?.connections || responses;
+                try {
+                    const varsResponse = await designAPI.getProjectVariables(projectId);
+                    this.projectVariables = varsResponse.data || varsResponse || {};
+                } catch (error) {
+                    console.warn('Failed to load project variables:', error);
+                    this.projectVariables = {};
+                }
             } catch (error) {
                 this.error = error.message || '加载项目失败';
                 throw error;
@@ -423,6 +436,16 @@ export const useDesignStore = defineStore('design', {
             } finally {
                 this.saving = false;
             }
+        },
+
+        /**
+         * 保存工程变量
+         */
+        async saveProjectVariables() {
+            if (!this.projectId) {
+                throw new Error('未选择项目');
+            }
+            await designAPI.updateProjectVariables(this.projectId, this.projectVariables || {});
         },
 
         /**
@@ -1138,6 +1161,7 @@ export const useDesignStore = defineStore('design', {
             this.dataSources = {};
             this.dataSourceConfigs = [];
             this.dataCenterConfig = [];
+            this.projectVariables = {};
 
             // 清理历史记录
             history.clear();

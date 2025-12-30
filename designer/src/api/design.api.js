@@ -105,6 +105,25 @@ export const designAPI = {
             parentId: targetGroupId,
         });
     },
+
+    /**
+     * 获取工程级别全局变量
+     * @param {string} projectId - 项目ID
+     * @returns {Promise<Object>}
+     */
+    getProjectVariables(projectId) {
+        return request.get(`/design/projects/${projectId}/variables`);
+    },
+
+    /**
+     * 更新工程级别全局变量
+     * @param {string} projectId - 项目ID
+     * @param {Object} variables - 变量对象
+     * @returns {Promise<Object>}
+     */
+    updateProjectVariables(projectId, variables) {
+        return request.put(`/design/projects/${projectId}/variables`, { variables });
+    },
 };
 
 export default designAPI;
