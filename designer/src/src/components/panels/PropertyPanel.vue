@@ -416,7 +416,27 @@ const filteredPropsSchema = computed(() => {
 });
 const eventsSchema = computed(() => componentDef.value?.eventsSchema || {});
 const defaultVariableOptions = ['变量A', '变量B', '变量C'];
-const availableVariables = computed(() => Object.keys(currentPage.value?.variables || {}));
+const allowedVariableTypes = new Set(['string', 'number', 'boolean']);
+const normalizeVariableType = (typeValue, fallbackValue) => {
+    const text = String(typeValue || '').trim().toLowerCase();
+    if (text) return text;
+    if (typeof fallbackValue === 'number') return 'number';
+    if (typeof fallbackValue === 'boolean') return 'boolean';
+    if (typeof fallbackValue === 'string') return 'string';
+    return '';
+};
+const availableVariables = computed(() => {
+    const vars = currentPage.value?.variables || {};
+    const meta = currentPage.value?.variableMeta || {};
+    const names = new Set([...Object.keys(vars), ...Object.keys(meta)]);
+    return Array.from(names).filter((name) => {
+        const metaType = meta?.[name]?.type;
+        const hasValue = Object.prototype.hasOwnProperty.call(vars, name);
+        const fallbackValue = hasValue ? vars[name] : meta?.[name]?.defaultValue;
+        const normalizedType = normalizeVariableType(metaType, fallbackValue);
+        return allowedVariableTypes.has(normalizedType);
+    });
+});
 const variableOptions = computed(() =>
     availableVariables.value.length > 0 ? availableVariables.value : defaultVariableOptions,
 );

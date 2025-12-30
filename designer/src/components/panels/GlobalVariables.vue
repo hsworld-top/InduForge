@@ -139,7 +139,7 @@ import { designAPI } from '@/api/design.api'
 
 const store = useDesignStore()
 
-const types = ['string','number','boolean','array','object','date','regexp','function','set','map']
+const types = ['string','number','boolean','array','object','set','map','date','regexp','function']
 
 if(!store.projectVariables) store.projectVariables = {}
 

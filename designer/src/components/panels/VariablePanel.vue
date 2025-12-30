@@ -44,11 +44,7 @@
                 </el-form-item>
                 <el-form-item label="类型" prop="type">
                     <el-select v-model="form.type" class="w-full" @change="handleTypeChange">
-                        <el-option label="String" value="String" />
-                        <el-option label="Number" value="Number" />
-                        <el-option label="Boolean" value="Boolean" />
-                        <el-option label="Object" value="Object" />
-                        <el-option label="Array" value="Array" />
+                        <el-option v-for="option in typeOptions" :key="option.value" :label="option.label" :value="option.value" />
                     </el-select>
                 </el-form-item>
                 <el-form-item label="默认值" prop="defaultValue">
@@ -90,6 +86,30 @@ const selectedName = ref('');
 const isEditing = ref(false);
 const editingName = ref('');
 const isHydratingForm = ref(false);
+const typeOptions = [
+    { label: 'String', value: 'String' },
+    { label: 'Number', value: 'Number' },
+    { label: 'Boolean', value: 'Boolean' },
+    { label: 'Array', value: 'Array' },
+    { label: 'Object', value: 'Object' },
+    { label: 'Set', value: 'Set' },
+    { label: 'Map', value: 'Map' },
+    { label: 'Date', value: 'Date' },
+    { label: 'RegExp', value: 'RegExp' },
+    { label: 'Function', value: 'Function' },
+];
+const defaultValueByType = {
+    String: '',
+    Number: 0,
+    Boolean: false,
+    Array: '[]',
+    Object: '{}',
+    Set: '[]',
+    Map: '[]',
+    Date: null,
+    RegExp: '/pattern/g',
+    Function: 'function(){}',
+};
 
 const form = ref({
     name: '',
@@ -137,16 +157,8 @@ const ensureVariableMeta = () => {
 
 const handleTypeChange = (type) => {
     if (isHydratingForm.value) return;
-    if (type === 'Boolean') {
-        form.value.defaultValue = false;
-        return;
-    }
-    if (type === 'Object') {
-        form.value.defaultValue = '{}';
-        return;
-    }
-    if (type === 'Array') {
-        form.value.defaultValue = '[]';
+    if (Object.prototype.hasOwnProperty.call(defaultValueByType, type)) {
+        form.value.defaultValue = defaultValueByType[type];
         return;
     }
     form.value.defaultValue = '';
@@ -174,8 +186,13 @@ const openAddDialog = async () => {
 };
 
 const inferType = (value) => {
-    if (Array.isArray(value)) return 'Array';
     if (value === null || value === undefined) return 'String';
+    if (Array.isArray(value)) return 'Array';
+    if (value instanceof Set) return 'Set';
+    if (value instanceof Map) return 'Map';
+    if (value instanceof Date) return 'Date';
+    if (value instanceof RegExp) return 'RegExp';
+    if (typeof value === 'function') return 'Function';
     if (typeof value === 'object') return 'Object';
     if (typeof value === 'number') return 'Number';
     if (typeof value === 'boolean') return 'Boolean';
@@ -194,6 +211,23 @@ const formatDefaultValueForForm = (type, value) => {
     if (type === 'Number') return value === null || value === undefined ? '' : String(value);
     if (type === 'Object') return value && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value, null, 2) : '{}';
     if (type === 'Array') return Array.isArray(value) ? JSON.stringify(value, null, 2) : '[]';
+    if (type === 'Set' || type === 'Map') {
+        if (Array.isArray(value)) return JSON.stringify(value, null, 2);
+        return value === null || value === undefined ? '[]' : String(value);
+    }
+    if (type === 'Date') {
+        if (value === null || value === undefined || value === '') return '';
+        if (value instanceof Date) return value.toISOString();
+        return String(value);
+    }
+    if (type === 'RegExp') {
+        if (value instanceof RegExp) return value.toString();
+        return value === null || value === undefined ? '' : String(value);
+    }
+    if (type === 'Function') {
+        if (typeof value === 'function') return value.toString();
+        return value === null || value === undefined ? '' : String(value);
+    }
     return value === null || value === undefined ? '' : String(value);
 };
 
@@ -269,6 +303,32 @@ const parseDefaultValue = () => {
             throw new Error('默认值必须是合法的JSON数组');
         }
     }
+    if (type === 'Set' || type === 'Map') {
+        if (Array.isArray(defaultValue)) return defaultValue;
+        if (!defaultValue) return [];
+        try {
+            const parsed = JSON.parse(defaultValue);
+            if (Array.isArray(parsed)) {
+                return parsed;
+            }
+            throw new Error('默认值必须是数组');
+        } catch (error) {
+            throw new Error('默认值必须是合法的JSON数组');
+        }
+    }
+    if (type === 'Date') {
+        if (defaultValue === '' || defaultValue === null || defaultValue === undefined) return null;
+        if (defaultValue instanceof Date) return defaultValue.toISOString();
+        return String(defaultValue);
+    }
+    if (type === 'RegExp') {
+        if (defaultValue instanceof RegExp) return defaultValue.toString();
+        return String(defaultValue ?? '');
+    }
+    if (type === 'Function') {
+        if (typeof defaultValue === 'function') return defaultValue.toString();
+        return String(defaultValue ?? '');
+    }
     return String(defaultValue ?? '');
 };
 
@@ -319,6 +379,11 @@ const normalizeType = (typeValue) => {
     if (['boolean', 'bool', '布尔', '布尔值'].includes(text)) return 'Boolean';
     if (['object', 'obj', '对象'].includes(text)) return 'Object';
     if (['array', 'arr', '数组'].includes(text)) return 'Array';
+    if (['set'].includes(text)) return 'Set';
+    if (['map'].includes(text)) return 'Map';
+    if (['date', 'datetime'].includes(text)) return 'Date';
+    if (['regexp', 'regex'].includes(text)) return 'RegExp';
+    if (['function', 'func'].includes(text)) return 'Function';
     return String(typeValue).trim();
 };
 
@@ -371,6 +436,32 @@ const parseImportedValue = (type, cellValue) => {
         } catch (error) {
             throw new Error('默认值必须是合法的JSON数组');
         }
+    }
+    if (type === 'Set' || type === 'Map') {
+        if (Array.isArray(cellValue)) return cellValue;
+        if (!cellValue) return [];
+        try {
+            const parsed = typeof cellValue === 'string' ? JSON.parse(cellValue) : cellValue;
+            if (Array.isArray(parsed)) {
+                return parsed;
+            }
+            throw new Error('默认值必须是数组');
+        } catch (error) {
+            throw new Error('默认值必须是合法的JSON数组');
+        }
+    }
+    if (type === 'Date') {
+        if (cellValue === null || cellValue === undefined || cellValue === '') return null;
+        if (cellValue instanceof Date) return cellValue.toISOString();
+        return String(cellValue);
+    }
+    if (type === 'RegExp') {
+        if (cellValue instanceof RegExp) return cellValue.toString();
+        return cellValue === null || cellValue === undefined ? '' : String(cellValue);
+    }
+    if (type === 'Function') {
+        if (typeof cellValue === 'function') return cellValue.toString();
+        return cellValue === null || cellValue === undefined ? '' : String(cellValue);
     }
     if (cellValue === null || cellValue === undefined) return '';
     return String(cellValue);
@@ -622,7 +713,7 @@ const handleImport = async (event) => {
 
             const rawType = typeIndex >= 0 ? row[typeIndex] : '';
             const normalizedType = normalizeType(rawType) || inferType(row[defaultIndex]);
-            const type = ['String', 'Number', 'Boolean', 'Object', 'Array'].includes(normalizedType)
+            const type = ['String', 'Number', 'Boolean', 'Object', 'Array', 'Set', 'Map', 'Date', 'RegExp', 'Function'].includes(normalizedType)
                 ? normalizedType
                 : 'String';
             const value = parseImportedValue(type, defaultIndex >= 0 ? row[defaultIndex] : '');
