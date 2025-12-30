@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+import request from "@/utils/request";
 
 // ===========================================
 // 数据连接相关API
@@ -12,10 +12,10 @@ import request from '@/utils/request'
 export const getConnections = (projectId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/connections`,
-    method: 'get',
-    params
-  })
-}
+    method: "get",
+    params,
+  });
+};
 
 /**
  * 创建数据连接
@@ -25,33 +25,38 @@ export const getConnections = (projectId, params = {}) => {
 export const createConnection = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections`,
-    method: 'post',
-    data
-  })
-}
+    method: "post",
+    data,
+  });
+};
 
 export const testConnection = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections/test`,
-    method: 'post',
-    data
-  })
-}
+    method: "post",
+    data,
+  });
+};
 
 export const getConnectionTables = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
-    method: 'get'
-  })
-}
+    method: "get",
+  });
+};
 
-export const getTableData = (projectId, connectionId, tableName, params = {}) => {
+export const getTableData = (
+  projectId,
+  connectionId,
+  tableName,
+  params = {}
+) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/data`,
-    method: 'get',
-    params
-  })
-}
+    method: "get",
+    params,
+  });
+};
 
 /**
  * 获取表结构信息
@@ -62,9 +67,9 @@ export const getTableData = (projectId, connectionId, tableName, params = {}) =>
 export const getTableStructure = (projectId, connectionId, tableName) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/structure`,
-    method: 'get'
-  })
-}
+    method: "get",
+  });
+};
 
 /**
  * 更新数据连接
@@ -75,10 +80,10 @@ export const getTableStructure = (projectId, connectionId, tableName) => {
 export const updateConnection = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}`,
-    method: 'put',
-    data
-  })
-}
+    method: "put",
+    data,
+  });
+};
 
 /**
  * 删除数据连接
@@ -88,9 +93,9 @@ export const updateConnection = (projectId, connectionId, data) => {
 export const deleteConnection = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}`,
-    method: 'delete'
-  })
-}
+    method: "delete",
+  });
+};
 
 /**
  * 更新连接状态
@@ -101,11 +106,10 @@ export const deleteConnection = (projectId, connectionId) => {
 export const updateConnectionStatus = (projectId, connectionId, status) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/status`,
-    method: 'patch',
-    data: { status }
-  })
-}
-
+    method: "patch",
+    data: { status },
+  });
+};
 
 // ===========================================
 // 数据查询相关API
@@ -119,10 +123,10 @@ export const updateConnectionStatus = (projectId, connectionId, status) => {
 export const getQueries = (projectId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/queries`,
-    method: 'get',
-    params
-  })
-}
+    method: "get",
+    params,
+  });
+};
 
 /**
  * 创建数据查询
@@ -132,10 +136,10 @@ export const getQueries = (projectId, params = {}) => {
 export const createQuery = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/queries`,
-    method: 'post',
-    data
-  })
-}
+    method: "post",
+    data,
+  });
+};
 
 /**
  * 更新数据查询
@@ -145,10 +149,10 @@ export const createQuery = (projectId, data) => {
 export const updateQuery = (id, data) => {
   return request({
     url: `/data/queries/${id}`,
-    method: 'put',
-    data
-  })
-}
+    method: "put",
+    data,
+  });
+};
 
 /**
  * 删除数据查询
@@ -157,9 +161,9 @@ export const updateQuery = (id, data) => {
 export const deleteQuery = (id) => {
   return request({
     url: `/data/queries/${id}`,
-    method: 'delete'
-  })
-}
+    method: "delete",
+  });
+};
 
 /**
  * 执行数据查询
@@ -169,10 +173,10 @@ export const deleteQuery = (id) => {
 export const executeQuery = (id, parameters = {}) => {
   return request({
     url: `/data/queries/${id}/execute`,
-    method: 'post',
-    data: { parameters }
-  })
-}
+    method: "post",
+    data: { parameters },
+  });
+};
 
 /**
  * 直接执行SQL查询
@@ -184,10 +188,10 @@ export const executeQuery = (id, parameters = {}) => {
 export const executeSql = (projectId, connectionId, sql, parameters = []) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/execute-sql`,
-    method: 'post',
-    data: { sql, parameters }
-  })
-}
+    method: "post",
+    data: { sql, parameters },
+  });
+};
 
 /**
  * 保存数据查询
@@ -197,10 +201,126 @@ export const executeSql = (projectId, connectionId, sql, parameters = []) => {
 export const saveQuery = (id, data) => {
   return request({
     url: `/data/queries/${id}`,
-    method: 'put',
-    data
-  })
-}
+    method: "put",
+    data,
+  });
+};
+
+// ===========================================
+// MQTT订阅相关API
+// ===========================================
+
+/**
+ * 获取MQTT订阅列表
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
+ */
+export const getMqttSubscriptions = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscriptions`,
+    method: "get",
+  });
+};
+
+/**
+ * 获取单个MQTT订阅
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ */
+export const getMqttSubscription = (projectId, subscriptionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}`,
+    method: "get",
+  });
+};
+
+/**
+ * 创建MQTT订阅
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
+ * @param {object} data - 订阅数据
+ */
+export const createMqttSubscription = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscriptions`,
+    method: "post",
+    data,
+  });
+};
+
+/**
+ * 更新MQTT订阅
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ * @param {object} data - 更新数据
+ */
+export const updateMqttSubscription = (projectId, subscriptionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}`,
+    method: "put",
+    data,
+  });
+};
+
+/**
+ * 删除MQTT订阅
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ */
+export const deleteMqttSubscription = (projectId, subscriptionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}`,
+    method: "delete",
+  });
+};
+
+/**
+ * 切换MQTT订阅启用状态
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ */
+export const toggleMqttSubscription = (projectId, subscriptionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/toggle`,
+    method: "patch",
+  });
+};
+
+/**
+ * 获取MQTT订阅的消息列表
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ */
+export const getMqttSubscriptionMessages = (projectId, subscriptionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/messages`,
+    method: "get",
+  });
+};
+
+/**
+ * 启动MQTT连接
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
+ */
+export const startMqttConnection = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/start`,
+    method: "post",
+  });
+};
+
+/**
+ * 停止MQTT连接
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
+ */
+export const stopMqttConnection = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/stop`,
+    method: "post",
+  });
+};
 
 export default {
   getConnections,
@@ -218,5 +338,14 @@ export default {
   executeQuery,
   executeSql,
   deleteQuery,
-}
-
+  // MQTT订阅相关
+  getMqttSubscriptions,
+  getMqttSubscription,
+  createMqttSubscription,
+  updateMqttSubscription,
+  deleteMqttSubscription,
+  toggleMqttSubscription,
+  getMqttSubscriptionMessages,
+  startMqttConnection,
+  stopMqttConnection,
+};

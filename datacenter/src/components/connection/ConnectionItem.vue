@@ -4,11 +4,11 @@
       'connection-item p-3 rounded-lg transition-colors',
       isSelected
         ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600'
-        : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+        : 'hover:bg-gray-100 dark:hover:bg-gray-700',
     ]"
   >
     <!-- 连接图标和信息（可点击区域） -->
-    <div 
+    <div
       class="flex items-center justify-between cursor-pointer"
       @click="handleClick"
       @dblclick.stop="handleDblClick"
@@ -16,12 +16,22 @@
     >
       <div class="flex items-center flex-1">
         <div class="w-6 h-6 mr-3 flex-shrink-0">
-          <IconTablerDatabase class="w-6 h-6 text-blue-500" />
+          <IconTablerDatabase
+            v-if="connection.type === 'relational'"
+            class="w-6 h-6 text-blue-500"
+          />
+          <IconTablerCloudDataConnection
+            v-else-if="connection.type === 'mqtt'"
+            class="w-6 h-6 text-green-500"
+          />
+          <IconTablerDatabase v-else class="w-6 h-6 text-gray-500" />
         </div>
 
         <!-- 连接信息 -->
         <div class="flex-1 min-w-0">
-          <div class="text-sm font-medium text-gray-900 dark:text-white truncate">
+          <div
+            class="text-sm font-medium text-gray-900 dark:text-white truncate"
+          >
             {{ connection.name }}
           </div>
           <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -33,9 +43,9 @@
       <!-- 状态指示器 -->
       <div class="flex-shrink-0 flex items-center space-x-1">
         <StatusIndicator :status="connection.status" />
-        <component 
-          v-if="connection.type === 'relational'" 
-          :is="isExpanded ? IconTablerChevronDown : IconTablerChevronRight" 
+        <component
+          v-if="connection.type === 'relational' || connection.type === 'mqtt'"
+          :is="isExpanded ? IconTablerChevronDown : IconTablerChevronRight"
           class="text-gray-400 w-4 h-4"
         />
       </div>
@@ -48,9 +58,22 @@
       @click="handleClick"
       @dblclick.stop="handleDblClick"
     >
-      {{ connection.relationalConfig.dbType }} - {{ connection.relationalConfig.host }}:{{
+      {{ connection.relationalConfig.dbType }} -
+      {{ connection.relationalConfig.host }}:{{
         connection.relationalConfig.port
       }}
+    </div>
+
+    <!-- MQTT 连接详情 -->
+    <div
+      v-if="connection.type === 'mqtt' && connection.mqttConfig"
+      class="mt-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
+      @click="handleClick"
+      @dblclick.stop="handleDblClick"
+    >
+      {{ connection.mqttConfig.protocol }}://{{
+        connection.mqttConfig.brokerUrl
+      }}:{{ connection.mqttConfig.port || 1883 }}
     </div>
 
     <!-- 展开内容（表和查询列表） - 不响应点击事件 -->
@@ -59,50 +82,57 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import IconTablerDatabase from '~icons/tabler/database'
-import IconTablerChevronRight from '~icons/tabler/chevron-right'
-import IconTablerChevronDown from '~icons/tabler/chevron-down'
-import StatusIndicator from '@/components/shared/StatusIndicator.vue'
-import { getConnectionTypeConfig } from '@/config/connectionTypes'
+import { computed } from "vue";
+import IconTablerDatabase from "~icons/tabler/database";
+import IconTablerCloudDataConnection from "~icons/tabler/cloud-data-connection";
+import IconTablerChevronRight from "~icons/tabler/chevron-right";
+import IconTablerChevronDown from "~icons/tabler/chevron-down";
+import StatusIndicator from "@/components/shared/StatusIndicator.vue";
+import { getConnectionTypeConfig } from "@/config/connectionTypes";
 
 const props = defineProps({
   connection: {
     type: Object,
-    required: true
+    required: true,
   },
   isSelected: {
     type: Boolean,
-    default: false
+    default: false,
   },
   isExpanded: {
     type: Boolean,
-    default: false
-  }
-})
+    default: false,
+  },
+});
 
-const emit = defineEmits(['click', 'dblclick', 'contextmenu'])
+const emit = defineEmits(["click", "dblclick", "contextmenu"]);
 
 const typeLabel = computed(() => {
-  if (props.connection.type === 'relational' && props.connection.relationalConfig) {
-    const dbType = props.connection.relationalConfig.dbType
-    const config = getConnectionTypeConfig(dbType)
-    return config ? config.label : dbType
+  if (
+    props.connection.type === "relational" &&
+    props.connection.relationalConfig
+  ) {
+    const dbType = props.connection.relationalConfig.dbType;
+    const config = getConnectionTypeConfig(dbType);
+    return config ? config.label : dbType;
+  } else if (props.connection.type === "mqtt") {
+    const config = getConnectionTypeConfig("mqtt");
+    return config ? config.label : "MQTT";
   }
-  return props.connection.type
-})
+  return props.connection.type;
+});
 
 const handleClick = () => {
-  emit('click', props.connection)
-}
+  emit("click", props.connection);
+};
 
 const handleDblClick = () => {
-  emit('dblclick', props.connection)
-}
+  emit("dblclick", props.connection);
+};
 
 const handleContextMenu = (event) => {
-  emit('contextmenu', event, props.connection)
-}
+  emit("contextmenu", event, props.connection);
+};
 </script>
 
 <style scoped>

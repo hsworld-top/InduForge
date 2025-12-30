@@ -20,7 +20,9 @@
     />
 
     <!-- 右侧内容区域 - 统一标签页系统 -->
-    <div class="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div
+      class="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden"
+    >
       <template v-if="tabs.length > 0">
         <el-tabs
           ref="tabsRef"
@@ -40,20 +42,36 @@
           >
             <template #label>
               <span class="flex items-center">
-                <component :is="tab.icon" v-if="tab.icon" class="mr-1 w-4 h-4" />
+                <component
+                  :is="tab.icon"
+                  v-if="tab.icon"
+                  class="mr-1 w-4 h-4"
+                />
                 <span>{{ tab.label }}</span>
-                <IconTablerAlertCircle v-if="tab.modified" class="ml-1 text-orange-500 w-3 h-3" />
+                <IconTablerAlertCircle
+                  v-if="tab.modified"
+                  class="ml-1 text-orange-500 w-3 h-3"
+                />
               </span>
             </template>
 
             <!-- 表列表内容 -->
-            <div v-if="tab.type === 'table-list'" class="flex-1 flex flex-col overflow-hidden">
-              <div class="table-toolbar flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div
+              v-if="tab.type === 'table-list'"
+              class="flex-1 flex flex-col overflow-hidden"
+            >
+              <div
+                class="table-toolbar flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              >
                 <div class="text-sm text-gray-700 dark:text-gray-300">
                   {{ tab.connection.name }} - 表列表
                 </div>
                 <div class="space-x-2">
-                  <el-button type="primary" size="small" @click="createNewQuery(tab.connection)">
+                  <el-button
+                    type="primary"
+                    size="small"
+                    @click="createNewQuery(tab.connection)"
+                  >
                     <IconTablerPlus class="mr-1 w-4 h-4" />
                     新建查询
                   </el-button>
@@ -63,23 +81,39 @@
                 <MysqlTableList
                   v-if="tab.connection.relationalConfig?.dbType === 'mysql'"
                   :connection-id="tab.connection.id"
-                  @table-select="(tableName) => createQueryFromTable(tab.connection, tableName)"
+                  @table-select="
+                    (tableName) =>
+                      createQueryFromTable(tab.connection, tableName)
+                  "
                 />
                 <PostgresTableList
-                  v-else-if="tab.connection.relationalConfig?.dbType === 'postgresql'"
+                  v-else-if="
+                    tab.connection.relationalConfig?.dbType === 'postgresql'
+                  "
                   :connection-id="tab.connection.id"
-                  @table-select="(tableName) => createQueryFromTable(tab.connection, tableName)"
+                  @table-select="
+                    (tableName) =>
+                      createQueryFromTable(tab.connection, tableName)
+                  "
                 />
                 <SqlServerTableList
-                  v-else-if="tab.connection.relationalConfig?.dbType === 'sqlserver'"
+                  v-else-if="
+                    tab.connection.relationalConfig?.dbType === 'sqlserver'
+                  "
                   :connection-id="tab.connection.id"
-                  @table-select="(tableName) => createQueryFromTable(tab.connection, tableName)"
+                  @table-select="
+                    (tableName) =>
+                      createQueryFromTable(tab.connection, tableName)
+                  "
                 />
               </div>
             </div>
 
             <!-- SQL 查询编辑器 -->
-            <div v-else-if="tab.type === 'query'" class="flex-1 flex flex-col overflow-y-auto p-4">
+            <div
+              v-else-if="tab.type === 'query'"
+              class="flex-1 flex flex-col overflow-y-auto p-4"
+            >
               <MysqlQueryEditor
                 v-if="tab.connection.relationalConfig?.dbType === 'mysql'"
                 :tab="tab"
@@ -87,16 +121,48 @@
                 @save="handleQuerySave"
               />
               <PostgresQueryEditor
-                v-else-if="tab.connection.relationalConfig?.dbType === 'postgresql'"
+                v-else-if="
+                  tab.connection.relationalConfig?.dbType === 'postgresql'
+                "
                 :tab="tab"
                 @execute="handleQueryExecute"
                 @save="handleQuerySave"
               />
               <SqlServerQueryEditor
-                v-else-if="tab.connection.relationalConfig?.dbType === 'sqlserver'"
+                v-else-if="
+                  tab.connection.relationalConfig?.dbType === 'sqlserver'
+                "
                 :tab="tab"
                 @execute="handleQueryExecute"
                 @save="handleQuerySave"
+              />
+            </div>
+
+            <!-- MQTT订阅列表 -->
+            <div
+              v-else-if="tab.type === 'mqtt-subscriptions'"
+              class="flex-1 flex flex-col overflow-hidden"
+            >
+              <MqttSubscriptionList
+                :connection-id="tab.connectionId"
+                :project-id="projectId"
+                @view-messages="
+                  (subscription) =>
+                    openMqttMessageViewer(tab.connection, subscription)
+                "
+              />
+            </div>
+
+            <!-- MQTT消息查看器 -->
+            <div
+              v-else-if="tab.type === 'mqtt-messages'"
+              class="flex-1 flex flex-col overflow-hidden"
+            >
+              <MqttMessageViewer
+                ref="mqttMessageViewerRef"
+                :subscription="tab.subscription"
+                :project-id="projectId"
+                :connection-id="tab.connectionId"
               />
             </div>
           </el-tab-pane>
@@ -171,43 +237,55 @@
 </template>
 
 <script setup>
-import { ref, computed, provide, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import IconTablerDatabase from '~icons/tabler/database'
-import IconTablerTable from '~icons/tabler/table'
-import IconTablerPlus from '~icons/tabler/plus'
-import IconTablerAlertCircle from '~icons/tabler/alert-circle'
-import ConnectionList from '@/components/connection/ConnectionList.vue'
-import ConnectionContextMenu from '@/components/connection/ConnectionContextMenu.vue'
-import TableContextMenu from '@/components/connection/TableContextMenu.vue'
-import QueryContextMenu from '@/components/connection/QueryContextMenu.vue'
-import ConnectionDialog from '@/components/dialogs/ConnectionDialog.vue'
-import ConnectionDetailsDialog from '@/components/dialogs/ConnectionDetailsDialog.vue'
-import TableStructureDialog from '@/components/dialogs/TableStructureDialog.vue'
-import MysqlTableList from '@/components/database/mysql/MysqlTableList.vue'
-import MysqlQueryEditor from '@/components/database/mysql/MysqlQueryEditor.vue'
-import PostgresTableList from '@/components/database/postgres/PostgresTableList.vue'
-import PostgresQueryEditor from '@/components/database/postgres/PostgresQueryEditor.vue'
-import SqlServerTableList from '@/components/database/sqlserver/SqlServerTableList.vue'
-import SqlServerQueryEditor from '@/components/database/sqlserver/SqlServerQueryEditor.vue'
-import { useConnection } from '@/composables/useConnection'
-import dataAPI from '@/api/data.api'
+import {
+  ref,
+  computed,
+  provide,
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+  watch,
+} from "vue";
+import { useRoute } from "vue-router";
+import { ElMessage, ElMessageBox } from "element-plus";
+import IconTablerDatabase from "~icons/tabler/database";
+import IconTablerTable from "~icons/tabler/table";
+import IconTablerPlus from "~icons/tabler/plus";
+import IconTablerAlertCircle from "~icons/tabler/alert-circle";
+import ConnectionList from "@/components/connection/ConnectionList.vue";
+import ConnectionContextMenu from "@/components/connection/ConnectionContextMenu.vue";
+import TableContextMenu from "@/components/connection/TableContextMenu.vue";
+import QueryContextMenu from "@/components/connection/QueryContextMenu.vue";
+import ConnectionDialog from "@/components/dialogs/ConnectionDialog.vue";
+import ConnectionDetailsDialog from "@/components/dialogs/ConnectionDetailsDialog.vue";
+import TableStructureDialog from "@/components/dialogs/TableStructureDialog.vue";
+import MysqlTableList from "@/components/database/mysql/MysqlTableList.vue";
+import MysqlQueryEditor from "@/components/database/mysql/MysqlQueryEditor.vue";
+import PostgresTableList from "@/components/database/postgres/PostgresTableList.vue";
+import PostgresQueryEditor from "@/components/database/postgres/PostgresQueryEditor.vue";
+import SqlServerTableList from "@/components/database/sqlserver/SqlServerTableList.vue";
+import SqlServerQueryEditor from "@/components/database/sqlserver/SqlServerQueryEditor.vue";
+import MqttSubscriptionList from "@/components/mqtt/MqttSubscriptionList.vue";
+import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
+import { useConnection } from "@/composables/useConnection";
+import { useMqttSocket } from "@/composables/useMqttSocket";
+import dataAPI from "@/api/data.api";
 
 // 从路由获取 project 信息
-const route = useRoute()
+const route = useRoute();
 const project = computed(() => {
-  const projectId = route.query.pid || route.query.id || route.meta?.project?.id
-  const tenantId = route.query.tenant || route.meta?.project?.tenantId
+  const projectId =
+    route.query.pid || route.query.id || route.meta?.project?.id;
+  const tenantId = route.query.tenant || route.meta?.project?.tenantId;
   if (projectId) {
-    return { id: projectId, tenantId: tenantId }
+    return { id: projectId, tenantId: tenantId };
   }
-  return null
-})
+  return null;
+});
 
 // 提供给子组件使用
-const projectId = computed(() => project.value?.id)
-provide('projectId', projectId)
+const projectId = computed(() => project.value?.id);
+provide("projectId", projectId);
 
 // 使用 composable
 const {
@@ -221,84 +299,157 @@ const {
   testConnection,
   updateConnectionStatus,
   selectConnection,
-} = useConnection(projectId)
+} = useConnection(projectId);
+
+// 使用 MQTT Socket
+const {
+  connected: mqttSocketConnected,
+  subscribeMessages,
+  onMessage,
+} = useMqttSocket(projectId);
 
 // 统一标签页管理
-const tabs = ref([])
-const activeTabId = ref('')
-const tabsRef = ref(null)
-let tabCounter = 0
+const tabs = ref([]);
+const activeTabId = ref("");
+const tabsRef = ref(null);
+const mqttMessageViewerRef = ref(null);
+let tabCounter = 0;
 
 // 对话框状态
-const showConnectionDialog = ref(false)
-const showDetailsDialog = ref(false)
-const showTableStructureDialog = ref(false)
-const connectionDialogMode = ref('create')
-const currentConnection = ref(null)
-const currentTableConnectionId = ref('')
-const currentTableName = ref('')
+const showConnectionDialog = ref(false);
+const showDetailsDialog = ref(false);
+const showTableStructureDialog = ref(false);
+const connectionDialogMode = ref("create");
+const currentConnection = ref(null);
+const currentTableConnectionId = ref("");
+const currentTableName = ref("");
 
 // 连接右键菜单状态
-const showContextMenu = ref(false)
-const contextMenuPosition = ref({ x: 0, y: 0 })
-const contextMenuConnection = ref(null)
+const showContextMenu = ref(false);
+const contextMenuPosition = ref({ x: 0, y: 0 });
+const contextMenuConnection = ref(null);
 
 // 表右键菜单状态
-const showTableContextMenu = ref(false)
-const tableContextMenuPosition = ref({ x: 0, y: 0 })
-const tableContextMenuConnection = ref(null)
-const tableContextMenuTable = ref(null)
+const showTableContextMenu = ref(false);
+const tableContextMenuPosition = ref({ x: 0, y: 0 });
+const tableContextMenuConnection = ref(null);
+const tableContextMenuTable = ref(null);
 
 // 查询右键菜单状态
-const showQueryContextMenu = ref(false)
-const queryContextMenuPosition = ref({ x: 0, y: 0 })
-const queryContextMenuConnection = ref(null)
-const queryContextMenuQuery = ref(null)
+const showQueryContextMenu = ref(false);
+const queryContextMenuPosition = ref({ x: 0, y: 0 });
+const queryContextMenuConnection = ref(null);
+const queryContextMenuQuery = ref(null);
 
 // 引用
-const connectionListRef = ref(null)
+const connectionListRef = ref(null);
 
 /**
  * 创建表列表标签页
  */
 const openTableListTab = (connection) => {
-  const tabId = `table-list-${connection.id}`
-  const existingTab = tabs.value.find(t => t.id === tabId)
-  
+  const tabId = `table-list-${connection.id}`;
+  const existingTab = tabs.value.find((t) => t.id === tabId);
+
   if (existingTab) {
-    activeTabId.value = tabId
-    return
+    activeTabId.value = tabId;
+    return;
   }
-  
+
   const newTab = {
     id: tabId,
-    type: 'table-list',
+    type: "table-list",
     label: `${connection.name} - 表列表`,
     icon: IconTablerTable,
     closable: true,
     connection: connection,
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+};
+
+/**
+ * 打开MQTT订阅列表
+ */
+const openMqttSubscriptionList = (connection) => {
+  const tabId = `mqtt-subscriptions-${connection.id}`;
+  const existingTab = tabs.value.find((t) => t.id === tabId);
+
+  if (existingTab) {
+    activeTabId.value = tabId;
+    return;
   }
-  
-  tabs.value.push(newTab)
-  activeTabId.value = tabId
-}
+
+  const newTab = {
+    id: tabId,
+    type: "mqtt-subscriptions",
+    label: `${connection.name} - 订阅列表`,
+    icon: IconTablerTable,
+    closable: true,
+    connection: connection,
+    connectionId: connection.id,
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+};
+
+/**
+ * 打开MQTT消息查看器
+ */
+const openMqttMessageViewer = (connection, subscription) => {
+  const tabId = `mqtt-messages-${subscription.id}`;
+  const existingTab = tabs.value.find((t) => t.id === tabId);
+
+  if (existingTab) {
+    activeTabId.value = tabId;
+    return;
+  }
+
+  const newTab = {
+    id: tabId,
+    type: "mqtt-messages",
+    label: `${connection.name} - ${subscription.name}`,
+    icon: IconTablerTable,
+    closable: true,
+    connection: connection,
+    connectionId: connection.id,
+    subscription: subscription,
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+
+  // 订阅实时消息
+  const unsubscribe = subscribeMessages(subscription.id, (data) => {
+    // 找到对应的消息查看器并添加消息
+    const viewerTab = tabs.value.find((t) => t.id === tabId);
+    if (viewerTab && mqttMessageViewerRef.value) {
+      mqttMessageViewerRef.value.addMessage(data.message);
+    }
+  });
+
+  // 当标签页关闭时取消订阅
+  newTab.unsubscribe = unsubscribe;
+};
 
 /**
  * 创建新查询标签页
  */
 const createNewQuery = (connection) => {
-  tabCounter++
-  const tabId = `query-${connection.id}-${tabCounter}`
-  
+  tabCounter++;
+  const tabId = `query-${connection.id}-${tabCounter}`;
+
   const newTab = {
     id: tabId,
-    type: 'query',
+    type: "query",
     label: `${connection.name} - 查询 ${tabCounter}`,
     closable: true,
     connection: connection,
     connectionId: connection.id,
-    table: '',
-    sql: 'SELECT * FROM ',
+    table: "",
+    sql: "SELECT * FROM ",
     result: null,
     executing: false,
     saving: false,
@@ -307,32 +458,32 @@ const createNewQuery = (connection) => {
     resultPageSize: 20,
     parameters: [],
     parametersExpanded: true,
-  }
-  
-  tabs.value.push(newTab)
-  activeTabId.value = tabId
-}
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+};
 
 /**
  * 从表双击创建查询标签页
  */
 const createQueryFromTable = (connection, tableName) => {
-  tabCounter++
-  const tabId = `query-${connection.id}-${tabCounter}`
-  
-  const dbType = connection.relationalConfig?.dbType
-  let sql = ''
-  if (dbType === 'mysql') {
-    sql = `SELECT * FROM \`${tableName}\` LIMIT 100`
-  } else if (dbType === 'postgresql') {
-    sql = `SELECT * FROM "${tableName}" LIMIT 100`
-  } else if (dbType === 'sqlserver') {
-    sql = `SELECT * FROM [${tableName}] ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY`
+  tabCounter++;
+  const tabId = `query-${connection.id}-${tabCounter}`;
+
+  const dbType = connection.relationalConfig?.dbType;
+  let sql = "";
+  if (dbType === "mysql") {
+    sql = `SELECT * FROM \`${tableName}\` LIMIT 100`;
+  } else if (dbType === "postgresql") {
+    sql = `SELECT * FROM "${tableName}" LIMIT 100`;
+  } else if (dbType === "sqlserver") {
+    sql = `SELECT * FROM [${tableName}] ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY`;
   }
-  
+
   const newTab = {
     id: tabId,
-    type: 'query',
+    type: "query",
     label: `${connection.name} - ${tableName}`,
     closable: true,
     connection: connection,
@@ -348,133 +499,146 @@ const createQueryFromTable = (connection, tableName) => {
     parameters: [],
     parametersExpanded: true,
     autoExecute: true,
-  }
-  
-  tabs.value.push(newTab)
-  activeTabId.value = tabId
-}
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+};
 
 /**
  * 关闭标签页
  */
 const handleCloseTab = (tabId) => {
-  const index = tabs.value.findIndex(t => t.id === tabId)
-  if (index === -1) return
-  
-  tabs.value.splice(index, 1)
-  
+  const index = tabs.value.findIndex((t) => t.id === tabId);
+  if (index === -1) return;
+
+  const tab = tabs.value[index];
+
+  // 如果是MQTT消息查看器，取消订阅
+  if (tab.type === "mqtt-messages" && tab.unsubscribe) {
+    tab.unsubscribe();
+  }
+
+  tabs.value.splice(index, 1);
+
   // 如果关闭的是当前激活的标签页，切换到最后一个标签页
   if (activeTabId.value === tabId) {
     if (tabs.value.length > 0) {
-      activeTabId.value = tabs.value[tabs.value.length - 1].id
+      activeTabId.value = tabs.value[tabs.value.length - 1].id;
     } else {
-      activeTabId.value = ''
+      activeTabId.value = "";
     }
   }
-}
+};
 
 /**
  * 标签页点击事件
  */
 const handleTabClick = (tab) => {
   // 可以在这里添加额外的逻辑
-}
+};
 
 // 添加标签栏滚轮滚动支持
 const setupTabsWheelScroll = async () => {
-  await nextTick()
-  
+  await nextTick();
+
   if (tabsRef.value) {
-    const tabsElement = tabsRef.value.$el
-    const header = tabsElement?.querySelector('.el-tabs__header')
-    
+    const tabsElement = tabsRef.value.$el;
+    const header = tabsElement?.querySelector(".el-tabs__header");
+
     if (header) {
       const handleWheel = (e) => {
         // 查找 Element Plus 的左右导航按钮
-        const prevBtn = header.querySelector('.el-tabs__nav-prev')
-        const nextBtn = header.querySelector('.el-tabs__nav-next')
-        
-        if (!prevBtn || !nextBtn) return
-        
+        const prevBtn = header.querySelector(".el-tabs__nav-prev");
+        const nextBtn = header.querySelector(".el-tabs__nav-next");
+
+        if (!prevBtn || !nextBtn) return;
+
         // 检查按钮是否可用（没有 disabled 类）
-        const canScrollLeft = !prevBtn.classList.contains('is-disabled')
-        const canScrollRight = !nextBtn.classList.contains('is-disabled')
-        
+        const canScrollLeft = !prevBtn.classList.contains("is-disabled");
+        const canScrollRight = !nextBtn.classList.contains("is-disabled");
+
         // 向上滚动 -> 触发左按钮，向下滚动 -> 触发右按钮
         if (e.deltaY < 0 && canScrollLeft) {
-          e.preventDefault()
-          prevBtn.click()
+          e.preventDefault();
+          prevBtn.click();
         } else if (e.deltaY > 0 && canScrollRight) {
-          e.preventDefault()
-          nextBtn.click()
+          e.preventDefault();
+          nextBtn.click();
         }
-      }
-      
-      header.addEventListener('wheel', handleWheel, { passive: false })
-      
+      };
+
+      header.addEventListener("wheel", handleWheel, { passive: false });
+
       // 返回清理函数
       return () => {
-        header.removeEventListener('wheel', handleWheel)
-      }
+        header.removeEventListener("wheel", handleWheel);
+      };
     }
   }
-  return null
-}
+  return null;
+};
 
-let cleanupWheelScroll = null
+let cleanupWheelScroll = null;
 
 // 监听标签页变化，重新设置滚轮事件
-watch(() => tabs.value.length, async (newLength, oldLength) => {
-  console.log('Tabs length changed:', oldLength, '->', newLength)
-  
-  if (newLength > 0 && oldLength === 0) {
-    // 第一次添加标签页时设置滚轮事件
-    console.log('Setting up wheel scroll for first tab')
-    cleanupWheelScroll = await setupTabsWheelScroll()
-  }
-}, { immediate: false })
+watch(
+  () => tabs.value.length,
+  async (newLength, oldLength) => {
+    console.log("Tabs length changed:", oldLength, "->", newLength);
+
+    if (newLength > 0 && oldLength === 0) {
+      // 第一次添加标签页时设置滚轮事件
+      console.log("Setting up wheel scroll for first tab");
+      cleanupWheelScroll = await setupTabsWheelScroll();
+    }
+  },
+  { immediate: false }
+);
 
 // 组件挂载时加载数据
 onMounted(() => {
   if (projectId.value) {
-    loadConnections()
+    loadConnections();
   }
-})
+});
 
 // 组件卸载时清理
 onBeforeUnmount(() => {
   if (cleanupWheelScroll) {
-    cleanupWheelScroll()
+    cleanupWheelScroll();
   }
-})
+});
 
 /**
  * 选择连接
  */
 const handleSelectConnection = (connection) => {
-  selectConnection(connection.id)
-}
+  selectConnection(connection.id);
+};
 
 /**
  * 双击连接 - 测试连接并切换展开/折叠
  */
 const handleConnectionDblClick = async (connection) => {
   try {
-    if (connection.type === 'relational' && connection.relationalConfig) {
+    if (connection.type === "relational" && connection.relationalConfig) {
       // 检查当前展开状态
-      const currentState = connectionListRef.value?.getConnectionState(connection.id)
-      const isCurrentlyExpanded = currentState?.expanded || false
-      
+      const currentState = connectionListRef.value?.getConnectionState(
+        connection.id
+      );
+      const isCurrentlyExpanded = currentState?.expanded || false;
+
       // 如果已经展开，则折叠
       if (isCurrentlyExpanded) {
         if (connectionListRef.value) {
-          currentState.expanded = false
+          currentState.expanded = false;
         }
-        return
+        return;
       }
-      
+
       // 如果未展开，则测试连接并展开
-      const config = connection.relationalConfig
+      const config = connection.relationalConfig;
       const response = await dataAPI.testConnection(projectId.value, {
         type: connection.type,
         config: {
@@ -483,114 +647,171 @@ const handleConnectionDblClick = async (connection) => {
           port: config.port,
           database: config.database,
           username: config.username,
-          password: config.password
-        }
-      })
+          password: config.password,
+        },
+      });
 
       if (response.success) {
-        await updateConnectionStatus(connection.id, 'connected')
+        await updateConnectionStatus(connection.id, "connected");
         ElMessage({
-          type: 'success',
-          message: '连接测试成功',
+          type: "success",
+          message: "连接测试成功",
           offset: 60,
-          duration: 3000
-        })
-        
+          duration: 3000,
+        });
+
         // 展开连接并加载表列表和查询列表
         if (connectionListRef.value) {
-          const state = connectionListRef.value.getConnectionState(connection.id)
-          state.expanded = true
-          
+          const state = connectionListRef.value.getConnectionState(
+            connection.id
+          );
+          state.expanded = true;
+
           // 并行加载表列表和查询列表
-          const loadPromises = []
-          
+          const loadPromises = [];
+
           if (state.tables.length === 0) {
-            loadPromises.push(connectionListRef.value.loadTables(connection.id))
+            loadPromises.push(
+              connectionListRef.value.loadTables(connection.id)
+            );
           }
-          
+
           if (state.queries.length === 0) {
-            loadPromises.push(connectionListRef.value.loadQueries(connection.id))
+            loadPromises.push(
+              connectionListRef.value.loadQueries(connection.id)
+            );
           }
-          
+
           if (loadPromises.length > 0) {
-            await Promise.all(loadPromises)
+            await Promise.all(loadPromises);
           }
         }
       }
+    } else if (connection.type === "mqtt" && connection.mqttConfig) {
+      // MQTT 连接处理
+      const currentState = connectionListRef.value?.getConnectionState(
+        connection.id
+      );
+      const isCurrentlyExpanded = currentState?.expanded || false;
+
+      // 如果已经展开，则折叠
+      if (isCurrentlyExpanded) {
+        if (connectionListRef.value) {
+          currentState.expanded = false;
+        }
+        return;
+      }
+
+      // 如果未展开，尝试启动连接并打开订阅列表
+      try {
+        // 启动 MQTT 连接
+        await dataAPI.startMqttConnection(projectId.value, connection.id);
+        await updateConnectionStatus(connection.id, "connected");
+
+        ElMessage({
+          type: "success",
+          message: "MQTT连接已启动",
+          offset: 60,
+          duration: 2000,
+        });
+
+        // 展开连接
+        if (connectionListRef.value) {
+          const state = connectionListRef.value.getConnectionState(
+            connection.id
+          );
+          state.expanded = true;
+        }
+
+        // 打开订阅列表标签页
+        openMqttSubscriptionList(connection);
+      } catch (startError) {
+        await updateConnectionStatus(connection.id, "error");
+        ElMessage({
+          type: "error",
+          message:
+            "启动MQTT连接失败：" +
+            (startError.response?.data?.message || startError.message),
+          offset: 60,
+          duration: 5000,
+          showClose: true,
+        });
+      }
     }
   } catch (error) {
-    await updateConnectionStatus(connection.id, 'error')
+    await updateConnectionStatus(connection.id, "error");
     ElMessage({
-      type: 'error',
-      message: '连接测试失败：' + (error.response?.data?.message || error.message),
+      type: "error",
+      message:
+        "连接测试失败：" + (error.response?.data?.message || error.message),
       offset: 60,
       duration: 5000,
-      showClose: true
-    })
+      showClose: true,
+    });
   }
-}
+};
 
 /**
  * 右键菜单
  */
 const handleConnectionContextMenu = (event, connection) => {
-  contextMenuConnection.value = connection
-  contextMenuPosition.value = { x: event.clientX, y: event.clientY }
-  showContextMenu.value = true
-}
+  contextMenuConnection.value = connection;
+  contextMenuPosition.value = { x: event.clientX, y: event.clientY };
+  showContextMenu.value = true;
+};
 
 /**
  * 打开连接（右键菜单）
  */
 const handleOpenConnection = async (connection) => {
-  await handleConnectionDblClick(connection)
-}
+  await handleConnectionDblClick(connection);
+};
 
 /**
  * 断开连接
  */
 const handleDisconnectConnection = async (connection) => {
   try {
-    await updateConnectionStatus(connection.id, 'disconnected')
+    await updateConnectionStatus(connection.id, "disconnected");
     ElMessage({
-      type: 'success',
-      message: '连接已断开',
+      type: "success",
+      message: "连接已断开",
       offset: 60,
-      duration: 3000
-    })
-    
+      duration: 3000,
+    });
+
     // 折叠连接树
     if (connectionListRef.value) {
-      const state = connectionListRef.value.getConnectionState(connection.id)
-      state.expanded = false
-      state.tablesExpanded = true
+      const state = connectionListRef.value.getConnectionState(connection.id);
+      state.expanded = false;
+      state.tablesExpanded = true;
     }
   } catch (error) {
     ElMessage({
-      type: 'error',
-      message: '断开连接失败',
+      type: "error",
+      message: "断开连接失败",
       offset: 60,
-      duration: 3000
-    })
+      duration: 3000,
+    });
   }
-}
+};
 
 /**
  * 查看连接详情
  */
 const handleViewConnectionDetails = (connection) => {
-  currentConnection.value = connection
-  showDetailsDialog.value = true
-}
+  currentConnection.value = connection;
+  showDetailsDialog.value = true;
+};
 
 /**
  * 编辑连接
  */
 const handleEditConnection = (connection) => {
-  connectionDialogMode.value = 'edit'
-  currentConnection.value = connection
-  showConnectionDialog.value = true
-}
+  connectionDialogMode.value = "edit";
+  currentConnection.value = connection;
+  showConnectionDialog.value = true;
+};
 
 /**
  * 删除连接
@@ -599,125 +820,125 @@ const handleDeleteConnection = async (connection) => {
   try {
     await ElMessageBox.confirm(
       `确定要删除连接 "${connection.name}" 吗？此操作不可恢复。`,
-      '删除确认',
+      "删除确认",
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
       }
-    )
+    );
 
-    await deleteConnection(connection.id)
+    await deleteConnection(connection.id);
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除连接失败:', error)
+    if (error !== "cancel") {
+      console.error("删除连接失败:", error);
     }
   }
-}
+};
 
 /**
  * 打开创建连接对话框
  */
 const openCreateConnectionDialog = () => {
-  connectionDialogMode.value = 'create'
-  currentConnection.value = null
-  showConnectionDialog.value = true
-}
+  connectionDialogMode.value = "create";
+  currentConnection.value = null;
+  showConnectionDialog.value = true;
+};
 
 /**
  * 提交连接（创建或更新）
  */
 const handleConnectionSubmit = async (data) => {
   try {
-    if (connectionDialogMode.value === 'create') {
+    if (connectionDialogMode.value === "create") {
       await createConnection({
         name: data.name,
         type: data.type,
-        config: data.config
-      })
+        config: data.config,
+      });
     } else {
       await updateConnection(currentConnection.value.id, {
         name: data.name,
         type: data.type,
-        config: data.config
-      })
+        config: data.config,
+      });
     }
-    showConnectionDialog.value = false
+    showConnectionDialog.value = false;
   } catch (error) {
-    console.error('保存连接失败:', error)
+    console.error("保存连接失败:", error);
   }
-}
+};
 
 /**
  * 测试连接
  */
 const handleConnectionTest = async (data) => {
   try {
-    await testConnection(data.type, data.config)
+    await testConnection(data.type, data.config);
   } catch (error) {
-    console.error('测试连接失败:', error)
+    console.error("测试连接失败:", error);
   }
-}
+};
 
 /**
  * 表双击 - 创建查询
  */
 const handleTableDblClick = (connection, table) => {
-  createQueryFromTable(connection, table.name)
-}
+  createQueryFromTable(connection, table.name);
+};
 
 /**
  * 表右键菜单
  */
 const handleTableContextMenu = (event, connection, table) => {
-  tableContextMenuConnection.value = connection
-  tableContextMenuTable.value = table
-  tableContextMenuPosition.value = { x: event.clientX, y: event.clientY }
-  showTableContextMenu.value = true
-}
+  tableContextMenuConnection.value = connection;
+  tableContextMenuTable.value = table;
+  tableContextMenuPosition.value = { x: event.clientX, y: event.clientY };
+  showTableContextMenu.value = true;
+};
 
 /**
  * 查看表结构
  */
 const handleViewTableStructure = (connection, table) => {
-  currentTableConnectionId.value = connection.id
-  currentTableName.value = table.name
-  showTableStructureDialog.value = true
-}
+  currentTableConnectionId.value = connection.id;
+  currentTableName.value = table.name;
+  showTableStructureDialog.value = true;
+};
 
 /**
  * 查询表数据（从右键菜单）
  */
 const handleQueryTable = (connection, table) => {
-  handleTableDblClick(connection, table)
-}
+  handleTableDblClick(connection, table);
+};
 
 /**
  * 查看表列表
  */
 const handleViewTableList = (connection) => {
-  openTableListTab(connection)
-}
+  openTableListTab(connection);
+};
 
 /**
  * 执行查询
  */
 const handleQueryExecute = async (tab) => {
   // 标记正在执行
-  tab.executing = true
-  
+  tab.executing = true;
+
   try {
-    const parameters = tab.parameters.map(p => p.value || '')
-    console.log('执行查询 - SQL:', tab.sql)
-    console.log('执行查询 - 参数对象:', tab.parameters)
-    console.log('执行查询 - 参数值:', parameters)
-    
+    const parameters = tab.parameters.map((p) => p.value || "");
+    console.log("执行查询 - SQL:", tab.sql);
+    console.log("执行查询 - 参数对象:", tab.parameters);
+    console.log("执行查询 - 参数值:", parameters);
+
     const response = await dataAPI.executeSql(
       projectId.value,
       tab.connectionId,
       tab.sql,
       parameters
-    )
+    );
 
     if (response.success) {
       // 更新结果
@@ -725,94 +946,95 @@ const handleQueryExecute = async (tab) => {
         columns: response.data.columns || [],
         rows: response.data.rows || [],
         rowCount: response.data.rowCount || 0,
-        executionTime: response.executionTime || 0
-      }
-      tab.resultPage = 1
+        executionTime: response.executionTime || 0,
+      };
+      tab.resultPage = 1;
       ElMessage({
-        type: 'success',
+        type: "success",
         message: `查询执行成功，返回 ${tab.result.rowCount} 行`,
         offset: 60,
-        duration: 3000
-      })
+        duration: 3000,
+      });
     }
   } catch (error) {
-    const errorMsg = error.response?.data?.message || error.message || '查询执行失败'
+    const errorMsg =
+      error.response?.data?.message || error.message || "查询执行失败";
     ElMessage({
-      type: 'error',
+      type: "error",
       message: errorMsg,
       offset: 60,
       duration: 5000,
-      showClose: true
-    })
+      showClose: true,
+    });
   } finally {
     // 确保在所有情况下都重置执行状态
-    tab.executing = false
+    tab.executing = false;
   }
-}
+};
 
 /**
  * 查询双击 - 打开查询
  */
 const handleQueryDblClick = (connection, query) => {
-  tabCounter++
-  const tabId = `saved-query-${query.id}`
-  
+  tabCounter++;
+  const tabId = `saved-query-${query.id}`;
+
   // 检查是否已经打开
-  const existingTab = tabs.value.find(t => t.id === tabId)
+  const existingTab = tabs.value.find((t) => t.id === tabId);
   if (existingTab) {
-    activeTabId.value = tabId
-    return
+    activeTabId.value = tabId;
+    return;
   }
-  
+
   const newTab = {
     id: tabId,
-    type: 'query',
+    type: "query",
     label: `${connection.name} - ${query.name}`,
     closable: true,
     connection: connection,
     queryId: query.id,
     connectionId: connection.id,
-    table: '',
-    sql: query.config?.sql || '',
+    table: "",
+    sql: query.config?.sql || "",
     result: null,
     executing: false,
     saving: false,
     modified: false,
     resultPage: 1,
     resultPageSize: 20,
-    parameters: (query.config?.parameters || []).map(p => ({
+    parameters: (query.config?.parameters || []).map((p) => ({
       name: p.name,
-      type: p.type || 'string',
-      value: p.default || ''
+      type: p.type || "string",
+      value: p.default || "",
     })),
     parametersExpanded: true,
-  }
-  
-  tabs.value.push(newTab)
-  activeTabId.value = tabId
-}
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+};
 
 /**
  * 查询删除后的处理
  */
 const handleQueryDeleted = (query) => {
   // 关闭对应的标签页
-  const tabId = `saved-query-${query.id}`
-  const index = tabs.value.findIndex(t => t.id === tabId)
+  const tabId = `saved-query-${query.id}`;
+  const index = tabs.value.findIndex((t) => t.id === tabId);
   if (index > -1) {
-    handleCloseTab(tabId)
+    handleCloseTab(tabId);
   }
-}
+};
 
 /**
  * 查询右键菜单
  */
 const handleQueryContextMenu = (event, connection, query) => {
-  queryContextMenuConnection.value = connection
-  queryContextMenuQuery.value = query
-  queryContextMenuPosition.value = { x: event.clientX, y: event.clientY }
-  showQueryContextMenu.value = true
-}
+  queryContextMenuConnection.value = connection;
+  queryContextMenuQuery.value = query;
+  queryContextMenuPosition.value = { x: event.clientX, y: event.clientY };
+  showQueryContextMenu.value = true;
+};
 
 /**
  * 查看查询详情
@@ -823,22 +1045,22 @@ const handleViewQueryDetails = (connection, query) => {
     <div style="text-align: left;">
       <p><strong>查询名称：</strong>${query.name}</p>
       <p><strong>连接：</strong>${connection.name}</p>
-      <p><strong>查询类型：</strong>${query.queryType || 'SQL'}</p>
-      <p><strong>是否启用：</strong>${query.isEnabled ? '是' : '否'}</p>
+      <p><strong>查询类型：</strong>${query.queryType || "SQL"}</p>
+      <p><strong>是否启用：</strong>${query.isEnabled ? "是" : "否"}</p>
       <p><strong>超时时间：</strong>${query.timeout || 60000}ms</p>
-      <p><strong>缓存：</strong>${query.cacheEnabled ? '启用' : '禁用'}</p>
-      ${query.cacheEnabled ? `<p><strong>缓存TTL：</strong>${query.cacheTtl}秒</p>` : ''}
+      <p><strong>缓存：</strong>${query.cacheEnabled ? "启用" : "禁用"}</p>
+      ${query.cacheEnabled ? `<p><strong>缓存TTL：</strong>${query.cacheTtl}秒</p>` : ""}
       <p><strong>创建时间：</strong>${new Date(query.createdAt).toLocaleString()}</p>
       <p><strong>更新时间：</strong>${new Date(query.updatedAt).toLocaleString()}</p>
     </div>
     `,
-    '查询详情',
+    "查询详情",
     {
       dangerouslyUseHTMLString: true,
-      confirmButtonText: '关闭'
+      confirmButtonText: "关闭",
     }
-  )
-}
+  );
+};
 
 /**
  * 从右键菜单删除查询
@@ -847,121 +1069,125 @@ const handleDeleteQueryFromMenu = async (connection, query) => {
   try {
     await ElMessageBox.confirm(
       `确定要删除查询 "${query.name}" 吗？`,
-      '删除确认',
+      "删除确认",
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
       }
-    )
+    );
 
-    await dataAPI.deleteQuery(query.id)
-    ElMessage.success('查询已删除')
-    
+    await dataAPI.deleteQuery(query.id);
+    ElMessage.success("查询已删除");
+
     // 从连接树中移除
     if (connectionListRef.value) {
-      const state = connectionListRef.value.getConnectionState(connection.id)
-      const index = state.queries.findIndex(q => q.id === query.id)
+      const state = connectionListRef.value.getConnectionState(connection.id);
+      const index = state.queries.findIndex((q) => q.id === query.id);
       if (index > -1) {
-        state.queries.splice(index, 1)
+        state.queries.splice(index, 1);
       }
     }
-    
+
     // 关闭对应的标签页
-    handleQueryDeleted(query)
+    handleQueryDeleted(query);
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除查询失败：' + (error.response?.data?.message || error.message))
+    if (error !== "cancel") {
+      ElMessage.error(
+        "删除查询失败：" + (error.response?.data?.message || error.message)
+      );
     }
   }
-}
+};
 
 /**
  * 保存查询
  */
 const handleQuerySave = async (tab) => {
-  const defaultName = tab.label?.includes('查询') ? '' : tab.label?.split(' - ')[1] || ''
-  
+  const defaultName = tab.label?.includes("查询")
+    ? ""
+    : tab.label?.split(" - ")[1] || "";
+
   // 使用自定义的 beforeClose 来控制对话框关闭
-  const messageBoxInstance = ElMessageBox.prompt('请输入查询名称', '保存查询', {
-    confirmButtonText: '保存',
-    cancelButtonText: '取消',
+  const messageBoxInstance = ElMessageBox.prompt("请输入查询名称", "保存查询", {
+    confirmButtonText: "保存",
+    cancelButtonText: "取消",
     inputPattern: /^.{2,100}$/,
-    inputErrorMessage: '查询名称长度在 2 到 100 个字符',
+    inputErrorMessage: "查询名称长度在 2 到 100 个字符",
     inputValue: defaultName,
     beforeClose: async (action, instance, done) => {
-      if (action === 'confirm') {
-        const queryName = instance.inputValue
-        
+      if (action === "confirm") {
+        const queryName = instance.inputValue;
+
         // 验证输入
         if (!queryName || queryName.length < 2 || queryName.length > 100) {
-          instance.editorErrorMessage = '查询名称长度在 2 到 100 个字符'
-          return
+          instance.editorErrorMessage = "查询名称长度在 2 到 100 个字符";
+          return;
         }
-        
+
         // 显示加载状态
-        instance.confirmButtonLoading = true
-        tab.saving = true
-        
+        instance.confirmButtonLoading = true;
+        tab.saving = true;
+
         try {
           const parameters = tab.parameters.map((param, index) => ({
             name: `param${index + 1}`,
-            type: param.type || 'string',
+            type: param.type || "string",
             required: false,
-            default: param.value || null
-          }))
+            default: param.value || null,
+          }));
 
           const response = await dataAPI.createQuery(projectId.value, {
             name: queryName,
             connectionId: tab.connectionId,
-            queryType: 'sql',
+            queryType: "sql",
             config: {
               sql: tab.sql,
-              parameters: parameters
-            }
-          })
+              parameters: parameters,
+            },
+          });
 
           if (response.success) {
             ElMessage({
-              type: 'success',
-              message: '查询保存成功',
+              type: "success",
+              message: "查询保存成功",
               offset: 60,
-              duration: 3000
-            })
-            tab.label = `${tab.connection.name} - ${queryName}`
-            tab.queryId = response.data.id
-            tab.modified = false
-            
+              duration: 3000,
+            });
+            tab.label = `${tab.connection.name} - ${queryName}`;
+            tab.queryId = response.data.id;
+            tab.modified = false;
+
             // 刷新左侧查询列表
             if (connectionListRef.value) {
-              await connectionListRef.value.loadQueries(tab.connectionId)
+              await connectionListRef.value.loadQueries(tab.connectionId);
             }
-            
+
             // 关闭对话框
-            done()
+            done();
           }
         } catch (error) {
           // 保存失败，显示错误但不关闭对话框
-          const errorMsg = error.response?.data?.message || error.message || '保存查询失败'
-          instance.editorErrorMessage = errorMsg
+          const errorMsg =
+            error.response?.data?.message || error.message || "保存查询失败";
+          instance.editorErrorMessage = errorMsg;
         } finally {
-          instance.confirmButtonLoading = false
-          tab.saving = false
+          instance.confirmButtonLoading = false;
+          tab.saving = false;
         }
       } else {
         // 用户取消
-        tab.saving = false
-        done()
+        tab.saving = false;
+        done();
       }
-    }
-  })
-  
+    },
+  });
+
   // 捕获用户直接关闭对话框的情况
   messageBoxInstance.catch(() => {
-    tab.saving = false
-  })
-}
-
+    tab.saving = false;
+  });
+};
 </script>
 
 <style scoped>

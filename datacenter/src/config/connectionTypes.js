@@ -101,6 +101,38 @@ export const CONNECTION_TYPES = {
       trustServerCertificate: true,
     }
   },
+
+  // MQTT
+  mqtt: {
+    label: 'MQTT',
+    category: 'message',
+    icon: 'Connection',
+    defaultPort: 1883,
+    formComponent: 'MqttConnectionForm',
+    contentComponent: 'MqttContent',
+    features: {
+      supportSubscribe: true,
+      supportPublish: true,
+      supportQoS: true,
+      supportWildcards: true,
+      supportRetain: true,
+      supportWill: true,
+      supportSSL: true,
+    },
+    defaultConfig: {
+      brokerUrl: 'localhost',
+      protocol: 'mqtt',
+      port: 1883,
+      clientId: '',
+      username: '',
+      password: '',
+      keepalive: 60,
+      cleanSession: true,
+      qos: 0,
+      reconnectPeriod: 5000,
+      connectTimeout: 30000,
+    }
+  },
 }
 
 /**

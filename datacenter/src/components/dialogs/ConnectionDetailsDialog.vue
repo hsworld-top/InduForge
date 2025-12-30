@@ -25,6 +25,16 @@
         <el-descriptions-item label="数据库名">{{ connection.relationalConfig.database }}</el-descriptions-item>
         <el-descriptions-item label="用户名">{{ connection.relationalConfig.username }}</el-descriptions-item>
       </template>
+      <template v-if="connection.type === 'mqtt' && connection.mqttConfig">
+        <el-descriptions-item label="协议">{{ connection.mqttConfig.protocol }}</el-descriptions-item>
+        <el-descriptions-item label="Broker 地址">{{ connection.mqttConfig.brokerUrl }}</el-descriptions-item>
+        <el-descriptions-item label="端口">{{ connection.mqttConfig.port }}</el-descriptions-item>
+        <el-descriptions-item label="客户端 ID">{{ connection.mqttConfig.clientId || '自动生成' }}</el-descriptions-item>
+        <el-descriptions-item label="用户名">{{ connection.mqttConfig.username || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="QoS">{{ connection.mqttConfig.qos }}</el-descriptions-item>
+        <el-descriptions-item label="保持连接">{{ connection.mqttConfig.keepalive }}秒</el-descriptions-item>
+        <el-descriptions-item label="清除会话">{{ connection.mqttConfig.cleanSession ? '是' : '否' }}</el-descriptions-item>
+      </template>
       <el-descriptions-item label="创建时间">{{ formatDate(connection.createdAt) }}</el-descriptions-item>
       <el-descriptions-item label="更新时间">{{ formatDate(connection.updatedAt) }}</el-descriptions-item>
     </el-descriptions>

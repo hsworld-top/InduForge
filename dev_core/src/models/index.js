@@ -11,6 +11,8 @@ const Project = require('./Project'); // 工程模型
 const Log = require('./Log'); // 日志模型 
 const DataConnectionFn = require('./DataConnection'); // 数据连接模型
 const DataRelationalConfigFn = require('./DataRelationalConfig'); // 关系库配置模型
+const DataMqttConfigFn = require('./DataMqttConfig'); // MQTT配置模型
+const DataMqttSubscriptionFn = require('./DataMqttSubscription'); // MQTT订阅模型
 const DataQueryFn = require('./DataQuery'); // 数据查询模型
 const DataSqlConfigFn = require('./DataSqlConfig'); // SQL配置模型
 const DataQueryLogFn = require('./DataQueryLog'); // 查询日志模型
@@ -21,6 +23,8 @@ const DesignPage = require('./DesignPage'); // 设计页面模型
 //===========================================
 const DataConnection = DataConnectionFn(sequelize, Sequelize.DataTypes); // 数据连接模型
 const DataRelationalConfig = DataRelationalConfigFn(sequelize, Sequelize.DataTypes); // 关系库配置模型
+const DataMqttConfig = DataMqttConfigFn(sequelize, Sequelize.DataTypes); // MQTT配置模型
+const DataMqttSubscription = DataMqttSubscriptionFn(sequelize, Sequelize.DataTypes); // MQTT订阅模型
 const DataQuery = DataQueryFn(sequelize, Sequelize.DataTypes); // 数据查询模型
 const DataSqlConfig = DataSqlConfigFn(sequelize, Sequelize.DataTypes); // SQL配置模型
 const DataQueryLog = DataQueryLogFn(sequelize, Sequelize.DataTypes); // 查询日志模型
@@ -144,6 +148,60 @@ DataConnection.hasOne(DataRelationalConfig, {
 DataRelationalConfig.belongsTo(DataConnection, {
   foreignKey: 'connectionId',
   as: 'connection',
+});
+
+// 数据连接和MQTT配置：一对一
+DataConnection.hasOne(DataMqttConfig, {
+  foreignKey: 'connectionId',
+  as: 'mqttConfig',
+});
+
+DataMqttConfig.belongsTo(DataConnection, {
+  foreignKey: 'connectionId',
+  as: 'connection',
+});
+
+// 数据连接和MQTT订阅：一对多
+DataConnection.hasMany(DataMqttSubscription, {
+  foreignKey: 'connectionId',
+  as: 'mqttSubscriptions',
+});
+
+DataMqttSubscription.belongsTo(DataConnection, {
+  foreignKey: 'connectionId',
+  as: 'connection',
+});
+
+// 工程和MQTT订阅：一对多
+Project.hasMany(DataMqttSubscription, {
+  foreignKey: 'projectId',
+  as: 'mqttSubscriptions',
+});
+
+DataMqttSubscription.belongsTo(Project, {
+  foreignKey: 'projectId',
+  as: 'project',
+});
+
+// 用户和MQTT订阅：创建者和更新者
+User.hasMany(DataMqttSubscription, {
+  foreignKey: 'createdBy',
+  as: 'createdMqttSubscriptions',
+});
+
+User.hasMany(DataMqttSubscription, {
+  foreignKey: 'updatedBy',
+  as: 'updatedMqttSubscriptions',
+});
+
+DataMqttSubscription.belongsTo(User, {
+  foreignKey: 'createdBy',
+  as: 'creator',
+});
+
+DataMqttSubscription.belongsTo(User, {
+  foreignKey: 'updatedBy',
+  as: 'updater',
 });
 
 // 数据连接和数据查询：一对多
@@ -291,6 +349,8 @@ module.exports = {
   Log, // 日志模型  
   DataConnection, // 数据连接模型
   DataRelationalConfig, // 关系库配置模型
+  DataMqttConfig, // MQTT配置模型
+  DataMqttSubscription, // MQTT订阅模型
   DataQuery, // 数据查询模型
   DataSqlConfig, // SQL配置模型
   DataQueryLog, // 查询日志模型

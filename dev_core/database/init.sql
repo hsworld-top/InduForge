@@ -229,8 +229,9 @@ CREATE TABLE IF NOT EXISTS `data_relational_configs` (
 CREATE TABLE IF NOT EXISTS `data_mqtt_configs` (
   `id` char(36) NOT NULL DEFAULT (uuid()),
   `connectionId` char(36) NOT NULL COMMENT '连接ID',
-  `brokerUrl` varchar(500) NOT NULL COMMENT 'Broker地址(支持多个,逗号分隔)',
   `protocol` enum('mqtt','mqtts','ws','wss') NOT NULL DEFAULT 'mqtt' COMMENT '协议',
+  `brokerUrl` varchar(500) NOT NULL COMMENT 'Broker地址(支持多个,逗号分隔)',
+  `port` int DEFAULT 1883 COMMENT '端口号',
   `clientId` varchar(100) DEFAULT NULL COMMENT '客户端ID',
   `username` varchar(100) DEFAULT NULL COMMENT '用户名',
   `password` varchar(255) DEFAULT NULL COMMENT '密码',
@@ -245,6 +246,30 @@ CREATE TABLE IF NOT EXISTS `data_mqtt_configs` (
   UNIQUE KEY `connectionId` (`connectionId`),
   CONSTRAINT `data_mqtt_fk_conn` FOREIGN KEY (`connectionId`) REFERENCES `data_connections` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MQTT配置表';
+
+-- 2.3.1 MQTT主题订阅表
+CREATE TABLE IF NOT EXISTS `data_mqtt_subscriptions` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `projectId` char(36) NOT NULL COMMENT '所属工程ID',
+  `connectionId` char(36) NOT NULL COMMENT 'MQTT连接ID',
+  `name` varchar(100) NOT NULL COMMENT '订阅名称',
+  `topic` varchar(500) NOT NULL COMMENT 'MQTT主题(支持通配符)',
+  `qos` tinyint DEFAULT 0 COMMENT 'QoS等级(0/1/2)',
+  `description` text COMMENT '订阅描述',
+  `isEnabled` tinyint(1) DEFAULT 1 COMMENT '是否启用',
+  `messageRetention` int DEFAULT 100 COMMENT '消息保留数量',
+  `createdBy` char(36) NOT NULL COMMENT '创建者ID',
+  `updatedBy` char(36) DEFAULT NULL COMMENT '更新者ID',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `mqtt_subs_project_name_uq` (`projectId`, `name`),
+  KEY `mqtt_subs_conn_idx` (`connectionId`),
+  KEY `mqtt_subs_enabled_idx` (`connectionId`, `isEnabled`),
+  CONSTRAINT `mqtt_subs_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `mqtt_subs_fk_conn` FOREIGN KEY (`connectionId`) REFERENCES `data_connections` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `mqtt_subs_fk_creator` FOREIGN KEY (`createdBy`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MQTT主题订阅表';
 
 -- 2.4 HTTP配置表
 CREATE TABLE IF NOT EXISTS `data_http_configs` (
