@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from '@/constants'
+import { STORAGE_KEYS } from "@/constants";
 
 /**
  * 本地存储工具类
@@ -12,11 +12,11 @@ export class Storage {
    */
   static get(key, defaultValue = null) {
     try {
-      const item = localStorage.getItem(key)
-      return item ? JSON.parse(item) : defaultValue
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : defaultValue;
     } catch (error) {
-      console.warn(`Storage get error for key "${key}":`, error)
-      return defaultValue
+      console.warn(`Storage get error for key "${key}":`, error);
+      return defaultValue;
     }
   }
 
@@ -27,9 +27,9 @@ export class Storage {
    */
   static set(key, value) {
     try {
-      localStorage.setItem(key, JSON.stringify(value))
+      localStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
-      console.warn(`Storage set error for key "${key}":`, error)
+      console.warn(`Storage set error for key "${key}":`, error);
     }
   }
 
@@ -39,9 +39,9 @@ export class Storage {
    */
   static remove(key) {
     try {
-      localStorage.removeItem(key)
+      localStorage.removeItem(key);
     } catch (error) {
-      console.warn(`Storage remove error for key "${key}":`, error)
+      console.warn(`Storage remove error for key "${key}":`, error);
     }
   }
 
@@ -50,9 +50,9 @@ export class Storage {
    */
   static clear() {
     try {
-      localStorage.clear()
+      localStorage.clear();
     } catch (error) {
-      console.warn('Storage clear error:', error)
+      console.warn("Storage clear error:", error);
     }
   }
 
@@ -61,7 +61,7 @@ export class Storage {
    * @returns {string|null} 令牌
    */
   static getToken() {
-    return localStorage.getItem(STORAGE_KEYS.TOKEN)
+    return localStorage.getItem(STORAGE_KEYS.TOKEN);
   }
 
   /**
@@ -69,7 +69,7 @@ export class Storage {
    * @param {string} token - 令牌
    */
   static setToken(token) {
-    localStorage.setItem(STORAGE_KEYS.TOKEN, token)
+    localStorage.setItem(STORAGE_KEYS.TOKEN, token);
   }
 
   /**
@@ -77,7 +77,7 @@ export class Storage {
    * @returns {string|null} 刷新令牌
    */
   static getRefreshToken() {
-    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
   }
 
   /**
@@ -85,7 +85,7 @@ export class Storage {
    * @param {string} refreshToken - 刷新令牌
    */
   static setRefreshToken(refreshToken) {
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
+    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
   }
 
   /**
@@ -93,7 +93,7 @@ export class Storage {
    * @returns {object|null} 用户信息
    */
   static getUserInfo() {
-    return this.get(STORAGE_KEYS.USER_INFO)
+    return this.get(STORAGE_KEYS.USER_INFO);
   }
 
   /**
@@ -101,7 +101,7 @@ export class Storage {
    * @param {object} userInfo - 用户信息
    */
   static setUserInfo(userInfo) {
-    this.set(STORAGE_KEYS.USER_INFO, userInfo)
+    this.set(STORAGE_KEYS.USER_INFO, userInfo);
   }
 
   /**
@@ -109,7 +109,7 @@ export class Storage {
    * @returns {string|null} 租户ID
    */
   static getTenantId() {
-    return this.get(STORAGE_KEYS.TENANT_ID)
+    return this.get(STORAGE_KEYS.TENANT_ID);
   }
 
   /**
@@ -117,7 +117,6 @@ export class Storage {
    * @param {string} tenantId - 租户ID
    */
   static setTenantId(tenantId) {
-    this.set(STORAGE_KEYS.TENANT_ID, tenantId)
+    this.set(STORAGE_KEYS.TENANT_ID, tenantId);
   }
 }
-

@@ -4,6 +4,8 @@ const { authenticateToken } = require("../../middlewares/auth");
 const dataConnectionService = require("../../services/dataConnectionService");
 const dataQueryService = require("../../services/dataQueryService");
 const mqttConnectionController = require("../../controllers/mqttConnectionController");
+const mqttTagGroupController = require("../../controllers/mqttTagGroupController");
+const mqttTagController = require("../../controllers/mqttTagController");
 const AppError = require("../../utils/AppError");
 const ErrorCodes = require("../../constants/errorCodes");
 
@@ -678,18 +680,14 @@ router.post(
 
 /**
  * 获取单个 MQTT 订阅
- * GET /api/v1/data/mqtt/subscriptions/:id
+ * GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId
  */
 router.get(
-  "/mqtt/subscriptions/:id",
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId",
   authenticateToken,
   async (req, res, next) => {
     try {
-      const { DataMqttSubscription } = require("../../models");
-      const subscription = await DataMqttSubscription.findByPk(req.params.id);
-      if (subscription) {
-        await checkProjectAccess(req, subscription.projectId);
-      }
+      await checkProjectAccess(req, req.params.projectId);
       await mqttSubscriptionController.getSubscription(req, res, next);
     } catch (error) {
       next(error);
@@ -699,18 +697,14 @@ router.get(
 
 /**
  * 更新 MQTT 订阅
- * PUT /api/v1/data/mqtt/subscriptions/:id
+ * PUT /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId
  */
 router.put(
-  "/mqtt/subscriptions/:id",
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId",
   authenticateToken,
   async (req, res, next) => {
     try {
-      const { DataMqttSubscription } = require("../../models");
-      const subscription = await DataMqttSubscription.findByPk(req.params.id);
-      if (subscription) {
-        await checkProjectAccess(req, subscription.projectId);
-      }
+      await checkProjectAccess(req, req.params.projectId);
       await mqttSubscriptionController.updateSubscription(req, res, next);
     } catch (error) {
       next(error);
@@ -720,18 +714,14 @@ router.put(
 
 /**
  * 删除 MQTT 订阅
- * DELETE /api/v1/data/mqtt/subscriptions/:id
+ * DELETE /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId
  */
 router.delete(
-  "/mqtt/subscriptions/:id",
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId",
   authenticateToken,
   async (req, res, next) => {
     try {
-      const { DataMqttSubscription } = require("../../models");
-      const subscription = await DataMqttSubscription.findByPk(req.params.id);
-      if (subscription) {
-        await checkProjectAccess(req, subscription.projectId);
-      }
+      await checkProjectAccess(req, req.params.projectId);
       await mqttSubscriptionController.deleteSubscription(req, res, next);
     } catch (error) {
       next(error);
@@ -741,18 +731,14 @@ router.delete(
 
 /**
  * 启用/禁用 MQTT 订阅
- * PATCH /api/v1/data/mqtt/subscriptions/:id/toggle
+ * PATCH /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/toggle
  */
 router.patch(
-  "/mqtt/subscriptions/:id/toggle",
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId/toggle",
   authenticateToken,
   async (req, res, next) => {
     try {
-      const { DataMqttSubscription } = require("../../models");
-      const subscription = await DataMqttSubscription.findByPk(req.params.id);
-      if (subscription) {
-        await checkProjectAccess(req, subscription.projectId);
-      }
+      await checkProjectAccess(req, req.params.projectId);
       await mqttSubscriptionController.toggleSubscription(req, res, next);
     } catch (error) {
       next(error);
@@ -762,24 +748,331 @@ router.patch(
 
 /**
  * 获取订阅的实时消息
- * GET /api/v1/data/mqtt/subscriptions/:id/messages
+ * GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/messages
  */
 router.get(
-  "/mqtt/subscriptions/:id/messages",
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId/messages",
   authenticateToken,
   async (req, res, next) => {
     try {
-      const { DataMqttSubscription } = require("../../models");
-      const subscription = await DataMqttSubscription.findByPk(req.params.id);
-      if (subscription) {
-        await checkProjectAccess(req, subscription.projectId);
-      }
+      await checkProjectAccess(req, req.params.projectId);
       await mqttSubscriptionController.getMessages(req, res, next);
     } catch (error) {
       next(error);
     }
   }
 );
+
+// ===========================================
+// MQTT Tag (变量) 管理路由
+// ===========================================
+
+// ============================================
+// MQTT 变量组管理路由
+// ============================================
+
+/**
+ * 获取订阅的所有变量组
+ * GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tag-groups
+ */
+router.get(
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId/tag-groups",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      await checkProjectAccess(req, req.params.projectId);
+      await mqttTagGroupController.getGroups(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 创建变量组
+ * POST /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tag-groups
+ */
+router.post(
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId/tag-groups",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      await checkProjectAccess(req, req.params.projectId);
+      await mqttTagGroupController.createGroup(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 批量更新变量组顺序
+ * PUT /api/v1/data/mqtt/tag-groups/order
+ * 注意：此路由必须在 /:groupId 路由之前，否则 order 会被当作 groupId
+ */
+router.put(
+  "/mqtt/tag-groups/order",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      await mqttTagGroupController.updateGroupsOrder(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取单个变量组
+ * GET /api/v1/data/mqtt/tag-groups/:groupId
+ */
+router.get(
+  "/mqtt/tag-groups/:groupId",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { DataMqttTagGroup } = require("../../models");
+      const group = await DataMqttTagGroup.findByPk(req.params.groupId);
+      if (group) {
+        await checkProjectAccess(req, group.projectId);
+      }
+      await mqttTagGroupController.getGroup(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 更新变量组
+ * PUT /api/v1/data/mqtt/tag-groups/:groupId
+ */
+router.put(
+  "/mqtt/tag-groups/:groupId",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { DataMqttTagGroup } = require("../../models");
+      const group = await DataMqttTagGroup.findByPk(req.params.groupId);
+      if (group) {
+        await checkProjectAccess(req, group.projectId);
+      }
+      await mqttTagGroupController.updateGroup(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 删除变量组
+ * DELETE /api/v1/data/mqtt/tag-groups/:groupId
+ */
+router.delete(
+  "/mqtt/tag-groups/:groupId",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { DataMqttTagGroup } = require("../../models");
+      const group = await DataMqttTagGroup.findByPk(req.params.groupId);
+      if (group) {
+        await checkProjectAccess(req, group.projectId);
+      }
+      await mqttTagGroupController.deleteGroup(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// MQTT 变量管理路由
+// ============================================
+
+/**
+ * 创建 Tag
+ * POST /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags
+ */
+router.post(
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      await checkProjectAccess(req, req.params.projectId);
+      await mqttTagController.createTag(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 批量创建 Tag
+ * POST /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags/batch
+ */
+router.post(
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags/batch",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      await checkProjectAccess(req, req.params.projectId);
+      await mqttTagController.createTagsBatch(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取订阅的所有 Tag
+ * GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags
+ */
+router.get(
+  "/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      await checkProjectAccess(req, req.params.projectId);
+      await mqttTagController.getTagsBySubscription(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取项目的所有 Tag
+ * GET /api/v1/data/projects/:projectId/mqtt/tags
+ */
+router.get(
+  "/projects/:projectId/mqtt/tags",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      await checkProjectAccess(req, req.params.projectId);
+      await mqttTagController.getTagsByProject(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取 Tag 详情
+ * GET /api/v1/data/mqtt/tags/:id
+ */
+router.get("/mqtt/tags/:id", authenticateToken, async (req, res, next) => {
+  try {
+    const { DataMqttTag } = require("../../models");
+    const tag = await DataMqttTag.findByPk(req.params.id);
+    if (tag) {
+      await checkProjectAccess(req, tag.projectId);
+    }
+    await mqttTagController.getTag(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * 更新 Tag
+ * PUT /api/v1/data/mqtt/tags/:id
+ */
+router.put("/mqtt/tags/:id", authenticateToken, async (req, res, next) => {
+  try {
+    const { DataMqttTag } = require("../../models");
+    const tag = await DataMqttTag.findByPk(req.params.id);
+    if (tag) {
+      await checkProjectAccess(req, tag.projectId);
+    }
+    await mqttTagController.updateTag(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * 删除 Tag
+ * DELETE /api/v1/data/mqtt/tags/:id
+ */
+router.delete("/mqtt/tags/:id", authenticateToken, async (req, res, next) => {
+  try {
+    const { DataMqttTag } = require("../../models");
+    const tag = await DataMqttTag.findByPk(req.params.id);
+    if (tag) {
+      await checkProjectAccess(req, tag.projectId);
+    }
+    await mqttTagController.deleteTag(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * 切换 Tag 启用状态
+ * PATCH /api/v1/data/mqtt/tags/:id/toggle
+ */
+router.patch(
+  "/mqtt/tags/:id/toggle",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { DataMqttTag } = require("../../models");
+      const tag = await DataMqttTag.findByPk(req.params.id);
+      if (tag) {
+        await checkProjectAccess(req, tag.projectId);
+      }
+      await mqttTagController.toggleTag(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 更新 Tags 顺序
+ * PUT /api/v1/data/mqtt/tags/order
+ */
+router.put("/mqtt/tags/order", authenticateToken, async (req, res, next) => {
+  try {
+    await mqttTagController.updateTagsOrder(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * 获取 Tag 的当前值
+ * GET /api/v1/data/mqtt/tags/:id/value
+ */
+router.get(
+  "/mqtt/tags/:id/value",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { DataMqttTag } = require("../../models");
+      const tag = await DataMqttTag.findByPk(req.params.id);
+      if (tag) {
+        await checkProjectAccess(req, tag.projectId);
+      }
+      await mqttTagController.getTagValue(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取多个 Tag 的当前值
+ * POST /api/v1/data/mqtt/tags/values
+ */
+router.post("/mqtt/tags/values", authenticateToken, async (req, res, next) => {
+  try {
+    await mqttTagController.getTagValues(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
 
 // ===========================================
 // MQTT 连接管理路由

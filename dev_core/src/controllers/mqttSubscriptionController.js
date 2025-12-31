@@ -67,13 +67,13 @@ class MqttSubscriptionController {
 
   /**
    * 获取单个订阅
-   * GET /api/v1/data/mqtt/subscriptions/:id
+   * GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId
    */
   async getSubscription(req, res, next) {
     try {
-      const { id } = req.params;
+      const { subscriptionId } = req.params;
 
-      const subscription = await DataMqttSubscription.findByPk(id, {
+      const subscription = await DataMqttSubscription.findByPk(subscriptionId, {
         include: [
           {
             association: "connection",
@@ -185,20 +185,20 @@ class MqttSubscriptionController {
 
   /**
    * 更新订阅
-   * PUT /api/v1/data/mqtt/subscriptions/:id
+   * PUT /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId
    */
   async updateSubscription(req, res, next) {
     try {
-      const { id } = req.params;
+      const { subscriptionId } = req.params;
       const { name, topic, qos, description, isEnabled, messageRetention } =
         req.body;
       const userId = req.user.id;
 
-      const subscription = await DataMqttSubscription.findByPk(id);
+      const subscription = await DataMqttSubscription.findByPk(subscriptionId);
       if (!subscription) {
         throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
           resource: "MqttSubscription",
-          id,
+          id: subscriptionId,
         });
       }
 
@@ -222,14 +222,14 @@ class MqttSubscriptionController {
         // 取消旧的订阅
         if (oldEnabled) {
           await mqttService.unsubscribeFromTopic(
-            id,
+            subscriptionId,
             subscription.connectionId,
             oldTopic
           );
         }
         // 订阅新的主题
         await mqttService.subscribeToTopic(
-          id,
+          subscriptionId,
           subscription.connectionId,
           topic,
           qos,
@@ -238,7 +238,7 @@ class MqttSubscriptionController {
       } else if (isEnabled && !oldEnabled) {
         // 从禁用变为启用
         await mqttService.subscribeToTopic(
-          id,
+          subscriptionId,
           subscription.connectionId,
           topic,
           qos,
@@ -247,13 +247,15 @@ class MqttSubscriptionController {
       } else if (!isEnabled && oldEnabled) {
         // 从启用变为禁用
         await mqttService.unsubscribeFromTopic(
-          id,
+          subscriptionId,
           subscription.connectionId,
           oldTopic
         );
       }
 
-      logger.info(`[MqttSubscriptionController] Subscription updated: ${id}`);
+      logger.info(
+        `[MqttSubscriptionController] Subscription updated: ${subscriptionId}`
+      );
 
       res.json({
         success: true,
@@ -271,24 +273,24 @@ class MqttSubscriptionController {
 
   /**
    * 删除订阅
-   * DELETE /api/v1/data/mqtt/subscriptions/:id
+   * DELETE /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId
    */
   async deleteSubscription(req, res, next) {
     try {
-      const { id } = req.params;
+      const { subscriptionId } = req.params;
 
-      const subscription = await DataMqttSubscription.findByPk(id);
+      const subscription = await DataMqttSubscription.findByPk(subscriptionId);
       if (!subscription) {
         throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
           resource: "MqttSubscription",
-          id,
+          id: subscriptionId,
         });
       }
 
       // 如果订阅是启用状态，先取消订阅
       if (subscription.isEnabled) {
         await mqttService.unsubscribeFromTopic(
-          id,
+          subscriptionId,
           subscription.connectionId,
           subscription.topic
         );
@@ -297,7 +299,9 @@ class MqttSubscriptionController {
       // 删除订阅记录
       await subscription.destroy();
 
-      logger.info(`[MqttSubscriptionController] Subscription deleted: ${id}`);
+      logger.info(
+        `[MqttSubscriptionController] Subscription deleted: ${subscriptionId}`
+      );
 
       res.json({
         success: true,
@@ -314,18 +318,18 @@ class MqttSubscriptionController {
 
   /**
    * 启用/禁用订阅
-   * PATCH /api/v1/data/mqtt/subscriptions/:id/toggle
+   * PATCH /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/toggle
    */
   async toggleSubscription(req, res, next) {
     try {
-      const { id } = req.params;
+      const { subscriptionId } = req.params;
       const userId = req.user.id;
 
-      const subscription = await DataMqttSubscription.findByPk(id);
+      const subscription = await DataMqttSubscription.findByPk(subscriptionId);
       if (!subscription) {
         throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
           resource: "MqttSubscription",
-          id,
+          id: subscriptionId,
         });
       }
 
@@ -340,7 +344,7 @@ class MqttSubscriptionController {
       // 根据新状态订阅或取消订阅
       if (newEnabled) {
         await mqttService.subscribeToTopic(
-          id,
+          subscriptionId,
           subscription.connectionId,
           subscription.topic,
           subscription.qos,
@@ -348,14 +352,14 @@ class MqttSubscriptionController {
         );
       } else {
         await mqttService.unsubscribeFromTopic(
-          id,
+          subscriptionId,
           subscription.connectionId,
           subscription.topic
         );
       }
 
       logger.info(
-        `[MqttSubscriptionController] Subscription toggled: ${id} -> ${newEnabled}`
+        `[MqttSubscriptionController] Subscription toggled: ${subscriptionId} -> ${newEnabled}`
       );
 
       res.json({
@@ -374,24 +378,24 @@ class MqttSubscriptionController {
 
   /**
    * 获取订阅的实时消息
-   * GET /api/v1/data/mqtt/subscriptions/:id/messages
+   * GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/messages
    */
   async getMessages(req, res, next) {
     try {
-      const { id } = req.params;
+      const { subscriptionId } = req.params;
       const { limit = 100 } = req.query;
 
-      const subscription = await DataMqttSubscription.findByPk(id);
+      const subscription = await DataMqttSubscription.findByPk(subscriptionId);
       if (!subscription) {
         throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
           resource: "MqttSubscription",
-          id,
+          id: subscriptionId,
         });
       }
 
       // 从 MQTT 服务获取缓存的消息
       const messages = await mqttService.getSubscriptionMessages(
-        id,
+        subscriptionId,
         parseInt(limit)
       );
 

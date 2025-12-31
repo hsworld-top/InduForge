@@ -1,18 +1,19 @@
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
+import { createApp } from "vue";
+import { createPinia } from "pinia";
+import ElementPlus from "element-plus";
+import "element-plus/dist/index.css";
 // import * as ElementPlusIconsVue from '@element-plus/icons-vue'
-import router from './router'
-import App from './App.vue'
-import './assets/styles/main.css'
-import { initMessageHandler } from './utils/messageHandler'
+import router from "./router";
+import App from "./App.vue";
+import "./assets/styles/main.css";
+import { initMessageHandler } from "./utils/messageHandler";
+import "./utils/socketTest";
 
-const app = createApp(App)
+const app = createApp(App);
 
-app.use(createPinia())
-app.use(router)
-app.use(ElementPlus)
+app.use(createPinia());
+app.use(router);
+app.use(ElementPlus);
 
 // 注册所有Element Plus图标组件
 // 已迁移到 unplugin-icons，不再需要全局注册
@@ -20,8 +21,7 @@ app.use(ElementPlus)
 //   app.component(key, component)
 // }
 
-app.mount('#app')
+app.mount("#app");
 
 // 初始化消息处理器（用于与Designer通信）
-initMessageHandler()
-
+initMessageHandler();

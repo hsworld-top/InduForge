@@ -1,7 +1,12 @@
 <template>
   <div
     v-show="visible"
-    :style="{ position: 'fixed', left: position.x + 'px', top: position.y + 'px', zIndex: 9999 }"
+    :style="{
+      position: 'fixed',
+      left: position.x + 'px',
+      top: position.y + 'px',
+      zIndex: 9999,
+    }"
     class="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[150px]"
   >
     <div
@@ -45,80 +50,83 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
-import IconTablerPlugConnected from '~icons/tabler/plug-connected'
-import IconTablerPlugConnectedX from '~icons/tabler/plug-connected-x'
-import IconTablerEye from '~icons/tabler/eye'
-import IconTablerEdit from '~icons/tabler/edit'
-import IconTablerTrash from '~icons/tabler/trash'
+import { ref, watch } from "vue";
+import IconTablerPlugConnected from "~icons/tabler/plug-connected";
+import IconTablerPlugConnectedX from "~icons/tabler/plug-connected-x";
+import IconTablerEye from "~icons/tabler/eye";
+import IconTablerEdit from "~icons/tabler/edit";
+import IconTablerTrash from "~icons/tabler/trash";
 
 const props = defineProps({
   visible: {
     type: Boolean,
-    default: false
+    default: false,
   },
   position: {
     type: Object,
-    default: () => ({ x: 0, y: 0 })
+    default: () => ({ x: 0, y: 0 }),
   },
   connection: {
     type: Object,
-    default: null
-  }
-})
+    default: null,
+  },
+});
 
 const emit = defineEmits([
-  'update:visible',
-  'open',
-  'disconnect',
-  'view-details',
-  'edit',
-  'delete'
-])
+  "update:visible",
+  "open",
+  "disconnect",
+  "view-details",
+  "edit",
+  "delete",
+]);
 
 // 点击菜单项后关闭菜单
 const closeMenu = () => {
-  emit('update:visible', false)
-}
+  emit("update:visible", false);
+};
 
 const handleOpen = () => {
-  emit('open', props.connection)
-  closeMenu()
-}
+  emit("open", props.connection);
+  closeMenu();
+};
 
 const handleDisconnect = () => {
-  emit('disconnect', props.connection)
-  closeMenu()
-}
+  emit("disconnect", props.connection);
+  closeMenu();
+};
 
 const handleViewDetails = () => {
-  emit('view-details', props.connection)
-  closeMenu()
-}
+  emit("view-details", props.connection);
+  closeMenu();
+};
 
 const handleEdit = () => {
-  emit('edit', props.connection)
-  closeMenu()
-}
+  emit("edit", props.connection);
+  closeMenu();
+};
 
 const handleDelete = () => {
-  emit('delete', props.connection)
-  closeMenu()
-}
+  emit("delete", props.connection);
+  closeMenu();
+};
 
 // 监听 visible 变化，添加/移除全局点击事件
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    // 延迟添加事件监听，避免立即触发
-    setTimeout(() => {
-      document.addEventListener('click', handleClickOutside)
-    }, 100)
-  } else {
-    document.removeEventListener('click', handleClickOutside)
-  }
-})
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (newVal) {
+      // 延迟添加事件监听，避免立即触发
+      setTimeout(() => {
+        document.addEventListener("click", handleClickOutside);
+      }, 100);
+    } else {
+      document.removeEventListener("click", handleClickOutside);
+    }
+  },
+);
 
 const handleClickOutside = () => {
-  closeMenu()
-}
+  closeMenu();
+};
 </script>

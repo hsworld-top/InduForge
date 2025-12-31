@@ -27,26 +27,39 @@
             <el-table-column label="允许为空" width="90" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.nullable ? 'info' : 'success'" size="small">
-                  {{ row.nullable ? '是' : '否' }}
+                  {{ row.nullable ? "是" : "否" }}
                 </el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="defaultValue" label="默认值" width="100">
               <template #default="{ row }">
-                <span v-if="row.defaultValue !== null">{{ row.defaultValue }}</span>
+                <span v-if="row.defaultValue !== null">{{
+                  row.defaultValue
+                }}</span>
                 <span v-else class="text-gray-400">NULL</span>
               </template>
             </el-table-column>
             <el-table-column label="标识" width="120">
               <template #default="{ row }">
                 <div class="flex gap-1">
-                  <el-tag v-if="row.isPrimary" type="danger" size="small">主键</el-tag>
-                  <el-tag v-if="row.isUnique" type="warning" size="small">唯一</el-tag>
-                  <el-tag v-if="row.autoIncrement" type="info" size="small">自增</el-tag>
+                  <el-tag v-if="row.isPrimary" type="danger" size="small"
+                    >主键</el-tag
+                  >
+                  <el-tag v-if="row.isUnique" type="warning" size="small"
+                    >唯一</el-tag
+                  >
+                  <el-tag v-if="row.autoIncrement" type="info" size="small"
+                    >自增</el-tag
+                  >
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="comment" label="注释" min-width="150" show-overflow-tooltip />
+            <el-table-column
+              prop="comment"
+              label="注释"
+              min-width="150"
+              show-overflow-tooltip
+            />
           </el-table>
         </el-tab-pane>
 
@@ -57,7 +70,13 @@
             <el-table-column label="类型" width="120">
               <template #default="{ row }">
                 <el-tag
-                  :type="row.type === 'PRIMARY' ? 'danger' : row.type === 'UNIQUE' ? 'warning' : 'info'"
+                  :type="
+                    row.type === 'PRIMARY'
+                      ? 'danger'
+                      : row.type === 'UNIQUE'
+                        ? 'warning'
+                        : 'info'
+                  "
                   size="small"
                 >
                   {{ row.type }}
@@ -78,22 +97,41 @@
               </template>
             </el-table-column>
           </el-table>
-          <div v-if="structure.indexes.length === 0" class="text-center text-gray-400 py-8">
+          <div
+            v-if="structure.indexes.length === 0"
+            class="text-center text-gray-400 py-8"
+          >
             暂无索引信息
           </div>
         </el-tab-pane>
 
         <!-- 外键信息 -->
         <el-tab-pane label="外键" name="foreignKeys">
-          <el-table :data="structure.foreignKeys" border stripe max-height="500">
+          <el-table
+            :data="structure.foreignKeys"
+            border
+            stripe
+            max-height="500"
+          >
             <el-table-column prop="name" label="外键名" width="200" />
             <el-table-column prop="columnName" label="本表字段" width="150" />
-            <el-table-column prop="referencedTable" label="引用表" width="150" />
-            <el-table-column prop="referencedColumn" label="引用字段" width="150" />
+            <el-table-column
+              prop="referencedTable"
+              label="引用表"
+              width="150"
+            />
+            <el-table-column
+              prop="referencedColumn"
+              label="引用字段"
+              width="150"
+            />
             <el-table-column prop="updateRule" label="ON UPDATE" width="120" />
             <el-table-column prop="deleteRule" label="ON DELETE" width="120" />
           </el-table>
-          <div v-if="structure.foreignKeys.length === 0" class="text-center text-gray-400 py-8">
+          <div
+            v-if="structure.foreignKeys.length === 0"
+            class="text-center text-gray-400 py-8"
+          >
             暂无外键信息
           </div>
         </el-tab-pane>
@@ -107,91 +145,92 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
-import { ElMessage } from 'element-plus'
-import dataAPI from '@/api/data.api'
+import { ref, watch, computed } from "vue";
+import { ElMessage } from "element-plus";
+import dataAPI from "@/api/data.api";
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   projectId: {
     type: String,
-    required: true
+    required: true,
   },
   connectionId: {
     type: String,
-    required: true
+    required: true,
   },
   tableName: {
     type: String,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(["update:modelValue"]);
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
-})
+  set: (val) => emit("update:modelValue", val),
+});
 
-const loading = ref(false)
-const activeTab = ref('columns')
+const loading = ref(false);
+const activeTab = ref("columns");
 const structure = ref({
   columns: [],
   indexes: [],
-  foreignKeys: []
-})
+  foreignKeys: [],
+});
 
 /**
  * 加载表结构
  */
 const loadTableStructure = async () => {
-  if (!props.projectId || !props.connectionId || !props.tableName) return
+  if (!props.projectId || !props.connectionId || !props.tableName) return;
 
-  loading.value = true
+  loading.value = true;
   try {
     const response = await dataAPI.getTableStructure(
       props.projectId,
       props.connectionId,
-      props.tableName
-    )
+      props.tableName,
+    );
 
     if (response.success) {
-      structure.value = response.data
+      structure.value = response.data;
     }
   } catch (error) {
     ElMessage({
-      type: 'error',
-      message: '加载表结构失败：' + (error.response?.data?.message || error.message),
+      type: "error",
+      message:
+        "加载表结构失败：" + (error.response?.data?.message || error.message),
       offset: 60,
       duration: 5000,
-      showClose: true
-    })
+      showClose: true,
+    });
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 /**
  * 关闭对话框
  */
 const handleClose = () => {
-  visible.value = false
-  activeTab.value = 'columns'
-}
+  visible.value = false;
+  activeTab.value = "columns";
+};
 
 // 监听对话框打开
 watch(
   () => props.modelValue,
   (newVal) => {
     if (newVal) {
-      loadTableStructure()
+      loadTableStructure();
     }
-  }
-)
+  },
+);
 </script>
 
 <style scoped>

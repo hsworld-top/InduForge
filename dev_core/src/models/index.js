@@ -1,30 +1,42 @@
 // 导入 Sequelize 和数据库连接
-const { Sequelize } = require('sequelize');
-const { sequelize } = require('../config/database');
+const { Sequelize } = require("sequelize");
+const { sequelize } = require("../config/database");
 
 //===========================================
 // 导入所有模型
 //===========================================
-const Tenant = require('./Tenant'); // 租户模型
-const User = require('./User'); // 用户模型
-const Project = require('./Project'); // 工程模型
-const Log = require('./Log'); // 日志模型 
-const DataConnectionFn = require('./DataConnection'); // 数据连接模型
-const DataRelationalConfigFn = require('./DataRelationalConfig'); // 关系库配置模型
-const DataMqttConfigFn = require('./DataMqttConfig'); // MQTT配置模型
-const DataMqttSubscriptionFn = require('./DataMqttSubscription'); // MQTT订阅模型
-const DataQueryFn = require('./DataQuery'); // 数据查询模型
-const DataSqlConfigFn = require('./DataSqlConfig'); // SQL配置模型
-const DataQueryLogFn = require('./DataQueryLog'); // 查询日志模型
-const DesignPage = require('./DesignPage'); // 设计页面模型
+const Tenant = require("./Tenant"); // 租户模型
+const User = require("./User"); // 用户模型
+const Project = require("./Project"); // 工程模型
+const Log = require("./Log"); // 日志模型
+const DataConnectionFn = require("./DataConnection"); // 数据连接模型
+const DataRelationalConfigFn = require("./DataRelationalConfig"); // 关系库配置模型
+const DataMqttConfigFn = require("./DataMqttConfig"); // MQTT配置模型
+const DataMqttSubscriptionFn = require("./DataMqttSubscription"); // MQTT订阅模型
+const DataMqttTagGroupFn = require("./DataMqttTagGroup"); // MQTT变量组模型
+const DataMqttTagFn = require("./DataMqttTag"); // MQTT变量模型
+// const DataMqttTagValueFn = require("./DataMqttTagValue"); // MQTT变量值模型 - 已废弃，改用 Redis
+const DataQueryFn = require("./DataQuery"); // 数据查询模型
+const DataSqlConfigFn = require("./DataSqlConfig"); // SQL配置模型
+const DataQueryLogFn = require("./DataQueryLog"); // 查询日志模型
+const DesignPage = require("./DesignPage"); // 设计页面模型
 
 //===========================================
 // 初始化数据中心模型
 //===========================================
 const DataConnection = DataConnectionFn(sequelize, Sequelize.DataTypes); // 数据连接模型
-const DataRelationalConfig = DataRelationalConfigFn(sequelize, Sequelize.DataTypes); // 关系库配置模型
+const DataRelationalConfig = DataRelationalConfigFn(
+  sequelize,
+  Sequelize.DataTypes
+); // 关系库配置模型
 const DataMqttConfig = DataMqttConfigFn(sequelize, Sequelize.DataTypes); // MQTT配置模型
-const DataMqttSubscription = DataMqttSubscriptionFn(sequelize, Sequelize.DataTypes); // MQTT订阅模型
+const DataMqttSubscription = DataMqttSubscriptionFn(
+  sequelize,
+  Sequelize.DataTypes
+); // MQTT订阅模型
+const DataMqttTagGroup = DataMqttTagGroupFn(sequelize); // MQTT变量组模型
+const DataMqttTag = DataMqttTagFn(sequelize, Sequelize.DataTypes); // MQTT变量模型
+// const DataMqttTagValue = DataMqttTagValueFn(sequelize, Sequelize.DataTypes); // MQTT变量值模型 - 已废弃，改用 Redis
 const DataQuery = DataQueryFn(sequelize, Sequelize.DataTypes); // 数据查询模型
 const DataSqlConfig = DataSqlConfigFn(sequelize, Sequelize.DataTypes); // SQL配置模型
 const DataQueryLog = DataQueryLogFn(sequelize, Sequelize.DataTypes); // 查询日志模型
@@ -35,71 +47,70 @@ const DataQueryLog = DataQueryLogFn(sequelize, Sequelize.DataTypes); // 查询�
 
 // 租户和用户：一对多
 Tenant.hasMany(User, {
-  foreignKey: 'tenantId',
-  as: 'users',
-  onDelete: 'CASCADE',
+  foreignKey: "tenantId",
+  as: "users",
+  onDelete: "CASCADE",
 });
 
 User.belongsTo(Tenant, {
-  foreignKey: 'tenantId',
-  as: 'tenant',
+  foreignKey: "tenantId",
+  as: "tenant",
 });
 
 // 租户和工程：一对多
 Tenant.hasMany(Project, {
-  foreignKey: 'tenantId',
-  as: 'projects',
-  onDelete: 'CASCADE',
+  foreignKey: "tenantId",
+  as: "projects",
+  onDelete: "CASCADE",
 });
 
 Project.belongsTo(Tenant, {
-  foreignKey: 'tenantId',
-  as: 'tenant',
+  foreignKey: "tenantId",
+  as: "tenant",
 });
 
 // 用户和工程：多对多（创建者和更新者）
 User.hasMany(Project, {
-  foreignKey: 'createdBy',
-  as: 'createdProjects',
+  foreignKey: "createdBy",
+  as: "createdProjects",
 });
 
 User.hasMany(Project, {
-  foreignKey: 'updatedBy',
-  as: 'updatedProjects',
+  foreignKey: "updatedBy",
+  as: "updatedProjects",
 });
 
 Project.belongsTo(User, {
-  foreignKey: 'createdBy',
-  as: 'creator',
+  foreignKey: "createdBy",
+  as: "creator",
 });
 
 Project.belongsTo(User, {
-  foreignKey: 'updatedBy',
-  as: 'updater',
+  foreignKey: "updatedBy",
+  as: "updater",
 });
-
 
 // 租户和日志：一对多
 Tenant.hasMany(Log, {
-  foreignKey: 'tenantId',
-  as: 'logs',
-  onDelete: 'CASCADE',
+  foreignKey: "tenantId",
+  as: "logs",
+  onDelete: "CASCADE",
 });
 
 Log.belongsTo(Tenant, {
-  foreignKey: 'tenantId',
-  as: 'tenant',
+  foreignKey: "tenantId",
+  as: "tenant",
 });
 
 // 用户和日志：一对多
 User.hasMany(Log, {
-  foreignKey: 'userId',
-  as: 'logs',
+  foreignKey: "userId",
+  as: "logs",
 });
 
 Log.belongsTo(User, {
-  foreignKey: 'userId',
-  as: 'user',
+  foreignKey: "userId",
+  as: "user",
 });
 
 // ===========================================
@@ -108,176 +119,252 @@ Log.belongsTo(User, {
 
 // 工程和数据连接：一对多
 Project.hasMany(DataConnection, {
-  foreignKey: 'projectId',
-  as: 'dataConnections',
-  onDelete: 'CASCADE',
+  foreignKey: "projectId",
+  as: "dataConnections",
+  onDelete: "CASCADE",
 });
 
 DataConnection.belongsTo(Project, {
-  foreignKey: 'projectId',
-  as: 'project',
+  foreignKey: "projectId",
+  as: "project",
 });
 
 // 用户和数据连接：多对多（创建者和更新者）
 User.hasMany(DataConnection, {
-  foreignKey: 'createdBy',
-  as: 'createdDataConnections',
+  foreignKey: "createdBy",
+  as: "createdDataConnections",
 });
 
 User.hasMany(DataConnection, {
-  foreignKey: 'updatedBy',
-  as: 'updatedDataConnections',
+  foreignKey: "updatedBy",
+  as: "updatedDataConnections",
 });
 
 DataConnection.belongsTo(User, {
-  foreignKey: 'createdBy',
-  as: 'creator',
+  foreignKey: "createdBy",
+  as: "creator",
 });
 
 DataConnection.belongsTo(User, {
-  foreignKey: 'updatedBy',
-  as: 'updater',
+  foreignKey: "updatedBy",
+  as: "updater",
 });
 
 // 数据连接和关系库配置：一对一
 DataConnection.hasOne(DataRelationalConfig, {
-  foreignKey: 'connectionId',
-  as: 'relationalConfig',
+  foreignKey: "connectionId",
+  as: "relationalConfig",
 });
 
 DataRelationalConfig.belongsTo(DataConnection, {
-  foreignKey: 'connectionId',
-  as: 'connection',
+  foreignKey: "connectionId",
+  as: "connection",
 });
 
 // 数据连接和MQTT配置：一对一
 DataConnection.hasOne(DataMqttConfig, {
-  foreignKey: 'connectionId',
-  as: 'mqttConfig',
+  foreignKey: "connectionId",
+  as: "mqttConfig",
 });
 
 DataMqttConfig.belongsTo(DataConnection, {
-  foreignKey: 'connectionId',
-  as: 'connection',
+  foreignKey: "connectionId",
+  as: "connection",
 });
 
 // 数据连接和MQTT订阅：一对多
 DataConnection.hasMany(DataMqttSubscription, {
-  foreignKey: 'connectionId',
-  as: 'mqttSubscriptions',
+  foreignKey: "connectionId",
+  as: "mqttSubscriptions",
 });
 
 DataMqttSubscription.belongsTo(DataConnection, {
-  foreignKey: 'connectionId',
-  as: 'connection',
+  foreignKey: "connectionId",
+  as: "connection",
 });
 
 // 工程和MQTT订阅：一对多
 Project.hasMany(DataMqttSubscription, {
-  foreignKey: 'projectId',
-  as: 'mqttSubscriptions',
+  foreignKey: "projectId",
+  as: "mqttSubscriptions",
 });
 
 DataMqttSubscription.belongsTo(Project, {
-  foreignKey: 'projectId',
-  as: 'project',
+  foreignKey: "projectId",
+  as: "project",
 });
 
 // 用户和MQTT订阅：创建者和更新者
 User.hasMany(DataMqttSubscription, {
-  foreignKey: 'createdBy',
-  as: 'createdMqttSubscriptions',
+  foreignKey: "createdBy",
+  as: "createdMqttSubscriptions",
 });
 
 User.hasMany(DataMqttSubscription, {
-  foreignKey: 'updatedBy',
-  as: 'updatedMqttSubscriptions',
+  foreignKey: "updatedBy",
+  as: "updatedMqttSubscriptions",
 });
 
 DataMqttSubscription.belongsTo(User, {
-  foreignKey: 'createdBy',
-  as: 'creator',
+  foreignKey: "createdBy",
+  as: "creator",
 });
 
 DataMqttSubscription.belongsTo(User, {
-  foreignKey: 'updatedBy',
-  as: 'updater',
+  foreignKey: "updatedBy",
+  as: "updater",
 });
+
+// MQTT订阅和MQTT变量组：一对多
+DataMqttSubscription.hasMany(DataMqttTagGroup, {
+  foreignKey: "subscriptionId",
+  as: "tagGroups",
+});
+
+DataMqttTagGroup.belongsTo(DataMqttSubscription, {
+  foreignKey: "subscriptionId",
+  as: "subscription",
+});
+
+// MQTT订阅和MQTT变量：一对多
+DataMqttSubscription.hasMany(DataMqttTag, {
+  foreignKey: "subscriptionId",
+  as: "tags",
+});
+
+DataMqttTag.belongsTo(DataMqttSubscription, {
+  foreignKey: "subscriptionId",
+  as: "subscription",
+});
+
+// MQTT变量组和MQTT变量：一对多
+DataMqttTagGroup.hasMany(DataMqttTag, {
+  foreignKey: "groupId",
+  as: "tags",
+});
+
+DataMqttTag.belongsTo(DataMqttTagGroup, {
+  foreignKey: "groupId",
+  as: "group",
+});
+
+// 工程和MQTT变量：一对多
+Project.hasMany(DataMqttTag, {
+  foreignKey: "projectId",
+  as: "mqttTags",
+});
+
+DataMqttTag.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+// 用户和MQTT变量：创建者和更新者
+User.hasMany(DataMqttTag, {
+  foreignKey: "createdBy",
+  as: "createdMqttTags",
+});
+
+User.hasMany(DataMqttTag, {
+  foreignKey: "updatedBy",
+  as: "updatedMqttTags",
+});
+
+DataMqttTag.belongsTo(User, {
+  foreignKey: "createdBy",
+  as: "creator",
+});
+
+DataMqttTag.belongsTo(User, {
+  foreignKey: "updatedBy",
+  as: "updater",
+});
+
+// MQTT变量和变量值：一对一 - 已废弃，改用 Redis
+// DataMqttTag.hasOne(DataMqttTagValue, {
+//   foreignKey: "tagId",
+//   as: "currentValue",
+// });
+
+// DataMqttTagValue.belongsTo(DataMqttTag, {
+//   foreignKey: "tagId",
+//   as: "tag",
+// });
 
 // 数据连接和数据查询：一对多
 DataConnection.hasMany(DataQuery, {
-  foreignKey: 'connectionId',
-  as: 'queries',
+  foreignKey: "connectionId",
+  as: "queries",
 });
 
 DataQuery.belongsTo(DataConnection, {
-  foreignKey: 'connectionId',
-  as: 'connection',
+  foreignKey: "connectionId",
+  as: "connection",
 });
 
 // 工程和数据查询：一对多
 Project.hasMany(DataQuery, {
-  foreignKey: 'projectId',
-  as: 'dataQueries',
+  foreignKey: "projectId",
+  as: "dataQueries",
 });
 
 DataQuery.belongsTo(Project, {
-  foreignKey: 'projectId',
-  as: 'project',
+  foreignKey: "projectId",
+  as: "project",
 });
 
 // 用户和数据查询：多对多（创建者和更新者）
 User.hasMany(DataQuery, {
-  foreignKey: 'createdBy',
-  as: 'createdDataQueries',
+  foreignKey: "createdBy",
+  as: "createdDataQueries",
 });
 
 User.hasMany(DataQuery, {
-  foreignKey: 'updatedBy',
-  as: 'updatedDataQueries',
+  foreignKey: "updatedBy",
+  as: "updatedDataQueries",
 });
 
 DataQuery.belongsTo(User, {
-  foreignKey: 'createdBy',
-  as: 'creator',
+  foreignKey: "createdBy",
+  as: "creator",
 });
 
 DataQuery.belongsTo(User, {
-  foreignKey: 'updatedBy',
-  as: 'updater',
+  foreignKey: "updatedBy",
+  as: "updater",
 });
 
 // 数据查询和查询日志：一对多
 DataQuery.hasMany(DataQueryLog, {
-  foreignKey: 'queryId',
-  as: 'logs',
+  foreignKey: "queryId",
+  as: "logs",
 });
 
 DataQueryLog.belongsTo(DataQuery, {
-  foreignKey: 'queryId',
-  as: 'query',
+  foreignKey: "queryId",
+  as: "query",
 });
 
 // 数据连接和查询日志：一对多
 DataConnection.hasMany(DataQueryLog, {
-  foreignKey: 'connectionId',
-  as: 'queryLogs',
+  foreignKey: "connectionId",
+  as: "queryLogs",
 });
 
 DataQueryLog.belongsTo(DataConnection, {
-  foreignKey: 'connectionId',
-  as: 'connection',
+  foreignKey: "connectionId",
+  as: "connection",
 });
 
 // 用户和查询日志：一对多
 User.hasMany(DataQueryLog, {
-  foreignKey: 'executedBy',
-  as: 'dataQueryLogs',
+  foreignKey: "executedBy",
+  as: "dataQueryLogs",
 });
 
 DataQueryLog.belongsTo(User, {
-  foreignKey: 'executedBy',
-  as: 'executor',
+  foreignKey: "executedBy",
+  as: "executor",
 });
 
 // ===========================================
@@ -286,71 +373,73 @@ DataQueryLog.belongsTo(User, {
 
 // 工程和设计页面：一对多
 Project.hasMany(DesignPage, {
-  foreignKey: 'projectId',
-  as: 'designPages',
-  onDelete: 'CASCADE',
+  foreignKey: "projectId",
+  as: "designPages",
+  onDelete: "CASCADE",
 });
 
 DesignPage.belongsTo(Project, {
-  foreignKey: 'projectId',
-  as: 'project',
+  foreignKey: "projectId",
+  as: "project",
 });
 
 // 设计页面自关联：父子关系（文件夹结构）
 DesignPage.hasMany(DesignPage, {
-  foreignKey: 'parentId',
-  as: 'children',
-  onDelete: 'RESTRICT', // 防止删除有子页面的文件夹
+  foreignKey: "parentId",
+  as: "children",
+  onDelete: "RESTRICT", // 防止删除有子页面的文件夹
 });
 
 DesignPage.belongsTo(DesignPage, {
-  foreignKey: 'parentId',
-  as: 'parent',
+  foreignKey: "parentId",
+  as: "parent",
 });
 
 // 用户和设计页面：创建者
 User.hasMany(DesignPage, {
-  foreignKey: 'createdBy',
-  as: 'createdDesignPages',
+  foreignKey: "createdBy",
+  as: "createdDesignPages",
 });
 
 DesignPage.belongsTo(User, {
-  foreignKey: 'createdBy',
-  as: 'creator',
+  foreignKey: "createdBy",
+  as: "creator",
 });
 
 // 用户和设计页面：更新者
 User.hasMany(DesignPage, {
-  foreignKey: 'updatedBy',
-  as: 'updatedDesignPages',
+  foreignKey: "updatedBy",
+  as: "updatedDesignPages",
 });
 
 DesignPage.belongsTo(User, {
-  foreignKey: 'updatedBy',
-  as: 'updater',
+  foreignKey: "updatedBy",
+  as: "updater",
 });
 
 // 用户和设计页面：锁定者
 User.hasMany(DesignPage, {
-  foreignKey: 'lockedBy',
-  as: 'lockedDesignPages',
+  foreignKey: "lockedBy",
+  as: "lockedDesignPages",
 });
 
 DesignPage.belongsTo(User, {
-  foreignKey: 'lockedBy',
-  as: 'locker',
+  foreignKey: "lockedBy",
+  as: "locker",
 });
-
 
 module.exports = {
   Tenant, // 租户模型
   User, // 用户模型
   Project, // 工程模型
-  Log, // 日志模型  
+  Log, // 日志模型
   DataConnection, // 数据连接模型
   DataRelationalConfig, // 关系库配置模型
   DataMqttConfig, // MQTT配置模型
   DataMqttSubscription, // MQTT订阅模型
+  DataMqttTagGroup, // MQTT变量组模型
+  DataMqttTag, // MQTT变量模型
+  // DataMqttTagValue, // MQTT变量值模型 - 已废弃，改用 Redis
   DataQuery, // 数据查询模型
   DataSqlConfig, // SQL配置模型
   DataQueryLog, // 查询日志模型

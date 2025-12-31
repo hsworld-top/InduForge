@@ -203,19 +203,19 @@ const handleSubmit = async () => {
       response = await dataAPI.createMqttSubscription(
         projectId,
         props.connectionId,
-        data
+        data,
       );
     } else {
       response = await dataAPI.updateMqttSubscription(
         projectId,
         props.subscription.id,
-        data
+        data,
       );
     }
 
     if (response.success) {
       ElMessage.success(
-        props.mode === "create" ? "订阅创建成功" : "订阅更新成功"
+        props.mode === "create" ? "订阅创建成功" : "订阅更新成功",
       );
       emit("success", response.data);
       handleClose();
@@ -227,7 +227,7 @@ const handleSubmit = async () => {
     }
     ElMessage.error(
       (props.mode === "create" ? "创建失败：" : "更新失败：") +
-        (error.response?.data?.message || error.message)
+        (error.response?.data?.message || error.message),
     );
   } finally {
     submitting.value = false;
@@ -259,7 +259,7 @@ watch(
       initFormData();
     }
   },
-  { deep: true }
+  { deep: true },
 );
 </script>
 

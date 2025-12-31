@@ -272,6 +272,65 @@ CREATE TABLE IF NOT EXISTS `data_mqtt_subscriptions` (
   CONSTRAINT `mqtt_subs_fk_creator` FOREIGN KEY (`createdBy`) REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MQTT主题订阅表';
 
+-- 2.3.0 MQTT变量组表
+CREATE TABLE IF NOT EXISTS `data_mqtt_tag_groups` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `projectId` char(36) NOT NULL COMMENT '所属工程ID',
+  `subscriptionId` char(36) NOT NULL COMMENT '订阅ID',
+  `name` varchar(100) NOT NULL COMMENT '分组名称',
+  `code` varchar(100) NOT NULL COMMENT '分组标识符',
+  `description` text COMMENT '分组描述',
+  `color` varchar(20) DEFAULT NULL COMMENT '分组颜色(用于UI显示)',
+  `icon` varchar(50) DEFAULT NULL COMMENT '分组图标',
+  `order` int NOT NULL DEFAULT 0 COMMENT '显示顺序',
+  `createdBy` char(36) NOT NULL COMMENT '创建者ID',
+  `updatedBy` char(36) DEFAULT NULL COMMENT '更新者ID',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `mqtt_tag_groups_subscription_code_uq` (`subscriptionId`, `code`),
+  KEY `mqtt_tag_groups_project_idx` (`projectId`),
+  KEY `mqtt_tag_groups_subscription_idx` (`subscriptionId`),
+  CONSTRAINT `mqtt_tag_groups_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `mqtt_tag_groups_fk_subscription` FOREIGN KEY (`subscriptionId`) REFERENCES `data_mqtt_subscriptions` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `mqtt_tag_groups_fk_creator` FOREIGN KEY (`createdBy`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MQTT变量分组表';
+
+-- 2.3.1 MQTT变量定义表
+CREATE TABLE IF NOT EXISTS `data_mqtt_tags` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `projectId` char(36) NOT NULL COMMENT '所属工程ID',
+  `subscriptionId` char(36) NOT NULL COMMENT '订阅ID',
+  `groupId` char(36) DEFAULT NULL COMMENT '所属分组ID',
+  `name` varchar(100) NOT NULL COMMENT '变量名称',
+  `code` varchar(100) NOT NULL COMMENT '变量标识符(用于引用)',
+  `description` text COMMENT '变量描述',
+  `dataType` enum('string','number','boolean','object','array') NOT NULL DEFAULT 'string' COMMENT '数据类型',
+  `parseType` enum('jsonpath','regex','script','fixed') NOT NULL DEFAULT 'jsonpath' COMMENT '解析类型',
+  `parseRule` text NOT NULL COMMENT '解析规则(JSONPath表达式/正则表达式/脚本代码)',
+  `defaultValue` text COMMENT '默认值',
+  `unit` varchar(50) DEFAULT NULL COMMENT '单位',
+  `transform` text COMMENT '值转换函数(JavaScript代码)',
+  `validation` json DEFAULT NULL COMMENT '验证规则(min/max/pattern等)',
+  `isEnabled` tinyint(1) DEFAULT 1 COMMENT '是否启用',
+  `order` int DEFAULT 0 COMMENT '显示顺序',
+  `createdBy` char(36) NOT NULL COMMENT '创建者ID',
+  `updatedBy` char(36) DEFAULT NULL COMMENT '更新者ID',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `mqtt_tags_project_code_uq` (`projectId`, `code`),
+  KEY `mqtt_tags_sub_idx` (`subscriptionId`),
+  KEY `mqtt_tags_group_idx` (`groupId`),
+  KEY `mqtt_tags_enabled_idx` (`subscriptionId`, `isEnabled`),
+  CONSTRAINT `mqtt_tags_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `mqtt_tags_fk_subscription` FOREIGN KEY (`subscriptionId`) REFERENCES `data_mqtt_subscriptions` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `mqtt_tags_fk_group` FOREIGN KEY (`groupId`) REFERENCES `data_mqtt_tag_groups` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `mqtt_tags_fk_creator` FOREIGN KEY (`createdBy`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='MQTT变量定义表';
+
+-- 注意：MQTT变量值将存储在 Redis 中，不再使用 MySQL 表
+
 -- 2.4 HTTP配置表
 CREATE TABLE IF NOT EXISTS `data_http_configs` (
   `id` char(36) NOT NULL DEFAULT (uuid()),

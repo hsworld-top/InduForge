@@ -250,7 +250,7 @@ class MqttProtocol extends BaseProtocol {
    * @param {Object} options - 订阅选项 { qos }
    * @returns {Promise<Object>}
    */
-  async subscribe(topics, options = {}) {
+  async subscribe(topics, options = {}, messageHandler = null) {
     if (!this.isConnected || !this.client) {
       throw new Error("Not connected to MQTT broker");
     }
@@ -264,6 +264,12 @@ class MqttProtocol extends BaseProtocol {
           logger.error("[MqttProtocol] Subscribe error:", err);
           reject(err);
           return;
+        }
+
+        // 如果提供了消息处理器，添加到处理器集合
+        if (messageHandler && typeof messageHandler === "function") {
+          this.addMessageHandler(messageHandler);
+          logger.info(`[MqttProtocol] Added message handler for subscription`);
         }
 
         // 记录订阅信息

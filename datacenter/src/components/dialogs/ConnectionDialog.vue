@@ -139,7 +139,7 @@ watch(
       }
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // 监听对话框打开（创建模式）
@@ -152,7 +152,7 @@ watch(
       dbType.value = "mysql";
       formData.value = getDefaultConfig("mysql");
     }
-  }
+  },
 );
 
 const handleTypeChange = () => {

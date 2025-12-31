@@ -49,7 +49,7 @@ export const getTableData = (
   projectId,
   connectionId,
   tableName,
-  params = {}
+  params = {},
 ) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/data`,
@@ -322,6 +322,225 @@ export const stopMqttConnection = (projectId, connectionId) => {
   });
 };
 
+// ===========================================
+// MQTT 变量组相关API
+// ===========================================
+
+/**
+ * 获取订阅的所有变量组
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ * @param {object} params - 查询参数
+ */
+export const getMqttTagGroups = (projectId, subscriptionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tag-groups`,
+    method: "get",
+    params,
+  });
+};
+
+/**
+ * 获取单个变量组
+ * @param {string} groupId - 变量组ID
+ */
+export const getMqttTagGroup = (groupId) => {
+  return request({
+    url: `/data/mqtt/tag-groups/${groupId}`,
+    method: "get",
+  });
+};
+
+/**
+ * 创建变量组
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ * @param {object} data - 变量组数据
+ */
+export const createMqttTagGroup = (projectId, subscriptionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tag-groups`,
+    method: "post",
+    data,
+  });
+};
+
+/**
+ * 更新变量组
+ * @param {string} groupId - 变量组ID
+ * @param {object} data - 更新数据
+ */
+export const updateMqttTagGroup = (groupId, data) => {
+  return request({
+    url: `/data/mqtt/tag-groups/${groupId}`,
+    method: "put",
+    data,
+  });
+};
+
+/**
+ * 删除变量组
+ * @param {string} groupId - 变量组ID
+ */
+export const deleteMqttTagGroup = (groupId) => {
+  return request({
+    url: `/data/mqtt/tag-groups/${groupId}`,
+    method: "delete",
+  });
+};
+
+/**
+ * 更新变量组顺序
+ * @param {array} groups - 变量组数组，包含id和order
+ */
+export const updateMqttTagGroupsOrder = (groups) => {
+  return request({
+    url: `/data/mqtt/tag-groups/order`,
+    method: "put",
+    data: { groups },
+  });
+};
+
+// ===========================================
+// MQTT Tag (变量) 相关API
+// ===========================================
+
+/**
+ * 获取订阅的所有Tag
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ * @param {object} params - 查询参数
+ */
+export const getMqttTags = (projectId, subscriptionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags`,
+    method: "get",
+    params,
+  });
+};
+
+/**
+ * 获取项目的所有Tag
+ * @param {string} projectId - 工程ID
+ * @param {object} params - 查询参数
+ */
+export const getProjectMqttTags = (projectId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/tags`,
+    method: "get",
+    params,
+  });
+};
+
+/**
+ * 获取Tag详情
+ * @param {string} tagId - Tag ID
+ */
+export const getMqttTag = (tagId) => {
+  return request({
+    url: `/data/mqtt/tags/${tagId}`,
+    method: "get",
+  });
+};
+
+/**
+ * 创建Tag
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ * @param {object} data - Tag数据
+ */
+export const createMqttTag = (projectId, subscriptionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags`,
+    method: "post",
+    data,
+  });
+};
+
+/**
+ * 批量创建Tag
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ * @param {array} tags - Tag数据数组
+ */
+export const createMqttTagsBatch = (projectId, subscriptionId, tags) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags/batch`,
+    method: "post",
+    data: { tags },
+  });
+};
+
+/**
+ * 更新Tag
+ * @param {string} tagId - Tag ID
+ * @param {object} data - 更新数据
+ */
+export const updateMqttTag = (tagId, data) => {
+  return request({
+    url: `/data/mqtt/tags/${tagId}`,
+    method: "put",
+    data,
+  });
+};
+
+/**
+ * 删除Tag
+ * @param {string} tagId - Tag ID
+ */
+export const deleteMqttTag = (tagId) => {
+  return request({
+    url: `/data/mqtt/tags/${tagId}`,
+    method: "delete",
+  });
+};
+
+/**
+ * 切换Tag启用状态
+ * @param {string} tagId - Tag ID
+ */
+export const toggleMqttTag = (tagId) => {
+  return request({
+    url: `/data/mqtt/tags/${tagId}/toggle`,
+    method: "patch",
+  });
+};
+
+/**
+ * 更新Tags顺序
+ * @param {array} tagIds - Tag ID数组
+ */
+export const updateMqttTagsOrder = (tagIds) => {
+  return request({
+    url: `/data/mqtt/tags/order`,
+    method: "put",
+    data: { tagIds },
+  });
+};
+
+/**
+ * 获取Tag的当前值
+ * @param {string} tagId - Tag ID
+ */
+export const getMqttTagValue = (tagId) => {
+  return request({
+    url: `/data/mqtt/tags/${tagId}/value`,
+    method: "get",
+  });
+};
+
+/**
+ * 获取多个Tag的当前值
+ * @param {array} tagIds - Tag ID数组
+ */
+export const getMqttTagValues = (tagIds) => {
+  return request({
+    url: `/data/mqtt/tags/values`,
+    method: "post",
+    data: { tagIds },
+  });
+};
+
 export default {
   getConnections,
   createConnection,
@@ -348,4 +567,23 @@ export default {
   getMqttSubscriptionMessages,
   startMqttConnection,
   stopMqttConnection,
+  // MQTT 变量组相关
+  getMqttTagGroups,
+  getMqttTagGroup,
+  createMqttTagGroup,
+  updateMqttTagGroup,
+  deleteMqttTagGroup,
+  updateMqttTagGroupsOrder,
+  // MQTT Tag相关
+  getMqttTags,
+  getProjectMqttTags,
+  getMqttTag,
+  createMqttTag,
+  createMqttTagsBatch,
+  updateMqttTag,
+  deleteMqttTag,
+  toggleMqttTag,
+  updateMqttTagsOrder,
+  getMqttTagValue,
+  getMqttTagValues,
 };

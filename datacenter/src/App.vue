@@ -6,13 +6,13 @@
 
 <script>
 export default {
-  name: 'App',
-}
+  name: "App",
+};
 </script>
 
 <style>
 #app {
-  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
@@ -20,4 +20,3 @@ export default {
   overflow: hidden;
 }
 </style>
-

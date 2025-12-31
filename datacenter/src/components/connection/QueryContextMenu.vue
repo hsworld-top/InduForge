@@ -2,7 +2,12 @@
   <Teleport to="body">
     <div
       v-show="visible"
-      :style="{ position: 'fixed', left: position.x + 'px', top: position.y + 'px', zIndex: 9999 }"
+      :style="{
+        position: 'fixed',
+        left: position.x + 'px',
+        top: position.y + 'px',
+        zIndex: 9999,
+      }"
       class="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[150px]"
       @click="handleClose"
     >
@@ -33,75 +38,78 @@
 </template>
 
 <script setup>
-import { watch, onMounted, onBeforeUnmount } from 'vue'
-import IconTablerInfoCircle from '~icons/tabler/info-circle'
-import IconTablerFileCode from '~icons/tabler/file-code'
-import IconTablerTrash from '~icons/tabler/trash'
+import { watch, onMounted, onBeforeUnmount } from "vue";
+import IconTablerInfoCircle from "~icons/tabler/info-circle";
+import IconTablerFileCode from "~icons/tabler/file-code";
+import IconTablerTrash from "~icons/tabler/trash";
 
 const props = defineProps({
   visible: {
     type: Boolean,
-    default: false
+    default: false,
   },
   position: {
     type: Object,
-    default: () => ({ x: 0, y: 0 })
+    default: () => ({ x: 0, y: 0 }),
   },
   connection: {
     type: Object,
-    default: null
+    default: null,
   },
   query: {
     type: Object,
-    default: null
-  }
-})
+    default: null,
+  },
+});
 
-const emit = defineEmits(['update:visible', 'view-details', 'open', 'delete'])
+const emit = defineEmits(["update:visible", "view-details", "open", "delete"]);
 
 const handleClose = () => {
-  emit('update:visible', false)
-}
+  emit("update:visible", false);
+};
 
 const handleViewDetails = () => {
-  emit('view-details', props.connection, props.query)
-  handleClose()
-}
+  emit("view-details", props.connection, props.query);
+  handleClose();
+};
 
 const handleOpen = () => {
-  emit('open', props.connection, props.query)
-  handleClose()
-}
+  emit("open", props.connection, props.query);
+  handleClose();
+};
 
 const handleDelete = () => {
-  emit('delete', props.connection, props.query)
-  handleClose()
-}
+  emit("delete", props.connection, props.query);
+  handleClose();
+};
 
 // 点击外部关闭菜单
 const handleClickOutside = (event) => {
   if (props.visible) {
-    handleClose()
+    handleClose();
   }
-}
+};
 
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    setTimeout(() => {
-      document.addEventListener('click', handleClickOutside)
-    }, 0)
-  } else {
-    document.removeEventListener('click', handleClickOutside)
-  }
-})
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (newVal) {
+      setTimeout(() => {
+        document.addEventListener("click", handleClickOutside);
+      }, 0);
+    } else {
+      document.removeEventListener("click", handleClickOutside);
+    }
+  },
+);
 
 onMounted(() => {
   if (props.visible) {
-    document.addEventListener('click', handleClickOutside)
+    document.addEventListener("click", handleClickOutside);
   }
-})
+});
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
+  document.removeEventListener("click", handleClickOutside);
+});
 </script>

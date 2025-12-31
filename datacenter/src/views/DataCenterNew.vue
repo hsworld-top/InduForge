@@ -150,6 +150,10 @@
                   (subscription) =>
                     openMqttMessageViewer(tab.connection, subscription)
                 "
+                @manage-tags="
+                  (subscription) =>
+                    openMqttTagManager(tab.connection, subscription)
+                "
               />
             </div>
 
@@ -159,11 +163,30 @@
               class="flex-1 flex flex-col overflow-hidden"
             >
               <MqttMessageViewer
-                ref="mqttMessageViewerRef"
+                :ref="(el) => setMessageViewerRef(tab.id, el)"
                 :subscription="tab.subscription"
                 :project-id="projectId"
                 :connection-id="tab.connectionId"
               />
+            </div>
+
+            <!-- MQTT Tag管理 -->
+            <div
+              v-else-if="tab.type === 'mqtt-tags'"
+              class="flex-1 flex overflow-hidden"
+            >
+              <div class="w-1/2 border-r">
+                <MqttTagList
+                  :project-id="projectId"
+                  :subscription-id="tab.subscriptionId"
+                />
+              </div>
+              <div class="w-1/2">
+                <MqttTagMonitor
+                  :project-id="projectId"
+                  :subscription-id="tab.subscriptionId"
+                />
+              </div>
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -267,6 +290,8 @@ import SqlServerTableList from "@/components/database/sqlserver/SqlServerTableLi
 import SqlServerQueryEditor from "@/components/database/sqlserver/SqlServerQueryEditor.vue";
 import MqttSubscriptionList from "@/components/mqtt/MqttSubscriptionList.vue";
 import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
+import MqttTagList from "@/components/mqtt/MqttTagList.vue";
+import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
 import { useConnection } from "@/composables/useConnection";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import dataAPI from "@/api/data.api";
@@ -306,14 +331,25 @@ const {
   connected: mqttSocketConnected,
   subscribeMessages,
   onMessage,
-} = useMqttSocket(projectId);
+} = useMqttSocket(projectId.value);
 
 // 统一标签页管理
 const tabs = ref([]);
 const activeTabId = ref("");
 const tabsRef = ref(null);
-const mqttMessageViewerRef = ref(null);
+const mqttMessageViewerRefs = ref(new Map()); // 存储每个消息查看器的引用
 let tabCounter = 0;
+
+/**
+ * 设置消息查看器引用
+ */
+const setMessageViewerRef = (tabId, el) => {
+  if (el) {
+    mqttMessageViewerRefs.value.set(tabId, el);
+  } else {
+    mqttMessageViewerRefs.value.delete(tabId);
+  }
+};
 
 // 对话框状态
 const showConnectionDialog = ref(false);
@@ -423,15 +459,78 @@ const openMqttMessageViewer = (connection, subscription) => {
 
   // 订阅实时消息
   const unsubscribe = subscribeMessages(subscription.id, (data) => {
+    console.log("[DataCenterNew] Received MQTT message for tab:", tabId, data);
+
     // 找到对应的消息查看器并添加消息
-    const viewerTab = tabs.value.find((t) => t.id === tabId);
-    if (viewerTab && mqttMessageViewerRef.value) {
-      mqttMessageViewerRef.value.addMessage(data.message);
+    const viewerRef = mqttMessageViewerRefs.value.get(tabId);
+    if (viewerRef) {
+      console.log("[DataCenterNew] Found viewer for tab:", tabId);
+      viewerRef.addMessage(data.message);
+      // 设置连接状态为已连接
+      viewerRef.setConnected(true);
+      console.log("[DataCenterNew] Set connected status for tab:", tabId);
+    } else {
+      console.log("[DataCenterNew] No viewer found for tab:", tabId, {
+        availableRefs: Array.from(mqttMessageViewerRefs.value.keys()),
+      });
+      // 如果找不到引用，延迟重试
+      setTimeout(() => {
+        const retryViewerRef = mqttMessageViewerRefs.value.get(tabId);
+        if (retryViewerRef) {
+          console.log("[DataCenterNew] Retry: Found viewer for tab:", tabId);
+          retryViewerRef.addMessage(data.message);
+          retryViewerRef.setConnected(true);
+        }
+      }, 500);
     }
   });
 
+  // 延迟设置初始连接状态，确保组件已挂载
+  setTimeout(() => {
+    const viewerRef = mqttMessageViewerRefs.value.get(tabId);
+    if (viewerRef) {
+      viewerRef.setConnected(true);
+      console.log(
+        "[DataCenterNew] Initial connected status set for tab:",
+        tabId,
+      );
+    } else {
+      console.log("[DataCenterNew] Initial: No viewer found for tab:", tabId, {
+        availableRefs: Array.from(mqttMessageViewerRefs.value.keys()),
+      });
+    }
+  }, 1500);
+
   // 当标签页关闭时取消订阅
   newTab.unsubscribe = unsubscribe;
+};
+
+/**
+ * 打开MQTT Tag管理器
+ */
+const openMqttTagManager = (connection, subscription) => {
+  const tabId = `mqtt-tags-${subscription.id}`;
+  const existingTab = tabs.value.find((t) => t.id === tabId);
+
+  if (existingTab) {
+    activeTabId.value = tabId;
+    return;
+  }
+
+  const newTab = {
+    id: tabId,
+    type: "mqtt-tags",
+    label: `${connection.name} - ${subscription.name} - 变量管理`,
+    icon: IconTablerTable,
+    closable: true,
+    connection: connection,
+    connectionId: connection.id,
+    subscription: subscription,
+    subscriptionId: subscription.id,
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
 };
 
 /**
@@ -514,9 +613,13 @@ const handleCloseTab = (tabId) => {
 
   const tab = tabs.value[index];
 
-  // 如果是MQTT消息查看器，取消订阅
-  if (tab.type === "mqtt-messages" && tab.unsubscribe) {
-    tab.unsubscribe();
+  // 如果是MQTT消息查看器，取消订阅并清理引用
+  if (tab.type === "mqtt-messages") {
+    if (tab.unsubscribe) {
+      tab.unsubscribe();
+    }
+    // 清理消息查看器引用
+    mqttMessageViewerRefs.value.delete(tab.id);
   }
 
   tabs.value.splice(index, 1);
@@ -593,7 +696,7 @@ watch(
       cleanupWheelScroll = await setupTabsWheelScroll();
     }
   },
-  { immediate: false }
+  { immediate: false },
 );
 
 // 组件挂载时加载数据
@@ -608,6 +711,8 @@ onBeforeUnmount(() => {
   if (cleanupWheelScroll) {
     cleanupWheelScroll();
   }
+  // 清理所有消息查看器引用
+  mqttMessageViewerRefs.value.clear();
 });
 
 /**
@@ -625,7 +730,7 @@ const handleConnectionDblClick = async (connection) => {
     if (connection.type === "relational" && connection.relationalConfig) {
       // 检查当前展开状态
       const currentState = connectionListRef.value?.getConnectionState(
-        connection.id
+        connection.id,
       );
       const isCurrentlyExpanded = currentState?.expanded || false;
 
@@ -663,7 +768,7 @@ const handleConnectionDblClick = async (connection) => {
         // 展开连接并加载表列表和查询列表
         if (connectionListRef.value) {
           const state = connectionListRef.value.getConnectionState(
-            connection.id
+            connection.id,
           );
           state.expanded = true;
 
@@ -672,13 +777,13 @@ const handleConnectionDblClick = async (connection) => {
 
           if (state.tables.length === 0) {
             loadPromises.push(
-              connectionListRef.value.loadTables(connection.id)
+              connectionListRef.value.loadTables(connection.id),
             );
           }
 
           if (state.queries.length === 0) {
             loadPromises.push(
-              connectionListRef.value.loadQueries(connection.id)
+              connectionListRef.value.loadQueries(connection.id),
             );
           }
 
@@ -690,7 +795,7 @@ const handleConnectionDblClick = async (connection) => {
     } else if (connection.type === "mqtt" && connection.mqttConfig) {
       // MQTT 连接处理
       const currentState = connectionListRef.value?.getConnectionState(
-        connection.id
+        connection.id,
       );
       const isCurrentlyExpanded = currentState?.expanded || false;
 
@@ -718,7 +823,7 @@ const handleConnectionDblClick = async (connection) => {
         // 展开连接
         if (connectionListRef.value) {
           const state = connectionListRef.value.getConnectionState(
-            connection.id
+            connection.id,
           );
           state.expanded = true;
         }
@@ -825,7 +930,7 @@ const handleDeleteConnection = async (connection) => {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         type: "warning",
-      }
+      },
     );
 
     await deleteConnection(connection.id);
@@ -937,7 +1042,7 @@ const handleQueryExecute = async (tab) => {
       projectId.value,
       tab.connectionId,
       tab.sql,
-      parameters
+      parameters,
     );
 
     if (response.success) {
@@ -1058,7 +1163,7 @@ const handleViewQueryDetails = (connection, query) => {
     {
       dangerouslyUseHTMLString: true,
       confirmButtonText: "关闭",
-    }
+    },
   );
 };
 
@@ -1074,7 +1179,7 @@ const handleDeleteQueryFromMenu = async (connection, query) => {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         type: "warning",
-      }
+      },
     );
 
     await dataAPI.deleteQuery(query.id);
@@ -1094,7 +1199,7 @@ const handleDeleteQueryFromMenu = async (connection, query) => {
   } catch (error) {
     if (error !== "cancel") {
       ElMessage.error(
-        "删除查询失败：" + (error.response?.data?.message || error.message)
+        "删除查询失败：" + (error.response?.data?.message || error.message),
       );
     }
   }

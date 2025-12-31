@@ -330,7 +330,7 @@ watch(
     if (!isUpdatingFromParent.value) {
       formData.value.port = portMap[newProtocol] || 1883;
     }
-  }
+  },
 );
 
 // 监听表单数据变化，向上传递
@@ -342,7 +342,7 @@ watch(
       emit("update:modelValue", { ...newValue });
     }
   },
-  { deep: true }
+  { deep: true },
 );
 
 // 监听外部数据变化
@@ -370,7 +370,7 @@ watch(
       }, 0);
     }
   },
-  { deep: true }
+  { deep: true },
 );
 
 // 生成客户端 ID

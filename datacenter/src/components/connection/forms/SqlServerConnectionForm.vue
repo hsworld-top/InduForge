@@ -9,7 +9,12 @@
     </el-form-item>
 
     <el-form-item label="端口" prop="port">
-      <el-input-number v-model="formData.port" :min="1" :max="65535" class="w-full" />
+      <el-input-number
+        v-model="formData.port"
+        :min="1"
+        :max="65535"
+        class="w-full"
+      />
     </el-form-item>
 
     <el-form-item label="数据库名" prop="database">
@@ -53,60 +58,64 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch } from "vue";
 
 const props = defineProps({
   modelValue: {
     type: Object,
-    default: () => ({})
-  }
-})
+    default: () => ({}),
+  },
+});
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(["update:modelValue"]);
 
-const formRef = ref(null)
+const formRef = ref(null);
 
 const formData = ref({
-  name: props.modelValue.name || '',
-  host: props.modelValue.host || 'localhost',
+  name: props.modelValue.name || "",
+  host: props.modelValue.host || "localhost",
   port: props.modelValue.port || 1433,
-  database: props.modelValue.database || '',
-  username: props.modelValue.username || 'sa',
-  password: props.modelValue.password || '',
-  encrypt: props.modelValue.encrypt !== undefined ? props.modelValue.encrypt : false,
-  trustServerCertificate: props.modelValue.trustServerCertificate !== undefined ? props.modelValue.trustServerCertificate : true,
-  timeout: props.modelValue.timeout || 60000
-})
+  database: props.modelValue.database || "",
+  username: props.modelValue.username || "sa",
+  password: props.modelValue.password || "",
+  encrypt:
+    props.modelValue.encrypt !== undefined ? props.modelValue.encrypt : false,
+  trustServerCertificate:
+    props.modelValue.trustServerCertificate !== undefined
+      ? props.modelValue.trustServerCertificate
+      : true,
+  timeout: props.modelValue.timeout || 60000,
+});
 
 const rules = {
-  name: [{ required: true, message: '请输入连接名称', trigger: 'blur' }],
-  host: [{ required: true, message: '请输入主机地址', trigger: 'blur' }],
-  port: [{ required: true, message: '请输入端口', trigger: 'blur' }],
-  database: [{ required: true, message: '请输入数据库名', trigger: 'blur' }],
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
-}
+  name: [{ required: true, message: "请输入连接名称", trigger: "blur" }],
+  host: [{ required: true, message: "请输入主机地址", trigger: "blur" }],
+  port: [{ required: true, message: "请输入端口", trigger: "blur" }],
+  database: [{ required: true, message: "请输入数据库名", trigger: "blur" }],
+  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
+};
 
 watch(
   formData,
   (newVal) => {
-    emit('update:modelValue', { ...newVal })
+    emit("update:modelValue", { ...newVal });
   },
-  { deep: true }
-)
+  { deep: true },
+);
 
 const validate = () => {
-  return formRef.value.validate()
-}
+  return formRef.value.validate();
+};
 
 const clearValidate = () => {
   if (formRef.value) {
-    formRef.value.clearValidate()
+    formRef.value.clearValidate();
   }
-}
+};
 
 defineExpose({
   validate,
-  clearValidate
-})
+  clearValidate,
+});
 </script>

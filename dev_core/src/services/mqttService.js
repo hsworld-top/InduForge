@@ -264,6 +264,91 @@ class MqttService {
         lastErrorMessage: null,
       });
 
+      // 自动订阅所有启用的订阅
+      try {
+        const enabledSubscriptions = await DataMqttSubscription.findAll({
+          where: {
+            connectionId: connectionId,
+            isEnabled: true,
+          },
+        });
+
+        for (const subscription of enabledSubscriptions) {
+          try {
+            await this.subscribeToTopic(
+              subscription.id,
+              connectionId,
+              subscription.topic,
+              subscription.qos,
+              subscription.projectId
+            );
+            logger.info(
+              `[MqttService] Auto-subscribed to topic: ${subscription.topic} for subscription: ${subscription.id}`
+            );
+          } catch (subscribeError) {
+            logger.error(
+              `[MqttService] Auto-subscribe error for subscription ${subscription.id}:`,
+              subscribeError
+            );
+          }
+        }
+
+        logger.info(
+          `[MqttService] Auto-subscribed ${enabledSubscriptions.length} topics for connection: ${connectionId}`
+        );
+      } catch (autoSubscribeError) {
+        logger.error(
+          `[MqttService] Auto-subscribe error for connection ${connectionId}:`,
+          autoSubscribeError
+        );
+      }
+
+      // 自动订阅所有启用的订阅
+      try {
+        const enabledSubscriptions = await DataMqttSubscription.findAll({
+          where: {
+            connectionId: connectionId,
+            isEnabled: true,
+          },
+        });
+
+        logger.info(
+          `[MqttService] Found ${enabledSubscriptions.length} enabled subscriptions for connection: ${connectionId}`
+        );
+
+        for (const subscription of enabledSubscriptions) {
+          try {
+            logger.info(
+              `[MqttService] Auto-subscribing to topic: ${subscription.topic} (QoS: ${subscription.qos}) for subscription: ${subscription.id}`
+            );
+            await this.subscribeToTopic(
+              subscription.id,
+              connectionId,
+              subscription.topic,
+              subscription.qos,
+              subscription.projectId
+            );
+            logger.info(
+              `[MqttService] Auto-subscribed to topic: ${subscription.topic} for subscription: ${subscription.id}`
+            );
+          } catch (subscribeError) {
+            logger.error(
+              `[MqttService] Auto-subscribe error for subscription ${subscription.id}:`,
+              subscribeError
+            );
+          }
+        }
+
+        logger.info(
+          `[MqttService] Auto-subscribed ${enabledSubscriptions.length} topics for connection: ${connectionId}`
+        );
+      } catch (autoSubscribeError) {
+        logger.error(
+          `[MqttService] Auto-subscribe error for connection ${connectionId}:`,
+          autoSubscribeError
+        );
+      }
+
       logger.info(`[MqttService] Connection started: ${connectionId}`);
       return {
         status: "connected",
@@ -447,9 +532,36 @@ class MqttService {
       timestamp: Date.now(),
     });
 
+    // 解析消息并更新Tag值（异步执行，不阻塞消息处理）
+    this.processTagsForMessage(
+      subscriptionId,
+      message.topic,
+      message.payload.toString()
+    ).catch((error) => {
+      logger.error(
+        `[MqttService] Error processing tags for subscription ${subscriptionId}:`,
+        error
+      );
+    });
+
     logger.debug(
       `[MqttService] Handled message for subscription: ${subscriptionId}`
     );
+  }
+
+  /**
+   * 处理消息的Tag解析（异步）
+   * @param {string} subscriptionId - 订阅ID
+   * @param {string} topic - 主题
+   * @param {string} payload - 消息内容
+   */
+  async processTagsForMessage(subscriptionId, topic, payload) {
+    try {
+      const mqttTagService = require("./mqttTagService");
+      await mqttTagService.processMessage(subscriptionId, topic, payload);
+    } catch (error) {
+      logger.error(`[MqttService] Tag processing failed:`, error);
+    }
   }
 
   /**

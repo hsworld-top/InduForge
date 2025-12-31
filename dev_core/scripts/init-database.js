@@ -196,7 +196,7 @@ async function executeSqlFile() {
 }
 
 /**
- * 重置数据库（删除所有表并重新创建）
+ * 重置数据库（删除数据库并重新创建所有表）
  */
 async function resetDatabase() {
   let connection;
@@ -204,52 +204,60 @@ async function resetDatabase() {
   try {
     console.log("🔄 正在连接数据库进行重置...");
 
-    // 创建数据库连接（不指定数据库，先确保数据库存在）
+    // 创建数据库连接（不指定数据库）
     const connectionConfig = { ...dbConfig };
     delete connectionConfig.database;
 
     connection = await mysql.createConnection(connectionConfig);
 
-    // 确保数据库存在
-    console.log(`📦 确保数据库 '${dbConfig.database}' 存在...`);
+    console.log("✅ 数据库连接成功");
+
+    // 删除数据库（如果存在）
+    console.log(`🗑️  删除数据库 '${dbConfig.database}'...`);
+    try {
+      await connection.query(
+        `DROP DATABASE IF EXISTS \`${dbConfig.database}\``
+      );
+      console.log(`✅ 数据库 '${dbConfig.database}' 删除成功`);
+    } catch (error) {
+      console.log(`⚠️  删除数据库失败: ${error.message}`);
+      // 如果删除失败，可能是权限问题或其他原因，继续执行
+    }
+
+    // 重新创建数据库
+    console.log(`📦 重新创建数据库 '${dbConfig.database}'...`);
     await connection.query(
-      `CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+      `CREATE DATABASE \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
     );
+    console.log(`✅ 数据库 '${dbConfig.database}' 创建成功`);
 
     // 切换到目标数据库
     await connection.query(`USE \`${dbConfig.database}\``);
 
-    console.log("✅ 数据库连接成功");
+    // 读取并执行 SQL 文件
+    const sqlFilePath = path.join(__dirname, "..", "database", "init.sql");
+    console.log(`📖 读取 SQL 文件: ${sqlFilePath}`);
 
-    console.log("🗑️  删除现有表...");
-
-    // 按照外键依赖关系的相反顺序删除表
-    const dropStatements = [
-      // 数据中心相关表
-      "DROP TABLE IF EXISTS `data_query_logs`",
-      "DROP TABLE IF EXISTS `data_sql_configs`",
-      "DROP TABLE IF EXISTS `data_queries`",
-      "DROP TABLE IF EXISTS `data_relational_configs`",
-      "DROP TABLE IF EXISTS `data_connections`",
-      // 低代码平台相关表
-      "DROP TABLE IF EXISTS `design_pages`",
-      // 基础表
-      "DROP TABLE IF EXISTS `logs`",
-      "DROP TABLE IF EXISTS `projects`",
-      "DROP TABLE IF EXISTS `users`",
-      "DROP TABLE IF EXISTS `tenants`",
-    ];
-
-    for (const statement of dropStatements) {
-      try {
-        await connection.query(statement);
-        console.log(`✅ ${statement}`);
-      } catch (error) {
-        console.log(`⚠️  ${statement} 失败: ${error.message}`);
-      }
+    if (!fs.existsSync(sqlFilePath)) {
+      throw new Error(`SQL 文件不存在: ${sqlFilePath}`);
     }
 
-    console.log("✅ 数据库重置完成");
+    const sqlContent = fs.readFileSync(sqlFilePath, "utf8");
+
+    console.log("⚡ 执行 SQL 文件创建表结构...");
+
+    try {
+      await connection.query(sqlContent);
+      console.log("✅ SQL 文件执行成功，表结构创建完成");
+    } catch (error) {
+      console.error("❌ SQL 文件执行失败:", error);
+      throw error;
+    }
+
+    // 插入初始数据
+    await insertInitialData(connection);
+
+    console.log("🎉 数据库重置完成！");
   } catch (error) {
     console.error("❌ 数据库重置失败:", error);
     process.exit(1);

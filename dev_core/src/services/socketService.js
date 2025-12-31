@@ -52,7 +52,11 @@ class SocketService {
       socket.on("mqtt:subscribe", (data) => {
         const { subscriptionId } = data;
         if (subscriptionId) {
-          socket.join(`mqtt:subscription:${subscriptionId}`);
+          const roomName = `mqtt:subscription:${subscriptionId}`;
+          socket.join(roomName);
+          console.log(
+            `[SocketService] Client ${socket.id} joined room: ${roomName}`
+          );
           logger.info(
             `[SocketService] Client ${socket.id} subscribed to: ${subscriptionId}`
           );
@@ -69,6 +73,9 @@ class SocketService {
           );
         }
       });
+
+      // 设置Tag订阅处理
+      this.setupTagSubscription(socket);
 
       // 断开连接
       socket.on("disconnect", (reason) => {
@@ -155,6 +162,54 @@ class SocketService {
     logger.debug(
       `[SocketService] Broadcasted subscription status to room: ${room}`
     );
+  }
+
+  /**
+   * 广播Tag值更新
+   * @param {string} tagId - Tag ID
+   * @param {Object} valueData - 值数据
+   */
+  broadcastTagValueUpdate(tagId, valueData) {
+    if (!this.io) {
+      logger.warn("[SocketService] Socket.IO not initialized");
+      return;
+    }
+
+    // 广播到订阅该Tag的房间
+    const tagRoom = `mqtt:tag:${tagId}`;
+    this.io.to(tagRoom).emit("mqtt:tag:value", valueData);
+
+    logger.debug(
+      `[SocketService] Broadcasted tag value update to room: ${tagRoom}`
+    );
+  }
+
+  /**
+   * 订阅Tag值更新（客户端调用）
+   * 需要在setupEventHandlers中添加对应的socket事件监听
+   */
+  setupTagSubscription(socket) {
+    // 订阅Tag值更新
+    socket.on("mqtt:tag:subscribe", (data) => {
+      const { tagId } = data;
+      if (tagId) {
+        socket.join(`mqtt:tag:${tagId}`);
+        logger.info(
+          `[SocketService] Client ${socket.id} subscribed to tag: ${tagId}`
+        );
+      }
+    });
+
+    // 取消订阅Tag值更新
+    socket.on("mqtt:tag:unsubscribe", (data) => {
+      const { tagId } = data;
+      if (tagId) {
+        socket.leave(`mqtt:tag:${tagId}`);
+        logger.info(
+          `[SocketService] Client ${socket.id} unsubscribed from tag: ${tagId}`
+        );
+      }
+    });
   }
 
   /**

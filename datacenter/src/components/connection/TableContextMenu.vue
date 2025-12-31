@@ -35,44 +35,44 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import IconTablerTable from '~icons/tabler/table'
-import IconTablerCode from '~icons/tabler/code'
+import { computed } from "vue";
+import IconTablerTable from "~icons/tabler/table";
+import IconTablerCode from "~icons/tabler/code";
 
 const props = defineProps({
   visible: {
     type: Boolean,
-    default: false
+    default: false,
   },
   position: {
     type: Object,
-    default: () => ({ x: 0, y: 0 })
+    default: () => ({ x: 0, y: 0 }),
   },
   connection: {
     type: Object,
-    default: null
+    default: null,
   },
   table: {
     type: Object,
-    default: null
-  }
-})
+    default: null,
+  },
+});
 
-const emit = defineEmits(['update:visible', 'view-structure', 'query-table'])
+const emit = defineEmits(["update:visible", "view-structure", "query-table"]);
 
 const handleClose = () => {
-  emit('update:visible', false)
-}
+  emit("update:visible", false);
+};
 
 const handleViewStructure = () => {
-  emit('view-structure', props.connection, props.table)
-  handleClose()
-}
+  emit("view-structure", props.connection, props.table);
+  handleClose();
+};
 
 const handleQueryTable = () => {
-  emit('query-table', props.connection, props.table)
-  handleClose()
-}
+  emit("query-table", props.connection, props.table);
+  handleClose();
+};
 </script>
 
 <style scoped>

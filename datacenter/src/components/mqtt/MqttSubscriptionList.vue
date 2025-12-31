@@ -42,12 +42,6 @@
             <div class="flex items-start justify-between">
               <div class="flex-1 min-w-0">
                 <div class="flex items-center space-x-2">
-                  <el-tag
-                    :type="subscription.isEnabled ? 'success' : 'info'"
-                    size="small"
-                  >
-                    {{ subscription.isEnabled ? "启用" : "禁用" }}
-                  </el-tag>
                   <span
                     class="font-medium text-gray-900 dark:text-gray-100 truncate"
                   >
@@ -83,39 +77,36 @@
                     <IconTablerEye class="w-4 h-4" />
                   </el-button>
                 </el-tooltip>
-                <el-tooltip
-                  :content="subscription.isEnabled ? '禁用' : '启用'"
-                  placement="top"
-                >
+                <el-tooltip content="管理变量" placement="top">
                   <el-button
-                    :type="subscription.isEnabled ? 'warning' : 'success'"
+                    type="success"
                     size="small"
                     circle
-                    @click.stop="handleToggle(subscription)"
+                    @click.stop="handleManageTags(subscription)"
                   >
-                    <IconTablerPower class="w-4 h-4" />
+                    <IconTablerVariable class="w-4 h-4" />
                   </el-button>
                 </el-tooltip>
-                <el-dropdown
-                  trigger="click"
-                  @command="(cmd) => handleCommand(cmd, subscription)"
-                >
-                  <el-button size="small" circle @click.stop>
-                    <IconTablerDots class="w-4 h-4" />
+                <el-tooltip content="编辑" placement="top">
+                  <el-button
+                    type="info"
+                    size="small"
+                    circle
+                    @click.stop="handleEdit(subscription)"
+                  >
+                    <IconTablerEdit class="w-4 h-4" />
                   </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="edit">
-                        <IconTablerEdit class="mr-2 w-4 h-4" />
-                        编辑
-                      </el-dropdown-item>
-                      <el-dropdown-item command="delete" divided>
-                        <IconTablerTrash class="mr-2 w-4 h-4 text-red-500" />
-                        <span class="text-red-500">删除</span>
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                </el-tooltip>
+                <el-tooltip content="删除" placement="top">
+                  <el-button
+                    type="danger"
+                    size="small"
+                    circle
+                    @click.stop="handleDelete(subscription)"
+                  >
+                    <IconTablerTrash class="w-4 h-4" />
+                  </el-button>
+                </el-tooltip>
               </div>
             </div>
           </div>
@@ -146,6 +137,7 @@ import IconTablerPower from "~icons/tabler/power";
 import IconTablerDots from "~icons/tabler/dots";
 import IconTablerEdit from "~icons/tabler/edit";
 import IconTablerTrash from "~icons/tabler/trash";
+import IconTablerVariable from "~icons/tabler/variable";
 import MqttSubscriptionDialog from "./MqttSubscriptionDialog.vue";
 import dataAPI from "@/api/data.api";
 
@@ -176,14 +168,14 @@ const loadSubscriptions = async () => {
   try {
     const response = await dataAPI.getMqttSubscriptions(
       props.projectId,
-      props.connectionId
+      props.connectionId,
     );
     if (response.success) {
       subscriptions.value = response.data || [];
     }
   } catch (error) {
     ElMessage.error(
-      "加载订阅列表失败：" + (error.response?.data?.message || error.message)
+      "加载订阅列表失败：" + (error.response?.data?.message || error.message),
     );
   } finally {
     loading.value = false;
@@ -214,34 +206,10 @@ const handleView = (subscription) => {
 };
 
 /**
- * 切换启用状态
+ * 管理变量
  */
-const handleToggle = async (subscription) => {
-  try {
-    const response = await dataAPI.toggleMqttSubscription(
-      props.projectId,
-      subscription.id
-    );
-    if (response.success) {
-      subscription.isEnabled = response.data.isEnabled;
-      ElMessage.success(`订阅已${subscription.isEnabled ? "启用" : "禁用"}`);
-    }
-  } catch (error) {
-    ElMessage.error(
-      "操作失败：" + (error.response?.data?.message || error.message)
-    );
-  }
-};
-
-/**
- * 处理命令
- */
-const handleCommand = (command, subscription) => {
-  if (command === "edit") {
-    handleEdit(subscription);
-  } else if (command === "delete") {
-    handleDelete(subscription);
-  }
+const handleManageTags = (subscription) => {
+  emit("manage-tags", subscription);
 };
 
 /**
@@ -265,7 +233,7 @@ const handleDelete = async (subscription) => {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         type: "warning",
-      }
+      },
     );
 
     await dataAPI.deleteMqttSubscription(props.projectId, subscription.id);
@@ -274,7 +242,7 @@ const handleDelete = async (subscription) => {
   } catch (error) {
     if (error !== "cancel") {
       ElMessage.error(
-        "删除失败：" + (error.response?.data?.message || error.message)
+        "删除失败：" + (error.response?.data?.message || error.message),
       );
     }
   }
@@ -302,7 +270,7 @@ watch(
       loadSubscriptions();
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // 组件挂载
