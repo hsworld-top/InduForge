@@ -21,21 +21,6 @@
         />
       </el-form-item>
 
-      <el-form-item label="变量标识符" prop="code">
-        <el-input
-          v-model="formData.code"
-          placeholder="例如: temperature_sensor_1"
-          clearable
-        >
-          <template #append>
-            <el-button @click="generateCode">自动生成</el-button>
-          </template>
-        </el-input>
-        <span class="text-xs text-gray-500">
-          用于在系统中引用该变量，建议使用英文、数字和下划线
-        </span>
-      </el-form-item>
-
       <el-form-item label="描述">
         <el-input
           v-model="formData.description"
@@ -244,14 +229,6 @@ const rules = {
     { required: true, message: "请输入变量名称", trigger: "blur" },
     { min: 1, max: 100, message: "长度在 1 到 100 个字符", trigger: "blur" },
   ],
-  code: [
-    { required: true, message: "请输入变量标识符", trigger: "blur" },
-    {
-      pattern: /^[a-zA-Z][a-zA-Z0-9_]*$/,
-      message: "只能包含字母、数字和下划线，且以字母开头",
-      trigger: "blur",
-    },
-  ],
   dataType: [{ required: true, message: "请选择数据类型", trigger: "change" }],
   parseType: [{ required: true, message: "请选择解析类型", trigger: "change" }],
   parseRule: [{ required: true, message: "请输入解析规则", trigger: "blur" }],
@@ -266,7 +243,10 @@ const dialogTitle = computed(() => {
   return titles[props.mode] || "变量";
 });
 
-// 初始化表单
+/**
+ * 初始化表单数据
+ * @returns {void}
+ */
 const initForm = () => {
   if (props.tag && props.mode !== "create") {
     formData.value = {
@@ -297,26 +277,33 @@ const initForm = () => {
   }
 };
 
-// 自动生成code
-const generateCode = () => {
-  if (formData.value.name) {
-    // 简单的拼音转换（实际项目中可以使用更完善的库）
-    const code = formData.value.name
-      .toLowerCase()
-      .replace(/\s+/g, "_")
-      .replace(/[^a-z0-9_]/g, "");
-    formData.value.code = code || `tag_${Date.now()}`;
-  } else {
-    formData.value.code = `tag_${Date.now()}`;
-  }
+/**
+ * 将名称转换为标识符
+ * @param {string} name - 变量名称
+ * @returns {string} 标识符
+ */
+const normalizeCode = (name) => {
+  const normalized = String(name || "")
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+  return normalized || `tag_${Date.now()}`;
 };
 
-// 解析类型变化
+/**
+ * 处理解析类型变化
+ * @returns {void}
+ */
 const handleParseTypeChange = () => {
   formData.value.parseRule = "";
 };
 
-// 获取解析规则占位符
+/**
+ * 获取解析规则占位符
+ * @returns {string} 占位符文本
+ */
 const getParseRulePlaceholder = () => {
   const placeholders = {
     jsonpath: "例如: $.data.temperature",
@@ -326,7 +313,10 @@ const getParseRulePlaceholder = () => {
   return placeholders[formData.value.parseType] || "请输入解析规则";
 };
 
-// 获取解析规则提示
+/**
+ * 获取解析规则提示
+ * @returns {string} 提示文本
+ */
 const getParseRuleHint = () => {
   const hints = {
     jsonpath: "使用JSONPath表达式从JSON消息中提取值",
@@ -338,8 +328,16 @@ const getParseRuleHint = () => {
 };
 
 // 提交
+/**
+ * 提交表单
+ * @returns {Promise<void>}
+ * @throws 表单校验失败或接口调用异常
+ */
 const handleSubmit = async () => {
   try {
+    if (!formData.value.code) {
+      formData.value.code = normalizeCode(formData.value.name);
+    }
     await formRef.value.validate();
 
     // 解析验证规则JSON
@@ -378,7 +376,10 @@ const handleSubmit = async () => {
   }
 };
 
-// 关闭
+/**
+ * 关闭对话框
+ * @returns {void}
+ */
 const handleClose = () => {
   emit("close");
 };

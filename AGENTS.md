@@ -76,6 +76,7 @@
 ### datacenter（数据中心前端）
 
 - **技术栈**：Vue 3 + Vite + Pinia + Element Plus + Monaco
+- **图标规范**：统一使用 `unplugin-icons`
 - **主入口**：`DataCenterNew.vue`（统一标签页系统）
 - **连接模型**：`type=relational|mqtt`，具体 DB 类型由 `config.dbType` 指定
 - **MQTT 能力**：连接、订阅、消息查看、变量组/变量管理、实时推送（Socket.IO）
@@ -101,6 +102,7 @@
 ### designer（设计器前端）
 
 - **技术栈**：Vue 3 + Pinia + Element Plus + Konva + ECharts + GSAP
+- **图标规范**：统一使用 `unplugin-icons`
 - **渲染架构**：DOM 组件渲染 + Canvas 辅助渲染（对齐线/选择框等）
 - **数据绑定**：
   - **API 模式**（默认）：直接调用后端
@@ -125,6 +127,7 @@
 ### dev_ide（IDE 前端）
 
 - **技术栈**：Vue 3 + Vite + Pinia + Element Plus
+- **图标规范**：统一使用 `unplugin-icons`
 - **角色访问**：路由基于角色限制（SUPER_ADMIN、SYSTEM_ADMIN、PROJECT_ADMIN、OPS_ADMIN、USER_ADMIN）
 - **登录跳转**：未登录统一跳转 `/login`；超级管理员固定进入 `/admin`
 - **注意**：路由内仍存在 `TENANT_ADMIN` 字符串，需与后端角色枚举保持一致

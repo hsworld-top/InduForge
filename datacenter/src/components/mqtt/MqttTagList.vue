@@ -1,22 +1,23 @@
 <template>
   <div class="mqtt-tag-list h-full flex flex-col">
     <!-- 工具栏 -->
-    <div class="flex items-center justify-between p-4 border-b">
+    <div class="p-3 border-b space-y-2">
       <div class="flex items-center gap-2">
-        <el-button type="primary" @click="handleCreateTag">
+        <el-button type="primary" size="small" @click="handleCreateTag">
           <IconTablerPlus class="mr-1 w-4 h-4" />
           新建变量
         </el-button>
-        <el-button type="success" @click="handleCreateGroup">
+        <el-button type="success" size="small" @click="handleCreateGroup">
           <IconTablerFolderAdd class="mr-1 w-4 h-4" />
           新建分组
         </el-button>
-        <el-button @click="handleBatchCreate">
+        <el-button size="small" @click="handleBatchCreate">
           <IconTablerDocumentAdd class="mr-1 w-4 h-4" />
           批量导入
         </el-button>
-        <el-button @click="handleRefresh">
-          <IconTablerRefresh class="w-4 h-4" />
+        <el-button size="small" @click="handleBatchExport">
+          <IconTablerDownload class="mr-1 w-4 h-4" />
+          批量导出
         </el-button>
       </div>
       <div class="flex items-center gap-2">
@@ -24,13 +25,17 @@
           v-model="searchKeyword"
           placeholder="搜索变量名称或标识符"
           clearable
-          style="width: 250px"
+          style="width: 220px"
           @input="handleSearch"
         >
           <template #prefix>
             <IconTablerSearch class="w-4 h-4" />
           </template>
         </el-input>
+        <el-button size="small" @click="handleRefresh">
+          <IconTablerRefresh class="w-4 h-4" />
+          刷新
+        </el-button>
       </div>
     </div>
 
@@ -82,10 +87,7 @@
           v-for="group in sortedGroups"
           :key="group.id"
           class="group-node"
-          :style="{
-            '--group-color': group.color || '#409EFF',
-            '--group-bg-color': group.color ? `${group.color}15` : '#f0f9ff',
-          }"
+          :style="getGroupStyle(group)"
         >
           <div
             class="group-header"
@@ -212,6 +214,7 @@ import IconTablerTrash from "~icons/tabler/trash";
 import IconTablerFile from "~icons/tabler/file";
 import IconTablerChevronRight from "~icons/tabler/chevron-right";
 import IconTablerChevronDown from "~icons/tabler/chevron-down";
+import IconTablerDownload from "~icons/tabler/download";
 
 const props = defineProps({
   projectId: {
@@ -277,6 +280,53 @@ const getGroupTagCount = (groupId) => {
   return tags.value.filter((tag) => tag.groupId === groupId).length;
 };
 
+/**
+ * 生成分组样式变量
+ * @param {object} group - 分组数据
+ * @returns {object} CSS 变量对象
+ */
+const getGroupStyle = (group) => {
+  const baseColor = group?.color || "#3b82f6";
+  return {
+    "--group-color": baseColor,
+    "--group-bg-color": buildGroupBackgroundColor(baseColor),
+  };
+};
+
+/**
+ * 构建浅色背景
+ * @param {string} color - 基础颜色
+ * @returns {string} 背景色
+ */
+const buildGroupBackgroundColor = (color) => {
+  const normalized = String(color || "").trim();
+  // 颜色格式不合法时回退默认值
+  if (!normalized) {
+    return "#f0f9ff";
+  }
+
+  const hexMatch = normalized.match(/^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, 0.12)`;
+  }
+
+  const rgbMatch = normalized.match(
+    /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i
+  );
+  if (rgbMatch) {
+    const r = Number(rgbMatch[1]);
+    const g = Number(rgbMatch[2]);
+    const b = Number(rgbMatch[3]);
+    return `rgba(${r}, ${g}, ${b}, 0.12)`;
+  }
+
+  return "#f0f9ff";
+};
+
 // 切换分组展开状态
 const toggleGroup = (groupId) => {
   const index = activeGroups.value.indexOf(groupId);
@@ -324,6 +374,14 @@ const loadTags = async () => {
 const handleRefresh = async () => {
   await Promise.all([loadGroups(), loadTags()]);
   ElMessage.success("刷新成功");
+};
+
+/**
+ * 处理批量导出占位
+ * @returns {void}
+ */
+const handleBatchExport = () => {
+  ElMessage.info("批量导出功能待实现");
 };
 
 // 变量组操作
@@ -536,12 +594,12 @@ onBeforeUnmount(() => {
 .group-header {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 10px 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   background: white;
   border-radius: 6px;
-  margin: 4px 8px;
+  margin: 2px 6px;
   position: relative;
 }
 
@@ -559,8 +617,8 @@ onBeforeUnmount(() => {
 }
 
 .group-icon-wrapper {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -582,14 +640,14 @@ onBeforeUnmount(() => {
 }
 
 .group-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #1f2937;
   margin-bottom: 2px;
 }
 
 .group-stats {
-  font-size: 12px;
+  font-size: 11px;
   color: #6b7280;
 }
 
@@ -626,10 +684,10 @@ onBeforeUnmount(() => {
 }
 
 .tag-items {
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .empty-group {

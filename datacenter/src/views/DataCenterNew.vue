@@ -17,6 +17,10 @@
       @query-dblclick="handleQueryDblClick"
       @query-contextmenu="handleQueryContextMenu"
       @query-deleted="handleQueryDeleted"
+      @mqtt-subscription-dblclick="handleMqttSubscriptionDblClick"
+      @mqtt-subscription-view="handleMqttSubscriptionView"
+      @mqtt-subscription-manage="handleMqttSubscriptionManage"
+      @mqtt-subscription-delete="handleMqttSubscriptionDelete"
     />
 
     <!-- 右侧内容区域 - 统一标签页系统 -->
@@ -154,6 +158,10 @@
                   (subscription) =>
                     openMqttTagManager(tab.connection, subscription)
                 "
+                @subscription-deleted="
+                  (subscription) =>
+                    handleMqttSubscriptionDeleted(tab.connection, subscription)
+                "
               />
             </div>
 
@@ -175,13 +183,13 @@
               v-else-if="tab.type === 'mqtt-tags'"
               class="flex-1 flex overflow-hidden"
             >
-              <div class="w-1/2 border-r">
+              <div class="w-1/2 border-r min-w-0">
                 <MqttTagList
                   :project-id="projectId"
                   :subscription-id="tab.subscriptionId"
                 />
               </div>
-              <div class="w-1/2">
+              <div class="w-1/2 min-w-0">
                 <MqttTagMonitor
                   :project-id="projectId"
                   :subscription-id="tab.subscriptionId"
@@ -826,6 +834,10 @@ const handleConnectionDblClick = async (connection) => {
             connection.id,
           );
           state.expanded = true;
+
+          if (state.mqttSubscriptions.length === 0) {
+            await connectionListRef.value.loadMqttSubscriptions(connection.id);
+          }
         }
 
         // 打开订阅列表标签页
@@ -1139,6 +1151,79 @@ const handleQueryContextMenu = (event, connection, query) => {
   queryContextMenuQuery.value = query;
   queryContextMenuPosition.value = { x: event.clientX, y: event.clientY };
   showQueryContextMenu.value = true;
+};
+
+/**
+ * 双击 MQTT 订阅
+ */
+const handleMqttSubscriptionDblClick = (connection, subscription) => {
+  openMqttTagManager(connection, subscription);
+};
+
+/**
+ * 订阅右键菜单 - 查看消息
+ */
+const handleMqttSubscriptionView = (connection, subscription) => {
+  openMqttMessageViewer(connection, subscription);
+};
+
+/**
+ * 订阅右键菜单 - 管理变量
+ */
+const handleMqttSubscriptionManage = (connection, subscription) => {
+  openMqttTagManager(connection, subscription);
+};
+
+/**
+ * 订阅右键菜单 - 删除订阅
+ */
+const handleMqttSubscriptionDelete = async (connection, subscription) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除订阅 "${subscription.name}" 吗？`,
+      "删除确认",
+      {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
+
+    await dataAPI.deleteMqttSubscription(projectId.value, subscription.id);
+    ElMessage.success("订阅已删除");
+
+    if (connectionListRef.value) {
+      await connectionListRef.value.loadMqttSubscriptions(connection.id);
+    }
+    handleMqttSubscriptionDeleted(connection, subscription);
+  } catch (error) {
+    if (error !== "cancel") {
+      ElMessage.error(
+        "删除失败：" + (error.response?.data?.message || error.message),
+      );
+    }
+  }
+};
+
+/**
+ * 订阅删除后清理相关标签页
+ */
+const handleMqttSubscriptionDeleted = (connection, subscription) => {
+  const subscriptionId = subscription.id;
+  const messageTabId = `mqtt-messages-${subscriptionId}`;
+  const tagTabId = `mqtt-tags-${subscriptionId}`;
+
+  tabs.value = tabs.value.filter(
+    (tab) => tab.id !== messageTabId && tab.id !== tagTabId
+  );
+
+  if (activeTabId.value === messageTabId || activeTabId.value === tagTabId) {
+    const fallbackTab = tabs.value.find(
+      (tab) =>
+        tab.id === `mqtt-subscriptions-${connection.id}` || tab.closable
+    );
+    activeTabId.value = fallbackTab ? fallbackTab.id : "";
+  }
 };
 
 /**

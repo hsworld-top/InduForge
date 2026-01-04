@@ -109,7 +109,7 @@ const getParseTypeLabel = (type) => {
   background: #fff;
   border: 1px solid #e4e7ed;
   border-radius: 4px;
-  padding: 12px 16px;
+  padding: 10px 12px;
   transition: all 0.3s;
 }
 
@@ -140,12 +140,12 @@ const getParseTypeLabel = (type) => {
 .tag-code {
   font-family: monospace;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   color: #303133;
 }
 
 .tag-name {
-  font-size: 13px;
+  font-size: 12px;
   color: #606266;
 }
 

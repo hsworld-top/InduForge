@@ -26,18 +26,18 @@
         </div>
 
         <!-- 连接列表 -->
-        <div class="connection-items">
-          <ConnectionItem
-            v-for="connection in connections"
-            :key="connection.id"
-            :connection="connection"
-            :is-selected="selectedConnectionId === connection.id"
-            :is-expanded="getConnectionState(connection.id).expanded"
-            @click="handleSelect"
-            @dblclick="handleDblClick"
-            @contextmenu="handleContextMenu"
-          >
-            <template #expanded v-if="connection.type === 'relational'">
+      <div class="connection-items">
+        <ConnectionItem
+          v-for="connection in connections"
+          :key="connection.id"
+          :connection="connection"
+          :is-selected="selectedConnectionId === connection.id"
+          :is-expanded="getConnectionState(connection.id).expanded"
+          @click="handleSelect"
+          @dblclick="handleDblClick"
+          @contextmenu="handleContextMenu"
+        >
+          <template #expanded v-if="connection.type === 'relational'">
               <div class="mt-2 space-y-2" @dblclick.stop>
                 <!-- 查询列表 -->
                 <div
@@ -239,6 +239,118 @@
                 </div>
               </div>
             </template>
+            <template #expanded v-else-if="connection.type === 'mqtt'">
+              <div class="mt-2 space-y-2" @dblclick.stop>
+                <div class="space-y-1">
+                  <div
+                    class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded"
+                    @dblclick.stop
+                  >
+                    <div
+                      class="flex items-center space-x-2 flex-1 cursor-pointer"
+                      @click.stop="toggleSection(connection.id, 'mqttSubscriptions')"
+                    >
+                      <component
+                        :is="
+                          getConnectionState(connection.id)
+                            .mqttSubscriptionsExpanded
+                            ? IconTablerChevronDown
+                            : IconTablerChevronRight
+                        "
+                        class="text-purple-500 w-4 h-4"
+                      />
+                      <span class="text-purple-700 dark:text-purple-300"
+                        >订阅</span
+                      >
+                    </div>
+                    <div class="flex items-center space-x-1">
+                      <el-tooltip content="刷新订阅列表" placement="top">
+                        <button
+                          class="p-1 hover:bg-purple-200 dark:hover:bg-purple-700 rounded"
+                          @click.stop="refreshMqttSubscriptions(connection.id)"
+                        >
+                          <IconTablerRefresh
+                            class="w-3 h-3 text-purple-600 dark:text-purple-400"
+                          />
+                        </button>
+                      </el-tooltip>
+                      <span
+                        v-if="
+                          !getConnectionState(connection.id)
+                            .loadingMqttSubscriptions
+                        "
+                        class="text-purple-600 dark:text-purple-400"
+                      >
+                        {{
+                          getConnectionState(connection.id).mqttSubscriptions
+                            .length
+                        }}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    v-if="
+                      getConnectionState(connection.id).loadingMqttSubscriptions
+                    "
+                    class="pl-6 text-xs text-gray-500"
+                  >
+                    加载订阅列表...
+                  </div>
+                  <template
+                    v-else-if="
+                      getConnectionState(connection.id).mqttSubscriptionsExpanded
+                    "
+                  >
+                    <div
+                      v-if="
+                        getConnectionState(connection.id).mqttSubscriptions
+                          .length === 0
+                      "
+                      class="pl-6 text-xs text-gray-500"
+                    >
+                      暂无订阅
+                    </div>
+                    <ul
+                      v-else
+                      class="space-y-0.5 pl-6 border-l-2 border-purple-300 dark:border-purple-700"
+                    >
+                      <li
+                        v-for="subscription in getConnectionState(connection.id)
+                          .mqttSubscriptions"
+                        :key="subscription.id"
+                        class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 cursor-pointer px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5"
+                        @dblclick.stop="
+                          handleMqttSubscriptionDblClick(
+                            connection,
+                            subscription
+                          )
+                        "
+                        @contextmenu.prevent.stop="
+                          handleMqttSubscriptionContextMenu(
+                            $event,
+                            connection,
+                            subscription
+                          )
+                        "
+                      >
+                        <el-tooltip
+                          :content="subscription.name"
+                          placement="top"
+                          :show-after="500"
+                        >
+                          <span class="truncate flex-1 font-medium">{{
+                            subscription.name
+                          }}</span>
+                        </el-tooltip>
+                        <span class="text-gray-400 text-[10px] truncate ml-2">
+                          {{ subscription.topic }}
+                        </span>
+                      </li>
+                    </ul>
+                  </template>
+                </div>
+              </div>
+            </template>
           </ConnectionItem>
         </div>
 
@@ -301,6 +413,10 @@ const emit = defineEmits([
   "query-dblclick",
   "query-contextmenu",
   "query-deleted",
+  "mqtt-subscription-dblclick",
+  "mqtt-subscription-view",
+  "mqtt-subscription-manage",
+  "mqtt-subscription-delete",
 ]);
 
 // 连接状态管理
@@ -316,6 +432,9 @@ const getConnectionState = (connectionId) => {
       loadingQueries: false,
       queries: [],
       queriesExpanded: true,
+      loadingMqttSubscriptions: false,
+      mqttSubscriptions: [],
+      mqttSubscriptionsExpanded: true,
     };
   }
   return connectionStates[connectionId];
@@ -374,6 +493,16 @@ const toggleSection = async (connectionId, section) => {
     ) {
       await loadQueries(connectionId);
     }
+  } else if (section === "mqttSubscriptions") {
+    state.mqttSubscriptionsExpanded = !state.mqttSubscriptionsExpanded;
+
+    if (
+      state.mqttSubscriptionsExpanded &&
+      state.mqttSubscriptions.length === 0 &&
+      !state.loadingMqttSubscriptions
+    ) {
+      await loadMqttSubscriptions(connectionId);
+    }
   }
 };
 
@@ -418,12 +547,110 @@ const loadQueries = async (connectionId) => {
   }
 };
 
+/**
+ * 加载 MQTT 订阅列表
+ * @param {string} connectionId - 连接ID
+ * @returns {Promise<void>}
+ */
+const loadMqttSubscriptions = async (connectionId) => {
+  const state = getConnectionState(connectionId);
+  state.loadingMqttSubscriptions = true;
+
+  try {
+    const response = await dataAPI.getMqttSubscriptions(
+      props.projectId,
+      connectionId,
+    );
+    if (response.success) {
+      state.mqttSubscriptions = response.data || [];
+    }
+  } catch (error) {
+    ElMessage.error(
+      "加载订阅列表失败：" + (error.response?.data?.message || error.message),
+    );
+  } finally {
+    state.loadingMqttSubscriptions = false;
+  }
+};
+
 const handleQueryDblClick = (connection, query) => {
   emit("query-dblclick", connection, query);
 };
 
 const handleQueryContextMenu = (event, connection, query) => {
   emit("query-contextmenu", event, connection, query);
+};
+
+/**
+ * 双击 MQTT 订阅
+ * @param {object} connection - 连接信息
+ * @param {object} subscription - 订阅信息
+ * @returns {void}
+ */
+const handleMqttSubscriptionDblClick = (connection, subscription) => {
+  emit("mqtt-subscription-dblclick", connection, subscription);
+};
+
+/**
+ * MQTT 订阅右键菜单
+ * @param {MouseEvent} event - 鼠标事件
+ * @param {object} connection - 连接信息
+ * @param {object} subscription - 订阅信息
+ * @returns {void}
+ */
+const handleMqttSubscriptionContextMenu = (
+  event,
+  connection,
+  subscription,
+) => {
+  const menu = document.createElement("div");
+  menu.className =
+    "fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[140px]";
+  menu.style.cssText = `position: fixed; left: ${event.clientX}px; top: ${event.clientY}px; z-index: 9999;`;
+
+  const viewItem = document.createElement("div");
+  viewItem.className =
+    "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
+  viewItem.textContent = "查看消息";
+  viewItem.onclick = () => {
+    emit("mqtt-subscription-view", connection, subscription);
+    document.body.removeChild(menu);
+  };
+
+  const manageItem = document.createElement("div");
+  manageItem.className =
+    "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
+  manageItem.textContent = "管理变量";
+  manageItem.onclick = () => {
+    emit("mqtt-subscription-manage", connection, subscription);
+    document.body.removeChild(menu);
+  };
+
+  const deleteItem = document.createElement("div");
+  deleteItem.className =
+    "px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer";
+  deleteItem.textContent = "删除";
+  deleteItem.onclick = () => {
+    emit("mqtt-subscription-delete", connection, subscription);
+    document.body.removeChild(menu);
+  };
+
+  menu.appendChild(viewItem);
+  menu.appendChild(manageItem);
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+
+  const closeMenu = (e) => {
+    if (!menu.contains(e.target)) {
+      if (document.body.contains(menu)) {
+        document.body.removeChild(menu);
+      }
+      document.removeEventListener("click", closeMenu);
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener("click", closeMenu);
+  }, 0);
 };
 
 const handleDeleteQuery = async (connection, query) => {
@@ -472,6 +699,16 @@ const refreshTables = async (connectionId) => {
 const refreshQueries = async (connectionId) => {
   await loadQueries(connectionId);
   ElMessage.success("查询列表已刷新");
+};
+
+/**
+ * 刷新订阅列表
+ * @param {string} connectionId - 连接ID
+ * @returns {Promise<void>}
+ */
+const refreshMqttSubscriptions = async (connectionId) => {
+  await loadMqttSubscriptions(connectionId);
+  ElMessage.success("订阅列表已刷新");
 };
 
 /**
@@ -561,5 +798,6 @@ defineExpose({
   getConnectionState,
   loadTables,
   loadQueries,
+  loadMqttSubscriptions,
 });
 </script>

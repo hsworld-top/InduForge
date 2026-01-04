@@ -36,7 +36,7 @@
             :key="subscription.id"
             class="subscription-item p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
             @click="handleSelect(subscription)"
-            @dblclick="handleView(subscription)"
+            @dblclick="handleManageTags(subscription)"
             @contextmenu.prevent="handleContextMenu($event, subscription)"
           >
             <div class="flex items-start justify-between">
@@ -152,7 +152,12 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["view-messages", "subscription-select"]);
+const emit = defineEmits([
+  "view-messages",
+  "subscription-select",
+  "manage-tags",
+  "subscription-deleted",
+]);
 
 const loading = ref(false);
 const subscriptions = ref([]);
@@ -239,6 +244,7 @@ const handleDelete = async (subscription) => {
     await dataAPI.deleteMqttSubscription(props.projectId, subscription.id);
     ElMessage.success("订阅已删除");
     await loadSubscriptions();
+    emit("subscription-deleted", subscription);
   } catch (error) {
     if (error !== "cancel") {
       ElMessage.error(
@@ -252,7 +258,54 @@ const handleDelete = async (subscription) => {
  * 右键菜单
  */
 const handleContextMenu = (event, subscription) => {
-  // TODO: 实现右键菜单
+  const menu = document.createElement("div");
+  menu.className =
+    "fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[140px]";
+  menu.style.cssText = `position: fixed; left: ${event.clientX}px; top: ${event.clientY}px; z-index: 9999;`;
+
+  const openItem = document.createElement("div");
+  openItem.className =
+    "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
+  openItem.textContent = "查看消息";
+  openItem.onclick = () => {
+    handleView(subscription);
+    document.body.removeChild(menu);
+  };
+
+  const manageItem = document.createElement("div");
+  manageItem.className =
+    "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
+  manageItem.textContent = "管理变量";
+  manageItem.onclick = () => {
+    handleManageTags(subscription);
+    document.body.removeChild(menu);
+  };
+
+  const deleteItem = document.createElement("div");
+  deleteItem.className =
+    "px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer";
+  deleteItem.textContent = "删除";
+  deleteItem.onclick = async () => {
+    document.body.removeChild(menu);
+    await handleDelete(subscription);
+  };
+
+  menu.appendChild(openItem);
+  menu.appendChild(manageItem);
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+
+  const closeMenu = (e) => {
+    if (!menu.contains(e.target)) {
+      if (document.body.contains(menu)) {
+        document.body.removeChild(menu);
+      }
+      document.removeEventListener("click", closeMenu);
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener("click", closeMenu);
+  }, 0);
 };
 
 /**

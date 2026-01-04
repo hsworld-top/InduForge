@@ -1,7 +1,7 @@
 <template>
   <div class="mqtt-tag-monitor h-full flex flex-col">
     <!-- 头部工具栏 -->
-    <div class="flex items-center justify-between p-4 border-b bg-gray-50">
+    <div class="flex items-center justify-between p-3 border-b bg-gray-50">
       <div class="flex items-center gap-2">
         <span class="text-sm font-semibold">Tag实时监控</span>
         <el-tag v-if="enabledTags.length > 0" size="small" type="info">
@@ -19,6 +19,22 @@
         </el-tag>
       </div>
       <div class="flex items-center gap-2">
+        <div class="view-toggle">
+          <el-button
+            size="small"
+            :type="viewMode === 'list' ? 'primary' : 'default'"
+            @click="viewMode = 'list'"
+          >
+            行展示
+          </el-button>
+          <el-button
+            size="small"
+            :type="viewMode === 'card' ? 'primary' : 'default'"
+            @click="viewMode = 'card'"
+          >
+            卡片展示
+          </el-button>
+        </div>
         <el-tooltip content="重新加载变量配置" placement="top">
           <el-button size="small" @click="handleRefresh">
             <IconTablerRefresh class="mr-1 w-4 h-4" />
@@ -29,7 +45,7 @@
     </div>
 
     <!-- Tag监控面板 -->
-    <div class="flex-1 overflow-auto p-4">
+    <div class="flex-1 overflow-auto p-3">
       <div
         v-if="enabledTags.length === 0"
         class="text-center text-gray-400 py-20"
@@ -46,11 +62,14 @@
         </div>
       </div>
 
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div
+        v-else-if="viewMode === 'card'"
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"
+      >
         <div
           v-for="tag in enabledTags"
           :key="tag.id"
-          class="tag-card border-2 rounded-xl p-4 bg-white shadow-sm hover:shadow-lg transition-all duration-300"
+          class="tag-card border-2 rounded-lg p-3 bg-white shadow-sm hover:shadow-md transition-all duration-300"
           :class="{
             'border-green-400 bg-green-50':
               tag.currentValue?.quality === 'good',
@@ -61,9 +80,9 @@
           }"
         >
           <!-- Tag名称和标识符 -->
-          <div class="flex items-start justify-between mb-3">
+          <div class="flex items-start justify-between mb-2">
             <div class="flex-1 min-w-0">
-              <div class="text-base font-bold text-gray-800 truncate">
+              <div class="text-sm font-semibold text-gray-800 truncate">
                 {{ tag.name }}
               </div>
               <div class="text-xs text-gray-500 font-mono mt-1">
@@ -82,19 +101,17 @@
           </div>
 
           <!-- Tag值显示 -->
-          <div
-            class="tag-value mt-3 p-4 bg-white rounded-lg border border-gray-200"
-          >
+          <div class="tag-value mt-2 p-3 bg-white rounded-lg border border-gray-200">
             <div
               v-if="tag.currentValue"
               class="flex items-baseline justify-between"
             >
-              <span class="text-3xl font-bold text-gray-900 truncate">
+              <span class="text-2xl font-bold text-gray-900 truncate">
                 {{ formatValue(tag.currentValue.parsedValue, tag.dataType) }}
               </span>
               <span
                 v-if="tag.unit"
-                class="text-base text-gray-600 ml-2 font-medium"
+                class="text-sm text-gray-600 ml-2 font-medium"
               >
                 {{ tag.unit }}
               </span>
@@ -106,7 +123,7 @@
           </div>
 
           <!-- Tag元数据 -->
-          <div class="mt-3 text-xs text-gray-500 space-y-1">
+          <div class="mt-2 text-xs text-gray-500 space-y-1">
             <div class="flex justify-between">
               <span>数据类型:</span>
               <span>{{ getDataTypeLabel(tag.dataType) }}</span>
@@ -138,6 +155,45 @@
           </div>
         </div>
       </div>
+      <div v-else class="tag-row-list">
+        <div class="tag-row tag-row-header">
+          <span>变量名</span>
+          <span>类型</span>
+          <span>当前值</span>
+          <span>时间戳</span>
+          <span>质量</span>
+        </div>
+        <div
+          v-for="tag in enabledTags"
+          :key="tag.id"
+          class="tag-row"
+        >
+          <span class="truncate" :title="tag.name">{{ tag.name }}</span>
+          <span>{{ getDataTypeLabel(tag.dataType) }}</span>
+          <span class="truncate">
+            {{
+              tag.currentValue
+                ? formatValue(tag.currentValue.parsedValue, tag.dataType)
+                : "-"
+            }}
+          </span>
+          <span class="truncate">
+            {{
+              tag.currentValue?.timestamp
+                ? formatTimestamp(tag.currentValue.timestamp)
+                : "-"
+            }}
+          </span>
+          <span>
+            <el-tag
+              :type="getQualityColor(tag.currentValue?.quality || 'unknown')"
+              size="small"
+            >
+              {{ getQualityLabel(tag.currentValue?.quality || "unknown") }}
+            </el-tag>
+          </span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -165,6 +221,7 @@ const props = defineProps({
 });
 
 const tags = ref([]);
+const viewMode = ref("list");
 
 // 只显示启用的Tag
 const enabledTags = computed(() => {
@@ -399,6 +456,42 @@ defineExpose({
   background: linear-gradient(to bottom, #f5f7fa, #e9ecef);
 }
 
+.view-toggle {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.tag-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tag-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.6fr 1fr 1.2fr 0.6fr;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.tag-row-header {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.tag-row .truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tag-card {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -418,7 +511,7 @@ defineExpose({
 }
 
 .tag-card:hover {
-  transform: translateY(-4px) scale(1.02);
+  transform: translateY(-2px) scale(1.01);
 }
 
 .tag-card:hover::before {
@@ -426,7 +519,7 @@ defineExpose({
 }
 
 .tag-value {
-  min-height: 80px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;

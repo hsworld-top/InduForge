@@ -14,21 +14,6 @@
         />
       </el-form-item>
 
-      <el-form-item label="分组标识符" prop="code">
-        <el-input
-          v-model="formData.code"
-          placeholder="请输入分组标识符（英文、数字、下划线）"
-          clearable
-        >
-          <template #append>
-            <el-button @click="generateCode">自动生成</el-button>
-          </template>
-        </el-input>
-        <span class="text-xs text-gray-500">
-          用于程序引用，创建后不可修改
-        </span>
-      </el-form-item>
-
       <el-form-item label="分组描述" prop="description">
         <el-input
           v-model="formData.description"
@@ -39,8 +24,19 @@
       </el-form-item>
 
       <el-form-item label="分组颜色" prop="color">
-        <el-color-picker v-model="formData.color" show-alpha />
-        <span class="ml-2 text-xs text-gray-500">用于UI显示的颜色标识</span>
+        <div class="color-options">
+          <button
+            v-for="color in presetColors"
+            :key="color"
+            type="button"
+            class="color-option"
+            :class="{ active: formData.color === color }"
+            :style="{ backgroundColor: color }"
+            :aria-label="`选择颜色 ${color}`"
+            @click="handleColorSelect(color)"
+          />
+        </div>
+        <span class="ml-2 text-xs text-gray-500">从预设颜色中选择</span>
       </el-form-item>
 
       <el-form-item label="显示顺序" prop="order">
@@ -96,6 +92,16 @@ const emit = defineEmits(["close", "success"]);
 // 状态
 const formRef = ref(null);
 const submitting = ref(false);
+const presetColors = [
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#6366f1",
+  "#8b5cf6",
+  "#06b6d4",
+  "#6b7280",
+];
 const formData = ref({
   name: "",
   code: "",
@@ -110,15 +116,6 @@ const rules = {
     { required: true, message: "请输入分组名称", trigger: "blur" },
     { min: 2, max: 50, message: "长度在 2 到 50 个字符", trigger: "blur" },
   ],
-  code: [
-    { required: true, message: "请输入分组标识符", trigger: "blur" },
-    {
-      pattern: /^[a-zA-Z][a-zA-Z0-9_]*$/,
-      message: "只能包含字母、数字、下划线，且以字母开头",
-      trigger: "blur",
-    },
-    { min: 2, max: 50, message: "长度在 2 到 50 个字符", trigger: "blur" },
-  ],
 };
 
 // 计算属性
@@ -126,36 +123,37 @@ const dialogTitle = computed(() => {
   return props.mode === "create" ? "新建变量组" : "编辑变量组";
 });
 
-// 自动生成 code
-const generateCode = () => {
-  if (!formData.value.name) {
-    ElMessage.warning("请先输入分组名称");
-    return;
-  }
+/**
+ * 选择分组颜色
+ * @param {string} color - 预设颜色值
+ */
+const handleColorSelect = (color) => {
+  formData.value.color = color;
+};
 
-  // 简单转换：移除特殊字符，保留字母、数字、下划线
-  let code = formData.value.name
+/**
+ * 自动生成分组标识符
+ * @param {string} name - 分组名称
+ * @returns {string} 分组标识符
+ */
+const generateCode = (name) => {
+  const rawName = String(name || "");
+  let code = rawName
     .toLowerCase()
-    // 移除中文字符
     .replace(/[\u4e00-\u9fa5]/g, "")
-    // 移除特殊字符，只保留字母、数字、下划线
     .replace(/[^a-z0-9_]/g, "_")
-    // 移除开头和结尾的下划线
     .replace(/^_+|_+$/g, "")
-    // 合并多个连续下划线
     .replace(/_+/g, "_");
 
-  // 如果结果为空，使用默认值
   if (!code) {
     code = "group_" + Date.now();
   }
 
-  // 确保以字母开头
   if (!/^[a-z]/.test(code)) {
     code = "g_" + code;
   }
 
-  formData.value.code = code;
+  return code;
 };
 
 // 监听 group 变化
@@ -185,14 +183,24 @@ watch(
   { immediate: true },
 );
 
-// 关闭对话框
+/**
+ * 关闭对话框
+ * @returns {void}
+ */
 const handleClose = () => {
   emit("close");
 };
 
-// 提交表单
+/**
+ * 提交表单
+ * @returns {Promise<void>}
+ * @throws 表单校验失败或接口调用异常
+ */
 const handleSubmit = async () => {
   try {
+    if (!formData.value.code) {
+      formData.value.code = generateCode(formData.value.name);
+    }
     await formRef.value.validate();
 
     submitting.value = true;
@@ -226,5 +234,25 @@ const handleSubmit = async () => {
 <style scoped>
 .el-select {
   width: 100%;
+}
+
+.color-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.color-option {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.color-option.active {
+  border-color: #111827;
+  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.3);
 }
 </style>
