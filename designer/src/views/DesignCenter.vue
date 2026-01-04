@@ -43,13 +43,11 @@
 
                 <el-divider direction="vertical" />
 
-                <!-- 画布宽度显示 - 点击打开设置 -->
-                <el-tooltip content="点击设置画布" placement="bottom">
-                    <div class="canvas-info" @click="showCanvasSettings = true">
-                        <span class="canvas-width">{{ canvasWidth }}px</span>
-                        <span class="canvas-scale">{{ Math.round(canvasScale * 100) }}%</span>
-                    </div>
-                </el-tooltip>
+                <!-- 页面宽度显示 - 点击打开设置 -->
+                <div class="canvas-info">
+                    <span class="canvas-width">{{ canvasWidth }}px</span>
+                    <span class="canvas-scale">{{ Math.round(canvasScale * 100) }}%</span>
+                </div>
 
                 <el-divider direction="vertical" />
 
@@ -70,7 +68,7 @@
             <div class="left-panel" :style="{ width: leftPanelWidth + 'px' }">
                 <el-tabs v-model="leftActiveTab" class="panel-tabs">
                     <el-tab-pane label="页面" name="pages">
-                        <PageTree />
+                        <PageTree :current-page-id="designStore.currentPageId" @page-create-requested="handlePageCreateRequested" />
                     </el-tab-pane>
                     <el-tab-pane label="组件库" name="library">
                         <ComponentLibrary @drag-start="handleDragStart" @drag-end="handleDragEnd" />
@@ -148,9 +146,12 @@
             <span class="status-item"> 组件: {{ componentCount }} </span>
         </div>
 
-        <!-- 画布设置对话框 -->
-        <el-dialog v-model="showCanvasSettings" title="画布设置" width="500px" :close-on-click-modal="false" :lock-scroll="false">
+        <!-- 页面设置对话框 -->
+        <el-dialog v-model="showCanvasSettings" title="页面设置" width="500px" :close-on-click-modal="false" :lock-scroll="false">
             <el-form label-width="80px" label-position="left">
+                <el-form-item label="页面名称">
+                    <el-input v-model.trim="pageName" placeholder="请输入页面名称" maxlength="50" show-word-limit />
+                </el-form-item>
                 <el-form-item label="宽度">
                     <el-input v-model.number="canvasWidth" type="number" suffix-icon="px">
                         <template #append>px</template>
@@ -162,7 +163,7 @@
                     </el-input>
                 </el-form-item>
                 <el-form-item label="自由布局">
-                    <el-switch v-model="freeLayout" />
+                    <el-switch v-model="settingsFreeLayout" />
                 </el-form-item>
             </el-form>
             <template #footer>
@@ -179,7 +180,7 @@
  * 集成三栏布局：PageTree + ComponentTree + ComponentLibrary | Canvas | PropertyPanel
  * Requirements: 1.1, 1.3, 6.2
  */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import IconTablerArrowBackUp from '~icons/tabler/arrow-back-up';
@@ -201,6 +202,7 @@ import { PageTree, ComponentTree, ComponentLibrary, PropertyPanel, GlobalVariabl
 import { DesignCanvas, CanvasRuler } from '@/components/canvas';
 import ContextMenu from '@/components/canvas/ContextMenu.vue';
 import { registerAllComponents } from '@/registry/components';
+import { createComponentInstance, getComponent } from '@/registry';
 
 // Route
 const route = useRoute();
@@ -234,8 +236,14 @@ const deviceType = ref('desktop');
 const orientation = ref('portrait');
 const canvasWidth = ref(1200);
 const showCanvasSettings = ref(false);
-const freeLayout = ref(true);
+const freeLayout = ref(false);
+const settingsFreeLayout = ref(false);
 const canvasScalePercent = ref(100);
+const layoutInitPending = ref(false);
+const pendingNewPage = ref(false);
+const pageName = ref('');
+const pageSettingsApplied = ref(false);
+const syncingPageConfig = ref(false);
 
 // 撤销/重做功能
 const canUndo = computed(() => designStore.canUndo);
@@ -269,6 +277,240 @@ const zoomControlLeft = computed(() => {
 
 // Methods
 
+/**
+ * 创建默认布局容器（填充画布）。
+ * @returns {Object|null} 布局容器组件实例
+ */
+function createDefaultLayoutContainer() {
+    const overrides = {
+        props: {
+            layout: 'grid',
+            gridTemplateColumns: 'repeat(24, minmax(0, 1fr))',
+            gridTemplateRows: 'auto',
+            gridAutoFlow: 'row',
+            gap: 16,
+            justifyItems: 'stretch',
+            alignItems: 'stretch',
+            justifyContent: 'start',
+            alignContent: 'start',
+            __autoLayout: true,
+        },
+        style: {
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 1,
+        },
+    };
+
+    const instance = createComponentInstance('Container', overrides);
+    if (!instance) {
+        return null;
+    }
+    instance.meta = { ...(instance.meta || {}), autoLayout: true };
+    instance.autoLayout = true;
+
+    return instance;
+}
+
+/**
+ * 在关闭自由布局时确保画布存在默认布局容器。
+ * @returns {void}
+ */
+function ensureDefaultLayoutContainer() {
+    if (freeLayout.value) return;
+    if (!currentPage.value || !Array.isArray(currentPage.value.components)) return;
+    if (currentPage.value.components.length > 0) return;
+
+    if (!getComponent('Container')) {
+        if (!layoutInitPending.value) {
+            layoutInitPending.value = true;
+            setTimeout(() => {
+                layoutInitPending.value = false;
+                ensureDefaultLayoutContainer();
+            }, 0);
+        }
+        return;
+    }
+
+    const container = createDefaultLayoutContainer();
+    if (!container) return;
+
+    designStore.addComponent(container);
+}
+
+/**
+ * 判断是否为默认布局容器
+ * @param {Object} component - 组件数据
+ * @returns {boolean} 是否为默认布局容器
+ */
+function isDefaultLayoutContainer(component) {
+    if (!component || component.type !== 'Container') return false;
+    if (component.meta?.autoLayout === true || component.autoLayout === true) return true;
+    const props = component.props || {};
+    if (props.__autoLayout === true) return true;
+    const style = component.style || {};
+
+    const normalizeText = (value) => String(value || '').replace(/\s+/g, '').toLowerCase();
+    const gridColumns = normalizeText(props.gridTemplateColumns);
+    const isGridLayout = props.layout === 'grid' || props.layoutMode === 'grid';
+    const isGapMatch = Number(props.gap) === 16;
+    const isLeftZero = style.left === 0 || style.left === '0' || style.left === '0px';
+    const isTopZero = style.top === 0 || style.top === '0' || style.top === '0px';
+    const widthText = normalizeText(style.width);
+    const heightText = normalizeText(style.height);
+    const isFullWidth = widthText === '100%';
+    const isFullHeight = heightText === '100%';
+    const hasGridTemplate = Boolean(props.gridTemplateColumns || props.gridTemplateRows || props.gridAutoFlow);
+    const gridColumnsLooksAuto =
+        gridColumns === 'repeat(24,minmax(0,1fr))' ||
+        gridColumns.includes('repeat(24') ||
+        gridColumns.includes('minmax(0,1fr)');
+
+    const gridRowsMatch = !props.gridTemplateRows || normalizeText(props.gridTemplateRows) === 'auto';
+    const gridAutoFlowMatch = !props.gridAutoFlow || normalizeText(props.gridAutoFlow) === 'row';
+    const justifyItemsMatch = !props.justifyItems || normalizeText(props.justifyItems) === 'stretch';
+    const alignItemsMatch = !props.alignItems || normalizeText(props.alignItems) === 'stretch';
+    const justifyContentMatch = !props.justifyContent || normalizeText(props.justifyContent) === 'start';
+    const alignContentMatch = !props.alignContent || normalizeText(props.alignContent) === 'start';
+
+    return (
+        (isGridLayout || hasGridTemplate) &&
+        gridColumnsLooksAuto &&
+        gridRowsMatch &&
+        gridAutoFlowMatch &&
+        isGapMatch &&
+        justifyItemsMatch &&
+        alignItemsMatch &&
+        justifyContentMatch &&
+        alignContentMatch &&
+        style.position === 'absolute' &&
+        isLeftZero &&
+        isTopZero &&
+        isFullWidth &&
+        isFullHeight
+    );
+}
+
+/**
+ * 自由布局下移除自动布局容器
+ * @returns {void}
+ */
+function removeAutoLayoutContainerIfNeeded() {
+    if (!freeLayout.value) return;
+    if (!currentPage.value || !Array.isArray(currentPage.value.components)) return;
+    const components = currentPage.value.components;
+    if (components.length === 0) return;
+
+    const nextComponents = [];
+    let removed = false;
+
+    components.forEach((component) => {
+        if (!isDefaultLayoutContainer(component)) {
+            nextComponents.push(component);
+            return;
+        }
+
+        const children = Array.isArray(component?.children) ? component.children : [];
+        if (children.length > 0) {
+            nextComponents.push(...children);
+        }
+        if (designStore.selectedComponentId === component.id) {
+            designStore.selectedComponentId = null;
+        }
+        removed = true;
+    });
+
+    if (!removed) return;
+
+    currentPage.value.components = nextComponents;
+    designStore.isDirty = true;
+}
+
+/**
+ * 获取页面自由布局状态
+ * @param {Object} page - 页面数据
+ * @returns {boolean} 是否启用自由布局
+ */
+function resolvePageFreeLayout(page) {
+    if (!page) return false;
+    const freeLayoutValue = page.config?.freeLayout;
+    if (typeof freeLayoutValue === 'boolean') return freeLayoutValue;
+    if (typeof freeLayoutValue === 'string') {
+        const normalizedValue = freeLayoutValue.trim().toLowerCase();
+        return normalizedValue === 'true' || normalizedValue === '1';
+    }
+    return freeLayoutValue === 1;
+}
+
+/**
+ * 同步当前页面状态（自由布局/表单/布局容器）
+ * @returns {Promise<void>} 同步完成
+ */
+async function applyPageSwitchState() {
+    if (!currentPage.value) return;
+    syncingPageConfig.value = true;
+    const pageFreeLayout = resolvePageFreeLayout(currentPage.value);
+    if (freeLayout.value !== pageFreeLayout) {
+        freeLayout.value = pageFreeLayout;
+    }
+    if (!showCanvasSettings.value) {
+        syncPageSettingsForm();
+    }
+    await nextTick();
+    syncingPageConfig.value = false;
+    if (!freeLayout.value) {
+        ensureDefaultLayoutContainer();
+    } else {
+        removeAutoLayoutContainerIfNeeded();
+    }
+}
+
+/**
+ * 同步页面设置表单数据
+ * @returns {void}
+ */
+function syncPageSettingsForm() {
+    if (!currentPage.value) {
+        pageName.value = '';
+        canvasWidth.value = 1200;
+        return;
+    }
+
+    const configWidth = currentPage.value?.config?.width;
+    canvasWidth.value = Number.isFinite(configWidth) ? configWidth : 1200;
+    settingsFreeLayout.value = resolvePageFreeLayout(currentPage.value);
+    pageName.value = currentPage.value?.meta?.name || '新页面';
+}
+
+/**
+ * 打开页面设置
+ * @returns {void}
+ */
+function handleCanvasSettingsOpen() {
+    if (!currentPage.value) {
+        ElMessage.warning('请先选择一个页面');
+        return;
+    }
+    showCanvasSettings.value = true;
+    syncPageSettingsForm();
+    settingsFreeLayout.value = freeLayout.value;
+}
+
+/**
+ * 处理新页面创建入口
+ * @returns {void}
+ */
+function handlePageCreateRequested() {
+    pendingNewPage.value = true;
+    pageSettingsApplied.value = false;
+    pageName.value = '新页面';
+    canvasWidth.value = 1200;
+    settingsFreeLayout.value = false;
+    showCanvasSettings.value = true;
+}
 /**
  * 加载项目
  * Requirements: 1.1 - 打开设计中心时显示页面树
@@ -528,12 +770,105 @@ function toggleOrientation() {
 }
 
 /**
- * 确认画布设置
+ * 规范化页面宽度输入
+ * @param {number|string} value - 输入的宽度
+ * @param {number} fallback - 回退宽度
+ * @returns {number} 规范化后的宽度
  */
-function handleCanvasSettingsConfirm() {
+function normalizeCanvasWidth(value, fallback = 1200) {
+    const width = Number(value);
+    if (!Number.isFinite(width) || width <= 0) {
+        return fallback;
+    }
+    return Math.round(width);
+}
+
+/**
+ * 确认页面设置
+ * @returns {Promise<void>} 页面设置更新流程
+ */
+async function handleCanvasSettingsConfirm() {
+    const rawName = pageName.value.trim();
+    const normalizedName = rawName || (pendingNewPage.value ? '新页面' : currentPage.value?.meta?.name || '页面');
+    const normalizedWidth = normalizeCanvasWidth(canvasWidth.value, 1200);
+    const desiredFreeLayout = settingsFreeLayout.value;
+
+    if (pendingNewPage.value) {
+        try {
+            const page = await designStore.createPage(normalizedName, null, 'page', {
+                activate: true,
+                schemaOverrides: {
+                    config: {
+                        width: normalizedWidth,
+                        freeLayout: desiredFreeLayout,
+                    },
+                },
+            });
+            designStore.cachePageConfig(page.id, {
+                width: normalizedWidth,
+                freeLayout: desiredFreeLayout,
+            });
+            try {
+                await designStore.loadPage(page.id);
+            } catch (error) {
+                ElMessage.warning('页面已创建，但加载失败: ' + error.message);
+            }
+        } catch (error) {
+            ElMessage.error('创建页面失败: ' + error.message);
+            return;
+        }
+
+        pendingNewPage.value = false;
+        freeLayout.value = desiredFreeLayout;
+        await applyPageSwitchState();
+        canvasWidth.value = normalizedWidth;
+        pageName.value = normalizedName;
+        pageSettingsApplied.value = true;
+        canvasState.scale = canvasScalePercent.value / 100;
+        showCanvasSettings.value = false;
+        ElMessage.success('页面创建成功');
+        return;
+    }
+
+    if (normalizedName && designStore.currentPageId && normalizedName !== currentPage.value?.meta?.name) {
+        try {
+            await designStore.renamePage(designStore.currentPageId, normalizedName);
+        } catch (error) {
+            ElMessage.error('页面名称更新失败: ' + error.message);
+            return;
+        }
+    }
+
+    if (currentPage.value && Number.isFinite(normalizedWidth)) {
+        if (!currentPage.value.config || typeof currentPage.value.config !== 'object') {
+            currentPage.value.config = {};
+        }
+        if (currentPage.value.config.width !== normalizedWidth) {
+            currentPage.value.config.width = normalizedWidth;
+            designStore.isDirty = true;
+        }
+        if (currentPage.value.config.freeLayout !== desiredFreeLayout) {
+            currentPage.value.config.freeLayout = desiredFreeLayout;
+            designStore.isDirty = true;
+        }
+    }
+
+    if (desiredFreeLayout !== freeLayout.value) {
+        freeLayout.value = desiredFreeLayout;
+    }
+
+    canvasWidth.value = normalizedWidth;
+    pageName.value = normalizedName;
+    if (designStore.currentPageId) {
+        designStore.cachePageConfig(designStore.currentPageId, {
+            width: normalizedWidth,
+            freeLayout: desiredFreeLayout,
+        });
+    }
+    pageSettingsApplied.value = true;
     canvasState.scale = canvasScalePercent.value / 100;
     showCanvasSettings.value = false;
-    ElMessage.success('画布设置已更新');
+    ElMessage.success('页面设置已更新');
 }
 
 /**
@@ -639,6 +974,47 @@ watch(
     },
 );
 
+watch(
+    () => currentPage.value?.meta?.id,
+    async () => {
+        await applyPageSwitchState();
+    },
+    { immediate: true },
+);
+
+// 关闭自由布局时初始化默认布局容器
+watch(
+    () => freeLayout.value,
+    () => {
+        if (pendingNewPage.value || syncingPageConfig.value) return;
+        if (freeLayout.value) {
+            removeAutoLayoutContainerIfNeeded();
+            return;
+        }
+        ensureDefaultLayoutContainer();
+    },
+);
+
+watch(
+    () => showCanvasSettings.value,
+    (visible) => {
+        if (visible) {
+            pageSettingsApplied.value = false;
+            if (pendingNewPage.value) return;
+            syncPageSettingsForm();
+            settingsFreeLayout.value = freeLayout.value;
+            return;
+        }
+        if (!pageSettingsApplied.value) {
+            syncPageSettingsForm();
+            settingsFreeLayout.value = freeLayout.value;
+        }
+        if (pendingNewPage.value) {
+            pendingNewPage.value = false;
+        }
+        pageSettingsApplied.value = false;
+    },
+);
 // 同步缩放百分比
 watch(
     () => canvasState.scale,

@@ -191,6 +191,20 @@
                     <PositionEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
                     <SpacingEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
                     <TransformEditor :style="selectedComponent.style" @change="handleStyleObjectChange" />
+                    <div v-if="isGridItem" class="section-group">
+                        <div class="section-title">æ …æ ¼è‡ªé€‚åº”</div>
+                        <el-form label-position="left" label-width="90px" size="small">
+                            <el-form-item label="å ç”¨åˆ—æ•°">
+                                <el-input-number
+                                    v-model="gridItemSpan"
+                                    :min="1"
+                                    :max="gridItemColumns"
+                                    :step="1"
+                                    :controls="false"
+                                    @change="handleGridItemChange" />
+                            </el-form-item>
+                        </el-form>
+                    </div>
                     <StyleEditor v-if="selectedComponent" :style="selectedComponent.style" @change="handleStyleChange" />
                 </el-scrollbar>
             </div>
@@ -416,6 +430,8 @@ const propsDef = defineProps({
 });
 
 const activeTab = ref(propsDef.initialTab || 'props');
+const DEFAULT_GRID_COLUMNS = 24;
+const gridItemSpan = ref(null);
 watch(
     () => propsDef.initialTab,
     (val) => {
@@ -706,7 +722,8 @@ const isFlexContainer = computed(() => {
     if (!selectedComponent.value) return false;
     return (
         selectedComponent.value.type === 'Flex' ||
-        (selectedComponent.value.type === 'Container' && selectedComponent.value.props?.layoutMode === 'flex')
+        (selectedComponent.value.type === 'Container' &&
+            (selectedComponent.value.props?.layoutMode === 'flex' || selectedComponent.value.props?.layout === 'flex'))
     );
 });
 
@@ -714,9 +731,35 @@ const isGridContainer = computed(() => {
     if (!selectedComponent.value) return false;
     return (
         selectedComponent.value.type === 'Grid' ||
-        (selectedComponent.value.type === 'Container' && selectedComponent.value.props?.layoutMode === 'grid')
+        (selectedComponent.value.type === 'Container' &&
+            (selectedComponent.value.props?.layoutMode === 'grid' || selectedComponent.value.props?.layout === 'grid'))
     );
 });
+
+const selectedComponentParent = computed(() => {
+    if (!selectedComponent.value) return null;
+    return findParentComponent(designStore.components, selectedComponent.value.id);
+});
+
+const isGridItem = computed(() => {
+    if (!selectedComponent.value) return false;
+    const parent = selectedComponentParent.value;
+    return Boolean(parent && isGridLayoutContainer(parent));
+});
+
+const gridItemColumns = computed(() => resolveGridColumnCount(selectedComponentParent.value));
+
+watch(
+    [selectedComponent, selectedComponentParent, gridItemColumns],
+    () => {
+        if (!selectedComponent.value || !isGridItem.value) {
+            gridItemSpan.value = null;
+            return;
+        }
+        gridItemSpan.value = resolveGridItemSpan(selectedComponent.value, gridItemColumns.value);
+    },
+    { immediate: true },
+);
 
 const componentEditorName = computed(() => {
     if (!selectedComponent.value) return null;
@@ -846,6 +889,132 @@ function handlePropChange(key, value) {
 function handlePropsChange(props) {
     if (!selectedComponent.value) return;
     designStore.updateComponent(selectedComponent.value.id, { props });
+}
+
+/**
+ * 查找组件的父组件
+ * @param {Array} components - 组件列表
+ * @param {string} componentId - 组件ID
+ * @param {Object|null} parent - 当前父组件
+ * @returns {Object|null} 父组件
+ */
+function findParentComponent(components, componentId, parent = null) {
+    for (const component of components || []) {
+        if (component.id === componentId) {
+            return parent;
+        }
+        if (component.children && component.children.length > 0) {
+            const found = findParentComponent(component.children, componentId, component);
+            if (found !== undefined) return found;
+        }
+    }
+    return null;
+}
+
+/**
+ * 判断容器是否为 Grid 布局
+ * @param {Object} container - 容器组件
+ * @returns {boolean} 是否为 Grid
+ */
+function isGridLayoutContainer(container) {
+    if (!container) return false;
+    if (container.type === 'Grid') return true;
+    const layoutMode = container.props?.layoutMode || container.props?.layout;
+    return layoutMode === 'grid';
+}
+
+/**
+ * 解析 Grid 容器列数
+ * @param {Object|null} container - 容器组件
+ * @returns {number} 列数
+ */
+function resolveGridColumnCount(container) {
+    if (!container) return DEFAULT_GRID_COLUMNS;
+    const template = container.props?.gridTemplateColumns;
+    if (typeof template !== 'string' || !template.trim()) {
+        return DEFAULT_GRID_COLUMNS;
+    }
+    const repeatMatch = template.match(/repeat\(\s*(\d+)\s*,/i);
+    if (repeatMatch) {
+        const count = Number.parseInt(repeatMatch[1], 10);
+        return Number.isFinite(count) && count > 0 ? count : DEFAULT_GRID_COLUMNS;
+    }
+    if (/repeat\(\s*auto-(fit|fill)/i.test(template)) {
+        return DEFAULT_GRID_COLUMNS;
+    }
+    const tokens = template
+        .replace(/\([^)]*\)/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    return tokens.length > 0 ? tokens.length : DEFAULT_GRID_COLUMNS;
+}
+
+/**
+ * 解析 Grid 子项占用列数
+ * @param {Object} component - 子组件
+ * @param {number} columns - 容器列数
+ * @returns {number} 占用列数
+ */
+function resolveGridItemSpan(component, columns) {
+    const total = Number.isFinite(columns) && columns > 0 ? columns : DEFAULT_GRID_COLUMNS;
+    const style = component?.style || {};
+    let span = null;
+
+    if (typeof style.gridColumn === 'string') {
+        const trimmed = style.gridColumn.trim();
+        const spanMatch = trimmed.match(/span\s+(\d+)/i);
+        if (spanMatch) {
+            span = Number.parseInt(spanMatch[1], 10);
+        } else if (trimmed.includes('/')) {
+            const [startText, endText] = trimmed.split('/').map((item) => item.trim());
+            const start = Number.parseInt(startText, 10);
+            const endSpanMatch = endText?.match(/span\s+(\d+)/i);
+            const end = Number.parseInt(endText, 10);
+            if (Number.isFinite(start) && endSpanMatch) {
+                span = Number.parseInt(endSpanMatch[1], 10);
+            } else if (Number.isFinite(start) && Number.isFinite(end)) {
+                span = Math.max(1, end - start);
+            }
+        }
+    }
+
+    if (!Number.isFinite(span) && Number.isFinite(style.gridColumnStart) && Number.isFinite(style.gridColumnEnd)) {
+        span = Math.max(1, style.gridColumnEnd - style.gridColumnStart);
+    }
+
+    if (!Number.isFinite(span) && typeof style.gridColumnEnd === 'string') {
+        const endSpanMatch = style.gridColumnEnd.match(/span\s+(\d+)/i);
+        if (endSpanMatch) {
+            span = Number.parseInt(endSpanMatch[1], 10);
+        }
+    }
+
+    if (!Number.isFinite(span) || span <= 0) {
+        span = total;
+    }
+
+    return Math.min(Math.max(1, span), total);
+}
+
+/**
+ * 处理 Grid 子项占用列数变更
+ * @param {number} value - 占用列数
+ * @returns {void}
+ */
+function handleGridItemChange(value) {
+    if (!selectedComponent.value || !isGridItem.value) return;
+    const columns = gridItemColumns.value || DEFAULT_GRID_COLUMNS;
+    const spanValue = Number.isFinite(value) ? value : Number.parseInt(value, 10);
+    const span = Math.min(Math.max(1, spanValue || columns), columns);
+    gridItemSpan.value = span;
+    designStore.updateComponent(selectedComponent.value.id, {
+        style: {
+            gridColumn: `span ${span}`,
+            gridColumnStart: null,
+            gridColumnEnd: null,
+        },
+    });
 }
 
 function createCanvasEventId() {

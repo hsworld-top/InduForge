@@ -80,13 +80,22 @@
  * 显示项目页面层级结构，支持创建、重命名、删除页面和文件夹
  * Requirements: 1.1, 1.2, 1.4, 1.5, 1.6
  */
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useDesignStore } from '@/store/design';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Folder, Document, Edit, Delete, FolderOpened, ArrowRight, HomeFilled } from '@element-plus/icons-vue';
 
+// Props
+const props = defineProps({
+    currentPageId: {
+        type: [String, Number],
+        default: null,
+    },
+});
+
 // Store
 const designStore = useDesignStore();
+const emit = defineEmits(['page-create-requested']);
 
 // Refs
 const treeRef = ref(null);
@@ -184,18 +193,8 @@ async function handleNodeClick(data) {
  * 创建新页面
  * Requirements: 1.2 - 创建新页面
  */
-async function handleCreatePage() {
-    try {
-        const page = await designStore.createPage('新页面', null, 'page');
-        ElMessage.success('页面创建成功');
-        // 开始编辑名称
-        editingId.value = page.id;
-        editingName.value = page.name;
-        await nextTick();
-        editInputRef.value?.focus();
-    } catch (error) {
-        ElMessage.error('创建页面失败: ' + error.message);
-    }
+function handleCreatePage() {
+    emit('page-create-requested');
 }
 
 /**
@@ -384,6 +383,16 @@ onMounted(() => {
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside);
 });
+
+watch(
+    () => props.currentPageId,
+    async (pageId) => {
+        if (!pageId) return;
+        await nextTick();
+        treeRef.value?.setCurrentKey?.(pageId);
+    },
+    { immediate: true },
+);
 </script>
 
 <style scoped>

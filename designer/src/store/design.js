@@ -30,6 +30,7 @@ function createDefaultPageSchema(name) {
             backgroundColor: '#ffffff',
             gridSize: 10,
             snapToGrid: true,
+            freeLayout: false,
             theme: 'light',
         },
         variables: {},
@@ -42,6 +43,26 @@ function createDefaultPageSchema(name) {
             componentAcl: [],
         },
     };
+}
+
+/**
+ * 合并页面 Schema 覆盖配置（仅允许 meta/config）
+ * @param {Object} schema - 现有页面 Schema
+ * @param {Object} overrides - 覆盖配置
+ * @returns {Object} 合并后的页面 Schema
+ */
+function applyPageSchemaOverrides(schema, overrides) {
+    if (!schema || typeof schema !== 'object') return schema;
+    if (!overrides || typeof overrides !== 'object') return schema;
+
+    if (overrides.meta && typeof overrides.meta === 'object') {
+        schema.meta = { ...schema.meta, ...overrides.meta };
+    }
+    if (overrides.config && typeof overrides.config === 'object') {
+        schema.config = { ...schema.config, ...overrides.config };
+    }
+
+    return schema;
 }
 
 function normalizeComponentSchema(component) {
@@ -82,6 +103,72 @@ function normalizeComponentSchema(component) {
     component.children.forEach(normalizeComponentSchema);
 }
 
+/**
+ * 判断是否为自动布局容器
+ * @param {Object} component - 组件数据
+ * @returns {boolean} 是否为自动布局容器
+ */
+function isAutoLayoutContainer(component) {
+    if (!component || component.type !== 'Container') return false;
+    if (component.meta?.autoLayout === true || component.autoLayout === true) return true;
+    const props = component.props || {};
+    if (props.__autoLayout === true) return true;
+    const style = component.style || {};
+
+    const normalizeText = (value) => String(value || '').replace(/\s+/g, '').toLowerCase();
+    const gridColumns = normalizeText(props.gridTemplateColumns);
+    const hasGridTemplate = Boolean(props.gridTemplateColumns || props.gridTemplateRows || props.gridAutoFlow);
+    const gridColumnsLooksAuto =
+        gridColumns === 'repeat(24,minmax(0,1fr))' ||
+        gridColumns.includes('repeat(24') ||
+        gridColumns.includes('minmax(0,1fr)');
+    const isGridLayout = props.layout === 'grid' || props.layoutMode === 'grid';
+    const isGapMatch = Number(props.gap) === 16;
+    const isLeftZero = style.left === 0 || style.left === '0' || style.left === '0px';
+    const isTopZero = style.top === 0 || style.top === '0' || style.top === '0px';
+    const widthText = normalizeText(style.width);
+    const heightText = normalizeText(style.height);
+    const isFullWidth = widthText === '100%';
+    const isFullHeight = heightText === '100%';
+    const gridRowsMatch = !props.gridTemplateRows || normalizeText(props.gridTemplateRows) === 'auto';
+    const gridAutoFlowMatch = !props.gridAutoFlow || normalizeText(props.gridAutoFlow) === 'row';
+
+    return (
+        (isGridLayout || hasGridTemplate) &&
+        gridColumnsLooksAuto &&
+        gridRowsMatch &&
+        gridAutoFlowMatch &&
+        isGapMatch &&
+        style.position === 'absolute' &&
+        isLeftZero &&
+        isTopZero &&
+        isFullWidth &&
+        isFullHeight
+    );
+}
+
+/**
+ * 移除自动布局容器并提升子组件
+ * @param {Array} components - 根组件列表
+ * @returns {{components: Array, removed: boolean}} 处理结果
+ */
+function stripAutoLayoutContainers(components = []) {
+    const nextComponents = [];
+    let removed = false;
+    components.forEach((component) => {
+        if (!isAutoLayoutContainer(component)) {
+            nextComponents.push(component);
+            return;
+        }
+        const children = Array.isArray(component.children) ? component.children : [];
+        if (children.length > 0) {
+            nextComponents.push(...children);
+        }
+        removed = true;
+    });
+    return { components: nextComponents, removed };
+}
+
 function normalizePageSchema(page) {
     if (!page || typeof page !== 'object') return;
     if (typeof page.version !== 'string') {
@@ -113,6 +200,14 @@ function normalizePageSchema(page) {
     }
     if (typeof page.config.snapToGrid !== 'boolean') {
         page.config.snapToGrid = true;
+    }
+    if (typeof page.config.freeLayout !== 'boolean') {
+        if (typeof page.config.freeLayout === 'string') {
+            const normalizedValue = page.config.freeLayout.trim().toLowerCase();
+            page.config.freeLayout = normalizedValue === 'true' || normalizedValue === '1';
+        } else {
+            page.config.freeLayout = page.config.freeLayout === 1;
+        }
     }
     if (!page.config.backgroundColor || typeof page.config.backgroundColor !== 'string') {
         page.config.backgroundColor = '#ffffff';
@@ -232,6 +327,8 @@ const animationManager = new AnimationManager();
 
 // 创建数据源管理器（延迟初始化）
 let dataSourceManager = null;
+// é¡µé¢åŠ è½½è¯·æ±‚ç¼–å·ï¼Œç”¨äºŽé¿å…æ—§è¯·æ±‚è¦†ç›–æœ€æ–°çŠ¶æ€?
+let pageLoadRequestId = 0;
 
 export const useDesignStore = defineStore('design', {
     state: () => ({
@@ -270,6 +367,8 @@ export const useDesignStore = defineStore('design', {
         dataSourceManager: null,
         // 项目级全局变量（区别于页面级 variables）
         projectVariables: {},
+        // 页面配置缓存（用于未保存状态下切换页面）
+        pageConfigCache: {},
     }),
 
     getters: {
@@ -379,6 +478,7 @@ export const useDesignStore = defineStore('design', {
                 console.warn('有未保存的更改');
             }
 
+            const requestId = ++pageLoadRequestId;
             this.loading = true;
             this.error = null;
             try {
@@ -388,9 +488,25 @@ export const useDesignStore = defineStore('design', {
                 }
 
                 const response = await designAPI.getPage(this.projectId, pageId);
+                if (requestId !== pageLoadRequestId) {
+                    return;
+                }
                 this.currentPageId = pageId;
                 this.currentPage = response.data || response;
                 normalizePageSchema(this.currentPage);
+                const cachedConfig = this.pageConfigCache[pageId];
+                if (cachedConfig && typeof cachedConfig === 'object') {
+                    this.currentPage.config = {
+                        ...this.currentPage.config,
+                        ...cachedConfig,
+                    };
+                }
+                if (this.currentPage.config?.freeLayout) {
+                    const { components: nextComponents, removed } = stripAutoLayoutContainers(this.currentPage.components);
+                    if (removed) {
+                        this.currentPage.components = nextComponents;
+                    }
+                }
                 if (!this.currentPage.events) {
                     this.currentPage.events = {};
                 }
@@ -399,6 +515,9 @@ export const useDesignStore = defineStore('design', {
 
                 // 初始化数据源管理器
                 await this.initDataSourceManager();
+                if (requestId !== pageLoadRequestId) {
+                    return;
+                }
 
                 // 加载页面的数据源
                 if (this.currentPage.dataSources && Array.isArray(this.currentPage.dataSources)) {
@@ -407,10 +526,15 @@ export const useDesignStore = defineStore('design', {
                     });
                 }
             } catch (error) {
+                if (requestId !== pageLoadRequestId) {
+                    return;
+                }
                 this.error = error.message || '加载页面失败';
                 throw error;
             } finally {
-                this.loading = false;
+                if (requestId === pageLoadRequestId) {
+                    this.loading = false;
+                }
             }
         },
 
@@ -430,6 +554,9 @@ export const useDesignStore = defineStore('design', {
                 await designAPI.updatePage(this.projectId, this.currentPageId, this.currentPage);
                 // Requirements: 6.5 - 保存成功后清除未保存标记
                 this.isDirty = false;
+                if (this.currentPageId && this.pageConfigCache[this.currentPageId]) {
+                    delete this.pageConfigCache[this.currentPageId];
+                }
             } catch (error) {
                 this.error = error.message || '保存页面失败';
                 throw error;
@@ -454,9 +581,11 @@ export const useDesignStore = defineStore('design', {
          * @param {string} name - 页面名称
          * @param {string} parentId - 父页面ID（可选）
          * @param {string} type - 页面类型 ('page' | 'folder')
+         * @param {Object} options - 可选配置
+         * @param {Object} options.schemaOverrides - 页面 Schema 覆盖配置
          * @returns {Promise<Object>} 创建的页面
          */
-        async createPage(name, parentId = null, type = 'page') {
+        async createPage(name, parentId = null, type = 'page', options = {}) {
             if (!this.projectId) {
                 throw new Error('未选择项目');
             }
@@ -464,15 +593,25 @@ export const useDesignStore = defineStore('design', {
             this.loading = true;
             this.error = null;
             try {
+                const schemaOverrides = options?.schemaOverrides;
+                const schemaContent =
+                    type === 'page' ? applyPageSchemaOverrides(createDefaultPageSchema(name), schemaOverrides) : null;
                 const data = {
                     name,
                     type,
                     parentId,
-                    schemaContent: type === 'page' ? createDefaultPageSchema(name) : null,
+                    schemaContent,
                 };
                 const response = await designAPI.createPage(this.projectId, data);
                 const newPage = response.data || response;
                 this.pages.push(newPage);
+                if (options?.activate && schemaContent && type === 'page') {
+                    this.currentPageId = newPage.id;
+                    this.currentPage = JSON.parse(JSON.stringify(schemaContent));
+                    normalizePageSchema(this.currentPage);
+                    this.selectedComponentId = null;
+                    this.isDirty = false;
+                }
                 return newPage;
             } catch (error) {
                 this.error = error.message || '创建页面失败';
@@ -480,6 +619,20 @@ export const useDesignStore = defineStore('design', {
             } finally {
                 this.loading = false;
             }
+        },
+
+        /**
+         * 缓存页面配置（用于页面切换时恢复未保存设置）
+         * @param {string} pageId - 页面ID
+         * @param {Object} config - 页面配置
+         * @returns {void}
+         */
+        cachePageConfig(pageId, config) {
+            if (!pageId || !config || typeof config !== 'object') return;
+            this.pageConfigCache[pageId] = {
+                ...(this.pageConfigCache[pageId] || {}),
+                ...config,
+            };
         },
 
         /**
@@ -1162,6 +1315,8 @@ export const useDesignStore = defineStore('design', {
             this.dataSourceConfigs = [];
             this.dataCenterConfig = [];
             this.projectVariables = {};
+            this.pageConfigCache = {};
+            pageLoadRequestId = 0;
 
             // 清理历史记录
             history.clear();

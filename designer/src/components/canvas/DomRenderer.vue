@@ -169,7 +169,23 @@ function convertStyle(dslStyle) {
     const style = convertDslStyleToCss(dslStyle);
 
     // Remove layout-related fields because ComponentWrapper already handles positioning
-    const layoutKeys = ['position', 'left', 'top', 'right', 'bottom', 'zIndex'];
+    const layoutKeys = [
+        'position',
+        'left',
+        'top',
+        'right',
+        'bottom',
+        'zIndex',
+        'gridColumn',
+        'gridColumnStart',
+        'gridColumnEnd',
+        'gridRow',
+        'gridRowStart',
+        'gridRowEnd',
+        'gridArea',
+        'justifySelf',
+        'alignSelf',
+    ];
     layoutKeys.forEach((key) => {
         if (key in style) {
             delete style[key];

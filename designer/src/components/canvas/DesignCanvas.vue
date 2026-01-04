@@ -191,6 +191,7 @@ const gridSize = computed(() => {
 });
 
 const CANVAS_PADDING = 40;
+const DEFAULT_GRID_COLUMNS = 24;
 
 function findComponentById(list, componentId) {
   for (const item of list || []) {
@@ -223,8 +224,14 @@ function isDescendantComponent(component, targetId) {
   return false;
 }
 
-function normalizeContainerChildStyle(style = {}) {
-  return {
+/**
+ * è§„èŒƒå®¹å™¨å†…å­ç»„ä»¶æ ·å¼ï¼Œé¿å…ç»å¯¹å®šä½å½±å“å¸ƒå±€
+ * @param {Object} style - ç»„ä»¶æ ·å¼
+ * @param {Object|null} container - å®¹å™¨ç»„ä»¶
+ * @returns {Object} è§„èŒƒåŽçš„æ ·å¼
+ */
+function normalizeContainerChildStyle(style = {}, container = null) {
+  const nextStyle = {
     ...style,
     position: "relative",
     left: null,
@@ -232,6 +239,17 @@ function normalizeContainerChildStyle(style = {}) {
     right: null,
     bottom: null,
   };
+
+  if (isGridLayoutContainer(container)) {
+    const hasGridColumn =
+      nextStyle.gridColumn || nextStyle.gridColumnStart || nextStyle.gridColumnEnd;
+    if (!hasGridColumn) {
+      const columns = resolveGridColumnCount(container);
+      nextStyle.gridColumn = `span ${columns}`;
+    }
+  }
+
+  return nextStyle;
 }
 
 function resolveContainerLayoutMode(container) {
@@ -242,6 +260,42 @@ function resolveContainerLayoutMode(container) {
   if (container.type === "Col" || container.type === "ElCol") return "block";
   const layoutMode = container.props?.layoutMode || container.props?.layout;
   return layoutMode || "flex";
+}
+
+/**
+ * è§£æž?Grid åˆ—æ•°ï¼Œé»˜è®¤ä¸º 24 æ …
+ * @param {Object} container - å®¹å™¨ç»„ä»¶
+ * @returns {number} åˆ—æ•°
+ */
+function resolveGridColumnCount(container) {
+  const template = container?.props?.gridTemplateColumns;
+  if (typeof template !== "string" || !template.trim()) {
+    return DEFAULT_GRID_COLUMNS;
+  }
+  const repeatMatch = template.match(/repeat\(\s*(\d+)\s*,/i);
+  if (repeatMatch) {
+    const count = Number.parseInt(repeatMatch[1], 10);
+    return Number.isFinite(count) && count > 0 ? count : DEFAULT_GRID_COLUMNS;
+  }
+  if (/repeat\(\s*auto-(fit|fill)/i.test(template)) {
+    return DEFAULT_GRID_COLUMNS;
+  }
+  const tokens = template
+    .replace(/\([^)]*\)/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return tokens.length > 0 ? tokens.length : DEFAULT_GRID_COLUMNS;
+}
+
+/**
+ * åˆ¤æ–­å®¹å™¨æ˜¯å¦ä¸º Grid å¸ƒå±€
+ * @param {Object} container - å®¹å™¨ç»„ä»¶
+ * @returns {boolean} æ˜¯å¦ä¸º Grid
+ */
+function isGridLayoutContainer(container) {
+  if (!container) return false;
+  return resolveContainerLayoutMode(container) === "grid";
 }
 
 function getContainerInsertInfo(container, event, excludeId = null) {
@@ -1208,7 +1262,7 @@ function handleContainerDrop(payload) {
       didDrop.value = true;
       designStore.moveComponent(componentId, container.id, insertIndex);
       designStore.updateComponent(componentId, {
-        style: normalizeContainerChildStyle(movingComponent.style || {}),
+        style: normalizeContainerChildStyle(movingComponent.style || {}, container),
       });
       designStore.saveHistory(`???? ${movingComponent.name || movingComponent.type} ???`);
       designStore.selectComponent(componentId);
@@ -1231,7 +1285,7 @@ function handleContainerDrop(payload) {
         container.type === "FlexLayout" ||
         container.type === "Grid"
       ) {
-        component.style = normalizeContainerChildStyle(component.style || {});
+        component.style = normalizeContainerChildStyle(component.style || {}, container);
       }
     } else {
       console.warn("[DesignCanvas] Unknown drag source:", source);

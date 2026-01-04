@@ -90,7 +90,7 @@ async function createPage(req, res, next) {
     const { projectId } = req.params;
     await checkProjectAccess(req, projectId);
 
-    const { name, type, parentId } = req.body;
+    const { name, type, parentId, schemaContent } = req.body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
@@ -100,7 +100,7 @@ async function createPage(req, res, next) {
 
     const page = await designService.createPage(
       projectId,
-      { name: name.trim(), type, parentId },
+      { name: name.trim(), type, parentId, schemaContent },
       req.user.id
     );
 

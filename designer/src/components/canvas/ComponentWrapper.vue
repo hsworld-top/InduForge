@@ -142,6 +142,16 @@ const wrapperStyle = computed(() => {
         width: style.width !== undefined && style.width !== null && typeof style.width === 'number' ? `${style.width}px` : style.width,
         height: style.height !== undefined && style.height !== null && typeof style.height === 'number' ? `${style.height}px` : style.height,
         zIndex: style.zIndex,
+        gridColumn: typeof style.gridColumn === 'number' ? String(style.gridColumn) : style.gridColumn,
+        gridColumnStart:
+            typeof style.gridColumnStart === 'number' ? String(style.gridColumnStart) : style.gridColumnStart,
+        gridColumnEnd: typeof style.gridColumnEnd === 'number' ? String(style.gridColumnEnd) : style.gridColumnEnd,
+        gridRow: typeof style.gridRow === 'number' ? String(style.gridRow) : style.gridRow,
+        gridRowStart: typeof style.gridRowStart === 'number' ? String(style.gridRowStart) : style.gridRowStart,
+        gridRowEnd: typeof style.gridRowEnd === 'number' ? String(style.gridRowEnd) : style.gridRowEnd,
+        gridArea: style.gridArea,
+        justifySelf: style.justifySelf,
+        alignSelf: style.alignSelf,
     };
 });
 

@@ -1,5 +1,5 @@
 <template>
-    <div class="layout-container" :class="[`layout-mode-${layoutMode}`, { 'is-drop-zone': isDropZone }]" :style="mergedStyle">
+    <div class="layout-container" :class="[`layout-mode-${resolvedLayoutMode}`, { 'is-drop-zone': isDropZone }]" :style="mergedStyle">
         <slot></slot>
         <div v-if="isEmpty" class="empty-hint">拖拽组件到此处</div>
     </div>
@@ -28,8 +28,12 @@ const attrs = useAttrs();
 const props = defineProps({
     layoutMode: {
         type: String,
-        default: 'flex',
-        validator: (value) => ['flex', 'grid', 'block'].includes(value),
+        default: '',
+        validator: (value) => ['flex', 'grid', 'block', ''].includes(value),
+    },
+    layout: {
+        type: String,
+        default: '',
     },
     // Flex 属性
     flexDirection: {
@@ -64,6 +68,14 @@ const props = defineProps({
     gridAutoFlow: {
         type: String,
         default: 'row',
+    },
+    justifyItems: {
+        type: String,
+        default: 'stretch',
+    },
+    alignContent: {
+        type: String,
+        default: 'start',
     },
     // 样式属性（从 defaultProps 中接收）
     backgroundColor: {
@@ -101,23 +113,44 @@ const props = defineProps({
     },
 });
 
+/**
+ * è§£æž? Grid å¯¹é½å€¼ï¼Œå…¼å®¹ flex-start/flex-end
+ * @param {string} value - å¯¹é½å€¼
+ * @param {string} fallback - é»˜è®¤å€¼
+ * @returns {string} è§£æž?åŽçš„å¯¹é½å€¼
+ */
+function normalizeGridAlign(value, fallback) {
+    if (!value) return fallback;
+    if (value === 'flex-start') return 'start';
+    if (value === 'flex-end') return 'end';
+    return value;
+}
+
+const resolvedLayoutMode = computed(() => {
+    return props.layoutMode || props.layout || 'flex';
+});
+
 const containerStyle = computed(() => {
     const style = {};
 
     // 布局模式
-    if (props.layoutMode === 'flex') {
+    if (resolvedLayoutMode.value === 'flex') {
         style.display = 'flex';
         style.flexDirection = props.flexDirection;
         style.justifyContent = props.justifyContent;
         style.alignItems = props.alignItems;
         style.flexWrap = props.flexWrap;
         style.gap = `${props.gap}px`;
-    } else if (props.layoutMode === 'grid') {
+    } else if (resolvedLayoutMode.value === 'grid') {
         style.display = 'grid';
         style.gridTemplateColumns = props.gridTemplateColumns;
         style.gridTemplateRows = props.gridTemplateRows;
         style.gridAutoFlow = props.gridAutoFlow;
         style.gap = `${props.gap}px`;
+        style.justifyItems = normalizeGridAlign(props.justifyItems, 'stretch');
+        style.alignItems = normalizeGridAlign(props.alignItems, 'stretch');
+        style.justifyContent = normalizeGridAlign(props.justifyContent, 'start');
+        style.alignContent = normalizeGridAlign(props.alignContent, 'start');
     } else {
         style.display = 'block';
     }
