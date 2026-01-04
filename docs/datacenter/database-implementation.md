@@ -21,6 +21,14 @@ DataCenterNew (主容器)
           ├─ MysqlQueryEditor
           ├─ PostgresQueryEditor
           └─ SqlServerQueryEditor
+
+      ├─ MQTT 订阅标签页
+      │   └─ MqttSubscriptionList
+      ├─ MQTT 消息查看器
+      │   └─ MqttMessageViewer
+      └─ MQTT 变量管理
+          ├─ MqttTagList
+          └─ MqttTagMonitor
 ```
 
 ## 核心组件
@@ -35,6 +43,7 @@ DataCenterNew (主容器)
 - 处理查询双击（打开查询）
 - 右键菜单管理
 - 标签页滚轮支持
+- MQTT 标签页管理（订阅/消息/变量）
 
 **状态**:
 - `tabs`: 所有标签页数组

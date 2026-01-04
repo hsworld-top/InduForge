@@ -44,9 +44,7 @@
 - 类型安全
 - 性能优化
 
-详细内容请参考：
-- [阶段一完成报告](../../designer/PHASE1_COMPLETED.md)
-- [开发总结](../../designer/DEVELOPMENT_SUMMARY.md)
+详细内容：内部记录未纳入仓库文档。
 
 ---
 
@@ -87,9 +85,7 @@
 - 模块化架构设计
 - 易于扩展和维护
 
-详细内容请参考：
-- [阶段二完成报告](../../designer/PHASE2_COMPLETED.md)
-- [阶段二总结](../../designer/PHASE2_SUMMARY.md)
+详细内容：内部记录未纳入仓库文档。
 
 ---
 
@@ -151,9 +147,7 @@
 - 可视化配置界面
 - 完善的文档体系
 
-详细内容请参考：
-- [阶段四完成报告](../../designer/PHASE4_COMPLETED.md)
-- [阶段四总结](../../designer/PHASE4_SUMMARY.md)
+详细内容：内部记录未纳入仓库文档。
 
 ---
 
@@ -199,7 +193,6 @@
 
 - 前端：`designer/src/components/canvas/*`、`designer/src/registry/ui/*`、`designer/src/registry/basic/Image.*`、`designer/src/registry/charts/*`。
 - 文档：补充本阶段更新记录。
-- [快速开始指南](../../designer/PHASE4_QUICKSTART.md)
 - [数据绑定系统](./data-binding.md)
 - [数据绑定架构](./data-binding-architecture.md)
 

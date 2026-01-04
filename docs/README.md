@@ -14,11 +14,7 @@
   - Expression 表达式系统
   - 完整示例和最佳实践
 
-- **[数据库设计](./database-design.md)** - 数据库表结构和字段说明
-  - 表结构设计
-  - 字段说明
-  - 索引和约束
-  - 初始化脚本
+- **[数据库设计](./database-design.md)** - 关键表结构与关系概览
 
 - **[迁移计划](./migration-plan.md)** - 从 KingPortal 迁移指南
   - 现状分析
@@ -33,17 +29,18 @@
 - **[数据绑定架构](./designer/data-binding-architecture.md)** - 架构设计说明
 - **[Canvas 渲染引擎](./designer/canvas-engine.md)** - Konva 渲染引擎
 - **[组件开发指南](./designer/component-development.md)** - 自定义组件开发
-- **[开发历程](./designer/development-history.md)** - 各阶段开发总结
+- **[开发历程](./designer/development-history.md)** - 里程碑记录与变更摘要
 
 ### 数据中心文档
 
 - **[数据中心概述](./datacenter/README.md)** - DataCenter 模块总览
 - **[数据连接管理](./datacenter/connections.md)** - 数据库连接配置
-- **[查询管理](./datacenter/queries.md)** - SQL 查询管理
+- **[查询管理](./datacenter/queries.md)** - SQL 查询管理（当前能力与限制）
+- **[MQTT 实现说明](./datacenter/mqtt-implementation.md)** - 实现现状与后续规划
 
 ### 后端文档
 
-- **[后端 API 文档](./backend/README.md)** - API 接口说明
+- **[后端 API 文档](./backend/README.md)** - API 接口说明（高层）
 - **[认证与授权](./backend/auth.md)** - 用户认证和权限控制
 - **[数据库初始化](./backend/database-init.md)** - 数据库初始化指南
 
@@ -82,7 +79,7 @@
 docs/
 ├── README.md                           # 本文档
 ├── dsl-design.md                       # DSL 设计规范
-├── database-design.md                  # 数据库设计
+├── database-design.md                  # 数据库设计（概览）
 ├── migration-plan.md                   # 迁移计划
 ├── designer/                           # 设计中心文档
 │   ├── README.md                       # 概述
@@ -94,7 +91,8 @@ docs/
 ├── datacenter/                         # 数据中心文档
 │   ├── README.md                       # 概述
 │   ├── connections.md                  # 数据连接管理
-│   └── queries.md                      # 查询管理
+│   ├── queries.md                      # 查询管理
+│   └── mqtt-implementation.md          # MQTT 实现说明
 └── backend/                            # 后端文档
     ├── README.md                       # 概述
     ├── auth.md                         # 认证与授权
@@ -103,8 +101,8 @@ docs/
 
 ### 文档版本
 
-- **版本**: 2.0.0
-- **最后更新**: 2025-12-08
+- **版本**: 2.1.0
+- **最后更新**: 2025-03-08
 - **维护者**: InduForge Team
 
 ### 文档贡献

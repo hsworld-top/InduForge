@@ -66,7 +66,7 @@ InduForge Designer的数据绑定系统提供了强大的数据管理和绑定�
 
 ### 3. 完整示例
 
-参考 [快速开始指南](./PHASE4_QUICKSTART.md) 获取详细的步骤说明。
+参考本文档的架构与核心模块章节完成配置。
 
 ## 架构设计
 
@@ -106,7 +106,7 @@ InduForge Designer的数据绑定系统提供了强大的数据管理和绑定�
 - ✅ 更简单的通信机制
 - ✅ 更好的性能和可靠性
 
-详细架构说明请参考 [架构文档](./DATA_BINDING_ARCHITECTURE.md)
+详细架构说明请参考 [数据绑定架构](./data-binding-architecture.md)
 
 ### 数据流
 
@@ -508,15 +508,12 @@ A: 确认模式为"轮询"，检查间隔设置，手动刷新测试。
 ### Q: 性能问题？
 A: 增加轮询间隔，使用数据转换器，优化表达式，使用计算数据源。
 
-更多问题请参考 [快速开始指南](./PHASE4_QUICKSTART.md#常见问题)。
-
 ## 文档索引
 
-- [阶段四完成报告](./PHASE4_COMPLETED.md) - 详细的实现内容
-- [阶段四总结](./PHASE4_SUMMARY.md) - 架构设计和技术亮点
-- [快速开始指南](./PHASE4_QUICKSTART.md) - 使用教程和示例
-- [DSL设计规范](../lowcode_dsl_db_design.md) - 完整的DSL规范
-- [迁移计划](../MIGRATION_PLAN.md) - 整体迁移计划
+- [数据绑定架构](./data-binding-architecture.md)
+- [设计中心概述](./README.md)
+- [DSL 设计规范](../dsl-design.md)
+- [迁移计划](../migration-plan.md)
 
 ## 贡献指南
 

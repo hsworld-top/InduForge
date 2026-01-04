@@ -363,6 +363,5 @@ async initDataSourceManager(options = {}) {
 
 ## 相关文档
 
-- [快速开始指南](./PHASE4_QUICKSTART.md)
-- [完整指南](./DATA_BINDING_README.md)
-- [阶段四完成报告](./PHASE4_COMPLETED.md)
+- [数据绑定完整指南](./data-binding.md)
+- [设计中心概述](./README.md)

@@ -330,8 +330,7 @@ A: 使用 `toDataURL({ quality: 1 })` 并设置合适的 mimeType。
 
 - [Konva.js 官方文档](https://konvajs.org/)
 - [Konva.js API 文档](https://konvajs.org/api/Konva.html)
-- [阶段二完成报告](../../designer/PHASE2_COMPLETED.md)
-- [阶段二总结](../../designer/PHASE2_SUMMARY.md)
+- [设计中心概述](./README.md)
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## 概述
 
-InduForge 使用 JWT (JSON Web Token) 进行身份认证，基于 RBAC (Role-Based Access Control) 进行权限控制。
+InduForge 使用 JWT (JSON Web Token) 进行身份认证，基于 RBAC (Role-Based Access Control) 进行权限控制。登录支持验证码校验（可选）。
 
 ## 认证流程
 
@@ -104,9 +104,10 @@ JWT_REFRESH_EXPIRES_IN=7d
 | 角色 | 说明 | 权限范围 |
 |------|------|---------|
 | SUPER_ADMIN | 超级管理员 | 所有权限 |
-| SYSTEM_ADMIN | 系统管理员 | 租户管理、用户管理 |
-| TENANT_ADMIN | 租户管理员 | 租户内用户和工程管理 |
-| USER | 普通用户 | 工程查看和编辑 |
+| SYSTEM_ADMIN | 系统管理员 | 租户管理、系统级管理 |
+| PROJECT_ADMIN | 工程管理员 | 工程管理与配置 |
+| OPS_ADMIN | 运维管理员 | 运维与日志相关 |
+| USER_ADMIN | 用户管理员 | 用户管理 |
 
 ### 权限列表
 
@@ -140,25 +141,10 @@ JWT_REFRESH_EXPIRES_IN=7d
 ```javascript
 const rolePermissions = {
   SUPER_ADMIN: ['*'],
-  SYSTEM_ADMIN: [
-    'user:*',
-    'tenant:*',
-    'project:*',
-    'data:*'
-  ],
-  TENANT_ADMIN: [
-    'user:read',
-    'user:create',
-    'user:update',
-    'project:*',
-    'data:*'
-  ],
-  USER: [
-    'project:read',
-    'project:update',
-    'data:connection:read',
-    'data:query:execute'
-  ]
+  SYSTEM_ADMIN: ['*'],
+  PROJECT_ADMIN: ['project:*', 'data:*', 'design:*'],
+  OPS_ADMIN: ['logs:*', 'project:read', 'data:read'],
+  USER_ADMIN: ['user:*', 'tenant:read']
 }
 ```
 

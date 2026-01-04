@@ -6,10 +6,10 @@
 
 ```bash
 # 初始化数据库（创建表结构和基础数据）
-npm run db:init
+pnpm db:init
 
 # 重置数据库（删除所有表后重新初始化）
-npm run db:reset
+pnpm db:reset
 ```
 
 ## 文件说明
@@ -23,6 +23,7 @@ npm run db:reset
   - 执行 SQL 文件创建表结构
   - 使用 bcrypt 对密码进行哈希处理
   - 插入初始数据（默认租户和管理员用户）
+  - 应用运行时不使用 `sequelize.sync()`
 
 ## 初始数据
 

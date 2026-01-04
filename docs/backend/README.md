@@ -35,86 +35,106 @@ dev_core/
 └── config/                 # 配置文件
 ```
 
-## API 接口
+## API 接口（高层）
+
+### 基础能力
+
+| 模块 | 路径 | 说明 |
+| --- | --- | --- |
+| 健康检查 | `GET /health` | 服务状态 |
+| 文档 | `GET /api-docs` | Swagger（非生产环境） |
+| V2 测试 | `GET /api/v2/test` | V2 示例接口 |
 
 ### 认证相关
 
-```
-POST   /api/v1/auth/login           # 用户登录
-POST   /api/v1/auth/logout          # 用户登出
-POST   /api/v1/auth/refresh         # 刷新 Token
-GET    /api/v1/auth/me              # 获取当前用户信息
-```
+| 路径 | 说明 |
+| --- | --- |
+| `GET /api/v1/auth/captcha` | 获取验证码 |
+| `POST /api/v1/auth/login` | 登录 |
+| `POST /api/v1/auth/refresh` | 刷新 Token |
+| `POST /api/v1/auth/logout` | 退出登录 |
+| `GET /api/v1/auth/me` | 获取当前用户 |
+| `GET /api/v1/auth/config` | 登录配置 |
 
-### 用户管理
+### 租户/用户/工程
 
-```
-GET    /api/v1/users                # 获取用户列表
-POST   /api/v1/users                # 创建用户
-GET    /api/v1/users/:id            # 获取用户详情
-PUT    /api/v1/users/:id            # 更新用户
-DELETE /api/v1/users/:id            # 删除用户
-```
+| 模块 | 路径前缀 | 说明 |
+| --- | --- | --- |
+| 租户 | `/api/v1/tenants` | 租户管理 |
+| 用户 | `/api/v1/users` | 用户管理 |
+| 工程 | `/api/v1/projects` | 工程管理 |
+| 日志 | `/api/v1/logs` | 系统日志 |
+| 角色 | `/api/v1/roles` | 角色管理 |
 
-### 租户管理
+### 数据中心（关系库）
 
-```
-GET    /api/v1/tenants              # 获取租户列表
-POST   /api/v1/tenants              # 创建租户
-GET    /api/v1/tenants/:id          # 获取租户详情
-PUT    /api/v1/tenants/:id          # 更新租户
-DELETE /api/v1/tenants/:id          # 删除租户
-```
+| 路径 | 说明 |
+| --- | --- |
+| `GET /api/v1/data/projects/:projectId/connections` | 连接列表 |
+| `POST /api/v1/data/projects/:projectId/connections` | 创建连接 |
+| `PUT /api/v1/data/projects/:projectId/connections/:connectionId` | 更新连接 |
+| `DELETE /api/v1/data/projects/:projectId/connections/:connectionId` | 删除连接 |
+| `PATCH /api/v1/data/projects/:projectId/connections/:connectionId/status` | 更新连接状态 |
+| `POST /api/v1/data/projects/:projectId/connections/test` | 测试连接 |
+| `GET /api/v1/data/projects/:projectId/connections/:connectionId/tables` | 表列表 |
+| `GET /api/v1/data/projects/:projectId/connections/:connectionId/tables/:tableName/data` | 表数据 |
+| `GET /api/v1/data/projects/:projectId/connections/:connectionId/tables/:tableName/structure` | 表结构 |
+| `POST /api/v1/data/projects/:projectId/connections/:connectionId/execute-sql` | 执行 SQL |
+| `GET /api/v1/data/projects/:projectId/queries` | 查询列表 |
+| `POST /api/v1/data/projects/:projectId/queries` | 创建查询 |
+| `POST /api/v1/data/queries/:id/execute` | 执行查询 |
 
-### 工程管理
+### 数据中心（MQTT）
 
-```
-GET    /api/v1/projects             # 获取工程列表
-POST   /api/v1/projects             # 创建工程
-GET    /api/v1/projects/:id         # 获取工程详情
-PUT    /api/v1/projects/:id         # 更新工程
-DELETE /api/v1/projects/:id         # 删除工程
-```
+| 路径 | 说明 |
+| --- | --- |
+| `POST /api/v1/data/projects/:projectId/mqtt/connections` | 创建连接 |
+| `GET /api/v1/data/projects/:projectId/mqtt/connections` | 连接列表 |
+| `GET /api/v1/data/mqtt/connections/:id` | 连接详情 |
+| `PUT /api/v1/data/mqtt/connections/:id` | 更新连接 |
+| `DELETE /api/v1/data/mqtt/connections/:id` | 删除连接 |
+| `POST /api/v1/data/mqtt/connections/test` | 测试连接 |
+| `POST /api/v1/data/mqtt/connections/:id/start` | 启动连接 |
+| `POST /api/v1/data/mqtt/connections/:id/stop` | 停止连接 |
+| `GET /api/v1/data/mqtt/connections/:id/status` | 获取连接状态 |
+| `GET /api/v1/data/projects/:projectId/mqtt/connections/:connectionId/subscriptions` | 订阅列表 |
+| `POST /api/v1/data/projects/:projectId/mqtt/connections/:connectionId/subscriptions` | 创建订阅 |
+| `GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId` | 订阅详情 |
+| `PUT /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId` | 更新订阅 |
+| `DELETE /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId` | 删除订阅 |
+| `PATCH /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/toggle` | 启停订阅 |
+| `GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/messages` | 订阅消息 |
+| `GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tag-groups` | 变量组列表 |
+| `POST /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tag-groups` | 创建变量组 |
+| `PUT /api/v1/data/mqtt/tag-groups/order` | 变量组排序 |
+| `GET /api/v1/data/mqtt/tag-groups/:groupId` | 变量组详情 |
+| `PUT /api/v1/data/mqtt/tag-groups/:groupId` | 更新变量组 |
+| `DELETE /api/v1/data/mqtt/tag-groups/:groupId` | 删除变量组 |
+| `GET /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags` | 变量列表 |
+| `POST /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags` | 创建变量 |
+| `POST /api/v1/data/projects/:projectId/mqtt/subscriptions/:subscriptionId/tags/batch` | 批量创建 |
+| `GET /api/v1/data/projects/:projectId/mqtt/tags` | 工程内变量 |
+| `GET /api/v1/data/mqtt/tags/:id` | 变量详情 |
+| `PUT /api/v1/data/mqtt/tags/:id` | 更新变量 |
+| `DELETE /api/v1/data/mqtt/tags/:id` | 删除变量 |
+| `PATCH /api/v1/data/mqtt/tags/:id/toggle` | 启停变量 |
+| `PUT /api/v1/data/mqtt/tags/order` | 变量排序 |
+| `GET /api/v1/data/mqtt/tags/:id/value` | 变量值 |
+| `POST /api/v1/data/mqtt/tags/values` | 批量变量值 |
 
-### 数据连接
+### 设计中心
 
-```
-GET    /api/v1/data/projects/:projectId/connections              # 获取连接列表
-POST   /api/v1/data/projects/:projectId/connections              # 创建连接
-GET    /api/v1/data/projects/:projectId/connections/:id          # 获取连接详情
-PUT    /api/v1/data/projects/:projectId/connections/:id          # 更新连接
-DELETE /api/v1/data/projects/:projectId/connections/:id          # 删除连接
-POST   /api/v1/data/projects/:projectId/connections/:id/test     # 测试连接
-```
-
-### 查询管理
-
-```
-GET    /api/v1/data/projects/:projectId/queries                  # 获取查询列表
-POST   /api/v1/data/projects/:projectId/queries                  # 创建查询
-GET    /api/v1/data/projects/:projectId/queries/:id              # 获取查询详情
-PUT    /api/v1/data/projects/:projectId/queries/:id              # 更新查询
-DELETE /api/v1/data/projects/:projectId/queries/:id              # 删除查询
-POST   /api/v1/data/queries/:id/execute                          # 执行查询
-```
-
-### 数据操作
-
-```
-POST   /api/v1/data/projects/:projectId/connections/:id/execute-sql        # 执行 SQL
-GET    /api/v1/data/projects/:projectId/connections/:id/tables             # 获取表列表
-GET    /api/v1/data/projects/:projectId/connections/:id/tables/:name/data  # 获取表数据
-```
-
-### 页面管理
-
-```
-GET    /api/v1/design/projects/:projectId/pages                 # 获取页面列表
-POST   /api/v1/design/projects/:projectId/pages                 # 创建页面
-GET    /api/v1/design/projects/:projectId/pages/:id             # 获取页面详情
-PUT    /api/v1/design/projects/:projectId/pages/:id             # 更新页面
-DELETE /api/v1/design/projects/:projectId/pages/:id             # 删除页面
-```
+| 路径 | 说明 |
+| --- | --- |
+| `GET /api/v1/design/projects/:projectId/pages` | 页面列表 |
+| `POST /api/v1/design/projects/:projectId/pages` | 创建页面 |
+| `GET /api/v1/design/projects/:projectId/pages/:pageId` | 页面详情 |
+| `PUT /api/v1/design/projects/:projectId/pages/:pageId` | 更新页面 |
+| `DELETE /api/v1/design/projects/:projectId/pages/:pageId` | 删除页面 |
+| `PATCH /api/v1/design/projects/:projectId/pages/:pageId/rename` | 重命名 |
+| `PATCH /api/v1/design/projects/:projectId/pages/:pageId/move` | 移动页面 |
+| `GET /api/v1/design/projects/:projectId/variables` | 全局变量 |
+| `PUT /api/v1/design/projects/:projectId/variables` | 更新全局变量 |
 
 ## 认证和授权
 
@@ -144,33 +164,26 @@ POST /api/v1/auth/refresh
 
 - SUPER_ADMIN: 超级管理员
 - SYSTEM_ADMIN: 系统管理员
-- TENANT_ADMIN: 租户管理员
-- USER: 普通用户
+- PROJECT_ADMIN: 工程管理员
+- OPS_ADMIN: 运维管理员
+- USER_ADMIN: 用户管理员
 
 ## 错误处理
 
-### 错误响应格式
+### 响应格式（统一）
 
 ```json
 {
   "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "错误信息",
-    "details": {}
-  }
+  "errorCode": "ERROR_CODE",
+  "message": "错误信息",
+  "requestId": "REQ_ID"
 }
 ```
 
 ### 常见错误码
 
-| 错误码 | HTTP 状态码 | 说明 |
-|--------|------------|------|
-| UNAUTHORIZED | 401 | 未授权 |
-| FORBIDDEN | 403 | 禁止访问 |
-| NOT_FOUND | 404 | 资源不存在 |
-| VALIDATION_ERROR | 400 | 参数验证失败 |
-| INTERNAL_ERROR | 500 | 服务器内部错误 |
+错误码以 `dev_core/src/constants/errorCodes.js` 为准。
 
 ## 国际化
 
@@ -234,12 +247,6 @@ pnpm dev
 pnpm test
 ```
 
-### 构建生产版本
-
-```bash
-pnpm build
-```
-
 ### 启动生产服务器
 
 ```bash
@@ -255,5 +262,5 @@ pnpm start
 
 ---
 
-**版本**: 2.0.0  
-**最后更新**: 2025-12-08
+**版本**: 2.1.0  
+**最后更新**: 2025-03-08
