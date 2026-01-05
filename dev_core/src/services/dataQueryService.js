@@ -2,6 +2,7 @@ const { DataQuery, DataQueryLog, DataConnection, DataRelationalConfig } = requir
 const DriverFactory = require('./drivers/DriverFactory');
 const AppError = require('../utils/AppError');
 const ErrorCodes = require('../constants/errorCodes');
+const dayjs = require('dayjs');
 
 /**
  * 数据查询服务
@@ -182,7 +183,7 @@ class DataQueryService {
       resultCount: result ? result.rowCount : null,
       status,
       errorMessage,
-      executedAt: new Date()
+      executedAt: dayjs().toDate()
     });
 
     if (status === 'error') {

@@ -23,6 +23,7 @@
 - **错误处理**：业务错误使用 `AppError` 与 `ErrorCodes`
 - **数据库初始化**：使用 `dev_core/scripts/init-database.js`，不使用 `sequelize.sync()`
 - **端口默认值**：`dev_core` 9099，`dev_ide` 9091，`datacenter` 9092，`designer` 9093
+- **时间处理**：`dev_core`、`dev_ide`、`datacenter`、`designer` 统一使用 `dayjs`，字符串时间展示格式 `YYYY-MM-DD HH:mm:ss`
 - **注释与命名（全局）**：
   - 类/函数：必须添加文档注释，说明功能描述、参数含义、返回值类型及异常情况
   - 注释语言：统一使用中文，语法清晰、简洁，避免冗余描述

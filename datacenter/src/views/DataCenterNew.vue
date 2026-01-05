@@ -303,6 +303,8 @@ import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
 import { useConnection } from "@/composables/useConnection";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import dataAPI from "@/api/data.api";
+import dayjs from "dayjs";
+import { TIME_FORMAT } from "@/constants";
 
 // 从路由获取 project 信息
 const route = useRoute();
@@ -1230,6 +1232,8 @@ const handleMqttSubscriptionDeleted = (connection, subscription) => {
  * 查看查询详情
  */
 const handleViewQueryDetails = (connection, query) => {
+  const createdAt = dayjs(query.createdAt);
+  const updatedAt = dayjs(query.updatedAt);
   ElMessageBox.alert(
     `
     <div style="text-align: left;">
@@ -1240,8 +1244,8 @@ const handleViewQueryDetails = (connection, query) => {
       <p><strong>超时时间：</strong>${query.timeout || 60000}ms</p>
       <p><strong>缓存：</strong>${query.cacheEnabled ? "启用" : "禁用"}</p>
       ${query.cacheEnabled ? `<p><strong>缓存TTL：</strong>${query.cacheTtl}秒</p>` : ""}
-      <p><strong>创建时间：</strong>${new Date(query.createdAt).toLocaleString()}</p>
-      <p><strong>更新时间：</strong>${new Date(query.updatedAt).toLocaleString()}</p>
+      <p><strong>创建时间：</strong>${createdAt.isValid() ? createdAt.format(TIME_FORMAT) : "-"}</p>
+      <p><strong>更新时间：</strong>${updatedAt.isValid() ? updatedAt.format(TIME_FORMAT) : "-"}</p>
     </div>
     `,
     "查询详情",

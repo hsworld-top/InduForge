@@ -1,7 +1,9 @@
 const { Sequelize } = require('sequelize');
 const mysql = require('mysql2/promise');
+const dayjs = require('dayjs');
 require('dotenv').config();
 const { logger } = require('../utils/logger');
+const { TIME_FORMAT } = require('../constants/time');
 
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'tenant_management',
@@ -98,7 +100,7 @@ const startDbHealthCheck = () => {
       } catch (error) {
         dbStatus.retryCount++;
         dbStatus.lastError = error.message;
-        dbStatus.lastErrorTime = new Date().toISOString();
+        dbStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
         logger.debug(`Database health check failed (attempt ${dbStatus.retryCount}): ${error.message}`);
       }
     }
@@ -300,7 +302,7 @@ const testConnection = async () => {
     }
     dbStatus.connected = false;
     dbStatus.lastError = error.message;
-    dbStatus.lastErrorTime = new Date().toISOString();
+    dbStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
     logger.error('Unable to connect to the database', {
       error: error.message,
       code: error.code,
@@ -388,7 +390,7 @@ const checkConnection = async () => {
   } catch (error) {
     dbStatus.connected = false;
     dbStatus.lastError = error.message;
-    dbStatus.lastErrorTime = new Date().toISOString();
+    dbStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
     logger.error('Database connection check failed', { error: error.message });
     return false;
   }

@@ -76,6 +76,8 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Edit, Delete, Download, Upload } from '@element-plus/icons-vue';
 import { useDesignStore } from '@/store/design';
 import * as XLSX from 'xlsx';
+import dayjs from 'dayjs';
+import { TIME_FORMAT } from '@/constants';
 
 const designStore = useDesignStore();
 
@@ -144,6 +146,10 @@ const selectedVariable = computed(() => {
 
 const formatValue = (value) => {
     if (value === null || value === undefined) return 'null';
+    if (value instanceof Date) {
+        const formatted = dayjs(value);
+        return formatted.isValid() ? formatted.format(TIME_FORMAT) : String(value);
+    }
     if (typeof value === 'object') return JSON.stringify(value);
     return String(value);
 };
@@ -217,7 +223,10 @@ const formatDefaultValueForForm = (type, value) => {
     }
     if (type === 'Date') {
         if (value === null || value === undefined || value === '') return '';
-        if (value instanceof Date) return value.toISOString();
+        if (value instanceof Date) {
+            const formatted = dayjs(value);
+            return formatted.isValid() ? formatted.format(TIME_FORMAT) : value.toISOString();
+        }
         return String(value);
     }
     if (type === 'RegExp') {
@@ -318,7 +327,10 @@ const parseDefaultValue = () => {
     }
     if (type === 'Date') {
         if (defaultValue === '' || defaultValue === null || defaultValue === undefined) return null;
-        if (defaultValue instanceof Date) return defaultValue.toISOString();
+        if (defaultValue instanceof Date) {
+            const formatted = dayjs(defaultValue);
+            return formatted.isValid() ? formatted.format(TIME_FORMAT) : defaultValue.toISOString();
+        }
         return String(defaultValue);
     }
     if (type === 'RegExp') {
@@ -452,7 +464,10 @@ const parseImportedValue = (type, cellValue) => {
     }
     if (type === 'Date') {
         if (cellValue === null || cellValue === undefined || cellValue === '') return null;
-        if (cellValue instanceof Date) return cellValue.toISOString();
+        if (cellValue instanceof Date) {
+            const formatted = dayjs(cellValue);
+            return formatted.isValid() ? formatted.format(TIME_FORMAT) : cellValue.toISOString();
+        }
         return String(cellValue);
     }
     if (type === 'RegExp') {

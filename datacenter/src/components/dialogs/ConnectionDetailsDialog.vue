@@ -91,6 +91,8 @@
 <script setup>
 import { computed } from "vue";
 import { getConnectionTypeConfig } from "@/config/connectionTypes";
+import dayjs from "dayjs";
+import { TIME_FORMAT } from "@/constants";
 
 const props = defineProps({
   modelValue: {
@@ -128,14 +130,7 @@ const getConnectionTypeLabel = (type) => {
 
 const formatDate = (dateString) => {
   if (!dateString) return "-";
-  const date = new Date(dateString);
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const date = dayjs(dateString);
+  return date.isValid() ? date.format(TIME_FORMAT) : "-";
 };
 </script>

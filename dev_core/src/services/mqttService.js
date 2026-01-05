@@ -8,6 +8,7 @@ const AppError = require("../utils/AppError");
 const ErrorCodes = require("../constants/errorCodes");
 const { logger } = require("../utils/logger");
 const socketService = require("./socketService");
+const dayjs = require("dayjs");
 
 /**
  * MQTT 服务
@@ -260,7 +261,7 @@ class MqttService {
       // 更新连接状态
       await connection.update({
         status: "connected",
-        lastConnectedAt: new Date(),
+        lastConnectedAt: dayjs().toDate(),
         lastErrorMessage: null,
       });
 

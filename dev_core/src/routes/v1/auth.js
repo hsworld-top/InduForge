@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const Joi = require('joi');
+const dayjs = require('dayjs');
 const { validate } = require('../../middlewares/validate');
 const { logger } = require('../../utils/logger');
 const ApiResponse = require('../../utils/response');
@@ -9,6 +10,7 @@ const AppError = require('../../utils/AppError');
 const appConfig = require('../../config/app');
 const TokenManager = require('../../utils/token');
 const Captcha = require('../../utils/captcha');
+const { TIME_FORMAT } = require('../../constants/time');
 
 const router = express.Router();
 
@@ -464,7 +466,7 @@ router.get('/config', async (req, res) => {
       version: packageInfo.version || '1.0.0',
       description: packageInfo.description || '',
       author: packageInfo.author || '',
-      buildTime: new Date().toISOString(),
+      buildTime: dayjs().format(TIME_FORMAT),
       // 如果活跃租户数量大于1，则启用多租户模式
       multiTenant: activeTenantsCount > 1,
       activeTenantsCount

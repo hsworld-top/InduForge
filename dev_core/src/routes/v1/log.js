@@ -3,6 +3,7 @@ const Joi = require('joi');
 const { validate } = require('../../middlewares/validate');
 const { logger } = require('../../utils/logger');
 const { Op, fn, col } = require('sequelize');
+const dayjs = require('dayjs');
 const ApiResponse = require('../../utils/response');
 const ErrorCodes = require('../../constants/errorCodes');
 const AppError = require('../../utils/AppError');
@@ -94,8 +95,8 @@ router.get('/', authenticateToken, validate(Joi.object({
     // 时间范围查询
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) where.createdAt[Op.lte] = new Date(endDate);
+      if (startDate) where.createdAt[Op.gte] = dayjs(startDate).toDate();
+      if (endDate) where.createdAt[Op.lte] = dayjs(endDate).toDate();
     }
 
     const offset = (page - 1) * limit;
@@ -156,8 +157,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
     });
 
     // 统计最近7天的日志趋势
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgo = dayjs().subtract(7, 'day').toDate();
 
     const trendStats = await Log.findAll({
       where: {

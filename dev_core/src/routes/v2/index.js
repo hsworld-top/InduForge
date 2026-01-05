@@ -1,4 +1,6 @@
 const express = require('express');
+const dayjs = require('dayjs');
+const { TIME_FORMAT } = require('../../constants/time');
 
 const router = express.Router();
 
@@ -29,7 +31,7 @@ router.get('/test', (req, res) => {
   res.json({
     message: 'This is a test API from v2',
     version: '2.0.0',
-    timestamp: new Date().toISOString()
+    timestamp: dayjs().format(TIME_FORMAT)
   });
 });
 

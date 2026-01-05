@@ -1,5 +1,7 @@
 const Redis = require('ioredis');
+const dayjs = require('dayjs');
 const { logger } = require('./logger');
+const { TIME_FORMAT } = require('../constants/time');
 
 /**
  * Redis 客户端实例
@@ -40,7 +42,7 @@ function initRedis() {
         // 超过最大重试次数，进入降级模式
         if (!redisStatus.degraded) {
           redisStatus.degraded = true;
-          redisStatus.lastErrorTime = new Date().toISOString();
+          redisStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
           logger.error('Redis max retry attempts reached, entering degraded mode', {
             maxRetries: redisStatus.maxRetries,
             retryCount: times,
@@ -102,7 +104,7 @@ function initRedis() {
     });
     redisStatus.connected = false;
     redisStatus.lastError = err.message;
-    redisStatus.lastErrorTime = new Date().toISOString();
+    redisStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
   });
 
   redisClient.on('close', () => {

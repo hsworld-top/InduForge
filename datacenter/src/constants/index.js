@@ -1,5 +1,6 @@
 // API 相关常量
 export const API_BASE_URL = "/api/v1";
+export const TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 
 // 本地存储键名常量
 export const STORAGE_KEYS = {
