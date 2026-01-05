@@ -76,6 +76,9 @@
                     <el-tab-pane label="工程变量" name="variables">
                         <GlobalVariables />
                     </el-tab-pane>
+                    <el-tab-pane label="全局脚本" name="global-scripts">
+                        <GlobalScripts />
+                    </el-tab-pane>
                 </el-tabs>
                 <!-- 调整宽度的拖拽条 -->
                 <div class="resize-handle resize-handle-right" @mousedown="startResizeLeft"></div>
@@ -198,7 +201,7 @@ import IconTablerStack from '~icons/tabler/stack';
 import { useDesignStore } from '@/store/design';
 import { useCanvas } from '@/composables/useCanvas';
 import { useKeyboard } from '@/composables/useKeyboard';
-import { PageTree, ComponentTree, ComponentLibrary, PropertyPanel, GlobalVariables, VariablePanel } from '@/components/panels';
+import { PageTree, ComponentTree, ComponentLibrary, PropertyPanel, GlobalVariables, GlobalScripts, VariablePanel } from '@/components/panels';
 import { DesignCanvas, CanvasRuler } from '@/components/canvas';
 import ContextMenu from '@/components/canvas/ContextMenu.vue';
 import { registerAllComponents } from '@/registry/components';

@@ -8,4 +8,5 @@ export { default as ComponentTree } from './ComponentTree.vue';
 export { default as ComponentLibrary } from './ComponentLibrary.vue';
 export { default as PropertyPanel } from './PropertyPanel.vue';
 export { default as GlobalVariables } from './GlobalVariables.vue';
+export { default as GlobalScripts } from './GlobalScripts.vue';
 export { default as VariablePanel } from './VariablePanel.vue';
