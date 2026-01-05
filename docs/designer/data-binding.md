@@ -2,532 +2,625 @@
 
 ## 概述
 
-InduForge Designer的数据绑定系统提供了强大的数据管理和绑定能力，支持与DataCenter深度集成，实现实时数据更新和可视化配置。
+InduForge Designer 的数据绑定系统提供了强大的数据管理和绑定能力。设计器通过绑定**数据点（DataPoint）**来获取数据中心管理的各类数据，实现组件与数据的动态关联。
+
+## 核心架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   数据中心 (DataCenter)                     设计器 (Designer)               │
+│   ┌───────────────────────┐                ┌───────────────────────┐       │
+│   │                       │                │                       │       │
+│   │  数据点目录            │   ─────────►  │  数据源配置            │       │
+│   │  (统一管理)            │   HTTP/WS     │  (绑定数据点)          │       │
+│   │                       │                │                       │       │
+│   │  • db.xxx             │                │  引用数据点:           │       │
+│   │  • mqtt.xxx           │                │  path: mqtt.EMQX.xxx  │       │
+│   │  • calc.xxx           │                │  mode: subscription   │       │
+│   │                       │                │                       │       │
+│   └───────────────────────┘                └───────────────────────┘       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ## 核心特性
 
-### ✨ 多种数据源类型
-- **DataCenter**: 与数据中心集成，支持查询和点位订阅
-- **HTTP**: REST API调用，支持各种HTTP方法
-- **Static**: 静态数据，适用于配置和字典
-- **Computed**: 计算数据源，基于其他数据源计算
+### 📌 数据点绑定
+
+设计器的数据配置核心是绑定**数据点**，数据点由数据中心统一管理：
+
+- **db.\*** - 数据库查询字段（如 `db.生产库.设备统计.device_count`）
+- **mqtt.\*** - MQTT 变量（如 `mqtt.EMQX.温度组.temperature`）
+- **calc.\*** - 计算单元输出（如 `calc.功率计算.power`）
+- **opcua.\*** - OPC UA 节点（规划中）
+- **ws.\*** - WebSocket 变量（规划中）
 
 ### 🔄 灵活的数据获取模式
-- **Request**: 单次请求，按需加载
-- **Poll**: 轮询模式，定时刷新
-- **Subscription**: 订阅模式，实时推送
+
+数据点支持三种获取模式：
+
+| 模式             | 说明               | 适用场景             |
+| ---------------- | ------------------ | -------------------- |
+| **Request**      | 单次请求，按需加载 | 配置数据、初始化数据 |
+| **Poll**         | 轮询模式，定时刷新 | 统计数据、报表数据   |
+| **Subscription** | 订阅模式，实时推送 | 实时监控、设备状态   |
 
 ### 🎯 强大的数据绑定
-- 支持组件属性绑定（props.*）
-- 支持组件样式绑定（style.*）
+
+- 支持组件属性绑定（`props.*`）
+- 支持组件样式绑定（`style.*`）
 - 表达式语法，支持复杂计算
 - 实时预览绑定值
 
 ### 🛠️ 可视化配置
-- 数据源配置面板
+
+- 数据点选择器（树形浏览、搜索筛选）
 - 数据绑定配置面板
 - 实时状态监控
 - 错误提示和降级
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 选择数据点
 
-数据绑定系统已集成到Designer中，无需额外安装。
+在设计器中打开数据源配置面板，点击「选择数据点」：
 
-### 2. 基本使用
+```
+┌─ 选择数据点 ──────────────────────────────────────────┐
+│                                                        │
+│  [🔍 搜索...]                    [类型: 全部 ▼]        │
+│                                                        │
+│  ▼ 📡 MQTT 变量                                       │
+│    │ ▼ EMQX                                           │
+│    │   │ ▼ 温度传感器                                 │
+│    │   │   ├─ temperature    25.5 ℃                  │
+│    │   │   └─ humidity       60 %                     │
+│                                                        │
+│  ▼ 🗄️ 数据库查询                                      │
+│    │ ▼ 生产库                                         │
+│    │   │ ▼ 设备统计                                   │
+│    │   │   ├─ device_count   150                      │
+│    │   │   └─ online_count   142                      │
+│                                                        │
+│  已选择: mqtt.EMQX.温度传感器.temperature              │
+│                                                        │
+│                         [取消]    [确定]               │
+└────────────────────────────────────────────────────────┘
+```
 
-```javascript
-// 1. 在页面配置中添加数据源
+### 2. 配置数据源
+
+```json
 {
   "dataSources": [
     {
-      "id": "ds_devices",
-      "type": "dataCenter",
-      "config": {
-        "sourceType": "query",
-        "queryId": "query_devices"
-      },
-      "mode": "poll",
-      "interval": 5000
+      "id": "ds_temp",
+      "path": "mqtt.EMQX.温度传感器.temperature",
+      "dataType": "number",
+      "mode": "subscription"
     }
   ]
 }
+```
 
-// 2. 在组件中绑定数据
+### 3. 绑定到组件
+
+```json
 {
-  "id": "comp_table",
-  "type": "Table",
+  "id": "gauge_temp",
+  "type": "Gauge",
   "bindings": {
-    "props.data": "{{ data.ds_devices }}"
+    "props.value": "{{ data.ds_temp }}",
+    "props.unit": "℃",
+    "props.color": "{{ data.ds_temp > 80 ? '#ff4d4f' : '#52c41a' }}"
   }
 }
 ```
 
-### 3. 完整示例
-
-参考本文档的架构与核心模块章节完成配置。
-
-## 架构设计
-
-### 系统架构（API模式 - 默认）
+## 数据点路径格式
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    IDE (标签页容器)                          │
-│  ┌──────────────────┐         ┌──────────────────┐          │
-│  │   Designer Tab   │         │ DataCenter Tab   │          │
-│  │                  │         │  (可选打开)       │          │
-│  │  ┌────────────┐  │         │                  │          │
-│  │  │DataSourceMgr│ │         │                  │          │
-│  │  │     ↓       │ │         │                  │          │
-│  │  │ 直接API调用 │ │         │                  │          │
-│  │  └────────────┘  │         │                  │          │
-│  └──────────────────┘         └──────────────────┘          │
-└─────────────────────────────────────────────────────────────┘
-                ↓ HTTP Request
-┌─────────────────────────────────────────────────────────────┐
-│                    Backend API (dev_core)                    │
-│  - /api/v1/data/projects/:id/connections                    │
-│  - /api/v1/data/projects/:id/queries                        │
-│  - /api/v1/data/queries/:id/execute                         │
-│  - /api/v1/data/.../execute-sql                             │
-└─────────────────────────────────────────────────────────────┘
-                ↓
-┌─────────────────────────────────────────────────────────────┐
-│                      Database                                │
-└─────────────────────────────────────────────────────────────┘
+{来源类型}.{连接名}.{分组名}.{数据点名}
 ```
 
-**优势**：
-- ✅ 不依赖DataCenter标签页
-- ✅ Designer和DataCenter完全解耦
-- ✅ 可以独立开发和测试
-- ✅ 更简单的通信机制
-- ✅ 更好的性能和可靠性
+**路径示例**：
 
-详细架构说明请参考 [数据绑定架构](./data-binding-architecture.md)
+| 路径                               | 说明                                             |
+| ---------------------------------- | ------------------------------------------------ |
+| `db.生产库.设备统计.device_count`  | 数据库查询「设备统计」的 `device_count` 字段     |
+| `mqtt.EMQX.温度传感器.temperature` | MQTT 连接下「温度传感器」组的 `temperature` 变量 |
+| `calc.功率计算.power`              | 计算单元「功率计算」的 `power` 输出              |
 
-### 数据流
-
-```
-配置 → 注册 → 启动 → 获取数据 → 转换 → 缓存 → 绑定 → 更新组件
-```
-
-## 核心模块
-
-### 1. DataCenterBridge
-**文件**: `src/engine/datasource/DataCenterBridge.js`
-
-iframe通信桥接，负责与DataCenter的消息通信。
-
-**主要方法**:
-- `init(iframeId)` - 初始化连接
-- `executeQuery(projectId, queryId, parameters)` - 执行查询
-- `executeSql(projectId, connectionId, sql, parameters)` - 执行SQL
-- `subscribe(projectId, queryId, parameters, onData, onError, interval)` - 订阅数据
-
-### 2. DataSourceManager
-**文件**: `src/engine/datasource/DataSourceManager.js`
-
-数据源管理器，负责数据源的生命周期管理。
-
-**主要方法**:
-- `register(dataSourceConfig)` - 注册数据源
-- `start(dataSourceId)` - 启动数据源
-- `stop(dataSourceId)` - 停止数据源
-- `refresh(dataSourceId)` - 刷新数据源
-- `getData(dataSourceId)` - 获取数据
-- `getStatus(dataSourceId)` - 获取状态
-
-### 3. MessageHandler
-**文件**: `datacenter/src/utils/messageHandler.js`
-
-DataCenter端的消息处理器，处理来自Designer的请求。
-
-**支持的操作**:
-- GET_CONNECTIONS - 获取连接列表
-- GET_QUERIES - 获取查询列表
-- EXECUTE_QUERY - 执行查询
-- EXECUTE_SQL - 执行SQL
-- SUBSCRIBE - 订阅数据
-- UNSUBSCRIBE - 取消订阅
-
-### 4. DataSourcePanel
-**文件**: `src/components/panels/DataSourcePanel.vue`
-
-数据源配置面板，提供可视化的数据源管理界面。
-
-**功能**:
-- 添加/编辑/删除数据源
-- 查看数据源状态
-- 刷新数据源
-- 配置数据源参数
-
-### 5. DataBindingPanel
-**文件**: `src/components/panels/DataBindingPanel.vue`
-
-数据绑定配置面板，提供可视化的数据绑定配置。
-
-**功能**:
-- 添加/删除绑定
-- 编辑表达式
-- 实时预览绑定值
-- 快速选择数据源
-
-### 6. VariablePanel
-**文件**: `src/components/panels/VariablePanel.vue`
-
-变量管理面板，用于维护页面变量。
-
-**功能**:
-- 新增/编辑/删除变量，编辑时会回填变量信息并更新原变量
-- 变量重命名会同步更新页面事件、数据源配置与组件绑定引用
-
-## API文档
+## 数据源配置
 
 ### DataSourceConfig
 
 ```typescript
 interface DataSourceConfig {
-  id: string                    // 数据源ID
-  type: 'dataCenter' | 'http' | 'static' | 'computed'
-  config: {
-    // DataCenter配置
-    sourceType?: 'query' | 'tags'
-    queryId?: string
-    connectionId?: string
-    tags?: string[]
-    parameters?: Record<string, any>
-    
-    // HTTP配置
-    url?: string
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
-    headers?: Record<string, string>
-    params?: Record<string, any>
-    data?: any
-    
-    // Static配置
-    data?: any
-    
-    // Computed配置
-    dependencies?: string[]
-    compute?: string
-  }
-  mode?: 'request' | 'poll' | 'subscription'
-  interval?: number             // 轮询间隔（毫秒）
-  transformer?: string          // 数据转换函数
-  errorHandler?: string         // 错误处理函数
+  id: string; // 数据源 ID，用于绑定引用
+  path: string; // 数据点路径
+  dataType: "number" | "string" | "boolean" | "object" | "array"; // 数据类型
+  mode: "request" | "poll" | "subscription"; // 获取模式
+  interval?: number; // 轮询间隔（毫秒），mode=poll 时有效
+  transformer?: string; // 数据转换脚本（可选）
+  errorHandler?: string; // 错误处理函数
   options?: {
-    autoStart?: boolean         // 自动启动
-    retryOnError?: boolean      // 错误重试
-    retryCount?: number         // 重试次数
-    retryInterval?: number      // 重试间隔
+    autoStart?: boolean; // 页面加载时自动启动
+    retryOnError?: boolean; // 错误时重试
+    retryCount?: number; // 重试次数
+    retryInterval?: number; // 重试间隔
+  };
+}
+```
+
+### 数据类型说明
+
+| 数据类型  | 说明       | 处理方式                                          |
+| --------- | ---------- | ------------------------------------------------- |
+| `number`  | 数值类型   | 直接使用，支持数学运算                            |
+| `string`  | 字符串类型 | 直接使用，支持字符串操作                          |
+| `boolean` | 布尔类型   | 直接使用，支持条件判断                            |
+| `object`  | 对象类型   | 可通过 `transformer` 脚本解析提取字段             |
+| `array`   | 数组类型   | 可通过 `transformer` 脚本处理或直接绑定到列表组件 |
+
+### 数据转换脚本（transformer）
+
+对于 `object` 或 `array` 类型的数据点，可以编写转换脚本提取或处理数据：
+
+```javascript
+// 示例 1：从对象中提取字段
+{
+  "transformer": "(data) => data.value"
+}
+
+// 示例 2：从对象中提取多个字段
+{
+  "transformer": "(data) => ({ temp: data.temperature, hum: data.humidity })"
+}
+
+// 示例 3：处理数组，提取第一个元素
+{
+  "transformer": "(data) => data[0]"
+}
+
+// 示例 4：数组过滤
+{
+  "transformer": "(data) => data.filter(item => item.status === 'online')"
+}
+
+// 示例 5：数组聚合计算
+{
+  "transformer": "(data) => data.reduce((sum, item) => sum + item.value, 0)"
+}
+```
+
+### 获取模式详解
+
+#### Request 模式（单次请求）
+
+适用于不常变化的数据，如配置、字典等。
+
+```json
+{
+  "id": "ds_config",
+  "path": "db.系统库.系统配置.site_name",
+  "dataType": "string",
+  "mode": "request"
+}
+```
+
+#### Poll 模式（定时轮询）
+
+适用于需要定期更新的数据，如统计数据。
+
+```json
+{
+  "id": "ds_stats",
+  "path": "db.生产库.设备统计.online_count",
+  "dataType": "number",
+  "mode": "poll",
+  "interval": 5000
+}
+```
+
+#### Subscription 模式（实时订阅）
+
+适用于实时数据，通过 Socket.IO 推送。
+
+```json
+{
+  "id": "ds_realtime",
+  "path": "mqtt.EMQX.温度传感器.temperature",
+  "dataType": "number",
+  "mode": "subscription"
+}
+```
+
+## 数据绑定
+
+### 绑定语法
+
+使用 `{{ expression }}` 语法将数据绑定到组件属性：
+
+```json
+{
+  "bindings": {
+    "props.value": "{{ data.ds_temp }}",
+    "props.title": "{{ '当前温度: ' + data.ds_temp + '℃' }}",
+    "style.color": "{{ data.ds_temp > 80 ? '#ff4d4f' : '#52c41a' }}",
+    "style.display": "{{ data.ds_temp > 0 ? 'block' : 'none' }}"
   }
 }
 ```
 
-### Binding
-
-```typescript
-interface Binding {
-  [path: string]: string        // 属性路径 -> 表达式
-}
-
-// 示例
-{
-  "props.value": "{{ data.ds_temp.value }}",
-  "style.color": "{{ data.ds_temp.value > 80 ? '#ff4d4f' : '#52c41a' }}"
-}
-```
-
-### Expression Context
+### 表达式上下文
 
 ```typescript
 interface ExpressionContext {
-  vars: Record<string, any>     // 页面变量
-  data: Record<string, any>     // 数据源数据
-  props: Record<string, any>    // 组件属性
-  $user: {                      // 用户信息
-    id: string
-    name: string
-    role: string
-    permissions: string[]
-  }
-  $route: {                     // 路由信息
-    params: Record<string, any>
-    query: Record<string, any>
-  }
-  $env: {                       // 环境变量
-    API_BASE: string
-    MODE: string
-  }
-  $global: Record<string, any>  // 全局变量
+  data: Record<string, any>; // 数据源数据（通过 data.{数据源ID} 访问）
+  vars: Record<string, any>; // 页面变量
+  props: Record<string, any>; // 组件属性
+  $user: {
+    // 用户信息
+    id: string;
+    name: string;
+    role: string;
+  };
+  $route: {
+    // 路由信息
+    params: Record<string, any>;
+    query: Record<string, any>;
+  };
 }
-```
-
-## 表达式语法
-
-### 基本语法
-
-```javascript
-// 访问数据源
-{{ data.ds_devices }}
-
-// 访问变量
-{{ vars.filterStatus }}
-
-// 访问属性
-{{ props.title }}
-
-// 条件表达式
-{{ data.ds_temp.value > 80 ? '高温' : '正常' }}
-
-// 数组操作
-{{ data.ds_devices.filter(d => d.status === 1) }}
-
-// 对象操作
-{{ data.ds_device.name + ' - ' + data.ds_device.status }}
-
-// 函数调用
-{{ Math.round(data.ds_temp.value * 100) / 100 }}
 ```
 
 ### 内置函数
 
 ```javascript
 // 格式化
-{{ $format.number(value, 2) }}
-{{ $format.date(date, 'YYYY-MM-DD') }}
+{
+  {
+    $format.number(data.ds_value, 2);
+  }
+} // 数字格式化，保留 2 位小数
+{
+  {
+    $format.date(data.ds_time, "YYYY-MM-DD");
+  }
+} // 日期格式化
 
 // 数组操作
-{{ $array.sum(arr, 'field') }}
-{{ $array.avg(arr, 'field') }}
-{{ $array.max(arr, 'field') }}
+{
+  {
+    $array.sum(data.ds_list, "value");
+  }
+} // 求和
+{
+  {
+    $array.avg(data.ds_list, "value");
+  }
+} // 平均值
+{
+  {
+    $array.max(data.ds_list, "value");
+  }
+} // 最大值
 
 // 条件判断
-{{ $if(condition, trueVal, falseVal) }}
+{
+  {
+    $if(data.ds_status > 0, "正常", "异常");
+  }
+}
 ```
 
 ## 使用场景
 
-### 场景1: 实时监控大屏
+### 场景 1: 实时监控大屏
 
 ```json
 {
   "dataSources": [
     {
-      "id": "ds_realtime_data",
-      "type": "dataCenter",
-      "config": {
-        "sourceType": "tags",
-        "connectionId": "conn_plc_01",
-        "tags": ["temp", "pressure", "flow"]
-      },
-      "mode": "subscription",
-      "interval": 1000
+      "id": "ds_temp",
+      "path": "mqtt.EMQX.车间1.temperature",
+      "dataType": "number",
+      "mode": "subscription"
+    },
+    {
+      "id": "ds_humidity",
+      "path": "mqtt.EMQX.车间1.humidity",
+      "dataType": "number",
+      "mode": "subscription"
+    },
+    {
+      "id": "ds_power",
+      "path": "calc.功率计算.power",
+      "dataType": "number",
+      "mode": "subscription"
     }
   ],
   "components": [
     {
-      "id": "comp_temp",
+      "id": "gauge_temp",
       "type": "Gauge",
       "bindings": {
-        "props.value": "{{ data.ds_realtime_data.temp }}",
-        "props.color": "{{ data.ds_realtime_data.temp > 80 ? '#ff4d4f' : '#52c41a' }}"
+        "props.value": "{{ data.ds_temp }}",
+        "props.unit": "℃",
+        "props.color": "{{ data.ds_temp > 35 ? '#ff4d4f' : '#52c41a' }}"
+      }
+    },
+    {
+      "id": "text_power",
+      "type": "Text",
+      "bindings": {
+        "props.content": "{{ '实时功率: ' + $format.number(data.ds_power, 1) + ' kW' }}"
       }
     }
   ]
 }
 ```
 
-### 场景2: 数据报表
+### 场景 2: 数据报表
 
 ```json
 {
   "dataSources": [
     {
-      "id": "ds_report",
-      "type": "dataCenter",
-      "config": {
-        "sourceType": "query",
-        "queryId": "query_daily_report",
-        "parameters": {
-          "date": "{{ vars.selectedDate }}"
-        }
-      },
-      "mode": "request"
+      "id": "ds_device_count",
+      "path": "db.生产库.设备统计.device_count",
+      "dataType": "number",
+      "mode": "poll",
+      "interval": 10000
+    },
+    {
+      "id": "ds_online_count",
+      "path": "db.生产库.设备统计.online_count",
+      "dataType": "number",
+      "mode": "poll",
+      "interval": 10000
     }
   ],
   "components": [
     {
-      "id": "comp_table",
+      "id": "card_total",
+      "type": "StatCard",
+      "bindings": {
+        "props.title": "设备总数",
+        "props.value": "{{ data.ds_device_count }}",
+        "props.suffix": "台"
+      }
+    },
+    {
+      "id": "card_online",
+      "type": "StatCard",
+      "bindings": {
+        "props.title": "在线设备",
+        "props.value": "{{ data.ds_online_count }}",
+        "props.suffix": "台",
+        "props.trend": "{{ (data.ds_online_count / data.ds_device_count * 100).toFixed(1) + '%' }}"
+      }
+    }
+  ]
+}
+```
+
+### 场景 3: 条件显示
+
+```json
+{
+  "dataSources": [
+    {
+      "id": "ds_alarm",
+      "path": "mqtt.EMQX.报警系统.has_alarm",
+      "dataType": "boolean",
+      "mode": "subscription"
+    }
+  ],
+  "components": [
+    {
+      "id": "alarm_indicator",
+      "type": "Indicator",
+      "bindings": {
+        "style.display": "{{ data.ds_alarm ? 'block' : 'none' }}",
+        "style.backgroundColor": "#ff4d4f",
+        "props.text": "报警中"
+      }
+    }
+  ]
+}
+```
+
+### 场景 4: 对象类型数据处理
+
+当数据点返回的是 JSON 对象时，可以通过 `transformer` 脚本解析：
+
+```json
+{
+  "dataSources": [
+    {
+      "id": "ds_sensor_raw",
+      "path": "mqtt.EMQX.传感器.raw_data",
+      "dataType": "object",
+      "mode": "subscription",
+      "transformer": "(data) => ({ temp: data.temperature, hum: data.humidity, ts: data.timestamp })"
+    }
+  ],
+  "components": [
+    {
+      "id": "text_temp",
+      "type": "Text",
+      "bindings": {
+        "props.content": "{{ '温度: ' + data.ds_sensor_raw.temp + '℃' }}"
+      }
+    },
+    {
+      "id": "text_humidity",
+      "type": "Text",
+      "bindings": {
+        "props.content": "{{ '湿度: ' + data.ds_sensor_raw.hum + '%' }}"
+      }
+    }
+  ]
+}
+```
+
+### 场景 5: 数组类型数据处理
+
+当数据点返回的是数组时，可以直接绑定到列表组件或通过 `transformer` 处理：
+
+```json
+{
+  "dataSources": [
+    {
+      "id": "ds_device_list",
+      "path": "db.生产库.设备列表.all_devices",
+      "dataType": "array",
+      "mode": "poll",
+      "interval": 30000
+    },
+    {
+      "id": "ds_online_devices",
+      "path": "db.生产库.设备列表.all_devices",
+      "dataType": "array",
+      "mode": "poll",
+      "interval": 30000,
+      "transformer": "(data) => data.filter(d => d.status === 'online')"
+    }
+  ],
+  "components": [
+    {
+      "id": "table_devices",
       "type": "Table",
       "bindings": {
-        "props.data": "{{ data.ds_report }}"
+        "props.data": "{{ data.ds_device_list }}"
+      }
+    },
+    {
+      "id": "text_online_count",
+      "type": "Text",
+      "bindings": {
+        "props.content": "{{ '在线设备: ' + data.ds_online_devices.length + ' 台' }}"
       }
     }
   ]
 }
 ```
 
-### 场景3: 表单应用
+## 辅助数据源类型
+
+除了数据点外，设计器还支持以下辅助数据源类型：
+
+### Static（静态数据）
+
+用于配置固定数据，如下拉选项：
 
 ```json
 {
-  "dataSources": [
-    {
-      "id": "ds_options",
-      "type": "static",
-      "config": {
-        "data": [
-          { "value": 1, "label": "选项1" },
-          { "value": 2, "label": "选项2" }
-        ]
-      }
-    }
-  ],
-  "components": [
-    {
-      "id": "comp_select",
-      "type": "Select",
-      "bindings": {
-        "props.options": "{{ data.ds_options }}"
-      }
-    }
-  ]
+  "id": "ds_options",
+  "type": "static",
+  "config": {
+    "data": [
+      { "value": 1, "label": "选项1" },
+      { "value": 2, "label": "选项2" }
+    ]
+  }
+}
+```
+
+### Computed（计算数据源）
+
+基于其他数据源进行二次计算：
+
+```json
+{
+  "id": "ds_summary",
+  "type": "computed",
+  "config": {
+    "dependencies": ["ds_device_count", "ds_online_count"],
+    "compute": "(sources) => ({ onlineRate: (sources.ds_online_count / sources.ds_device_count * 100).toFixed(1) })"
+  }
 }
 ```
 
 ## 性能优化
 
-### 1. 合理设置轮询间隔
-```javascript
-// 不推荐：间隔太短
-{ "interval": 500 }
+### 1. 合理选择获取模式
 
-// 推荐：根据实际需求设置
-{ "interval": 5000 }  // 5秒
+```javascript
+// 实时数据 → subscription
+{ "mode": "subscription" }
+
+// 统计数据 → poll（间隔不要太短）
+{ "mode": "poll", "interval": 10000 }
+
+// 配置数据 → request
+{ "mode": "request" }
 ```
 
-### 2. 使用数据转换器
-```javascript
-// 减少数据量
-{
-  "transformer": "(data) => data.slice(0, 100)"
-}
+### 2. 使用 Computed 缓存计算
 
-// 提取需要的字段
+```json
 {
-  "transformer": "(data) => data.map(d => ({ id: d.id, name: d.name }))"
-}
-```
-
-### 3. 使用计算数据源
-```javascript
-// 缓存计算结果
-{
-  "id": "ds_summary",
+  "id": "ds_filtered",
   "type": "computed",
   "config": {
-    "dependencies": ["ds_devices"],
-    "compute": "(sources) => ({ total: sources.ds_devices.length })"
+    "dependencies": ["ds_list"],
+    "compute": "(sources) => sources.ds_list.filter(d => d.status === 1)"
   }
 }
 ```
 
-### 4. 避免复杂表达式
-```javascript
-// 不推荐：在绑定中进行复杂计算
-{
-  "bindings": {
-    "props.value": "{{ data.ds_devices.filter(d => d.status === 1).map(d => d.value).reduce((a, b) => a + b, 0) }}"
-  }
-}
+### 3. 避免复杂表达式
 
-// 推荐：使用计算数据源
-{
-  "dataSources": [
-    {
-      "id": "ds_total",
-      "type": "computed",
-      "config": {
-        "dependencies": ["ds_devices"],
-        "compute": "(sources) => sources.ds_devices.filter(d => d.status === 1).map(d => d.value).reduce((a, b) => a + b, 0)"
-      }
-    }
-  ],
-  "bindings": {
-    "props.value": "{{ data.ds_total }}"
-  }
-}
+```javascript
+// ❌ 不推荐：在绑定中进行复杂计算
+"props.value": "{{ data.ds_list.filter(d => d.status === 1).reduce((a, b) => a + b.value, 0) }}"
+
+// ✅ 推荐：使用 Computed 数据源
+"props.value": "{{ data.ds_computed_total }}"
 ```
 
 ## 调试指南
 
-### 1. 查看数据源状态
+### 查看数据源状态
+
+打开浏览器控制台：
 
 ```javascript
-// 在浏览器控制台
-const store = useDesignStore()
-const dataSources = Array.from(store.dataSourceManager.dataSources.values())
-console.log(dataSources)
+// 查看所有数据源
+const store = useDesignStore();
+console.log(store.dataSources);
+
+// 查看特定数据源
+console.log(store.dataSources.ds_temp);
 ```
 
-### 2. 查看数据源数据
+### 手动刷新数据源
 
 ```javascript
-console.log(store.dataSources)
-```
-
-### 3. 手动刷新数据源
-
-```javascript
-await store.dataSourceManager.refresh('ds_devices')
-```
-
-### 4. 监听消息通信
-
-```javascript
-window.addEventListener('message', (event) => {
-  console.log('Message:', event.data)
-})
+await store.dataSourceManager.refresh("ds_temp");
 ```
 
 ## 常见问题
 
 ### Q: 数据源状态一直是"加载中"？
-A: 检查DataCenter是否加载完成，查询ID是否存在，网络请求是否成功。
 
-### Q: 数据绑定不生效？
-A: 检查表达式语法，确认数据源状态为"就绪"，查看实时预览。
+A: 检查数据点路径是否正确，数据中心是否已创建该数据点。
 
-### Q: 轮询不工作？
-A: 确认模式为"轮询"，检查间隔设置，手动刷新测试。
+### Q: 实时数据不更新？
 
-### Q: 性能问题？
-A: 增加轮询间隔，使用数据转换器，优化表达式，使用计算数据源。
+A: 确认 `mode` 设置为 `subscription`，检查 Socket.IO 连接状态。
+
+### Q: 如何获取多个数据点？
+
+A: 为每个数据点创建单独的数据源，通过不同的 `id` 引用。
 
 ## 文档索引
 
 - [数据绑定架构](./data-binding-architecture.md)
-- [设计中心概述](./README.md)
+- [数据点方案设计](../datacenter/datapoint-design.md)
+- [数据点改造实施](../datacenter/datapoint-implementation.md)
 - [DSL 设计规范](../dsl-design.md)
-- [迁移计划](../migration-plan.md)
-
-## 贡献指南
-
-欢迎贡献代码和文档！请遵循以下规范：
-
-1. 代码风格：遵循ESLint规则
-2. 提交信息：使用语义化提交信息
-3. 测试：添加单元测试
-4. 文档：更新相关文档
-
-## 许可证
-
-ISC
-
-## 联系方式
-
-如有问题或建议，请联系开发团队。
+- [设计中心概述](./README.md)

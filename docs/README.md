@@ -34,6 +34,8 @@
 ### 数据中心文档
 
 - **[数据中心概述](./datacenter/README.md)** - DataCenter 模块总览
+- **[数据点方案设计](./datacenter/datapoint-design.md)** - 数据点统一抽象设计
+- **[数据点改造实施](./datacenter/datapoint-implementation.md)** - 数据点功能改造计划
 - **[数据连接管理](./datacenter/connections.md)** - 数据库连接配置
 - **[查询管理](./datacenter/queries.md)** - SQL 查询管理（当前能力与限制）
 - **[MQTT 实现说明](./datacenter/mqtt-implementation.md)** - 实现现状与后续规划
@@ -90,6 +92,8 @@ docs/
 │   └── development-history.md          # 开发历程
 ├── datacenter/                         # 数据中心文档
 │   ├── README.md                       # 概述
+│   ├── datapoint-design.md             # 数据点方案设计
+│   ├── datapoint-implementation.md     # 数据点改造实施
 │   ├── connections.md                  # 数据连接管理
 │   ├── queries.md                      # 查询管理
 │   └── mqtt-implementation.md          # MQTT 实现说明
