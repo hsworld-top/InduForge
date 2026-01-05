@@ -255,6 +255,118 @@ function normalizePageSchema(page) {
     }
 }
 
+function createDefaultProjectGlobals() {
+    return {
+        version: 1,
+        variables: {
+            items: {},
+            groups: [],
+        },
+        scripts: {
+            system: {
+                startup: { code: '' },
+                shutdown: { code: '' },
+            },
+            timers: {
+                groups: [],
+                items: [],
+            },
+            variableChanges: {
+                groups: [],
+                items: [],
+            },
+            custom: {
+                groups: [],
+                items: [],
+            },
+        },
+    };
+}
+
+function normalizeProjectGroups(groups) {
+    if (!Array.isArray(groups)) return [];
+    return groups
+        .filter((group) => group && typeof group === 'object')
+        .map((group) => ({
+            id: typeof group.id === 'string' && group.id ? group.id : crypto.randomUUID(),
+            name: typeof group.name === 'string' && group.name ? group.name : '分组',
+            parentId: typeof group.parentId === 'string' && group.parentId ? group.parentId : null,
+            sortOrder: Number.isFinite(group.sortOrder) ? group.sortOrder : 0,
+        }));
+}
+
+function normalizeScriptItems(items, defaults = {}) {
+    if (!Array.isArray(items)) return [];
+    return items
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => ({
+            id: typeof item.id === 'string' && item.id ? item.id : crypto.randomUUID(),
+            name: typeof item.name === 'string' ? item.name : '',
+            groupId: typeof item.groupId === 'string' ? item.groupId : null,
+            code: typeof item.code === 'string' ? item.code : '',
+            ...defaults,
+            ...item,
+        }));
+}
+
+function normalizeProjectGlobals(raw) {
+    const defaults = createDefaultProjectGlobals();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return defaults;
+    }
+
+    const hasStructuredKeys = Object.prototype.hasOwnProperty.call(raw, 'variables') || Object.prototype.hasOwnProperty.call(raw, 'scripts');
+    if (!hasStructuredKeys) {
+        return {
+            ...defaults,
+            variables: {
+                items: raw,
+                groups: [],
+            },
+        };
+    }
+
+    let variableItems = {};
+    let variableGroups = [];
+    if (raw.variables && typeof raw.variables === 'object' && !Array.isArray(raw.variables)) {
+        if (raw.variables.items && typeof raw.variables.items === 'object' && !Array.isArray(raw.variables.items)) {
+            variableItems = raw.variables.items;
+        } else if (!Object.prototype.hasOwnProperty.call(raw.variables, 'groups')) {
+            variableItems = raw.variables;
+        }
+        variableGroups = normalizeProjectGroups(raw.variables.groups);
+    }
+
+    const scripts = raw.scripts && typeof raw.scripts === 'object' && !Array.isArray(raw.scripts) ? raw.scripts : {};
+    const normalizedScripts = {
+        system: {
+            startup: { code: typeof scripts?.system?.startup?.code === 'string' ? scripts.system.startup.code : '' },
+            shutdown: { code: typeof scripts?.system?.shutdown?.code === 'string' ? scripts.system.shutdown.code : '' },
+        },
+        timers: {
+            groups: normalizeProjectGroups(scripts?.timers?.groups),
+            items: normalizeScriptItems(scripts?.timers?.items, { interval: 1000, enabled: true, description: '' }),
+        },
+        variableChanges: {
+            groups: normalizeProjectGroups(scripts?.variableChanges?.groups),
+            items: normalizeScriptItems(scripts?.variableChanges?.items, { variable: '', description: '' }),
+        },
+        custom: {
+            groups: normalizeProjectGroups(scripts?.custom?.groups),
+            items: normalizeScriptItems(scripts?.custom?.items, { description: '', params: '' }),
+        },
+    };
+
+    return {
+        ...defaults,
+        variables: {
+            items: variableItems,
+            groups: variableGroups,
+        },
+        scripts: normalizedScripts,
+    };
+}
+
 /**
  * 递归查找组件
  * @param {Array} components - 组件数组
@@ -369,6 +481,10 @@ export const useDesignStore = defineStore('design', {
         projectVariables: {},
         // 页面配置缓存（用于未保存状态下切换页面）
         pageConfigCache: {},
+        // 项目变量分组
+        projectVariableGroups: [],
+        // 项目级全局脚本
+        projectGlobalScripts: createDefaultProjectGlobals().scripts,
     }),
 
     getters: {
@@ -449,10 +565,15 @@ export const useDesignStore = defineStore('design', {
                 this.dataCenterConfig = responses.data?.connections || responses;
                 try {
                     const varsResponse = await designAPI.getProjectVariables(projectId);
-                    this.projectVariables = varsResponse.data || varsResponse || {};
+                    const normalized = normalizeProjectGlobals(varsResponse.data || varsResponse || {});
+                    this.projectVariables = normalized.variables.items || {};
+                    this.projectVariableGroups = normalized.variables.groups || [];
+                    this.projectGlobalScripts = normalized.scripts || createDefaultProjectGlobals().scripts;
                 } catch (error) {
                     console.warn('Failed to load project variables:', error);
                     this.projectVariables = {};
+                    this.projectVariableGroups = [];
+                    this.projectGlobalScripts = createDefaultProjectGlobals().scripts;
                 }
             } catch (error) {
                 this.error = error.message || '加载项目失败';
@@ -572,7 +693,15 @@ export const useDesignStore = defineStore('design', {
             if (!this.projectId) {
                 throw new Error('未选择项目');
             }
-            await designAPI.updateProjectVariables(this.projectId, this.projectVariables || {});
+            const payload = {
+                version: 1,
+                variables: {
+                    items: this.projectVariables || {},
+                    groups: this.projectVariableGroups || [],
+                },
+                scripts: this.projectGlobalScripts || createDefaultProjectGlobals().scripts,
+            };
+            await designAPI.updateProjectVariables(this.projectId, payload);
         },
 
         /**
