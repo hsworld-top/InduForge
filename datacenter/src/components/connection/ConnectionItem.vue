@@ -1,9 +1,9 @@
 <template>
   <div
     :class="[
-      'connection-item p-3 rounded-lg transition-colors',
+      'connection-item px-2.5 py-2 transition-colors',
       isSelected
-        ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600'
+        ? 'bg-blue-100 dark:bg-blue-900/30 border-l-2 border-blue-500'
         : 'hover:bg-gray-100 dark:hover:bg-gray-700',
     ]"
   >
@@ -15,7 +15,7 @@
       @contextmenu.prevent="handleContextMenu"
     >
       <div class="flex items-center flex-1">
-        <div class="w-6 h-6 mr-3 flex-shrink-0">
+        <div class="w-6 h-6 mr-2.5 flex-shrink-0">
           <IconTablerDatabase
             v-if="connection.type === 'relational'"
             class="w-6 h-6 text-blue-500"
@@ -54,7 +54,7 @@
     <!-- 连接详情 -->
     <div
       v-if="connection.type === 'relational' && connection.relationalConfig"
-      class="mt-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
+      class="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
       @click="handleClick"
       @dblclick.stop="handleDblClick"
     >
@@ -67,7 +67,7 @@
     <!-- MQTT 连接详情 -->
     <div
       v-if="connection.type === 'mqtt' && connection.mqttConfig"
-      class="mt-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
+      class="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
       @click="handleClick"
       @dblclick.stop="handleDblClick"
     >
@@ -137,12 +137,6 @@ const handleContextMenu = (event) => {
 
 <style scoped>
 .connection-item {
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.connection-item:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.2s ease;
 }
 </style>

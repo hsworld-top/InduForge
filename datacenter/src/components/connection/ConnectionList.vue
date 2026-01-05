@@ -2,33 +2,42 @@
   <div
     class="connection-list w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden"
   >
-    <div class="p-4 flex-1 overflow-y-auto min-h-0">
-      <div class="space-y-2">
-        <!-- 标题和操作按钮 -->
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-sm font-medium text-gray-900 dark:text-white">
-            数据连接
-          </h3>
-          <div class="flex items-center space-x-2">
-            <el-button type="primary" size="small" @click="handleCreate">
-              <IconTablerPlus class="mr-1 w-4 h-4" />
-              新建
-            </el-button>
-            <el-button
-              size="small"
-              circle
-              @click="handleRefresh"
-              class="!border-gray-300 dark:!border-gray-600 hover:!bg-gray-50 dark:hover:!bg-gray-700"
-            >
-              <IconTablerRefresh class="w-4 h-4" />
-            </el-button>
-          </div>
-        </div>
+    <div class="px-2.5 py-1.5 bg-[#F5F7FA] dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+      <div class="flex items-center gap-1.5">
+        <el-input
+          v-model="searchText"
+          size="small"
+          placeholder="搜索连接..."
+          clearable
+          class="connection-search flex-1"
+        />
+        <el-button
+          size="small"
+          circle
+          @click="handleCreate"
+          class="header-btn icon-btn"
+          title="新建连接"
+        >
+          <IconTablerPlus class="w-4 h-4" />
+        </el-button>
+        <el-button
+          size="small"
+          circle
+          @click="handleRefresh"
+          class="header-btn icon-btn"
+          title="刷新列表"
+        >
+          <IconTablerRefresh class="w-4 h-4" />
+        </el-button>
+      </div>
+    </div>
 
+    <div class="px-2.5 py-2 flex-1 overflow-y-auto min-h-0">
+      <div class="space-y-2">
         <!-- 连接列表 -->
       <div class="connection-items">
         <ConnectionItem
-          v-for="connection in connections"
+          v-for="connection in filteredConnections"
           :key="connection.id"
           :connection="connection"
           :is-selected="selectedConnectionId === connection.id"
@@ -356,10 +365,12 @@
 
         <!-- 空状态 -->
         <div
-          v-if="connections.length === 0"
+          v-if="filteredConnections.length === 0"
           class="text-center py-8 text-gray-500"
         >
-          <div class="text-sm">暂无数据连接</div>
+          <div class="text-sm">
+            {{ searchText ? "未找到匹配连接" : "暂无数据连接" }}
+          </div>
           <el-button
             type="primary"
             size="small"
@@ -375,7 +386,7 @@
 </template>
 
 <script setup>
-import { reactive } from "vue";
+import { computed, reactive, ref } from "vue";
 import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
 import IconTablerChevronRight from "~icons/tabler/chevron-right";
@@ -416,8 +427,11 @@ const emit = defineEmits([
   "mqtt-subscription-dblclick",
   "mqtt-subscription-view",
   "mqtt-subscription-manage",
+  "mqtt-subscription-edit",
   "mqtt-subscription-delete",
 ]);
+
+const searchText = ref("");
 
 // 连接状态管理
 const connectionStates = reactive({});
@@ -439,6 +453,16 @@ const getConnectionState = (connectionId) => {
   }
   return connectionStates[connectionId];
 };
+
+const filteredConnections = computed(() => {
+  const keyword = searchText.value.trim().toLowerCase();
+  if (!keyword) return props.connections;
+  return props.connections.filter((connection) => {
+    const name = String(connection.name || "").toLowerCase();
+    const type = String(connection.type || "").toLowerCase();
+    return name.includes(keyword) || type.includes(keyword);
+  });
+});
 
 const handleSelect = (connection) => {
   emit("select", connection);
@@ -626,6 +650,15 @@ const handleMqttSubscriptionContextMenu = (
     document.body.removeChild(menu);
   };
 
+  const editItem = document.createElement("div");
+  editItem.className =
+    "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
+  editItem.textContent = "编辑订阅";
+  editItem.onclick = () => {
+    emit("mqtt-subscription-edit", connection, subscription);
+    document.body.removeChild(menu);
+  };
+
   const deleteItem = document.createElement("div");
   deleteItem.className =
     "px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer";
@@ -637,6 +670,7 @@ const handleMqttSubscriptionContextMenu = (
 
   menu.appendChild(viewItem);
   menu.appendChild(manageItem);
+  menu.appendChild(editItem);
   menu.appendChild(deleteItem);
   document.body.appendChild(menu);
 
@@ -801,3 +835,31 @@ defineExpose({
   loadMqttSubscriptions,
 });
 </script>
+
+<style scoped>
+.connection-search :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.connection-search :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+}
+
+.header-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.icon-btn {
+  border-color: transparent;
+  color: #6b7280;
+  background: transparent;
+}
+
+.icon-btn:hover {
+  color: #2563eb;
+  background: rgba(243, 244, 246, 0.9);
+}
+</style>

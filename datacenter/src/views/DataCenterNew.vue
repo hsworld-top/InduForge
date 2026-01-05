@@ -20,6 +20,7 @@
       @mqtt-subscription-dblclick="handleMqttSubscriptionDblClick"
       @mqtt-subscription-view="handleMqttSubscriptionView"
       @mqtt-subscription-manage="handleMqttSubscriptionManage"
+      @mqtt-subscription-edit="handleMqttSubscriptionEdit"
       @mqtt-subscription-delete="handleMqttSubscriptionDelete"
     />
 
@@ -31,7 +32,6 @@
         <el-tabs
           ref="tabsRef"
           v-model="activeTabId"
-          type="card"
           closable
           class="query-tabs flex-1 flex flex-col overflow-hidden"
           @tab-remove="handleCloseTab"
@@ -148,6 +148,7 @@
               class="flex-1 flex flex-col overflow-hidden"
             >
               <MqttSubscriptionList
+                :ref="(el) => setSubscriptionListRef(tab.id, el)"
                 :connection-id="tab.connectionId"
                 :project-id="projectId"
                 @view-messages="
@@ -348,6 +349,7 @@ const tabs = ref([]);
 const activeTabId = ref("");
 const tabsRef = ref(null);
 const mqttMessageViewerRefs = ref(new Map()); // 存储每个消息查看器的引用
+const mqttSubscriptionListRefs = ref(new Map()); // 存储每个订阅列表的引用
 let tabCounter = 0;
 
 /**
@@ -358,6 +360,17 @@ const setMessageViewerRef = (tabId, el) => {
     mqttMessageViewerRefs.value.set(tabId, el);
   } else {
     mqttMessageViewerRefs.value.delete(tabId);
+  }
+};
+
+/**
+ * 设置订阅列表引用
+ */
+const setSubscriptionListRef = (tabId, el) => {
+  if (el) {
+    mqttSubscriptionListRefs.value.set(tabId, el);
+  } else {
+    mqttSubscriptionListRefs.value.delete(tabId);
   }
 };
 
@@ -1177,6 +1190,26 @@ const handleMqttSubscriptionManage = (connection, subscription) => {
 };
 
 /**
+ * 订阅右键菜单 - 编辑订阅
+ */
+const handleMqttSubscriptionEdit = async (connection, subscription) => {
+  openMqttSubscriptionList(connection);
+  await nextTick();
+  const tabId = `mqtt-subscriptions-${connection.id}`;
+  const listRef = mqttSubscriptionListRefs.value.get(tabId);
+  if (listRef && typeof listRef.openEditDialog === "function") {
+    listRef.openEditDialog(subscription);
+    return;
+  }
+  setTimeout(() => {
+    const retryRef = mqttSubscriptionListRefs.value.get(tabId);
+    if (retryRef && typeof retryRef.openEditDialog === "function") {
+      retryRef.openEditDialog(subscription);
+    }
+  }, 200);
+};
+
+/**
  * 订阅右键菜单 - 删除订阅
  */
 const handleMqttSubscriptionDelete = async (connection, subscription) => {
@@ -1392,6 +1425,33 @@ const handleQuerySave = async (tab) => {
 .query-tabs :deep(.el-tabs__header) {
   margin: 0;
   flex-shrink: 0;
+  background: #f5f7fa;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.query-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+  background-color: #e5e7eb;
+}
+
+.query-tabs :deep(.el-tabs__item) {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+}
+
+.query-tabs :deep(.el-tabs__item.is-active) {
+  color: #111827;
+  font-weight: 600;
+}
+
+.query-tabs :deep(.el-tabs__active-bar) {
+  height: 2px;
+  background-color: #3b82f6;
+}
+
+.query-tabs :deep(.el-tabs__nav) {
+  border: none;
 }
 
 .query-tabs :deep(.el-tabs__content) {
