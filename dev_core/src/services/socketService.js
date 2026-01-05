@@ -1,5 +1,6 @@
 const { Server } = require("socket.io");
 const { logger } = require("../utils/logger");
+const { normalizePath } = require("../utils/datapointPath");
 
 /**
  * Socket.IO 服务
@@ -76,6 +77,9 @@ class SocketService {
 
       // 设置Tag订阅处理
       this.setupTagSubscription(socket);
+
+      // 数据点订阅
+      this.setupDataPointSubscription(socket);
 
       // 断开连接
       socket.on("disconnect", (reason) => {
@@ -209,6 +213,47 @@ class SocketService {
           `[SocketService] Client ${socket.id} unsubscribed from tag: ${tagId}`
         );
       }
+    });
+  }
+
+  /**
+   * 订阅数据点值更新
+   * @param {object} socket - Socket 实例
+   */
+  setupDataPointSubscription(socket) {
+    socket.on("datapoint:subscribe", (data) => {
+      const { projectId, paths } = data || {};
+      if (!projectId || !Array.isArray(paths)) {
+        return;
+      }
+
+      paths
+        .map((path) => normalizePath(path))
+        .filter(Boolean)
+        .forEach((path) => {
+          const room = `datapoint:${projectId}:${path}`;
+          socket.join(room);
+          logger.info(
+            `[SocketService] Client ${socket.id} subscribed to datapoint: ${path}`
+          );
+        });
+    });
+
+    socket.on("datapoint:unsubscribe", (data) => {
+      const { projectId, paths } = data || {};
+      if (!projectId || !Array.isArray(paths)) {
+        return;
+      }
+
+      paths
+        .map((path) => normalizePath(path))
+        .filter(Boolean)
+        .forEach((path) => {
+          socket.leave(`datapoint:${projectId}:${path}`);
+          logger.info(
+            `[SocketService] Client ${socket.id} unsubscribed from datapoint: ${path}`
+          );
+        });
     });
   }
 

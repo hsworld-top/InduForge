@@ -455,6 +455,197 @@ router.post(
   }
 );
 
+/**
+ * 更新数据查询
+ * PUT /api/v1/data/queries/:id
+ */
+router.put(
+  "/queries/:id",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { DataQuery } = require("../../models");
+      const query = await DataQuery.findByPk(id);
+      if (query) {
+        await checkProjectAccess(req, query.projectId);
+      }
+
+      const result = await dataQueryService.updateQuery(id, req.body, req.user.id);
+
+      res.json({
+        success: true,
+        data: result,
+        message: "数据查询更新成功",
+      });
+    } catch (error) {
+      console.error("更新数据查询失败:", error);
+      next(error);
+    }
+  }
+);
+
+/**
+ * 删除数据查询
+ * DELETE /api/v1/data/queries/:id
+ */
+router.delete(
+  "/queries/:id",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { DataQuery } = require("../../models");
+      const query = await DataQuery.findByPk(id);
+      if (query) {
+        await checkProjectAccess(req, query.projectId);
+      }
+
+      await dataQueryService.deleteQuery(id, req.user.id);
+
+      res.json({
+        success: true,
+        message: "数据查询删除成功",
+      });
+    } catch (error) {
+      console.error("删除数据查询失败:", error);
+      next(error);
+    }
+  }
+);
+
+// ===========================================
+// 数据点相关API
+// ===========================================
+
+const dataPointController = require("../../controllers/dataPointController");
+
+/**
+ * 获取数据点列表
+ * GET /api/v1/data/projects/:projectId/datapoints
+ */
+router.get(
+  "/projects/:projectId/datapoints",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      await checkProjectAccess(req, projectId);
+      await dataPointController.getDataPoints(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取数据点值
+ * GET /api/v1/data/projects/:projectId/datapoints/value
+ */
+router.get(
+  "/projects/:projectId/datapoints/value",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      await checkProjectAccess(req, projectId);
+      await dataPointController.getDataPointValue(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取数据点详情
+ * GET /api/v1/data/projects/:projectId/datapoints/:id
+ */
+router.get(
+  "/projects/:projectId/datapoints/:id",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      await checkProjectAccess(req, projectId);
+      await dataPointController.getDataPoint(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 更新数据点扩展属性
+ * PUT /api/v1/data/projects/:projectId/datapoints/:id
+ */
+router.put(
+  "/projects/:projectId/datapoints/:id",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      await checkProjectAccess(req, projectId);
+      await dataPointController.updateDataPoint(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 删除失效数据点
+ * DELETE /api/v1/data/projects/:projectId/datapoints/:id
+ */
+router.delete(
+  "/projects/:projectId/datapoints/:id",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      await checkProjectAccess(req, projectId);
+      await dataPointController.deleteDataPoint(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 批量删除失效数据点
+ * POST /api/v1/data/projects/:projectId/datapoints/delete-batch
+ */
+router.post(
+  "/projects/:projectId/datapoints/delete-batch",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      await checkProjectAccess(req, projectId);
+      await dataPointController.deleteDataPointsBatch(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取数据点使用情况
+ * GET /api/v1/data/projects/:projectId/datapoints/:id/usages
+ */
+router.get(
+  "/projects/:projectId/datapoints/:id/usages",
+  authenticateToken,
+  async (req, res, next) => {
+    try {
+      const { projectId } = req.params;
+      await checkProjectAccess(req, projectId);
+      await dataPointController.getDataPointUsages(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // ===========================================
 // MQTT 连接相关API
 // ===========================================

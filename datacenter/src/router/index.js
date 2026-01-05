@@ -21,10 +21,63 @@ const router = createRouter({
   routes,
 });
 
+/**
+ * 应用主题到文档根节点。
+ * @param {string} theme - 主题
+ */
+const applyTheme = (theme) => {
+  document.documentElement.classList.toggle("dark", theme === "dark");
+};
+
+/**
+ * 从 URL 同步鉴权与主题配置。
+ */
+const syncRuntimeSettings = () => {
+  const url = new URL(window.location.href);
+  const urlParams = url.searchParams;
+  let shouldReplace = false;
+
+  const tokenFromUrl = urlParams.get("token");
+  const refreshTokenFromUrl = urlParams.get("refreshToken");
+  const themeFromUrl = urlParams.get("theme");
+  const themeValue = ["light", "dark"].includes(themeFromUrl)
+    ? themeFromUrl
+    : Storage.get(STORAGE_KEYS.THEME, "light");
+
+  if (tokenFromUrl) {
+    Storage.setToken(tokenFromUrl);
+    urlParams.delete("token");
+    shouldReplace = true;
+  }
+
+  if (refreshTokenFromUrl) {
+    Storage.setRefreshToken(refreshTokenFromUrl);
+    urlParams.delete("refreshToken");
+    shouldReplace = true;
+  }
+
+  if (themeFromUrl && ["light", "dark"].includes(themeFromUrl)) {
+    Storage.set(STORAGE_KEYS.THEME, themeFromUrl);
+    urlParams.delete("theme");
+    shouldReplace = true;
+  }
+
+  applyTheme(themeValue);
+
+  if (shouldReplace) {
+    const nextQuery = urlParams.toString();
+    const nextUrl = nextQuery ? `${url.pathname}?${nextQuery}` : url.pathname;
+    window.history.replaceState({}, "", nextUrl);
+  }
+};
+
 // 路由守卫 - 鉴权检查和状态恢复
 router.beforeEach(async (to, from, next) => {
   // 设置页面标题
   document.title = `${to.meta.title || "数据中心"} - ProjectIDE`;
+
+  // 同步外部传入的 token/主题信息
+  syncRuntimeSettings();
 
   const isDev = import.meta.env.DEV;
   const devHost = import.meta.env.VITE_DEV_HOST || "localhost";

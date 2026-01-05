@@ -2,50 +2,63 @@
   <div
     class="connection-list w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden"
   >
-    <div class="px-2.5 py-1.5 bg-[#F5F7FA] dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-      <div class="flex items-center gap-1.5">
-        <el-input
-          v-model="searchText"
-          size="small"
-          placeholder="搜索连接..."
-          clearable
-          class="connection-search flex-1"
-        />
-        <el-button
-          size="small"
-          circle
-          @click="handleCreate"
-          class="header-btn icon-btn"
-          title="新建连接"
-        >
-          <IconTablerPlus class="w-4 h-4" />
-        </el-button>
-        <el-button
-          size="small"
-          circle
-          @click="handleRefresh"
-          class="header-btn icon-btn"
-          title="刷新列表"
-        >
-          <IconTablerRefresh class="w-4 h-4" />
-        </el-button>
-      </div>
-    </div>
-
     <div class="px-2.5 py-2 flex-1 overflow-y-auto min-h-0">
       <div class="space-y-2">
-        <!-- 连接列表 -->
-      <div class="connection-items">
-        <ConnectionItem
-          v-for="connection in filteredConnections"
-          :key="connection.id"
-          :connection="connection"
-          :is-selected="selectedConnectionId === connection.id"
-          :is-expanded="getConnectionState(connection.id).expanded"
-          @click="handleSelect"
-          @dblclick="handleDblClick"
-          @contextmenu="handleContextMenu"
-        >
+        <div class="section-block">
+          <div class="section-title">基础配置</div>
+          <div
+            class="section-entry flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer"
+            @click="handleOpenDataPoints"
+          >
+            <IconTablerDatabase class="w-4 h-4 text-indigo-500" />
+            <span class="text-sm text-gray-700 dark:text-gray-200">数据点</span>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-head">
+            <span class="section-title">连接管理</span>
+            <div class="section-actions">
+              <el-button
+                size="small"
+                circle
+                @click="handleCreate"
+                class="header-btn icon-btn"
+                title="新建连接"
+              >
+                <IconTablerPlus class="w-4 h-4" />
+              </el-button>
+              <el-button
+                size="small"
+                circle
+                @click="handleRefresh"
+                class="header-btn icon-btn"
+                title="刷新列表"
+              >
+                <IconTablerRefresh class="w-4 h-4" />
+              </el-button>
+            </div>
+          </div>
+          <div class="section-tools">
+            <el-input
+              v-model="searchText"
+              size="small"
+              placeholder="搜索连接..."
+              clearable
+              class="connection-search flex-1"
+            />
+          </div>
+          <div class="connection-items">
+            <ConnectionItem
+              v-for="connection in filteredConnections"
+              :key="connection.id"
+              :connection="connection"
+              :is-selected="selectedConnectionId === connection.id"
+              :is-expanded="getConnectionState(connection.id).expanded"
+              @click="handleSelect"
+              @dblclick="handleDblClick"
+              @contextmenu="handleContextMenu"
+            >
           <template #expanded v-if="connection.type === 'relational'">
               <div class="mt-2 space-y-2" @dblclick.stop>
                 <!-- 查询列表 -->
@@ -360,7 +373,29 @@
                 </div>
               </div>
             </template>
-          </ConnectionItem>
+            </ConnectionItem>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">处理逻辑</div>
+          <div
+            class="section-entry flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer"
+            @click="handleOpenCalcUnits"
+          >
+            <IconTablerCalculator class="w-4 h-4 text-amber-500" />
+            <span class="text-sm text-gray-700 dark:text-gray-200">计算单元</span>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div
+            class="section-entry flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer"
+            @click="handleOpenAlarmUnits"
+          >
+            <IconTablerBell class="w-4 h-4 text-rose-500" />
+            <span class="text-sm text-gray-700 dark:text-gray-200">报警单元</span>
+          </div>
         </div>
 
         <!-- 空状态 -->
@@ -393,6 +428,9 @@ import IconTablerChevronRight from "~icons/tabler/chevron-right";
 import IconTablerChevronDown from "~icons/tabler/chevron-down";
 import IconTablerTable from "~icons/tabler/table";
 import IconTablerTrash from "~icons/tabler/trash";
+import IconTablerDatabase from "~icons/tabler/database";
+import IconTablerCalculator from "~icons/tabler/calculator";
+import IconTablerBell from "~icons/tabler/bell";
 import ConnectionItem from "./ConnectionItem.vue";
 import dataAPI from "@/api/data.api";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -429,6 +467,9 @@ const emit = defineEmits([
   "mqtt-subscription-manage",
   "mqtt-subscription-edit",
   "mqtt-subscription-delete",
+  "datapoint-open",
+  "calcunit-open",
+  "alarmunit-open",
 ]);
 
 const searchText = ref("");
@@ -482,6 +523,27 @@ const handleCreate = () => {
 
 const handleRefresh = () => {
   emit("refresh");
+};
+
+/**
+ * 打开数据点列表
+ */
+const handleOpenDataPoints = () => {
+  emit("datapoint-open");
+};
+
+/**
+ * 打开计算单元
+ */
+const handleOpenCalcUnits = () => {
+  emit("calcunit-open");
+};
+
+/**
+ * 打开报警单元
+ */
+const handleOpenAlarmUnits = () => {
+  emit("alarmunit-open");
 };
 
 const handleTableDblClick = (connection, table) => {
@@ -840,10 +902,18 @@ defineExpose({
 .connection-search :deep(.el-input__wrapper) {
   border-radius: 8px;
   box-shadow: none;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+}
+
+.dark .connection-search :deep(.el-input__wrapper) {
+  background: #0f172a;
+  border-color: #1f2937;
 }
 
 .connection-search :deep(.el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+  border-color: #93c5fd;
 }
 
 .header-btn {
@@ -862,4 +932,66 @@ defineExpose({
   color: #2563eb;
   background: rgba(243, 244, 246, 0.9);
 }
+
+.section-block {
+  padding: 6px 2px 10px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 6px 6px;
+}
+
+.section-title {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.section-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 10px;
+}
+
+.section-entry {
+  background: #eef2ff;
+}
+
+.section-entry:hover {
+  background: #e0e7ff;
+}
+
+.dark .section-title {
+  color: #6b7280;
+}
+
+.dark .section-entry {
+  background: rgba(79, 70, 229, 0.18);
+}
+
+.dark .section-entry:hover {
+  background: rgba(79, 70, 229, 0.28);
+}
+
+.section-entry .text-amber-500 {
+  color: #f59e0b;
+}
+
+.section-entry .text-rose-500 {
+  color: #f43f5e;
+}
+
+.connection-items {
+  padding-left: 8px;
+}
+
 </style>

@@ -10,3 +10,5 @@ export { default as PropertyPanel } from './PropertyPanel.vue';
 export { default as GlobalVariables } from './GlobalVariables.vue';
 export { default as GlobalScripts } from './GlobalScripts.vue';
 export { default as VariablePanel } from './VariablePanel.vue';
+export { default as DataSourcePanel } from './DataSourcePanel.vue';
+export { default as DataBindingPanel } from './DataBindingPanel.vue';

@@ -4,7 +4,7 @@
         <div class="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
             <h3 class="text-sm font-medium text-gray-900 dark:text-white">数据源</h3>
             <el-button type="primary" size="small" @click="showAddDialog = true">
-                <el-icon class="mr-1"><Plus /></el-icon>
+                <IconTablerPlus class="mr-1" />
                 添加
             </el-button>
         </div>
@@ -28,9 +28,7 @@
                     <div class="flex items-start justify-between">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center space-x-2">
-                                <el-icon :class="getTypeIcon(ds.type).color">
-                                    <component :is="getTypeIcon(ds.type).icon" />
-                                </el-icon>
+                                <component :is="getTypeIcon(ds.type).icon" :class="getTypeIcon(ds.type).color" />
                                 <span class="text-sm font-medium text-gray-900 dark:text-white truncate">
                                     {{ ds.id }}
                                 </span>
@@ -45,13 +43,13 @@
                         </div>
                         <div class="flex items-center space-x-1 ml-2">
                             <el-button size="small" text @click.stop="refreshDataSource(ds.id)" :loading="ds.status === 'loading'">
-                                <el-icon><Refresh /></el-icon>
+                                <IconTablerRefresh />
                             </el-button>
                             <el-button size="small" text @click.stop="editDataSource(ds)">
-                                <el-icon><Edit /></el-icon>
+                                <IconTablerPencil />
                             </el-button>
                             <el-button size="small" text type="danger" @click.stop="removeDataSource(ds.id)">
-                                <el-icon><Delete /></el-icon>
+                                <IconTablerTrash />
                             </el-button>
                         </div>
                     </div>
@@ -64,22 +62,10 @@
         <!-- 添加/编辑数据源对话框 -->
         <el-dialog v-model="showAddDialog" :title="editingDataSource ? '编辑数据源' : '添加数据源'" width="600px" :close-on-click-modal="false" :lock-scroll="false">
             <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-                <el-form-item label="数据源ID" prop="id">
-                    <el-input v-model="form.id" placeholder="ds_example" :disabled="!!editingDataSource" />
-                </el-form-item>
-
-                <el-form-item label="类型" prop="type">
-                    <el-select v-model="form.type" placeholder="选择类型" class="w-full" @change="onTypeChange">
-                        <el-option label="数据中心" value="dataCenter" />
-                        <el-option label="HTTP请求" value="http" />
-                        <el-option label="静态数据" value="static" />
-                        <el-option label="计算数据" value="computed" />
-                    </el-select>
-                </el-form-item>
 
                 <!-- DataCenter配置 -->
                 <template v-if="form.type === 'dataCenter'">
-                    <el-form-item label="数据类型" prop="config.sourceType">
+                        <el-form-item label="数据类型" prop="config.sourceType">
                         <el-select v-model="form.config.sourceType" placeholder="选择数据类型" class="w-full">
                             <el-option label="查询" value="query" />
                             <el-option label="点位订阅" value="tags" />
@@ -105,6 +91,49 @@
                             <el-select v-model="form.config.tags" placeholder="输入点位标签" class="w-full" multiple filterable allow-create />
                         </el-form-item>
                     </template>
+
+                    <el-form-item label="模式" prop="mode">
+                        <el-radio-group v-model="form.mode">
+                            <el-radio label="request">单次请求</el-radio>
+                            <el-radio label="poll">轮询</el-radio>
+                            <el-radio label="subscription">订阅</el-radio>
+                        </el-radio-group>
+                    </el-form-item>
+
+                    <el-form-item v-if="form.mode !== 'request'" label="间隔(ms)" prop="interval">
+                        <el-input-number v-model="form.interval" :min="1000" :step="1000" class="w-full" />
+                    </el-form-item>
+                </template>
+
+                <!-- 数据点配置 -->
+                <template v-if="form.type === 'datapoint'">
+                    <el-form-item label="来源类型">
+                        <el-select v-model="datapointTypeFilter" placeholder="全部类型" class="w-full" @change="loadDataPoints">
+                            <el-option label="全部类型" value="" />
+                            <el-option label="关系库查询" value="db.query" />
+                            <el-option label="MQTT 主题" value="mqtt.subscription" />
+                            <el-option label="MQTT 变量" value="mqtt.tag" />
+                            <el-option label="计算输出" value="calc.output" />
+                        </el-select>
+                    </el-form-item>
+
+                    <el-form-item label="搜索">
+                        <el-input v-model="datapointSearch" placeholder="搜索名称或路径" clearable />
+                    </el-form-item>
+
+                    <el-form-item label="数据点" prop="config.datapointPath">
+                        <el-select
+                            v-model="form.config.datapointPath"
+                            placeholder="选择数据点"
+                            class="w-full"
+                            filterable
+                            :loading="loadingDatapoints"
+                            @change="handleDatapointChange">
+                            <el-option-group v-for="group in datapointGroups" :key="group.key" :label="group.label">
+                                <el-option v-for="item in group.items" :key="item.id" :label="item.label" :value="item.path" />
+                            </el-option-group>
+                        </el-select>
+                    </el-form-item>
 
                     <el-form-item label="模式" prop="mode">
                         <el-radio-group v-model="form.mode">
@@ -180,9 +209,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Refresh, Edit, Delete, Database, Link, Document, Calculator } from '@element-plus/icons-vue';
+import IconTablerPlus from '~icons/tabler/plus';
+import IconTablerRefresh from '~icons/tabler/refresh';
+import IconTablerPencil from '~icons/tabler/pencil';
+import IconTablerTrash from '~icons/tabler/trash';
+import IconTablerDatabase from '~icons/tabler/database';
+import IconTablerLink from '~icons/tabler/link';
+import IconTablerFileText from '~icons/tabler/file-text';
+import IconTablerChartBar from '~icons/tabler/chart-bar';
 import { useDesignStore } from '@/store/design';
 import dayjs from 'dayjs';
 import { TIME_FORMAT } from '@/constants';
@@ -198,15 +234,23 @@ const connections = ref([]);
 const queries = ref([]);
 const loadingConnections = ref(false);
 const loadingQueries = ref(false);
+const datapoints = ref([]);
+const loadingDatapoints = ref(false);
+const datapointTypeFilter = ref('');
+const datapointSearch = ref('');
+const datapointSearchTimer = ref(null);
 
 const form = ref({
     id: '',
-    type: 'dataCenter',
+    type: 'datapoint',
     config: {
         sourceType: 'query',
         queryId: '',
         connectionId: '',
         tags: [],
+        datapointId: '',
+        datapointPath: '',
+        datapointType: '',
         url: '',
         method: 'GET',
         dataJson: '{}',
@@ -220,12 +264,22 @@ const form = ref({
     },
 });
 
+/**
+ * 校验数据点配置
+ * @param {Object} rule - 校验规则
+ * @param {string} value - 当前值
+ * @param {Function} callback - 回调
+ */
+const validateDatapointPath = (rule, value, callback) => {
+    if (form.value.type === 'datapoint' && !form.value.config.datapointPath) {
+        callback(new Error('请选择数据点'));
+        return;
+    }
+    callback();
+};
+
 const rules = {
-    id: [
-        { required: true, message: '请输入数据源ID', trigger: 'blur' },
-        { pattern: /^[a-zA-Z_][a-zA-Z0-9_]*$/, message: 'ID只能包含字母、数字和下划线，且以字母或下划线开头', trigger: 'blur' },
-    ],
-    type: [{ required: true, message: '请选择类型', trigger: 'change' }],
+    'config.datapointPath': [{ validator: validateDatapointPath, trigger: 'change' }],
 };
 
 const dataSources = computed(() => {
@@ -235,6 +289,7 @@ const dataSources = computed(() => {
 const getTypeLabel = (type) => {
     const labels = {
         dataCenter: '数据中心',
+        datapoint: '数据点',
         http: 'HTTP请求',
         static: '静态数据',
         computed: '计算数据',
@@ -244,10 +299,11 @@ const getTypeLabel = (type) => {
 
 const getTypeIcon = (type) => {
     const icons = {
-        dataCenter: { icon: Database, color: 'text-blue-500' },
-        http: { icon: Link, color: 'text-green-500' },
-        static: { icon: Document, color: 'text-gray-500' },
-        computed: { icon: Calculator, color: 'text-purple-500' },
+        dataCenter: { icon: IconTablerDatabase, color: 'text-blue-500' },
+        datapoint: { icon: IconTablerDatabase, color: 'text-indigo-500' },
+        http: { icon: IconTablerLink, color: 'text-green-500' },
+        static: { icon: IconTablerFileText, color: 'text-gray-500' },
+        computed: { icon: IconTablerChartBar, color: 'text-purple-500' },
     };
     return icons[type] || { icon: Database, color: 'text-gray-500' };
 };
@@ -288,6 +344,43 @@ const formatTime = (timestamp) => {
     }
 };
 
+const datapointGroups = computed(() => {
+    const keyword = datapointSearch.value.trim().toLowerCase();
+    const filtered = datapoints.value.filter((item) => {
+        if (!keyword) return true;
+        const name = item.name || '';
+        const path = item.path || '';
+        return name.toLowerCase().includes(keyword) || path.toLowerCase().includes(keyword);
+    });
+
+    const groups = new Map();
+    filtered.forEach((item) => {
+        const key = item.sourceType || 'other';
+        if (!groups.has(key)) {
+            groups.set(key, []);
+        }
+        groups.get(key).push({
+            id: item.id,
+            path: item.path,
+            label: item.name ? `${item.name} (${item.path})` : item.path,
+            sourceType: item.sourceType,
+        });
+    });
+
+    const typeLabels = {
+        'db.query': '关系库查询',
+        'mqtt.subscription': 'MQTT 主题',
+        'mqtt.tag': 'MQTT 变量',
+        'calc.output': '计算输出',
+    };
+
+    return Array.from(groups.entries()).map(([key, items]) => ({
+        key,
+        label: typeLabels[key] || key,
+        items,
+    }));
+});
+
 const selectDataSource = (id) => {
     selectedDataSourceId.value = id;
 };
@@ -314,6 +407,10 @@ const editDataSource = (ds) => {
 
     if (ds.type === 'static' && ds.config.data) {
         form.value.config.dataJson = JSON.stringify(ds.config.data, null, 2);
+    }
+
+    if (ds.type === 'datapoint') {
+        datapointTypeFilter.value = ds.config?.datapointType || '';
     }
 
     showAddDialog.value = true;
@@ -345,21 +442,6 @@ const removeDataSource = async (id) => {
     }
 };
 
-const onTypeChange = () => {
-    // 重置配置
-    form.value.config = {
-        sourceType: 'query',
-        queryId: '',
-        connectionId: '',
-        tags: [],
-        url: '',
-        method: 'GET',
-        dataJson: '{}',
-        dependencies: [],
-        compute: '',
-    };
-};
-
 const saveDataSource = async () => {
     try {
         await formRef.value.validate();
@@ -380,6 +462,10 @@ const saveDataSource = async () => {
         // 添加到页面配置
         if (!store.currentPage.dataSources) {
             store.currentPage.dataSources = [];
+        }
+
+        if (!config.id) {
+            config.id = buildDatapointId(config.config?.datapointId || config.config?.datapointPath || '');
         }
 
         const existingIndex = store.currentPage.dataSources.findIndex((ds) => ds.id === config.id);
@@ -409,12 +495,15 @@ const saveDataSource = async () => {
 const resetForm = () => {
     form.value = {
         id: '',
-        type: 'dataCenter',
+        type: 'datapoint',
         config: {
             sourceType: 'query',
             queryId: '',
             connectionId: '',
             tags: [],
+            datapointId: '',
+            datapointPath: '',
+            datapointType: '',
             url: '',
             method: 'GET',
             dataJson: '{}',
@@ -427,6 +516,8 @@ const resetForm = () => {
             autoStart: true,
         },
     };
+    datapointTypeFilter.value = '';
+    datapointSearch.value = '';
 };
 
 const loadConnections = async () => {
@@ -461,15 +552,113 @@ const loadQueries = async () => {
     }
 };
 
+/**
+ * 加载数据点列表
+ */
+const loadDataPoints = async () => {
+    if (!store.projectId) return;
+
+    loadingDatapoints.value = true;
+    try {
+        if (store.dataSourceManager) {
+            datapoints.value = await store.dataSourceManager.getDataPointsAPI(store.projectId, {
+                page: 1,
+                pageSize: 200,
+                status: 'active',
+                type: datapointTypeFilter.value || undefined,
+                search: datapointSearch.value || undefined,
+            });
+        }
+    } catch (error) {
+        console.error('Load datapoints error:', error);
+    } finally {
+        loadingDatapoints.value = false;
+    }
+};
+
+/**
+ * 处理数据点选择
+ * @param {string} path - 数据点路径
+ */
+const handleDatapointChange = (path) => {
+    const selected = datapoints.value.find((item) => item.path === path);
+    if (!selected) {
+        form.value.config.datapointId = '';
+        form.value.config.datapointType = '';
+        return;
+    }
+
+    form.value.config.datapointId = selected.id;
+    form.value.config.datapointType = selected.sourceType;
+    if (!editingDataSource.value) {
+        form.value.id = buildDatapointId(selected.id);
+    }
+};
+
+/**
+ * 构建数据点数据源ID
+ * @param {string} seed - 数据点ID或路径
+ * @returns {string}
+ */
+const buildDatapointId = (seed) => {
+    const normalized = String(seed || '').replace(/[^a-zA-Z0-9_]/g, '_');
+    const baseId = normalized ? `dp_${normalized}` : `dp_${Date.now()}`;
+    const existingIds = new Set(dataSources.value.map((ds) => ds.id));
+
+    if (!existingIds.has(baseId)) {
+        return baseId;
+    }
+
+    let index = 1;
+    let candidate = `${baseId}_${index}`;
+    while (existingIds.has(candidate)) {
+        index += 1;
+        candidate = `${baseId}_${index}`;
+    }
+    return candidate;
+};
+
 watch(
     () => showAddDialog.value,
     (val) => {
         if (val) {
             loadConnections();
             loadQueries();
+            if (form.value.type === 'datapoint') {
+                loadDataPoints();
+            }
         }
     },
 );
+
+watch(
+    () => form.value.type,
+    (type) => {
+        if (showAddDialog.value && type === 'datapoint') {
+            loadDataPoints();
+        }
+    },
+);
+
+watch(
+    () => datapointSearch.value,
+    () => {
+        if (datapointSearchTimer.value) {
+            clearTimeout(datapointSearchTimer.value);
+        }
+        datapointSearchTimer.value = setTimeout(() => {
+            if (showAddDialog.value && form.value.type === 'datapoint') {
+                loadDataPoints();
+            }
+        }, 300);
+    },
+);
+
+onBeforeUnmount(() => {
+    if (datapointSearchTimer.value) {
+        clearTimeout(datapointSearchTimer.value);
+    }
+});
 
 onMounted(() => {
     // 初始化已有的数据源

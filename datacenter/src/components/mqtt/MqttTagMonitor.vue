@@ -199,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { getMqttTags } from "@/api/data.api";
 import { useMqttSocket } from "@/composables/useMqttSocket";
@@ -237,6 +237,8 @@ const {
   disconnect,
   onMessage,
 } = useMqttSocket(props.projectId);
+
+const subscribedTagIds = ref(new Set());
 
 // Tag 同步管理（监听左侧变化）
 const { subscribe: subscribeTagSync, unsubscribe: unsubscribeTagSync } =
@@ -373,7 +375,7 @@ const handleTagSyncEvent = async (event) => {
         }
         // 如果启用了Tag，订阅Socket.IO
         else if (tag.isEnabled && socket.value && socketConnected.value) {
-          socket.value.emit("mqtt:tag:subscribe", { tagId: tag.id });
+          syncSubscriptions();
         }
       }
       break;
@@ -384,6 +386,31 @@ const handleTagSyncEvent = async (event) => {
       await fetchTags();
       break;
   }
+};
+
+/**
+ * 同步订阅列表，避免重复订阅
+ */
+const syncSubscriptions = () => {
+  if (!socket.value || !socketConnected.value) {
+    return;
+  }
+
+  const desiredIds = new Set(enabledTags.value.map((tag) => tag.id));
+
+  desiredIds.forEach((tagId) => {
+    if (!subscribedTagIds.value.has(tagId)) {
+      socket.value.emit("mqtt:tag:subscribe", { tagId });
+      subscribedTagIds.value.add(tagId);
+    }
+  });
+
+  subscribedTagIds.value.forEach((tagId) => {
+    if (!desiredIds.has(tagId)) {
+      socket.value.emit("mqtt:tag:unsubscribe", { tagId });
+      subscribedTagIds.value.delete(tagId);
+    }
+  });
 };
 
 onMounted(async () => {
@@ -405,32 +432,23 @@ onMounted(async () => {
     }
   });
 
-  // 监听连接状态变化
-  const checkConnection = () => {
-    if (socket.value?.connected && socketConnected.value) {
-      console.log("[MqttTagMonitor] Socket connected");
+  const stopWatch = watch(
+    () => [socketConnected.value, enabledTags.value.map((tag) => tag.id).join(",")],
+    () => {
+      if (!socketConnected.value) {
+        subscribedTagIds.value.clear();
+        return;
+      }
+      syncSubscriptions();
+    },
+    { immediate: true }
+  );
 
-      // 只订阅启用的Tag的值更新
-      enabledTags.value.forEach((tag) => {
-        console.log("[MqttTagMonitor] Subscribing to tag:", tag.id, tag.code);
-        socket.value.emit("mqtt:tag:subscribe", { tagId: tag.id });
-      });
-    }
-  };
-
-  // 立即检查一次连接状态
-  checkConnection();
-
-  // 监听连接状态变化（使用定时器定期检查）
-  const connectionCheckInterval = setInterval(checkConnection, 1000);
-
-  // 保存清理函数
   const cleanup = () => {
-    clearInterval(connectionCheckInterval);
+    stopWatch();
     unsubscribeMessage();
   };
 
-  // 在组件卸载时清理
   onBeforeUnmount(cleanup);
 });
 
@@ -440,8 +458,8 @@ onBeforeUnmount(() => {
 
   // 取消订阅Socket.IO
   if (socket.value && socketConnected.value) {
-    enabledTags.value.forEach((tag) => {
-      socket.value.emit("mqtt:tag:unsubscribe", { tagId: tag.id });
+    subscribedTagIds.value.forEach((tagId) => {
+      socket.value.emit("mqtt:tag:unsubscribe", { tagId });
     });
   }
 

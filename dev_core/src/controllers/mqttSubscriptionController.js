@@ -1,5 +1,6 @@
 const { DataMqttSubscription } = require("../models");
 const mqttService = require("../services/mqttService");
+const dataPointService = require("../services/dataPointService");
 const AppError = require("../utils/AppError");
 const ErrorCodes = require("../constants/errorCodes");
 const { logger } = require("../utils/logger");
@@ -169,6 +170,19 @@ class MqttSubscriptionController {
         `[MqttSubscriptionController] Subscription created: ${subscription.id}`
       );
 
+      try {
+        await dataPointService.syncFromMqttSubscription(
+          projectId,
+          subscription.id,
+          userId
+        );
+      } catch (error) {
+        logger.warn(
+          "[MqttSubscriptionController] Sync datapoint failed:",
+          error
+        );
+      }
+
       res.status(201).json({
         success: true,
         data: subscription,
@@ -257,6 +271,19 @@ class MqttSubscriptionController {
         `[MqttSubscriptionController] Subscription updated: ${subscriptionId}`
       );
 
+      try {
+        await dataPointService.syncFromMqttSubscription(
+          subscription.projectId,
+          subscription.id,
+          userId
+        );
+      } catch (error) {
+        logger.warn(
+          "[MqttSubscriptionController] Sync datapoint failed:",
+          error
+        );
+      }
+
       res.json({
         success: true,
         data: subscription,
@@ -298,6 +325,21 @@ class MqttSubscriptionController {
 
       // 删除订阅记录
       await subscription.destroy();
+
+      try {
+        await dataPointService.markInvalidBySource(
+          subscription.projectId,
+          "mqtt.subscription",
+          subscription.id,
+          subscription.updatedBy || subscription.createdBy || null
+        );
+        mqttService.clearSubscriptionDatapointCache(subscription.id);
+      } catch (error) {
+        logger.warn(
+          "[MqttSubscriptionController] Mark datapoint invalid failed:",
+          error
+        );
+      }
 
       logger.info(
         `[MqttSubscriptionController] Subscription deleted: ${subscriptionId}`

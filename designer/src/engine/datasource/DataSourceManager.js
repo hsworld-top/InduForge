@@ -89,6 +89,8 @@ export class DataSourceManager {
 
         if (dataSource.type === 'dataCenter') {
             await this.startDataCenterSource(dataSource);
+        } else if (dataSource.type === 'datapoint') {
+            await this.startDataPointSource(dataSource);
         } else if (dataSource.type === 'http') {
             await this.startHttpSource(dataSource);
         } else if (dataSource.type === 'static') {
@@ -96,6 +98,73 @@ export class DataSourceManager {
         } else if (dataSource.type === 'computed') {
             this.startComputedSource(dataSource);
         }
+    }
+
+    /**
+     * 启动数据点数据源
+     * @param {Object} dataSource - 数据源对象
+     */
+    async startDataPointSource(dataSource) {
+        const { config, mode, interval } = dataSource;
+        const projectId = this.store.projectId;
+
+        if (!projectId) {
+            console.error('DataSourceManager: projectId not set');
+            return;
+        }
+
+        if (!config?.datapointPath) {
+            throw new Error('未配置数据点路径');
+        }
+
+        try {
+            dataSource.status = 'loading';
+            if (mode === 'poll' || mode === 'subscription') {
+                // 订阅模式暂使用轮询，后续可接入实时通道
+                await this.pollDataPoint(dataSource, projectId, config.datapointPath, interval);
+            } else {
+                await this.fetchDataPoint(dataSource, projectId, config.datapointPath);
+            }
+            dataSource.status = 'ready';
+        } catch (error) {
+            dataSource.status = 'error';
+            dataSource.error = error.message;
+            this.handleError(dataSource, error);
+        }
+    }
+
+    /**
+     * 获取数据点值（单次）
+     * @param {Object} dataSource - 数据源对象
+     * @param {string} projectId - 项目ID
+     * @param {string} datapointPath - 数据点路径
+     */
+    async fetchDataPoint(dataSource, projectId, datapointPath) {
+        const value = await this.getDataPointValueAPI(projectId, datapointPath);
+        this.updateData(dataSource, value);
+    }
+
+    /**
+     * 轮询数据点值
+     * @param {Object} dataSource - 数据源对象
+     * @param {string} projectId - 项目ID
+     * @param {string} datapointPath - 数据点路径
+     * @param {number} interval - 轮询间隔
+     */
+    async pollDataPoint(dataSource, projectId, datapointPath, interval) {
+        const poll = async () => {
+            try {
+                const value = await this.getDataPointValueAPI(projectId, datapointPath);
+                this.updateData(dataSource, value);
+            } catch (error) {
+                this.handleError(dataSource, error);
+            }
+        };
+
+        await poll();
+
+        const timer = setInterval(poll, interval);
+        this.pollingTimers.set(dataSource.id, timer);
     }
 
     /**
@@ -291,6 +360,36 @@ export class DataSourceManager {
             });
             return response.data || response;
         }
+    }
+
+    /**
+     * 获取数据点列表（API模式）
+     * @param {string} projectId - 项目ID
+     * @param {Object} params - 查询参数
+     * @returns {Promise<Array>}
+     */
+    async getDataPointsAPI(projectId, params = {}) {
+        const response = await request({
+            url: `/data/projects/${projectId}/datapoints`,
+            method: 'get',
+            params,
+        });
+        return response.data?.datapoints || response.data || [];
+    }
+
+    /**
+     * 获取数据点值（API模式）
+     * @param {string} projectId - 项目ID
+     * @param {string} datapointPath - 数据点路径
+     * @returns {Promise<any>}
+     */
+    async getDataPointValueAPI(projectId, datapointPath) {
+        const response = await request({
+            url: `/data/projects/${projectId}/datapoints/value`,
+            method: 'get',
+            params: { path: datapointPath },
+        });
+        return response.data || response;
     }
 
     /**

@@ -7,6 +7,7 @@
 ### 核心设计文档
 
 - **[DSL 设计规范](./dsl-design.md)** - 低代码平台 DSL 完整规范
+
   - Page Schema 页面结构
   - Component Schema 组件结构
   - DataSource Schema 数据源
@@ -39,6 +40,7 @@
 - **[数据连接管理](./datacenter/connections.md)** - 数据库连接配置
 - **[查询管理](./datacenter/queries.md)** - SQL 查询管理（当前能力与限制）
 - **[MQTT 实现说明](./datacenter/mqtt-implementation.md)** - 实现现状与后续规划
+- **[变量自动发现与批量导入](./datacenter/mqtt-auto-discovery.md)** - MQTT/API/CSV 多种变量来源方式
 
 ### 后端文档
 
@@ -49,26 +51,31 @@
 ## 🚀 快速导航
 
 ### 我是新手，想快速了解项目
+
 1. 阅读 [项目 README](../README.md)
 2. 查看 [DSL 设计规范](./dsl-design.md)
 3. 参考 [数据绑定系统快速开始](./designer/data-binding.md#快速开始)
 
 ### 我要开发自定义组件
+
 1. 阅读 [组件开发指南](./designer/component-development.md)
 2. 参考 [DSL 组件结构](./dsl-design.md#3-component-schema-组件结构)
 3. 查看现有组件示例
 
 ### 我要配置数据源
+
 1. 阅读 [数据绑定系统](./designer/data-binding.md)
 2. 参考 [DSL 数据源规范](./dsl-design.md#4-datasource-schema-数据源)
 3. 查看 [数据连接管理](./datacenter/connections.md)
 
 ### 我要部署项目
+
 1. 阅读 [项目 README - 部署指南](../README.md#部署指南)
 2. 参考 [数据库初始化](./backend/database-init.md)
 3. 配置 Nginx（参考 `../nginx/nginx.conf`）
 
 ### 我要了解架构设计
+
 1. 阅读 [项目 README - 整体架构](../README.md#整体架构)
 2. 查看 [数据绑定架构](./designer/data-binding-architecture.md)
 3. 参考 [迁移计划](./migration-plan.md)
@@ -96,7 +103,8 @@ docs/
 │   ├── datapoint-implementation.md     # 数据点改造实施
 │   ├── connections.md                  # 数据连接管理
 │   ├── queries.md                      # 查询管理
-│   └── mqtt-implementation.md          # MQTT 实现说明
+│   ├── mqtt-implementation.md          # MQTT 实现说明
+│   └── mqtt-auto-discovery.md          # MQTT 自动发现设计
 └── backend/                            # 后端文档
     ├── README.md                       # 概述
     ├── auth.md                         # 认证与授权
@@ -122,6 +130,7 @@ docs/
 ## 🔗 相关资源
 
 ### 外部文档
+
 - [Vue 3 文档](https://vuejs.org/)
 - [Pinia 文档](https://pinia.vuejs.org/)
 - [Element Plus 文档](https://element-plus.org/)
@@ -129,6 +138,7 @@ docs/
 - [ECharts 文档](https://echarts.apache.org/)
 
 ### 项目资源
+
 - [GitHub 仓库](#)
 - [在线演示](#)
 - [问题反馈](#)

@@ -223,6 +223,12 @@
         </div>
       </div>
     </div>
+
+    <DataPointInlineList
+      v-if="localTab.queryId"
+      :project-id="projectId"
+      :query-id="localTab.queryId"
+    />
   </div>
 </template>
 
@@ -242,6 +248,7 @@ import {
   unregisterSqlCompletionProvider,
 } from "@/utils/sqlCompletion";
 import * as monaco from "monaco-editor";
+import DataPointInlineList from "@/components/datapoint/DataPointInlineList.vue";
 
 const props = defineProps({
   tab: {

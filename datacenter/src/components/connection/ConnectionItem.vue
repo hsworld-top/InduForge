@@ -1,84 +1,71 @@
 <template>
-  <div
-    :class="[
-      'connection-item px-2.5 py-2 transition-colors',
-      isSelected
-        ? 'bg-blue-100 dark:bg-blue-900/30 border-l-2 border-blue-500'
-        : 'hover:bg-gray-100 dark:hover:bg-gray-700',
-    ]"
+  <el-tooltip
+    :content="detailText"
+    placement="right"
+    :disabled="!detailText"
   >
-    <!-- 连接图标和信息（可点击区域） -->
     <div
-      class="flex items-center justify-between cursor-pointer"
-      @click="handleClick"
-      @dblclick.stop="handleDblClick"
-      @contextmenu.prevent="handleContextMenu"
+      :class="[
+        'connection-item transition-colors',
+        isSelected
+          ? 'is-selected'
+          : 'hover:bg-gray-100 dark:hover:bg-gray-700',
+        isExpanded ? 'is-expanded' : '',
+      ]"
     >
-      <div class="flex items-center flex-1">
-        <div class="w-6 h-6 mr-2.5 flex-shrink-0">
-          <IconTablerDatabase
-            v-if="connection.type === 'relational'"
-            class="w-6 h-6 text-blue-500"
-          />
-          <IconTablerCloudDataConnection
-            v-else-if="connection.type === 'mqtt'"
-            class="w-6 h-6 text-green-500"
-          />
-          <IconTablerDatabase v-else class="w-6 h-6 text-gray-500" />
+      <!-- 连接图标和信息（可点击区域） -->
+      <div
+        class="flex items-center justify-between cursor-pointer"
+        @click="handleClick"
+        @dblclick.stop="handleDblClick"
+        @contextmenu.prevent="handleContextMenu"
+      >
+        <div class="flex items-center flex-1 min-w-0">
+          <div class="w-5 h-5 mr-2 flex-shrink-0">
+            <IconTablerDatabase
+              v-if="connection.type === 'relational'"
+              class="w-5 h-5 text-blue-500"
+            />
+            <IconTablerCloudDataConnection
+              v-else-if="connection.type === 'mqtt'"
+              class="w-5 h-5 text-green-500"
+            />
+            <IconTablerDatabase v-else class="w-5 h-5 text-gray-500" />
+          </div>
+
+          <!-- 连接信息 -->
+          <div class="flex-1 min-w-0">
+            <div
+              :class="[
+                'text-sm truncate',
+                isSelected
+                  ? 'font-semibold text-indigo-700 dark:text-indigo-200'
+                  : 'font-medium text-gray-900 dark:text-white',
+              ]"
+            >
+              {{ connection.name }}
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+              {{ typeLabel }}
+            </div>
+          </div>
         </div>
 
-        <!-- 连接信息 -->
-        <div class="flex-1 min-w-0">
-          <div
-            class="text-sm font-medium text-gray-900 dark:text-white truncate"
-          >
-            {{ connection.name }}
-          </div>
-          <div class="text-xs text-gray-500 dark:text-gray-400">
-            {{ typeLabel }}
-          </div>
+        <!-- 状态指示器 -->
+        <div class="flex-shrink-0 flex items-center space-x-1">
+          <StatusIndicator :status="connection.status" />
+          <component
+            v-if="connection.type === 'relational' || connection.type === 'mqtt'"
+            :is="isExpanded ? IconTablerChevronDown : IconTablerChevronRight"
+            class="expand-icon text-gray-400 w-4 h-4"
+          />
         </div>
       </div>
 
-      <!-- 状态指示器 -->
-      <div class="flex-shrink-0 flex items-center space-x-1">
-        <StatusIndicator :status="connection.status" />
-        <component
-          v-if="connection.type === 'relational' || connection.type === 'mqtt'"
-          :is="isExpanded ? IconTablerChevronDown : IconTablerChevronRight"
-          class="text-gray-400 w-4 h-4"
-        />
-      </div>
+      <!-- 展开内容（表和查询列表） - 不响应点击事件 -->
+      <slot name="expanded" v-if="isExpanded"></slot>
     </div>
-
-    <!-- 连接详情 -->
-    <div
-      v-if="connection.type === 'relational' && connection.relationalConfig"
-      class="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
-      @click="handleClick"
-      @dblclick.stop="handleDblClick"
-    >
-      {{ connection.relationalConfig.dbType }} -
-      {{ connection.relationalConfig.host }}:{{
-        connection.relationalConfig.port
-      }}
-    </div>
-
-    <!-- MQTT 连接详情 -->
-    <div
-      v-if="connection.type === 'mqtt' && connection.mqttConfig"
-      class="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
-      @click="handleClick"
-      @dblclick.stop="handleDblClick"
-    >
-      {{ connection.mqttConfig.protocol }}://{{
-        connection.mqttConfig.brokerUrl
-      }}:{{ connection.mqttConfig.port || 1883 }}
-    </div>
-
-    <!-- 展开内容（表和查询列表） - 不响应点击事件 -->
-    <slot name="expanded" v-if="isExpanded"></slot>
-  </div>
+  </el-tooltip>
 </template>
 
 <script setup>
@@ -122,6 +109,18 @@ const typeLabel = computed(() => {
   return props.connection.type;
 });
 
+const detailText = computed(() => {
+  if (props.connection.type === "relational" && props.connection.relationalConfig) {
+    const config = props.connection.relationalConfig;
+    return `${config.dbType} - ${config.host}:${config.port}`;
+  }
+  if (props.connection.type === "mqtt" && props.connection.mqttConfig) {
+    const config = props.connection.mqttConfig;
+    return `${config.protocol}://${config.brokerUrl}:${config.port || 1883}`;
+  }
+  return "";
+});
+
 const handleClick = () => {
   emit("click", props.connection);
 };
@@ -137,6 +136,26 @@ const handleContextMenu = (event) => {
 
 <style scoped>
 .connection-item {
+  padding: 8px 10px;
+  border-radius: 10px;
   transition: background-color 0.2s ease;
+}
+
+.connection-item.is-selected {
+  background: #e0e7ff;
+}
+
+.dark .connection-item.is-selected {
+  background: rgba(79, 70, 229, 0.28);
+}
+
+.expand-icon {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.connection-item:hover .expand-icon,
+.connection-item.is-expanded .expand-icon {
+  opacity: 1;
 }
 </style>

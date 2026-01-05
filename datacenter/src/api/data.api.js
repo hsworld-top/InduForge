@@ -207,6 +207,50 @@ export const saveQuery = (id, data) => {
 };
 
 // ===========================================
+// 数据点相关API
+// ===========================================
+
+/**
+ * 获取数据点列表
+ * @param {string} projectId - 工程ID
+ * @param {object} params - 查询参数
+ */
+export const getDataPoints = (projectId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints`,
+    method: "get",
+    params,
+  });
+};
+
+/**
+ * 删除数据点
+ * @param {string} projectId - 工程ID
+ * @param {string} datapointId - 数据点ID
+ */
+export const deleteDataPoint = (projectId, datapointId) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}`,
+    method: "delete",
+  });
+};
+
+/**
+ * 批量删除失效数据点
+ * @param {string} projectId - 工程ID
+ * @param {string[]} datapointIds - 数据点ID列表
+ */
+export const deleteDataPointsBatch = (projectId, datapointIds) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/delete-batch`,
+    method: "post",
+    data: {
+      ids: datapointIds,
+    },
+  });
+};
+
+// ===========================================
 // MQTT订阅相关API
 // ===========================================
 
@@ -557,6 +601,10 @@ export default {
   executeQuery,
   executeSql,
   deleteQuery,
+  // 数据点相关
+  getDataPoints,
+  deleteDataPoint,
+  deleteDataPointsBatch,
   // MQTT订阅相关
   getMqttSubscriptions,
   getMqttSubscription,

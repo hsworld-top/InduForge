@@ -2,19 +2,19 @@
   <div class="admin-dashboard">
     <!-- 页面头部 -->
     <div
-      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 px-6 py-4"
+      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 h-12 px-4"
     >
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between h-full">
         <!-- Logo 图片 -->
         <div class="flex items-center">
-          <img :src="logoUrl" alt="Logo" class="h-8 w-auto mr-4" />
-          <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">超级管理员控制台</h1>
+          <img :src="logoUrl" alt="Logo" class="h-7 w-auto mr-2" />
+          <h1 class="text-base font-semibold text-gray-800 dark:text-white hidden sm:block">超级管理员控制台</h1>
         </div>
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-2">
           <!-- 主题切换 -->
           <button
             @click="toggleTheme"
-            class="p-2 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <svg
               v-if="isDark"
@@ -40,26 +40,20 @@
             </svg>
           </button>
 
+          <div class="h-4 w-px bg-gray-200 dark:bg-gray-700"></div>
+
           <!-- 用户菜单 -->
           <div class="relative">
             <button
               @click="showUserMenu = !showUserMenu"
-              class="flex items-center space-x-2 p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              class="flex items-center gap-2 h-8 px-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
             >
-              <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                <span class="text-white text-sm font-medium">
+              <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                <span class="text-white text-xs font-medium">
                   {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'A' }}
                 </span>
               </div>
-              <span class="text-sm">{{ userInfo?.username || '管理员' }}</span>
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+              <span class="text-xs text-gray-600 dark:text-gray-400">{{ userInfo?.username || '管理员' }}</span>
             </button>
 
             <!-- 下拉菜单 -->
@@ -88,29 +82,33 @@
     <!-- 主要内容区域 -->
     <div class="flex flex-1">
       <!-- 左侧菜单栏 -->
-      <div class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
-        <div class="p-4">
+      <div class="bg-gray-900 border-r border-gray-800 w-14">
+        <div class="p-2">
           <nav class="space-y-2">
-            <!-- 租户管理 -->
-            <router-link
-              to="/admin/tenants"
-              :class="[
-                'w-full flex items-center px-4 py-3 text-left rounded-lg transition-colors',
-                $route.path === '/admin/tenants'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
-            >
-              <svg class="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                />
-              </svg>
-              租户管理
-            </router-link>
+            <el-tooltip content="租户管理" placement="right" :show-after="500">
+              <router-link
+                to="/admin/tenants"
+                class="w-full h-11 flex items-center justify-center"
+              >
+                <span
+                  :class="[
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                    $route.path === '/admin/tenants'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-400/80 hover:text-white hover:bg-gray-800',
+                  ]"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                    />
+                  </svg>
+                </span>
+              </router-link>
+            </el-tooltip>
           </nav>
         </div>
       </div>

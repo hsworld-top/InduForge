@@ -439,6 +439,41 @@ CREATE TABLE IF NOT EXISTS `data_queries` (
 CREATE UNIQUE INDEX `queries_project_name_uq` ON `data_queries` (`projectId`, `name`);
 CREATE INDEX `queries_type_idx` ON `data_queries` (`queryType`);
 
+-- 2.8.1 数据点表
+CREATE TABLE IF NOT EXISTS `data_points` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `project_id` char(36) NOT NULL COMMENT '所属工程ID',
+  `path` varchar(255) NOT NULL COMMENT '数据点路径',
+  `name` varchar(100) NOT NULL COMMENT '数据点名称',
+  `description` text COMMENT '描述',
+  `source_type` varchar(50) NOT NULL COMMENT '来源类型',
+  `source_id` char(36) DEFAULT NULL COMMENT '来源ID',
+  `source_config` json DEFAULT NULL COMMENT '来源配置',
+  `data_type` varchar(20) NOT NULL COMMENT '数据类型',
+  `unit` varchar(20) DEFAULT NULL COMMENT '单位',
+  `precision_num` int DEFAULT NULL COMMENT '精度',
+  `default_value` text DEFAULT NULL COMMENT '默认值',
+  `min_value` decimal(20,6) DEFAULT NULL COMMENT '最小值',
+  `max_value` decimal(20,6) DEFAULT NULL COMMENT '最大值',
+  `alarm_low` decimal(20,6) DEFAULT NULL COMMENT '低报警阈值',
+  `alarm_high` decimal(20,6) DEFAULT NULL COMMENT '高报警阈值',
+  `tags` json DEFAULT NULL COMMENT '标签',
+  `refresh_mode` varchar(20) DEFAULT 'auto' COMMENT '刷新模式',
+  `refresh_interval` int DEFAULT NULL COMMENT '刷新间隔',
+  `status` varchar(20) DEFAULT 'active' COMMENT '状态',
+  `created_by` char(36) DEFAULT NULL COMMENT '创建者ID',
+  `updated_by` char(36) DEFAULT NULL COMMENT '更新者ID',
+  `created_at` datetime(6) NOT NULL,
+  `updated_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `data_points_project_path_uq` (`project_id`, `path`),
+  KEY `data_points_project_idx` (`project_id`),
+  KEY `data_points_source_type_idx` (`source_type`),
+  KEY `data_points_status_idx` (`status`),
+  CONSTRAINT `data_points_fk_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `data_points_fk_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据点表';
+
 -- 2.9 SQL配置表（用于存储预定义SQL语句）
 CREATE TABLE IF NOT EXISTS `data_sql_configs` (
   `id` char(36) NOT NULL DEFAULT (uuid()),

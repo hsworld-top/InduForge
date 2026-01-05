@@ -22,6 +22,8 @@ class MqttService {
     this.activeSubscriptions = new Map();
     // 消息缓存 subscriptionId -> Array<message>
     this.messageCache = new Map();
+    // 订阅数据点路径缓存 subscriptionId -> path
+    this.subscriptionDatapointCache = new Map();
     // 缓存消息数量限制
     this.MAX_CACHE_SIZE = 100;
   }
@@ -533,6 +535,19 @@ class MqttService {
       timestamp: Date.now(),
     });
 
+    // 推送订阅数据点值
+    this.emitSubscriptionDatapointValue(subscriptionId, projectId, {
+      topic: message.topic,
+      payload: message.payload.toString(),
+      qos: message.qos || 0,
+      timestamp: Date.now(),
+    }).catch((error) => {
+      logger.error(
+        `[MqttService] Emit datapoint value failed for ${subscriptionId}:`,
+        error
+      );
+    });
+
     // 解析消息并更新Tag值（异步执行，不阻塞消息处理）
     this.processTagsForMessage(
       subscriptionId,
@@ -548,6 +563,66 @@ class MqttService {
     logger.debug(
       `[MqttService] Handled message for subscription: ${subscriptionId}`
     );
+  }
+
+  /**
+   * 获取订阅的最新消息
+   * @param {string} subscriptionId - 订阅ID
+   * @returns {object|null} 最新消息
+   */
+  getLatestSubscriptionMessage(subscriptionId) {
+    const cache = this.messageCache.get(subscriptionId);
+    if (!cache || cache.length === 0) {
+      return null;
+    }
+    return cache[cache.length - 1];
+  }
+
+  /**
+   * 设置订阅数据点缓存
+   * @param {string} subscriptionId - 订阅ID
+   * @param {string} path - 数据点路径
+   */
+  setSubscriptionDatapointCache(subscriptionId, path) {
+    if (!subscriptionId || !path) {
+      return;
+    }
+    this.subscriptionDatapointCache.set(subscriptionId, path);
+  }
+
+  /**
+   * 清理订阅数据点缓存
+   * @param {string} subscriptionId - 订阅ID
+   */
+  clearSubscriptionDatapointCache(subscriptionId) {
+    this.subscriptionDatapointCache.delete(subscriptionId);
+  }
+
+  /**
+   * 发送订阅数据点值
+   * @param {string} subscriptionId - 订阅ID
+   * @param {string} projectId - 项目ID
+   * @param {object} value - 数据值
+   * @returns {Promise<void>}
+   */
+  async emitSubscriptionDatapointValue(subscriptionId, projectId, value) {
+    const dataPointService = require("./dataPointService");
+    let path = this.subscriptionDatapointCache.get(subscriptionId);
+    if (!path) {
+      const datapoint = await dataPointService.getDataPointBySourceId(
+        projectId,
+        "mqtt.subscription",
+        subscriptionId
+      );
+      if (datapoint) {
+        path = datapoint.path;
+        this.subscriptionDatapointCache.set(subscriptionId, path);
+      }
+    }
+
+    if (path) {
+      dataPointService.emitDataPointValue(projectId, path, value);
+    }
   }
 
   /**

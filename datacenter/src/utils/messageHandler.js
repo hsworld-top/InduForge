@@ -4,6 +4,8 @@
  * 处理来自Designer的消息请求
  */
 import dataAPI from "@/api/data.api";
+import { Storage } from "@/utils/storage";
+import { STORAGE_KEYS } from "@/constants";
 
 class MessageHandler {
   constructor() {
@@ -22,6 +24,12 @@ class MessageHandler {
   async handleMessage(event) {
     const data = event.data;
     if (!data || typeof data !== "object") {
+      return;
+    }
+
+    // 处理主题更新
+    if (data.type === "THEME_UPDATE" && data.theme) {
+      this.applyTheme(data.theme);
       return;
     }
 
@@ -52,6 +60,18 @@ class MessageHandler {
         });
       }
     }
+  }
+
+  /**
+   * 应用主题并缓存设置。
+   * @param {string} theme - 主题
+   */
+  applyTheme(theme) {
+    if (!["light", "dark"].includes(theme)) {
+      return;
+    }
+    Storage.set(STORAGE_KEYS.THEME, theme);
+    document.documentElement.classList.toggle("dark", theme === "dark");
   }
 
   /**

@@ -14,6 +14,7 @@
 
 <script setup>
 import { computed } from "vue";
+import { buildAppUrl } from "@/utils/appUrl";
 
 const props = defineProps({
   appType: {
@@ -27,18 +28,7 @@ const props = defineProps({
   },
 });
 
-const appUrl = computed(() => {
-  const params = new URLSearchParams();
-  if (props.project.id) params.set("pid", props.project.id);
-  if (props.project.tenantId) params.set("tenant", props.project.tenantId);
-
-  if (props.appType === "designer") {
-    params.set("type", "app");
-    return `/designer/?${params.toString()}`;
-  } else {
-    return `/datacenter/?${params.toString()}`;
-  }
-});
+const appUrl = computed(() => buildAppUrl(props.appType, props.project));
 </script>
 
 <style scoped>

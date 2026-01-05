@@ -20,6 +20,7 @@ const DataQueryFn = require("./DataQuery"); // 数据查询模型
 const DataSqlConfigFn = require("./DataSqlConfig"); // SQL配置模型
 const DataQueryLogFn = require("./DataQueryLog"); // 查询日志模型
 const DesignPage = require("./DesignPage"); // 设计页面模型
+const DataPointFn = require("./DataPoint"); // 数据点模型
 
 //===========================================
 // 初始化数据中心模型
@@ -40,6 +41,7 @@ const DataMqttTag = DataMqttTagFn(sequelize, Sequelize.DataTypes); // MQTT变量
 const DataQuery = DataQueryFn(sequelize, Sequelize.DataTypes); // 数据查询模型
 const DataSqlConfig = DataSqlConfigFn(sequelize, Sequelize.DataTypes); // SQL配置模型
 const DataQueryLog = DataQueryLogFn(sequelize, Sequelize.DataTypes); // 查询日志模型
+const DataPoint = DataPointFn(sequelize, Sequelize.DataTypes); // 数据点模型
 
 //===========================================
 // 定义模型关联关系
@@ -417,6 +419,38 @@ DesignPage.belongsTo(User, {
   as: "updater",
 });
 
+// 工程和数据点：一对多
+Project.hasMany(DataPoint, {
+  foreignKey: "projectId",
+  as: "dataPoints",
+});
+
+DataPoint.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+// 用户和数据点：创建者和更新者
+User.hasMany(DataPoint, {
+  foreignKey: "createdBy",
+  as: "createdDataPoints",
+});
+
+User.hasMany(DataPoint, {
+  foreignKey: "updatedBy",
+  as: "updatedDataPoints",
+});
+
+DataPoint.belongsTo(User, {
+  foreignKey: "createdBy",
+  as: "creator",
+});
+
+DataPoint.belongsTo(User, {
+  foreignKey: "updatedBy",
+  as: "updater",
+});
+
 // 用户和设计页面：锁定者
 User.hasMany(DesignPage, {
   foreignKey: "lockedBy",
@@ -444,4 +478,5 @@ module.exports = {
   DataSqlConfig, // SQL配置模型
   DataQueryLog, // 查询日志模型
   DesignPage, // 设计页面模型
+  DataPoint, // 数据点模型
 };

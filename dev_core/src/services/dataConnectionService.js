@@ -92,15 +92,28 @@ class DataConnectionService {
       });
     }
 
-    // 创建数据连接
-    const connection = await DataConnection.create({
-      projectId,
-      name,
-      type,
-      category: finalCategory,
-      status: "unknown",
-      createdBy: userId,
-    });
+    let connection;
+    try {
+      // 创建数据连接
+      connection = await DataConnection.create({
+        projectId,
+        name,
+        type,
+        category: finalCategory,
+        status: "unknown",
+        createdBy: userId,
+      });
+    } catch (error) {
+      if (
+        error?.name === "SequelizeUniqueConstraintError" ||
+        error?.code === "ER_DUP_ENTRY"
+      ) {
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: `连接名称 "${name}" 已存在`,
+        });
+      }
+      throw error;
+    }
 
     // 根据类型创建对应的配置
     if (type === "relational" && config) {

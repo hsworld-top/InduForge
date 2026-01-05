@@ -196,6 +196,7 @@ import {
   toggleMqttTag,
   getMqttTagGroups,
   deleteMqttTagGroup,
+  getDataPoints,
 } from "@/api/data.api";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import { useMqttTagSync } from "@/composables/useMqttTagSync";
@@ -362,12 +363,49 @@ const loadTags = async () => {
     if (response.success) {
       // 后端返回: { success: true, data: tags数组, pagination }
       tags.value = response.data || [];
+      await loadTagDatapoints(tags.value);
     }
   } catch (error) {
     console.error("Failed to load tags:", error);
     ElMessage.error("加载变量失败");
   } finally {
     loading.value = false;
+  }
+};
+
+/**
+ * 加载变量对应的数据点
+ * @param {object[]} tagList - 变量列表
+ * @returns {Promise<void>}
+ */
+const loadTagDatapoints = async (tagList) => {
+  const ids = (tagList || []).map((tag) => tag.id).filter(Boolean);
+  if (ids.length === 0) {
+    tags.value.forEach((tag) => {
+      tag.datapointPath = "";
+      tag.datapointStatus = "";
+    });
+    return;
+  }
+
+  try {
+    const response = await getDataPoints(props.projectId, {
+      type: "mqtt.tag",
+      sourceIds: ids.join(","),
+      page: 1,
+      pageSize: 200,
+    });
+    if (response.success) {
+      const list = response.data?.datapoints || [];
+      const map = new Map(list.map((item) => [item.sourceId, item]));
+      tags.value.forEach((tag) => {
+        const datapoint = map.get(tag.id);
+        tag.datapointPath = datapoint?.path || "";
+        tag.datapointStatus = datapoint?.status || "";
+      });
+    }
+  } catch (error) {
+    console.error("Failed to load datapoints:", error);
   }
 };
 

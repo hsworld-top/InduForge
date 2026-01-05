@@ -98,7 +98,7 @@ dev_core/
 
 #### 1.3 自动生成逻辑
 
-**查询保存时自动生成数据点**：
+**查询保存时自动生成数据点**（一个查询对应一个数据点，值为查询结果对象）：
 
 修改 `dev_core/services/queryService.js`：
 
@@ -110,16 +110,8 @@ async saveQuery(projectId, queryData) {
   // 1. 保存查询
   const query = await this.queryRepository.save(queryData);
 
-  // 2. 执行查询获取字段信息
-  const result = await this.executeQuery(query);
-  const fields = this.extractFieldsFromResult(result);
-
-  // 3. 同步数据点
-  await this.dataPointService.syncFromQuery(
-    projectId,
-    query,
-    fields
-  );
+  // 2. 同步数据点（查询结果对象）
+  await this.dataPointService.syncFromQuery(projectId, query);
 
   return query;
 }
@@ -144,6 +136,23 @@ async saveTag(projectId, tagData) {
 }
 ```
 
+**MQTT 订阅保存时自动生成数据点**（订阅本身作为数据点，值为消息对象）：
+
+修改 `dev_core/controllers/mqttSubscriptionController.js`：
+
+```javascript
+/**
+ * 创建订阅并自动生成数据点
+ */
+async createSubscription(req, res, next) {
+  // ...创建订阅...
+  await this.dataPointService.syncFromMqttSubscription(
+    projectId,
+    subscription.id
+  );
+}
+```
+
 **数据点同步服务**：
 
 ```javascript
@@ -153,37 +162,30 @@ class DataPointService {
   /**
    * 从查询同步数据点
    */
-  async syncFromQuery(projectId, query, fields) {
+  async syncFromQuery(projectId, query) {
     const connection = await this.getConnection(query.connectionId);
     const basePath = `db.${connection.name}.${query.name}`;
 
     // 获取现有数据点
-    const existingPoints = await this.getBySource("db.query", query.id);
-    const existingFieldNames = existingPoints.map(
-      (p) => p.sourceConfig?.fieldName
-    );
-    const newFieldNames = fields.map((f) => f.name);
+    const existing = await this.getBySource("db.query", query.id);
 
-    // 新增字段 → 创建数据点
-    for (const field of fields) {
-      if (!existingFieldNames.includes(field.name)) {
-        await this.create({
-          projectId,
-          path: `${basePath}.${field.name}`,
-          name: field.name,
-          sourceType: "db.query",
-          sourceId: query.id,
-          sourceConfig: { fieldName: field.name },
-          dataType: this.mapSqlType(field.type),
-        });
-      }
-    }
-
-    // 删除的字段 → 标记失效
-    for (const point of existingPoints) {
-      if (!newFieldNames.includes(point.sourceConfig?.fieldName)) {
-        await this.markInvalid(point.id);
-      }
+    if (existing.length > 0) {
+      await this.update(existing[0].id, {
+        path: basePath,
+        name: query.name,
+        dataType: "object",
+        sourceConfig: { mode: "result" },
+      });
+    } else {
+      await this.create({
+        projectId,
+        path: basePath,
+        name: query.name,
+        sourceType: "db.query",
+        sourceId: query.id,
+        sourceConfig: { mode: "result" },
+        dataType: "object",
+      });
     }
   }
 
@@ -350,7 +352,7 @@ datacenter/src/
 
 #### 2.4 查询编辑器集成数据点显示
 
-修改查询编辑器，在查询结果下方显示自动生成的数据点：
+修改查询编辑器，在查询结果下方显示自动生成的数据点（每个查询一条）：
 
 ```vue
 <!-- QueryEditor.vue 新增部分 -->
@@ -369,7 +371,7 @@ datacenter/src/
       <span>自动生成的数据点</span>
     </div>
     <el-table :data="datapoints" size="small">
-      <el-table-column prop="fieldName" label="字段名" width="120" />
+      <el-table-column prop="name" label="名称" width="140" />
       <el-table-column prop="path" label="数据点路径">
         <template #default="{ row }">
           <span class="path">{{ row.path }}</span>
@@ -378,7 +380,7 @@ datacenter/src/
           </el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="value" label="当前值" width="100" />
+      <el-table-column prop="dataType" label="数据类型" width="100" />
     </el-table>
   </div>
 </template>
@@ -661,10 +663,9 @@ parseOutputVariables(script) {
 │                                                                               │
 │  ┌─ 自动生成的数据点 📌 ──────────────────────────────────────────────────┐ │
 │  │                                                                         │ │
-│  │  字段名          数据点路径                               当前值  [复制]│ │
+│  │  名称          数据点路径                               数据类型  [复制]│ │
 │  │  ─────────────────────────────────────────────────────────────────────  │ │
-│  │  device_count    db.生产库.设备统计.device_count          150     📋   │ │
-│  │  online_count    db.生产库.设备统计.online_count          142     📋   │ │
+│  │  设备统计      db.生产库.设备统计                       object   📋   │ │
 │  │                                                                         │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 │                                                                               │

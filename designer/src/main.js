@@ -4,6 +4,8 @@ import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
 // import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import router from './router';
+import { Storage } from './utils/storage';
+import { STORAGE_KEYS } from './constants';
 import App from './App.vue';
 import './assets/styles/main.css';
 
@@ -20,3 +22,21 @@ app.use(ElementPlus);
 // }
 
 app.mount('#app');
+
+/**
+ * 处理来自父窗口的主题更新消息。
+ * @param {MessageEvent} event - 消息事件
+ */
+const handleThemeMessage = (event) => {
+    const data = event.data;
+    if (!data || typeof data !== 'object') {
+        return;
+    }
+    if (data.type !== 'THEME_UPDATE' || !['light', 'dark'].includes(data.theme)) {
+        return;
+    }
+    Storage.set(STORAGE_KEYS.THEME, data.theme);
+    document.documentElement.classList.toggle('dark', data.theme === 'dark');
+};
+
+window.addEventListener('message', handleThemeMessage);

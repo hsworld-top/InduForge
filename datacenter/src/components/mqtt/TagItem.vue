@@ -19,6 +19,22 @@
             {{ tag.parseRule }}
           </span>
         </div>
+        <div class="tag-datapoint">
+          <span class="text-xs text-gray-500">数据点:</span>
+          <span
+            class="text-xs ml-1 truncate"
+            :class="tag.datapointStatus === 'invalid' ? 'text-gray-400' : 'text-gray-700'"
+          >
+            {{ tag.datapointPath || "-" }}
+          </span>
+          <el-tag
+            v-if="tag.datapointPath"
+            size="small"
+            :type="tag.datapointStatus === 'invalid' ? 'info' : 'success'"
+          >
+            {{ tag.datapointStatus === "invalid" ? "失效" : "活跃" }}
+          </el-tag>
+        </div>
       </div>
 
       <!-- 右侧操作 -->
@@ -152,6 +168,14 @@ const getParseTypeLabel = (type) => {
 .tag-rule {
   display: flex;
   align-items: center;
+  overflow: hidden;
+}
+
+.tag-datapoint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
   overflow: hidden;
 }
 

@@ -3,22 +3,22 @@
     <!-- 页面头部 -->
     <div
       v-if="!isTabMaximized"
-      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 px-6 py-2"
+      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 h-12 px-4"
     >
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between h-full">
         <!-- Logo 图片 -->
         <div class="flex items-center">
-          <img :src="tenantLogoUrl" :alt="currentTenant?.name || 'Logo'" class="h-6 w-auto mr-3" />
-          <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+          <img :src="tenantLogoUrl" :alt="currentTenant?.name || 'Logo'" class="h-7 w-auto mr-2" />
+          <h1 class="text-base font-semibold text-gray-800 dark:text-white hidden sm:block">
             {{ currentTenant?.name || '多租户管理系统' }}
           </h1>
         </div>
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-2">
           <!-- 语言切换 -->
           <div class="relative language-menu">
             <button
               @click="showLanguageMenu = !showLanguageMenu"
-              class="flex items-center space-x-2 p-2 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+              class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
@@ -26,15 +26,6 @@
                   stroke-linejoin="round"
                   stroke-width="2"
                   d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
-                />
-              </svg>
-              <span class="text-sm">{{ languageName }}</span>
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
                 />
               </svg>
             </button>
@@ -72,7 +63,7 @@
           <!-- 主题切换 -->
           <button
             @click="toggleTheme"
-            class="p-2 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <svg
               v-if="isDark"
@@ -98,26 +89,20 @@
             </svg>
           </button>
 
+          <div class="h-4 w-px bg-gray-200 dark:bg-gray-700"></div>
+
           <!-- 用户菜单 -->
           <div class="relative user-menu">
             <button
               @click="showUserMenu = !showUserMenu"
-              class="flex items-center space-x-2 p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              class="flex items-center gap-2 h-8 px-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
             >
               <div
-                class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium"
+                class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-medium"
               >
                 {{ userInitials }}
               </div>
-              <span class="text-sm">{{ username }}</span>
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+              <span class="text-xs text-gray-600 dark:text-gray-400">{{ username }}</span>
             </button>
 
             <!-- 下拉菜单 -->
@@ -149,183 +134,321 @@
       <div
         v-if="!isTabMaximized"
         :class="[
-          'bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 flex flex-col',
-          sidebarCollapsed ? 'w-16' : 'w-48'
+          'border-r transition-all duration-200 flex flex-col',
+          isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200',
+          sidebarCollapsed ? 'w-12' : 'w-44',
         ]"
       >
-        <div :class="[sidebarCollapsed ? 'p-2 flex-1 overflow-y-auto' : 'p-4 flex-1 overflow-y-auto']">
+        <div :class="[sidebarCollapsed ? 'p-2' : 'p-3', 'flex-1 overflow-y-auto']">
           <nav class="space-y-2">
-            <button
+            <el-tooltip
               v-if="isSystemAdmin"
-              @click="openTab('dashboard')"
-              :class="[
-                'w-full flex items-center rounded-lg transition-colors',
-                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
-                activeTab === 'dashboard'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
+              content="仪表盘"
+              placement="right"
+              :show-after="500"
+              :disabled="!sidebarCollapsed"
             >
-              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"
-                />
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"
-                />
-              </svg>
-              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">仪表盘</span>
-            </button>
+              <button
+                @click="openTab('dashboard')"
+                :class="[
+                  'w-full h-11 flex items-center rounded-lg transition-colors',
+                  sidebarCollapsed ? 'justify-center' : 'px-3 gap-3 justify-start',
+                ]"
+              >
+                <span
+                  :class="[
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                    activeTab === 'dashboard'
+                      ? 'bg-blue-600 text-white'
+                      : isDark
+                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                  ]"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"
+                    />
+                  </svg>
+                </span>
+                <span
+                  v-if="!sidebarCollapsed"
+                  :class="[
+                    'text-sm font-medium',
+                    activeTab === 'dashboard' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                  ]"
+                >
+                  仪表盘
+                </span>
+              </button>
+            </el-tooltip>
 
-            <button
+            <el-tooltip
               v-if="isSuperAdmin"
-              @click="openTab('tenant-management')"
-              :class="[
-                'w-full flex items-center rounded-lg transition-colors',
-                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
-                activeTab === 'tenant-management'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
+              content="租户管理"
+              placement="right"
+              :show-after="500"
+              :disabled="!sidebarCollapsed"
             >
-              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                />
-              </svg>
-              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">租户管理</span>
-            </button>
+              <button
+                @click="openTab('tenant-management')"
+                :class="[
+                  'w-full h-11 flex items-center rounded-lg transition-colors',
+                  sidebarCollapsed ? 'justify-center' : 'px-3 gap-3 justify-start',
+                ]"
+              >
+                <span
+                  :class="[
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                    activeTab === 'tenant-management'
+                      ? 'bg-blue-600 text-white'
+                      : isDark
+                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                  ]"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                    />
+                  </svg>
+                </span>
+                <span
+                  v-if="!sidebarCollapsed"
+                  :class="[
+                    'text-sm font-medium',
+                    activeTab === 'tenant-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                  ]"
+                >
+                  租户管理
+                </span>
+              </button>
+            </el-tooltip>
 
-            <button
+            <el-tooltip
               v-if="isSuperAdmin || isSystemAdmin"
-              @click="openTab('user-management')"
-              :class="[
-                'w-full flex items-center rounded-lg transition-colors',
-                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
-                activeTab === 'user-management'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
+              content="用户管理"
+              placement="right"
+              :show-after="500"
+              :disabled="!sidebarCollapsed"
             >
-              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
-                />
-              </svg>
-              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">用户管理</span>
-            </button>
+              <button
+                @click="openTab('user-management')"
+                :class="[
+                  'w-full h-11 flex items-center rounded-lg transition-colors',
+                  sidebarCollapsed ? 'justify-center' : 'px-3 gap-3 justify-start',
+                ]"
+              >
+                <span
+                  :class="[
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                    activeTab === 'user-management'
+                      ? 'bg-blue-600 text-white'
+                      : isDark
+                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                  ]"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+                    />
+                  </svg>
+                </span>
+                <span
+                  v-if="!sidebarCollapsed"
+                  :class="[
+                    'text-sm font-medium',
+                    activeTab === 'user-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                  ]"
+                >
+                  用户管理
+                </span>
+              </button>
+            </el-tooltip>
 
-            <button
+            <el-tooltip
               v-if="isSuperAdmin || isSystemAdmin || isProjectAdmin"
-              @click="openTab('project-management')"
-              :class="[
-                'w-full flex items-center rounded-lg transition-colors',
-                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
-                activeTab === 'project-management'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
+              content="工程管理"
+              placement="right"
+              :show-after="500"
+              :disabled="!sidebarCollapsed"
             >
-              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">工程管理</span>
-            </button>
+              <button
+                @click="openTab('project-management')"
+                :class="[
+                  'w-full h-11 flex items-center rounded-lg transition-colors',
+                  sidebarCollapsed ? 'justify-center' : 'px-3 gap-3 justify-start',
+                ]"
+              >
+                <span
+                  :class="[
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                    activeTab === 'project-management'
+                      ? 'bg-blue-600 text-white'
+                      : isDark
+                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                  ]"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </span>
+                <span
+                  v-if="!sidebarCollapsed"
+                  :class="[
+                    'text-sm font-medium',
+                    activeTab === 'project-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                  ]"
+                >
+                  工程管理
+                </span>
+              </button>
+            </el-tooltip>
 
-            <button
+            <el-tooltip
               v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin"
-              @click="openTab('ops-management')"
-              :class="[
-                'w-full flex items-center rounded-lg transition-colors',
-                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
-                activeTab === 'ops-management'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
+              content="运维管理"
+              placement="right"
+              :show-after="500"
+              :disabled="!sidebarCollapsed"
             >
-              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">运维管理</span>
-            </button>
+              <button
+                @click="openTab('ops-management')"
+                :class="[
+                  'w-full h-11 flex items-center rounded-lg transition-colors',
+                  sidebarCollapsed ? 'justify-center' : 'px-3 gap-3 justify-start',
+                ]"
+              >
+                <span
+                  :class="[
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                    activeTab === 'ops-management'
+                      ? 'bg-blue-600 text-white'
+                      : isDark
+                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                  ]"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </span>
+                <span
+                  v-if="!sidebarCollapsed"
+                  :class="[
+                    'text-sm font-medium',
+                    activeTab === 'ops-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                  ]"
+                >
+                  运维管理
+                </span>
+              </button>
+            </el-tooltip>
 
-            <button
+            <el-tooltip
               v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin"
-              @click="openTab('system-logs')"
-              :class="[
-                'w-full flex items-center rounded-lg transition-colors',
-                sidebarCollapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3 text-left',
-                activeTab === 'system-logs'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
+              content="系统日志"
+              placement="right"
+              :show-after="500"
+              :disabled="!sidebarCollapsed"
             >
-              <svg class="w-5 h-5" :class="sidebarCollapsed ? '' : 'mr-3'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <span v-if="!sidebarCollapsed" class="transition-opacity duration-300">系统日志</span>
-            </button>
+              <button
+                @click="openTab('system-logs')"
+                :class="[
+                  'w-full h-11 flex items-center rounded-lg transition-colors',
+                  sidebarCollapsed ? 'justify-center' : 'px-3 gap-3 justify-start',
+                ]"
+              >
+                <span
+                  :class="[
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                    activeTab === 'system-logs'
+                      ? 'bg-blue-600 text-white'
+                      : isDark
+                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                  ]"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </span>
+                <span
+                  v-if="!sidebarCollapsed"
+                  :class="[
+                    'text-sm font-medium',
+                    activeTab === 'system-logs' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                  ]"
+                >
+                  系统日志
+                </span>
+              </button>
+            </el-tooltip>
           </nav>
         </div>
-
-        <!-- 折叠/展开按钮 -->
-        <div :class="[sidebarCollapsed ? 'p-2 border-t border-gray-200 dark:border-gray-700' : 'p-4 border-t border-gray-200 dark:border-gray-700']">
-          <div class="flex justify-start">
-            <button
-              @click="toggleSidebar"
-              :class="[
-                'p-1 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
-                sidebarCollapsed ? 'mx-auto' : ''
-              ]"
+        <div class="px-2 py-2">
+          <div :class="['h-px', isDark ? 'bg-gray-800/50' : 'bg-gray-200/60']"></div>
+          <button
+            @click="toggleSidebar"
+            :class="[
+              'mt-2 mx-auto h-8 w-8 rounded-md flex items-center justify-center transition-colors',
+              isDark
+                ? 'text-gray-400 hover:text-white hover:bg-gray-800'
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100',
+            ]"
+          >
+            <svg
+              :class="['w-4 h-4 transition-transform', sidebarCollapsed ? '' : 'rotate-180']"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
             >
-              <svg
-                :class="['w-5 h-5 transition-transform duration-300', sidebarCollapsed ? 'rotate-180' : '']"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-                />
-              </svg>
-            </button>
-          </div>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+              />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -358,6 +481,23 @@
                 <div class="flex items-center space-x-2">
                   <span>{{ tab.title }}</span>
                   <el-button
+                    v-if="tab.props?.appType"
+                    size="small"
+                    text
+                    circle
+                    class="!p-0 !w-4 !h-4"
+                    @click.stop="openExternalTab(tab)"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M14 3h7v7m0-7L10 14m-4 7h11a2 2 0 002-2V8"
+                      />
+                    </svg>
+                  </el-button>
+                  <el-button
                     v-if="!isTabMaximized && tab.key !== 'dashboard'"
                     size="small"
                     text
@@ -386,6 +526,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { buildAppUrl } from '@/utils/appUrl'
 
 // 标签页组件懒加载，提升首次加载速度
 const DashboardContent = defineAsyncComponent(() => import('@/views/DashboardContent.vue'))
@@ -411,7 +552,7 @@ export default {
     const showLanguageMenu = ref(false)
 
     // 侧边栏折叠状态
-    const sidebarCollapsed = ref(false)
+    const sidebarCollapsed = ref(true)
 
     // 标签页状态
     const tabs = ref([])
@@ -489,12 +630,16 @@ export default {
       }
     })
 
-    // 监听标签页变化，当打开数据中心或设计中心时自动折叠侧边栏
-    watch(() => activeTab.value, (newTabKey) => {
-      if (newTabKey && (newTabKey.startsWith('data-center-') || newTabKey.startsWith('design-center-'))) {
-        sidebarCollapsed.value = true
-      }
-    })
+    /**
+     * 通知嵌入应用更新主题。
+     * @param {string} theme - 主题
+     */
+    const syncEmbeddedTheme = (theme) => {
+      const iframes = document.querySelectorAll('iframe.embedded-iframe')
+      iframes.forEach((iframe) => {
+        iframe.contentWindow?.postMessage({ type: 'THEME_UPDATE', theme }, '*')
+      })
+    }
 
     // 租户相关计算属性
     const currentTenant = computed(() => tenantStore.currentTenant)
@@ -519,10 +664,6 @@ export default {
     }
 
     const currentLanguage = computed(() => appStore.language || 'zh')
-    const languageName = computed(() => {
-      return currentLanguage.value === 'zh' ? '中文' : 'English'
-    })
-
     const handleLogout = async () => {
       try {
         await ElMessageBox.confirm('确定要登出吗？', '提示', {
@@ -719,11 +860,6 @@ export default {
       document.removeEventListener('click', handleClickOutside)
     }
 
-    // 切换侧边栏折叠状态
-    const toggleSidebar = () => {
-      sidebarCollapsed.value = !sidebarCollapsed.value
-    }
-
     // 最大化标签页
     const maximizeTab = (tabKey) => {
       if (tabKey === 'dashboard') return
@@ -741,6 +877,29 @@ export default {
       const tab = tabs.value.find(t => t.key === activeTab.value)
       return tab ? tab.title : ''
     }
+
+    /**
+     * 在新标签页打开设计中心或数据中心。
+     * @param {object} tab - 标签页配置
+     */
+    const openExternalTab = (tab) => {
+      if (!tab?.props?.appType) return
+      const url = buildAppUrl(tab.props.appType, tab.props.project)
+      const newWindow = window.open(url, '_blank', 'noopener')
+      if (newWindow) newWindow.opener = null
+    }
+
+    /**
+     * 切换侧边栏折叠状态。
+     */
+    const toggleSidebar = () => {
+      sidebarCollapsed.value = !sidebarCollapsed.value
+    }
+
+    watch(isDark, (nextIsDark) => {
+      const theme = nextIsDark ? 'dark' : 'light'
+      syncEmbeddedTheme(theme)
+    })
 
     return {
       showUserMenu,
@@ -760,16 +919,16 @@ export default {
       currentTenant,
       tenantLogoUrl,
       toggleTheme,
-      toggleSidebar,
       changeLanguage,
       currentLanguage,
-      languageName,
       handleLogout,
       openTab,
       closeTab,
       maximizeTab,
       restoreTab,
       getCurrentTabTitle,
+      openExternalTab,
+      toggleSidebar,
       isTabMaximized,
       onUnmounted,
     }
@@ -788,7 +947,7 @@ export default {
 /* 标签页样式 */
 .dashboard-tabs :deep(.el-tabs__header) {
   margin: 0;
-  padding: 8px 8px 0 8px;
+  padding: 4px 6px 0 6px;
 }
 
 .dashboard-tabs :deep(.el-tabs__nav-wrap) {
@@ -803,10 +962,10 @@ export default {
   border-radius: 4px 4px 0 0;
   margin-right: 4px;
   color: rgb(55 65 81);
-  padding: 8px 16px;
+  padding: 6px 14px;
   height: 36px;
-  line-height: 20px;
-  font-size: 13px;
+  line-height: 22px;
+  font-size: 14px;
 }
 
 .dashboard-tabs :deep(.el-tabs__item:hover) {
@@ -825,14 +984,14 @@ export default {
 }
 
 .dashboard-tabs :deep(.dark .el-tabs__item:hover) {
-  color: rgb(96 165 250);
-  background-color: rgb(30 58 138 / 0.3);
+  color: rgb(147 197 253);
+  background-color: rgb(30 41 59);
 }
 
 .dashboard-tabs :deep(.dark .el-tabs__item.is-active) {
-  color: rgb(96 165 250);
-  background-color: rgb(30 58 138 / 0.3);
-  border-bottom-color: rgb(30 58 138 / 0.3);
+  color: rgb(191 219 254);
+  background-color: rgb(30 41 59);
+  border-bottom-color: rgb(30 41 59);
 }
 
 .dashboard-tabs :deep(.el-tabs__content) {

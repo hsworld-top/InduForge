@@ -134,11 +134,23 @@
                     <el-tab-pane label="连接" name="events">
                         <PropertyPanel :show-tabs="false" initial-tab="events" />
                     </el-tab-pane>
-                    <el-tab-pane name="variables">
+                    <el-tab-pane label="绑定" name="binding">
+                        <DataBindingPanel />
+                    </el-tab-pane>
+                    <el-tab-pane name="data">
                         <template #label>
-                            <span class="variable-tab-label">变量</span>
+                            <span class="variable-tab-label">数据</span>
                         </template>
-                        <VariablePanel />
+                        <div class="data-panel">
+                            <el-collapse v-model="dataCollapse">
+                                <el-collapse-item title="数据源" name="sources">
+                                    <DataSourcePanel />
+                                </el-collapse-item>
+                                <el-collapse-item title="页面变量" name="variables">
+                                    <VariablePanel />
+                                </el-collapse-item>
+                            </el-collapse>
+                        </div>
                     </el-tab-pane>
                 </el-tabs>
             </div>
@@ -201,7 +213,17 @@ import IconTablerStack from '~icons/tabler/stack';
 import { useDesignStore } from '@/store/design';
 import { useCanvas } from '@/composables/useCanvas';
 import { useKeyboard } from '@/composables/useKeyboard';
-import { PageTree, ComponentTree, ComponentLibrary, PropertyPanel, GlobalVariables, GlobalScripts, VariablePanel } from '@/components/panels';
+import {
+    PageTree,
+    ComponentTree,
+    ComponentLibrary,
+    PropertyPanel,
+    GlobalVariables,
+    GlobalScripts,
+    VariablePanel,
+    DataSourcePanel,
+    DataBindingPanel,
+} from '@/components/panels';
 import { DesignCanvas, CanvasRuler } from '@/components/canvas';
 import ContextMenu from '@/components/canvas/ContextMenu.vue';
 import { registerAllComponents } from '@/registry/components';
@@ -219,6 +241,7 @@ const { canvasState } = useCanvas();
 // State
 const leftActiveTab = ref('pages');
 const rightActiveTab = ref('tree');
+const dataCollapse = ref(['sources', 'variables']);
 const showGrid = ref(true);
 const showRuler = ref(true);
 const draggingComponent = ref(null);
@@ -1234,6 +1257,14 @@ watch(
 :deep(.right-panel-tabs .variable-tab-label) {
     display: inline-block;
     margin-right: 10px;
+}
+
+.data-panel {
+    padding: 8px 10px;
+}
+
+.data-panel :deep(.el-collapse-item__content) {
+    padding-bottom: 12px;
 }
 
 :deep(.right-panel .el-tabs__content) {

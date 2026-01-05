@@ -1,8 +1,15 @@
-const { DataQuery, DataQueryLog, DataConnection, DataRelationalConfig } = require('../models');
+const {
+  DataQuery,
+  DataQueryLog,
+  DataConnection,
+  DataRelationalConfig,
+} = require('../models');
 const DriverFactory = require('./drivers/DriverFactory');
 const AppError = require('../utils/AppError');
 const ErrorCodes = require('../constants/errorCodes');
+const { logger } = require('../utils/logger');
 const dayjs = require('dayjs');
+const dataPointService = require('./dataPointService');
 
 /**
  * 数据查询服务
@@ -105,6 +112,12 @@ class DataQueryService {
         ]
       });
 
+      try {
+        await dataPointService.syncFromQuery(projectId, query.id, userId);
+      } catch (error) {
+        logger.warn('[DataQueryService] Sync datapoints failed:', error);
+      }
+
       return fullQuery;
     } catch (error) {
       // 处理数据库唯一键冲突错误
@@ -115,6 +128,122 @@ class DataQueryService {
       }
       throw error;
     }
+  }
+
+  /**
+   * 更新数据查询
+   * @param {string} queryId - 查询ID
+   * @param {Object} data - 查询数据
+   * @param {string} userId - 用户ID
+   * @returns {Promise<Object>} 更新后的查询对象
+   */
+  async updateQuery(queryId, data, userId) {
+    const query = await DataQuery.findByPk(queryId);
+    if (!query) {
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        resource: "DataQuery",
+        id: queryId,
+      });
+    }
+
+    const {
+      name,
+      description,
+      category,
+      connectionId,
+      queryType,
+      config,
+      isEnabled,
+      cacheEnabled,
+      cacheTtl,
+      timeout,
+    } = data;
+
+    if (name && name !== query.name) {
+      const existingQuery = await DataQuery.findOne({
+        where: { projectId: query.projectId, name },
+      });
+      if (existingQuery && existingQuery.id !== queryId) {
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: `查询名称 "${name}" 已存在，请使用其他名称`,
+        });
+      }
+      query.name = name;
+    }
+
+    if (connectionId && connectionId !== query.connectionId) {
+      const connection = await DataConnection.findOne({
+        where: { id: connectionId, projectId: query.projectId },
+      });
+      if (!connection) {
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: "无效的连接ID",
+        });
+      }
+      query.connectionId = connectionId;
+    }
+
+    if (description !== undefined) query.description = description;
+    if (category !== undefined) query.category = category;
+    if (queryType !== undefined) query.queryType = queryType;
+    if (config !== undefined) query.config = config;
+    if (isEnabled !== undefined) query.isEnabled = isEnabled;
+    if (cacheEnabled !== undefined) query.cacheEnabled = cacheEnabled;
+    if (cacheTtl !== undefined) query.cacheTtl = cacheTtl;
+    if (timeout !== undefined) query.timeout = timeout;
+    if (userId) query.updatedBy = userId;
+
+    await query.save();
+
+    const fullQuery = await DataQuery.findByPk(query.id, {
+      include: [
+        {
+          model: DataConnection,
+          as: "connection",
+          attributes: ["id", "name", "type"],
+        },
+      ],
+    });
+
+    try {
+      await dataPointService.syncFromQuery(query.projectId, query.id, userId);
+    } catch (error) {
+      logger.warn("[DataQueryService] Sync datapoints failed:", error);
+    }
+
+    return fullQuery;
+  }
+
+  /**
+   * 删除数据查询
+   * @param {string} queryId - 查询ID
+   * @param {string} userId - 用户ID
+   * @returns {Promise<Object>} 删除的查询对象
+   */
+  async deleteQuery(queryId, userId) {
+    const query = await DataQuery.findByPk(queryId);
+    if (!query) {
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        resource: "DataQuery",
+        id: queryId,
+      });
+    }
+
+    const data = query.toJSON();
+    await query.destroy();
+
+    try {
+      await dataPointService.markInvalidBySource(
+        query.projectId,
+        "db.query",
+        queryId,
+        userId || null
+      );
+    } catch (error) {
+      logger.warn("[DataQueryService] Mark datapoint invalid failed:", error);
+    }
+
+    return data;
   }
 
   /**

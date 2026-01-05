@@ -22,6 +22,9 @@
       @mqtt-subscription-manage="handleMqttSubscriptionManage"
       @mqtt-subscription-edit="handleMqttSubscriptionEdit"
       @mqtt-subscription-delete="handleMqttSubscriptionDelete"
+      @datapoint-open="handleOpenDataPointList"
+      @calcunit-open="handleOpenCalcUnitList"
+      @alarmunit-open="handleOpenAlarmUnitList"
     />
 
     <!-- 右侧内容区域 - 统一标签页系统 -->
@@ -111,6 +114,33 @@
                   "
                 />
               </div>
+            </div>
+
+            <!-- 数据点列表 -->
+            <div
+              v-else-if="tab.type === 'datapoints'"
+              class="flex-1 flex flex-col overflow-hidden"
+            >
+              <DataPointList
+                :ref="(el) => setDataPointListRef(tab.id, el)"
+                :project-id="projectId"
+              />
+            </div>
+
+            <!-- 计算单元 -->
+            <div
+              v-else-if="tab.type === 'calc-units'"
+              class="flex-1 flex items-center justify-center text-gray-500"
+            >
+              计算单元功能规划中
+            </div>
+
+            <!-- 报警单元 -->
+            <div
+              v-else-if="tab.type === 'alarm-units'"
+              class="flex-1 flex items-center justify-center text-gray-500"
+            >
+              报警单元功能规划中
             </div>
 
             <!-- SQL 查询编辑器 -->
@@ -284,6 +314,8 @@ import IconTablerDatabase from "~icons/tabler/database";
 import IconTablerTable from "~icons/tabler/table";
 import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerAlertCircle from "~icons/tabler/alert-circle";
+import IconTablerCalculator from "~icons/tabler/calculator";
+import IconTablerBell from "~icons/tabler/bell";
 import ConnectionList from "@/components/connection/ConnectionList.vue";
 import ConnectionContextMenu from "@/components/connection/ConnectionContextMenu.vue";
 import TableContextMenu from "@/components/connection/TableContextMenu.vue";
@@ -301,6 +333,7 @@ import MqttSubscriptionList from "@/components/mqtt/MqttSubscriptionList.vue";
 import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
 import MqttTagList from "@/components/mqtt/MqttTagList.vue";
 import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
+import DataPointList from "@/components/datapoint/DataPointList.vue";
 import { useConnection } from "@/composables/useConnection";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import dataAPI from "@/api/data.api";
@@ -350,6 +383,7 @@ const activeTabId = ref("");
 const tabsRef = ref(null);
 const mqttMessageViewerRefs = ref(new Map()); // 存储每个消息查看器的引用
 const mqttSubscriptionListRefs = ref(new Map()); // 存储每个订阅列表的引用
+const dataPointListRefs = ref(new Map()); // 存储数据点列表引用
 let tabCounter = 0;
 
 /**
@@ -371,6 +405,17 @@ const setSubscriptionListRef = (tabId, el) => {
     mqttSubscriptionListRefs.value.set(tabId, el);
   } else {
     mqttSubscriptionListRefs.value.delete(tabId);
+  }
+};
+
+/**
+ * 设置数据点列表引用
+ */
+const setDataPointListRef = (tabId, el) => {
+  if (el) {
+    dataPointListRefs.value.set(tabId, el);
+  } else {
+    dataPointListRefs.value.delete(tabId);
   }
 };
 
@@ -448,6 +493,89 @@ const openMqttSubscriptionList = (connection) => {
     closable: true,
     connection: connection,
     connectionId: connection.id,
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+};
+
+/**
+ * 打开数据点列表
+ */
+const handleOpenDataPointList = () => {
+  const tabId = "datapoints";
+  const existingTab = tabs.value.find((t) => t.id === tabId);
+
+  if (existingTab) {
+    activeTabId.value = tabId;
+    const listRef = dataPointListRefs.value.get(tabId);
+    if (listRef && typeof listRef.refresh === "function") {
+      listRef.refresh();
+    }
+    return;
+  }
+
+  const newTab = {
+    id: tabId,
+    type: "datapoints",
+    label: "数据点",
+    icon: IconTablerDatabase,
+    closable: true,
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+
+  nextTick(() => {
+    const listRef = dataPointListRefs.value.get(tabId);
+    if (listRef && typeof listRef.refresh === "function") {
+      listRef.refresh();
+    }
+  });
+};
+
+/**
+ * 打开计算单元列表
+ */
+const handleOpenCalcUnitList = () => {
+  const tabId = "calc-units";
+  const existingTab = tabs.value.find((t) => t.id === tabId);
+
+  if (existingTab) {
+    activeTabId.value = tabId;
+    return;
+  }
+
+  const newTab = {
+    id: tabId,
+    type: "calc-units",
+    label: "计算单元",
+    icon: IconTablerCalculator,
+    closable: true,
+  };
+
+  tabs.value.push(newTab);
+  activeTabId.value = tabId;
+};
+
+/**
+ * 打开报警单元列表
+ */
+const handleOpenAlarmUnitList = () => {
+  const tabId = "alarm-units";
+  const existingTab = tabs.value.find((t) => t.id === tabId);
+
+  if (existingTab) {
+    activeTabId.value = tabId;
+    return;
+  }
+
+  const newTab = {
+    id: tabId,
+    type: "alarm-units",
+    label: "报警单元",
+    icon: IconTablerBell,
+    closable: true,
   };
 
   tabs.value.push(newTab);

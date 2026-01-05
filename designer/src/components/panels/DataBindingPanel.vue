@@ -63,8 +63,8 @@
                 </el-form-item>
 
                 <el-form-item label="表达式" prop="expression">
-                    <el-input v-model="form.expression" type="textarea" :rows="4" placeholder="{{ data.ds_example.value }}" />
-                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">使用 {{ "{{ expression }}" }} 语法</div>
+                    <el-input v-model="form.expression" type="textarea" :rows="4" :placeholder="expressionPlaceholder" />
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1" v-pre>使用 {{ expression }} 语法</div>
                 </el-form-item>
 
                 <!-- 快速选择 -->
@@ -113,6 +113,7 @@ const quickSelect = ref('');
 const previewValue = ref(null);
 const previewError = ref(null);
 const previewValues = ref({});
+const expressionPlaceholder = '{{ data.ds_example.value }}';
 
 const form = ref({
     path: '',

@@ -15,6 +15,7 @@ const {
 const { parseMessage, parseMessageBatch } = require("./messageParser");
 const socketService = require("./socketService");
 const redisTagService = require("./redisTagService");
+const dataPointService = require("./dataPointService");
 const dayjs = require("dayjs");
 const { TIME_FORMAT } = require("../constants/time");
 
@@ -54,6 +55,12 @@ class MqttTagService {
 
     logger.info(`[MqttTagService] Created tag: ${tag.code} (${tag.id})`);
 
+    try {
+      await dataPointService.syncFromMqttTag(projectId, tag.id, userId);
+    } catch (error) {
+      logger.warn("[MqttTagService] Sync datapoint failed:", error);
+    }
+
     return tag;
   }
 
@@ -89,6 +96,12 @@ class MqttTagService {
 
     logger.info(`[MqttTagService] Updated tag: ${tag.code} (${tag.id})`);
 
+    try {
+      await dataPointService.syncFromMqttTag(tag.projectId, tag.id, userId);
+    } catch (error) {
+      logger.warn("[MqttTagService] Sync datapoint failed:", error);
+    }
+
     return tag;
   }
 
@@ -116,6 +129,17 @@ class MqttTagService {
     }
 
     logger.info(`[MqttTagService] Deleted tag: ${tag.code} (${tag.id})`);
+
+    try {
+      await dataPointService.markInvalidBySource(
+        tag.projectId,
+        "mqtt.tag",
+        tag.id,
+        tag.updatedBy || tag.createdBy || null
+      );
+    } catch (error) {
+      logger.warn("[MqttTagService] Mark datapoint invalid failed:", error);
+    }
 
     return { success: true };
   }
@@ -268,6 +292,17 @@ class MqttTagService {
         return;
       }
 
+      // 批量获取数据点映射，避免重复查询
+      const tagIds = tags.map((tag) => tag.id);
+      const datapoints = await dataPointService.getDataPointsBySourceIds(
+        tags[0]?.projectId,
+        "mqtt.tag",
+        tagIds
+      );
+      const datapointMap = new Map(
+        datapoints.map((point) => [point.sourceId, point])
+      );
+
       // 批量解析消息
       const parseResults = parseMessageBatch(message, tags);
 
@@ -312,6 +347,15 @@ class MqttTagService {
               timestamp: now,
               error: result.error,
             });
+
+            const datapoint = datapointMap.get(tag.id);
+            if (datapoint) {
+              dataPointService.emitDataPointValue(tag.projectId, datapoint.path, {
+                value: result.value,
+                quality: result.quality,
+                timestamp: now,
+              });
+            }
 
             logger.debug(
               `[MqttTagService] Updated tag value: ${tag.code} = ${result.value}`
@@ -374,6 +418,16 @@ class MqttTagService {
 
     logger.info(
       `[MqttTagService] Created ${tags.length} tags for subscription ${subscriptionId}`
+    );
+
+    await Promise.all(
+      tags.map(async (tag) => {
+        try {
+          await dataPointService.syncFromMqttTag(projectId, tag.id, userId);
+        } catch (error) {
+          logger.warn("[MqttTagService] Sync datapoint failed:", error);
+        }
+      })
     );
 
     return tags;
