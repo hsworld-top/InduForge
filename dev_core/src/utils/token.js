@@ -1,8 +1,10 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const dayjs = require('dayjs');
 const { logger } = require('./logger');
 const redis = require('./redis');
 const appConfig = require('../config/app');
+const { TIME_FORMAT } = require('../constants/time');
 
 /**
  * Token 管理工具类
@@ -72,7 +74,7 @@ class TokenManager {
       const tokenData = {
         userId,
         tenantId,
-        createdAt: new Date().toISOString(),
+        createdAt: dayjs().format(TIME_FORMAT),
       };
 
       return await redis.set(key, tokenData, refreshExpiresIn);

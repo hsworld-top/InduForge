@@ -4,6 +4,8 @@
  * 支持 {{ expression }} 语法，提供内置函数和上下文变量
  */
 import { Parser } from 'expr-eval';
+import dayjs from 'dayjs';
+import { TIME_FORMAT } from '../../constants';
 
 class ExpressionEngine {
     constructor() {
@@ -135,18 +137,9 @@ class ExpressionEngine {
         });
 
         // 日期格式化（简单实现）
-        this.registerFunction('formatDate', (date, format = 'YYYY-MM-DD') => {
-            const d = new Date(date);
-            if (isNaN(d.getTime())) return '';
-
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            const hours = String(d.getHours()).padStart(2, '0');
-            const minutes = String(d.getMinutes()).padStart(2, '0');
-            const seconds = String(d.getSeconds()).padStart(2, '0');
-
-            return format.replace('YYYY', year).replace('MM', month).replace('DD', day).replace('HH', hours).replace('mm', minutes).replace('ss', seconds);
+        this.registerFunction('formatDate', (date, format = TIME_FORMAT) => {
+            const parsed = dayjs(date);
+            return parsed.isValid() ? parsed.format(format) : '';
         });
 
         // 线性变换（工业场景常用）

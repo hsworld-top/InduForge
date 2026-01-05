@@ -5,6 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
+const dayjs = require('dayjs');
 // 从项目根目录加载 .env 文件
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const { logger } = require('./utils/logger');
@@ -13,6 +14,7 @@ const { localeMiddleware } = require('./middlewares/locale');
 const ApiResponse = require('./utils/response');
 const ErrorCodes = require('./constants/errorCodes');
 const { getErrorMessage } = require('./utils/i18n');
+const { TIME_FORMAT } = require('./constants/time');
 
 // 导入路由注册器（版本化）
 const { registerVersionedRoutes } = require('./routes/register');
@@ -197,7 +199,7 @@ function buildApp() {
     const { checkConnection, getDbStatus, isDbDegraded } = require('./config/database');
     const { isConnected, getStatus: getRedisStatus, isDegraded: isRedisDegraded } = require('./utils/redis');
 
-    const timestamp = new Date().toISOString();
+    const timestamp = dayjs().format(TIME_FORMAT);
     const dbConnected = await checkConnection();
     const redisConnected = await isConnected();
     const dbStatus = getDbStatus();

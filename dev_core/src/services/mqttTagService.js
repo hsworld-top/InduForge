@@ -15,6 +15,8 @@ const {
 const { parseMessage, parseMessageBatch } = require("./messageParser");
 const socketService = require("./socketService");
 const redisTagService = require("./redisTagService");
+const dayjs = require("dayjs");
+const { TIME_FORMAT } = require("../constants/time");
 
 class MqttTagService {
   /**
@@ -270,7 +272,7 @@ class MqttTagService {
       const parseResults = parseMessageBatch(message, tags);
 
       // 当前时间戳
-      const now = new Date().toISOString();
+      const now = dayjs().format(TIME_FORMAT);
 
       // 更新每个 Tag 的值
       const updatePromises = Object.entries(parseResults).map(

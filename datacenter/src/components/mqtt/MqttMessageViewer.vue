@@ -206,6 +206,8 @@ import IconTablerCopy from "~icons/tabler/copy";
 import IconTablerPower from "~icons/tabler/power";
 import IconTablerArrowUp from "~icons/tabler/arrow-up";
 import dataAPI from "@/api/data.api";
+import dayjs from "dayjs";
+import { TIME_FORMAT } from "@/constants";
 
 const props = defineProps({
   subscription: {
@@ -330,16 +332,8 @@ const addMessage = async (message) => {
  */
 const formatTimestamp = (timestamp) => {
   if (!timestamp) return "";
-  const date = new Date(timestamp);
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  const date = dayjs(timestamp);
+  return date.isValid() ? date.format(TIME_FORMAT) : "";
 };
 
 /**

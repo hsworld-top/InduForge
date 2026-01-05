@@ -7,6 +7,7 @@
 
 const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
+const dayjs = require("dayjs");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
@@ -54,7 +55,7 @@ async function insertInitialData(connection) {
   try {
     console.log("📝 插入初始数据...");
 
-    const now = new Date();
+    const now = dayjs().toDate();
 
     // 创建默认租户
     console.log("🏢 创建默认租户...");

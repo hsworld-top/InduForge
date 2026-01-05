@@ -184,6 +184,8 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh, Edit, Delete, Database, Link, Document, Calculator } from '@element-plus/icons-vue';
 import { useDesignStore } from '@/store/design';
+import dayjs from 'dayjs';
+import { TIME_FORMAT } from '@/constants';
 
 const store = useDesignStore();
 
@@ -271,9 +273,9 @@ const getStatusType = (status) => {
 };
 
 const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now - date;
+    const date = dayjs(timestamp);
+    if (!date.isValid()) return '-';
+    const diff = dayjs().diff(date);
 
     if (diff < 60000) {
         return '刚刚';
@@ -282,7 +284,7 @@ const formatTime = (timestamp) => {
     } else if (diff < 86400000) {
         return `${Math.floor(diff / 3600000)}小时前`;
     } else {
-        return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        return date.format(TIME_FORMAT);
     }
 };
 

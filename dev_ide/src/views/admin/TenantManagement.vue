@@ -465,7 +465,9 @@
 <script>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import dayjs from 'dayjs'
 import { tenantAPI } from '@/api'
+import { TIME_FORMAT } from '@/constants'
 
 export default {
   name: 'TenantManagement',
@@ -551,7 +553,8 @@ export default {
 
     // 格式化日期
     const formatDate = (date) => {
-      return new Date(date).toLocaleDateString('zh-CN')
+      const parsed = dayjs(date)
+      return parsed.isValid() ? parsed.format(TIME_FORMAT) : ''
     }
 
     // 换页

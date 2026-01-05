@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
+import dayjs from 'dayjs'
 import { Storage } from '@/utils'
+import { TIME_FORMAT } from '@/constants'
 
 // 认证状态管理
 export const useAuthStore = defineStore('auth', {
@@ -222,7 +224,7 @@ export const useTenantStore = defineStore('tenant', {
           id: Date.now(),
           ...tenantData,
           status: 'active',
-          createdAt: new Date().toISOString(),
+          createdAt: dayjs().format(TIME_FORMAT),
           userCount: 0,
         }
         this.tenants.push(newTenant)

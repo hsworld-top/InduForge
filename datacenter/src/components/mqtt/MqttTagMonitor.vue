@@ -208,6 +208,8 @@ import IconTablerRefresh from "~icons/tabler/refresh";
 import IconTablerFile from "~icons/tabler/file";
 import IconTablerLoader from "~icons/tabler/loader";
 import IconTablerAlertTriangle from "~icons/tabler/alert-triangle";
+import dayjs from "dayjs";
+import { TIME_FORMAT } from "@/constants";
 
 const props = defineProps({
   projectId: {
@@ -277,8 +279,8 @@ const formatValue = (value, dataType) => {
 
 // 格式化时间戳
 const formatTimestamp = (timestamp) => {
-  const date = new Date(timestamp);
-  return date.toLocaleString("zh-CN");
+  const date = dayjs(timestamp);
+  return date.isValid() ? date.format(TIME_FORMAT) : "-";
 };
 
 // 数据类型标签

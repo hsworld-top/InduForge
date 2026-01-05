@@ -1,5 +1,7 @@
 const redis = require("../utils/redis");
 const { logger } = require("../utils/logger");
+const dayjs = require("dayjs");
+const { TIME_FORMAT } = require("../constants/time");
 
 /**
  * Redis Tag 值存储服务
@@ -41,8 +43,8 @@ class RedisTagService {
       const data = {
         parsedValue: value.parsedValue,
         quality: value.quality || "good",
-        timestamp: value.timestamp || new Date().toISOString(),
-        receivedAt: value.receivedAt || new Date().toISOString(),
+        timestamp: value.timestamp || dayjs().format(TIME_FORMAT),
+        receivedAt: value.receivedAt || dayjs().format(TIME_FORMAT),
         error: value.error || null,
       };
 
@@ -157,7 +159,7 @@ class RedisTagService {
       const data = {
         parsedValue: value.parsedValue,
         quality: value.quality || "good",
-        timestamp: value.timestamp || new Date().toISOString(),
+        timestamp: value.timestamp || dayjs().format(TIME_FORMAT),
       };
 
       const client = redis.getRedis();

@@ -1,6 +1,8 @@
 /**
  * 日期工具函数
  */
+import dayjs from 'dayjs'
+import { TIME_FORMAT } from '@/constants'
 
 /**
  * 格式化日期
@@ -8,27 +10,10 @@
  * @param {string} format - 格式化字符串
  * @returns {string} 格式化后的日期字符串
  */
-export function formatDate(date, format = 'YYYY-MM-DD') {
+export function formatDate(date, format = TIME_FORMAT) {
   if (!date) return ''
-
-  const d = new Date(date)
-
-  if (isNaN(d.getTime())) return ''
-
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const hours = String(d.getHours()).padStart(2, '0')
-  const minutes = String(d.getMinutes()).padStart(2, '0')
-  const seconds = String(d.getSeconds()).padStart(2, '0')
-
-  return format
-    .replace('YYYY', year)
-    .replace('MM', month)
-    .replace('DD', day)
-    .replace('HH', hours)
-    .replace('mm', minutes)
-    .replace('ss', seconds)
+  const parsed = dayjs(date)
+  return parsed.isValid() ? parsed.format(format) : ''
 }
 
 /**
@@ -37,7 +22,7 @@ export function formatDate(date, format = 'YYYY-MM-DD') {
  * @returns {string} 格式化后的日期时间字符串
  */
 export function formatDateTime(date) {
-  return formatDate(date, 'YYYY-MM-DD HH:mm:ss')
+  return formatDate(date, TIME_FORMAT)
 }
 
 /**
@@ -48,9 +33,9 @@ export function formatDateTime(date) {
 export function getRelativeTime(date) {
   if (!date) return ''
 
-  const d = new Date(date)
-  const now = new Date()
-  const diff = now - d
+  const d = dayjs(date)
+  if (!d.isValid()) return ''
+  const diff = dayjs().diff(d)
 
   const minute = 60 * 1000
   const hour = 60 * minute
@@ -79,11 +64,10 @@ export function getRelativeTime(date) {
  * @returns {Array} [startDate, endDate]
  */
 export function getDateRange(days) {
-  const endDate = new Date()
-  const startDate = new Date()
-  startDate.setDate(startDate.getDate() - days)
+  const endDate = dayjs()
+  const startDate = dayjs().subtract(days, 'day')
 
-  return [startDate, endDate]
+  return [startDate.toDate(), endDate.toDate()]
 }
 
 /**
@@ -94,11 +78,11 @@ export function getDateRange(days) {
  * @returns {boolean} 是否在范围内
  */
 export function isDateInRange(date, startDate, endDate) {
-  const d = new Date(date)
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-
-  return d >= start && d <= end
+  const d = dayjs(date)
+  const start = dayjs(startDate)
+  const end = dayjs(endDate)
+  if (!d.isValid() || !start.isValid() || !end.isValid()) return false
+  return d.valueOf() >= start.valueOf() && d.valueOf() <= end.valueOf()
 }
 
 /**

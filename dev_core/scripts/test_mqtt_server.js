@@ -1,6 +1,8 @@
 // publisher.js
 
 const mqtt = require("mqtt");
+const dayjs = require("dayjs");
+const { TIME_FORMAT } = require("../src/constants/time");
 
 // 1. MQTT 服务器连接选项
 const options = {
@@ -29,7 +31,7 @@ client.on("connect", () => {
       N: "test",
       V: 1,
       Q: 1,
-      T: new Date().toISOString(),
+      T: dayjs().format(TIME_FORMAT),
     };
 
     // 6. 将数据转换为字符串并发布
