@@ -192,6 +192,7 @@ const gridSize = computed(() => {
 
 const CANVAS_PADDING = 40;
 const DEFAULT_GRID_COLUMNS = 24;
+const DEFAULT_GRID_ROW_HEIGHT = 40;
 
 function findComponentById(list, componentId) {
   for (const item of list || []) {
@@ -241,6 +242,13 @@ function normalizeContainerChildStyle(style = {}, container = null) {
   };
 
   if (isGridLayoutContainer(container)) {
+    if (nextStyle.width === undefined || nextStyle.width === null) {
+      nextStyle.width = '100%';
+    }
+    if (nextStyle.height === undefined || nextStyle.height === null) {
+      nextStyle.height = '100%';
+    }
+
     const hasGridColumn =
       nextStyle.gridColumn || nextStyle.gridColumnStart || nextStyle.gridColumnEnd;
     if (!hasGridColumn) {
@@ -289,13 +297,197 @@ function resolveGridColumnCount(container) {
 }
 
 /**
- * åˆ¤æ–­å®¹å™¨æ˜¯å¦ä¸º Grid å¸ƒå±€
- * @param {Object} container - å®¹å™¨ç»„ä»¶
- * @returns {boolean} æ˜¯å¦ä¸º Grid
+ * 瑙ｆ瀽 Grid 琛屽楂?
+ * @param {Object} container - 容器组件
+ * @returns {number} 行高
  */
+
+/**
+ * ?? Grid ??
+ * @param {Object} container - 容器组件
+ * @returns {number|null} ??
+ */
+function resolveGridRowCount(container) {
+  const template = container?.props?.gridTemplateRows;
+  if (typeof template !== "string" || !template.trim()) {
+    return null;
+  }
+  if (template.trim() === "auto") {
+    return null;
+  }
+  const repeatMatch = template.match(/repeat\(\s*(\d+)\s*,/i);
+  if (repeatMatch) {
+    const count = Number.parseInt(repeatMatch[1], 10);
+    return Number.isFinite(count) && count > 0 ? count : null;
+  }
+  if (/repeat\(\s*auto-(fit|fill)/i.test(template)) {
+    return null;
+  }
+  const tokens = template
+    .replace(/\([^)]*\)/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return tokens.length > 0 ? tokens.length : null;
+}
+
+/**
+ * 解析 Grid 最大行数
+ * @param {Object} container - 容器组件
+ * @returns {number|null} 最大行数
+ */
+function resolveGridMaxRows(container) {
+  const maxRows = Number(container?.props?.gridMaxRows);
+  return Number.isFinite(maxRows) && maxRows > 0 ? maxRows : null;
+}
+
+/**
+ * 计算行高分配的行数
+ * @param {Object} container - 容器组件
+ * @returns {number|null} ??
+ */
+function resolveGridDistributionRows(container) {
+  const templateRows = resolveGridRowCount(container);
+  const maxRows = resolveGridMaxRows(container);
+  if (Number.isFinite(templateRows)) {
+    return maxRows ? Math.min(templateRows, maxRows) : templateRows;
+  }
+  return maxRows || null;
+}
+
+/**
+ * ?? Grid ??
+ * @param {Object} container - 容器组件
+ * @param {number|null} containerHeight - 容器高度
+ * @returns {number} ??
+ */
+function resolveGridRowHeight(container, containerHeight = null) {
+  const rowHeight = Number(container?.props?.gridRowHeight);
+  const fallback = Number.isFinite(rowHeight) && rowHeight > 0 ? rowHeight : DEFAULT_GRID_ROW_HEIGHT;
+  const rowCount = resolveGridDistributionRows(container);
+  if (!rowCount || rowCount <= 0) return fallback;
+
+  const heightValue =
+    Number.isFinite(containerHeight) && containerHeight > 0
+      ? containerHeight
+      : parseSizeValue(container?.style?.height);
+  if (!Number.isFinite(heightValue) || heightValue <= 0) return fallback;
+
+  const gap = Number(container?.props?.gap);
+  const resolvedGap = Number.isFinite(gap) ? gap : 0;
+  const available = heightValue - resolvedGap * (rowCount - 1);
+  if (!Number.isFinite(available) || available <= 0) return fallback;
+  return available / rowCount;
+}
+
 function isGridLayoutContainer(container) {
   if (!container) return false;
   return resolveContainerLayoutMode(container) === "grid";
+}
+
+/**
+ * 计算拖拽到 Grid 容器的网格落点
+ * @param {Object} container - 容器组件
+ * @param {DragEvent} event - 拖拽事件
+ * @param {Object} style - 组件样式
+ * @returns {Object|null} 落点信息
+ */
+function resolveGridDropPlacement(container, event, style = {}) {
+  const targetEl =
+    event?.currentTarget?.id === container?.id
+      ? event.currentTarget
+      : document.getElementById(container?.id || "");
+  if (!targetEl) return null;
+  const rect = targetEl.getBoundingClientRect();
+  if (!rect) return null;
+
+  const columns = resolveGridColumnCount(container);
+  const rowHeight = resolveGridRowHeight(container, rect.height);
+  const colWidth = rect.width / columns;
+  if (!Number.isFinite(colWidth) || colWidth <= 0) return null;
+
+  const x = Math.max(0, event.clientX - rect.left);
+  const y = Math.max(0, event.clientY - rect.top);
+  const columnStart = Math.min(columns, Math.max(1, Math.floor(x / colWidth) + 1));
+  const rowStart = Math.max(1, Math.floor(y / rowHeight) + 1);
+
+  const maxColumnSpan = Math.max(1, columns - columnStart + 1);
+  const columnSpan = resolveGridSpanFromStyle(style, "column", columns) ??
+    resolveGridDefaultSpan(container, maxColumnSpan);
+  const rowSpan = resolveGridSpanFromStyle(style, "row", Infinity) ??
+    resolveGridDropSpan(style?.height, rowHeight, Infinity);
+
+  return {
+    columnStart,
+    columnSpan,
+    rowStart,
+    rowSpan,
+  };
+}
+
+/**
+ * 根据尺寸计算 Grid 占用
+ * @param {number} size - 像素尺寸
+ * @param {number} unit - 单元尺寸
+ * @param {number} maxSpan - 最大占用
+ * @returns {number} 占用数量
+ */
+function resolveGridDropSpan(size, unit, maxSpan) {
+  if (Number.isFinite(size) && Number.isFinite(unit) && unit > 0) {
+    const span = Math.max(1, Math.round(size / unit));
+    return Number.isFinite(maxSpan) ? Math.min(span, maxSpan) : span;
+  }
+  const fallback = 1;
+  return Number.isFinite(maxSpan) ? Math.min(fallback, maxSpan) : fallback;
+}
+
+/**
+ * 获取容器默认跨度设置
+ * @param {Object} container - 容器组件
+ * @param {number} maxSpan - 最大跨度
+ * @returns {number} 跨度
+ */
+function resolveGridDefaultSpan(container, maxSpan) {
+  const mode = container?.props?.gridDefaultSpan || "full";
+  if (mode === "fixed") {
+    const fixed = Number(container?.props?.gridFixedSpan);
+    const span = Number.isFinite(fixed) ? fixed : 1;
+    return Math.min(Math.max(1, span), maxSpan);
+  }
+  return maxSpan;
+}
+
+function resolveGridSpanFromStyle(style = {}, axis, maxSpan) {
+  const gridKey = axis === "row" ? "gridRow" : "gridColumn";
+  const startKey = axis === "row" ? "gridRowStart" : "gridColumnStart";
+  const endKey = axis === "row" ? "gridRowEnd" : "gridColumnEnd";
+
+  if (typeof style[gridKey] === "string") {
+    const trimmed = style[gridKey].trim();
+    const spanMatch = trimmed.match(/span\s+(\d+)/i);
+    if (spanMatch) {
+      const span = Number.parseInt(spanMatch[1], 10);
+      if (Number.isFinite(span)) {
+        return Number.isFinite(maxSpan) ? Math.min(span, maxSpan) : span;
+      }
+    } else if (trimmed.includes("/")) {
+      const [startText, endText] = trimmed.split("/").map((item) => item.trim());
+      const start = Number.parseInt(startText, 10);
+      const end = Number.parseInt(endText, 10);
+      if (Number.isFinite(start) && Number.isFinite(end)) {
+        const span = Math.max(1, end - start);
+        return Number.isFinite(maxSpan) ? Math.min(span, maxSpan) : span;
+      }
+    }
+  }
+
+  const start = Number(style[startKey]);
+  const end = Number(style[endKey]);
+  if (Number.isFinite(start) && Number.isFinite(end)) {
+    const span = Math.max(1, end - start);
+    return Number.isFinite(maxSpan) ? Math.min(span, maxSpan) : span;
+  }
+  return null;
 }
 
 function getContainerInsertInfo(container, event, excludeId = null) {
@@ -1261,17 +1453,29 @@ function handleContainerDrop(payload) {
       const { index: insertIndex } = getContainerInsertInfo(container, event, componentId);
       didDrop.value = true;
       designStore.moveComponent(componentId, container.id, insertIndex);
+      const nextStyle = normalizeContainerChildStyle(movingComponent.style || {}, container);
+      if (isGridLayoutContainer(container)) {
+        const placement = resolveGridDropPlacement(container, event, movingComponent.style || {});
+        if (placement) {
+          nextStyle.gridColumn = null;
+          nextStyle.gridRow = null;
+          nextStyle.gridColumnStart = placement.columnStart;
+          nextStyle.gridColumnEnd = placement.columnStart + placement.columnSpan;
+          nextStyle.gridRowStart = placement.rowStart;
+          nextStyle.gridRowEnd = placement.rowStart + placement.rowSpan;
+        }
+      }
       designStore.updateComponent(componentId, {
-        style: normalizeContainerChildStyle(movingComponent.style || {}, container),
+        style: nextStyle,
       });
-      designStore.saveHistory(`???? ${movingComponent.name || movingComponent.type} ???`);
+      designStore.saveHistory(`移动组件 ${movingComponent.name || movingComponent.type} 到容器`);
       designStore.selectComponent(componentId);
       console.log("? Component moved into container");
       return;
     }
 
     if (source === "library") {
-      // ???????dragData ??????????
+      // 使用库拖拽数据作为新组件
       component = dragData;
 
       if (!component) {
@@ -1279,13 +1483,24 @@ function handleContainerDrop(payload) {
         return;
       }
 
-      // ????????????????
+      // 容器内部放置时处理布局
       if (
         container.type === "Container" ||
         container.type === "FlexLayout" ||
         container.type === "Grid"
       ) {
         component.style = normalizeContainerChildStyle(component.style || {}, container);
+        if (isGridLayoutContainer(container)) {
+          const placement = resolveGridDropPlacement(container, event, component.style || {});
+          if (placement) {
+            component.style.gridColumn = null;
+            component.style.gridRow = null;
+            component.style.gridColumnStart = placement.columnStart;
+            component.style.gridColumnEnd = placement.columnStart + placement.columnSpan;
+            component.style.gridRowStart = placement.rowStart;
+            component.style.gridRowEnd = placement.rowStart + placement.rowSpan;
+          }
+        }
       }
     } else {
       console.warn("[DesignCanvas] Unknown drag source:", source);
@@ -1294,15 +1509,15 @@ function handleContainerDrop(payload) {
 
     const { index: insertIndex } = getContainerInsertInfo(container, event);
     didDrop.value = true;
-    // ???????
+    // 添加组件到容器
     designStore.addComponent(component, container.id, insertIndex);
-    designStore.saveHistory(`???? ${component.type} ???`);
+    designStore.saveHistory(`添加组件 ${component.type} 到容器`);
 
     console.log("? Component added to container");
   } catch (error) {
     console.error("? Failed to drop component to container:", error);
   } finally {
-    // ??????
+    // 清理拖拽状态
     hideDragPreview();
     hideInsertLine();
     isDragging.value = false;

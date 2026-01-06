@@ -17,7 +17,7 @@
  */
 import { computed, useAttrs } from 'vue';
 
-// 禁用自动继承 attrs（我们手动处理 style）
+// 禁用自动继承 attrs（手动处理 style）
 defineOptions({
     inheritAttrs: false,
 });
@@ -65,6 +65,22 @@ const props = defineProps({
         type: String,
         default: 'auto',
     },
+    gridDefaultSpan: {
+        type: String,
+        default: 'full',
+    },
+    gridFixedSpan: {
+        type: Number,
+        default: 6,
+    },
+    gridRowHeight: {
+        type: Number,
+        default: 40,
+    },
+    gridMaxRows: {
+        type: Number,
+        default: 0,
+    },
     gridAutoFlow: {
         type: String,
         default: 'row',
@@ -76,6 +92,14 @@ const props = defineProps({
     alignContent: {
         type: String,
         default: 'start',
+    },
+    gridInteractive: {
+        type: Boolean,
+        default: true,
+    },
+    gridDragOut: {
+        type: Boolean,
+        default: true,
     },
     // 样式属性（从 defaultProps 中接收）
     backgroundColor: {
@@ -114,16 +138,41 @@ const props = defineProps({
 });
 
 /**
- * è§£æž? Grid å¯¹é½å€¼ï¼Œå…¼å®¹ flex-start/flex-end
- * @param {string} value - å¯¹é½å€¼
- * @param {string} fallback - é»˜è®¤å€¼
- * @returns {string} è§£æž?åŽçš„å¯¹é½å€¼
+ * 归一化 Grid 对齐值，兼容 flex-start/flex-end
+ * @param {string} value - 对齐值
+ * @param {string} fallback - 默认值
+ * @returns {string} 归一化后的对齐值
  */
 function normalizeGridAlign(value, fallback) {
     if (!value) return fallback;
     if (value === 'flex-start') return 'start';
     if (value === 'flex-end') return 'end';
     return value;
+}
+
+/**
+ * 解析 Grid 列数
+ * @param {string} template - gridTemplateColumns
+ * @returns {number} 列数
+ */
+function resolveGridColumnCount(template) {
+    if (typeof template !== 'string' || !template.trim()) {
+        return 24;
+    }
+    const repeatMatch = template.match(/repeat\(\s*(\d+)\s*,/i);
+    if (repeatMatch) {
+        const count = Number.parseInt(repeatMatch[1], 10);
+        return Number.isFinite(count) && count > 0 ? count : 24;
+    }
+    if (/repeat\(\s*auto-(fit|fill)/i.test(template)) {
+        return 24;
+    }
+    const tokens = template
+        .replace(/\([^)]*\)/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    return tokens.length > 0 ? tokens.length : 24;
 }
 
 const resolvedLayoutMode = computed(() => {
@@ -142,15 +191,10 @@ const containerStyle = computed(() => {
         style.flexWrap = props.flexWrap;
         style.gap = `${props.gap}px`;
     } else if (resolvedLayoutMode.value === 'grid') {
-        style.display = 'grid';
-        style.gridTemplateColumns = props.gridTemplateColumns;
-        style.gridTemplateRows = props.gridTemplateRows;
-        style.gridAutoFlow = props.gridAutoFlow;
-        style.gap = `${props.gap}px`;
-        style.justifyItems = normalizeGridAlign(props.justifyItems, 'stretch');
-        style.alignItems = normalizeGridAlign(props.alignItems, 'stretch');
-        style.justifyContent = normalizeGridAlign(props.justifyContent, 'start');
-        style.alignContent = normalizeGridAlign(props.alignContent, 'start');
+        style.display = 'block';
+        style['--grid-columns'] = resolveGridColumnCount(props.gridTemplateColumns);
+        style['--grid-row-height'] = `${props.gridRowHeight}px`;
+        style['--grid-gap'] = `${props.gap}px`;
     } else {
         style.display = 'block';
     }
@@ -172,16 +216,15 @@ const containerStyle = computed(() => {
 const mergedStyle = computed(() => {
     // attrs.style 包含父组件传入的样式
     const parentStyle = attrs.style || {};
-    
+
     // 过滤掉定位相关的属性（这些由 ComponentWrapper 处理）
     const { position, left, top, right, bottom, width, height, zIndex, ...otherStyles } = parentStyle;
-    
+
     // 合并样式：组件内部样式 + 父组件的非定位样式
     // Container 填充 ComponentWrapper（width: 100%, height: 100%）
     return {
-        ...containerStyle.value,  // 组件内部样式（布局模式、边框）
-        ...otherStyles,           // 父组件的其他样式（如果有）
-        // Container 固定样式：填充父容器，relative 定位
+        ...containerStyle.value,
+        ...otherStyles,
         width: '100%',
         height: '100%',
         position: 'relative',
@@ -196,6 +239,13 @@ const mergedStyle = computed(() => {
     min-width: 50px;
     min-height: 50px;
     position: relative; /* 确保 empty-hint 绝对定位基准 */
+}
+
+.layout-container.layout-mode-grid {
+    background-image:
+        linear-gradient(to right, rgba(64, 158, 255, 0.15) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(64, 158, 255, 0.15) 1px, transparent 1px);
+    background-size: calc(100% / var(--grid-columns)) var(--grid-row-height);
 }
 
 .layout-container.is-drop-zone {

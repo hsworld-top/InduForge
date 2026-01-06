@@ -1,54 +1,68 @@
 <template>
-    <div class="layout-row" :style="rowStyle">
-        <slot></slot>
-    </div>
+  <el-row
+    class="layout-row"
+    :gutter="gutter"
+    :justify="justify"
+    :align="align"
+    :wrap="wrap"
+    v-bind="attrs"
+    :style="mergedStyle"
+  >
+    <slot></slot>
+  </el-row>
 </template>
 
 <script setup>
 /**
- * Row - 行组件（24栅格系统）
- * Task 3.2: 实现 Row/Col 组件
+ * Row - Element Plus 行布局组件
  */
-import { computed } from 'vue';
+import { computed, useAttrs } from 'vue';
 
-const props = defineProps({
-    gutter: {
-        type: Number,
-        default: 0,
-    },
-    justify: {
-        type: String,
-        default: 'start',
-    },
-    align: {
-        type: String,
-        default: 'top',
-    },
+defineOptions({
+  inheritAttrs: false,
 });
 
-const rowStyle = computed(() => ({
-    display: 'flex',
-    flexWrap: 'wrap',
-    marginLeft: `-${props.gutter / 2}px`,
-    marginRight: `-${props.gutter / 2}px`,
-    justifyContent:
-        props.justify === 'start'
-            ? 'flex-start'
-            : props.justify === 'end'
-              ? 'flex-end'
-              : props.justify === 'center'
-                ? 'center'
-                : props.justify === 'space-around'
-                  ? 'space-around'
-                  : props.justify === 'space-between'
-                    ? 'space-between'
-                    : 'flex-start',
-    alignItems: props.align === 'top' ? 'flex-start' : props.align === 'middle' ? 'center' : props.align === 'bottom' ? 'flex-end' : 'flex-start',
-}));
+const props = defineProps({
+  gutter: {
+    type: Number,
+    default: 0,
+  },
+  gutterVertical: {
+    type: Number,
+    default: 0,
+  },
+  justify: {
+    type: String,
+    default: 'start',
+  },
+  align: {
+    type: String,
+    default: 'top',
+  },
+  wrap: {
+    type: Boolean,
+    default: true,
+  },
+});
+
+const attrs = useAttrs();
+
+const mergedStyle = computed(() => {
+  const styleAttr = attrs.style || {};
+  const { left, top, right, bottom, position, zIndex, ...rest } = styleAttr;
+  const style = {
+    ...rest,
+    width: '100%',
+  };
+  if (props.gutterVertical) {
+    style.rowGap = `${props.gutterVertical}px`;
+  }
+  return style;
+});
 </script>
 
 <style scoped>
 .layout-row {
-    width: 100%;
+  width: 100%;
 }
 </style>

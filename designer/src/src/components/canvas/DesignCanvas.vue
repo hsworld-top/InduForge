@@ -1192,14 +1192,14 @@ function handleContainerDrop(payload) {
       designStore.updateComponent(componentId, {
         style: normalizeContainerChildStyle(movingComponent.style || {}),
       });
-      designStore.saveHistory(`???? ${movingComponent.name || movingComponent.type} ???`);
+      designStore.saveHistory(`移动组件 ${movingComponent.name || movingComponent.type} 到容器`);
       designStore.selectComponent(componentId);
       console.log("? Component moved into container");
       return;
     }
 
     if (source === "library") {
-      // ???????dragData ??????????
+      // 使用库拖拽数据作为新组件
       component = dragData;
 
       if (!component) {
@@ -1207,7 +1207,7 @@ function handleContainerDrop(payload) {
         return;
       }
 
-      // ????????????????
+      // 容器内部放置时处理布局
       if (
         container.type === "Container" ||
         container.type === "FlexLayout" ||
@@ -1222,15 +1222,15 @@ function handleContainerDrop(payload) {
 
     const { index: insertIndex } = getContainerInsertInfo(container, event);
     didDrop.value = true;
-    // ???????
+    // 添加组件到容器
     designStore.addComponent(component, container.id, insertIndex);
-    designStore.saveHistory(`???? ${component.type} ???`);
+    designStore.saveHistory(`添加组件 ${component.type} 到容器`);
 
     console.log("? Component added to container");
   } catch (error) {
     console.error("? Failed to drop component to container:", error);
   } finally {
-    // ??????
+    // 清理拖拽状态
     hideDragPreview();
     hideInsertLine();
     isDragging.value = false;

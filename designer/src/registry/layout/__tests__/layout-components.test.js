@@ -54,9 +54,9 @@ describe('Layout Components', () => {
             expect(wrapper.classes()).toContain('layout-mode-grid');
             
             const style = wrapper.element.style;
-            expect(style.display).toBe('grid');
-            expect(style.gridTemplateColumns).toBe('repeat(3, 1fr)');
-            expect(style.gap).toBe('20px');
+            expect(style.display).toBe('block');
+            expect(style.getPropertyValue('--grid-columns')).toBe('3');
+            expect(style.getPropertyValue('--grid-gap')).toBe('20px');
         });
 
         it('should render with block layout mode', () => {
@@ -211,9 +211,8 @@ describe('Layout Components', () => {
             expect(wrapper.exists()).toBe(true);
             expect(wrapper.classes()).toContain('layout-row');
             
-            const style = wrapper.element.style;
-            expect(style.display).toBe('flex');
-            expect(style.flexWrap).toBe('wrap');
+            expect(wrapper.props('justify')).toBe('start');
+            expect(wrapper.props('align')).toBe('top');
         });
 
         it('should apply gutter spacing', () => {
@@ -223,9 +222,7 @@ describe('Layout Components', () => {
                 },
             });
 
-            const style = wrapper.element.style;
-            expect(style.marginLeft).toBe('-10px');
-            expect(style.marginRight).toBe('-10px');
+            expect(wrapper.props('gutter')).toBe(20);
         });
 
         it('should apply justify and align properties', () => {
@@ -236,9 +233,8 @@ describe('Layout Components', () => {
                 },
             });
 
-            const style = wrapper.element.style;
-            expect(style.justifyContent).toBe('center');
-            expect(style.alignItems).toBe('center');
+            expect(wrapper.props('justify')).toBe('center');
+            expect(wrapper.props('align')).toBe('middle');
         });
 
         it('should render children in slot', () => {
@@ -260,8 +256,7 @@ describe('Layout Components', () => {
             expect(wrapper.exists()).toBe(true);
             expect(wrapper.classes()).toContain('layout-col');
             
-            const style = wrapper.element.style;
-            expect(style.width).toBe('100%'); // span 24 = 100%
+            expect(wrapper.props('span')).toBe(24);
         });
 
         it('should apply span property', () => {
@@ -271,8 +266,7 @@ describe('Layout Components', () => {
                 },
             });
 
-            const style = wrapper.element.style;
-            expect(style.width).toBe('50%'); // 12/24 = 50%
+            expect(wrapper.props('span')).toBe(12);
         });
 
         it('should apply offset property', () => {
@@ -283,8 +277,7 @@ describe('Layout Components', () => {
                 },
             });
 
-            const style = wrapper.element.style;
-            expect(style.marginLeft).toBe('25%'); // 6/24 = 25%
+            expect(wrapper.props('offset')).toBe(6);
         });
 
         it('should render children in slot', () => {

@@ -1,58 +1,76 @@
 <template>
-    <div class="layout-col" :style="colStyle">
-        <slot></slot>
-    </div>
+  <el-col
+    class="layout-col"
+    :span="span"
+    :offset="offset"
+    :push="push"
+    :pull="pull"
+    v-bind="attrs"
+    :style="mergedStyle"
+  >
+    <slot></slot>
+  </el-col>
 </template>
 
 <script setup>
 /**
- * Col - 列组件（24栅格系统）
- * Task 3.2: 实现 Row/Col 组件
+ * Col - Element Plus 列布局组件
  */
-import { computed, inject } from 'vue';
+import { computed, useAttrs } from 'vue';
 
-const props = defineProps({
-    span: {
-        type: Number,
-        default: 24,
-        validator: (value) => value >= 0 && value <= 24,
-    },
-    offset: {
-        type: Number,
-        default: 0,
-    },
-    push: {
-        type: Number,
-        default: 0,
-    },
-    pull: {
-        type: Number,
-        default: 0,
-    },
+defineOptions({
+  inheritAttrs: false,
 });
 
-const gutter = inject('gutter', 0);
+const props = defineProps({
+  span: {
+    type: Number,
+    default: 24,
+    validator: (value) => value >= 0 && value <= 24,
+  },
+  offset: {
+    type: Number,
+    default: 0,
+  },
+  push: {
+    type: Number,
+    default: 0,
+  },
+  pull: {
+    type: Number,
+    default: 0,
+  },
+  padding: {
+    type: Number,
+    default: 0,
+  },
+  minHeight: {
+    type: Number,
+    default: 0,
+  },
+});
 
-const colStyle = computed(() => {
-    const width = `${(props.span / 24) * 100}%`;
-    const marginLeft = props.offset > 0 ? `${(props.offset / 24) * 100}%` : undefined;
-    const left = props.push > 0 ? `${(props.push / 24) * 100}%` : undefined;
-    const right = props.pull > 0 ? `${(props.pull / 24) * 100}%` : undefined;
+const attrs = useAttrs();
 
-    return {
-        width,
-        marginLeft,
-        left,
-        right,
-        paddingLeft: `${gutter / 2}px`,
-        paddingRight: `${gutter / 2}px`,
-    };
+const mergedStyle = computed(() => {
+  const styleAttr = attrs.style || {};
+  const { left, top, right, bottom, position, zIndex, width, height, ...rest } = styleAttr;
+  const style = {
+    ...rest,
+  };
+  if (props.padding) {
+    style.padding = `${props.padding}px`;
+  }
+  if (props.minHeight) {
+    style.minHeight = `${props.minHeight}px`;
+  }
+  return style;
 });
 </script>
 
 <style scoped>
 .layout-col {
-    position: relative;
-    box-sizing: border-box;
+  position: relative;
+  box-sizing: border-box;
 }
 </style>

@@ -10,7 +10,7 @@
             'is-drop-target': isDropTarget,
         }"
         :style="wrapperStyle"
-        :draggable="!component.locked && !isResizing"
+        :draggable="!component.locked && !isResizing && (!interactionDisabled || dragOutEnabled)"
         @click.capture.stop="handleClick($event)"
         @contextmenu.stop="handleContextMenu($event)"
         @dragstart.capture="handleDragStart"
@@ -20,7 +20,7 @@
         @dragleave="handleDragLeave"
         @drop.prevent="handleDrop">
         <slot />
-        <template v-if="selected && !component.locked">
+        <template v-if="selected && !component.locked && !interactionDisabled">
             <span
                 v-for="handle in resizeHandles"
                 :key="handle"
@@ -70,6 +70,27 @@ const props = defineProps({
     selected: {
         type: Boolean,
         default: false,
+    },
+    /**
+     * æ˜¯å¦å…è®¸ä»Ž Grid å®¹å™¨ä¸­æ‹–æ‹½å‡ºæ¥
+     */
+    dragOutEnabled: {
+        type: Boolean,
+        default: false,
+    },
+    /**
+     * æ˜¯å¦ç¦ç”¨æ‹–æ‹½/ç¼©æ”¾äº¤äº’ï¼ˆä¾‹ï¼šGridLayout äº¤ç»™å¸ƒå±€å¼ç»„ä»¶å¤„ç†ï¼‰
+     */
+    interactionDisabled: {
+        type: Boolean,
+        default: false,
+    },
+    /**
+     * 布局模式（absolute/grid），grid 模式下由容器控制尺寸
+     */
+    layoutMode: {
+        type: String,
+        default: 'absolute',
     },
 });
 
@@ -134,6 +155,16 @@ const isContainer = computed(() => {
  */
 const wrapperStyle = computed(() => {
     const style = props.component.style || {};
+    if (props.layoutMode === 'grid') {
+        return {
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            zIndex: style.zIndex,
+            justifySelf: style.justifySelf,
+            alignSelf: style.alignSelf,
+        };
+    }
     // 提取定位相关的属性，避免 0 被判定为 falsy
     return {
         position: style.position || 'absolute',
@@ -178,6 +209,7 @@ function cleanupResize() {
 
 function startResize(handle, event) {
     if (props.component.locked) return;
+    if (props.interactionDisabled) return;
     const point = getEventPoint(event);
     if (!point) return;
 
@@ -332,6 +364,12 @@ function handleDragStart(event) {
         event.preventDefault();
         return;
     }
+    if (props.interactionDisabled) {
+        if (!props.dragOutEnabled || !event.altKey) {
+            event.preventDefault();
+            return;
+        }
+    }
     if (props.component.locked) {
         event.preventDefault();
         return;
@@ -390,6 +428,7 @@ function handleDragStart(event) {
 function handleDrag(event) {
     if (!isInnermostWrapperEvent(event)) return;
     if (isResizing.value) return;
+    if (props.interactionDisabled) return;
     if (!isDragging.value) return;
 
     emit('drag', {
@@ -407,6 +446,7 @@ function handleDrag(event) {
 function handleDragEnd(event) {
     if (!isInnermostWrapperEvent(event)) return;
     if (isResizing.value) return;
+    if (props.interactionDisabled) return;
     isDragging.value = false;
     if (event.currentTarget) {
         event.currentTarget.style.outline = '';

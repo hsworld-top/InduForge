@@ -6,10 +6,10 @@
             <el-form-item label="列模板">
                 <el-input v-model="localProps.gridTemplateColumns" placeholder="例如: 1fr 1fr 1fr" @change="handleChange">
                     <template #append>
-                    <el-dropdown @command="handleColumnsPreset">
-                        <el-button>
-                            <IconTablerLayoutGrid />
-                        </el-button>
+                        <el-dropdown @command="handleColumnsPreset">
+                            <el-button>
+                                <IconTablerLayoutGrid />
+                            </el-button>
                             <template #dropdown>
                                 <el-dropdown-menu>
                                     <el-dropdown-item command="1fr">1 列</el-dropdown-item>
@@ -28,10 +28,10 @@
             <el-form-item label="行模板">
                 <el-input v-model="localProps.gridTemplateRows" placeholder="例如: auto auto" @change="handleChange">
                     <template #append>
-                    <el-dropdown @command="handleRowsPreset">
-                        <el-button>
-                            <IconTablerLayoutGrid />
-                        </el-button>
+                        <el-dropdown @command="handleRowsPreset">
+                            <el-button>
+                                <IconTablerLayoutGrid />
+                            </el-button>
                             <template #dropdown>
                                 <el-dropdown-menu>
                                     <el-dropdown-item command="auto">1 行</el-dropdown-item>
@@ -50,13 +50,52 @@
                 <el-input-number v-model="localProps.gap" :min="0" :step="4" :controls="false" @change="handleChange" />
             </el-form-item>
 
+            <!-- Row Height -->
+            <el-form-item label="行高">
+                <el-input-number v-model="localProps.gridRowHeight" :min="10" :step="5" :controls="false" @change="handleChange" />
+            </el-form-item>
+
+            <!-- Max Rows -->
+            <el-form-item label="最大行数">
+                <el-input-number v-model="localProps.gridMaxRows" :min="0" :step="1" :controls="false" @change="handleChange" />
+            </el-form-item>
+
+            <!-- Default Span -->
+            <el-form-item label="默认跨度">
+                <el-select v-model="localProps.gridDefaultSpan" @change="handleChange" placeholder="默认跨度">
+                    <el-option label="撑满整行" value="full" />
+                    <el-option label="固定跨度" value="fixed" />
+                </el-select>
+            </el-form-item>
+
+            <!-- Fixed Span -->
+            <el-form-item v-if="localProps.gridDefaultSpan === 'fixed'" label="固定跨度">
+                <el-input-number
+                    v-model="localProps.gridFixedSpan"
+                    :min="1"
+                    :max="24"
+                    :step="1"
+                    :controls="false"
+                    @change="handleChange" />
+            </el-form-item>
+
+            <!-- Grid Interactive -->
+            <el-form-item label="网格拖拽">
+                <el-switch v-model="localProps.gridInteractive" @change="handleChange" />
+            </el-form-item>
+
+            <!-- Drag Out -->
+            <el-form-item label="拖拽出容器">
+                <el-switch v-model="localProps.gridDragOut" @change="handleChange" />
+            </el-form-item>
+
             <!-- Grid Auto Flow -->
             <el-form-item label="自动流">
                 <el-select v-model="localProps.gridAutoFlow" @change="handleChange" placeholder="自动流">
                     <el-option label="按行填充 (row)" value="row" />
                     <el-option label="按列填充 (column)" value="column" />
-                    <el-option label="密集行 (row dense)" value="row dense" />
-                    <el-option label="密集列 (column dense)" value="column dense" />
+                    <el-option label="密集行(row dense)" value="row dense" />
+                    <el-option label="密集列(column dense)" value="column dense" />
                 </el-select>
             </el-form-item>
 
@@ -142,6 +181,12 @@ const localProps = ref({
     gridTemplateColumns: props.props.gridTemplateColumns || 'repeat(3, 1fr)',
     gridTemplateRows: props.props.gridTemplateRows || 'auto',
     gap: props.props.gap || 0,
+    gridRowHeight: props.props.gridRowHeight || 40,
+    gridMaxRows: props.props.gridMaxRows ?? 0,
+    gridDefaultSpan: props.props.gridDefaultSpan || 'full',
+    gridFixedSpan: props.props.gridFixedSpan || 6,
+    gridInteractive: props.props.gridInteractive ?? true,
+    gridDragOut: props.props.gridDragOut ?? true,
     gridAutoFlow: props.props.gridAutoFlow || 'row',
     justifyItems: props.props.justifyItems || 'stretch',
     alignItems: props.props.alignItems || 'stretch',
@@ -157,6 +202,12 @@ watch(
             gridTemplateColumns: newProps.gridTemplateColumns || 'repeat(3, 1fr)',
             gridTemplateRows: newProps.gridTemplateRows || 'auto',
             gap: newProps.gap || 0,
+            gridRowHeight: newProps.gridRowHeight || 40,
+            gridMaxRows: newProps.gridMaxRows ?? 0,
+            gridDefaultSpan: newProps.gridDefaultSpan || 'full',
+            gridFixedSpan: newProps.gridFixedSpan || 6,
+            gridInteractive: newProps.gridInteractive ?? true,
+            gridDragOut: newProps.gridDragOut ?? true,
             gridAutoFlow: newProps.gridAutoFlow || 'row',
             justifyItems: newProps.justifyItems || 'stretch',
             alignItems: newProps.alignItems || 'stretch',
@@ -221,4 +272,3 @@ function handleChange() {
     padding: 0 8px;
 }
 </style>
-
