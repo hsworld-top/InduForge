@@ -22,13 +22,24 @@
 #### 重构计划（进行中）
 
 - **[重构计划](./designer/refactor/README.md)** - 完整重构计划与里程碑
-- **[编辑器内核](./designer/refactor/editor-core.md)** - DocumentModel、Command、History
+- **[编辑器内核](./designer/refactor/editor-core.md)** - DocumentModel、Command、History、页面锁
 - **[Schema 设计](./designer/refactor/schema-design.md)** - 规范化工程 Schema（v2）
+- **[组件清单](./designer/refactor/component-manifest.md)** - Component Manifest 规范
 - **[数据绑定 v2](./designer/refactor/data-binding-v2.md)** - 三态隔离、Binding 结构
+- **[变量系统](./designer/refactor/vars-system.md)** - 页面级/全局变量
+- **[表达式引擎](./designer/refactor/expression-engine.md)** - 上下文变量、内置函数
 - **[布局系统](./designer/refactor/layout-system.md)** - Flex/Free/Grid、Constraints
+- **[渲染架构](./designer/refactor/rendering.md)** - 设计态/运行态同构渲染
+- **[设计态交互](./designer/refactor/design-interaction.md)** - 工具栏、属性面板、Canvas 绘图
+- **[动作系统](./designer/refactor/action-system.md)** - 完整动作类型、控制流
+- **[动画系统](./designer/refactor/animation-system.md)** - 状态驱动动画
+- **[验证系统](./designer/refactor/validation-system.md)** - 表单验证规则
 - **[发布流水线](./designer/refactor/publish-pipeline.md)** - 校验、编译、打包、部署
 - **[运行时引擎](./designer/refactor/runtime-engine.md)** - DataService、Watchdog
+- **[多端适配](./designer/refactor/multi-view.md)** - Multi-View 模型
+- **[权限系统](./designer/refactor/permissions.md)** - 组件权限 + 动作权限
 - **[国际化与主题](./designer/refactor/i18n-theme.md)** - i18n、主题切换组件
+- **[最佳实践](./designer/refactor/best-practices.md)** - 性能优化、安全考虑
 
 #### 其他文档
 
