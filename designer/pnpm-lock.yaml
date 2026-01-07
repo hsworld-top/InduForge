@@ -35,9 +35,6 @@ importers:
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(vue@3.5.25)
-      prettier:
-        specifier: ^3.6.2
-        version: 3.7.4
       socket.io-client:
         specifier: ^4.8.3
         version: 4.8.3
@@ -96,6 +93,9 @@ importers:
       postcss:
         specifier: ^8.5.6
         version: 8.5.6
+      prettier:
+        specifier: ^3.6.2
+        version: 3.7.4
       tailwindcss:
         specifier: ^3.4.0
         version: 3.4.18

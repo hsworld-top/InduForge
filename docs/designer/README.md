@@ -458,7 +458,7 @@ A: 减少轮询频率，使用数据转换器减少数据量，优化表达式�
 
 - **编辑器内核**：DocumentModel + Command/History 命令系统
 - **三态数据隔离**：设计态/预览态/运行态数据分离
-- **多端适配**：支持 PC/BigScreen/Mobile 多视图
+- **多端适配**：支持 PC/BigScreen/Tablet/Phone 多视图
 - **发布流水线**：完整的校验、编译、打包、快照流程
 
 详见 [Designer 重构计划](./refactor/README.md)

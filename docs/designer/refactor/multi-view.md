@@ -1,6 +1,6 @@
 # 多端适配（Multi-View）
 
-Multi-View 模型支持同一路由在不同终端（PC、大屏、移动端）下显示不同视图。
+Multi-View 模型支持同一路由在不同终端（PC、大屏、平板、手机）下显示不同视图。
 
 ## 1. 概述
 
@@ -18,7 +18,9 @@ Multi-View 模型支持同一路由在不同终端（PC、大屏、移动端）�
 逻辑页面 (logicalId)
 ├── PC 视图 (target: pc) [default]
 ├── 大屏视图 (target: bigscreen)
-└── 移动视图 (target: mobile)
+├── 平板视图 (target: tablet)
+├── 手机竖向视图 (target: phoneLandscape)
+└── 手机竖屏视图 (target: phonePortrait)
 ```
 
 同一 `logicalId` 的多个视图共享路由路径，运行时根据终端类型选择渲染。
@@ -32,7 +34,7 @@ Multi-View 模型支持同一路由在不同终端（PC、大屏、移动端）�
 | 字段            | 类型        | 说明                            |
 | --------------- | ----------- | ------------------------------- |
 | logicalId       | char(36)    | 逻辑页面 ID（同路由多视图共享） |
-| target          | varchar(20) | 目标端：pc/bigscreen/mobile     |
+| target          | varchar(20) | 目标端：pc/bigscreen/tablet/phoneLandscape/phonePortrait |
 | isDefaultTarget | tinyint(1)  | 是否默认视图（fallback）        |
 
 **唯一约束**：`(projectId, path, target)` 三元组唯一。
@@ -74,7 +76,12 @@ interface PageMeta {
   isDefaultTarget: boolean;
 }
 
-type TargetType = "pc" | "bigscreen" | "mobile";
+type TargetType =
+  | "pc"
+  | "bigscreen"
+  | "tablet"
+  | "phoneLandscape"
+  | "phonePortrait";
 ```
 
 ## 3. 运行时选路
@@ -96,8 +103,10 @@ function detectTarget(): TargetType {
 
   // 3. 根据屏幕尺寸自动判断
   const width = window.innerWidth;
-  if (width >= 1920) return "bigscreen";
-  if (width <= 768) return "mobile";
+  if (width >= 1200) return "bigscreen";
+  if (width <= 480) return "phonePortrait";
+  if (width <= 768) return "phoneLandscape";
+  if (width <= 992) return "tablet";
   return "pc";
 }
 ```
@@ -170,7 +179,9 @@ const router = createRouter({
 │  ├──────────────┼───────────┼────────┼──────────┼───────────┤   │
 │  │ 首页-PC      │ 💻 PC     │ ✅     │ 已发布   │ [编辑]    │   │
 │  │ 首页-大屏    │ 🖥️ 大屏   │        │ 草稿     │ [编辑]    │   │
-│  │ 首页-移动    │ 📱 移动   │        │ 未创建   │ [创建]    │   │
+│  │ 首页-平板    │ 📟 平板   │        │ 草稿     │ [编辑]    │   │
+│  │ 首页-手机竖向 │ 📱 手机竖向 │        │ 未创建   │ [创建]    │   │
+│  │ 首页-手机竖屏 │ 📱 手机竖屏 │        │ 未创建   │ [创建]    │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -182,7 +193,7 @@ const router = createRouter({
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  [💻 PC] [🖥️ 大屏] [📱 移动]    │    [预览] [发布]              │
+│  [💻 PC] [🖥️ 大屏] [📟 平板] [📱 手机竖向] [📱 手机竖屏]    │    [预览] [发布]              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -247,8 +258,14 @@ async function cloneView(sourcePageId: string, targetType: TargetType) {
       <el-radio-button value="bigscreen">
         <Icon icon="mdi:television" /> 大屏
       </el-radio-button>
-      <el-radio-button value="mobile">
-        <Icon icon="mdi:cellphone" /> 移动
+      <el-radio-button value="tablet">
+        <Icon icon="mdi:tablet" /> 平板
+      </el-radio-button>
+      <el-radio-button value="phoneLandscape">
+        <Icon icon="mdi:cellphone" /> 手机竖向
+      </el-radio-button>
+      <el-radio-button value="phonePortrait">
+        <Icon icon="mdi:cellphone" /> 手机竖屏
       </el-radio-button>
     </el-radio-group>
 
@@ -271,22 +288,11 @@ async function cloneView(sourcePageId: string, targetType: TargetType) {
 
 ```typescript
 const resolutionPresets = {
-  pc: [
-    { label: "1920×1080", value: "1920x1080" },
-    { label: "1366×768", value: "1366x768" },
-    { label: "1280×720", value: "1280x720" },
-  ],
-  bigscreen: [
-    { label: "3840×2160 (4K)", value: "3840x2160" },
-    { label: "2560×1440 (2K)", value: "2560x1440" },
-    { label: "1920×1080 (FHD)", value: "1920x1080" },
-    { label: "7680×2160 (双屏)", value: "7680x2160" },
-  ],
-  mobile: [
-    { label: "iPhone 14 (390×844)", value: "390x844" },
-    { label: "iPhone SE (375×667)", value: "375x667" },
-    { label: "Android (360×800)", value: "360x800" },
-  ],
+  bigscreen: [{ label: "1920×1080", value: "1920x1080" }],
+  pc: [{ label: "1366×768", value: "1366x768" }],
+  tablet: [{ label: "992×744", value: "992x744" }],
+  phoneLandscape: [{ label: "768×1024", value: "768x1024" }],
+  phonePortrait: [{ label: "480×800", value: "480x800" }],
 };
 ```
 
@@ -328,12 +334,12 @@ interface FitMode {
 
 不同视图通常差异：
 
-| 差异内容 | 说明                 |
-| -------- | -------------------- |
-| 布局结构 | 大屏横向、移动端纵向 |
-| 组件选择 | 移动端使用简化组件   |
-| 显示密度 | 大屏信息密度高       |
-| 交互方式 | 移动端触摸优化       |
+| 差异内容 | 说明                     |
+| -------- | ------------------------ |
+| 布局结构 | 大屏横向、平板/手机纵向   |
+| 组件选择 | 小屏端使用简化组件        |
+| 显示密度 | 大屏信息密度高           |
+| 交互方式 | 平板/手机触摸优化         |
 
 ## 7. 发布与部署
 
@@ -376,7 +382,7 @@ console.log(`Running in ${target} mode`);
 ### 8.1 设计建议
 
 1. **先设计 PC 版**：PC 版作为默认视图，功能最完整
-2. **克隆后调整**：大屏/移动版从 PC 克隆后调整布局
+2. **克隆后调整**：大屏/平板/手机视图从 PC 克隆后调整布局
 3. **保持数据一致**：不同视图使用相同数据点
 4. **适度差异化**：不必完全一致，根据场景裁剪
 
@@ -387,7 +393,7 @@ console.log(`Running in ${target} mode`);
 - 考虑多屏拼接场景
 - 轮播/自动刷新
 
-### 8.3 移动端适配要点
+### 8.3 平板/手机适配要点
 
 - 纵向布局为主
 - 减少同屏信息量

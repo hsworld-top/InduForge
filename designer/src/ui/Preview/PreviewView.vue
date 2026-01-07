@@ -14,18 +14,13 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <el-radio-group v-model="deviceType" size="small">
-          <el-radio-button value="desktop">
-            <IconEpMonitor />
-            桌面
-          </el-radio-button>
-          <el-radio-button value="tablet">
-            <IconEpIphone />
-            平板
-          </el-radio-button>
-          <el-radio-button value="mobile">
-            <IconEpCellphone />
-            手机
+        <el-radio-group v-model="viewKey" size="small">
+          <el-radio-button
+            v-for="preset in viewPresets"
+            :key="preset.key"
+            :value="preset.key"
+          >
+            {{ preset.label }}
           </el-radio-button>
         </el-radio-group>
       </div>
@@ -62,28 +57,22 @@ import { useRouter, useRoute } from "vue-router";
 
 // 图标导入
 import IconEpArrowLeft from "~icons/ep/arrow-left";
-import IconEpMonitor from "~icons/ep/monitor";
-import IconEpIphone from "~icons/ep/iphone";
-import IconEpCellphone from "~icons/ep/cellphone";
 import IconEpRefresh from "~icons/ep/refresh";
 import IconEpView from "~icons/ep/view";
+import { VIEW_PRESETS } from "@/constants";
 
 const router = useRouter();
 const route = useRoute();
 
-// 设备类型
-const deviceType = ref("desktop");
-
-// 设备尺寸配置
-const deviceSizes = {
-  desktop: { width: "100%", height: "100%" },
-  tablet: { width: "768px", height: "1024px" },
-  mobile: { width: "375px", height: "667px" },
-};
+const viewKey = ref("pc");
+const viewPresets = VIEW_PRESETS;
 
 // 预览框样式
 const frameStyle = computed(() => {
-  const size = deviceSizes[deviceType.value];
+  const preset = viewPresets.find((item) => item.key === viewKey.value);
+  const size = preset
+    ? { width: `${preset.width}px`, height: `${preset.height}px` }
+    : { width: "100%", height: "100%" };
   return {
     width: size.width,
     height: size.height,

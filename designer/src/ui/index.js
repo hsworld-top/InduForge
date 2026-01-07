@@ -13,4 +13,6 @@ export * from "./Canvas/index.js";
 export * from "./TopToolbar/index.js";
 export * from "./DatapointPicker/index.js";
 export * from "./DiagnosticsPanel/index.js";
+export * from "./ToolRail/index.js";
+export * from "./DockPanel/index.js";
 

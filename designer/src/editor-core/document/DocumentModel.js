@@ -154,6 +154,21 @@ export class DocumentModel extends EventEmitter {
     return this._schema;
   }
 
+  /**
+   * 更新入口配置（内部方法）
+   * @param {Partial<import('./types.js').EntryConfig>} patch - 更新内容
+   */
+  _updateEntry(patch) {
+    const oldValue = { ...this._schema.entry };
+    this._schema.entry = { ...this._schema.entry, ...patch };
+    this._emitChange({
+      type: "update",
+      target: "entry",
+      oldValue,
+      newValue: this._schema.entry,
+    });
+  }
+
   // ==================== 页面操作 ====================
 
   /**

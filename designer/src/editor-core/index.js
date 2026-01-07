@@ -57,6 +57,8 @@ export {
   SetBindingFallbackCommand,
   CopyBindingsCommand,
 } from "./commands/bindingCommands.js";
+export { UpdatePageCommand } from "./commands/pageCommands.js";
+export { UpdateEntryCommand } from "./commands/entryCommands.js";
 export { History } from "./commands/History.js";
 
 // 选中管理

@@ -47,21 +47,202 @@
     @apply flex flex-1 overflow-hidden;
   }
 
+  .designer-workspace {
+    @apply flex flex-1 overflow-hidden relative;
+  }
+
+  .designer-canvas {
+    @apply flex-1 relative overflow-hidden;
+  }
+
+  .toolbar-section {
+    @apply flex items-center gap-2;
+  }
+
+  .toolbar-section--left {
+    @apply min-w-[220px];
+  }
+
+  .toolbar-section--center {
+    @apply flex-1 justify-between;
+  }
+
+  .toolbar-section--right {
+    @apply min-w-[200px] justify-end;
+  }
+
+  .toolbar-page-name {
+    @apply font-medium text-sm text-gray-800 dark:text-gray-200;
+  }
+
+  .toolbar-dirty {
+    @apply text-red-500 text-xs ml-1;
+  }
+
+  .toolbar-view-group {
+    @apply flex items-center gap-3;
+  }
+
+  .toolbar-view-size,
+  .toolbar-zoom {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  .toolbar-action-group {
+    @apply flex items-center gap-2;
+  }
+
+  .tool-rail {
+    @apply flex flex-col items-center justify-between bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700;
+    width: 52px;
+    flex-shrink: 0;
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-style: solid;
+  }
+
+  .tool-rail--left {
+    border-right-width: 1px;
+    border-left-width: 0;
+  }
+
+  .tool-rail--right {
+    border-left-width: 1px;
+    border-right-width: 0;
+  }
+
+  .tool-rail__section {
+    @apply flex flex-col items-center gap-2 py-2;
+  }
+
+  .tool-rail__section--bottom {
+    @apply mt-auto pb-3;
+  }
+
+  .tool-rail__button {
+    @apply flex flex-col items-center justify-center text-xs text-gray-500 dark:text-gray-300 rounded-md px-1 py-2 transition-colors;
+    width: 44px;
+  }
+
+  .tool-rail__button:hover {
+    @apply bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100;
+  }
+
+  .tool-rail__button.is-active {
+    @apply bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200;
+  }
+
+  .tool-rail__icon {
+    @apply text-base;
+  }
+
+  .tool-rail__label {
+    @apply text-[10px] leading-tight;
+  }
+
+  .dock-panel {
+    @apply flex flex-col bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700;
+    width: 300px;
+    flex-shrink: 0;
+    border-style: solid;
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+  }
+
+  .dock-panel__header {
+    @apply flex items-center justify-between h-10 px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0;
+  }
+
+  .dock-panel__title {
+    @apply text-sm font-medium text-gray-700 dark:text-gray-200;
+  }
+
+  .dock-panel__actions {
+    @apply flex items-center gap-1;
+  }
+
+  .dock-panel__body {
+    @apply flex-1 overflow-auto p-2;
+  }
+
+  .dock-panel.is-floating {
+    @apply absolute top-0 bottom-0 shadow-lg;
+    z-index: 20;
+  }
+
+  .dock-panel--left.is-floating {
+    left: 0;
+  }
+
+  .dock-panel--right.is-floating {
+    right: 0;
+  }
+
+  .page-tree-actions {
+    @apply flex flex-col gap-1 items-start;
+    position: absolute;
+    left: -6px;
+    top: 8px;
+    z-index: 2;
+  }
+
+  .page-tree-root {
+    @apply relative;
+  }
+
+  .page-tree-node {
+    @apply inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200;
+  }
+
+  .page-tree-node__icon {
+    @apply text-base text-gray-500 dark:text-gray-300;
+  }
+
+  .page-tree-node__label {
+    @apply text-sm;
+  }
+
+  .page-tree-node__badge {
+    @apply text-[10px] px-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-200;
+  }
+
+  .page-tree-move-popover {
+    @apply p-2;
+  }
+
+  .page-tree-move-list {
+    @apply flex flex-col gap-1;
+  }
+
+  .page-tree-move-label {
+    @apply inline-flex items-center text-sm text-gray-700 dark:text-gray-200;
+  }
+
   /* 面板样式 */
   .panel {
     @apply bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700;
   }
 
   .panel-left {
-    @apply flex w-64 border-r;
+    @apply flex flex-col w-64 border-r;
   }
 
   .panel-right {
-    @apply flex w-64 border-l;
+    @apply flex flex-col w-64 border-l;
   }
 
   .panel-header {
     @apply flex items-center justify-between h-10 px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0;
+  }
+
+  .panel-header .el-tabs__header {
+    margin: 0;
+  }
+
+  .panel-header .el-tabs__nav-wrap::after {
+    display: none;
   }
 
   .panel-body {

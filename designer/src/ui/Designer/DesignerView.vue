@@ -1,123 +1,102 @@
 <template>
   <div class="designer-layout">
     <!-- 顶部工具栏 -->
-    <header class="designer-toolbar">
-      <div class="flex items-center gap-2">
-        <span class="font-semibold text-gray-800 dark:text-gray-200">
-          InduForge Designer
-        </span>
-        <span class="text-gray-400">|</span>
-        <span class="text-sm text-gray-600 dark:text-gray-400">
-          {{ projectTitle }}
-        </span>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <!-- 工具按钮组 -->
-        <el-button-group>
-          <el-button size="small" :type="activeTool === 'select' ? 'primary' : ''" @click="activeTool = 'select'">
-            <IconEpPointer />
-          </el-button>
-          <el-button size="small" :type="activeTool === 'hand' ? 'primary' : ''" @click="activeTool = 'hand'">
-            <IconEpRank />
-          </el-button>
-        </el-button-group>
-
-        <el-divider direction="vertical" />
-
-        <!-- 撤销重做 -->
-        <el-button-group>
-          <el-button size="small" :disabled="!canUndo" @click="handleUndo">
-            <IconEpBack />
-          </el-button>
-          <el-button size="small" :disabled="!canRedo" @click="handleRedo">
-            <IconEpRight />
-          </el-button>
-        </el-button-group>
-
-        <el-divider direction="vertical" />
-
-        <!-- 缩放 -->
-        <span class="text-sm text-gray-600 dark:text-gray-400">
-          {{ Math.round(zoom * 100) }}%
-        </span>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <el-button size="small" @click="handlePreview">
-          <IconEpView />
-          预览
-        </el-button>
-        <el-button size="small" type="primary" @click="handleSave" :loading="saving">
-          <IconEpUpload />
-          保存
-        </el-button>
-      </div>
-    </header>
+    <TopToolbar
+      :page-name="pageName"
+      :is-locked="isLocked"
+      :is-dirty="isDirty"
+      :view-presets="viewPresets"
+      :active-view-key="activeViewKey"
+      :can-undo="canUndo"
+      :can-redo="canRedo"
+      :zoom="zoom"
+      :saving="saving"
+      @update:activeViewKey="handleViewChange"
+      @undo="handleUndo"
+      @redo="handleRedo"
+      @preview="handlePreview"
+      @save="handleSave"
+      @export="handleExport"
+      @toggleLock="handleToggleLock"
+    />
 
     <!-- 主体区域 -->
     <div class="designer-main">
-      <!-- 左侧面板 -->
-      <aside class="panel panel-left">
-        <div class="panel-header">
-          <span class="text-sm font-medium">组件库</span>
-        </div>
-        <div class="panel-body">
-          <p class="text-sm text-gray-400 text-center py-8">
-            组件面板（待实现）
-          </p>
-        </div>
-      </aside>
+      <ToolRail
+        side="left"
+        :items="leftRailItems"
+        :active-key="leftActiveKey"
+        @select="handleLeftSelect"
+      />
 
-      <!-- 画布区域 -->
-      <main class="canvas-container">
-        <div class="canvas-wrapper">
-          <div
-            class="canvas"
-            :style="{
-              width: `${canvasWidth}px`,
-              height: `${canvasHeight}px`,
-              transform: `scale(${zoom})`,
-            }"
+      <div class="designer-workspace">
+        <DockPanel
+          v-if="leftActiveKey && !leftFloating"
+          side="left"
+          :title="leftPanelTitle"
+          :floating="leftFloating"
+          @close="handleLeftClose"
+          @toggleFloating="toggleLeftFloating"
+        >
+          <component
+            :is="leftPanelComponent"
+            v-bind="leftPanelProps"
+            @update:drawingTool="(value) => (drawingTool.value = value)"
+          />
+        </DockPanel>
+
+        <div class="designer-canvas">
+          <CanvasContainer
+            :width="canvasWidth"
+            :height="canvasHeight"
+            :zoom="zoom"
+          />
+
+          <DockPanel
+            v-if="leftActiveKey && leftFloating"
+            side="left"
+            :title="leftPanelTitle"
+            :floating="leftFloating"
+            @close="handleLeftClose"
+            @toggleFloating="toggleLeftFloating"
           >
-            <!-- Canvas 图形层 -->
-            <div class="absolute inset-0 pointer-events-none">
-              <!-- Konva 将在这里渲染 -->
-            </div>
+            <component
+              :is="leftPanelComponent"
+              v-bind="leftPanelProps"
+              @update:drawingTool="(value) => (drawingTool.value = value)"
+            />
+          </DockPanel>
 
-            <!-- DOM 组件层 -->
-            <div class="absolute inset-0">
-              <div class="flex flex-col items-center justify-center h-full text-gray-400">
-                <IconEpPlus class="text-5xl mb-4" />
-                <p>从左侧拖拽组件到画布</p>
-              </div>
-            </div>
-          </div>
+          <DockPanel
+            v-if="rightActiveKey && rightFloating"
+            side="right"
+            :title="rightPanelTitle"
+            :floating="rightFloating"
+            @close="handleRightClose"
+            @toggleFloating="toggleRightFloating"
+          >
+            <component :is="rightPanelComponent" />
+          </DockPanel>
         </div>
 
-        <!-- 状态栏 -->
-        <div class="canvas-statusbar">
-          <span>画布: {{ canvasWidth }} × {{ canvasHeight }}</span>
-          <el-divider direction="vertical" />
-          <span>缩放: {{ Math.round(zoom * 100) }}%</span>
-        </div>
-      </main>
+        <DockPanel
+          v-if="rightActiveKey && !rightFloating"
+          side="right"
+          :title="rightPanelTitle"
+          :floating="rightFloating"
+          @close="handleRightClose"
+          @toggleFloating="toggleRightFloating"
+        >
+          <component :is="rightPanelComponent" />
+        </DockPanel>
+      </div>
 
-      <!-- 右侧面板 -->
-      <aside class="panel panel-right">
-        <div class="panel-header">
-          <el-tabs v-model="rightTab" class="flex-1">
-            <el-tab-pane label="属性" name="props" />
-            <el-tab-pane label="样式" name="style" />
-            <el-tab-pane label="事件" name="events" />
-          </el-tabs>
-        </div>
-        <div class="panel-body">
-          <p class="text-sm text-gray-400 text-center py-8">
-            请选择一个组件
-          </p>
-        </div>
-      </aside>
+      <ToolRail
+        side="right"
+        :items="rightRailItems"
+        :active-key="rightActiveKey"
+        @select="handleRightSelect"
+      />
     </div>
   </div>
 </template>
@@ -128,40 +107,137 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
-
-// 图标导入
-import IconEpPointer from "~icons/ep/pointer";
-import IconEpRank from "~icons/ep/rank";
-import IconEpBack from "~icons/ep/back";
-import IconEpRight from "~icons/ep/right";
-import IconEpView from "~icons/ep/view";
-import IconEpUpload from "~icons/ep/upload";
-import IconEpPlus from "~icons/ep/plus";
+import { CanvasContainer } from "@/ui/Canvas";
+import { TopToolbar } from "@/ui/TopToolbar";
+import { ToolRail } from "@/ui/ToolRail";
+import { DockPanel } from "@/ui/DockPanel";
+import {
+  PageTree,
+  OutlineTree,
+  MaterialPanel,
+  DataPanel,
+  I18nPanel,
+  ScriptVarsPanel,
+  AiPanel,
+  RolePanel,
+} from "@/ui/LeftPanel";
+import { PropertyPanel, StylePanel, AdvancedPanel } from "@/ui/RightPanel";
+import { VIEW_PRESETS } from "@/constants";
+import IconEpDocument from "~icons/ep/document";
+import IconEpMenu from "~icons/ep/menu";
+import IconEpBox from "~icons/ep/box";
+import IconEpDataAnalysis from "~icons/ep/data-analysis";
+import IconEpEdit from "~icons/ep/edit";
+import IconEpChatDotRound from "~icons/ep/chat-dot-round";
+import IconEpUser from "~icons/ep/user";
+import IconEpTools from "~icons/ep/tools";
+import IconEpBrush from "~icons/ep/brush";
+import IconEpSetting from "~icons/ep/setting";
 
 const route = useRoute();
 const router = useRouter();
 
 const editorStore = useEditorStore();
-const { projectName, canUndo, canRedo, saving } = storeToRefs(editorStore);
+const { canUndo, canRedo, saving, currentPageId, currentPage } =
+  storeToRefs(editorStore);
 
-// 工具状态
-const activeTool = ref("select");
 const zoom = ref(1);
+const activeViewKey = ref("pc");
+const viewPresets = VIEW_PRESETS;
 
-// 画布尺寸
-const canvasWidth = ref(1920);
-const canvasHeight = ref(1080);
+const drawingTool = ref("");
+const isLocked = ref(false);
+const leftActiveKey = ref("pages");
+const rightActiveKey = ref("props");
+const leftFloating = ref(false);
+const rightFloating = ref(false);
 
-// 右侧面板标签
-const rightTab = ref("props");
-
-/**
- * 项目标题展示
- */
-const projectTitle = computed(() => {
-  const fallbackProjectId = route.meta.project?.id;
-  return projectName.value || (fallbackProjectId ? `工程 ${fallbackProjectId}` : "未选择工程");
+const pageName = computed(() => {
+  const page = currentPage.value;
+  return page?.name || page?.id || "未命名页面";
 });
+
+const isDirty = computed(() => canUndo.value);
+
+const activeView = computed(() =>
+  viewPresets.find((preset) => preset.key === activeViewKey.value)
+);
+
+const canvasWidth = computed(() => activeView.value?.width || 1920);
+const canvasHeight = computed(() => activeView.value?.height || 1080);
+
+const leftRailItems = [
+  { key: "pages", label: "页面", icon: IconEpDocument },
+  { key: "outline", label: "大纲", icon: IconEpMenu },
+  { key: "material", label: "物料", icon: IconEpBox },
+  { key: "data", label: "数据", icon: IconEpDataAnalysis },
+  { key: "i18n", label: "国际", icon: IconEpDocument },
+  { key: "script", label: "脚本", icon: IconEpEdit },
+  { key: "ai", label: "AI", icon: IconEpChatDotRound },
+  { key: "role", label: "角色", icon: IconEpUser, placement: "bottom" },
+];
+
+const rightRailItems = [
+  { key: "props", label: "属性", icon: IconEpTools },
+  { key: "style", label: "样式", icon: IconEpBrush },
+  { key: "advanced", label: "高级", icon: IconEpSetting },
+];
+
+const leftPanelComponent = computed(() => {
+  switch (leftActiveKey.value) {
+    case "pages":
+      return PageTree;
+    case "outline":
+      return OutlineTree;
+    case "material":
+      return MaterialPanel;
+    case "data":
+      return DataPanel;
+    case "i18n":
+      return I18nPanel;
+    case "script":
+      return ScriptVarsPanel;
+    case "ai":
+      return AiPanel;
+    case "role":
+      return RolePanel;
+    default:
+      return PageTree;
+  }
+});
+
+const leftPanelTitle = computed(() => {
+  const item = leftRailItems.find((entry) => entry.key === leftActiveKey.value);
+  return item?.label || "面板";
+});
+
+const leftPanelProps = computed(() => {
+  if (leftActiveKey.value === "material") {
+    return { drawingTool: drawingTool.value };
+  }
+  return {};
+});
+
+const rightPanelComponent = computed(() => {
+  switch (rightActiveKey.value) {
+    case "props":
+      return PropertyPanel;
+    case "style":
+      return StylePanel;
+    case "advanced":
+      return AdvancedPanel;
+    default:
+      return PropertyPanel;
+  }
+});
+
+const rightPanelTitle = computed(() => {
+  const item = rightRailItems.find(
+    (entry) => entry.key === rightActiveKey.value
+  );
+  return item?.label || "面板";
+});
+
 
 /**
  * 撤销操作
@@ -203,6 +279,77 @@ const handleSave = async () => {
 };
 
 /**
+ * 切换视图
+ * @param {string} key - 视图键值
+ */
+const handleViewChange = (key) => {
+  activeViewKey.value = key;
+  const targetView = viewPresets.find((preset) => preset.key === key);
+  if (!targetView || !currentPage.value) return;
+  const nextConfig = {
+    ...currentPage.value.config,
+    width: targetView.width,
+    height: targetView.height,
+  };
+  editorStore.updateCurrentPage({ config: nextConfig });
+};
+
+/**
+ * 切换锁定状态
+ */
+const handleToggleLock = () => {
+  isLocked.value = !isLocked.value;
+};
+
+/**
+ * 导出页面 Schema
+ */
+const handleExport = () => {
+  if (!editorStore.doc || !currentPageId.value) {
+    ElMessage.warning("暂无可导出的页面");
+    return;
+  }
+  const payload = editorStore.serializer.exportPage(
+    editorStore.doc,
+    currentPageId.value
+  );
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const name = `${pageName.value || "page"}.json`;
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+  ElMessage.success("已导出页面");
+};
+
+const handleLeftSelect = (key) => {
+  leftActiveKey.value = leftActiveKey.value === key ? "" : key;
+};
+
+const handleRightSelect = (key) => {
+  rightActiveKey.value = rightActiveKey.value === key ? "" : key;
+};
+
+const handleLeftClose = () => {
+  leftActiveKey.value = "";
+};
+
+const handleRightClose = () => {
+  rightActiveKey.value = "";
+};
+
+const toggleLeftFloating = () => {
+  leftFloating.value = !leftFloating.value;
+};
+
+const toggleRightFloating = () => {
+  rightFloating.value = !rightFloating.value;
+};
+
+/**
  * 加载工程数据
  */
 const loadProject = async () => {
@@ -219,33 +366,4 @@ onMounted(() => {
   void loadProject();
 });
 </script>
-
-<style scoped>
-/* 网格背景 */
-.canvas {
-  background-image: linear-gradient(
-      rgba(0, 0, 0, 0.05) 1px,
-      transparent 1px
-    ),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
-  background-size: 10px 10px;
-}
-
-.dark .canvas {
-  background-image: linear-gradient(
-      rgba(255, 255, 255, 0.05) 1px,
-      transparent 1px
-    ),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-}
-
-/* 面板标签覆盖 */
-.panel-header :deep(.el-tabs__header) {
-  margin: 0;
-}
-
-.panel-header :deep(.el-tabs__nav-wrap::after) {
-  display: none;
-}
-</style>
 
