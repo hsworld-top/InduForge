@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
             },
         },
         optimizeDeps: {
-            include: ['vue', '@vueuse/core', 'mitt'],
+            include: ['vue', '@vueuse/core'],
         },
     };
 });
