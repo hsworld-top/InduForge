@@ -6,29 +6,51 @@
 
 ```
 DataCenterNew (主容器)
-  ├─ ConnectionList (左侧连接树)
-  │   └─ ConnectionItem (连接项)
-  │       ├─ 查询列表 (蓝色区域)
-  │       └─ 表列表 (绿色区域)
+  │
+  ├─ ConnectionList (左侧面板)
+  │   ├─ 基础配置区
+  │   │   └─ 数据点入口
+  │   │
+  │   ├─ 连接管理区
+  │   │   ├─ 搜索/新建/刷新按钮
+  │   │   └─ ConnectionItem (连接项)
+  │   │       ├─ 关系型连接展开内容
+  │   │       │   ├─ 查询列表 (蓝色区域)
+  │   │       │   └─ 表列表 (绿色区域)
+  │   │       └─ MQTT 连接展开内容
+  │   │           └─ 订阅列表 (紫色区域)
+  │   │
+  │   └─ 处理逻辑区
+  │       ├─ 计算单元入口
+  │       └─ 报警单元入口
   │
   └─ 统一标签页系统 (右侧内容区)
-      ├─ 表列表标签页
-      │   ├─ MysqlTableList
-      │   ├─ PostgresTableList
-      │   └─ SqlServerTableList
       │
-      └─ 查询标签页
-          ├─ MysqlQueryEditor
-          ├─ PostgresQueryEditor
-          └─ SqlServerQueryEditor
-
-      ├─ MQTT 订阅标签页
-      │   └─ MqttSubscriptionList
-      ├─ MQTT 消息查看器
-      │   └─ MqttMessageViewer
-      └─ MQTT 变量管理
-          ├─ MqttTagList
-          └─ MqttTagMonitor
+      ├─ 数据点标签页
+      │   └─ DataPointList
+      │
+      ├─ 关系型数据库标签页
+      │   ├─ 表列表标签页
+      │   │   ├─ MysqlTableList
+      │   │   ├─ PostgresTableList
+      │   │   └─ SqlServerTableList
+      │   └─ 查询标签页
+      │       ├─ MysqlQueryEditor
+      │       ├─ PostgresQueryEditor
+      │       └─ SqlServerQueryEditor
+      │
+      ├─ MQTT 标签页
+      │   ├─ 订阅列表标签页
+      │   │   └─ MqttSubscriptionList
+      │   ├─ 消息查看器标签页
+      │   │   └─ MqttMessageViewer
+      │   └─ 变量管理标签页
+      │       ├─ MqttTagList (左侧)
+      │       └─ MqttTagMonitor (右侧)
+      │
+      └─ 规划中
+          ├─ 计算单元标签页
+          └─ 报警单元标签页
 ```
 
 ## 核心组件
@@ -37,18 +59,23 @@ DataCenterNew (主容器)
 **职责**: 主容器，管理统一标签页系统
 
 **功能**:
-- 管理所有标签页（表列表和查询）
+- 管理所有标签页（数据点、表列表、查询、MQTT 订阅/消息/变量）
 - 处理连接双击（测试连接并展开）
 - 处理表双击（创建查询）
 - 处理查询双击（打开查询）
-- 右键菜单管理
+- 处理 MQTT 订阅双击（打开变量管理）
+- 右键菜单管理（连接、表、查询、MQTT 订阅）
 - 标签页滚轮支持
-- MQTT 标签页管理（订阅/消息/变量）
+- MQTT 实时消息订阅与推送
+- 数据点/计算单元/报警单元入口处理
 
 **状态**:
 - `tabs`: 所有标签页数组
 - `activeTabId`: 当前活动标签页 ID
 - `connections`: 连接列表
+- `mqttMessageViewerRefs`: MQTT 消息查看器引用映射
+- `mqttSubscriptionListRefs`: MQTT 订阅列表引用映射
+- `dataPointListRefs`: 数据点列表引用映射
 
 ### QueryEditor 组件（MySQL/PostgreSQL/SQL Server）
 **职责**: SQL 查询编辑器
@@ -79,28 +106,34 @@ DataCenterNew (主容器)
 - 表搜索和过滤
 
 ### ConnectionList.vue
-**职责**: 左侧连接树
+**职责**: 左侧面板
 
 **功能**:
-- 连接列表展示
-- 连接展开/折叠
-- 查询列表展示（蓝色区域）
-- 表列表展示（绿色区域）
-- 右键菜单
-- 查询删除
+- 基础配置区：数据点入口
+- 连接管理区：
+  - 连接列表展示（支持搜索过滤）
+  - 连接展开/折叠
+  - 关系型连接：查询列表（蓝色）、表列表（绿色）
+  - MQTT 连接：订阅列表（紫色）
+  - 右键菜单（刷新、查看表列表）
+  - 查询删除
+- 处理逻辑区：计算单元、报警单元入口
 
 **状态管理**:
 使用 `connectionStates` reactive 对象管理每个连接的状态：
 ```javascript
 {
   [connectionId]: {
-    expanded: false,        // 是否展开
-    loading: false,         // 是否正在加载表
-    tables: [],            // 表列表
-    tablesExpanded: true,  // 表区域是否展开
-    loadingQueries: false, // 是否正在加载查询
-    queries: [],           // 查询列表
-    queriesExpanded: true  // 查询区域是否展开
+    expanded: false,                   // 是否展开
+    loading: false,                    // 是否正在加载表
+    tables: [],                        // 表列表
+    tablesExpanded: true,              // 表区域是否展开
+    loadingQueries: false,             // 是否正在加载查询
+    queries: [],                       // 查询列表
+    queriesExpanded: true,             // 查询区域是否展开
+    loadingMqttSubscriptions: false,   // 是否正在加载 MQTT 订阅
+    mqttSubscriptions: [],             // MQTT 订阅列表
+    mqttSubscriptionsExpanded: true    // MQTT 订阅区域是否展开
   }
 }
 ```
@@ -113,12 +146,14 @@ DataCenterNew (主容器)
 **提供**:
 - `connections`: 连接列表
 - `selectedConnection`: 当前选中的连接
+- `relationalConnections`: 关系型数据库连接列表
 - `loadConnections()`: 加载连接列表
 - `createConnection()`: 创建连接
 - `updateConnection()`: 更新连接
 - `deleteConnection()`: 删除连接
 - `testConnection()`: 测试连接
 - `updateConnectionStatus()`: 更新连接状态
+- `getConnectionById()`: 根据 ID 获取连接
 
 ### useConnectionStatus.js
 **职责**: 连接状态管理
@@ -126,6 +161,30 @@ DataCenterNew (主容器)
 **提供**:
 - 连接状态监控
 - 状态更新逻辑
+
+### useMqttSocket.js
+**职责**: MQTT WebSocket 实时通信
+
+**提供**:
+- `socket`: Socket.IO 实例
+- `connected`: 连接状态
+- `connect()`: 建立连接
+- `disconnect()`: 断开连接
+- `subscribeMessages()`: 订阅 MQTT 消息
+- `onMessage()`: 注册消息处理器
+- `emit()`: 发送事件
+
+**监听的事件**:
+- `mqtt:message`: MQTT 消息
+- `mqtt:subscription:status`: 订阅状态变更
+- `mqtt:connection:status`: 连接状态变更
+- `mqtt:tag:value`: 变量值更新
+
+### useMqttConnection.js
+**职责**: MQTT 连接管理
+
+### useMqttTagSync.js
+**职责**: MQTT 变量同步管理
 
 ### 数据库专用 Composables
 
@@ -273,5 +332,5 @@ DataCenterNew (主容器)
 
 ---
 
-**版本**: 2.1.0  
-**最后更新**: 2025-12-15
+**版本**: 2.2.0  
+**最后更新**: 2026-01-06

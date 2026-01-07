@@ -78,7 +78,7 @@
 
 ### datacenter（数据中心前端）
 
-- **技术栈**：Vue 3 + Vite + Pinia + Element Plus + Monaco
+- **技术栈**：Vue 3(JS) + Vite + Pinia + Element Plus + Monaco
 - **图标规范**：统一使用 `unplugin-icons`
 - **主入口**：`DataCenterNew.vue`（统一标签页系统）
 - **连接模型**：`type=relational|mqtt`，具体 DB 类型由 `config.dbType` 指定

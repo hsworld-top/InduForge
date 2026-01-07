@@ -4,31 +4,33 @@
 
 ## 📚 文档目录
 
-### 核心设计文档
+### 🆕 核心设计文档（推荐）
 
-- **[DSL 设计规范](./dsl-design.md)** - 低代码平台 DSL 完整规范
+- **[高层设计](./高层设计.md)** - 平台整体架构设计（**入口文档**）
+  - 数据隔离三态模型
+  - 发布与部署流程
+  - 数据库设计
+  - 安全与可靠性
 
-  - Page Schema 页面结构
-  - Component Schema 组件结构
-  - DataSource Schema 数据源
-  - Action Schema 动作系统
-  - Expression 表达式系统
-  - 完整示例和最佳实践
-
-- **[数据库设计](./database-design.md)** - 关键表结构与关系概览
-
-- **[迁移计划](./migration-plan.md)** - 从 KingPortal 迁移指南
-  - 现状分析
-  - 技术栈对比
-  - 迁移策略
-  - 时间规划
+- **[数据库设计概览](./database-design.md)** - 数据库表结构快速索引
 
 ### 设计中心文档
 
 - **[设计中心概述](./designer/README.md)** - Designer 模块总览
-- **[数据绑定系统](./designer/data-binding.md)** - 数据绑定完整指南
-- **[数据绑定架构](./designer/data-binding-architecture.md)** - 架构设计说明
-- **[Canvas 渲染引擎](./designer/canvas-engine.md)** - Konva 渲染引擎
+
+#### 重构计划（进行中）
+
+- **[重构计划](./designer/refactor/README.md)** - 完整重构计划与里程碑
+- **[编辑器内核](./designer/refactor/editor-core.md)** - DocumentModel、Command、History
+- **[Schema 设计](./designer/refactor/schema-design.md)** - 规范化工程 Schema（v2）
+- **[数据绑定 v2](./designer/refactor/data-binding-v2.md)** - 三态隔离、Binding 结构
+- **[布局系统](./designer/refactor/layout-system.md)** - Flex/Free/Grid、Constraints
+- **[发布流水线](./designer/refactor/publish-pipeline.md)** - 校验、编译、打包、部署
+- **[运行时引擎](./designer/refactor/runtime-engine.md)** - DataService、Watchdog
+- **[国际化与主题](./designer/refactor/i18n-theme.md)** - i18n、主题切换组件
+
+#### 其他文档
+
 - **[组件开发指南](./designer/component-development.md)** - 自定义组件开发
 - **[开发历程](./designer/development-history.md)** - 里程碑记录与变更摘要
 
@@ -38,47 +40,54 @@
 - **[数据点方案设计](./datacenter/datapoint-design.md)** - 数据点统一抽象设计
 - **[数据点改造实施](./datacenter/datapoint-implementation.md)** - 数据点功能改造计划
 - **[数据连接管理](./datacenter/connections.md)** - 数据库连接配置
-- **[查询管理](./datacenter/queries.md)** - SQL 查询管理（当前能力与限制）
+- **[查询管理](./datacenter/queries.md)** - SQL 查询管理
 - **[MQTT 实现说明](./datacenter/mqtt-implementation.md)** - 实现现状与后续规划
-- **[变量自动发现与批量导入](./datacenter/mqtt-auto-discovery.md)** - MQTT/API/CSV 多种变量来源方式
+- **[变量自动发现与批量导入](./datacenter/mqtt-auto-discovery.md)** - MQTT/API/CSV 多种变量来源
 
 ### 后端文档
 
-- **[后端 API 文档](./backend/README.md)** - API 接口说明（高层）
+- **[后端 API 文档](./backend/README.md)** - API 接口说明
 - **[认证与授权](./backend/auth.md)** - 用户认证和权限控制
 - **[数据库初始化](./backend/database-init.md)** - 数据库初始化指南
+
+### 历史参考文档
+
+> 以下文档为历史版本，部分内容可能已过时。
+
+- **[DSL 设计规范 v2.0](./dsl-design.md)** - 低代码平台 DSL 规范（被 Schema v2 替代）
+- **[迁移计划](./migration-plan.md)** - 从 KingPortal 迁移指南（已归档）
 
 ## 🚀 快速导航
 
 ### 我是新手，想快速了解项目
 
 1. 阅读 [项目 README](../README.md)
-2. 查看 [DSL 设计规范](./dsl-design.md)
-3. 参考 [数据绑定系统快速开始](./designer/data-binding.md#快速开始)
+2. 查看 [高层设计](./高层设计.md)
+3. 了解 [Designer 重构计划](./designer/refactor/README.md)
 
 ### 我要开发自定义组件
 
 1. 阅读 [组件开发指南](./designer/component-development.md)
-2. 参考 [DSL 组件结构](./dsl-design.md#3-component-schema-组件结构)
-3. 查看现有组件示例
+2. 参考 [Schema 设计](./designer/refactor/schema-design.md)
+3. 查看 [数据绑定 v2](./designer/refactor/data-binding-v2.md)
 
 ### 我要配置数据源
 
-1. 阅读 [数据绑定系统](./designer/data-binding.md)
-2. 参考 [DSL 数据源规范](./dsl-design.md#4-datasource-schema-数据源)
+1. 阅读 [数据绑定 v2](./designer/refactor/data-binding-v2.md)
+2. 参考 [数据中心概述](./datacenter/README.md)
 3. 查看 [数据连接管理](./datacenter/connections.md)
+
+### 我要了解发布与部署
+
+1. 阅读 [发布流水线](./designer/refactor/publish-pipeline.md)
+2. 查看 [运行时引擎](./designer/refactor/runtime-engine.md)
+3. 参考 [高层设计 - 发布与部署](./高层设计.md#5-发布与部署流程)
 
 ### 我要部署项目
 
 1. 阅读 [项目 README - 部署指南](../README.md#部署指南)
 2. 参考 [数据库初始化](./backend/database-init.md)
 3. 配置 Nginx（参考 `../nginx/nginx.conf`）
-
-### 我要了解架构设计
-
-1. 阅读 [项目 README - 整体架构](../README.md#整体架构)
-2. 查看 [数据绑定架构](./designer/data-binding-architecture.md)
-3. 参考 [迁移计划](./migration-plan.md)
 
 ## 📖 文档说明
 
@@ -87,14 +96,21 @@
 ```
 docs/
 ├── README.md                           # 本文档
-├── dsl-design.md                       # DSL 设计规范
-├── database-design.md                  # 数据库设计（概览）
-├── migration-plan.md                   # 迁移计划
+├── 高层设计.md                          # 平台整体架构设计 ⭐
+├── database-design.md                  # 数据库设计概览
+├── dsl-design.md                       # DSL 设计规范（历史）
+├── migration-plan.md                   # 迁移计划（历史）
 ├── designer/                           # 设计中心文档
 │   ├── README.md                       # 概述
-│   ├── data-binding.md                 # 数据绑定系统
-│   ├── data-binding-architecture.md    # 数据绑定架构
-│   ├── canvas-engine.md                # Canvas 渲染引擎
+│   ├── refactor/                       # 🆕 重构文档
+│   │   ├── README.md                   # 重构计划
+│   │   ├── editor-core.md              # 编辑器内核
+│   │   ├── schema-design.md            # Schema 设计
+│   │   ├── data-binding-v2.md          # 数据绑定 v2
+│   │   ├── layout-system.md            # 布局系统
+│   │   ├── publish-pipeline.md         # 发布流水线
+│   │   ├── runtime-engine.md           # 运行时引擎
+│   │   └── i18n-theme.md               # 国际化与主题
 │   ├── component-development.md        # 组件开发指南
 │   └── development-history.md          # 开发历程
 ├── datacenter/                         # 数据中心文档
@@ -113,8 +129,8 @@ docs/
 
 ### 文档版本
 
-- **版本**: 2.1.0
-- **最后更新**: 2025-03-08
+- **版本**: 3.0.0
+- **最后更新**: 2026-01
 - **维护者**: InduForge Team
 
 ### 文档贡献
@@ -134,8 +150,8 @@ docs/
 - [Vue 3 文档](https://vuejs.org/)
 - [Pinia 文档](https://pinia.vuejs.org/)
 - [Element Plus 文档](https://element-plus.org/)
-- [Konva.js 文档](https://konvajs.org/)
 - [ECharts 文档](https://echarts.apache.org/)
+- [Day.js 文档](https://day.js.org/)
 
 ### 项目资源
 
@@ -155,5 +171,5 @@ docs/
 ---
 
 **文档状态**: ✅ 完整  
-**覆盖率**: 90%+  
+**覆盖率**: 95%+  
 **语言**: 简体中文

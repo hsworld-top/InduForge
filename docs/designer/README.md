@@ -4,59 +4,80 @@
 
 设计中心是 InduForge 平台的核心模块，提供可视化的页面设计功能。通过拖拽式操作，用户可以快速构建工业应用界面，无需编写代码。
 
+> **🚀 重构计划**：设计中心正在重构，详见 [Designer 重构计划](./refactor/README.md)
+
 ## 核心功能
 
 ### 1. 可视化设计
+
 - 拖拽式组件布局
 - 实时预览
 - 所见即所得
 - 多种画布缩放模式
 
 ### 2. 组件库
+
 - **基础组件**: 按钮、视频、图片、开关、多选组、下拉框、单选组
 - **UI 组件**: 输入框、表格、图表、标签、对话框等
 - **布局组件**: Container、Flex、Grid、Row/Col、CenterLayout
 - **自定义组件**: 支持组件封装和复用
 
+### 2.5 绘图工具 ✨ 新增
+
+- **基础图形**: 直线、矩形、圆形、椭圆、多边形、路径
+- **管道**: 带流动动画的管道，支持流速/方向绑定
+- **符号库**: 预设工业符号（泵、阀门、储罐、换热器等）
+- **文字标注**: Canvas 层文字，支持数据绑定
+
 ### 3. 数据绑定
+
 - 表达式绑定
 - 实时数据订阅
 - 多数据源支持
 - 数据转换和计算
- - 支持 API 模式与 Bridge 模式（DataCenter 通信）
+- 直接调用数据中心 API（预览/运行时）
 
 ### 4. 选中与辅助线
+
 - 多选支持（单选/多选/框选/全选）
 - 选择框和控制点（缩放、旋转）
 - 智能对齐辅助线
 - 自动吸附功能
 
 ### 5. 历史记录
+
 - 撤销/重做（Ctrl+Z/Y）
-- 操作历史追踪（最多50条）
+- 操作历史追踪（最多 50 条）
 - 事务支持（批量操作合并）
 
 ### 6. 高级功能
+
 - 画布缩放（10%-500%，Ctrl+滚轮/Plus/Minus/0）
 - 完整的快捷键系统
 - 批量操作（移动、删除、复制）
 
 ## 技术架构
 
-### 混合渲染架构 (DOM + Canvas 双层) ✨ 核心创新
+### 混合渲染架构 (Canvas + DOM 双层) ✨ 核心创新
 
-设计中心采用创新的混合渲染架构，完美结合 DOM 和 Canvas 的优势：
+设计中心采用创新的混合渲染架构，完美结合 Canvas 和 DOM 的优势：
 
-- **DOM Layer (z-index: 1)**: 渲染所有组件和布局容器
+- **Canvas Layer (z-index: 1)**: 绘制 2D 工艺流程图
+  - 基础图形（线段、矩形、圆形、多边形）
+  - 管道（带流动动画）
+  - 工业符号（泵、阀门、储罐等）
+  - 文字标注
+  - 高性能绑定大量图形
+- **DOM Layer (z-index: 10)**: 渲染交互组件
   - Vue 组件 + CSS 原生布局（Flexbox/Grid）
   - 完整的事件支持和交互
-  - 支持任意嵌套的容器结构
-  
-- **Canvas Layer (z-index: 100)**: 渲染辅助功能
+  - 表单、表格、图表等复杂组件
+- **Overlay Layer (z-index: 100)**: 设计态辅助
   - 选择框和控制点（缩放、旋转）
   - 对齐辅助线和插入线
   - 拖拽预览和框选矩形
-  - 标尺和参考线（可选）
+
+**统一数据绑定**：无论 Canvas 图形还是 DOM 组件，都支持相同的数据绑定、事件配置和动画系统。
 
 ```
 Designer/
@@ -121,27 +142,25 @@ Designer/
 
 ### 架构优势
 
-1. **性能优化**: DOM渲染组件，Canvas渲染辅助图形，各司其职
+1. **性能优化**: DOM 渲染组件，Canvas 渲染辅助图形，各司其职
    - DOM Layer: 利用浏览器原生渲染和事件处理
    - Canvas Layer: 高性能绘制辅助图形（Konva.js）
-   
-2. **原生布局**: 使用CSS Flexbox/Grid，布局更精确可靠
+2. **原生布局**: 使用 CSS Flexbox/Grid，布局更精确可靠
    - 支持任意嵌套的容器结构
    - 完整的响应式布局能力
    - 无需手动计算布局位置
-   
-3. **易于维护**: Vue组件开发，代码结构清晰
+3. **易于维护**: Vue 组件开发，代码结构清晰
    - 组件化架构，每个组件职责单一
-   - 完整的TypeScript类型支持（可选）
+   - 完整的 TypeScript 类型支持（可选）
    - 测试覆盖率高（Vitest + Property-based Testing）
-   
-4. **坐标同步**: 自动同步DOM和Canvas坐标系统
-   - ResizeObserver监听尺寸变化
+4. **坐标同步**: 自动同步 DOM 和 Canvas 坐标系统
+
+   - ResizeObserver 监听尺寸变化
    - 实时更新选择框和辅助线位置
    - 支持缩放和滚动同步
 
 5. **用户体验**: 完整的交互功能
-   - 拖拽系统（库→画布、画布内、容器内、排序）
+   - 拖拽系统（库 → 画布、画布内、容器内、排序）
    - 多选支持（单选/Ctrl+点击/框选/Ctrl+A）
    - 撤销/重做（Ctrl+Z/Y）
    - 画布缩放（Ctrl+滚轮/Plus/Minus/0）
@@ -170,66 +189,85 @@ pnpm dev
 ### 快捷键列表 ⌨️
 
 **选择操作**：
+
 - `单击` - 选中组件
 - `Ctrl + 单击` - 多选/取消选中
 - `Ctrl + A` - 全选
 - `Esc` - 取消选择
 
 **编辑操作**：
+
 - `Ctrl + C` - 复制
 - `Ctrl + V` - 粘贴
 - `Ctrl + D` - 复制并粘贴
 - `Delete / Backspace` - 删除
 
 **历史操作**：
+
 - `Ctrl + Z` - 撤销
 - `Ctrl + Y` - 重做
-- `Ctrl + Shift + Z` - 重做（Mac风格）
+- `Ctrl + Shift + Z` - 重做（Mac 风格）
 
 **缩放操作**：
+
 - `Ctrl + 滚轮` - 以鼠标位置缩放画布
 - `Ctrl + Plus` - 放大
 - `Ctrl + Minus` - 缩小
 - `Ctrl + 0` - 重置缩放（100%）
 
 **拖拽操作**：
+
 - `拖拽组件` - 从组件库拖到画布
 - `拖拽画布内组件` - 移动位置或改变父容器
 - `拖拽到容器` - 添加为容器子组件
 
 ## 文档导航
 
-### 核心功能文档
-- **[数据绑定系统](./data-binding.md)** - 完整的数据绑定指南
-  - 数据源配置
-  - 表达式语法
-  - 实时订阅
-  - 使用示例
+### 🚀 重构文档（当前设计）
 
-- **[数据绑定架构](./data-binding-architecture.md)** - 架构设计说明
-  - API 模式 vs Bridge 模式
-  - 通信机制
-  - 性能对比
-  - 最佳实践
+**核心架构**：
 
-- **[Canvas 辅助层](./canvas-engine.md)** - Canvas Layer 辅助功能
-  - 选择框和控制点（SelectionBox）
-  - 对齐辅助线和吸附（AlignmentGuides）
-  - 框选矩形（SelectionRect）
-  - 插入线和拖拽预览
+- **[重构计划](./refactor/README.md)** - 完整重构计划与里程碑
+- **[编辑器内核](./refactor/editor-core.md)** - DocumentModel、Command、History、Selection
+- **[Schema 设计](./refactor/schema-design.md)** - 规范化工程 Schema（v2）、循环、插槽、生命周期
 
-- **[组件开发指南](./component-development.md)** - 自定义组件开发
-  - 组件结构
-  - 属性定义
-  - 事件处理
-  - 注册和使用
+**数据系统**：
+
+- **[数据绑定 v2](./refactor/data-binding-v2.md)** - 三态隔离、Binding 结构、数据点状态
+- **[表达式引擎](./refactor/expression-engine.md)** - 上下文变量、内置函数、工业计算
+
+**动作与动画**：
+
+- **[动作系统](./refactor/action-system.md)** - 完整动作类型、条件分支、循环、并行
+- **[动画系统](./refactor/animation-system.md)** - 状态驱动动画、工业场景动画
+- **[验证系统](./refactor/validation-system.md)** - 表单验证规则、异步验证
+
+**布局与渲染**：
+
+- **[布局系统](./refactor/layout-system.md)** - Flex/Free/Grid、Constraints 约束
+- **[设计态交互](./refactor/design-interaction.md)** - 工具栏、属性面板、预览功能
+
+**发布与运行**：
+
+- **[发布流水线](./refactor/publish-pipeline.md)** - 校验、编译、打包、快照
+- **[运行时引擎](./refactor/runtime-engine.md)** - DataService、资源生命周期、Watchdog
+
+**国际化与主题**：
+
+- **[国际化与主题](./refactor/i18n-theme.md)** - i18n 资源、主题系统、切换组件
+
+**开发指南**：
+
+- **[最佳实践](./refactor/best-practices.md)** - 性能优化、安全建议、命名规范
+
+### 历史文档
+
+- **[组件开发指南](./component-development.md)** - 组件开发参考
+- **[开发历程](./development-history.md)** - 各阶段开发记录
 
 ### 开发历程
+
 - **[开发历程](./development-history.md)** - 各阶段开发总结
-  - 阶段一: 基础设施
-  - 阶段二: Canvas 渲染引擎
-  - 阶段三: 组件库扩展
-  - 阶段四: 数据绑定系统
 
 ## 核心概念
 
@@ -299,13 +337,25 @@ pnpm dev
 
 ```javascript
 // 访问数据源
-{{ data.ds_device.temperature }}
+{
+  {
+    data.ds_device.temperature;
+  }
+}
 
 // 条件表达式
-{{ data.ds_device.status == 1 ? '运行' : '停止' }}
+{
+  {
+    data.ds_device.status == 1 ? "运行" : "停止";
+  }
+}
 
 // 函数调用
-{{ format(data.ds_device.temperature, 1) }}
+{
+  {
+    format(data.ds_device.temperature, 1);
+  }
+}
 ```
 
 ## 开发指南
@@ -322,19 +372,19 @@ pnpm dev
 ```javascript
 // registry/components/custom/MyComponent.js
 export default {
-  type: 'MyComponent',
-  name: '我的组件',
-  category: '自定义',
+  type: "MyComponent",
+  name: "我的组件",
+  category: "自定义",
   defaultProps: {
-    title: 'Hello'
+    title: "Hello",
   },
   propsSchema: {
     title: {
-      type: 'text',
-      label: '标题'
-    }
-  }
-}
+      type: "text",
+      label: "标题",
+    },
+  },
+};
 ```
 
 ### 配置数据源
@@ -356,18 +406,22 @@ export default {
 ## 常见问题
 
 ### Q: 如何调试数据绑定？
+
 A: 在数据绑定面板中查看实时预览值，或在浏览器控制台查看 `store.dataSources`。
 
 ### Q: 组件不显示怎么办？
+
 A: 检查组件的样式配置，确保位置和大小正确。
 
 ### Q: 数据源状态一直是"加载中"？
+
 A: 检查后端 API 是否正常，查询 ID 是否存在。
 
 ### Q: 如何提高性能？
+
 A: 减少轮询频率，使用数据转换器减少数据量，优化表达式。
 
-更多问题请参考 [数据绑定系统 - 常见问题](./data-binding.md#常见问题)。
+更多问题请参考 [数据绑定 v2](./refactor/data-binding-v2.md) 或 [最佳实践](./refactor/best-practices.md)。
 
 ## 相关资源
 
@@ -386,42 +440,32 @@ A: 减少轮询频率，使用数据转换器减少数据量，优化表达式�
 3. 测试: 添加单元测试
 4. 文档: 更新相关文档
 
-## 最新更新 (2025-12-08)
+## 最新更新 (2026-01-06)
 
-### Phase 1-3 完成：混合渲染架构重构
+### 🚀 重构计划发布
 
-✅ **Phase 1: 画布主架构搭建**
-- 实现 DOM + Canvas 双层渲染架构
-- 创建 DesignCanvas、DomRenderer、CanvasAuxiliary 组件
-- 实现坐标系统同步（ResizeObserver + MutationObserver）
-- 实现缩放和滚动同步，支持缩放中心点保持
-- 完成单元测试和Property-based测试
+设计中心正在进行大规模重构，采用全新架构：
 
-✅ **Phase 2: 组件注册机制**
-- 创建 ComponentFactory 组件工厂类
-- 定义组件定义规范（schema）
-- 重构现有组件注册使用 ComponentFactory
-- 在 DomRenderer 中集成 ComponentFactory
-- 实现未注册组件占位符和错误处理
+- **编辑器内核**：DocumentModel + Command/History 命令系统
+- **三态数据隔离**：设计态/预览态/运行态数据分离
+- **多端适配**：支持 PC/BigScreen/Mobile 多视图
+- **发布流水线**：完整的校验、编译、打包、快照流程
 
-✅ **Phase 3: 基础布局组件 DOM 实现**
-- 实现 Container 组件（支持 Flex/Grid/Block 三种布局模式）
-- 实现 Row/Col 组件（24栅格系统）
-- 实现 Flex 组件（完整的 Flexbox 属性）
-- 实现 Grid 组件（完整的 Grid 属性）
-- 实现 CenterLayout 组件（水平/垂直居中）
-- 增强 styleConverter 支持所有布局属性
+详见 [Designer 重构计划](./refactor/README.md)
 
-### 待实现功能
+### 历史版本
 
-- Phase 4: 拖拽系统
-- Phase 5: 选中与辅助线系统
-- Phase 6: 右侧属性面板
-- Phase 7: 高级功能（撤销/重做、标尺、快捷键等）
-- Phase 8: 代码清理和文档更新
-- Phase 9: 测试和验收
+✅ **Phase 1-3**：混合渲染架构（DOM + Canvas 双层）
+
+- 实现 DesignCanvas、DomRenderer、CanvasAuxiliary 组件
+- 实现 Container、Flex、Grid、Row/Col 布局组件
+- 实现 ComponentFactory 组件工厂
+
+### 重构后待实现
+
+详见 [重构计划 - 里程碑](./refactor/README.md#重构阶段)
 
 ---
 
-**版本**: 2.1.0  
-**最后更新**: 2025-12-26
+**版本**: 3.0.0-alpha  
+**最后更新**: 2026-01-06
