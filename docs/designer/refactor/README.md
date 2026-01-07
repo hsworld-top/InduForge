@@ -32,8 +32,9 @@
 | Command/History | [editor-core.md](./editor-core.md)     | 撤销重做正常工作                |
 | SelectionModel  | [editor-core.md](./editor-core.md)     | 单选/多选/hover                 |
 | Serializer      | [editor-core.md](./editor-core.md)     | 导入导出、版本迁移              |
+| PageLockManager | [editor-core.md](./editor-core.md)     | 页面编辑锁、冲突提示            |
 
-**里程碑 M1**：能拖组件到画布、撤销重做、保存加载
+**里程碑 M1**：能拖组件到画布、撤销重做、保存加载、页面锁防冲突
 
 ### 第二阶段：数据绑定（与 DataCenter 对接）
 
@@ -53,30 +54,36 @@
 
 **预计周期**：2-3 周
 
-| 模块                   | 文档                                             | 验收标准             |
-| ---------------------- | ------------------------------------------------ | -------------------- |
-| FreeLayout Constraints | [layout-system.md](./layout-system.md)           | 约束布局运行时计算   |
-| Canvas 绘图层          | [design-interaction.md](./design-interaction.md) | 绘制线/矩形/圆/管道  |
-| 符号库                 | [schema-design.md](./schema-design.md)           | 预设工业符号拖入     |
-| 空容器 Placeholder     | [design-interaction.md](./design-interaction.md) | 设计态占位符渲染     |
-| 拖拽高亮               | [design-interaction.md](./design-interaction.md) | Drop target 视觉反馈 |
-| 属性面板               | [design-interaction.md](./design-interaction.md) | 自动生成、绑定配置   |
+| 模块                   | 文档                                             | 验收标准               |
+| ---------------------- | ------------------------------------------------ | ---------------------- |
+| FreeLayout Constraints | [layout-system.md](./layout-system.md)           | 约束布局运行时计算     |
+| Canvas 绘图层（Konva） | [design-interaction.md](./design-interaction.md) | 绘制线/矩形/圆/管道    |
+| 符号库                 | [schema-design.md](./schema-design.md)           | 预设工业符号拖入       |
+| 管道锚点连接           | [design-interaction.md](./design-interaction.md) | 管道连接设备、跟随移动 |
+| 图形命令               | [editor-core.md](./editor-core.md)               | 图形 CRUD 撤销重做     |
+| 混合选择               | [editor-core.md](./editor-core.md)               | 同时选中节点和图形     |
+| 对齐/分布/吸附         | [design-interaction.md](./design-interaction.md) | 智能对齐、网格吸附     |
+| 空容器 Placeholder     | [design-interaction.md](./design-interaction.md) | 设计态占位符渲染       |
 
-**里程碑 M3**：能绘制工艺流程图（Canvas 图形 + DOM 组件）、配置管道流动动画
+**里程碑 M3**：能绘制工艺流程图（Canvas 图形 + DOM 组件）、配置管道流动动画、锚点连接
 
 ### 第四阶段：发布与运行（闭环交付）
 
 **预计周期**：2-3 周
 
-| 模块            | 文档                                         | 验收标准                    |
-| --------------- | -------------------------------------------- | --------------------------- |
-| 发布流水线      | [publish-pipeline.md](./publish-pipeline.md) | validate → compile → bundle |
-| AssetNormalizer | [publish-pipeline.md](./publish-pipeline.md) | 资源分层打包                |
-| 工程快照        | [publish-pipeline.md](./publish-pipeline.md) | 完整快照与回滚              |
-| RuntimeEngine   | [runtime-engine.md](./runtime-engine.md)     | 独立运行、数据订阅          |
-| 资源生命周期    | [runtime-engine.md](./runtime-engine.md)     | DisposableScope、Watchdog   |
+| 模块               | 文档                                         | 验收标准                    |
+| ------------------ | -------------------------------------------- | --------------------------- |
+| 发布流水线         | [publish-pipeline.md](./publish-pipeline.md) | validate → compile → bundle |
+| AssetNormalizer    | [publish-pipeline.md](./publish-pipeline.md) | 资源分层打包                |
+| 工程快照           | [publish-pipeline.md](./publish-pipeline.md) | 完整快照与回滚              |
+| RuntimeEngine      | [runtime-engine.md](./runtime-engine.md)     | 独立运行、数据订阅          |
+| Canvas 运行时渲染  | [runtime-engine.md](./runtime-engine.md)     | 图形渲染、管道动画          |
+| 资源生命周期       | [runtime-engine.md](./runtime-engine.md)     | DisposableScope、Watchdog   |
+| NodeAgent          | [publish-pipeline.md](./publish-pipeline.md) | 节点监测、进程管理          |
+| 节点注册与健康检查 | [publish-pipeline.md](./publish-pipeline.md) | 注册流程、心跳、状态上报    |
+| 版本回滚           | [publish-pipeline.md](./publish-pipeline.md) | 一键回滚、自动回滚          |
 
-**里程碑 M3**：能发布 .ifp、节点能加载并运行、数据正常显示
+**里程碑 M4**：能发布 .ifp、节点能加载并运行、Canvas 图形和数据正常显示
 
 ### 第五阶段：国际化与主题
 
@@ -103,6 +110,21 @@
 | 动画系统   | [animation-system.md](./animation-system.md)   | 状态动画、工业场景动画   |
 | 验证系统   | [validation-system.md](./validation-system.md) | 表单验证、规则配置       |
 
+### 第七阶段：Standalone 桌面应用（低优先级）
+
+**预计周期**：2-3 周（可选迭代）
+
+| 模块             | 文档                                                                         | 验收标准                  |
+| ---------------- | ---------------------------------------------------------------------------- | ------------------------- |
+| RuntimeHost 抽象 | [publish-pipeline.md](./publish-pipeline.md#112-核心代码复用)                | 统一接口，支持多种宿主    |
+| IPC 数据桥接     | [publish-pipeline.md](./publish-pipeline.md#116-ipc-数据桥接standalone-模式) | 主进程 DataService 通信   |
+| 桌面应用导出     | [publish-pipeline.md](./publish-pipeline.md#115-standalone-模式导出)         | IFP + Electron 打包成 exe |
+| Kiosk 模式       | [publish-pipeline.md](./publish-pipeline.md#115-standalone-模式导出)         | 全屏运行、禁止退出        |
+
+> **说明**：此阶段为低优先级，但架构设计已预留支持。RuntimeEngine 核心代码通过 RuntimeHost 抽象，可同时用于 Server 模式（浏览器）和 Standalone 模式（Electron）。
+
+**里程碑 M7**：能导出独立桌面应用，无需浏览器即可运行工程
+
 ## 文档索引
 
 ### 核心架构
@@ -123,6 +145,9 @@
 - [渲染架构](./rendering.md) - 设计态/运行态同构渲染
 - [设计态交互](./design-interaction.md) - 工具栏、属性面板、Canvas 绘图、预览功能
 - [Canvas 图形](./schema-design.md#6-canvas-图形节点) - 工艺流程图、管道、符号库
+- [Canvas 渲染引擎](./design-interaction.md#9-canvas-渲染引擎) - Konva 技术选型、管道动画
+- [锚点连接系统](./design-interaction.md#10-管道锚点连接系统) - 管道连接设备、跟随移动
+- [对齐分布吸附](./design-interaction.md#11-对齐分布与吸附) - 智能对齐、网格吸附
 
 ### 动作与动画
 
@@ -134,6 +159,9 @@
 
 - [发布流水线](./publish-pipeline.md) - 校验、编译、打包、快照
 - [运行时引擎](./runtime-engine.md) - DataService、资源生命周期、Watchdog
+- [运维部署](./publish-pipeline.md#11-运行架构设计) - NodeAgent、节点注册、健康检查、日志
+- [版本回滚](./publish-pipeline.md#14-版本回滚) - 回滚策略、自动回滚
+- [Standalone 模式](./publish-pipeline.md#114-standalone-模式架构低优先级预留设计) - 单机桌面应用（低优先级）
 
 ### 多端与权限
 

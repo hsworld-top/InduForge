@@ -117,6 +117,14 @@ project-v1.0.0.ifp
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                          Renderer Layer                               │   │
+│  │  ┌─────────────────────────────┐  ┌─────────────────────────────┐   │   │
+│  │  │     CanvasRenderer          │  │      DOMRenderer            │   │   │
+│  │  │  (Konva - 图形/管道/符号)    │  │   (Vue - 组件渲染)          │   │   │
+│  │  └─────────────────────────────┘  └─────────────────────────────┘   │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                          Other Services                               │   │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                  │   │
 │  │  │ Auth        │  │ Action      │  │ Lifecycle   │                  │   │
@@ -615,7 +623,201 @@ class RuntimeEngine {
 }
 ```
 
-## 7. 测试要点
+## 7. Canvas 图形运行时渲染
+
+RuntimeEngine 需要同时渲染 DOM 组件和 Canvas 图形。
+
+### 7.1 架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      RuntimeRenderer                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              CanvasRenderer (z-index: 1)                 │   │
+│  │                                                         │   │
+│  │  graphicsById → Konva Shapes                            │   │
+│  │  - 绑定解析 → props 更新                                 │   │
+│  │  - 动画驱动（管道流动等）                                │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              DOMRenderer (z-index: 10)                   │   │
+│  │                                                         │   │
+│  │  nodesById → Vue Components                             │   │
+│  │  - 绑定解析 → props 更新                                 │   │
+│  │  - 事件处理                                              │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 7.2 图形绑定解析
+
+Canvas 图形的绑定解析与 DOM 组件相同：
+
+```typescript
+class CanvasRenderer {
+  private stage: Konva.Stage;
+  private layer: Konva.Layer;
+  private shapesMap: Map<string, Konva.Shape> = new Map();
+  private disposableScope: DisposableScope;
+
+  constructor(
+    private container: HTMLElement,
+    private graphicsById: Record<string, GraphicNode>,
+    private dataService: DataService
+  ) {
+    this.initStage();
+    this.renderGraphics();
+  }
+
+  private renderGraphics(): void {
+    for (const [id, graphic] of Object.entries(this.graphicsById)) {
+      const shape = this.createShape(graphic);
+      this.shapesMap.set(id, shape);
+      this.layer.add(shape);
+
+      // 设置数据绑定
+      this.setupBindings(id, graphic);
+    }
+    this.layer.draw();
+  }
+
+  private setupBindings(graphicId: string, graphic: GraphicNode): void {
+    for (const [propKey, binding] of Object.entries(graphic.bindings)) {
+      if (binding.kind === "datapoint") {
+        // 订阅数据点
+        const unsubscribe = this.dataService.subscribe(binding.path, (value) =>
+          this.updateGraphicProp(graphicId, propKey, value, binding.transform)
+        );
+        this.disposableScope.add(unsubscribe);
+      }
+    }
+  }
+
+  private updateGraphicProp(
+    graphicId: string,
+    propKey: string,
+    value: any,
+    transform?: Transform[]
+  ): void {
+    const shape = this.shapesMap.get(graphicId);
+    if (!shape) return;
+
+    // 应用转换
+    const transformedValue = applyTransform(value, transform);
+
+    // 更新 Konva shape 属性
+    shape.setAttr(this.mapPropToAttr(propKey), transformedValue);
+    this.layer.batchDraw();
+  }
+}
+```
+
+### 7.3 管道流动动画
+
+```typescript
+class PipeRenderer {
+  private animationController: AnimationController;
+
+  renderPipe(graphic: GraphicNode): Konva.Group {
+    const pipe = new Konva.Group();
+
+    // 绘制管道主体
+    const body = new Konva.Line({
+      points: flattenPoints(graphic.props.points),
+      stroke: graphic.props.strokeColor,
+      strokeWidth: graphic.props.width,
+      lineCap: "round",
+      lineJoin: "round",
+    });
+    pipe.add(body);
+
+    // 创建流动动画层
+    const flowIndicator = new Konva.Line({
+      points: flattenPoints(graphic.props.points),
+      stroke: graphic.props.flowColor ?? "#ffffff",
+      strokeWidth: graphic.props.width * 0.3,
+      dash: graphic.props.flowDash ?? [10, 10],
+      dashOffset: 0,
+    });
+    pipe.add(flowIndicator);
+
+    // 启动流动动画（由绑定的 flowSpeed 驱动）
+    if (graphic.bindings.flowSpeed) {
+      this.animationController.register(graphic.id, (speed: number) => {
+        if (speed > 0) {
+          const direction = graphic.props.flowDirection === "backward" ? -1 : 1;
+          flowIndicator.dashOffset(
+            flowIndicator.dashOffset() + speed * direction
+          );
+        }
+      });
+    }
+
+    return pipe;
+  }
+}
+```
+
+### 7.4 符号渲染
+
+```typescript
+class SymbolRenderer {
+  private symbolsById: Record<string, SymbolDef>;
+
+  renderSymbol(graphic: GraphicNode): Konva.Group {
+    const symbolDef = this.symbolsById[graphic.props.symbolId];
+    if (!symbolDef) {
+      console.warn(`Symbol not found: ${graphic.props.symbolId}`);
+      return new Konva.Group();
+    }
+
+    const group = new Konva.Group({
+      x: graphic.props.x,
+      y: graphic.props.y,
+      scaleX: graphic.props.scale ?? 1,
+      scaleY: graphic.props.scale ?? 1,
+      rotation: graphic.props.rotation ?? 0,
+    });
+
+    // 渲染符号内的基础图形
+    for (const primitive of symbolDef.graphics) {
+      const shape = this.createPrimitive(primitive);
+      group.add(shape);
+    }
+
+    return group;
+  }
+}
+```
+
+### 7.5 事件处理
+
+```typescript
+// Canvas 图形事件绑定
+function bindGraphicEvents(
+  shape: Konva.Shape,
+  graphic: GraphicNode,
+  actionExecutor: ActionExecutor
+): void {
+  for (const [eventName, actions] of Object.entries(graphic.events)) {
+    shape.on(eventName, (e) => {
+      const context = {
+        $event: { target: graphic.id, type: eventName },
+        $graphic: graphic,
+      };
+      actionExecutor.executeActions(actions, context);
+    });
+  }
+}
+```
+
+## 8. 测试要点
 
 - [ ] DataService 订阅/取消订阅正确性
 - [ ] 引用计数订阅合并
@@ -625,6 +827,11 @@ class RuntimeEngine {
 - [ ] 启动流程完整性
 - [ ] 多端选路规则
 - [ ] 健康状态上报
+- [ ] **Canvas 图形渲染正确性**
+- [ ] **Canvas 图形数据绑定更新**
+- [ ] **管道流动动画正常**
+- [ ] **符号渲染和旋转正确**
+- [ ] **Canvas 图形事件触发正确**
 
 ---
 
@@ -632,4 +839,5 @@ class RuntimeEngine {
 
 - [发布流水线](./publish-pipeline.md)
 - [数据绑定 v2](./data-binding-v2.md)
+- [设计态交互](./design-interaction.md)
 - [多端适配](./multi-view.md)

@@ -195,6 +195,226 @@ dataService.subscribe(manifest.dataRequirements.datapoints);
 }
 ```
 
+### 1.5 大规模数据点优化
+
+当工程涉及上万甚至百万级数据点时，需要特别注意以下优化策略。
+
+#### 1.5.1 数据点选择器
+
+**虚拟滚动**：数据点列表必须使用虚拟滚动，避免渲染全部 DOM。
+
+```typescript
+// 使用 @vueuse/core 的 useVirtualList
+import { useVirtualList } from "@vueuse/core";
+
+const { list, containerProps, wrapperProps } = useVirtualList(
+  datapoints, // 可能有 10 万条
+  { itemHeight: 36 }
+);
+```
+
+**分页加载 + 搜索**：不要一次性加载全部数据点。
+
+```typescript
+// ❌ 不推荐：全量加载
+const allDatapoints = await api.getDatapoints();
+
+// ✅ 推荐：分页 + 搜索
+const loadDatapoints = async (params: {
+  page: number;
+  pageSize: number;
+  keyword?: string;
+  sourceType?: string;
+}) => {
+  return api.getDatapoints(params); // 服务端分页
+};
+
+// 搜索使用 debounce
+const searchDatapoints = debounce(async (keyword: string) => {
+  if (keyword.length < 2) return []; // 至少 2 字符
+  return api.searchDatapoints({ keyword, limit: 100 });
+}, 300);
+```
+
+**树形结构懒加载**：按层级展开加载。
+
+```typescript
+// 首次只加载顶层（连接列表）
+const connections = await api.getConnections();
+
+// 展开时加载子节点
+const loadChildren = async (node: TreeNode) => {
+  if (node.type === "connection") {
+    return api.getDatapointGroups(node.id);
+  }
+  if (node.type === "group") {
+    return api.getDatapointsByGroup(node.id, { limit: 100 });
+  }
+};
+```
+
+#### 1.5.2 WebSocket 订阅优化
+
+**前缀订阅**：避免逐个订阅数据点。
+
+```typescript
+// ❌ 不推荐：逐个订阅
+paths.forEach((path) => {
+  socket.emit("datapoint:subscribe", { path });
+});
+
+// ✅ 推荐：批量订阅
+socket.emit("datapoint:subscribe", {
+  projectId,
+  paths, // 一次性传入
+});
+
+// ✅ 更推荐：前缀订阅（如果后端支持）
+socket.emit("datapoint:subscribe", {
+  projectId,
+  prefixes: ["mqtt.EMQX.温度组.*"], // 通配符
+});
+```
+
+**批量值更新**：合并处理推送的值。
+
+```typescript
+// 值缓存 Map
+const valueCache = reactive(new Map<string, DataPointValue>());
+
+// 监听批量推送
+socket.on(
+  "datapoint:batch",
+  (data: { timestamp: number; values: Record<string, any> }) => {
+    // 批量更新，只触发一次响应式更新
+    const batch = new Map(valueCache);
+    Object.entries(data.values).forEach(([path, value]) => {
+      batch.set(path, { value, timestamp: data.timestamp });
+    });
+    // 替换整个 Map
+    valueCache.clear();
+    batch.forEach((v, k) => valueCache.set(k, v));
+  }
+);
+```
+
+**页面级订阅管理**：离开页面时取消订阅。
+
+```typescript
+// 在页面组件中
+const subscriptions = new Set<string>();
+
+onMounted(() => {
+  // 收集当前页面需要的数据点
+  const paths = collectPageDatapoints(pageSchema);
+  paths.forEach((p) => subscriptions.add(p));
+
+  // 订阅
+  socket.emit("datapoint:subscribe", { projectId, paths: [...subscriptions] });
+});
+
+onUnmounted(() => {
+  // 取消订阅
+  socket.emit("datapoint:unsubscribe", {
+    projectId,
+    paths: [...subscriptions],
+  });
+  subscriptions.clear();
+});
+```
+
+#### 1.5.3 绑定校验优化
+
+**增量校验**：只校验变更的部分。
+
+```typescript
+// ❌ 不推荐：每次保存全量校验
+const validateAll = async (doc: DocumentModel) => {
+  const allBindings = collectAllBindings(doc); // 可能有上万条
+  return validateBindings(allBindings);
+};
+
+// ✅ 推荐：增量校验
+const validateChanged = async (changedNodes: string[], doc: DocumentModel) => {
+  const changedBindings = changedNodes.flatMap((nodeId) =>
+    collectNodeBindings(doc, nodeId)
+  );
+  return validateBindings(changedBindings);
+};
+```
+
+**后台校验**：使用 Web Worker 或后端校验。
+
+```typescript
+// 大规模校验放到 Web Worker
+const validationWorker = new Worker("/workers/validation.js");
+
+validationWorker.postMessage({
+  type: "validate",
+  bindings: collectAllBindings(doc),
+});
+
+validationWorker.onmessage = (e) => {
+  if (e.data.type === "result") {
+    updateDiagnostics(e.data.errors, e.data.warnings);
+  }
+};
+```
+
+#### 1.5.4 运行时优化
+
+**数据点分级**：按更新频率分级处理。
+
+```typescript
+// 数据点分级策略
+enum DataPointTier {
+  HOT = "hot", // 高频（<1s）- 实时监控
+  WARM = "warm", // 中频（1-10s）- 常规数据
+  COLD = "cold", // 低频（>10s）- 配置状态
+}
+
+// 运行时按级别差异化处理
+class TieredSubscriptionManager {
+  // HOT: 实时推送，内存缓存
+  // WARM: 100ms 聚合推送，Redis 缓存
+  // COLD: 按需拉取
+}
+```
+
+**值变化检测**：避免无意义的更新。
+
+```typescript
+// 只有值真正变化时才更新
+const updateValue = (path: string, newValue: any) => {
+  const current = valueCache.get(path);
+
+  // 深度比较或使用 deadband
+  if (isEqual(current?.value, newValue)) {
+    return; // 值未变化，跳过
+  }
+
+  // 数值类型使用死区过滤
+  if (typeof newValue === "number" && typeof current?.value === "number") {
+    const deadband = getDeadband(path);
+    if (Math.abs(newValue - current.value) < deadband) {
+      return; // 在死区内，跳过
+    }
+  }
+
+  valueCache.set(path, { value: newValue, timestamp: Date.now() });
+};
+```
+
+#### 1.5.5 设计态性能建议
+
+| 场景         | 数量级     | 建议              |
+| ------------ | ---------- | ----------------- |
+| 数据点选择器 | > 1000     | 必须分页 + 搜索   |
+| 数据点树     | > 5000     | 懒加载 + 虚拟滚动 |
+| 绑定校验     | > 500 节点 | 增量校验          |
+| 诊断面板     | > 100 问题 | 分组 + 分页       |
+| 大纲树       | > 200 节点 | 虚拟滚动          |
+
 ## 2. 安全建议
 
 ### 2.1 表达式安全
@@ -203,13 +423,33 @@ dataService.subscribe(manifest.dataRequirements.datapoints);
 
 ```javascript
 // ❌ 禁止的表达式
-{{ eval('malicious code') }}
-{{ window.location = 'evil.com' }}
-{{ new Function('alert(1)')() }}
+{
+  {
+    eval("malicious code");
+  }
+}
+{
+  {
+    window.location = "evil.com";
+  }
+}
+{
+  {
+    new Function("alert(1)")();
+  }
+}
 
 // ✅ 允许的表达式
-{{ $dp['device.temp'] > 80 ? '过热' : '正常' }}
-{{ $format.number(value, 2) }}
+{
+  {
+    $dp["device.temp"] > 80 ? "过热" : "正常";
+  }
+}
+{
+  {
+    $format.number(value, 2);
+  }
+}
 ```
 
 **自定义脚本限制**：
@@ -292,10 +532,19 @@ dataService.subscribe(manifest.dataRequirements.datapoints);
         "config": {
           "if": "{{ $vars.page.inputValue >= 0 && $vars.page.inputValue <= 100 }}",
           "then": [
-            { "type": "writeTag", "config": { "path": "device.setpoint", "value": "{{ $vars.page.inputValue }}" } }
+            {
+              "type": "writeTag",
+              "config": {
+                "path": "device.setpoint",
+                "value": "{{ $vars.page.inputValue }}"
+              }
+            }
           ],
           "else": [
-            { "type": "notify", "config": { "type": "error", "message": "输入值超出范围" } }
+            {
+              "type": "notify",
+              "config": { "type": "error", "message": "输入值超出范围" }
+            }
           ]
         }
       }
@@ -341,16 +590,16 @@ socket.on("connect_error", (error) => {
 
 ### 3.1 ID 命名
 
-| 类型       | 前缀    | 示例                         |
-| ---------- | ------- | ---------------------------- |
-| 页面       | page_   | page_monitor, page_login     |
-| 节点       | node_   | node_header, node_chart_temp |
-| 数据点     | dp_     | dp_temp_001                  |
-| 变量       | -       | isLoading, selectedId        |
-| 动作       | act_    | act_submit, act_refresh      |
-| 动画       | anim_   | anim_rotate, anim_flash      |
-| 自定义组件 | cc_     | cc_standard_pump_v1          |
-| 资源       | 按类型  | img_logo, icon_motor         |
+| 类型       | 前缀   | 示例                         |
+| ---------- | ------ | ---------------------------- |
+| 页面       | page\_ | page_monitor, page_login     |
+| 节点       | node\_ | node_header, node_chart_temp |
+| 数据点     | dp\_   | dp_temp_001                  |
+| 变量       | -      | isLoading, selectedId        |
+| 动作       | act\_  | act_submit, act_refresh      |
+| 动画       | anim\_ | anim_rotate, anim_flash      |
+| 自定义组件 | cc\_   | cc_standard_pump_v1          |
+| 资源       | 按类型 | img_logo, icon_motor         |
 
 ### 3.2 路径命名
 
@@ -379,55 +628,55 @@ calc.{计算单元}.{输出名}
 
 ```javascript
 // 布尔值：is/has/can/should 前缀
-isLoading
-isEditing
-hasError
-canSubmit
+isLoading;
+isEditing;
+hasError;
+canSubmit;
 
 // 选中/当前：selected/current 前缀
-selectedId
-selectedDevice
-currentTab
-currentPage
+selectedId;
+selectedDevice;
+currentTab;
+currentPage;
 
 // 列表/集合：复数形式
-devices
-selectedIds
-filteredItems
+devices;
+selectedIds;
+filteredItems;
 
 // 表单数据：formData 或具体名称
-formData
-loginForm
-settingsForm
+formData;
+loginForm;
+settingsForm;
 ```
 
 **全局变量**：
 
 ```javascript
 // 用户信息
-currentUser
+currentUser;
 
 // 应用状态
-theme
-locale
+theme;
+locale;
 ```
 
 ### 3.4 事件命名
 
 ```javascript
 // 组件事件
-click
-dblclick
-change
-input
-focus
-blur
+click;
+dblclick;
+change;
+input;
+focus;
+blur;
 
 // 自定义事件：on 前缀 + 动词
-onSelect
-onConfirm
-onCancel
-onRefresh
+onSelect;
+onConfirm;
+onCancel;
+onRefresh;
 ```
 
 ## 4. 项目结构建议
@@ -632,4 +881,3 @@ __designer__.performance.exportReport();
 - [动画系统](./animation-system.md)
 - [表达式引擎](./expression-engine.md)
 - [验证系统](./validation-system.md)
-

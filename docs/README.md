@@ -7,6 +7,7 @@
 ### 🆕 核心设计文档（推荐）
 
 - **[高层设计](./高层设计.md)** - 平台整体架构设计（**入口文档**）
+
   - 数据隔离三态模型
   - 发布与部署流程
   - 数据库设计
@@ -44,11 +45,22 @@
 - **[MQTT 实现说明](./datacenter/mqtt-implementation.md)** - 实现现状与后续规划
 - **[变量自动发现与批量导入](./datacenter/mqtt-auto-discovery.md)** - MQTT/API/CSV 多种变量来源
 
+### IDE 前端文档
+
+- **[dev_ide 概述](./dev_ide/README.md)** - 项目管理与运维中心
+  - 工程管理、发布流程
+  - 用户管理、权限控制
+  - 节点管理、部署运维
+  - **工程共享机制**（private/shared 可见性）
+  - **工程成员管理**（OWNER/ADMIN/DEVELOPER/VIEWER 角色）
+
 ### 后端文档
 
 - **[后端 API 文档](./backend/README.md)** - API 接口说明
 - **[认证与授权](./backend/auth.md)** - 用户认证和权限控制
 - **[数据库初始化](./backend/database-init.md)** - 数据库初始化指南
+- **[WebSocket 协议](./backend/websocket.md)** - Socket.IO 事件与消息格式
+- **[发布部署 API](./backend/publish-deploy-api.md)** - 发布、节点、部署接口
 
 ### 历史参考文档
 
@@ -81,7 +93,14 @@
 
 1. 阅读 [发布流水线](./designer/refactor/publish-pipeline.md)
 2. 查看 [运行时引擎](./designer/refactor/runtime-engine.md)
-3. 参考 [高层设计 - 发布与部署](./高层设计.md#5-发布与部署流程)
+3. 参考 [发布部署 API](./backend/publish-deploy-api.md)
+4. 了解 [dev_ide 运维管理](./dev_ide/README.md#5-运维管理待开发)
+
+### 我要开发实时数据功能
+
+1. 阅读 [WebSocket 协议](./backend/websocket.md)
+2. 参考 [MQTT 实现](./datacenter/mqtt-implementation.md)
+3. 查看 [数据绑定 v2](./designer/refactor/data-binding-v2.md)
 
 ### 我要部署项目
 
@@ -100,6 +119,8 @@ docs/
 ├── database-design.md                  # 数据库设计概览
 ├── dsl-design.md                       # DSL 设计规范（历史）
 ├── migration-plan.md                   # 迁移计划（历史）
+├── dev_ide/                            # 🆕 IDE 前端文档
+│   └── README.md                       # 项目管理与运维中心
 ├── designer/                           # 设计中心文档
 │   ├── README.md                       # 概述
 │   ├── refactor/                       # 🆕 重构文档
@@ -108,6 +129,7 @@ docs/
 │   │   ├── schema-design.md            # Schema 设计
 │   │   ├── data-binding-v2.md          # 数据绑定 v2
 │   │   ├── layout-system.md            # 布局系统
+│   │   ├── design-interaction.md       # 设计态交互
 │   │   ├── publish-pipeline.md         # 发布流水线
 │   │   ├── runtime-engine.md           # 运行时引擎
 │   │   └── i18n-theme.md               # 国际化与主题
@@ -124,7 +146,9 @@ docs/
 └── backend/                            # 后端文档
     ├── README.md                       # 概述
     ├── auth.md                         # 认证与授权
-    └── database-init.md                # 数据库初始化
+    ├── database-init.md                # 数据库初始化
+    ├── websocket.md                    # 🆕 WebSocket 协议
+    └── publish-deploy-api.md           # 🆕 发布部署 API
 ```
 
 ### 文档版本

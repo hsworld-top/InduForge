@@ -280,6 +280,308 @@ DataCenter 支持两大类连接：
 - PostgreSQL: `postgresql`
 - SQL Server: `transactsql`
 
+## 性能优化（大规模数据点）
+
+当数据点数量达到上万甚至百万级时，需要考虑以下优化策略。
+
+> **说明**：以下为设计时预留的优化方案，可根据实际业务规模按需实施。
+
+### 数据库层优化
+
+#### 索引优化
+
+```sql
+-- 复合索引（项目 + 来源类型 + 路径前缀）
+CREATE INDEX idx_dp_project_source_path ON data_points(project_id, source_type, path(100));
+
+-- 状态索引
+CREATE INDEX idx_dp_project_status ON data_points(project_id, status);
+
+-- 路径 Hash 索引（精确匹配场景）
+ALTER TABLE data_points ADD COLUMN path_hash CHAR(32) GENERATED ALWAYS AS (MD5(path)) STORED;
+CREATE INDEX idx_dp_path_hash ON data_points(project_id, path_hash);
+```
+
+#### 分表策略
+
+当单表数据量过大时，可按项目分表：
+
+```
+data_points_{projectId}
+├── data_points_proj_001
+├── data_points_proj_002
+└── ...
+```
+
+#### 查询优化
+
+```typescript
+// ❌ 不推荐：全量查询
+SELECT * FROM data_points WHERE project_id = ?;
+
+// ✅ 推荐：分页 + 条件筛选
+SELECT * FROM data_points
+WHERE project_id = ?
+  AND source_type = ?
+  AND path LIKE ?
+ORDER BY path
+LIMIT ? OFFSET ?;
+
+// ✅ 推荐：使用 path_hash 精确查询
+SELECT * FROM data_points
+WHERE project_id = ? AND path_hash = MD5(?);
+```
+
+### 缓存层优化
+
+#### Redis 缓存架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       缓存层设计                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────┐│
+│  │  值缓存 (HOT)    │  │  状态缓存 (WARM) │  │  元数据缓存    ││
+│  │                  │  │                  │  │                ││
+│  │  Key: dp:v:{path}│  │  Key: dp:s:{path}│  │  Key: dp:m:{id}││
+│  │  TTL: 60s        │  │  TTL: 300s       │  │  TTL: 3600s    ││
+│  │  数据: 最新值    │  │  数据: 连接状态  │  │  数据: 定义    ││
+│  │                  │  │  quality/error   │  │  path/dataType ││
+│  └──────────────────┘  └──────────────────┘  └────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 缓存实现
+
+```typescript
+class DataPointCacheService {
+  private redis: Redis;
+
+  // 获取数据点值（缓存优先）
+  async getValue(projectId: string, path: string): Promise<any> {
+    const cacheKey = `dp:v:${projectId}:${path}`;
+
+    // 1. 尝试从缓存获取
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
+    // 2. 缓存未命中，从源获取
+    const value = await this.fetchFromSource(projectId, path);
+
+    // 3. 写入缓存
+    await this.redis.setex(cacheKey, 60, JSON.stringify(value));
+
+    return value;
+  }
+
+  // 批量获取（减少 Redis 往返）
+  async getValues(
+    projectId: string,
+    paths: string[]
+  ): Promise<Map<string, any>> {
+    const keys = paths.map((p) => `dp:v:${projectId}:${p}`);
+    const values = await this.redis.mget(keys);
+
+    const result = new Map();
+    const missing: string[] = [];
+
+    values.forEach((v, i) => {
+      if (v) {
+        result.set(paths[i], JSON.parse(v));
+      } else {
+        missing.push(paths[i]);
+      }
+    });
+
+    // 批量获取缺失的
+    if (missing.length > 0) {
+      const fetched = await this.fetchFromSourceBatch(projectId, missing);
+      // ... 写入缓存和结果
+    }
+
+    return result;
+  }
+}
+```
+
+### WebSocket 推送优化
+
+#### 批量聚合推送
+
+```typescript
+// 服务端：聚合推送器
+class BatchPushService {
+  private buffer = new Map<string, Map<string, any>>();
+  private flushInterval = 100; // 100ms 聚合
+
+  constructor() {
+    setInterval(() => this.flush(), this.flushInterval);
+  }
+
+  // 缓冲单个值更新
+  push(projectId: string, path: string, value: any): void {
+    if (!this.buffer.has(projectId)) {
+      this.buffer.set(projectId, new Map());
+    }
+    this.buffer.get(projectId)!.set(path, value);
+  }
+
+  // 定时批量推送
+  private flush(): void {
+    for (const [projectId, values] of this.buffer) {
+      if (values.size === 0) continue;
+
+      const payload = {
+        timestamp: Date.now(),
+        values: Object.fromEntries(values),
+      };
+
+      // 推送到项目房间
+      socketService.io
+        .to(`project:${projectId}`)
+        .emit("datapoint:batch", payload);
+
+      values.clear();
+    }
+  }
+}
+```
+
+#### 差值推送
+
+```typescript
+// 只推送变化的值
+class DeltaPushService {
+  private lastValues = new Map<string, any>();
+
+  shouldPush(path: string, newValue: any): boolean {
+    const lastValue = this.lastValues.get(path);
+
+    // 首次推送
+    if (lastValue === undefined) {
+      this.lastValues.set(path, newValue);
+      return true;
+    }
+
+    // 值相同，跳过
+    if (isEqual(lastValue, newValue)) {
+      return false;
+    }
+
+    // 数值类型：死区过滤
+    if (typeof newValue === "number" && typeof lastValue === "number") {
+      const deadband = this.getDeadband(path);
+      if (Math.abs(newValue - lastValue) < deadband) {
+        return false;
+      }
+    }
+
+    this.lastValues.set(path, newValue);
+    return true;
+  }
+}
+```
+
+#### 订阅聚合
+
+```typescript
+// 支持前缀订阅，减少订阅数量
+class SubscriptionManager {
+  // 按前缀聚合
+  private prefixSubscriptions = new Map<string, Set<string>>(); // prefix -> socketIds
+
+  // 订阅前缀
+  subscribePrefixes(socketId: string, prefixes: string[]): void {
+    prefixes.forEach((prefix) => {
+      if (!this.prefixSubscriptions.has(prefix)) {
+        this.prefixSubscriptions.set(prefix, new Set());
+      }
+      this.prefixSubscriptions.get(prefix)!.add(socketId);
+    });
+  }
+
+  // 获取匹配的订阅者
+  getSubscribers(path: string): Set<string> {
+    const subscribers = new Set<string>();
+
+    for (const [prefix, sockets] of this.prefixSubscriptions) {
+      if (path.startsWith(prefix.replace("*", ""))) {
+        sockets.forEach((s) => subscribers.add(s));
+      }
+    }
+
+    return subscribers;
+  }
+}
+```
+
+### 数据点分级
+
+```typescript
+// 按更新频率和重要性分级
+enum DataPointTier {
+  HOT = "hot", // 高频（<1s）- 关键监控值
+  WARM = "warm", // 中频（1-10s）- 常规数据
+  COLD = "cold", // 低频（>10s）- 配置/状态
+}
+
+// 数据点定义扩展
+interface DataPoint {
+  // ... 其他字段
+  tier?: DataPointTier;
+  updateInterval?: number; // 最小更新间隔 (ms)
+  deadband?: number; // 数值死区
+}
+
+// 按级别差异化处理
+class TieredDataService {
+  async getValue(path: string): Promise<any> {
+    const meta = await this.getMeta(path);
+
+    switch (meta.tier) {
+      case "hot":
+        return this.memoryCache.get(path);
+      case "warm":
+        return this.redisCache.get(path);
+      case "cold":
+        return this.database.get(path);
+    }
+  }
+}
+```
+
+### 容量规划参考
+
+| 数据点规模 | 推荐配置           | 关键优化            |
+| ---------- | ------------------ | ------------------- |
+| < 1 万     | 单机 4C8G          | 基础索引            |
+| 1-10 万    | 单机 8C16G + Redis | 缓存 + 批量推送     |
+| 10-50 万   | 集群 2-3 节点      | 分表 + 订阅聚合     |
+| 50-100 万  | 集群 + 专用缓存    | 数据分级 + 差值推送 |
+| > 100 万   | Kafka + 时序数据库 | 专业方案            |
+
+### 实施优先级
+
+1. **立即可做**（低成本高收益）：
+
+   - 数据库索引优化
+   - WebSocket 批量推送（100ms 聚合）
+
+2. **短期实施**（中等复杂度）：
+
+   - Redis 值缓存层
+   - 前缀订阅机制
+   - 差值推送
+
+3. **长期规划**（需要架构调整）：
+   - 数据点分级
+   - 分表策略
+   - 时序数据库（如需历史数据）
+
 ## 相关文档
 
 - [数据点方案设计](./datapoint-design.md)
@@ -288,3 +590,4 @@ DataCenter 支持两大类连接：
 - [查询管理详细说明](./queries.md)
 - [数据库实现概述](./database-implementation.md)
 - [MQTT 实现说明](./mqtt-implementation.md)
+- [WebSocket 协议](../backend/websocket.md)

@@ -257,10 +257,13 @@ pnpm start
 
 - [认证与授权](./auth.md)
 - [数据库初始化](./database-init.md)
+- [WebSocket 协议](./websocket.md) - Socket.IO 事件与消息格式
+- [发布部署 API](./publish-deploy-api.md) - 发布、节点、部署接口
 - [数据连接管理](../datacenter/connections.md)
 - [查询管理](../datacenter/queries.md)
+- [dev_ide 文档](../dev_ide/README.md) - IDE 前端功能说明
 
 ---
 
-**版本**: 2.1.0  
-**最后更新**: 2025-03-08
+**版本**: 2.2.0  
+**最后更新**: 2026-01-07

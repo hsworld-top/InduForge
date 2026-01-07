@@ -740,7 +740,806 @@ class DataService {
 | T      | 管道   |
 | X      | 文字   |
 
-## 9. 测试要点
+### 8.7 位置微调
+
+| 快捷键         | 功能             |
+| -------------- | ---------------- |
+| ↑ ↓ ← →        | 移动 1px         |
+| Shift + 方向键 | 移动 10px        |
+| Ctrl + 方向键  | 移动到下一网格线 |
+
+### 8.8 锁定与隐藏
+
+| 快捷键       | 功能          |
+| ------------ | ------------- |
+| Ctrl+L       | 切换锁定状态  |
+| Ctrl+Shift+L | 解锁所有      |
+| Ctrl+H       | 切换显示/隐藏 |
+
+## 9. Canvas 渲染引擎
+
+### 9.1 技术选型
+
+推荐使用 **Konva.js** 作为 Canvas 渲染引擎：
+
+| 方案        | 优点                           | 缺点               | 推荐度     |
+| ----------- | ------------------------------ | ------------------ | ---------- |
+| **Konva**   | 熟悉度高、事件系统完善、性能好 | 包体积中等         | ⭐⭐⭐⭐⭐ |
+| Fabric.js   | 功能丰富、序列化强             | 包体积大、学习成本 | ⭐⭐⭐⭐   |
+| 原生 Canvas | 轻量、无依赖                   | 事件处理需自己实现 | ⭐⭐⭐     |
+| PixiJS      | WebGL 高性能                   | 偏游戏、API 差异大 | ⭐⭐       |
+
+### 9.2 架构设计
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     CanvasLayer.vue                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │   Konva.Stage   │  │   Konva.Layer   │  │ Konva.Transformer│ │
+│  │   (容器)        │  │  (图形渲染层)    │  │  (变换控制器)    │ │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘ │
+│           │                    │                    │           │
+│           └────────────────────┴────────────────────┘           │
+│                                │                                │
+│  ┌─────────────────────────────┴─────────────────────────────┐ │
+│  │                    GraphicsRenderer                        │ │
+│  │                                                           │ │
+│  │  graphicsById → Konva Shapes 映射                         │ │
+│  │  - Canvas.Line   → Konva.Line                             │ │
+│  │  - Canvas.Rect   → Konva.Rect                             │ │
+│  │  - Canvas.Circle → Konva.Circle                           │ │
+│  │  - Canvas.Pipe   → PipeShape (自定义)                     │ │
+│  │  - Canvas.Symbol → SymbolShape (自定义)                   │ │
+│  │                                                           │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 9.3 管道流动动画
+
+```typescript
+// PipeShape.ts - 自定义管道形状
+class PipeShape extends Konva.Group {
+  private flowAnimation: Konva.Animation | null = null;
+  private flowOffset = 0;
+
+  constructor(config: PipeConfig) {
+    super(config);
+    this.createPipeGraphics();
+    if (config.flowSpeed > 0) {
+      this.startFlowAnimation();
+    }
+  }
+
+  private createPipeGraphics(): void {
+    // 1. 绘制管道主体（矩形/圆角路径）
+    // 2. 绘制流动指示（虚线动画）
+  }
+
+  startFlowAnimation(): void {
+    this.flowAnimation = new Konva.Animation((frame) => {
+      // 根据 flowSpeed 和 flowDirection 更新 flowOffset
+      this.flowOffset += this.flowSpeed * (frame.timeDiff / 1000);
+      this.updateFlowIndicator();
+    }, this.getLayer());
+    this.flowAnimation.start();
+  }
+
+  // 数据绑定时调用
+  setFlowSpeed(speed: number): void {
+    this.flowSpeed = speed;
+    if (speed > 0 && !this.flowAnimation) {
+      this.startFlowAnimation();
+    } else if (speed === 0 && this.flowAnimation) {
+      this.flowAnimation.stop();
+      this.flowAnimation = null;
+    }
+  }
+}
+```
+
+## 10. 管道锚点连接系统
+
+### 10.1 锚点定义
+
+```typescript
+interface Anchor {
+  name: string; // 锚点名称，如 'inlet', 'outlet', 'top', 'bottom'
+  x: number; // 相对于符号中心的 X 偏移
+  y: number; // 相对于符号中心的 Y 偏移
+  direction: "up" | "down" | "left" | "right"; // 连接方向
+}
+
+// 符号定义中的锚点
+interface SymbolDef {
+  id: string;
+  anchors: Anchor[];
+  // ...
+}
+```
+
+### 10.2 管道连接
+
+```typescript
+// 管道可以连接到符号的锚点
+interface PipeConnection {
+  startAnchor?: {
+    symbolId: string; // 连接的符号 ID
+    anchorName: string; // 锚点名称
+  };
+  endAnchor?: {
+    symbolId: string;
+    anchorName: string;
+  };
+}
+
+// 管道 props 扩展
+interface PipeProps {
+  points: [number, number][];
+  connections?: PipeConnection; // 锚点连接信息
+  // ...其他属性
+}
+```
+
+### 10.3 连接交互
+
+```
+连接管道到设备锚点：
+
+1. 选择管道工具
+2. 鼠标靠近设备符号时，显示可用锚点（高亮圆点）
+3. 点击锚点开始绘制管道
+4. 绘制中间点
+5. 靠近目标设备锚点时自动吸附
+6. 点击目标锚点完成连接
+
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│     ┌───┐                                      ┌───┐            │
+│     │泵 │●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●│阀门│            │
+│     └───┘ (outlet)              管道        (inlet) └───┘       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+移动设备时，连接的管道端点跟随移动
+```
+
+### 10.4 连接跟随逻辑
+
+```typescript
+// 当符号移动时，更新连接的管道端点
+function onSymbolMove(symbolId: string, newX: number, newY: number): void {
+  // 找到所有连接到此符号的管道
+  const connectedPipes = findPipesConnectedTo(symbolId);
+
+  for (const pipe of connectedPipes) {
+    const connections = pipe.props.connections;
+    if (!connections) continue;
+
+    const newPoints = [...pipe.props.points];
+
+    // 更新起点（如果连接到此符号）
+    if (connections.startAnchor?.symbolId === symbolId) {
+      const anchor = getAnchorPosition(
+        symbolId,
+        connections.startAnchor.anchorName
+      );
+      newPoints[0] = [anchor.x, anchor.y];
+    }
+
+    // 更新终点（如果连接到此符号）
+    if (connections.endAnchor?.symbolId === symbolId) {
+      const anchor = getAnchorPosition(
+        symbolId,
+        connections.endAnchor.anchorName
+      );
+      newPoints[newPoints.length - 1] = [anchor.x, anchor.y];
+    }
+
+    // 执行更新命令
+    executeCommand(
+      new UpdateGraphicCommand(pipe.id, {
+        props: { ...pipe.props, points: newPoints },
+      })
+    );
+  }
+}
+```
+
+## 11. 对齐、分布与吸附
+
+### 11.1 对齐操作
+
+| 操作     | 快捷键 | 说明             |
+| -------- | ------ | ---------------- |
+| 左对齐   | Alt+L  | 以最左元素为基准 |
+| 右对齐   | Alt+R  | 以最右元素为基准 |
+| 上对齐   | Alt+T  | 以最上元素为基准 |
+| 下对齐   | Alt+B  | 以最下元素为基准 |
+| 水平居中 | Alt+H  | 水平中心对齐     |
+| 垂直居中 | Alt+V  | 垂直中心对齐     |
+
+### 11.2 分布操作
+
+| 操作     | 说明                   |
+| -------- | ---------------------- |
+| 水平分布 | 等间距水平排列选中元素 |
+| 垂直分布 | 等间距垂直排列选中元素 |
+
+### 11.3 智能吸附
+
+```typescript
+interface SnapConfig {
+  enabled: boolean;
+  gridSize: number; // 网格尺寸，如 8px
+  snapToGrid: boolean; // 吸附到网格
+  snapToGuides: boolean; // 吸附到参考线
+  snapToElements: boolean; // 吸附到其他元素边缘
+  snapThreshold: number; // 吸附阈值，如 5px
+}
+
+// 吸附类型
+type SnapLine = {
+  type: "vertical" | "horizontal";
+  position: number; // x 或 y 坐标
+  sourceId: string; // 吸附来源元素 ID
+};
+```
+
+### 11.4 吸附时机
+
+- **移动元素时**：显示对齐辅助线，自动吸附到最近的吸附点
+- **缩放元素时**：边缘吸附到其他元素或网格
+- **绘制图形时**：起点/终点吸附到网格或其他图形
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│     ┌─────────┐                                                │
+│     │  元素A  │                                                │
+│     └────┬────┘                                                │
+│          │                                                      │
+│          │ 吸附辅助线                                           │
+│          │                                                      │
+│     ┌────┴────┐                                                │
+│     │  元素B  │  ← 正在移动，左边缘与 A 对齐时显示辅助线        │
+│     └─────────┘                                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 11.5 网格模式
+
+```typescript
+interface GridConfig {
+  visible: boolean; // 是否显示网格
+  size: number; // 网格尺寸
+  color: string; // 网格颜色
+  opacity: number; // 透明度
+  subdivisions: number; // 细分数量（每大格分几小格）
+}
+```
+
+## 12. 复制粘贴策略
+
+### 12.1 基本规则
+
+| 场景           | 行为                                |
+| -------------- | ----------------------------------- |
+| 同页面复制粘贴 | 粘贴位置偏移 (10, 10)，避免完全重叠 |
+| 跨页面复制粘贴 | 粘贴到目标页面相同位置，无偏移      |
+| 多选复制       | 保持相对位置关系                    |
+| 混合复制       | 分别处理节点和图形，保持各自层级    |
+
+### 12.2 ID 重新生成
+
+```typescript
+// 复制时生成新 ID 的策略
+function generateCopyId(originalId: string): string {
+  // 格式: 原ID_copy_时间戳后4位
+  const timestamp = Date.now().toString().slice(-4);
+  return `${originalId}_copy_${timestamp}`;
+}
+
+// 批量复制时保持引用关系
+function copyElements(elements: SelectableElement[]): CopiedData {
+  const idMapping = new Map<string, string>(); // 旧ID -> 新ID
+
+  // 1. 先生成所有新 ID
+  for (const el of elements) {
+    idMapping.set(el.id, generateCopyId(el.id));
+  }
+
+  // 2. 复制数据并更新内部引用
+  const copiedNodes = [];
+  const copiedGraphics = [];
+
+  for (const el of elements) {
+    if (el.kind === "node") {
+      const node = deepClone(doc.getNode(el.id));
+      node.id = idMapping.get(el.id);
+      // 更新 children 中的引用
+      node.children = node.children
+        .map((childId) => idMapping.get(childId) ?? childId)
+        .filter(
+          (id) => idMapping.has(id) || !elements.some((e) => e.id === id)
+        );
+      copiedNodes.push(node);
+    } else {
+      const graphic = deepClone(doc.getGraphic(el.id));
+      graphic.id = idMapping.get(el.id);
+      // 更新管道连接引用
+      if (graphic.props.connections) {
+        updateConnectionRefs(graphic.props.connections, idMapping);
+      }
+      copiedGraphics.push(graphic);
+    }
+  }
+
+  return { nodes: copiedNodes, graphics: copiedGraphics, idMapping };
+}
+```
+
+### 12.3 粘贴位置计算
+
+```typescript
+interface PasteConfig {
+  offsetX: number; // 同页面偏移 X
+  offsetY: number; // 同页面偏移 Y
+  maxOffset: number; // 最大累计偏移（连续粘贴时）
+}
+
+const defaultPasteConfig: PasteConfig = {
+  offsetX: 10,
+  offsetY: 10,
+  maxOffset: 100, // 超过后重置偏移
+};
+
+// 连续粘贴时递增偏移
+let pasteCount = 0;
+function getPasteOffset(isSamePage: boolean): { x: number; y: number } {
+  if (!isSamePage) {
+    pasteCount = 0;
+    return { x: 0, y: 0 };
+  }
+
+  pasteCount++;
+  const offset = pasteCount * defaultPasteConfig.offsetX;
+
+  // 超过最大偏移后重置
+  if (offset > defaultPasteConfig.maxOffset) {
+    pasteCount = 1;
+  }
+
+  return {
+    x: pasteCount * defaultPasteConfig.offsetX,
+    y: pasteCount * defaultPasteConfig.offsetY,
+  };
+}
+```
+
+### 12.4 剪贴板格式
+
+```typescript
+interface ClipboardData {
+  type: "designer-elements";
+  version: 1;
+  sourcePageId: string;
+  nodes: ComponentNode[];
+  graphics: GraphicNode[];
+  timestamp: number;
+}
+
+// 写入系统剪贴板
+async function copyToClipboard(data: ClipboardData): Promise<void> {
+  const json = JSON.stringify(data);
+  await navigator.clipboard.writeText(json);
+}
+
+// 从系统剪贴板读取
+async function readFromClipboard(): Promise<ClipboardData | null> {
+  const text = await navigator.clipboard.readText();
+  try {
+    const data = JSON.parse(text);
+    if (data.type === "designer-elements") {
+      return data;
+    }
+  } catch {}
+  return null;
+}
+```
+
+## 13. 键盘微调
+
+### 13.1 移动微调
+
+| 快捷键         | 移动距离   | 说明               |
+| -------------- | ---------- | ------------------ |
+| ↑ ↓ ← →        | 1px        | 精细调整           |
+| Shift + 方向键 | 10px       | 快速调整           |
+| Ctrl + 方向键  | 吸附到网格 | 移动到下一个网格线 |
+
+### 13.2 实现
+
+```typescript
+function handleKeyboardMove(e: KeyboardEvent): void {
+  const selected = selectionModel.getSelectedElements();
+  if (selected.length === 0) return;
+
+  const directions: Record<string, { x: number; y: number }> = {
+    ArrowUp: { x: 0, y: -1 },
+    ArrowDown: { x: 0, y: 1 },
+    ArrowLeft: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+  };
+
+  const dir = directions[e.key];
+  if (!dir) return;
+
+  e.preventDefault();
+
+  // 计算移动距离
+  let distance = 1;
+  if (e.shiftKey) {
+    distance = 10;
+  } else if (e.ctrlKey) {
+    distance = snapConfig.gridSize;
+  }
+
+  const deltaX = dir.x * distance;
+  const deltaY = dir.y * distance;
+
+  // 批量移动
+  history.startBatch();
+  for (const el of selected) {
+    if (el.kind === "node") {
+      // 更新节点 layoutItem
+      executeCommand(new MoveNodeCommand(el.id, deltaX, deltaY));
+    } else {
+      // 更新图形位置
+      executeCommand(new MoveGraphicCommand(el.id, deltaX, deltaY));
+    }
+  }
+  history.endBatch();
+}
+```
+
+### 13.3 缩放微调
+
+| 快捷键               | 效果         |
+| -------------------- | ------------ |
+| Ctrl + +             | 放大选中元素 |
+| Ctrl + -             | 缩小选中元素 |
+| Alt + Shift + 方向键 | 单边缩放     |
+
+## 14. Canvas.Text 编辑
+
+### 14.1 交互流程
+
+```
+1. 选中 Canvas.Text 图形
+2. 双击进入编辑模式
+3. 显示文本光标，支持选中/输入
+4. 点击外部或按 Esc 退出编辑
+5. 按 Enter 确认（单行）或 Shift+Enter 换行（多行）
+```
+
+### 14.2 编辑态 UI
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│     双击进入编辑模式：                                           │
+│     ┌──────────────────────────────────────────┐                │
+│     │ 温度: 25.5℃|                            │ ← 文本光标     │
+│     │             ↑                            │                │
+│     │         编辑中文本                        │                │
+│     └──────────────────────────────────────────┘                │
+│     ↓                                                           │
+│     [B] [I] [U]  [左] [中] [右]  [字体▼] [大小▼]  [颜色■]        │
+│     ↑                                                           │
+│     迷你工具栏（选中文本时显示）                                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 14.3 属性面板配置
+
+| 属性          | 类型   | 说明                          |
+| ------------- | ------ | ----------------------------- |
+| text          | string | 文本内容（支持 `{{ }}` 绑定） |
+| fontSize      | number | 字体大小                      |
+| fontFamily    | enum   | 字体族                        |
+| fontWeight    | enum   | 字重（normal/bold）           |
+| fontStyle     | enum   | 样式（normal/italic）         |
+| fill          | color  | 文字颜色                      |
+| align         | enum   | 水平对齐（left/center/right） |
+| verticalAlign | enum   | 垂直对齐（top/middle/bottom） |
+| lineHeight    | number | 行高                          |
+| wrap          | enum   | 换行模式（none/word/char）    |
+
+### 14.4 字体选择
+
+```typescript
+// 预设字体列表
+const fontFamilies = [
+  { label: "系统默认", value: "system-ui" },
+  { label: "思源黑体", value: '"Source Han Sans SC", sans-serif' },
+  { label: "思源宋体", value: '"Source Han Serif SC", serif' },
+  { label: "等宽字体", value: '"JetBrains Mono", monospace' },
+  { label: "Arial", value: "Arial, sans-serif" },
+  // 工业场景常用
+  { label: "数码字体", value: '"DSEG7 Classic", monospace' },
+  { label: "LED 字体", value: '"LED Board", monospace' },
+];
+```
+
+## 15. 图形锁定与隐藏
+
+### 15.1 锁定行为
+
+| 状态 | 可选中 | 可移动 | 可缩放 | 显示大纲树 | 视觉样式     |
+| ---- | ------ | ------ | ------ | ---------- | ------------ |
+| 正常 | ✅     | ✅     | ✅     | ✅         | 正常         |
+| 锁定 | ✅     | ❌     | ❌     | ✅ 🔒 图标 | 选中框虚线   |
+| 隐藏 | ❌     | ❌     | ❌     | ✅ 👁 图标  | 设计态不显示 |
+
+### 15.2 锁定样式
+
+```typescript
+// 锁定图形的选中框样式
+const lockedSelectionStyle = {
+  stroke: "#999",
+  strokeDashArray: [4, 4], // 虚线
+  fill: "transparent",
+};
+
+// 锁定图形的鼠标样式
+const lockedCursor = "not-allowed";
+```
+
+### 15.3 大纲树显示
+
+```
+页面大纲
+├─ 📦 FlexContainer
+│  ├─ 📝 Text "标题"
+│  └─ 🖼️ Image
+├─ 🎨 Canvas.Rect "背景框"        👁️
+├─ 🎨 Canvas.Pipe "主管道"        🔒
+└─ 🎨 Canvas.Symbol "泵-001"
+```
+
+### 15.4 批量锁定/解锁
+
+```typescript
+// 快捷键
+const lockShortcuts = {
+  "Ctrl+L": "toggleLock", // 切换锁定状态
+  "Ctrl+Shift+L": "unlockAll", // 解锁所有
+  "Ctrl+H": "toggleVisibility", // 切换显示/隐藏
+};
+
+// 批量操作
+function toggleLockSelected(): void {
+  const selected = selectionModel.getSelectedElements();
+  const allLocked = selected.every((el) => getElement(el.id)?.locked);
+
+  history.startBatch();
+  for (const el of selected) {
+    if (el.kind === "graphic") {
+      executeCommand(new UpdateGraphicCommand(el.id, { locked: !allLocked }));
+    } else {
+      executeCommand(new UpdateNodeCommand(el.id, { locked: !allLocked }));
+    }
+  }
+  history.endBatch();
+}
+```
+
+## 16. 批量样式编辑
+
+### 16.1 多选时属性面板
+
+```
+┌─ 属性面板（已选中 3 个元素）──────────────────────────────────┐
+│                                                              │
+│  ⚠️ 多个元素选中，仅显示共同属性                              │
+│                                                              │
+│  ┌─ 共同属性 ─────────────────────────────────────────────┐ │
+│  │                                                        │ │
+│  │  透明度    [████████░░] 80%                           │ │
+│  │                                                        │ │
+│  │  可见性    [✅ 显示]                                   │ │
+│  │                                                        │ │
+│  │  锁定      [❌ 未锁定]                                 │ │
+│  │                                                        │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                              │
+│  ┌─ 样式（混合值显示 "--"）────────────────────────────────┐ │
+│  │                                                        │ │
+│  │  填充颜色  [■ --]  [设置统一值]                        │ │
+│  │                                                        │ │
+│  │  描边颜色  [■ #333333]  ← 相同值直接显示               │ │
+│  │                                                        │ │
+│  │  描边宽度  [-- ]px  [设置统一值]                       │ │
+│  │                                                        │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 16.2 混合值处理
+
+```typescript
+interface MultiSelectValue<T> {
+  type: "same" | "mixed";
+  value?: T; // type === 'same' 时有值
+  values?: T[]; // type === 'mixed' 时的所有值
+}
+
+function getMultiSelectValue<T>(
+  elements: (ComponentNode | GraphicNode)[],
+  path: string
+): MultiSelectValue<T> {
+  const values = elements.map((el) => get(el, path));
+  const uniqueValues = [...new Set(values.map((v) => JSON.stringify(v)))];
+
+  if (uniqueValues.length === 1) {
+    return { type: "same", value: values[0] };
+  }
+  return { type: "mixed", values };
+}
+
+// 设置统一值
+function setUnifiedValue(path: string, value: any): void {
+  history.startBatch();
+  for (const el of selectedElements) {
+    if (el.kind === "node") {
+      executeCommand(new UpdateNodeCommand(el.id, set({}, path, value)));
+    } else {
+      executeCommand(new UpdateGraphicCommand(el.id, set({}, path, value)));
+    }
+  }
+  history.endBatch();
+}
+```
+
+## 17. 自动保存
+
+### 17.1 配置
+
+```typescript
+interface AutoSaveConfig {
+  enabled: boolean;
+  intervalSeconds: number; // 保存间隔，默认 30 秒
+  maxVersions: number; // 保留的本地版本数，默认 10
+  saveOnBlur: boolean; // 窗口失焦时保存
+}
+
+const defaultAutoSaveConfig: AutoSaveConfig = {
+  enabled: true,
+  intervalSeconds: 30,
+  maxVersions: 10,
+  saveOnBlur: true,
+};
+```
+
+### 17.2 保存策略
+
+```typescript
+class AutoSaveManager {
+  private timer: number | null = null;
+  private lastSaveTime = 0;
+  private isDirty = false;
+
+  start(): void {
+    if (this.timer) return;
+
+    this.timer = setInterval(() => {
+      if (this.isDirty) {
+        this.save();
+      }
+    }, this.config.intervalSeconds * 1000);
+
+    // 监听变更
+    documentModel.on("change", () => {
+      this.isDirty = true;
+    });
+
+    // 窗口失焦保存
+    if (this.config.saveOnBlur) {
+      window.addEventListener("blur", () => {
+        if (this.isDirty) {
+          this.save();
+        }
+      });
+    }
+
+    // 页面关闭前保存
+    window.addEventListener("beforeunload", (e) => {
+      if (this.isDirty) {
+        this.saveSync();
+        e.returnValue = "有未保存的更改，确定离开吗？";
+      }
+    });
+  }
+
+  private async save(): Promise<void> {
+    try {
+      // 1. 保存到本地 IndexedDB（即时）
+      await this.saveToLocal();
+
+      // 2. 保存到服务器（异步）
+      await this.saveToServer();
+
+      this.isDirty = false;
+      this.lastSaveTime = Date.now();
+
+      // 显示保存成功提示
+      toast.success("自动保存成功", { duration: 1000 });
+    } catch (error) {
+      console.error("自动保存失败:", error);
+      toast.error("自动保存失败，请手动保存");
+    }
+  }
+
+  private async saveToLocal(): Promise<void> {
+    const data = documentModel.serialize();
+    const version = {
+      id: generateId("local_"),
+      timestamp: Date.now(),
+      data,
+    };
+
+    // 保存到 IndexedDB
+    await localDB.put("autoSaveVersions", version);
+
+    // 清理旧版本
+    await this.cleanupOldVersions();
+  }
+}
+```
+
+### 17.3 本地版本恢复
+
+```
+┌─ 恢复本地版本 ───────────────────────────────────────────────┐
+│                                                              │
+│  检测到本地有未保存的更改，是否恢复？                          │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  📄 自动保存 - 2026-01-07 14:30:25                     │ │
+│  │     比服务器版本新 5 分钟                               │ │
+│  │     [预览] [恢复此版本]                                 │ │
+│  ├────────────────────────────────────────────────────────┤ │
+│  │  📄 自动保存 - 2026-01-07 14:25:10                     │ │
+│  │     [预览] [恢复此版本]                                 │ │
+│  ├────────────────────────────────────────────────────────┤ │
+│  │  📄 自动保存 - 2026-01-07 14:20:05                     │ │
+│  │     [预览] [恢复此版本]                                 │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                              │
+│  [使用服务器版本]                    [恢复最新本地版本]       │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 17.4 保存状态指示
+
+```
+工具栏右侧显示保存状态：
+
+[✓ 已保存]              - 无未保存更改
+[● 未保存]              - 有更改未保存（圆点闪烁）
+[↻ 保存中...]           - 正在保存
+[⚠ 保存失败 - 重试]     - 保存失败，点击重试
+```
+
+## 18. 测试要点
 
 - [ ] 工具栏各功能正常工作
 - [ ] 绘图工具绘制图形正常
@@ -755,12 +1554,25 @@ class DataService {
 - [ ] 空容器占位符显示
 - [ ] 预览模式数据连接正常
 - [ ] 快捷键响应正确
+- [ ] **管道锚点连接正常**
+- [ ] **移动设备时管道跟随**
+- [ ] **管道流动动画正常**
+- [ ] **智能吸附功能正常**
+- [ ] **对齐分布操作正确**
+- [ ] **混合选择（节点 + 图形）正常**
+- [ ] **复制粘贴（同页面/跨页面）正确**
+- [ ] **键盘微调移动正常**
+- [ ] **Canvas.Text 双击编辑正常**
+- [ ] **图形锁定/隐藏行为正确**
+- [ ] **多选批量样式编辑正常**
+- [ ] **自动保存触发和恢复正常**
 
 ---
 
 **相关文档**：
 
 - [Schema 设计](./schema-design.md)
+- [编辑器内核](./editor-core.md)
 - [组件清单](./component-manifest.md)
 - [动作系统](./action-system.md)
 - [数据绑定 v2](./data-binding-v2.md)
