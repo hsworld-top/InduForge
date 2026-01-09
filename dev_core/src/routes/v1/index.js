@@ -9,6 +9,7 @@ const logRoutes = require("./log");
 const roleRoutes = require("./role");
 const dataRoutes = require("./data");
 const designRoutes = require("./design");
+const pageLockRoutes = require("./pageLock");
 
 function buildV1Router(options = {}) {
   const router = express.Router();
@@ -26,6 +27,7 @@ function buildV1Router(options = {}) {
   router.use("/roles", roleRoutes);
   router.use("/data", dataRoutes);
   router.use("/design", designRoutes);
+  router.use("/pages", pageLockRoutes);
 
   logger.info("V1 router mounted successfully");
 

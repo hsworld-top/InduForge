@@ -7,8 +7,9 @@
       :is-dirty="isDirty"
       :view-presets="viewPresets"
       :active-view-key="activeViewKey"
-      :can-undo="canUndo"
-      :can-redo="canRedo"
+      :can-undo="canUndoEnabled"
+      :can-redo="canRedoEnabled"
+      :can-move-layer="canMoveLayer"
       :zoom="zoom"
       :saving="saving"
       @update:activeViewKey="handleViewChange"
@@ -18,6 +19,10 @@
       @save="handleSave"
       @export="handleExport"
       @toggleLock="handleToggleLock"
+      @moveUp="handleLayerMoveUp"
+      @moveDown="handleLayerMoveDown"
+      @moveToTop="handleLayerMoveToTop"
+      @moveToBottom="handleLayerMoveToBottom"
     />
 
     <!-- 主体区域 -->
@@ -38,19 +43,73 @@
           @close="handleLeftClose"
           @toggleFloating="toggleLeftFloating"
         >
+          <template #actions>
+            <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+              <el-button size="small" text @click="handlePageCreate">
+                <IconEpPlus />
+              </el-button>
+            </el-tooltip>
+          </template>
           <component
             :is="leftPanelComponent"
             v-bind="leftPanelProps"
+            ref="leftPanelRef"
             @update:drawingTool="(value) => (drawingTool.value = value)"
           />
         </DockPanel>
 
         <div class="designer-canvas">
-          <CanvasContainer
-            :width="canvasWidth"
-            :height="canvasHeight"
-            :zoom="zoom"
-          />
+          <!-- 页面标签栏 -->
+          <div v-if="pageTabs.length > 0" class="page-tabs-bar">
+            <el-tabs
+              v-model="activePageTabId"
+              type="card"
+              closable
+              @tab-remove="handleClosePageTab"
+            >
+              <el-tab-pane
+                v-for="tab in pageTabs"
+                :key="tab.id"
+                :name="tab.id"
+                closable
+              >
+                <template #label>
+                  <span class="page-tab-label">
+                    <IconEpDocument class="tab-icon" />
+                    <span class="tab-name">{{ tab.name }}</span>
+                    <IconEpWarning
+                      v-if="tab.isDirty"
+                      class="tab-dirty-icon"
+                      title="未保存"
+                    />
+                  </span>
+                </template>
+              </el-tab-pane>
+            </el-tabs>
+          </div>
+
+          <!-- 画布容器 -->
+          <template v-if="hasPages">
+            <CanvasContainer
+              :width="canvasWidth"
+              :height="canvasHeight"
+              :zoom="zoom"
+              @zoomChange="handleZoomChange"
+            />
+          </template>
+
+          <!-- 空页面提示 -->
+          <div v-else class="empty-canvas-placeholder">
+            <div class="empty-content">
+              <IconEpDocument class="empty-icon" />
+              <h3 class="empty-title">暂无页面</h3>
+              <p class="empty-desc">创建一个新页面开始设计</p>
+              <el-button type="primary" @click="handlePageCreate">
+                <IconEpPlus class="mr-1" />
+                新建页面
+              </el-button>
+            </div>
+          </div>
 
           <DockPanel
             v-if="leftActiveKey && leftFloating"
@@ -60,9 +119,17 @@
             @close="handleLeftClose"
             @toggleFloating="toggleLeftFloating"
           >
+            <template #actions>
+              <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+                <el-button size="small" text @click="handlePageCreate">
+                  <IconEpPlus />
+                </el-button>
+              </el-tooltip>
+            </template>
             <component
               :is="leftPanelComponent"
               v-bind="leftPanelProps"
+              ref="leftPanelRef"
               @update:drawingTool="(value) => (drawingTool.value = value)"
             />
           </DockPanel>
@@ -102,9 +169,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { CanvasContainer } from "@/ui/Canvas";
@@ -133,28 +200,238 @@ import IconEpUser from "~icons/ep/user";
 import IconEpTools from "~icons/ep/tools";
 import IconEpBrush from "~icons/ep/brush";
 import IconEpSetting from "~icons/ep/setting";
+import IconEpPlus from "~icons/ep/plus";
+import IconEpWarning from "~icons/ep/warning";
 
 const route = useRoute();
 const router = useRouter();
 
 const editorStore = useEditorStore();
-const { canUndo, canRedo, saving, currentPageId, currentPage } =
-  storeToRefs(editorStore);
+const {
+  canUndo,
+  canRedo,
+  saving,
+  selection,
+  currentPageId,
+  currentPage,
+  isLocked,
+  readonlyState,
+} = storeToRefs(editorStore);
 
 const zoom = ref(1);
 const activeViewKey = ref("pc");
 const viewPresets = VIEW_PRESETS;
 
 const drawingTool = ref("");
-const isLocked = ref(false);
+
+// ==================== 页面标签页系统 ====================
+/**
+ * @typedef {Object} PageTab
+ * @property {string} id - 页面ID
+ * @property {string} name - 页面名称
+ * @property {boolean} isDirty - 是否有未保存的修改
+ */
+
+/** @type {import('vue').Ref<PageTab[]>} */
+const pageTabs = ref([]);
+const activePageTabId = ref("");
+
+/**
+ * 打开页面标签页
+ * @param {string} pageId - 页面ID
+ */
+const openPageTab = (pageId) => {
+  const page = editorStore.pages.find((p) => p.id === pageId);
+  if (!page) return;
+
+  // 检查是否已打开
+  const existingTab = pageTabs.value.find((t) => t.id === pageId);
+  if (existingTab) {
+    // 只更新 activePageTabId，watch 会自动调用 setCurrentPage
+    activePageTabId.value = pageId;
+    return;
+  }
+
+  // 添加新标签页
+  pageTabs.value.push({
+    id: pageId,
+    name: page.name || "未命名页面",
+    isDirty: false,
+  });
+
+  // 只更新 activePageTabId，watch 会自动调用 setCurrentPage
+  activePageTabId.value = pageId;
+};
+
+/**
+ * 关闭页面标签页
+ * @param {string} tabId - 标签页ID
+ */
+const handleClosePageTab = async (tabId) => {
+  const index = pageTabs.value.findIndex((t) => t.id === tabId);
+  if (index === -1) return;
+
+  const tab = pageTabs.value[index];
+
+  // 如果有未保存的修改，弹窗确认
+  if (tab.isDirty) {
+    try {
+      const action = await ElMessageBox.confirm(
+        `页面 "${tab.name}" 有未保存的修改，是否保存后关闭？`,
+        "关闭确认",
+        {
+          distinguishCancelAndClose: true,
+          confirmButtonText: "保存并关闭",
+          cancelButtonText: "不保存",
+          type: "warning",
+        }
+      );
+
+      if (action === "confirm") {
+        // 先切换到该页面再保存
+        if (currentPageId.value !== tabId) {
+          editorStore.setCurrentPage(tabId);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        await editorStore.saveCurrentPage();
+        ElMessage.success("页面已保存");
+      }
+    } catch (action) {
+      if (action === "close") {
+        // 用户点击关闭按钮，取消操作
+        return;
+      }
+      // action === 'cancel'，不保存直接关闭
+    }
+  }
+
+  // 执行关闭
+  pageTabs.value.splice(index, 1);
+
+  // 如果关闭的是当前标签页
+  if (activePageTabId.value === tabId) {
+    if (pageTabs.value.length > 0) {
+      // 切换到其他标签页
+      const newActiveTab =
+        pageTabs.value[Math.min(index, pageTabs.value.length - 1)];
+      activePageTabId.value = newActiveTab.id;
+      editorStore.setCurrentPage(newActiveTab.id);
+    } else {
+      // 没有标签页了，清空状态
+      activePageTabId.value = "";
+    }
+  }
+};
+
+/**
+ * 更新标签页脏状态
+ */
+const updateTabDirtyState = () => {
+  const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
+  if (tab) {
+    tab.isDirty = canUndo.value;
+  }
+};
+
+/**
+ * 更新标签页名称
+ */
+const updateTabName = () => {
+  const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
+  if (tab) {
+    // 从 pages 列表获取最新的页面名称
+    const page = editorStore.pages.find((p) => p.id === currentPageId.value);
+    tab.name = page?.name || "未命名页面";
+  }
+};
+
+// 监听 canUndo 变化，更新标签页脏状态
+watch(canUndo, updateTabDirtyState);
+
+// 监听页面列表变化，更新标签页名称
+watch(
+  [() => editorStore.pages, currentPageId],
+  () => {
+    updateTabName();
+  },
+  { deep: true }
+);
+
+// 监听标签页切换，同步到 currentPageId
+watch(
+  activePageTabId,
+  async (newTabId, oldTabId) => {
+    // 标签页切换时，直接同步到 store
+    if (newTabId && newTabId !== oldTabId) {
+      await editorStore.setCurrentPage(newTabId);
+    }
+  },
+  { flush: "sync" }
+);
+
+// 初始化时打开当前页面
+watch(
+  currentPageId,
+  (newPageId) => {
+    if (newPageId && !pageTabs.value.find((t) => t.id === newPageId)) {
+      // ✅ 验证页面是否真的存在
+      const pageExists = editorStore.pages.some((p) => p.id === newPageId);
+      if (pageExists) {
+        openPageTab(newPageId);
+      }
+    }
+  },
+  { immediate: true }
+);
+
+// 提供 openPageTab 方法给子组件
+provide("openPageTab", openPageTab);
+
+/**
+ * 是否有页面
+ */
+const hasPages = computed(() => {
+  // ✅ 确保页面列表不为空且当前页面确实存在
+  if (editorStore.pages.length === 0) return false;
+  if (!currentPageId.value) return false;
+  return editorStore.pages.some((p) => p.id === currentPageId.value);
+});
+// ==================== 页面标签页系统结束 ====================
+const canUndoEnabled = computed(
+  () => canUndo.value && !readonlyState.value?.readonly
+);
+const canRedoEnabled = computed(
+  () => canRedo.value && !readonlyState.value?.readonly
+);
+
+/**
+ * 是否可以移动图层
+ */
+const canMoveLayer = computed(() => {
+  if (readonlyState.value?.readonly) return false;
+  const primary = selection.value?.getPrimaryElement();
+  if (!primary || primary.kind !== "node") return false;
+  // 不能移动根节点
+  const rootNodeId = currentPage.value?.rootNodeId;
+  return primary.id !== rootNodeId;
+});
 const leftActiveKey = ref("pages");
 const rightActiveKey = ref("props");
 const leftFloating = ref(false);
 const rightFloating = ref(false);
+const leftPanelRef = ref(null);
 
 const pageName = computed(() => {
+  // ✅ 如果没有页面，返回空
+  if (!hasPages.value) return "";
+  // 优先从 pages 列表获取名称（更可靠）
+  const pageFromList = editorStore.pages.find(
+    (p) => p.id === currentPageId.value
+  );
+  if (pageFromList?.name) return pageFromList.name;
+  // 其次从 doc 中获取
   const page = currentPage.value;
-  return page?.name || page?.id || "未命名页面";
+  return page?.name || "";
 });
 
 const isDirty = computed(() => canUndo.value);
@@ -238,7 +515,6 @@ const rightPanelTitle = computed(() => {
   return item?.label || "面板";
 });
 
-
 /**
  * 撤销操作
  */
@@ -271,6 +547,13 @@ const handlePreview = () => {
 const handleSave = async () => {
   try {
     await editorStore.saveCurrentPage();
+
+    // 保存成功后清除当前标签页的脏状态
+    const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
+    if (tab) {
+      tab.isDirty = false;
+    }
+
     ElMessage.success("保存成功");
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
@@ -297,8 +580,23 @@ const handleViewChange = (key) => {
 /**
  * 切换锁定状态
  */
-const handleToggleLock = () => {
-  isLocked.value = !isLocked.value;
+const handleToggleLock = async () => {
+  const result = await editorStore.togglePageLock();
+  if (!result) return;
+
+  if (result.success) {
+    const message =
+      result.action === "release" ? "已释放页面锁" : "已获取页面锁";
+    ElMessage.success(message);
+    return;
+  }
+
+  if (result.reason === "locked") {
+    ElMessage.warning(`页面已被${result.lockedByName || "其他用户"}锁定`);
+    return;
+  }
+
+  ElMessage.error(result.error?.message || "页面锁操作失败");
 };
 
 /**
@@ -350,6 +648,59 @@ const toggleRightFloating = () => {
 };
 
 /**
+ * 更新缩放比例
+ * @param {number} value - 缩放比例
+ */
+const handleZoomChange = (value) => {
+  zoom.value = value;
+};
+
+/**
+ * 打开页面新建弹窗
+ * @returns {void}
+ */
+const handlePageCreate = () => {
+  if (leftActiveKey.value !== "pages") return;
+  leftPanelRef.value?.openCreateDialog?.();
+};
+
+/**
+ * 工具栏:上移图层
+ */
+const handleLayerMoveUp = () => {
+  if (editorStore.moveNodeUp()) {
+    ElMessage.success("已上移");
+  }
+};
+
+/**
+ * 工具栏:下移图层
+ */
+const handleLayerMoveDown = () => {
+  if (editorStore.moveNodeDown()) {
+    ElMessage.success("已下移");
+  }
+};
+
+/**
+ * 工具栏:置顶
+ */
+const handleLayerMoveToTop = () => {
+  if (editorStore.moveNodeToTop()) {
+    ElMessage.success("已置顶");
+  }
+};
+
+/**
+ * 工具栏:置底
+ */
+const handleLayerMoveToBottom = () => {
+  if (editorStore.moveNodeToBottom()) {
+    ElMessage.success("已置底");
+  }
+};
+
+/**
  * 加载工程数据
  */
 const loadProject = async () => {
@@ -365,5 +716,121 @@ const loadProject = async () => {
 onMounted(() => {
   void loadProject();
 });
+
+onBeforeUnmount(() => {
+  void editorStore.releasePageLock();
+});
 </script>
 
+<style scoped>
+/* 页面标签栏样式 */
+.page-tabs-bar {
+  flex-shrink: 0;
+  background: #f5f7fa;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.dark .page-tabs-bar {
+  background: #1a1a1a;
+  border-bottom-color: #3a3a3a;
+}
+
+.page-tabs-bar :deep(.el-tabs__header) {
+  margin: 0;
+  border-bottom: none;
+}
+
+.page-tabs-bar :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.page-tabs-bar :deep(.el-tabs__item) {
+  height: 36px;
+  line-height: 36px;
+  border: none !important;
+  background: transparent;
+  color: #606266;
+  padding: 0 16px;
+}
+
+.page-tabs-bar :deep(.el-tabs__item.is-active) {
+  background: white;
+  color: #409eff;
+  border-bottom: 2px solid #409eff !important;
+}
+
+.dark .page-tabs-bar :deep(.el-tabs__item.is-active) {
+  background: #2a2a2a;
+}
+
+.page-tab-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-tab-label .tab-icon {
+  width: 14px;
+  height: 14px;
+  color: #909399;
+}
+
+.page-tab-label .tab-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-tab-label .tab-dirty-icon {
+  width: 12px;
+  height: 12px;
+  color: #e6a23c;
+}
+
+/* 空页面提示 */
+.empty-canvas-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ed 100%);
+}
+
+.dark .empty-canvas-placeholder {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+}
+
+.empty-content {
+  text-align: center;
+  padding: 40px;
+}
+
+.empty-icon {
+  width: 80px;
+  height: 80px;
+  color: #c0c4cc;
+  margin-bottom: 20px;
+}
+
+.dark .empty-icon {
+  color: #4a4a4a;
+}
+
+.empty-title {
+  font-size: 20px;
+  font-weight: 500;
+  color: #606266;
+  margin: 0 0 8px 0;
+}
+
+.dark .empty-title {
+  color: #d1d5db;
+}
+
+.empty-desc {
+  font-size: 14px;
+  color: #909399;
+  margin: 0 0 24px 0;
+}
+</style>

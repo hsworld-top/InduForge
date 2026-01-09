@@ -1,30 +1,42 @@
 <template>
   <nav class="tool-rail" :class="`tool-rail--${side}`">
     <div class="tool-rail__section">
-      <button
+      <el-tooltip
         v-for="item in topItems"
         :key="item.key"
-        type="button"
-        class="tool-rail__button"
-        :class="{ 'is-active': item.key === activeKey }"
-        @click="handleSelect(item.key)"
+        :content="item.label"
+        :placement="side === 'left' ? 'right' : 'left'"
+        :show-after="300"
       >
-        <component v-if="item.icon" :is="item.icon" class="tool-rail__icon" />
-        <span class="tool-rail__label">{{ item.label }}</span>
-      </button>
+        <button
+          type="button"
+          class="tool-rail__button"
+          :class="{ 'is-active': item.key === activeKey }"
+          @click="handleSelect(item.key)"
+        >
+          <component v-if="item.icon" :is="item.icon" class="tool-rail__icon" />
+          <span class="tool-rail__label">{{ item.label }}</span>
+        </button>
+      </el-tooltip>
     </div>
     <div class="tool-rail__section tool-rail__section--bottom">
-      <button
+      <el-tooltip
         v-for="item in bottomItems"
         :key="item.key"
-        type="button"
-        class="tool-rail__button"
-        :class="{ 'is-active': item.key === activeKey }"
-        @click="handleSelect(item.key)"
+        :content="item.label"
+        :placement="side === 'left' ? 'right' : 'left'"
+        :show-after="300"
       >
-        <component v-if="item.icon" :is="item.icon" class="tool-rail__icon" />
-        <span class="tool-rail__label">{{ item.label }}</span>
-      </button>
+        <button
+          type="button"
+          class="tool-rail__button"
+          :class="{ 'is-active': item.key === activeKey }"
+          @click="handleSelect(item.key)"
+        >
+          <component v-if="item.icon" :is="item.icon" class="tool-rail__icon" />
+          <span class="tool-rail__label">{{ item.label }}</span>
+        </button>
+      </el-tooltip>
     </div>
   </nav>
 </template>

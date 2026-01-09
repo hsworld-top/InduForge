@@ -7,9 +7,12 @@ import router from './router';
 import { Storage } from './utils/storage';
 import { STORAGE_KEYS } from './constants';
 import App from './App.vue';
+import { registerBuiltinComponents } from "./editor-core/registry/builtinManifests.js";
 import './assets/styles/main.css';
 
 const app = createApp(App);
+
+registerBuiltinComponents();
 
 app.use(createPinia());
 app.use(router);

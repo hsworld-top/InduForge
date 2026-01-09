@@ -20,6 +20,16 @@ export { EventEmitter } from "./utils/EventEmitter.js";
 export { DocumentModel } from "./document/DocumentModel.js";
 export * from "./document/indexes.js";
 
+// 工厂函数
+export {
+  createComponentNode,
+  cloneComponentNode,
+  inferPositioning,
+  createDiagramNode,
+  createDiagramData,
+  createShape,
+} from "./document/factory.js";
+
 // 序列化（从 document/ 目录导出）
 export { Serializer } from "./document/Serializer.js";
 export {
@@ -38,6 +48,9 @@ export {
   DuplicateNodeCommand,
   SetNodePropsCommand,
   SetNodeStyleCommand,
+  ReorderNodeCommand,
+  ToggleNodeVisibilityCommand,
+  ToggleNodeLockCommand,
 } from "./commands/nodeCommands.js";
 export {
   InsertGraphicCommand,

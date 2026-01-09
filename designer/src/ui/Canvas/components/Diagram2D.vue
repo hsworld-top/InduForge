@@ -1,0 +1,238 @@
+<template>
+  <div
+    class="diagram-2d-component"
+    :style="componentStyle"
+    @dblclick.stop="handleDoubleClick"
+  >
+    <!-- 预览渲染区域 -->
+    <canvas
+      ref="canvasRef"
+      class="diagram-canvas"
+      :width="canvasWidth"
+      :height="canvasHeight"
+    />
+
+    <!-- 空状态提示 -->
+    <div v-if="isEmpty" class="empty-hint">
+      <IconEpGrid class="empty-icon" />
+      <div class="empty-text">双击进入Canvas编辑模式</div>
+      <div class="empty-subtext">在此绘制流程图、图表等</div>
+    </div>
+
+    <!-- 图元数量提示 -->
+    <div v-else class="shape-count-badge">
+      {{ shapeCount }} 个图元
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
+import { useEditorStore } from "@/stores/editor-store";
+import IconEpGrid from "~icons/ep/grid";
+
+const props = defineProps({
+  /**
+   * 节点数据
+   * @type {import('@/editor-core').ComponentNode}
+   */
+  node: {
+    type: Object,
+    required: true,
+  },
+});
+
+const emit = defineEmits(["enterCanvasMode"]);
+
+const editorStore = useEditorStore();
+const canvasRef = ref(null);
+
+/**
+ * 绘图数据
+ */
+const diagramId = computed(() => props.node.props?.diagramId || "");
+const diagramData = computed(() => {
+  // TODO: 从 store 获取绘图数据
+  return null;
+});
+
+const isEmpty = computed(() => {
+  return !diagramData.value || !diagramData.value.shapes?.length;
+});
+
+const shapeCount = computed(() => {
+  return diagramData.value?.shapes?.length || 0;
+});
+
+/**
+ * 组件样式
+ */
+const componentStyle = computed(() => {
+  const { background, showGrid, gridSize } = props.node.props || {};
+  
+  const style = {
+    background: background || "#ffffff",
+  };
+
+  if (showGrid) {
+    const size = gridSize || 10;
+    style.backgroundImage = `
+      linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px)
+    `;
+    style.backgroundSize = `${size}px ${size}px`;
+  }
+
+  return style;
+});
+
+/**
+ * Canvas 尺寸
+ */
+const canvasWidth = computed(() => {
+  return props.node.absolutePos?.w || 400;
+});
+
+const canvasHeight = computed(() => {
+  return props.node.absolutePos?.h || 300;
+});
+
+/**
+ * 双击进入Canvas编辑模式
+ */
+const handleDoubleClick = () => {
+  emit("enterCanvasMode", {
+    nodeId: props.node.id,
+    diagramId: diagramId.value,
+  });
+};
+
+/**
+ * 渲染图元到 Canvas（预览）
+ */
+const renderShapes = () => {
+  if (!canvasRef.value || !diagramData.value) return;
+
+  const ctx = canvasRef.value.getContext("2d");
+  if (!ctx) return;
+
+  // 清空画布
+  ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value);
+
+  // 渲染图元（简化版预览）
+  const shapes = diagramData.value.shapes || [];
+  for (const shape of shapes) {
+    if (shape.hidden) continue;
+    
+    // TODO: 根据图元类型渲染
+    ctx.save();
+    ctx.fillStyle = shape.style?.fill || "#cccccc";
+    ctx.strokeStyle = shape.style?.stroke || "#000000";
+    ctx.lineWidth = shape.style?.strokeWidth || 1;
+
+    switch (shape.type) {
+      case "rect":
+        ctx.fillRect(
+          shape.data.x,
+          shape.data.y,
+          shape.data.width,
+          shape.data.height
+        );
+        ctx.strokeRect(
+          shape.data.x,
+          shape.data.y,
+          shape.data.width,
+          shape.data.height
+        );
+        break;
+      case "circle":
+        ctx.beginPath();
+        ctx.arc(
+          shape.data.cx,
+          shape.data.cy,
+          shape.data.radius,
+          0,
+          2 * Math.PI
+        );
+        ctx.fill();
+        ctx.stroke();
+        break;
+      // ... 其他图元类型
+    }
+
+    ctx.restore();
+  }
+};
+
+watch(diagramData, renderShapes, { deep: true });
+
+onMounted(() => {
+  renderShapes();
+});
+</script>
+
+<style scoped>
+.diagram-2d-component {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 200px;
+  min-height: 150px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.diagram-2d-component:hover {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.diagram-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.empty-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--el-text-color-placeholder);
+  pointer-events: none;
+}
+
+.empty-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.empty-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.empty-subtext {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.shape-count-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  font-size: 12px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+</style>

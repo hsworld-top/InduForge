@@ -34,6 +34,8 @@
 | Serializer      | [editor-core.md](./editor-core.md)     | 导入导出、版本迁移              |
 | PageLockManager | [editor-core.md](./editor-core.md)     | 页面编辑锁、冲突提示            |
 
+**当前状态**：✅ 已完成（M1 达成）
+
 **里程碑 M1**：能拖组件到画布、撤销重做、保存加载、页面锁防冲突
 
 ### 第二阶段：数据绑定（与 DataCenter 对接）
@@ -47,6 +49,8 @@
 | 预览态数据连接 | [data-binding-v2.md](./data-binding-v2.md) | 直接调用数据中心 API          |
 | 变量系统       | [vars-system.md](./vars-system.md)         | 页面级/全局变量               |
 | 表达式引擎     | [data-binding-v2.md](./data-binding-v2.md) | {{ }} 语法解析                |
+
+**说明**：本阶段仅支持 API 模式，不引入 Bridge 通信。
 
 **里程碑 M2**：能配置数据绑定、预览看到真实数据
 

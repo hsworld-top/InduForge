@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS `projects` (
     `code` varchar(50) DEFAULT NULL COMMENT '工程代码',
     `description` text COMMENT '工程描述',
     `projectVariables` json DEFAULT NULL COMMENT '工程级别全局变量',
+    `entryConfig` json DEFAULT NULL COMMENT '入口配置：homePageId, loginPageId, logoutPageId 等',
     `colorTag` varchar(20) NOT NULL DEFAULT '#3b82f6' COMMENT '颜色标签',
   `icon` varchar(100) DEFAULT NULL COMMENT '工程图标',
   `status` enum('active','archived','deleted') NOT NULL DEFAULT 'active' COMMENT '工程状态',

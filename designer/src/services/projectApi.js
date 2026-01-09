@@ -106,6 +106,16 @@ export const projectApi = {
   updateProjectVariables(projectId, variables) {
     return request.put(`/design/projects/${projectId}/variables`, { variables });
   },
+
+  /**
+   * 更新项目入口配置
+   * @param {string} projectId - 项目ID
+   * @param {Object} entryConfig - 入口配置 { homePageId, loginPageId, logoutPageId }
+   * @returns {Promise<Object>}
+   */
+  updateEntryConfig(projectId, entryConfig) {
+    return request.put(`/design/projects/${projectId}/entry`, entryConfig);
+  },
 };
 
 export default projectApi;

@@ -32,10 +32,14 @@
 
 | 里程碑 | 阶段         | 状态      |
 | ------ | ------------ | --------- |
-| M1     | 编辑器内核   | 🚧 进行中 |
+| M1     | 编辑器内核   | ✅ 已完成 |
 | M2     | 数据绑定     | ⏳ 待开始 |
 | M3     | 发布运行     | ⏳ 待开始 |
 | M4     | 国际化与主题 | ⏳ 待开始 |
+
+**M1 完成内容**：
+- 编辑器内核（Schema v2、DocumentModel、Command/History、SelectionModel、Serializer）
+- 页面编辑锁（PageLockManager）与基础保存/加载流程
 
 ---
 

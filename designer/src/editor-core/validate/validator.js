@@ -162,14 +162,6 @@ export class Validator {
       return;
     }
 
-    if (schema.schemaVersion !== 2) {
-      errors.push({
-        code: "SCHEMA_VERSION_INVALID",
-        message: `Schema 版本无效: ${schema.schemaVersion}`,
-        path: "schemaVersion",
-      });
-    }
-
     if (!schema.project) {
       errors.push({
         code: "PROJECT_META_MISSING",

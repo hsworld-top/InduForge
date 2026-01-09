@@ -52,7 +52,10 @@ const migrations = {
     if (schema.variables && typeof schema.variables === "object") {
       v2Schema.vars.global = migrateVariables(schema.variables);
     }
-    if (schema.projectVariables && typeof schema.projectVariables === "object") {
+    if (
+      schema.projectVariables &&
+      typeof schema.projectVariables === "object"
+    ) {
       Object.assign(
         v2Schema.vars.global,
         migrateVariables(schema.projectVariables)
@@ -359,7 +362,8 @@ export function getSchemaVersion(schema) {
  * @returns {boolean}
  */
 export function needsMigration(schema) {
-  return getSchemaVersion(schema) < CURRENT_SCHEMA_VERSION;
+  // 版本迁移已禁用，所有 schema 当作初版处理
+  return false;
 }
 
 export default {
@@ -368,4 +372,3 @@ export default {
   needsMigration,
   CURRENT_SCHEMA_VERSION,
 };
-

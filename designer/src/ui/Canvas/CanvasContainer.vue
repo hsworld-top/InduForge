@@ -1,26 +1,18 @@
 <template>
-  <main class="canvas-container">
-    <div class="canvas-wrapper">
+  <main class="canvas-container" ref="containerRef" @wheel="handleZoomWheel">
+    <div class="canvas-wrapper" ref="wrapperRef">
       <div
         class="canvas"
-        :style="{
-          width: `${width}px`,
-          height: `${height}px`,
-          transform: `scale(${zoom})`,
-        }"
+        ref="canvasRef"
+        :style="canvasStyle"
+        @dragover="handleDragOver"
+        @drop="handleDrop"
       >
         <div class="absolute inset-0 pointer-events-none">
           <slot name="canvas-layer" />
         </div>
         <div class="absolute inset-0">
-          <slot>
-            <div
-              class="flex flex-col items-center justify-center h-full text-gray-400"
-            >
-              <IconEpPlus class="text-5xl mb-4" />
-              <p>从左侧拖拽组件到画布</p>
-            </div>
-          </slot>
+          <DesignCanvas />
         </div>
       </div>
     </div>
@@ -28,13 +20,26 @@
       <span>画布: {{ width }} × {{ height }}</span>
       <el-divider direction="vertical" />
       <span>缩放: {{ Math.round(zoom * 100) }}%</span>
+      <el-tooltip content="重置缩放">
+        <el-button size="small" text @click="handleZoomReset">
+          <IconEpRefresh />
+        </el-button>
+      </el-tooltip>
     </div>
   </main>
 </template>
 
 <script setup>
-import { toRefs } from "vue";
-import IconEpPlus from "~icons/ep/plus";
+import { computed, provide, ref, toRefs } from "vue";
+import { storeToRefs } from "pinia";
+import { useEditorStore } from "@/stores/editor-store";
+import IconEpRefresh from "~icons/ep/refresh";
+import {
+  componentRegistry,
+  createComponentNode,
+  InsertNodeCommand,
+} from "@/editor-core";
+import DesignCanvas from "./DesignCanvas.vue";
 
 const props = defineProps({
   width: {
@@ -51,11 +56,398 @@ const props = defineProps({
   },
 });
 
+const emit = defineEmits(["zoomChange"]);
+
 const { width, height, zoom } = toRefs(props);
+
+const containerRef = ref(null);
+const wrapperRef = ref(null);
+const canvasRef = ref(null);
+const editorStore = useEditorStore();
+const { doc, history, selection, currentPage } = storeToRefs(editorStore);
+
+// 向子组件提供当前缩放比例，用于拖拽落点换算
+provide("canvasZoom", zoom);
+
+const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
+const translateX = ref(0);
+const translateY = ref(0);
+
+const canvasStyle = computed(() => {
+  const style = {
+    width: `${width.value}px`,
+    height: `${height.value}px`,
+    transform: `translate(${translateX.value}px, ${translateY.value}px) scale(${zoom.value})`,
+  };
+
+  // 显示网格
+  if (currentPage.value?.config?.showGrid) {
+    const gridSize = 10;
+    style.backgroundImage = `
+      linear-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.08) 1px, transparent 1px)
+    `;
+    style.backgroundSize = `${gridSize}px ${gridSize}px`;
+  }
+
+  return style;
+});
+
+/**
+ * 处理拖拽经过
+ * @param {DragEvent} event - 拖拽事件
+ */
+const handleDragOver = (event) => {
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "copy";
+  }
+};
+
+/**
+ * 处理拖拽放置
+ * @param {DragEvent} event - 拖拽事件
+ */
+const handleDrop = (event) => {
+  event.preventDefault();
+  if (!canvasRef.value) return;
+
+  const payload =
+    event.dataTransfer?.getData("application/x-designer-component") ||
+    event.dataTransfer?.getData("text/plain");
+  if (!payload) return;
+
+  let componentType = "";
+  try {
+    const parsed = JSON.parse(payload);
+    componentType = parsed.type || "";
+  } catch (error) {
+    componentType = payload;
+  }
+
+  if (!componentType) return;
+
+  const target = resolveDropTarget(event, componentType);
+  if (!target.nodeId || !target.element) return;
+
+  const { x, y } = calcDropOffset(event, target.element);
+  insertNode(componentType, target.nodeId, x, y);
+};
+
+/**
+ * 判断组件是否为布局容器类型
+ * @param {string} type - 组件类型
+ * @returns {boolean}
+ */
+const isLayoutContainerType = (type) => {
+  return ["FlexContainer", "GridContainer", "FreeContainer"].includes(type);
+};
+
+/**
+ * 插入组件节点
+ * @param {string} type - 组件类型
+ * @param {string} parentId - 父节点 ID
+ * @param {number} x - X 坐标
+ * @param {number} y - Y 坐标
+ */
+const insertNode = (type, parentId, x, y) => {
+  if (!doc.value || !history.value || !parentId) return;
+
+  const manifest = componentRegistry.get(type);
+  const defaultSize = resolveDefaultSize(type, manifest);
+  const parentNode = doc.value.getNode(parentId);
+  const insertIndex = parentNode?.children?.length ?? 0;
+
+  // ✅ 布局容器使用流式布局，不支持自由放置
+  const isLayoutContainer = isLayoutContainerType(type);
+  let layoutItem;
+  let nodeStyle = { ...(manifest?.defaultStyle || {}) };
+
+  if (isLayoutContainer) {
+    // 布局容器使用流式布局，占据整行
+    layoutItem = {
+      flex: {
+        grow: 0,
+        shrink: 0,
+        basis: "auto",
+      },
+    };
+    // 布局容器默认宽度100%，高度auto（由内容撑开），但设置最小高度方便拖入
+    nodeStyle = {
+      ...nodeStyle,
+      width: "100%",
+      minHeight: "120px",
+    };
+  } else {
+    // 其他组件使用自由放置
+    layoutItem = buildLayoutItem(parentNode, {
+    x,
+    y,
+    width: defaultSize.width,
+    height: defaultSize.height,
+  });
+  }
+
+  const node = createComponentNode(type, {
+    label: manifest?.name || type,
+    props: { ...(manifest?.defaultProps || {}) },
+    style: nodeStyle,
+    layoutItem,
+  });
+
+  history.value.execute(new InsertNodeCommand(parentId, insertIndex, node));
+  selection.value?.select({ kind: "node", id: node.id });
+};
+
+/**
+ * 处理画布缩放
+ * @param {WheelEvent} event - 滚轮事件
+ */
+const handleZoomWheel = (event) => {
+  if (!event.ctrlKey) return;
+  event.preventDefault();
+
+  const rect =
+    wrapperRef.value?.getBoundingClientRect() ||
+    containerRef.value?.getBoundingClientRect();
+  if (!rect) return;
+
+  const pointerX = Math.min(
+    Math.max(0, event.clientX - rect.left),
+    rect.width
+  );
+  const pointerY = Math.min(
+    Math.max(0, event.clientY - rect.top),
+    rect.height
+  );
+
+  const step = 0.1;
+  const direction = event.deltaY > 0 ? -1 : 1;
+  const nextZoom = Math.min(5, Math.max(0.1, zoom.value + step * direction));
+  const currentZoom = zoom.value;
+  if (nextZoom === currentZoom) return;
+
+  const worldX = (pointerX - translateX.value) / currentZoom;
+  const worldY = (pointerY - translateY.value) / currentZoom;
+
+  translateX.value = pointerX - worldX * nextZoom;
+  translateY.value = pointerY - worldY * nextZoom;
+
+  emit("zoomChange", Number(nextZoom.toFixed(2)));
+};
+
+/**
+ * 重置缩放比例
+ */
+const handleZoomReset = () => {
+  translateX.value = 0;
+  translateY.value = 0;
+  emit("zoomChange", 1);
+};
+
+/**
+ * 构建布局配置
+ * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节点
+ * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
+ * @returns {import('@/editor-core').LayoutItem | null}
+ */
+const buildLayoutItem = (parentNode, dropInfo) => {
+  if (!parentNode) {
+    return buildFreeLayoutItem(dropInfo);
+  }
+
+  if (parentNode.type === "GridContainer") {
+    return buildGridLayoutItem(parentNode);
+  }
+
+  if (parentNode.type === "FlexContainer") {
+    return buildFlexLayoutItem();
+  }
+
+  if (parentNode.type === "FreeContainer") {
+    return buildFreeLayoutItem(dropInfo);
+  }
+
+  return buildFreeLayoutItem(dropInfo);
+};
+
+/**
+ * 构建自由布局配置
+ * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
+ * @returns {import('@/editor-core').LayoutItem}
+ */
+const buildFreeLayoutItem = (dropInfo) => {
+  return {
+    free: {
+      mode: "abs",
+      abs: {
+        x: Math.max(0, Math.round(dropInfo.x)),
+        y: Math.max(0, Math.round(dropInfo.y)),
+        w: dropInfo.width,
+        h: dropInfo.height,
+        z: 1,
+      },
+    },
+  };
+};
+
+/**
+ * 构建 Flex 布局配置
+ * @returns {import('@/editor-core').LayoutItem}
+ */
+const buildFlexLayoutItem = () => {
+  return {
+    flex: {
+      grow: 0,
+      shrink: 0,
+      basis: "auto",
+    },
+  };
+};
+
+/**
+ * 构建 Grid 布局配置
+ * @param {import('@/editor-core').ComponentNode} parentNode - 父节点
+ * @returns {import('@/editor-core').LayoutItem}
+ */
+const buildGridLayoutItem = (parentNode) => {
+  const columns = resolveGridCount(parentNode.props?.columns);
+  const colCount = Math.max(1, columns);
+  const index = parentNode.children?.length ?? 0;
+  const row = Math.floor(index / colCount) + 1;
+  const col = (index % colCount) + 1;
+
+  return {
+    grid: {
+      row,
+      col,
+      rowSpan: 1,
+      colSpan: 1,
+    },
+  };
+};
+
+/**
+ * 解析 Grid 列数
+ * @param {string | number | undefined} value - 列配置
+ * @returns {number}
+ */
+const resolveGridCount = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(1, Math.floor(value));
+  }
+
+  if (typeof value === "string") {
+    const repeatMatch = value.match(/repeat\((\d+)/i);
+    if (repeatMatch) {
+      const count = Number(repeatMatch[1]);
+      if (Number.isFinite(count)) return Math.max(1, Math.floor(count));
+    }
+    const tokens = value.trim().split(/\s+/).filter(Boolean);
+    if (tokens.length > 0) return tokens.length;
+  }
+
+  return 1;
+};
+
+/**
+ * 解析拖拽落点目标容器
+ * @param {DragEvent} event - 拖拽事件
+ * @param {string} componentType - 组件类型
+ * @returns {{ nodeId: string, element: HTMLElement } | { nodeId: string, element: HTMLElement | null }}
+ */
+const resolveDropTarget = (event, componentType) => {
+  if (!doc.value) {
+    return { nodeId: rootNodeId.value, element: canvasRef.value };
+  }
+
+  const hit = document.elementFromPoint(event.clientX, event.clientY);
+  let current = hit;
+
+  while (current && current !== canvasRef.value) {
+    const nodeId = current.dataset?.nodeId;
+    if (nodeId && isContainerNode(nodeId) && canAcceptChild(nodeId, componentType)) {
+      return { nodeId, element: current };
+    }
+    current = current.parentElement;
+  }
+
+  return { nodeId: rootNodeId.value, element: canvasRef.value };
+};
+
+/**
+ * 判断节点是否为容器
+ * @param {string} nodeId - 节点 ID
+ * @returns {boolean}
+ */
+const isContainerNode = (nodeId) => {
+  const node = doc.value?.getNode(nodeId);
+  if (!node) return false;
+  const manifest = componentRegistry.get(node.type);
+  return Boolean(manifest?.isContainer);
+};
+
+/**
+ * 判断容器是否允许子组件
+ * @param {string} parentId - 父节点 ID
+ * @param {string} childType - 子组件类型
+ * @returns {boolean}
+ */
+const canAcceptChild = (parentId, childType) => {
+  const node = doc.value?.getNode(parentId);
+  if (!node) return false;
+  const manifest = componentRegistry.get(node.type);
+  const allowed = manifest?.allowedChildren;
+  if (!Array.isArray(allowed) || allowed.length === 0) return true;
+  return allowed.includes(childType);
+};
+
+/**
+ * 计算落点相对坐标
+ * @param {DragEvent} event - 拖拽事件
+ * @param {HTMLElement} element - 目标元素
+ * @returns {{ x: number, y: number }}
+ */
+const calcDropOffset = (event, element) => {
+  const rect = element.getBoundingClientRect();
+  const offsetX = (event.clientX - rect.left) / zoom.value;
+  const offsetY = (event.clientY - rect.top) / zoom.value;
+  return {
+    x: Math.max(0, Math.round(offsetX)),
+    y: Math.max(0, Math.round(offsetY)),
+  };
+};
+
+/**
+ * 获取默认尺寸
+ * @param {string} type - 组件类型
+ * @param {Object | undefined} manifest - 组件清单
+ * @returns {{width: number, height: number}}
+ */
+const resolveDefaultSize = (type, manifest) => {
+  if (manifest?.defaultSize) {
+    return {
+      width: manifest.defaultSize.width || 120,
+      height: manifest.defaultSize.height || 32,
+    };
+  }
+
+  const sizeMap = {
+    FlexContainer: { width: 360, height: 200 },
+    FreeContainer: { width: 360, height: 200 },
+    GridContainer: { width: 360, height: 200 },
+    Text: { width: 120, height: 32 },
+    Button: { width: 120, height: 36 },
+  };
+
+  return sizeMap[type] || { width: 160, height: 80 };
+};
 </script>
 
 <style scoped>
 .canvas {
+  position: relative;
+  transform-origin: 0 0;
   background-image: linear-gradient(
       rgba(0, 0, 0, 0.05) 1px,
       transparent 1px

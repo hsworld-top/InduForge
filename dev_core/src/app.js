@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const dayjs = require('dayjs');
 // 从项目根目录加载 .env 文件
@@ -139,47 +138,6 @@ function buildApp() {
     }));
   }
 
-  // ==================== 限流中间件 ====================
-  const createRateLimitHandler = () => (req, res) => {
-    res.locals.language = req.language || 'zh-CN';
-    res.locals.requestId = req.requestId;
-    ApiResponse.error(res, ErrorCodes.RATE_LIMIT_EXCEEDED, {}, 429);
-  };
-
-  const limiter = rateLimit({
-    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
-    max: Number(process.env.RATE_LIMIT_MAX || 100),
-    handler: createRateLimitHandler(),
-    standardHeaders: true,
-    legacyHeaders: false,
-    // 跳过静态资源请求，避免限流影响静态资源加载
-    skip: (req) => {
-      // 跳过静态资源文件（JS、CSS、图片、字体等）
-      if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json)$/i.test(req.path)) {
-        return true;
-      }
-      // 跳过静态资源目录
-      if (req.path.startsWith('/assets/') || 
-          req.path.startsWith('/designer/assets/') || 
-          req.path.startsWith('/designer/local-cdn-static/') ||
-          req.path.startsWith('/designer/material-static/') ||
-          req.path.startsWith('/edit/')) {
-        return true;
-      }
-      return false;
-    }
-  });
-
-  const authLimiter = rateLimit({
-    windowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || 5 * 60 * 1000),
-    max: Number(process.env.AUTH_RATE_LIMIT_MAX || 20),
-    handler: createRateLimitHandler(),
-    standardHeaders: true,
-    legacyHeaders: false
-  });
-
-  app.use(limiter);
-
   // ==================== 请求解析中间件 ====================
   app.use(cookieParser()); // 解析 cookie
   app.use(express.json({ limit: '10mb' }));
@@ -192,7 +150,7 @@ function buildApp() {
   }
 
   // ==================== API 路由 ====================
-  registerVersionedRoutes(app, { authLimiter });
+  registerVersionedRoutes(app);
 
   // ==================== 健康检查 ====================
   app.get('/health', async (req, res) => {

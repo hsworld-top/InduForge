@@ -35,3 +35,12 @@ export const VIEW_PRESETS = [
   { key: "phoneLandscape", label: "手机竖向", width: 768, height: 1024 },
   { key: "phonePortrait", label: "手机竖屏", width: 480, height: 800 },
 ];
+
+/**
+ * 网格配置
+ */
+export const GRID_CONFIG = {
+  size: 10, // 网格大小(px)
+  enabled: true, // 是否启用吸附
+  showGrid: false, // 是否显示网格线(暂不支持)
+};

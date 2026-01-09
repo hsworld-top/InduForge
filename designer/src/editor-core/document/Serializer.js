@@ -3,9 +3,7 @@
  * 负责 Schema 的导入导出、版本迁移和差量补丁
  */
 
-import { CURRENT_SCHEMA_VERSION } from "./types.js";
 import { DocumentModel } from "./DocumentModel.js";
-import { migrate, needsMigration, getSchemaVersion } from "./migrations.js";
 
 /**
  * @typedef {import('./types.js').ProjectSchema} ProjectSchema
@@ -127,19 +125,7 @@ export class Serializer {
   importFromSchema(schema) {
     // 自动迁移
     let finalSchema = schema;
-    if (this._autoMigrate && needsMigration(schema)) {
-      console.log(
-        `Schema 需要迁移: v${getSchemaVersion(schema)} -> v${CURRENT_SCHEMA_VERSION}`
-      );
-      finalSchema = migrate(schema);
-    }
-
-    // 验证版本
-    if (finalSchema.schemaVersion !== CURRENT_SCHEMA_VERSION) {
-      throw new Error(
-        `Schema 版本不匹配: 期望 ${CURRENT_SCHEMA_VERSION}, 实际 ${finalSchema.schemaVersion}`
-      );
-    }
+    // 版本迁移已禁用，直接使用原始 schema
 
     return new DocumentModel(finalSchema);
   }
@@ -404,4 +390,3 @@ export class Serializer {
 }
 
 export default Serializer;
-

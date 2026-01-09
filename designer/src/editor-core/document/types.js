@@ -357,7 +357,10 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {string} [label] - 显示标签
  * @property {Record<string, *>} props - 组件属性
  * @property {Record<string, *>} style - 样式定义
- * @property {LayoutItem | null} layoutItem - 布局配置
+ * @property {LayoutItem | null} layoutItem - 布局配置（兼容旧版）
+ * @property {'absolute' | 'flow'} [positioning] - 定位模式（新架构）
+ * @property {AbsolutePosition} [absolutePos] - 绝对定位数据（新架构）
+ * @property {FlexLayoutItem | GridLayoutItem} [flowLayout] - 流式布局数据（新架构）
  * @property {Record<string, Binding>} bindings - 数据绑定
  * @property {PermissionConfig} permissions - 权限配置
  * @property {Record<string, Action[]>} events - 事件处理
@@ -369,7 +372,113 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {Record<string, Object>} [overrides] - 自定义组件属性覆盖
  * @property {string[]} children - 子节点 ID 数组
  * @property {boolean} [locked] - 锁定状态
- * @property {boolean} [visible] - 可见性
+ * @property {boolean} [hidden] - 隐藏状态（新增）
+ */
+
+// ==================== 绘图组件（新架构） ====================
+
+/**
+ * @typedef {'line' | 'rect' | 'circle' | 'text' | 'image' | 'path'} ShapeType
+ * 图元类型
+ */
+
+/**
+ * @typedef {Object} ShapeStyle
+ * 图元样式
+ * @property {string} [fill] - 填充颜色
+ * @property {string} [stroke] - 边框颜色
+ * @property {number} [strokeWidth] - 边框宽度
+ * @property {string} [fontFamily] - 字体族
+ * @property {number} [fontSize] - 字体大小
+ * @property {string} [fontWeight] - 字体粗细
+ * @property {string} [textAlign] - 文本对齐
+ * @property {number} [opacity] - 不透明度
+ */
+
+/**
+ * @typedef {Object} LineData
+ * 线段数据
+ * @property {number} x1 - 起点 X
+ * @property {number} y1 - 起点 Y
+ * @property {number} x2 - 终点 X
+ * @property {number} y2 - 终点 Y
+ */
+
+/**
+ * @typedef {Object} RectData
+ * 矩形数据
+ * @property {number} x - X 坐标
+ * @property {number} y - Y 坐标
+ * @property {number} width - 宽度
+ * @property {number} height - 高度
+ * @property {number} [rx] - 圆角 X 半径
+ * @property {number} [ry] - 圆角 Y 半径
+ */
+
+/**
+ * @typedef {Object} CircleData
+ * 圆形数据
+ * @property {number} cx - 圆心 X
+ * @property {number} cy - 圆心 Y
+ * @property {number} radius - 半径
+ */
+
+/**
+ * @typedef {Object} TextData
+ * 文本数据
+ * @property {number} x - X 坐标
+ * @property {number} y - Y 坐标
+ * @property {string} text - 文本内容
+ */
+
+/**
+ * @typedef {Object} ImageData
+ * 图片数据
+ * @property {number} x - X 坐标
+ * @property {number} y - Y 坐标
+ * @property {number} width - 宽度
+ * @property {number} height - 高度
+ * @property {string} src - 图片源
+ */
+
+/**
+ * @typedef {Object} PathData
+ * 路径数据
+ * @property {string} d - SVG 路径数据
+ */
+
+/**
+ * @typedef {Object} Shape
+ * 图元定义
+ * @property {string} id - 图元唯一 ID
+ * @property {ShapeType} type - 图元类型
+ * @property {number} x - X 坐标（通用）
+ * @property {number} y - Y 坐标（通用）
+ * @property {ShapeStyle} style - 图元样式
+ * @property {LineData | RectData | CircleData | TextData | ImageData | PathData} [data] - 类型特定数据
+ * @property {number} [rotation] - 旋转角度
+ * @property {number} [zIndex] - 层级
+ * @property {boolean} [locked] - 锁定状态
+ * @property {boolean} [hidden] - 隐藏状态
+ */
+
+/**
+ * @typedef {Object} DiagramData
+ * 绘图数据（独立存储）
+ * @property {string} diagramId - 绘图唯一 ID
+ * @property {Shape[]} shapes - 图元列表
+ * @property {number} version - 版本号
+ * @property {number} [createdAt] - 创建时间戳
+ * @property {number} [updatedAt] - 更新时间戳
+ */
+
+/**
+ * @typedef {Object} DiagramProps
+ * 绘图组件属性
+ * @property {boolean} [showGrid] - 显示网格
+ * @property {number} [gridSize] - 网格大小
+ * @property {string} [background] - 背景色
+ * @property {boolean} [snapToGrid] - 吸附到网格
  */
 
 // ==================== Canvas 图形节点 ====================
@@ -493,6 +602,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {Record<string, ComponentNode>} nodesById - 组件节点
  * @property {Record<string, GraphicNode>} graphicsById - 图形节点
  * @property {Record<string, SymbolDef>} symbolsById - 符号库
+ * @property {Record<string, DiagramData>} [diagramsById] - 绘图数据（新架构）
  */
 
 // ==================== 选中元素 ====================
@@ -692,10 +802,11 @@ export function createEmptySchema(meta = {}) {
 export function createPageNode(options = {}) {
   const id = options.id || generateId("page_");
   const rootNodeId = options.rootNodeId || generateId("node_");
+  const defaultPath = buildPagePathFromName(options.name || "新页面");
   return {
     id,
     name: options.name || "新页面",
-    path: options.path || `/${id}`,
+    path: options.path || defaultPath,
     target: options.target || "pc",
     logicalId: options.logicalId || generateId("logic_"),
     isDefaultTarget: options.isDefaultTarget !== false,
@@ -710,6 +821,19 @@ export function createPageNode(options = {}) {
     },
     lifecycle: options.lifecycle || {},
   };
+}
+
+/**
+ * 根据页面名称生成路由路径
+ * @param {string} name - 页面名称
+ * @returns {string}
+ */
+export function buildPagePathFromName(name) {
+  const normalized = String(name || "")
+    .trim()
+    .replace(/\s+/g, "-");
+  const sanitized = normalized.replace(/[/?#\\]+/g, "-");
+  return `/${sanitized || "page"}`;
 }
 
 /**

@@ -76,7 +76,20 @@ router.patch(
  * GET /api/v1/design/projects/:projectId/variables
  * PUT /api/v1/design/projects/:projectId/variables
  */
-router.get("/projects/:projectId/variables", designController.getProjectVariables);
-router.put("/projects/:projectId/variables", designController.updateProjectVariables);
+router.get(
+  "/projects/:projectId/variables",
+  designController.getProjectVariables
+);
+router.put(
+  "/projects/:projectId/variables",
+  designController.updateProjectVariables
+);
+
+/**
+ * 更新项目入口配置
+ * PUT /api/v1/projects/:projectId/entry
+ * Body: { homePageId?: string, loginPageId?: string, logoutPageId?: string }
+ */
+router.put("/projects/:projectId/entry", designController.updateEntryConfig);
 
 module.exports = router;

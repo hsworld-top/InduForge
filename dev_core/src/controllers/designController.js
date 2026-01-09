@@ -282,7 +282,11 @@ async function updateProjectVariables(req, res, next) {
     await checkProjectAccess(req, projectId);
 
     const { variables } = req.body;
-    if (!variables || typeof variables !== "object" || Array.isArray(variables)) {
+    if (
+      !variables ||
+      typeof variables !== "object" ||
+      Array.isArray(variables)
+    ) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
         message: "variables 必须是对象",
       });
@@ -311,6 +315,41 @@ async function updateProjectVariables(req, res, next) {
   }
 }
 
+/**
+ * 更新项目入口配置
+ * PUT /api/v1/projects/:projectId/entry
+ */
+async function updateEntryConfig(req, res, next) {
+  try {
+    const { projectId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const entryConfig = req.body;
+    if (
+      !entryConfig ||
+      typeof entryConfig !== "object" ||
+      Array.isArray(entryConfig)
+    ) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "入口配置必须是对象",
+      });
+    }
+
+    const result = await designService.updateEntryConfig(
+      projectId,
+      entryConfig
+    );
+
+    res.json({
+      success: true,
+      message: "入口配置已更新",
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getPages,
   getPage,
@@ -321,4 +360,5 @@ module.exports = {
   movePage,
   getProjectVariables,
   updateProjectVariables,
+  updateEntryConfig,
 };

@@ -14,24 +14,8 @@
 
     <div class="toolbar-section toolbar-section--center">
       <div class="toolbar-view-group">
-        <el-button-group>
-          <el-button
-            v-for="preset in viewPresets"
-            :key="preset.key"
-            size="small"
-            :type="activeViewKey === preset.key ? 'primary' : ''"
-            @click="handleViewChange(preset.key)"
-          >
-            <component
-              v-if="viewIcons[preset.key]"
-              :is="viewIcons[preset.key]"
-              class="mr-1"
-            />
-            {{ preset.label }}
-          </el-button>
-        </el-button-group>
         <span class="toolbar-view-size">
-          {{ activeViewSize }}
+          {{ canvasSize }}
         </span>
         <span class="toolbar-zoom">{{ Math.round(zoom * 100) }}%</span>
       </div>
@@ -44,6 +28,31 @@
             <IconEpRight />
           </el-button>
         </el-button-group>
+        
+        <!-- 图层操作按钮组 -->
+        <el-button-group>
+          <el-tooltip content="置顶 (Ctrl+Shift+])">
+            <el-button size="small" :disabled="!canMoveLayer" @click="handleMoveToTop">
+              <IconEpTop />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="上移 (Ctrl+])">
+            <el-button size="small" :disabled="!canMoveLayer" @click="handleMoveUp">
+              <IconEpArrowUp />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="下移 (Ctrl+[)">
+            <el-button size="small" :disabled="!canMoveLayer" @click="handleMoveDown">
+              <IconEpArrowDown />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="置底 (Ctrl+Shift+[)">
+            <el-button size="small" :disabled="!canMoveLayer" @click="handleMoveToBottom">
+              <IconEpBottom />
+            </el-button>
+          </el-tooltip>
+        </el-button-group>
+        
         <el-button size="small" @click="handlePreview">
           <IconEpView />
           预览
@@ -56,7 +65,12 @@
         <IconEpDocument />
         导出页面
       </el-button>
-      <el-button size="small" type="primary" @click="handleSave" :loading="saving">
+      <el-button
+        size="small"
+        type="primary"
+        @click="handleSave"
+        :loading="saving"
+      >
         <IconEpUpload />
         保存
       </el-button>
@@ -73,10 +87,10 @@ import IconEpUpload from "~icons/ep/upload";
 import IconEpLock from "~icons/ep/lock";
 import IconEpUnlock from "~icons/ep/unlock";
 import IconEpDocument from "~icons/ep/document";
-import IconEpMonitor from "~icons/ep/monitor";
-import IconEpFullScreen from "~icons/ep/full-screen";
-import IconEpIphone from "~icons/ep/iphone";
-import IconEpCellphone from "~icons/ep/cellphone";
+import IconEpTop from "~icons/ep/top";
+import IconEpBottom from "~icons/ep/bottom";
+import IconEpArrowUp from "~icons/ep/arrow-up";
+import IconEpArrowDown from "~icons/ep/arrow-down";
 
 const props = defineProps({
   pageName: {
@@ -107,6 +121,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  canMoveLayer: {
+    type: Boolean,
+    default: false,
+  },
   zoom: {
     type: Number,
     default: 1,
@@ -125,34 +143,46 @@ const emit = defineEmits([
   "redo",
   "preview",
   "save",
+  "moveUp",
+  "moveDown",
+  "moveToTop",
+  "moveToBottom",
 ]);
 
-const viewIcons = {
-  bigscreen: IconEpFullScreen,
-  pc: IconEpMonitor,
-  tablet: IconEpIphone,
-  phoneLandscape: IconEpCellphone,
-  phonePortrait: IconEpCellphone,
-};
+/**
+ * 获取画布尺寸文本
+ */
+const canvasSize = computed(() => {
+  const preset = props.viewPresets.find((p) => p.key === props.activeViewKey);
+  return preset ? `${preset.width}×${preset.height}` : "-";
+});
+
+// const viewIcons = {
+//   bigscreen: IconEpFullScreen,
+//   pc: IconEpMonitor,
+//   tablet: IconEpIphone,
+//   phoneLandscape: IconEpCellphone,
+//   phonePortrait: IconEpCellphone,
+// };
 
 /**
  * 当前视图尺寸
  */
-const activeViewSize = computed(() => {
-  const preset = props.viewPresets.find(
-    (item) => item.key === props.activeViewKey
-  );
-  if (!preset) return "-";
-  return `${preset.width}×${preset.height}`;
-});
+// const activeViewSize = computed(() => {
+//   const preset = props.viewPresets.find(
+//     (item) => item.key === props.activeViewKey
+//   );
+//   if (!preset) return "-";
+//   return `${preset.width}×${preset.height}`;
+// });
 
 /**
  * 切换视图
  * @param {string} key - 视图键值
  */
-const handleViewChange = (key) => {
-  emit("update:activeViewKey", key);
-};
+// const handleViewChange = (key) => {
+//   emit("update:activeViewKey", key);
+// };
 
 /**
  * 切换锁定状态
@@ -194,5 +224,33 @@ const handlePreview = () => {
  */
 const handleSave = () => {
   emit("save");
+};
+
+/**
+ * 上移图层
+ */
+const handleMoveUp = () => {
+  emit("moveUp");
+};
+
+/**
+ * 下移图层
+ */
+const handleMoveDown = () => {
+  emit("moveDown");
+};
+
+/**
+ * 置顶
+ */
+const handleMoveToTop = () => {
+  emit("moveToTop");
+};
+
+/**
+ * 置底
+ */
+const handleMoveToBottom = () => {
+  emit("moveToBottom");
 };
 </script>

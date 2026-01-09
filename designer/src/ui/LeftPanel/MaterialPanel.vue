@@ -1,34 +1,96 @@
 <template>
-  <div class="flex flex-col gap-3">
-    <el-tabs v-model="activeTab">
-      <el-tab-pane label="组件" name="components">
-        <ComponentPanel />
-      </el-tab-pane>
-      <el-tab-pane label="绘图" name="drawing">
-        <DrawingPanel v-model="drawingTool" />
-      </el-tab-pane>
-    </el-tabs>
+  <div class="flex flex-col gap-3 material-panel">
+    <!-- 页面编辑模式：组件 + 绘图区 -->
+    <template v-if="editMode === 'page'">
+      <el-tabs v-model="activeTab">
+        <el-tab-pane label="组件" name="components">
+          <ComponentPanel />
+        </el-tab-pane>
+        <el-tab-pane label="绘图区" name="diagram">
+          <DiagramAreaPanel />
+        </el-tab-pane>
+      </el-tabs>
+    </template>
+
+    <!-- Canvas绘图模式：绘图工具 -->
+    <template v-else-if="editMode === 'canvas'">
+      <div class="canvas-tools-panel">
+        <div class="panel-header">
+          <h3 class="text-sm font-medium">Canvas 绘图工具</h3>
+          <el-button size="small" text @click="exitCanvasMode">
+            <IconEpBack />
+            返回页面编辑
+          </el-button>
+        </div>
+        <CanvasToolsPanel v-model="activeToolModel" />
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup>
 import { computed, ref } from "vue";
 import ComponentPanel from "./ComponentPanel.vue";
-import DrawingPanel from "./DrawingPanel.vue";
+import DiagramAreaPanel from "./DiagramAreaPanel.vue";
+import CanvasToolsPanel from "./CanvasToolsPanel.vue";
+import IconEpBack from "~icons/ep/back";
 
 const props = defineProps({
-  drawingTool: {
+  /**
+   * 编辑模式：page - 页面编辑，canvas - Canvas绘图
+   */
+  editMode: {
+    type: String,
+    default: "page",
+    validator: (v) => ["page", "canvas"].includes(v),
+  },
+  /**
+   * 当前激活的工具
+   */
+  activeTool: {
     type: String,
     default: "",
   },
 });
 
-const emit = defineEmits(["update:drawingTool"]);
+const emit = defineEmits(["update:editMode", "update:activeTool"]);
 
 const activeTab = ref("components");
 
-const drawingTool = computed({
-  get: () => props.drawingTool,
-  set: (value) => emit("update:drawingTool", value),
+/**
+ * Canvas 工具栏 v-model 代理，避免直接修改 props
+ */
+const activeToolModel = computed({
+  get: () => props.activeTool,
+  set: (value) => emit("update:activeTool", value),
 });
+
+/**
+ * 退出 Canvas 模式
+ */
+const exitCanvasMode = () => {
+  emit("update:editMode", "page");
+};
 </script>
+
+<style scoped>
+.material-panel {
+  height: 100%;
+  overflow: hidden;
+}
+
+.canvas-tools-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color);
+}
+</style>

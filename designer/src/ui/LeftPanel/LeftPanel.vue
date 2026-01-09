@@ -1,3 +1,9 @@
+<!--
+  @deprecated 此组件已废弃
+  请使用 ToolRail + DockPanel 架构替代
+  新架构参见 DesignerView.vue 中的 leftRailItems 配置
+  各功能面板已拆分为独立组件：PageTree、OutlineTree、MaterialPanel 等
+-->
 <template>
   <aside class="panel panel-left">
     <div class="panel-header">
