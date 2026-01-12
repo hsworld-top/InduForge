@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 组件 Manifest 注册表
  * 定义组件的属性、样式和事件配置
  */
@@ -30,7 +30,8 @@
  *   type: string,
  *   name: string,
  *   category: string,
- *   props: PropDefinition[]
+ *   props: PropDefinition[],
+ *   defaultSize?: { width: number, height: number }
  * }} ComponentManifest
  */
 
@@ -226,6 +227,242 @@ registerManifest({
   ],
 });
 
+// ResponsiveLayout 响应式布局
+registerManifest({
+  type: "ResponsiveLayout",
+  name: "响应式布局",
+  category: "布局",
+  isContainer: true,
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "direction",
+      type: "enum",
+      label: "方向",
+      group: "布局",
+      defaultValue: "row",
+      options: [
+        { label: "垂直", value: "column" },
+        { label: "水平", value: "row" },
+        { label: "垂直反向", value: "column-reverse" },
+        { label: "水平反向", value: "row-reverse" },
+      ],
+    },
+    {
+      name: "wrap",
+      type: "enum",
+      label: "换行",
+      group: "布局",
+      defaultValue: "wrap",
+      options: [
+        { label: "不换行", value: "nowrap" },
+        { label: "换行", value: "wrap" },
+        { label: "反向换行", value: "wrap-reverse" },
+      ],
+    },
+    {
+      name: "justify",
+      type: "enum",
+      label: "主轴对齐",
+      group: "布局",
+      defaultValue: "flex-start",
+      options: [
+        { label: "起始", value: "flex-start" },
+        { label: "居中", value: "center" },
+        { label: "末尾", value: "flex-end" },
+        { label: "两端", value: "space-between" },
+        { label: "环绕", value: "space-around" },
+        { label: "均匀", value: "space-evenly" },
+      ],
+    },
+    {
+      name: "align",
+      type: "enum",
+      label: "交叉轴对齐",
+      group: "布局",
+      defaultValue: "stretch",
+      options: [
+        { label: "拉伸", value: "stretch" },
+        { label: "起始", value: "flex-start" },
+        { label: "居中", value: "center" },
+        { label: "末尾", value: "flex-end" },
+        { label: "基线", value: "baseline" },
+      ],
+    },
+    {
+      name: "gap",
+      type: "number",
+      label: "间距",
+      group: "布局",
+      defaultValue: 8,
+      min: 0,
+      max: 100,
+    },
+  ],
+});
+
+// ColumnLayout1 分栏*1
+registerManifest({
+  type: "ColumnLayout1",
+  name: "分栏*1",
+  category: "布局",
+  isContainer: true,
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "columns",
+      type: "number",
+      label: "列数",
+      group: "布局",
+      defaultValue: 1,
+      min: 1,
+      max: 12,
+    },
+    {
+      name: "rows",
+      type: "number",
+      label: "行数",
+      group: "布局",
+      defaultValue: 1,
+      min: 1,
+      max: 12,
+    },
+    {
+      name: "gap",
+      type: "number",
+      label: "间距",
+      group: "布局",
+      defaultValue: 8,
+      min: 0,
+      max: 50,
+    },
+    {
+      name: "columnTemplate",
+      type: "string",
+      label: "列模板",
+      group: "高级",
+      defaultValue: "1fr",
+      placeholder: "例如: 1fr 或 repeat(1, 1fr)",
+    },
+    {
+      name: "rowTemplate",
+      type: "string",
+      label: "行模板",
+      group: "高级",
+      defaultValue: "auto",
+      placeholder: "例如: auto 或 repeat(1, auto)",
+    },
+  ],
+});
+
+// ColumnLayout2 分栏*2
+registerManifest({
+  type: "ColumnLayout2",
+  name: "分栏*2",
+  category: "布局",
+  isContainer: true,
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "columns",
+      type: "number",
+      label: "列数",
+      group: "布局",
+      defaultValue: 2,
+      min: 1,
+      max: 12,
+    },
+    {
+      name: "rows",
+      type: "number",
+      label: "行数",
+      group: "布局",
+      defaultValue: 1,
+      min: 1,
+      max: 12,
+    },
+    {
+      name: "gap",
+      type: "number",
+      label: "间距",
+      group: "布局",
+      defaultValue: 8,
+      min: 0,
+      max: 50,
+    },
+    {
+      name: "columnTemplate",
+      type: "string",
+      label: "列模板",
+      group: "高级",
+      defaultValue: "1fr 1fr",
+      placeholder: "例如: 1fr 1fr 或 repeat(2, 1fr)",
+    },
+    {
+      name: "rowTemplate",
+      type: "string",
+      label: "行模板",
+      group: "高级",
+      defaultValue: "auto",
+      placeholder: "例如: auto 或 repeat(1, auto)",
+    },
+  ],
+});
+
+// ColumnLayout4 分栏*4
+registerManifest({
+  type: "ColumnLayout4",
+  name: "分栏*4",
+  category: "布局",
+  isContainer: true,
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "columns",
+      type: "number",
+      label: "列数",
+      group: "布局",
+      defaultValue: 4,
+      min: 1,
+      max: 12,
+    },
+    {
+      name: "rows",
+      type: "number",
+      label: "行数",
+      group: "布局",
+      defaultValue: 1,
+      min: 1,
+      max: 12,
+    },
+    {
+      name: "gap",
+      type: "number",
+      label: "间距",
+      group: "布局",
+      defaultValue: 8,
+      min: 0,
+      max: 50,
+    },
+    {
+      name: "columnTemplate",
+      type: "string",
+      label: "列模板",
+      group: "高级",
+      defaultValue: "1fr 1fr 1fr 1fr",
+      placeholder: "例如: 1fr 1fr 1fr 1fr 或 repeat(4, 1fr)",
+    },
+    {
+      name: "rowTemplate",
+      type: "string",
+      label: "行模板",
+      group: "高级",
+      defaultValue: "auto",
+      placeholder: "例如: auto 或 repeat(1, auto)",
+    },
+  ],
+});
+
 // Diagram2D 2D流程图组件
 registerManifest({
   type: "Diagram2D",
@@ -276,7 +513,7 @@ registerManifest({
 registerManifest({
   type: "Text",
   name: "文本",
-  category: "基础",
+  category: "PC端组件",
   props: [
     {
       name: "text",
@@ -413,7 +650,7 @@ registerManifest({
 registerManifest({
   type: "Button",
   name: "按钮",
-  category: "基础",
+  category: "PC端组件",
   props: [
     {
       name: "text",
@@ -518,7 +755,7 @@ registerManifest({
 registerManifest({
   type: "Image",
   name: "图片",
-  category: "基础",
+  category: "PC端组件",
   props: [
     {
       name: "src",
@@ -556,7 +793,7 @@ registerManifest({
 registerManifest({
   type: "Input",
   name: "输入框",
-  category: "表单",
+  category: "PC端组件",
   props: [
     {
       name: "placeholder",
@@ -607,7 +844,7 @@ registerManifest({
 registerManifest({
   type: "Select",
   name: "选择器",
-  category: "表单",
+  category: "PC端组件",
   props: [
     {
       name: "placeholder",
@@ -638,6 +875,16 @@ registerManifest({
       defaultValue: false,
     },
     {
+      name: "options",
+      type: "array",
+      label: "选项",
+      group: "数据",
+      defaultValue: [
+        { label: "选项一", value: "option1" },
+        { label: "选项二", value: "option2" },
+      ],
+    },
+    {
       name: "disabled",
       type: "boolean",
       label: "禁用",
@@ -646,12 +893,11 @@ registerManifest({
     },
   ],
 });
-
 // Switch 开关组件
 registerManifest({
   type: "Switch",
   name: "开关",
-  category: "表单",
+  category: "PC端组件",
   props: [
     {
       name: "activeText",
@@ -673,6 +919,730 @@ registerManifest({
       label: "禁用",
       group: "状态",
       defaultValue: false,
+    },
+  ],
+});
+
+// Table 表格组件
+registerManifest({
+  type: "Table",
+  name: "表格",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "data",
+      type: "array",
+      label: "数据",
+      group: "数据",
+      defaultValue: [
+        { name: "张三", age: 28, address: "上海" },
+        { name: "李四", age: 32, address: "北京" },
+      ],
+    },
+    {
+      name: "columns",
+      type: "array",
+      label: "列",
+      group: "数据",
+      defaultValue: [
+        { label: "姓名", prop: "name" },
+        { label: "年龄", prop: "age" },
+        { label: "地址", prop: "address" },
+      ],
+    },
+    {
+      name: "stripe",
+      type: "boolean",
+      label: "斑马纹",
+      group: "样式",
+      defaultValue: true,
+    },
+    {
+      name: "border",
+      type: "boolean",
+      label: "边框",
+      group: "样式",
+      defaultValue: true,
+    },
+  ],
+});
+
+// Tree 树组件
+registerManifest({
+  type: "Tree",
+  name: "树",
+  category: "PC端组件",
+  defaultSize: { width: 240, height: 200 },
+  props: [
+    {
+      name: "data",
+      type: "array",
+      label: "数据",
+      group: "数据",
+      defaultValue: [
+        {
+          label: "一级 1",
+          children: [{ label: "二级 1-1" }, { label: "二级 1-2" }],
+        },
+        {
+          label: "一级 2",
+          children: [{ label: "二级 2-1" }, { label: "二级 2-2" }],
+        },
+      ],
+    },
+    {
+      name: "showCheckbox",
+      type: "boolean",
+      label: "显示复选框",
+      group: "样式",
+      defaultValue: false,
+    },
+    {
+      name: "defaultExpandAll",
+      type: "boolean",
+      label: "默认展开",
+      group: "样式",
+      defaultValue: true,
+    },
+  ],
+});
+
+// Dropdown 下拉菜单组件
+registerManifest({
+  type: "Dropdown",
+  name: "下拉菜单",
+  category: "PC端组件",
+  defaultSize: { width: 120, height: 32 },
+  props: [
+    {
+      name: "label",
+      type: "string",
+      label: "按钮文字",
+      group: "基础",
+      defaultValue: "更多",
+    },
+    {
+      name: "trigger",
+      type: "enum",
+      label: "触发方式",
+      group: "行为",
+      defaultValue: "click",
+      options: [
+        { label: "点击", value: "click" },
+        { label: "悬停", value: "hover" },
+      ],
+    },
+    {
+      name: "items",
+      type: "array",
+      label: "菜单项",
+      group: "数据",
+      defaultValue: [
+        { label: "操作一", value: "action1" },
+        { label: "操作二", value: "action2" },
+      ],
+    },
+  ],
+});
+
+// Menu 导航菜单组件
+registerManifest({
+  type: "Menu",
+  name: "导航菜单",
+  category: "PC端组件",
+  defaultSize: { width: 240, height: 120 },
+  props: [
+    {
+      name: "mode",
+      type: "enum",
+      label: "模式",
+      group: "布局",
+      defaultValue: "vertical",
+      options: [
+        { label: "垂直", value: "vertical" },
+        { label: "水平", value: "horizontal" },
+      ],
+    },
+    {
+      name: "defaultActive",
+      type: "string",
+      label: "默认激活",
+      group: "状态",
+      defaultValue: "1",
+    },
+    {
+      name: "items",
+      type: "array",
+      label: "菜单项",
+      group: "数据",
+      defaultValue: [
+        { index: "1", label: "菜单一" },
+        { index: "2", label: "菜单二" },
+        { index: "3", label: "菜单三" },
+      ],
+    },
+  ],
+});
+
+// Radio 单选框组件
+registerManifest({
+  type: "Radio",
+  name: "单选框",
+  category: "PC端组件",
+  defaultSize: { width: 200, height: 32 },
+  props: [
+    {
+      name: "modelValue",
+      type: "string",
+      label: "当前值",
+      group: "数据",
+      defaultValue: "option1",
+    },
+    {
+      name: "options",
+      type: "array",
+      label: "选项",
+      group: "数据",
+      defaultValue: [
+        { label: "选项一", value: "option1" },
+        { label: "选项二", value: "option2" },
+      ],
+    },
+  ],
+});
+
+// Checkbox 多选框组件
+registerManifest({
+  type: "Checkbox",
+  name: "多选框",
+  category: "PC端组件",
+  defaultSize: { width: 200, height: 32 },
+  props: [
+    {
+      name: "modelValue",
+      type: "array",
+      label: "当前值",
+      group: "数据",
+      defaultValue: ["option1"],
+    },
+    {
+      name: "options",
+      type: "array",
+      label: "选项",
+      group: "数据",
+      defaultValue: [
+        { label: "选项一", value: "option1" },
+        { label: "选项二", value: "option2" },
+      ],
+    },
+  ],
+});
+
+// Cascader 级联选择器组件
+registerManifest({
+  type: "Cascader",
+  name: "级联选择器",
+  category: "PC端组件",
+  defaultSize: { width: 220, height: 32 },
+  props: [
+    {
+      name: "options",
+      type: "array",
+      label: "选项",
+      group: "数据",
+      defaultValue: [
+        {
+          label: "一级 1",
+          value: "1",
+          children: [
+            { label: "二级 1-1", value: "1-1" },
+            { label: "二级 1-2", value: "1-2" },
+          ],
+        },
+        {
+          label: "一级 2",
+          value: "2",
+          children: [
+            { label: "二级 2-1", value: "2-1" },
+            { label: "二级 2-2", value: "2-2" },
+          ],
+        },
+      ],
+    },
+    {
+      name: "placeholder",
+      type: "string",
+      label: "占位符",
+      group: "基础",
+      defaultValue: "请选择",
+    },
+    {
+      name: "clearable",
+      type: "boolean",
+      label: "可清空",
+      group: "功能",
+      defaultValue: false,
+    },
+  ],
+});
+
+// Tabs 标签页组件
+registerManifest({
+  type: "Tabs",
+  name: "标签页",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "activeName",
+      type: "string",
+      label: "默认激活",
+      group: "状态",
+      defaultValue: "tab1",
+    },
+    {
+      name: "type",
+      type: "enum",
+      label: "风格",
+      group: "样式",
+      defaultValue: "card",
+      options: [
+        { label: "默认", value: "" },
+        { label: "卡片", value: "card" },
+        { label: "边框卡片", value: "border-card" },
+      ],
+    },
+    {
+      name: "tabs",
+      type: "array",
+      label: "标签页",
+      group: "数据",
+      defaultValue: [
+        { name: "tab1", label: "标签一", content: "内容一" },
+        { name: "tab2", label: "标签二", content: "内容二" },
+        { name: "tab3", label: "标签三", content: "内容三" },
+      ],
+    },
+  ],
+});
+
+// Transfer 穿梭框组件
+registerManifest({
+  type: "Transfer",
+  name: "穿梭框",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "data",
+      type: "array",
+      label: "数据",
+      group: "数据",
+      defaultValue: [
+        { key: "1", label: "选项一" },
+        { key: "2", label: "选项二" },
+        { key: "3", label: "选项三" },
+      ],
+    },
+    {
+      name: "titles",
+      type: "array",
+      label: "标题",
+      group: "显示",
+      defaultValue: ["待选", "已选"],
+    },
+  ],
+});
+
+// Tag 标签组件
+registerManifest({
+  type: "Tag",
+  name: "标签",
+  category: "PC端组件",
+  defaultSize: { width: 120, height: 32 },
+  props: [
+    {
+      name: "text",
+      type: "string",
+      label: "文本",
+      group: "基础",
+      defaultValue: "标签",
+    },
+    {
+      name: "type",
+      type: "enum",
+      label: "类型",
+      group: "样式",
+      defaultValue: "primary",
+      options: [
+        { label: "默认", value: "" },
+        { label: "主要", value: "primary" },
+        { label: "成功", value: "success" },
+        { label: "警告", value: "warning" },
+        { label: "危险", value: "danger" },
+      ],
+    },
+  ],
+});
+
+// InputNumber 计数器组件
+registerManifest({
+  type: "InputNumber",
+  name: "计数器",
+  category: "PC端组件",
+  defaultSize: { width: 160, height: 32 },
+  props: [
+    {
+      name: "modelValue",
+      type: "number",
+      label: "当前值",
+      group: "数据",
+      defaultValue: 1,
+    },
+    {
+      name: "min",
+      type: "number",
+      label: "最小值",
+      group: "数据",
+      defaultValue: 0,
+    },
+    {
+      name: "max",
+      type: "number",
+      label: "最大值",
+      group: "数据",
+      defaultValue: 10,
+    },
+  ],
+});
+
+// Timeline 时间线组件
+registerManifest({
+  type: "Timeline",
+  name: "时间线",
+  category: "PC端组件",
+  defaultSize: { width: 240, height: 200 },
+  props: [
+    {
+      name: "items",
+      type: "array",
+      label: "节点",
+      group: "数据",
+      defaultValue: [
+        { label: "步骤一", timestamp: "2024-01-01" },
+        { label: "步骤二", timestamp: "2024-01-02" },
+        { label: "步骤三", timestamp: "2024-01-03" },
+      ],
+    },
+  ],
+});
+
+// ImageCarousel 图片轮播组件
+registerManifest({
+  type: "ImageCarousel",
+  name: "图片轮播",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "height",
+      type: "string",
+      label: "高度",
+      group: "样式",
+      defaultValue: "160px",
+    },
+    {
+      name: "items",
+      type: "array",
+      label: "图片",
+      group: "数据",
+      defaultValue: [
+        { src: "", label: "轮播一" },
+        { src: "", label: "轮播二" },
+      ],
+    },
+  ],
+});
+
+// CarouselComponent 轮播组件
+registerManifest({
+  type: "CarouselComponent",
+  name: "轮播组件",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "height",
+      type: "string",
+      label: "高度",
+      group: "样式",
+      defaultValue: "160px",
+    },
+    {
+      name: "items",
+      type: "array",
+      label: "内容",
+      group: "数据",
+      defaultValue: [
+        { label: "内容一" },
+        { label: "内容二" },
+      ],
+    },
+  ],
+});
+
+// WebContainer 网页容器组件
+registerManifest({
+  type: "WebContainer",
+  name: "网页容器",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "url",
+      type: "string",
+      label: "URL",
+      group: "基础",
+      defaultValue: "",
+    },
+  ],
+});
+
+// Steps 步骤条组件
+registerManifest({
+  type: "Steps",
+  name: "步骤条",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 120 },
+  props: [
+    {
+      name: "active",
+      type: "number",
+      label: "当前步",
+      group: "状态",
+      defaultValue: 1,
+    },
+    {
+      name: "items",
+      type: "array",
+      label: "步骤",
+      group: "数据",
+      defaultValue: [
+        { title: "步骤一" },
+        { title: "步骤二" },
+        { title: "步骤三" },
+      ],
+    },
+  ],
+});
+
+// Card 卡片组件
+registerManifest({
+  type: "Card",
+  name: "卡片",
+  category: "PC端组件",
+  defaultSize: { width: 240, height: 140 },
+  props: [
+    {
+      name: "title",
+      type: "string",
+      label: "标题",
+      group: "基础",
+      defaultValue: "卡片标题",
+    },
+    {
+      name: "content",
+      type: "string",
+      label: "内容",
+      group: "基础",
+      defaultValue: "卡片内容",
+    },
+  ],
+});
+
+// Pagination 分页组件
+registerManifest({
+  type: "Pagination",
+  name: "分页",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 40 },
+  props: [
+    {
+      name: "currentPage",
+      type: "number",
+      label: "当前页",
+      group: "数据",
+      defaultValue: 1,
+    },
+    {
+      name: "pageSize",
+      type: "number",
+      label: "每页条数",
+      group: "数据",
+      defaultValue: 10,
+    },
+    {
+      name: "total",
+      type: "number",
+      label: "总数",
+      group: "数据",
+      defaultValue: 100,
+    },
+    {
+      name: "layout",
+      type: "string",
+      label: "布局",
+      group: "显示",
+      defaultValue: "prev, pager, next",
+    },
+  ],
+});
+
+// Collapse 折叠面板组件
+registerManifest({
+  type: "Collapse",
+  name: "折叠面板",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "items",
+      type: "array",
+      label: "面板",
+      group: "数据",
+      defaultValue: [
+        { name: "1", title: "面板一", content: "内容一" },
+        { name: "2", title: "面板二", content: "内容二" },
+      ],
+    },
+  ],
+});
+
+// BigDataTable 大数据表格组件
+registerManifest({
+  type: "BigDataTable",
+  name: "大数据表格",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 200 },
+  props: [
+    {
+      name: "data",
+      type: "array",
+      label: "数据",
+      group: "数据",
+      defaultValue: [
+        { name: "张三", value: 100 },
+        { name: "李四", value: 200 },
+      ],
+    },
+    {
+      name: "columns",
+      type: "array",
+      label: "列",
+      group: "数据",
+      defaultValue: [
+        { label: "名称", prop: "name" },
+        { label: "数值", prop: "value" },
+      ],
+    },
+  ],
+});
+
+// BusinessCard 业务卡片组件
+registerManifest({
+  type: "BusinessCard",
+  name: "业务卡片",
+  category: "PC端组件",
+  defaultSize: { width: 240, height: 140 },
+  props: [
+    {
+      name: "title",
+      type: "string",
+      label: "标题",
+      group: "基础",
+      defaultValue: "业务卡片",
+    },
+    {
+      name: "content",
+      type: "string",
+      label: "内容",
+      group: "基础",
+      defaultValue: "指标说明",
+    },
+  ],
+});
+
+// Barcode 条形码组件
+registerManifest({
+  type: "Barcode",
+  name: "条形码",
+  category: "PC端组件",
+  defaultSize: { width: 200, height: 80 },
+  props: [
+    {
+      name: "value",
+      type: "string",
+      label: "内容",
+      group: "基础",
+      defaultValue: "1234567890",
+    },
+  ],
+});
+
+// Slider 滑块组件
+registerManifest({
+  type: "Slider",
+  name: "滑块",
+  category: "PC端组件",
+  defaultSize: { width: 240, height: 32 },
+  props: [
+    {
+      name: "modelValue",
+      type: "number",
+      label: "当前值",
+      group: "数据",
+      defaultValue: 30,
+    },
+    {
+      name: "min",
+      type: "number",
+      label: "最小值",
+      group: "数据",
+      defaultValue: 0,
+    },
+    {
+      name: "max",
+      type: "number",
+      label: "最大值",
+      group: "数据",
+      defaultValue: 100,
+    },
+  ],
+});
+
+// Calendar 日历组件
+registerManifest({
+  type: "Calendar",
+  name: "日历",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 260 },
+  props: [],
+});
+
+// Signature 电子签名组件
+registerManifest({
+  type: "Signature",
+  name: "电子签名",
+  category: "PC端组件",
+  defaultSize: { width: 360, height: 120 },
+  props: [
+    {
+      name: "placeholder",
+      type: "string",
+      label: "占位符",
+      group: "基础",
+      defaultValue: "请签名",
     },
   ],
 });

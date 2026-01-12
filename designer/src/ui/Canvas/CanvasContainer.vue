@@ -30,15 +30,12 @@
 </template>
 
 <script setup>
-import { computed, provide, ref, toRefs } from "vue";
+import { computed, onBeforeUnmount, onMounted, provide, ref, toRefs } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import IconEpRefresh from "~icons/ep/refresh";
-import {
-  componentRegistry,
-  createComponentNode,
-  InsertNodeCommand,
-} from "@/editor-core";
+import { componentRegistry } from "@/editor-core";
+import { useDragState, endDrag } from "./use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 
 const props = defineProps({
@@ -65,8 +62,54 @@ const wrapperRef = ref(null);
 const canvasRef = ref(null);
 const editorStore = useEditorStore();
 const { doc, history, selection, currentPage } = storeToRefs(editorStore);
+const dragState = useDragState();
 
-// 向子组件提供当前缩放比例，用于拖拽落点换算
+const handleGlobalDragOver = (event) => {
+  if (!dragState.dragType) return;
+  if (!containerRef.value) return;
+  if (!containerRef.value.contains(event.target)) return;
+  event.preventDefault();
+};
+
+const handleGlobalDrop = (event) => {
+  if (!dragState.dragType) return;
+  if (!canvasRef.value || !containerRef.value) return;
+  if (!containerRef.value.contains(event.target)) return;
+  event.preventDefault();
+
+  const componentType = dragState.dragType;
+  const target = resolveDropTarget(event, componentType);
+  if (!target.nodeId || !target.element) return;
+
+  const { x, y } = calcDropOffset(event, target.element);
+  insertNode(componentType, target.nodeId, x, y);
+  endDrag();
+};
+const handleGlobalMouseUp = (event) => {
+  if (!dragState.dragType) return;
+  if (!containerRef.value) {
+    endDrag();
+    return;
+  }
+
+  if (!containerRef.value.contains(event.target)) {
+    endDrag();
+    return;
+  }
+
+  const componentType = dragState.dragType;
+  const target = resolveDropTarget(event, componentType);
+  if (!target.nodeId || !target.element) {
+    endDrag();
+    return;
+  }
+
+  const { x, y } = calcDropOffset(event, target.element);
+  insertNode(componentType, target.nodeId, x, y);
+  endDrag();
+};
+
+// 向子组件提供当前缩放比例，用于拖拽落点换�?
 provide("canvasZoom", zoom);
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
@@ -115,16 +158,21 @@ const handleDrop = (event) => {
   const payload =
     event.dataTransfer?.getData("application/x-designer-component") ||
     event.dataTransfer?.getData("text/plain");
-  if (!payload) return;
+  const fallbackType = dragState.dragType || "";
 
   let componentType = "";
-  try {
-    const parsed = JSON.parse(payload);
-    componentType = parsed.type || "";
-  } catch (error) {
-    componentType = payload;
+  if (payload) {
+    try {
+      const parsed = JSON.parse(payload);
+      componentType = parsed.type || "";
+    } catch (error) {
+      componentType = payload;
+    }
   }
 
+  if (!componentType) {
+    componentType = fallbackType;
+  }
   if (!componentType) return;
 
   const target = resolveDropTarget(event, componentType);
@@ -132,6 +180,7 @@ const handleDrop = (event) => {
 
   const { x, y } = calcDropOffset(event, target.element);
   insertNode(componentType, target.nodeId, x, y);
+  endDrag();
 };
 
 /**
@@ -140,63 +189,31 @@ const handleDrop = (event) => {
  * @returns {boolean}
  */
 const isLayoutContainerType = (type) => {
-  return ["FlexContainer", "GridContainer", "FreeContainer"].includes(type);
+  return [
+    "FlexContainer",
+    "GridContainer",
+    "FreeContainer",
+    "ResponsiveLayout",
+    "ColumnLayout1",
+    "ColumnLayout2",
+    "ColumnLayout4",
+  ].includes(type);
 };
 
 /**
  * 插入组件节点
  * @param {string} type - 组件类型
- * @param {string} parentId - 父节点 ID
+ * @param {string} parentId - 父节�?ID
  * @param {number} x - X 坐标
  * @param {number} y - Y 坐标
  */
 const insertNode = (type, parentId, x, y) => {
-  if (!doc.value || !history.value || !parentId) return;
-
-  const manifest = componentRegistry.get(type);
-  const defaultSize = resolveDefaultSize(type, manifest);
-  const parentNode = doc.value.getNode(parentId);
+  if (!parentId) return;
+  const parentNode = doc.value?.getNode(parentId);
   const insertIndex = parentNode?.children?.length ?? 0;
-
-  // ✅ 布局容器使用流式布局，不支持自由放置
-  const isLayoutContainer = isLayoutContainerType(type);
-  let layoutItem;
-  let nodeStyle = { ...(manifest?.defaultStyle || {}) };
-
-  if (isLayoutContainer) {
-    // 布局容器使用流式布局，占据整行
-    layoutItem = {
-      flex: {
-        grow: 0,
-        shrink: 0,
-        basis: "auto",
-      },
-    };
-    // 布局容器默认宽度100%，高度auto（由内容撑开），但设置最小高度方便拖入
-    nodeStyle = {
-      ...nodeStyle,
-      width: "100%",
-      minHeight: "120px",
-    };
-  } else {
-    // 其他组件使用自由放置
-    layoutItem = buildLayoutItem(parentNode, {
-    x,
-    y,
-    width: defaultSize.width,
-    height: defaultSize.height,
+  editorStore.insertNode(type, parentId, insertIndex, {
+    dropPosition: { x, y },
   });
-  }
-
-  const node = createComponentNode(type, {
-    label: manifest?.name || type,
-    props: { ...(manifest?.defaultProps || {}) },
-    style: nodeStyle,
-    layoutItem,
-  });
-
-  history.value.execute(new InsertNodeCommand(parentId, insertIndex, node));
-  selection.value?.select({ kind: "node", id: node.id });
 };
 
 /**
@@ -247,8 +264,7 @@ const handleZoomReset = () => {
 
 /**
  * 构建布局配置
- * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节点
- * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
+ * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节�? * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
  * @returns {import('@/editor-core').LayoutItem | null}
  */
 const buildLayoutItem = (parentNode, dropInfo) => {
@@ -256,11 +272,16 @@ const buildLayoutItem = (parentNode, dropInfo) => {
     return buildFreeLayoutItem(dropInfo);
   }
 
-  if (parentNode.type === "GridContainer") {
+  if (
+    parentNode.type === "GridContainer" ||
+    parentNode.type === "ColumnLayout1" ||
+    parentNode.type === "ColumnLayout2" ||
+    parentNode.type === "ColumnLayout4"
+  ) {
     return buildGridLayoutItem(parentNode);
   }
 
-  if (parentNode.type === "FlexContainer") {
+  if (parentNode.type === "FlexContainer" || parentNode.type === "ResponsiveLayout") {
     return buildFlexLayoutItem();
   }
 
@@ -307,8 +328,7 @@ const buildFlexLayoutItem = () => {
 
 /**
  * 构建 Grid 布局配置
- * @param {import('@/editor-core').ComponentNode} parentNode - 父节点
- * @returns {import('@/editor-core').LayoutItem}
+ * @param {import('@/editor-core').ComponentNode} parentNode - 父节�? * @returns {import('@/editor-core').LayoutItem}
  */
 const buildGridLayoutItem = (parentNode) => {
   const columns = resolveGridCount(parentNode.props?.columns);
@@ -329,8 +349,7 @@ const buildGridLayoutItem = (parentNode) => {
 
 /**
  * 解析 Grid 列数
- * @param {string | number | undefined} value - 列配置
- * @returns {number}
+ * @param {string | number | undefined} value - 列配�? * @returns {number}
  */
 const resolveGridCount = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -376,8 +395,7 @@ const resolveDropTarget = (event, componentType) => {
 };
 
 /**
- * 判断节点是否为容器
- * @param {string} nodeId - 节点 ID
+ * 判断节点是否为容�? * @param {string} nodeId - 节点 ID
  * @returns {boolean}
  */
 const isContainerNode = (nodeId) => {
@@ -388,10 +406,8 @@ const isContainerNode = (nodeId) => {
 };
 
 /**
- * 判断容器是否允许子组件
- * @param {string} parentId - 父节点 ID
- * @param {string} childType - 子组件类型
- * @returns {boolean}
+ * 判断容器是否允许子组�? * @param {string} parentId - 父节�?ID
+ * @param {string} childType - 子组件类�? * @returns {boolean}
  */
 const canAcceptChild = (parentId, childType) => {
   const node = doc.value?.getNode(parentId);
@@ -442,6 +458,17 @@ const resolveDefaultSize = (type, manifest) => {
 
   return sizeMap[type] || { width: 160, height: 80 };
 };
+onMounted(() => {
+  window.addEventListener("dragover", handleGlobalDragOver);
+  window.addEventListener("drop", handleGlobalDrop);
+  window.addEventListener("mouseup", handleGlobalMouseUp);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("dragover", handleGlobalDragOver);
+  window.removeEventListener("drop", handleGlobalDrop);
+  window.removeEventListener("mouseup", handleGlobalMouseUp);
+});
 </script>
 
 <style scoped>
@@ -464,3 +491,15 @@ const resolveDefaultSize = (type, manifest) => {
     linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
 }
 </style>
+
+
+
+
+
+
+
+
+
+
+
+

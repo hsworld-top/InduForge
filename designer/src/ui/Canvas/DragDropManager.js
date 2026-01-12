@@ -144,7 +144,15 @@ export class DragDropManager {
    */
   _isContainerType(nodeType) {
     if (!nodeType) return false;
-    const containerTypes = ['FlexContainer', 'FreeContainer', 'GridContainer'];
+    const containerTypes = [
+      'FlexContainer',
+      'FreeContainer',
+      'GridContainer',
+      'ResponsiveLayout',
+      'ColumnLayout1',
+      'ColumnLayout2',
+      'ColumnLayout4',
+    ];
     return containerTypes.includes(nodeType);
   }
 
@@ -186,7 +194,8 @@ export class DragDropManager {
     const nodeType = targetElement.getAttribute('data-node-type');
     
     switch(nodeType) {
-      case 'FlexContainer': {
+      case 'FlexContainer':
+      case 'ResponsiveLayout': {
         // Flex 容器：子节点使用流式布局
         const direction = this.getContainerDirection(targetElement);
         const insertInfo = this.calculateFlexInsertPosition(targetElement, event, direction);
@@ -203,7 +212,10 @@ export class DragDropManager {
         };
       }
         
-      case 'GridContainer': {
+      case 'GridContainer':
+      case 'ColumnLayout1':
+      case 'ColumnLayout2':
+      case 'ColumnLayout4': {
         // Grid 容器：子节点使用流式布局
         const gridInfo = this.calculateGridCell(targetElement, event);
         

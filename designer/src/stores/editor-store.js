@@ -1,6 +1,5 @@
-/**
+﻿/**
  * 编辑器状态管理
- * 负责加载工程、初始化编辑器内核、管理撤销重做与保存
  */
 
 import { defineStore } from "pinia";
@@ -31,9 +30,9 @@ import request from "@/utils/request";
 import { Storage } from "@/utils/storage";
 
 /**
- * 解包 API 响应数据
+ * 解包 API 响应
  * @param {*} payload - 原始响应
- * @returns {*} 业务数据
+ * @returns {*}
  */
 const unwrapApiData = (payload) => {
   if (payload && typeof payload === "object" && "success" in payload) {
@@ -43,9 +42,9 @@ const unwrapApiData = (payload) => {
 };
 
 /**
- * 规范化页面列表返回值
- * @param {*} payload - 原始响应数据
- * @returns {Array} 页面数组
+ * 规范化页面列表
+ * @param {*} payload - 原始响应
+ * @returns {Array}
  */
 const normalizePageList = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -56,7 +55,7 @@ const normalizePageList = (payload) => {
 
 /**
  * 规范化页面 Schema
- * @param {*} payload - 原始响应数据
+ * @param {*} payload - 原始响应
  * @returns {Object}
  */
 const normalizePageSchema = (payload) => {
@@ -66,13 +65,219 @@ const normalizePageSchema = (payload) => {
 };
 
 /**
- * 规范化布局容器类型（对齐布局系统文档）
+ * 判断是否为工程级 Schema
+ * @param {*} payload - 原始响应
+ * @returns {boolean}
+ */
+const isProjectSchemaPayload = (payload) => {
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      payload.pagesById &&
+      payload.nodesById
+  );
+};
+
+/**
+ * 规范化页面节点映射，并修复键值不一致问题
+ * @param {Object | Array} nodesById - 节点映射或数组
+ * @returns {{ nodesById: Object, idMap: Map<string, string> }}
+ */
+const normalizeNodesById = (nodesById) => {
+  const rawMap = Array.isArray(nodesById)
+    ? nodesById.reduce((map, node) => {
+        if (node && node.id) {
+          map[node.id] = node;
+        }
+        return map;
+      }, {})
+    : nodesById && typeof nodesById === "object"
+      ? nodesById
+      : {};
+
+  const normalized = {};
+  const idMap = new Map();
+
+  for (const [key, node] of Object.entries(rawMap)) {
+    if (!node || !node.id) continue;
+    normalized[node.id] = node;
+    if (key !== node.id) {
+      idMap.set(key, node.id);
+    }
+  }
+
+  if (idMap.size > 0) {
+    for (const node of Object.values(normalized)) {
+      if (!Array.isArray(node.children)) continue;
+      node.children = node.children
+        .map((childId) => idMap.get(childId) || childId)
+        .filter(Boolean);
+    }
+  }
+
+  return { nodesById: normalized, idMap };
+};
+
+/**
+ * 解析根节点 ID
+ * @param {Object} page - 页面数据
+ * @param {Object} nodesById - 节点映射
+ * @returns {string}
+ */
+const resolveRootNodeId = (page, nodesById) => {
+  if (page?.rootNodeId && nodesById?.[page.rootNodeId]) {
+    return page.rootNodeId;
+  }
+
+  const nodeIds = Object.keys(nodesById || {});
+  if (nodeIds.length === 0) return "";
+
+  const childSet = new Set();
+  for (const node of Object.values(nodesById)) {
+    if (Array.isArray(node?.children)) {
+      node.children.forEach((id) => childSet.add(id));
+    }
+  }
+
+  const candidates = nodeIds.filter((id) => !childSet.has(id));
+  return candidates[0] || nodeIds[0];
+};
+
+/**
+ * 补齐工程级 Schema 结构
+ * @param {Object} schema - 工程 Schema
+ * @returns {Object}
+ */
+const ensureProjectSchemaStructure = (schema) => {
+  if (!schema || typeof schema !== "object") return schema;
+  if (!schema.pagesById || typeof schema.pagesById !== "object") return schema;
+
+  const { nodesById, idMap } = normalizeNodesById(schema.nodesById);
+  schema.nodesById = nodesById;
+
+  if (!schema.graphicsById || typeof schema.graphicsById !== "object") {
+    schema.graphicsById = {};
+  }
+  if (!schema.entry || typeof schema.entry !== "object") {
+    schema.entry = {};
+  }
+
+  for (const page of Object.values(schema.pagesById)) {
+    if (!page) continue;
+    if (page.rootNodeId && idMap.has(page.rootNodeId)) {
+      page.rootNodeId = idMap.get(page.rootNodeId);
+    }
+    const resolvedRootId = resolveRootNodeId(page, nodesById);
+    if (resolvedRootId) {
+      page.rootNodeId = resolvedRootId;
+    }
+  }
+
+  return schema;
+};
+
+/**
+ * 确保页面数据包含 ID，并修复根节点指向
+ * @param {Object} payload - 页面数据
+ * @param {string} fallbackPageId - 兜底页面 ID
+ * @returns {Object}
+ */
+const ensurePagePayloadId = (payload, fallbackPageId) => {
+  if (!payload || typeof payload !== "object") return payload;
+  if (!fallbackPageId) return payload;
+
+  const page =
+    payload.page && typeof payload.page === "object" ? payload.page : {};
+  page.id = fallbackPageId;
+
+  const { nodesById, idMap } = normalizeNodesById(payload.nodesById);
+  if (page.rootNodeId && idMap.has(page.rootNodeId)) {
+    page.rootNodeId = idMap.get(page.rootNodeId);
+  }
+
+  const resolvedRootId = resolveRootNodeId(page, nodesById);
+  if (resolvedRootId) {
+    page.rootNodeId = resolvedRootId;
+  }
+
+  payload.page = page;
+  payload.nodesById = nodesById;
+  return payload;
+};
+
+/**
+ * 将响应数据统一解析为工程级 Schema
+ * @param {*} payload - 原始响应
+ * @param {string} projectId - 工程 ID
+ * @param {string} fallbackPageId - 页面兜底 ID
+ * @returns {import('@/editor-core').ProjectSchema}
+ */
+const resolveProjectSchema = (payload, projectId, fallbackPageId) => {
+  const normalized = normalizePageSchema(payload);
+  if (isProjectSchemaPayload(normalized)) {
+    return ensureProjectSchemaStructure(normalized);
+  }
+  if (normalized && typeof normalized === "object" && normalized.pagesById) {
+    return ensureProjectSchemaStructure(normalized);
+  }
+  if (normalized && typeof normalized === "object") {
+    const ensured = ensurePagePayloadId(normalized, fallbackPageId);
+    return buildSchemaFromPagePayload(ensured, projectId);
+  }
+  return buildSchemaFromPagePayload({ page: { id: fallbackPageId } }, projectId);
+};
+
+/**
+ * 确保页面根节点存在并修复异常标签
+ * @param {Object} schema - 工程 Schema
+ */
+const ensurePageRootNodes = (schema) => {
+  if (!schema || typeof schema !== "object") return;
+  if (!schema.pagesById || !schema.nodesById) return;
+
+  for (const page of Object.values(schema.pagesById)) {
+    if (!page) continue;
+    const rootId = page.rootNodeId;
+    let rootNode = rootId ? schema.nodesById[rootId] : null;
+
+    if (!rootNode) {
+      rootNode = createComponentNode("FreeContainer", {
+        label: "画布",
+        props: {},
+        style: { width: "100%", height: "100%" },
+      });
+      schema.nodesById[rootNode.id] = rootNode;
+      page.rootNodeId = rootNode.id;
+    }
+
+    if (rootNode.type !== "FreeContainer") {
+      rootNode.type = "FreeContainer";
+    }
+    if (!rootNode.props || typeof rootNode.props !== "object") {
+      rootNode.props = {};
+    }
+    rootNode.style = {
+      ...(rootNode.style || {}),
+      width: "100%",
+      height: "100%",
+    };
+
+    if (!rootNode.label || rootNode.label.includes("\uFFFD")) {
+      rootNode.label = "画布";
+    }
+  }
+};
+
+/**
+ * 规范化布局容器类型
  * @param {import('@/editor-core').ProjectSchema} schema - 工程 Schema
  * @returns {import('@/editor-core').ProjectSchema}
  */
 const normalizeLayoutSchema = (schema) => {
   if (!schema || typeof schema !== "object") return schema;
   if (!schema.nodesById) return schema;
+
+  ensurePageRootNodes(schema);
 
   for (const node of Object.values(schema.nodesById)) {
     if (!node || !node.type) continue;
@@ -120,7 +325,7 @@ const normalizeLayoutSchema = (schema) => {
 };
 
 /**
- * 更新页面 Schema 中的名称与路由
+ * 更新页面 Schema 中的名称与路径
  * @param {Object} schema - 页面 Schema
  * @param {string} pageId - 页面 ID
  * @param {string} name - 页面名称
@@ -171,10 +376,9 @@ const createBaseSchema = (projectId) => {
     path: "/",
   });
 
-  // ✅ 根容器使用FreeContainer，允许自由放置组件
   const rootNode = createComponentNode("FreeContainer", {
     id: page.rootNodeId,
-    label: "根容器",
+    label: "画布",
     props: {},
     style: {
       width: "100%",
@@ -209,27 +413,40 @@ const buildSchemaFromPagePayload = (payload, projectId) => {
   if (!page.path || page.path === `/${page.id}`) {
     page.path = derivedPath;
   }
-  const nodesById = payload.nodesById || {};
+  const { nodesById, idMap } = normalizeNodesById(payload.nodesById);
   const graphicsById = payload.graphicsById || {};
 
-  // 确保根节点存在
-  if (!nodesById[page.rootNodeId]) {
-    nodesById[page.rootNodeId] = createComponentNode("FlexContainer", {
-      id: page.rootNodeId,
-      label: "根容器",
-      props: {
-        direction: "column",
-        wrap: "nowrap",
-        justify: "flex-start",
-        align: "stretch",
-        gap: 0,
+  if (page.rootNodeId && idMap.has(page.rootNodeId)) {
+    page.rootNodeId = idMap.get(page.rootNodeId);
+  }
+
+  let rootId = resolveRootNodeId(page, nodesById);
+  if (!rootId) {
+    const rootNode = createComponentNode("FreeContainer", {
+      label: "画布",
+      props: {},
+      style: {
+        width: "100%",
+        height: "100%",
       },
+    });
+    nodesById[rootNode.id] = rootNode;
+    rootId = rootNode.id;
+  }
+
+  if (!nodesById[rootId]) {
+    nodesById[rootId] = createComponentNode("FreeContainer", {
+      id: rootId,
+      label: "画布",
+      props: {},
       style: {
         width: "100%",
         height: "100%",
       },
     });
   }
+
+  page.rootNodeId = rootId;
 
   schema.pagesById[page.id] = page;
   schema.nodesById = nodesById;
@@ -240,11 +457,76 @@ const buildSchemaFromPagePayload = (payload, projectId) => {
 };
 
 /**
+ * 构建页面 Schema Payload
+ * @param {{ id: string, name: string, path: string }} page - 页面信息
+ * @returns {Object}
+ */
+const createPageSchemaPayload = (page) => {
+  const schema = createEmptySchema({
+    projectId: page.projectId || "",
+    name: page.projectName || "工程",
+  });
+  const pageNode = createPageNode({
+    id: page.id,
+    name: page.name,
+    path: page.path,
+  });
+  const rootNode = createComponentNode("FreeContainer", {
+    id: pageNode.rootNodeId,
+    label: "画布",
+    props: {},
+    style: {
+      width: "100%",
+      height: "100%",
+    },
+  });
+
+  schema.pagesById[pageNode.id] = pageNode;
+  schema.nodesById[rootNode.id] = rootNode;
+  schema.entry = { ...schema.entry };
+
+  const tempSerializer = new Serializer();
+  const tempDoc = tempSerializer.importFromSchema(schema);
+  const payload = tempSerializer.exportPage(tempDoc, pageNode.id);
+  payload.entry = schema.entry;
+  return payload;
+};
+
+/**
+ * 构建新页面的 Schema（用于创建时传入 schemaContent）
+ * @param {{ name: string, path: string }} pageInfo - 页面信息
+ * @returns {Object} schema 内容
+ */
+const buildNewPageSchema = (pageInfo) => {
+  const pageNode = createPageNode({
+    name: pageInfo.name,
+    path: pageInfo.path,
+  });
+
+  const rootNode = createComponentNode("FreeContainer", {
+    id: pageNode.rootNodeId,
+    label: "画布",
+    props: {},
+    style: {
+      width: "100%",
+      height: "100%",
+    },
+  });
+
+  return {
+    page: pageNode,
+    nodesById: { [rootNode.id]: rootNode },
+    graphicsById: {},
+  };
+};
+/**
  * 编辑器状态管理 Store
  */
 export const useEditorStore = defineStore("editor", () => {
   /** @type {import('vue').ShallowRef<import('@/editor-core').DocumentModel | null>} */
   const doc = shallowRef(null);
+  /** @type {import('vue').Ref<number>} */
+  const docVersion = ref(0);
   /** @type {import('vue').ShallowRef<import('@/editor-core').History | null>} */
   const history = shallowRef(null);
   /** @type {import('vue').ShallowRef<import('@/editor-core').SelectionModel | null>} */
@@ -272,6 +554,7 @@ export const useEditorStore = defineStore("editor", () => {
 
   let historyUnsubscribe = null;
   let lockUnsubscribe = null;
+  let docUnsubscribe = null;
 
   /**
    * 同步锁状态
@@ -370,10 +653,18 @@ export const useEditorStore = defineStore("editor", () => {
       historyUnsubscribe();
       historyUnsubscribe = null;
     }
+    if (docUnsubscribe) {
+      docUnsubscribe();
+      docUnsubscribe = null;
+    }
 
     historyUnsubscribe = nextHistory.on("change", (payload) => {
       canUndo.value = payload.canUndo;
       canRedo.value = payload.canRedo;
+    });
+    docVersion.value = 0;
+    docUnsubscribe = nextDoc.on("change", () => {
+      docVersion.value += 1;
     });
 
     doc.value = markRaw(nextDoc);
@@ -458,20 +749,18 @@ export const useEditorStore = defineStore("editor", () => {
 
     try {
       await releasePageLock();
-      const { pages: pageList, entryConfig } = await refreshPages();
+      const { pages: pageList, entryConfig: entryConfigResp } =
+        await refreshPages();
 
-      // ✅ 如果没有页面，自动创建首页并持久化
       if (!pageList.length) {
         const homePageResult = await createHomePage(id);
         if (!homePageResult.ok) {
           initEditor(createBaseSchema(id));
         }
-        // createHomePage 内部已经初始化了编辑器
         return { ok: homePageResult.ok };
       }
 
-      // 优先使用 entryConfig 中的 homePageId，否则使用第一个页面
-      const homePageId = entryConfig?.homePageId;
+      const homePageId = entryConfigResp?.homePageId;
       const targetPageId =
         homePageId && pageList.some((p) => p.id === homePageId)
           ? homePageId
@@ -490,23 +779,14 @@ export const useEditorStore = defineStore("editor", () => {
         page: { id: targetPageId },
       };
 
-      // 如果返回的是完整工程 Schema，直接使用
-      if (pagePayload?.page) {
-        initEditor(pagePayload);
-      } else if (pagePayload?.schema) {
-        initEditor(pagePayload.schema);
-      } else {
-        initEditor(buildSchemaFromPagePayload(pagePayload || {}, id));
-      }
+      const nextSchema = resolveProjectSchema(pagePayload, id, targetPageId);
+      initEditor(nextSchema);
 
-      // 使用 entryConfig 更新 doc.entry
-      if (entryConfig && doc.value && Object.keys(entryConfig).length > 0) {
-        doc.value._updateEntry(entryConfig);
+      if (entryConfigResp && doc.value && Object.keys(entryConfigResp).length > 0) {
+        doc.value._updateEntry(entryConfigResp);
       }
 
       currentPageId.value = targetPageId;
-      // 锁定改为手动操作，移除自动锁定
-
       return { ok: true };
     } catch (err) {
       const nextError = err instanceof Error ? err : new Error("加载工程失败");
@@ -541,38 +821,15 @@ export const useEditorStore = defineStore("editor", () => {
         page: { id: pageId },
       };
 
-      let nextSchema = null;
-      // 保留原有的 entry 配置，避免切换页面时覆盖 homePageId
+      let nextSchema = resolveProjectSchema(pagePayload, projectId.value, pageId);
       const existingEntry = doc.value?.entry;
 
-      if (pagePayload?.page) {
-        nextSchema = pagePayload;
-        // 合并原有的 entry 配置
-        if (existingEntry && !nextSchema.entry) {
-          nextSchema.entry = existingEntry;
-        }
-      } else if (pagePayload?.schema) {
-        nextSchema = pagePayload.schema;
-        // 合并原有的 entry 配置
-        if (existingEntry && !nextSchema.entry) {
-          nextSchema.entry = existingEntry;
-        }
-      } else {
-        nextSchema = buildSchemaFromPagePayload(
-          pagePayload || {},
-          projectId.value
-        );
-        // 合并原有的 entry 配置
-        if (existingEntry) {
-          nextSchema.entry = { ...nextSchema.entry, ...existingEntry };
-        }
+      if (existingEntry) {
+        nextSchema.entry = { ...nextSchema.entry, ...existingEntry };
       }
 
       initEditor(nextSchema);
-      // 无论如何都要更新 currentPageId
       currentPageId.value = pageId;
-      // 锁定改为手动操作，移除自动锁定
-
       return { ok: true };
     } catch (err) {
       const nextError = err instanceof Error ? err : new Error("加载页面失败");
@@ -595,11 +852,8 @@ export const useEditorStore = defineStore("editor", () => {
     const pageList = normalizePageList(responseData.pages);
     pages.value = pageList;
     const newEntryConfig = responseData.entryConfig || {};
-
-    // 更新响应式 entryConfig
     entryConfig.value = newEntryConfig;
 
-    // 同步 entryConfig 到 doc（使用内部方法）
     if (doc.value && newEntryConfig && Object.keys(newEntryConfig).length > 0) {
       doc.value._updateEntry(newEntryConfig);
     }
@@ -608,50 +862,35 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
-   * 创建首页（项目初始化时自动调用）
+   * 创建首页
    * @param {string} pid - 工程 ID
    * @returns {Promise<{ok: boolean, pageId?: string, error?: Error}>}
    */
   const createHomePage = async (pid) => {
     try {
-      // 1. 创建页面记录
       const result = await projectApi.createPage(pid, {
         name: "首页",
         type: "page",
         parentId: null,
       });
 
-      // 调试日志
-      console.log("创建页面返回结果:", result);
-
-      // 确保 result 存在
-      if (!result) {
-        throw new Error("创建首页失败：API 返回空结果");
-      }
-
-      // 确保 data 存在
-      if (!result.data) {
-        throw new Error("创建首页失败：API 返回结果缺少 data 字段");
+      if (!result || !result.data) {
+        throw new Error("创建首页失败：API 返回异常");
       }
 
       const pageId = result.data.id;
-
       if (!pageId) {
         throw new Error("创建首页失败：未获取到页面ID");
       }
 
-      // 2. 构建并保存页面 Schema
       const schema = createBaseSchema(pid);
       const pageNode = Object.values(schema.pagesById)[0];
-
-      // 确保 pageNode 存在
       if (!pageNode) {
         throw new Error("创建首页失败：无法获取页面节点");
       }
 
       const rootNode = schema.nodesById[pageNode.rootNodeId];
 
-      // 更新 pageNode 使用实际的 pageId
       delete schema.pagesById[pageNode.id];
       pageNode.id = pageId;
       schema.pagesById[pageId] = pageNode;
@@ -661,7 +900,6 @@ export const useEditorStore = defineStore("editor", () => {
         pageNode.rootNodeId = rootNode.id;
       }
 
-      // 3. 保存页面 Schema
       const pagePayload = {
         page: pageNode,
         nodesById: rootNode ? { [rootNode.id]: rootNode } : {},
@@ -669,19 +907,15 @@ export const useEditorStore = defineStore("editor", () => {
       };
       await projectApi.updatePage(pid, pageId, pagePayload);
 
-      // 4. 保存项目级别的 entryConfig（设置首页）
       const newEntryConfig = { homePageId: pageId };
       await projectApi.updateEntryConfig(pid, newEntryConfig);
       entryConfig.value = newEntryConfig;
 
-      // 5. 初始化编辑器
       schema.pagesById = { [pageId]: pageNode };
       initEditor(schema);
       currentPageId.value = pageId;
 
-      // 6. 刷新页面列表，确保页面树正确渲染
       await refreshPages();
-
       return { ok: true, pageId };
     } catch (err) {
       console.error("创建首页失败:", err);
@@ -693,23 +927,29 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
-   * 创建页面/页面组
-   * @param {{ name: string, type?: string, parentId?: string | null, schemaContent?: Object }} payload - 创建参数
-   * @returns {Promise<{ id: string, name: string }>}
+   * 创建页面/分组
+   * @param {{ name: string, type: string, parentId?: string | null, schemaContent?: Object }} payload - 创建参数
+   * @returns {Promise<Object>}
    */
   const createPage = async (payload) => {
     if (!projectId.value) {
       throw new Error("缺少工程信息");
     }
-    const response = await projectApi.createPage(projectId.value, payload);
+
+    const result = await projectApi.createPage(projectId.value, payload);
+    const data = unwrapApiData(result) || result?.data || result;
+    const pageId = data?.id || data?.page?.id;
+
+    if (payload?.schemaContent && pageId) {
+      await projectApi.updatePage(projectId.value, pageId, payload.schemaContent);
+    }
+
     await refreshPages();
-    // 统一返回格式，提取 data 中的内容
-    const data = response?.data || response;
     return data;
   };
 
   /**
-   * 删除页面
+   * 删除页面/分组
    * @param {string} pageId - 页面 ID
    * @returns {Promise<void>}
    */
@@ -717,118 +957,71 @@ export const useEditorStore = defineStore("editor", () => {
     if (!projectId.value) {
       throw new Error("缺少工程信息");
     }
+    if (!pageId) {
+      throw new Error("缺少页面信息");
+    }
+
     await projectApi.deletePage(projectId.value, pageId);
-    await refreshPages();
+    const { pages: pageList, entryConfig: entryConfigResp } =
+      await refreshPages();
+
+    if (currentPageId.value !== pageId) return;
+
+    const homeId = entryConfigResp?.homePageId;
+    const nextId =
+      homeId && pageList.some((page) => page.id === homeId)
+        ? homeId
+        : pageList.find((page) => page.type === "page")?.id;
+
+    if (nextId) {
+      await loadPage(nextId);
+      return;
+    }
+
+    initEditor(createBaseSchema(projectId.value));
+    currentPageId.value = "";
   };
 
   /**
-   * 更新指定页面 Schema
+   * 更新页面 Schema
    * @param {string} pageId - 页面 ID
-   * @param {Object} schema - 页面 Schema
+   * @param {Object} [schema] - 页面 Schema
    * @returns {Promise<void>}
    */
   const updatePageSchema = async (pageId, schema) => {
     if (!projectId.value) {
       throw new Error("缺少工程信息");
     }
-    if (doc.value?.entry && schema && typeof schema === "object") {
-      schema.entry = { ...doc.value.entry };
-    }
-    await projectApi.updatePage(projectId.value, pageId, schema);
-  };
-
-  /**
-   * 构建页面 Schema Payload
-   * @param {{ id: string, name: string, path: string }} page - 页面信息
-   * @returns {Object}
-   */
-  const createPageSchemaPayload = (page) => {
-    const schema = createEmptySchema({
-      projectId: projectId.value,
-      name: projectName.value || "工程",
-    });
-    const pageNode = createPageNode({
-      id: page.id,
-      name: page.name,
-      path: page.path,
-    });
-    const rootNode = createComponentNode("FlexContainer", {
-      id: pageNode.rootNodeId,
-      label: "根容器",
-      props: {
-        direction: "column",
-        wrap: "nowrap",
-        justify: "flex-start",
-        align: "stretch",
-        gap: 0,
-      },
-      style: {
-        width: "100%",
-        height: "100%",
-      },
-    });
-
-    schema.pagesById[pageNode.id] = pageNode;
-    schema.nodesById[rootNode.id] = rootNode;
-    // 保留现有的 entry 配置，不要覆盖 homePageId
-    schema.entry = { ...schema.entry, ...(doc.value?.entry || {}) };
-    // 只在还没有设置首页时才设置（用于初始化）
-    if (!schema.entry.homePageId) {
-      schema.entry.homePageId = pageNode.id;
+    if (!pageId) {
+      throw new Error("缺少页面信息");
     }
 
-    const tempDoc = serializer.value.importFromSchema(schema);
-    const payload = serializer.value.exportPage(tempDoc, pageNode.id);
-    payload.entry = schema.entry;
-    return payload;
-  };
-
-  /**
-   * 构建新页面的 Schema（用于创建时传入 schemaContent）
-   * @param {{ name: string, path: string }} pageInfo - 页面信息
-   * @returns {Object} schema 内容
-   */
-  const buildNewPageSchema = (pageInfo) => {
-    const pageNode = createPageNode({
-      name: pageInfo.name,
-      path: pageInfo.path,
-    });
-    // 使用 FreeContainer 作为根容器
-    const rootNode = createComponentNode("FreeContainer", {
-      id: pageNode.rootNodeId,
-      label: "根容器",
-      props: {},
-      style: {
-        width: "100%",
-        height: "100%",
-      },
-    });
-
-    return {
-      page: pageNode,
-      nodesById: { [rootNode.id]: rootNode },
-      graphicsById: {},
-    };
+    const payload = schema || serializer.value.exportPage(doc.value, pageId);
+    await projectApi.updatePage(projectId.value, pageId, payload);
   };
 
   /**
    * 移动页面到指定分组
    * @param {string} pageId - 页面 ID
-   * @param {string|null} parentId - 分组 ID
+   * @param {string | null} targetGroupId - 分组 ID
    * @returns {Promise<void>}
    */
-  const movePageToGroup = async (pageId, parentId) => {
+  const movePageToGroup = async (pageId, targetGroupId) => {
     if (!projectId.value) {
       throw new Error("缺少工程信息");
     }
-    await projectApi.movePageToGroup(projectId.value, pageId, parentId ?? null);
+    if (!pageId) {
+      throw new Error("缺少页面信息");
+    }
+
+    await projectApi.movePageToGroup(projectId.value, pageId, targetGroupId);
     await refreshPages();
   };
 
   /**
-   * 重命名页面/分组
+   * 重命名页面
    * @param {string} pageId - 页面 ID
-   * @param {string} name - 新名称
+   * @param {string} name - 页面名称
    * @param {string} [path] - 页面路径
    * @returns {Promise<void>}
    */
@@ -836,54 +1029,52 @@ export const useEditorStore = defineStore("editor", () => {
     if (!projectId.value) {
       throw new Error("缺少工程信息");
     }
-    await projectApi.renamePage(projectId.value, pageId, name);
-
-    if (path) {
-      if (doc.value && currentPageId.value === pageId) {
-        updateCurrentPage({ name, path });
-        const payload = serializer.value.exportPage(doc.value, pageId);
-        await projectApi.updatePage(projectId.value, pageId, payload);
-      } else {
-        const pageResponse = await projectApi.getPage(projectId.value, pageId);
-        const pagePayload = normalizePageSchema(unwrapApiData(pageResponse));
-        const nextSchema = applyPageNamePath(pagePayload, pageId, name, path);
-        await projectApi.updatePage(projectId.value, pageId, nextSchema);
-      }
+    if (!pageId) {
+      throw new Error("缺少页面信息");
     }
 
-    await refreshPages();
+    await projectApi.renamePage(projectId.value, pageId, name);
+
+    pages.value = pages.value.map((page) =>
+      page.id === pageId
+        ? {
+            ...page,
+            name,
+            path: path ?? page.path,
+          }
+        : page
+    );
+
+    if (doc.value && currentPageId.value === pageId && history.value) {
+      const patch = { name };
+      if (path !== undefined) {
+        patch.path = path;
+      }
+      history.value.execute(new UpdatePageCommand(pageId, patch));
+    }
   };
 
   /**
-   * 更新入口配置
-   * @param {Partial<import('@/editor-core').EntryConfig>} patch - 更新内容
-   * @returns {boolean}
+   * 更新入口配置（仅更新本地）
+   * @param {Object} patch - 更新内容
    */
   const updateEntry = (patch) => {
-    if (!doc.value || !history.value) return false;
-    if (!ensureEditable()) return false;
+    if (!doc.value || !history.value) return;
+    if (!ensureEditable()) return;
+
     history.value.execute(new UpdateEntryCommand(patch));
-    // 同步更新响应式 entryConfig
     entryConfig.value = { ...entryConfig.value, ...patch };
-    return true;
   };
 
   /**
    * 持久化入口配置
-   * 使用项目级别的 entryConfig API
    * @returns {Promise<void>}
    */
   const persistEntry = async () => {
     if (!projectId.value) return;
-
-    const entryData = entryConfig.value || {};
-    try {
-      await projectApi.updateEntryConfig(projectId.value, entryData);
-      await refreshPages();
-    } catch (err) {
-      console.error("持久化 entry 失败:", err);
-      throw err;
-    }
+    const payload = doc.value?.entry || entryConfig.value || {};
+    await projectApi.updateEntryConfig(projectId.value, payload);
+    entryConfig.value = { ...payload };
   };
 
   /**
@@ -891,94 +1082,92 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {Promise<void>}
    */
   const saveCurrentPage = async () => {
-    if (!doc.value || !currentPageId.value || !projectId.value) {
-      throw new Error("缺少工程或页面信息，无法保存");
+    if (!projectId.value) {
+      throw new Error("缺少工程信息");
+    }
+    if (!doc.value || !currentPageId.value) {
+      throw new Error("缺少页面信息");
     }
     if (!ensureEditable()) {
       throw new Error(error.value || "当前为只读模式");
     }
 
     saving.value = true;
-    error.value = "";
-
     try {
       const payload = serializer.value.exportPage(
         doc.value,
         currentPageId.value
       );
-      payload.entry = doc.value.entry;
-      await projectApi.updatePage(
-        projectId.value,
-        currentPageId.value,
-        payload
-      );
-    } catch (err) {
-      const nextError = err instanceof Error ? err : new Error("保存失败");
-      error.value = nextError.message;
-      throw nextError;
+      await projectApi.updatePage(projectId.value, currentPageId.value, payload);
     } finally {
       saving.value = false;
     }
   };
 
   /**
-   * 更新当前页面配置
+   * 更新当前页面配置（仅更新本地）
    * @param {Partial<import('@/editor-core').PageNode>} patch - 更新内容
    * @returns {boolean}
    */
   const updateCurrentPage = (patch) => {
-    if (!doc.value || !history.value || !currentPageId.value) return false;
+    if (!doc.value || !currentPageId.value || !history.value) return false;
     if (!ensureEditable()) return false;
+
     history.value.execute(new UpdatePageCommand(currentPageId.value, patch));
+    pages.value = pages.value.map((page) =>
+      page.id === currentPageId.value ? { ...page, ...patch } : page
+    );
     return true;
   };
 
   /**
-   * 更新节点
+   * 更新组件节点
    * @param {string} nodeId - 节点 ID
    * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
    * @returns {boolean}
    */
   const updateNode = (nodeId, patch) => {
-    if (!doc.value || !history.value) return false;
+    if (!doc.value || !history.value || !nodeId) return false;
     if (!ensureEditable()) return false;
+
     history.value.execute(new UpdateNodeCommand(nodeId, patch));
     return true;
   };
 
   /**
-   * 更新图形
+   * 更新图形节点
    * @param {string} graphicId - 图形 ID
    * @param {Partial<import('@/editor-core').GraphicNode>} patch - 更新内容
    * @returns {boolean}
    */
   const updateGraphic = (graphicId, patch) => {
-    if (!doc.value || !history.value) return false;
+    if (!doc.value || !history.value || !graphicId) return false;
     if (!ensureEditable()) return false;
+
     history.value.execute(new UpdateGraphicCommand(graphicId, patch));
     return true;
   };
 
   /**
-   * 执行撤销
-   * @returns {boolean} 是否成功撤销
+   * 撤销
+   * @returns {boolean}
    */
   const undo = () => {
-    if (!history.value) return false;
-    return history.value.undo();
+    if (readonlyState.value?.readonly) return false;
+    return history.value?.undo() || false;
   };
 
   /**
-   * 执行重做
-   * @returns {boolean} 是否成功重做
+   * 重做
+   * @returns {boolean}
    */
   const redo = () => {
-    if (!history.value) return false;
-    return history.value.redo();
+    if (readonlyState.value?.readonly) return false;
+    return history.value?.redo() || false;
   };
 
   /**
-   * 当前页面配置
+   * 当前页面
    */
   const currentPage = computed(() => {
     if (!doc.value || !currentPageId.value) return null;
@@ -988,52 +1177,20 @@ export const useEditorStore = defineStore("editor", () => {
   /**
    * 切换当前页面
    * @param {string} pageId - 页面 ID
+   * @returns {Promise<{ok: boolean, error?: Error}>}
    */
   const setCurrentPage = async (pageId) => {
-    if (!pageId) return;
-
-    // 如果已经是当前页面，只重置选择但不重新加载
-    if (currentPageId.value === pageId) {
-      selection.value?.reset();
-      return;
+    if (!pageId || pageId === currentPageId.value) {
+      return { ok: true };
     }
-
-    const currentPageData = doc.value?.getPage(pageId);
-
-    // 如果 doc 中已有该页面数据，直接切换
-    if (currentPageData) {
-      currentPageId.value = pageId;
-      selection.value?.reset();
-      return;
-    }
-
-    // 否则需要从后端加载页面数据
-    try {
-      loading.value = true;
-      const result = await loadPage(pageId);
-      if (result.ok) {
-        return;
-      }
-    } catch (err) {
-      console.error("加载页面失败:", err);
-    } finally {
-      loading.value = false;
-    }
-
-    // 加载失败时仍然更新 currentPageId（保持 UI 同步）
-    currentPageId.value = pageId;
-    console.log(
-      "[EditorStore] Fallback updated currentPageId to:",
-      currentPageId.value
-    );
-    selection.value?.reset();
+    return loadPage(pageId);
   };
 
   /**
    * 解析默认尺寸
    * @param {string} type - 组件类型
    * @param {Object | undefined} manifest - 组件清单
-   * @returns {{width: number, height: number}}
+   * @returns {{ width: number, height: number }}
    */
   const resolveDefaultSize = (type, manifest) => {
     if (manifest?.defaultSize) {
@@ -1055,276 +1212,382 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
-   * 插入组件节点
-   * @param {string} componentType - 组件类型
-   * @param {string} [parentId] - 父节点 ID，默认为当前页面根节点
-   * @param {number} [index] - 插入位置，默认追加到末尾
-   * @param {{ dropPosition?: { x: number, y: number } }} [options] - 额外参数
-   * @returns {string | null} 新节点 ID
+   * 判断是否为布局容器
+   * @param {string} type - 组件类型
+   * @returns {boolean}
    */
-  const insertNode = (componentType, parentId, index, options = {}) => {
-    if (!doc.value || !history.value || !currentPageId.value) return null;
-    if (!ensureEditable()) return null;
+  const isLayoutContainerType = (type) => {
+    return [
+      "FlexContainer",
+      "GridContainer",
+      "FreeContainer",
+      "ResponsiveLayout",
+      "ColumnLayout1",
+      "ColumnLayout2",
+      "ColumnLayout4",
+    ].includes(type);
+  };
 
-    // 获取组件清单
-    const manifest = componentRegistry.get(componentType);
-    if (!manifest) {
-      console.warn(`未找到组件类型: ${componentType}`);
-      return null;
+  /**
+   * 解析 Grid 列数
+   * @param {string | number | undefined} value - 列配置
+   * @returns {number}
+   */
+  const resolveGridCount = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(1, Math.floor(value));
     }
 
-    // 确定父节点
-    const targetParentId = parentId || currentPage.value?.rootNodeId;
-    if (!targetParentId) return null;
+    if (typeof value === "string") {
+      const repeatMatch = value.match(/repeat\((\d+)/i);
+      if (repeatMatch) {
+        const count = Number(repeatMatch[1]);
+        if (Number.isFinite(count)) return Math.max(1, Math.floor(count));
+      }
+      const tokens = value.trim().split(/\s+/).filter(Boolean);
+      if (tokens.length > 0) return tokens.length;
+    }
 
-    const parent = doc.value.getNode(targetParentId);
-    if (!parent) return null;
+    return 1;
+  };
 
-    // 确定插入位置
-    const insertIndex = index ?? (parent.children?.length || 0);
+  /**
+   * 构建布局配置
+   * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节点
+   * @param {{ x: number, y: number, width: number, height: number }} dropInfo - 放置信息
+   * @returns {import('@/editor-core').LayoutItem | null}
+   */
+  const buildLayoutItem = (parentNode, dropInfo) => {
+    if (!parentNode) {
+      return buildFreeLayoutItem(dropInfo);
+    }
 
-    // 创建新节点
-    const newNode = createComponentNode(componentType, {
-      parentNode: parent,
-      label: manifest.name,
-      props: { ...manifest.defaultProps },
-      style: { ...manifest.defaultStyle },
+    if (
+      parentNode.type === "GridContainer" ||
+      parentNode.type === "ColumnLayout1" ||
+      parentNode.type === "ColumnLayout2" ||
+      parentNode.type === "ColumnLayout4"
+    ) {
+      return buildGridLayoutItem(parentNode);
+    }
+
+    if (parentNode.type === "FlexContainer" || parentNode.type === "ResponsiveLayout") {
+      return buildFlexLayoutItem();
+    }
+
+    if (parentNode.type === "FreeContainer") {
+      return buildFreeLayoutItem(dropInfo);
+    }
+
+    return buildFreeLayoutItem(dropInfo);
+  };
+
+  /**
+   * 构建自由布局配置
+   * @param {{ x: number, y: number, width: number, height: number }} dropInfo - 放置信息
+   * @returns {import('@/editor-core').LayoutItem}
+   */
+  const buildFreeLayoutItem = (dropInfo) => {
+    return {
+      free: {
+        mode: "abs",
+        abs: {
+          x: Math.max(0, Math.round(dropInfo.x)),
+          y: Math.max(0, Math.round(dropInfo.y)),
+          w: dropInfo.width,
+          h: dropInfo.height,
+          z: 1,
+        },
+      },
+    };
+  };
+
+  /**
+   * 构建 Flex 布局配置
+   * @returns {import('@/editor-core').LayoutItem}
+   */
+  const buildFlexLayoutItem = () => {
+    return {
+      flex: {
+        grow: 0,
+        shrink: 0,
+        basis: "auto",
+      },
+    };
+  };
+
+  /**
+   * 构建 Grid 布局配置
+   * @param {import('@/editor-core').ComponentNode} parentNode - 父节点
+   * @returns {import('@/editor-core').LayoutItem}
+   */
+  const buildGridLayoutItem = (parentNode) => {
+    const columns = resolveGridCount(parentNode.props?.columns);
+    const colCount = Math.max(1, columns);
+    const index = parentNode.children?.length ?? 0;
+    const row = Math.floor(index / colCount) + 1;
+    const col = (index % colCount) + 1;
+
+    return {
+      grid: {
+        row,
+        col,
+        rowSpan: 1,
+        colSpan: 1,
+      },
+    };
+  };
+
+  /**
+   * 插入组件节点
+   * @param {string} type - 组件类型
+   * @param {string} parentId - 父节点 ID
+   * @param {number | undefined} index - 插入索引
+   * @param {{ dropPosition?: { x: number, y: number } }} [options] - 插入选项
+   * @returns {import('@/editor-core').ComponentNode | null}
+   */
+  const insertNode = (type, parentId, index, options = {}) => {
+    if (!doc.value || !history.value || !parentId) return null;
+    if (!ensureEditable()) return null;
+
+    const parentNode = doc.value.getNode(parentId);
+    if (!parentNode) return null;
+
+    const manifest = componentRegistry.get(type);
+    const defaultSize = resolveDefaultSize(type, manifest);
+    const insertIndex = Number.isInteger(index)
+      ? index
+      : parentNode.children?.length ?? 0;
+
+    const dropPosition = options.dropPosition || { x: 0, y: 0 };
+    const dropInfo = {
+      x: dropPosition.x ?? 0,
+      y: dropPosition.y ?? 0,
+      width: defaultSize.width,
+      height: defaultSize.height,
+    };
+
+    const isLayoutContainer = isLayoutContainerType(type);
+    let layoutItem = null;
+    let nodeStyle = { ...(manifest?.defaultStyle || {}) };
+
+    if (isLayoutContainer) {
+      layoutItem = buildFlexLayoutItem();
+      nodeStyle = {
+        ...nodeStyle,
+        width: "100%",
+        minHeight: "120px",
+      };
+    } else {
+      layoutItem = buildLayoutItem(parentNode, dropInfo);
+    }
+
+    const node = createComponentNode(type, {
+      label: manifest?.name || type,
+      props: { ...(manifest?.defaultProps || {}) },
+      style: nodeStyle,
+      layoutItem,
     });
 
-    // ✅ 判断是否为布局容器组件
-    const isLayoutComponent =
-      manifest.category === "布局" ||
-      manifest.category === "layout" ||
-      ["FlexContainer", "GridContainer", "FreeContainer"].includes(
-        componentType
-      );
-
-    // FreeContainer 下：布局组件走流式，占据整行；普通组件走绝对定位
-    if (parent.type === "FreeContainer") {
-      if (isLayoutComponent) {
-        const minHeightValue = Number.parseFloat(
-          String(newNode.style?.minHeight || 0)
-        );
-        const nextMinHeight = Number.isFinite(minHeightValue)
-          ? Math.max(minHeightValue, 120)
-          : 120;
-        newNode.positioning = "flow";
-        newNode.absolutePos = undefined;
-        newNode.flowLayout = undefined;
-        newNode.layoutItem = null;
-        newNode.style = {
-          ...newNode.style,
-          width: newNode.style?.width || "100%",
-          minHeight: `${nextMinHeight}px`,
-        };
-      } else if (options.dropPosition) {
-        const { width, height } = resolveDefaultSize(componentType, manifest);
-        const nextX = Math.max(0, Math.round(options.dropPosition.x));
-        const nextY = Math.max(0, Math.round(options.dropPosition.y));
-
-        newNode.positioning = "absolute";
-        newNode.absolutePos = {
-          x: nextX,
-          y: nextY,
-          w: width,
-          h: height,
-          z: 1,
-        };
-        newNode.layoutItem = {
-          free: {
-            mode: "abs",
-            abs: {
-              x: nextX,
-              y: nextY,
-              w: width,
-              h: height,
-              z: 1,
-            },
-          },
-        };
+    if (parentNode.type === "FreeContainer") {
+      node.positioning = "absolute";
+      node.absolutePos = {
+        x: Math.max(0, Math.round(dropInfo.x)),
+        y: Math.max(0, Math.round(dropInfo.y)),
+        w: dropInfo.width,
+        h: dropInfo.height,
+        z: 1,
+      };
+    } else if (
+      parentNode.type === "FlexContainer" ||
+      parentNode.type === "ResponsiveLayout"
+    ) {
+      node.positioning = "flow";
+      if (layoutItem?.flex) {
+        node.flowLayout = { ...layoutItem.flex };
+      }
+    } else if (
+      parentNode.type === "GridContainer" ||
+      parentNode.type === "ColumnLayout1" ||
+      parentNode.type === "ColumnLayout2" ||
+      parentNode.type === "ColumnLayout4"
+    ) {
+      node.positioning = "flow";
+      if (layoutItem?.grid) {
+        node.flowLayout = { ...layoutItem.grid };
       }
     }
 
-    // 执行插入命令
-    history.value.execute(
-      new InsertNodeCommand(targetParentId, insertIndex, newNode)
-    );
+    history.value.execute(new InsertNodeCommand(parentId, insertIndex, node));
+    selection.value?.select(createSelectableElement("node", node.id));
 
-    // 选中新节点
-    const element = createSelectableElement("node", newNode.id);
-    selection.value?.select(element);
-
-    return newNode.id;
+    return node;
   };
 
   /**
    * 删除选中的节点
-   * @returns {boolean} 是否成功删除
+   * @returns {boolean}
    */
   const removeSelectedNodes = () => {
     if (!doc.value || !history.value || !selection.value) return false;
     if (!ensureEditable()) return false;
 
-    const selectedNodeIds = selection.value.getSelectedNodeIds();
-    if (!selectedNodeIds.length) return false;
+    const selected = selection.value.getSelectedElements?.() || [];
+    const nodeIds = selected
+      .filter((el) => el.kind === "node")
+      .map((el) => el.id);
 
-    // 过滤掉根节点
-    const rootNodeId = currentPage.value?.rootNodeId;
-    const nodesToRemove = selectedNodeIds.filter((id) => id !== rootNodeId);
-    if (!nodesToRemove.length) return false;
+    if (!nodeIds.length) return false;
 
-    // 依次删除节点
-    for (const nodeId of nodesToRemove) {
+    const rootId = currentPage.value?.rootNodeId;
+    const nodeSet = new Set(nodeIds);
+    const deletable = nodeIds.filter((nodeId) => {
+      if (nodeId === rootId) return false;
+      const ancestors = doc.value.getAncestors(nodeId) || [];
+      return !ancestors.some((ancestor) => nodeSet.has(ancestor.id));
+    });
+
+    if (!deletable.length) return false;
+
+    deletable.forEach((nodeId) => {
       history.value.execute(new RemoveNodeCommand(nodeId));
-    }
-
-    // 清除选中
-    selection.value.clearSelection();
-
+    });
+    selection.value.clearSelection?.();
     return true;
   };
 
   /**
-   * 上移图层
-   * @param {string} [nodeId] - 节点 ID,不传则使用当前选中节点
-   * @returns {boolean} 是否成功
+   * 删除指定节点
+   * @param {string} nodeId - 节点 ID
+   * @returns {boolean}
+   */
+  const removeNode = (nodeId) => {
+    if (!doc.value || !history.value || !nodeId) return false;
+    if (!ensureEditable()) return false;
+
+    const rootId = currentPage.value?.rootNodeId;
+    if (nodeId === rootId) return false;
+
+    history.value.execute(new RemoveNodeCommand(nodeId));
+    selection.value?.clearSelection?.();
+    return true;
+  };
+
+  /**
+   * 获取用于图层操作的节点 ID
+   * @param {string | undefined} nodeId - 指定节点
+   * @returns {string}
+   */
+  const resolveLayerTarget = (nodeId) => {
+    if (nodeId) return nodeId;
+    const primary = selection.value?.getPrimaryElement?.();
+    return primary?.kind === "node" ? primary.id : "";
+  };
+
+  /**
+   * 上移节点
+   * @param {string} [nodeId] - 节点 ID
+   * @returns {boolean}
    */
   const moveNodeUp = (nodeId) => {
     if (!doc.value || !history.value) return false;
     if (!ensureEditable()) return false;
 
-    const targetId = nodeId || selection.value?.getPrimaryElement()?.id;
+    const targetId = resolveLayerTarget(nodeId);
     if (!targetId) return false;
-
-    const node = doc.value.getNode(targetId);
-    if (!node) return false;
-
-    // 不能移动根节点
-    const rootNodeId = currentPage.value?.rootNodeId;
-    if (targetId === rootNodeId) return false;
+    if (targetId === currentPage.value?.rootNodeId) return false;
 
     history.value.execute(new ReorderNodeCommand(targetId, "up"));
     return true;
   };
 
   /**
-   * 下移图层
-   * @param {string} [nodeId] - 节点 ID,不传则使用当前选中节点
-   * @returns {boolean} 是否成功
+   * 下移节点
+   * @param {string} [nodeId] - 节点 ID
+   * @returns {boolean}
    */
   const moveNodeDown = (nodeId) => {
     if (!doc.value || !history.value) return false;
     if (!ensureEditable()) return false;
 
-    const targetId = nodeId || selection.value?.getPrimaryElement()?.id;
+    const targetId = resolveLayerTarget(nodeId);
     if (!targetId) return false;
-
-    const node = doc.value.getNode(targetId);
-    if (!node) return false;
-
-    // 不能移动根节点
-    const rootNodeId = currentPage.value?.rootNodeId;
-    if (targetId === rootNodeId) return false;
+    if (targetId === currentPage.value?.rootNodeId) return false;
 
     history.value.execute(new ReorderNodeCommand(targetId, "down"));
     return true;
   };
 
   /**
-   * 置顶图层
-   * @param {string} [nodeId] - 节点 ID,不传则使用当前选中节点
-   * @returns {boolean} 是否成功
+   * 置顶节点
+   * @param {string} [nodeId] - 节点 ID
+   * @returns {boolean}
    */
   const moveNodeToTop = (nodeId) => {
     if (!doc.value || !history.value) return false;
     if (!ensureEditable()) return false;
 
-    const targetId = nodeId || selection.value?.getPrimaryElement()?.id;
+    const targetId = resolveLayerTarget(nodeId);
     if (!targetId) return false;
-
-    const node = doc.value.getNode(targetId);
-    if (!node) return false;
-
-    // 不能移动根节点
-    const rootNodeId = currentPage.value?.rootNodeId;
-    if (targetId === rootNodeId) return false;
+    if (targetId === currentPage.value?.rootNodeId) return false;
 
     history.value.execute(new ReorderNodeCommand(targetId, "top"));
     return true;
   };
 
   /**
-   * 置底图层
-   * @param {string} [nodeId] - 节点 ID,不传则使用当前选中节点
-   * @returns {boolean} 是否成功
+   * 置底节点
+   * @param {string} [nodeId] - 节点 ID
+   * @returns {boolean}
    */
   const moveNodeToBottom = (nodeId) => {
     if (!doc.value || !history.value) return false;
     if (!ensureEditable()) return false;
 
-    const targetId = nodeId || selection.value?.getPrimaryElement()?.id;
+    const targetId = resolveLayerTarget(nodeId);
     if (!targetId) return false;
-
-    const node = doc.value.getNode(targetId);
-    if (!node) return false;
-
-    // 不能移动根节点
-    const rootNodeId = currentPage.value?.rootNodeId;
-    if (targetId === rootNodeId) return false;
+    if (targetId === currentPage.value?.rootNodeId) return false;
 
     history.value.execute(new ReorderNodeCommand(targetId, "bottom"));
     return true;
   };
 
   /**
-   * 切换节点显示/隐藏
+   * 切换节点可见性
    * @param {string} nodeId - 节点 ID
-   * @param {boolean} [hidden] - 目标状态,不传则自动切换
-   * @returns {boolean} 是否成功
+   * @returns {boolean}
    */
-  const toggleNodeVisibility = (nodeId, hidden) => {
-    if (!doc.value || !history.value) return false;
+  const toggleNodeVisibility = (nodeId) => {
+    if (!doc.value || !history.value || !nodeId) return false;
     if (!ensureEditable()) return false;
-    if (!nodeId) return false;
 
-    const node = doc.value.getNode(nodeId);
-    if (!node) return false;
-
-    history.value.execute(new ToggleNodeVisibilityCommand(nodeId, hidden));
+    history.value.execute(new ToggleNodeVisibilityCommand(nodeId));
     return true;
   };
 
   /**
-   * 切换节点锁定/解锁
+   * 切换节点锁定状态
    * @param {string} nodeId - 节点 ID
-   * @param {boolean} [locked] - 目标状态,不传则自动切换
-   * @returns {boolean} 是否成功
+   * @returns {boolean}
    */
-  const toggleNodeLock = (nodeId, locked) => {
-    if (!doc.value || !history.value) return false;
+  const toggleNodeLock = (nodeId) => {
+    if (!doc.value || !history.value || !nodeId) return false;
     if (!ensureEditable()) return false;
-    if (!nodeId) return false;
 
-    const node = doc.value.getNode(nodeId);
-    if (!node) return false;
-
-    history.value.execute(new ToggleNodeLockCommand(nodeId, locked));
+    history.value.execute(new ToggleNodeLockCommand(nodeId));
     return true;
   };
 
   return {
     doc,
+    docVersion,
     history,
     selection,
-    serializer,
-    lockState,
-    readonlyState,
-    isLocked,
-    isLockOwner,
-    isReadonly,
+    serializer: serializer.value,
     projectId,
     projectName,
     currentPageId,
+    currentPage,
     pages,
     entryConfig,
     loading,
@@ -1332,37 +1595,44 @@ export const useEditorStore = defineStore("editor", () => {
     canUndo,
     canRedo,
     error,
-    currentPage,
+    readonlyState,
+    isReadonly,
+    isLocked,
+    isLockOwner,
     initEditor,
     loadProject,
     loadPage,
+    setCurrentPage,
     refreshPages,
+    createHomePage,
     createPage,
     deletePage,
     updatePageSchema,
-    createPageSchemaPayload,
-    buildNewPageSchema,
     movePageToGroup,
     renamePage,
+    updateEntry,
+    persistEntry,
     saveCurrentPage,
     updateCurrentPage,
-    persistEntry,
     updateNode,
     updateGraphic,
-    updateEntry,
-    undo,
-    redo,
-    setCurrentPage,
     insertNode,
     removeSelectedNodes,
-    togglePageLock,
-    releasePageLock,
+    removeNode,
     moveNodeUp,
     moveNodeDown,
     moveNodeToTop,
     moveNodeToBottom,
     toggleNodeVisibility,
     toggleNodeLock,
+    undo,
+    redo,
+    acquirePageLock,
+    releasePageLock,
+    togglePageLock,
+    ensureEditable,
+    buildNewPageSchema,
+    createPageSchemaPayload,
   };
 });
 

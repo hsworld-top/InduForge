@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter } from '../utils/EventEmitter.js';
+import { BatchCommand } from './Command.js';
 
 /**
  * @typedef {import('./Command.js').Command} Command
@@ -390,7 +391,6 @@ export class History extends EventEmitter {
         }
 
         // 创建批量命令并推入历史
-        const { BatchCommand } = require('./Command.js');
         const batchCommand = new BatchCommand(this._transactionCommands, description);
 
         // 直接推入历史（命令已执行）
@@ -445,4 +445,3 @@ export class History extends EventEmitter {
 }
 
 export default History;
-

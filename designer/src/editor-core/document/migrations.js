@@ -99,9 +99,9 @@ const migrations = {
       // 创建根节点
       v2Schema.nodesById[rootNodeId] = {
         id: rootNodeId,
-        type: "FlexContainer",
-        label: "根容器",
-        props: { direction: "column" },
+        type: "FreeContainer",
+        label: "画布",
+        props: {},
         style: {
           width: "100%",
           height: "100%",

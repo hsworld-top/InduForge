@@ -1,48 +1,170 @@
-<template>
-  <component
+﻿<template>
+  <div
     v-if="node && !node.hidden"
-    :is="renderTag"
     :class="nodeClass"
-    :style="resolvedStyle"
+    :style="wrapperStyle"
     :data-node-id="node.id"
     :data-node-type="node.type"
+    ref="nodeRef"
     @click.stop="handleSelect"
+    @pointerdown.capture="handlePointerDown"
+    @mousedown.capture="handlePointerDown"
     @dragover.prevent="handleDragOver"
+    @dragstart.prevent
     @dragleave="handleDragLeave"
     @drop.prevent="handleDrop"
     @contextmenu.prevent="handleContextMenu"
   >
-    <template v-if="displayContent !== null">{{ displayContent }}</template>
-    <template v-if="isContainer && !hasChildren && !props.isRoot">
-      <div class="empty-container-hint">
-        <span v-if="isDragOver">释放以添加组件</span>
-        <span v-else>拖拽组件到此处</span>
-      </div>
-    </template>
-    <!-- 插入线指示器 -->
-    <div
-      v-if="showInsertLine && insertLineStyle"
-      class="insert-line"
-      :class="insertLineStyle.orientation"
-      :style="{
-        [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
-          insertLineStyle.offset + 'px',
-      }"
-    />
-    <NodeRenderer
-      v-for="childId in node.children || []"
-      :key="childId"
-      :node-id="childId"
-    />
-  </component>
+    <component
+      :is="renderTag"
+      :style="contentStyle"
+      v-bind="resolvedProps"
+    >
+      <template v-if="displayContent !== null">{{ displayContent }}</template>
+      <template v-if="node?.type === 'Select'">
+        <el-option
+          v-for="option in selectOptions"
+          :key="option.value ?? option.label"
+          :label="option.label"
+          :value="option.value"
+        />
+      </template>
+      <template v-if="node?.type === 'Radio'">
+        <el-radio
+          v-for="option in radioOptions"
+          :key="option.value ?? option.label"
+          :label="option.value"
+        >
+          {{ option.label }}
+        </el-radio>
+      </template>
+      <template v-if="node?.type === 'Checkbox'">
+        <el-checkbox
+          v-for="option in checkboxOptions"
+          :key="option.value ?? option.label"
+          :label="option.value"
+        >
+          {{ option.label }}
+        </el-checkbox>
+      </template>
+      <template v-if="node?.type === 'Table'">
+        <el-table-column
+          v-for="column in tableColumns"
+          :key="column.prop ?? column.label"
+          v-bind="column"
+        />
+      </template>
+      <template v-if="node?.type === 'BigDataTable'">
+        <el-table-column
+          v-for="column in bigTableColumns"
+          :key="column.prop ?? column.label"
+          v-bind="column"
+        />
+      </template>
+      <template v-if="node?.type === 'Menu'">
+        <el-menu-item
+          v-for="item in menuItems"
+          :key="item.index ?? item.label"
+          :index="item.index ?? item.label"
+        >
+          {{ item.label }}
+        </el-menu-item>
+      </template>
+      <template v-if="node?.type === 'Timeline'">
+        <el-timeline-item
+          v-for="item in timelineItems"
+          :key="item.timestamp ?? item.label"
+          :timestamp="item.timestamp"
+        >
+          {{ item.label }}
+        </el-timeline-item>
+      </template>
+      <template v-if="node?.type === 'Tabs'">
+        <el-tab-pane
+          v-for="tab in tabsList"
+          :key="tab.name ?? tab.label"
+          :label="tab.label"
+          :name="tab.name"
+        >
+          {{ tab.content }}
+        </el-tab-pane>
+      </template>
+      <template v-if="node?.type === 'Collapse'">
+        <el-collapse-item
+          v-for="item in collapseItems"
+          :key="item.name ?? item.title"
+          :name="item.name"
+          :title="item.title"
+        >
+          {{ item.content }}
+        </el-collapse-item>
+      </template>
+      <template v-if="node?.type === 'Steps'">
+        <el-step
+          v-for="item in stepsItems"
+          :key="item.title"
+          :title="item.title"
+          :description="item.description"
+        />
+      </template>
+      <template v-if="node?.type === 'ImageCarousel' || node?.type === 'CarouselComponent'">
+        <el-carousel-item
+          v-for="item in carouselItems"
+          :key="item.label"
+        >
+          <div class="carousel-item-placeholder">{{ item.label }}</div>
+        </el-carousel-item>
+      </template>
+      <template v-if="node?.type === 'Dropdown'" #default>
+        <el-button size="small" type="primary">{{ dropdownLabel }}</el-button>
+      </template>
+      <template v-if="node?.type === 'Dropdown'" #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item
+            v-for="item in dropdownItems"
+            :key="item.value ?? item.label"
+            :command="item.value"
+          >
+            {{ item.label }}
+          </el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+      <template v-if="isContainer && !hasChildren && !props.isRoot">
+        <div class="empty-container-hint">
+          <span v-if="isDragOver">释放以添加组件</span>
+          <span v-else>拖拽组件到此处</span>
+        </div>
+      </template>
+      <!-- 插入线指示器 -->
+      <div
+        v-if="showInsertLine && insertLineStyle"
+        class="insert-line"
+        :class="insertLineStyle.orientation"
+        :style="{
+          [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
+            insertLineStyle.offset + 'px',
+        }"
+      />
+      <NodeRenderer
+        v-for="childId in node.children || []"
+        :key="childId"
+        :node-id="childId"
+      />
+    </component>
+  </div>
 </template>
 
 <script setup>
-import { computed, ref, inject } from "vue";
+import { computed, ref, inject, onBeforeUnmount } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
-import { componentRegistry, createSelectableElement } from "@/editor-core";
+import {
+  componentRegistry,
+  createSelectableElement,
+  UpdateNodeCommand,
+} from "@/editor-core";
 import { createDragDropManager } from "./DragDropManager";
+import { useDragState, endDrag } from "./use-drag-state";
 
 const props = defineProps({
   nodeId: {
@@ -56,16 +178,190 @@ const props = defineProps({
 });
 
 const editorStore = useEditorStore();
-const { doc, selection } = storeToRefs(editorStore);
+const { doc, selection, docVersion, history } = storeToRefs(editorStore);
 const canvasZoom = inject("canvasZoom", ref(1));
+const dragState = useDragState();
+const nodeRef = ref(null);
 
-const node = computed(() => doc.value?.getNode(props.nodeId) || null);
+const node = computed(() => {
+  docVersion.value;
+  return doc.value?.getNode(props.nodeId) || null;
+});
+const fallbackSelectOptions = [
+  { label: "选项一", value: "option1" },
+  { label: "选项二", value: "option2" },
+];
+const fallbackRadioOptions = [
+  { label: "选项一", value: "option1" },
+  { label: "选项二", value: "option2" },
+];
+const fallbackCheckboxOptions = [
+  { label: "选项一", value: "option1" },
+  { label: "选项二", value: "option2" },
+];
+const fallbackDropdownItems = [
+  { label: "操作一", value: "action1" },
+  { label: "操作二", value: "action2" },
+];
+const fallbackMenuItems = [
+  { index: "1", label: "菜单一" },
+  { index: "2", label: "菜单二" },
+  { index: "3", label: "菜单三" },
+];
+const fallbackTableColumns = [
+  { label: "姓名", prop: "name" },
+  { label: "年龄", prop: "age" },
+  { label: "地址", prop: "address" },
+];
+const fallbackTableData = [
+  { name: "张三", age: 28, address: "上海" },
+  { name: "李四", age: 32, address: "北京" },
+];
+const fallbackBigTableColumns = [
+  { label: "名称", prop: "name" },
+  { label: "数值", prop: "value" },
+];
+const fallbackBigTableData = [
+  { name: "张三", value: 100 },
+  { name: "李四", value: 200 },
+];
+const fallbackTimelineItems = [
+  { label: "步骤一", timestamp: "2024-01-01" },
+  { label: "步骤二", timestamp: "2024-01-02" },
+  { label: "步骤三", timestamp: "2024-01-03" },
+];
+const fallbackTabs = [
+  { name: "tab1", label: "标签一", content: "内容一" },
+  { name: "tab2", label: "标签二", content: "内容二" },
+  { name: "tab3", label: "标签三", content: "内容三" },
+];
+const fallbackStepsItems = [
+  { title: "步骤一" },
+  { title: "步骤二" },
+  { title: "步骤三" },
+];
+const fallbackCollapseItems = [
+  { name: "1", title: "面板一", content: "内容一" },
+  { name: "2", title: "面板二", content: "内容二" },
+];
+const fallbackCarouselItems = [
+  { label: "轮播一" },
+  { label: "轮播二" },
+];
+
+/**
+ * 规范化选项列表
+ * @param {Array} source - 原始列表
+ * @param {Array} fallback - 默认列表
+ * @returns {Array}
+ */
+const normalizeOptions = (source, fallback) => {
+  if (Array.isArray(source) && source.length > 0) return source;
+  return fallback;
+};
+
+/**
+ * 过滤用于渲染的组件属性
+ * @param {string} type - 组件类型
+ * @param {Record<string, any>} props - 原始属性
+ * @returns {Record<string, any>}
+ */
+const filterRenderProps = (type, props) => {
+  const nextProps = { ...props };
+  const removeKeysByType = {
+    Button: ["text"],
+    Text: ["text"],
+    Tag: ["text"],
+    Dropdown: ["label", "items"],
+    Menu: ["items"],
+    Tabs: ["tabs"],
+    Table: ["columns"],
+    BigDataTable: ["columns"],
+    Radio: ["options"],
+    Checkbox: ["options"],
+    Select: ["options"],
+    Timeline: ["items"],
+    Steps: ["items"],
+    Collapse: ["items"],
+    ImageCarousel: ["items"],
+    CarouselComponent: ["items"],
+    Card: ["title", "content"],
+    BusinessCard: ["title", "content"],
+  };
+  const removeKeys = removeKeysByType[type] || [];
+  for (const key of removeKeys) {
+    delete nextProps[key];
+  }
+  if (type === "Table") {
+    nextProps.data = normalizeOptions(nextProps.data, fallbackTableData);
+  }
+  if (type === "BigDataTable") {
+    nextProps.data = normalizeOptions(nextProps.data, fallbackBigTableData);
+  }
+  if (type === "Signature") {
+    nextProps.type = "textarea";
+    if (!nextProps.rows) {
+      nextProps.rows = 3;
+    }
+  }
+  if (type === "ImageCarousel" || type === "CarouselComponent") {
+    if (!nextProps.height) {
+      nextProps.height = "160px";
+    }
+  }
+  return nextProps;
+};
 
 /** 拖拽状态 */
 const isDragOver = ref(false);
 const showInsertLine = ref(false);
 const insertLineStyle = ref(null);
 const dragDropManager = createDragDropManager();
+const resolvedProps = computed(() => {
+  if (!node.value) return {};
+  return filterRenderProps(node.value.type, node.value.props || {});
+});
+
+const selectOptions = computed(() =>
+  normalizeOptions(node.value?.props?.options, fallbackSelectOptions)
+);
+const radioOptions = computed(() =>
+  normalizeOptions(node.value?.props?.options, fallbackRadioOptions)
+);
+const checkboxOptions = computed(() =>
+  normalizeOptions(node.value?.props?.options, fallbackCheckboxOptions)
+);
+const dropdownItems = computed(() =>
+  normalizeOptions(node.value?.props?.items, fallbackDropdownItems)
+);
+const menuItems = computed(() =>
+  normalizeOptions(node.value?.props?.items, fallbackMenuItems)
+);
+const tableColumns = computed(() =>
+  normalizeOptions(node.value?.props?.columns, fallbackTableColumns)
+);
+const bigTableColumns = computed(() =>
+  normalizeOptions(node.value?.props?.columns, fallbackBigTableColumns)
+);
+const timelineItems = computed(() =>
+  normalizeOptions(node.value?.props?.items, fallbackTimelineItems)
+);
+const tabsList = computed(() =>
+  normalizeOptions(node.value?.props?.tabs, fallbackTabs)
+);
+const stepsItems = computed(() =>
+  normalizeOptions(node.value?.props?.items, fallbackStepsItems)
+);
+const collapseItems = computed(() =>
+  normalizeOptions(node.value?.props?.items, fallbackCollapseItems)
+);
+const carouselItems = computed(() =>
+  normalizeOptions(node.value?.props?.items, fallbackCarouselItems)
+);
+const dropdownLabel = computed(() => {
+  if (!node.value) return "下拉菜单";
+  return node.value.props?.label || node.value.label || "下拉菜单";
+});
 
 // ✅ 注入右键菜单显示函数
 const showContextMenu = inject("showContextMenu", null);
@@ -78,6 +374,16 @@ const isContainer = computed(() => {
 
 const hasChildren = computed(() => {
   return (node.value?.children || []).length > 0;
+});
+
+/**
+ * 判断节点是否可自由拖动
+ * @returns {boolean} 是否允许拖动
+ * @throws {Error} 无
+ */
+const isMovable = computed(() => {
+  if (!node.value || props.isRoot || node.value.locked) return false;
+  return true;
 });
 
 /**
@@ -115,6 +421,7 @@ const nodeClass = computed(() => {
   const classes = ["designer-node"];
   if (props.isRoot) classes.push("is-root");
   if (isContainer.value) classes.push("is-container");
+  if (isMovable.value) classes.push("is-draggable");
   if (node.value.locked) classes.push("is-locked");
   if (isDragOver.value) classes.push("drag-over");
   if (selection.value?.isSelected(node.value.id)) {
@@ -127,7 +434,65 @@ const renderTag = computed(() => {
   if (!node.value) return "div";
   switch (node.value.type) {
     case "Button":
-      return "button";
+      return "el-button";
+    case "Input":
+      return "el-input";
+    case "Select":
+      return "el-select";
+    case "InputNumber":
+      return "el-input-number";
+    case "Switch":
+      return "el-switch";
+    case "Table":
+      return "el-table";
+    case "BigDataTable":
+      return "el-table";
+    case "Tree":
+      return "el-tree";
+    case "Transfer":
+      return "el-transfer";
+    case "Tag":
+      return "el-tag";
+    case "Dropdown":
+      return "el-dropdown";
+    case "Menu":
+      return "el-menu";
+    case "Radio":
+      return "el-radio-group";
+    case "Checkbox":
+      return "el-checkbox-group";
+    case "Cascader":
+      return "el-cascader";
+    case "Image":
+      return "el-image";
+    case "Tabs":
+      return "el-tabs";
+    case "Timeline":
+      return "el-timeline";
+    case "ImageCarousel":
+      return "el-carousel";
+    case "CarouselComponent":
+      return "el-carousel";
+    case "WebContainer":
+      return "el-card";
+    case "Steps":
+      return "el-steps";
+    case "Card":
+      return "el-card";
+    case "Pagination":
+      return "el-pagination";
+    case "Collapse":
+      return "el-collapse";
+    case "BusinessCard":
+      return "el-card";
+    case "Barcode":
+      return "el-card";
+    case "Slider":
+      return "el-slider";
+    case "Calendar":
+      return "el-calendar";
+    case "Signature":
+      return "el-input";
     case "Text":
       return "div";
     default:
@@ -143,19 +508,49 @@ const displayContent = computed(() => {
   if (node.value.type === "Button") {
     return node.value.props?.text ?? node.value.label ?? "按钮";
   }
+  if (node.value.type === "Tag") {
+    return node.value.props?.text ?? node.value.label ?? "标签";
+  }
+  if (node.value.type === "Card") {
+    return node.value.props?.content ?? node.value.label ?? "卡片";
+  }
+  if (node.value.type === "BusinessCard") {
+    return node.value.props?.content ?? node.value.label ?? "业务卡片";
+  }
+  if (node.value.type === "WebContainer") {
+    return node.value.props?.url
+      ? `网页容器: ${node.value.props.url}`
+      : "网页容器";
+  }
+  if (node.value.type === "Barcode") {
+    return node.value.props?.value ?? "1234567890";
+  }
   return null;
 });
 
-const resolvedStyle = computed(() => {
+const layoutStyle = computed(() => {
   if (!node.value) return {};
-  const baseStyle = resolveLayoutStyle(node.value, props.isRoot);
-  const containerStyle = resolveContainerStyle(node.value, baseStyle);
+  return resolveLayoutStyle(node.value, props.isRoot);
+});
+
+const contentStyle = computed(() => {
+  if (!node.value) return {};
+  const containerStyle = resolveContainerStyle(node.value, {});
   const customStyle = normalizeStyleObject(node.value.style || {});
-  return {
-    ...baseStyle,
+  const style = {
     ...containerStyle,
     ...customStyle,
   };
+  if (props.isRoot || layoutStyle.value.position === "absolute") {
+    if (!style.width) style.width = "100%";
+    if (!style.height) style.height = "100%";
+  }
+  return style;
+});
+
+const wrapperStyle = computed(() => {
+  if (!node.value) return {};
+  return layoutStyle.value;
 });
 
 /**
@@ -217,14 +612,15 @@ const handleDragOver = (event) => {
   event.stopPropagation();
 
   if (!isContainer.value) return;
-  if (!event.dataTransfer) return;
-
-  const hasComponent = event.dataTransfer.types.includes(
-    "application/x-designer-component"
-  );
+  const hasComponent =
+    event.dataTransfer?.types?.includes("application/x-designer-component") ||
+    event.dataTransfer?.types?.includes("text/plain") ||
+    Boolean(dragState.dragType);
   if (!hasComponent) return;
 
-  event.dataTransfer.dropEffect = "copy";
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "copy";
+  }
   isDragOver.value = true;
 
   // 计算插入位置
@@ -265,15 +661,42 @@ const handleDrop = (event) => {
   showInsertLine.value = false;
   insertLineStyle.value = null;
 
-  if (!event.dataTransfer) return;
-
-  const payload = event.dataTransfer.getData(
-    "application/x-designer-component"
-  );
-  if (!payload) return;
+  const payload =
+    event.dataTransfer?.getData("application/x-designer-component") ||
+    event.dataTransfer?.getData("text/plain");
+  const fallbackType = dragState.dragType || "";
 
   try {
-    const { type } = JSON.parse(payload);
+    const parsed = JSON.parse(payload);
+    const type = parsed?.type || "";
+    if (!type && !fallbackType) return;
+    const resolvedType = type || fallbackType;
+    if (!node.value) return;
+    if (!canAcceptChild(node.value, resolvedType)) return;
+    let insertIndex = (node.value?.children || []).length;
+
+    if (node.value?.type === "FlexContainer") {
+      const direction = node.value.props?.direction || "column";
+      const currentElement = event.currentTarget;
+      const insertInfo = dragDropManager.calculateFlexInsertPosition(
+        currentElement,
+        event,
+        direction
+      );
+      insertIndex = insertInfo.index;
+    }
+    const dropPosition =
+      node.value?.type === "FreeContainer"
+        ? resolveDropOffset(event, event.currentTarget)
+        : null;
+
+    // 插入新节点
+    editorStore.insertNode(resolvedType, node.value?.id, insertIndex, {
+      dropPosition: dropPosition || undefined,
+    });
+    endDrag();
+  } catch (err) {
+    const type = payload || fallbackType;
     if (!type) return;
     if (!node.value) return;
     if (!canAcceptChild(node.value, type)) return;
@@ -301,8 +724,7 @@ const handleDrop = (event) => {
     editorStore.insertNode(type, node.value?.id, insertIndex, {
       dropPosition: dropPosition || undefined,
     });
-  } catch (err) {
-    console.error("拖拽数据解析失败:", err);
+    endDrag();
   }
 };
 
@@ -429,7 +851,7 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
   const manifest = componentRegistry.get(currentNode.type);
   const isContainer = manifest?.isContainer || false;
 
-  if (currentNode.type === "FlexContainer") {
+  if (currentNode.type === "FlexContainer" || currentNode.type === "ResponsiveLayout") {
     style.display = "flex";
     style.flexDirection = currentNode.props?.direction || "row";
     style.flexWrap = currentNode.props?.wrap || "nowrap";
@@ -438,7 +860,12 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     if (currentNode.props?.gap !== undefined) {
       style.gap = currentNode.props.gap;
     }
-  } else if (currentNode.type === "GridContainer") {
+  } else if (
+    currentNode.type === "GridContainer" ||
+    currentNode.type === "ColumnLayout1" ||
+    currentNode.type === "ColumnLayout2" ||
+    currentNode.type === "ColumnLayout4"
+  ) {
     style.display = "grid";
     if (currentNode.props?.columns) {
       style.gridTemplateColumns = formatGridTemplate(currentNode.props.columns);
@@ -542,6 +969,199 @@ const formatGridTemplate = (value) => {
   }
   return value;
 };
+
+/**
+ * 判断是否为可编辑元素（避免拖拽干扰编辑）
+ * @param {EventTarget | null} target - 事件目标
+ * @returns {boolean} 是否为可交互元素
+ * @throws {Error} 无
+ */
+const isInteractiveTarget = (target) => {
+  if (!target || !(target instanceof Element)) return false;
+  if (target.isContentEditable) return true;
+  return Boolean(target.closest("[contenteditable='true']"));
+};
+
+/**
+ * 解析节点自由布局信息
+ * @param {import('@/editor-core').ComponentNode} currentNode - 当前节点
+ * @returns {{ x: number, y: number, w: number, h: number, z: number }}
+ * @throws {Error} 无
+ */
+const resolveAbsoluteLayout = (currentNode) => {
+  const fallbackAbs = currentNode.layoutItem?.free?.abs || {};
+  const absolutePos = currentNode.absolutePos || fallbackAbs;
+  const rect = nodeRef.value?.getBoundingClientRect?.();
+  const width = Number.isFinite(absolutePos.w)
+    ? absolutePos.w
+    : rect?.width ?? 120;
+  const height = Number.isFinite(absolutePos.h)
+    ? absolutePos.h
+    : rect?.height ?? 40;
+
+  let x = Number.isFinite(absolutePos.x) ? absolutePos.x : 0;
+  let y = Number.isFinite(absolutePos.y) ? absolutePos.y : 0;
+
+  if (!Number.isFinite(absolutePos.x) || !Number.isFinite(absolutePos.y)) {
+    const parentElement = nodeRef.value?.parentElement?.closest?.("[data-node-id]");
+    const parentRect = parentElement?.getBoundingClientRect?.();
+    if (rect && parentRect) {
+      x = rect.left - parentRect.left;
+      y = rect.top - parentRect.top;
+    }
+  }
+
+  return {
+    x: Math.max(0, Math.round(x)),
+    y: Math.max(0, Math.round(y)),
+    w: Math.max(1, Math.round(width)),
+    h: Math.max(1, Math.round(height)),
+    z: Number.isFinite(absolutePos.z) ? absolutePos.z : 1,
+  };
+};
+
+let activeDragHandlers = null;
+
+/**
+ * 清理拖拽事件监听
+ * @returns {void}
+ * @throws {Error} 无
+ */
+const cleanupDragHandlers = () => {
+  if (!activeDragHandlers) return;
+  const {
+    move,
+    up,
+    userSelect,
+    pointerTarget,
+    pointerId,
+    usePointer,
+  } = activeDragHandlers;
+  if (usePointer) {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    window.removeEventListener("pointercancel", up);
+  } else {
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+  }
+  if (pointerTarget?.releasePointerCapture && pointerId !== undefined) {
+    try {
+      pointerTarget.releasePointerCapture(pointerId);
+    } catch (error) {
+      // 忽略释放失败
+    }
+  }
+  document.body.style.userSelect = userSelect ?? "";
+  activeDragHandlers = null;
+};
+
+onBeforeUnmount(() => {
+  cleanupDragHandlers();
+});
+
+/**
+ * 处理节点拖拽移动
+ * @param {MouseEvent} event - 鼠标事件
+ * @returns {void}
+ * @throws {Error} 无
+ */
+const handlePointerDown = (event) => {
+  if (activeDragHandlers) return;
+  if (!node.value || !isMovable.value) return;
+  if (event.button !== 0) return;
+  if (isInteractiveTarget(event.target)) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (selection.value) {
+    const element = createSelectableElement("node", node.value.id);
+    selection.value.select(element);
+  }
+
+  const zoomValue = Number(canvasZoom?.value) || 1;
+  const baseLayout = resolveAbsoluteLayout(node.value);
+  const startClientX = event.clientX;
+  const startClientY = event.clientY;
+
+  cleanupDragHandlers();
+  const originalUserSelect = document.body.style.userSelect;
+  document.body.style.userSelect = "none";
+
+  if (history.value && !history.value.isInTransaction?.()) {
+    history.value.beginTransaction();
+  }
+
+  const usePointer = event.type === "pointerdown";
+  const pointerTarget =
+    event.target instanceof Element ? event.target : nodeRef.value?.$el;
+  if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
+    try {
+      pointerTarget.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // 忽略捕获失败
+    }
+  }
+
+  const move = (moveEvent) => {
+    if (!node.value) return;
+    const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
+    const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
+    const nextX = Math.max(0, Math.round(baseLayout.x + deltaX));
+    const nextY = Math.max(0, Math.round(baseLayout.y + deltaY));
+
+    const nextAbs = {
+      x: nextX,
+      y: nextY,
+      w: baseLayout.w,
+      h: baseLayout.h,
+      z: baseLayout.z,
+    };
+
+    const nextLayoutItem = {
+      ...(node.value.layoutItem || {}),
+      free: {
+        mode: "abs",
+        abs: { ...nextAbs },
+      },
+    };
+
+    // 同步新旧布局字段，确保自由拖动可见
+    history.value?.executeInTransaction(
+      new UpdateNodeCommand(node.value.id, {
+        positioning: "absolute",
+        absolutePos: nextAbs,
+        layoutItem: nextLayoutItem,
+      })
+    );
+  };
+
+  const up = () => {
+    cleanupDragHandlers();
+    if (history.value?.isInTransaction?.()) {
+      history.value.commitTransaction("移动组件");
+    }
+  };
+
+  activeDragHandlers = {
+    move,
+    up,
+    userSelect: originalUserSelect,
+    pointerTarget,
+    pointerId: event.pointerId,
+    usePointer,
+  };
+
+  if (usePointer) {
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  } else {
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+};
 </script>
 
 <style scoped>
@@ -558,6 +1178,10 @@ const formatGridTemplate = (value) => {
 
 .designer-node.is-selected {
   outline: 2px solid #3b82f6;
+}
+
+.designer-node.is-draggable {
+  cursor: move;
 }
 
 .designer-node.is-container {
@@ -613,6 +1237,18 @@ const formatGridTemplate = (value) => {
   width: 2px;
   top: 0;
   bottom: 0;
+}
+
+.carousel-item-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #f5f7fa;
+  border: 1px dashed #dcdfe6;
+  color: #909399;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
 }
 
 .designer-node.is-root {

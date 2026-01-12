@@ -13,6 +13,7 @@
  * @property {string} [description] - 组件描述
  * @property {Object} defaultProps - 默认属性
  * @property {Object} defaultStyle - 默认样式
+ * @property {{ width?: number, height?: number }} [defaultSize] - 默认尺寸
  * @property {Object} propsSchema - 属性 Schema（用于属性面板）
  * @property {Object} [styleSchema] - 样式 Schema
  * @property {string[]} [events] - 支持的事件列表
@@ -201,4 +202,3 @@ export class ComponentRegistry {
 export const componentRegistry = new ComponentRegistry();
 
 export default ComponentRegistry;
-

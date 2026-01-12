@@ -4,6 +4,8 @@
     tabindex="0"
     @click.self="handleClearSelection"
     @keydown="handleKeyDown"
+    @dragover.prevent
+    @drop.prevent.stop="handleCanvasDrop"
   >
     <NodeRenderer v-if="rootNodeId" :node-id="rootNodeId" :is-root="true" />
     <div v-if="!hasContent" class="empty-placeholder">
@@ -69,7 +71,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount, provide } from "vue";
+import { computed, ref, onMounted, onBeforeUnmount, provide, inject } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import NodeRenderer from "./NodeRenderer.vue";
@@ -79,13 +81,17 @@ import IconEpTop from "~icons/ep/top";
 import IconEpBottom from "~icons/ep/bottom";
 import IconEpRefreshLeft from "~icons/ep/refresh-left";
 import IconEpRefreshRight from "~icons/ep/refresh-right";
+import { useDragState, endDrag } from "./use-drag-state";
 
 const editorStore = useEditorStore();
-const { doc, currentPage, selection, history } = storeToRefs(editorStore);
+const { doc, currentPage, selection, history, docVersion } = storeToRefs(editorStore);
+const canvasZoom = inject("canvasZoom", ref(1));
+const dragState = useDragState();
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
 
 const hasContent = computed(() => {
+  docVersion.value;
   if (!doc.value || !currentPage.value) return false;
   const root = doc.value.getNode(currentPage.value.rootNodeId);
   return (root?.children || []).length > 0;
@@ -109,6 +115,47 @@ const hasSelection = computed(() => {
 
 const canUndo = computed(() => history.value?.canUndo?.() || false);
 const canRedo = computed(() => history.value?.canRedo?.() || false);
+
+/**
+ * 处理画布空白处放置组件
+ * @param {DragEvent} event - 拖拽事件
+ */
+const handleCanvasDrop = (event) => {
+  if (!currentPage.value?.rootNodeId) return;
+
+  const payload =
+    event.dataTransfer?.getData("application/x-designer-component") ||
+    event.dataTransfer?.getData("text/plain");
+  const fallbackType = dragState.dragType || "";
+
+  let componentType = "";
+  if (payload) {
+    try {
+      const parsed = JSON.parse(payload);
+      componentType = parsed.type || "";
+    } catch (error) {
+      componentType = payload;
+    }
+  }
+
+  if (!componentType) {
+    componentType = fallbackType;
+  }
+  if (!componentType) return;
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const zoomValue = Number(canvasZoom?.value) || 1;
+  const offsetX = (event.clientX - rect.left) / zoomValue;
+  const offsetY = (event.clientY - rect.top) / zoomValue;
+
+  editorStore.insertNode(componentType, currentPage.value.rootNodeId, undefined, {
+    dropPosition: {
+      x: Math.max(0, Math.round(offsetX)),
+      y: Math.max(0, Math.round(offsetY)),
+    },
+  });
+  endDrag();
+};
 
 /**
  * 显示右键菜单（从 NodeRenderer 触发）

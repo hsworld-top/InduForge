@@ -79,6 +79,22 @@ const exitCanvasMode = () => {
   overflow: hidden;
 }
 
+.material-panel :deep(.el-tabs) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.material-panel :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+}
+
+.material-panel :deep(.el-tab-pane) {
+  height: 100%;
+}
+
 .canvas-tools-panel {
   display: flex;
   flex-direction: column;

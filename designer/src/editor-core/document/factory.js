@@ -63,10 +63,14 @@ export function inferPositioning(type, parentNode) {
       return "absolute";
       
     case "FlexContainer":
+    case "ResponsiveLayout":
       // Flex 容器：子节点使用流式布局
       return "flow";
       
     case "GridContainer":
+    case "ColumnLayout1":
+    case "ColumnLayout2":
+    case "ColumnLayout4":
       // Grid 容器：子节点使用流式布局
       return "flow";
       
@@ -101,7 +105,12 @@ function createDefaultFlowLayout(parentNode) {
   }
 
   // 如果父容器是 Grid，返回 Grid 布局配置
-  if (parentNode.type === "GridContainer") {
+  if (
+    parentNode.type === "GridContainer" ||
+    parentNode.type === "ColumnLayout1" ||
+    parentNode.type === "ColumnLayout2" ||
+    parentNode.type === "ColumnLayout4"
+  ) {
     const columns = resolveGridColumns(parentNode.props?.columns);
     const childIndex = parentNode.children?.length || 0;
     const row = Math.floor(childIndex / columns) + 1;

@@ -11,7 +11,9 @@
         <div
           class="diagram-item"
           draggable="true"
+          @mousedown="handlePointerStart('Diagram2D', $event)"
           @dragstart="handleDragStart('Diagram2D', $event)"
+          @dragend="handleDragEnd"
         >
           <div class="diagram-icon">
             <IconEpGrid />
@@ -46,6 +48,7 @@
 <script setup>
 import IconEpGrid from "~icons/ep/grid";
 import IconEpBox from "~icons/ep/box";
+import { startDrag, endDrag } from "@/ui/Canvas/use-drag-state";
 
 /**
  * 处理拖拽开始
@@ -53,11 +56,29 @@ import IconEpBox from "~icons/ep/box";
  * @param {DragEvent} event - 拖拽事件
  */
 const handleDragStart = (type, event) => {
+  startDrag(type);
   if (!event.dataTransfer) return;
   const payload = JSON.stringify({ type });
   event.dataTransfer.effectAllowed = "copy";
   event.dataTransfer.setData("application/x-designer-component", payload);
   event.dataTransfer.setData("text/plain", type);
+};
+
+/**
+ * 处理鼠标拖拽开始（HTML5 drag 失效时兜底）
+ * @param {string} type - 组件类型
+ * @param {MouseEvent} event - 鼠标事件
+ */
+const handlePointerStart = (type, event) => {
+  if (event.button !== 0) return;
+  startDrag(type);
+};
+
+/**
+ * 处理拖拽结束
+ */
+const handleDragEnd = () => {
+  endDrag();
 };
 </script>
 

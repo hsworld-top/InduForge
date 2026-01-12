@@ -27,7 +27,15 @@ function extractDefaultProps(props) {
  * @returns {Object} 默认样式
  */
 function getDefaultStyle(type) {
-  const containerTypes = ["FlexContainer", "FreeContainer", "GridContainer"];
+  const containerTypes = [
+    "FlexContainer",
+    "FreeContainer",
+    "GridContainer",
+    "ResponsiveLayout",
+    "ColumnLayout1",
+    "ColumnLayout2",
+    "ColumnLayout4",
+  ];
   const baseStyle = {
     minHeight: "40px",
   };
@@ -64,7 +72,15 @@ function getDefaultStyle(type) {
  * @returns {boolean}
  */
 function isContainerType(type) {
-  const containerTypes = ["FlexContainer", "FreeContainer", "GridContainer"];
+  const containerTypes = [
+    "FlexContainer",
+    "FreeContainer",
+    "GridContainer",
+    "ResponsiveLayout",
+    "ColumnLayout1",
+    "ColumnLayout2",
+    "ColumnLayout4",
+  ];
   return containerTypes.includes(type);
 }
 
@@ -79,6 +95,8 @@ function mapCategory(category) {
     基础: "basic",
     表单: "form",
     图形: "canvas",
+    UI组件: "ui",
+    PC端组件: "uiPc",
   };
   return categoryMap[category] || "custom";
 }
@@ -98,6 +116,7 @@ export function registerBuiltinComponents() {
       description: `${manifest.name}组件`,
       defaultProps: extractDefaultProps(manifest.props),
       defaultStyle: getDefaultStyle(manifest.type),
+      defaultSize: manifest.defaultSize,
       propsSchema: manifest.props,
       styleSchema: undefined,
       events: ["click", "dblclick", "mouseenter", "mouseleave"],

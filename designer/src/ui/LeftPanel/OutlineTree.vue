@@ -95,7 +95,7 @@ import IconEpArrowDown from "~icons/ep/arrow-down";
 import IconEpDelete from "~icons/ep/delete";
 
 const editorStore = useEditorStore();
-const { doc, currentPageId, selection } = storeToRefs(editorStore);
+const { doc, currentPageId, selection, docVersion } = storeToRefs(editorStore);
 
 const selectedNodeId = ref("");
 const contextMenuVisible = ref(false);
@@ -118,7 +118,7 @@ const contextMenuVirtualRef = {
 };
 
 /**
- * 构建组件大纲树
+ * 构建组件大纲树（隐藏根节点，直接展示子节点）
  * @param {import('@/editor-core').DocumentModel} document - 文档模型
  * @param {string} rootNodeId - 根节点 ID
  * @returns {Array<{id: string, label: string, hidden: boolean, locked: boolean, isRoot: boolean, children?: Array}>}
@@ -143,22 +143,14 @@ const buildOutlineTree = (document, rootNodeId) => {
       })
       .filter(Boolean);
 
-  return [
-    {
-      id: rootNode.id,
-      label: rootNode.label || rootNode.type || rootNode.id,
-      hidden: rootNode.hidden || false,
-      locked: rootNode.locked || false,
-      isRoot: true,
-      children: buildChildren(rootNode),
-    },
-  ];
+  return buildChildren(rootNode);
 };
 
 /**
  * 组件大纲树数据
  */
 const outlineData = computed(() => {
+  docVersion.value;
   if (!doc.value || !currentPageId.value) return [];
   const page = doc.value.getPage(currentPageId.value);
   if (!page) return [];
