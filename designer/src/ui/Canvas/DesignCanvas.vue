@@ -2,7 +2,7 @@
   <div
     class="design-canvas"
     tabindex="0"
-    @click.self="handleClearSelection"
+    @pointerdown.capture="handleCanvasPointerDown"
     @keydown="handleKeyDown"
     @dragover.prevent
     @drop.prevent.stop="handleCanvasDrop"
@@ -74,6 +74,7 @@
 import { computed, ref, onMounted, onBeforeUnmount, provide, inject } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
+import { createSelectableElement } from "@/editor-core";
 import NodeRenderer from "./NodeRenderer.vue";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpDelete from "~icons/ep/delete";
@@ -98,9 +99,37 @@ const hasContent = computed(() => {
 });
 
 /**
- * 清除选中状态
+ * 兜底处理画布点击选中，避免组件内部阻止冒泡导致无法选中
+ * @param {PointerEvent | MouseEvent} event - 鼠标事件
  */
-const handleClearSelection = () => {
+const handleCanvasPointerDown = (event) => {
+  if (!selection.value) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (!(event.target instanceof Element)) {
+    selection.value?.clearSelection();
+    return;
+  }
+
+  const nodeElement = event.target.closest(".designer-node");
+  if (nodeElement && !nodeElement.classList.contains("is-root")) {
+    return;
+  }
+
+  const rootId = rootNodeId.value;
+  if (rootId) {
+    const element = createSelectableElement("node", rootId);
+    if (event.shiftKey) {
+      selection.value.selectRange(element);
+      return;
+    }
+    if (event.metaKey || event.ctrlKey) {
+      selection.value.toggleSelect(element);
+      return;
+    }
+    selection.value.select(element);
+    return;
+  }
+
   selection.value?.clearSelection();
 };
 

@@ -8,7 +8,6 @@
     ref="nodeRef"
     @click.stop="handleSelect"
     @pointerdown.capture="handlePointerDown"
-    @mousedown.capture="handlePointerDown"
     @dragover.prevent="handleDragOver"
     @dragstart.prevent
     @dragleave="handleDragLeave"
@@ -178,7 +177,7 @@ const props = defineProps({
 });
 
 const editorStore = useEditorStore();
-const { doc, selection, docVersion, history } = storeToRefs(editorStore);
+const { doc, selection, docVersion, selectionVersion, history } = storeToRefs(editorStore);
 const canvasZoom = inject("canvasZoom", ref(1));
 const dragState = useDragState();
 const nodeRef = ref(null);
@@ -417,6 +416,7 @@ const resolveDropOffset = (event, element) => {
 };
 
 const nodeClass = computed(() => {
+  selectionVersion.value;
   if (!node.value) return "";
   const classes = ["designer-node"];
   if (props.isRoot) classes.push("is-root");
@@ -529,11 +529,13 @@ const displayContent = computed(() => {
 });
 
 const layoutStyle = computed(() => {
+  docVersion.value;
   if (!node.value) return {};
   return resolveLayoutStyle(node.value, props.isRoot);
 });
 
 const contentStyle = computed(() => {
+  docVersion.value;
   if (!node.value) return {};
   const containerStyle = resolveContainerStyle(node.value, {});
   const customStyle = normalizeStyleObject(node.value.style || {});
@@ -857,6 +859,7 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     style.flexWrap = currentNode.props?.wrap || "nowrap";
     style.justifyContent = currentNode.props?.justify || "flex-start";
     style.alignItems = currentNode.props?.align || "stretch";
+    style.position = "relative";
     if (currentNode.props?.gap !== undefined) {
       style.gap = currentNode.props.gap;
     }
@@ -867,6 +870,7 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     currentNode.type === "ColumnLayout4"
   ) {
     style.display = "grid";
+    style.position = "relative";
     if (currentNode.props?.columns) {
       style.gridTemplateColumns = formatGridTemplate(currentNode.props.columns);
     }
@@ -1038,12 +1042,12 @@ const cleanupDragHandlers = () => {
     usePointer,
   } = activeDragHandlers;
   if (usePointer) {
-    window.removeEventListener("pointermove", move);
-    window.removeEventListener("pointerup", up);
-    window.removeEventListener("pointercancel", up);
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", up);
   } else {
-    window.removeEventListener("mousemove", move);
-    window.removeEventListener("mouseup", up);
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up);
   }
   if (pointerTarget?.releasePointerCapture && pointerId !== undefined) {
     try {
@@ -1069,7 +1073,7 @@ onBeforeUnmount(() => {
 const handlePointerDown = (event) => {
   if (activeDragHandlers) return;
   if (!node.value || !isMovable.value) return;
-  if (event.button !== 0) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
   if (isInteractiveTarget(event.target)) return;
 
   event.preventDefault();
@@ -1119,6 +1123,15 @@ const handlePointerDown = (event) => {
       z: baseLayout.z,
     };
 
+    if (nodeRef.value) {
+      nodeRef.value.style.position = "absolute";
+      nodeRef.value.style.left = `${nextAbs.x}px`;
+      nodeRef.value.style.top = `${nextAbs.y}px`;
+      nodeRef.value.style.width = `${nextAbs.w}px`;
+      nodeRef.value.style.height = `${nextAbs.h}px`;
+      nodeRef.value.style.zIndex = `${nextAbs.z}`;
+    }
+
     const nextLayoutItem = {
       ...(node.value.layoutItem || {}),
       free: {
@@ -1128,13 +1141,24 @@ const handlePointerDown = (event) => {
     };
 
     // 同步新旧布局字段，确保自由拖动可见
-    history.value?.executeInTransaction(
-      new UpdateNodeCommand(node.value.id, {
-        positioning: "absolute",
-        absolutePos: nextAbs,
-        layoutItem: nextLayoutItem,
-      })
-    );
+    const patch = {
+      positioning: "absolute",
+      absolutePos: nextAbs,
+      layoutItem: nextLayoutItem,
+    };
+    if (history.value?.isInTransaction?.()) {
+      history.value.executeInTransaction(
+        new UpdateNodeCommand(node.value.id, patch)
+      );
+      return;
+    }
+    if (history.value?.execute) {
+      history.value.execute(new UpdateNodeCommand(node.value.id, patch));
+      return;
+    }
+    if (doc.value?._updateNode) {
+      doc.value._updateNode(node.value.id, patch);
+    }
   };
 
   const up = () => {
@@ -1154,12 +1178,12 @@ const handlePointerDown = (event) => {
   };
 
   if (usePointer) {
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", up);
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
   } else {
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
   }
 };
 </script>

@@ -1,5 +1,10 @@
 <template>
-  <main class="canvas-container" ref="containerRef" @wheel="handleZoomWheel">
+  <main
+    class="canvas-container"
+    ref="containerRef"
+    @wheel="handleZoomWheel"
+    @click="handleContainerClick"
+  >
     <div class="canvas-wrapper" ref="wrapperRef">
       <div
         class="canvas"
@@ -261,6 +266,18 @@ const handleZoomReset = () => {
   translateY.value = 0;
   emit("zoomChange", 1);
 };
+/**
+ * \u70b9\u51fb\u753b\u5e03\u5916\u90e8\u7a7a\u767d\u533a\u57df\u65f6\u663e\u793a\u9875\u9762\u4fe1\u606f
+ * @param {MouseEvent} event - \u9f20\u6807\u4e8b\u4ef6
+ */
+const handleContainerClick = (event) => {
+  const target = event.target;
+  if (canvasRef.value && canvasRef.value.contains(target)) {
+    return;
+  }
+  selection.value?.clearSelection();
+};
+
 
 /**
  * 构建布局配置

@@ -527,6 +527,8 @@ export const useEditorStore = defineStore("editor", () => {
   const doc = shallowRef(null);
   /** @type {import('vue').Ref<number>} */
   const docVersion = ref(0);
+  /** @type {import('vue').Ref<number>} */
+  const selectionVersion = ref(0);
   /** @type {import('vue').ShallowRef<import('@/editor-core').History | null>} */
   const history = shallowRef(null);
   /** @type {import('vue').ShallowRef<import('@/editor-core').SelectionModel | null>} */
@@ -555,6 +557,7 @@ export const useEditorStore = defineStore("editor", () => {
   let historyUnsubscribe = null;
   let lockUnsubscribe = null;
   let docUnsubscribe = null;
+  let selectionUnsubscribe = null;
 
   /**
    * 同步锁状态
@@ -657,14 +660,22 @@ export const useEditorStore = defineStore("editor", () => {
       docUnsubscribe();
       docUnsubscribe = null;
     }
+    if (selectionUnsubscribe) {
+      selectionUnsubscribe();
+      selectionUnsubscribe = null;
+    }
 
     historyUnsubscribe = nextHistory.on("change", (payload) => {
       canUndo.value = payload.canUndo;
       canRedo.value = payload.canRedo;
     });
     docVersion.value = 0;
+    selectionVersion.value = 0;
     docUnsubscribe = nextDoc.on("change", () => {
       docVersion.value += 1;
+    });
+    selectionUnsubscribe = nextSelection.on("change", () => {
+      selectionVersion.value += 1;
     });
 
     doc.value = markRaw(nextDoc);
@@ -1581,6 +1592,7 @@ export const useEditorStore = defineStore("editor", () => {
   return {
     doc,
     docVersion,
+    selectionVersion,
     history,
     selection,
     serializer: serializer.value,
