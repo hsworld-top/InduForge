@@ -92,4 +92,13 @@ router.put(
  */
 router.put("/projects/:projectId/entry", designController.updateEntryConfig);
 
+router.get(
+  "/projects/:projectId/settings",
+  designController.getProjectSettings
+);
+router.put(
+  "/projects/:projectId/settings",
+  designController.updateProjectSettings
+);
+
 module.exports = router;

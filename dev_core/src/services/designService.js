@@ -7,14 +7,175 @@ const { DesignPage, Project } = require("../models");
 const { validatePageSchema } = require("../dsl/validators");
 const AppError = require("../utils/AppError");
 const ErrorCodes = require("../constants/errorCodes");
-const { literal } = require("sequelize");
+const { literal,QueryTypes } = require("sequelize");
 
 const LOCK_TIMEOUT_MS = 30 * 60 * 1000;
+
+const DEFAULT_GLOBAL_SCRIPTS = {
+  system: {
+    startup: { code: "" },
+    shutdown: { code: "" },
+  },
+  timers: { groups: [], items: [] },
+  variableChanges: { groups: [], items: [] },
+  custom: { groups: [], items: [] },
+};
+
+const parseJsonField = (value) => {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return null;
+  }
+};
+
+const normalizeGlobalVariables = (raw, fallbackDefinitions = {}) => {
+  if (!raw || typeof raw !== "object") {
+    return { definitions: fallbackDefinitions, groups: [] };
+  }
+  if (raw.definitions || raw.groups) {
+    return {
+      definitions:
+        raw.definitions && typeof raw.definitions === "object"
+          ? raw.definitions
+          : fallbackDefinitions,
+      groups: Array.isArray(raw.groups) ? raw.groups : [],
+    };
+  }
+  return { definitions: raw, groups: [] };
+};
+
+const normalizeGlobalScripts = (raw) => {
+  const source = raw && typeof raw === "object" ? raw : DEFAULT_GLOBAL_SCRIPTS;
+  const system = source.system || {};
+  const timers = source.timers || {};
+  const variableChanges = source.variableChanges || {};
+  const custom = source.custom || {};
+
+  return {
+    system: {
+      startup: { code: system.startup?.code || "" },
+      shutdown: { code: system.shutdown?.code || "" },
+    },
+    timers: {
+      groups: Array.isArray(timers.groups) ? timers.groups : [],
+      items: Array.isArray(timers.items) ? timers.items : [],
+    },
+    variableChanges: {
+      groups: Array.isArray(variableChanges.groups)
+        ? variableChanges.groups
+        : [],
+      items: Array.isArray(variableChanges.items)
+        ? variableChanges.items
+        : [],
+    },
+    custom: {
+      groups: Array.isArray(custom.groups) ? custom.groups : [],
+      items: Array.isArray(custom.items) ? custom.items : [],
+    },
+  };
+};
 /**
  * 设计服务类
  * 提供页面管理的业务逻辑
  */
 class DesignService {
+  /**
+   * 获取工程级别设置（全局变量/脚本）
+   * @param {string} projectId - 项目ID
+   * @returns {Promise<Object>}
+   */
+  async getProjectSettings(projectId) {
+    const project = await Project.findByPk(projectId);
+    if (!project) {
+      throw new AppError(ErrorCodes.PROJECT_NOT_FOUND, 404, {
+        resource: "Project",
+        id: projectId,
+      });
+    }
+
+    let row = null;
+    try {
+      const rows = await Project.sequelize.query(
+        "SELECT globalVariables, globalScripts FROM design_project_settings WHERE projectId = ? LIMIT 1",
+        {
+          replacements: [projectId],
+          type: QueryTypes.SELECT,
+        }
+      );
+      row = rows && rows.length ? rows[0] : null;
+    } catch (error) {
+      row = null;
+    }
+
+    const parsedVariables = parseJsonField(row?.globalVariables);
+    const parsedScripts = parseJsonField(row?.globalScripts);
+    const normalizedVariables = normalizeGlobalVariables(
+      parsedVariables,
+      project.projectVariables || {}
+    );
+
+    return {
+      globalVariables: normalizedVariables,
+      globalScripts: normalizeGlobalScripts(parsedScripts),
+    };
+  }
+
+  /**
+   * 更新工程级别设置（全局变量/脚本）
+   * @param {string} projectId - 项目ID
+   * @param {Object} settings - 设置数据
+   * @param {string} userId - 更新者用户ID
+   * @returns {Promise<Object>}
+   */
+  async updateProjectSettings(projectId, settings, userId) {
+    const project = await Project.findByPk(projectId);
+    if (!project) {
+      throw new AppError(ErrorCodes.PROJECT_NOT_FOUND, 404, {
+        resource: "Project",
+        id: projectId,
+      });
+    }
+
+    const normalizedVariables = normalizeGlobalVariables(
+      settings?.globalVariables,
+      project.projectVariables || {}
+    );
+    const normalizedScripts = normalizeGlobalScripts(settings?.globalScripts);
+
+    await project.update({
+      projectVariables: normalizedVariables.definitions,
+      updatedBy: userId,
+    });
+
+    await Project.sequelize.query(
+      `INSERT INTO design_project_settings
+        (projectId, schemaVersion, globalVariables, globalScripts, updatedBy, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        globalVariables = VALUES(globalVariables),
+        globalScripts = VALUES(globalScripts),
+        updatedBy = VALUES(updatedBy),
+        updatedAt = VALUES(updatedAt)`,
+      {
+        replacements: [
+          projectId,
+          "1.0.0",
+          JSON.stringify(normalizedVariables),
+          JSON.stringify(normalizedScripts),
+          userId,
+          new Date(),
+        ],
+      }
+    );
+
+    return {
+      globalVariables: normalizedVariables,
+      globalScripts: normalizedScripts,
+    };
+  }
   /**
    * 获取项目的页面列表
    * Requirements: 7.1

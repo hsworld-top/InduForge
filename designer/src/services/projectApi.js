@@ -116,7 +116,14 @@ export const projectApi = {
   updateEntryConfig(projectId, entryConfig) {
     return request.put(`/design/projects/${projectId}/entry`, entryConfig);
   },
+  getProjectSettings(projectId) {
+    return request.get(`/design/projects/${projectId}/settings`);
+  },
+
+  updateProjectSettings(projectId, settings) {
+    return request.put(`/design/projects/${projectId}/settings`, settings);
+  },
 };
 
-export default projectApi;
 
+export default projectApi;

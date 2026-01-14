@@ -127,15 +127,45 @@ router.post('/', authenticateToken, validate(Joi.object({
     }
 
     // 创建工程
+        const defaultProjectVariables = {};
+
+    
+    const defaultGlobalVariables = {
+      definitions: defaultProjectVariables,
+      groups: [],
+    };
     const project = await Project.create({
       name,
       description,
       colorTag: colorTag || '#3b82f6',
       tenantId,
       createdBy: userId,
+      projectVariables: defaultProjectVariables,
     });
-
-    // 返回工程信息（附带对应的 app 基本信息）
+    try {
+      await Project.sequelize.query(
+        `INSERT INTO design_project_settings
+          (projectId, schemaVersion, globalVariables, globalScripts, updatedBy, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          globalVariables = VALUES(globalVariables),
+          globalScripts = VALUES(globalScripts),
+          updatedBy = VALUES(updatedBy),
+          updatedAt = VALUES(updatedAt)`,
+        {
+          replacements: [
+            project.id,
+            '1.0.0',
+            JSON.stringify(defaultGlobalVariables),
+            JSON.stringify(defaultGlobalScripts),
+            userId,
+            new Date(),
+          ],
+        },
+      );
+    } catch (error) {
+      logger.warn('Init project settings failed', { error: error.message, projectId: project.id });
+    }
     const projectWithRelations = await Project.findByPk(project.id, {
       include: [
         { model: Tenant, as: 'tenant' },

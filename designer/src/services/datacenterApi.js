@@ -12,10 +12,11 @@ export const datacenterApi = {
   /**
    * 获取数据连接列表
    * @param {string} projectId - 工程ID
+   * @param {Object} [params] - 查询参数
    * @returns {Promise<Array>} 连接列表
    */
-  getConnections(projectId) {
-    return request.get(`/data/projects/${projectId}/connections`);
+  getConnections(projectId, params = {}) {
+    return request.get(`/data/projects/${projectId}/connections`, { params });
   },
 
   /**
@@ -29,7 +30,7 @@ export const datacenterApi = {
   },
 
   /**
-   * 获取数据点列表
+   * 获取数据点列表（兼容旧路径）
    * @param {string} projectId - 项目ID
    * @param {string} connectionId - 连接ID
    * @returns {Promise<Array>} 数据点列表
@@ -38,6 +39,16 @@ export const datacenterApi = {
     return request.get(
       `/data/projects/${projectId}/connections/${connectionId}/datapoints`
     );
+  },
+
+  /**
+   * 获取数据点列表
+   * @param {string} projectId - 项目ID
+   * @param {Object} [params] - 查询参数
+   * @returns {Promise<Object>} 数据点列表
+   */
+  getDataPoints(projectId, params = {}) {
+    return request.get(`/data/projects/${projectId}/datapoints`, { params });
   },
 
   /**
@@ -80,4 +91,3 @@ export const datacenterApi = {
 };
 
 export default datacenterApi;
-

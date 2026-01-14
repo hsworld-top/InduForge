@@ -350,6 +350,60 @@ async function updateEntryConfig(req, res, next) {
   }
 }
 
+
+
+/**
+ * 获取工程级设置（全局变量/脚本）
+ * GET /api/v1/design/projects/:projectId/settings
+ */
+async function getProjectSettings(req, res, next) {
+  try {
+    const { projectId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const settings = await designService.getProjectSettings(projectId);
+
+    res.json({
+      success: true,
+      data: settings,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 更新工程级设置（全局变量/脚本）
+ * PUT /api/v1/design/projects/:projectId/settings
+ */
+async function updateProjectSettings(req, res, next) {
+  try {
+    const { projectId } = req.params;
+    await checkProjectAccess(req, projectId);
+
+    const settings = req.body;
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "settings 必须是对象",
+      });
+    }
+
+    const result = await designService.updateProjectSettings(
+      projectId,
+      settings,
+      req.user.id
+    );
+
+    res.json({
+      success: true,
+      message: "工程设置已更新",
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getPages,
   getPage,
@@ -360,5 +414,7 @@ module.exports = {
   movePage,
   getProjectVariables,
   updateProjectVariables,
+  getProjectSettings,
+  updateProjectSettings,
   updateEntryConfig,
 };

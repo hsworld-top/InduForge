@@ -40,6 +40,57 @@ const unwrapApiData = (payload) => {
   }
   return payload;
 };
+const getDefaultGlobalScripts = () => ({
+  system: {
+    startup: { code: "" },
+    shutdown: { code: "" },
+  },
+  timers: { groups: [], items: [] },
+  variableChanges: { groups: [], items: [] },
+  custom: { groups: [], items: [] },
+});
+
+const normalizeGlobalVariables = (raw, fallbackDefinitions = {}) => {
+  if (!raw || typeof raw !== "object") {
+    return { definitions: fallbackDefinitions, groups: [] };
+  }
+  if (raw.definitions || raw.groups) {
+    return {
+      definitions:
+        raw.definitions && typeof raw.definitions === "object"
+          ? raw.definitions
+          : fallbackDefinitions,
+      groups: Array.isArray(raw.groups) ? raw.groups : [],
+    };
+  }
+  return { definitions: raw, groups: [] };
+};
+
+const normalizeGlobalScripts = (raw) => {
+  const system = raw && raw.system ? raw.system : {};
+  const timers = raw && raw.timers ? raw.timers : {};
+  const variableChanges = raw && raw.variableChanges ? raw.variableChanges : {};
+  const custom = raw && raw.custom ? raw.custom : {};
+
+  return {
+    system: {
+      startup: { code: system.startup?.code || "" },
+      shutdown: { code: system.shutdown?.code || "" },
+    },
+    timers: {
+      groups: Array.isArray(timers.groups) ? timers.groups : [],
+      items: Array.isArray(timers.items) ? timers.items : [],
+    },
+    variableChanges: {
+      groups: Array.isArray(variableChanges.groups) ? variableChanges.groups : [],
+      items: Array.isArray(variableChanges.items) ? variableChanges.items : [],
+    },
+    custom: {
+      groups: Array.isArray(custom.groups) ? custom.groups : [],
+      items: Array.isArray(custom.items) ? custom.items : [],
+    },
+  };
+};
 
 /**
  * 规范化页面列表
@@ -543,6 +594,9 @@ export const useEditorStore = defineStore("editor", () => {
   const readonlyState = ref({ readonly: false });
 
   const projectId = ref("");
+  const projectVariables = ref({});
+  const projectVariableGroups = ref([]);
+  const globalScripts = ref(getDefaultGlobalScripts());
   const projectName = ref("");
   const currentPageId = ref("");
   const pages = ref([]);
@@ -753,8 +807,98 @@ export const useEditorStore = defineStore("editor", () => {
    * @param {string} id - 工程 ID
    * @returns {Promise<{ok: boolean, error?: Error}>}
    */
+  
+  /**
+   * 加载工程级变量与脚本设置
+   * @returns {Promise<void>}
+   */
+  const loadProjectSettings = async () => {
+    if (!projectId.value) return;
+
+    const results = await Promise.allSettled([
+      projectApi.getProjectVariables(projectId.value),
+      projectApi.getProjectSettings(projectId.value),
+    ]);
+
+    const varsResult =
+      results[0].status === "fulfilled" ? unwrapApiData(results[0].value) : null;
+    const settingsResult =
+      results[1].status === "fulfilled" ? unwrapApiData(results[1].value) : null;
+
+    const fallbackDefinitions =
+      varsResult && typeof varsResult === "object" ? varsResult : {};
+
+    if (settingsResult && typeof settingsResult === "object") {
+      const normalizedVariables = normalizeGlobalVariables(
+        settingsResult.globalVariables,
+        fallbackDefinitions
+      );
+      projectVariables.value = normalizedVariables.definitions;
+      projectVariableGroups.value = normalizedVariables.groups;
+      globalScripts.value = normalizeGlobalScripts(settingsResult.globalScripts || {});
+      return;
+    }
+
+    projectVariables.value = fallbackDefinitions;
+    projectVariableGroups.value = [];
+    globalScripts.value = getDefaultGlobalScripts();
+  };
+  
+  /**
+   * 保存工程级变量与脚本设置
+   * @returns {Promise<{ok: boolean, error?: Error}>}
+   */
+  const saveProjectSettings = async () => {
+    if (!projectId.value) {
+      return { ok: false, error: new Error("缺少工程信息") };
+    }
+
+    const payload = {
+      globalVariables: {
+        definitions: projectVariables.value,
+        groups: projectVariableGroups.value,
+      },
+      globalScripts: globalScripts.value,
+    };
+
+    try {
+      const results = await Promise.allSettled([
+        projectApi.updateProjectSettings(projectId.value, payload),
+        projectApi.updateProjectVariables(projectId.value, projectVariables.value),
+      ]);
+      const settingsResult =
+        results[0].status === "fulfilled" ? results[0].value : null;
+      const data = unwrapApiData(settingsResult) || settingsResult?.data || settingsResult;
+      const rejected = results.find((res) => res.status === "rejected");
+      if (rejected) {
+        return {
+          ok: false,
+          error: rejected.reason instanceof Error ? rejected.reason : new Error("淇濆瓨澶辫触"),
+        };
+      }
+
+      if (data && typeof data === "object") {
+        if (data.globalVariables) {
+          const normalized = normalizeGlobalVariables(
+            data.globalVariables,
+            projectVariables.value
+          );
+          projectVariables.value = normalized.definitions;
+          projectVariableGroups.value = normalized.groups;
+        }
+        if (data.globalScripts) {
+          globalScripts.value = normalizeGlobalScripts(data.globalScripts);
+        }
+      }
+
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err : new Error("保存失败") };
+    }
+  };
   const loadProject = async (id) => {
     projectId.value = id || "";
+    await loadProjectSettings();
     loading.value = true;
     error.value = "";
 
@@ -1598,6 +1742,9 @@ export const useEditorStore = defineStore("editor", () => {
     serializer: serializer.value,
     projectId,
     projectName,
+    projectVariables,
+    projectVariableGroups,
+    globalScripts,
     currentPageId,
     currentPage,
     pages,
@@ -1613,6 +1760,8 @@ export const useEditorStore = defineStore("editor", () => {
     isLockOwner,
     initEditor,
     loadProject,
+    saveProjectSettings,
+    loadProjectSettings,
     loadPage,
     setCurrentPage,
     refreshPages,
