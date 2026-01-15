@@ -53,11 +53,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, provide } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, provide } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import NodeRenderer from "@/ui/Canvas/NodeRenderer.vue";
+import { initPreviewRuntime, clearPreviewRuntime } from "./previewRuntime";
 
 // 图标导入
 import IconEpArrowLeft from "~icons/ep/arrow-left";
@@ -67,7 +68,8 @@ import { VIEW_PRESETS } from "@/constants";
 const router = useRouter();
 const route = useRoute();
 const editorStore = useEditorStore();
-const { currentPage, docVersion } = storeToRefs(editorStore);
+const { currentPage, docVersion, projectVariables, globalScripts, projectId } =
+  storeToRefs(editorStore);
 provide("canvasZoom", ref(1));
 
 const viewKey = ref("pc");
@@ -135,8 +137,24 @@ const loadProject = async () => {
   await editorStore.loadProject(projectId);
 };
 
+let previewRuntime = null;
+
 onMounted(() => {
   void loadProject();
+  const runtime = initPreviewRuntime({
+    projectId: projectId.value || editorStore.projectId,
+    projectVariables: projectVariables.value || {},
+    globalScripts: globalScripts.value || {},
+  });
+  previewRuntime = runtime || null;
+  runtime?.start?.();
+});
+
+onBeforeUnmount(() => {
+  if (previewRuntime?.stop) {
+    previewRuntime.stop();
+  }
+  clearPreviewRuntime();
 });
 </script>
 

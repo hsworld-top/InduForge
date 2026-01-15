@@ -160,6 +160,7 @@ import { computed, ref, inject, onBeforeUnmount } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { datacenterApi } from "@/services";
+import { getPreviewRuntime } from "@/ui/Preview/previewRuntime";
 import {
   componentRegistry,
   createSelectableElement,
@@ -801,6 +802,10 @@ const runPreviewScript = async (eventName, event) => {
   const code = typeof action === "string" ? action : action?.code || "";
   if (!code.trim()) return;
 
+  const runtime = getPreviewRuntime();
+  if (runtime?.runCode) {
+    return await runtime.runCode(code, event);
+  }
   const globals = buildPreviewGlobals();
   const customScripts = buildPreviewCustomScripts(globals);
   const context = {
