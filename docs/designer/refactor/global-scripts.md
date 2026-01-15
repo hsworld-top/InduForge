@@ -78,3 +78,61 @@
 
 全局脚本保存到 `design_project_settings.globalScripts`，由设计器统一读写。
 
+
+## 6. 使用示例
+### 6.1 组件访问
+- `this`：当前事件触发的组件实例，提供 `setText/setProps/setStyle` 等调用
+- `components.<组件名>`：当前页面组件引用
+- `components.pages["<页面名>"].<组件名>`：指定页面组件
+
+```js
+// 当前组件
+this.setText("刷新");
+
+// 当前页面其它组件
+components.按钮2.setText("我被操作了");
+
+// 跨页面组件
+components.pages["首页"].按钮1.setText("跨页操作");
+```
+
+### 6.2 系统脚本
+```js
+// 系统启动
+console.log("startup", $global.变量A);
+
+// 系统关闭
+console.log("shutdown");
+```
+
+### 6.3 定时器
+```js
+// 每隔 N ms 触发
+const now = new Date().toISOString();
+console.log("timer tick", now);
+```
+
+### 6.4 变量改变
+```js
+// item.variable = "测试布尔"
+console.log("var changed", $event.name, $event.previous, "->", $event.value);
+```
+
+### 6.5 自定义脚本
+```js
+// custom script: name = "sum", params = "a, b"
+return a + b;
+```
+
+```js
+// 在其它脚本内调用
+const total = await customScripts.sum(1, 2);
+console.log(total);
+```
+
+### 6.6 $global 映射数据中心
+```js
+// 映射 SQL 查询到工程变量后可 await 直接取值
+const rows = await $global.users;
+console.log(rows);
+```
