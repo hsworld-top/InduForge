@@ -19,6 +19,7 @@
       :style="contentStyle"
       v-bind="resolvedProps"
       v-on="componentEventListeners"
+      ref="contentRef"
     >
       <template v-if="displayContent !== null">{{ displayContent }}</template>
       <template v-if="node?.type === 'Select'">
@@ -156,7 +157,7 @@
 </template>
 
 <script setup>
-import { computed, ref, inject, onBeforeUnmount } from "vue";
+import { computed, ref, inject, onBeforeUnmount, onMounted, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { datacenterApi } from "@/services";
@@ -195,10 +196,18 @@ const {
   projectId,
   projectVariables,
   globalScripts,
+  currentPage,
 } = storeToRefs(editorStore);
 const canvasZoom = inject("canvasZoom", ref(1));
 const dragState = useDragState();
 const nodeRef = ref(null);
+const contentRef = ref(null);
+const previewPageId = computed(
+  () => currentPage.value?.name || currentPage.value?.id || ""
+);
+let registerTimer = null;
+let registerAttempts = 0;
+const maxRegisterAttempts = 10;
 
 const node = computed(() => {
   docVersion.value;
@@ -804,8 +813,11 @@ const runPreviewScript = async (eventName, event) => {
 
   const runtime = getPreviewRuntime();
   if (runtime?.runCode) {
-    return await runtime.runCode(code, event);
+    const pageId = currentPage.value?.name || currentPage.value?.id;
+    const instance = buildRefInfo();
+    return await runtime.runCode(code, event, instance, pageId);
   }
+  const instance = buildRefInfo();
   const globals = buildPreviewGlobals();
   const customScripts = buildPreviewCustomScripts(globals);
   const context = {
@@ -820,9 +832,9 @@ const runPreviewScript = async (eventName, event) => {
     const values = Object.values(context);
     const runner = new Function(
       ...keys,
-      `"use strict";\nreturn (async () => {\n${code}\n})();`
+      `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`
     );
-    return await runner(...values);
+    return await runner.call(instance || null, ...values);
   } catch (error) {
     console.error("[Preview] Script error:", error);
   }
@@ -867,6 +879,105 @@ const handleClick = (event) => {
   }
   handleSelect(event);
 };
+
+const buildRefInfo = () => {
+  if (!node.value) return null;
+  return {
+    name: node.value.label,
+    id: node.value.id,
+    el: nodeRef.value || null,
+    component: contentRef.value || null,
+    node: node.value,
+    setProps: (patch) => {
+      if (!patch || typeof patch !== "object") return;
+      editorStore.updateNode(node.value.id, {
+        props: { ...(node.value.props || {}), ...patch },
+      });
+    },
+    setStyle: (patch) => {
+      if (!patch || typeof patch !== "object") return;
+      editorStore.updateNode(node.value.id, {
+        style: { ...(node.value.style || {}), ...patch },
+      });
+    },
+    setText: (text) => {
+      editorStore.updateNode(node.value.id, {
+        props: { ...(node.value.props || {}), text: String(text ?? "") },
+      });
+    },
+  };
+};
+
+const tryRegisterPreviewRef = (pageIdValue) => {
+  if (!props.readonly || !node.value?.label) return false;
+  const runtime = getPreviewRuntime();
+  if (!runtime?.registerComponentRef) return false;
+  if (!pageIdValue) return false;
+  const refInfo = buildRefInfo();
+  if (!refInfo) return false;
+  runtime.registerComponentRef(pageIdValue, node.value.label, refInfo);
+  return true;
+};
+
+const scheduleRegisterPreviewRef = (pageIdValue) => {
+  if (tryRegisterPreviewRef(pageIdValue)) return;
+  if (registerAttempts >= maxRegisterAttempts) return;
+  registerAttempts += 1;
+  if (registerTimer) clearTimeout(registerTimer);
+  registerTimer = setTimeout(() => {
+    scheduleRegisterPreviewRef(pageIdValue);
+  }, 120);
+};
+
+const unregisterPreviewRef = (label, pageIdValue = previewPageId.value) => {
+  if (!props.readonly || !label) return;
+  const runtime = getPreviewRuntime();
+  if (!runtime?.unregisterComponentRef) return;
+  if (!pageIdValue) return;
+  const refInfo = buildRefInfo();
+  runtime.unregisterComponentRef(pageIdValue, label, refInfo);
+};
+
+watch(
+  () => node.value?.label,
+  (next, prev) => {
+    if (!props.readonly) return;
+    if (prev && prev !== next) {
+      unregisterPreviewRef(prev);
+    }
+    if (next) {
+      registerAttempts = 0;
+      scheduleRegisterPreviewRef(previewPageId.value);
+    }
+  }
+);
+
+watch(
+  () => previewPageId.value,
+  (next, prev) => {
+    if (!props.readonly) return;
+    if (prev && node.value?.label) {
+      unregisterPreviewRef(node.value.label, prev);
+    }
+    if (next && node.value?.label) {
+      registerAttempts = 0;
+      scheduleRegisterPreviewRef(next);
+    }
+  }
+);
+
+onMounted(() => {
+  registerAttempts = 0;
+  scheduleRegisterPreviewRef(previewPageId.value);
+});
+
+onBeforeUnmount(() => {
+  if (registerTimer) {
+    clearTimeout(registerTimer);
+    registerTimer = null;
+  }
+  if (node.value?.label) unregisterPreviewRef(node.value.label);
+});
 
 /**
  * 处理右键菜单

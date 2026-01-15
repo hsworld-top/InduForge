@@ -100,6 +100,7 @@ import PropEditor from "./PropEditor.vue";
 import { usePanelState } from "./use-panel-state";
 import { getManifest } from "@/manifests";
 import { useEditorStore } from "@/stores/editor-store";
+import { ElMessage } from "element-plus";
 import IconEpLink from "~icons/ep/link";
 
 const editorStore = useEditorStore();
@@ -192,10 +193,21 @@ const handleLabelChange = () => {
   const el = currentElement.value;
   if (!el) return;
 
+  const nextLabel = (elementLabel.value || "").trim();
+  if (!nextLabel) {
+    elementLabel.value = el.label || "";
+    return;
+  }
+  if (!editorStore.isLabelUnique?.(nextLabel, el.id)) {
+    ElMessage.warning("组件名称已存在，请更换");
+    elementLabel.value = el.label || "";
+    return;
+  }
+
   if (selectedNode.value) {
-    editorStore.updateNode(el.id, { label: elementLabel.value });
+    editorStore.updateNode(el.id, { label: nextLabel });
   } else if (selectedGraphic.value) {
-    editorStore.updateGraphic(el.id, { label: elementLabel.value });
+    editorStore.updateGraphic(el.id, { label: nextLabel });
   }
 };
 

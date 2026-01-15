@@ -37,7 +37,7 @@ const completionItems = ref(props.completions || []);
 let completionProvider = null;
 let markerTooltipEl = null;
 let latestMarkers = [];
-let extraLibInstalled = false;
+let extraLibDisposable = null;
 
 const runEditorAction = async (id) => {
   const action = editorInstance?.getAction(id);
@@ -312,14 +312,17 @@ function initEditor() {
       diagnosticCodesToIgnore: ignoreDiagnostics,
     });
     monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
-    if (!extraLibInstalled) {
-      monaco.languages.typescript.javascriptDefaults.addExtraLib(
-        "declare const $global: Record<string, any>;\n" +
-          "declare const customScripts: Record<string, (...args: any[]) => any>;\n",
-        "ts:global-scripts.d.ts"
-      );
-      extraLibInstalled = true;
+    if (extraLibDisposable) {
+      extraLibDisposable.dispose();
+      extraLibDisposable = null;
     }
+    extraLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
+      "declare const $global: Record<string, any>;\n" +
+        "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
+        "declare const components: Record<string, any>;\n" +
+        "declare const $event: any;\n",
+      "ts:global-scripts.d.ts"
+    );
   }
 
   editorInstance = monaco.editor.create(editorContainerRef.value, baseOptions());

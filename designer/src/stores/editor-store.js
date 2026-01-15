@@ -1537,8 +1537,30 @@ export const useEditorStore = defineStore("editor", () => {
       layoutItem = buildLayoutItem(parentNode, dropInfo);
     }
 
+    const baseLabel = manifest?.name || type;
+    const existingLabels = new Set();
+    const rootId = currentPage.value?.rootNodeId;
+    if (rootId && doc.value) {
+      const stack = [rootId];
+      while (stack.length) {
+        const id = stack.pop();
+        const current = doc.value.getNode(id);
+        if (!current) continue;
+        if (current.label) existingLabels.add(current.label);
+        if (Array.isArray(current.children)) {
+          stack.push(...current.children);
+        }
+      }
+    }
+    let uniqueLabel = `${baseLabel}1`;
+    let labelIndex = 2;
+    while (existingLabels.has(uniqueLabel)) {
+      uniqueLabel = `${baseLabel}${labelIndex}`;
+      labelIndex += 1;
+    }
+
     const node = createComponentNode(type, {
-      label: manifest?.name || type,
+      label: uniqueLabel,
       props: { ...(manifest?.defaultProps || {}) },
       style: nodeStyle,
       layoutItem,
@@ -1576,7 +1598,30 @@ export const useEditorStore = defineStore("editor", () => {
     history.value.execute(new InsertNodeCommand(parentId, insertIndex, node));
     selection.value?.select(createSelectableElement("node", node.id));
 
-    return node;
+  return node;
+};
+
+  /**
+   * 校验当前页面组件名称是否唯一
+   * @param {string} name - 组件名称
+   * @param {string} [excludeId] - 排除的节点ID
+   * @returns {boolean}
+   */
+  const isLabelUnique = (name, excludeId) => {
+    if (!doc.value || !currentPage.value?.rootNodeId) return true;
+    const stack = [currentPage.value.rootNodeId];
+    while (stack.length) {
+      const id = stack.pop();
+      const node = doc.value.getNode(id);
+      if (!node) continue;
+      if (node.label === name && node.id !== excludeId) {
+        return false;
+      }
+      if (Array.isArray(node.children)) {
+        stack.push(...node.children);
+      }
+    }
+    return true;
   };
 
   /**
@@ -1776,6 +1821,7 @@ export const useEditorStore = defineStore("editor", () => {
     saveCurrentPage,
     updateCurrentPage,
     updateNode,
+    isLabelUnique,
     updateGraphic,
     insertNode,
     removeSelectedNodes,

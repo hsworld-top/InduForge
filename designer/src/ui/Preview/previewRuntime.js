@@ -1,6 +1,8 @@
 import { datacenterApi } from "@/services";
 
 let runtimeInstance = null;
+const componentRefsByPage = new Map();
+const componentRefsByName = new Map();
 
 const connectionCache = new Map();
 const queryCache = new Map();
@@ -205,9 +207,9 @@ export const initPreviewRuntime = (options) => {
         try {
           const runner = new Function(
             ...localKeys,
-            `"use strict";\nreturn (async () => {\n${code}\n})();`
+            `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`
           );
-          return await runner(...localValues);
+          return await runner.call(undefined, ...localValues);
         } catch (error) {
           console.error(`[Preview] customScripts.${item.name} error:`, error);
           return undefined;
@@ -219,20 +221,58 @@ export const initPreviewRuntime = (options) => {
 
   const customScripts = buildCustomScripts();
 
-  const runCode = async (code, event) => {
+  const buildPageProxy = () =>
+    new Proxy(
+      {},
+      {
+        get(_target, prop) {
+          if (typeof prop !== "string") return undefined;
+          const pageMap = componentRefsByPage.get(prop);
+          if (!pageMap) return undefined;
+          return new Proxy(
+            {},
+            {
+              get(_subTarget, name) {
+                if (typeof name !== "string") return undefined;
+                return pageMap.get(name);
+              },
+            }
+          );
+        },
+      }
+    );
+
+  const getComponentsProxy = (pageId) =>
+    new Proxy(
+      {},
+      {
+        get(_target, prop) {
+          if (typeof prop !== "string") return undefined;
+          if (prop === "pages") return buildPageProxy();
+          const pageMap = componentRefsByPage.get(pageId);
+          if (pageMap && pageMap.has(prop)) return pageMap.get(prop);
+          if (componentRefsByName.has(prop)) return componentRefsByName.get(prop);
+          return undefined;
+        },
+      }
+    );
+
+  const runCode = async (code, event, thisArg, pageId) => {
     if (!code || !code.trim()) return;
+    const components = getComponentsProxy(pageId || options?.pageId);
     const context = {
       $event: event,
       $global: globalsProxy,
       customScripts,
+      components,
       console,
     };
     try {
       const runner = new Function(
         ...Object.keys(context),
-        `"use strict";\nreturn (async () => {\n${code}\n})();`
+        `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`
       );
-      return await runner(...Object.values(context));
+      return await runner.call(thisArg || null, ...Object.values(context));
     } catch (error) {
       console.error("[Preview] Script error:", error);
     }
@@ -269,12 +309,53 @@ export const initPreviewRuntime = (options) => {
     await runCode(shutdownCode, { type: "shutdown" });
   };
 
+  const registerComponentRef = (pageIdValue, name, refInfo) => {
+    if (!pageIdValue || !name || !refInfo) return;
+    if (!componentRefsByPage.has(pageIdValue)) {
+      componentRefsByPage.set(pageIdValue, new Map());
+    }
+    componentRefsByPage.get(pageIdValue).set(name, refInfo);
+    componentRefsByName.set(name, refInfo);
+    const alias = String(name).replace(/\d+$/, "");
+    if (alias && alias !== name) {
+      const pageMap = componentRefsByPage.get(pageIdValue);
+      if (pageMap && !pageMap.has(alias)) {
+        pageMap.set(alias, refInfo);
+      }
+      if (!componentRefsByName.has(alias)) {
+        componentRefsByName.set(alias, refInfo);
+      }
+    }
+  };
+
+  const unregisterComponentRef = (pageIdValue, name, refInfo) => {
+    if (!pageIdValue || !name) return;
+    const pageMap = componentRefsByPage.get(pageIdValue);
+    if (pageMap && pageMap.get(name) === refInfo) {
+      pageMap.delete(name);
+    }
+    if (componentRefsByName.get(name) === refInfo) {
+      componentRefsByName.delete(name);
+    }
+    const alias = String(name).replace(/\d+$/, "");
+    if (alias && alias !== name) {
+      if (pageMap && pageMap.get(alias) === refInfo) {
+        pageMap.delete(alias);
+      }
+      if (componentRefsByName.get(alias) === refInfo) {
+        componentRefsByName.delete(alias);
+      }
+    }
+  };
+
   runtimeInstance = {
     globals: globalsProxy,
     customScripts,
     runCode,
     start,
     stop,
+    registerComponentRef,
+    unregisterComponentRef,
   };
 
   return runtimeInstance;
@@ -285,4 +366,6 @@ export const getPreviewRuntime = () => runtimeInstance;
 export const clearPreviewRuntime = () => {
   runtimeInstance = null;
   mappedValueCache.clear();
+  componentRefsByPage.clear();
+  componentRefsByName.clear();
 };

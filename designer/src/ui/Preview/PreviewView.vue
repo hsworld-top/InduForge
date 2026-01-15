@@ -145,6 +145,7 @@ onMounted(() => {
     projectId: projectId.value || editorStore.projectId,
     projectVariables: projectVariables.value || {},
     globalScripts: globalScripts.value || {},
+    pageId: currentPage.value?.name || currentPage.value?.id || null,
   });
   previewRuntime = runtime || null;
   runtime?.start?.();
