@@ -650,6 +650,7 @@ const normalizeGlobalValue = (detail) => {
 const connectionCache = new Map();
 const queryCache = new Map();
 const mappedValueCache = new Map();
+const previewOverrides = new Map();
 
 const unwrapApiData = (payload) => {
   if (payload && typeof payload === "object" && "data" in payload) {
@@ -722,6 +723,9 @@ const buildPreviewGlobals = () => {
     {
       get(_target, prop) {
         if (typeof prop !== "string") return undefined;
+        if (previewOverrides.has(prop)) {
+          return previewOverrides.get(prop);
+        }
         const detail = vars[prop];
         if (!detail) return undefined;
         if (detail?.mapped && detail?.source?.type === "dataCenter") {
@@ -732,6 +736,11 @@ const buildPreviewGlobals = () => {
           return mappedValueCache.get(prop);
         }
         return normalizeGlobalValue(detail);
+      },
+      set(_target, prop, value) {
+        if (typeof prop !== "string") return false;
+        previewOverrides.set(prop, value);
+        return true;
       },
     }
   );

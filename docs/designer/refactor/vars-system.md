@@ -107,6 +107,41 @@ interface VarDefinition {
 }
 ```
 
+### 2.4 配置变量案例
+
+```json
+{
+  "global": {
+    "isRunning": { "type": "boolean", "default": true, "description": "运行状态" },
+    "maxCount": { "type": "number", "default": 10 },
+    "labels": { "type": "array", "default": ["A", "B", "C"] },
+    "userInfo": { "type": "object", "default": { "name": "admin" } },
+    "sampleSet": { "type": "set", "default": [1, 2, 3] },
+    "sampleMap": { "type": "map", "default": [["k1", "v1"], ["k2", 2]] },
+    "sampleDate": { "type": "date", "default": "2026-01-01T00:00:00.000Z" },
+    "sampleRegExp": { "type": "regexp", "default": "/^\\w+$/i" },
+    "calcFn": {
+      "type": "function",
+      "default": "async function(a, b) { return a + b; }"
+    },
+    "users": {
+      "type": "object",
+      "mapped": true,
+      "source": {
+        "type": "dataCenter",
+        "path": "数据源名称.users"
+      }
+    }
+  }
+}
+```
+
+说明：
+- `set` 建议使用数组保存，运行时会解析成 `Set`。
+- `map` 可用数组对或对象保存，运行时会解析成 `Map`。
+- `function` 保存为字符串形式的函数体或函数表达式。
+- `mapped` 表示映射数据中心变量，`path` 格式为 `连接名.查询名/字段`。
+
 ## 3. 绑定语法
 
 ### 3.1 在 Binding 中引用变量
