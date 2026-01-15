@@ -142,6 +142,7 @@
 - [数据绑定 v2](./data-binding-v2.md) - 三态隔离、Binding 结构、数据点状态
 - [表达式引擎](./expression-engine.md) - 上下文变量、内置函数、工业计算
 - [变量系统](./vars-system.md) - 页面级/全局变量
+- [全局脚本](./global-scripts.md) - 系统脚本/定时器/变量改变/自定义脚本
 
 ### 布局与渲染
 
