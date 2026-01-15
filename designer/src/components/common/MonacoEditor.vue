@@ -292,6 +292,7 @@ function initEditor() {
     });
   }
   if (props.language === "javascript" || props.language === "typescript") {
+    const ignoreDiagnostics = [1108];
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
       allowJs: true,
       allowNonTsExtensions: true,
@@ -308,6 +309,7 @@ function initEditor() {
       noSemanticValidation: false,
       noSyntaxValidation: false,
       onlyVisible: false,
+      diagnosticCodesToIgnore: ignoreDiagnostics,
     });
     monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
     if (!extraLibInstalled) {

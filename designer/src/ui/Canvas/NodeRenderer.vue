@@ -728,14 +728,44 @@ const buildPreviewGlobals = () => {
   );
 };
 
-const buildPreviewCustomScripts = () => {
+const parseParamNames = (value) => {
+  if (!value || typeof value !== "string") return [];
+  return value
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => /^[A-Za-z_$][\w$]*$/.test(name));
+};
+
+const buildPreviewCustomScripts = (globals) => {
   const items = globalScripts.value?.custom?.items || [];
   const handlers = {};
   items.forEach((item) => {
     if (!item?.name) return;
-    handlers[item.name] = (...args) => {
-      console.info(`[Preview] customScripts.${item.name}()`, ...args);
-      return undefined;
+    const paramNames = parseParamNames(item.params || item.args);
+    handlers[item.name] = async (...args) => {
+      const code = item.code || "";
+      if (!code.trim()) return undefined;
+      const scope = {
+        $global: globals,
+        customScripts: handlers,
+        console,
+        $event: undefined,
+      };
+      const localKeys = [...paramNames, ...Object.keys(scope)];
+      const localValues = [
+        ...paramNames.map((_, index) => args[index]),
+        ...Object.values(scope),
+      ];
+      try {
+        const runner = new Function(
+          ...localKeys,
+          `"use strict";\nreturn (async () => {\n${code}\n})();`
+        );
+        return await runner(...localValues);
+      } catch (error) {
+        console.error(`[Preview] customScripts.${item.name} error:`, error);
+        return undefined;
+      }
     };
   });
   return handlers;
@@ -751,10 +781,12 @@ const runPreviewScript = async (eventName, event) => {
   const code = typeof action === "string" ? action : action?.code || "";
   if (!code.trim()) return;
 
+  const globals = buildPreviewGlobals();
+  const customScripts = buildPreviewCustomScripts(globals);
   const context = {
     $event: event,
-    $global: buildPreviewGlobals(),
-    customScripts: buildPreviewCustomScripts(),
+    $global: globals,
+    customScripts,
     console,
   };
 
