@@ -18,6 +18,7 @@
       :is="renderTag"
       :style="contentStyle"
       v-bind="resolvedProps"
+      v-on="componentEventListeners"
     >
       <template v-if="displayContent !== null">{{ displayContent }}</template>
       <template v-if="node?.type === 'Select'">
@@ -164,6 +165,7 @@ import {
   createSelectableElement,
   UpdateNodeCommand,
 } from "@/editor-core";
+import { normalizeEventDefinitions } from "@/editor-core/registry/componentEvents.js";
 import { createDragDropManager } from "./DragDropManager";
 import { useDragState, endDrag } from "./use-drag-state";
 
@@ -820,6 +822,21 @@ const runPreviewScript = async (eventName, event) => {
     console.error("[Preview] Script error:", error);
   }
 };
+
+const componentEventListeners = computed(() => {
+  if (!props.readonly || !node.value) return {};
+  const manifest = componentRegistry.get(node.value.type);
+  const definitions = normalizeEventDefinitions(manifest?.events || []);
+  const listeners = {};
+  definitions.forEach((eventItem) => {
+    if (!eventItem?.name || eventItem.name === "click") return;
+    listeners[eventItem.name] = (...args) => {
+      const payload = args.length > 1 ? args : args[0];
+      void runPreviewScript(eventItem.name, payload);
+    };
+  });
+  return listeners;
+});
 
 const handleSelect = (event) => {
   if (!node.value || !selection.value) return;

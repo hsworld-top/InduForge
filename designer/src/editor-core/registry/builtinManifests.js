@@ -4,6 +4,7 @@
  */
 
 import { componentRegistry } from "./componentRegistry.js";
+import { getComponentEventDefinitions } from "./componentEvents.js";
 import { getAllManifests } from "../../manifests/index.js";
 
 /**
@@ -119,7 +120,9 @@ export function registerBuiltinComponents() {
       defaultSize: manifest.defaultSize,
       propsSchema: manifest.props,
       styleSchema: undefined,
-      events: ["click", "dblclick", "mouseenter", "mouseleave"],
+      events: Array.isArray(manifest.events) && manifest.events.length > 0
+        ? manifest.events
+        : getComponentEventDefinitions(manifest.type),
       isContainer: isContainerType(manifest.type),
       allowedChildren: undefined,
       slots: undefined,

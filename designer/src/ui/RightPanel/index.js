@@ -8,6 +8,7 @@ export { default as PropertyPanel } from "./PropertyPanel.vue";
 export { default as StylePanel } from "./StylePanel.vue";
 export { default as EventPanel } from "./EventPanel.vue";
 export { default as BindingPanel } from "./BindingPanel.vue";
+export { default as VariablesPanel } from "./VariablesPanel.vue";
 export { default as PageInspectorPanel } from "./PageInspectorPanel.vue";
 export { default as AdvancedPanel } from "./AdvancedPanel.vue";
 

@@ -1,29 +1,32 @@
 <template>
   <div class="event-panel">
-    <template v-if="panelState === 'page'">
-      <div class="empty-hint">请选择一个按钮组件以配置点击事件</div>
+    <template v-if="isPageContext">
+      <BindingPanel :force-show="true" />
     </template>
-    <template v-else-if="!selectedNode">
-      <div class="empty-hint">请选择一个按钮组件以配置点击事件</div>
-    </template>
-    <template v-else-if="selectedNode.type !== 'Button'">
-      <div class="empty-hint">当前仅支持按钮点击事件</div>
+    <template v-else-if="eventDefinitions.length === 0">
+      <div class="empty-hint">当前组件暂无可配置事件</div>
     </template>
     <template v-else>
-      <div class="section-title">按钮点击事件</div>
-      <div class="event-controls">
-        <div class="event-toggle">
-          <span class="event-label">启动</span>
-          <el-switch v-model="eventEnabled" />
+      <div class="event-list">
+        <div v-for="eventItem in eventDefinitions" :key="eventItem.name" class="event-item">
+          <div class="event-row">
+            <div class="section-title">{{ getEventTitle(eventItem) }}</div>
+            <div class="event-controls">
+              <div class="event-toggle">
+                <span class="event-label">启用</span>
+                <el-switch
+                  :model-value="getEventEnabled(eventItem.name)"
+                  @change="(value) => handleToggleEvent(eventItem.name, value)"
+                />
+              </div>
+              <el-tooltip content="打开编辑器" placement="top">
+                <el-button class="icon-button" size="small" circle @click="openEditor(eventItem)">
+                  <IconEpEditPen />
+                </el-button>
+              </el-tooltip>
+            </div>
+          </div>
         </div>
-        <el-tooltip content="打开编辑器" placement="top">
-          <el-button class="icon-button" size="small" circle @click="openEditor">
-            <IconEpEditPen />
-          </el-button>
-        </el-tooltip>
-      </div>
-      <div class="hint">
-        预览模式点击按钮可执行脚本（支持 $event、$global、customScripts）。
       </div>
     </template>
   </div>
@@ -38,7 +41,7 @@
   >
     <div class="editor-meta">
       <div class="meta-title">{{ editorTitle }}</div>
-      <div class="meta-desc">按钮点击脚本</div>
+      <div class="meta-desc">{{ editorDescription }}</div>
     </div>
     <div class="editor-body">
       <div class="editor-main">
@@ -130,72 +133,191 @@ import { ref, watch, computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePanelState } from "./use-panel-state";
+import { componentRegistry } from "@/editor-core";
+import { normalizeEventDefinitions } from "@/editor-core/registry/componentEvents.js";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import BindingPanel from "./BindingPanel.vue";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
 
 const editorStore = useEditorStore();
-const { panelState, selectedNode } = usePanelState();
-const { projectVariables, projectVariableGroups, globalScripts } = storeToRefs(editorStore);
+const { panelState, selectedNode, selectedGraphic } = usePanelState();
+const { projectVariables, projectVariableGroups, globalScripts, currentPage } =
+  storeToRefs(editorStore);
 
 const scriptCode = ref("");
-const eventEnabled = ref(true);
 const editorVisible = ref(false);
 const editorRef = ref(null);
 const variableTreeRef = ref(null);
 const customTreeRef = ref(null);
 const variableSearch = ref("");
 const scriptSearch = ref("");
+const activeEventName = ref("");
+const eventToggleState = ref({});
 
-const currentScript = computed(() => {
-  if (!selectedNode.value?.events?.click) return "";
-  const handler = selectedNode.value.events.click[0];
+const componentManifest = computed(() => {
+  if (!selectedNode.value) return null;
+  return componentRegistry.get(selectedNode.value.type) || null;
+});
+
+const componentLabel = computed(() => {
+  return selectedNode.value?.label || componentManifest.value?.name || "组件";
+});
+
+const eventDefinitions = computed(() => {
+  const events = componentManifest.value?.events || [];
+  return normalizeEventDefinitions(events);
+});
+
+const isPageContext = computed(() => {
+  if (panelState.value === "page") return true;
+  if (selectedGraphic.value) return true;
+  if (!selectedNode.value) return true;
+  const pageRootId = currentPage.value?.rootNodeId;
+  return Boolean(pageRootId && selectedNode.value.id === pageRootId);
+});
+
+/**
+ * 获取事件处理器
+ * @param {string} eventName - 事件名称
+ * @returns {Object | string | null} 事件处理器
+ */
+const getEventHandler = (eventName) => {
+  if (!selectedNode.value || !eventName) return null;
+  const handlers = selectedNode.value.events?.[eventName];
+  if (!Array.isArray(handlers) || handlers.length === 0) return null;
+  return handlers[0] || null;
+};
+
+/**
+ * 获取事件脚本内容
+ * @param {string} eventName - 事件名称
+ * @returns {string} 事件脚本
+ */
+const getEventScript = (eventName) => {
+  const handler = getEventHandler(eventName);
+  if (!handler) return "";
   if (typeof handler === "string") return handler;
   return handler?.code || "";
-});
+};
 
-watch(
-  () => selectedNode.value?.id,
-  () => {
-    scriptCode.value = currentScript.value || "";
-    const handler = selectedNode.value?.events?.click?.[0];
-    eventEnabled.value = handler?.enabled !== false;
-  },
-  { immediate: true }
-);
+/**
+ * 同步事件开关状态
+ * @returns {void}
+ */
+const syncEventToggleState = () => {
+  const nextState = {};
+  eventDefinitions.value.forEach((eventItem) => {
+    const handler = getEventHandler(eventItem.name);
+    nextState[eventItem.name] = handler?.enabled !== false;
+  });
+  eventToggleState.value = nextState;
+};
 
-watch(eventEnabled, () => {
+/**
+ * 获取事件启用状态
+ * @param {string} eventName - 事件名称
+ * @returns {boolean} 是否启用
+ */
+const getEventEnabled = (eventName) => {
+  if (!eventName) return true;
+  return eventToggleState.value[eventName] !== false;
+};
+
+/**
+ * 处理事件开关切换
+ * @param {string} eventName - 事件名称
+ * @param {boolean} enabled - 是否启用
+ * @returns {void}
+ */
+const handleToggleEvent = (eventName, enabled) => {
+  if (!eventName) return;
+  eventToggleState.value = {
+    ...eventToggleState.value,
+    [eventName]: enabled !== false,
+  };
   if (!selectedNode.value) return;
-  const handler = selectedNode.value.events?.click?.[0];
+  const handler = getEventHandler(eventName);
   if (!handler) return;
-  const next = { ...handler, enabled: eventEnabled.value !== false };
+  const nextHandler =
+    typeof handler === "string"
+      ? { type: "script", code: handler, enabled: enabled !== false }
+      : { ...handler, enabled: enabled !== false };
   const nextEvents = { ...(selectedNode.value.events || {}) };
-  nextEvents.click = [next];
+  nextEvents[eventName] = [nextHandler];
   editorStore.updateNode(selectedNode.value.id, { events: nextEvents });
-});
+};
 
-const openEditor = () => {
+/**
+ * 打开脚本编辑器
+ * @param {{ name: string }} eventItem - 事件定义
+ * @returns {void}
+ */
+const openEditor = (eventItem) => {
+  activeEventName.value = eventItem?.name || "";
+  scriptCode.value = getEventScript(activeEventName.value) || "";
   editorVisible.value = true;
 };
 
+/**
+ * 保存脚本配置
+ * @returns {void}
+ */
 const saveScript = () => {
-  if (!selectedNode.value) return;
+  if (!selectedNode.value || !activeEventName.value) return;
   const code = scriptCode.value || "";
   const nextEvents = { ...(selectedNode.value.events || {}) };
   if (!code.trim()) {
-    delete nextEvents.click;
+    delete nextEvents[activeEventName.value];
   } else {
-    nextEvents.click = [{ type: "script", code, enabled: eventEnabled.value !== false }];
+    nextEvents[activeEventName.value] = [
+      {
+        type: "script",
+        code,
+        enabled: getEventEnabled(activeEventName.value),
+      },
+    ];
   }
   editorStore.updateNode(selectedNode.value.id, { events: nextEvents });
   void editorStore.saveCurrentPage?.();
   editorVisible.value = false;
 };
 
-const editorTitle = computed(() => {
-  const label = selectedNode.value?.label || selectedNode.value?.id || "按钮";
-  return label;
+/**
+ * 获取事件标题
+ * @param {{ name: string, label?: string }} eventItem - 事件定义
+ * @returns {string} 标题文本
+ */
+const getEventTitle = (eventItem) => {
+  return eventItem?.name || "";
+};
+
+watch(
+  () => [selectedNode.value?.id, eventDefinitions.value.length],
+  () => {
+    syncEventToggleState();
+  },
+  { immediate: true }
+);
+
+watch(
+  () => [selectedNode.value?.id, activeEventName.value],
+  () => {
+    if (!activeEventName.value) return;
+    scriptCode.value = getEventScript(activeEventName.value) || "";
+  },
+  { immediate: true }
+);
+
+const editorTitle = computed(() => componentLabel.value);
+
+const editorDescription = computed(() => {
+  const eventItem = eventDefinitions.value.find(
+    (item) => item.name === activeEventName.value
+  );
+  const label = eventItem?.label || activeEventName.value || "事件";
+  return `${componentLabel.value}${label}脚本`;
 });
 
 const variableTree = computed(() => {
@@ -275,9 +397,9 @@ const customScriptTree = computed(() => {
 const jsCompletions = computed(() => {
   const items = [
     { label: "console.log", insertText: "console.log()", kind: "Function", detail: "Log output" },
-    { label: "if", insertText: "if () {\n  \n}", kind: "Snippet", detail: "if statement" },
-    { label: "for", insertText: "for (let i = 0; i < ; i++) {\n  \n}", kind: "Snippet" },
-    { label: "function", insertText: "function name() {\n  \n}", kind: "Snippet" },
+    { label: "if", insertText: "if () {\\n  \\n}", kind: "Snippet", detail: "if statement" },
+    { label: "for", insertText: "for (let i = 0; i < ; i++) {\\n  \\n}", kind: "Snippet" },
+    { label: "function", insertText: "function name() {\\n  \\n}", kind: "Snippet" },
     { label: "const", insertText: "const ", kind: "Keyword" },
     { label: "let", insertText: "let ", kind: "Keyword" },
     { label: "return", insertText: "return ", kind: "Keyword" },
@@ -347,24 +469,47 @@ const handleCustomScriptInsert = (data) => {
   gap: 10px;
 }
 
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  background: #ffffff;
+}
+
+.event-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .section-title {
   font-size: 12px;
   font-weight: 600;
   color: var(--el-text-color-regular);
+  min-width: 120px;
 }
 
 .event-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .event-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 4px 8px;
   border-radius: 8px;
   background: var(--el-fill-color-lighter);
 }
@@ -372,6 +517,7 @@ const handleCustomScriptInsert = (data) => {
 .event-label {
   font-size: 12px;
   color: var(--el-text-color-regular);
+  white-space: nowrap;
 }
 
 .icon-button {
@@ -489,11 +635,6 @@ const handleCustomScriptInsert = (data) => {
 
 .node-label.is-group {
   font-weight: 600;
-}
-
-.hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
 }
 
 .empty-hint {
