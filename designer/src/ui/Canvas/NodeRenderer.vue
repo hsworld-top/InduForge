@@ -529,6 +529,7 @@ const renderTag = computed(() => {
 });
 
 const displayContent = computed(() => {
+  docVersion.value;
   if (!node.value) return null;
   if (node.value.type === "Text") {
     return node.value.props?.text ?? node.value.label ?? "";
@@ -880,6 +881,20 @@ const handleClick = (event) => {
   handleSelect(event);
 };
 
+const applyPreviewPatch = (patch) => {
+  if (!node.value || !patch || typeof patch !== "object") return;
+  if (patch.props) {
+    node.value.props = { ...(node.value.props || {}), ...patch.props };
+  }
+  if (patch.style) {
+    node.value.style = { ...(node.value.style || {}), ...patch.style };
+  }
+  if (patch.label !== undefined) {
+    node.value.label = patch.label;
+  }
+  docVersion.value += 1;
+};
+
 const buildRefInfo = () => {
   if (!node.value) return null;
   return {
@@ -890,19 +905,36 @@ const buildRefInfo = () => {
     node: node.value,
     setProps: (patch) => {
       if (!patch || typeof patch !== "object") return;
+      if (props.readonly) {
+        applyPreviewPatch({ props: patch });
+        return;
+      }
       editorStore.updateNode(node.value.id, {
         props: { ...(node.value.props || {}), ...patch },
       });
     },
     setStyle: (patch) => {
       if (!patch || typeof patch !== "object") return;
+      if (props.readonly) {
+        applyPreviewPatch({ style: patch });
+        return;
+      }
       editorStore.updateNode(node.value.id, {
         style: { ...(node.value.style || {}), ...patch },
       });
     },
     setText: (text) => {
+      const value = String(text ?? "");
+      if (props.readonly) {
+        const propsPatch = { text: value };
+        if (node.value?.type === "Card" || node.value?.type === "BusinessCard") {
+          propsPatch.content = value;
+        }
+        applyPreviewPatch({ props: propsPatch });
+        return;
+      }
       editorStore.updateNode(node.value.id, {
-        props: { ...(node.value.props || {}), text: String(text ?? "") },
+        props: { ...(node.value.props || {}), text: value },
       });
     },
   };
