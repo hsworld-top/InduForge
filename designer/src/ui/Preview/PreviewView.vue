@@ -36,15 +36,16 @@
     <!-- 预览内容 -->
     <main class="flex-1 flex items-center justify-center p-6 overflow-auto">
       <div
-        class="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden transition-all duration-300"
+        class="preview-frame bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden transition-all duration-300"
         :style="frameStyle"
       >
-        <div
-          class="flex flex-col items-center justify-center h-full min-h-[400px] text-gray-400"
-        >
-          <IconEpView class="text-6xl text-blue-500 mb-4" />
-          <h3 class="text-lg font-medium mb-2">预览模式</h3>
-          <p class="text-sm">这里将渲染设计器中的页面内容</p>
+        <div class="preview-canvas" :style="canvasStyle">
+          <NodeRenderer
+            v-if="rootNodeId"
+            :node-id="rootNodeId"
+            :is-root="true"
+            :readonly="true"
+          />
         </div>
       </div>
     </main>
@@ -52,20 +53,27 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, provide } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { storeToRefs } from "pinia";
+import { useEditorStore } from "@/stores/editor-store";
+import NodeRenderer from "@/ui/Canvas/NodeRenderer.vue";
 
 // 图标导入
 import IconEpArrowLeft from "~icons/ep/arrow-left";
 import IconEpRefresh from "~icons/ep/refresh";
-import IconEpView from "~icons/ep/view";
 import { VIEW_PRESETS } from "@/constants";
 
 const router = useRouter();
 const route = useRoute();
+const editorStore = useEditorStore();
+const { currentPage, docVersion } = storeToRefs(editorStore);
+provide("canvasZoom", ref(1));
 
 const viewKey = ref("pc");
 const viewPresets = VIEW_PRESETS;
+
+const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
 
 // 预览框样式
 const frameStyle = computed(() => {
@@ -79,6 +87,27 @@ const frameStyle = computed(() => {
     maxWidth: "100%",
     maxHeight: "100%",
   };
+});
+
+const canvasStyle = computed(() => {
+  docVersion.value;
+  const config = currentPage.value?.config || {};
+  const preset = viewPresets.find((item) => item.key === viewKey.value);
+  const width = config.width || preset?.width || 1200;
+  const height = config.height || preset?.height || 800;
+  const style = {
+    width: `${width}px`,
+    height: `${height}px`,
+    backgroundColor: config.backgroundColor || "#ffffff",
+    position: "relative",
+  };
+  if (config.backgroundImage) {
+    style.backgroundImage = `url(${config.backgroundImage})`;
+    style.backgroundSize = config.backgroundSize || "cover";
+    style.backgroundRepeat = "no-repeat";
+    style.backgroundPosition = "center";
+  }
+  return style;
 });
 
 /**
@@ -96,5 +125,28 @@ const handleRefresh = () => {
   // TODO: 重新加载数据
   console.log("刷新预览");
 };
+
+const loadProject = async () => {
+  const projectId = route.meta.project?.id;
+  if (!projectId) return;
+  await editorStore.loadProject(projectId);
+};
+
+onMounted(() => {
+  void loadProject();
+});
 </script>
+
+<style scoped>
+.preview-frame {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: auto;
+}
+
+.preview-canvas {
+  flex-shrink: 0;
+}
+</style>
 

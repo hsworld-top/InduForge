@@ -174,6 +174,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  readonly: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const editorStore = useEditorStore();
@@ -420,11 +424,12 @@ const nodeClass = computed(() => {
   if (!node.value) return "";
   const classes = ["designer-node"];
   if (props.isRoot) classes.push("is-root");
+  if (props.readonly) classes.push("is-preview");
   if (isContainer.value) classes.push("is-container");
-  if (isMovable.value) classes.push("is-draggable");
+  if (isMovable.value && !props.readonly) classes.push("is-draggable");
   if (node.value.locked) classes.push("is-locked");
-  if (isDragOver.value) classes.push("drag-over");
-  if (selection.value?.isSelected(node.value.id)) {
+  if (isDragOver.value && !props.readonly) classes.push("drag-over");
+  if (!props.readonly && selection.value?.isSelected(node.value.id)) {
     classes.push("is-selected");
   }
   return classes.join(" ");
@@ -560,6 +565,7 @@ const wrapperStyle = computed(() => {
  * @param {MouseEvent} event - 鼠标事件
  */
 const handleSelect = (event) => {
+  if (props.readonly) return;
   if (!node.value || !selection.value) return;
   // 锁定的节点不能选中
   if (node.value.locked) return;
@@ -581,6 +587,7 @@ const handleSelect = (event) => {
  * @param {MouseEvent} event - 鼠标事件
  */
 const handleContextMenu = (event) => {
+  if (props.readonly) return;
   // ✅ 阻止浏览器默认右键菜单
   event.preventDefault();
   event.stopPropagation();
@@ -610,6 +617,7 @@ const handleContextMenu = (event) => {
  * @param {DragEvent} event - 拖拽事件
  */
 const handleDragOver = (event) => {
+  if (props.readonly) return;
   // ✅ 阻止事件冒泡
   event.stopPropagation();
 
@@ -646,6 +654,7 @@ const handleDragOver = (event) => {
  * 处理拖拽离开
  */
 const handleDragLeave = () => {
+  if (props.readonly) return;
   isDragOver.value = false;
   showInsertLine.value = false;
   insertLineStyle.value = null;
@@ -656,6 +665,7 @@ const handleDragLeave = () => {
  * @param {DragEvent} event - 拖拽事件
  */
 const handleDrop = (event) => {
+  if (props.readonly) return;
   // ✅ 阻止事件冒泡，避免重复插入
   event.stopPropagation();
 
@@ -1071,6 +1081,7 @@ onBeforeUnmount(() => {
  * @throws {Error} 无
  */
 const handlePointerDown = (event) => {
+  if (props.readonly) return;
   if (activeDragHandlers) return;
   if (!node.value || !isMovable.value) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -1280,6 +1291,14 @@ const handlePointerDown = (event) => {
 }
 
 .designer-node.is-root:hover {
+  outline: none;
+}
+
+.designer-node.is-preview {
+  outline: none;
+}
+
+.designer-node.is-preview:hover {
   outline: none;
 }
 </style>
