@@ -581,12 +581,21 @@ const normalizeGlobalValue = (detail) => {
   if (type === "function") {
     if (typeof raw === "function") return raw;
     if (typeof raw === "string") {
+      const text = raw.trim();
+      if (!text) return () => undefined;
       try {
-        // Treat as function body or full function text
-        if (raw.trim().startsWith("function")) {
-          return new Function(`return (${raw});`)();
+        // Treat as function expression or async function expression
+        if (
+          text.startsWith("function") ||
+          text.startsWith("async function") ||
+          text.startsWith("(") ||
+          text.startsWith("async (") ||
+          text.startsWith("async(")
+        ) {
+          return new Function(`return (${text});`)();
         }
-        return new Function(raw);
+        // Treat as function body
+        return new Function(text);
       } catch (error) {
         return () => undefined;
       }

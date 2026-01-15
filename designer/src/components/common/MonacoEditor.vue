@@ -292,7 +292,7 @@ function initEditor() {
     });
   }
   if (props.language === "javascript" || props.language === "typescript") {
-    const ignoreDiagnostics = [1108];
+    const ignoreDiagnostics = [1003, 1108, 1308, 1375, 1378, 1379];
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
       allowJs: true,
       allowNonTsExtensions: true,

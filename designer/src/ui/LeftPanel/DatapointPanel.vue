@@ -198,7 +198,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="初始值">
-          <el-input v-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
+          <MonacoEditor
+            v-if="editType === 'function'"
+            v-model="editValue"
+            language="javascript"
+            height="220px"
+          />
+          <el-input v-else-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
           <el-input-number
             v-else-if="editType === 'number'"
             v-model="editValue"
@@ -334,6 +340,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { datacenterApi } from "@/services";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import * as XLSX from "xlsx";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
@@ -794,16 +801,36 @@ function parseEditValue(type, value) {
     return value || null;
   }
   if (["array", "object", "set", "map"].includes(type)) {
+    if (value instanceof Set) return Array.from(value);
+    if (value instanceof Map) return Array.from(value.entries());
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object") {
+      if (type === "map") return Object.entries(value);
+      if (type === "set") return Object.values(value);
+      if (type === "object") return value;
+    }
     if (value && typeof value === "string") {
       try {
         const parsed = JSON.parse(value);
-        if (Array.isArray(parsed)) return parsed;
+        if (type === "array") return Array.isArray(parsed) ? parsed : [];
+        if (type === "set") {
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed && typeof parsed === "object") return Object.values(parsed);
+          return [];
+        }
+        if (type === "map") {
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed && typeof parsed === "object") return Object.entries(parsed);
+          return [];
+        }
         if (parsed && typeof parsed === "object") return parsed;
       } catch (error) {
-        return type === "array" || type === "set" ? [] : {};
+        if (type === "array" || type === "set" || type === "map") return [];
+        return {};
       }
     }
-    return type === "array" || type === "set" ? [] : {};
+    if (type === "array" || type === "set" || type === "map") return [];
+    return {};
   }
   return value ?? "";
 }
@@ -814,6 +841,12 @@ function resetEditValue() {
 
 const formatValue = (value) => {
   if (value === null || value === undefined) return "";
+  if (value instanceof Set) {
+    return JSON.stringify(Array.from(value));
+  }
+  if (value instanceof Map) {
+    return JSON.stringify(Array.from(value.entries()));
+  }
   if (typeof value === "object") {
     try {
       return JSON.stringify(value);
