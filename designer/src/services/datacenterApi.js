@@ -88,6 +88,16 @@ export const datacenterApi = {
       { value }
     );
   },
+
+  /**
+   * 执行数据查询
+   * @param {string} queryId - 查询ID
+   * @param {Object} [parameters] - 查询参数
+   * @returns {Promise<Object>} 查询结果
+   */
+  executeQuery(queryId, parameters = {}) {
+    return request.post(`/data/queries/${queryId}/execute`, { parameters });
+  },
 };
 
 export default datacenterApi;

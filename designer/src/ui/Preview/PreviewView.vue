@@ -129,6 +129,9 @@ const handleRefresh = () => {
 const loadProject = async () => {
   const projectId = route.meta.project?.id;
   if (!projectId) return;
+  if (editorStore.projectId === projectId && currentPage.value?.rootNodeId) {
+    return;
+  }
   await editorStore.loadProject(projectId);
 };
 
@@ -147,6 +150,33 @@ onMounted(() => {
 
 .preview-canvas {
   flex-shrink: 0;
+}
+
+.preview-frame::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.preview-frame::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.preview-frame::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.6);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.preview-frame::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.preview-frame {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
 }
 </style>
 

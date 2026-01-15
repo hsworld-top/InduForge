@@ -6,7 +6,7 @@
     :data-node-id="node.id"
     :data-node-type="node.type"
     ref="nodeRef"
-    @click.stop="handleSelect"
+    @click.stop="handleClick"
     @pointerdown.capture="handlePointerDown"
     @dragover.prevent="handleDragOver"
     @dragstart.prevent
@@ -148,6 +148,7 @@
         v-for="childId in node.children || []"
         :key="childId"
         :node-id="childId"
+        :readonly="props.readonly"
       />
     </component>
   </div>
@@ -157,6 +158,7 @@
 import { computed, ref, inject, onBeforeUnmount } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
+import { datacenterApi } from "@/services";
 import {
   componentRegistry,
   createSelectableElement,
@@ -181,7 +183,16 @@ const props = defineProps({
 });
 
 const editorStore = useEditorStore();
-const { doc, selection, docVersion, selectionVersion, history } = storeToRefs(editorStore);
+const {
+  doc,
+  selection,
+  docVersion,
+  selectionVersion,
+  history,
+  projectId,
+  projectVariables,
+  globalScripts,
+} = storeToRefs(editorStore);
 const canvasZoom = inject("canvasZoom", ref(1));
 const dragState = useDragState();
 const nodeRef = ref(null);
@@ -564,8 +575,203 @@ const wrapperStyle = computed(() => {
  * 处理节点选中逻辑
  * @param {MouseEvent} event - 鼠标事件
  */
+const normalizeGlobalValue = (detail) => {
+  const type = detail?.type;
+  const raw = detail?.default;
+  if (type === "function") {
+    if (typeof raw === "function") return raw;
+    if (typeof raw === "string") {
+      try {
+        // Treat as function body or full function text
+        if (raw.trim().startsWith("function")) {
+          return new Function(`return (${raw});`)();
+        }
+        return new Function(raw);
+      } catch (error) {
+        return () => undefined;
+      }
+    }
+    return () => undefined;
+  }
+  if (type === "set") {
+    if (raw instanceof Set) return raw;
+    if (Array.isArray(raw)) return new Set(raw);
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        return new Set(Array.isArray(parsed) ? parsed : []);
+      } catch (error) {
+        return new Set();
+      }
+    }
+    return new Set();
+  }
+  if (type === "map") {
+    if (raw instanceof Map) return raw;
+    if (Array.isArray(raw)) return new Map(raw);
+    if (raw && typeof raw === "object") return new Map(Object.entries(raw));
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return new Map(parsed);
+        if (parsed && typeof parsed === "object") {
+          return new Map(Object.entries(parsed));
+        }
+      } catch (error) {
+        return new Map();
+      }
+    }
+    return new Map();
+  }
+  if (type === "regexp") {
+    if (raw instanceof RegExp) return raw;
+    if (typeof raw === "string") {
+      try {
+        const match = raw.match(/^\/(.*)\/([gimsuy]*)$/);
+        if (match) return new RegExp(match[1], match[2]);
+        return new RegExp(raw);
+      } catch (error) {
+        return null;
+      }
+    }
+  }
+  return raw ?? null;
+};
+
+const connectionCache = new Map();
+const queryCache = new Map();
+const mappedValueCache = new Map();
+
+const unwrapApiData = (payload) => {
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return payload.data;
+  }
+  return payload;
+};
+
+const resolveConnection = async (name) => {
+  if (connectionCache.has(name)) return connectionCache.get(name);
+  if (!projectId.value) return null;
+  const result = await datacenterApi.getConnections(projectId.value, {
+    page: 1,
+    limit: 200,
+  });
+  const data = unwrapApiData(result) || {};
+  const connections = data.connections || data.items || data.list || [];
+  const found = connections.find((item) => item.name === name);
+  if (found) {
+    connectionCache.set(name, found);
+  }
+  return found || null;
+};
+
+const resolveQuery = async (connectionId, queryName) => {
+  if (!projectId.value) return null;
+  const cacheKey = `${connectionId}`;
+  let queries = queryCache.get(cacheKey);
+  if (!queries) {
+    const result = await datacenterApi.getQueries(projectId.value, {
+      connectionId,
+      page: 1,
+      limit: 200,
+    });
+    const data = unwrapApiData(result) || {};
+    queries = data.queries || data.items || data.list || [];
+    queryCache.set(cacheKey, queries);
+  }
+  return queries.find((item) => item.name === queryName || item.id === queryName) || null;
+};
+
+const resolveMappedGlobalValue = async (name, detail) => {
+  const source = detail?.source;
+  if (!source || source.type !== "dataCenter" || !source.path) {
+    return normalizeGlobalValue(detail);
+  }
+  if (!projectId.value) return normalizeGlobalValue(detail);
+  const [sourceName, ...rest] = String(source.path).split(".");
+  const field = rest.join(".");
+  if (!sourceName || !field) return normalizeGlobalValue(detail);
+
+  const connection = await resolveConnection(sourceName);
+  if (!connection) return normalizeGlobalValue(detail);
+
+  if (connection.type === "relational") {
+    const query = await resolveQuery(connection.id, field);
+    if (!query) return normalizeGlobalValue(detail);
+    const result = await datacenterApi.executeQuery(query.id);
+    const payload = unwrapApiData(result) || result;
+    return payload?.data ?? payload;
+  }
+
+  return normalizeGlobalValue(detail);
+};
+
+const buildPreviewGlobals = () => {
+  const vars = projectVariables.value || {};
+  return new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (typeof prop !== "string") return undefined;
+        const detail = vars[prop];
+        if (!detail) return undefined;
+        if (detail?.mapped && detail?.source?.type === "dataCenter") {
+          if (!mappedValueCache.has(prop)) {
+            const promise = resolveMappedGlobalValue(prop, detail).catch(() => null);
+            mappedValueCache.set(prop, promise);
+          }
+          return mappedValueCache.get(prop);
+        }
+        return normalizeGlobalValue(detail);
+      },
+    }
+  );
+};
+
+const buildPreviewCustomScripts = () => {
+  const items = globalScripts.value?.custom?.items || [];
+  const handlers = {};
+  items.forEach((item) => {
+    if (!item?.name) return;
+    handlers[item.name] = (...args) => {
+      console.info(`[Preview] customScripts.${item.name}()`, ...args);
+      return undefined;
+    };
+  });
+  return handlers;
+};
+
+const runPreviewScript = async (eventName, event) => {
+  if (!node.value) return;
+  const handlers = node.value?.events?.[eventName];
+  if (!Array.isArray(handlers) || handlers.length === 0) return;
+  const action = handlers.find((item) => item?.type === "script" || item?.code);
+  if (!action) return;
+  if (action?.enabled === false) return;
+  const code = typeof action === "string" ? action : action?.code || "";
+  if (!code.trim()) return;
+
+  const context = {
+    $event: event,
+    $global: buildPreviewGlobals(),
+    customScripts: buildPreviewCustomScripts(),
+    console,
+  };
+
+  try {
+    const keys = Object.keys(context);
+    const values = Object.values(context);
+    const runner = new Function(
+      ...keys,
+      `"use strict";\nreturn (async () => {\n${code}\n})();`
+    );
+    return await runner(...values);
+  } catch (error) {
+    console.error("[Preview] Script error:", error);
+  }
+};
+
 const handleSelect = (event) => {
-  if (props.readonly) return;
   if (!node.value || !selection.value) return;
   // 锁定的节点不能选中
   if (node.value.locked) return;
@@ -580,6 +786,14 @@ const handleSelect = (event) => {
     return;
   }
   selection.value.select(element);
+};
+
+const handleClick = (event) => {
+  if (props.readonly) {
+    void runPreviewScript("click", event);
+    return;
+  }
+  handleSelect(event);
 };
 
 /**
@@ -1300,5 +1514,14 @@ const handlePointerDown = (event) => {
 
 .designer-node.is-preview:hover {
   outline: none;
+}
+
+.designer-node.is-preview {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.designer-node.is-preview::after {
+  display: none !important;
 }
 </style>
