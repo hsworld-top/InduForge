@@ -16,6 +16,7 @@
   >
     <component
       :is="renderTag"
+      :key="renderKey"
       :style="contentStyle"
       v-bind="resolvedProps"
       v-on="componentEventListeners"
@@ -108,11 +109,12 @@
           :description="item.description"
         />
       </template>
-      <template v-if="node?.type === 'ImageCarousel' || node?.type === 'CarouselComponent'">
-        <el-carousel-item
-          v-for="item in carouselItems"
-          :key="item.label"
-        >
+      <template
+        v-if="
+          node?.type === 'ImageCarousel' || node?.type === 'CarouselComponent'
+        "
+      >
+        <el-carousel-item v-for="item in carouselItems" :key="item.label">
           <div class="carousel-item-placeholder">{{ item.label }}</div>
         </el-carousel-item>
       </template>
@@ -281,10 +283,7 @@ const fallbackCollapseItems = [
   { name: "1", title: "面板一", content: "内容一" },
   { name: "2", title: "面板二", content: "内容二" },
 ];
-const fallbackCarouselItems = [
-  { label: "轮播一" },
-  { label: "轮播二" },
-];
+const fallbackCarouselItems = [{ label: "轮播一" }, { label: "轮播二" }];
 
 /**
  * 规范化选项列表
@@ -354,47 +353,53 @@ const isDragOver = ref(false);
 const showInsertLine = ref(false);
 const insertLineStyle = ref(null);
 const dragDropManager = createDragDropManager();
+const tableRenderVersion = ref(0);
 const resolvedProps = computed(() => {
   if (!node.value) return {};
+  if (node.value.type === "Table" || node.value.type === "BigDataTable") {
+    tableRenderVersion.value;
+  }
   return filterRenderProps(node.value.type, node.value.props || {});
 });
 
-const selectOptions = computed(() =>
-  normalizeOptions(node.value?.props?.options, fallbackSelectOptions)
-);
-const radioOptions = computed(() =>
-  normalizeOptions(node.value?.props?.options, fallbackRadioOptions)
-);
-const checkboxOptions = computed(() =>
-  normalizeOptions(node.value?.props?.options, fallbackCheckboxOptions)
-);
-const dropdownItems = computed(() =>
-  normalizeOptions(node.value?.props?.items, fallbackDropdownItems)
-);
-const menuItems = computed(() =>
-  normalizeOptions(node.value?.props?.items, fallbackMenuItems)
-);
-const tableColumns = computed(() =>
-  normalizeOptions(node.value?.props?.columns, fallbackTableColumns)
-);
-const bigTableColumns = computed(() =>
-  normalizeOptions(node.value?.props?.columns, fallbackBigTableColumns)
-);
-const timelineItems = computed(() =>
-  normalizeOptions(node.value?.props?.items, fallbackTimelineItems)
-);
-const tabsList = computed(() =>
-  normalizeOptions(node.value?.props?.tabs, fallbackTabs)
-);
-const stepsItems = computed(() =>
-  normalizeOptions(node.value?.props?.items, fallbackStepsItems)
-);
-const collapseItems = computed(() =>
-  normalizeOptions(node.value?.props?.items, fallbackCollapseItems)
-);
-const carouselItems = computed(() =>
-  normalizeOptions(node.value?.props?.items, fallbackCarouselItems)
-);
+const selectOptions = computed(() => {
+  return normalizeOptions(node.value?.props?.options, fallbackSelectOptions);
+});
+const radioOptions = computed(() => {
+  return normalizeOptions(node.value?.props?.options, fallbackRadioOptions);
+});
+const checkboxOptions = computed(() => {
+  return normalizeOptions(node.value?.props?.options, fallbackCheckboxOptions);
+});
+const dropdownItems = computed(() => {
+  return normalizeOptions(node.value?.props?.items, fallbackDropdownItems);
+});
+const menuItems = computed(() => {
+  return normalizeOptions(node.value?.props?.items, fallbackMenuItems);
+});
+const tableColumns = computed(() => {
+  tableRenderVersion.value;
+  return normalizeOptions(node.value?.props?.columns, fallbackTableColumns);
+});
+const bigTableColumns = computed(() => {
+  tableRenderVersion.value;
+  return normalizeOptions(node.value?.props?.columns, fallbackBigTableColumns);
+});
+const timelineItems = computed(() => {
+  return normalizeOptions(node.value?.props?.items, fallbackTimelineItems);
+});
+const tabsList = computed(() => {
+  return normalizeOptions(node.value?.props?.tabs, fallbackTabs);
+});
+const stepsItems = computed(() => {
+  return normalizeOptions(node.value?.props?.items, fallbackStepsItems);
+});
+const collapseItems = computed(() => {
+  return normalizeOptions(node.value?.props?.items, fallbackCollapseItems);
+});
+const carouselItems = computed(() => {
+  return normalizeOptions(node.value?.props?.items, fallbackCarouselItems);
+});
 const dropdownLabel = computed(() => {
   if (!node.value) return "下拉菜单";
   return node.value.props?.label || node.value.label || "下拉菜单";
@@ -555,6 +560,20 @@ const renderTag = computed(() => {
     default:
       return "div";
   }
+});
+
+const renderKey = computed(() => {
+  if (!node.value) return "";
+  if (node.value.type === "Table" || node.value.type === "BigDataTable") {
+    const columnsSize = Array.isArray(node.value.props?.columns)
+      ? node.value.props.columns.length
+      : 0;
+    const dataSize = Array.isArray(node.value.props?.data)
+      ? node.value.props.data.length
+      : 0;
+    return `${node.value.id}-${columnsSize}-${dataSize}-${tableRenderVersion.value}`;
+  }
+  return node.value.id || "";
 });
 
 const displayContent = computed(() => {
@@ -734,7 +753,10 @@ const resolveQuery = async (connectionId, queryName) => {
     queries = data.queries || data.items || data.list || [];
     queryCache.set(cacheKey, queries);
   }
-  return queries.find((item) => item.name === queryName || item.id === queryName) || null;
+  return (
+    queries.find((item) => item.name === queryName || item.id === queryName) ||
+    null
+  );
 };
 
 const resolveMappedGlobalValue = async (name, detail) => {
@@ -793,7 +815,9 @@ const buildPreviewGlobals = () => {
         if (!detail) return undefined;
         if (detail?.mapped && detail?.source?.type === "dataCenter") {
           if (!mappedValueCache.has(prop)) {
-            const promise = resolveMappedGlobalValue(prop, detail).catch(() => null);
+            const promise = resolveMappedGlobalValue(prop, detail).catch(
+              () => null
+            );
             mappedValueCache.set(prop, promise);
           }
           return mappedValueCache.get(prop);
@@ -898,15 +922,36 @@ const extractDatapointValue = (payload, datapointId) => {
   }
   if (Array.isArray(payload.values)) {
     const hit = payload.values.find((item) => item?.id === datapointId);
-    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+    if (hit)
+      return (
+        hit.value ??
+        hit.currentValue ??
+        hit.dataValue ??
+        hit.lastValue ??
+        hit.rawValue
+      );
   }
   if (Array.isArray(payload.datapoints)) {
     const hit = payload.datapoints.find((item) => item?.id === datapointId);
-    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+    if (hit)
+      return (
+        hit.value ??
+        hit.currentValue ??
+        hit.dataValue ??
+        hit.lastValue ??
+        hit.rawValue
+      );
   }
   if (Array.isArray(payload)) {
     const hit = payload.find((item) => item?.id === datapointId);
-    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+    if (hit)
+      return (
+        hit.value ??
+        hit.currentValue ??
+        hit.dataValue ??
+        hit.lastValue ??
+        hit.rawValue
+      );
   }
   if (payload && typeof payload === "object" && datapointId in payload) {
     return payload[datapointId];
@@ -996,41 +1041,100 @@ const buildRefInfo = () => {
         style: { ...(node.value.style || {}), ...patch },
       });
     },
-      setText: (text) => {
-        const value = String(text ?? "");
-        if (props.readonly) {
-          const propsPatch = { text: value };
-          if (node.value?.type === "Card" || node.value?.type === "BusinessCard") {
-            propsPatch.content = value;
-          }
-          applyPreviewPatch({ props: propsPatch });
-          return;
+    setText: (text) => {
+      const value = String(text ?? "");
+      if (props.readonly) {
+        const propsPatch = { text: value };
+        if (
+          node.value?.type === "Card" ||
+          node.value?.type === "BusinessCard"
+        ) {
+          propsPatch.content = value;
         }
-        editorStore.updateNode(node.value.id, {
-          props: { ...(node.value.props || {}), text: value },
+        applyPreviewPatch({ props: propsPatch });
+        return;
+      }
+      editorStore.updateNode(node.value.id, {
+        props: { ...(node.value.props || {}), text: value },
+      });
+    },
+    setTableHeader: (columns) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      if (columns && typeof columns.then === "function") {
+        columns.then((resolved) => {
+          refInfo.setTableHeader(resolved);
         });
-      },
-      setTableHeader: (columns) => {
-        if (columns && typeof columns.then === "function") {
-          columns.then((resolved) => {
-            refInfo.setTableHeader(resolved);
-          });
-          return;
+        return;
+      }
+      let input = columns;
+      if (input && typeof input === "object" && !Array.isArray(input)) {
+        if (Array.isArray(input.columns)) {
+          input = input.columns;
+        } else if (Array.isArray(input.data)) {
+          input = input.data;
         }
-        let input = columns;
-        if (input && typeof input === "object" && !Array.isArray(input)) {
-          if (Array.isArray(input.columns)) {
-            input = input.columns;
-          } else if (Array.isArray(input.data)) {
-            input = input.data;
+      }
+      if (!Array.isArray(input)) return;
+      const normalized = input
+        .map((item) => {
+          if (item && typeof item === "object") {
+            const label = item.label ?? item.title ?? item.name ?? item.prop;
+            const prop =
+              item.prop ?? item.field ?? item.key ?? item.name ?? item.label;
+            return { ...item, label, prop };
           }
+          if (typeof item === "string") {
+            return { label: item, prop: item };
+          }
+          return null;
+        })
+        .filter(Boolean);
+      if (props.readonly) {
+        applyPreviewPatch({ props: { columns: normalized } });
+        tableRenderVersion.value += 1;
+        return;
+      }
+      editorStore.updateNode(node.value.id, {
+        props: { ...(node.value.props || {}), columns: normalized },
+      });
+      tableRenderVersion.value += 1;
+    },
+    setTableData: (data, header) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      if (!data) return;
+      if (data && typeof data.then === "function") {
+        data.then((resolved) => {
+          refInfo.setTableData(resolved, header);
+        });
+        return;
+      }
+      let rows = data;
+      let columns = header || null;
+      if (rows && typeof rows === "object" && !Array.isArray(rows)) {
+        if (Array.isArray(rows.rows)) {
+          rows = rows.rows;
+        } else if (Array.isArray(rows.data)) {
+          rows = rows.data;
         }
-        if (!Array.isArray(input)) return;
-        const normalized = input
+        if (Array.isArray(rows.columns)) {
+          columns = rows.columns;
+        } else if (Array.isArray(data.columns)) {
+          columns = data.columns;
+        }
+      }
+      if (!Array.isArray(rows)) return;
+      const normalizeColumns = (input) => {
+        if (!Array.isArray(input)) return [];
+        return input
           .map((item) => {
             if (item && typeof item === "object") {
               const label = item.label ?? item.title ?? item.name ?? item.prop;
-              const prop = item.prop ?? item.field ?? item.key ?? item.name ?? item.label;
+              const prop =
+                item.prop ?? item.field ?? item.key ?? item.name ?? item.label;
               return { ...item, label, prop };
             }
             if (typeof item === "string") {
@@ -1039,57 +1143,12 @@ const buildRefInfo = () => {
             return null;
           })
           .filter(Boolean);
-        if (props.readonly) {
-          applyPreviewPatch({ props: { columns: normalized } });
-          return;
-        }
-        editorStore.updateNode(node.value.id, {
-          props: { ...(node.value.props || {}), columns: normalized },
-        });
-      },
-      setTableData: (data, header) => {
-        if (!data) return;
-        if (data && typeof data.then === "function") {
-          data.then((resolved) => {
-            refInfo.setTableData(resolved, header);
-          });
-          return;
-        }
-        let rows = data;
-        let columns = header || null;
-        if (rows && typeof rows === "object" && !Array.isArray(rows)) {
-          if (Array.isArray(rows.rows)) {
-            rows = rows.rows;
-          } else if (Array.isArray(rows.data)) {
-            rows = rows.data;
-          }
-          if (Array.isArray(rows.columns)) {
-            columns = rows.columns;
-          } else if (Array.isArray(data.columns)) {
-            columns = data.columns;
-          }
-        }
-        if (!Array.isArray(rows)) return;
-        const normalizeColumns = (input) => {
-          if (!Array.isArray(input)) return [];
-          return input
-            .map((item) => {
-              if (item && typeof item === "object") {
-                const label = item.label ?? item.title ?? item.name ?? item.prop;
-                const prop = item.prop ?? item.field ?? item.key ?? item.name ?? item.label;
-                return { ...item, label, prop };
-              }
-              if (typeof item === "string") {
-                return { label: item, prop: item };
-              }
-              return null;
-            })
-            .filter(Boolean);
-        };
-        const normalizedColumns = normalizeColumns(
-          columns || node.value?.props?.columns || []
-        );
-        const normalizedData = Array.isArray(rows) && Array.isArray(rows[0])
+      };
+      const normalizedColumns = normalizeColumns(
+        columns || node.value?.props?.columns || []
+      );
+      const normalizedData =
+        Array.isArray(rows) && Array.isArray(rows[0])
           ? rows.map((row) => {
               if (!Array.isArray(row)) return row;
               if (normalizedColumns.length === 0) return row;
@@ -1101,16 +1160,18 @@ const buildRefInfo = () => {
               return next;
             })
           : rows;
-        if (props.readonly) {
-          applyPreviewPatch({ props: { data: normalizedData } });
-          return;
-        }
-        editorStore.updateNode(node.value.id, {
-          props: { ...(node.value.props || {}), data: normalizedData },
-        });
-      },
-    };
+      if (props.readonly) {
+        applyPreviewPatch({ props: { data: normalizedData } });
+        tableRenderVersion.value += 1;
+        return;
+      }
+      editorStore.updateNode(node.value.id, {
+        props: { ...(node.value.props || {}), data: normalizedData },
+      });
+      tableRenderVersion.value += 1;
+    },
   };
+};
 
 const tryRegisterPreviewRef = (pageIdValue) => {
   if (!props.readonly || !node.value?.label) return false;
@@ -1120,6 +1181,14 @@ const tryRegisterPreviewRef = (pageIdValue) => {
   const refInfo = buildRefInfo();
   if (!refInfo) return false;
   runtime.registerComponentRef(pageIdValue, node.value.label, refInfo);
+  const pageId = currentPage.value?.id;
+  const pageName = currentPage.value?.name;
+  if (pageId && pageId !== pageIdValue) {
+    runtime.registerComponentRef(pageId, node.value.label, refInfo);
+  }
+  if (pageName && pageName !== pageIdValue) {
+    runtime.registerComponentRef(pageName, node.value.label, refInfo);
+  }
   return true;
 };
 
@@ -1140,6 +1209,14 @@ const unregisterPreviewRef = (label, pageIdValue = previewPageId.value) => {
   if (!pageIdValue) return;
   const refInfo = buildRefInfo();
   runtime.unregisterComponentRef(pageIdValue, label, refInfo);
+  const pageId = currentPage.value?.id;
+  const pageName = currentPage.value?.name;
+  if (pageId && pageId !== pageIdValue) {
+    runtime.unregisterComponentRef(pageId, label, refInfo);
+  }
+  if (pageName && pageName !== pageIdValue) {
+    runtime.unregisterComponentRef(pageName, label, refInfo);
+  }
 };
 
 watch(
@@ -1464,7 +1541,10 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
   const manifest = componentRegistry.get(currentNode.type);
   const isContainer = manifest?.isContainer || false;
 
-  if (currentNode.type === "FlexContainer" || currentNode.type === "ResponsiveLayout") {
+  if (
+    currentNode.type === "FlexContainer" ||
+    currentNode.type === "ResponsiveLayout"
+  ) {
     style.display = "flex";
     style.flexDirection = currentNode.props?.direction || "row";
     style.flexWrap = currentNode.props?.wrap || "nowrap";
@@ -1609,16 +1689,17 @@ const resolveAbsoluteLayout = (currentNode) => {
   const rect = nodeRef.value?.getBoundingClientRect?.();
   const width = Number.isFinite(absolutePos.w)
     ? absolutePos.w
-    : rect?.width ?? 120;
+    : (rect?.width ?? 120);
   const height = Number.isFinite(absolutePos.h)
     ? absolutePos.h
-    : rect?.height ?? 40;
+    : (rect?.height ?? 40);
 
   let x = Number.isFinite(absolutePos.x) ? absolutePos.x : 0;
   let y = Number.isFinite(absolutePos.y) ? absolutePos.y : 0;
 
   if (!Number.isFinite(absolutePos.x) || !Number.isFinite(absolutePos.y)) {
-    const parentElement = nodeRef.value?.parentElement?.closest?.("[data-node-id]");
+    const parentElement =
+      nodeRef.value?.parentElement?.closest?.("[data-node-id]");
     const parentRect = parentElement?.getBoundingClientRect?.();
     if (rect && parentRect) {
       x = rect.left - parentRect.left;
@@ -1644,14 +1725,8 @@ let activeDragHandlers = null;
  */
 const cleanupDragHandlers = () => {
   if (!activeDragHandlers) return;
-  const {
-    move,
-    up,
-    userSelect,
-    pointerTarget,
-    pointerId,
-    usePointer,
-  } = activeDragHandlers;
+  const { move, up, userSelect, pointerTarget, pointerId, usePointer } =
+    activeDragHandlers;
   if (usePointer) {
     document.removeEventListener("pointermove", move);
     document.removeEventListener("pointerup", up);
@@ -1728,7 +1803,11 @@ const handleResizePointerDown = (event, handle) => {
   const usePointer = event.type === "pointerdown";
   const pointerTarget =
     event.target instanceof Element ? event.target : nodeRef.value?.$el;
-  if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
+  if (
+    usePointer &&
+    pointerTarget?.setPointerCapture &&
+    event.pointerId !== undefined
+  ) {
     try {
       pointerTarget.setPointerCapture(event.pointerId);
     } catch (error) {
@@ -1922,7 +2001,11 @@ const handlePointerDown = (event) => {
   const usePointer = event.type === "pointerdown";
   const pointerTarget =
     event.target instanceof Element ? event.target : nodeRef.value?.$el;
-  if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
+  if (
+    usePointer &&
+    pointerTarget?.setPointerCapture &&
+    event.pointerId !== undefined
+  ) {
     try {
       pointerTarget.setPointerCapture(event.pointerId);
     } catch (error) {

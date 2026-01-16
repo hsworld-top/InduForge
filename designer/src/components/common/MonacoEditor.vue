@@ -315,10 +315,11 @@ const loadPrettier = async () => {
   prettierReady = Promise.all([
     import("prettier/standalone"),
     import("prettier/parser-babel"),
+    import("prettier/plugins/estree"),
   ])
-    .then(([prettier, parserBabel]) => ({
+    .then(([prettier, parserBabel, estree]) => ({
       format: prettier.format,
-      plugins: [parserBabel.default || parserBabel],
+      plugins: [parserBabel.default || parserBabel, estree.default || estree],
     }))
     .catch(() => null);
   return prettierReady;
@@ -328,8 +329,15 @@ const formatWithPrettier = async (code, language) => {
   const prettier = await loadPrettier();
   if (!prettier) return null;
   const parser = language === "typescript" ? "babel-ts" : "babel";
+  const trimmed = String(code || "");
+  const isAnonFunction = /^\s*function\s*\(/.test(trimmed);
+  const wrapPrefix = "const __fn = ";
+  const wrapSuffix = ";";
+  const formatTarget = isAnonFunction
+    ? `${wrapPrefix}${trimmed}${wrapSuffix}`
+    : trimmed;
   try {
-    return prettier.format(code, {
+    const formatted = await prettier.format(formatTarget, {
       parser,
       plugins: prettier.plugins,
       semi: true,
@@ -338,6 +346,14 @@ const formatWithPrettier = async (code, language) => {
       printWidth: 100,
       tabWidth: 2,
     });
+    if (!formatted) return null;
+    if (isAnonFunction) {
+      const stripped = formatted
+        .replace(/^const __fn\s*=\s*/, "")
+        .replace(/;\s*$/, "");
+      return stripped;
+    }
+    return formatted;
   } catch (error) {
     return null;
   }

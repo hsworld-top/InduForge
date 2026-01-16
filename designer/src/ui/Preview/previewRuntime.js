@@ -23,6 +23,7 @@ const previewMqttState = {
   subscriptionIdToProps: new Map(),
   onValueUpdate: null,
 };
+const pendingComponentCalls = new Map();
 
 const connectionCache = new Map();
 const queryCache = new Map();
@@ -106,6 +107,39 @@ const normalizeGlobalValue = (detail) => {
   }
   return raw ?? null;
 };
+
+const buildPendingKey = (pageId, name) => `${pageId || "global"}::${name}`;
+
+const queueComponentCall = (pageId, name, method, args) => {
+  if (!name) return;
+  const key = buildPendingKey(pageId, name);
+  if (!pendingComponentCalls.has(key)) {
+    pendingComponentCalls.set(key, []);
+  }
+  pendingComponentCalls.get(key).push({ method, args });
+};
+
+const applyPendingCalls = (pageId, name, refInfo) => {
+  if (!name || !refInfo) return;
+  const key = buildPendingKey(pageId, name);
+  const calls = pendingComponentCalls.get(key);
+  if (!calls || calls.length === 0) return;
+  calls.forEach((call) => {
+    const fn = refInfo?.[call.method];
+    if (typeof fn === "function") {
+      fn(...(call.args || []));
+    }
+  });
+  pendingComponentCalls.delete(key);
+};
+
+const buildComponentStub = (pageId, name) => ({
+  setText: (...args) => queueComponentCall(pageId, name, "setText", args),
+  setTableHeader: (...args) => queueComponentCall(pageId, name, "setTableHeader", args),
+  setTableData: (...args) => queueComponentCall(pageId, name, "setTableData", args),
+  setProps: (...args) => queueComponentCall(pageId, name, "setProps", args),
+  setStyle: (...args) => queueComponentCall(pageId, name, "setStyle", args),
+});
 
 const getApiBase = () => {
   if (typeof __VITE_API_URL__ !== "undefined" && __VITE_API_URL__) {
@@ -442,6 +476,30 @@ export const initPreviewRuntime = (options) => {
     }
   };
 
+  const preloadMappedGlobals = async () => {
+    const entries = Object.entries(projectVariables || {});
+    const tasks = [];
+    entries.forEach(([name, detail]) => {
+      if (!detail?.mapped || detail?.source?.type !== "dataCenter") return;
+      if (mappedValueCache.has(name) || mappedValuePending.has(name)) return;
+      const sourceType = String(detail?.source?.sourceType || "");
+      if (!sourceType.includes("query")) return;
+      mappedValuePending.set(name, true);
+      tasks.push(
+        resolveMappedGlobalValue(projectId, detail)
+          .then((value) => {
+            updateMappedValue(name, value, detail);
+          })
+          .finally(() => {
+            mappedValuePending.delete(name);
+          })
+      );
+    });
+    if (tasks.length > 0) {
+      await Promise.allSettled(tasks);
+    }
+  };
+
   previewMqttState.onValueUpdate = (type, id, value) => {
     const detailMap =
       type === "tag"
@@ -542,13 +600,23 @@ export const initPreviewRuntime = (options) => {
         get(_target, prop) {
           if (typeof prop !== "string") return undefined;
           const pageMap = componentRefsByPage.get(prop);
-          if (!pageMap) return undefined;
+          if (!pageMap) {
+            return new Proxy(
+              {},
+              {
+                get(_subTarget, name) {
+                  if (typeof name !== "string") return undefined;
+                  return buildComponentStub(prop, name);
+                },
+              }
+            );
+          }
           return new Proxy(
             {},
             {
               get(_subTarget, name) {
                 if (typeof name !== "string") return undefined;
-                return pageMap.get(name);
+                return pageMap.get(name) || buildComponentStub(prop, name);
               },
             }
           );
@@ -566,13 +634,14 @@ export const initPreviewRuntime = (options) => {
           const pageMap = componentRefsByPage.get(pageId);
           if (pageMap && pageMap.has(prop)) return pageMap.get(prop);
           if (componentRefsByName.has(prop)) return componentRefsByName.get(prop);
-          return undefined;
+          return buildComponentStub(pageId, prop);
         },
       }
     );
 
   const runCode = async (code, event, thisArg, pageId) => {
     if (!code || !code.trim()) return;
+    await preloadMappedGlobals();
     const components = getComponentsProxy(pageId || options?.pageId);
     const context = {
       $event: event,
@@ -630,6 +699,7 @@ export const initPreviewRuntime = (options) => {
     }
     componentRefsByPage.get(pageIdValue).set(name, refInfo);
     componentRefsByName.set(name, refInfo);
+    applyPendingCalls(pageIdValue, name, refInfo);
     const alias = String(name).replace(/\d+$/, "");
     if (alias && alias !== name) {
       const pageMap = componentRefsByPage.get(pageIdValue);
@@ -639,6 +709,7 @@ export const initPreviewRuntime = (options) => {
       if (!componentRefsByName.has(alias)) {
         componentRefsByName.set(alias, refInfo);
       }
+      applyPendingCalls(pageIdValue, alias, refInfo);
     }
   };
 
@@ -684,6 +755,7 @@ export const clearPreviewRuntime = () => {
   mappedDetails.clear();
   componentRefsByPage.clear();
   componentRefsByName.clear();
+  pendingComponentCalls.clear();
   if (previewDataServiceState.service) {
     previewDataServiceState.service.destroy();
   }
