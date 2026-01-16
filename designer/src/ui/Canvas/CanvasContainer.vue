@@ -3,8 +3,34 @@
     class="canvas-container"
     ref="containerRef"
     @wheel="handleZoomWheel"
+    @mousemove="handleRulerMouseMove"
+    @mouseleave="handleRulerMouseLeave"
     @click="handleContainerClick"
   >
+    <div class="ruler-layer">
+      <div class="ruler ruler-x" :style="rulerXStyle">
+        <div class="ruler-crosshair-x" :style="{ left: `${pointerX}px` }" />
+        <span
+          v-for="mark in rulerMarksX"
+          :key="`x-${mark}`"
+          class="ruler-label"
+          :style="{ left: `${mark * zoom + translateX}px` }"
+        >
+          {{ mark }}
+        </span>
+      </div>
+      <div class="ruler ruler-y" :style="rulerYStyle">
+        <div class="ruler-crosshair-y" :style="{ top: `${pointerY}px` }" />
+        <span
+          v-for="mark in rulerMarksY"
+          :key="`y-${mark}`"
+          class="ruler-label"
+          :style="{ top: `${mark * zoom + translateY}px` }"
+        >
+          {{ mark }}
+        </span>
+      </div>
+    </div>
     <div class="canvas-wrapper" ref="wrapperRef">
       <div
         class="canvas"
@@ -68,6 +94,61 @@ const canvasRef = ref(null);
 const editorStore = useEditorStore();
 const { doc, history, selection, currentPage } = storeToRefs(editorStore);
 const dragState = useDragState();
+const minorStep = 10;
+const majorStep = 100;
+const rulerMax = 5000;
+const containerSize = ref({ width: 0, height: 0 });
+const pointerX = ref(-9999);
+const pointerY = ref(-9999);
+const isNodeTransforming = ref(false);
+
+/**
+ * 处理鼠标移动，更新标尺指示线
+ * @param {MouseEvent} event - 鼠标事件
+ */
+const handleRulerMouseMove = (event) => {
+  if (isNodeTransforming.value) return;
+  if (!containerRef.value) return;
+  const rect = containerRef.value.getBoundingClientRect();
+  pointerX.value = Math.min(Math.max(0, event.clientX - rect.left), rect.width);
+  pointerY.value = Math.min(Math.max(0, event.clientY - rect.top), rect.height);
+};
+
+/**
+ * 处理鼠标离开，隐藏标尺指示线
+ */
+const handleRulerMouseLeave = () => {
+  if (isNodeTransforming.value) return;
+  pointerX.value = -9999;
+  pointerY.value = -9999;
+};
+
+/**
+ * 处理组件拖拽/缩放的标尺指示
+ * @param {CustomEvent} event - 自定义事件
+ */
+const handleNodeTransform = (event) => {
+  if (!containerRef.value || !event?.detail) return;
+  const rect = containerRef.value.getBoundingClientRect();
+  const x = Number(event.detail.x) || 0;
+  const y = Number(event.detail.y) || 0;
+  pointerX.value = Math.min(
+    Math.max(0, x * zoom.value + translateX.value),
+    rect.width
+  );
+  pointerY.value = Math.min(
+    Math.max(0, y * zoom.value + translateY.value),
+    rect.height
+  );
+  isNodeTransforming.value = true;
+};
+
+/**
+ * 结束组件拖拽/缩放的标尺指示
+ */
+const handleNodeTransformEnd = () => {
+  isNodeTransforming.value = false;
+};
 
 const handleGlobalDragOver = (event) => {
   if (!dragState.dragType) return;
@@ -114,7 +195,7 @@ const handleGlobalMouseUp = (event) => {
   endDrag();
 };
 
-// 向子组件提供当前缩放比例，用于拖拽落点换�?
+// 向子组件提供当前缩放比例，用于拖拽落点换?
 provide("canvasZoom", zoom);
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
@@ -139,6 +220,48 @@ const canvasStyle = computed(() => {
   }
 
   return style;
+});
+
+const rulerXStyle = computed(() => {
+  const minor = minorStep * zoom.value;
+  const major = majorStep * zoom.value;
+  return {
+    "--ruler-minor": `${minor}px`,
+    "--ruler-major": `${major}px`,
+    "--ruler-offset": `${translateX.value}px`,
+  };
+});
+
+const rulerYStyle = computed(() => {
+  const minor = minorStep * zoom.value;
+  const major = majorStep * zoom.value;
+  return {
+    "--ruler-minor": `${minor}px`,
+    "--ruler-major": `${major}px`,
+    "--ruler-offset": `${translateY.value}px`,
+  };
+});
+
+const rulerMarksX = computed(() => {
+  const marks = [];
+  const max = rulerMax;
+  for (let value = 0; value <= max; value += majorStep) {
+    const pos = value * zoom.value + translateX.value;
+    if (pos < -majorStep || pos > containerSize.value.width) continue;
+    marks.push(value);
+  }
+  return marks;
+});
+
+const rulerMarksY = computed(() => {
+  const marks = [];
+  const max = rulerMax;
+  for (let value = 0; value <= max; value += majorStep) {
+    const pos = value * zoom.value + translateY.value;
+    if (pos < -majorStep || pos > containerSize.value.height) continue;
+    marks.push(value);
+  }
+  return marks;
 });
 
 /**
@@ -208,7 +331,7 @@ const isLayoutContainerType = (type) => {
 /**
  * 插入组件节点
  * @param {string} type - 组件类型
- * @param {string} parentId - 父节�?ID
+ * @param {string} parentId - 父节?ID
  * @param {number} x - X 坐标
  * @param {number} y - Y 坐标
  */
@@ -229,32 +352,13 @@ const handleZoomWheel = (event) => {
   if (!event.ctrlKey) return;
   event.preventDefault();
 
-  const rect =
-    wrapperRef.value?.getBoundingClientRect() ||
-    containerRef.value?.getBoundingClientRect();
-  if (!rect) return;
-
-  const pointerX = Math.min(
-    Math.max(0, event.clientX - rect.left),
-    rect.width
-  );
-  const pointerY = Math.min(
-    Math.max(0, event.clientY - rect.top),
-    rect.height
-  );
-
   const step = 0.1;
   const direction = event.deltaY > 0 ? -1 : 1;
   const nextZoom = Math.min(5, Math.max(0.1, zoom.value + step * direction));
-  const currentZoom = zoom.value;
-  if (nextZoom === currentZoom) return;
+  if (nextZoom === zoom.value) return;
 
-  const worldX = (pointerX - translateX.value) / currentZoom;
-  const worldY = (pointerY - translateY.value) / currentZoom;
-
-  translateX.value = pointerX - worldX * nextZoom;
-  translateY.value = pointerY - worldY * nextZoom;
-
+  translateX.value = 0;
+  translateY.value = 0;
   emit("zoomChange", Number(nextZoom.toFixed(2)));
 };
 
@@ -281,7 +385,7 @@ const handleContainerClick = (event) => {
 
 /**
  * 构建布局配置
- * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节�? * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
+ * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节? * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
  * @returns {import('@/editor-core').LayoutItem | null}
  */
 const buildLayoutItem = (parentNode, dropInfo) => {
@@ -345,7 +449,7 @@ const buildFlexLayoutItem = () => {
 
 /**
  * 构建 Grid 布局配置
- * @param {import('@/editor-core').ComponentNode} parentNode - 父节�? * @returns {import('@/editor-core').LayoutItem}
+ * @param {import('@/editor-core').ComponentNode} parentNode - 父节? * @returns {import('@/editor-core').LayoutItem}
  */
 const buildGridLayoutItem = (parentNode) => {
   const columns = resolveGridCount(parentNode.props?.columns);
@@ -366,7 +470,7 @@ const buildGridLayoutItem = (parentNode) => {
 
 /**
  * 解析 Grid 列数
- * @param {string | number | undefined} value - 列配�? * @returns {number}
+ * @param {string | number | undefined} value - 列配? * @returns {number}
  */
 const resolveGridCount = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -412,7 +516,7 @@ const resolveDropTarget = (event, componentType) => {
 };
 
 /**
- * 判断节点是否为容�? * @param {string} nodeId - 节点 ID
+ * 判断节点是否为容? * @param {string} nodeId - 节点 ID
  * @returns {boolean}
  */
 const isContainerNode = (nodeId) => {
@@ -423,8 +527,8 @@ const isContainerNode = (nodeId) => {
 };
 
 /**
- * 判断容器是否允许子组�? * @param {string} parentId - 父节�?ID
- * @param {string} childType - 子组件类�? * @returns {boolean}
+ * 判断容器是否允许子组? * @param {string} parentId - 父节?ID
+ * @param {string} childType - 子组件类? * @returns {boolean}
  */
 const canAcceptChild = (parentId, childType) => {
   const node = doc.value?.getNode(parentId);
@@ -479,16 +583,47 @@ onMounted(() => {
   window.addEventListener("dragover", handleGlobalDragOver);
   window.addEventListener("drop", handleGlobalDrop);
   window.addEventListener("mouseup", handleGlobalMouseUp);
+  window.addEventListener("designer:node-transform", handleNodeTransform);
+  window.addEventListener("designer:node-transform-end", handleNodeTransformEnd);
+  if (containerRef.value && typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width: w, height: h } = entry.contentRect;
+      containerSize.value = { width: w, height: h };
+    });
+    observer.observe(containerRef.value);
+    containerRef.value.__rulerObserver = observer;
+  }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("dragover", handleGlobalDragOver);
   window.removeEventListener("drop", handleGlobalDrop);
   window.removeEventListener("mouseup", handleGlobalMouseUp);
+  window.removeEventListener("designer:node-transform", handleNodeTransform);
+  window.removeEventListener(
+    "designer:node-transform-end",
+    handleNodeTransformEnd
+  );
+  if (containerRef.value?.__rulerObserver) {
+    containerRef.value.__rulerObserver.disconnect();
+    containerRef.value.__rulerObserver = null;
+  }
 });
 </script>
 
 <style scoped>
+.canvas-container {
+  position: relative;
+}
+
+.canvas-wrapper {
+  padding: 0 !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+}
+
 .canvas {
   position: relative;
   transform-origin: 0 0;
@@ -507,6 +642,132 @@ onBeforeUnmount(() => {
     ),
     linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
 }
+.ruler-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.ruler-crosshair-x {
+  position: absolute;
+  top: 0;
+  height: 18px;
+  width: 2px;
+  background: #409eff;
+  opacity: 0.9;
+  z-index: 3;
+}
+
+.ruler-crosshair-y {
+  position: absolute;
+  left: 0;
+  width: 18px;
+  height: 2px;
+  background: #409eff;
+  opacity: 0.9;
+  z-index: 3;
+}
+
+.ruler-zero {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  font-size: 10px;
+  color: #606266;
+  background: #f5f7fa;
+  padding: 0 2px;
+}
+
+.ruler {
+  position: absolute;
+  color: #606266;
+  font-size: 10px;
+  background-color: #f5f7fa;
+  border-color: #dcdfe6;
+  overflow: hidden;
+}
+
+.ruler-x {
+  left: 0;
+  top: 0;
+  height: 18px;
+  right: 0;
+  border-bottom: 1px solid #dcdfe6;
+  z-index: 2;
+}
+
+.ruler-y {
+  left: 0;
+  top: 0;
+  width: 18px;
+  bottom: 0;
+  border-right: 1px solid #dcdfe6;
+  z-index: 1;
+}
+
+.ruler-x::before,
+.ruler-x::after,
+.ruler-y::before,
+.ruler-y::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.ruler-x::before {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  background-image: linear-gradient(to right, #c0c4cc 1px, transparent 1px);
+  background-size: var(--ruler-minor, 10px) 100%;
+  background-position: var(--ruler-offset, 0) 0;
+}
+
+.ruler-x::after {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 12px;
+  background-image: linear-gradient(to right, #909399 1px, transparent 1px);
+  background-size: var(--ruler-major, 100px) 100%;
+  background-position: var(--ruler-offset, 0) 0;
+}
+
+.ruler-y::before {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 6px;
+  background-image: linear-gradient(to bottom, #c0c4cc 1px, transparent 1px);
+  background-size: 100% var(--ruler-minor, 10px);
+  background-position: 0 var(--ruler-offset, 0);
+}
+
+.ruler-y::after {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  background-image: linear-gradient(to bottom, #909399 1px, transparent 1px);
+  background-size: 100% var(--ruler-major, 100px);
+  background-position: 0 var(--ruler-offset, 0);
+}
+
+.ruler-label {
+  position: absolute;
+  padding: 2px 2px 0 2px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ruler-y .ruler-label {
+  transform: rotate(-90deg);
+  transform-origin: left top;
+  left: 2px;
+}
+
 </style>
 
 

@@ -80,6 +80,55 @@
           >{{ formattedProps }}</pre
         >
       </template>
+
+      <el-divider />
+
+      <template v-if="hasStyleSelection">
+        <el-collapse v-model="activeStyleNames">
+          <el-collapse-item title="基础样式" name="basic">
+            <SizeEditor
+              :model-value="currentStyle"
+              @update:model-value="handleStyleChange"
+            />
+            <el-divider style="margin: 12px 0" />
+            <BackgroundEditor
+              :model-value="currentStyle"
+              @update:model-value="handleStyleChange"
+            />
+            <el-divider style="margin: 12px 0" />
+            <BorderEditor
+              :model-value="currentStyle"
+              @update:model-value="handleStyleChange"
+            />
+          </el-collapse-item>
+
+          <el-collapse-item title="布局样式" name="layout">
+            <PositionEditor
+              :model-value="currentStyle"
+              @update:model-value="handleStyleChange"
+            />
+            <el-divider style="margin: 12px 0" />
+            <SpacingEditor
+              title="内边距"
+              prefix="padding"
+              :model-value="currentStyle"
+              @update:model-value="handleStyleChange"
+            />
+            <el-divider style="margin: 12px 0" />
+            <SpacingEditor
+              title="外边距"
+              prefix="margin"
+              :model-value="currentStyle"
+              @update:model-value="handleStyleChange"
+            />
+          </el-collapse-item>
+        </el-collapse>
+      </template>
+      <div v-else class="text-sm text-gray-400 text-center py-6">
+        请选择组件
+      </div>
+
+
     </div>
   </div>
 </template>
@@ -97,6 +146,11 @@ import { computed, ref, watch } from "vue";
 import PageInspectorPanel from "./PageInspectorPanel.vue";
 import MultiInspectorPanel from "./MultiInspectorPanel.vue";
 import PropEditor from "./PropEditor.vue";
+import SizeEditor from "./StylePanel/SizeEditor.vue";
+import SpacingEditor from "./StylePanel/SpacingEditor.vue";
+import BackgroundEditor from "./StylePanel/BackgroundEditor.vue";
+import BorderEditor from "./StylePanel/BorderEditor.vue";
+import PositionEditor from "./StylePanel/PositionEditor.vue";
 import { usePanelState } from "./use-panel-state";
 import { getManifest } from "@/manifests";
 import { useEditorStore } from "@/stores/editor-store";
@@ -107,6 +161,7 @@ const editorStore = useEditorStore();
 
 /** 当前展开的分组 */
 const activeGroupNames = ref([]);
+const activeStyleNames = ref(["basic", "layout"]);
 
 const { panelState, selectedElements, selectedNode, selectedGraphic } =
   usePanelState();
@@ -185,6 +240,28 @@ const formattedProps = computed(() => {
   if (!target) return "{}";
   return JSON.stringify(target.props || {}, null, 2);
 });
+
+/**
+ * ????????
+ */
+const hasStyleSelection = computed(() => selectedNode.value !== null);
+
+/**
+ * ????
+ */
+const currentStyle = computed(() => {
+  if (!selectedNode.value) return {};
+  return selectedNode.value.style || {};
+});
+
+/**
+ * ??????
+ * @param {Object} newStyle - ?????
+ */
+const handleStyleChange = (newStyle) => {
+  if (!selectedNode.value) return;
+  editorStore.updateNode(selectedNode.value.id, { style: newStyle });
+};
 
 /**
  * 处理名称变更

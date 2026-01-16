@@ -153,6 +153,17 @@
         :readonly="props.readonly"
       />
     </component>
+
+    <div v-if="showResizeHandles" class="resize-handles">
+      <span
+        v-for="handle in resizeHandles"
+        :key="handle.key"
+        class="resize-handle"
+        :class="handle.key"
+        :style="{ cursor: handle.cursor }"
+        @pointerdown.stop="(event) => handleResizePointerDown(event, handle)"
+      />
+    </div>
   </div>
 </template>
 
@@ -412,6 +423,24 @@ const isMovable = computed(() => {
   return true;
 });
 
+const resizeHandles = [
+  { key: "nw", x: -1, y: -1, cursor: "nwse-resize" },
+  { key: "n", x: 0, y: -1, cursor: "ns-resize" },
+  { key: "ne", x: 1, y: -1, cursor: "nesw-resize" },
+  { key: "e", x: 1, y: 0, cursor: "ew-resize" },
+  { key: "se", x: 1, y: 1, cursor: "nwse-resize" },
+  { key: "s", x: 0, y: 1, cursor: "ns-resize" },
+  { key: "sw", x: -1, y: 1, cursor: "nesw-resize" },
+  { key: "w", x: -1, y: 0, cursor: "ew-resize" },
+];
+
+const showResizeHandles = computed(() => {
+  selectionVersion.value;
+  if (props.readonly || props.isRoot) return false;
+  if (!node.value || node.value.locked) return false;
+  return Boolean(selection.value?.isSelected?.(node.value.id));
+});
+
 /**
  * 判断容器是否允许子组件
  * @param {import('@/editor-core').ComponentNode} parentNode - 父节点
@@ -572,6 +601,9 @@ const contentStyle = computed(() => {
     ...containerStyle,
     ...customStyle,
   };
+  if (!style.overflow && !isContainer.value) {
+    style.overflow = "hidden";
+  }
   if (props.isRoot || layoutStyle.value.position === "absolute") {
     if (!style.width) style.width = "100%";
     if (!style.height) style.height = "100%";
@@ -1509,11 +1541,221 @@ onBeforeUnmount(() => {
  * @returns {void}
  * @throws {Error} 无
  */
+/**
+ * ??????
+ * @param {PointerEvent} event - ????
+ * @param {{ key: string, x: number, y: number }} handle - ????
+ * @returns {void}
+ */
+const handleResizePointerDown = (event, handle) => {
+  if (props.readonly) return;
+  if (activeDragHandlers) return;
+  if (!node.value || !isMovable.value) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (selection.value) {
+    const element = createSelectableElement("node", node.value.id);
+    selection.value.select(element);
+  }
+
+  const zoomValue = Number(canvasZoom?.value) || 1;
+  const baseLayout = resolveAbsoluteLayout(node.value);
+  const rect = nodeRef.value?.getBoundingClientRect?.();
+  const baseWidth = baseLayout.w || rect?.width || 120;
+  const baseHeight = baseLayout.h || rect?.height || 40;
+  const startClientX = event.clientX;
+  const startClientY = event.clientY;
+  const minSize = 40;
+
+  const parentNode = doc.value?.getParent?.(node.value.id);
+  const shouldUpdateAbsolute =
+    parentNode?.type === "FreeContainer" ||
+    node.value.positioning === "absolute" ||
+    node.value.layoutItem?.free?.mode === "abs" ||
+    node.value.absolutePos;
+
+  cleanupDragHandlers();
+  const originalUserSelect = document.body.style.userSelect;
+  document.body.style.userSelect = "none";
+
+  if (history.value && !history.value.isInTransaction?.()) {
+    history.value.beginTransaction();
+  }
+
+  const usePointer = event.type === "pointerdown";
+  const pointerTarget =
+    event.target instanceof Element ? event.target : nodeRef.value?.$el;
+  if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
+    try {
+      pointerTarget.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // ??????
+    }
+  }
+
+  const move = (moveEvent) => {
+    if (!node.value) return;
+    const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
+    const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
+
+    let nextWidth = baseWidth;
+    let nextHeight = baseHeight;
+    let nextX = baseLayout.x;
+    let nextY = baseLayout.y;
+
+    if (handle.x === 1) {
+      nextWidth = baseWidth + deltaX;
+    } else if (handle.x === -1) {
+      nextWidth = baseWidth - deltaX;
+      nextX = baseLayout.x + deltaX;
+    }
+
+    if (handle.y === 1) {
+      nextHeight = baseHeight + deltaY;
+    } else if (handle.y === -1) {
+      nextHeight = baseHeight - deltaY;
+      nextY = baseLayout.y + deltaY;
+    }
+
+    if (handle.x === -1 && nextWidth < minSize) {
+      nextX = baseLayout.x + (baseWidth - minSize);
+      nextWidth = minSize;
+    }
+    if (handle.x === 1 && nextWidth < minSize) {
+      nextWidth = minSize;
+    }
+    if (handle.y === -1 && nextHeight < minSize) {
+      nextY = baseLayout.y + (baseHeight - minSize);
+      nextHeight = minSize;
+    }
+    if (handle.y === 1 && nextHeight < minSize) {
+      nextHeight = minSize;
+    }
+
+    nextWidth = Math.round(nextWidth);
+    nextHeight = Math.round(nextHeight);
+    nextX = Math.max(0, Math.round(nextX));
+    nextY = Math.max(0, Math.round(nextY));
+
+    const nextStyle = {
+      ...(node.value.style || {}),
+      width: `${nextWidth}px`,
+      height: `${nextHeight}px`,
+    };
+
+    let patch = { style: nextStyle };
+
+    if (shouldUpdateAbsolute) {
+      const nextAbs = {
+        x: nextX,
+        y: nextY,
+        w: nextWidth,
+        h: nextHeight,
+        z: baseLayout.z,
+      };
+
+      if (nodeRef.value) {
+        nodeRef.value.style.position = "absolute";
+        nodeRef.value.style.left = `${nextAbs.x}px`;
+        nodeRef.value.style.top = `${nextAbs.y}px`;
+        nodeRef.value.style.width = `${nextAbs.w}px`;
+        nodeRef.value.style.height = `${nextAbs.h}px`;
+        nodeRef.value.style.zIndex = `${nextAbs.z}`;
+      }
+
+      const nextLayoutItem = {
+        ...(node.value.layoutItem || {}),
+        free: {
+          mode: "abs",
+          abs: { ...nextAbs },
+        },
+      };
+
+      patch = {
+        ...patch,
+        positioning: "absolute",
+        absolutePos: nextAbs,
+        layoutItem: nextLayoutItem,
+      };
+    } else if (nodeRef.value) {
+      nodeRef.value.style.width = `${nextWidth}px`;
+      nodeRef.value.style.height = `${nextHeight}px`;
+    }
+
+    if (history.value?.isInTransaction?.()) {
+      history.value.executeInTransaction(
+        new UpdateNodeCommand(node.value.id, patch)
+      );
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("designer:node-transform", {
+            detail: { x: nextX, y: nextY },
+          })
+        );
+      }
+      return;
+    }
+    if (history.value?.execute) {
+      history.value.execute(new UpdateNodeCommand(node.value.id, patch));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("designer:node-transform", {
+            detail: { x: nextX, y: nextY },
+          })
+        );
+      }
+      return;
+    }
+    if (doc.value?._updateNode) {
+      doc.value._updateNode(node.value.id, patch);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("designer:node-transform", {
+            detail: { x: nextX, y: nextY },
+          })
+        );
+      }
+    }
+  };
+
+  const up = () => {
+    cleanupDragHandlers();
+    if (history.value?.isInTransaction?.()) {
+      history.value.commitTransaction("????");
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("designer:node-transform-end"));
+    }
+  };
+
+  activeDragHandlers = {
+    move,
+    up,
+    userSelect: originalUserSelect,
+    pointerTarget,
+    pointerId: event.pointerId,
+    usePointer,
+  };
+
+  if (usePointer) {
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
+  } else {
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+};
+
 const handlePointerDown = (event) => {
   if (props.readonly) return;
   if (activeDragHandlers) return;
   if (!node.value || !isMovable.value) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (event.target?.closest?.(".resize-handle")) return;
   if (isInteractiveTarget(event.target)) return;
 
   event.preventDefault();
@@ -1590,14 +1832,35 @@ const handlePointerDown = (event) => {
       history.value.executeInTransaction(
         new UpdateNodeCommand(node.value.id, patch)
       );
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("designer:node-transform", {
+            detail: { x: nextAbs.x, y: nextAbs.y },
+          })
+        );
+      }
       return;
     }
     if (history.value?.execute) {
       history.value.execute(new UpdateNodeCommand(node.value.id, patch));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("designer:node-transform", {
+            detail: { x: nextAbs.x, y: nextAbs.y },
+          })
+        );
+      }
       return;
     }
     if (doc.value?._updateNode) {
       doc.value._updateNode(node.value.id, patch);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("designer:node-transform", {
+            detail: { x: nextAbs.x, y: nextAbs.y },
+          })
+        );
+      }
     }
   };
 
@@ -1605,6 +1868,9 @@ const handlePointerDown = (event) => {
     cleanupDragHandlers();
     if (history.value?.isInTransaction?.()) {
       history.value.commitTransaction("移动组件");
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("designer:node-transform-end"));
     }
   };
 
@@ -1738,5 +2004,67 @@ const handlePointerDown = (event) => {
 
 .designer-node.is-preview::after {
   display: none !important;
+}
+
+.resize-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.resize-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border: 1px solid #3b82f6;
+  box-sizing: border-box;
+  border-radius: 2px;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.resize-handle.nw {
+  left: -4px;
+  top: -4px;
+}
+
+.resize-handle.n {
+  left: 50%;
+  top: -4px;
+  transform: translateX(-50%);
+}
+
+.resize-handle.ne {
+  right: -4px;
+  top: -4px;
+}
+
+.resize-handle.e {
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.resize-handle.se {
+  right: -4px;
+  bottom: -4px;
+}
+
+.resize-handle.s {
+  left: 50%;
+  bottom: -4px;
+  transform: translateX(-50%);
+}
+
+.resize-handle.sw {
+  left: -4px;
+  bottom: -4px;
+}
+
+.resize-handle.w {
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 </style>

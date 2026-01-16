@@ -1,20 +1,9 @@
 <template>
   <div class="flex flex-col gap-3">
-    <el-tabs v-model="activeTab">
-      <el-tab-pane label="事件" name="events">
-        <EventPanel />
-      </el-tab-pane>
-      <el-tab-pane label="变量" name="variables">
-        <VariablesPanel />
-      </el-tab-pane>
-    </el-tabs>
+    <EventPanel />
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
 import EventPanel from "./EventPanel.vue";
-import VariablesPanel from "./VariablesPanel.vue";
-
-const activeTab = ref("events");
 </script>

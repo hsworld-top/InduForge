@@ -188,7 +188,11 @@ import {
   AiPanel,
   RolePanel,
 } from "@/ui/LeftPanel";
-import { PropertyPanel, StylePanel, AdvancedPanel } from "@/ui/RightPanel";
+import {
+  PropertyPanel,
+  AdvancedPanel,
+  VariablesPanel,
+} from "@/ui/RightPanel";
 import { VIEW_PRESETS } from "@/constants";
 import IconEpDocument from "~icons/ep/document";
 import IconEpMenu from "~icons/ep/menu";
@@ -198,8 +202,8 @@ import IconEpEdit from "~icons/ep/edit";
 import IconEpChatDotRound from "~icons/ep/chat-dot-round";
 import IconEpUser from "~icons/ep/user";
 import IconEpTools from "~icons/ep/tools";
-import IconEpBrush from "~icons/ep/brush";
 import IconEpSetting from "~icons/ep/setting";
+import IconEpList from "~icons/ep/list";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpWarning from "~icons/ep/warning";
 
@@ -456,8 +460,8 @@ const leftRailItems = [
 
 const rightRailItems = [
   { key: "props", label: "属性", icon: IconEpTools },
-  { key: "style", label: "样式", icon: IconEpBrush },
   { key: "advanced", label: "高级", icon: IconEpSetting },
+  { key: "variables", label: "变量", icon: IconEpList },
 ];
 
 const leftPanelComponent = computed(() => {
@@ -499,10 +503,10 @@ const rightPanelComponent = computed(() => {
   switch (rightActiveKey.value) {
     case "props":
       return PropertyPanel;
-    case "style":
-      return StylePanel;
     case "advanced":
       return AdvancedPanel;
+    case "variables":
+      return VariablesPanel;
     default:
       return PropertyPanel;
   }
