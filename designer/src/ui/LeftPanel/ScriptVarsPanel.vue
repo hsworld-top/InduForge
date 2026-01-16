@@ -221,6 +221,13 @@
       <div class="editor-meta">
         <div class="meta-title">{{ selectedSystemLabel }}</div>
         <div class="meta-desc">系统脚本</div>
+        <div class="meta-actions">
+          <el-tooltip content="枚举工程变量" placement="top">
+            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+              <IconEpList />
+            </el-button>
+          </el-tooltip>
+        </div>
       </div>
       <div class="editor-body">
         <div class="editor-main">
@@ -233,32 +240,6 @@
           />
         </div>
         <div class="editor-sidebar">
-          <div class="sidebar-section">
-            <div class="sidebar-title">工程变量</div>
-            <el-input v-model="variableSearch" size="small" placeholder="搜索变量/分组" clearable />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="variableTreeRef"
-                :data="variableSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handleVariableInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-variable">
-                      <IconEpFolder v-if="data.type === 'group'" />
-                      <IconEpLink v-else-if="data.mapped" />
-                      <IconEpEditPen v-else />
-                    </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
           <div class="sidebar-section">
             <div class="sidebar-title">自定义脚本</div>
             <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
@@ -278,7 +259,32 @@
                       <IconEpFolder v-if="data.type === 'group'" />
                       <IconEpEditPen v-else />
                     </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
+                    <span class="node-label" :class="{ 'is-group': data.type === 'group' || data.type === 'folder' }">{{ data.label }}</span>
+                  </div>
+                </template>
+              </el-tree>
+            </div>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-title">页面</div>
+            <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
+            <div class="sidebar-scroll">
+              <el-tree
+                ref="pageTreeRef"
+                :data="pageSidebarTree"
+                node-key="id"
+                :default-expand-all="true"
+                :expand-on-click-node="false"
+                :filter-node-method="filterSidebarNode"
+                @node-click="handlePageInsert"
+              >
+                <template #default="{ data }">
+                  <div class="tree-node" :class="`node-${data.type}`">
+                    <el-icon class="node-icon icon-page">
+                      <IconEpFolder v-if="data.type === 'folder'" />
+                      <IconEpDocument v-else />
+                    </el-icon>
+                    <span class="node-label" :class="{ 'is-group': data.type === 'group' || data.type === 'folder' }">{{ data.label }}</span>
                   </div>
                 </template>
               </el-tree>
@@ -311,6 +317,13 @@
           <span class="meta-label">入参</span>
           <span class="meta-value">{{ editorParams || '无' }}</span>
         </div>
+        <div class="meta-actions">
+          <el-tooltip content="枚举工程变量" placement="top">
+            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+              <IconEpList />
+            </el-button>
+          </el-tooltip>
+        </div>
       </div>
       <div class="editor-body">
         <div class="editor-main">
@@ -323,32 +336,6 @@
           />
         </div>
         <div class="editor-sidebar">
-          <div class="sidebar-section">
-            <div class="sidebar-title">工程变量</div>
-            <el-input v-model="variableSearch" size="small" placeholder="搜索变量/分组" clearable />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="variableTreeRef"
-                :data="variableSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handleVariableInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-variable">
-                      <IconEpFolder v-if="data.type === 'group'" />
-                      <IconEpLink v-else-if="data.mapped" />
-                      <IconEpEditPen v-else />
-                    </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
           <div class="sidebar-section">
             <div class="sidebar-title">自定义脚本</div>
             <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
@@ -374,11 +361,93 @@
               </el-tree>
             </div>
           </div>
+          <div class="sidebar-section">
+            <div class="sidebar-title">页面</div>
+            <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
+            <div class="sidebar-scroll">
+              <el-tree
+                ref="pageTreeRef"
+                :data="pageSidebarTree"
+                node-key="id"
+                :default-expand-all="true"
+                :expand-on-click-node="false"
+                :filter-node-method="filterSidebarNode"
+                @node-click="handlePageInsert"
+              >
+                <template #default="{ data }">
+                  <div class="tree-node" :class="`node-${data.type}`">
+                    <el-icon class="node-icon icon-page">
+                      <IconEpFolder v-if="data.type === 'folder'" />
+                      <IconEpDocument v-else />
+                    </el-icon>
+                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
+                  </div>
+                </template>
+              </el-tree>
+            </div>
+          </div>
         </div>
       </div>
       <template #footer>
         <el-button @click="scriptEditorVisible = false">取消</el-button>
         <el-button type="primary" @click="saveActiveScript">保存 (Ctrl+S)</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="variableEnumVisible"
+      title="工程变量"
+      width="760px"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+    >
+      <div class="enum-layout">
+        <div class="enum-left">
+          <div class="sidebar-title">分组</div>
+          <el-tree
+            ref="enumGroupTreeRef"
+            :data="enumGroupTree"
+            node-key="id"
+            :default-expand-all="true"
+            :expand-on-click-node="false"
+            :filter-node-method="filterSidebarNode"
+            @node-click="handleEnumGroupSelect"
+          >
+            <template #default="{ data }">
+              <div class="tree-node" :class="`node-${data.type}`">
+                <el-icon class="node-icon icon-variable">
+                  <IconEpFolder />
+                </el-icon>
+                <span class="node-label is-group">{{ data.label }}</span>
+              </div>
+            </template>
+          </el-tree>
+        </div>
+        <div class="enum-right">
+          <el-input v-model="enumVariableSearch" size="small" placeholder="搜索工程变量" clearable />
+          <el-table
+            :data="enumVariableRows"
+            size="small"
+            height="360"
+            highlight-current-row
+            @row-click="handleEnumRowClick"
+            @row-dblclick="handleEnumRowDblClick"
+            :row-class-name="enumRowClass"
+          >
+            <el-table-column prop="name" label="变量名" min-width="160" />
+            <el-table-column prop="type" label="类型" width="90" />
+            <el-table-column prop="description" label="描述" min-width="160" />
+            <el-table-column prop="mapped" label="映射" width="70">
+              <template #default="{ row }">
+                {{ row.mapped ? "是" : "" }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="variableEnumVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!enumSelectedVar" @click="confirmEnumInsert">插入</el-button>
       </template>
     </el-dialog>
 
@@ -454,9 +523,12 @@ import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpPointer from "~icons/ep/pointer";
 import IconEpClose from "~icons/ep/close";
 import IconEpLink from "~icons/ep/link";
+import IconEpList from "~icons/ep/list";
+import IconEpDocument from "~icons/ep/document";
 
 const editorStore = useEditorStore();
-const { projectId, globalScripts, projectVariables, projectVariableGroups } = storeToRefs(editorStore);
+const { projectId, globalScripts, projectVariables, projectVariableGroups, pages } =
+  storeToRefs(editorStore);
 const maxGroupDepth = 5;
 
 const activeSections = ref("system");
@@ -529,10 +601,15 @@ const customScripts = computed(() => globalScripts.value?.custom?.items || []);
 const customScriptGroups = computed(() => globalScripts.value?.custom?.groups || []);
 const variableGroups = computed(() => projectVariableGroups.value || []);
 
-const variableSearch = ref("");
 const scriptSearch = ref("");
-const variableTreeRef = ref(null);
 const customScriptTreeRef = ref(null);
+const pageSearch = ref("");
+const pageTreeRef = ref(null);
+const variableEnumVisible = ref(false);
+const enumVariableSearch = ref("");
+const enumGroupTreeRef = ref(null);
+const enumSelectedGroupId = ref(null);
+const enumSelectedVar = ref(null);
 
 const selectedSystemLabel = computed(() =>
   selectedSystemKey.value === "startup" ? "系统启动" : "系统关闭"
@@ -544,6 +621,30 @@ const editorMetaDescription = computed(
 
 const variableSidebarTree = computed(() => buildVariableTree(variableGroups.value, projectVariablesList.value));
 const customScriptSidebarTree = computed(() => buildScriptTree(customScriptGroups.value, customScripts.value));
+const pageSidebarTree = computed(() => buildPageTree(pages.value || []));
+const enumGroupTree = computed(() => [
+  { id: "all", label: "全部", type: "group", children: buildGroupTree(variableGroups.value) },
+]);
+const enumVariableRows = computed(() => {
+  const keyword = String(enumVariableSearch.value || "").toLowerCase();
+  return projectVariablesList.value
+    .filter((item) => {
+      if (enumSelectedGroupId.value) {
+        return item.groupId === enumSelectedGroupId.value;
+      }
+      return true;
+    })
+    .filter((item) => {
+      if (!keyword) return true;
+      return String(item.name || "").toLowerCase().includes(keyword);
+    })
+    .map((item) => ({
+      name: item.name,
+      type: item.meta?.type || "string",
+      description: item.meta?.description || "",
+      mapped: !!item.meta?.mapped,
+    }));
+});
 
 const jsCompletions = computed(() => {
   const items = [
@@ -683,13 +784,14 @@ watch(selectedCustom, (item) => {
   editorParams.value = item.params || item.args || "";
 });
 
-watch(variableSearch, (value) => {
-  variableTreeRef.value?.filter?.(value);
-});
-
 watch(scriptSearch, (value) => {
   customScriptTreeRef.value?.filter?.(value);
 });
+
+watch(pageSearch, (value) => {
+  pageTreeRef.value?.filter?.(value);
+});
+
 
 function buildScriptTree(groups, items) {
   const groupMap = new Map();
@@ -753,6 +855,51 @@ function buildVariableTree(groups, variables) {
     }
   });
 
+  return roots;
+}
+
+function buildGroupTree(groups) {
+  const groupMap = new Map();
+  const roots = [];
+  const normalized = Array.isArray(groups) ? groups : [];
+  normalized.forEach((group) => {
+    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+  });
+  groupMap.forEach((node, id) => {
+    const group = normalized.find((item) => item.id === id);
+    if (group?.parentId && groupMap.has(group.parentId)) {
+      groupMap.get(group.parentId).children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
+}
+
+function buildPageTree(pageList) {
+  const nodeMap = new Map();
+  const roots = [];
+  const normalized = Array.isArray(pageList) ? pageList : [];
+  normalized
+    .filter((page) => page.type !== "dialog")
+    .forEach((page) => {
+      nodeMap.set(page.id, {
+        id: page.id,
+        label: page.name || page.title || "未命名页面",
+        name: page.name || page.title || "未命名页面",
+        type: page.type || "page",
+        parentId: page.parentId || null,
+        children: [],
+      });
+    });
+
+  nodeMap.forEach((node) => {
+    if (node.parentId && nodeMap.has(node.parentId)) {
+      nodeMap.get(node.parentId).children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
   return roots;
 }
 
@@ -841,11 +988,53 @@ function handleCustomScriptInsert(data) {
   insertText(`customScripts.${call}`);
 }
 
+function handlePageInsert(data) {
+  if (!data || data.type !== "page") return;
+  const name = data.name || data.label;
+  if (!name) return;
+  insertText(`components.pages["${name}"]`);
+}
+
+const handleEnumGroupSelect = (data) => {
+  if (!data) {
+    enumSelectedGroupId.value = null;
+    return;
+  }
+  enumSelectedGroupId.value = data.id === "all" ? null : data.id;
+};
+
+const handleEnumRowClick = (row) => {
+  enumSelectedVar.value = row || null;
+};
+
+const handleEnumRowDblClick = (row) => {
+  enumSelectedVar.value = row || null;
+  confirmEnumInsert();
+};
+
+const enumRowClass = ({ row }) => {
+  if (enumSelectedVar.value?.name === row.name) return "is-selected";
+  return "";
+};
+
 function filterSidebarNode(value, data) {
   if (!value) return true;
   const keyword = String(value).toLowerCase();
   return String(data?.label || "").toLowerCase().includes(keyword);
 }
+
+const openVariableEnum = () => {
+  enumVariableSearch.value = "";
+  enumSelectedVar.value = null;
+  enumSelectedGroupId.value = null;
+  variableEnumVisible.value = true;
+};
+
+const confirmEnumInsert = () => {
+  if (!enumSelectedVar.value?.name) return;
+  insertText(`$global.${enumSelectedVar.value.name}`);
+  variableEnumVisible.value = false;
+};
 
 function formatSystemCode() {
   systemEditorRef.value?.format?.();
@@ -1686,6 +1875,22 @@ onUnmounted(() => {
   color: #303133;
 }
 
+.meta-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+.icon-button {
+  background: #eef2ff;
+  border: none;
+  color: #4f46e5;
+}
+
+.icon-button:hover {
+  background: #e0e7ff;
+}
+
 .editor-main {
   flex: 1;
   min-width: 0;
@@ -1762,6 +1967,10 @@ onUnmounted(() => {
   color: #0ea5e9;
 }
 
+.node-page .node-icon.icon-page {
+  color: #6366f1;
+}
+
 .list-menu .node-icon.icon-system {
   color: #6366f1;
   margin-right: 6px;
@@ -1786,6 +1995,37 @@ onUnmounted(() => {
 
 .node-label.is-group {
   font-weight: 600;
+}
+
+.enum-body {
+  margin-top: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.enum-layout {
+  display: flex;
+  gap: 12px;
+}
+
+.enum-left {
+  width: 200px;
+  border-right: 1px solid #e4e7ed;
+  padding-right: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.enum-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.enum-right :deep(.el-table__row.is-selected) {
+  background: #eef2ff;
 }
 
 :deep(.scripts-list .el-tree) {

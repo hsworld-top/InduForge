@@ -318,6 +318,7 @@ function initEditor() {
     }
     extraLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
       "declare const $global: Record<string, any>;\n" +
+        "declare const $vars: Record<string, any>;\n" +
         "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
         "declare const components: Record<string, any>;\n" +
         "declare const $event: any;\n",
