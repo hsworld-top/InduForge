@@ -136,3 +136,30 @@ console.log(total);
 const rows = await $global.users;
 console.log(rows);
 ```
+
+### 6.7 表格方法（仅表格组件生效）
+- `setTableHeader(columns)`：设置表头列
+- `setTableData(rows[, header])`：设置表格数据
+
+说明：
+- 仅会刷新当前表格组件，其他表格不受影响。
+- `rows` 支持对象数组，或 SQL 结果 `{ columns, rows }`。
+- `columns` 支持 `{ label, prop }` 数组。
+
+```js
+const { columns, rows } = $global.users;
+const { tableData, tableColumns } = $global.toElementUITable(columns, rows);
+components.pages["dada"].表格1.setTableHeader(tableColumns);
+components.pages["dada"].表格1.setTableData(tableData);
+```
+
+### 6.8 预览态 $global 使用说明
+- 工程变量（非映射）直接同步读取：`$global.变量名`
+- 映射的数据中心变量：预览态优先取实时值，无需 `await`
+- 需要查询接口时，`await $global.xxx` 仍可使用（兼容）
+
+```js
+let d = $global.tag1;           // 订阅/Tag 实时值
+let e = $global.mqttzzz;        // 订阅实时值
+let f = await $global.users;    // 查询结果（兼容 await）
+```
