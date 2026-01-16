@@ -198,12 +198,15 @@
           </el-select>
         </el-form-item>
         <el-form-item label="初始值">
-          <MonacoEditor
-            v-if="editType === 'function'"
-            v-model="editValue"
-            language="javascript"
-            height="220px"
-          />
+          <div v-if="isEditorType" class="edit-value-block">
+            <MonacoEditor
+              ref="editValueEditorRef"
+              v-model="editValue"
+              :language="editorLanguage"
+              height="220px"
+              @markers="handleEditValueMarkers"
+            />
+          </div>
           <el-input v-else-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
           <el-input-number
             v-else-if="editType === 'number'"
@@ -388,6 +391,7 @@ const editName = ref("");
 const editType = ref("string");
 const editValue = ref("");
 const editDescription = ref("");
+const editValueEditorRef = ref(null);
 const ROOT_GROUP_ID = "__root__";
 const editGroupId = ref(ROOT_GROUP_ID);
 const mapped = ref(false);
@@ -396,6 +400,7 @@ const mappedField = ref("");
 const dataSources = ref([]);
 const importInputRef = ref(null);
 const importType = ref("json");
+const editValueHasErrors = ref(false);
 
 const groupVisible = ref(false);
 const groupEditMode = ref(false);
@@ -413,10 +418,17 @@ const suffix = ref("");
 const replaceFrom = ref("");
 const replaceTo = ref("");
 
+const isEditorType = computed(() =>
+  ["function", "array", "object", "set", "map"].includes(editType.value)
+);
+const isStructuredType = computed(() =>
+  ["array", "object", "set", "map"].includes(editType.value)
+);
+const editorLanguage = computed(() =>
+  isStructuredType.value ? "json" : "javascript"
+);
 const isTextType = computed(() =>
-  ["string", "array", "object", "regexp", "function", "set", "map"].includes(
-    editType.value
-  )
+  ["string", "regexp"].includes(editType.value)
 );
 
 const groupOptions = computed(() => projectVariableGroups.value || []);
@@ -837,7 +849,43 @@ function parseEditValue(type, value) {
 
 function resetEditValue() {
   editValue.value = defaultEditValue(editType.value);
+  editValueHasErrors.value = false;
 }
+
+const parseStructuredJson = (value, type) => {
+  if (!isStructuredType.value) return { ok: true, parsed: value };
+  if (typeof value !== "string") return { ok: true, parsed: value };
+  try {
+    const parsed = JSON.parse(value);
+    if (type === "array" && !Array.isArray(parsed)) {
+      return { ok: false, error: "数组类型需要 JSON 数组" };
+    }
+    if (type === "object") {
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { ok: false, error: "对象类型需要 JSON 对象" };
+      }
+    }
+    if (type === "set" || type === "map") {
+      if (!Array.isArray(parsed) && (!parsed || typeof parsed !== "object")) {
+        return { ok: false, error: "Set/Map 需要 JSON 数组或对象" };
+      }
+    }
+    return { ok: true, parsed };
+  } catch (error) {
+    return { ok: false, error: "JSON 格式不正确" };
+  }
+};
+
+const validateStructuredValue = () => {
+  if (!isStructuredType.value) return true;
+  const result = parseStructuredJson(editValue.value, editType.value);
+  if (!result.ok) {
+    ElMessage.error(result.error || "校验失败");
+    return false;
+  }
+  return true;
+};
+
 
 const formatValue = (value) => {
   if (value === null || value === undefined) return "";
@@ -934,6 +982,12 @@ async function saveEdit() {
 
   if (mapped.value && !mappedField.value.trim()) {
     return ElMessage.warning("请输入映射字段");
+  }
+  if (editValueHasErrors.value) {
+    return ElMessage.error("初始值存在语法错误，请先修正");
+  }
+  if (isStructuredType.value && !validateStructuredValue()) {
+    return;
   }
 
   const nextVariables = { ...(projectVariables.value || {}) };
@@ -1466,6 +1520,14 @@ const handleFileChange = async (event) => {
   await mergeImportedRows(rows);
 };
 
+const handleEditValueMarkers = (markers) => {
+  if (!isEditorType.value) {
+    editValueHasErrors.value = false;
+    return;
+  }
+  editValueHasErrors.value = (markers || []).some((marker) => marker.severity === 8);
+};
+
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
 });
@@ -1711,5 +1773,18 @@ onUnmounted(() => {
 .context-submenu {
   max-height: 300px;
   overflow-y: auto;
+}
+
+.edit-value-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-value-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

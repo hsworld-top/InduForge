@@ -84,7 +84,16 @@
         </el-select>
       </el-form-item>
       <el-form-item label="初始值">
-        <el-input v-if="isTextType" v-model="formDefaultText" type="textarea" :rows="6" />
+        <div v-if="isEditorType" class="edit-value-block">
+          <MonacoEditor
+            ref="editValueEditorRef"
+            v-model="formDefaultText"
+            :language="editorLanguage"
+            height="220px"
+            @markers="handleEditValueMarkers"
+          />
+        </div>
+        <el-input v-else-if="isTextType" v-model="formDefaultText" type="textarea" :rows="6" />
         <el-input-number
           v-else-if="formType === 'number'"
           v-model="formDefaultNumber"
@@ -120,6 +129,7 @@ import IconEpDelete from "~icons/ep/delete";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpUpload from "~icons/ep/upload";
 import IconEpDownload from "~icons/ep/download";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import * as XLSX from "xlsx";
 
 const editorStore = useEditorStore();
@@ -137,6 +147,8 @@ const formDefaultNumber = ref(0);
 const formDefaultBoolean = ref(false);
 const formDefaultDate = ref(null);
 const formDescription = ref("");
+const editValueEditorRef = ref(null);
+const editValueHasErrors = ref(false);
 const importInputRef = ref(null);
 const importType = ref("json");
 
@@ -153,8 +165,15 @@ const typeOptions = [
   "function",
 ];
 
-const isTextType = computed(() =>
-  ["string", "array", "object", "regexp", "function", "set", "map"].includes(formType.value)
+const isEditorType = computed(() =>
+  ["function", "array", "object", "set", "map"].includes(formType.value)
+);
+const isStructuredType = computed(() =>
+  ["array", "object", "set", "map"].includes(formType.value)
+);
+const isTextType = computed(() => ["string", "regexp"].includes(formType.value));
+const editorLanguage = computed(() =>
+  isStructuredType.value ? "json" : "javascript"
 );
 
 const pageName = computed(() => {
@@ -254,6 +273,58 @@ const resetDefaultValue = () => {
   formDefaultNumber.value = 0;
   formDefaultBoolean.value = false;
   formDefaultDate.value = null;
+  editValueHasErrors.value = false;
+};
+
+const parseStructuredJson = (value, type) => {
+  if (!isStructuredType.value) return { ok: true, parsed: value };
+  if (typeof value !== "string") return { ok: true, parsed: value };
+  try {
+    const parsed = JSON.parse(value);
+    if (type === "array" && !Array.isArray(parsed)) {
+      return { ok: false, error: "数组类型需要 JSON 数组" };
+    }
+    if (type === "object") {
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { ok: false, error: "对象类型需要 JSON 对象" };
+      }
+    }
+    if (type === "set") {
+      if (Array.isArray(parsed)) return { ok: true, parsed };
+      if (parsed && typeof parsed === "object") {
+        return { ok: true, parsed: Object.values(parsed) };
+      }
+      return { ok: false, error: "Set 需要 JSON 数组或对象" };
+    }
+    if (type === "map") {
+      if (Array.isArray(parsed)) return { ok: true, parsed };
+      if (parsed && typeof parsed === "object") {
+        return { ok: true, parsed: Object.entries(parsed) };
+      }
+      return { ok: false, error: "Map 需要 JSON 数组或对象" };
+    }
+    return { ok: true, parsed };
+  } catch (error) {
+    return { ok: false, error: "JSON 格式不正确" };
+  }
+};
+
+const validateStructuredValue = () => {
+  if (!isStructuredType.value) return true;
+  const result = parseStructuredJson(formDefaultText.value, formType.value);
+  if (!result.ok) {
+    ElMessage.error(result.error || "校验失败");
+    return false;
+  }
+  return true;
+};
+
+const handleEditValueMarkers = (markers) => {
+  if (!isEditorType.value) {
+    editValueHasErrors.value = false;
+    return;
+  }
+  editValueHasErrors.value = (markers || []).some((marker) => marker.severity === 8);
 };
 
 /**
@@ -275,8 +346,16 @@ const saveVar = () => {
     ElMessage.warning("变量名已存在");
     return;
   }
+  if (editValueHasErrors.value) {
+    ElMessage.error("初始值存在语法错误，请先修正");
+    return;
+  }
+  if (isStructuredType.value && !validateStructuredValue()) {
+    return;
+  }
 
   const nextVars = { ...pageVars.value };
+  const structured = parseStructuredJson(formDefaultText.value, formType.value);
   const value =
     formType.value === "number"
       ? Number(formDefaultNumber.value)
@@ -284,7 +363,9 @@ const saveVar = () => {
         ? Boolean(formDefaultBoolean.value)
         : formType.value === "date"
           ? formDefaultDate.value
-          : formDefaultText.value;
+          : structured.ok
+            ? structured.parsed
+            : formDefaultText.value;
   if (editMode.value && originalName.value && name !== originalName.value) {
     delete nextVars[originalName.value];
   }
@@ -618,5 +699,18 @@ watch(currentPageId, () => {
   color: var(--el-text-color-secondary);
   text-align: center;
   padding: 16px 0;
+}
+
+.edit-value-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-value-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>
