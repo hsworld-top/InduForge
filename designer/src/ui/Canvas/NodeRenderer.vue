@@ -743,6 +743,24 @@ const resolveMappedGlobalValue = async (name, detail) => {
     return normalizeGlobalValue(detail);
   }
   if (!projectId.value) return normalizeGlobalValue(detail);
+
+  if (source.datapointId || source.sourceType || source.sourceId) {
+    const sourceType = String(source.sourceType || "");
+    if (sourceType.includes("query") && source.sourceId) {
+      const result = await datacenterApi.executeQuery(source.sourceId);
+      const payload = unwrapApiData(result) || result;
+      return payload?.data ?? payload;
+    }
+    if (source.datapointId) {
+      const result = await datacenterApi.getDatapointValues(projectId.value, [
+        source.datapointId,
+      ]);
+      const payload = unwrapApiData(result) || result;
+      const picked = extractDatapointValue(payload, source.datapointId);
+      return picked ?? payload?.data ?? payload;
+    }
+  }
+
   const [sourceName, ...rest] = String(source.path).split(".");
   const field = rest.join(".");
   if (!sourceName || !field) return normalizeGlobalValue(detail);
@@ -871,6 +889,29 @@ const runPreviewScript = async (eventName, event) => {
   } catch (error) {
     console.error("[Preview] Script error:", error);
   }
+};
+
+const extractDatapointValue = (payload, datapointId) => {
+  if (!payload || !datapointId) return null;
+  if (payload.values && typeof payload.values === "object") {
+    if (datapointId in payload.values) return payload.values[datapointId];
+  }
+  if (Array.isArray(payload.values)) {
+    const hit = payload.values.find((item) => item?.id === datapointId);
+    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+  }
+  if (Array.isArray(payload.datapoints)) {
+    const hit = payload.datapoints.find((item) => item?.id === datapointId);
+    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+  }
+  if (Array.isArray(payload)) {
+    const hit = payload.find((item) => item?.id === datapointId);
+    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+  }
+  if (payload && typeof payload === "object" && datapointId in payload) {
+    return payload[datapointId];
+  }
+  return null;
 };
 
 const componentEventListeners = computed(() => {

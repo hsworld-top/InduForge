@@ -193,7 +193,11 @@
           </el-select>
         </el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="editType" @change="resetEditValue">
+          <el-select
+            v-model="editType"
+            :disabled="mapped"
+            @change="resetEditValue"
+          >
             <el-option v-for="t in types" :key="t" :label="t" :value="t" />
           </el-select>
         </el-form-item>
@@ -281,29 +285,22 @@
     >
       <el-form :inline="true" class="quick-form" label-width="60px" size="small">
         <el-row :gutter="12" class="quick-form-row">
-          <el-col :span="6">
-            <el-form-item label="数据源">
-              <el-select v-model="quickDs" placeholder="请选择数据源" @change="loadFields">
-                <el-option v-for="ds in dataSources" :key="ds.id" :label="ds.name" :value="ds" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-form-item label="搜索">
               <el-input v-model="searchKey" placeholder="字段名搜索" />
             </el-form-item>
           </el-col>
-          <el-col :span="3">
+          <el-col :span="4">
             <el-form-item label="前缀">
               <el-input v-model="prefix" placeholder="前缀" />
             </el-form-item>
           </el-col>
-          <el-col :span="3">
+          <el-col :span="4">
             <el-form-item label="后缀">
               <el-input v-model="suffix" placeholder="后缀" />
             </el-form-item>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-form-item label="替换" class="quick-replace">
               <el-input v-model="replaceFrom" placeholder="替换" />
               <span class="quick-arrow">→</span>
@@ -313,10 +310,19 @@
         </el-row>
       </el-form>
 
-      <el-table :data="filteredFields" border height="420" @selection-change="onSelectFields">
+      <el-table
+        :data="filteredFields"
+        border
+        stripe
+        size="small"
+        height="420"
+        v-loading="quickLoading"
+        @selection-change="onSelectFields"
+      >
         <el-table-column type="selection" width="50" />
         <el-table-column prop="name" label="字段名" sortable width="150" />
-        <el-table-column prop="type" label="类型" width="120" sortable />
+        <el-table-column prop="sourceLabel" label="来源" width="120" sortable />
+        <el-table-column prop="typeLabel" label="变量类型" width="120" sortable />
         <el-table-column label="变量名">
           <template #default="{ row }">
             {{ buildVarName(row.name) }}
@@ -328,6 +334,18 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="quick-pagination">
+        <el-pagination
+          background
+          layout="prev, pager, next, sizes, total"
+          :page-size="quickPageSize"
+          :page-sizes="[50, 100, 200, 500]"
+          :total="quickTotal"
+          :current-page="quickPage"
+          @current-change="handleQuickPageChange"
+          @size-change="handleQuickSizeChange"
+        />
+      </div>
 
       <template #footer>
         <el-button @click="quickVisible = false">取消</el-button>
@@ -409,7 +427,6 @@ const groupName = ref("");
 const groupParentId = ref(null);
 
 const quickVisible = ref(false);
-const quickDs = ref(null);
 const fields = ref([]);
 const selectedFields = ref([]);
 const searchKey = ref("");
@@ -417,6 +434,10 @@ const prefix = ref("");
 const suffix = ref("");
 const replaceFrom = ref("");
 const replaceTo = ref("");
+const quickLoading = ref(false);
+const quickPage = ref(1);
+const quickPageSize = ref(200);
+const quickTotal = ref(0);
 
 const isEditorType = computed(() =>
   ["function", "array", "object", "set", "map"].includes(editType.value)
@@ -983,6 +1004,12 @@ async function saveEdit() {
   if (mapped.value && !mappedField.value.trim()) {
     return ElMessage.warning("请输入映射字段");
   }
+  if (mapped.value && selectedVariable.value?.detail?.type) {
+    editType.value = selectedVariable.value.detail.type;
+  }
+  if (mapped.value && selectedVariable.value?.detail?.type) {
+    editType.value = selectedVariable.value.detail.type;
+  }
   if (editValueHasErrors.value) {
     return ElMessage.error("初始值存在语法错误，请先修正");
   }
@@ -1211,52 +1238,65 @@ async function removeGroup() {
 
 async function openQuickAdd() {
   quickVisible.value = true;
-  await loadDataSourcesForMapping();
-  quickDs.value = null;
   fields.value = [];
   selectedFields.value = [];
+  quickPage.value = 1;
+  await loadDatapoints();
 }
 
-async function loadFields(ds) {
-  quickDs.value = ds;
-  if (!ds || !projectId.value) {
+const getDatapointSourceLabel = (sourceType) => {
+  if (!sourceType) return "未知";
+  if (sourceType.includes("query")) return "查询";
+  if (sourceType.includes("subscription")) return "订阅";
+  if (sourceType.includes("tag")) return "订阅";
+  return "数据点";
+};
+
+const normalizeDatapointType = (type) => {
+  const normalized = String(type || "").toLowerCase();
+  if (normalized.includes("int") || normalized.includes("float") || normalized.includes("double") || normalized.includes("decimal") || normalized.includes("number")) {
+    return "number";
+  }
+  if (normalized.includes("bool")) return "boolean";
+  if (normalized.includes("array")) return "array";
+  if (normalized.includes("map")) return "map";
+  if (normalized.includes("set")) return "set";
+  if (normalized.includes("date") || normalized.includes("time")) return "date";
+  if (normalized.includes("object") || normalized.includes("json")) return "object";
+  return "string";
+};
+
+async function loadDatapoints() {
+  if (!projectId.value) {
     fields.value = [];
     return;
   }
-
-  if (ds.type === "relational") {
-    const result = await datacenterApi.getQueries(projectId.value, {
-      connectionId: ds.id,
-      page: 1,
-      limit: 200,
+  quickLoading.value = true;
+  try {
+    const result = await datacenterApi.getDataPoints(projectId.value, {
+      page: quickPage.value,
+      pageSize: quickPageSize.value,
     });
     const data = unwrapApiData(result) || {};
-    const queries = data.queries || data.items || data.list || [];
-    if (!Array.isArray(queries) || queries.length === 0) {
-      ElMessage.warning("未获取到数据查询，请检查数据源或权限");
+    const datapoints = data.datapoints || data.items || data.list || [];
+    const pagination = data.pagination || {};
+    quickTotal.value = Number(pagination.total || datapoints.length || 0);
+    if (!Array.isArray(datapoints) || datapoints.length === 0) {
+      ElMessage.warning("未获取到数据点，请检查数据源或权限");
     }
-    fields.value = queries.map((item) => ({
-      name: item.name || item.id,
-      type: "object",
+    fields.value = datapoints.map((item) => ({
+      id: item.id,
+      name: item.name || item.path || item.id,
+      path: item.path || item.name || item.id,
+      sourceType: item.sourceType || "",
+      sourceId: item.sourceId || "",
+      sourceLabel: getDatapointSourceLabel(item.sourceType),
+      type: normalizeDatapointType(item.dataType || item.type),
+      typeLabel: item.dataType || item.type || "string",
     }));
-    return;
+  } finally {
+    quickLoading.value = false;
   }
-
-  const result = await datacenterApi.getDataPoints(projectId.value, {
-    sourceId: ds.id,
-    pageSize: 200,
-    page: 1,
-  });
-  const data = unwrapApiData(result) || {};
-  const datapoints = data.datapoints || data.items || data.list || [];
-  if (!Array.isArray(datapoints) || datapoints.length === 0) {
-    ElMessage.warning("未获取到数据点，请检查数据源或权限");
-  }
-
-  fields.value = datapoints.map((item) => ({
-    name: item.path || item.name || item.id,
-    type: item.dataType || item.type || "string",
-  }));
 }
 
 const filteredFields = computed(() =>
@@ -1264,6 +1304,17 @@ const filteredFields = computed(() =>
     field.name.toLowerCase().includes(searchKey.value.toLowerCase())
   )
 );
+
+const handleQuickPageChange = (page) => {
+  quickPage.value = page;
+  loadDatapoints();
+};
+
+const handleQuickSizeChange = (size) => {
+  quickPageSize.value = size;
+  quickPage.value = 1;
+  loadDatapoints();
+};
 
 function onSelectFields(rows) {
   selectedFields.value = rows;
@@ -1276,12 +1327,11 @@ function buildVarName(field) {
 }
 
 function buildMappedExpression(field) {
-  if (!quickDs.value) return "";
-  return `${quickDs.value.name}.${field}`;
+  return field || "";
 }
 
 async function confirmQuickAdd() {
-  if (!selectedFields.value.length || !quickDs.value) {
+  if (!selectedFields.value.length) {
     quickVisible.value = false;
     return;
   }
@@ -1293,14 +1343,17 @@ async function confirmQuickAdd() {
     const name = buildVarName(field.name);
     if (nextVariables[name]) return;
 
-    const type = field.type || "string";
+    const type = field.type || "object";
     nextVariables[name] = {
       type,
       default: parseEditValue(type, defaultEditValue(type)),
       mapped: true,
       source: {
         type: "dataCenter",
-        path: buildMappedExpression(field.name),
+        path: buildMappedExpression(field.path),
+        sourceType: field.sourceType || "",
+        sourceId: field.sourceId || "",
+        datapointId: field.id || "",
       },
       groupId: targetGroupId,
     };
@@ -1737,6 +1790,12 @@ onUnmounted(() => {
 .quick-arrow {
   color: #909399;
   flex: 0 0 auto;
+}
+
+.quick-pagination {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .context-menu {

@@ -33,6 +33,7 @@ const emit = defineEmits(["update:modelValue", "change", "markers"]);
 const editorContainerRef = ref(null);
 let editorInstance = null;
 let isInternalUpdate = false;
+let jsFormatterRegistered = false;
 const completionItems = ref(props.completions || []);
 let completionProvider = null;
 let markerTooltipEl = null;
@@ -276,6 +277,50 @@ const registerCompletionProvider = () => {
   );
 };
 
+const buildSemicolonEdits = (model) => {
+  const edits = [];
+  const lineCount = model.getLineCount();
+  for (let lineNumber = 1; lineNumber <= lineCount; lineNumber += 1) {
+    const line = model.getLineContent(lineNumber);
+    if (!line || !line.trim()) continue;
+    const trimmed = line.replace(/\s+$/, "");
+    if (!trimmed) continue;
+    if (/^\s*\/[/*]/.test(trimmed)) continue;
+    if (/[;,{[(]$/.test(trimmed)) continue;
+    if (/=>\s*$/.test(trimmed)) continue;
+    if (/:$/.test(trimmed)) continue;
+    if (
+      /^(if|for|while|switch|catch|function|class|else|try)\b/.test(trimmed) &&
+      /\)\s*$/.test(trimmed)
+    ) {
+      continue;
+    }
+    if (/^\s*(case|default)\b/.test(trimmed)) continue;
+    if (!/[\w)\]"'`]+$/.test(trimmed)) continue;
+
+    const commentIndex = trimmed.indexOf("//");
+    const insertColumn =
+      commentIndex >= 0 ? commentIndex + 1 : trimmed.length + 1;
+    edits.push({
+      range: new monaco.Range(lineNumber, insertColumn, lineNumber, insertColumn),
+      text: ";",
+    });
+  }
+  return edits;
+};
+
+const ensureJsFormatter = () => {
+  if (jsFormatterRegistered) return;
+  jsFormatterRegistered = true;
+  const provider = {
+    provideDocumentFormattingEdits(model) {
+      return buildSemicolonEdits(model);
+    },
+  };
+  monaco.languages.registerDocumentFormattingEditProvider("javascript", provider);
+  monaco.languages.registerDocumentFormattingEditProvider("typescript", provider);
+};
+
 function initEditor() {
   if (!editorContainerRef.value) return;
   if (editorInstance) editorInstance.dispose();
@@ -292,19 +337,29 @@ function initEditor() {
     });
   }
   if (props.language === "javascript" || props.language === "typescript") {
-    const ignoreDiagnostics = [1003, 1108, 1308, 1375, 1378, 1379];
-    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+    const ignoreDiagnostics = [1308, 1375, 1378, 1379, 80007, 80008];
+    const compilerOptions = {
       allowJs: true,
       allowNonTsExtensions: true,
-      target: monaco.languages.typescript.ScriptTarget.ES2020,
+      target: monaco.languages.typescript.ScriptTarget.ES2022,
       module: monaco.languages.typescript.ModuleKind.ESNext,
-      lib: ["es2020", "dom"],
+      lib: ["es2022", "dom"],
       moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
       allowSyntheticDefaultImports: true,
       esModuleInterop: true,
       noEmit: true,
       checkJs: true,
-    });
+    };
+    if (
+      monaco.languages.typescript.ModuleDetectionKind &&
+      typeof monaco.languages.typescript.ModuleDetectionKind.Force !== "undefined"
+    ) {
+      compilerOptions.moduleDetection =
+        monaco.languages.typescript.ModuleDetectionKind.Force;
+    }
+    monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
+      compilerOptions
+    );
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: false,
       noSyntaxValidation: false,
@@ -324,6 +379,7 @@ function initEditor() {
         "declare const $event: any;\n",
       "ts:global-scripts.d.ts"
     );
+    ensureJsFormatter();
   }
 
   editorInstance = monaco.editor.create(editorContainerRef.value, baseOptions());
@@ -355,6 +411,7 @@ function initEditor() {
     emit("change", val);
     requestAnimationFrame(() => (isInternalUpdate = false));
   });
+
 
   const mouseMoveListener = editorInstance.onMouseMove((event) => {
     if (!event?.target?.position) {

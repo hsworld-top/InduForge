@@ -87,10 +87,10 @@ export {
 
 import { VarsStore } from "./VarsStore.js";
 import { ExpressionEngine } from "./ExpressionEngine.js";
-import { MockDataProvider } from "./MockDataProvider.js";
-import { DiagnosticsStore } from "./DiagnosticsStore.js";
-import { DataService } from "./DataService.js";
-import { BindingResolver } from "./BindingResolver.js";
+import { MockDataProvider, createMockDataProvider } from "./MockDataProvider.js";
+import { DiagnosticsStore, createDiagnosticsStore } from "./DiagnosticsStore.js";
+import { DataService, createDataService } from "./DataService.js";
+import { BindingResolver, createBindingResolver } from "./BindingResolver.js";
 
 /**
  * @typedef {import('./types.js').DataMode} DataMode

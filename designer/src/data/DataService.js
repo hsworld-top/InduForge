@@ -84,14 +84,27 @@ export class DataService extends EventEmitter {
     this._setConnectionState("connecting");
 
     const serverUrl = url || this._baseUrl || window.location.origin;
+    const finalUrl = serverUrl.replace(/\/$/, "");
 
     return new Promise((resolve, reject) => {
-      this._socket = io(serverUrl, {
+      this._socket = io(finalUrl, {
         path: this._wsPath,
         transports: ["websocket", "polling"],
         reconnection: this._autoReconnect,
         reconnectionDelay: this._reconnectDelay,
         reconnectionAttempts: this._maxReconnectAttempts,
+        query: (() => {
+          try {
+            const urlObj = new URL(finalUrl);
+            const params = {};
+            for (const [key, value] of urlObj.searchParams.entries()) {
+              params[key] = value;
+            }
+            return params;
+          } catch (error) {
+            return undefined;
+          }
+        })(),
       });
 
       // 连接成功

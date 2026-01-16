@@ -1,12 +1,34 @@
 import { datacenterApi } from "@/services";
+import { DataService } from "@/data";
+import { Storage } from "@/utils/storage";
+import { io } from "socket.io-client";
 
 let runtimeInstance = null;
 const componentRefsByPage = new Map();
 const componentRefsByName = new Map();
+const previewDataServiceState = {
+  service: null,
+  connectPromise: null,
+  projectId: null,
+  subscribed: new Set(),
+  pending: new Map(),
+};
+const previewMqttState = {
+  socket: null,
+  connectPromise: null,
+  projectId: null,
+  tagValues: new Map(),
+  subscriptionValues: new Map(),
+  tagIdToProps: new Map(),
+  subscriptionIdToProps: new Map(),
+  onValueUpdate: null,
+};
 
 const connectionCache = new Map();
 const queryCache = new Map();
 const mappedValueCache = new Map();
+const mappedValuePending = new Map();
+const mappedDetails = new Map();
 
 const unwrapApiData = (payload) => {
   if (payload && typeof payload === "object" && "data" in payload) {
@@ -85,6 +107,26 @@ const normalizeGlobalValue = (detail) => {
   return raw ?? null;
 };
 
+const getApiBase = () => {
+  if (typeof __VITE_API_URL__ !== "undefined" && __VITE_API_URL__) {
+    return __VITE_API_URL__;
+  }
+  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  return "http://localhost:9099";
+};
+
+const buildSocketQuery = (projectId) => {
+  const token = Storage.getToken();
+  const tenantId = Storage.getTenantId();
+  const query = new URLSearchParams();
+  if (projectId) query.set("projectId", projectId);
+  if (token) query.set("token", token);
+  if (tenantId) query.set("tenantId", tenantId);
+  return query;
+};
+
 const resolveConnection = async (projectId, name) => {
   if (connectionCache.has(name)) return connectionCache.get(name);
   if (!projectId) return null;
@@ -118,12 +160,158 @@ const resolveQuery = async (projectId, connectionId, queryName) => {
   return queries.find((item) => item.name === queryName || item.id === queryName) || null;
 };
 
+const ensurePreviewMqttSocket = async (projectId) => {
+  const apiBase = getApiBase();
+  const query = new URLSearchParams();
+  if (projectId) query.set("projectId", projectId);
+  const socketUrl = query.toString() ? `${apiBase}?${query}` : apiBase;
+
+  if (previewMqttState.socket && previewMqttState.projectId === projectId) {
+    if (!previewMqttState.connectPromise) {
+      previewMqttState.connectPromise = new Promise((resolve, reject) => {
+        previewMqttState.socket.once("connect", resolve);
+        previewMqttState.socket.once("connect_error", reject);
+      });
+    }
+    await previewMqttState.connectPromise;
+    return previewMqttState.socket;
+  }
+
+  if (previewMqttState.socket) {
+    previewMqttState.socket.disconnect();
+  }
+
+  const queryParams = (() => {
+    try {
+      const urlObj = new URL(socketUrl);
+      const params = {};
+      for (const [key, value] of urlObj.searchParams.entries()) {
+        params[key] = value;
+      }
+      return params;
+    } catch (error) {
+      return undefined;
+    }
+  })();
+
+  const socket = io(apiBase.replace(/\/$/, ""), {
+    path: "/socket.io",
+    transports: ["websocket", "polling"],
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: Infinity,
+    query: queryParams,
+  });
+
+  previewMqttState.socket = socket;
+  previewMqttState.projectId = projectId;
+  previewMqttState.connectPromise = new Promise((resolve, reject) => {
+    socket.once("connect", resolve);
+    socket.once("connect_error", reject);
+  });
+
+  socket.on("mqtt:tag:value", (data) => {
+    if (!data?.tagId) return;
+    const value = data.value ?? data.parsedValue ?? data.payload;
+    previewMqttState.tagValues.set(data.tagId, value);
+    previewMqttState.onValueUpdate?.("tag", data.tagId, value, data);
+  });
+
+  socket.on("connect", () => {
+    previewMqttState.tagIdToProps.forEach((_props, tagId) => {
+      socket.emit("mqtt:tag:subscribe", { tagId });
+    });
+    previewMqttState.subscriptionIdToProps.forEach((_props, subscriptionId) => {
+      socket.emit("mqtt:subscribe", { subscriptionId });
+    });
+  });
+
+  socket.on("mqtt:message", (data) => {
+    if (!data?.subscriptionId) return;
+    const value = data.payload ?? data.message ?? data.value ?? data;
+    previewMqttState.subscriptionValues.set(data.subscriptionId, value);
+    previewMqttState.onValueUpdate?.("subscription", data.subscriptionId, value, data);
+  });
+
+  await previewMqttState.connectPromise;
+  return socket;
+};
+
+const registerMqttMapping = (prop, detail) => {
+  if (!detail?.mapped || detail?.source?.type !== "dataCenter") return;
+  const sourceType = String(detail?.source?.sourceType || "");
+  const sourceId = detail?.source?.sourceId;
+  if (!sourceId) return;
+  mappedDetails.set(prop, detail);
+  if (sourceType.includes("tag")) {
+    if (!previewMqttState.tagIdToProps.has(sourceId)) {
+      previewMqttState.tagIdToProps.set(sourceId, new Set());
+    }
+    previewMqttState.tagIdToProps.get(sourceId).add(prop);
+  } else if (sourceType.includes("subscription")) {
+    if (!previewMqttState.subscriptionIdToProps.has(sourceId)) {
+      previewMqttState.subscriptionIdToProps.set(sourceId, new Set());
+    }
+    previewMqttState.subscriptionIdToProps.get(sourceId).add(prop);
+  }
+};
+
+const subscribeMqttSource = async (projectId, detail) => {
+  if (!detail?.mapped || detail?.source?.type !== "dataCenter") return;
+  const sourceType = String(detail?.source?.sourceType || "");
+  const sourceId = detail?.source?.sourceId;
+  if (!sourceId) return;
+  const socket = await ensurePreviewMqttSocket(projectId);
+  if (!socket?.connected) return;
+  if (sourceType.includes("tag")) {
+    socket.emit("mqtt:tag:subscribe", { tagId: sourceId });
+  } else if (sourceType.includes("subscription")) {
+    socket.emit("mqtt:subscribe", { subscriptionId: sourceId });
+  }
+};
+
 const resolveMappedGlobalValue = async (projectId, detail) => {
   const source = detail?.source;
   if (!source || source.type !== "dataCenter" || !source.path) {
     return normalizeGlobalValue(detail);
   }
   if (!projectId) return normalizeGlobalValue(detail);
+  const fallbackValue = normalizeGlobalValue(detail);
+
+  if (source.datapointId || source.sourceType || source.sourceId) {
+    const sourceType = String(source.sourceType || "");
+    if (sourceType.includes("query") && source.sourceId) {
+      try {
+        const result = await datacenterApi.executeQuery(source.sourceId);
+        const payload = unwrapApiData(result) || result;
+        const value = payload?.data ?? payload;
+        return value ?? fallbackValue;
+      } catch (error) {
+        return fallbackValue;
+      }
+    }
+    if (sourceType.includes("subscription") || sourceType.includes("tag")) {
+      await subscribeMqttSource(projectId, detail);
+      if (sourceType.includes("tag")) {
+        const value = previewMqttState.tagValues.get(source.sourceId);
+        return value ?? fallbackValue;
+      }
+      const value = previewMqttState.subscriptionValues.get(source.sourceId);
+      return value ?? fallbackValue;
+    }
+    if (source.datapointId) {
+      try {
+        const result = await datacenterApi.getDatapointValues(projectId, [source.datapointId]);
+        const payload = unwrapApiData(result) || result;
+        const picked = extractDatapointValue(payload, source.datapointId);
+        return picked ?? payload?.data ?? payload ?? fallbackValue;
+      } catch (error) {
+        return fallbackValue;
+      }
+    }
+  }
+
   const [sourceName, ...rest] = String(source.path).split(".");
   const field = rest.join(".");
   if (!sourceName || !field) return normalizeGlobalValue(detail);
@@ -134,12 +322,99 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
   if (connection.type === "relational") {
     const query = await resolveQuery(projectId, connection.id, field);
     if (!query) return normalizeGlobalValue(detail);
-    const result = await datacenterApi.executeQuery(query.id);
-    const payload = unwrapApiData(result) || result;
-    return payload?.data ?? payload;
+    try {
+      const result = await datacenterApi.executeQuery(query.id);
+      const payload = unwrapApiData(result) || result;
+      return payload?.data ?? payload ?? fallbackValue;
+    } catch (error) {
+      return fallbackValue;
+    }
   }
 
-  return normalizeGlobalValue(detail);
+  return fallbackValue;
+};
+
+const ensurePreviewDataService = async (projectId) => {
+  const apiBase = getApiBase();
+  const query = buildSocketQuery(projectId);
+  const wsUrl = query.toString() ? `${apiBase}?${query}` : apiBase;
+  if (
+    previewDataServiceState.service &&
+    previewDataServiceState.projectId === projectId
+  ) {
+    if (!previewDataServiceState.connectPromise) {
+      previewDataServiceState.connectPromise =
+        previewDataServiceState.service.connect(wsUrl) || Promise.resolve();
+    }
+    await previewDataServiceState.connectPromise;
+    return previewDataServiceState.service;
+  }
+
+  if (previewDataServiceState.service) {
+    previewDataServiceState.service.destroy();
+  }
+  const service = new DataService({ baseUrl: apiBase });
+  previewDataServiceState.service = service;
+  previewDataServiceState.projectId = projectId;
+  previewDataServiceState.subscribed = new Set();
+  previewDataServiceState.pending = new Map();
+  previewDataServiceState.connectPromise =
+    service.connect(wsUrl) || Promise.resolve();
+  await previewDataServiceState.connectPromise;
+  return service;
+};
+
+const subscribeDatapointPath = (service, path) => {
+  if (!service || !path) return;
+  if (previewDataServiceState.subscribed.has(path)) return;
+  service.subscribe(path, (payload) => {
+    const pending = previewDataServiceState.pending.get(path);
+    if (pending) {
+      pending.resolve(payload.value);
+      previewDataServiceState.pending.delete(path);
+    }
+  });
+  previewDataServiceState.subscribed.add(path);
+};
+
+const getSubscriptionValue = async (projectId, path) => {
+  if (!path) return null;
+  const service = await ensurePreviewDataService(projectId);
+  subscribeDatapointPath(service, path);
+  const cached = service.getValue(path);
+  if (cached !== undefined) return cached;
+  const existing = previewDataServiceState.pending.get(path);
+  if (existing) return existing.promise;
+  let resolver = null;
+  const promise = new Promise((resolve) => {
+    resolver = resolve;
+    setTimeout(() => resolve(null), 2000);
+  });
+  previewDataServiceState.pending.set(path, { promise, resolve: resolver });
+  return promise;
+};
+
+const extractDatapointValue = (payload, datapointId) => {
+  if (!payload || !datapointId) return null;
+  if (payload.values && typeof payload.values === "object") {
+    if (datapointId in payload.values) return payload.values[datapointId];
+  }
+  if (Array.isArray(payload.values)) {
+    const hit = payload.values.find((item) => item?.id === datapointId);
+    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+  }
+  if (Array.isArray(payload.datapoints)) {
+    const hit = payload.datapoints.find((item) => item?.id === datapointId);
+    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+  }
+  if (Array.isArray(payload)) {
+    const hit = payload.find((item) => item?.id === datapointId);
+    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+  }
+  if (payload && typeof payload === "object" && datapointId in payload) {
+    return payload[datapointId];
+  }
+  return null;
 };
 
 const parseParamNames = (value) => {
@@ -155,6 +430,31 @@ export const initPreviewRuntime = (options) => {
   const overrides = new Map();
   const timerIds = new Set();
 
+  const updateMappedValue = (prop, nextValue, detail) => {
+    const fallbackValue = normalizeGlobalValue(detail);
+    const resolvedValue = nextValue ?? fallbackValue;
+    const previous = mappedValueCache.has(prop)
+      ? mappedValueCache.get(prop)
+      : fallbackValue;
+    mappedValueCache.set(prop, resolvedValue);
+    if (previous !== resolvedValue) {
+      triggerVariableChange(prop, resolvedValue, previous);
+    }
+  };
+
+  previewMqttState.onValueUpdate = (type, id, value) => {
+    const detailMap =
+      type === "tag"
+        ? previewMqttState.tagIdToProps
+        : previewMqttState.subscriptionIdToProps;
+    const props = detailMap.get(id);
+    if (!props || props.size === 0) return;
+    props.forEach((prop) => {
+      const detail = projectVariables?.[prop] || mappedDetails.get(prop);
+      updateMappedValue(prop, value, detail);
+    });
+  };
+
   const globalsProxy = new Proxy(
     {},
     {
@@ -164,11 +464,25 @@ export const initPreviewRuntime = (options) => {
         const detail = projectVariables?.[prop];
         if (!detail) return undefined;
         if (detail?.mapped && detail?.source?.type === "dataCenter") {
-          if (!mappedValueCache.has(prop)) {
-            const promise = resolveMappedGlobalValue(projectId, detail).catch(() => null);
-            mappedValueCache.set(prop, promise);
+          registerMqttMapping(prop, detail);
+          if (!mappedValuePending.has(prop)) {
+            mappedValuePending.set(prop, true);
+            resolveMappedGlobalValue(projectId, detail)
+              .then((value) => {
+                updateMappedValue(
+                  prop,
+                  value ?? normalizeGlobalValue(detail),
+                  detail
+                );
+              })
+              .finally(() => {
+                mappedValuePending.delete(prop);
+              });
           }
-          return mappedValueCache.get(prop);
+          if (mappedValueCache.has(prop)) {
+            return mappedValueCache.get(prop);
+          }
+          return normalizeGlobalValue(detail);
         }
         return normalizeGlobalValue(detail);
       },
@@ -366,6 +680,27 @@ export const getPreviewRuntime = () => runtimeInstance;
 export const clearPreviewRuntime = () => {
   runtimeInstance = null;
   mappedValueCache.clear();
+  mappedValuePending.clear();
+  mappedDetails.clear();
   componentRefsByPage.clear();
   componentRefsByName.clear();
+  if (previewDataServiceState.service) {
+    previewDataServiceState.service.destroy();
+  }
+  previewDataServiceState.service = null;
+  previewDataServiceState.connectPromise = null;
+  previewDataServiceState.projectId = null;
+  previewDataServiceState.subscribed.clear();
+  previewDataServiceState.pending.clear();
+  if (previewMqttState.socket) {
+    previewMqttState.socket.disconnect();
+  }
+  previewMqttState.socket = null;
+  previewMqttState.connectPromise = null;
+  previewMqttState.projectId = null;
+  previewMqttState.tagValues.clear();
+  previewMqttState.subscriptionValues.clear();
+  previewMqttState.tagIdToProps.clear();
+  previewMqttState.subscriptionIdToProps.clear();
+  previewMqttState.onValueUpdate = null;
 };
