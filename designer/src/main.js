@@ -26,6 +26,17 @@ app.use(ElementPlus);
 
 app.mount('#app');
 
+const initialLoading = document.getElementById('app-loading');
+if (initialLoading) {
+    if (window.location.pathname.includes('/preview')) {
+        initialLoading.remove();
+    } else {
+        requestAnimationFrame(() => {
+            initialLoading.remove();
+        });
+    }
+}
+
 /**
  * 处理来自父窗口的主题更新消息。
  * @param {MessageEvent} event - 消息事件

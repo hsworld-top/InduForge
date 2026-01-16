@@ -5,9 +5,91 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>数据中心</title>
+    <style>
+      .app-initial-loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at 30% 20%, rgba(14, 165, 233, 0.12), rgba(15, 23, 42, 0.2));
+        font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+        z-index: 9999;
+      }
+      .app-initial-loading .loading-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 22px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #ffffff, #f0f9ff);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.2);
+      }
+      .app-initial-loading .loading-mark {
+        position: relative;
+        width: 36px;
+        height: 36px;
+      }
+      .app-initial-loading .loading-ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 3px solid rgba(14, 165, 233, 0.2);
+        border-top-color: #0ea5e9;
+        animation: loading-spin 0.9s linear infinite;
+      }
+      .app-initial-loading .loading-dot {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #0ea5e9;
+        top: 2px;
+        left: 50%;
+        transform: translateX(-50%);
+        animation: loading-pulse 1.2s ease-in-out infinite;
+      }
+      .app-initial-loading .loading-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+      .app-initial-loading .loading-subtitle {
+        font-size: 12px;
+        color: #64748b;
+      }
+      @keyframes loading-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes loading-pulse {
+        0%,
+        100% {
+          transform: translateX(-50%) scale(0.9);
+          opacity: 0.6;
+        }
+        50% {
+          transform: translateX(-50%) scale(1.15);
+          opacity: 1;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="app-loading" class="app-initial-loading">
+      <div class="loading-card">
+        <div class="loading-mark">
+          <div class="loading-ring"></div>
+          <div class="loading-dot"></div>
+        </div>
+        <div class="loading-content">
+          <div class="loading-title">数据中心加载中</div>
+          <div class="loading-subtitle">正在连接数据服务...</div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

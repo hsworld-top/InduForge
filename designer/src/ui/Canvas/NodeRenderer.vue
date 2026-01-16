@@ -293,7 +293,7 @@ const fallbackCarouselItems = [
  * @returns {Array}
  */
 const normalizeOptions = (source, fallback) => {
-  if (Array.isArray(source) && source.length > 0) return source;
+  if (Array.isArray(source)) return source;
   return fallback;
 };
 
@@ -996,22 +996,121 @@ const buildRefInfo = () => {
         style: { ...(node.value.style || {}), ...patch },
       });
     },
-    setText: (text) => {
-      const value = String(text ?? "");
-      if (props.readonly) {
-        const propsPatch = { text: value };
-        if (node.value?.type === "Card" || node.value?.type === "BusinessCard") {
-          propsPatch.content = value;
+      setText: (text) => {
+        const value = String(text ?? "");
+        if (props.readonly) {
+          const propsPatch = { text: value };
+          if (node.value?.type === "Card" || node.value?.type === "BusinessCard") {
+            propsPatch.content = value;
+          }
+          applyPreviewPatch({ props: propsPatch });
+          return;
         }
-        applyPreviewPatch({ props: propsPatch });
-        return;
-      }
-      editorStore.updateNode(node.value.id, {
-        props: { ...(node.value.props || {}), text: value },
-      });
-    },
+        editorStore.updateNode(node.value.id, {
+          props: { ...(node.value.props || {}), text: value },
+        });
+      },
+      setTableHeader: (columns) => {
+        if (columns && typeof columns.then === "function") {
+          columns.then((resolved) => {
+            refInfo.setTableHeader(resolved);
+          });
+          return;
+        }
+        let input = columns;
+        if (input && typeof input === "object" && !Array.isArray(input)) {
+          if (Array.isArray(input.columns)) {
+            input = input.columns;
+          } else if (Array.isArray(input.data)) {
+            input = input.data;
+          }
+        }
+        if (!Array.isArray(input)) return;
+        const normalized = input
+          .map((item) => {
+            if (item && typeof item === "object") {
+              const label = item.label ?? item.title ?? item.name ?? item.prop;
+              const prop = item.prop ?? item.field ?? item.key ?? item.name ?? item.label;
+              return { ...item, label, prop };
+            }
+            if (typeof item === "string") {
+              return { label: item, prop: item };
+            }
+            return null;
+          })
+          .filter(Boolean);
+        if (props.readonly) {
+          applyPreviewPatch({ props: { columns: normalized } });
+          return;
+        }
+        editorStore.updateNode(node.value.id, {
+          props: { ...(node.value.props || {}), columns: normalized },
+        });
+      },
+      setTableData: (data, header) => {
+        if (!data) return;
+        if (data && typeof data.then === "function") {
+          data.then((resolved) => {
+            refInfo.setTableData(resolved, header);
+          });
+          return;
+        }
+        let rows = data;
+        let columns = header || null;
+        if (rows && typeof rows === "object" && !Array.isArray(rows)) {
+          if (Array.isArray(rows.rows)) {
+            rows = rows.rows;
+          } else if (Array.isArray(rows.data)) {
+            rows = rows.data;
+          }
+          if (Array.isArray(rows.columns)) {
+            columns = rows.columns;
+          } else if (Array.isArray(data.columns)) {
+            columns = data.columns;
+          }
+        }
+        if (!Array.isArray(rows)) return;
+        const normalizeColumns = (input) => {
+          if (!Array.isArray(input)) return [];
+          return input
+            .map((item) => {
+              if (item && typeof item === "object") {
+                const label = item.label ?? item.title ?? item.name ?? item.prop;
+                const prop = item.prop ?? item.field ?? item.key ?? item.name ?? item.label;
+                return { ...item, label, prop };
+              }
+              if (typeof item === "string") {
+                return { label: item, prop: item };
+              }
+              return null;
+            })
+            .filter(Boolean);
+        };
+        const normalizedColumns = normalizeColumns(
+          columns || node.value?.props?.columns || []
+        );
+        const normalizedData = Array.isArray(rows) && Array.isArray(rows[0])
+          ? rows.map((row) => {
+              if (!Array.isArray(row)) return row;
+              if (normalizedColumns.length === 0) return row;
+              const next = {};
+              normalizedColumns.forEach((col, index) => {
+                const key = col.prop ?? col.label ?? `col${index}`;
+                next[key] = row[index];
+              });
+              return next;
+            })
+          : rows;
+        if (props.readonly) {
+          applyPreviewPatch({ props: { data: normalizedData } });
+          return;
+        }
+        editorStore.updateNode(node.value.id, {
+          props: { ...(node.value.props || {}), data: normalizedData },
+        });
+      },
+    };
   };
-};
 
 const tryRegisterPreviewRef = (pageIdValue) => {
   if (!props.readonly || !node.value?.label) return false;

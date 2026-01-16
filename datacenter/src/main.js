@@ -23,5 +23,12 @@ app.use(ElementPlus);
 
 app.mount("#app");
 
+const initialLoading = document.getElementById("app-loading");
+if (initialLoading) {
+  requestAnimationFrame(() => {
+    initialLoading.remove();
+  });
+}
+
 // 初始化消息处理器（用于与Designer通信）
 initMessageHandler();

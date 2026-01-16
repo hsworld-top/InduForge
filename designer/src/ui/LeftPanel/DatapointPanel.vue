@@ -1,5 +1,4 @@
-﻿
-<template>
+﻿<template>
   <div class="global-vars">
     <div class="toolbar">
       <el-button
@@ -8,7 +7,7 @@
         @click="openQuickAdd"
       >
         <IconEpLink class="toolbar-icon" />
-        快速添加数据中心变量
+        快速添加数据点
       </el-button>
       <el-dropdown @command="handleExport">
         <el-button class="toolbar-button" size="small">
@@ -62,7 +61,10 @@
         <template #default="{ data }">
           <div
             class="tree-node"
-            :class="[{ 'is-selected': isNodeSelected(data) }, `node-${data.type}`]"
+            :class="[
+              { 'is-selected': isNodeSelected(data) },
+              `node-${data.type}`,
+            ]"
             @click.stop="(event) => handleNodeClick(data, event)"
           >
             <el-icon
@@ -76,7 +78,10 @@
               <IconEpLink v-else-if="data.meta?.mapped" />
               <IconEpEditPen v-else />
             </el-icon>
-            <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+            <span
+              class="node-label"
+              :class="{ 'is-group': data.type === 'group' }"
+            >
               {{ data.label }}
             </span>
             <span v-if="data.type === 'variable'" class="node-meta">
@@ -97,9 +102,15 @@
       @mousedown.stop
     >
       <template v-if="contextMenuNode?.type === 'blank'">
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建分组</div>
-        <div class="context-menu-item" @click="openCreateFromMenu">新增变量</div>
-        <div class="context-menu-item" @click="openQuickAddFromMenu">快速添加</div>
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">
+          新建分组
+        </div>
+        <div class="context-menu-item" @click="openCreateFromMenu">
+          新增变量
+        </div>
+        <div class="context-menu-item" @click="openQuickAddFromMenu">
+          快速添加
+        </div>
         <div
           class="context-menu-item"
           :class="{ 'is-disabled': !varClipboard }"
@@ -117,7 +128,10 @@
           编辑变量
         </div>
         <div class="context-menu-item" @click="copyVar">复制</div>
-        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">
+        <div
+          class="context-menu-item"
+          @click="showMoveToMenu = !showMoveToMenu"
+        >
           移动到
         </div>
         <div
@@ -139,7 +153,10 @@
         <div class="context-menu-item" @click="openGroupCreateFromMenu">
           新建子分组
         </div>
-        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">
+        <div
+          class="context-menu-item"
+          @click="showMoveToMenu = !showMoveToMenu"
+        >
           移动到
         </div>
         <div
@@ -207,11 +224,16 @@
               ref="editValueEditorRef"
               v-model="editValue"
               :language="editorLanguage"
-              height="220px"
+              height="136px"
               @markers="handleEditValueMarkers"
             />
           </div>
-          <el-input v-else-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
+          <el-input
+            v-else-if="isTextType"
+            v-model="editValue"
+            type="textarea"
+            :rows="6"
+          />
           <el-input-number
             v-else-if="editType === 'number'"
             v-model="editValue"
@@ -232,13 +254,11 @@
           <el-switch v-model="mapped" />
         </el-form-item>
         <template v-if="mapped">
-          <el-form-item label="数据源">
-            <el-select v-model="mappedDs">
-              <el-option v-for="ds in dataSources" :key="ds.id" :label="ds.name" :value="ds" />
-            </el-select>
+          <el-form-item label="路径">
+            <el-input v-model="mappedField" disabled />
           </el-form-item>
-          <el-form-item label="字段">
-            <el-input v-model="mappedField" />
+          <el-form-item label="来源">
+            <el-input v-model="mappedSourceLabel" disabled />
           </el-form-item>
         </template>
       </el-form>
@@ -278,12 +298,18 @@
 
     <el-dialog
       v-model="quickVisible"
-      title="快速添加数据源变量"
-      width="900px"
+      title="快速添加数据点"
+      width="1100px"
+      top="3vh"
       :close-on-click-modal="false"
       :lock-scroll="false"
     >
-      <el-form :inline="true" class="quick-form" label-width="60px" size="small">
+      <el-form
+        :inline="true"
+        class="quick-form"
+        label-width="60px"
+        size="small"
+      >
         <el-row :gutter="12" class="quick-form-row">
           <el-col :span="8">
             <el-form-item label="搜索">
@@ -315,24 +341,21 @@
         border
         stripe
         size="small"
-        height="420"
+        height="520"
         v-loading="quickLoading"
         @selection-change="onSelectFields"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column prop="name" label="字段名" sortable width="150" />
-        <el-table-column prop="sourceLabel" label="来源" width="120" sortable />
-        <el-table-column prop="typeLabel" label="变量类型" width="120" sortable />
-        <el-table-column label="变量名">
+        <el-table-column label="变量名" min-width="160">
           <template #default="{ row }">
             {{ buildVarName(row.name) }}
           </template>
         </el-table-column>
-        <el-table-column label="映射">
-          <template #default="{ row }">
-            {{ buildMappedExpression(row.name) }}
-          </template>
-        </el-table-column>
+        <el-table-column prop="name" label="数据点名称" sortable width="150" />
+        <el-table-column prop="path" label="路径" min-width="220" />
+        <el-table-column prop="typeLabel" label="类型" width="110" sortable />
+        <el-table-column prop="sourceLabel" label="来源" width="120" sortable />
+        <el-table-column prop="updatedAtLabel" label="更新时间" width="160" />
       </el-table>
       <div class="quick-pagination">
         <el-pagination
@@ -362,6 +385,8 @@ import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { datacenterApi } from "@/services";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import dayjs from "dayjs";
+import { TIME_FORMAT } from "@/constants";
 import * as XLSX from "xlsx";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
@@ -370,7 +395,8 @@ import IconEpUpload from "~icons/ep/upload";
 import IconEpDownload from "~icons/ep/download";
 
 const editorStore = useEditorStore();
-const { projectId, projectVariables, projectVariableGroups } = storeToRefs(editorStore);
+const { projectId, projectVariables, projectVariableGroups } =
+  storeToRefs(editorStore);
 const maxGroupDepth = 5;
 
 const types = [
@@ -413,9 +439,9 @@ const editValueEditorRef = ref(null);
 const ROOT_GROUP_ID = "__root__";
 const editGroupId = ref(ROOT_GROUP_ID);
 const mapped = ref(false);
-const mappedDs = ref(null);
 const mappedField = ref("");
 const dataSources = ref([]);
+const mappedSourceLabel = ref("");
 const importInputRef = ref(null);
 const importType = ref("json");
 const editValueHasErrors = ref(false);
@@ -457,7 +483,8 @@ const groupOptions = computed(() => projectVariableGroups.value || []);
 const groupParentOptions = computed(() => {
   if (!groupEditMode.value) return groupOptions.value;
   return groupOptions.value.filter(
-    (group) => group.id !== groupId.value && !isDescendantGroup(group.id, groupId.value)
+    (group) =>
+      group.id !== groupId.value && !isDescendantGroup(group.id, groupId.value)
   );
 });
 
@@ -472,7 +499,9 @@ const selectedVariable = computed(() => {
 const selectedGroup = computed(() => {
   if (selectedNode.value?.type !== "group") return null;
   return (
-    projectVariableGroups.value?.find((group) => group.id === selectedNode.value.id) || null
+    projectVariableGroups.value?.find(
+      (group) => group.id === selectedNode.value.id
+    ) || null
   );
 });
 
@@ -480,7 +509,8 @@ const selectedGroupId = computed(() => {
   const groupNode = selectedNodes.value.find((node) => node.type === "group");
   if (groupNode?.id) return groupNode.id;
   if (selectedGroup.value?.id) return selectedGroup.value.id;
-  if (selectedVariable.value?.detail?.groupId) return selectedVariable.value.detail.groupId;
+  if (selectedVariable.value?.detail?.groupId)
+    return selectedVariable.value.detail.groupId;
   return null;
 });
 
@@ -511,7 +541,8 @@ const availableGroups = computed(() => {
   const groups = projectVariableGroups.value || [];
   if (!current || current.type !== "group") return groups;
   return groups.filter(
-    (group) => group.id !== current.id && !isDescendantGroup(group.id, current.id)
+    (group) =>
+      group.id !== current.id && !isDescendantGroup(group.id, current.id)
   );
 });
 
@@ -536,7 +567,12 @@ function buildTree(groups, variables) {
   const roots = [];
 
   groups.forEach((group) => {
-    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+    groupMap.set(group.id, {
+      id: group.id,
+      label: group.name,
+      type: "group",
+      children: [],
+    });
   });
 
   groupMap.forEach((node, id) => {
@@ -556,7 +592,8 @@ function buildTree(groups, variables) {
       name,
       meta: {
         ...detail,
-        mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+        mapped:
+          detail?.source?.type === "dataCenter" || detail?.mapped === true,
       },
     };
     const groupIdValue = detail?.groupId;
@@ -577,7 +614,9 @@ function handleNodeClick(data, event) {
   const isCtrl = Boolean(event?.ctrlKey || event?.metaKey);
   if (isCtrl) {
     if (isNodeSelected(data)) {
-      selectedNodes.value = selectedNodes.value.filter((node) => node.id !== data.id);
+      selectedNodes.value = selectedNodes.value.filter(
+        (node) => node.id !== data.id
+      );
     } else {
       selectedNodes.value = [...selectedNodes.value, data];
     }
@@ -719,9 +758,14 @@ function allowDrop(draggingNode, dropNode, type) {
 
   if (dragData.type === "group") {
     if (type === "inner" && dropData.type !== "group") return false;
-    if (dropData.type === "group" && isDescendantGroup(dropData.id, dragData.id)) return false;
+    if (
+      dropData.type === "group" &&
+      isDescendantGroup(dropData.id, dragData.id)
+    )
+      return false;
     if (type === "inner") {
-      const depth = getGroupDepth(dropData.id) + getGroupSubtreeDepth(dragData.id);
+      const depth =
+        getGroupDepth(dropData.id) + getGroupSubtreeDepth(dragData.id);
       return depth <= maxGroupDepth;
     }
     return true;
@@ -848,12 +892,14 @@ function parseEditValue(type, value) {
         if (type === "array") return Array.isArray(parsed) ? parsed : [];
         if (type === "set") {
           if (Array.isArray(parsed)) return parsed;
-          if (parsed && typeof parsed === "object") return Object.values(parsed);
+          if (parsed && typeof parsed === "object")
+            return Object.values(parsed);
           return [];
         }
         if (type === "map") {
           if (Array.isArray(parsed)) return parsed;
-          if (parsed && typeof parsed === "object") return Object.entries(parsed);
+          if (parsed && typeof parsed === "object")
+            return Object.entries(parsed);
           return [];
         }
         if (parsed && typeof parsed === "object") return parsed;
@@ -907,7 +953,6 @@ const validateStructuredValue = () => {
   return true;
 };
 
-
 const formatValue = (value) => {
   if (value === null || value === undefined) return "";
   if (value instanceof Set) {
@@ -958,8 +1003,8 @@ async function openCreate() {
   editDescription.value = "";
   editGroupId.value = selectedGroupId.value || ROOT_GROUP_ID;
   mapped.value = false;
-  mappedDs.value = null;
   mappedField.value = "";
+  mappedSourceLabel.value = "";
   await loadDataSourcesForMapping();
   editVisible.value = true;
 }
@@ -983,11 +1028,13 @@ async function openEdit() {
   if (mapped.value) {
     const path = selectedVariable.value.detail?.source?.path || "";
     const [dsName, ...rest] = String(path).split(".");
-    mappedDs.value = dataSources.value.find((ds) => ds.name === dsName) || null;
-    mappedField.value = rest.join(".") || path;
+    mappedField.value = path;
+    mappedSourceLabel.value = getDatapointSourceLabel(
+      selectedVariable.value.detail?.source?.sourceType || ""
+    );
   } else {
-    mappedDs.value = null;
     mappedField.value = "";
+    mappedSourceLabel.value = "";
   }
   editVisible.value = true;
 }
@@ -1023,7 +1070,8 @@ async function saveEdit() {
   }
 
   const value = parseEditValue(editType.value, editValue.value);
-  const groupIdValue = editGroupId.value === ROOT_GROUP_ID ? null : editGroupId.value;
+  const groupIdValue =
+    editGroupId.value === ROOT_GROUP_ID ? null : editGroupId.value;
   const next = {
     type: editType.value,
     default: value,
@@ -1034,14 +1082,15 @@ async function saveEdit() {
     next.description = editDescription.value;
   }
 
-  if (mapped.value && (mappedField.value || mappedDs.value)) {
-    const sourcePath = mappedDs.value
-      ? `${mappedDs.value.name}.${mappedField.value}`
-      : mappedField.value;
+  if (mapped.value && mappedField.value) {
+    const sourcePath = mappedField.value;
     next.mapped = true;
     next.source = {
       type: "dataCenter",
       path: sourcePath,
+      sourceType: selectedVariable.value?.detail?.source?.sourceType || "",
+      sourceId: selectedVariable.value?.detail?.source?.sourceId || "",
+      datapointId: selectedVariable.value?.detail?.source?.datapointId || "",
     };
   }
 
@@ -1073,7 +1122,8 @@ async function removeVar() {
     if (count > 1) {
       message = `确定删除选中的 ${count} 项吗？`;
     } else if (groupsToRemove.length === 1 && variablesToRemove.length === 0) {
-      const name = selectedNodes.value.find((node) => node.type === "group")?.label || "";
+      const name =
+        selectedNodes.value.find((node) => node.type === "group")?.label || "";
       message = `确定删除分组 "${name}" 吗？分组内成员会移动到父级。`;
     }
     await ElMessageBox.confirm(message, "确认删除", {
@@ -1126,7 +1176,10 @@ function copyVar() {
   if (contextMenuVisible.value) closeContextMenu();
   const selectedVars = selectedNodes.value
     .filter((node) => node.type === "variable")
-    .map((node) => ({ name: node.name, detail: projectVariables.value?.[node.name] }));
+    .map((node) => ({
+      name: node.name,
+      detail: projectVariables.value?.[node.name],
+    }));
   if (!selectedVars.length && selectedVariable.value) {
     selectedVars.push({
       name: selectedVariable.value.name,
@@ -1180,7 +1233,10 @@ function openGroupCreate() {
   groupId.value = "";
   groupName.value = "";
   groupParentId.value = selectedGroup.value?.id || null;
-  if (groupParentId.value && getGroupDepth(groupParentId.value) >= maxGroupDepth) {
+  if (
+    groupParentId.value &&
+    getGroupDepth(groupParentId.value) >= maxGroupDepth
+  ) {
     ElMessage.warning(`分组最多支持 ${maxGroupDepth} 层`);
     groupParentId.value = null;
   }
@@ -1254,7 +1310,13 @@ const getDatapointSourceLabel = (sourceType) => {
 
 const normalizeDatapointType = (type) => {
   const normalized = String(type || "").toLowerCase();
-  if (normalized.includes("int") || normalized.includes("float") || normalized.includes("double") || normalized.includes("decimal") || normalized.includes("number")) {
+  if (
+    normalized.includes("int") ||
+    normalized.includes("float") ||
+    normalized.includes("double") ||
+    normalized.includes("decimal") ||
+    normalized.includes("number")
+  ) {
     return "number";
   }
   if (normalized.includes("bool")) return "boolean";
@@ -1262,8 +1324,16 @@ const normalizeDatapointType = (type) => {
   if (normalized.includes("map")) return "map";
   if (normalized.includes("set")) return "set";
   if (normalized.includes("date") || normalized.includes("time")) return "date";
-  if (normalized.includes("object") || normalized.includes("json")) return "object";
+  if (normalized.includes("object") || normalized.includes("json"))
+    return "object";
   return "string";
+};
+
+const formatDatapointTime = (value) => {
+  if (!value) return "";
+  const date = dayjs(value);
+  if (!date.isValid()) return String(value);
+  return date.format(TIME_FORMAT);
 };
 
 async function loadDatapoints() {
@@ -1293,6 +1363,7 @@ async function loadDatapoints() {
       sourceLabel: getDatapointSourceLabel(item.sourceType),
       type: normalizeDatapointType(item.dataType || item.type),
       typeLabel: item.dataType || item.type || "string",
+      updatedAtLabel: formatDatapointTime(item.updated_at || item.updatedAt),
     }));
   } finally {
     quickLoading.value = false;
@@ -1322,7 +1393,8 @@ function onSelectFields(rows) {
 
 function buildVarName(field) {
   let name = field;
-  if (replaceFrom.value) name = name.replace(replaceFrom.value, replaceTo.value);
+  if (replaceFrom.value)
+    name = name.replace(replaceFrom.value, replaceTo.value);
   return `${prefix.value}${name}${suffix.value}`;
 }
 
@@ -1489,7 +1561,9 @@ const mergeImportedDefinitions = async (definitions, groups) => {
 
   Object.entries(definitions || {}).forEach(([name, detail]) => {
     if (nextVariables[name]) return;
-    const groupPath = detail?.groupId ? importedPathMap.get(detail.groupId) || "" : "";
+    const groupPath = detail?.groupId
+      ? importedPathMap.get(detail.groupId) || ""
+      : "";
     const groupIdValue = ensureGroupPath(nextGroups, groupPath);
     nextVariables[name] = {
       ...detail,
@@ -1527,7 +1601,11 @@ const handleExport = async (format) => {
     return;
   }
   const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-  downloadBlob(buffer, "project-variables.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  downloadBlob(
+    buffer,
+    "project-variables.xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
 };
 
 const handleImport = (format) => {
@@ -1547,8 +1625,15 @@ const handleFileChange = async (event) => {
     const text = await file.text();
     try {
       const data = JSON.parse(text);
-      if (data && typeof data === "object" && (data.definitions || data.groups)) {
-        await mergeImportedDefinitions(data.definitions || {}, data.groups || []);
+      if (
+        data &&
+        typeof data === "object" &&
+        (data.definitions || data.groups)
+      ) {
+        await mergeImportedDefinitions(
+          data.definitions || {},
+          data.groups || []
+        );
         return;
       }
       if (Array.isArray(data)) {
@@ -1569,7 +1654,9 @@ const handleFileChange = async (event) => {
     ElMessage.error("文件中没有数据表");
     return;
   }
-  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    defval: "",
+  });
   await mergeImportedRows(rows);
 };
 
@@ -1578,7 +1665,9 @@ const handleEditValueMarkers = (markers) => {
     editValueHasErrors.value = false;
     return;
   }
-  editValueHasErrors.value = (markers || []).some((marker) => marker.severity === 8);
+  editValueHasErrors.value = (markers || []).some(
+    (marker) => marker.severity === 8
+  );
 };
 
 onMounted(() => {
@@ -1705,7 +1794,11 @@ onUnmounted(() => {
 }
 
 .tree-node.is-selected {
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.14), rgba(59, 130, 246, 0.06));
+  background: linear-gradient(
+    90deg,
+    rgba(59, 130, 246, 0.14),
+    rgba(59, 130, 246, 0.06)
+  );
   color: #1d4ed8;
   border: 1px solid rgba(59, 130, 246, 0.18);
   box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);

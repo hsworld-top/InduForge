@@ -39,6 +39,7 @@ let completionProvider = null;
 let markerTooltipEl = null;
 let latestMarkers = [];
 let extraLibDisposable = null;
+let prettierReady = null;
 
 const runEditorAction = async (id) => {
   const action = editorInstance?.getAction(id);
@@ -309,16 +310,84 @@ const buildSemicolonEdits = (model) => {
   return edits;
 };
 
+const loadPrettier = async () => {
+  if (prettierReady) return prettierReady;
+  prettierReady = Promise.all([
+    import("prettier/standalone"),
+    import("prettier/parser-babel"),
+  ])
+    .then(([prettier, parserBabel]) => ({
+      format: prettier.format,
+      plugins: [parserBabel.default || parserBabel],
+    }))
+    .catch(() => null);
+  return prettierReady;
+};
+
+const formatWithPrettier = async (code, language) => {
+  const prettier = await loadPrettier();
+  if (!prettier) return null;
+  const parser = language === "typescript" ? "babel-ts" : "babel";
+  try {
+    return prettier.format(code, {
+      parser,
+      plugins: prettier.plugins,
+      semi: true,
+      singleQuote: true,
+      trailingComma: "all",
+      printWidth: 100,
+      tabWidth: 2,
+    });
+  } catch (error) {
+    return null;
+  }
+};
+
 const ensureJsFormatter = () => {
   if (jsFormatterRegistered) return;
   jsFormatterRegistered = true;
   const provider = {
-    provideDocumentFormattingEdits(model) {
+    async provideDocumentFormattingEdits(model) {
+      const languageId = model.getLanguageId?.() || props.language;
+      const code = model.getValue();
+      const formatted = await formatWithPrettier(code, languageId);
+      if (formatted && formatted !== code) {
+        return [
+          {
+            range: model.getFullModelRange(),
+            text: formatted,
+          },
+        ];
+      }
       return buildSemicolonEdits(model);
     },
   };
   monaco.languages.registerDocumentFormattingEditProvider("javascript", provider);
   monaco.languages.registerDocumentFormattingEditProvider("typescript", provider);
+};
+
+const applyFormatEdits = async () => {
+  if (!editorInstance) return false;
+  const model = editorInstance.getModel();
+  if (!model) return false;
+  const languageId = model.getLanguageId?.() || props.language;
+  if (languageId !== "javascript" && languageId !== "typescript") return false;
+  const code = model.getValue();
+  const formatted = await formatWithPrettier(code, languageId);
+  if (formatted && formatted !== code) {
+    editorInstance.pushUndoStop();
+    editorInstance.executeEdits("format", [
+      { range: model.getFullModelRange(), text: formatted },
+    ]);
+    editorInstance.pushUndoStop();
+    return true;
+  }
+  const edits = buildSemicolonEdits(model);
+  if (!edits.length) return true;
+  editorInstance.pushUndoStop();
+  editorInstance.executeEdits("format", edits);
+  editorInstance.pushUndoStop();
+  return true;
 };
 
 function initEditor() {
@@ -337,7 +406,7 @@ function initEditor() {
     });
   }
   if (props.language === "javascript" || props.language === "typescript") {
-    const ignoreDiagnostics = [1308, 1375, 1378, 1379, 80007, 80008];
+    const ignoreDiagnostics = [1003, 1308, 1375, 1378, 1379, 2391, 80007, 80008];
     const compilerOptions = {
       allowJs: true,
       allowNonTsExtensions: true,
@@ -385,6 +454,26 @@ function initEditor() {
   editorInstance = monaco.editor.create(editorContainerRef.value, baseOptions());
   applyTheme(props.theme);
   registerCompletionProvider();
+  const runFormatCommand = () => {
+    void runEditorAction("editor.action.formatDocument").then((ok) => {
+      if (!ok) void applyFormatEdits();
+    });
+  };
+  editorInstance.addAction({
+    id: "format-document",
+    label: "格式化文档",
+    keybindings: [
+      monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
+    ],
+    run: () => runFormatCommand(),
+  });
+  editorInstance.onKeyDown((event) => {
+    if (event.shiftKey && event.altKey && event.keyCode === monaco.KeyCode.KeyF) {
+      event.preventDefault();
+      event.stopPropagation();
+      runFormatCommand();
+    }
+  });
   const markerListener = monaco.editor.onDidChangeMarkers((uris) => {
     const model = editorInstance?.getModel();
     if (!model) return;
@@ -523,7 +612,7 @@ defineExpose({
       editorInstance.trigger("format", "editor.action.formatDocument");
       return true;
     } catch (error) {
-      return false;
+      return applyFormatEdits();
     }
   },
   getValue: () => editorInstance?.getValue() ?? "",
@@ -556,7 +645,7 @@ defineExpose({
 <style scoped>
 .monaco-editor-container {
   width: 100%;
-  min-height: 200px;
+  min-height: 0;
   border: 1px solid #e4e7ed;
   border-radius: 4px;
   overflow: hidden;
