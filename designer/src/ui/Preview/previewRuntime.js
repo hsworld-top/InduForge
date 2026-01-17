@@ -19,6 +19,8 @@ const previewMqttState = {
   projectId: null,
   tagValues: new Map(),
   subscriptionValues: new Map(),
+  datapointValues: new Map(),
+  datapointSubscribed: new Set(),
   tagIdToProps: new Map(),
   subscriptionIdToProps: new Map(),
   onValueUpdate: null,
@@ -268,6 +270,13 @@ const ensurePreviewMqttSocket = async (projectId) => {
     previewMqttState.onValueUpdate?.("subscription", data.subscriptionId, value, data);
   });
 
+  socket.on("datapoint:value", (data) => {
+    if (!data?.path) return;
+    const value = data.value ?? data.payload ?? data;
+    previewMqttState.datapointValues.set(data.path, value);
+    previewMqttState.onValueUpdate?.("datapoint", data.path, value, data);
+  });
+
   await previewMqttState.connectPromise;
   return socket;
 };
@@ -295,6 +304,7 @@ const subscribeMqttSource = async (projectId, detail) => {
   if (!detail?.mapped || detail?.source?.type !== "dataCenter") return;
   const sourceType = String(detail?.source?.sourceType || "");
   const sourceId = detail?.source?.sourceId;
+  const path = detail?.source?.path;
   if (!sourceId) return;
   const socket = await ensurePreviewMqttSocket(projectId);
   if (!socket?.connected) return;
@@ -302,6 +312,13 @@ const subscribeMqttSource = async (projectId, detail) => {
     socket.emit("mqtt:tag:subscribe", { tagId: sourceId });
   } else if (sourceType.includes("subscription")) {
     socket.emit("mqtt:subscribe", { subscriptionId: sourceId });
+  }
+  if (path && !previewMqttState.datapointSubscribed.has(path)) {
+    socket.emit("datapoint:subscribe", {
+      projectId,
+      paths: [path],
+    });
+    previewMqttState.datapointSubscribed.add(path);
   }
 };
 
@@ -501,6 +518,15 @@ export const initPreviewRuntime = (options) => {
   };
 
   previewMqttState.onValueUpdate = (type, id, value) => {
+    if (type === "datapoint") {
+      mappedDetails.forEach((detail, name) => {
+        const path = detail?.source?.path;
+        if (path && path === id) {
+          updateMappedValue(name, value, detail);
+        }
+      });
+      return;
+    }
     const detailMap =
       type === "tag"
         ? previewMqttState.tagIdToProps
@@ -523,6 +549,32 @@ export const initPreviewRuntime = (options) => {
         if (!detail) return undefined;
         if (detail?.mapped && detail?.source?.type === "dataCenter") {
           registerMqttMapping(prop, detail);
+          const sourceType = String(detail?.source?.sourceType || "");
+          const sourceId = detail?.source?.sourceId;
+          const path = detail?.source?.path;
+          if (sourceId) {
+            if (sourceType.includes("tag")) {
+              const liveValue = previewMqttState.tagValues.get(sourceId);
+              if (liveValue !== undefined) {
+                updateMappedValue(prop, liveValue, detail);
+                return liveValue;
+              }
+            }
+            if (sourceType.includes("subscription")) {
+              const liveValue = previewMqttState.subscriptionValues.get(sourceId);
+              if (liveValue !== undefined) {
+                updateMappedValue(prop, liveValue, detail);
+                return liveValue;
+              }
+            }
+          }
+          if (path) {
+            const pathValue = previewMqttState.datapointValues.get(path);
+            if (pathValue !== undefined) {
+              updateMappedValue(prop, pathValue, detail);
+              return pathValue;
+            }
+          }
           if (!mappedValuePending.has(prop)) {
             mappedValuePending.set(prop, true);
             resolveMappedGlobalValue(projectId, detail)
@@ -772,6 +824,8 @@ export const clearPreviewRuntime = () => {
   previewMqttState.projectId = null;
   previewMqttState.tagValues.clear();
   previewMqttState.subscriptionValues.clear();
+  previewMqttState.datapointValues.clear();
+  previewMqttState.datapointSubscribed.clear();
   previewMqttState.tagIdToProps.clear();
   previewMqttState.subscriptionIdToProps.clear();
   previewMqttState.onValueUpdate = null;
