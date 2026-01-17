@@ -61,4 +61,24 @@ export const projectAPI = {
   performOperation(id, operation) {
     return request.post(`/projects/${id}/operations/${operation}`)
   },
+
+  /**
+   * 导出工程
+   * @param {string} id - 工程ID
+   * @returns {Promise} 导出结果
+   */
+  exportProject(id) {
+    return request.get(`/projects/${id}/export`, { responseType: 'blob' })
+  },
+
+  /**
+   * 导入工程
+   * @param {object} payload - 导入数据
+   * @param {string} [payload.name] - 新工程名称
+   * @param {object} payload.payload - 工程导出内容
+   * @returns {Promise} 导入结果
+   */
+  importProject(payload) {
+    return request.post('/projects/import', payload)
+  },
 }

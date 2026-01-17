@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="project-management">
     <!-- 页面标题和操作栏 -->
     <div class="flex justify-between items-center mb-6">
@@ -41,6 +41,14 @@
         >
           <el-icon class="mr-2"><Plus /></el-icon>
           添加工程
+        </el-button>
+        <el-button
+          v-if="canManageProjects"
+          type="default"
+          @click="handleImportProject"
+        >
+          <el-icon class="mr-2"><Upload /></el-icon>
+          导入工程
         </el-button>
 
       </div>
@@ -133,6 +141,15 @@
               </el-button>
               <el-button
                 v-if="canManageProjects"
+                type="success"
+                size="small"
+                @click.stop="handleExportProject(project)"
+              >
+                <el-icon class="mr-1"><Download /></el-icon>
+                导出
+              </el-button>
+              <el-button
+                v-if="canManageProjects"
                 type="danger"
                 size="small"
                 @click.stop="deleteProject(project)"
@@ -201,6 +218,16 @@
                 class="mr-2"
               >
                 运维
+              </el-button>
+              <el-button
+                v-if="canManageProjects"
+                type="success"
+                size="small"
+                @click="handleExportProject(scope.row)"
+                class="mr-2"
+              >
+                <el-icon class="mr-1"><Download /></el-icon>
+                导出
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -547,7 +574,10 @@ import {
   Refresh,
   Grid,
   List,
+  Upload,
+  Download,
 } from '@element-plus/icons-vue'
+import JSZip from 'jszip'
 import { useAuthStore } from '@/store'
 import { projectAPI } from '@/api/project.api'
 import { ColorTagEnum, ENUM_LABELS } from '@/enums'
@@ -813,6 +843,114 @@ export default {
       }
     }
 
+    // 导出工程
+    const handleExportProject = async (project) => {
+      if (!project?.id) return
+      try {
+        const response = await projectAPI.exportProject(project.id)
+        const blob =
+          response instanceof Blob
+            ? response
+            : new Blob([response], { type: 'application/zip' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${project.name || 'project'}.zip`
+        link.click()
+        URL.revokeObjectURL(url)
+        ElMessage.success('工程已导出')
+      } catch (error) {
+        ElMessage.error('导出工程失败：' + (error.response?.data?.message || error.message))
+      }
+    }
+
+    // 导入工程
+    const handleImportProject = () => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.json,.zip,application/json,application/zip'
+      input.onchange = async (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        try {
+          let payload = null
+          if (file.name.toLowerCase().endsWith('.zip')) {
+            const zip = await JSZip.loadAsync(file)
+            const readJson = async (path) => {
+              const entry = zip.file(path)
+              if (!entry) return null
+              const content = await entry.async('string')
+              return JSON.parse(content)
+            }
+
+            const projectJson = await readJson('project.json')
+            if (!projectJson?.project) {
+              ElMessage.error('未找到project.json')
+              return
+            }
+            const globalVariables = await readJson('designer/global-variables.json')
+            const globalScripts = await readJson('designer/global-scripts.json')
+            const projectVariables = await readJson('designer/project-variables.json')
+            const pageIndex = await readJson('designer/pages/index.json')
+            const pages = []
+            if (Array.isArray(pageIndex)) {
+              for (const item of pageIndex) {
+                if (!item?.file) continue
+                const schema = await readJson(`designer/pages/${item.file}`)
+                pages.push({
+                  page: {
+                    id: item.id,
+                    name: item.name,
+                    type: item.type,
+                    parentId: item.parentId ?? null,
+                    sortOrder: item.sortOrder ?? 0,
+                  },
+                  schemaContent: schema,
+                })
+              }
+            }
+
+            const datacenter = {
+              connections: await readJson('datacenter/connections.json'),
+              queries: await readJson('datacenter/queries.json'),
+              mqttConfigs: await readJson('datacenter/mqtt-configs.json'),
+              mqttSubscriptions: await readJson('datacenter/mqtt-subscriptions.json'),
+              mqttTagGroups: await readJson('datacenter/mqtt-tag-groups.json'),
+              mqttTags: await readJson('datacenter/mqtt-tags.json'),
+              datapoints: await readJson('datacenter/datapoints.json'),
+            }
+
+            payload = {
+              project: projectJson.project,
+              entryConfig: projectJson.entryConfig || {},
+              settings: {
+                globalVariables: globalVariables || {},
+                globalScripts: globalScripts || {},
+                projectVariables: projectVariables || {},
+              },
+              pages,
+              datacenter,
+            }
+          } else {
+            const text = await file.text()
+            const parsed = JSON.parse(text)
+            payload = parsed?.payload || parsed
+          }
+
+          if (!payload) {
+            ElMessage.error('工程数据格式不正确')
+            return
+          }
+          await projectAPI.importProject({ payload })
+          ElMessage.success('工程已导入')
+          fetchProjects()
+        } catch (error) {
+          ElMessage.error('导入工程失败：' + (error.response?.data?.message || error.message))
+        }
+      }
+      input.click()
+    }
+
     // 显示运维操作对话框
     const openOperationDialog = (project) => {
       currentProject.value = project
@@ -944,6 +1082,8 @@ export default {
       editProject,
       handleUpdateProject,
       deleteProject,
+      handleExportProject,
+      handleImportProject,
       openOperationDialog,
       performOperation,
       openProjectDialog,

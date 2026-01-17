@@ -12,6 +12,7 @@
     "deploy": "node ./scripts/deploy.cjs"
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.13.2",
     "dayjs": "^1.11.13",

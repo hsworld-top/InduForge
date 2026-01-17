@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-tree-container">
     <!-- 搜索框 -->
     <div class="page-search">
@@ -238,6 +238,13 @@
         </div>
         <div
           class="menu-item"
+          @click="handleCommand('export', contextMenuNode)"
+        >
+          <IconEpDownload class="menu-icon" />
+          <span>导出页面</span>
+        </div>
+        <div
+          class="menu-item"
           @click="handleCommand('setHome', contextMenuNode)"
         >
           <IconEpHomeFilled class="menu-icon" />
@@ -354,6 +361,7 @@ import IconEpEdit from "~icons/ep/edit";
 import IconEpDelete from "~icons/ep/delete";
 import IconEpView from "~icons/ep/view";
 import IconEpHomeFilled from "~icons/ep/home-filled";
+import IconEpDownload from "~icons/ep/download";
 
 // 注入打开标签页的方法
 const openPageTab = inject("openPageTab", null);
@@ -916,6 +924,36 @@ const handleCommand = (command, data) => {
     case "setHome":
       handleSetHome(data.id);
       break;
+    case "export":
+      handleExportPage(data.id, data.label);
+      break;
+  }
+};
+
+/**
+ * 导出页面 Schema
+ * @param {string} pageId - 页面 ID
+ * @param {string} label - 页面名称
+ */
+const handleExportPage = (pageId, label) => {
+  if (!editorStore.doc || !pageId) {
+    ElMessage.warning("暂无可导出的页面");
+    return;
+  }
+  try {
+    const payload = editorStore.serializer.exportPage(editorStore.doc, pageId);
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const name = `${label || "page"}.json`;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(url);
+    ElMessage.success("已导出页面");
+  } catch (error) {
+    ElMessage.error("导出页面失败");
   }
 };
 

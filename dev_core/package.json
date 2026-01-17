@@ -16,6 +16,7 @@
   "packageManager": "pnpm@10.19.0",
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "archiver": "^6.0.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dayjs": "^1.11.13",

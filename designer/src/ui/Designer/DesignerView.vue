@@ -49,6 +49,11 @@
                 <IconEpPlus />
               </el-button>
             </el-tooltip>
+            <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
+              <el-button size="small" text @click="handlePageImport">
+                <IconEpUpload />
+              </el-button>
+            </el-tooltip>
           </template>
           <component
             :is="leftPanelComponent"
@@ -119,13 +124,18 @@
             @close="handleLeftClose"
             @toggleFloating="toggleLeftFloating"
           >
-            <template #actions>
-              <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
-                <el-button size="small" text @click="handlePageCreate">
-                  <IconEpPlus />
-                </el-button>
-              </el-tooltip>
-            </template>
+          <template #actions>
+            <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+              <el-button size="small" text @click="handlePageCreate">
+                <IconEpPlus />
+              </el-button>
+            </el-tooltip>
+            <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
+              <el-button size="small" text @click="handlePageImport">
+                <IconEpUpload />
+              </el-button>
+            </el-tooltip>
+          </template>
             <component
               :is="leftPanelComponent"
               v-bind="leftPanelProps"
@@ -206,6 +216,7 @@ import IconEpSetting from "~icons/ep/setting";
 import IconEpList from "~icons/ep/list";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpWarning from "~icons/ep/warning";
+import IconEpUpload from "~icons/ep/upload";
 
 const route = useRoute();
 const router = useRouter();
@@ -666,6 +677,69 @@ const handleZoomChange = (value) => {
 const handlePageCreate = () => {
   if (leftActiveKey.value !== "pages") return;
   leftPanelRef.value?.openCreateDialog?.();
+};
+
+const getUniquePageName = (name) => {
+  const base = (name || "导入页面").trim() || "导入页面";
+  const existingNames = editorStore.pages.map((page) => page.name).filter(Boolean);
+  if (!existingNames.includes(base)) return base;
+  let index = 1;
+  let next = `${base}_${index}`;
+  while (existingNames.includes(next)) {
+    index += 1;
+    next = `${base}_${index}`;
+  }
+  return next;
+};
+
+const handlePageImport = () => {
+  if (!editorStore.doc) {
+    ElMessage.warning("暂无可导入的页面");
+    return;
+  }
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json,application/json";
+  input.onchange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      if (!payload?.page || !payload?.nodesById) {
+        ElMessage.error("页面数据格式不正确");
+        return;
+      }
+      const serializer = editorStore.serializer;
+      const baseSchema = serializer.exportToSchema(editorStore.doc);
+      const tempDoc = serializer.importFromSchema(baseSchema);
+      const tempPageId = serializer.importPage(tempDoc, payload, {
+        generateNewIds: true,
+      });
+      const imported = serializer.exportPage(tempDoc, tempPageId);
+      const uniqueName = getUniquePageName(payload.page?.name);
+      imported.page.name = uniqueName;
+
+      const result = await editorStore.createPage({
+        name: uniqueName,
+        type: imported.page?.type || "page",
+        parentId: null,
+      });
+      const pageId = result?.id || result?.page?.id;
+      if (!pageId) {
+        ElMessage.error("导入页面失败");
+        return;
+      }
+      imported.page.id = pageId;
+      await editorStore.updatePageSchema(pageId, imported);
+      await editorStore.loadPage(pageId);
+      openPageTab?.(pageId);
+      ElMessage.success("页面已导入");
+    } catch (error) {
+      ElMessage.error("导入页面失败");
+    }
+  };
+  input.click();
 };
 
 /**
