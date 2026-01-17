@@ -2,7 +2,11 @@ const {
   DataConnection,
   DataRelationalConfig,
   DataMqttConfig,
+  DataQuery,
+  DataQueryLog,
+  DataPoint,
 } = require("../models");
+const { Op } = require("sequelize");
 const DriverFactory = require("./drivers/DriverFactory");
 const mqttService = require("./mqttService");
 const AppError = require("../utils/AppError");
@@ -483,6 +487,26 @@ class DataConnectionService {
 
     // 删除关联的配置
     if (connection.type === "relational") {
+      const queries = await DataQuery.findAll({
+        where: { projectId, connectionId },
+        attributes: ["id"],
+      });
+      const queryIds = queries.map((item) => item.id);
+      if (queryIds.length) {
+        await DataPoint.destroy({
+          where: {
+            projectId,
+            sourceType: "db.query",
+            sourceId: { [Op.in]: queryIds },
+          },
+        });
+        await DataQueryLog.destroy({
+          where: { queryId: { [Op.in]: queryIds } },
+        });
+        await DataQuery.destroy({
+          where: { id: { [Op.in]: queryIds } },
+        });
+      }
       await DataRelationalConfig.destroy({
         where: { connectionId },
       });

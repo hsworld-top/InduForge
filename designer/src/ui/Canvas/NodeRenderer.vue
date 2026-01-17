@@ -759,6 +759,19 @@ const resolveQuery = async (connectionId, queryName) => {
   );
 };
 
+const executeQueryByPath = async (path) => {
+  const [sourceName, ...rest] = String(path || "").split(".");
+  const field = rest.join(".");
+  if (!sourceName || !field) return undefined;
+  const connection = await resolveConnection(sourceName);
+  if (!connection || connection.type !== "relational") return undefined;
+  const query = await resolveQuery(connection.id, field);
+  if (!query) return undefined;
+  const result = await datacenterApi.executeQuery(query.id);
+  const payload = unwrapApiData(result) || result;
+  return payload?.data ?? payload;
+};
+
 const resolveMappedGlobalValue = async (name, detail) => {
   const source = detail?.source;
   if (!source || source.type !== "dataCenter" || !source.path) {
@@ -769,9 +782,19 @@ const resolveMappedGlobalValue = async (name, detail) => {
   if (source.datapointId || source.sourceType || source.sourceId) {
     const sourceType = String(source.sourceType || "");
     if (sourceType.includes("query") && source.sourceId) {
-      const result = await datacenterApi.executeQuery(source.sourceId);
-      const payload = unwrapApiData(result) || result;
-      return payload?.data ?? payload;
+      try {
+        const result = await datacenterApi.executeQuery(source.sourceId);
+        const payload = unwrapApiData(result) || result;
+        return payload?.data ?? payload;
+      } catch (error) {
+        try {
+          const fallbackResult = await executeQueryByPath(source.path);
+          if (fallbackResult !== undefined) return fallbackResult;
+        } catch (fallbackError) {
+          // ignore
+        }
+        return normalizeGlobalValue(detail);
+      }
     }
     if (source.datapointId) {
       const result = await datacenterApi.getDatapointValues(projectId.value, [

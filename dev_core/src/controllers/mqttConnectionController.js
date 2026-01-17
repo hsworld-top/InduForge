@@ -1,6 +1,6 @@
 const mqttService = require("../services/mqttService");
 const { DataConnection, DataMqttConfig } = require("../models");
-const { successResponse } = require("../utils/response");
+const ApiResponse = require("../utils/response");
 const AppError = require("../utils/AppError");
 const { logger } = require("../utils/logger");
 
@@ -84,11 +84,13 @@ class MqttConnectionController {
         `[MqttConnectionController] MQTT connection created: ${connection.id}`
       );
 
-      res
-        .status(201)
-        .json(
-          successResponse("MQTT connection created successfully", connection)
-        );
+      return ApiResponse.success(
+        res,
+        connection,
+        "mqtt_connection_create_success",
+        {},
+        201
+      );
     } catch (error) {
       next(error);
     }
@@ -131,17 +133,15 @@ class MqttConnectionController {
         };
       });
 
-      res.json(
-        successResponse("MQTT connections retrieved successfully", {
-          connections,
-          pagination: {
-            total: count,
-            page: parseInt(page),
-            pageSize: limit,
-            totalPages: Math.ceil(count / limit),
-          },
-        })
-      );
+      return ApiResponse.success(res, {
+        connections,
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          pageSize: limit,
+          totalPages: Math.ceil(count / limit),
+        },
+      }, "mqtt_connection_list_success");
     } catch (error) {
       next(error);
     }
@@ -175,9 +175,7 @@ class MqttConnectionController {
         runtimeStatus: status,
       };
 
-      res.json(
-        successResponse("MQTT connection retrieved successfully", result)
-      );
+      return ApiResponse.success(res, result, "mqtt_connection_get_success");
     } catch (error) {
       next(error);
     }
@@ -258,8 +256,10 @@ class MqttConnectionController {
 
       logger.info(`[MqttConnectionController] MQTT connection updated: ${id}`);
 
-      res.json(
-        successResponse("MQTT connection updated successfully", connection)
+      return ApiResponse.success(
+        res,
+        connection,
+        "mqtt_connection_update_success"
       );
     } catch (error) {
       next(error);
@@ -277,7 +277,7 @@ class MqttConnectionController {
 
       logger.info(`[MqttConnectionController] MQTT connection deleted: ${id}`);
 
-      res.json(successResponse("MQTT connection deleted successfully"));
+      return ApiResponse.success(res, null, "mqtt_connection_delete_success");
     } catch (error) {
       next(error);
     }
@@ -330,8 +330,10 @@ class MqttConnectionController {
 
       logger.info("[MqttConnectionController] MQTT connection test successful");
 
-      res.json(
-        successResponse("MQTT connection test successful", { success: true })
+      return ApiResponse.success(
+        res,
+        { success: true },
+        "mqtt_connection_test_success"
       );
     } catch (error) {
       logger.error(
@@ -353,7 +355,11 @@ class MqttConnectionController {
 
       logger.info(`[MqttConnectionController] MQTT connection started: ${id}`);
 
-      res.json(successResponse("MQTT connection started successfully", result));
+      return ApiResponse.success(
+        res,
+        result,
+        "mqtt_connection_start_success"
+      );
     } catch (error) {
       next(error);
     }
@@ -370,7 +376,11 @@ class MqttConnectionController {
 
       logger.info(`[MqttConnectionController] MQTT connection stopped: ${id}`);
 
-      res.json(successResponse("MQTT connection stopped successfully", result));
+      return ApiResponse.success(
+        res,
+        result,
+        "mqtt_connection_stop_success"
+      );
     } catch (error) {
       next(error);
     }
@@ -385,8 +395,10 @@ class MqttConnectionController {
 
       const status = mqttService.getConnectionStatus(id);
 
-      res.json(
-        successResponse("Connection status retrieved successfully", status)
+      return ApiResponse.success(
+        res,
+        status,
+        "mqtt_connection_status_success"
       );
     } catch (error) {
       next(error);

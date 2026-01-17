@@ -912,6 +912,7 @@ export default {
 
             const datacenter = {
               connections: await readJson('datacenter/connections.json'),
+              relationalConfigs: await readJson('datacenter/relational-configs.json'),
               queries: await readJson('datacenter/queries.json'),
               mqttConfigs: await readJson('datacenter/mqtt-configs.json'),
               mqttSubscriptions: await readJson('datacenter/mqtt-subscriptions.json'),

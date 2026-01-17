@@ -200,6 +200,19 @@ const resolveQuery = async (projectId, connectionId, queryName) => {
   return queries.find((item) => item.name === queryName || item.id === queryName) || null;
 };
 
+const executeQueryByPath = async (projectId, path) => {
+  const [sourceName, ...rest] = String(path || "").split(".");
+  const field = rest.join(".");
+  if (!sourceName || !field) return undefined;
+  const connection = await resolveConnection(projectId, sourceName);
+  if (!connection || connection.type !== "relational") return undefined;
+  const query = await resolveQuery(projectId, connection.id, field);
+  if (!query) return undefined;
+  const result = await datacenterApi.executeQuery(query.id);
+  const payload = unwrapApiData(result) || result;
+  return payload?.data ?? payload;
+};
+
 const ensurePreviewMqttSocket = async (projectId) => {
   const apiBase = getApiBase();
   const query = new URLSearchParams();
@@ -433,6 +446,12 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
         const value = payload?.data ?? payload;
         return value ?? fallbackValue;
       } catch (error) {
+        try {
+          const fallbackResult = await executeQueryByPath(projectId, source.path);
+          if (fallbackResult !== undefined) return fallbackResult;
+        } catch (fallbackError) {
+          // ignore
+        }
         return fallbackValue;
       }
     }

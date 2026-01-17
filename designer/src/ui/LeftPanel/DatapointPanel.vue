@@ -1618,6 +1618,53 @@ const handleImport = (format) => {
   });
 };
 
+const decodeTextBuffer = (raw) => {
+  try {
+    const bytes =
+      raw instanceof ArrayBuffer ? new Uint8Array(raw) : new Uint8Array(raw);
+    const hasUtf8Bom =
+      bytes.length >= 3 &&
+      bytes[0] === 0xef &&
+      bytes[1] === 0xbb &&
+      bytes[2] === 0xbf;
+    const hasUtf16LeBom = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
+    const hasUtf16BeBom = bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff;
+    const tryDecode = (encoding) => {
+      try {
+        return new TextDecoder(encoding, { fatal: false }).decode(raw);
+      } catch (error) {
+        return "";
+      }
+    };
+
+    if (hasUtf8Bom) return tryDecode("utf-8");
+    if (hasUtf16LeBom) return tryDecode("utf-16le");
+    if (hasUtf16BeBom) return tryDecode("utf-16be");
+
+    const utf8Text = tryDecode("utf-8");
+    if (utf8Text && !utf8Text.includes("\uFFFD")) return utf8Text;
+
+    const sampleLen = Math.min(bytes.length, 2000);
+    let zeroCount = 0;
+    let oddCount = 0;
+    for (let i = 1; i < sampleLen; i += 2) {
+      oddCount += 1;
+      if (bytes[i] === 0) zeroCount += 1;
+    }
+    if (oddCount > 0 && zeroCount / oddCount > 0.2) {
+      const utf16Text = tryDecode("utf-16le");
+      if (utf16Text) return utf16Text;
+    }
+
+    const gbkText = tryDecode("gbk");
+    if (gbkText) return gbkText;
+
+    return utf8Text || "";
+  } catch (error) {
+    return "";
+  }
+};
+
 const handleFileChange = async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -1642,13 +1689,38 @@ const handleFileChange = async (event) => {
       }
       ElMessage.error("JSON 格式不支持");
     } catch (error) {
-      ElMessage.error("JSON 解析失败");
+      try {
+        const buffer = await file.arrayBuffer();
+        const fallbackText = decodeTextBuffer(buffer);
+        const data = JSON.parse(fallbackText);
+        if (
+          data &&
+          typeof data === "object" &&
+          (data.definitions || data.groups)
+        ) {
+          await mergeImportedDefinitions(
+            data.definitions || {},
+            data.groups || []
+          );
+          return;
+        }
+        if (Array.isArray(data)) {
+          await mergeImportedRows(data);
+          return;
+        }
+        ElMessage.error("JSON 格式不支持");
+      } catch (fallbackError) {
+        ElMessage.error("JSON 解析失败");
+      }
     }
     return;
   }
 
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
+  const workbook =
+    importType.value === "csv"
+      ? XLSX.read(decodeTextBuffer(buffer), { type: "string" })
+      : XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
     ElMessage.error("文件中没有数据表");

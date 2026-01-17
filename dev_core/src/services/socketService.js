@@ -1,10 +1,11 @@
-const { Server } = require("socket.io");
+﻿const { Server } = require("socket.io");
+const { DataMqttSubscription, DataMqttTag } = require("../models");
 const { logger } = require("../utils/logger");
 const { normalizePath } = require("../utils/datapointPath");
 
 /**
- * Socket.IO 服务
- * 管理WebSocket连接，广播MQTT消息
+ * Socket.IO 鏈嶅姟
+ * 绠＄悊WebSocket杩炴帴锛屽箍鎾璏QTT娑堟伅
  */
 class SocketService {
   constructor() {
@@ -12,9 +13,36 @@ class SocketService {
     this.connections = new Map(); // userId -> socket
   }
 
+  async ensureMqttConnectionBySubscription(subscriptionId) {
+    if (!subscriptionId) return;
+    try {
+      const subscription = await DataMqttSubscription.findByPk(subscriptionId);
+      if (!subscription?.connectionId) return;
+      const mqttService = require("./mqttService");
+      await mqttService.startConnection(subscription.connectionId);
+    } catch (error) {
+      logger.warn(
+        `[SocketService] Failed to ensure MQTT connection for subscription ${subscriptionId}: ${error?.message || error}`
+      );
+    }
+  }
+
+  async ensureMqttConnectionByTag(tagId) {
+    if (!tagId) return;
+    try {
+      const tag = await DataMqttTag.findByPk(tagId);
+      if (!tag?.subscriptionId) return;
+      await this.ensureMqttConnectionBySubscription(tag.subscriptionId);
+    } catch (error) {
+      logger.warn(
+        `[SocketService] Failed to ensure MQTT connection for tag ${tagId}: ${error?.message || error}`
+      );
+    }
+  }
+
   /**
-   * 初始化Socket.IO服务器
-   * @param {Object} httpServer - HTTP服务器实例
+   * 鍒濆鍖朣ocket.IO鏈嶅姟鍣?
+   * @param {Object} httpServer - HTTP鏈嶅姟鍣ㄥ疄渚?
    */
   initialize(httpServer) {
     this.io = new Server(httpServer, {
@@ -32,7 +60,7 @@ class SocketService {
   }
 
   /**
-   * 设置事件处理器
+   * 璁剧疆浜嬩欢澶勭悊鍣?
    */
   setupEventHandlers() {
     this.io.on("connection", (socket) => {
@@ -41,7 +69,7 @@ class SocketService {
         `[SocketService] Client connected: ${socket.id}, project: ${projectId}`
       );
 
-      // 加入项目房间
+      // 鍔犲叆椤圭洰鎴块棿
       if (projectId) {
         socket.join(`project:${projectId}`);
         logger.info(
@@ -49,12 +77,13 @@ class SocketService {
         );
       }
 
-      // 订阅MQTT主题
+      // 璁㈤槄MQTT涓婚
       socket.on("mqtt:subscribe", (data) => {
         const { subscriptionId } = data;
         if (subscriptionId) {
           const roomName = `mqtt:subscription:${subscriptionId}`;
           socket.join(roomName);
+          this.ensureMqttConnectionBySubscription(subscriptionId);
           console.log(
             `[SocketService] Client ${socket.id} joined room: ${roomName}`
           );
@@ -64,7 +93,7 @@ class SocketService {
         }
       });
 
-      // 取消订阅MQTT主题
+      // 鍙栨秷璁㈤槄MQTT涓婚
       socket.on("mqtt:unsubscribe", (data) => {
         const { subscriptionId } = data;
         if (subscriptionId) {
@@ -75,20 +104,19 @@ class SocketService {
         }
       });
 
-      // 设置Tag订阅处理
+      // 璁剧疆Tag璁㈤槄澶勭悊
       this.setupTagSubscription(socket);
 
-      // 数据点订阅
       this.setupDataPointSubscription(socket);
 
-      // 断开连接
+      // 鏂紑杩炴帴
       socket.on("disconnect", (reason) => {
         logger.info(
           `[SocketService] Client disconnected: ${socket.id}, reason: ${reason}`
         );
       });
 
-      // 错误处理
+      // 閿欒澶勭悊
       socket.on("error", (error) => {
         logger.error(`[SocketService] Socket error: ${socket.id}`, error);
       });
@@ -96,9 +124,9 @@ class SocketService {
   }
 
   /**
-   * 广播MQTT消息到订阅者
-   * @param {string} subscriptionId - 订阅ID
-   * @param {Object} message - 消息内容
+   * 骞挎挱MQTT娑堟伅鍒拌闃呰€?
+   * @param {string} subscriptionId - 璁㈤槄ID
+   * @param {Object} message - 娑堟伅鍐呭
    */
   broadcastMqttMessage(subscriptionId, message) {
     if (!this.io) {
@@ -121,10 +149,10 @@ class SocketService {
   }
 
   /**
-   * 广播MQTT连接状态变化
-   * @param {string} projectId - 项目ID
-   * @param {string} connectionId - 连接ID
-   * @param {string} status - 状态
+   * 骞挎挱MQTT杩炴帴鐘舵€佸彉鍖?
+   * @param {string} projectId - 椤圭洰ID
+   * @param {string} connectionId - 杩炴帴ID
+   * @param {string} status - 鐘舵€?
    */
   broadcastConnectionStatus(projectId, connectionId, status) {
     if (!this.io) {
@@ -145,10 +173,10 @@ class SocketService {
   }
 
   /**
-   * 广播MQTT订阅状态变化
-   * @param {string} projectId - 项目ID
-   * @param {string} subscriptionId - 订阅ID
-   * @param {string} status - 状态
+   * 骞挎挱MQTT璁㈤槄鐘舵€佸彉鍖?
+   * @param {string} projectId - 椤圭洰ID
+   * @param {string} subscriptionId - 璁㈤槄ID
+   * @param {string} status - 鐘舵€?
    */
   broadcastSubscriptionStatus(projectId, subscriptionId, status) {
     if (!this.io) {
@@ -169,9 +197,9 @@ class SocketService {
   }
 
   /**
-   * 广播Tag值更新
+   * 骞挎挱Tag鍊兼洿鏂?
    * @param {string} tagId - Tag ID
-   * @param {Object} valueData - 值数据
+   * @param {Object} valueData - 鍊兼暟鎹?
    */
   broadcastTagValueUpdate(tagId, valueData) {
     if (!this.io) {
@@ -179,7 +207,7 @@ class SocketService {
       return;
     }
 
-    // 广播到订阅该Tag的房间
+    // 骞挎挱鍒拌闃呰Tag鐨勬埧闂?
     const tagRoom = `mqtt:tag:${tagId}`;
     this.io.to(tagRoom).emit("mqtt:tag:value", valueData);
 
@@ -189,22 +217,23 @@ class SocketService {
   }
 
   /**
-   * 订阅Tag值更新（客户端调用）
-   * 需要在setupEventHandlers中添加对应的socket事件监听
+   * 璁㈤槄Tag鍊兼洿鏂帮紙瀹㈡埛绔皟鐢級
+   * 闇€瑕佸湪setupEventHandlers涓坊鍔犲搴旂殑socket浜嬩欢鐩戝惉
    */
   setupTagSubscription(socket) {
-    // 订阅Tag值更新
+    // 璁㈤槄Tag鍊兼洿鏂?
     socket.on("mqtt:tag:subscribe", (data) => {
       const { tagId } = data;
       if (tagId) {
         socket.join(`mqtt:tag:${tagId}`);
+        this.ensureMqttConnectionByTag(tagId);
         logger.info(
           `[SocketService] Client ${socket.id} subscribed to tag: ${tagId}`
         );
       }
     });
 
-    // 取消订阅Tag值更新
+    // 鍙栨秷璁㈤槄Tag鍊兼洿鏂?
     socket.on("mqtt:tag:unsubscribe", (data) => {
       const { tagId } = data;
       if (tagId) {
@@ -217,48 +246,57 @@ class SocketService {
   }
 
   /**
-   * 订阅数据点值更新
-   * @param {object} socket - Socket 实例
+   * 璁㈤槄鏁版嵁鐐瑰€兼洿鏂?   * @param {object} socket - Socket 瀹炰緥
    */
   setupDataPointSubscription(socket) {
     socket.on("datapoint:subscribe", (data) => {
-      const { projectId, paths } = data || {};
-      if (!projectId || !Array.isArray(paths)) {
+      const { projectId, paths, path } = data || {};
+      const targetPaths = Array.isArray(paths)
+        ? paths
+        : path
+        ? [path]
+        : [];
+      if (!projectId || targetPaths.length === 0) {
         return;
       }
 
-      paths
-        .map((path) => normalizePath(path))
+      targetPaths
+        .map((item) => normalizePath(item))
         .filter(Boolean)
-        .forEach((path) => {
-          const room = `datapoint:${projectId}:${path}`;
+        .forEach((normalized) => {
+          const room = `datapoint:${projectId}:${normalized}`;
           socket.join(room);
           logger.info(
-            `[SocketService] Client ${socket.id} subscribed to datapoint: ${path}`
+            `[SocketService] Client ${socket.id} subscribed to datapoint: ${normalized}`
           );
         });
     });
 
     socket.on("datapoint:unsubscribe", (data) => {
-      const { projectId, paths } = data || {};
-      if (!projectId || !Array.isArray(paths)) {
+      const { projectId, paths, path } = data || {};
+      const targetPaths = Array.isArray(paths)
+        ? paths
+        : path
+        ? [path]
+        : [];
+      if (!projectId || targetPaths.length === 0) {
         return;
       }
 
-      paths
-        .map((path) => normalizePath(path))
+      targetPaths
+        .map((item) => normalizePath(item))
         .filter(Boolean)
-        .forEach((path) => {
-          socket.leave(`datapoint:${projectId}:${path}`);
+        .forEach((normalized) => {
+          socket.leave(`datapoint:${projectId}:${normalized}`);
           logger.info(
-            `[SocketService] Client ${socket.id} unsubscribed from datapoint: ${path}`
+            `[SocketService] Client ${socket.id} unsubscribed from datapoint: ${normalized}`
           );
         });
     });
   }
 
   /**
-   * 关闭Socket.IO服务器
+   * 鍏抽棴Socket.IO鏈嶅姟鍣?
    */
   close() {
     if (this.io) {
@@ -269,13 +307,16 @@ class SocketService {
   }
 
   /**
-   * 获取Socket.IO实例
+   * 鑾峰彇Socket.IO瀹炰緥
    */
   getIO() {
     return this.io;
   }
 }
 
-// 导出单例实例
+// 瀵煎嚭鍗曚緥瀹炰緥
 const socketService = new SocketService();
 module.exports = socketService;
+
+
+

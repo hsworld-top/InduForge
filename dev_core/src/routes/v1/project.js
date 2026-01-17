@@ -24,6 +24,7 @@ const {
   DataMqttTagGroup,
   DataMqttTag,
   DataPoint,
+  DataRelationalConfig,
 } = require('../../models');
 const { authenticateToken, requireResourceOwnership } = require('../../middlewares/auth');
 const { randomUUID } = require('crypto');
@@ -41,6 +42,18 @@ const parseJsonField = (value, fallback) => {
 const sanitizeFileName = (value) => {
   const base = String(value || '').trim() || 'file';
   return base.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
+};
+
+const toAsciiFileName = (value) => {
+  const base = sanitizeFileName(value);
+  return base.replace(/[^\x20-\x7E]/g, '_') || 'file';
+};
+
+const buildContentDisposition = (fileName) => {
+  const safeName = sanitizeFileName(fileName);
+  const asciiName = toAsciiFileName(fileName);
+  const encoded = encodeURIComponent(safeName);
+  return `attachment; filename="${asciiName}.zip"; filename*=UTF-8''${encoded}.zip`;
 };
 
 /**
@@ -157,6 +170,9 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
     const connections = await DataConnection.findAll({ where: { projectId: id } });
     const queries = await DataQuery.findAll({ where: { projectId: id } });
     const connectionIds = connections.map((item) => item.id);
+    const relationalConfigs = connectionIds.length
+      ? await DataRelationalConfig.findAll({ where: { connectionId: connectionIds } })
+      : [];
     const mqttConfigs = connectionIds.length
       ? await DataMqttConfig.findAll({ where: { connectionId: connectionIds } })
       : [];
@@ -192,8 +208,8 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
     };
 
     res.setHeader('Content-Type', 'application/zip');
-    const zipName = `${sanitizeFileName(project.name || 'project')}.zip`;
-    res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
+    const rawName = project.name || 'project';
+    res.setHeader('Content-Disposition', buildContentDisposition(rawName));
 
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.on('error', (error) => {
@@ -239,6 +255,10 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
     archive.append(
       JSON.stringify(connections.map((item) => item.toJSON()), null, 2),
       { name: 'datacenter/connections.json' }
+    );
+    archive.append(
+      JSON.stringify(relationalConfigs.map((item) => item.toJSON()), null, 2),
+      { name: 'datacenter/relational-configs.json' }
     );
     archive.append(
       JSON.stringify(queries.map((item) => item.toJSON()), null, 2),
@@ -427,8 +447,61 @@ router.post('/import', authenticateToken, validate(Joi.object({
       } = item;
       return rest;
     };
+    /**
+     * 重写查询类映射变量的 sourceId
+     * @param {Object} definitions - 变量定义
+     * @param {Map<string, string>} idMap - 旧查询ID -> 新查询ID
+     * @returns {Object} 重写后的变量定义
+     */
+    const remapQueryVariableDefinitions = (definitions, idMap) => {
+      if (!definitions || typeof definitions !== 'object') return definitions;
+      const next = {};
+      Object.entries(definitions).forEach(([name, detail]) => {
+        if (!detail || typeof detail !== 'object') {
+          next[name] = detail;
+          return;
+        }
+        const nextDetail = { ...detail };
+        if (
+          nextDetail.sourceType &&
+          String(nextDetail.sourceType).includes('query') &&
+          nextDetail.sourceId &&
+          idMap.has(nextDetail.sourceId)
+        ) {
+          nextDetail.sourceId = idMap.get(nextDetail.sourceId);
+        }
+        if (nextDetail.source && typeof nextDetail.source === 'object') {
+          const sourceType = String(nextDetail.source.sourceType || '');
+          if (sourceType.includes('query') && nextDetail.source.sourceId && idMap.has(nextDetail.source.sourceId)) {
+            nextDetail.source = {
+              ...nextDetail.source,
+              sourceId: idMap.get(nextDetail.source.sourceId),
+            };
+          }
+        }
+        next[name] = nextDetail;
+      });
+      return next;
+    };
+    /**
+     * 重写工程变量结构中的查询映射ID
+     * @param {Object} payload - 工程变量结构
+     * @param {Map<string, string>} idMap - 旧查询ID -> 新查询ID
+     * @returns {Object} 重写后的结构
+     */
+    const remapQueryVariables = (payload, idMap) => {
+      if (!payload || typeof payload !== 'object') return payload;
+      if (payload.definitions || payload.groups) {
+        return {
+          ...payload,
+          definitions: remapQueryVariableDefinitions(payload.definitions || {}, idMap),
+        };
+      }
+      return remapQueryVariableDefinitions(payload, idMap);
+    };
 
     const connectionIdMap = new Map();
+    const relationalConfigIdMap = new Map();
     const queryIdMap = new Map();
     const mqttConfigIdMap = new Map();
     const mqttSubscriptionIdMap = new Map();
@@ -450,6 +523,23 @@ router.post('/import', authenticateToken, validate(Joi.object({
       await DataConnection.bulkCreate(connectionRows);
     }
 
+    const relationalConfigRows = normalizeList(datacenter.relationalConfigs)
+      .map((item) => {
+        const newConnectionId = connectionIdMap.get(item.connectionId);
+        if (!newConnectionId) return null;
+        const newId = randomUUID();
+        relationalConfigIdMap.set(item.id, newId);
+        return {
+          ...stripMeta(item),
+          id: newId,
+          connectionId: newConnectionId,
+        };
+      })
+      .filter(Boolean);
+    if (relationalConfigRows.length) {
+      await DataRelationalConfig.bulkCreate(relationalConfigRows);
+    }
+
     const queryRows = normalizeList(datacenter.queries)
       .map((item) => {
         const newConnectionId = connectionIdMap.get(item.connectionId);
@@ -468,6 +558,24 @@ router.post('/import', authenticateToken, validate(Joi.object({
       .filter(Boolean);
     if (queryRows.length) {
       await DataQuery.bulkCreate(queryRows);
+    }
+    if (queryIdMap.size) {
+      const remappedProjectVariables = remapQueryVariables(projectVariables, queryIdMap);
+      const remappedGlobalVariables = remapQueryVariables(globalVariables, queryIdMap);
+      await project.update({ projectVariables: remappedProjectVariables });
+      await Project.sequelize.query(
+        `UPDATE design_project_settings
+          SET globalVariables = ?, updatedBy = ?, updatedAt = ?
+          WHERE projectId = ?`,
+        {
+          replacements: [
+            JSON.stringify(remappedGlobalVariables),
+            userId,
+            new Date(),
+            project.id,
+          ],
+        },
+      );
     }
 
     const mqttConfigRows = normalizeList(datacenter.mqttConfigs)
