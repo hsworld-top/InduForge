@@ -32,6 +32,8 @@ const queryCache = new Map();
 const mappedValueCache = new Map();
 const mappedValuePending = new Map();
 const mappedDetails = new Map();
+const datapointMetaCache = new Map();
+const datapointMetaPending = new Map();
 
 const unwrapApiData = (payload) => {
   if (payload && typeof payload === "object" && "data" in payload) {
@@ -111,6 +113,8 @@ const normalizeGlobalValue = (detail) => {
 };
 
 const buildPendingKey = (pageId, name) => `${pageId || "global"}::${name}`;
+const buildDatapointCacheKey = (projectId, path) =>
+  `${projectId || ""}::${path || ""}`;
 
 const queueComponentCall = (pageId, name, method, args) => {
   if (!name) return;
@@ -281,12 +285,73 @@ const ensurePreviewMqttSocket = async (projectId) => {
   return socket;
 };
 
-const registerMqttMapping = (prop, detail) => {
-  if (!detail?.mapped || detail?.source?.type !== "dataCenter") return;
-  const sourceType = String(detail?.source?.sourceType || "");
-  const sourceId = detail?.source?.sourceId;
-  if (!sourceId) return;
-  mappedDetails.set(prop, detail);
+const cacheDatapointMetaList = (projectId, items) => {
+  if (!projectId || !Array.isArray(items)) return;
+  items.forEach((item) => {
+    if (!item?.path) return;
+    const key = buildDatapointCacheKey(projectId, item.path);
+    if (datapointMetaCache.has(key)) return;
+    datapointMetaCache.set(key, {
+      id: item.id,
+      path: item.path,
+      sourceType: item.sourceType || "",
+      sourceId: item.sourceId || "",
+      dataType: item.dataType || item.type || "",
+    });
+  });
+};
+
+const resolveDatapointMeta = async (projectId, path) => {
+  if (!projectId || !path) return null;
+  const key = buildDatapointCacheKey(projectId, path);
+  if (datapointMetaCache.has(key)) return datapointMetaCache.get(key);
+  if (datapointMetaPending.has(key)) return datapointMetaPending.get(key);
+
+  const pending = (async () => {
+    let page = 1;
+    const pageSize = 300;
+    let totalPages = 1;
+    while (page <= totalPages) {
+      const result = await datacenterApi.getDataPoints(projectId, {
+        page,
+        pageSize,
+      });
+      const data = unwrapApiData(result) || {};
+      const items = data.datapoints || data.items || data.list || [];
+      cacheDatapointMetaList(projectId, items);
+      const hit = items.find((item) => item?.path === path);
+      if (hit) {
+        const meta = {
+          id: hit.id,
+          path: hit.path,
+          sourceType: hit.sourceType || "",
+          sourceId: hit.sourceId || "",
+          dataType: hit.dataType || hit.type || "",
+        };
+        datapointMetaCache.set(key, meta);
+        return meta;
+      }
+      const pagination = data.pagination || {};
+      if (pagination.totalPages) {
+        totalPages = Number(pagination.totalPages) || 1;
+      } else if (items.length < pageSize) {
+        break;
+      } else {
+        totalPages = Math.max(totalPages, page + 1);
+      }
+      page += 1;
+    }
+    return null;
+  })();
+
+  datapointMetaPending.set(key, pending);
+  const result = await pending;
+  datapointMetaPending.delete(key);
+  return result;
+};
+
+const trackMqttProp = (prop, sourceType, sourceId) => {
+  if (!prop || !sourceId) return;
   if (sourceType.includes("tag")) {
     if (!previewMqttState.tagIdToProps.has(sourceId)) {
       previewMqttState.tagIdToProps.set(sourceId, new Set());
@@ -300,18 +365,46 @@ const registerMqttMapping = (prop, detail) => {
   }
 };
 
-const subscribeMqttSource = async (projectId, detail) => {
+const resolveSourceInfo = async (projectId, detail) => {
+  const source = detail?.source || {};
+  const path = source.path;
+  let sourceType = String(source.sourceType || "");
+  let sourceId = source.sourceId || "";
+  let datapointId = source.datapointId || "";
+  if ((!sourceType || !sourceId || !datapointId) && path) {
+    const meta = await resolveDatapointMeta(projectId, path);
+    if (meta) {
+      sourceType = sourceType || meta.sourceType || "";
+      sourceId = sourceId || meta.sourceId || "";
+      datapointId = datapointId || meta.id || "";
+    }
+  }
+  return { path, sourceType, sourceId, datapointId };
+};
+
+const registerMqttMapping = (prop, detail) => {
   if (!detail?.mapped || detail?.source?.type !== "dataCenter") return;
+  mappedDetails.set(prop, detail);
   const sourceType = String(detail?.source?.sourceType || "");
   const sourceId = detail?.source?.sourceId;
-  const path = detail?.source?.path;
   if (!sourceId) return;
+  trackMqttProp(prop, sourceType, sourceId);
+};
+
+const subscribeMqttSource = async (projectId, detail) => {
+  if (!detail?.mapped || detail?.source?.type !== "dataCenter") return;
+  const resolved = await resolveSourceInfo(projectId, detail);
+  const sourceType = String(resolved.sourceType || "");
+  const sourceId = resolved.sourceId;
+  const path = resolved.path;
   const socket = await ensurePreviewMqttSocket(projectId);
   if (!socket?.connected) return;
-  if (sourceType.includes("tag")) {
-    socket.emit("mqtt:tag:subscribe", { tagId: sourceId });
-  } else if (sourceType.includes("subscription")) {
-    socket.emit("mqtt:subscribe", { subscriptionId: sourceId });
+  if (sourceId) {
+    if (sourceType.includes("tag")) {
+      socket.emit("mqtt:tag:subscribe", { tagId: sourceId });
+    } else if (sourceType.includes("subscription")) {
+      socket.emit("mqtt:subscribe", { subscriptionId: sourceId });
+    }
   }
   if (path && !previewMqttState.datapointSubscribed.has(path)) {
     socket.emit("datapoint:subscribe", {
@@ -330,8 +423,9 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
   if (!projectId) return normalizeGlobalValue(detail);
   const fallbackValue = normalizeGlobalValue(detail);
 
-  if (source.datapointId || source.sourceType || source.sourceId) {
-    const sourceType = String(source.sourceType || "");
+  if (source.datapointId || source.sourceType || source.sourceId || source.path) {
+    const resolved = await resolveSourceInfo(projectId, detail);
+    const sourceType = String(resolved.sourceType || "");
     if (sourceType.includes("query") && source.sourceId) {
       try {
         const result = await datacenterApi.executeQuery(source.sourceId);
@@ -345,22 +439,42 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
     if (sourceType.includes("subscription") || sourceType.includes("tag")) {
       await subscribeMqttSource(projectId, detail);
       if (sourceType.includes("tag")) {
-        const value = previewMqttState.tagValues.get(source.sourceId);
-        return value ?? fallbackValue;
+        const value = previewMqttState.tagValues.get(resolved.sourceId || source.sourceId);
+        if (value !== undefined) return value;
       }
-      const value = previewMqttState.subscriptionValues.get(source.sourceId);
-      return value ?? fallbackValue;
+      if (sourceType.includes("subscription")) {
+        const value = previewMqttState.subscriptionValues.get(
+          resolved.sourceId || source.sourceId
+        );
+        if (value !== undefined) return value;
+      }
+      if (resolved.path) {
+        const pathValue = previewMqttState.datapointValues.get(resolved.path);
+        return pathValue ?? fallbackValue;
+      }
+      return fallbackValue;
     }
-    if (source.datapointId) {
+    if (resolved.datapointId || source.datapointId) {
       try {
-        const result = await datacenterApi.getDatapointValues(projectId, [source.datapointId]);
+        const result = await datacenterApi.getDatapointValues(projectId, [
+          resolved.datapointId || source.datapointId,
+        ]);
         const payload = unwrapApiData(result) || result;
-        const picked = extractDatapointValue(payload, source.datapointId);
+        const picked = extractDatapointValue(
+          payload,
+          resolved.datapointId || source.datapointId
+        );
         return picked ?? payload?.data ?? payload ?? fallbackValue;
       } catch (error) {
         return fallbackValue;
       }
     }
+  }
+
+  if (String(source.path).startsWith("mqtt.")) {
+    await subscribeMqttSource(projectId, detail);
+    const pathValue = previewMqttState.datapointValues.get(source.path);
+    return pathValue ?? fallbackValue;
   }
 
   const [sourceName, ...rest] = String(source.path).split(".");
@@ -552,6 +666,13 @@ export const initPreviewRuntime = (options) => {
           const sourceType = String(detail?.source?.sourceType || "");
           const sourceId = detail?.source?.sourceId;
           const path = detail?.source?.path;
+          if ((!sourceId || !sourceType) && path) {
+            resolveSourceInfo(projectId, detail).then((resolved) => {
+              if (resolved?.sourceId && resolved?.sourceType) {
+                trackMqttProp(prop, resolved.sourceType, resolved.sourceId);
+              }
+            });
+          }
           if (sourceId) {
             if (sourceType.includes("tag")) {
               const liveValue = previewMqttState.tagValues.get(sourceId);

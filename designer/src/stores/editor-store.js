@@ -50,20 +50,52 @@ const getDefaultGlobalScripts = () => ({
   custom: { groups: [], items: [] },
 });
 
+const normalizeVariableDef = (detail) => {
+  if (!detail || typeof detail !== "object") return detail;
+  const next = { ...detail };
+  if (typeof next.source === "string") {
+    next.source = { type: "dataCenter", path: next.source };
+    next.mapped = true;
+  }
+  const mappedPath = next.mappedPath || next.sourcePath || next.path;
+  if (!next.source && mappedPath) {
+    next.source = { type: "dataCenter", path: mappedPath };
+    next.mapped = true;
+  }
+  if (next.source && typeof next.source === "object") {
+    if (!next.source.type && (next.mapped || next.source.path)) {
+      next.source.type = "dataCenter";
+    }
+    if (!next.mapped && next.source.type === "dataCenter") {
+      next.mapped = true;
+    }
+  }
+  return next;
+};
+
 const normalizeGlobalVariables = (raw, fallbackDefinitions = {}) => {
   if (!raw || typeof raw !== "object") {
     return { definitions: fallbackDefinitions, groups: [] };
   }
   if (raw.definitions || raw.groups) {
+    const definitions =
+      raw.definitions && typeof raw.definitions === "object"
+        ? raw.definitions
+        : fallbackDefinitions;
+    const normalizedDefinitions = {};
+    Object.entries(definitions).forEach(([name, detail]) => {
+      normalizedDefinitions[name] = normalizeVariableDef(detail);
+    });
     return {
-      definitions:
-        raw.definitions && typeof raw.definitions === "object"
-          ? raw.definitions
-          : fallbackDefinitions,
+      definitions: normalizedDefinitions,
       groups: Array.isArray(raw.groups) ? raw.groups : [],
     };
   }
-  return { definitions: raw, groups: [] };
+  const normalizedDefinitions = {};
+  Object.entries(raw).forEach(([name, detail]) => {
+    normalizedDefinitions[name] = normalizeVariableDef(detail);
+  });
+  return { definitions: normalizedDefinitions, groups: [] };
 };
 
 const normalizeGlobalScripts = (raw) => {
