@@ -92,7 +92,7 @@ const activeUiSections = ref(["pc"]);
  * 组件筛选范围
  */
 const allowedTypesByCategory = {
-  layout: ["ResponsiveLayout", "ColumnLayout1", "ColumnLayout2", "ColumnLayout4"],
+  layout: ["ElContainer", "ElLayout"],
 };
 
 /**
@@ -153,12 +153,31 @@ const getPreviewComponent = (type) => {
     FreeContainer: {
       render: () => h("div", { class: "preview-free-container" }, "自由"),
     },
+    ElContainer: {
+      render: () =>
+        h("div", { class: "preview-el-container" }, [
+          h("div", { class: "preview-el-header" }),
+          h("div", { class: "preview-el-body" }, [
+            h("div", { class: "preview-el-aside" }),
+            h("div", { class: "preview-el-main" }),
+          ]),
+          h("div", { class: "preview-el-footer" }),
+        ]),
+    },
     ResponsiveLayout: {
       render: () =>
         h("div", { class: "preview-responsive-layout" }, [
           h("div", { class: "preview-responsive-block" }),
           h("div", { class: "preview-responsive-block" }),
           h("div", { class: "preview-responsive-block" }),
+        ]),
+    },
+    ElLayout: {
+      render: () =>
+        h("div", { class: "preview-el-layout" }, [
+          h("div", { class: "preview-el-layout-col" }),
+          h("div", { class: "preview-el-layout-col" }),
+          h("div", { class: "preview-el-layout-col" }),
         ]),
     },
     ColumnLayout1: {
@@ -440,8 +459,12 @@ const getPreviewIcon = (type) => {
       '<div style="width:60px;height:40px;background:#e4e7ed;border-radius:4px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;"><div style="background:#909399;"></div><div style="background:#909399;"></div><div style="background:#909399;"></div><div style="background:#909399;"></div></div>',
     FreeContainer:
       '<div style="width:60px;height:40px;background:#f5f7fa;border:2px dashed #dcdfe6;border-radius:4px;"></div>',
+    ElContainer:
+      '<div style="width:60px;height:40px;border:1px solid #dcdfe6;border-radius:4px;display:flex;flex-direction:column;gap:3px;padding:4px;background:#f5f7fa;"><div style="height:6px;background:#409eff;border-radius:2px;"></div><div style="flex:1;display:flex;gap:3px;"><div style="width:12px;background:#409eff;border-radius:2px;"></div><div style="flex:1;background:#e4e7ed;border-radius:2px;"></div></div><div style="height:6px;background:#409eff;border-radius:2px;"></div></div>',
     ResponsiveLayout:
       '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;display:flex;gap:4px;padding:4px;"><div style="flex:1;background:#c0c4cc;"></div><div style="flex:1;background:#c0c4cc;"></div><div style="flex:1;background:#c0c4cc;"></div></div>',
+    ElLayout:
+      '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;display:flex;gap:3px;padding:4px;"><div style="flex:1;background:#409eff;border-radius:2px;"></div><div style="flex:1;background:#409eff;border-radius:2px;"></div><div style="flex:1;background:#409eff;border-radius:2px;"></div></div>',
     ColumnLayout1:
       '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:4px;"><div style="width:100%;height:100%;background:#c0c4cc;"></div></div>',
     ColumnLayout2:
@@ -694,6 +717,43 @@ const getPreviewIcon = (type) => {
   color: #3b6cff;
 }
 
+.preview-el-container {
+  width: 60px;
+  height: 40px;
+  background: #ffffff;
+  border: 1px solid #3b6cff;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px;
+}
+
+.preview-el-header,
+.preview-el-footer {
+  height: 6px;
+  background: #3b6cff;
+  border-radius: 2px;
+}
+
+.preview-el-body {
+  flex: 1;
+  display: flex;
+  gap: 3px;
+}
+
+.preview-el-aside {
+  width: 12px;
+  background: #3b6cff;
+  border-radius: 2px;
+}
+
+.preview-el-main {
+  flex: 1;
+  background: #e4e7ed;
+  border-radius: 2px;
+}
+
 .preview-responsive-layout {
   width: 60px;
   height: 40px;
@@ -703,6 +763,23 @@ const getPreviewIcon = (type) => {
   display: flex;
   gap: 4px;
   padding: 4px;
+}
+
+.preview-el-layout {
+  width: 60px;
+  height: 40px;
+  background: #ffffff;
+  border: 1px solid #3b6cff;
+  border-radius: 4px;
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+}
+
+.preview-el-layout-col {
+  flex: 1;
+  background: #3b6cff;
+  border-radius: 2px;
 }
 
 .preview-responsive-block {

@@ -152,6 +152,13 @@ export class DragDropManager {
       'ColumnLayout1',
       'ColumnLayout2',
       'ColumnLayout4',
+      'ElContainer',
+      'ElLayout',
+      'ElHeader',
+      'ElAside',
+      'ElMain',
+      'ElFooter',
+      'ElCol',
     ];
     return containerTypes.includes(nodeType);
   }
@@ -224,6 +231,28 @@ export class DragDropManager {
           positioning: 'flow',
           visualHint: gridInfo,
           insertRule: 'grid_cell', // 显示单元格高亮
+        };
+      }
+
+      case 'ElContainer':
+      case 'ElLayout':
+      case 'ElHeader':
+      case 'ElAside':
+      case 'ElMain':
+      case 'ElFooter':
+      case 'ElCol': {
+        const direction = this.getContainerDirection(targetElement);
+        const insertInfo = this.calculateFlexInsertPosition(targetElement, event, direction);
+
+        return {
+          containerType: 'flex',
+          positioning: 'flow',
+          visualHint: {
+            orientation: insertInfo.insertLine?.orientation || 'horizontal',
+            offset: insertInfo.insertLine?.offset || 0,
+            index: insertInfo.index,
+          },
+          insertRule: 'before_after',
         };
       }
         

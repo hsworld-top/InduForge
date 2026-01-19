@@ -465,6 +465,208 @@ registerManifest({
 
 // Diagram2D 2D流程图组件
 registerManifest({
+  type: "ElContainer",
+  name: "Container布局",
+  category: "布局",
+  isContainer: true,
+  props: [
+    {
+      name: "showHeader",
+      type: "boolean",
+      label: "el-header",
+      group: "区域",
+      defaultValue: true,
+    },
+    {
+      name: "headerHeight",
+      type: "string",
+      label: "Header高度",
+      group: "区域",
+      defaultValue: "60px",
+    },
+    {
+      name: "showAside",
+      type: "boolean",
+      label: "el-aside",
+      group: "区域",
+      defaultValue: true,
+    },
+    {
+      name: "asideWidth",
+      type: "string",
+      label: "Aside宽度",
+      group: "区域",
+      defaultValue: "200px",
+    },
+    {
+      name: "showMain",
+      type: "boolean",
+      label: "el-main",
+      group: "区域",
+      defaultValue: true,
+    },
+    {
+      name: "showFooter",
+      type: "boolean",
+      label: "el-footer",
+      group: "区域",
+      defaultValue: true,
+    },
+    {
+      name: "footerHeight",
+      type: "string",
+      label: "Footer高度",
+      group: "区域",
+      defaultValue: "60px",
+    },
+  ],
+});
+
+// Element Plus Header 容器
+registerManifest({
+  type: "ElHeader",
+  name: "Header",
+  category: "布局",
+  isContainer: true,
+  props: [
+    {
+      name: "height",
+      type: "string",
+      label: "高度",
+      group: "布局",
+      defaultValue: "60px",
+    },
+  ],
+});
+
+// Element Plus Aside 容器
+registerManifest({
+  type: "ElAside",
+  name: "Aside",
+  category: "布局",
+  isContainer: true,
+  props: [
+    {
+      name: "width",
+      type: "string",
+      label: "宽度",
+      group: "布局",
+      defaultValue: "200px",
+    },
+  ],
+});
+
+// Element Plus Main 容器
+registerManifest({
+  type: "ElMain",
+  name: "Main",
+  category: "布局",
+  isContainer: true,
+  props: [],
+});
+
+// Element Plus Footer 容器
+registerManifest({
+  type: "ElFooter",
+  name: "Footer",
+  category: "布局",
+  isContainer: true,
+  props: [
+    {
+      name: "height",
+      type: "string",
+      label: "高度",
+      group: "布局",
+      defaultValue: "60px",
+    },
+  ],
+});
+
+// Element Plus Layout 布局
+registerManifest({
+  type: "ElLayout",
+  name: "Layout布局",
+  category: "布局",
+  isContainer: true,
+  props: [
+    {
+      name: "columns",
+      type: "number",
+      label: "列数",
+      group: "布局",
+      defaultValue: 3,
+      min: 1,
+      max: 24,
+    },
+    {
+      name: "gutter",
+      type: "number",
+      label: "间距",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 100,
+    },
+    {
+      name: "justify",
+      type: "enum",
+      label: "水平对齐",
+      group: "布局",
+      defaultValue: "start",
+      options: [
+        { label: "起始", value: "start" },
+        { label: "居中", value: "center" },
+        { label: "末尾", value: "end" },
+        { label: "两端", value: "space-between" },
+        { label: "环绕", value: "space-around" },
+        { label: "均匀", value: "space-evenly" },
+      ],
+    },
+    {
+      name: "align",
+      type: "enum",
+      label: "垂直对齐",
+      group: "布局",
+      defaultValue: "top",
+      options: [
+        { label: "顶部", value: "top" },
+        { label: "居中", value: "middle" },
+        { label: "底部", value: "bottom" },
+      ],
+    },
+  ],
+});
+
+// Element Plus Col 容器
+registerManifest({
+  type: "ElCol",
+  name: "Col",
+  category: "布局",
+  isContainer: true,
+  props: [
+    {
+      name: "span",
+      type: "number",
+      label: "栅格",
+      group: "布局",
+      defaultValue: 8,
+      min: 1,
+      max: 24,
+    },
+    {
+      name: "offset",
+      type: "number",
+      label: "偏移",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 24,
+    },
+  ],
+});
+
+// Diagram2D 2D流程图组件
+registerManifest({
   type: "Diagram2D",
   name: "2D流程图",
   category: "绘图",

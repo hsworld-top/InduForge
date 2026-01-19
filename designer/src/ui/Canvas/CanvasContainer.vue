@@ -325,6 +325,8 @@ const isLayoutContainerType = (type) => {
     "ColumnLayout1",
     "ColumnLayout2",
     "ColumnLayout4",
+    "ElContainer",
+    "ElLayout",
   ].includes(type);
 };
 
@@ -402,7 +404,17 @@ const buildLayoutItem = (parentNode, dropInfo) => {
     return buildGridLayoutItem(parentNode);
   }
 
-  if (parentNode.type === "FlexContainer" || parentNode.type === "ResponsiveLayout") {
+  if (
+    parentNode.type === "FlexContainer" ||
+    parentNode.type === "ResponsiveLayout" ||
+    parentNode.type === "ElContainer" ||
+    parentNode.type === "ElLayout" ||
+    parentNode.type === "ElHeader" ||
+    parentNode.type === "ElAside" ||
+    parentNode.type === "ElMain" ||
+    parentNode.type === "ElFooter" ||
+    parentNode.type === "ElCol"
+  ) {
     return buildFlexLayoutItem();
   }
 
@@ -573,6 +585,8 @@ const resolveDefaultSize = (type, manifest) => {
     FlexContainer: { width: 360, height: 200 },
     FreeContainer: { width: 360, height: 200 },
     GridContainer: { width: 360, height: 200 },
+    ElContainer: { width: 360, height: 240 },
+    ElLayout: { width: 360, height: 200 },
     Text: { width: 120, height: 32 },
     Button: { width: 120, height: 36 },
   };

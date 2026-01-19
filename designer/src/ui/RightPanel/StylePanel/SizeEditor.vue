@@ -5,10 +5,12 @@
       <div class="form-item">
         <label>宽度</label>
         <el-input
-          :model-value="width"
+          :model-value="widthInput"
           size="small"
           placeholder="auto"
-          @update:model-value="handleWidthChange"
+          @update:model-value="handleWidthInput"
+          @change="handleWidthChange"
+          @blur="handleWidthChange"
         >
           <template #append>
             <el-select
@@ -27,10 +29,12 @@
       <div class="form-item">
         <label>高度</label>
         <el-input
-          :model-value="height"
+          :model-value="heightInput"
           size="small"
           placeholder="auto"
-          @update:model-value="handleHeightChange"
+          @update:model-value="handleHeightInput"
+          @change="handleHeightChange"
+          @blur="handleHeightChange"
         >
           <template #append>
             <el-select
@@ -51,12 +55,20 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({}),
+  },
+  minWidth: {
+    type: Number,
+    default: undefined,
+  },
+  minHeight: {
+    type: Number,
+    default: undefined,
   },
 });
 
@@ -79,14 +91,87 @@ const parseSize = (value) => {
   return { value: "", unit: "auto" };
 };
 
-const width = computed(() => parseSize(props.modelValue.width).value);
+/**
+ * 限制尺寸最小值
+ * @param {string} value - 当前值
+ * @param {number | undefined} minValue - 最小值
+ * @returns {string}
+ */
+const clampSizeValue = (value, minValue) => {
+  if (minValue === undefined || minValue === null) return value;
+  if (value === "" || value === undefined || value === null) return value;
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num)) return value;
+  return String(Math.max(num, minValue));
+};
+
+/**
+ * 获取默认尺寸值
+ * @param {number | undefined} minValue - 最小值
+ * @returns {string}
+ */
+const resolveDefaultValue = (minValue) => {
+  if (Number.isFinite(minValue)) return String(minValue);
+  return "100";
+};
+
+/**
+ * 生成尺寸字符串
+ * @param {string} rawValue - 当前输入值
+ * @param {string} unit - 单位
+ * @param {number | undefined} minValue - 最小值
+ * @param {boolean} useDefault - 是否使用默认值
+ * @returns {string}
+ */
+const buildSizeValue = (rawValue, unit, minValue, useDefault) => {
+  const text = String(rawValue ?? "").trim();
+  if (!text) {
+    if (!useDefault) return "auto";
+    const defaultValue = resolveDefaultValue(minValue);
+    const nextValue =
+      unit === "px" ? clampSizeValue(defaultValue, minValue) : defaultValue;
+    return `${nextValue}${unit}`;
+  }
+  let nextValue = text;
+  if (unit === "px") {
+    nextValue = clampSizeValue(text, minValue);
+  }
+  return `${nextValue}${unit}`;
+};
+
 const widthUnit = computed(() => parseSize(props.modelValue.width).unit);
-const height = computed(() => parseSize(props.modelValue.height).value);
 const heightUnit = computed(() => parseSize(props.modelValue.height).unit);
 
-const handleWidthChange = (value) => {
+const widthInput = ref("");
+const heightInput = ref("");
+
+watch(
+  () => props.modelValue.width,
+  (val) => {
+    widthInput.value = parseSize(val).value;
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.modelValue.height,
+  (val) => {
+    heightInput.value = parseSize(val).value;
+  },
+  { immediate: true }
+);
+
+const handleWidthInput = (value) => {
+  widthInput.value = value;
+};
+
+const handleHeightInput = (value) => {
+  heightInput.value = value;
+};
+
+const handleWidthChange = () => {
   const unit = widthUnit.value === "auto" ? "px" : widthUnit.value;
-  const newWidth = value ? `${value}${unit}` : "auto";
+  const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, false);
   emit("update:modelValue", { ...props.modelValue, width: newWidth });
 };
 
@@ -94,14 +179,19 @@ const handleWidthUnitChange = (unit) => {
   if (unit === "auto") {
     emit("update:modelValue", { ...props.modelValue, width: "auto" });
   } else {
-    const value = width.value || "100";
-    emit("update:modelValue", { ...props.modelValue, width: `${value}${unit}` });
+    const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, true);
+    emit("update:modelValue", { ...props.modelValue, width: newWidth });
   }
 };
 
-const handleHeightChange = (value) => {
+const handleHeightChange = () => {
   const unit = heightUnit.value === "auto" ? "px" : heightUnit.value;
-  const newHeight = value ? `${value}${unit}` : "auto";
+  const newHeight = buildSizeValue(
+    heightInput.value,
+    unit,
+    props.minHeight,
+    false
+  );
   emit("update:modelValue", { ...props.modelValue, height: newHeight });
 };
 
@@ -109,8 +199,13 @@ const handleHeightUnitChange = (unit) => {
   if (unit === "auto") {
     emit("update:modelValue", { ...props.modelValue, height: "auto" });
   } else {
-    const value = height.value || "100";
-    emit("update:modelValue", { ...props.modelValue, height: `${value}${unit}` });
+    const newHeight = buildSizeValue(
+      heightInput.value,
+      unit,
+      props.minHeight,
+      true
+    );
+    emit("update:modelValue", { ...props.modelValue, height: newHeight });
   }
 };
 </script>
@@ -147,3 +242,7 @@ const handleHeightUnitChange = (unit) => {
   color: var(--el-text-color-regular);
 }
 </style>
+
+
+
+

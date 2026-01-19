@@ -36,10 +36,47 @@ function getDefaultStyle(type) {
     "ColumnLayout1",
     "ColumnLayout2",
     "ColumnLayout4",
+    "ElContainer",
+    "ElLayout",
+    "ElCol",
   ];
   const baseStyle = {
     minHeight: "40px",
   };
+
+  if (type === "ElHeader" || type === "ElFooter") {
+    return {
+      ...baseStyle,
+      width: "100%",
+      padding: "8px",
+    };
+  }
+
+  if (type === "ElAside") {
+    return {
+      ...baseStyle,
+      width: "200px",
+      padding: "8px",
+    };
+  }
+
+  if (type === "ElMain") {
+    return {
+      ...baseStyle,
+      width: "100%",
+      padding: "8px",
+      flex: "1 1 auto",
+    };
+  }
+
+  if (type === "ElCol") {
+    return {
+      ...baseStyle,
+      width: "100%",
+      padding: "8px",
+      minHeight: "80px",
+    };
+  }
 
   if (containerTypes.includes(type)) {
     return {
@@ -81,6 +118,13 @@ function isContainerType(type) {
     "ColumnLayout1",
     "ColumnLayout2",
     "ColumnLayout4",
+    "ElContainer",
+    "ElLayout",
+    "ElHeader",
+    "ElAside",
+    "ElMain",
+    "ElFooter",
+    "ElCol",
   ];
   return containerTypes.includes(type);
 }

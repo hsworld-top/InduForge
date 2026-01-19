@@ -1308,6 +1308,371 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
+   * 同步 Element Plus Container 的内置区域容器
+   * @param {string} containerId - 容器节点 ID
+   * @param {Record<string, any>} nextProps - 最新属性
+   */
+  const syncElContainerSections = (containerId, nextProps) => {
+    if (!doc.value || !history.value) return;
+    const containerNode = doc.value.getNode(containerId);
+    if (!containerNode || containerNode.type !== "ElContainer") return;
+
+    const sectionDefs = [
+      { prop: "showHeader", type: "ElHeader" },
+      { prop: "showAside", type: "ElAside" },
+      { prop: "showMain", type: "ElMain" },
+      { prop: "showFooter", type: "ElFooter" },
+    ];
+    const sectionSizeMap = {
+      ElHeader: { prop: "height", containerProp: "headerHeight", fallback: "60px" },
+      ElFooter: { prop: "height", containerProp: "footerHeight", fallback: "60px" },
+      ElAside: { prop: "width", containerProp: "asideWidth", fallback: "200px" },
+    };
+    const sectionOrder = sectionDefs.map((item) => item.type);
+    const getOrderIndex = (type) => sectionOrder.indexOf(type);
+
+    const executeCommand = (command) => {
+      if (history.value.isInTransaction?.()) {
+        history.value.executeInTransaction(command);
+        return;
+      }
+      history.value.execute(command);
+    };
+
+    const currentChildren = [...(containerNode.children || [])];
+    const existingSectionMap = new Map();
+    for (const childId of currentChildren) {
+      const childNode = doc.value.getNode(childId);
+      if (childNode && sectionOrder.includes(childNode.type)) {
+        existingSectionMap.set(childNode.type, childId);
+      }
+    }
+
+    for (const section of sectionDefs) {
+      if (!nextProps?.[section.prop] && existingSectionMap.has(section.type)) {
+        executeCommand(new RemoveNodeCommand(existingSectionMap.get(section.type)));
+      }
+    }
+
+    const refreshedNode = doc.value.getNode(containerId);
+    if (!refreshedNode) return;
+    const refreshedChildren = [...(refreshedNode.children || [])];
+
+    const refreshedSectionMap = new Map();
+    for (const childId of refreshedChildren) {
+      const childNode = doc.value.getNode(childId);
+      if (childNode && sectionOrder.includes(childNode.type)) {
+        refreshedSectionMap.set(childNode.type, childId);
+      }
+    }
+
+    const applySectionSize = (sectionType) => {
+      const config = sectionSizeMap[sectionType];
+      if (!config) return;
+      const sectionId = refreshedSectionMap.get(sectionType);
+      if (!sectionId) return;
+      const sectionNode = doc.value.getNode(sectionId);
+      if (!sectionNode) return;
+      const nextValue = nextProps?.[config.containerProp] || config.fallback;
+      if (sectionNode.props?.[config.prop] === nextValue) return;
+      executeCommand(
+        new UpdateNodeCommand(sectionNode.id, {
+          props: { ...(sectionNode.props || {}), [config.prop]: nextValue },
+        })
+      );
+    };
+
+    const resolveInsertIndex = (type) => {
+      const orderIndex = getOrderIndex(type);
+      let insertIndex = refreshedChildren.length;
+      for (let i = 0; i < refreshedChildren.length; i += 1) {
+        const childNode = doc.value.getNode(refreshedChildren[i]);
+        const childOrder = childNode ? getOrderIndex(childNode.type) : -1;
+        if (childOrder !== -1 && childOrder > orderIndex) {
+          insertIndex = i;
+          break;
+        }
+      }
+      if (type === "ElHeader" && insertIndex === refreshedChildren.length) {
+        return 0;
+      }
+      return insertIndex;
+    };
+
+    const buildUniqueLabel = (baseLabel) => {
+      let label = baseLabel || "容器";
+      if (isLabelUnique(label)) return label;
+      let index = 1;
+      while (!isLabelUnique(`${label}${index}`)) {
+        index += 1;
+      }
+      return `${label}${index}`;
+    };
+
+    for (const section of sectionDefs) {
+      if (!nextProps?.[section.prop]) continue;
+      if (refreshedSectionMap.has(section.type)) continue;
+
+      const manifest = componentRegistry.get(section.type);
+      const sizeConfig = sectionSizeMap[section.type];
+      const sizeValue = sizeConfig
+        ? nextProps?.[sizeConfig.containerProp] || sizeConfig.fallback
+        : null;
+      const childNode = createComponentNode(section.type, {
+        parentNode: refreshedNode,
+        label: buildUniqueLabel(manifest?.name || section.type),
+        props: {
+          ...(manifest?.defaultProps || {}),
+          ...(sizeConfig && sizeValue ? { [sizeConfig.prop]: sizeValue } : {}),
+        },
+        style: { ...(manifest?.defaultStyle || {}) },
+        layoutItem: buildFlexLayoutItem(),
+      });
+
+      const insertIndex = resolveInsertIndex(section.type);
+      executeCommand(new InsertNodeCommand(containerId, insertIndex, childNode));
+    }
+
+    Object.keys(sectionSizeMap).forEach((sectionType) => {
+      if (!refreshedSectionMap.has(sectionType)) return;
+      applySectionSize(sectionType);
+    });
+  };
+
+  /**
+   * 同步 Element Plus Layout 的内置列
+   * @param {string} layoutId - 布局节点 ID
+   * @param {Record<string, any>} nextProps - 最新属性
+   */
+  const syncElLayoutColumns = (layoutId, nextProps) => {
+    if (!doc.value || !history.value) return;
+    const layoutNode = doc.value.getNode(layoutId);
+    if (!layoutNode || layoutNode.type !== "ElLayout") return;
+
+    const total = Math.max(1, Math.min(24, Number(nextProps?.columns) || 1));
+    const baseSpan = Math.max(1, Math.floor(24 / total));
+    const remainder = 24 - baseSpan * (total - 1);
+    const getSpanByIndex = (index) =>
+      index === total - 1 ? Math.max(1, remainder) : baseSpan;
+
+    const executeCommand = (command) => {
+      if (history.value.isInTransaction?.()) {
+        history.value.executeInTransaction(command);
+        return;
+      }
+      history.value.execute(command);
+    };
+
+    const children = [...(layoutNode.children || [])];
+    const colIds = children.filter((childId) => {
+      const childNode = doc.value.getNode(childId);
+      return childNode?.type === "ElCol";
+    });
+
+    if (colIds.length > total) {
+      for (let i = colIds.length - 1; i >= total; i -= 1) {
+        executeCommand(new RemoveNodeCommand(colIds[i]));
+      }
+    }
+
+    let refreshedNode = doc.value.getNode(layoutId);
+    if (!refreshedNode) return;
+    let refreshedChildren = [...(refreshedNode.children || [])];
+    let refreshedCols = refreshedChildren.filter((childId) => {
+      const childNode = doc.value.getNode(childId);
+      return childNode?.type === "ElCol";
+    });
+
+    const buildUniqueLabel = (baseLabel) => {
+      const rootId = currentPage.value?.rootNodeId;
+      const existingLabels = new Set();
+      if (rootId && doc.value) {
+        const stack = [rootId];
+        while (stack.length) {
+          const id = stack.pop();
+          const current = doc.value.getNode(id);
+          if (!current) continue;
+          if (current.label) existingLabels.add(current.label);
+          if (Array.isArray(current.children)) {
+            stack.push(...current.children);
+          }
+        }
+      }
+      const normalized = baseLabel || "容器";
+      if (!existingLabels.has(normalized)) return normalized;
+      let index = 1;
+      let label = `${normalized}${index}`;
+      while (existingLabels.has(label)) {
+        index += 1;
+        label = `${normalized}${index}`;
+      }
+      return label;
+    };
+
+    for (let i = refreshedCols.length; i < total; i += 1) {
+      const manifest = componentRegistry.get("ElCol");
+      const childNode = createComponentNode("ElCol", {
+        parentNode: refreshedNode,
+        label: buildUniqueLabel(manifest?.name || "Col"),
+        props: { ...(manifest?.defaultProps || {}), span: getSpanByIndex(i) },
+        style: { ...(manifest?.defaultStyle || {}) },
+        layoutItem: buildFlexLayoutItem(),
+      });
+
+      const insertIndex = refreshedChildren.length;
+      executeCommand(new InsertNodeCommand(layoutId, insertIndex, childNode));
+
+      refreshedNode = doc.value.getNode(layoutId);
+      refreshedChildren = [...(refreshedNode?.children || [])];
+      refreshedCols = refreshedChildren.filter((childId) => {
+        const childNode = doc.value.getNode(childId);
+        return childNode?.type === "ElCol";
+      });
+    }
+
+    refreshedCols = refreshedCols.slice(0, total);
+    for (let i = 0; i < refreshedCols.length; i += 1) {
+      const colNode = doc.value.getNode(refreshedCols[i]);
+      if (!colNode) continue;
+      const nextSpan = getSpanByIndex(i);
+      if (colNode.props?.span === nextSpan) continue;
+      executeCommand(
+        new UpdateNodeCommand(colNode.id, {
+          props: { ...(colNode.props || {}), span: nextSpan },
+        })
+      );
+    }
+  };
+
+  /**
+   * 解析尺寸为像素值
+   * @param {string | number | undefined | null} value - 尺寸值
+   * @returns {number | undefined}
+   */
+  const parseSizeToNumber = (value) => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    const text = String(value).trim();
+    if (!text || text === "auto") return undefined;
+    if (text.endsWith("px")) {
+      const num = Number.parseFloat(text.slice(0, -2));
+      return Number.isFinite(num) ? num : undefined;
+    }
+    if (/^[\d.]+$/.test(text)) {
+      const num = Number.parseFloat(text);
+      return Number.isFinite(num) ? num : undefined;
+    }
+    return undefined;
+  };
+
+  /**
+   * 同步绝对定位节点的尺寸数据
+   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
+   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
+   * @returns {Partial<import('@/editor-core').ComponentNode>}
+   */
+  const syncAbsoluteSizePatch = (node, patch) => {
+    if (!node || !patch?.style) return patch;
+    if (node.positioning !== "absolute" || !node.absolutePos) return patch;
+
+    const widthValue = parseSizeToNumber(patch.style.width);
+    const heightValue = parseSizeToNumber(patch.style.height);
+    if (widthValue === undefined && heightValue === undefined) return patch;
+
+    const nextAbs = { ...(node.absolutePos || {}) };
+    if (widthValue !== undefined) {
+      nextAbs.w = Math.max(1, Math.round(widthValue));
+    }
+    if (heightValue !== undefined) {
+      nextAbs.h = Math.max(1, Math.round(heightValue));
+    }
+
+    const baseLayoutItem = patch.layoutItem || node.layoutItem;
+    let nextLayoutItem = baseLayoutItem;
+    if (baseLayoutItem?.free?.abs) {
+      nextLayoutItem = {
+        ...(baseLayoutItem || {}),
+        free: {
+          ...(baseLayoutItem.free || {}),
+          abs: {
+            ...(baseLayoutItem.free.abs || {}),
+            ...(widthValue !== undefined ? { w: nextAbs.w } : {}),
+            ...(heightValue !== undefined ? { h: nextAbs.h } : {}),
+          },
+        },
+      };
+    }
+
+    return {
+      ...patch,
+      absolutePos: nextAbs,
+      ...(nextLayoutItem ? { layoutItem: nextLayoutItem } : {}),
+    };
+  };
+
+  /**
+   * 限制容器最小尺寸，避免小于内部区域
+   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
+   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
+   * @returns {Partial<import('@/editor-core').ComponentNode>}
+   */
+  const clampElContainerSizePatch = (node, patch) => {
+    if (!node || node.type !== "ElContainer" || !patch?.style) return patch;
+
+    const children = node.children || [];
+    let hasHeader = false;
+    let hasFooter = false;
+    let hasAside = false;
+    let hasMain = false;
+    for (const childId of children) {
+      const childNode = doc.value?.getNode?.(childId);
+      if (!childNode) continue;
+      if (childNode.type === "ElHeader") hasHeader = true;
+      if (childNode.type === "ElFooter") hasFooter = true;
+      if (childNode.type === "ElAside") hasAside = true;
+      if (childNode.type === "ElMain") hasMain = true;
+    }
+
+    const props = node.props || {};
+    if (typeof props.showHeader === "boolean") hasHeader = props.showHeader;
+    if (typeof props.showFooter === "boolean") hasFooter = props.showFooter;
+    if (typeof props.showAside === "boolean") hasAside = props.showAside;
+    if (typeof props.showMain === "boolean") hasMain = props.showMain;
+
+    const headerHeight = parseSizeToNumber(props.headerHeight) ?? 60;
+    const footerHeight = parseSizeToNumber(props.footerHeight) ?? 60;
+    const asideWidth = parseSizeToNumber(props.asideWidth) ?? 200;
+    const minBodySize = 40;
+
+    const hasBody = hasAside || hasMain;
+    let minWidth = 0;
+    if (hasAside && hasMain) {
+      minWidth = asideWidth + minBodySize;
+    } else if (hasAside) {
+      minWidth = asideWidth;
+    } else if (hasMain) {
+      minWidth = minBodySize;
+    }
+
+    let minHeight = 0;
+    if (hasHeader) minHeight += headerHeight;
+    if (hasFooter) minHeight += footerHeight;
+    if (hasBody) minHeight += minBodySize;
+
+    const nextStyle = { ...(patch.style || {}) };
+    const widthValue = parseSizeToNumber(nextStyle.width);
+    const heightValue = parseSizeToNumber(nextStyle.height);
+    if (widthValue !== undefined && minWidth > 0) {
+      nextStyle.width = `${Math.max(widthValue, minWidth)}px`;
+    }
+    if (heightValue !== undefined && minHeight > 0) {
+      nextStyle.height = `${Math.max(heightValue, minHeight)}px`;
+    }
+
+    return { ...patch, style: nextStyle };
+  };
+
+  /**
    * 更新组件节点
    * @param {string} nodeId - 节点 ID
    * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
@@ -1317,7 +1682,82 @@ export const useEditorStore = defineStore("editor", () => {
     if (!doc.value || !history.value || !nodeId) return false;
     if (!ensureEditable()) return false;
 
-    history.value.execute(new UpdateNodeCommand(nodeId, patch));
+    const node = doc.value.getNode(nodeId);
+    const limitedPatch = clampElContainerSizePatch(node, patch);
+    const nextPatch = syncAbsoluteSizePatch(node, limitedPatch);
+    const shouldSyncContainer =
+      node?.type === "ElContainer" && nextPatch?.props && typeof nextPatch === "object";
+    const shouldSyncLayout =
+      node?.type === "ElLayout" && nextPatch?.props && typeof nextPatch === "object";
+
+    if (!shouldSyncContainer && !shouldSyncLayout) {
+      history.value.execute(new UpdateNodeCommand(nodeId, nextPatch));
+      return true;
+    }
+
+    const mergedProps = {
+      ...(node.props || {}),
+      ...(nextPatch.props || {}),
+    };
+    const mergedPatch = { ...nextPatch, props: mergedProps };
+    const shouldCommit = !history.value.isInTransaction?.();
+    if (shouldCommit) {
+      history.value.beginTransaction();
+    }
+
+    history.value.executeInTransaction(new UpdateNodeCommand(nodeId, mergedPatch));
+    if (shouldSyncContainer) {
+      syncElContainerSections(nodeId, mergedProps);
+    }
+    if (shouldSyncLayout) {
+      syncElLayoutColumns(nodeId, mergedProps);
+    }
+
+    if (shouldCommit) {
+      history.value.commitTransaction("更新容器布局");
+    }
+    const executeParentUpdate = (parentId, patch) => {
+      if (history.value.isInTransaction?.()) {
+        history.value.executeInTransaction(
+          new UpdateNodeCommand(parentId, patch)
+        );
+        return;
+      }
+      history.value.execute(new UpdateNodeCommand(parentId, patch));
+    };
+    if (node?.type === "ElHeader") {
+      const parentNode = doc.value.getParent(nodeId);
+      if (parentNode?.type === "ElContainer" && mergedProps.height) {
+        executeParentUpdate(parentNode.id, {
+          props: {
+            ...(parentNode.props || {}),
+            headerHeight: mergedProps.height,
+          },
+        });
+      }
+    }
+    if (node?.type === "ElFooter") {
+      const parentNode = doc.value.getParent(nodeId);
+      if (parentNode?.type === "ElContainer" && mergedProps.height) {
+        executeParentUpdate(parentNode.id, {
+          props: {
+            ...(parentNode.props || {}),
+            footerHeight: mergedProps.height,
+          },
+        });
+      }
+    }
+    if (node?.type === "ElAside") {
+      const parentNode = doc.value.getParent(nodeId);
+      if (parentNode?.type === "ElContainer" && mergedProps.width) {
+        executeParentUpdate(parentNode.id, {
+          props: {
+            ...(parentNode.props || {}),
+            asideWidth: mergedProps.width,
+          },
+        });
+      }
+    }
     return true;
   };
 
@@ -1391,6 +1831,8 @@ export const useEditorStore = defineStore("editor", () => {
       FlexContainer: { width: 360, height: 200 },
       FreeContainer: { width: 360, height: 200 },
       GridContainer: { width: 360, height: 200 },
+      ElContainer: { width: 360, height: 240 },
+      ElLayout: { width: 360, height: 200 },
       Text: { width: 120, height: 32 },
       Button: { width: 120, height: 36 },
     };
@@ -1412,6 +1854,8 @@ export const useEditorStore = defineStore("editor", () => {
       "ColumnLayout1",
       "ColumnLayout2",
       "ColumnLayout4",
+      "ElContainer",
+      "ElLayout",
     ].includes(type);
   };
 
@@ -1458,7 +1902,17 @@ export const useEditorStore = defineStore("editor", () => {
       return buildGridLayoutItem(parentNode);
     }
 
-    if (parentNode.type === "FlexContainer" || parentNode.type === "ResponsiveLayout") {
+    if (
+      parentNode.type === "FlexContainer" ||
+      parentNode.type === "ResponsiveLayout" ||
+      parentNode.type === "ElContainer" ||
+      parentNode.type === "ElLayout" ||
+      parentNode.type === "ElHeader" ||
+      parentNode.type === "ElAside" ||
+      parentNode.type === "ElMain" ||
+      parentNode.type === "ElFooter" ||
+      parentNode.type === "ElCol"
+    ) {
       return buildFlexLayoutItem();
     }
 
@@ -1537,8 +1991,29 @@ export const useEditorStore = defineStore("editor", () => {
     if (!doc.value || !history.value || !parentId) return null;
     if (!ensureEditable()) return null;
 
-    const parentNode = doc.value.getNode(parentId);
+    let parentNode = doc.value.getNode(parentId);
     if (!parentNode) return null;
+    let resolvedParentId = parentId;
+    const isElContainerRegionType = (nodeType) =>
+      nodeType === "ElHeader" ||
+      nodeType === "ElAside" ||
+      nodeType === "ElMain" ||
+      nodeType === "ElFooter";
+    let shouldReplaceRegionChildren = false;
+    if (parentNode.type === "ElContainer" && !isElContainerRegionType(type)) {
+      const mainChildId = (parentNode.children || []).find((childId) => {
+        const childNode = doc.value?.getNode?.(childId);
+        return childNode?.type === "ElMain";
+      });
+      if (mainChildId) {
+        const mainNode = doc.value.getNode(mainChildId);
+        if (mainNode) {
+          parentNode = mainNode;
+          resolvedParentId = mainNode.id;
+          shouldReplaceRegionChildren = true;
+        }
+      }
+    }
 
     const manifest = componentRegistry.get(type);
     const defaultSize = resolveDefaultSize(type, manifest);
@@ -1567,6 +2042,22 @@ export const useEditorStore = defineStore("editor", () => {
       };
     } else {
       layoutItem = buildLayoutItem(parentNode, dropInfo);
+    }
+
+    const isRegionContainer = [
+      "ElHeader",
+      "ElAside",
+      "ElMain",
+      "ElFooter",
+      "ElCol",
+    ].includes(parentNode.type);
+    if (isRegionContainer) {
+      // 区域容器内默认填满
+      nodeStyle = {
+        ...nodeStyle,
+        width: "100%",
+        height: "100%",
+      };
     }
 
     const baseLabel = manifest?.name || type;
@@ -1609,7 +2100,14 @@ export const useEditorStore = defineStore("editor", () => {
       };
     } else if (
       parentNode.type === "FlexContainer" ||
-      parentNode.type === "ResponsiveLayout"
+      parentNode.type === "ResponsiveLayout" ||
+      parentNode.type === "ElContainer" ||
+      parentNode.type === "ElLayout" ||
+      parentNode.type === "ElHeader" ||
+      parentNode.type === "ElAside" ||
+      parentNode.type === "ElMain" ||
+      parentNode.type === "ElFooter" ||
+      parentNode.type === "ElCol"
     ) {
       node.positioning = "flow";
       if (layoutItem?.flex) {
@@ -1627,11 +2125,50 @@ export const useEditorStore = defineStore("editor", () => {
       }
     }
 
-    history.value.execute(new InsertNodeCommand(parentId, insertIndex, node));
+    const shouldWrapTransaction =
+      (type === "ElContainer" || type === "ElLayout") &&
+      !history.value.isInTransaction?.();
+    if (shouldWrapTransaction) {
+      history.value.beginTransaction();
+    }
+
+    if (type === "ElContainer" || type === "ElLayout") {
+      history.value.executeInTransaction(
+        new InsertNodeCommand(parentId, insertIndex, node)
+      );
+      if (type === "ElContainer") {
+        syncElContainerSections(node.id, node.props || {});
+      }
+      if (type === "ElLayout") {
+        syncElLayoutColumns(node.id, node.props || {});
+      }
+    } else {
+    const shouldCommit = shouldReplaceRegionChildren && !history.value.isInTransaction?.();
+    if (shouldCommit) {
+      history.value.beginTransaction();
+    }
+    if (shouldReplaceRegionChildren) {
+      const existingChildren = [...(parentNode.children || [])];
+      for (const childId of existingChildren) {
+        history.value.executeInTransaction?.(new RemoveNodeCommand(childId));
+        if (!history.value.executeInTransaction) {
+          history.value.execute(new RemoveNodeCommand(childId));
+        }
+      }
+    }
+    history.value.execute(new InsertNodeCommand(resolvedParentId, insertIndex, node));
+    if (shouldCommit) {
+      history.value.commitTransaction("更新Main区域");
+    }
+    }
+
+    if (shouldWrapTransaction) {
+      history.value.commitTransaction("插入容器布局");
+    }
     selection.value?.select(createSelectableElement("node", node.id));
 
-  return node;
-};
+    return node;
+  };
 
   /**
    * 校验当前页面组件名称是否唯一

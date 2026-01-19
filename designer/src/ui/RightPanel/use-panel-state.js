@@ -36,7 +36,7 @@ export function computePanelState(count) {
  */
 export function usePanelState() {
   const editorStore = useEditorStore();
-  const { doc, selection } = storeToRefs(editorStore);
+  const { doc, selection, docVersion } = storeToRefs(editorStore);
 
   /** @type {import('vue').Ref<number>} */
   const selectedCount = ref(0);
@@ -80,11 +80,28 @@ export function usePanelState() {
     // 同步选中的节点或图形
     if (primary && doc.value) {
       if (primary.kind === "node") {
-        selectedNode.value = doc.value.getNode?.(primary.id) || null;
+        const node = doc.value.getNode?.(primary.id) || null;
+        selectedNode.value = node
+          ? {
+              ...node,
+              props: { ...(node.props || {}) },
+              style: { ...(node.style || {}) },
+              children: Array.isArray(node.children)
+                ? [...node.children]
+                : node.children,
+            }
+          : null;
         selectedGraphic.value = null;
       } else if (primary.kind === "graphic") {
+        const graphic = doc.value.getGraphic?.(primary.id) || null;
         selectedNode.value = null;
-        selectedGraphic.value = doc.value.getGraphic?.(primary.id) || null;
+        selectedGraphic.value = graphic
+          ? {
+              ...graphic,
+              props: { ...(graphic.props || {}) },
+              style: { ...(graphic.style || {}) },
+            }
+          : null;
       } else {
         selectedNode.value = null;
         selectedGraphic.value = null;
@@ -123,6 +140,13 @@ export function usePanelState() {
       }
     },
     { immediate: true }
+  );
+
+  watch(
+    () => docVersion.value,
+    () => {
+      syncSelection();
+    }
   );
 
   // 组件卸载时取消订阅

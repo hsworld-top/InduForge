@@ -7,6 +7,7 @@
     :data-node-type="node.type"
     ref="nodeRef"
     @click.stop="handleClick"
+    @dblclick.stop="handleDoubleClick"
     @pointerdown.capture="handlePointerDown"
     @dragover.prevent="handleDragOver"
     @dragstart.prevent
@@ -133,9 +134,14 @@
         </el-dropdown-menu>
       </template>
       <template v-if="isContainer && !hasChildren && !props.isRoot">
-        <div class="empty-container-hint">
-          <span v-if="isDragOver">释放以添加组件</span>
-          <span v-else>拖拽组件到此处</span>
+        <div
+          class="empty-container-hint"
+          :class="{ 'is-region-hint': isRegionContainer }"
+        >
+          <span v-if="isDropActive">释放以添加组件</span>
+          <span v-else>{{
+            isRegionContainer ? regionHintText : "拖拽组件到此处"
+          }}</span>
         </div>
       </template>
       <!-- 插入线指示器 -->
@@ -158,7 +164,7 @@
 
     <div v-if="showResizeHandles" class="resize-handles">
       <span
-        v-for="handle in resizeHandles"
+        v-for="handle in visibleResizeHandles"
         :key="handle.key"
         class="resize-handle"
         :class="handle.key"
@@ -179,10 +185,17 @@ import {
   componentRegistry,
   createSelectableElement,
   UpdateNodeCommand,
+  MoveNodeCommand,
 } from "@/editor-core";
 import { normalizeEventDefinitions } from "@/editor-core/registry/componentEvents.js";
 import { createDragDropManager } from "./DragDropManager";
-import { useDragState, endDrag } from "./use-drag-state";
+import {
+  useDragState,
+  startDrag,
+  endDrag,
+  updateDropTarget,
+  clearDropTarget,
+} from "./use-drag-state";
 
 const props = defineProps({
   nodeId: {
@@ -323,6 +336,8 @@ const filterRenderProps = (type, props) => {
     CarouselComponent: ["items"],
     Card: ["title", "content"],
     BusinessCard: ["title", "content"],
+    ElContainer: ["showHeader", "showAside", "showMain", "showFooter"],
+    ElLayout: ["columns"],
   };
   const removeKeys = removeKeysByType[type] || [];
   for (const key of removeKeys) {
@@ -350,6 +365,10 @@ const filterRenderProps = (type, props) => {
 
 /** 拖拽状态 */
 const isDragOver = ref(false);
+const isDropActive = computed(() => {
+  if (!node.value) return isDragOver.value;
+  return isDragOver.value || dragState.targetContainerId === node.value.id;
+});
 const showInsertLine = ref(false);
 const insertLineStyle = ref(null);
 const dragDropManager = createDragDropManager();
@@ -414,8 +433,45 @@ const isContainer = computed(() => {
   return Boolean(manifest?.isContainer);
 });
 
+/**
+ * 判断是否为 Flex 插入容器
+ * @param {string} type - 组件类型
+ * @returns {boolean}
+ */
+const isFlexDropContainer = (type) => {
+  return [
+    "FlexContainer",
+    "ResponsiveLayout",
+    "ElContainer",
+    "ElLayout",
+    "ElHeader",
+    "ElAside",
+    "ElMain",
+    "ElFooter",
+    "ElCol",
+  ].includes(type);
+};
+
+/**
+ * 获取 Flex 方向
+ * @param {string} type - 组件类型
+ * @param {HTMLElement} element - 目标元素
+ * @returns {string}
+ */
+const resolveFlexDirection = (type, element) => {
+  if (type === "FlexContainer" || type === "ResponsiveLayout") {
+    return node.value?.props?.direction || "column";
+  }
+  return dragDropManager.getContainerDirection(element);
+};
+
 const hasChildren = computed(() => {
-  return (node.value?.children || []).length > 0;
+  docVersion.value;
+  if (!node.value || !doc.value) return false;
+  if (typeof doc.value.getChildren === "function") {
+    return doc.value.getChildren(node.value.id).length > 0;
+  }
+  return (node.value.children || []).length > 0;
 });
 
 /**
@@ -425,6 +481,14 @@ const hasChildren = computed(() => {
  */
 const isMovable = computed(() => {
   if (!node.value || props.isRoot || node.value.locked) return false;
+  if (
+    node.value.type === "ElHeader" ||
+    node.value.type === "ElAside" ||
+    node.value.type === "ElMain" ||
+    node.value.type === "ElFooter"
+  ) {
+    return false;
+  }
   return true;
 });
 
@@ -439,10 +503,44 @@ const resizeHandles = [
   { key: "w", x: -1, y: 0, cursor: "ew-resize" },
 ];
 
+const getRegionResizeConfig = (type) => {
+  const configMap = {
+    ElHeader: { axis: "y", prop: "height", handles: ["s"] },
+    ElAside: { axis: "x", prop: "width", handles: ["e"] },
+  };
+  if (type === "ElFooter") {
+    return {
+      axis: "y",
+      prop: "height",
+      handles: ["n"],
+      invert: true,
+    };
+  }
+  return configMap[type] || null;
+};
+
+const visibleResizeHandles = computed(() => {
+  const config = getRegionResizeConfig(node.value?.type);
+  if (!config) return resizeHandles;
+  return resizeHandles.filter((handle) => config.handles.includes(handle.key));
+});
+
 const showResizeHandles = computed(() => {
   selectionVersion.value;
   if (props.readonly || props.isRoot) return false;
   if (!node.value || node.value.locked) return false;
+  if (node.value.type === "ElMain") return false;
+  const parentNode = doc.value?.getParent?.(node.value.id);
+  if (
+    parentNode?.type === "ElHeader" ||
+    parentNode?.type === "ElAside" ||
+    parentNode?.type === "ElMain" ||
+    parentNode?.type === "ElFooter"
+  ) {
+    return false;
+  }
+  const config = getRegionResizeConfig(node.value?.type);
+  if (config && config.handles.length === 0) return false;
   return Boolean(selection.value?.isSelected?.(node.value.id));
 });
 
@@ -455,6 +553,14 @@ const showResizeHandles = computed(() => {
 const canAcceptChild = (parentNode, childType) => {
   const manifest = componentRegistry.get(parentNode.type);
   const allowed = manifest?.allowedChildren;
+  if (
+    parentNode.type === "ElHeader" ||
+    parentNode.type === "ElAside" ||
+    parentNode.type === "ElMain" ||
+    parentNode.type === "ElFooter"
+  ) {
+    return (parentNode.children || []).length === 0;
+  }
   if (!Array.isArray(allowed) || allowed.length === 0) return true;
   return allowed.includes(childType);
 };
@@ -485,11 +591,32 @@ const nodeClass = computed(() => {
   if (isContainer.value) classes.push("is-container");
   if (isMovable.value && !props.readonly) classes.push("is-draggable");
   if (node.value.locked) classes.push("is-locked");
-  if (isDragOver.value && !props.readonly) classes.push("drag-over");
+  if (isDropActive.value && !props.readonly) classes.push("drag-over");
   if (!props.readonly && selection.value?.isSelected(node.value.id)) {
     classes.push("is-selected");
   }
   return classes.join(" ");
+});
+
+const isRegionContainer = computed(() => {
+  const type = node.value?.type;
+  return (
+    type === "ElHeader" ||
+    type === "ElAside" ||
+    type === "ElMain" ||
+    type === "ElFooter"
+  );
+});
+
+const regionHintText = computed(() => {
+  if (!node.value) return "";
+  const hintMap = {
+    ElHeader: "Header区域",
+    ElAside: "Aside区域",
+    ElMain: "Main区域",
+    ElFooter: "Footer区域",
+  };
+  return hintMap[node.value.type] || "区域";
 });
 
 const renderTag = computed(() => {
@@ -555,6 +682,20 @@ const renderTag = computed(() => {
       return "el-calendar";
     case "Signature":
       return "el-input";
+    case "ElContainer":
+      return "el-container";
+    case "ElHeader":
+      return "el-header";
+    case "ElAside":
+      return "el-aside";
+    case "ElMain":
+      return "el-main";
+    case "ElFooter":
+      return "el-footer";
+    case "ElLayout":
+      return "el-row";
+    case "ElCol":
+      return "el-col";
     case "Text":
       return "div";
     default:
@@ -616,12 +757,60 @@ const contentStyle = computed(() => {
   if (!node.value) return {};
   const containerStyle = resolveContainerStyle(node.value, {});
   const customStyle = normalizeStyleObject(node.value.style || {});
+  const parentNode = doc.value?.getParent?.(node.value.id);
   const style = {
     ...containerStyle,
     ...customStyle,
   };
   if (!style.overflow && !isContainer.value) {
     style.overflow = "hidden";
+  }
+  if (
+    parentNode?.type === "ElHeader" ||
+    parentNode?.type === "ElAside" ||
+    parentNode?.type === "ElMain" ||
+    parentNode?.type === "ElFooter"
+  ) {
+    style.overflow = "hidden";
+  }
+  if (
+    node.value.type === "ElContainer" ||
+    node.value.type === "ElHeader" ||
+    node.value.type === "ElAside" ||
+    node.value.type === "ElMain" ||
+    node.value.type === "ElFooter"
+  ) {
+    style.padding = "0";
+  }
+  if (parentNode?.type === "ElContainer") {
+    if (node.value.type === "ElHeader") {
+      style.width = "100%";
+      style.height = parentNode.props?.headerHeight || "60px";
+    } else if (node.value.type === "ElFooter") {
+      style.width = "100%";
+      style.height = parentNode.props?.footerHeight || "60px";
+    } else if (node.value.type === "ElAside") {
+      style.width = parentNode.props?.asideWidth || "200px";
+      style.height = "100%";
+    }
+  }
+  if (
+    !style.width &&
+    (parentNode?.type === "ElHeader" ||
+      parentNode?.type === "ElAside" ||
+      parentNode?.type === "ElMain" ||
+      parentNode?.type === "ElFooter")
+  ) {
+    style.width = "100%";
+  }
+  if (
+    !style.height &&
+    (parentNode?.type === "ElHeader" ||
+      parentNode?.type === "ElAside" ||
+      parentNode?.type === "ElMain" ||
+      parentNode?.type === "ElFooter")
+  ) {
+    style.height = "100%";
   }
   if (props.isRoot || layoutStyle.value.position === "absolute") {
     if (!style.width) style.width = "100%";
@@ -632,7 +821,15 @@ const contentStyle = computed(() => {
 
 const wrapperStyle = computed(() => {
   if (!node.value) return {};
-  return layoutStyle.value;
+  const style = { ...layoutStyle.value };
+  const customStyle = normalizeStyleObject(node.value.style || {});
+  if (customStyle.width && !style.width) {
+    style.width = customStyle.width;
+  }
+  if (customStyle.height && !style.height) {
+    style.height = customStyle.height;
+  }
+  return style;
 });
 
 /**
@@ -1014,12 +1211,68 @@ const handleSelect = (event) => {
   selection.value.select(element);
 };
 
+/**
+ * 解析点击时的选中目标
+ * @param {MouseEvent} event - 鼠标事件
+ * @returns {import('@/editor-core').ComponentNode | null}
+ */
+const resolveClickSelectionTarget = (event) => {
+  if (!node.value) return null;
+  if (!isRegionContainer.value) return node.value;
+  if (event?.altKey) return node.value;
+  const parentNode = doc.value?.getParent?.(node.value.id);
+  if (!parentNode || parentNode.type !== "ElContainer") return node.value;
+  if (parentNode.locked) return node.value;
+  return parentNode;
+};
+
 const handleClick = (event) => {
   if (props.readonly) {
     void runPreviewScript("click", event);
     return;
   }
-  handleSelect(event);
+  let targetNode = resolveClickSelectionTarget(event);
+  if (
+    targetNode === node.value &&
+    !isRegionContainer.value &&
+    !event?.altKey
+  ) {
+    const parentNode = doc.value?.getParent?.(node.value.id);
+    if (
+      parentNode &&
+      (parentNode.type === "ElHeader" ||
+        parentNode.type === "ElAside" ||
+        parentNode.type === "ElMain" ||
+        parentNode.type === "ElFooter")
+    ) {
+      const containerNode = doc.value?.getParent?.(parentNode.id);
+      if (containerNode?.type === "ElContainer" && !containerNode.locked) {
+        targetNode = containerNode;
+      }
+    }
+  }
+  if (!targetNode || !selection.value) return;
+  const element = createSelectableElement("node", targetNode.id);
+  if (event.shiftKey) {
+    selection.value.selectRange(element);
+    return;
+  }
+  if (event.metaKey || event.ctrlKey) {
+    selection.value.toggleSelect(element);
+    return;
+  }
+  selection.value.select(element);
+};
+
+const handleDoubleClick = (event) => {
+  if (props.readonly) return;
+  if (!node.value || !selection.value) return;
+  if (!isRegionContainer.value) return;
+  const parentNode = doc.value?.getParent?.(node.value.id);
+  if (!parentNode || parentNode.type !== "ElContainer") return;
+  if (parentNode.locked) return;
+  const element = createSelectableElement("node", parentNode.id);
+  selection.value.select(element);
 };
 
 const applyPreviewPatch = (patch) => {
@@ -1335,9 +1588,9 @@ const handleDragOver = (event) => {
   isDragOver.value = true;
 
   // 计算插入位置
-  if (node.value?.type === "FlexContainer") {
-    const direction = node.value.props?.direction || "column";
+  if (node.value?.type && isFlexDropContainer(node.value.type)) {
     const currentElement = event.currentTarget;
+    const direction = resolveFlexDirection(node.value.type, currentElement);
     const insertInfo = dragDropManager.calculateFlexInsertPosition(
       currentElement,
       event,
@@ -1374,6 +1627,58 @@ const handleDrop = (event) => {
   showInsertLine.value = false;
   insertLineStyle.value = null;
 
+    const resolveElContainerTarget = () => {
+      const isRegionType = (type) =>
+        type === "ElHeader" ||
+        type === "ElAside" ||
+        type === "ElMain" ||
+        type === "ElFooter";
+      const resolveContainerMain = (containerNode) => {
+        if (!containerNode || containerNode.type !== "ElContainer") return null;
+        const mainChildId = (containerNode.children || []).find((childId) => {
+          const childNode = doc.value?.getNode?.(childId);
+          return childNode?.type === "ElMain";
+        });
+        if (!mainChildId) return null;
+        return doc.value?.getNode?.(mainChildId) || null;
+      };
+      const resolveNodeFromId = (nodeId) => {
+        if (!nodeId) return null;
+        const targetNode = doc.value?.getNode?.(nodeId);
+        if (!targetNode) return null;
+        if (isRegionType(targetNode.type)) {
+          return { node: targetNode, element: null };
+        }
+        if (targetNode.type === "ElContainer") {
+          const mainNode = resolveContainerMain(targetNode) || targetNode;
+          return { node: mainNode, element: null };
+        }
+        return null;
+      };
+      const resolveFromElement = (element) => {
+        if (!element) return null;
+        const nodeElement = element.closest?.("[data-node-id]");
+        if (!nodeElement) return null;
+        const nodeId = nodeElement.getAttribute("data-node-id");
+        const resolved = resolveNodeFromId(nodeId);
+        if (!resolved) return null;
+        return { node: resolved.node, element: nodeElement };
+      };
+
+      const path = event.composedPath?.() || [];
+      for (const item of path) {
+        if (!(item instanceof Element)) continue;
+        const resolved = resolveFromElement(item);
+        if (resolved) return resolved;
+      }
+
+      const hit = document.elementFromPoint(event.clientX, event.clientY);
+      const resolvedHit = resolveFromElement(hit);
+      if (resolvedHit) return resolvedHit;
+
+      return null;
+    };
+
   const payload =
     event.dataTransfer?.getData("application/x-designer-component") ||
     event.dataTransfer?.getData("text/plain");
@@ -1385,12 +1690,15 @@ const handleDrop = (event) => {
     if (!type && !fallbackType) return;
     const resolvedType = type || fallbackType;
     if (!node.value) return;
-    if (!canAcceptChild(node.value, resolvedType)) return;
-    let insertIndex = (node.value?.children || []).length;
+      const resolvedTarget = resolveElContainerTarget();
+      const targetNode = resolvedTarget?.node || node.value;
+      const targetElement = resolvedTarget?.element || event.currentTarget;
+    if (!canAcceptChild(targetNode, resolvedType)) return;
+    let insertIndex = (targetNode?.children || []).length;
 
-    if (node.value?.type === "FlexContainer") {
-      const direction = node.value.props?.direction || "column";
-      const currentElement = event.currentTarget;
+    if (targetNode?.type && isFlexDropContainer(targetNode.type)) {
+      const currentElement = targetElement;
+      const direction = resolveFlexDirection(targetNode.type, currentElement);
       const insertInfo = dragDropManager.calculateFlexInsertPosition(
         currentElement,
         event,
@@ -1399,12 +1707,12 @@ const handleDrop = (event) => {
       insertIndex = insertInfo.index;
     }
     const dropPosition =
-      node.value?.type === "FreeContainer"
-        ? resolveDropOffset(event, event.currentTarget)
+      targetNode?.type === "FreeContainer"
+        ? resolveDropOffset(event, targetElement)
         : null;
 
     // 插入新节点
-    editorStore.insertNode(resolvedType, node.value?.id, insertIndex, {
+    editorStore.insertNode(resolvedType, targetNode?.id, insertIndex, {
       dropPosition: dropPosition || undefined,
     });
     endDrag();
@@ -1412,14 +1720,17 @@ const handleDrop = (event) => {
     const type = payload || fallbackType;
     if (!type) return;
     if (!node.value) return;
-    if (!canAcceptChild(node.value, type)) return;
+    const resolvedTarget = resolveElContainerTarget();
+    const targetNode = resolvedTarget?.node || node.value;
+    const targetElement = resolvedTarget?.element || event.currentTarget;
+    if (!canAcceptChild(targetNode, type)) return;
 
     // 计算插入位置
-    let insertIndex = (node.value?.children || []).length;
+    let insertIndex = (targetNode?.children || []).length;
 
-    if (node.value?.type === "FlexContainer") {
-      const direction = node.value.props?.direction || "column";
-      const currentElement = event.currentTarget;
+    if (targetNode?.type && isFlexDropContainer(targetNode.type)) {
+      const currentElement = targetElement;
+      const direction = resolveFlexDirection(targetNode.type, currentElement);
       const insertInfo = dragDropManager.calculateFlexInsertPosition(
         currentElement,
         event,
@@ -1429,12 +1740,12 @@ const handleDrop = (event) => {
     }
 
     const dropPosition =
-      node.value?.type === "FreeContainer"
-        ? resolveDropOffset(event, event.currentTarget)
+      targetNode?.type === "FreeContainer"
+        ? resolveDropOffset(event, targetElement)
         : null;
 
     // 插入新节点
-    editorStore.insertNode(type, node.value?.id, insertIndex, {
+    editorStore.insertNode(type, targetNode?.id, insertIndex, {
       dropPosition: dropPosition || undefined,
     });
     endDrag();
@@ -1499,8 +1810,34 @@ const resolveLayoutStyle = (currentNode, isRoot) => {
     // 流式布局默认占据整行
     style.position = "relative";
     style.display = "block";
-    return style;
-  }
+      const parentNode = doc.value?.getParent?.(currentNode.id);
+      if (parentNode?.type === "ElContainer") {
+        if (currentNode.type === "ElHeader") {
+          style.gridArea = "header";
+        } else if (currentNode.type === "ElAside") {
+          style.gridArea = "aside";
+        } else if (currentNode.type === "ElMain") {
+          style.gridArea = "main";
+        } else if (currentNode.type === "ElFooter") {
+          style.gridArea = "footer";
+        }
+        style.width = "100%";
+        style.height = "100%";
+        style.alignSelf = "stretch";
+        style.justifySelf = "stretch";
+      } else if (
+        parentNode?.type === "ElHeader" ||
+        parentNode?.type === "ElAside" ||
+        parentNode?.type === "ElMain" ||
+        parentNode?.type === "ElFooter"
+      ) {
+        style.width = "100%";
+        style.height = "100%";
+        style.flexGrow = 1;
+        style.flexShrink = 1;
+      }
+      return style;
+    }
 
   // ✅ 旧架构：layoutItem（向后兼容）
   if (currentNode.layoutItem?.free) {
@@ -1603,6 +1940,148 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     if (currentNode.props?.overflow) {
       style.overflow = currentNode.props.overflow;
     }
+  } else if (currentNode.type === "ElContainer") {
+    const children = currentNode.children || [];
+    let headerNode = null;
+    let footerNode = null;
+    let asideNode = null;
+    let mainNode = null;
+    for (const childId of children) {
+      const childNode = doc.value?.getNode?.(childId);
+      if (!childNode) continue;
+      if (childNode.type === "ElHeader" && !headerNode) headerNode = childNode;
+      if (childNode.type === "ElFooter" && !footerNode) footerNode = childNode;
+      if (childNode.type === "ElAside" && !asideNode) asideNode = childNode;
+      if (childNode.type === "ElMain" && !mainNode) mainNode = childNode;
+    }
+    const hasHeader = Boolean(headerNode);
+    const hasFooter = Boolean(footerNode);
+    const hasAside = Boolean(asideNode);
+    const hasMain = Boolean(mainNode);
+    const hasBody = hasAside || hasMain;
+    const hasTwoCols = hasAside && hasMain;
+    const containerProps = currentNode.props || {};
+    const headerHeight =
+      containerProps.headerHeight || headerNode?.props?.height || "60px";
+    const footerHeight =
+      containerProps.footerHeight || footerNode?.props?.height || "60px";
+    const asideWidth =
+      containerProps.asideWidth || asideNode?.props?.width || "200px";
+
+    style.display = "grid";
+    style.position = "relative";
+    style.gridTemplateColumns = hasTwoCols ? `${asideWidth} 1fr` : "1fr";
+
+    const rows = [];
+    const areas = [];
+    if (hasHeader) {
+      rows.push(headerHeight);
+      areas.push(hasTwoCols ? '"header header"' : '"header"');
+    }
+    if (hasBody) {
+      rows.push("1fr");
+      if (hasTwoCols) {
+        areas.push('"aside main"');
+      } else if (hasAside) {
+        areas.push('"aside"');
+      } else {
+        areas.push('"main"');
+      }
+    }
+    if (hasFooter) {
+      rows.push(footerHeight);
+      areas.push(hasTwoCols ? '"footer footer"' : '"footer"');
+    }
+    if (rows.length === 0) {
+      rows.push("1fr");
+      areas.push('"main"');
+    }
+
+    style.gridTemplateRows = rows.join(" ");
+    style.gridTemplateAreas = areas.join(" ");
+  } else if (currentNode.type === "ElHeader") {
+    const parentNode = doc.value?.getParent?.(currentNode.id);
+    const headerHeight =
+      parentNode?.type === "ElContainer"
+        ? parentNode.props?.headerHeight
+        : currentNode.props?.height;
+    style.display = "flex";
+    style.flexDirection = "column";
+    style.alignItems = "stretch";
+    style.width = "100%";
+    style.height = headerHeight || "60px";
+    style.padding = "0";
+    style.overflow = "hidden";
+    style.position = "relative";
+  } else if (currentNode.type === "ElFooter") {
+    const parentNode = doc.value?.getParent?.(currentNode.id);
+    const footerHeight =
+      parentNode?.type === "ElContainer"
+        ? parentNode.props?.footerHeight
+        : currentNode.props?.height;
+    style.display = "flex";
+    style.flexDirection = "column";
+    style.alignItems = "stretch";
+    style.width = "100%";
+    style.height = footerHeight || "60px";
+    style.padding = "0";
+    style.overflow = "hidden";
+    style.position = "relative";
+  } else if (currentNode.type === "ElAside") {
+    const parentNode = doc.value?.getParent?.(currentNode.id);
+    const asideWidth =
+      parentNode?.type === "ElContainer"
+        ? parentNode.props?.asideWidth
+        : currentNode.props?.width;
+    style.display = "flex";
+    style.flexDirection = "column";
+    style.alignItems = "stretch";
+    style.width = asideWidth || "200px";
+    style.height = "100%";
+    style.padding = "0";
+    style.overflow = "hidden";
+    style.position = "relative";
+  } else if (currentNode.type === "ElMain") {
+    style.display = "flex";
+    style.flexDirection = "column";
+    style.alignItems = "stretch";
+    style.width = "100%";
+    style.height = "100%";
+    style.padding = "0";
+    style.overflow = "hidden";
+    style.position = "relative";
+  } else if (currentNode.type === "ElLayout") {
+    const gutter = Number(currentNode.props?.gutter) || 0;
+    const justifyMap = {
+      start: "flex-start",
+      end: "flex-end",
+      center: "center",
+      "space-between": "space-between",
+      "space-around": "space-around",
+      "space-evenly": "space-evenly",
+    };
+    const alignMap = {
+      top: "flex-start",
+      middle: "center",
+      bottom: "flex-end",
+    };
+    style.display = "flex";
+    style.flexWrap = "wrap";
+    style.alignItems = alignMap[currentNode.props?.align] || "stretch";
+    style.justifyContent =
+      justifyMap[currentNode.props?.justify] || "flex-start";
+    style.gap = gutter ? `${gutter}px` : "0px";
+    style.width = "100%";
+    style.position = "relative";
+  } else if (currentNode.type === "ElCol") {
+    const span = Number(currentNode.props?.span) || 1;
+    const percent = Math.max(1, Math.min(24, span)) / 24;
+    style.display = "flex";
+    style.flexDirection = "column";
+    style.alignItems = "stretch";
+    style.flex = `0 0 ${percent * 100}%`;
+    style.maxWidth = `${percent * 100}%`;
+    style.position = "relative";
   } else if (isContainer && !baseStyle.position) {
     style.position = "relative";
   }
@@ -1739,6 +2218,78 @@ const resolveAbsoluteLayout = (currentNode) => {
   };
 };
 
+/**
+ * 解析尺寸为像素值
+ * @param {string | number | undefined | null} value - 尺寸值
+ * @returns {number | undefined}
+ */
+const parseSizeToNumber = (value) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const text = String(value).trim();
+  if (!text || text === "auto") return undefined;
+  if (text.endsWith("px")) {
+    const num = Number.parseFloat(text.slice(0, -2));
+    return Number.isFinite(num) ? num : undefined;
+  }
+  if (/^[\d.]+$/.test(text)) {
+    const num = Number.parseFloat(text);
+    return Number.isFinite(num) ? num : undefined;
+  }
+  return undefined;
+};
+
+/**
+ * 计算容器最小尺寸，避免小于内部区域
+ * @param {import('@/editor-core').ComponentNode | null} containerNode - 容器节点
+ * @returns {{ width: number, height: number } | null}
+ */
+const resolveElContainerMinSize = (containerNode) => {
+  if (!containerNode || containerNode.type !== "ElContainer") return null;
+  const children = containerNode.children || [];
+  let hasHeader = false;
+  let hasFooter = false;
+  let hasAside = false;
+  let hasMain = false;
+  for (const childId of children) {
+    const childNode = doc.value?.getNode?.(childId);
+    if (!childNode) continue;
+    if (childNode.type === "ElHeader") hasHeader = true;
+    if (childNode.type === "ElFooter") hasFooter = true;
+    if (childNode.type === "ElAside") hasAside = true;
+    if (childNode.type === "ElMain") hasMain = true;
+  }
+
+  const props = containerNode.props || {};
+  if (typeof props.showHeader === "boolean") hasHeader = props.showHeader;
+  if (typeof props.showFooter === "boolean") hasFooter = props.showFooter;
+  if (typeof props.showAside === "boolean") hasAside = props.showAside;
+  if (typeof props.showMain === "boolean") hasMain = props.showMain;
+
+  const headerHeight = parseSizeToNumber(props.headerHeight) ?? 60;
+  const footerHeight = parseSizeToNumber(props.footerHeight) ?? 60;
+  const asideWidth = parseSizeToNumber(props.asideWidth) ?? 200;
+  const minBodySize = 40;
+
+  const hasBody = hasAside || hasMain;
+  let minWidth = 0;
+  if (hasAside && hasMain) {
+    minWidth = asideWidth + minBodySize;
+  } else if (hasAside) {
+    minWidth = asideWidth;
+  } else if (hasMain) {
+    minWidth = minBodySize;
+  }
+
+  let minHeight = 0;
+  if (hasHeader) minHeight += headerHeight;
+  if (hasFooter) minHeight += footerHeight;
+  if (hasBody) minHeight += minBodySize;
+
+  if (minWidth <= 0 && minHeight <= 0) return null;
+  return { width: minWidth, height: minHeight };
+};
+
 let activeDragHandlers = null;
 
 /**
@@ -1748,8 +2299,16 @@ let activeDragHandlers = null;
  */
 const cleanupDragHandlers = () => {
   if (!activeDragHandlers) return;
-  const { move, up, userSelect, pointerTarget, pointerId, usePointer } =
-    activeDragHandlers;
+  const {
+    move,
+    up,
+    userSelect,
+    pointerTarget,
+    pointerId,
+    usePointer,
+    pointerEvents,
+    pointerElement,
+  } = activeDragHandlers;
   if (usePointer) {
     document.removeEventListener("pointermove", move);
     document.removeEventListener("pointerup", up);
@@ -1764,6 +2323,9 @@ const cleanupDragHandlers = () => {
     } catch (error) {
       // 忽略释放失败
     }
+  }
+  if (pointerElement && pointerEvents !== undefined) {
+    pointerElement.style.pointerEvents = pointerEvents;
   }
   document.body.style.userSelect = userSelect ?? "";
   activeDragHandlers = null;
@@ -1799,6 +2361,11 @@ const handleResizePointerDown = (event, handle) => {
     selection.value.select(element);
   }
 
+  const regionConfig = getRegionResizeConfig(node.value.type);
+  if (regionConfig && !regionConfig.handles.includes(handle.key)) {
+    return;
+  }
+
   const zoomValue = Number(canvasZoom?.value) || 1;
   const baseLayout = resolveAbsoluteLayout(node.value);
   const rect = nodeRef.value?.getBoundingClientRect?.();
@@ -1807,6 +2374,7 @@ const handleResizePointerDown = (event, handle) => {
   const startClientX = event.clientX;
   const startClientY = event.clientY;
   const minSize = 40;
+  const containerMinSize = resolveElContainerMinSize(node.value);
 
   const parentNode = doc.value?.getParent?.(node.value.id);
   const shouldUpdateAbsolute =
@@ -1826,6 +2394,11 @@ const handleResizePointerDown = (event, handle) => {
   const usePointer = event.type === "pointerdown";
   const pointerTarget =
     event.target instanceof Element ? event.target : nodeRef.value?.$el;
+  const pointerElement = nodeRef.value;
+  const originalPointerEvents = pointerElement?.style.pointerEvents;
+  if (pointerElement) {
+    pointerElement.style.pointerEvents = "none";
+  }
   if (
     usePointer &&
     pointerTarget?.setPointerCapture &&
@@ -1842,6 +2415,107 @@ const handleResizePointerDown = (event, handle) => {
     if (!node.value) return;
     const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
     const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
+
+    if (regionConfig) {
+      const currentSize =
+        regionConfig.axis === "x" ? baseWidth : baseHeight;
+      const rawDelta = regionConfig.axis === "x" ? deltaX : deltaY;
+      const delta = regionConfig.invert ? -rawDelta : rawDelta;
+      let nextSize = currentSize + delta;
+      const containerNode =
+        parentNode?.type === "ElContainer"
+          ? parentNode
+          : doc.value?.getParent?.(parentNode?.id);
+      if (containerNode) {
+        const containerEl = document.querySelector(
+          `[data-node-id="${containerNode.id}"]`
+        );
+        const containerRect = containerEl?.getBoundingClientRect?.();
+        const minBodySize = minSize;
+        if (containerRect) {
+          if (node.value.type === "ElAside") {
+            const maxWidth = Math.max(
+              minBodySize,
+              Math.round(containerRect.width - minBodySize)
+            );
+            nextSize = Math.min(nextSize, maxWidth);
+          } else if (node.value.type === "ElHeader") {
+            const footerHeight = Number.parseFloat(
+              containerNode.props?.footerHeight || "0"
+            );
+            const maxHeight = Math.max(
+              minBodySize,
+              Math.round(containerRect.height - footerHeight - minBodySize)
+            );
+            nextSize = Math.min(nextSize, maxHeight);
+          } else if (node.value.type === "ElFooter") {
+            const headerHeight = Number.parseFloat(
+              containerNode.props?.headerHeight || "0"
+            );
+            const maxHeight = Math.max(
+              minBodySize,
+              Math.round(containerRect.height - headerHeight - minBodySize)
+            );
+            nextSize = Math.min(nextSize, maxHeight);
+          }
+        }
+      }
+      if (nextSize < minSize) nextSize = minSize;
+      nextSize = Math.round(nextSize);
+      const nextProps = {
+        ...(node.value.props || {}),
+        [regionConfig.prop]: `${nextSize}px`,
+      };
+      const parentContainer = parentNode?.type === "ElContainer" ? parentNode : null;
+      const parentPatch =
+        parentContainer && regionConfig.prop === "height"
+          ? node.value.type === "ElHeader"
+            ? { headerHeight: `${nextSize}px` }
+            : node.value.type === "ElFooter"
+              ? { footerHeight: `${nextSize}px` }
+              : null
+          : parentContainer && regionConfig.prop === "width"
+            ? { asideWidth: `${nextSize}px` }
+            : null;
+
+      if (nodeRef.value) {
+        if (regionConfig.axis === "x") {
+          nodeRef.value.style.width = `${nextSize}px`;
+        } else {
+          nodeRef.value.style.height = `${nextSize}px`;
+        }
+      }
+
+      const patch = { props: nextProps };
+      if (history.value?.isInTransaction?.()) {
+        history.value.executeInTransaction(
+          new UpdateNodeCommand(node.value.id, patch)
+        );
+        if (parentContainer && parentPatch) {
+          history.value.executeInTransaction(
+            new UpdateNodeCommand(parentContainer.id, {
+              props: { ...(parentContainer.props || {}), ...parentPatch },
+            })
+          );
+        }
+        return;
+      }
+      if (history.value?.execute) {
+        history.value.execute(new UpdateNodeCommand(node.value.id, patch));
+        if (parentContainer && parentPatch) {
+          history.value.execute(
+            new UpdateNodeCommand(parentContainer.id, {
+              props: { ...(parentContainer.props || {}), ...parentPatch },
+            })
+          );
+        }
+        return;
+      }
+      if (doc.value?._updateNode) {
+        doc.value._updateNode(node.value.id, patch);
+      }
+      return;
+    }
 
     let nextWidth = baseWidth;
     let nextHeight = baseHeight;
@@ -1875,6 +2549,15 @@ const handleResizePointerDown = (event, handle) => {
     }
     if (handle.y === 1 && nextHeight < minSize) {
       nextHeight = minSize;
+    }
+
+    if (containerMinSize) {
+      if (nextWidth < containerMinSize.width) {
+        nextWidth = containerMinSize.width;
+      }
+      if (nextHeight < containerMinSize.height) {
+        nextHeight = containerMinSize.height;
+      }
     }
 
     nextWidth = Math.round(nextWidth);
@@ -1980,6 +2663,8 @@ const handleResizePointerDown = (event, handle) => {
     pointerTarget,
     pointerId: event.pointerId,
     usePointer,
+    pointerEvents: originalPointerEvents,
+    pointerElement,
   };
 
   if (usePointer) {
@@ -1999,6 +2684,11 @@ const handlePointerDown = (event) => {
   if (event.pointerType === "mouse" && event.button !== 0) return;
   if (event.target?.closest?.(".resize-handle")) return;
   if (isInteractiveTarget(event.target)) return;
+  const targetNodeEl = event.target?.closest?.("[data-node-id]");
+  const targetNodeId = targetNodeEl?.getAttribute?.("data-node-id");
+  if (targetNodeId && targetNodeId !== node.value.id) {
+    return;
+  }
 
   event.preventDefault();
   event.stopPropagation();
@@ -2008,10 +2698,68 @@ const handlePointerDown = (event) => {
     selection.value.select(element);
   }
 
+  const originParent = doc.value?.getParent?.(node.value.id);
+  const isRegionNode =
+    node.value.type === "ElHeader" ||
+    node.value.type === "ElAside" ||
+    node.value.type === "ElMain" ||
+    node.value.type === "ElFooter";
+  const isRegionParent =
+    originParent?.type === "ElHeader" ||
+    originParent?.type === "ElAside" ||
+    originParent?.type === "ElMain" ||
+    originParent?.type === "ElFooter";
+  const originContainer = isRegionParent
+    ? doc.value?.getParent?.(originParent?.id)
+    : isRegionNode
+      ? originParent
+      : null;
+  const allowRegionMoveOut = isRegionNode;
+  const rootNodeId = currentPage.value?.rootNodeId || "";
+
   const zoomValue = Number(canvasZoom?.value) || 1;
   const baseLayout = resolveAbsoluteLayout(node.value);
   const startClientX = event.clientX;
   const startClientY = event.clientY;
+  let hasMoved = false;
+  let startedDragFromMove = false;
+
+  const resolveDropRegion = (upEvent) => {
+    if (!upEvent) return null;
+    const hitList = document.elementsFromPoint(
+      upEvent.clientX,
+      upEvent.clientY
+    );
+    let containerNode = null;
+    for (const hit of hitList) {
+      const nodeElement = hit.closest?.("[data-node-id]");
+      const nodeId = nodeElement?.getAttribute?.("data-node-id");
+      if (!nodeId) continue;
+      const targetNode = doc.value?.getNode?.(nodeId);
+      if (!targetNode) continue;
+      if (
+        targetNode.type === "ElHeader" ||
+        targetNode.type === "ElAside" ||
+        targetNode.type === "ElMain" ||
+        targetNode.type === "ElFooter"
+      ) {
+        return targetNode;
+      }
+      if (targetNode.type === "ElContainer" && !containerNode) {
+        containerNode = targetNode;
+      }
+    }
+    if (containerNode) {
+      const mainChildId = (containerNode.children || []).find((childId) => {
+        const childNode = doc.value?.getNode?.(childId);
+        return childNode?.type === "ElMain";
+      });
+      if (mainChildId) {
+        return doc.value?.getNode?.(mainChildId) || null;
+      }
+    }
+    return null;
+  };
 
   cleanupDragHandlers();
   const originalUserSelect = document.body.style.userSelect;
@@ -2040,6 +2788,35 @@ const handlePointerDown = (event) => {
     if (!node.value) return;
     const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
     const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
+    if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+      hasMoved = true;
+      if (!startedDragFromMove) {
+        startDrag(node.value.type);
+        startedDragFromMove = true;
+      }
+      const dropRegion = resolveDropRegion(moveEvent);
+      if (dropRegion?.id) {
+        const rect = document
+          .querySelector(`[data-node-id="${dropRegion.id}"]`)
+          ?.getBoundingClientRect?.();
+        updateDropTarget({
+          containerId: dropRegion.id,
+          insertIndex: (dropRegion.children || []).length,
+          position: rect
+            ? {
+                x: rect.left,
+                y: rect.top,
+                width: rect.width,
+                height: rect.height,
+              }
+            : { x: 0, y: 0, width: 0, height: 0 },
+          layoutType: "flex",
+          direction: "column",
+        });
+      } else {
+        clearDropTarget();
+      }
+    }
     const nextX = Math.max(0, Math.round(baseLayout.x + deltaX));
     const nextY = Math.max(0, Math.round(baseLayout.y + deltaY));
 
@@ -2110,7 +2887,125 @@ const handlePointerDown = (event) => {
     }
   };
 
-  const up = () => {
+
+  const up = (upEvent) => {
+    if (startedDragFromMove) {
+      endDrag();
+      clearDropTarget();
+    }
+    if (hasMoved && !isRegionNode && upEvent) {
+      const dropRegion = resolveDropRegion(upEvent);
+      if (
+        dropRegion &&
+        dropRegion.id &&
+        dropRegion.id !== originParent?.id &&
+        canAcceptChild(dropRegion, node.value.type)
+      ) {
+        const insertIndex = (dropRegion.children || []).length;
+        const moveCommand = new MoveNodeCommand(
+          node.value.id,
+          dropRegion.id,
+          insertIndex
+        );
+        const updateCommand = new UpdateNodeCommand(node.value.id, {
+          positioning: "flow",
+          absolutePos: undefined,
+          flowLayout: undefined,
+          layoutItem: undefined,
+        });
+        if (history.value?.isInTransaction?.()) {
+          history.value.executeInTransaction(moveCommand);
+          history.value.executeInTransaction(updateCommand);
+        } else if (history.value?.execute) {
+          history.value.execute(moveCommand);
+          history.value.execute(updateCommand);
+        } else if (doc.value?._moveNode && doc.value?._updateNode) {
+          doc.value._moveNode(node.value.id, dropRegion.id, insertIndex);
+          doc.value._updateNode(node.value.id, {
+            positioning: "flow",
+            absolutePos: undefined,
+            flowLayout: undefined,
+            layoutItem: undefined,
+          });
+        }
+      }
+    }
+    if (
+      hasMoved &&
+      (isRegionParent || allowRegionMoveOut) &&
+      originContainer?.type === "ElContainer" &&
+      rootNodeId &&
+      upEvent
+    ) {
+      const containerEl = document.querySelector(
+        `[data-node-id="${originContainer.id}"]`
+      );
+      const containerRect = containerEl?.getBoundingClientRect?.();
+      const isInsideContainer = containerRect
+        ? upEvent.clientX >= containerRect.left &&
+          upEvent.clientX <= containerRect.right &&
+          upEvent.clientY >= containerRect.top &&
+          upEvent.clientY <= containerRect.bottom
+        : (() => {
+            const hit = document.elementFromPoint(
+              upEvent.clientX,
+              upEvent.clientY
+            );
+            return Boolean(containerEl && hit && containerEl.contains(hit));
+          })();
+      if (!isInsideContainer) {
+        const rootEl = document.querySelector(
+          `[data-node-id="${rootNodeId}"]`
+        );
+        const rootRect = rootEl?.getBoundingClientRect?.();
+        const nextX = rootRect
+          ? (upEvent.clientX - rootRect.left) / zoomValue
+          : 0;
+        const nextY = rootRect
+          ? (upEvent.clientY - rootRect.top) / zoomValue
+          : 0;
+        const nextAbs = {
+          x: Math.max(0, Math.round(nextX)),
+          y: Math.max(0, Math.round(nextY)),
+          w: baseLayout.w,
+          h: baseLayout.h,
+          z: baseLayout.z,
+        };
+        const nextLayoutItem = {
+          ...(node.value.layoutItem || {}),
+          free: {
+            mode: "abs",
+            abs: { ...nextAbs },
+          },
+        };
+        const rootNode = doc.value?.getNode?.(rootNodeId);
+        const insertIndex = rootNode?.children?.length ?? 0;
+        const moveCommand = new MoveNodeCommand(
+          node.value.id,
+          rootNodeId,
+          insertIndex
+        );
+        const updateCommand = new UpdateNodeCommand(node.value.id, {
+          positioning: "absolute",
+          absolutePos: nextAbs,
+          layoutItem: nextLayoutItem,
+        });
+        if (history.value?.isInTransaction?.()) {
+          history.value.executeInTransaction(moveCommand);
+          history.value.executeInTransaction(updateCommand);
+        } else if (history.value?.execute) {
+          history.value.execute(moveCommand);
+          history.value.execute(updateCommand);
+        } else if (doc.value?._moveNode && doc.value?._updateNode) {
+          doc.value._moveNode(node.value.id, rootNodeId, insertIndex);
+          doc.value._updateNode(node.value.id, {
+            positioning: "absolute",
+            absolutePos: nextAbs,
+            layoutItem: nextLayoutItem,
+          });
+        }
+      }
+    }
     cleanupDragHandlers();
     if (history.value?.isInTransaction?.()) {
       history.value.commitTransaction("移动组件");
@@ -2187,6 +3082,13 @@ const handlePointerDown = (event) => {
   border: 1px dashed #d1d5db;
   border-radius: 4px;
   transition: all 0.2s ease;
+}
+
+.empty-container-hint.is-region-hint {
+  color: #6b7280;
+  border-color: #cbd5e1;
+  background-color: rgba(59, 130, 246, 0.06);
+  letter-spacing: 0.5px;
 }
 
 .drag-over .empty-container-hint {
@@ -2314,3 +3216,5 @@ const handlePointerDown = (event) => {
   transform: translateY(-50%);
 }
 </style>
+
+

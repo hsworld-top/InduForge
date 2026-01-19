@@ -64,6 +64,13 @@ export function inferPositioning(type, parentNode) {
       
     case "FlexContainer":
     case "ResponsiveLayout":
+    case "ElContainer":
+    case "ElLayout":
+    case "ElHeader":
+    case "ElAside":
+    case "ElMain":
+    case "ElFooter":
+    case "ElCol":
       // Flex 容器：子节点使用流式布局
       return "flow";
       
