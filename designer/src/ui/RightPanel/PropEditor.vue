@@ -53,6 +53,19 @@
       />
     </el-select>
 
+    <!-- JSON ?? -->
+    <el-input
+      v-else-if="isJsonType"
+      :model-value="jsonDraft"
+      type="textarea"
+      :rows="3"
+      :placeholder="prop.placeholder || '??? JSON'"
+      size="small"
+      @update:model-value="handleJsonInput"
+      @change="commitJsonDraft"
+    />
+
+
     <!-- 默认：文本输入 -->
     <el-input
       v-else
@@ -68,6 +81,9 @@
  * 通用属性编辑器
  * 根据属性类型渲染对应的 Element Plus 组件
  */
+
+import { computed, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 
 defineOptions({ name: 'PropEditor' });
 
@@ -86,6 +102,32 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
+const isJsonType = computed(() =>
+  ["object", "array"].includes(props.prop?.type)
+);
+const jsonDraft = ref("");
+
+/**
+ * ?? JSON ????
+ */
+const syncJsonDraft = () => {
+  if (!isJsonType.value) return;
+  if (props.modelValue === undefined || props.modelValue === null) {
+    jsonDraft.value = "";
+    return;
+  }
+  try {
+    jsonDraft.value = JSON.stringify(props.modelValue);
+  } catch (error) {
+    jsonDraft.value = String(props.modelValue);
+  }
+};
+
+watch([() => props.modelValue, () => props.prop?.type], syncJsonDraft, {
+  immediate: true,
+});
+
+
 /**
  * 处理值变更
  * @param {any} value - 新值
@@ -93,6 +135,31 @@ const emit = defineEmits(['update:modelValue']);
 const handleChange = (value) => {
   emit('update:modelValue', value);
 };
+
+/**
+ * ?? JSON ??
+ * @param {string} value - ???
+ */
+const handleJsonInput = (value) => {
+  jsonDraft.value = value;
+};
+
+/**
+ * ?? JSON ??
+ */
+const commitJsonDraft = () => {
+  const trimmed = String(jsonDraft.value ?? "").trim();
+  if (!trimmed) {
+    emit("update:modelValue", undefined);
+    return;
+  }
+  try {
+    emit("update:modelValue", JSON.parse(trimmed));
+  } catch (error) {
+    ElMessage.warning("?????? JSON");
+  }
+};
+
 </script>
 
 <style scoped>

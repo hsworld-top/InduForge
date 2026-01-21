@@ -361,6 +361,54 @@ const normalizeLayoutSchema = (schema) => {
   if (!schema.nodesById) return schema;
 
   ensurePageRootNodes(schema);
+  const resolveLayoutCount = (value, fallback, max = 24) => {
+    const num = Number(value);
+    if (Number.isFinite(num) && num > 0) {
+      return Math.min(max, Math.floor(num));
+    }
+    return fallback;
+  };
+  const buildColumnSpans = (columns) => {
+    const count = resolveLayoutCount(columns, 1, 24);
+    const base = Math.max(1, Math.floor(24 / count));
+    const remainder = 24 - base * (count - 1);
+    return Array.from({ length: count }, (_, index) =>
+      index === count - 1 ? Math.max(1, remainder) : base
+    );
+  };
+  const ensureRowColumns = (rowNode) => {
+    if (!rowNode) return;
+    if (!rowNode.props || typeof rowNode.props !== "object") {
+      rowNode.props = {};
+    }
+    const children = Array.isArray(rowNode.children) ? rowNode.children : [];
+    const colIds = children.filter((childId) => {
+      const childNode = schema.nodesById?.[childId];
+      return childNode?.type === "ElCol";
+    });
+    const resolvedColumns = resolveLayoutCount(
+      rowNode.props.columns,
+      colIds.length || 3,
+      24
+    );
+    rowNode.props.columns = resolvedColumns;
+    if (colIds.length >= resolvedColumns) return;
+    const colManifest = componentRegistry.get("ElCol");
+    const spans = buildColumnSpans(resolvedColumns);
+    const nextChildren = [...children];
+    for (let index = colIds.length; index < resolvedColumns; index += 1) {
+      const span = spans[index];
+      const colNode = createComponentNode("ElCol", {
+        parentNode: rowNode,
+        label: colManifest?.name || "Col",
+        props: { ...(colManifest?.defaultProps || {}), span },
+        style: { ...(colManifest?.defaultStyle || {}) },
+      });
+      schema.nodesById[colNode.id] = colNode;
+      nextChildren.push(colNode.id);
+    }
+    rowNode.children = nextChildren;
+  };
 
   for (const node of Object.values(schema.nodesById)) {
     if (!node || !node.type) continue;
@@ -401,6 +449,63 @@ const normalizeLayoutSchema = (schema) => {
           },
         };
       }
+    } else if (node.type === "ElLayout") {
+      if (!node.props || typeof node.props !== "object") {
+        node.props = {};
+      }
+      if (node.props.columns !== undefined) {
+        delete node.props.columns;
+      }
+      const desiredRows = resolveLayoutCount(node.props.rows, 1, 24);
+      const children = Array.isArray(node.children) ? node.children : [];
+      const rowIds = [];
+      const orphanIds = [];
+      for (const childId of children) {
+        const childNode = schema.nodesById?.[childId];
+        if (!childNode) continue;
+        if (childNode.type === "ElLayoutRow") {
+          rowIds.push(childId);
+        } else {
+          orphanIds.push(childId);
+        }
+      }
+
+      let normalizedRowIds = [...rowIds];
+      if (normalizedRowIds.length === 0 && orphanIds.length > 0) {
+        const rowManifest = componentRegistry.get("ElLayoutRow");
+        const rowNode = createComponentNode("ElLayoutRow", {
+          parentNode: node,
+          label: rowManifest?.name || "行",
+          props: { ...(rowManifest?.defaultProps || {}), columns: orphanIds.length },
+          style: { ...(rowManifest?.defaultStyle || {}) },
+        });
+        rowNode.children = orphanIds;
+        schema.nodesById[rowNode.id] = rowNode;
+        normalizedRowIds = [rowNode.id];
+      } else if (normalizedRowIds.length > 0 && orphanIds.length > 0) {
+        const firstRow = schema.nodesById?.[normalizedRowIds[0]];
+        if (firstRow) {
+          firstRow.children = [...orphanIds, ...(firstRow.children || [])];
+        }
+      }
+
+      const rowManifest = componentRegistry.get("ElLayoutRow");
+      while (normalizedRowIds.length < desiredRows) {
+        const rowNode = createComponentNode("ElLayoutRow", {
+          parentNode: node,
+          label: rowManifest?.name || "行",
+          props: { ...(rowManifest?.defaultProps || {}), columns: 3 },
+          style: { ...(rowManifest?.defaultStyle || {}) },
+        });
+        schema.nodesById[rowNode.id] = rowNode;
+        normalizedRowIds.push(rowNode.id);
+      }
+
+      node.children = normalizedRowIds;
+      node.props.rows = Math.max(1, normalizedRowIds.length);
+      normalizedRowIds.forEach((rowId) => {
+        ensureRowColumns(schema.nodesById?.[rowId]);
+      });
     }
   }
 
@@ -1444,16 +1549,51 @@ export const useEditorStore = defineStore("editor", () => {
    * @param {string} layoutId - 布局节点 ID
    * @param {Record<string, any>} nextProps - 最新属性
    */
-  const syncElLayoutColumns = (layoutId, nextProps) => {
-    if (!doc.value || !history.value) return;
-    const layoutNode = doc.value.getNode(layoutId);
-    if (!layoutNode || layoutNode.type !== "ElLayout") return;
+  const buildElLayoutUniqueLabel = (baseLabel) => {
+    const rootId = currentPage.value?.rootNodeId;
+    const existingLabels = new Set();
+    if (rootId && doc.value) {
+      const stack = [rootId];
+      while (stack.length) {
+        const id = stack.pop();
+        const current = doc.value.getNode(id);
+        if (!current) continue;
+        if (current.label) existingLabels.add(current.label);
+        if (Array.isArray(current.children)) {
+          stack.push(...current.children);
+        }
+      }
+    }
+    const normalized = baseLabel || "容器";
+    if (!existingLabels.has(normalized)) return normalized;
+    let index = 1;
+    let label = `${normalized}${index}`;
+    while (existingLabels.has(label)) {
+      index += 1;
+      label = `${normalized}${index}`;
+    }
+    return label;
+  };
 
-    const total = Math.max(1, Math.min(24, Number(nextProps?.columns) || 1));
-    const baseSpan = Math.max(1, Math.floor(24 / total));
-    const remainder = 24 - baseSpan * (total - 1);
+  /**
+   * 同步 Element Plus Layout 行内列
+   * @param {string} rowId - 行节点 ID
+   * @param {Record<string, any>} nextProps - 最新属性
+   * @param {{ forceSpanUpdate?: boolean, anchorColId?: string }} [options] - 同步选项
+   */
+  const syncElLayoutRowColumns = (rowId, nextProps, options = {}) => {
+    if (!doc.value || !history.value) return;
+    const rowNode = doc.value.getNode(rowId);
+    if (!rowNode || rowNode.type !== "ElLayoutRow") return;
+
+    const columns = Math.max(
+      1,
+      Math.min(24, Number(nextProps?.columns || rowNode.props?.columns || 3))
+    );
+    const baseSpan = Math.max(1, Math.floor(24 / columns));
+    const remainder = 24 - baseSpan * columns;
     const getSpanByIndex = (index) =>
-      index === total - 1 ? Math.max(1, remainder) : baseSpan;
+      baseSpan + (index < remainder ? 1 : 0);
 
     const executeCommand = (command) => {
       if (history.value.isInTransaction?.()) {
@@ -1463,19 +1603,19 @@ export const useEditorStore = defineStore("editor", () => {
       history.value.execute(command);
     };
 
-    const children = [...(layoutNode.children || [])];
+    const children = [...(rowNode.children || [])];
     const colIds = children.filter((childId) => {
       const childNode = doc.value.getNode(childId);
       return childNode?.type === "ElCol";
     });
 
-    if (colIds.length > total) {
-      for (let i = colIds.length - 1; i >= total; i -= 1) {
+    if (colIds.length > columns) {
+      for (let i = colIds.length - 1; i >= columns; i -= 1) {
         executeCommand(new RemoveNodeCommand(colIds[i]));
       }
     }
 
-    let refreshedNode = doc.value.getNode(layoutId);
+    let refreshedNode = doc.value.getNode(rowId);
     if (!refreshedNode) return;
     let refreshedChildren = [...(refreshedNode.children || [])];
     let refreshedCols = refreshedChildren.filter((childId) => {
@@ -1483,46 +1623,19 @@ export const useEditorStore = defineStore("editor", () => {
       return childNode?.type === "ElCol";
     });
 
-    const buildUniqueLabel = (baseLabel) => {
-      const rootId = currentPage.value?.rootNodeId;
-      const existingLabels = new Set();
-      if (rootId && doc.value) {
-        const stack = [rootId];
-        while (stack.length) {
-          const id = stack.pop();
-          const current = doc.value.getNode(id);
-          if (!current) continue;
-          if (current.label) existingLabels.add(current.label);
-          if (Array.isArray(current.children)) {
-            stack.push(...current.children);
-          }
-        }
-      }
-      const normalized = baseLabel || "容器";
-      if (!existingLabels.has(normalized)) return normalized;
-      let index = 1;
-      let label = `${normalized}${index}`;
-      while (existingLabels.has(label)) {
-        index += 1;
-        label = `${normalized}${index}`;
-      }
-      return label;
-    };
-
-    for (let i = refreshedCols.length; i < total; i += 1) {
+    for (let i = refreshedCols.length; i < columns; i += 1) {
       const manifest = componentRegistry.get("ElCol");
       const childNode = createComponentNode("ElCol", {
         parentNode: refreshedNode,
-        label: buildUniqueLabel(manifest?.name || "Col"),
+        label: buildElLayoutUniqueLabel(manifest?.name || "Col"),
         props: { ...(manifest?.defaultProps || {}), span: getSpanByIndex(i) },
         style: { ...(manifest?.defaultStyle || {}) },
         layoutItem: buildFlexLayoutItem(),
       });
-
       const insertIndex = refreshedChildren.length;
-      executeCommand(new InsertNodeCommand(layoutId, insertIndex, childNode));
+      executeCommand(new InsertNodeCommand(rowId, insertIndex, childNode));
 
-      refreshedNode = doc.value.getNode(layoutId);
+      refreshedNode = doc.value.getNode(rowId);
       refreshedChildren = [...(refreshedNode?.children || [])];
       refreshedCols = refreshedChildren.filter((childId) => {
         const childNode = doc.value.getNode(childId);
@@ -1530,18 +1643,163 @@ export const useEditorStore = defineStore("editor", () => {
       });
     }
 
-    refreshedCols = refreshedCols.slice(0, total);
+    const shouldUpdateSpan =
+      options.forceSpanUpdate ||
+      Object.prototype.hasOwnProperty.call(nextProps || {}, "columns");
+    if (!shouldUpdateSpan) return;
+    refreshedCols = refreshedCols.slice(0, columns);
+    const anchorColId = options.anchorColId;
+    if (anchorColId && refreshedCols.includes(anchorColId)) {
+      const anchorIndex = refreshedCols.indexOf(anchorColId);
+      const spans = refreshedCols.map((colId) => {
+        const colNode = doc.value.getNode(colId);
+        const span = Number(colNode?.props?.span) || 1;
+        return Math.max(1, Math.min(24, span));
+      });
+      const offsets = refreshedCols.map((colId) => {
+        const colNode = doc.value.getNode(colId);
+        const offset = Number(colNode?.props?.offset) || 0;
+        return Math.max(0, Math.min(24, offset));
+      });
+      const fixedSpanTotal = spans
+        .slice(0, anchorIndex + 1)
+        .reduce((sum, value) => sum + value, 0);
+      const totalOffset = offsets.reduce((sum, value) => sum + value, 0);
+      const rightCount = Math.max(0, refreshedCols.length - anchorIndex - 1);
+      if (rightCount === 0) return;
+      const remainingUnits = Math.max(
+        rightCount,
+        24 - totalOffset - fixedSpanTotal
+      );
+      const base = Math.floor(remainingUnits / rightCount);
+      const rem = remainingUnits - base * rightCount;
+      for (let i = anchorIndex + 1; i < refreshedCols.length; i += 1) {
+        const colNode = doc.value.getNode(refreshedCols[i]);
+        if (!colNode) continue;
+        const rightIndex = i - anchorIndex - 1;
+        const nextSpan = Math.max(1, base + (rightIndex < rem ? 1 : 0));
+        if (colNode.props?.span !== nextSpan) {
+          executeCommand(
+            new UpdateNodeCommand(colNode.id, {
+              props: { ...(colNode.props || {}), span: nextSpan },
+            })
+          );
+        }
+      }
+      return;
+    }
+
+    const offsets = refreshedCols.map((colId) => {
+      const colNode = doc.value.getNode(colId);
+      const offset = Number(colNode?.props?.offset) || 0;
+      return Math.max(0, Math.min(24, offset));
+    });
+    // 按剩余格数等分列宽，避免只压缩右侧区域
+    const totalOffset = offsets.reduce((sum, value) => sum + value, 0);
+    const remainingUnits = Math.max(columns, 24 - totalOffset);
+    const base = Math.floor(remainingUnits / columns);
+    const rem = remainingUnits - base * columns;
     for (let i = 0; i < refreshedCols.length; i += 1) {
       const colNode = doc.value.getNode(refreshedCols[i]);
       if (!colNode) continue;
-      const nextSpan = getSpanByIndex(i);
-      if (colNode.props?.span === nextSpan) continue;
-      executeCommand(
-        new UpdateNodeCommand(colNode.id, {
-          props: { ...(colNode.props || {}), span: nextSpan },
-        })
-      );
+      const nextSpan = Math.max(1, base + (i < rem ? 1 : 0));
+      if (colNode.props?.span !== nextSpan) {
+        executeCommand(
+          new UpdateNodeCommand(colNode.id, {
+            props: { ...(colNode.props || {}), span: nextSpan },
+          })
+        );
+      }
     }
+  };
+
+  /**
+   * 同步 Element Plus Layout 行节点
+   * @param {string} layoutId - 布局节点 ID
+   * @param {Record<string, any>} nextProps - 最新属性
+   */
+  const syncElLayoutRows = (layoutId, nextProps) => {
+    if (!doc.value || !history.value) return;
+    const layoutNode = doc.value.getNode(layoutId);
+    if (!layoutNode || layoutNode.type !== "ElLayout") return;
+
+    const rows = Math.max(1, Math.min(24, Number(nextProps?.rows || 1)));
+    const executeCommand = (command) => {
+      if (history.value.isInTransaction?.()) {
+        history.value.executeInTransaction(command);
+        return;
+      }
+      history.value.execute(command);
+    };
+
+    const children = [...(layoutNode.children || [])];
+    const rowIds = children.filter((childId) => {
+      const childNode = doc.value.getNode(childId);
+      return childNode?.type === "ElLayoutRow";
+    });
+
+    if (rowIds.length > rows) {
+      for (let i = rowIds.length - 1; i >= rows; i -= 1) {
+        executeCommand(new RemoveNodeCommand(rowIds[i]));
+      }
+    }
+
+    let refreshedNode = doc.value.getNode(layoutId);
+    if (!refreshedNode) return;
+    let refreshedChildren = [...(refreshedNode.children || [])];
+    let refreshedRows = refreshedChildren.filter((childId) => {
+      const childNode = doc.value.getNode(childId);
+      return childNode?.type === "ElLayoutRow";
+    });
+
+    for (let i = refreshedRows.length; i < rows; i += 1) {
+      const manifest = componentRegistry.get("ElLayoutRow");
+      const childNode = createComponentNode("ElLayoutRow", {
+        parentNode: refreshedNode,
+        label: buildElLayoutUniqueLabel(manifest?.name || "行"),
+        props: { ...(manifest?.defaultProps || {}), columns: 3 },
+        style: { ...(manifest?.defaultStyle || {}) },
+        layoutItem: buildFlexLayoutItem(),
+      });
+      const insertIndex = refreshedChildren.length;
+      executeCommand(new InsertNodeCommand(layoutId, insertIndex, childNode));
+
+      refreshedNode = doc.value.getNode(layoutId);
+      refreshedChildren = [...(refreshedNode?.children || [])];
+      refreshedRows = refreshedChildren.filter((childId) => {
+        const childNode = doc.value.getNode(childId);
+        return childNode?.type === "ElLayoutRow";
+      });
+      syncElLayoutRowColumns(childNode.id, childNode.props || {}, {
+        forceSpanUpdate: true,
+      });
+    }
+
+    refreshedRows = refreshedRows.slice(0, rows);
+    refreshedRows.forEach((rowId) => {
+      const rowNode = doc.value.getNode(rowId);
+      if (!rowNode) return;
+      const colCount = (rowNode.children || []).filter((childId) => {
+        const childNode = doc.value.getNode(childId);
+        return childNode?.type === "ElCol";
+      }).length;
+      const nextColumns = Math.max(
+        1,
+        Math.min(24, Number(rowNode.props?.columns || colCount || 3))
+      );
+      if (rowNode.props?.columns !== nextColumns) {
+        executeCommand(
+          new UpdateNodeCommand(rowNode.id, {
+            props: { ...(rowNode.props || {}), columns: nextColumns },
+          })
+        );
+      }
+      if (colCount !== nextColumns) {
+        syncElLayoutRowColumns(rowNode.id, rowNode.props || {}, {
+          forceSpanUpdate: true,
+        });
+      }
+    });
   };
 
   /**
@@ -1673,6 +1931,185 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
+   * 限制 ElCol 的栅格总和不超过 24
+   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
+   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
+   * @returns {Partial<import('@/editor-core').ComponentNode>}
+   */
+  const clampElColSpanPatch = (node, patch) => {
+    if (!node || node.type !== "ElCol" || !patch?.props) return patch;
+    if (!Object.prototype.hasOwnProperty.call(patch.props, "span")) return patch;
+    const parentNode = doc.value?.getParent?.(node.id);
+    if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
+
+    const siblings = parentNode.children || [];
+    let total = 0;
+    for (const childId of siblings) {
+      if (childId === node.id) continue;
+      const childNode = doc.value?.getNode?.(childId);
+      if (!childNode || childNode.type !== "ElCol") continue;
+      const span = Number(childNode.props?.span) || 0;
+      total += Math.max(0, Math.min(24, span));
+    }
+    const maxSpan = Math.max(1, 24 - total);
+    const nextSpan = Number(patch.props.span) || 1;
+    const clamped = Math.max(1, Math.min(maxSpan, nextSpan));
+    if (clamped === nextSpan) return patch;
+    return {
+      ...patch,
+      props: { ...(patch.props || {}), span: clamped },
+    };
+  };
+
+  /**
+   * 限制 ElCol 的偏移不挤出右侧最小栅格
+   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
+   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
+   * @returns {Partial<import('@/editor-core').ComponentNode>}
+   */
+  const clampElColOffsetPatch = (node, patch) => {
+    if (!node || node.type !== "ElCol" || !patch?.props) return patch;
+    if (!Object.prototype.hasOwnProperty.call(patch.props, "offset")) return patch;
+    const parentNode = doc.value?.getParent?.(node.id);
+    if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
+    const colIds = (parentNode.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      return childNode?.type === "ElCol";
+    });
+    const anchorIndex = colIds.indexOf(node.id);
+    if (anchorIndex < 0) return patch;
+
+    const spans = colIds.map((colId) => {
+      const colNode = doc.value?.getNode?.(colId);
+      const span = Number(colNode?.props?.span) || 1;
+      return Math.max(1, Math.min(24, span));
+    });
+    if (Object.prototype.hasOwnProperty.call(patch.props, "span")) {
+      const nextSpan = Number(patch.props.span) || 1;
+      spans[anchorIndex] = Math.max(1, Math.min(24, nextSpan));
+    }
+
+    const offsets = colIds.map((colId) => {
+      const colNode = doc.value?.getNode?.(colId);
+      const offset = Number(colNode?.props?.offset) || 0;
+      return Math.max(0, Math.min(24, offset));
+    });
+    const nextOffset = Math.max(0, Math.min(24, Number(patch.props.offset) || 0));
+    offsets[anchorIndex] = nextOffset;
+
+    const fixedSpanTotal = spans
+      .slice(0, anchorIndex + 1)
+      .reduce((sum, value) => sum + value, 0);
+    const offsetOthers = offsets.reduce(
+      (sum, value, index) => (index === anchorIndex ? sum : sum + value),
+      0
+    );
+    const rightCount = Math.max(0, colIds.length - anchorIndex - 1);
+    const maxOffset = Math.max(
+      0,
+      24 - fixedSpanTotal - offsetOthers - rightCount
+    );
+    const clampedOffset = Math.min(nextOffset, maxOffset);
+    if (clampedOffset === nextOffset) return patch;
+    return {
+      ...patch,
+      props: { ...(patch.props || {}), offset: clampedOffset },
+    };
+  };
+
+  /**
+   * 限制 ElCol 的 push/pull 不超出当前行宽度
+   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
+   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
+   * @returns {Partial<import('@/editor-core').ComponentNode>}
+   */
+  const clampElColShiftPatch = (node, patch) => {
+    if (!node || node.type !== "ElCol" || !patch?.props) return patch;
+    const hasPush = Object.prototype.hasOwnProperty.call(patch.props, "push");
+    const hasPull = Object.prototype.hasOwnProperty.call(patch.props, "pull");
+    if (!hasPush && !hasPull) return patch;
+    const parentNode = doc.value?.getParent?.(node.id);
+    if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
+
+    const mergedProps = {
+      ...(node.props || {}),
+      ...(patch.props || {}),
+    };
+    const span = Math.max(1, Math.min(24, Number(mergedProps.span) || 1));
+    const offset = Math.max(0, Math.min(24, Number(mergedProps.offset) || 0));
+    const prevPush = Math.max(0, Math.min(24, Number(node.props?.push) || 0));
+    const prevPull = Math.max(0, Math.min(24, Number(node.props?.pull) || 0));
+    const push = Math.max(0, Math.min(24, Number(mergedProps.push) || 0));
+    const pull = Math.max(0, Math.min(24, Number(mergedProps.pull) || 0));
+    const colIds = (parentNode.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      return childNode?.type === "ElCol";
+    });
+    const colIndex = colIds.indexOf(node.id);
+    let leftEdge = offset;
+    if (colIndex > 0) {
+      leftEdge = colIds.slice(0, colIndex).reduce((sum, colId) => {
+        const colNode = doc.value?.getNode?.(colId);
+        if (!colNode) return sum;
+        const colSpan = Number(colNode.props?.span) || 1;
+        const colOffset = Number(colNode.props?.offset) || 0;
+        return (
+          sum +
+          Math.max(1, Math.min(24, colSpan)) +
+          Math.max(0, Math.min(24, colOffset))
+        );
+      }, 0);
+      leftEdge += offset;
+    }
+    const minShift = -leftEdge;
+    const maxShift = 24 - leftEdge - span;
+    const desiredShift = push - pull;
+    const clampedShift = Math.min(maxShift, Math.max(minShift, desiredShift));
+
+    const changedPush = hasPush && push !== prevPush;
+    const changedPull = hasPull && pull !== prevPull;
+    let nextPush = push;
+    let nextPull = pull;
+    if (changedPush && !changedPull) {
+      nextPush = Math.max(0, clampedShift + pull);
+      nextPull = pull;
+    } else if (changedPull && !changedPush) {
+      nextPull = Math.max(0, push - clampedShift);
+      nextPush = push;
+    } else if (changedPush && changedPull) {
+      nextPush = Math.max(0, clampedShift + pull);
+      nextPull = pull;
+    } else {
+      return patch;
+    }
+
+    if (nextPush === push && nextPull === pull) return patch;
+    return {
+      ...patch,
+      props: { ...(patch.props || {}), push: nextPush, pull: nextPull },
+    };
+  };
+
+  /**
+   * 限制 Layout 行列数范围
+   * @param {import('@/editor-core').ComponentNode} node - 当前节点
+   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
+   * @returns {Partial<import('@/editor-core').ComponentNode>}
+   */
+  const clampElLayoutRowColumnsPatch = (node, patch) => {
+    if (!node || node.type !== "ElLayoutRow" || !patch?.props) return patch;
+    if (!Object.prototype.hasOwnProperty.call(patch.props, "columns")) return patch;
+    const raw = Number(patch.props.columns);
+    if (!Number.isFinite(raw)) return patch;
+    const clamped = Math.max(1, Math.min(24, raw));
+    if (clamped === raw) return patch;
+    return {
+      ...patch,
+      props: { ...(patch.props || {}), columns: clamped },
+    };
+  };
+
+  /**
    * 更新组件节点
    * @param {string} nodeId - 节点 ID
    * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
@@ -1684,13 +2121,33 @@ export const useEditorStore = defineStore("editor", () => {
 
     const node = doc.value.getNode(nodeId);
     const limitedPatch = clampElContainerSizePatch(node, patch);
-    const nextPatch = syncAbsoluteSizePatch(node, limitedPatch);
+    const clampedColumnsPatch = clampElLayoutRowColumnsPatch(
+      node,
+      limitedPatch
+    );
+    const clampedSpanPatch = clampElColSpanPatch(node, clampedColumnsPatch);
+    const clampedOffsetPatch = clampElColOffsetPatch(node, clampedSpanPatch);
+    const clampedShiftPatch = clampElColShiftPatch(node, clampedOffsetPatch);
+    const nextPatch = syncAbsoluteSizePatch(node, clampedShiftPatch);
     const shouldSyncContainer =
       node?.type === "ElContainer" && nextPatch?.props && typeof nextPatch === "object";
     const shouldSyncLayout =
       node?.type === "ElLayout" && nextPatch?.props && typeof nextPatch === "object";
+    const shouldSyncLayoutRow =
+      node?.type === "ElLayoutRow" &&
+      nextPatch?.props &&
+      typeof nextPatch === "object";
+    const shouldSyncLayoutRowFromCol =
+      node?.type === "ElCol" &&
+      nextPatch?.props &&
+      Object.prototype.hasOwnProperty.call(nextPatch.props, "offset");
 
-    if (!shouldSyncContainer && !shouldSyncLayout) {
+    if (
+      !shouldSyncContainer &&
+      !shouldSyncLayout &&
+      !shouldSyncLayoutRow &&
+      !shouldSyncLayoutRowFromCol
+    ) {
       history.value.execute(new UpdateNodeCommand(nodeId, nextPatch));
       return true;
     }
@@ -1710,7 +2167,22 @@ export const useEditorStore = defineStore("editor", () => {
       syncElContainerSections(nodeId, mergedProps);
     }
     if (shouldSyncLayout) {
-      syncElLayoutColumns(nodeId, mergedProps);
+      syncElLayoutRows(nodeId, mergedProps);
+    }
+    if (
+      shouldSyncLayoutRow &&
+      Object.prototype.hasOwnProperty.call(nextPatch.props || {}, "columns")
+    ) {
+      syncElLayoutRowColumns(nodeId, mergedProps, { forceSpanUpdate: true });
+    }
+    if (shouldSyncLayoutRowFromCol) {
+      const parentNode = doc.value.getParent(nodeId);
+      if (parentNode?.type === "ElLayoutRow") {
+        syncElLayoutRowColumns(parentNode.id, parentNode.props || {}, {
+          forceSpanUpdate: true,
+          anchorColId: nodeId,
+        });
+      }
     }
 
     if (shouldCommit) {
@@ -1856,6 +2328,7 @@ export const useEditorStore = defineStore("editor", () => {
       "ColumnLayout4",
       "ElContainer",
       "ElLayout",
+      "ElLayoutRow",
     ].includes(type);
   };
 
@@ -1907,6 +2380,7 @@ export const useEditorStore = defineStore("editor", () => {
       parentNode.type === "ResponsiveLayout" ||
       parentNode.type === "ElContainer" ||
       parentNode.type === "ElLayout" ||
+      parentNode.type === "ElLayoutRow" ||
       parentNode.type === "ElHeader" ||
       parentNode.type === "ElAside" ||
       parentNode.type === "ElMain" ||
@@ -2088,7 +2562,6 @@ export const useEditorStore = defineStore("editor", () => {
       style: nodeStyle,
       layoutItem,
     });
-
     if (parentNode.type === "FreeContainer") {
       node.positioning = "absolute";
       node.absolutePos = {
@@ -2103,6 +2576,7 @@ export const useEditorStore = defineStore("editor", () => {
       parentNode.type === "ResponsiveLayout" ||
       parentNode.type === "ElContainer" ||
       parentNode.type === "ElLayout" ||
+      parentNode.type === "ElLayoutRow" ||
       parentNode.type === "ElHeader" ||
       parentNode.type === "ElAside" ||
       parentNode.type === "ElMain" ||
@@ -2126,22 +2600,31 @@ export const useEditorStore = defineStore("editor", () => {
     }
 
     const shouldWrapTransaction =
-      (type === "ElContainer" || type === "ElLayout") &&
+      (type === "ElContainer" ||
+        type === "ElLayout" ||
+        type === "ElLayoutRow") &&
       !history.value.isInTransaction?.();
     if (shouldWrapTransaction) {
       history.value.beginTransaction();
     }
 
-    if (type === "ElContainer" || type === "ElLayout") {
+    if (type === "ElContainer") {
       history.value.executeInTransaction(
         new InsertNodeCommand(parentId, insertIndex, node)
       );
-      if (type === "ElContainer") {
-        syncElContainerSections(node.id, node.props || {});
-      }
-      if (type === "ElLayout") {
-        syncElLayoutColumns(node.id, node.props || {});
-      }
+      syncElContainerSections(node.id, node.props || {});
+    } else if (type === "ElLayout") {
+      history.value.executeInTransaction(
+        new InsertNodeCommand(parentId, insertIndex, node)
+      );
+      syncElLayoutRows(node.id, node.props || {});
+    } else if (type === "ElLayoutRow") {
+      history.value.executeInTransaction(
+        new InsertNodeCommand(parentId, insertIndex, node)
+      );
+      syncElLayoutRowColumns(node.id, node.props || {}, {
+        forceSpanUpdate: true,
+      });
     } else {
     const shouldCommit = shouldReplaceRegionChildren && !history.value.isInTransaction?.();
     if (shouldCommit) {

@@ -38,6 +38,7 @@ function getDefaultStyle(type) {
     "ColumnLayout4",
     "ElContainer",
     "ElLayout",
+    "ElLayoutRow",
     "ElCol",
   ];
   const baseStyle = {
@@ -120,6 +121,7 @@ function isContainerType(type) {
     "ColumnLayout4",
     "ElContainer",
     "ElLayout",
+    "ElLayoutRow",
     "ElHeader",
     "ElAside",
     "ElMain",

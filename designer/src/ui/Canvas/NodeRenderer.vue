@@ -1,11 +1,14 @@
 ﻿<template>
-  <div
+  <component
     v-if="node && !node.hidden"
+    :is="outerTag"
     :class="nodeClass"
-    :style="wrapperStyle"
+    :style="useComponentWrapper ? wrapperComponentStyle : wrapperStyle"
     :data-node-id="node.id"
     :data-node-type="node.type"
-    ref="nodeRef"
+    :ref="setNodeRef"
+    v-bind="useComponentWrapper ? resolvedProps : {}"
+    v-on="useComponentWrapper ? componentEventListeners : {}"
     @click.stop="handleClick"
     @dblclick.stop="handleDoubleClick"
     @pointerdown.capture="handlePointerDown"
@@ -16,6 +19,7 @@
     @contextmenu.prevent="handleContextMenu"
   >
     <component
+      v-if="!useComponentWrapper"
       :is="renderTag"
       :key="renderKey"
       :style="contentStyle"
@@ -133,7 +137,20 @@
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>
-      <template v-if="isContainer && !hasChildren && !props.isRoot">
+      <template
+        v-if="
+          isContainer &&
+          !hasChildren &&
+          !props.isRoot &&
+          !(
+            props.readonly &&
+            (isRegionContainer ||
+              node?.type === 'ElLayout' ||
+              node?.type === 'ElLayoutRow' ||
+              node?.type === 'ElCol')
+          )
+        "
+      >
         <div
           class="empty-container-hint"
           :class="{ 'is-region-hint': isRegionContainer }"
@@ -161,7 +178,45 @@
         :readonly="props.readonly"
       />
     </component>
-
+    <template v-if="useComponentWrapper">
+      <div
+        v-if="
+          isContainer &&
+          !hasChildren &&
+          !props.isRoot &&
+          !(
+            props.readonly &&
+            (isRegionContainer ||
+              node?.type === 'ElLayout' ||
+              node?.type === 'ElLayoutRow' ||
+              node?.type === 'ElCol')
+          )
+        "
+        class="empty-container-hint"
+        :class="{ 'is-region-hint': isRegionContainer }"
+      >
+        <span v-if="isDropActive">释放以添加组件</span>
+        <span v-else>{{
+          isRegionContainer ? regionHintText : "拖拽组件到此处"
+        }}</span>
+      </div>
+      <!-- 插入线指示器 -->
+      <div
+        v-if="showInsertLine && insertLineStyle"
+        class="insert-line"
+        :class="insertLineStyle.orientation"
+        :style="{
+          [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
+            insertLineStyle.offset + 'px',
+        }"
+      />
+      <NodeRenderer
+        v-for="childId in node.children || []"
+        :key="childId"
+        :node-id="childId"
+        :readonly="props.readonly"
+      />
+    </template>
     <div v-if="showResizeHandles" class="resize-handles">
       <span
         v-for="handle in visibleResizeHandles"
@@ -172,7 +227,7 @@
         @pointerdown.stop="(event) => handleResizePointerDown(event, handle)"
       />
     </div>
-  </div>
+  </component>
 </template>
 
 <script setup>
@@ -227,6 +282,9 @@ const {
 const canvasZoom = inject("canvasZoom", ref(1));
 const dragState = useDragState();
 const nodeRef = ref(null);
+const setNodeRef = (el) => {
+  nodeRef.value = el?.$el || el;
+};
 const contentRef = ref(null);
 const previewPageId = computed(
   () => currentPage.value?.name || currentPage.value?.id || ""
@@ -337,7 +395,8 @@ const filterRenderProps = (type, props) => {
     Card: ["title", "content"],
     BusinessCard: ["title", "content"],
     ElContainer: ["showHeader", "showAside", "showMain", "showFooter"],
-    ElLayout: ["columns"],
+    ElLayout: ["columns", "rows"],
+    ElLayoutRow: ["columns"],
   };
   const removeKeys = removeKeysByType[type] || [];
   for (const key of removeKeys) {
@@ -374,11 +433,41 @@ const insertLineStyle = ref(null);
 const dragDropManager = createDragDropManager();
 const tableRenderVersion = ref(0);
 const resolvedProps = computed(() => {
+  docVersion.value;
   if (!node.value) return {};
   if (node.value.type === "Table" || node.value.type === "BigDataTable") {
     tableRenderVersion.value;
   }
-  return filterRenderProps(node.value.type, node.value.props || {});
+  const nextProps = filterRenderProps(node.value.type, node.value.props || {});
+  if (node.value.type === "ElCol") {
+    const parentNode = doc.value?.getParent?.(node.value.id);
+    const rawColumns = Number(parentNode?.props?.columns);
+    if (
+      parentNode?.type === "ElLayoutRow" &&
+      Number.isFinite(rawColumns) &&
+      !Object.prototype.hasOwnProperty.call(nextProps, "span")
+    ) {
+      const columns = Math.max(1, Math.min(24, rawColumns));
+      const colIds = (parentNode.children || []).filter((childId) => {
+        const childNode = doc.value?.getNode?.(childId);
+        return childNode?.type === "ElCol";
+      });
+      const colIndex = Math.max(0, colIds.indexOf(node.value.id));
+      const offsets = colIds.map((colId) => {
+        const colNode = doc.value?.getNode?.(colId);
+        const offset = Number(colNode?.props?.offset) || 0;
+        return Math.max(0, Math.min(24, offset));
+      });
+      // 按剩余格数等分列宽，避免只压缩右侧区域
+      const totalOffset = offsets.reduce((sum, value) => sum + value, 0);
+      const remainingUnits = Math.max(columns, 24 - totalOffset);
+      const base = Math.floor(remainingUnits / columns);
+      const rem = remainingUnits - base * columns;
+      const span = base + (colIndex < rem ? 1 : 0);
+      nextProps.span = Math.max(1, span);
+    }
+  }
+  return nextProps;
 });
 
 const selectOptions = computed(() => {
@@ -444,6 +533,7 @@ const isFlexDropContainer = (type) => {
     "ResponsiveLayout",
     "ElContainer",
     "ElLayout",
+    "ElLayoutRow",
     "ElHeader",
     "ElAside",
     "ElMain",
@@ -485,7 +575,9 @@ const isMovable = computed(() => {
     node.value.type === "ElHeader" ||
     node.value.type === "ElAside" ||
     node.value.type === "ElMain" ||
-    node.value.type === "ElFooter"
+    node.value.type === "ElFooter" ||
+    node.value.type === "ElCol" ||
+    node.value.type === "ElLayoutRow"
   ) {
     return false;
   }
@@ -561,6 +653,12 @@ const canAcceptChild = (parentNode, childType) => {
   ) {
     return (parentNode.children || []).length === 0;
   }
+  if (parentNode.type === "ElLayout") {
+    return childType === "ElLayoutRow";
+  }
+  if (parentNode.type === "ElLayoutRow") {
+    return childType === "ElCol";
+  }
   if (!Array.isArray(allowed) || allowed.length === 0) return true;
   return allowed.includes(childType);
 };
@@ -582,6 +680,49 @@ const resolveDropOffset = (event, element) => {
   };
 };
 
+/**
+ * 获取组件默认尺寸
+ * @param {string} type - 组件类型
+ * @returns {{ width: number, height: number }}
+ */
+const resolveDefaultSize = (type) => {
+  const manifest = componentRegistry.get(type);
+  if (manifest?.defaultSize) {
+    return {
+      width: manifest.defaultSize.width || 120,
+      height: manifest.defaultSize.height || 32,
+    };
+  }
+  const sizeMap = {
+    FlexContainer: { width: 360, height: 200 },
+    FreeContainer: { width: 360, height: 200 },
+    GridContainer: { width: 360, height: 200 },
+    ElContainer: { width: 360, height: 240 },
+    ElLayout: { width: 360, height: 200 },
+    Text: { width: 120, height: 32 },
+    Button: { width: 120, height: 36 },
+  };
+  return sizeMap[type] || { width: 160, height: 80 };
+};
+
+/**
+ * 限制拖拽放置坐标不超出容器可见范围
+ * @param {{ x: number, y: number }} position - 原始落点
+ * @param {HTMLElement} element - 目标容器
+ * @param {{ width: number, height: number }} size - 组件尺寸
+ * @returns {{ x: number, y: number }}
+ */
+const clampDropPosition = (position, element, size) => {
+  const rect = element.getBoundingClientRect();
+  const zoomValue = Number(canvasZoom?.value) || 1;
+  const maxX = Math.max(0, Math.round(rect.width / zoomValue - size.width));
+  const maxY = Math.max(0, Math.round(rect.height / zoomValue - size.height));
+  return {
+    x: Math.min(Math.max(0, position.x), maxX),
+    y: Math.min(Math.max(0, position.y), maxY),
+  };
+};
+
 const nodeClass = computed(() => {
   selectionVersion.value;
   if (!node.value) return "";
@@ -591,6 +732,12 @@ const nodeClass = computed(() => {
   if (isContainer.value) classes.push("is-container");
   if (isMovable.value && !props.readonly) classes.push("is-draggable");
   if (node.value.locked) classes.push("is-locked");
+  if (node.value.type === "ElCol") {
+    classes.push("el-col");
+    const parentNode = doc.value?.getParent?.(node.value.id);
+    const gutter = Number(parentNode?.props?.gutter) || 0;
+    if (gutter > 0) classes.push("is-guttered");
+  }
   if (isDropActive.value && !props.readonly) classes.push("drag-over");
   if (!props.readonly && selection.value?.isSelected(node.value.id)) {
     classes.push("is-selected");
@@ -693,6 +840,8 @@ const renderTag = computed(() => {
     case "ElFooter":
       return "el-footer";
     case "ElLayout":
+      return "div";
+    case "ElLayoutRow":
       return "el-row";
     case "ElCol":
       return "el-col";
@@ -701,6 +850,15 @@ const renderTag = computed(() => {
     default:
       return "div";
   }
+});
+
+const useComponentWrapper = computed(() => {
+  const type = node.value?.type;
+  return type === "ElLayoutRow" || type === "ElCol";
+});
+
+const outerTag = computed(() => {
+  return useComponentWrapper.value ? renderTag.value : "div";
 });
 
 const renderKey = computed(() => {
@@ -765,6 +923,9 @@ const contentStyle = computed(() => {
   if (!style.overflow && !isContainer.value) {
     style.overflow = "hidden";
   }
+  if (node.value.type === "ElLayoutRow") {
+    style.overflow = "visible";
+  }
   if (
     parentNode?.type === "ElHeader" ||
     parentNode?.type === "ElAside" ||
@@ -772,6 +933,16 @@ const contentStyle = computed(() => {
     parentNode?.type === "ElFooter"
   ) {
     style.overflow = "hidden";
+  }
+  if (node.value.type === "ElCol" && parentNode?.type === "ElLayoutRow") {
+    style.height = "auto";
+    if (!style.minHeight) {
+      style.minHeight = "80px";
+    }
+  }
+  if (parentNode?.type === "ElCol" && isMovable.value) {
+    style.width = "100%";
+    style.height = "100%";
   }
   if (
     node.value.type === "ElContainer" ||
@@ -828,6 +999,116 @@ const wrapperStyle = computed(() => {
   }
   if (customStyle.height && !style.height) {
     style.height = customStyle.height;
+  }
+  const parentNode = doc.value?.getParent?.(node.value.id);
+  const hasCustomWidth = Boolean(customStyle.width);
+  const hasCustomHeight = Boolean(customStyle.height);
+  if (
+    node.value.type === "ElCol" &&
+    parentNode?.type === "ElLayoutRow" &&
+    !style.height
+  ) {
+    style.height = "auto";
+  }
+  if (parentNode?.type === "ElCol" && isMovable.value) {
+    style.width = "100%";
+    style.height = "100%";
+    if (style.position === "absolute") {
+      style.left = "0";
+      style.top = "0";
+    }
+  }
+  if (isContainer.value && isMovable.value) {
+    if (!hasCustomWidth && !style.width) style.width = "100%";
+    if (!hasCustomHeight && !style.height) style.height = "100%";
+  }
+  return style;
+});
+
+const wrapperComponentStyle = computed(() => {
+  if (!useComponentWrapper.value) return {};
+  const style = { ...wrapperStyle.value, ...contentStyle.value };
+  const type = node.value?.type;
+  const parentNode = doc.value?.getParent?.(node.value?.id);
+  if (type === "ElLayoutRow" || type === "ElCol") {
+    delete style.display;
+  }
+  if (type === "ElLayoutRow" && parentNode?.type === "ElLayout") {
+    style.flex = "1 1 0";
+    style.width = "100%";
+    style.height = "100%";
+    style.alignItems = "stretch";
+  }
+  if (type === "ElLayoutRow") {
+    const gutter = Number(node.value?.props?.gutter) || 0;
+    const columns = Math.max(
+      1,
+      Math.min(24, Number(node.value?.props?.columns) || 1)
+    );
+    style["--row-gutter"] = `${Math.max(0, gutter)}px`;
+    style["--row-columns"] = String(columns);
+    if (!gutter) {
+      style["--el-row-gutter"] = "0px";
+    }
+    if (gutter > 0) {
+      style.marginLeft = "0";
+      style.marginRight = "0";
+    }
+    style.boxSizing = "border-box";
+    style.flexWrap = "nowrap";
+    style.overflow = "visible";
+  }
+  if (type === "ElCol" && parentNode?.type === "ElLayoutRow") {
+    delete style.flexGrow;
+    delete style.flexShrink;
+    delete style.flexBasis;
+    style.height = "100%";
+    style.alignSelf = "stretch";
+    style.boxSizing = "border-box";
+    const gutter = Number(parentNode.props?.gutter) || 0;
+    if (!gutter) {
+      style.paddingLeft = "0";
+      style.paddingRight = "0";
+      style["--col-gutter-x"] = "0px";
+    } else {
+      const halfGutter = "calc(var(--row-gutter) / 2)";
+      const halfCol = "calc(100% / var(--row-columns) / 2)";
+      const clampedHalf = `min(${halfGutter}, ${halfCol})`;
+      style.paddingLeft = clampedHalf;
+      style.paddingRight = clampedHalf;
+      style["--col-gutter-x"] = clampedHalf;
+    }
+    const rawColumns = Number(parentNode.props?.columns);
+    if (Number.isFinite(rawColumns)) {
+      const offset = Math.max(
+        0,
+        Math.min(24, Number(node.value?.props?.offset) || 0)
+      );
+      if (offset > 0) {
+        style.marginLeft = `${(offset / 24) * 100}%`;
+      }
+      const span = Math.max(
+        1,
+        Math.min(24, Number(node.value?.props?.span) || 1)
+      );
+      const percent = (span / 24) * 100;
+      style.flex = `0 0 ${percent}%`;
+      style.maxWidth = `${percent}%`;
+      style.width = `${percent}%`;
+      const push = Math.max(
+        0,
+        Math.min(24, Number(node.value?.props?.push) || 0)
+      );
+      const pull = Math.max(
+        0,
+        Math.min(24, Number(node.value?.props?.pull) || 0)
+      );
+      const shift = push - pull;
+      if (shift !== 0) {
+        style.position = "relative";
+        style.left = `${(shift / 24) * 100}%`;
+      }
+    }
   }
   return style;
 });
@@ -1690,9 +1971,10 @@ const handleDrop = (event) => {
     if (!type && !fallbackType) return;
     const resolvedType = type || fallbackType;
     if (!node.value) return;
-      const resolvedTarget = resolveElContainerTarget();
-      const targetNode = resolvedTarget?.node || node.value;
-      const targetElement = resolvedTarget?.element || event.currentTarget;
+    const resolvedTarget = resolveElContainerTarget();
+    const targetNode = (resolvedTarget && resolvedTarget.node) || node.value;
+    const targetElement =
+      (resolvedTarget && resolvedTarget.element) || event.currentTarget;
     if (!canAcceptChild(targetNode, resolvedType)) return;
     let insertIndex = (targetNode?.children || []).length;
 
@@ -1706,10 +1988,12 @@ const handleDrop = (event) => {
       );
       insertIndex = insertInfo.index;
     }
-    const dropPosition =
-      targetNode?.type === "FreeContainer"
-        ? resolveDropOffset(event, targetElement)
-        : null;
+    let dropPosition = null;
+    if (targetNode?.type === "FreeContainer" && targetElement) {
+      const rawPosition = resolveDropOffset(event, targetElement);
+      const defaultSize = resolveDefaultSize(resolvedType);
+      dropPosition = clampDropPosition(rawPosition, targetElement, defaultSize);
+    }
 
     // 插入新节点
     editorStore.insertNode(resolvedType, targetNode?.id, insertIndex, {
@@ -1739,10 +2023,12 @@ const handleDrop = (event) => {
       insertIndex = insertInfo.index;
     }
 
-    const dropPosition =
-      targetNode?.type === "FreeContainer"
-        ? resolveDropOffset(event, targetElement)
-        : null;
+    let dropPosition = null;
+    if (targetNode?.type === "FreeContainer" && targetElement) {
+      const rawPosition = resolveDropOffset(event, targetElement);
+      const defaultSize = resolveDefaultSize(type);
+      dropPosition = clampDropPosition(rawPosition, targetElement, defaultSize);
+    }
 
     // 插入新节点
     editorStore.insertNode(type, targetNode?.id, insertIndex, {
@@ -1810,34 +2096,38 @@ const resolveLayoutStyle = (currentNode, isRoot) => {
     // 流式布局默认占据整行
     style.position = "relative";
     style.display = "block";
-      const parentNode = doc.value?.getParent?.(currentNode.id);
-      if (parentNode?.type === "ElContainer") {
-        if (currentNode.type === "ElHeader") {
-          style.gridArea = "header";
-        } else if (currentNode.type === "ElAside") {
-          style.gridArea = "aside";
-        } else if (currentNode.type === "ElMain") {
-          style.gridArea = "main";
-        } else if (currentNode.type === "ElFooter") {
-          style.gridArea = "footer";
-        }
-        style.width = "100%";
-        style.height = "100%";
-        style.alignSelf = "stretch";
-        style.justifySelf = "stretch";
-      } else if (
-        parentNode?.type === "ElHeader" ||
-        parentNode?.type === "ElAside" ||
-        parentNode?.type === "ElMain" ||
-        parentNode?.type === "ElFooter"
-      ) {
-        style.width = "100%";
-        style.height = "100%";
-        style.flexGrow = 1;
-        style.flexShrink = 1;
-      }
-      return style;
+    const parentNode = doc.value?.getParent?.(currentNode.id);
+    if (parentNode?.type === "ElCol") {
+      style.width = "100%";
+      style.alignSelf = "stretch";
     }
+    if (parentNode?.type === "ElContainer") {
+      if (currentNode.type === "ElHeader") {
+        style.gridArea = "header";
+      } else if (currentNode.type === "ElAside") {
+        style.gridArea = "aside";
+      } else if (currentNode.type === "ElMain") {
+        style.gridArea = "main";
+      } else if (currentNode.type === "ElFooter") {
+        style.gridArea = "footer";
+      }
+      style.width = "100%";
+      style.height = "100%";
+      style.alignSelf = "stretch";
+      style.justifySelf = "stretch";
+    } else if (
+      parentNode?.type === "ElHeader" ||
+      parentNode?.type === "ElAside" ||
+      parentNode?.type === "ElMain" ||
+      parentNode?.type === "ElFooter"
+    ) {
+      style.width = "100%";
+      style.height = "100%";
+      style.flexGrow = 1;
+      style.flexShrink = 1;
+    }
+    return style;
+  }
 
   // ✅ 旧架构：layoutItem（向后兼容）
   if (currentNode.layoutItem?.free) {
@@ -2051,39 +2341,24 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     style.overflow = "hidden";
     style.position = "relative";
   } else if (currentNode.type === "ElLayout") {
-    const gutter = Number(currentNode.props?.gutter) || 0;
-    const justifyMap = {
-      start: "flex-start",
-      end: "flex-end",
-      center: "center",
-      "space-between": "space-between",
-      "space-around": "space-around",
-      "space-evenly": "space-evenly",
-    };
-    const alignMap = {
-      top: "flex-start",
-      middle: "center",
-      bottom: "flex-end",
-    };
-    style.display = "flex";
-    style.flexWrap = "wrap";
-    style.alignItems = alignMap[currentNode.props?.align] || "stretch";
-    style.justifyContent =
-      justifyMap[currentNode.props?.justify] || "flex-start";
-    style.gap = gutter ? `${gutter}px` : "0px";
-    style.width = "100%";
-    style.position = "relative";
-  } else if (currentNode.type === "ElCol") {
-    const span = Number(currentNode.props?.span) || 1;
-    const percent = Math.max(1, Math.min(24, span)) / 24;
     style.display = "flex";
     style.flexDirection = "column";
     style.alignItems = "stretch";
-    style.flex = `0 0 ${percent * 100}%`;
-    style.maxWidth = `${percent * 100}%`;
+    style.width = "100%";
+    style.height = "100%";
+    style.overflow = "hidden";
     style.position = "relative";
   } else if (isContainer && !baseStyle.position) {
     style.position = "relative";
+  }
+
+  if (isContainer && currentNode.positioning === "absolute") {
+    if (style.width === undefined) {
+      style.width = "100%";
+    }
+    if (style.height === undefined) {
+      style.height = "100%";
+    }
   }
 
   return style;
@@ -2375,6 +2650,37 @@ const handleResizePointerDown = (event, handle) => {
   const startClientY = event.clientY;
   const minSize = 40;
   const containerMinSize = resolveElContainerMinSize(node.value);
+  const childMinSize = (() => {
+    if (!nodeRef.value || !node.value?.children?.length) return null;
+    const parentRect = nodeRef.value.getBoundingClientRect?.();
+    if (!parentRect) return null;
+    let minLeft = Number.POSITIVE_INFINITY;
+    let minTop = Number.POSITIVE_INFINITY;
+    let maxRight = Number.NEGATIVE_INFINITY;
+    let maxBottom = Number.NEGATIVE_INFINITY;
+    for (const childId of node.value.children) {
+      const childEl = nodeRef.value.querySelector?.(
+        `[data-node-id="${childId}"]`
+      );
+      if (!childEl) continue;
+      const childRect = childEl.getBoundingClientRect?.();
+      if (!childRect) continue;
+      minLeft = Math.min(minLeft, childRect.left);
+      minTop = Math.min(minTop, childRect.top);
+      maxRight = Math.max(maxRight, childRect.right);
+      maxBottom = Math.max(maxBottom, childRect.bottom);
+    }
+    if (
+      minLeft === Number.POSITIVE_INFINITY ||
+      minTop === Number.POSITIVE_INFINITY
+    ) {
+      return null;
+    }
+    return {
+      width: Math.max(0, Math.round((maxRight - minLeft) / zoomValue)),
+      height: Math.max(0, Math.round((maxBottom - minTop) / zoomValue)),
+    };
+  })();
 
   const parentNode = doc.value?.getParent?.(node.value.id);
   const shouldUpdateAbsolute =
@@ -2559,6 +2865,20 @@ const handleResizePointerDown = (event, handle) => {
         nextHeight = containerMinSize.height;
       }
     }
+    if (childMinSize) {
+      if (handle.x === -1 && nextWidth < childMinSize.width) {
+        nextX = baseLayout.x + (baseWidth - childMinSize.width);
+        nextWidth = childMinSize.width;
+      } else if (handle.x === 1 && nextWidth < childMinSize.width) {
+        nextWidth = childMinSize.width;
+      }
+      if (handle.y === -1 && nextHeight < childMinSize.height) {
+        nextY = baseLayout.y + (baseHeight - childMinSize.height);
+        nextHeight = childMinSize.height;
+      } else if (handle.y === 1 && nextHeight < childMinSize.height) {
+        nextHeight = childMinSize.height;
+      }
+    }
 
     nextWidth = Math.round(nextWidth);
     nextHeight = Math.round(nextHeight);
@@ -2687,7 +3007,7 @@ const handlePointerDown = (event) => {
   const targetNodeEl = event.target?.closest?.("[data-node-id]");
   const targetNodeId = targetNodeEl?.getAttribute?.("data-node-id");
   if (targetNodeId && targetNodeId !== node.value.id) {
-    return;
+    if (!isContainer.value) return;
   }
 
   event.preventDefault();
@@ -2759,6 +3079,16 @@ const handlePointerDown = (event) => {
       }
     }
     return null;
+  };
+  const isSelfOrDescendant = (targetId) => {
+    if (!targetId || !node.value?.id || !doc.value) return false;
+    if (targetId === node.value.id) return true;
+    let current = doc.value.getParent?.(targetId);
+    while (current) {
+      if (current.id === node.value.id) return true;
+      current = doc.value.getParent?.(current.id);
+    }
+    return false;
   };
 
   cleanupDragHandlers();
@@ -2899,7 +3229,8 @@ const handlePointerDown = (event) => {
         dropRegion &&
         dropRegion.id &&
         dropRegion.id !== originParent?.id &&
-        canAcceptChild(dropRegion, node.value.type)
+        canAcceptChild(dropRegion, node.value.type) &&
+        !isSelfOrDescendant(dropRegion.id)
       ) {
         const insertIndex = (dropRegion.children || []).length;
         const moveCommand = new MoveNodeCommand(
@@ -3059,6 +3390,10 @@ const handlePointerDown = (event) => {
   min-height: 40px;
 }
 
+.designer-node.el-col {
+  outline-offset: calc(-1 * var(--col-gutter-x, 0));
+}
+
 .designer-node.is-locked {
   opacity: 0.6;
   pointer-events: none;
@@ -3070,11 +3405,14 @@ const handlePointerDown = (event) => {
 }
 
 .empty-container-hint {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--col-gutter-x, 0);
+  right: var(--col-gutter-x, 0);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
   min-height: 40px;
   color: #9ca3af;
   font-size: 12px;
@@ -3215,6 +3553,5 @@ const handlePointerDown = (event) => {
   top: 50%;
   transform: translateY(-50%);
 }
+
 </style>
-
-

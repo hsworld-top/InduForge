@@ -66,6 +66,7 @@ export function inferPositioning(type, parentNode) {
     case "ResponsiveLayout":
     case "ElContainer":
     case "ElLayout":
+    case "ElLayoutRow":
     case "ElHeader":
     case "ElAside":
     case "ElMain":

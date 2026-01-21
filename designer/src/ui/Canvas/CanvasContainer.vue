@@ -65,7 +65,6 @@ import { computed, onBeforeUnmount, onMounted, provide, ref, toRefs } from "vue"
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import IconEpRefresh from "~icons/ep/refresh";
-import { componentRegistry } from "@/editor-core";
 import { useDragState, endDrag } from "./use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 
@@ -327,6 +326,7 @@ const isLayoutContainerType = (type) => {
     "ColumnLayout4",
     "ElContainer",
     "ElLayout",
+    "ElLayoutRow",
   ].includes(type);
 };
 
@@ -409,6 +409,7 @@ const buildLayoutItem = (parentNode, dropInfo) => {
     parentNode.type === "ResponsiveLayout" ||
     parentNode.type === "ElContainer" ||
     parentNode.type === "ElLayout" ||
+    parentNode.type === "ElLayoutRow" ||
     parentNode.type === "ElHeader" ||
     parentNode.type === "ElAside" ||
     parentNode.type === "ElMain" ||
@@ -545,6 +546,12 @@ const isContainerNode = (nodeId) => {
 const canAcceptChild = (parentId, childType) => {
   const node = doc.value?.getNode(parentId);
   if (!node) return false;
+  if (node.type === "ElLayout") {
+    return childType === "ElLayoutRow";
+  }
+  if (node.type === "ElLayoutRow") {
+    return childType === "ElCol";
+  }
   const manifest = componentRegistry.get(node.type);
   const allowed = manifest?.allowedChildren;
   if (!Array.isArray(allowed) || allowed.length === 0) return true;
@@ -783,15 +790,5 @@ onBeforeUnmount(() => {
 }
 
 </style>
-
-
-
-
-
-
-
-
-
-
 
 

@@ -154,6 +154,7 @@ export class DragDropManager {
       'ColumnLayout4',
       'ElContainer',
       'ElLayout',
+      'ElLayoutRow',
       'ElHeader',
       'ElAside',
       'ElMain',
@@ -236,6 +237,7 @@ export class DragDropManager {
 
       case 'ElContainer':
       case 'ElLayout':
+      case 'ElLayoutRow':
       case 'ElHeader':
       case 'ElAside':
       case 'ElMain':
