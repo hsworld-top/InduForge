@@ -343,6 +343,7 @@ export class ExpressionEngine {
     const funcBody = `
       "use strict";
       const { $dp = {}, $vars = {}, $global = {}, $props = {}, $event, $item, $index } = ctx;
+      const state = ctx.state ?? $global.state ?? $global;
       const fns = funcs;
       
       // 注入函数到作用域
@@ -470,4 +471,3 @@ export function evaluateTemplate(template, context = {}) {
 }
 
 export default ExpressionEngine;
-

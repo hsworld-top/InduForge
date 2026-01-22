@@ -1,11 +1,12 @@
 ﻿<template>
   <component
-    v-if="node && !node.hidden"
+    v-if="node && isNodeVisible"
     :is="outerTag"
     :class="nodeClass"
-    :style="useComponentWrapper ? wrapperComponentStyle : wrapperStyle"
+    :style="outerStyle"
     :data-node-id="node.id"
     :data-node-type="node.type"
+    :id="useComponentWrapper ? nodeDomId : null"
     :ref="setNodeRef"
     v-bind="useComponentWrapper ? resolvedProps : {}"
     v-on="useComponentWrapper ? componentEventListeners : {}"
@@ -22,7 +23,8 @@
       v-if="!useComponentWrapper"
       :is="renderTag"
       :key="renderKey"
-      :style="contentStyle"
+      :id="!useComponentWrapper ? nodeDomId : null"
+      :style="contentStyleWithConfig"
       v-bind="resolvedProps"
       v-on="componentEventListeners"
       ref="contentRef"
@@ -231,10 +233,19 @@
 </template>
 
 <script setup>
-import { computed, ref, inject, onBeforeUnmount, onMounted, watch } from "vue";
+import {
+  computed,
+  ref,
+  inject,
+  onBeforeUnmount,
+  onMounted,
+  watch,
+  watchEffect,
+} from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { datacenterApi } from "@/services";
+import { evaluate, evaluateTemplate } from "@/data";
 import { getPreviewRuntime } from "@/ui/Preview/previewRuntime";
 import {
   componentRegistry,
@@ -432,13 +443,24 @@ const showInsertLine = ref(false);
 const insertLineStyle = ref(null);
 const dragDropManager = createDragDropManager();
 const tableRenderVersion = ref(0);
+const resolvedNodeProps = computed(() => {
+  docVersion.value;
+  if (!node.value) return {};
+  const baseProps = node.value.props || {};
+  const bindingValues = resolveExprBindings(node.value.bindings, baseProps);
+  if (Object.keys(bindingValues).length === 0) return baseProps;
+  return { ...baseProps, ...bindingValues };
+});
 const resolvedProps = computed(() => {
   docVersion.value;
   if (!node.value) return {};
   if (node.value.type === "Table" || node.value.type === "BigDataTable") {
     tableRenderVersion.value;
   }
-  const nextProps = filterRenderProps(node.value.type, node.value.props || {});
+  const nextProps = filterRenderProps(
+    node.value.type,
+    resolvedNodeProps.value || {}
+  );
   if (node.value.type === "ElCol") {
     const parentNode = doc.value?.getParent?.(node.value.id);
     const rawColumns = Number(parentNode?.props?.columns);
@@ -520,6 +542,18 @@ const isContainer = computed(() => {
   if (!node.value) return false;
   const manifest = componentRegistry.get(node.value.type);
   return Boolean(manifest?.isContainer);
+});
+
+const isNodeVisible = computed(() => {
+  docVersion.value;
+  if (!node.value) return false;
+  if (node.value.hidden) return false;
+  const visibleConfig = node.value.conditions?.visible;
+  if (typeof visibleConfig === "boolean") return visibleConfig;
+  if (typeof visibleConfig !== "string" || !visibleConfig.trim()) return true;
+  const context = buildExpressionContext(resolvedNodeProps.value || {});
+  const value = resolveExpressionValue(visibleConfig, context, true);
+  return Boolean(value);
 });
 
 /**
@@ -878,28 +912,29 @@ const renderKey = computed(() => {
 const displayContent = computed(() => {
   docVersion.value;
   if (!node.value) return null;
+  const resolvedPropsValue = resolvedNodeProps.value || {};
   if (node.value.type === "Text") {
-    return node.value.props?.text ?? node.value.label ?? "";
+    return resolvedPropsValue.text ?? node.value.label ?? "";
   }
   if (node.value.type === "Button") {
-    return node.value.props?.text ?? node.value.label ?? "按钮";
+    return resolvedPropsValue.text ?? node.value.label ?? "按钮";
   }
   if (node.value.type === "Tag") {
-    return node.value.props?.text ?? node.value.label ?? "标签";
+    return resolvedPropsValue.text ?? node.value.label ?? "标签";
   }
   if (node.value.type === "Card") {
-    return node.value.props?.content ?? node.value.label ?? "卡片";
+    return resolvedPropsValue.content ?? node.value.label ?? "卡片";
   }
   if (node.value.type === "BusinessCard") {
-    return node.value.props?.content ?? node.value.label ?? "业务卡片";
+    return resolvedPropsValue.content ?? node.value.label ?? "业务卡片";
   }
   if (node.value.type === "WebContainer") {
-    return node.value.props?.url
-      ? `网页容器: ${node.value.props.url}`
+    return resolvedPropsValue.url
+      ? `网页容器: ${resolvedPropsValue.url}`
       : "网页容器";
   }
   if (node.value.type === "Barcode") {
-    return node.value.props?.value ?? "1234567890";
+    return resolvedPropsValue.value ?? "1234567890";
   }
   return null;
 });
@@ -1113,6 +1148,255 @@ const wrapperComponentStyle = computed(() => {
   return style;
 });
 
+const styleConfigText = computed(() => {
+  docVersion.value;
+  return String(node.value?.styleConfig || "").trim();
+});
+const hasStyleConfigSelector = computed(() =>
+  styleConfigText.value.includes("{")
+);
+const hasDomIdSelector = computed(() => styleConfigText.value.includes("#domId"));
+const nodeDomId = computed(() => {
+  if (!node.value) return "";
+  const customId =
+    typeof node.value.props?.id === "string" ? node.value.props.id.trim() : "";
+  if (customId) return customId;
+  if (!node.value.id) return "";
+  return `dom-${node.value.id}`;
+});
+const styleScopeSelector = computed(() => {
+  if (!node.value?.id) return "";
+  if (nodeDomId.value) return `#${nodeDomId.value}`;
+  return `[data-node-id="${node.value.id}"]`;
+});
+const normalizedStyleConfigText = computed(() => {
+  if (!styleConfigText.value) return "";
+  if (!styleScopeSelector.value) return styleConfigText.value;
+  return styleConfigText.value.replaceAll("#domId", styleScopeSelector.value);
+});
+const inlineStyleConfig = computed(() => {
+  if (hasStyleConfigSelector.value) return "";
+  return styleConfigText.value ? styleConfigText.value : "";
+});
+const inlineStyleConfigObject = computed(() => {
+  const raw = inlineStyleConfig.value;
+  if (!raw) return {};
+  const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "");
+  const entries = stripped
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const result = {};
+  entries.forEach((item) => {
+    const [key, ...rest] = item.split(":");
+    if (!key || rest.length === 0) return;
+    const value = rest.join(":").trim();
+    const prop = key.trim();
+    if (!prop || !value) return;
+    result[prop] = value;
+  });
+  return result;
+});
+const domIdStyleConfigObject = computed(() => {
+  const raw = styleConfigText.value;
+  if (!raw || !raw.includes("#domId")) return {};
+  const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "");
+  const selectorIndex = stripped.indexOf("#domId");
+  if (selectorIndex < 0) return {};
+  const openIndex = stripped.indexOf("{", selectorIndex);
+  if (openIndex < 0) return {};
+  const closeIndex = findMatchingBrace(stripped, openIndex);
+  if (closeIndex < 0) return {};
+  const body = stripped.slice(openIndex + 1, closeIndex);
+  const entries = body
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const result = {};
+  entries.forEach((item) => {
+    const [key, ...rest] = item.split(":");
+    if (!key || rest.length === 0) return;
+    const value = rest.join(":").trim();
+    const prop = key.trim();
+    if (!prop || !value) return;
+    result[prop] = value;
+  });
+  return result;
+});
+const resolvedInlineStyleConfigObject = computed(() => {
+  return {
+    ...inlineStyleConfigObject.value,
+    ...domIdStyleConfigObject.value,
+  };
+});
+
+/**
+ * 拼接选择器前缀
+ * @param {string} selectorText - 选择器文本
+ * @param {string} scope - 作用域选择器
+ * @returns {string}
+ */
+const prefixSelectors = (selectorText, scope) => {
+  return selectorText
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => (item.startsWith(scope) ? item : `${scope} ${item}`))
+    .join(", ");
+};
+
+/**
+ * 查找匹配的右花括号
+ * @param {string} text - 源文本
+ * @param {number} startIndex - 起始索引
+ * @returns {number}
+ */
+const findMatchingBrace = (text, startIndex) => {
+  let depth = 0;
+  for (let i = startIndex; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+};
+
+/**
+ * 构建带作用域的样式规则
+ * @param {string} cssText - 原始 CSS
+ * @param {string} scope - 作用域选择器
+ * @returns {string}
+ */
+const buildScopedCss = (cssText, scope) => {
+  if (!cssText) return "";
+  if (!cssText.includes("{")) {
+    return `${scope} { ${cssText} }`;
+  }
+
+  let result = "";
+  let index = 0;
+  const text = cssText;
+
+  while (index < text.length) {
+    const nextOpen = text.indexOf("{", index);
+    if (nextOpen === -1) break;
+    const selector = text.slice(index, nextOpen).trim();
+    const closeIndex = findMatchingBrace(text, nextOpen);
+    if (closeIndex === -1) break;
+    const body = text.slice(nextOpen + 1, closeIndex);
+
+    if (selector.startsWith("@")) {
+      const nested = buildScopedCss(body, scope);
+      result += `${selector}{${nested}}`;
+    } else if (selector) {
+      result += `${prefixSelectors(selector, scope)}{${body}}`;
+    }
+
+    index = closeIndex + 1;
+  }
+
+  return result;
+};
+
+const styleConfigCss = computed(() => {
+  if (!node.value?.id || !hasStyleConfigSelector.value) return "";
+  if (hasDomIdSelector.value) {
+    return normalizedStyleConfigText.value;
+  }
+  const scope = styleScopeSelector.value || `[data-node-id="${node.value.id}"]`;
+  return buildScopedCss(normalizedStyleConfigText.value, scope);
+});
+
+const styleElementRef = ref(null);
+
+/**
+ * 注入/更新样式节点，确保样式生效
+ */
+const syncStyleElement = () => {
+  if (typeof document === "undefined") return;
+  const nodeId = node.value?.id;
+  const cssText = styleConfigCss.value;
+
+  if (!nodeId || !cssText) {
+    if (styleElementRef.value?.parentNode) {
+      styleElementRef.value.parentNode.removeChild(styleElementRef.value);
+    }
+    styleElementRef.value = null;
+    return;
+  }
+
+  let styleEl = styleElementRef.value;
+  if (!styleEl || styleEl.getAttribute("data-style-node") !== nodeId) {
+    if (styleEl?.parentNode) {
+      styleEl.parentNode.removeChild(styleEl);
+    }
+    styleEl = document.querySelector(`style[data-style-node="${nodeId}"]`);
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.setAttribute("data-style-node", nodeId);
+      document.head.appendChild(styleEl);
+    }
+    styleElementRef.value = styleEl;
+  }
+
+  if (styleEl.textContent !== cssText) {
+    styleEl.textContent = cssText;
+  }
+};
+
+watch(
+  [() => node.value?.id, styleConfigCss],
+  () => {
+    syncStyleElement();
+  },
+  { immediate: true }
+);
+
+watchEffect(() => {
+  styleConfigCss.value;
+  syncStyleElement();
+});
+
+onMounted(() => {
+  syncStyleElement();
+});
+
+onBeforeUnmount(() => {
+  if (styleElementRef.value?.parentNode) {
+    styleElementRef.value.parentNode.removeChild(styleElementRef.value);
+  }
+  styleElementRef.value = null;
+});
+
+/**
+ * 外层样式（处理组件包装模式）
+ */
+const outerStyle = computed(() => {
+  if (useComponentWrapper.value) {
+    const inlineStyle = resolvedInlineStyleConfigObject.value;
+    if (!inlineStyle || Object.keys(inlineStyle).length === 0) {
+      return wrapperComponentStyle.value;
+    }
+    return [wrapperComponentStyle.value, inlineStyle];
+  }
+  return wrapperStyle.value;
+});
+
+/**
+ * 内容样式（非包装组件时附加样式配置）
+ */
+const contentStyleWithConfig = computed(() => {
+  if (useComponentWrapper.value) return contentStyle.value;
+  const inlineStyle = resolvedInlineStyleConfigObject.value;
+  if (!inlineStyle || Object.keys(inlineStyle).length === 0) {
+    return contentStyle.value;
+  }
+  return [contentStyle.value, inlineStyle];
+});
+
 /**
  * 处理节点选中逻辑
  * @param {MouseEvent} event - 鼠标事件
@@ -1187,6 +1471,84 @@ const normalizeGlobalValue = (detail) => {
     }
   }
   return raw ?? null;
+};
+
+/**
+ * 构建变量默认值映射
+ * @param {Record<string, { default?: any }>} definitions - 变量定义
+ * @returns {Record<string, any>}
+ */
+const buildVarValuesFromDefinitions = (definitions) => {
+  const result = {};
+  if (!definitions || typeof definitions !== "object") return result;
+  Object.entries(definitions).forEach(([name, detail]) => {
+    result[name] = normalizeGlobalValue(detail);
+  });
+  return result;
+};
+
+/**
+ * 构建表达式上下文
+ * @param {Record<string, any>} propsValue - 当前组件属性
+ * @returns {import("@/data").ExpressionContext}
+ */
+const buildExpressionContext = (propsValue = {}) => {
+  const pageId = currentPage.value?.id;
+  const pageDefs = doc.value?.vars?.pages?.[pageId] || {};
+  const globalDefs = projectVariables.value || {};
+  const runtimeGlobals = getPreviewRuntime()?.globals;
+  const globalValues =
+    runtimeGlobals && typeof runtimeGlobals === "object"
+      ? runtimeGlobals
+      : buildVarValuesFromDefinitions(globalDefs);
+  return {
+    $dp: {},
+    $vars: buildVarValuesFromDefinitions(pageDefs),
+    $global: globalValues,
+    $props: propsValue,
+    state: globalValues,
+  };
+};
+
+/**
+ * 解析表达式值
+ * @param {string} expr - 表达式
+ * @param {import("@/data").ExpressionContext} context - 上下文
+ * @param {*} fallback - 兜底值
+ * @returns {*}
+ */
+const resolveExpressionValue = (expr, context, fallback) => {
+  if (typeof expr !== "string" || !expr.trim()) return fallback;
+  const text = expr.trim();
+  const value = text.includes("{{")
+    ? evaluateTemplate(text, context)
+    : evaluate(text, context);
+  return value === undefined ? fallback : value;
+};
+
+/**
+ * 解析表达式绑定
+ * @param {Record<string, any>} bindings - 绑定配置
+ * @param {Record<string, any>} propsValue - 当前组件属性
+ * @returns {Record<string, any>}
+ */
+const resolveExprBindings = (bindings, propsValue) => {
+  if (!bindings || typeof bindings !== "object") return {};
+  const context = buildExpressionContext(propsValue);
+  const resolved = {};
+  Object.entries(bindings).forEach(([key, binding]) => {
+    if (!binding || typeof binding !== "object") return;
+    if (binding.kind !== "expr" || typeof binding.expr !== "string") return;
+    const value = resolveExpressionValue(
+      binding.expr,
+      context,
+      binding.fallback
+    );
+    if (value !== undefined) {
+      resolved[key] = value;
+    }
+  });
+  return resolved;
 };
 
 const connectionCache = new Map();
@@ -1564,15 +1926,187 @@ const applyPreviewPatch = (patch) => {
   if (patch.style) {
     node.value.style = { ...(node.value.style || {}), ...patch.style };
   }
+  if (patch.bindings) {
+    node.value.bindings = { ...(node.value.bindings || {}), ...patch.bindings };
+  }
+  if (patch.events) {
+    node.value.events = { ...(node.value.events || {}), ...patch.events };
+  }
+  if (patch.conditions) {
+    node.value.conditions = {
+      ...(node.value.conditions || {}),
+      ...patch.conditions,
+    };
+  }
+  if (patch.permissions) {
+    node.value.permissions = {
+      ...(node.value.permissions || {}),
+      ...patch.permissions,
+    };
+  }
+  if (typeof patch.hidden === "boolean") {
+    node.value.hidden = patch.hidden;
+  }
   if (patch.label !== undefined) {
     node.value.label = patch.label;
   }
   docVersion.value += 1;
 };
 
+const detailConfigText = computed(() => {
+  docVersion.value;
+  return String(node.value?.detailConfig || "").trim();
+});
+
+/**
+ * @typedef {Object} ButtonDslOnClick
+ * @property {string} action - 点击动作脚本
+ * @property {string} [confirm] - 二次确认提示
+ */
+
+/**
+ * @typedef {Object} ButtonDslConfig
+ * @property {string} id - DOM 唯一 ID
+ * @property {string} [text] - 静态文字
+ * @property {string} [textExpr] - 初始化表达式
+ * @property {boolean | string} [visible] - 显隐（支持表达式）
+ * @property {string} [permission] - 权限码
+ * @property {'primary' | 'success' | 'warning' | 'danger' | 'info' | 'text'} [type] - 类型
+ * @property {'large' | 'default' | 'small'} [size] - 尺寸
+ * @property {boolean} [plain] - 朴素按钮
+ * @property {boolean} [round] - 圆角按钮
+ * @property {boolean} [circle] - 圆形按钮
+ * @property {boolean} [disabled] - 禁用
+ * @property {boolean} [loading] - 加载中
+ * @property {string} [icon] - 图标
+ * @property {Record<string, string>} [style] - 样式
+ * @property {string} [className] - 自定义类名
+ * @property {string | ButtonDslOnClick} [onClick] - 点击事件
+ * @property {*} [plugin] - 插件扩展
+ */
+
+/**
+ * 生成按钮 DSL 的点击脚本
+ * @param {string | ButtonDslOnClick} onClick - 点击配置
+ * @returns {string}
+ */
+const buildButtonClickScript = (onClick) => {
+  if (typeof onClick === "string") return onClick;
+  if (!onClick || typeof onClick !== "object") return "";
+  const action = typeof onClick.action === "string" ? onClick.action.trim() : "";
+  if (!action) return "";
+  if (typeof onClick.confirm === "string" && onClick.confirm.trim()) {
+    const confirmText = JSON.stringify(onClick.confirm.trim());
+    return `if (confirm(${confirmText})) {\n  ${action}\n}`;
+  }
+  return action;
+};
+
+/**
+ * 生成按钮 DSL 更新补丁
+ * @param {ButtonDslConfig} config - 按钮 DSL 配置
+ * @returns {{
+ *   propsPatch: Record<string, *>,
+ *   stylePatch: Record<string, *>,
+ *   bindingsPatch: Record<string, *>,
+ *   eventsPatch: Record<string, *>,
+ *   conditionsPatch: Record<string, *>,
+ *   hidden: boolean | undefined,
+ * }}
+ */
+const buildButtonDslPatch = (config) => {
+  const propsPatch = {};
+  const stylePatch = {};
+  const bindingsPatch = {};
+  const eventsPatch = {};
+  const conditionsPatch = {};
+  let hidden;
+
+  if (!config || typeof config !== "object") {
+    return {
+      propsPatch,
+      stylePatch,
+      bindingsPatch,
+      eventsPatch,
+      conditionsPatch,
+      hidden,
+    };
+  }
+
+  if (Object.prototype.hasOwnProperty.call(config, "id")) {
+    const value = String(config.id || "");
+    if (value) propsPatch.id = value;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "text")) {
+    propsPatch.text = String(config.text ?? "");
+  }
+  if (typeof config.textExpr === "string" && config.textExpr.trim()) {
+    bindingsPatch.text = {
+      kind: "expr",
+      expr: config.textExpr.trim(),
+      fallback:
+        Object.prototype.hasOwnProperty.call(config, "text") &&
+        config.text !== undefined
+          ? String(config.text ?? "")
+          : undefined,
+    };
+  }
+  if (typeof config.visible === "boolean") {
+    hidden = !config.visible;
+  } else if (typeof config.visible === "string" && config.visible.trim()) {
+    conditionsPatch.visible = config.visible.trim();
+  }
+  if (typeof config.permission === "string" && config.permission.trim()) {
+    propsPatch.permission = config.permission.trim();
+  }
+  if (typeof config.type === "string" && config.type.trim()) {
+    propsPatch.type = config.type.trim();
+  }
+  if (typeof config.size === "string" && config.size.trim()) {
+    propsPatch.size = config.size.trim();
+  }
+  if (typeof config.plain === "boolean") propsPatch.plain = config.plain;
+  if (typeof config.round === "boolean") propsPatch.round = config.round;
+  if (typeof config.circle === "boolean") propsPatch.circle = config.circle;
+  if (typeof config.disabled === "boolean")
+    propsPatch.disabled = config.disabled;
+  if (typeof config.loading === "boolean") propsPatch.loading = config.loading;
+  if (typeof config.icon === "string" && config.icon.trim()) {
+    propsPatch.icon = config.icon.trim();
+  }
+  if (config.style && typeof config.style === "object") {
+    Object.entries(config.style).forEach(([key, value]) => {
+      if (typeof value === "string") {
+        stylePatch[key] = value;
+      }
+    });
+  }
+  if (typeof config.className === "string" && config.className.trim()) {
+    propsPatch.class = config.className.trim();
+  }
+  if (config.onClick) {
+    const code = buildButtonClickScript(config.onClick);
+    if (code) {
+      eventsPatch.click = [{ type: "script", code, enabled: true }];
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "plugin")) {
+    propsPatch.plugin = config.plugin;
+  }
+
+  return {
+    propsPatch,
+    stylePatch,
+    bindingsPatch,
+    eventsPatch,
+    conditionsPatch,
+    hidden,
+  };
+};
+
 const buildRefInfo = () => {
   if (!node.value) return null;
-  return {
+  const refInfo = {
     name: node.value.label,
     id: node.value.id,
     el: nodeRef.value || null,
@@ -1727,8 +2261,116 @@ const buildRefInfo = () => {
       });
       tableRenderVersion.value += 1;
     },
+    /**
+     * 应用按钮 DSL 配置
+     * @param {ButtonDslConfig} config - 按钮 DSL 配置
+     * @returns {void}
+     */
+    button: (config) => {
+      if (node.value?.type !== "Button") return;
+      const patch = buildButtonDslPatch(config);
+      const nextPatch = {};
+      if (Object.keys(patch.propsPatch).length > 0) {
+        nextPatch.props = {
+          ...(node.value.props || {}),
+          ...patch.propsPatch,
+        };
+      }
+      if (Object.keys(patch.stylePatch).length > 0) {
+        nextPatch.style = {
+          ...(node.value.style || {}),
+          ...patch.stylePatch,
+        };
+      }
+      if (Object.keys(patch.bindingsPatch).length > 0) {
+        nextPatch.bindings = {
+          ...(node.value.bindings || {}),
+          ...patch.bindingsPatch,
+        };
+      }
+      if (Object.keys(patch.eventsPatch).length > 0) {
+        nextPatch.events = {
+          ...(node.value.events || {}),
+          ...patch.eventsPatch,
+        };
+      }
+      if (Object.keys(patch.conditionsPatch).length > 0) {
+        nextPatch.conditions = {
+          ...(node.value.conditions || {}),
+          ...patch.conditionsPatch,
+        };
+      }
+      if (typeof patch.hidden === "boolean") {
+        nextPatch.hidden = patch.hidden;
+      }
+      if (Object.keys(nextPatch).length === 0) return;
+      if (props.readonly) {
+        applyPreviewPatch(nextPatch);
+        return;
+      }
+      editorStore.updateNode(node.value.id, nextPatch);
+    },
   };
+  return refInfo;
 };
+
+let detailConfigTimer = null;
+let lastDetailConfigKey = "";
+
+const runDetailConfigScript = async (code) => {
+  if (!code || !code.trim()) return;
+  const runtime = getPreviewRuntime();
+  const pageId = currentPage.value?.name || currentPage.value?.id;
+  const instance = buildRefInfo();
+  if (!instance) return;
+  if (runtime?.runCode) {
+    await runtime.runCode(code, { type: "detail" }, instance, pageId);
+    return;
+  }
+  const globals = buildPreviewGlobals();
+  const customScripts = buildPreviewCustomScripts(globals);
+  const context = {
+    $event: { type: "detail" },
+    $global: globals,
+    customScripts,
+    console,
+  };
+  try {
+    const keys = Object.keys(context);
+    const values = Object.values(context);
+    const runner = new Function(
+      ...keys,
+      `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`
+    );
+    await runner.call(instance || null, ...values);
+  } catch (error) {
+    console.error("[Preview] Detail script error:", error);
+  }
+};
+
+const scheduleDetailConfig = (force = false) => {
+  if (!props.readonly) return;
+  const code = detailConfigText.value;
+  if (!code) return;
+  const key = `${node.value?.id || ""}::${code}`;
+  if (!force && key === lastDetailConfigKey) return;
+  lastDetailConfigKey = key;
+  if (detailConfigTimer) {
+    clearTimeout(detailConfigTimer);
+  }
+  detailConfigTimer = setTimeout(() => {
+    runDetailConfigScript(code);
+  }, 120);
+};
+
+watch(
+  () => [props.readonly, node.value?.id, detailConfigText.value],
+  () => {
+    if (!props.readonly) return;
+    scheduleDetailConfig(true);
+  },
+  { immediate: true }
+);
 
 const tryRegisterPreviewRef = (pageIdValue) => {
   if (!props.readonly || !node.value?.label) return false;
@@ -1813,6 +2455,10 @@ onBeforeUnmount(() => {
   if (registerTimer) {
     clearTimeout(registerTimer);
     registerTimer = null;
+  }
+  if (detailConfigTimer) {
+    clearTimeout(detailConfigTimer);
+    detailConfigTimer = null;
   }
   if (node.value?.label) unregisterPreviewRef(node.value.label);
 });

@@ -357,6 +357,8 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {string} [label] - 显示标签
  * @property {Record<string, *>} props - 组件属性
  * @property {Record<string, *>} style - 样式定义
+ * @property {string} [styleConfig] - 样式配置（内联样式字符串）
+ * @property {string} [detailConfig] - 详细配置（高级配置脚本）
  * @property {LayoutItem | null} layoutItem - 布局配置（兼容旧版）
  * @property {'absolute' | 'flow'} [positioning] - 定位模式（新架构）
  * @property {AbsolutePosition} [absolutePos] - 绝对定位数据（新架构）
@@ -849,6 +851,8 @@ export function createComponentNode(type, options = {}) {
     label: options.label || type,
     props: options.props || {},
     style: options.style || {},
+    styleConfig: options.styleConfig || "",
+    detailConfig: options.detailConfig || "",
     layoutItem: options.layoutItem || null,
     bindings: options.bindings || {},
     permissions: options.permissions || {},

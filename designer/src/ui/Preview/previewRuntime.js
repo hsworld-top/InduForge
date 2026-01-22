@@ -145,6 +145,7 @@ const buildComponentStub = (pageId, name) => ({
   setTableData: (...args) => queueComponentCall(pageId, name, "setTableData", args),
   setProps: (...args) => queueComponentCall(pageId, name, "setProps", args),
   setStyle: (...args) => queueComponentCall(pageId, name, "setStyle", args),
+  button: (...args) => queueComponentCall(pageId, name, "button", args),
 });
 
 const getApiBase = () => {
