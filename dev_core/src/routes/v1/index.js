@@ -10,6 +10,11 @@ const roleRoutes = require("./role");
 const dataRoutes = require("./data");
 const designRoutes = require("./design");
 const pageLockRoutes = require("./pageLock");
+// 运维模块路由
+const nodeRoutes = require("./node");
+const nodeRegisterRoutes = require("./node-register");
+const deploymentRoutes = require("./deployment");
+const publishRoutes = require("./publish");
 
 function buildV1Router(options = {}) {
   const router = express.Router();
@@ -28,6 +33,11 @@ function buildV1Router(options = {}) {
   router.use("/data", dataRoutes);
   router.use("/design", designRoutes);
   router.use("/pages", pageLockRoutes);
+  // 运维模块路由
+  router.use("/nodes", nodeRoutes);
+  router.use("/node-register", nodeRegisterRoutes); // 节点注册（无需认证）
+  router.use("/deployments", deploymentRoutes);
+  router.use("/publish", publishRoutes);
 
   logger.info("V1 router mounted successfully");
 

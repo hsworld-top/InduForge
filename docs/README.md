@@ -65,6 +65,12 @@
   - **工程共享机制**（private/shared 可见性）
   - **工程成员管理**（OWNER/ADMIN/DEVELOPER/VIEWER 角色）
 
+### NodeAgent 系统文档
+
+- **[NodeAgent 系统架构](./README_nodeagent.md)** - 系统整体架构和组件说明
+- **[NodeAgent 后端文档](./node_agent/README.md)** - Go 后端服务详细功能
+- **[NodeAgent Front 文档](./node_agent_front/README.md)** - Vue 前端管理界面详解
+
 ### 后端文档
 
 - **[后端 API 文档](./backend/README.md)** - API 接口说明

@@ -242,9 +242,39 @@ function checkResourcePermission(userRole, resourceType, method) {
   return resourcePermissions.includes(method);
 }
 
+/**
+ * 检查用户是否有权限访问指定工程
+ * @param {Object} req - Express request
+ * @param {string} projectId - 工程ID
+ * @throws {AppError} 如果无权访问
+ */
+async function checkProjectAccess(req, projectId) {
+  if (!req.user) {
+    throw new AppError(ErrorCodes.AUTH_TOKEN_REQUIRED, 401);
+  }
+
+  // 超级管理员和系统管理员拥有所有权限
+  if (req.user.role === "SUPER_ADMIN" || req.user.role === "SYSTEM_ADMIN") {
+    return true;
+  }
+
+  // 其他角色检查所属租户和项目关联
+  const user = await User.findByPk(req.user.id);
+  const userProjects = await user.getProjects();
+  const hasAccess = userProjects.some((p) => p.id === projectId);
+
+  if (!hasAccess) {
+    throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+      message: "无权访问此工程",
+    });
+  }
+}
+
 module.exports = {
   authenticateToken,
+  authenticate: authenticateToken, // 别名，用于部分旧路由
   requireRole,
   requireTenantAccess,
   requireResourceOwnership,
+  checkProjectAccess,
 };

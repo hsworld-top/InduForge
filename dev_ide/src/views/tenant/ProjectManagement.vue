@@ -2,10 +2,14 @@
   <div class="project-management">
     <!-- 页面标题和操作栏 -->
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">工程管理</h1>
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
+        工程管理
+      </h1>
       <div class="flex items-center space-x-4">
         <!-- 视图切换 -->
-        <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+        <div
+          class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1"
+        >
           <button
             @click="viewMode = 'card'"
             :class="[
@@ -50,16 +54,16 @@
           <el-icon class="mr-2"><Upload /></el-icon>
           导入工程
         </el-button>
-
       </div>
     </div>
 
     <!-- 搜索和筛选栏 -->
     <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6"
+      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6"
     >
-      <el-form :inline="true" :model="searchForm" class="flex flex-wrap gap-4">
-        <el-form-item label="工程名称">
+      <div class="flex items-center justify-between">
+        <!-- 搜索表单 -->
+        <div class="flex items-center space-x-3">
           <el-input
             v-model="searchForm.name"
             placeholder="输入工程名称搜索"
@@ -67,33 +71,93 @@
             style="width: 200px"
             @input="handleSearch"
           />
-        </el-form-item>
-        <el-form-item>
-          <el-button @click="resetSearch" type="default">
+          <el-button @click="resetSearch" type="default" size="small">
             <el-icon><Refresh /></el-icon>
-            重置
           </el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+
+        <!-- 操作按钮组 -->
+        <div class="flex items-center space-x-3">
+          <template v-if="selectionMode">
+            <el-button
+              type="success"
+              size="small"
+              @click="batchExportProjects"
+              :disabled="selectedProjects.length === 0"
+            >
+              <el-icon class="mr-1"><Download /></el-icon>
+              批量导出 ({{ selectedProjects.length }})
+            </el-button>
+            <el-button
+              v-if="canManageProjects"
+              type="danger"
+              size="small"
+              @click="batchDeleteProjects"
+              :disabled="selectedProjects.length === 0"
+            >
+              <el-icon class="mr-1"><Delete /></el-icon>
+              批量删除 ({{ selectedProjects.length }})
+            </el-button>
+            <el-divider direction="vertical" />
+          </template>
+
+          <!-- 多选切换按钮 -->
+          <el-button
+            :type="selectionMode ? 'primary' : 'default'"
+            size="small"
+            @click="toggleSelectionMode"
+          >
+            <el-icon class="mr-1"><Select /></el-icon>
+            {{ selectionMode ? "取消选择" : "多选" }}
+          </el-button>
+        </div>
+      </div>
     </div>
 
     <!-- 工程列表 -->
     <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 "  
+      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
     >
       <!-- 卡片视图 -->
-      <div v-if="viewMode === 'card'" class="p-6 ">
-        <div v-if="projectList.length === 0 && !loading" class="text-center py-12">
+      <div v-if="viewMode === 'card'" class="p-6">
+        <div
+          v-if="projectList.length === 0 && !loading"
+          class="text-center py-12"
+        >
           <el-empty description="暂无工程数据" />
         </div>
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          v-else
+          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        >
           <div
             v-for="project in projectList"
             :key="project.id"
-            class="project-card border border-gray-200 dark:border-gray-600 rounded-lg p-6 hover:shadow-lg transition-all duration-200 cursor-pointer"
+            class="project-card relative border border-gray-200 dark:border-gray-600 rounded-lg p-6 hover:shadow-lg transition-all duration-200 cursor-pointer"
+            :class="{
+              'ring-4 ring-blue-500': selectedProjects.includes(project.id),
+              'opacity-60': selectionMode,
+            }"
             :style="{ backgroundColor: project.colorTag || '#3b82f6' }"
-            @click="openProjectDialog(project)"
+            @click="handleCardClick(project)"
           >
+            <!-- 选择模式下的复选框 -->
+            <div
+              v-if="selectionMode"
+              class="absolute top-2 right-2 z-10"
+              @click.stop
+            >
+              <el-checkbox
+                :model-value="selectedProjects.includes(project.id)"
+                @change="(val) => toggleProjectSelection(project.id, val)"
+                size="large"
+                :style="{
+                  '--el-checkbox-checked-bg-color': '#10b981',
+                  '--el-checkbox-checked-input-border-color': '#10b981',
+                }"
+              />
+            </div>
+
             <!-- 卡片头部 -->
             <div class="flex items-start justify-between mb-4">
               <div class="flex-1">
@@ -108,7 +172,7 @@
 
             <!-- 工程描述 -->
             <p class="text-sm text-white opacity-90 mb-4 line-clamp-2">
-              {{ project.description || '暂无描述' }}
+              {{ project.description || "暂无描述" }}
             </p>
 
             <!-- 工程信息 -->
@@ -116,28 +180,48 @@
               <div class="flex justify-between text-sm">
                 <span class="text-white opacity-75">创建者:</span>
                 <span class="text-white font-medium">{{
-                  project.creator?.fullName || '未知'
+                  project.creator?.fullName || "未知"
                 }}</span>
+              </div>
+              <div class="flex justify-between text-sm">
+                <span class="text-white opacity-75">运行模式:</span>
+                <el-tag
+                  :type="getProjectModeTagType(project)"
+                  size="small"
+                  effect="dark"
+                >
+                  {{ getProjectModeDisplay(project) }}
+                </el-tag>
               </div>
             </div>
 
             <!-- 操作按钮 -->
             <div class="flex justify-end space-x-2">
               <el-button
-                v-if="canManageProjects"
-                type="primary"
+                v-if="canPerformOps && getProjectModeDisplay(project) === 'DEV'"
+                type="success"
                 size="small"
-                @click.stop="editProject(project)"
+                @click.stop="updateDevProject(project)"
               >
-                编辑
+                更新
               </el-button>
               <el-button
                 v-if="canPerformOps"
+                type="primary"
+                size="small"
+                @click.stop="openDeployDialog(project)"
+              >
+                部署
+              </el-button>
+              <el-button
+                v-if="
+                  canPerformOps && getProjectModeDisplay(project) !== '未部署'
+                "
                 type="warning"
                 size="small"
-                @click.stop="openOperationDialog(project)"
+                @click.stop="undeployProject(project)"
               >
-                运维
+                撤销部署
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -168,7 +252,15 @@
           v-loading="loading"
           style="width: 100%"
           :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
+          @selection-change="handleSelectionChange"
         >
+          <!-- 选择列（仅在选择模式显示） -->
+          <el-table-column
+            v-if="selectionMode"
+            type="selection"
+            width="55"
+            fixed="left"
+          />
           <el-table-column label="颜色" width="80">
             <template #default="scope">
               <div
@@ -181,7 +273,7 @@
             <template #default="scope">
               <span
                 class="cursor-pointer text-blue-600 hover:text-blue-800 underline"
-                @click="openProjectDialog(scope.row)"
+                @click="handleProjectNameClick(scope.row)"
               >
                 {{ scope.row.name }}
               </span>
@@ -194,30 +286,50 @@
               {{ formatDateTime(scope.row.createdAt) }}
             </template>
           </el-table-column>
+          <el-table-column label="运行模式" width="120" align="center">
+            <template #default="scope">
+              <el-tag :type="getProjectModeTagType(scope.row)" size="small">
+                {{ getProjectModeDisplay(scope.row) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column
             label="操作"
-            width="min-200"
+            width="min-320"
             fixed="right"
             v-if="canManageProjects || canPerformOps"
           >
             <template #default="scope">
               <el-button
-                v-if="canManageProjects"
-                type="primary"
+                v-if="
+                  canPerformOps && getProjectModeDisplay(scope.row) === 'DEV'
+                "
+                type="success"
                 size="small"
-                @click="editProject(scope.row)"
+                @click="updateDevProject(scope.row)"
                 class="mr-2"
               >
-                编辑
+                更新
               </el-button>
               <el-button
                 v-if="canPerformOps"
-                type="warning"
+                type="primary"
                 size="small"
-                @click="openOperationDialog(scope.row)"
+                @click="openDeployDialog(scope.row)"
                 class="mr-2"
               >
-                运维
+                部署
+              </el-button>
+              <el-button
+                v-if="
+                  canPerformOps && getProjectModeDisplay(scope.row) !== '未部署'
+                "
+                type="warning"
+                size="small"
+                @click="undeployProject(scope.row)"
+                class="mr-2"
+              >
+                撤销部署
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -249,8 +361,8 @@
       >
         <div class="text-sm text-gray-500 dark:text-gray-400">
           显示第 {{ (pagination.page - 1) * pagination.limit + 1 }} 到
-          {{ Math.min(pagination.page * pagination.limit, pagination.total) }} 条， 共
-          {{ pagination.total }} 条记录
+          {{ Math.min(pagination.page * pagination.limit, pagination.total) }}
+          条， 共 {{ pagination.total }} 条记录
         </div>
         <el-pagination
           v-model:current-page="pagination.page"
@@ -271,7 +383,12 @@
       width="600px"
       :close-on-click-modal="false"
     >
-      <el-form ref="createFormRef" :model="createForm" :rules="createFormRules" label-width="100px">
+      <el-form
+        ref="createFormRef"
+        :model="createForm"
+        :rules="createFormRules"
+        label-width="100px"
+      >
         <el-form-item label="工程名称" prop="name">
           <el-input v-model="createForm.name" placeholder="请输入工程名称" />
         </el-form-item>
@@ -284,7 +401,11 @@
           />
         </el-form-item>
         <el-form-item label="颜色标签">
-          <el-select v-model="createForm.colorTag" placeholder="请选择颜色标签" style="width: 100%">
+          <el-select
+            v-model="createForm.colorTag"
+            placeholder="请选择颜色标签"
+            style="width: 100%"
+          >
             <el-option
               v-for="color in colorTagOptions"
               :key="color.value"
@@ -292,7 +413,10 @@
               :value="color.value"
             >
               <div class="flex items-center">
-                <div class="w-4 h-4 rounded mr-2" :style="{ backgroundColor: color.value }"></div>
+                <div
+                  class="w-4 h-4 rounded mr-2"
+                  :style="{ backgroundColor: color.value }"
+                ></div>
                 {{ color.label }}
               </div>
             </el-option>
@@ -300,8 +424,16 @@
         </el-form-item>
       </el-form>
       <template #footer>
+        <el-button type="success" @click="importProject">
+          <el-icon class="mr-1"><Upload /></el-icon>
+          导入工程
+        </el-button>
         <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateProject" :loading="createLoading">
+        <el-button
+          type="primary"
+          @click="handleCreateProject"
+          :loading="createLoading"
+        >
           创建
         </el-button>
       </template>
@@ -314,7 +446,12 @@
       width="600px"
       :close-on-click-modal="false"
     >
-      <el-form ref="editFormRef" :model="editForm" :rules="editFormRules" label-width="100px">
+      <el-form
+        ref="editFormRef"
+        :model="editForm"
+        :rules="editFormRules"
+        label-width="100px"
+      >
         <el-form-item label="工程名称" prop="name">
           <el-input v-model="editForm.name" placeholder="请输入工程名称" />
         </el-form-item>
@@ -327,7 +464,11 @@
           />
         </el-form-item>
         <el-form-item label="颜色标签">
-          <el-select v-model="editForm.colorTag" placeholder="请选择颜色标签" style="width: 100%">
+          <el-select
+            v-model="editForm.colorTag"
+            placeholder="请选择颜色标签"
+            style="width: 100%"
+          >
             <el-option
               v-for="color in colorTagOptions"
               :key="color.value"
@@ -335,7 +476,10 @@
               :value="color.value"
             >
               <div class="flex items-center">
-                <div class="w-4 h-4 rounded mr-2" :style="{ backgroundColor: color.value }"></div>
+                <div
+                  class="w-4 h-4 rounded mr-2"
+                  :style="{ backgroundColor: color.value }"
+                ></div>
                 {{ color.label }}
               </div>
             </el-option>
@@ -344,7 +488,11 @@
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleUpdateProject" :loading="editLoading">
+        <el-button
+          type="primary"
+          @click="handleUpdateProject"
+          :loading="editLoading"
+        >
           保存
         </el-button>
       </template>
@@ -411,6 +559,122 @@
       </div>
     </el-dialog>
 
+    <!-- 部署对话框 -->
+    <el-dialog
+      v-model="showDeployDialog"
+      :title="`部署工程 - ${deployForm.project?.name || ''}`"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <!-- 当前模式显示 -->
+      <div class="mb-4 p-3 bg-gray-100 dark:bg-gray-800 rounded">
+        <span class="text-gray-600 dark:text-gray-400">当前运行模式：</span>
+        <el-tag :type="getModeTagType(deployForm.currentMode)">
+          {{ deployForm.currentMode || "未部署" }}
+        </el-tag>
+      </div>
+
+      <!-- 部署模式选择 -->
+      <el-form :model="deployForm" label-width="100px">
+        <el-form-item label="部署模式">
+          <el-radio-group v-model="deployForm.mode">
+            <el-radio value="RELEASE"> RELEASE（选择版本，独立运行） </el-radio>
+            <el-radio value="DEV"> DEV（选择节点，实时同步） </el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- RELEASE模式：选择版本 -->
+        <template v-if="deployForm.mode === 'RELEASE'">
+          <el-form-item label="版本号" required>
+            <el-select
+              v-model="deployForm.version"
+              placeholder="选择已有版本或输入新版本"
+              filterable
+              allow-create
+              style="width: 100%"
+            >
+              <el-option
+                v-for="v in projectVersions"
+                :key="v.id"
+                :label="`v${v.version} - ${formatDateTime(v.createdAt)}`"
+                :value="v.version"
+              />
+            </el-select>
+            <div class="text-xs text-gray-500 mt-1">
+              选择已有版本或输入新版本号进行发布部署
+            </div>
+          </el-form-item>
+        </template>
+
+        <!-- 选择节点 -->
+        <el-form-item label="目标节点" required>
+          <el-checkbox-group v-model="deployForm.targetNodes">
+            <el-checkbox v-for="n in availableNodes" :key="n.id" :value="n.id">
+              {{ n.name }} ({{ n.ipAddress }})
+              <el-tag
+                v-if="getNodeMode(n.id) === 'DEV'"
+                type="warning"
+                size="small"
+                class="ml-1"
+              >
+                DEV
+              </el-tag>
+              <el-tag
+                v-if="getNodeMode(n.id) === 'RELEASE'"
+                type="success"
+                size="small"
+                class="ml-1"
+              >
+                RELEASE
+              </el-tag>
+            </el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+
+        <!-- 部署说明 -->
+        <el-alert
+          v-if="deployForm.mode === 'RELEASE'"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="mt-4"
+        >
+          <template #title> RELEASE 模式说明 </template>
+          <ul class="text-sm mt-1">
+            <li>将停止选中节点上的所有DEV实例</li>
+            <li>切换数据库连接（开发库 → 本地库）</li>
+            <li>记录版本发布历史</li>
+          </ul>
+        </el-alert>
+
+        <el-alert
+          v-if="deployForm.mode === 'DEV'"
+          type="info"
+          :closable="false"
+          show-icon
+          class="mt-4"
+        >
+          <template #title> DEV 模式说明 </template>
+          <ul class="text-sm mt-1">
+            <li>节点直接连接开发环境数据库</li>
+            <li>实时同步设计修改（无需重新部署）</li>
+            <li>不记录版本发布历史</li>
+          </ul>
+        </el-alert>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showDeployDialog = false">取消</el-button>
+        <el-button
+          type="primary"
+          @click="confirmDeploy"
+          :loading="deployLoading"
+        >
+          {{ deployForm.mode === "RELEASE" ? "发布并部署" : "部署DEV模式" }}
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- 工程功能选择弹窗 -->
     <el-dialog
       v-model="projectDialogVisible"
@@ -423,18 +687,8 @@
       <div class="project-dialog-content">
         <!-- 工程信息展示 -->
         <div class="text-center mb-6">
-          <div class="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
-               :style="{ backgroundColor: selectedProject?.colorTag || '#3b82f6' }">
-            <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-            </svg>
-          </div>
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-            {{ selectedProject?.name }}
-          </h3>
           <p class="text-sm text-gray-600 dark:text-gray-400">
-            {{ selectedProject?.description || '暂无描述' }}
+            {{ selectedProject?.description || "暂无描述" }}
           </p>
         </div>
 
@@ -442,23 +696,33 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- 设计中心卡片 -->
           <div
-            class="function-card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20
-                 border-2 border-blue-200 dark:border-blue-700 rounded-xl p-6 cursor-pointer
-                 hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300
-                 hover:scale-105"
+            class="function-card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-2 border-blue-200 dark:border-blue-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300 hover:scale-105"
             @click="openDesignCenter(selectedProject)"
           >
             <div class="text-center">
               <!-- 图标 -->
-              <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-full mb-4">
-                <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"/>
+              <div
+                class="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-full mb-4"
+              >
+                <svg
+                  class="w-8 h-8 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"
+                  />
                 </svg>
               </div>
 
               <!-- 标题 -->
-              <h4 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              <h4
+                class="text-xl font-semibold text-gray-900 dark:text-white mb-2"
+              >
                 设计中心
               </h4>
 
@@ -468,23 +732,47 @@
               </p>
 
               <!-- 统计信息 -->
-              <div class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+              <div
+                class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400"
+              >
                 <span class="flex items-center">
-                  <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  <svg
+                    class="w-4 h-4 mr-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
                   </svg>
                   {{ selectedProject?.pageCount || 0 }} 个页面
                 </span>
                 <span class="flex items-center">
-                  <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-9 0V1m10 3V1m0 3l1 1v16a2 2 0 01-2 2H6a2 2 0 01-2-2V5l1-1z"/>
+                  <svg
+                    class="w-4 h-4 mr-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-9 0V1m10 3V1m0 3l1 1v16a2 2 0 01-2 2H6a2 2 0 01-2-2V5l1-1z"
+                    />
                   </svg>
                   {{ selectedProject?.componentCount || 0 }} 个组件
                 </span>
               </div>
 
               <!-- 操作提示 -->
-              <div class="mt-4 text-xs text-blue-600 dark:text-blue-400 font-medium">
+              <div
+                class="mt-4 text-xs text-blue-600 dark:text-blue-400 font-medium"
+              >
                 点击进入设计中心 →
               </div>
             </div>
@@ -492,23 +780,33 @@
 
           <!-- 数据中心卡片 -->
           <div
-            class="function-card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20
-                 border-2 border-green-200 dark:border-green-700 rounded-xl p-6 cursor-pointer
-                 hover:shadow-lg hover:border-green-300 dark:hover:border-green-600 transition-all duration-300
-                 hover:scale-105"
+            class="function-card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-2 border-green-200 dark:border-green-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-green-300 dark:hover:border-green-600 transition-all duration-300 hover:scale-105"
             @click="openDataCenter(selectedProject)"
           >
             <div class="text-center">
               <!-- 图标 -->
-              <div class="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4">
-                <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+              <div
+                class="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4"
+              >
+                <svg
+                  class="w-8 h-8 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
+                  />
                 </svg>
               </div>
 
               <!-- 标题 -->
-              <h4 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              <h4
+                class="text-xl font-semibold text-gray-900 dark:text-white mb-2"
+              >
                 数据中心
               </h4>
 
@@ -518,23 +816,47 @@
               </p>
 
               <!-- 统计信息 -->
-              <div class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+              <div
+                class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400"
+              >
                 <span class="flex items-center">
-                  <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4"/>
+                  <svg
+                    class="w-4 h-4 mr-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4"
+                    />
                   </svg>
                   {{ selectedProject?.dataSourceCount || 0 }} 个数据源
                 </span>
                 <span class="flex items-center">
-                  <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                  <svg
+                    class="w-4 h-4 mr-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                    />
                   </svg>
                   {{ selectedProject?.scriptCount || 0 }} 个脚本
                 </span>
               </div>
 
               <!-- 操作提示 -->
-              <div class="mt-4 text-xs text-green-600 dark:text-green-400 font-medium">
+              <div
+                class="mt-4 text-xs text-green-600 dark:text-green-400 font-medium"
+              >
                 点击进入数据中心 →
               </div>
             </div>
@@ -551,6 +873,10 @@
             </span>
           </div>
           <div class="space-x-2">
+            <el-button type="success" @click="exportProject(selectedProject)">
+              <el-icon class="mr-1"><Download /></el-icon>
+              导出工程
+            </el-button>
             <el-button @click="projectDialogVisible = false">取消</el-button>
             <el-button
               v-if="canManageProjects"
@@ -567,8 +893,8 @@
 </template>
 
 <script>
-import { ref, reactive, computed, onMounted, getCurrentInstance } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, reactive, computed, onMounted, getCurrentInstance } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Plus,
   Refresh,
@@ -576,54 +902,75 @@ import {
   List,
   Upload,
   Download,
-} from '@element-plus/icons-vue'
-import JSZip from 'jszip'
-import { useAuthStore } from '@/store'
-import { projectAPI } from '@/api/project.api'
-import { ColorTagEnum, ENUM_LABELS } from '@/enums'
-import { formatDateTime, formatDate, formatCurrency } from '@/utils'
+  Select,
+  Delete,
+} from "@element-plus/icons-vue";
+import JSZip from "jszip";
+import { useAuthStore } from "@/store";
+import request from "@/utils/request";
+import { projectAPI } from "@/api/project.api";
+import { ColorTagEnum, ENUM_LABELS } from "@/enums";
+import { formatDateTime, formatDate, formatCurrency } from "@/utils";
 
 export default {
-  name: 'ProjectManagement',
+  name: "ProjectManagement",
   setup() {
-    const { emit } = getCurrentInstance()
-    const authStore = useAuthStore()
+    const { emit } = getCurrentInstance();
+    const authStore = useAuthStore();
 
     // 当前用户信息
-    const currentUser = computed(() => authStore.userInfo)
+    const currentUser = computed(() => authStore.userInfo);
 
     // 状态
-    const loading = ref(false)
-    const createLoading = ref(false)
-    const editLoading = ref(false)
-    const operationLoading = ref(false)
+    const loading = ref(false);
+    const createLoading = ref(false);
+    const editLoading = ref(false);
+    const operationLoading = ref(false);
 
     // 对话框显示状态
-    const showCreateDialog = ref(false)
-    const showEditDialog = ref(false)
-    const showOperationDialog = ref(false)
-    const projectDialogVisible = ref(false)
+    const showCreateDialog = ref(false);
+    const showEditDialog = ref(false);
+    const showOperationDialog = ref(false);
+    const showDeployDialog = ref(false);
+    const projectDialogVisible = ref(false);
 
     // 视图模式
-    const viewMode = ref('card') // 'card' 或 'list'
+    const viewMode = ref("card"); // 'card' 或 'list'
+
+    // 选择模式状态
+    const selectionMode = ref(false);
+    const selectedProjects = ref([]); // 选中的工程ID列表
 
     // 当前操作的工程
-    const currentProject = ref(null)
-    const selectedProject = ref(null)
+    const currentProject = ref(null);
+    const selectedProject = ref(null);
+
+    // 部署相关状态
+    const deployLoading = ref(false);
+    const deployForm = reactive({
+      project: null,
+      currentMode: null,
+      mode: "RELEASE",
+      version: "",
+      targetNodes: [],
+    });
+    const projectVersions = ref([]);
+    const availableNodes = ref([]);
+    const nodeModes = reactive({}); // { nodeId: 'DEV' | 'RELEASE' | null }
 
     // 工程列表和分页
-    const projectList = ref([])
+    const projectList = ref([]);
     const pagination = reactive({
       page: 1,
       limit: 10,
       total: 0,
       totalPages: 0,
-    })
+    });
 
     // 搜索表单
     const searchForm = reactive({
-      name: '',
-    })
+      name: "",
+    });
 
     // 颜色标签选项
     const colorTagOptions = [
@@ -634,269 +981,311 @@ export default {
       { value: ColorTagEnum.PURPLE, label: ENUM_LABELS[ColorTagEnum.PURPLE] },
       { value: ColorTagEnum.PINK, label: ENUM_LABELS[ColorTagEnum.PINK] },
       { value: ColorTagEnum.GRAY, label: ENUM_LABELS[ColorTagEnum.GRAY] },
-    ]
+    ];
 
     // 创建工程表单
     const createForm = reactive({
-      name: '',
-      description: '',
+      name: "",
+      description: "",
       colorTag: ColorTagEnum.BLUE,
-    })
+    });
 
     // 创建表单验证规则
     const createFormRules = {
       name: [
-        { required: true, message: '请输入工程名称', trigger: 'blur' },
-        { min: 2, max: 100, message: '工程名称长度在 2 到 100 个字符', trigger: 'blur' },
+        { required: true, message: "请输入工程名称", trigger: "blur" },
+        {
+          min: 2,
+          max: 100,
+          message: "工程名称长度在 2 到 100 个字符",
+          trigger: "blur",
+        },
       ],
-    }
+    };
 
     // 编辑工程表单
     const editForm = reactive({
-      id: '',
-      name: '',
-      description: '',
+      id: "",
+      name: "",
+      description: "",
       colorTag: ColorTagEnum.BLUE,
-    })
+    });
 
     // 编辑表单验证规则
     const editFormRules = {
       name: [
-        { required: true, message: '请输入工程名称', trigger: 'blur' },
-        { min: 2, max: 100, message: '工程名称长度在 2 到 100 个字符', trigger: 'blur' },
+        { required: true, message: "请输入工程名称", trigger: "blur" },
+        {
+          min: 2,
+          max: 100,
+          message: "工程名称长度在 2 到 100 个字符",
+          trigger: "blur",
+        },
       ],
-    }
+    };
 
     // 表单引用
-    const createFormRef = ref(null)
-    const editFormRef = ref(null)
+    const createFormRef = ref(null);
+    const editFormRef = ref(null);
 
     // 检查是否可以管理工程
     const canManageProjects = computed(() => {
-      return ['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(currentUser.value?.role)
-    })
+      return ["SYSTEM_ADMIN", "PROJECT_ADMIN"].includes(
+        currentUser.value?.role,
+      );
+    });
 
     // 检查是否可以执行运维操作
     const canPerformOps = computed(() => {
-      return ['SYSTEM_ADMIN', 'OPS_ADMIN'].includes(currentUser.value?.role)
-    })
+      return ["SYSTEM_ADMIN", "OPS_ADMIN"].includes(currentUser.value?.role);
+    });
 
     // 获取工程列表
     const fetchProjects = async () => {
-      loading.value = true
+      loading.value = true;
       try {
         const params = {
           page: pagination.page,
           limit: pagination.limit,
           ...searchForm,
-        }
+        };
 
         // 移除空值
         Object.keys(params).forEach((key) => {
-          if (!params[key]) delete params[key]
-        })
+          if (!params[key]) delete params[key];
+        });
 
-        const response = await projectAPI.getProjects(params)
+        const response = await projectAPI.getProjects(params);
 
-        projectList.value = response.data.projects || []
-        pagination.total = response.pagination?.total || 0
-        pagination.totalPages = response.pagination?.totalPages || 0
+        projectList.value = response.data.projects || [];
+        pagination.total = response.pagination?.total || 0;
+        pagination.totalPages = response.pagination?.totalPages || 0;
       } catch (error) {
-        ElMessage.error('获取工程列表失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          "获取工程列表失败：" +
+            (error.response?.data?.message || error.message),
+        );
       } finally {
-        loading.value = false
+        loading.value = false;
       }
-    }
+    };
 
     // 搜索处理
     const handleSearch = () => {
-      pagination.page = 1
-      fetchProjects()
-    }
+      pagination.page = 1;
+      fetchProjects();
+    };
 
     // 重置搜索
     const resetSearch = () => {
       Object.keys(searchForm).forEach((key) => {
-        searchForm[key] = ''
-      })
-      pagination.page = 1
-      fetchProjects()
-    }
+        searchForm[key] = "";
+      });
+      pagination.page = 1;
+      fetchProjects();
+    };
 
     // 分页大小改变
     const handleSizeChange = (size) => {
-      pagination.limit = size
-      pagination.page = 1
-      fetchProjects()
-    }
+      pagination.limit = size;
+      pagination.page = 1;
+      fetchProjects();
+    };
 
     // 页码改变
     const handleCurrentChange = (page) => {
-      pagination.page = page
-      fetchProjects()
-    }
+      pagination.page = page;
+      fetchProjects();
+    };
 
     // 创建工程
     const handleCreateProject = async () => {
-      if (!createFormRef.value) return
+      if (!createFormRef.value) return;
 
       try {
-        await createFormRef.value.validate()
+        await createFormRef.value.validate();
       } catch (error) {
-        return
+        return;
       }
 
-      createLoading.value = true
+      createLoading.value = true;
       try {
         const projectData = {
           name: createForm.name,
-          description: createForm.description || '',
+          description: createForm.description || "",
           colorTag: createForm.colorTag,
-        }
+        };
 
-        await projectAPI.createProject(projectData)
+        await projectAPI.createProject(projectData);
 
-        ElMessage.success('工程创建成功')
-        showCreateDialog.value = false
-        resetCreateForm()
-        fetchProjects()
+        ElMessage.success("工程创建成功");
+        showCreateDialog.value = false;
+        resetCreateForm();
+        fetchProjects();
       } catch (error) {
-        ElMessage.error('创建工程失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          "创建工程失败：" + (error.response?.data?.message || error.message),
+        );
       } finally {
-        createLoading.value = false
+        createLoading.value = false;
       }
-    }
+    };
 
     // 重置创建表单
     const resetCreateForm = () => {
       Object.keys(createForm).forEach((key) => {
-        if (key === 'colorTag') {
-          createForm[key] = ColorTagEnum.BLUE
+        if (key === "colorTag") {
+          createForm[key] = ColorTagEnum.BLUE;
         } else {
-          createForm[key] = ''
+          createForm[key] = "";
         }
-      })
+      });
       if (createFormRef.value) {
-        createFormRef.value.clearValidate()
+        createFormRef.value.clearValidate();
       }
-    }
+    };
+
+    // 导入工程（暂未实现）
+    const importProject = () => {
+      ElMessage.info("导入工程功能待实现");
+      // TODO: 实现文件选择和解析逻辑
+    };
+
+    // 导出工程（暂未实现）
+    const exportProject = (project) => {
+      if (!project) return;
+      ElMessage.info("导出工程功能待实现");
+      // TODO: 实现导出逻辑
+    };
 
     // 编辑工程
     const editProject = (project) => {
-      editForm.id = project.id
-      editForm.name = project.name
-      editForm.description = project.description
-      editForm.colorTag = project.colorTag || ColorTagEnum.BLUE
-      showEditDialog.value = true
-    }
+      editForm.id = project.id;
+      editForm.name = project.name;
+      editForm.description = project.description;
+      editForm.colorTag = project.colorTag || ColorTagEnum.BLUE;
+      showEditDialog.value = true;
+    };
 
     // 更新工程
     const handleUpdateProject = async () => {
-      if (!editFormRef.value) return
+      if (!editFormRef.value) return;
 
       try {
-        await editFormRef.value.validate()
+        await editFormRef.value.validate();
       } catch (error) {
-        return
+        return;
       }
 
-      editLoading.value = true
+      editLoading.value = true;
       try {
         const projectData = {
           name: editForm.name,
-          description: editForm.description || '',
+          description: editForm.description || "",
           colorTag: editForm.colorTag,
-        }
+        };
 
-        await projectAPI.updateProject(editForm.id, projectData)
+        await projectAPI.updateProject(editForm.id, projectData);
 
-        ElMessage.success('工程更新成功')
-        showEditDialog.value = false
-        fetchProjects()
+        ElMessage.success("工程更新成功");
+        showEditDialog.value = false;
+        fetchProjects();
       } catch (error) {
-        ElMessage.error('更新工程失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          "更新工程失败：" + (error.response?.data?.message || error.message),
+        );
       } finally {
-        editLoading.value = false
+        editLoading.value = false;
       }
-    }
+    };
 
     // 删除工程
     const deleteProject = async (project) => {
       try {
         await ElMessageBox.confirm(
           `确定要删除工程 "${project.name}" 吗？此操作不可恢复。`,
-          '确认删除',
+          "确认删除",
           {
-            confirmButtonText: '确定删除',
-            cancelButtonText: '取消',
-            type: 'warning',
-          }
-        )
+            confirmButtonText: "确定删除",
+            cancelButtonText: "取消",
+            type: "warning",
+          },
+        );
 
-        await projectAPI.deleteProject(project.id)
-        ElMessage.success('工程删除成功')
-        fetchProjects()
+        await projectAPI.deleteProject(project.id);
+        ElMessage.success("工程删除成功");
+        fetchProjects();
       } catch (error) {
-        if (error !== 'cancel') {
-          ElMessage.error('删除工程失败：' + (error.response?.data?.message || error.message))
+        if (error !== "cancel") {
+          ElMessage.error(
+            "删除工程失败：" + (error.response?.data?.message || error.message),
+          );
         }
       }
-    }
+    };
 
     // 导出工程
     const handleExportProject = async (project) => {
-      if (!project?.id) return
+      if (!project?.id) return;
       try {
-        const response = await projectAPI.exportProject(project.id)
+        const response = await projectAPI.exportProject(project.id);
         const blob =
           response instanceof Blob
             ? response
-            : new Blob([response], { type: 'application/zip' })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `${project.name || 'project'}.zip`
-        link.click()
-        URL.revokeObjectURL(url)
-        ElMessage.success('工程已导出')
+            : new Blob([response], { type: "application/zip" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${project.name || "project"}.zip`;
+        link.click();
+        URL.revokeObjectURL(url);
+        ElMessage.success("工程已导出");
       } catch (error) {
-        ElMessage.error('导出工程失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          "导出工程失败：" + (error.response?.data?.message || error.message),
+        );
       }
-    }
+    };
 
     // 导入工程
     const handleImportProject = () => {
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = '.json,.zip,application/json,application/zip'
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json,.zip,application/json,application/zip";
       input.onchange = async (event) => {
-        const file = event.target.files?.[0]
-        if (!file) return
+        const file = event.target.files?.[0];
+        if (!file) return;
         try {
-          let payload = null
-          if (file.name.toLowerCase().endsWith('.zip')) {
-            const zip = await JSZip.loadAsync(file)
+          let payload = null;
+          if (file.name.toLowerCase().endsWith(".zip")) {
+            const zip = await JSZip.loadAsync(file);
             const readJson = async (path) => {
-              const entry = zip.file(path)
-              if (!entry) return null
-              const content = await entry.async('string')
-              return JSON.parse(content)
-            }
+              const entry = zip.file(path);
+              if (!entry) return null;
+              const content = await entry.async("string");
+              return JSON.parse(content);
+            };
 
-            const projectJson = await readJson('project.json')
+            const projectJson = await readJson("project.json");
             if (!projectJson?.project) {
-              ElMessage.error('未找到project.json')
-              return
+              ElMessage.error("未找到project.json");
+              return;
             }
-            const globalVariables = await readJson('designer/global-variables.json')
-            const globalScripts = await readJson('designer/global-scripts.json')
-            const projectVariables = await readJson('designer/project-variables.json')
-            const pageIndex = await readJson('designer/pages/index.json')
-            const pages = []
+            const globalVariables = await readJson(
+              "designer/global-variables.json",
+            );
+            const globalScripts = await readJson(
+              "designer/global-scripts.json",
+            );
+            const projectVariables = await readJson(
+              "designer/project-variables.json",
+            );
+            const pageIndex = await readJson("designer/pages/index.json");
+            const pages = [];
             if (Array.isArray(pageIndex)) {
               for (const item of pageIndex) {
-                if (!item?.file) continue
-                const schema = await readJson(`designer/pages/${item.file}`)
+                if (!item?.file) continue;
+                const schema = await readJson(`designer/pages/${item.file}`);
                 pages.push({
                   page: {
                     id: item.id,
@@ -906,20 +1295,24 @@ export default {
                     sortOrder: item.sortOrder ?? 0,
                   },
                   schemaContent: schema,
-                })
+                });
               }
             }
 
             const datacenter = {
-              connections: await readJson('datacenter/connections.json'),
-              relationalConfigs: await readJson('datacenter/relational-configs.json'),
-              queries: await readJson('datacenter/queries.json'),
-              mqttConfigs: await readJson('datacenter/mqtt-configs.json'),
-              mqttSubscriptions: await readJson('datacenter/mqtt-subscriptions.json'),
-              mqttTagGroups: await readJson('datacenter/mqtt-tag-groups.json'),
-              mqttTags: await readJson('datacenter/mqtt-tags.json'),
-              datapoints: await readJson('datacenter/datapoints.json'),
-            }
+              connections: await readJson("datacenter/connections.json"),
+              relationalConfigs: await readJson(
+                "datacenter/relational-configs.json",
+              ),
+              queries: await readJson("datacenter/queries.json"),
+              mqttConfigs: await readJson("datacenter/mqtt-configs.json"),
+              mqttSubscriptions: await readJson(
+                "datacenter/mqtt-subscriptions.json",
+              ),
+              mqttTagGroups: await readJson("datacenter/mqtt-tag-groups.json"),
+              mqttTags: await readJson("datacenter/mqtt-tags.json"),
+              datapoints: await readJson("datacenter/datapoints.json"),
+            };
 
             payload = {
               project: projectJson.project,
@@ -931,112 +1324,504 @@ export default {
               },
               pages,
               datacenter,
-            }
+            };
           } else {
-            const text = await file.text()
-            const parsed = JSON.parse(text)
-            payload = parsed?.payload || parsed
+            const text = await file.text();
+            const parsed = JSON.parse(text);
+            payload = parsed?.payload || parsed;
           }
 
           if (!payload) {
-            ElMessage.error('工程数据格式不正确')
-            return
+            ElMessage.error("工程数据格式不正确");
+            return;
           }
-          await projectAPI.importProject({ payload })
-          ElMessage.success('工程已导入')
-          fetchProjects()
+          await projectAPI.importProject({ payload });
+          ElMessage.success("工程已导入");
+          fetchProjects();
         } catch (error) {
-          ElMessage.error('导入工程失败：' + (error.response?.data?.message || error.message))
+          ElMessage.error(
+            "导入工程失败：" + (error.response?.data?.message || error.message),
+          );
         }
-      }
-      input.click()
-    }
+      };
+      input.click();
+    };
 
     // 显示运维操作对话框
     const openOperationDialog = (project) => {
-      currentProject.value = project
-      showOperationDialog.value = true
-    }
+      currentProject.value = project;
+      showOperationDialog.value = true;
+    };
 
     // 执行运维操作
     const performOperation = async (operation) => {
-      if (!currentProject.value) return
+      if (!currentProject.value) return;
 
-      operationLoading.value = true
+      operationLoading.value = true;
       try {
-        await projectAPI.performOperation(currentProject.value.id, operation)
+        await projectAPI.performOperation(currentProject.value.id, operation);
 
         ElMessage.success(
           `工程${
-            operation === 'start'
-              ? '启动'
-              : operation === 'stop'
-                ? '停止'
-                : operation === 'restart'
-                  ? '重启'
-                  : operation === 'deploy'
-                    ? '部署'
-                    : '备份'
-          }操作成功`
-        )
+            operation === "start"
+              ? "启动"
+              : operation === "stop"
+                ? "停止"
+                : operation === "restart"
+                  ? "重启"
+                  : operation === "deploy"
+                    ? "部署"
+                    : "备份"
+          }操作成功`,
+        );
 
-        showOperationDialog.value = false
-        currentProject.value = null
+        showOperationDialog.value = false;
+        currentProject.value = null;
       } catch (error) {
-        ElMessage.error(`工程操作失败：${error.response?.data?.message || error.message}`)
+        ElMessage.error(
+          `工程操作失败：${error.response?.data?.message || error.message}`,
+        );
       } finally {
-        operationLoading.value = false
+        operationLoading.value = false;
       }
-    }
+    };
+
+    // 切换选择模式
+    const toggleSelectionMode = () => {
+      selectionMode.value = !selectionMode.value;
+      if (!selectionMode.value) {
+        // 退出选择模式时清除选择
+        selectedProjects.value = [];
+      }
+    };
+
+    // 卡片点击处理
+    const handleCardClick = (project) => {
+      if (selectionMode.value) {
+        // 在选择模式下点击切换选中状态
+        toggleProjectSelection(project.id);
+      } else {
+        // 非选择模式下打开工程详情
+        openProjectDialog(project);
+      }
+    };
+
+    // 工程名称点击处理（列表视图）
+    const handleProjectNameClick = (project) => {
+      if (selectionMode.value) {
+        // 在选择模式下点击切换选中状态
+        toggleProjectSelection(project.id);
+      } else {
+        // 非选择模式下打开工程详情
+        openProjectDialog(project);
+      }
+    };
+
+    // 切换工程选中状态
+    const toggleProjectSelection = (projectId, value = null) => {
+      const index = selectedProjects.value.indexOf(projectId);
+      if (value === true || (value === null && index === -1)) {
+        // 选中
+        if (index === -1) {
+          selectedProjects.value.push(projectId);
+        }
+      } else if (value === false || (value === null && index !== -1)) {
+        // 取消选中
+        if (index !== -1) {
+          selectedProjects.value.splice(index, 1);
+        }
+      }
+    };
+
+    // 处理表格选择变化
+    const handleSelectionChange = (selection) => {
+      selectedProjects.value = selection.map((p) => p.id);
+    };
+
+    // 批量导出工程
+    const batchExportProjects = async () => {
+      if (selectedProjects.value.length === 0) {
+        return ElMessage.warning("请先选择要导出的工程");
+      }
+      ElMessage.info(`准备导出 ${selectedProjects.value.length} 个工程`);
+      // TODO: 实现批量导出逻辑
+    };
+
+    // 批量删除工程
+    const batchDeleteProjects = async () => {
+      if (selectedProjects.value.length === 0) {
+        return ElMessage.warning("请先选择要删除的工程");
+      }
+      try {
+        await ElMessageBox.confirm(
+          `确定要删除选中的 ${selectedProjects.value.length} 个工程吗？此操作不可恢复。`,
+          "确认批量删除",
+          {
+            confirmButtonText: "确定删除",
+            cancelButtonText: "取消",
+            type: "warning",
+          },
+        );
+
+        // 逐个删除工程
+        let successCount = 0;
+        let failCount = 0;
+        for (const projectId of selectedProjects.value) {
+          try {
+            await projectAPI.deleteProject(projectId);
+            successCount++;
+          } catch (error) {
+            console.error(`删除工程 ${projectId} 失败:`, error);
+            failCount++;
+          }
+        }
+
+        if (successCount > 0) {
+          ElMessage.success(`成功删除 ${successCount} 个工程`);
+        }
+        if (failCount > 0) {
+          ElMessage.warning(`删除失败 ${failCount} 个工程`);
+        }
+
+        // 清除选择并刷新列表
+        selectedProjects.value = [];
+        fetchProjects();
+      } catch (error) {
+        if (error !== "cancel") {
+          ElMessage.error(
+            "批量删除失败：" + (error.response?.data?.message || error.message),
+          );
+        }
+      }
+    };
 
     // 打开工程功能选择弹窗
     const openProjectDialog = (project) => {
-      selectedProject.value = project
-      projectDialogVisible.value = true
-    }
+      selectedProject.value = project;
+      projectDialogVisible.value = true;
+    };
 
     // 打开设计中心
     const openDesignCenter = (project) => {
-      projectDialogVisible.value = false
+      projectDialogVisible.value = false;
       // 在标签页内打开设计中心（使用 iframe 嵌入）
-      import('@/components/EmbeddedApp.vue').then((module) => {
-        const EmbeddedApp = module.default
-        emit('open-tab', {
+      import("@/components/EmbeddedApp.vue").then((module) => {
+        const EmbeddedApp = module.default;
+        emit("open-tab", {
           key: `design-center-${project.id}`,
           title: `${project.name} - 设计中心`,
           component: EmbeddedApp,
           props: {
-            appType: 'designer',
-            project: project
+            appType: "designer",
+            project: project,
           },
-          icon: 'design',
-        })
-      })
-    }
+          icon: "design",
+        });
+      });
+    };
 
     // 打开数据中心
     const openDataCenter = (project) => {
-      projectDialogVisible.value = false
+      projectDialogVisible.value = false;
       // 在标签页内打开数据中心（使用 iframe 嵌入）
-      import('@/components/EmbeddedApp.vue').then((module) => {
-        const EmbeddedApp = module.default
-        emit('open-tab', {
+      import("@/components/EmbeddedApp.vue").then((module) => {
+        const EmbeddedApp = module.default;
+        emit("open-tab", {
           key: `data-center-${project.id}`,
           title: `${project.name} - 数据中心`,
           component: EmbeddedApp,
           props: {
-            appType: 'datacenter',
-            project: project
+            appType: "datacenter",
+            project: project,
           },
-          icon: 'database',
-        })
-      })
-    }
+          icon: "database",
+        });
+      });
+    };
+
+    // 获取节点当前模式
+    const getNodeMode = (nodeId) => {
+      return nodeModes[nodeId] || null;
+    };
+
+    // 获取模式标签类型
+    const getModeTagType = (mode) => {
+      if (mode === "DEV") return "warning";
+      if (mode === "RELEASE") return "success";
+      return "info";
+    };
+
+    // 获取工程运行模式显示
+    const getProjectModeDisplay = (project) => {
+      // 从缓存中获取该工程在任意节点上的模式
+      for (const nodeId in nodeModes) {
+        if (nodeModes[nodeId]) {
+          return nodeModes[nodeId] === "DEV" ? "DEV" : "RELEASE";
+        }
+      }
+      return "未部署";
+    };
+
+    // 获取工程模式标签类型
+    const getProjectModeTagType = (project) => {
+      const mode = getProjectModeDisplay(project);
+      return getModeTagType(mode === "未部署" ? null : mode);
+    };
+
+    // 打开部署对话框
+    const openDeployDialog = async (project) => {
+      deployForm.project = project;
+      deployForm.currentMode = null;
+      deployForm.mode = "RELEASE";
+      deployForm.version = "";
+      deployForm.targetNodes = [];
+
+      try {
+        // 获取可用节点列表
+        const nodesRes = await request.get("/nodes", {
+          params: { approvalStatus: "approved", status: "online" },
+        });
+        // 兼容不同的响应结构
+        const nodesData = nodesRes.data?.data || nodesRes.data || {};
+        availableNodes.value = nodesData.items || nodesData || [];
+
+        // 获取每个节点的当前部署模式
+        for (const node of availableNodes.value) {
+          try {
+            const modeRes = await request.get(
+              `/deployments/project/${project.id}/node/${node.id}/mode`,
+            );
+            nodeModes[node.id] = modeRes.data.data.mode;
+          } catch {
+            nodeModes[node.id] = null;
+          }
+        }
+
+        // 获取版本列表
+        const versionsRes = await request.get(
+          `/publish/${project.id}/versions`,
+        );
+        // 兼容不同的响应结构
+        const versionsData = versionsRes.data?.data || versionsRes.data || {};
+        projectVersions.value = versionsData.items || versionsData || [];
+
+        // 设置当前模式（如果有节点部署的话）
+        if (availableNodes.value.length > 0) {
+          deployForm.currentMode = nodeModes[availableNodes.value[0].id];
+        }
+
+        showDeployDialog.value = true;
+      } catch (error) {
+        ElMessage.error(
+          "加载数据失败：" + (error.response?.data?.message || error.message),
+        );
+      }
+    };
+
+    // 更新DEV模式工程（通知节点重新加载配置）
+    const updateDevProject = async (project) => {
+      try {
+        // 获取该工程在DEV模式下的节点部署
+        const deploymentsRes = await request.get(
+          `/deployments/project/${project.id}/nodes`,
+        );
+        const deploymentsData =
+          deploymentsRes.data?.data || deploymentsRes.data || [];
+        const nodeDeployments = Array.isArray(deploymentsData)
+          ? deploymentsData
+          : deploymentsData.items || deploymentsData || [];
+
+        // 筛选出DEV模式的部署
+        const devDeployments = nodeDeployments.filter(
+          (nd) => nd.mode === "DEV",
+        );
+
+        if (devDeployments.length === 0) {
+          return ElMessage.warning("没有找到DEV模式的部署");
+        }
+
+        // 对每个DEV部署发送更新命令
+        let successCount = 0;
+        for (const nd of devDeployments) {
+          try {
+            await request.post(`/deployments/node-deployment/${nd.id}/restart`);
+            successCount++;
+          } catch (e) {
+            console.error(`更新节点 ${nd.nodeId} 失败:`, e);
+          }
+        }
+
+        ElMessage.success(`成功更新 ${successCount} 个节点的DEV实例`);
+      } catch (error) {
+        ElMessage.error(
+          "更新失败：" + (error.response?.data?.message || error.message),
+        );
+      }
+    };
+
+    // 确认部署
+    const confirmDeploy = async () => {
+      const { project, mode, targetNodes, version } = deployForm;
+
+      if (targetNodes.length === 0) {
+        return ElMessage.warning("请选择目标节点");
+      }
+
+      if (mode === "RELEASE" && !version) {
+        return ElMessage.warning("请填写或选择版本号");
+      }
+
+      deployLoading.value = true;
+      try {
+        if (mode === "RELEASE") {
+          // RELEASE模式：需要选择或创建版本
+          let deploymentId;
+
+          // 检查是否选择已有版本
+          const existingVersion = projectVersions.value.find(
+            (v) => v.version === version,
+          );
+          if (existingVersion) {
+            deploymentId = existingVersion.id;
+          } else {
+            // 需要先发布新版本
+            const publishRes = await request.post(`/publish/${project.id}`, {
+              version,
+              name: `v${version}`,
+              description: "通过部署界面发布",
+            });
+            if (!publishRes.data.success) {
+              throw new Error(publishRes.data.message || "发布失败");
+            }
+            deploymentId = publishRes.data.data.id;
+          }
+
+          // 检查是否有DEV实例需要停止
+          const devNodes = targetNodes.filter((n) => getNodeMode(n) === "DEV");
+          if (devNodes.length > 0) {
+            await ElMessageBox.confirm(
+              `将停止选中的 ${devNodes.length} 个节点的DEV实例，切换到RELEASE模式`,
+              "确认切换",
+              { type: "warning" },
+            );
+          }
+
+          // 部署到节点
+          const deployRes = await request.post(
+            `/deployments/${deploymentId}/deploy`,
+            {
+              nodeIds: targetNodes,
+              mode: "RELEASE",
+              runtimeConfig: {},
+            },
+          );
+
+          if (deployRes.data.success) {
+            ElMessage.success(
+              `部署成功：${deployRes.data.data.summary.success} 个节点成功`,
+            );
+          }
+        } else {
+          // DEV模式：需要先确保没有RELEASE部署
+          const releaseNodes = targetNodes.filter(
+            (n) => getNodeMode(n) === "RELEASE",
+          );
+          if (releaseNodes.length > 0) {
+            return ElMessage.warning(
+              "选中的节点中有RELEASE部署，请先撤销部署后再切换到DEV模式",
+            );
+          }
+
+          // 使用最新版本作为DEV源
+          if (projectVersions.value.length === 0) {
+            throw new Error("没有可用的发布版本");
+          }
+
+          const latestVersion = projectVersions.value[0];
+
+          // 部署DEV模式
+          const deployRes = await request.post(
+            `/deployments/${latestVersion.id}/deploy`,
+            {
+              nodeIds: targetNodes,
+              mode: "DEV",
+              runtimeConfig: {},
+            },
+          );
+
+          if (deployRes.data.success) {
+            ElMessage.success(
+              `DEV模式部署成功：${deployRes.data.data.summary.success} 个节点成功`,
+            );
+          }
+        }
+
+        showDeployDialog.value = false;
+        fetchProjects();
+      } catch (error) {
+        if (error !== "cancel") {
+          ElMessage.error(
+            error.response?.data?.message || error.message || "操作失败",
+          );
+        }
+      } finally {
+        deployLoading.value = false;
+      }
+    };
+
+    // 撤销部署
+    const undeployProject = async (project) => {
+      try {
+        await ElMessageBox.confirm(
+          `确定要撤销工程 "${project.name}" 在所有节点上的部署吗？`,
+          "确认撤销",
+          {
+            confirmButtonText: "确定撤销",
+            cancelButtonText: "取消",
+            type: "warning",
+          },
+        );
+
+        // 获取该工程在所有节点上的部署
+        const deploymentsRes = await request.get(
+          `/deployments/project/${project.id}/nodes`,
+        );
+        const deploymentsData =
+          deploymentsRes.data?.data || deploymentsRes.data || [];
+        const nodeDeployments = Array.isArray(deploymentsData)
+          ? deploymentsData
+          : deploymentsData.items || deploymentsData || [];
+
+        if (nodeDeployments.length === 0) {
+          return ElMessage.warning("该工程没有部署记录");
+        }
+
+        // 逐个撤销部署
+        let successCount = 0;
+        for (const nd of nodeDeployments) {
+          try {
+            await request.delete(`/deployments/node-deployment/${nd.id}`);
+            successCount++;
+          } catch (e) {
+            console.error(`撤销节点 ${nd.nodeId} 部署失败:`, e);
+          }
+        }
+
+        ElMessage.success(`成功撤销 ${successCount} 个节点的部署`);
+        fetchProjects();
+      } catch (error) {
+        if (error !== "cancel") {
+          ElMessage.error(
+            "撤销部署失败：" + (error.response?.data?.message || error.message),
+          );
+        }
+      }
+    };
 
     // 组件挂载时获取数据
     onMounted(() => {
-      fetchProjects()
-    })
+      fetchProjects();
+    });
 
     return {
       // 状态
@@ -1047,10 +1832,15 @@ export default {
       showCreateDialog,
       showEditDialog,
       showOperationDialog,
+      showDeployDialog,
       projectDialogVisible,
 
       // 视图
       viewMode,
+
+      // 选择模式
+      selectionMode,
+      selectedProjects,
       currentProject,
       selectedProject,
 
@@ -1060,6 +1850,13 @@ export default {
       searchForm,
       colorTagOptions,
       currentUser,
+
+      // 部署相关
+      deployLoading,
+      deployForm,
+      projectVersions,
+      availableNodes,
+      nodeModes,
 
       // 表单
       createForm,
@@ -1080,6 +1877,12 @@ export default {
       handleSizeChange,
       handleCurrentChange,
       handleCreateProject,
+      toggleSelectionMode,
+      handleCardClick,
+      handleProjectNameClick,
+      toggleProjectSelection,
+      handleSelectionChange,
+      importProject,
       editProject,
       handleUpdateProject,
       deleteProject,
@@ -1090,12 +1893,23 @@ export default {
       openProjectDialog,
       openDesignCenter,
       openDataCenter,
+      openDeployDialog,
+      updateDevProject,
+      exportProject,
+      batchExportProjects,
+      batchDeleteProjects,
+      confirmDeploy,
+      undeployProject,
+      getNodeMode,
+      getModeTagType,
+      getProjectModeDisplay,
+      getProjectModeTagType,
       formatDateTime,
       formatDate,
       formatCurrency,
-    }
+    };
   },
-}
+};
 </script>
 
 <style scoped>

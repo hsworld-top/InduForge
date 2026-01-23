@@ -836,31 +836,43 @@ CREATE UNIQUE INDEX `permissions_component_uq` ON `design_permissions` (`pageId`
 CREATE TABLE IF NOT EXISTS `deployments` (
   `id` char(36) NOT NULL DEFAULT (uuid()),
   `projectId` char(36) NOT NULL COMMENT '工程ID',
-  `version` varchar(50) NOT NULL COMMENT '版本号',
-  `name` varchar(200) DEFAULT NULL COMMENT '版本名称',
-  `description` text COMMENT '版本描述',
+  `tenantId` char(36) NOT NULL COMMENT '租户ID（冗余，便于查询）',
+  `version` varchar(50) NOT NULL COMMENT '版本号（语义化版本）',
+  `name` varchar(200) DEFAULT NULL COMMENT '版本名称（可选描述）',
+  `description` text COMMENT '版本描述/发布说明',
   `type` enum('development','staging','production') NOT NULL DEFAULT 'development' COMMENT '部署类型',
-  `status` enum('pending','building','success','failed','cancelled') NOT NULL DEFAULT 'pending' COMMENT '部署状态',
+  `mode` enum('DEV','RELEASE') NOT NULL DEFAULT 'RELEASE' COMMENT '运行模式：DEV=连接开发库实时同步，RELEASE=使用本地库',
+  `status` enum('pending','building','success','failed') NOT NULL DEFAULT 'pending' COMMENT '构建状态',
   `buildConfig` json DEFAULT NULL COMMENT '构建配置',
-  `buildLog` mediumtext COMMENT '构建日志',
-  `artifactUrl` varchar(1000) DEFAULT NULL COMMENT '构建产物URL',
-  `artifactSize` bigint DEFAULT NULL COMMENT '产物大小(字节)',
-  `artifactHash` varchar(64) DEFAULT NULL COMMENT '产物哈希',
-  `snapshot` json DEFAULT NULL COMMENT '发布时的配置快照',
+  `buildLog` json DEFAULT NULL COMMENT '构建日志（数组）',
+  `artifactUrl` varchar(1000) DEFAULT NULL COMMENT '构建产物URL（IFP包）',
+  `artifactHash` varchar(64) DEFAULT NULL COMMENT '产物SHA256哈希',
+  `artifactSize` bigint DEFAULT NULL COMMENT '产物大小（字节）',
+  `snapshotUrl` varchar(1000) DEFAULT NULL COMMENT '快照文件URL',
+  `snapshotHash` varchar(64) DEFAULT NULL COMMENT '快照SHA256哈希',
+  `manifest` json DEFAULT NULL COMMENT '清单信息：dataRequirements, capabilities, security等',
   `pageCount` int DEFAULT 0 COMMENT '页面数量',
   `componentCount` int DEFAULT 0 COMMENT '组件数量',
-  `startedAt` datetime(6) DEFAULT NULL COMMENT '开始时间',
-  `completedAt` datetime(6) DEFAULT NULL COMMENT '完成时间',
-  `deployedBy` char(36) NOT NULL COMMENT '部署人',
+  `datapointCount` int DEFAULT 0 COMMENT '数据点数量',
+  `startedAt` datetime(6) DEFAULT NULL COMMENT '构建开始时间',
+  `completedAt` datetime(6) DEFAULT NULL COMMENT '构建完成时间',
+  `errorMessage` text DEFAULT NULL COMMENT '错误信息',
+  `deployedBy` char(36) DEFAULT NULL COMMENT '发布者ID',
   `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  `deletedAt` datetime(6) DEFAULT NULL COMMENT '软删除时间',
   PRIMARY KEY (`id`),
   CONSTRAINT `deployments_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `deployments_fk_deployer` FOREIGN KEY (`deployedBy`) REFERENCES `users` (`id`)
+  CONSTRAINT `deployments_fk_tenant` FOREIGN KEY (`tenantId`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `deployments_fk_deployer` FOREIGN KEY (`deployedBy`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发布版本表';
 
 CREATE INDEX `deployments_project_idx` ON `deployments` (`projectId`);
+CREATE INDEX `deployments_tenant_idx` ON `deployments` (`tenantId`);
 CREATE INDEX `deployments_status_idx` ON `deployments` (`status`);
 CREATE INDEX `deployments_type_idx` ON `deployments` (`type`);
+CREATE INDEX `deployments_mode_idx` ON `deployments` (`mode`);
+CREATE INDEX `deployments_created_at_idx` ON `deployments` (`createdAt`);
 CREATE UNIQUE INDEX `deployments_version_uq` ON `deployments` (`projectId`, `version`);
 
 -- 5.2 发布页面快照表
@@ -876,6 +888,80 @@ CREATE TABLE IF NOT EXISTS `deployment_pages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发布页面快照表';
 
 CREATE INDEX `deploy_pages_deploy_idx` ON `deployment_pages` (`deploymentId`);
+
+-- 5.3 运行时节点表
+CREATE TABLE IF NOT EXISTS `nodes` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `tenantId` char(36) NOT NULL COMMENT '所属租户ID',
+  `name` varchar(100) NOT NULL COMMENT '节点名称',
+  `description` varchar(500) DEFAULT NULL COMMENT '节点描述',
+  `agentVersion` varchar(20) DEFAULT NULL COMMENT 'NodeAgent版本',
+  `status` enum('online','offline','error') NOT NULL DEFAULT 'offline' COMMENT '节点状态',
+  `currentProjectId` char(36) DEFAULT NULL COMMENT '当前运行的工程ID',
+  `currentVersion` varchar(50) DEFAULT NULL COMMENT '当前运行的版本号',
+  `currentDeploymentId` char(36) DEFAULT NULL COMMENT '当前部署记录ID',
+  `ipAddress` varchar(45) DEFAULT NULL COMMENT '节点IP地址',
+  `port` int DEFAULT 8080 COMMENT 'RuntimeEngine运行端口',
+  `lastHeartbeatAt` datetime(6) DEFAULT NULL COMMENT '最后心跳时间',
+  `lastErrorMessage` text DEFAULT NULL COMMENT '最后错误信息',
+  `lastErrorAt` datetime(6) DEFAULT NULL COMMENT '最后错误时间',
+  `metrics` json DEFAULT NULL COMMENT '运行指标(cpu, memory, uptime等)',
+  `config` json DEFAULT NULL COMMENT '节点配置(标签, 分组等)',
+  `registrationToken` varchar(64) DEFAULT NULL COMMENT '注册令牌',
+  `approvalStatus` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending' COMMENT '审批状态',
+  `approvedAt` datetime(6) DEFAULT NULL COMMENT '审批时间',
+  `approvedBy` char(36) DEFAULT NULL COMMENT '审批人ID',
+  `registeredBy` char(36) DEFAULT NULL COMMENT '注册申请人ID',
+  `mode` enum('online','offline') NOT NULL DEFAULT 'online' COMMENT '节点模式(在线/离线)',
+  `createdBy` char(36) DEFAULT NULL COMMENT '创建者ID',
+  `updatedBy` char(36) DEFAULT NULL COMMENT '更新者ID',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  `deletedAt` datetime(6) DEFAULT NULL COMMENT '软删除时间',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `nodes_fk_tenant` FOREIGN KEY (`tenantId`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `nodes_fk_project` FOREIGN KEY (`currentProjectId`) REFERENCES `projects` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='运行时节点表';
+
+CREATE INDEX `nodes_tenant_idx` ON `nodes` (`tenantId`);
+CREATE INDEX `nodes_status_idx` ON `nodes` (`status`);
+CREATE INDEX `nodes_heartbeat_idx` ON `nodes` (`lastHeartbeatAt`);
+CREATE UNIQUE INDEX `nodes_tenant_name_uq` ON `nodes` (`tenantId`, `name`);
+
+-- 5.4 节点部署关系表
+CREATE TABLE IF NOT EXISTS `node_deployments` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `nodeId` char(36) NOT NULL COMMENT '节点ID',
+  `deploymentId` char(36) NOT NULL COMMENT '发布版本ID',
+  `projectId` char(36) NOT NULL COMMENT '工程ID(冗余)',
+  `version` varchar(50) NOT NULL COMMENT '版本号(冗余)',
+  `mode` enum('DEV', 'RELEASE') NOT NULL DEFAULT 'RELEASE' COMMENT '运行模式',
+  `status` enum('pending','deploying','running','stopped','error','rollback') NOT NULL DEFAULT 'pending' COMMENT '部署状态',
+  `runtimeConfig` json DEFAULT NULL COMMENT '运行时配置(port, uiTarget等)',
+  `deployedAt` datetime(6) DEFAULT NULL COMMENT '部署完成时间',
+  `startedAt` datetime(6) DEFAULT NULL COMMENT '启动时间',
+  `stoppedAt` datetime(6) DEFAULT NULL COMMENT '停止时间',
+  `deployedBy` char(36) DEFAULT NULL COMMENT '部署操作者ID',
+  `errorMessage` text DEFAULT NULL COMMENT '错误信息',
+  `errorStack` text DEFAULT NULL COMMENT '错误堆栈',
+  `deployLog` json DEFAULT NULL COMMENT '部署日志(数组)',
+  `runtimeMetrics` json DEFAULT NULL COMMENT '运行时指标(onlineUsers, concurrentUsers等)',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  `deletedAt` datetime(6) DEFAULT NULL COMMENT '软删除时间',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `node_deploy_fk_node` FOREIGN KEY (`nodeId`) REFERENCES `nodes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `node_deploy_fk_deployment` FOREIGN KEY (`deploymentId`) REFERENCES `deployments` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `node_deploy_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `node_deploy_fk_deployer` FOREIGN KEY (`deployedBy`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='节点部署关系表';
+
+CREATE INDEX `node_deploy_node_idx` ON `node_deployments` (`nodeId`);
+CREATE INDEX `node_deploy_deployment_idx` ON `node_deployments` (`deploymentId`);
+CREATE INDEX `node_deploy_project_idx` ON `node_deployments` (`projectId`);
+CREATE INDEX `node_deploy_status_idx` ON `node_deployments` (`status`);
+CREATE INDEX `node_deploy_mode_idx` ON `node_deployments` (`mode`);
+CREATE UNIQUE INDEX `node_deploy_active_uq` ON `node_deployments` (`nodeId`, `projectId`) COMMENT '同一节点同一工程只能有一个活跃部署';
 
 -- ============================================
 -- 第六部分：运行时相关表

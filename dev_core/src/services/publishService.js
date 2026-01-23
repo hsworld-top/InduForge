@@ -1,0 +1,459 @@
+/**
+ * 发布服务 - 工程发布流水线
+ * @description 处理工程发布：验证 → 编译清单 → 打包 IFP → 上传
+ */
+const path = require("path");
+const fs = require("fs-extra");
+const archiver = require("archiver");
+const crypto = require("crypto");
+const {
+  Project,
+  DesignPage,
+  DataPoint,
+  DataConnection,
+  DataQuery,
+  Deployment,
+  User,
+} = require("../models");
+const { sequelize } = require("../config/database");
+
+// 制品存储目录
+const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, "../../artifacts");
+
+/**
+ * 发布服务类
+ */
+class PublishService {
+  constructor() {
+    // 确保制品目录存在
+    fs.ensureDirSync(ARTIFACTS_DIR);
+  }
+
+  /**
+   * 发布工程
+   * @param {string} projectId - 工程ID
+   * @param {Object} options - 发布选项
+   * @param {string} options.version - 版本号
+   * @param {string} options.name - 版本名称
+   * @param {string} options.description - 版本描述
+   * @param {string} options.type - 部署类型
+   * @param {string} options.deployedBy - 发布者ID
+   * @returns {Promise<Object>} 发布结果
+   */
+  async publish(projectId, options) {
+    const {
+      version,
+      name,
+      description,
+      type = "development",
+      deployedBy,
+    } = options;
+
+    // 获取工程信息
+    const project = await Project.findByPk(projectId);
+    if (!project) {
+      throw new Error(`工程 ${projectId} 不存在`);
+    }
+
+    // 检查版本号是否已存在
+    const existingVersion = await Deployment.findOne({
+      where: { projectId, version, deletedAt: null },
+    });
+    if (existingVersion) {
+      throw new Error(`版本 ${version} 已存在`);
+    }
+
+    // 创建发布记录
+    const deploymentId = crypto.randomUUID();
+    const deployment = await Deployment.create({
+      id: deploymentId,
+      projectId,
+      tenantId: project.tenantId,
+      version,
+      name: name || `v${version}`,
+      description,
+      type,
+      status: "building",
+      deployedBy,
+      startedAt: new Date(),
+      buildLog: [{ time: new Date().toISOString(), message: "开始构建..." }],
+    });
+
+    try {
+      // 1. 验证工程
+      await this.addBuildLog(deploymentId, "验证工程配置...");
+      const validation = await this.validateProject(projectId);
+      if (!validation.valid) {
+        throw new Error(`工程验证失败: ${validation.errors.join(", ")}`);
+      }
+
+      // 2. 收集工程数据
+      await this.addBuildLog(deploymentId, "收集工程数据...");
+      const projectData = await this.collectProjectData(projectId);
+
+      // 3. 编译清单
+      await this.addBuildLog(deploymentId, "生成清单文件...");
+      const manifest = await this.compileManifest(project, projectData, version);
+
+      // 4. 打包 IFP
+      await this.addBuildLog(deploymentId, "打包 IFP 文件...");
+      const { ifpPath, hash, size } = await this.bundleIFP(
+        deploymentId,
+        projectId,
+        manifest,
+        projectData
+      );
+
+      // 5. 生成制品 URL
+      const artifactUrl = `/artifacts/${path.basename(ifpPath)}`;
+
+      // 6. 更新发布记录
+      await deployment.update({
+        status: "success",
+        artifactUrl,
+        artifactHash: hash,
+        artifactSize: size,
+        manifest: {
+          name: manifest.name,
+          version: manifest.version,
+          dataRequirements: manifest.dataRequirements,
+          capabilities: manifest.capabilities,
+        },
+        pageCount: projectData.pages.length,
+        componentCount: this.countComponents(projectData.pages),
+        datapointCount: projectData.dataPoints.length,
+        completedAt: new Date(),
+      });
+
+      await this.addBuildLog(deploymentId, "发布成功！");
+
+      return {
+        id: deploymentId,
+        version,
+        artifactUrl,
+        artifactHash: hash,
+        artifactSize: size,
+        pageCount: projectData.pages.length,
+        componentCount: this.countComponents(projectData.pages),
+      };
+    } catch (error) {
+      // 记录错误
+      await deployment.update({
+        status: "failed",
+        errorMessage: error.message,
+        completedAt: new Date(),
+      });
+      await this.addBuildLog(deploymentId, `发布失败: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 添加构建日志
+   */
+  async addBuildLog(deploymentId, message) {
+    const deployment = await Deployment.findByPk(deploymentId);
+    if (deployment) {
+      const logs = deployment.buildLog || [];
+      logs.push({ time: new Date().toISOString(), message });
+      await deployment.update({ buildLog: logs });
+    }
+  }
+
+  /**
+   * 验证工程
+   */
+  async validateProject(projectId) {
+    const errors = [];
+
+    // 检查页面
+    const pages = await DesignPage.findAll({
+      where: { projectId, type: "page" },
+    });
+    if (pages.length === 0) {
+      errors.push("工程没有任何页面");
+    }
+
+    // 检查是否有首页
+    const homePage = pages.find((p) => p.isHome);
+    if (!homePage && pages.length > 0) {
+      // 警告但不阻止发布
+      console.warn("工程没有设置首页，将使用第一个页面作为首页");
+    }
+
+    // 检查数据绑定（可选，仅警告）
+    // ...
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings: [],
+    };
+  }
+
+  /**
+   * 收集工程数据
+   */
+  async collectProjectData(projectId) {
+    // 获取所有页面
+    const pages = await DesignPage.findAll({
+      where: { projectId },
+      order: [
+        ["type", "ASC"],
+        ["sortOrder", "ASC"],
+      ],
+    });
+
+    // 获取数据点
+    const dataPoints = await DataPoint.findAll({
+      where: { project_id: projectId },
+    });
+
+    // 获取数据连接
+    const connections = await DataConnection.findAll({
+      where: { projectId },
+    });
+
+    // 获取数据查询
+    const queries = await DataQuery.findAll({
+      where: { projectId },
+    });
+
+    return {
+      pages,
+      dataPoints,
+      connections,
+      queries,
+    };
+  }
+
+  /**
+   * 编译清单
+   */
+  async compileManifest(project, projectData, version) {
+    // 分析数据需求
+    const dataRequirements = {
+      connections: projectData.connections.map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+      })),
+      dataPoints: projectData.dataPoints.map((dp) => ({
+        path: dp.path,
+        sourceType: dp.source_type,
+        dataType: dp.data_type,
+      })),
+    };
+
+    // 分析能力需求
+    const capabilities = [];
+    if (projectData.connections.some((c) => c.type === "mqtt")) {
+      capabilities.push("mqtt");
+    }
+    if (projectData.connections.some((c) => c.type === "relational")) {
+      capabilities.push("database");
+    }
+    if (projectData.queries.length > 0) {
+      capabilities.push("query");
+    }
+
+    return {
+      name: project.name,
+      code: project.code,
+      version,
+      projectId: project.id,
+      tenantId: project.tenantId,
+      buildTime: new Date().toISOString(),
+      schemaVersion: "1.0.0",
+      entryConfig: project.entryConfig || {},
+      dataRequirements,
+      capabilities,
+      security: {
+        requireAuth: false, // 可配置
+      },
+    };
+  }
+
+  /**
+   * 打包 IFP
+   */
+  async bundleIFP(deploymentId, projectId, manifest, projectData) {
+    const fileName = `${projectId}_v${manifest.version}_${Date.now()}.ifp`;
+    const ifpPath = path.join(ARTIFACTS_DIR, fileName);
+
+    return new Promise((resolve, reject) => {
+      const output = fs.createWriteStream(ifpPath);
+      const archive = archiver("zip", { zlib: { level: 9 } });
+
+      output.on("close", async () => {
+        // 计算哈希
+        const hash = await this.calculateFileHash(ifpPath);
+        const stats = await fs.stat(ifpPath);
+
+        resolve({
+          ifpPath,
+          hash,
+          size: stats.size,
+        });
+      });
+
+      archive.on("error", (err) => {
+        reject(err);
+      });
+
+      archive.pipe(output);
+
+      // 添加 manifest.json
+      archive.append(JSON.stringify(manifest, null, 2), { name: "manifest.json" });
+
+      // 添加 project.json（页面和组件 Schema）
+      const projectJson = {
+        pages: projectData.pages.map((p) => ({
+          id: p.id,
+          name: p.name,
+          path: p.path,
+          type: p.type,
+          parentId: p.parentId,
+          isHome: p.isHome,
+          schemaVersion: p.schemaVersion,
+          schemaContent: p.schemaContent,
+          pageConfig: p.pageConfig,
+          variables: p.variables,
+          dataSources: p.dataSources,
+          lifecycle: p.lifecycle,
+          sortOrder: p.sortOrder,
+        })),
+      };
+      archive.append(JSON.stringify(projectJson, null, 2), { name: "project.json" });
+
+      // 添加 datacenter.json（数据配置）
+      const datacenterJson = {
+        connections: projectData.connections.map((c) => ({
+          id: c.id,
+          name: c.name,
+          type: c.type,
+          category: c.category,
+        })),
+        dataPoints: projectData.dataPoints.map((dp) => ({
+          id: dp.id,
+          path: dp.path,
+          name: dp.name,
+          sourceType: dp.source_type,
+          sourceId: dp.source_id,
+          sourceConfig: dp.source_config,
+          dataType: dp.data_type,
+          unit: dp.unit,
+          defaultValue: dp.default_value,
+        })),
+        queries: projectData.queries.map((q) => ({
+          id: q.id,
+          name: q.name,
+          connectionId: q.connectionId,
+          queryType: q.queryType,
+          config: q.config,
+          transformer: q.transformer,
+        })),
+      };
+      archive.append(JSON.stringify(datacenterJson, null, 2), { name: "datacenter.json" });
+
+      // TODO: 添加 assets 目录（如果有资源文件）
+
+      archive.finalize();
+    });
+  }
+
+  /**
+   * 计算文件哈希
+   */
+  async calculateFileHash(filePath) {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash("sha256");
+      const stream = fs.createReadStream(filePath);
+      stream.on("data", (data) => hash.update(data));
+      stream.on("end", () => resolve(hash.digest("hex")));
+      stream.on("error", reject);
+    });
+  }
+
+  /**
+   * 统计组件数量
+   */
+  countComponents(pages) {
+    let count = 0;
+    for (const page of pages) {
+      if (page.schemaContent?.components) {
+        count += this.countNestedComponents(page.schemaContent.components);
+      }
+    }
+    return count;
+  }
+
+  countNestedComponents(components) {
+    if (!Array.isArray(components)) return 0;
+    let count = components.length;
+    for (const comp of components) {
+      if (comp.children) {
+        count += this.countNestedComponents(comp.children);
+      }
+    }
+    return count;
+  }
+
+  /**
+   * 获取发布详情
+   */
+  async getDeployment(deploymentId) {
+    return Deployment.findByPk(deploymentId, {
+      include: [
+        { model: Project, as: "project", attributes: ["id", "name", "code"] },
+        { model: User, as: "deployer", attributes: ["id", "username"] },
+      ],
+    });
+  }
+
+  /**
+   * 获取工程的发布历史
+   */
+  async getDeploymentsByProject(projectId, options = {}) {
+    const { page = 1, pageSize = 20 } = options;
+    const offset = (page - 1) * pageSize;
+
+    const { rows, count } = await Deployment.findAndCountAll({
+      where: { projectId },
+      include: [
+        { model: User, as: "deployer", attributes: ["id", "username"] },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: pageSize,
+      offset,
+    });
+
+    return {
+      items: rows,
+      total: count,
+      page,
+      pageSize,
+    };
+  }
+
+  /**
+   * 下载制品
+   */
+  async getArtifactPath(deploymentId) {
+    const deployment = await Deployment.findByPk(deploymentId);
+    if (!deployment || !deployment.artifactUrl) {
+      throw new Error("制品不存在");
+    }
+
+    const fileName = path.basename(deployment.artifactUrl);
+    const filePath = path.join(ARTIFACTS_DIR, fileName);
+
+    if (!(await fs.pathExists(filePath))) {
+      throw new Error("制品文件不存在");
+    }
+
+    return filePath;
+  }
+}
+
+module.exports = new PublishService();

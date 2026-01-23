@@ -1,0 +1,25 @@
+{
+  "name": "node_agent_front",
+  "version": "1.0.0",
+  "description": "NodeAgent Web Management Interface",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.0",
+    "axios": "^1.6.0",
+    "dayjs": "^1.11.19",
+    "element-plus": "^2.5.0",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "sass": "^1.69.0",
+    "vite": "^5.0.0"
+  }
+}

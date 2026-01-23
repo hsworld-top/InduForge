@@ -22,6 +22,11 @@ const DataQueryLogFn = require("./DataQueryLog"); // 查询日志模型
 const DesignPage = require("./DesignPage"); // 设计页面模型
 const DataPointFn = require("./DataPoint"); // 数据点模型
 
+// 运维模块模型
+const NodeFn = require("./Node"); // 节点模型
+const NodeDeploymentFn = require("./NodeDeployment"); // 节点部署关系模型
+const DeploymentFn = require("./Deployment"); // 发布版本模型
+
 //===========================================
 // 初始化数据中心模型
 //===========================================
@@ -42,6 +47,11 @@ const DataQuery = DataQueryFn(sequelize, Sequelize.DataTypes); // 数据查询�
 const DataSqlConfig = DataSqlConfigFn(sequelize, Sequelize.DataTypes); // SQL配置模型
 const DataQueryLog = DataQueryLogFn(sequelize, Sequelize.DataTypes); // 查询日志模型
 const DataPoint = DataPointFn(sequelize, Sequelize.DataTypes); // 数据点模型
+
+// 运维模块模型初始化
+const Node = NodeFn(sequelize, Sequelize.DataTypes); // 节点模型
+const NodeDeployment = NodeDeploymentFn(sequelize, Sequelize.DataTypes); // 节点部署关系模型
+const Deployment = DeploymentFn(sequelize, Sequelize.DataTypes); // 发布版本模型
 
 //===========================================
 // 定义模型关联关系
@@ -462,6 +472,132 @@ DesignPage.belongsTo(User, {
   as: "locker",
 });
 
+// ===========================================
+// 运维模块关联关系
+// ===========================================
+
+// 租户和节点：一对多
+Tenant.hasMany(Node, {
+  foreignKey: "tenantId",
+  as: "nodes",
+  onDelete: "CASCADE",
+});
+
+Node.belongsTo(Tenant, {
+  foreignKey: "tenantId",
+  as: "tenant",
+});
+
+// 用户和节点：注册申请人
+User.hasMany(Node, {
+  foreignKey: "registeredBy",
+  as: "registeredNodes",
+});
+
+Node.belongsTo(User, {
+  foreignKey: "registeredBy",
+  as: "registrant",
+});
+
+// 工程和发布版本：一对多
+Project.hasMany(Deployment, {
+  foreignKey: "projectId",
+  as: "deployments",
+  onDelete: "CASCADE",
+});
+
+Deployment.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+// 租户和发布版本：一对多
+Tenant.hasMany(Deployment, {
+  foreignKey: "tenantId",
+  as: "deployments",
+  onDelete: "CASCADE",
+});
+
+Deployment.belongsTo(Tenant, {
+  foreignKey: "tenantId",
+  as: "tenant",
+});
+
+// 用户和发布版本：发布者
+User.hasMany(Deployment, {
+  foreignKey: "deployedBy",
+  as: "deployedVersions",
+});
+
+Deployment.belongsTo(User, {
+  foreignKey: "deployedBy",
+  as: "deployer",
+});
+
+// 节点和节点部署：一对多
+Node.hasMany(NodeDeployment, {
+  foreignKey: "nodeId",
+  as: "deployments",
+  onDelete: "CASCADE",
+});
+
+Node.hasMany(NodeDeployment, {
+  foreignKey: "nodeId",
+  as: "deploymentHistory",
+  onDelete: "CASCADE",
+});
+
+NodeDeployment.belongsTo(Node, {
+  foreignKey: "nodeId",
+  as: "node",
+});
+
+// 发布版本和节点部署：一对多
+Deployment.hasMany(NodeDeployment, {
+  foreignKey: "deploymentId",
+  as: "nodeDeployments",
+  onDelete: "CASCADE",
+});
+
+NodeDeployment.belongsTo(Deployment, {
+  foreignKey: "deploymentId",
+  as: "deployment",
+});
+
+// 工程和节点部署：一对多（冗余关联，便于查询）
+Project.hasMany(NodeDeployment, {
+  foreignKey: "projectId",
+  as: "nodeDeployments",
+});
+
+NodeDeployment.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+// 用户和节点部署：部署者
+User.hasMany(NodeDeployment, {
+  foreignKey: "deployedBy",
+  as: "nodeDeployments",
+});
+
+NodeDeployment.belongsTo(User, {
+  foreignKey: "deployedBy",
+  as: "deployer",
+});
+
+// 节点当前工程关联
+Node.belongsTo(Project, {
+  foreignKey: "currentProjectId",
+  as: "currentProject",
+});
+
+// 节点当前部署关联
+Node.belongsTo(NodeDeployment, {
+  foreignKey: "currentDeploymentId",
+  as: "currentDeployment",
+});
+
 module.exports = {
   Tenant, // 租户模型
   User, // 用户模型
@@ -479,4 +615,8 @@ module.exports = {
   DataQueryLog, // 查询日志模型
   DesignPage, // 设计页面模型
   DataPoint, // 数据点模型
+  // 运维模块模型
+  Node, // 节点模型
+  NodeDeployment, // 节点部署关系模型
+  Deployment, // 发布版本模型
 };

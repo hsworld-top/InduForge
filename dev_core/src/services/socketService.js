@@ -22,7 +22,7 @@ class SocketService {
       await mqttService.startConnection(subscription.connectionId);
     } catch (error) {
       logger.warn(
-        `[SocketService] Failed to ensure MQTT connection for subscription ${subscriptionId}: ${error?.message || error}`
+        `[SocketService] Failed to ensure MQTT connection for subscription ${subscriptionId}: ${error?.message || error}`,
       );
     }
   }
@@ -35,7 +35,7 @@ class SocketService {
       await this.ensureMqttConnectionBySubscription(tag.subscriptionId);
     } catch (error) {
       logger.warn(
-        `[SocketService] Failed to ensure MQTT connection for tag ${tagId}: ${error?.message || error}`
+        `[SocketService] Failed to ensure MQTT connection for tag ${tagId}: ${error?.message || error}`,
       );
     }
   }
@@ -66,14 +66,14 @@ class SocketService {
     this.io.on("connection", (socket) => {
       const { projectId } = socket.handshake.query;
       logger.info(
-        `[SocketService] Client connected: ${socket.id}, project: ${projectId}`
+        `[SocketService] Client connected: ${socket.id}, project: ${projectId}`,
       );
 
       // 鍔犲叆椤圭洰鎴块棿
       if (projectId) {
         socket.join(`project:${projectId}`);
         logger.info(
-          `[SocketService] Client ${socket.id} joined room: project:${projectId}`
+          `[SocketService] Client ${socket.id} joined room: project:${projectId}`,
         );
       }
 
@@ -85,10 +85,10 @@ class SocketService {
           socket.join(roomName);
           this.ensureMqttConnectionBySubscription(subscriptionId);
           console.log(
-            `[SocketService] Client ${socket.id} joined room: ${roomName}`
+            `[SocketService] Client ${socket.id} joined room: ${roomName}`,
           );
           logger.info(
-            `[SocketService] Client ${socket.id} subscribed to: ${subscriptionId}`
+            `[SocketService] Client ${socket.id} subscribed to: ${subscriptionId}`,
           );
         }
       });
@@ -99,20 +99,26 @@ class SocketService {
         if (subscriptionId) {
           socket.leave(`mqtt:subscription:${subscriptionId}`);
           logger.info(
-            `[SocketService] Client ${socket.id} unsubscribed from: ${subscriptionId}`
+            `[SocketService] Client ${socket.id} unsubscribed from: ${subscriptionId}`,
           );
         }
       });
 
-      // 璁剧疆Tag璁㈤槄澶勭悊
+      // 设置Tag订阅处理
       this.setupTagSubscription(socket);
+
+      // 数据点订阅
+      this.setupDataPointSubscription(socket);
+
+      // 运维监控订阅
+      this.setupOpsSubscription(socket);
 
       this.setupDataPointSubscription(socket);
 
       // 鏂紑杩炴帴
       socket.on("disconnect", (reason) => {
         logger.info(
-          `[SocketService] Client disconnected: ${socket.id}, reason: ${reason}`
+          `[SocketService] Client disconnected: ${socket.id}, reason: ${reason}`,
         );
       });
 
@@ -168,7 +174,7 @@ class SocketService {
     });
 
     logger.debug(
-      `[SocketService] Broadcasted connection status to room: ${room}`
+      `[SocketService] Broadcasted connection status to room: ${room}`,
     );
   }
 
@@ -192,7 +198,7 @@ class SocketService {
     });
 
     logger.debug(
-      `[SocketService] Broadcasted subscription status to room: ${room}`
+      `[SocketService] Broadcasted subscription status to room: ${room}`,
     );
   }
 
@@ -212,7 +218,7 @@ class SocketService {
     this.io.to(tagRoom).emit("mqtt:tag:value", valueData);
 
     logger.debug(
-      `[SocketService] Broadcasted tag value update to room: ${tagRoom}`
+      `[SocketService] Broadcasted tag value update to room: ${tagRoom}`,
     );
   }
 
@@ -221,14 +227,13 @@ class SocketService {
    * 闇€瑕佸湪setupEventHandlers涓坊鍔犲搴旂殑socket浜嬩欢鐩戝惉
    */
   setupTagSubscription(socket) {
-    // 璁㈤槄Tag鍊兼洿鏂?
+    // 订阅Tag值更新
     socket.on("mqtt:tag:subscribe", (data) => {
       const { tagId } = data;
       if (tagId) {
         socket.join(`mqtt:tag:${tagId}`);
-        this.ensureMqttConnectionByTag(tagId);
         logger.info(
-          `[SocketService] Client ${socket.id} subscribed to tag: ${tagId}`
+          `[SocketService] Client ${socket.id} subscribed to tag: ${tagId}`,
         );
       }
     });
@@ -239,9 +244,126 @@ class SocketService {
       if (tagId) {
         socket.leave(`mqtt:tag:${tagId}`);
         logger.info(
-          `[SocketService] Client ${socket.id} unsubscribed from tag: ${tagId}`
+          `[SocketService] Client ${socket.id} unsubscribed from tag: ${tagId}`,
         );
       }
+    });
+  }
+
+  /**
+   * 订阅数据点值更新
+   * @param {object} socket - Socket 实例
+   */
+  setupDataPointSubscription(socket) {
+    socket.on("datapoint:subscribe", (data) => {
+      const { projectId, paths } = data || {};
+      if (!projectId || !Array.isArray(paths)) {
+        return;
+      }
+
+      paths
+        .map((path) => normalizePath(path))
+        .filter(Boolean)
+        .forEach((path) => {
+          const room = `datapoint:${projectId}:${path}`;
+          socket.join(room);
+          logger.info(
+            `[SocketService] Client ${socket.id} subscribed to datapoint: ${path}`,
+          );
+        });
+    });
+
+    socket.on("datapoint:unsubscribe", (data) => {
+      const { projectId, paths } = data || {};
+      if (!projectId || !Array.isArray(paths)) {
+        return;
+      }
+
+      paths
+        .map((path) => normalizePath(path))
+        .filter(Boolean)
+        .forEach((path) => {
+          socket.leave(`datapoint:${projectId}:${path}`);
+          logger.info(
+            `[SocketService] Client ${socket.id} unsubscribed from datapoint: ${path}`,
+          );
+        });
+    });
+  }
+
+  /**
+   * 订阅运维监控动态
+   * @param {object} socket - Socket 实例
+   */
+  setupOpsSubscription(socket) {
+    socket.on("ops:subscribe", (data) => {
+      const { tenantId } = data || {};
+      if (tenantId) {
+        const room = `ops:tenant:${tenantId}`;
+        socket.join(room);
+        logger.info(
+          `[SocketService] Client ${socket.id} subscribed to ops: ${tenantId}`,
+        );
+      }
+    });
+
+    socket.on("ops:unsubscribe", (data) => {
+      const { tenantId } = data || {};
+      if (tenantId) {
+        socket.leave(`ops:tenant:${tenantId}`);
+        logger.info(
+          `[SocketService] Client ${socket.id} unsubscribed from ops: ${tenantId}`,
+        );
+      }
+    });
+  }
+
+  /**
+   * 广播节点指标更新
+   */
+  broadcastNodeMetrics(tenantId, nodeId, metrics) {
+    if (!this.io) return;
+    const room = `ops:tenant:${tenantId}`;
+    this.io
+      .to(room)
+      .emit("ops:node:metrics", { nodeId, metrics, timestamp: Date.now() });
+  }
+
+  /**
+   * 广播节点状态变化
+   */
+  broadcastNodeStatus(tenantId, nodeId, status) {
+    if (!this.io) return;
+    const room = `ops:tenant:${tenantId}`;
+    this.io
+      .to(room)
+      .emit("ops:node:status", { nodeId, status, timestamp: Date.now() });
+  }
+
+  /**
+   * 广播工程运行指标更新
+   */
+  broadcastProjectMetrics(tenantId, nodeId, projectId, metrics) {
+    if (!this.io) return;
+    const room = `ops:tenant:${tenantId}`;
+    this.io.to(room).emit("ops:project:metrics", {
+      nodeId,
+      projectId,
+      metrics,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * 广播部署日志
+   */
+  broadcastDeployLog(tenantId, deploymentId, log) {
+    if (!this.io) return;
+    const room = `ops:tenant:${tenantId}`;
+    this.io.to(room).emit("ops:deploy:log", {
+      deploymentId,
+      log,
+      timestamp: Date.now(),
     });
   }
 
@@ -251,11 +373,7 @@ class SocketService {
   setupDataPointSubscription(socket) {
     socket.on("datapoint:subscribe", (data) => {
       const { projectId, paths, path } = data || {};
-      const targetPaths = Array.isArray(paths)
-        ? paths
-        : path
-        ? [path]
-        : [];
+      const targetPaths = Array.isArray(paths) ? paths : path ? [path] : [];
       if (!projectId || targetPaths.length === 0) {
         return;
       }
@@ -267,18 +385,14 @@ class SocketService {
           const room = `datapoint:${projectId}:${normalized}`;
           socket.join(room);
           logger.info(
-            `[SocketService] Client ${socket.id} subscribed to datapoint: ${normalized}`
+            `[SocketService] Client ${socket.id} subscribed to datapoint: ${normalized}`,
           );
         });
     });
 
     socket.on("datapoint:unsubscribe", (data) => {
       const { projectId, paths, path } = data || {};
-      const targetPaths = Array.isArray(paths)
-        ? paths
-        : path
-        ? [path]
-        : [];
+      const targetPaths = Array.isArray(paths) ? paths : path ? [path] : [];
       if (!projectId || targetPaths.length === 0) {
         return;
       }
@@ -289,7 +403,7 @@ class SocketService {
         .forEach((normalized) => {
           socket.leave(`datapoint:${projectId}:${normalized}`);
           logger.info(
-            `[SocketService] Client ${socket.id} unsubscribed from datapoint: ${normalized}`
+            `[SocketService] Client ${socket.id} unsubscribed from datapoint: ${normalized}`,
           );
         });
     });
@@ -317,6 +431,3 @@ class SocketService {
 // 瀵煎嚭鍗曚緥瀹炰緥
 const socketService = new SocketService();
 module.exports = socketService;
-
-
-
