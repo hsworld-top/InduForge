@@ -43,6 +43,8 @@
           v-for="option in radioOptions"
           :key="option.value ?? option.label"
           :label="option.value"
+          :disabled="Boolean(option.disabled)"
+          v-show="option.visible !== false"
         >
           {{ option.label }}
         </el-radio>
@@ -52,6 +54,8 @@
           v-for="option in checkboxOptions"
           :key="option.value ?? option.label"
           :label="option.value"
+          :disabled="Boolean(option.disabled)"
+          v-show="option.visible !== false"
         >
           {{ option.label }}
         </el-checkbox>
@@ -134,6 +138,9 @@
             v-for="item in dropdownItems"
             :key="item.value ?? item.label"
             :command="item.value"
+            :disabled="Boolean(item.disabled)"
+            :divided="Boolean(item.divided ?? item.diveded)"
+            :icon="item.icon"
           >
             {{ item.label }}
           </el-dropdown-item>
@@ -237,6 +244,7 @@ import {
   computed,
   ref,
   inject,
+  nextTick,
   onBeforeUnmount,
   onMounted,
   watch,
@@ -2106,7 +2114,361 @@ const buildButtonDslPatch = (config) => {
 
 const buildRefInfo = () => {
   if (!node.value) return null;
+  /**
+   * 规范化下拉菜单项数据
+   * @param {Record<string, any>} input - 菜单项数据
+   * @returns {Record<string, any> | null} 规范化后的菜单项
+   */
+  const normalizeDropdownItem = (input) => {
+    if (!input || typeof input !== "object") return null;
+    const text = input.text ?? input.label ?? "";
+    const command = input.command ?? input.value ?? input.key ?? "";
+    const disabled = Boolean(input.disabled);
+    const divided = Boolean(
+      Object.prototype.hasOwnProperty.call(input, "divided")
+        ? input.divided
+        : input.diveded
+    );
+    const icon = typeof input.icon === "string" ? input.icon : "";
+    return {
+      label: text || String(command ?? ""),
+      value: command || String(text ?? ""),
+      disabled,
+      divided,
+      icon,
+    };
+  };
+  /**
+   * 获取当前下拉菜单项列表
+   * @returns {Array} 菜单项列表
+   */
+  const getDropdownItems = () => {
+    const items = node.value?.props?.items;
+    return Array.isArray(items) ? [...items] : [];
+  };
+  /**
+   * 更新下拉菜单项列表
+   * @param {Array} nextItems - 新的菜单项列表
+   * @returns {void}
+   */
+  const updateDropdownItems = (nextItems) => {
+    if (props.readonly) {
+      applyPreviewPatch({ props: { items: nextItems } });
+      return;
+    }
+    editorStore.updateNode(node.value.id, {
+      props: { ...(node.value.props || {}), items: nextItems },
+    });
+  };
+  /**
+   * 更新组件属性
+   * @param {Record<string, any>} patch - 属性补丁
+   * @returns {void}
+   */
+  const updateNodeProps = (patch) => {
+    if (!patch || typeof patch !== "object") return;
+    if (props.readonly) {
+      applyPreviewPatch({ props: patch });
+      return;
+    }
+    editorStore.updateNode(node.value.id, {
+      props: { ...(node.value.props || {}), ...patch },
+    });
+  };
+  /**
+   * 更新组件样式
+   * @param {Record<string, any>} patch - 样式补丁
+   * @returns {void}
+   */
+  const updateNodeStyle = (patch) => {
+    if (!patch || typeof patch !== "object") return;
+    if (props.readonly) {
+      applyPreviewPatch({ style: patch });
+      return;
+    }
+    editorStore.updateNode(node.value.id, {
+      style: { ...(node.value.style || {}), ...patch },
+    });
+  };
+  /**
+   * 更新组件显隐
+   * @param {boolean} visible - 是否显示
+   * @returns {void}
+   */
+  const updateNodeVisibility = (visible) => {
+    const hidden = !Boolean(visible);
+    if (props.readonly) {
+      applyPreviewPatch({ hidden });
+      return;
+    }
+    editorStore.updateNode(node.value.id, { hidden });
+  };
+  /**
+   * 获取样式数值
+   * @param {string} key - 样式字段
+   * @returns {number}
+   */
+  const getStyleNumber = (key) => {
+    const raw = node.value?.style?.[key];
+    if (typeof raw === "number") return raw;
+    if (typeof raw === "string") {
+      const parsed = Number.parseFloat(raw);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  };
+  /**
+   * 规范化单选/多选项数据
+   * @param {any} input - 选项数据
+   * @returns {Record<string, any> | null} 规范化后的选项
+   */
+  const normalizeChoiceOption = (input) => {
+    if (input == null) return null;
+    if (typeof input === "object") {
+      const label = input.label ?? input.text ?? "";
+      const value = input.value ?? input.label ?? input.text ?? "";
+      return {
+        ...input,
+        label,
+        value,
+      };
+    }
+    const text = String(input);
+    return { label: text, value: text };
+  };
+  /**
+   * 获取单选/多选项列表
+   * @returns {Array} 选项列表
+   */
+  const getChoiceOptions = () => {
+    const options = node.value?.props?.options;
+    if (!Array.isArray(options)) return [];
+    return options
+      .map((item) => normalizeChoiceOption(item))
+      .filter(Boolean);
+  };
+  /**
+   * 更新单选/多选项列表
+   * @param {Array} nextOptions - 新的选项列表
+   * @returns {void}
+   */
+  const updateChoiceOptions = (nextOptions) => {
+    if (props.readonly) {
+      applyPreviewPatch({ props: { options: nextOptions } });
+      return;
+    }
+    editorStore.updateNode(node.value.id, {
+      props: { ...(node.value.props || {}), options: nextOptions },
+    });
+  };
+  /**
+   * 获取表格数据
+   * @returns {Array} 表格数据
+   */
+  const getTableData = () => {
+    const data = node.value?.props?.data;
+    return Array.isArray(data) ? [...data] : [];
+  };
+  /**
+   * 更新表格数据
+   * @param {Array} nextData - 表格数据
+   * @returns {void}
+   */
+  const updateTableData = (nextData) => {
+    if (props.readonly) {
+      applyPreviewPatch({ props: { data: nextData } });
+      tableRenderVersion.value += 1;
+      return;
+    }
+    editorStore.updateNode(node.value.id, {
+      props: { ...(node.value.props || {}), data: nextData },
+    });
+    tableRenderVersion.value += 1;
+  };
+  /**
+   * 更新树组件数据
+   * @param {Array} nextData - 树数据
+   * @returns {void}
+   */
+  const updateTreeData = (nextData) => {
+    updateNodeProps({ data: Array.isArray(nextData) ? nextData : [] });
+  };
+  /**
+   * 更新级联选择器数据
+   * @param {Array} nextOptions - 级联数据
+   * @returns {void}
+   */
+  const updateCascaderOptions = (nextOptions) => {
+    updateNodeProps({ options: Array.isArray(nextOptions) ? nextOptions : [] });
+  };
+  /**
+   * 更新选择器数据
+   * @param {Array} nextOptions - 选择器选项
+   * @returns {void}
+   */
+  const updateSelectOptions = (nextOptions) => {
+    updateNodeProps({ options: Array.isArray(nextOptions) ? nextOptions : [] });
+  };
+  /**
+   * 更新输入值
+   * @param {any} value - 输入值
+   * @returns {void}
+   */
+  const updateInputValue = (value) => {
+    updateNodeProps({ modelValue: value });
+  };
+  /**
+   * 更新开关值
+   * @param {boolean} value - 开关状态
+   * @returns {void}
+   */
+  const updateSwitchValue = (value) => {
+    updateNodeProps({ modelValue: Boolean(value) });
+  };
+  /**
+   * 更新穿梭框数据
+   * @param {Array} leftData - 左侧数据
+   * @param {Array} rightData - 右侧数据
+   * @returns {void}
+   */
+  const updateTransferData = (leftData, rightData) => {
+    updateNodeProps({
+      data: Array.isArray(leftData) ? leftData : [],
+      modelValue: Array.isArray(rightData) ? rightData : [],
+    });
+  };
+  /**
+   * 获取表格行键字段
+   * @returns {string}
+   */
+  const getTableRowKeyProp = () => {
+    const propsValue = node.value?.props || {};
+    return (
+      propsValue.rowKey ||
+      propsValue["row-key"] ||
+      propsValue.keyField ||
+      "id"
+    );
+  };
+  /**
+   * 获取表格行键值
+   * @param {Record<string, any>} row - 行数据
+   * @returns {string|number|undefined}
+   */
+  const getTableRowKeyValue = (row) => {
+    if (!row || typeof row !== "object") return undefined;
+    const keyProp = getTableRowKeyProp();
+    return row[keyProp];
+  };
+  /**
+   * 获取树节点键字段
+   * @returns {string}
+   */
+  const getTreeNodeKeyProp = () => {
+    const propsValue = node.value?.props || {};
+    return propsValue.nodeKey || propsValue["node-key"] || "id";
+  };
+  /**
+   * 收集树数据中的节点 key
+   * @param {Array} list - 树节点列表
+   * @returns {Array<string|number>}
+   */
+  const collectTreeKeys = (list) => {
+    const keys = [];
+    const keyProp = getTreeNodeKeyProp();
+    const walk = (items) => {
+      if (!Array.isArray(items)) return;
+      items.forEach((item) => {
+        if (!item || typeof item !== "object") return;
+        if (Object.prototype.hasOwnProperty.call(item, keyProp)) {
+          keys.push(item[keyProp]);
+        }
+        walk(item.children);
+      });
+    };
+    walk(list);
+    return keys;
+  };
   const refInfo = {
+    get Name() {
+      return node.value?.label || "";
+    },
+    get Comment() {
+      const type = node.value?.type || "";
+      const manifest = type ? componentRegistry.get(type) : null;
+      return manifest?.name || type || "";
+    },
+    get Location() {
+      return {
+        get X() {
+          return getStyleNumber("left");
+        },
+        set X(value) {
+          const next = Number(value);
+          if (!Number.isFinite(next)) return;
+          updateNodeStyle({ left: `${next}px` });
+        },
+        get Y() {
+          return getStyleNumber("top");
+        },
+        set Y(value) {
+          const next = Number(value);
+          if (!Number.isFinite(next)) return;
+          updateNodeStyle({ top: `${next}px` });
+        },
+      };
+    },
+    get Size() {
+      return {
+        get Width() {
+          return getStyleNumber("width");
+        },
+        set Width(value) {
+          const next = Number(value);
+          if (!Number.isFinite(next)) return;
+          updateNodeStyle({ width: `${next}px` });
+        },
+        get Height() {
+          return getStyleNumber("height");
+        },
+        set Height(value) {
+          const next = Number(value);
+          if (!Number.isFinite(next)) return;
+          updateNodeStyle({ height: `${next}px` });
+        },
+      };
+    },
+    get Visible() {
+      return !node.value?.hidden;
+    },
+    set Visible(value) {
+      updateNodeVisibility(Boolean(value));
+    },
+    get Enable() {
+      return !Boolean(node.value?.props?.disabled);
+    },
+    set Enable(value) {
+      updateNodeProps({ disabled: !Boolean(value) });
+    },
+    get Caption() {
+      if (node.value?.type === "Button" || node.value?.type === "Tag") {
+        return node.value?.props?.text ?? "";
+      }
+      return undefined;
+    },
+    set Caption(value) {
+      if (node.value?.type === "Button" || node.value?.type === "Tag") {
+        updateNodeProps({ text: String(value ?? "") });
+      }
+    },
+    get Image() {
+      if (node.value?.type !== "Image") return undefined;
+      return node.value?.props?.src ?? "";
+    },
+    set Image(value) {
+      if (node.value?.type !== "Image") return;
+      updateNodeProps({ src: String(value ?? "") });
+    },
     name: node.value.label,
     id: node.value.id,
     el: nodeRef.value || null,
@@ -2148,6 +2510,103 @@ const buildRefInfo = () => {
       editorStore.updateNode(node.value.id, {
         props: { ...(node.value.props || {}), text: value },
       });
+    },
+    SetText: (text) => {
+      if (
+        node.value?.type !== "Text" &&
+        node.value?.type !== "Tag" &&
+        node.value?.type !== "Button"
+      ) {
+        return;
+      }
+      const value = String(text ?? "");
+      updateNodeProps({ text: value });
+    },
+    GetText: () => {
+      if (
+        node.value?.type !== "Text" &&
+        node.value?.type !== "Tag" &&
+        node.value?.type !== "Button"
+      ) {
+        return undefined;
+      }
+      return node.value?.props?.text ?? "";
+    },
+    SetType: (type) => {
+      if (
+        node.value?.type !== "Button" &&
+        node.value?.type !== "Tag" &&
+        node.value?.type !== "Text"
+      ) {
+        return;
+      }
+      updateNodeProps({ type: String(type ?? "") });
+    },
+    SetEllipsis: (value) => {
+      if (node.value?.type !== "Text") return;
+      updateNodeProps({ truncate: Boolean(value) });
+    },
+    SetTooltip: (value) => {
+      if (node.value?.type !== "Text") return;
+      updateNodeProps({ showTooltip: Boolean(value) });
+    },
+    SetLoading: (value) => {
+      if (
+        node.value?.type !== "Button" &&
+        node.value?.type !== "Card" &&
+        node.value?.type !== "BusinessCard"
+      ) {
+        return;
+      }
+      updateNodeProps({ loading: Boolean(value) });
+    },
+    SetDisabled: (value) => {
+      if (node.value?.type !== "Button") return;
+      updateNodeProps({ disabled: Boolean(value) });
+    },
+    Click: () => {
+      if (node.value?.type !== "Button") return;
+      const el = contentRef.value?.$el || contentRef.value || nodeRef.value;
+      if (el?.click) {
+        el.click();
+        return;
+      }
+      contentRef.value?.$emit?.("click");
+    },
+    SetSrc: (src) => {
+      if (node.value?.type !== "Image") return;
+      updateNodeProps({ src: String(src ?? "") });
+    },
+    GetSrc: () => {
+      if (node.value?.type !== "Image") return undefined;
+      return node.value?.props?.src ?? "";
+    },
+    Preview: (urls, startIndex = 0) => {
+      if (node.value?.type !== "Image") return;
+      if (Array.isArray(urls) && urls.length > 0) {
+        updateNodeProps({
+          previewSrcList: urls,
+          initialIndex: Number(startIndex) || 0,
+        });
+      }
+      contentRef.value?.showPreview?.();
+    },
+    Reload: () => {
+      if (node.value?.type === "Image") {
+        const src = String(node.value?.props?.src || "");
+        if (!src) return;
+        const url = new URL(src, window.location.href);
+        url.searchParams.set("_t", String(Date.now()));
+        updateNodeProps({ src: url.toString() });
+        return;
+      }
+      if (node.value?.type === "WebContainer") {
+        const src = String(node.value?.props?.url || "");
+        if (!src) return;
+        const url = new URL(src, window.location.href);
+        url.searchParams.set("_t", String(Date.now()));
+        updateNodeProps({ url: url.toString() });
+      }
     },
     setTableHeader: (columns) => {
       if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
@@ -2309,6 +2768,1068 @@ const buildRefInfo = () => {
         return;
       }
       editorStore.updateNode(node.value.id, nextPatch);
+    },
+    InsertItem: (item) => {
+      if (node.value?.type !== "Dropdown") return;
+      const normalized = normalizeDropdownItem(item);
+      if (!normalized) return;
+      const items = getDropdownItems();
+      items.push(normalized);
+      updateDropdownItems(items);
+    },
+    GetCommandItem: (menuItem) => {
+      if (node.value?.type !== "Dropdown") return undefined;
+      const items = getDropdownItems();
+      if (menuItem && typeof menuItem === "object") {
+        return menuItem.value ?? menuItem.command ?? menuItem.key;
+      }
+      const found = items.find(
+        (item) =>
+          item?.label === menuItem ||
+          item?.text === menuItem ||
+          item?.value === menuItem
+      );
+      return found?.value;
+    },
+    GetMenuItem: (command) => {
+      if (node.value?.type !== "Dropdown") return undefined;
+      const items = getDropdownItems();
+      return items.find((item) => item?.value === command);
+    },
+    DeleteItem: (menuItem) => {
+      if (node.value?.type !== "Dropdown") return;
+      const items = getDropdownItems();
+      const index = items.findIndex(
+        (item) =>
+          item?.label === menuItem ||
+          item?.text === menuItem ||
+          item?.value === menuItem
+      );
+      if (index === -1) return;
+      items.splice(index, 1);
+      updateDropdownItems(items);
+    },
+    ClearAll: () => {
+      if (node.value?.type === "Dropdown") {
+        updateDropdownItems([]);
+        return;
+      }
+      if (node.value?.type === "Cascader") {
+        updateCascaderOptions([]);
+        updateInputValue([]);
+        return;
+      }
+      if (node.value?.type === "Select") {
+        const multiple = Boolean(node.value?.props?.multiple);
+        updateInputValue(multiple ? [] : "");
+        return;
+      }
+    },
+    UpdateKeyChildren: (key, data) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.updateKeyChildren?.(key, data);
+    },
+    GetCheckedNodes: (leafOnly, includeHalfChecked) => {
+      if (node.value?.type === "Tree") {
+        return contentRef.value?.getCheckedNodes?.(leafOnly, includeHalfChecked);
+      }
+      if (node.value?.type === "Cascader") {
+        return contentRef.value?.getCheckedNodes?.(leafOnly);
+      }
+      if (node.value?.type === "Select") {
+        const options = getChoiceOptions();
+        const value = node.value?.props?.modelValue;
+        if (Array.isArray(value)) {
+          return options.filter((item) => value.includes(item.value));
+        }
+        const hit = options.find((item) => item.value === value);
+        return hit ? [hit] : [];
+      }
+      return undefined;
+    },
+    SetCheckedNodes: (nodes) => {
+      if (node.value?.type === "Tree") {
+        contentRef.value?.setCheckedNodes?.(nodes);
+        return;
+      }
+      if (node.value?.type === "Select") {
+        const options = getChoiceOptions();
+        const target = options.find((item) => item.label === nodes);
+        updateNodeProps({ modelValue: target?.value ?? "" });
+      }
+    },
+    GetCheckedKeys: (leafOnly) => {
+      if (node.value?.type !== "Tree") return undefined;
+      return contentRef.value?.getCheckedKeys?.(leafOnly);
+    },
+    SetCheckedKeys: (keys, leafOnly) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.setCheckedKeys?.(keys, leafOnly);
+    },
+    SetChecked: (keyOrData, checked, deep) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.setChecked?.(keyOrData, checked, deep);
+    },
+    GetHalfCheckedNodes: () => {
+      if (node.value?.type !== "Tree") return undefined;
+      return contentRef.value?.getHalfCheckedNodes?.();
+    },
+    GetHalfCheckedKeys: () => {
+      if (node.value?.type !== "Tree") return undefined;
+      return contentRef.value?.getHalfCheckedKeys?.();
+    },
+    GetCurrentKey: () => {
+      if (node.value?.type !== "Tree") return undefined;
+      return contentRef.value?.getCurrentKey?.();
+    },
+    GetCurrentNode: () => {
+      if (node.value?.type !== "Tree") return undefined;
+      return contentRef.value?.getCurrentNode?.();
+    },
+    SetCurrentKey: (key) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.setCurrentKey?.(key);
+    },
+    SetCurrentNode: (nodeData) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.setCurrentNode?.(nodeData);
+    },
+    GetNode: (dataOrKey) => {
+      if (node.value?.type !== "Tree") return undefined;
+      return contentRef.value?.getNode?.(dataOrKey);
+    },
+    Remove: (dataOrNode) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.remove?.(dataOrNode);
+    },
+    Append: (data, parentNode) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.append?.(data, parentNode);
+    },
+    InsertBefore: (data, refNode) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.insertBefore?.(data, refNode);
+    },
+    InsertAfter: (data, refNode) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.insertAfter?.(data, refNode);
+    },
+    ExpandAll: () => {
+      if (node.value?.type !== "Tree") return;
+      const data = node.value?.props?.data || [];
+      const keys = collectTreeKeys(data);
+      contentRef.value?.setExpandedKeys?.(keys);
+    },
+    CollapseAll: () => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.setExpandedKeys?.([]);
+    },
+    SetExpandedKeys: (keys) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.setExpandedKeys?.(Array.isArray(keys) ? keys : []);
+    },
+    GetExpandedKeys: () => {
+      if (node.value?.type !== "Tree") return [];
+      return contentRef.value?.getExpandedKeys?.() || [];
+    },
+    Filter: (keyword) => {
+      if (node.value?.type !== "Tree") return;
+      contentRef.value?.filter?.(keyword ?? "");
+    },
+    Open: (index) => {
+      if (node.value?.type === "Menu") {
+        contentRef.value?.open?.(index);
+        return;
+      }
+      if (node.value?.type === "Dropdown") {
+        contentRef.value?.handleOpen?.();
+        updateNodeProps({ visible: true });
+        return;
+      }
+      if (node.value?.type === "Select" || node.value?.type === "Cascader") {
+        contentRef.value?.toggleMenu?.(true);
+        contentRef.value?.togglePopperVisible?.(true);
+        contentRef.value?.focus?.();
+        return;
+      }
+      if (node.value?.type === "Collapse") {
+        const names = Array.isArray(index) ? index : [index];
+        updateNodeProps({ modelValue: names });
+      }
+    },
+    Close: (index) => {
+      if (node.value?.type === "Menu") {
+        contentRef.value?.close?.(index);
+        return;
+      }
+      if (node.value?.type === "Dropdown") {
+        contentRef.value?.handleClose?.();
+        updateNodeProps({ visible: false });
+        return;
+      }
+      if (node.value?.type === "Select" || node.value?.type === "Cascader") {
+        contentRef.value?.toggleMenu?.(false);
+        contentRef.value?.togglePopperVisible?.(false);
+        contentRef.value?.blur?.();
+        return;
+      }
+      if (node.value?.type === "Tag") {
+        updateNodeVisibility(false);
+        return;
+      }
+      if (node.value?.type === "Collapse") {
+        const current = Array.isArray(node.value?.props?.modelValue)
+          ? node.value.props.modelValue
+          : [];
+        const remove = new Set(Array.isArray(index) ? index : [index]);
+        updateNodeProps({
+          modelValue: current.filter((name) => !remove.has(name)),
+        });
+      }
+    },
+    Toggle: () => {
+      if (node.value?.type === "Dropdown") {
+        const visible = Boolean(node.value?.props?.visible);
+        if (visible) {
+          refInfo.Close();
+          return;
+        }
+        refInfo.Open();
+        return;
+      }
+      if (node.value?.type === "Cascader" || node.value?.type === "Select") {
+        contentRef.value?.toggleMenu?.();
+        contentRef.value?.togglePopperVisible?.();
+      }
+      if (node.value?.type === "Switch") {
+        const current = Boolean(node.value?.props?.modelValue);
+        updateSwitchValue(!current);
+      }
+      if (node.value?.type === "Collapse") {
+        const name = node.value?.props?.modelValue?.[0];
+        if (name !== undefined) {
+          refInfo.Close([name]);
+        }
+      }
+    },
+    GetVisible: () => {
+      if (node.value?.type !== "Dropdown") return undefined;
+      return Boolean(node.value?.props?.visible);
+    },
+    Focus: () => {
+      if (
+        node.value?.type !== "Input" &&
+        node.value?.type !== "Select" &&
+        node.value?.type !== "Cascader" &&
+        node.value?.type !== "InputNumber" &&
+        node.value?.type !== "Button"
+      ) {
+        return;
+      }
+      const el = contentRef.value?.$el || contentRef.value || nodeRef.value;
+      el?.focus?.();
+      contentRef.value?.focus?.();
+    },
+    Blur: () => {
+      if (
+        node.value?.type !== "Input" &&
+        node.value?.type !== "Select" &&
+        node.value?.type !== "Cascader" &&
+        node.value?.type !== "InputNumber" &&
+        node.value?.type !== "Button"
+      ) {
+        return;
+      }
+      const el = contentRef.value?.$el || contentRef.value || nodeRef.value;
+      el?.blur?.();
+      contentRef.value?.blur?.();
+    },
+    Select: () => {
+      if (node.value?.type !== "Input" && node.value?.type !== "InputNumber") {
+        return;
+      }
+      contentRef.value?.select?.();
+    },
+    GetInputValue: () => {
+      if (node.value?.type !== "Input" && node.value?.type !== "InputNumber") {
+        return undefined;
+      }
+      return node.value?.props?.modelValue ?? "";
+    },
+    SetInputValue: (value) => {
+      if (node.value?.type === "Input") {
+        updateInputValue(String(value ?? ""));
+        return;
+      }
+      if (node.value?.type === "InputNumber") {
+        const next = Number(value);
+        if (!Number.isFinite(next)) return;
+        updateInputValue(next);
+      }
+    },
+    ClearQuery: (area) => {
+      if (node.value?.type !== "Transfer") return;
+      contentRef.value?.clearQuery?.(area);
+    },
+    SetValue: (value) => {
+      if (node.value?.type === "Switch") {
+        updateSwitchValue(value);
+        return;
+      }
+      if (node.value?.type === "Input") {
+        updateInputValue(String(value ?? ""));
+        return;
+      }
+      if (node.value?.type === "InputNumber") {
+        const next = Number(value);
+        if (!Number.isFinite(next)) return;
+        updateInputValue(next);
+        return;
+      }
+      if (node.value?.type === "Select" || node.value?.type === "Cascader") {
+        updateInputValue(value);
+        return;
+      }
+      if (node.value?.type === "Radio") {
+        updateNodeProps({ modelValue: value });
+        return;
+      }
+      if (node.value?.type === "Checkbox") {
+        updateNodeProps({ modelValue: Array.isArray(value) ? value : [] });
+        return;
+      }
+      if (node.value?.type === "Slider") {
+        const next = Number(value);
+        if (!Number.isFinite(next)) return;
+        updateNodeProps({ modelValue: next });
+        return;
+      }
+      if (node.value?.type === "Transfer") {
+        updateNodeProps({ modelValue: Array.isArray(value) ? value : [] });
+        return;
+      }
+      if (node.value?.type === "Barcode") {
+        updateNodeProps({ value: String(value ?? "") });
+      }
+    },
+    GetValue: () => {
+      if (node.value?.type === "Switch") {
+        return Boolean(node.value?.props?.modelValue);
+      }
+      if (
+        node.value?.type === "Input" ||
+        node.value?.type === "InputNumber" ||
+        node.value?.type === "Select" ||
+        node.value?.type === "Cascader" ||
+        node.value?.type === "Radio" ||
+        node.value?.type === "Slider"
+      ) {
+        return node.value?.props?.modelValue ?? "";
+      }
+      if (node.value?.type === "Checkbox" || node.value?.type === "Transfer") {
+        return Array.isArray(node.value?.props?.modelValue)
+          ? node.value.props.modelValue
+          : [];
+      }
+      if (node.value?.type === "Barcode") {
+        return node.value?.props?.value ?? "";
+      }
+      return undefined;
+    },
+    Clear: () => {
+      if (
+        node.value?.type === "Input" ||
+        node.value?.type === "InputNumber" ||
+        node.value?.type === "Select" ||
+        node.value?.type === "Cascader"
+      ) {
+        updateInputValue(
+          node.value?.type === "Select" && node.value?.props?.multiple
+            ? []
+            : ""
+        );
+        return;
+      }
+      if (node.value?.type === "Radio") {
+        updateNodeProps({ modelValue: "" });
+        return;
+      }
+      if (node.value?.type === "Checkbox" || node.value?.type === "Transfer") {
+        updateNodeProps({ modelValue: [] });
+        return;
+      }
+      if (node.value?.type === "Timeline") {
+        updateNodeProps({ items: [] });
+        return;
+      }
+      if (node.value?.type === "Signature") {
+        updateInputValue("");
+      }
+    },
+    ClearSelection: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      contentRef.value?.clearSelection?.();
+    },
+    AppendRow: (row) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      const data = getTableData();
+      data.push(row);
+      updateTableData(data);
+    },
+    ToggleRowSelection: (row, selected) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      if (contentRef.value?.toggleRowSelection) {
+        contentRef.value.toggleRowSelection(row, selected);
+      }
+    },
+    ToggleAllSelection: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      contentRef.value?.toggleAllSelection?.();
+    },
+    ToggleRowExpansion: (row, expanded) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      if (contentRef.value?.toggleRowExpansion) {
+        contentRef.value.toggleRowExpansion(row, expanded);
+      }
+    },
+    SetCurrentRow: (row) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      contentRef.value?.setCurrentRow?.(row);
+    },
+    ClearSort: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      contentRef.value?.clearSort?.();
+    },
+    ClearFilter: (columnKeys) => {
+      if (node.value?.type === "Table" || node.value?.type === "BigDataTable") {
+        if (typeof columnKeys === "undefined") {
+          contentRef.value?.clearFilter?.();
+          return;
+        }
+        contentRef.value?.clearFilter?.(columnKeys);
+        return;
+      }
+      if (node.value?.type === "Tree") {
+        contentRef.value?.filter?.("");
+      }
+    },
+    Dolayout: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      contentRef.value?.doLayout?.();
+    },
+    Sort: (prop, order) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      contentRef.value?.sort?.(prop, order);
+    },
+    GetSelection: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return [];
+      }
+      return contentRef.value?.getSelectionRows?.() || [];
+    },
+    GetSelectionKeys: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return [];
+      }
+      const selected = contentRef.value?.getSelectionRows?.() || [];
+      return selected
+        .map((row) => getTableRowKeyValue(row))
+        .filter((value) => value !== undefined);
+    },
+    SetPage: (page) => {
+      const next = Number(page);
+      if (!Number.isFinite(next)) return;
+      if (node.value?.type === "Pagination") {
+        updateNodeProps({ currentPage: next });
+        return;
+      }
+      if (node.value?.type === "Table" || node.value?.type === "BigDataTable") {
+        updateNodeProps({ currentPage: next, page: next });
+      }
+    },
+    SetPageSize: (size) => {
+      const next = Number(size);
+      if (!Number.isFinite(next)) return;
+      if (node.value?.type === "Pagination") {
+        updateNodeProps({ pageSize: next });
+        return;
+      }
+      if (node.value?.type === "Table" || node.value?.type === "BigDataTable") {
+        updateNodeProps({ pageSize: next });
+      }
+    },
+    GetPageData: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return [];
+      }
+      const data = getTableData();
+      const page =
+        Number(node.value?.props?.currentPage ?? node.value?.props?.page) || 1;
+      const size = Number(node.value?.props?.pageSize) || data.length || 1;
+      const start = Math.max(0, (page - 1) * size);
+      return data.slice(start, start + size);
+    },
+    UpdateRowByKey: (key, patch) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      const data = getTableData();
+      const index = data.findIndex((row) => getTableRowKeyValue(row) === key);
+      if (index === -1) return;
+      data[index] = { ...data[index], ...(patch || {}) };
+      updateTableData(data);
+    },
+    RemoveRowByKey: (key) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      const data = getTableData().filter(
+        (row) => getTableRowKeyValue(row) !== key
+      );
+      updateTableData(data);
+    },
+    UpsertRowByKey: (key, row) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      const data = getTableData();
+      const index = data.findIndex((item) => getTableRowKeyValue(item) === key);
+      if (index === -1) {
+        data.push(row);
+      } else {
+        data[index] = { ...data[index], ...(row || {}) };
+      }
+      updateTableData(data);
+    },
+    ScrollToTop: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      contentRef.value?.setScrollTop?.(0);
+      const wrapper = contentRef.value?.$el?.querySelector?.(
+        ".el-scrollbar__wrap"
+      );
+      if (wrapper) wrapper.scrollTop = 0;
+    },
+    ScrollToRow: (keyOrRow) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      if (contentRef.value?.scrollTo) {
+        contentRef.value.scrollTo(keyOrRow);
+        return;
+      }
+      const data = getTableData();
+      const key =
+        typeof keyOrRow === "object"
+          ? getTableRowKeyValue(keyOrRow)
+          : keyOrRow;
+      const index = data.findIndex((row) => getTableRowKeyValue(row) === key);
+      if (index < 0) return;
+      const wrapper = contentRef.value?.$el?.querySelector?.(
+        ".el-scrollbar__wrap"
+      );
+      if (wrapper) {
+        wrapper.scrollTop = index * 32;
+      }
+    },
+    DoLayoutSafe: () => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      nextTick(() => {
+        contentRef.value?.doLayout?.();
+      });
+    },
+    SetData: (data, rightData) => {
+      if (node.value?.type === "Table" || node.value?.type === "BigDataTable") {
+        updateTableData(Array.isArray(data) ? data : []);
+        return;
+      }
+      if (node.value?.type === "Cascader") {
+        updateCascaderOptions(data);
+        return;
+      }
+      if (node.value?.type === "Select") {
+        updateSelectOptions(data);
+        return;
+      }
+      if (node.value?.type === "Transfer") {
+        updateTransferData(data, rightData);
+        return;
+      }
+      if (node.value?.type === "Tree") {
+        updateTreeData(data);
+        return;
+      }
+      if (node.value?.type === "BusinessCard") {
+        updateNodeProps({ data });
+      }
+    },
+    GetData: () => {
+      if (node.value?.type === "Table" || node.value?.type === "BigDataTable") {
+        return getTableData();
+      }
+      if (node.value?.type === "Cascader") {
+        return node.value?.props?.options ?? [];
+      }
+      if (node.value?.type === "Select") {
+        return node.value?.props?.options ?? [];
+      }
+      if (node.value?.type === "Transfer") {
+        return {
+          leftData: node.value?.props?.data ?? [],
+          rightData: node.value?.props?.modelValue ?? [],
+        };
+      }
+      if (node.value?.type === "Tree") {
+        return node.value?.props?.data ?? [];
+      }
+      if (node.value?.type === "BusinessCard") {
+        return node.value?.props?.data;
+      }
+      return undefined;
+    },
+    GetRadioChecked: () => {
+      if (node.value?.type !== "Radio") return undefined;
+      const options = getChoiceOptions();
+      const value = node.value?.props?.modelValue;
+      return options.findIndex((item) => item?.value === value);
+    },
+    GetRadioValue: (labelIndex) => {
+      if (node.value?.type !== "Radio") return undefined;
+      const options = getChoiceOptions();
+      return options?.[Number(labelIndex)]?.value;
+    },
+    GetRadioLabel: (radioValue) => {
+      if (node.value?.type !== "Radio") return undefined;
+      const options = getChoiceOptions();
+      return options.find((item) => item?.value === radioValue)?.label;
+    },
+    SetRadioEnable: (labelIndex, enable) => {
+      if (node.value?.type !== "Radio") return;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      if (!options[index]) return;
+      options[index] = { ...options[index], disabled: !Boolean(enable) };
+      updateChoiceOptions(options);
+    },
+    GetRadioEnable: (labelIndex) => {
+      if (node.value?.type !== "Radio") return undefined;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      if (!options[index]) return undefined;
+      return !options[index].disabled;
+    },
+    SetRadioVisible: (labelIndex, visible) => {
+      if (node.value?.type !== "Radio") return;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      if (!options[index]) return;
+      options[index] = { ...options[index], visible: Boolean(visible) };
+      updateChoiceOptions(options);
+    },
+    GetRadioVisible: (labelIndex) => {
+      if (node.value?.type !== "Radio") return undefined;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      if (!options[index]) return undefined;
+      return options[index].visible !== false;
+    },
+    GetCheckState: (labelIndex) => {
+      if (node.value?.type !== "Checkbox") return undefined;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      const option = options[index];
+      const values = Array.isArray(node.value?.props?.modelValue)
+        ? node.value.props.modelValue
+        : [];
+      if (!option) return undefined;
+      return values.includes(option.value);
+    },
+    SetCheckState: (labelIndex, state) => {
+      if (node.value?.type !== "Checkbox") return;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      const option = options[index];
+      if (!option) return;
+      const values = Array.isArray(node.value?.props?.modelValue)
+        ? [...node.value.props.modelValue]
+        : [];
+      const exists = values.includes(option.value);
+      if (Boolean(state) && !exists) values.push(option.value);
+      if (!Boolean(state) && exists) {
+        const nextValues = values.filter((value) => value !== option.value);
+        if (props.readonly) {
+          applyPreviewPatch({ props: { modelValue: nextValues } });
+          return;
+        }
+        editorStore.updateNode(node.value.id, {
+          props: { ...(node.value.props || {}), modelValue: nextValues },
+        });
+        return;
+      }
+      if (props.readonly) {
+        applyPreviewPatch({ props: { modelValue: values } });
+        return;
+      }
+      editorStore.updateNode(node.value.id, {
+        props: { ...(node.value.props || {}), modelValue: values },
+      });
+    },
+    SetCheckEnable: (labelIndex, enable) => {
+      if (node.value?.type !== "Checkbox") return;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      if (!options[index]) return;
+      options[index] = { ...options[index], disabled: !Boolean(enable) };
+      updateChoiceOptions(options);
+    },
+    GetCheckEnable: (labelIndex) => {
+      if (node.value?.type !== "Checkbox") return undefined;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      if (!options[index]) return undefined;
+      return !options[index].disabled;
+    },
+    SetCheckVisible: (labelIndex, visible) => {
+      if (node.value?.type !== "Checkbox") return;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      if (!options[index]) return;
+      options[index] = { ...options[index], visible: Boolean(visible) };
+      updateChoiceOptions(options);
+    },
+    GetCheckVisible: (labelIndex) => {
+      if (node.value?.type !== "Checkbox") return undefined;
+      const options = getChoiceOptions();
+      const index = Number(labelIndex);
+      if (!options[index]) return undefined;
+      return options[index].visible !== false;
+    },
+    CheckAll: (value) => {
+      if (node.value?.type !== "Checkbox") return;
+      const options = getChoiceOptions();
+      const next = Boolean(value) ? options.map((item) => item.value) : [];
+      updateNodeProps({ modelValue: next });
+    },
+    SetActive: (name) => {
+      if (node.value?.type === "Menu") {
+        updateNodeProps({ defaultActive: String(name ?? "") });
+        return;
+      }
+      if (node.value?.type === "Tabs") {
+        updateNodeProps({ activeName: String(name ?? "") });
+        return;
+      }
+      if (node.value?.type === "Steps") {
+        const next = Number(name);
+        if (!Number.isFinite(next)) return;
+        updateNodeProps({ active: next });
+      }
+    },
+    GetActive: () => {
+      if (node.value?.type === "Menu") {
+        return node.value?.props?.defaultActive ?? "";
+      }
+      if (node.value?.type === "Tabs") {
+        return node.value?.props?.activeName ?? "";
+      }
+      return undefined;
+    },
+    Collapse: (value) => {
+      if (node.value?.type === "Menu") {
+        updateNodeProps({ collapse: Boolean(value) });
+        return;
+      }
+      if (node.value?.type === "Card") {
+        updateNodeProps({ collapsed: Boolean(value) });
+      }
+    },
+    Next: () => {
+      if (node.value?.type === "Tabs") {
+        const tabs = Array.isArray(node.value?.props?.tabs)
+          ? node.value.props.tabs
+          : [];
+        const current = node.value?.props?.activeName;
+        const index = tabs.findIndex((item) => item.name === current);
+        const next = tabs[index + 1] || tabs[0];
+        if (next?.name) updateNodeProps({ activeName: next.name });
+        return;
+      }
+      if (node.value?.type === "Steps") {
+        const active = Number(node.value?.props?.active) || 0;
+        updateNodeProps({ active: active + 1 });
+        return;
+      }
+      if (node.value?.type === "ImageCarousel" || node.value?.type === "CarouselComponent") {
+        contentRef.value?.next?.();
+      }
+    },
+    Prev: () => {
+      if (node.value?.type === "Tabs") {
+        const tabs = Array.isArray(node.value?.props?.tabs)
+          ? node.value.props.tabs
+          : [];
+        const current = node.value?.props?.activeName;
+        const index = tabs.findIndex((item) => item.name === current);
+        const prev = tabs[index - 1] || tabs[tabs.length - 1];
+        if (prev?.name) updateNodeProps({ activeName: prev.name });
+        return;
+      }
+      if (node.value?.type === "Steps") {
+        const active = Number(node.value?.props?.active) || 0;
+        updateNodeProps({ active: Math.max(0, active - 1) });
+        return;
+      }
+      if (node.value?.type === "ImageCarousel" || node.value?.type === "CarouselComponent") {
+        contentRef.value?.prev?.();
+      }
+    },
+    AddTab: (tab) => {
+      if (node.value?.type !== "Tabs") return;
+      const tabs = Array.isArray(node.value?.props?.tabs)
+        ? [...node.value.props.tabs]
+        : [];
+      tabs.push(tab);
+      updateNodeProps({ tabs });
+    },
+    RemoveTab: (name) => {
+      if (node.value?.type !== "Tabs") return;
+      const tabs = Array.isArray(node.value?.props?.tabs)
+        ? node.value.props.tabs.filter((item) => item.name !== name)
+        : [];
+      updateNodeProps({ tabs });
+    },
+    SetSelectionByKeys: (keys) => {
+      if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
+        return;
+      }
+      const data = getTableData();
+      const keySet = new Set(Array.isArray(keys) ? keys : []);
+      contentRef.value?.clearSelection?.();
+      data.forEach((row) => {
+        const rowKey = getTableRowKeyValue(row);
+        if (keySet.has(rowKey)) {
+          contentRef.value?.toggleRowSelection?.(row, true);
+        }
+      });
+    },
+    MoveToRight: (keys) => {
+      if (node.value?.type !== "Transfer") return;
+      const current = Array.isArray(node.value?.props?.modelValue)
+        ? [...node.value.props.modelValue]
+        : [];
+      const nextKeys = Array.isArray(keys) ? keys : [];
+      nextKeys.forEach((key) => {
+        if (!current.includes(key)) current.push(key);
+      });
+      updateNodeProps({ modelValue: current });
+    },
+    MoveToLeft: (keys) => {
+      if (node.value?.type !== "Transfer") return;
+      const current = Array.isArray(node.value?.props?.modelValue)
+        ? [...node.value.props.modelValue]
+        : [];
+      const remove = new Set(Array.isArray(keys) ? keys : []);
+      const next = current.filter((key) => !remove.has(key));
+      updateNodeProps({ modelValue: next });
+    },
+    Increase: (step) => {
+      if (node.value?.type !== "InputNumber") return;
+      const current = Number(node.value?.props?.modelValue) || 0;
+      const delta = Number(step ?? node.value?.props?.step ?? 1);
+      updateInputValue(current + (Number.isFinite(delta) ? delta : 1));
+    },
+    Decrease: (step) => {
+      if (node.value?.type !== "InputNumber") return;
+      const current = Number(node.value?.props?.modelValue) || 0;
+      const delta = Number(step ?? node.value?.props?.step ?? 1);
+      updateInputValue(current - (Number.isFinite(delta) ? delta : 1));
+    },
+    SetItems: (items) => {
+      if (
+        node.value?.type !== "Timeline" &&
+        node.value?.type !== "ImageCarousel" &&
+        node.value?.type !== "CarouselComponent" &&
+        node.value?.type !== "Steps"
+      ) {
+        return;
+      }
+      updateNodeProps({ items: Array.isArray(items) ? items : [] });
+    },
+    AppendItem: (item) => {
+      if (node.value?.type !== "Timeline") return;
+      const items = Array.isArray(node.value?.props?.items)
+        ? [...node.value.props.items]
+        : [];
+      items.push(item);
+      updateNodeProps({ items });
+    },
+    Play: () => {
+      if (
+        node.value?.type !== "ImageCarousel" &&
+        node.value?.type !== "CarouselComponent"
+      ) {
+        return;
+      }
+      updateNodeProps({ autoplay: true });
+    },
+    Pause: () => {
+      if (
+        node.value?.type !== "ImageCarousel" &&
+        node.value?.type !== "CarouselComponent"
+      ) {
+        return;
+      }
+      updateNodeProps({ autoplay: false });
+    },
+    SetActiveItem: (nameOrIndex) => {
+      if (
+        node.value?.type !== "ImageCarousel" &&
+        node.value?.type !== "CarouselComponent"
+      ) {
+        return;
+      }
+      contentRef.value?.setActiveItem?.(nameOrIndex);
+    },
+    Load: (url) => {
+      if (node.value?.type !== "WebContainer") return;
+      updateNodeProps({ url: String(url ?? "") });
+    },
+    PostMessage: (_data) => {
+      if (node.value?.type !== "WebContainer") return;
+    },
+    GetUrl: () => {
+      if (node.value?.type !== "WebContainer") return undefined;
+      return node.value?.props?.url ?? "";
+    },
+    Back: () => {
+      if (node.value?.type !== "WebContainer") return;
+    },
+    Forward: () => {
+      if (node.value?.type !== "WebContainer") return;
+    },
+    Reset: () => {
+      if (node.value?.type === "Steps") {
+        updateNodeProps({ active: 1 });
+        return;
+      }
+      if (node.value?.type === "Pagination") {
+        updateNodeProps({ currentPage: 1 });
+        return;
+      }
+      if (node.value?.type === "Slider") {
+        const min = Number(node.value?.props?.min);
+        updateNodeProps({ modelValue: Number.isFinite(min) ? min : 0 });
+      }
+    },
+    SetTitle: (title) => {
+      if (node.value?.type !== "Card" && node.value?.type !== "BusinessCard") {
+        return;
+      }
+      updateNodeProps({ title: String(title ?? "") });
+    },
+    GetPage: () => {
+      if (node.value?.type !== "Pagination") return undefined;
+      return Number(node.value?.props?.currentPage) || 1;
+    },
+    GetPageSize: () => {
+      if (node.value?.type !== "Pagination") return undefined;
+      return Number(node.value?.props?.pageSize) || 0;
+    },
+    SetTotal: (total) => {
+      if (node.value?.type !== "Pagination") return;
+      const next = Number(total);
+      if (!Number.isFinite(next)) return;
+      updateNodeProps({ total: next });
+    },
+    GetTotal: () => {
+      if (node.value?.type !== "Pagination") return undefined;
+      return Number(node.value?.props?.total) || 0;
+    },
+    GetActiveNames: () => {
+      if (node.value?.type !== "Collapse") return [];
+      return Array.isArray(node.value?.props?.modelValue)
+        ? node.value.props.modelValue
+        : [];
+    },
+    SetActiveNames: (names) => {
+      if (node.value?.type !== "Collapse") return;
+      updateNodeProps({ modelValue: Array.isArray(names) ? names : [] });
+    },
+    Refresh: () => {
+      if (node.value?.type !== "BusinessCard") return;
+      updateNodeProps({ refreshAt: Date.now() });
+    },
+    OpenDetail: (_id) => {
+      if (node.value?.type !== "BusinessCard") return;
+    },
+    Render: () => {
+      if (node.value?.type !== "Barcode") return;
+    },
+    Download: (_format) => {
+      if (node.value?.type !== "Barcode") return undefined;
+      return undefined;
+    },
+    Disable: (value) => {
+      if (
+        node.value?.type !== "Switch" &&
+        node.value?.type !== "Slider"
+      ) {
+        return;
+      }
+      updateNodeProps({ disabled: Boolean(value) });
+    },
+    SetDate: (date) => {
+      if (node.value?.type !== "Calendar") return;
+      updateNodeProps({ date });
+    },
+    GetDate: () => {
+      if (node.value?.type !== "Calendar") return undefined;
+      return node.value?.props?.date ?? null;
+    },
+    Today: () => {
+      if (node.value?.type !== "Calendar") return;
+      updateNodeProps({ date: new Date() });
+    },
+    ClearSignature: () => {
+      if (node.value?.type !== "Signature") return;
+      updateInputValue("");
+    },
+    GetImage: () => {
+      if (node.value?.type !== "Signature") return undefined;
+      return node.value?.props?.modelValue ?? "";
+    },
+    SetImage: (value) => {
+      if (node.value?.type !== "Signature") return;
+      updateInputValue(String(value ?? ""));
+    },
+    IsEmpty: () => {
+      if (node.value?.type !== "Signature") return true;
+      const value = node.value?.props?.modelValue;
+      return !value;
+    },
+    SetPen: (_color, _width) => {
+      if (node.value?.type !== "Signature") return;
     },
   };
   return refInfo;
