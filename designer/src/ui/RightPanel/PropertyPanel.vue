@@ -31,118 +31,152 @@
 
       <el-divider />
 
+      <template v-if="hasStyleSelection">
+        <template v-if="showSizeEditor">
+          <SizeEditor
+            :model-value="currentStyle"
+            :min-width="containerMinSize?.width"
+            :min-height="containerMinSize?.height"
+            @update:model-value="handleStyleChange"
+          />
+          <el-divider style="margin: 12px 0" />
+        </template>
+        <div class="style-config-list">
+          <div class="style-config-row">
+            <div class="style-config-label">详细配置</div>
+            <el-button
+              size="small"
+              class="config-btn"
+              :class="{ 'is-active': hasDetailConfig }"
+              @click="openConfigDialog('detail')"
+            >
+              配置
+            </el-button>
+          </div>
+          <div class="style-config-row">
+            <div class="style-config-label">样式配置</div>
+            <el-button
+              size="small"
+              class="config-btn"
+              :class="{ 'is-active': hasStyleConfig }"
+              @click="openConfigDialog('style')"
+            >
+              配置
+            </el-button>
+          </div>
+        </div>
+        <el-divider />
+      </template>
+
       <!-- 属性表单：根据 Manifest 生成 -->
       <template v-if="manifest && manifest.props.length > 0">
-        <el-collapse v-model="activeGroupNames">
-          <el-collapse-item
-            v-for="group in groupedProps"
-            :key="group.name"
-            :title="group.name"
-            :name="group.name"
-          >
-            <div class="prop-list">
-              <template v-if="isElContainer && isRegionGroup(group)">
-                <div
-                  v-for="item in regionPropRows"
-                  :key="item.key"
-                  class="prop-item region-prop-row"
-                >
-                  <div class="prop-label">
-                    <div class="region-label">
-                      <span>{{ item.label }}</span>
-                      <span
-                        v-if="getRegionSizeText(item)"
-                        class="region-size-text"
-                      >
-                        {{ getRegionSizeText(item) }}
-                      </span>
-                      <span
-                        v-if="getRegionMaxLabel(item.sizeProp)"
-                        class="region-size-limit"
-                      >
-                        {{ getRegionMaxLabel(item.sizeProp) }}
-                      </span>
-                    </div>
-                    <el-switch
-                      v-if="!item.sizeProp"
-                      class="region-toggle"
-                      :model-value="Boolean(getPropValue(item.toggleProp))"
-                      size="small"
-                      @update:model-value="
-                        (val) => handlePropChange(item.toggleProp, Boolean(val))
-                      "
-                    />
-                  </div>
-                  <div v-if="item.sizeProp" class="region-prop-controls">
-                    <el-input
-                      class="region-size-input"
-                      :model-value="getSizeValue(item.sizeProp)"
-                      size="small"
-                      placeholder="auto"
-                      :disabled="!isRegionEnabled(item)"
-                      @update:model-value="
-                        (val) => handleSizeValueChange(item.sizeProp, val)
-                      "
-                    />
-                    <el-select
-                      :model-value="getSizeUnit(item.sizeProp)"
-                      size="small"
-                      class="region-unit-select"
-                      :disabled="!isRegionEnabled(item)"
-                      @update:model-value="
-                        (val) => handleSizeUnitChange(item.sizeProp, val)
-                      "
-                      @change="
-                        (val) => handleSizeUnitChange(item.sizeProp, val)
-                      "
+        <div class="prop-list">
+          <template v-for="group in groupedProps" :key="group.name">
+            <template v-if="isElContainer && isRegionGroup(group)">
+              <div
+                v-for="item in regionPropRows"
+                :key="item.key"
+                class="prop-item region-prop-row"
+              >
+                <div class="prop-label">
+                  <div class="region-label">
+                    <span>{{ item.label }}</span>
+                    <span
+                      v-if="getRegionSizeText(item)"
+                      class="region-size-text"
                     >
-                      <el-option label="px" value="px" />
-                      <el-option label="%" value="%" />
-                      <el-option label="auto" value="auto" />
-                    </el-select>
-                    <el-switch
-                      class="region-toggle"
-                      :model-value="Boolean(getPropValue(item.toggleProp))"
-                      size="small"
-                      @update:model-value="
-                        (val) => handlePropChange(item.toggleProp, Boolean(val))
-                      "
-                    />
+                      {{ getRegionSizeText(item) }}
+                    </span>
+                    <span
+                      v-if="getRegionMaxLabel(item.sizeProp)"
+                      class="region-size-limit"
+                    >
+                      {{ getRegionMaxLabel(item.sizeProp) }}
+                    </span>
                   </div>
-                </div>
-              </template>
-              <template v-else>
-                <div
-                  v-for="propDef in group.props"
-                  :key="propDef.name"
-                  class="prop-item"
-                >
-                  <div class="prop-label">
-                    <span>{{ propDef.label }}</span>
-                    <el-tooltip content="绑定数据" placement="top">
-                      <el-button
-                        size="small"
-                        text
-                        class="bind-btn"
-                        :class="{ 'is-active': hasPropBinding(propDef.name) }"
-                        @click="handleBindClick(propDef)"
-                      >
-                        <IconEpLink />
-                      </el-button>
-                    </el-tooltip>
-                  </div>
-                  <PropEditor
-                    :prop="propDef"
-                    :model-value="getPropValue(propDef.name)"
+                  <el-switch
+                    v-if="!item.sizeProp"
+                    class="region-toggle"
+                    :model-value="Boolean(getPropValue(item.toggleProp))"
+                    size="small"
                     @update:model-value="
-                      (val) => handlePropChange(propDef.name, val)
+                      (val) => handlePropChange(item.toggleProp, Boolean(val))
                     "
                   />
                 </div>
-              </template>
-            </div>
-          </el-collapse-item>
-        </el-collapse>
+                <div v-if="item.sizeProp" class="region-prop-controls">
+                  <el-input
+                    class="region-size-input"
+                    :model-value="getSizeValue(item.sizeProp)"
+                    size="small"
+                    placeholder="auto"
+                    :disabled="!isRegionEnabled(item)"
+                    @update:model-value="
+                      (val) => handleSizeValueChange(item.sizeProp, val)
+                    "
+                  />
+                  <el-select
+                    :model-value="getSizeUnit(item.sizeProp)"
+                    size="small"
+                    class="region-unit-select"
+                    :disabled="!isRegionEnabled(item)"
+                    @update:model-value="
+                      (val) => handleSizeUnitChange(item.sizeProp, val)
+                    "
+                    @change="
+                      (val) => handleSizeUnitChange(item.sizeProp, val)
+                    "
+                  >
+                    <el-option label="px" value="px" />
+                    <el-option label="%" value="%" />
+                    <el-option label="auto" value="auto" />
+                  </el-select>
+                  <el-switch
+                    class="region-toggle"
+                    :model-value="Boolean(getPropValue(item.toggleProp))"
+                    size="small"
+                    @update:model-value="
+                      (val) => handlePropChange(item.toggleProp, Boolean(val))
+                    "
+                  />
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <div
+                v-for="propDef in group.props"
+                :key="propDef.name"
+                class="prop-item"
+              >
+                <div class="prop-label">
+                  <span>{{ propDef.label }}</span>
+                  <el-tooltip
+                    v-if="shouldShowBindButton(propDef)"
+                    content="绑定数据"
+                    placement="top"
+                  >
+                    <el-button
+                      size="small"
+                      text
+                      class="bind-btn"
+                      :class="{ 'is-active': hasPropBinding(propDef.name) }"
+                      @click="handleBindClick(propDef)"
+                    >
+                      <IconEpLink />
+                    </el-button>
+                  </el-tooltip>
+                </div>
+                <PropEditor
+                  :prop="propDef"
+                  :model-value="getPropValue(propDef.name)"
+                  @update:model-value="
+                    (val) => handlePropChange(propDef.name, val)
+                  "
+                />
+              </div>
+            </template>
+          </template>
+        </div>
       </template>
 
       <!-- 无 Manifest 时显示原始 Props -->
@@ -154,79 +188,7 @@
         >
       </template>
 
-      <el-divider />
-
-      <template v-if="hasStyleSelection">
-        <el-collapse v-model="activeStyleNames">
-          <el-collapse-item title="基础样式" name="basic">
-            <template v-if="showSizeEditor">
-              <SizeEditor
-                :model-value="currentStyle"
-                :min-width="containerMinSize?.width"
-                :min-height="containerMinSize?.height"
-                @update:model-value="handleStyleChange"
-              />
-              <el-divider style="margin: 12px 0" />
-            </template>
-            <BackgroundEditor
-              :model-value="currentStyle"
-              @update:model-value="handleStyleChange"
-            />
-            <el-divider style="margin: 12px 0" />
-            <BorderEditor
-              :model-value="currentStyle"
-              @update:model-value="handleStyleChange"
-            />
-            <el-divider style="margin: 12px 0" />
-            <div class="style-config-list">
-              <div class="style-config-row">
-                <div class="style-config-label">详细配置</div>
-                <el-button
-                  size="small"
-                  class="config-btn"
-                  :class="{ 'is-active': hasDetailConfig }"
-                  @click="openConfigDialog('detail')"
-                >
-                  配置
-                </el-button>
-              </div>
-              <div class="style-config-row">
-                <div class="style-config-label">样式配置</div>
-                <el-button
-                  size="small"
-                  class="config-btn"
-                  :class="{ 'is-active': hasStyleConfig }"
-                  @click="openConfigDialog('style')"
-                >
-                  配置
-                </el-button>
-              </div>
-            </div>
-          </el-collapse-item>
-
-          <el-collapse-item title="布局样式" name="layout">
-            <PositionEditor
-              :model-value="currentStyle"
-              @update:model-value="handleStyleChange"
-            />
-            <el-divider style="margin: 12px 0" />
-            <SpacingEditor
-              title="内边距"
-              prefix="padding"
-              :model-value="currentStyle"
-              @update:model-value="handleStyleChange"
-            />
-            <el-divider style="margin: 12px 0" />
-            <SpacingEditor
-              title="外边距"
-              prefix="margin"
-              :model-value="currentStyle"
-              @update:model-value="handleStyleChange"
-            />
-          </el-collapse-item>
-        </el-collapse>
-      </template>
-      <div v-else class="text-sm text-gray-400 text-center py-6">
+      <div v-if="!hasStyleSelection" class="text-sm text-gray-400 text-center py-6">
         请选择组件
       </div>
     </div>
@@ -550,8 +512,6 @@ import PropEditor from "./PropEditor.vue";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import SizeEditor from "./StylePanel/SizeEditor.vue";
 import SpacingEditor from "./StylePanel/SpacingEditor.vue";
-import BackgroundEditor from "./StylePanel/BackgroundEditor.vue";
-import BorderEditor from "./StylePanel/BorderEditor.vue";
 import PositionEditor from "./StylePanel/PositionEditor.vue";
 import { usePanelState } from "./use-panel-state";
 import { getManifest } from "@/manifests";
@@ -575,8 +535,6 @@ const {
 } = storeToRefs(editorStore);
 
 /** ??????? */
-const activeGroupNames = ref([]);
-const activeStyleNames = ref(["basic", "layout"]);
 
 const { panelState, selectedElements, selectedNode, selectedGraphic } =
   usePanelState();
@@ -767,6 +725,16 @@ const isElementPlusType = (type) => {
 };
 
 /**
+ * 是否显示属性绑定入口
+ * @param {{ group?: string }} propDef - 属性定义
+ * @returns {boolean}
+ */
+const shouldShowBindButton = (propDef) => {
+  if (!propDef) return false;
+  return propDef.group !== "数据";
+};
+
+/**
  * 获取 DSL 方法名
  * @param {string} type - 组件类型
  * @returns {string}
@@ -795,6 +763,37 @@ const buildPresetId = (type, key) => {
  */
 const buildDslTemplate = (methodName, body) => {
   return `this.${methodName}({\n${body}\n});`;
+};
+
+/**
+ * 格式化 DSL 值
+ * @param {*} value - 值
+ * @param {number} indentSize - 缩进空格数
+ * @returns {string}
+ */
+const formatDslValue = (value, indentSize = 2) => {
+  if (value === undefined) return "undefined";
+  const json = JSON.stringify(value, null, 2);
+  if (!json) return "null";
+  const lines = json.split("\n");
+  if (lines.length === 1) return json;
+  const pad = " ".repeat(indentSize);
+  return [lines[0], ...lines.slice(1).map((line) => `${pad}${line}`)].join(
+    "\n",
+  );
+};
+
+/**
+ * 获取 Manifest 默认值
+ * @param {string} type - 组件类型
+ * @param {string} propName - 属性名
+ * @returns {*}
+ */
+const getManifestDefaultValue = (type, propName) => {
+  if (!type || !propName) return undefined;
+  const manifest = getManifest(type);
+  if (!manifest?.props?.length) return undefined;
+  return manifest.props.find((prop) => prop.name === propName)?.defaultValue;
 };
 
 /**
@@ -1108,15 +1107,25 @@ const elementPlusPresetGroups = [
   {
     name: "table",
     types: ["Table", "BigDataTable"],
-    detail: (methodName, type) => [
-      {
-        id: buildPresetId(type, "basic"),
-        label: "表格基础配置",
-        content: buildDslTemplate(
-          methodName,
-          '  id: "tableList",\n  data: [],\n  columns: [\n    { prop: "name", label: "名称" },\n    { prop: "value", label: "值" },\n  ],',
-        ),
-      },
+    detail: (methodName, type) => {
+      const dataDefault = getManifestDefaultValue(type, "data") || [];
+      const columnsDefault =
+        getManifestDefaultValue(type, "columns") || [
+          { prop: "name", label: "名称" },
+          { prop: "value", label: "值" },
+        ];
+      return [
+        {
+          id: buildPresetId(type, "basic"),
+          label: "表格基础配置",
+          content: buildDslTemplate(
+            methodName,
+            `  id: "tableList",\n  data: ${formatDslValue(
+              dataDefault,
+              2,
+            )},\n  columns: ${formatDslValue(columnsDefault, 2)},`,
+          ),
+        },
       {
         id: buildPresetId(type, "layout"),
         label: "表格布局配置",
@@ -1130,10 +1139,17 @@ const elementPlusPresetGroups = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** 基础 */\n  id: "tableList",\n  data: [],\n  columns: [\n    { prop: "name", label: "名称" },\n    { prop: "value", label: "值" },\n  ],\n\n  /** 表格属性 */\n  stripe: true,\n  border: true,\n  rowKey: "id",\n  height: 360,\n\n  /** 样式 */\n  className: "custom-table",\n\n  /** 事件 */\n  onRowClick: {\n    action: "setVar",\n    target: "$vars.currentRow",\n  },',
+          `  /** 基础 */\n  id: "tableList",\n  data: ${formatDslValue(
+            dataDefault,
+            2,
+          )},\n  columns: ${formatDslValue(
+            columnsDefault,
+            2,
+          )},\n\n  /** 表格属性 */\n  stripe: true,\n  border: true,\n  rowKey: "id",\n  height: 360,\n\n  /** 样式 */\n  className: "custom-table",\n\n  /** 事件 */\n  onRowClick: {\n    action: "setVar",\n    target: "$vars.currentRow",\n  },`,
         ),
       },
-    ],
+      ];
+    },
     style: (type) => [
       {
         id: buildPresetId(type, "header"),
@@ -1155,15 +1171,20 @@ const elementPlusPresetGroups = [
   {
     name: "tree",
     types: ["Tree"],
-    detail: (methodName, type) => [
-      {
-        id: buildPresetId(type, "basic"),
-        label: "树基础配置",
-        content: buildDslTemplate(
-          methodName,
-          '  id: "treeData",\n  data: [],\n  props: { label: "label", children: "children" },',
-        ),
-      },
+    detail: (methodName, type) => {
+      const dataDefault = getManifestDefaultValue(type, "data") || [];
+      return [
+        {
+          id: buildPresetId(type, "basic"),
+          label: "树基础配置",
+          content: buildDslTemplate(
+            methodName,
+            `  id: "treeData",\n  data: ${formatDslValue(
+              dataDefault,
+              2,
+            )},\n  props: { label: "label", children: "children" },`,
+          ),
+        },
       {
         id: buildPresetId(type, "check"),
         label: "树勾选配置",
@@ -1177,10 +1198,14 @@ const elementPlusPresetGroups = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** 基础 */\n  id: "treeData",\n  data: [],\n  props: { label: "label", children: "children" },\n\n  /** 属性 */\n  showCheckbox: true,\n  nodeKey: "id",\n  defaultExpandAll: true,\n\n  /** 样式 */\n  className: "custom-tree",\n\n  /** 事件 */\n  onNodeClick: {\n    action: "setVar",\n    target: "$vars.activeNode",\n  },',
+          `  /** 基础 */\n  id: "treeData",\n  data: ${formatDslValue(
+            dataDefault,
+            2,
+          )},\n  props: { label: "label", children: "children" },\n\n  /** 属性 */\n  showCheckbox: true,\n  nodeKey: "id",\n  defaultExpandAll: true,\n\n  /** 样式 */\n  className: "custom-tree",\n\n  /** 事件 */\n  onNodeClick: {\n    action: "setVar",\n    target: "$vars.activeNode",\n  },`,
         ),
       },
-    ],
+      ];
+    },
     style: (type) => [
       {
         id: buildPresetId(type, "node"),
@@ -2104,6 +2129,24 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => currentElement.value?.id,
+  () => {
+    const node = currentElement.value;
+    if (!node || !isElementPlusType(node.type)) return;
+    const rawDetail = String(node.detailConfig || "").trim();
+    if (rawDetail) return;
+    const presets = resolveElementPlusDetailPresets(node.type);
+    const basicId = buildPresetId(node.type, "basic");
+    const preset = presets.find((item) => item.id === basicId) || presets[0];
+    const nextContent = preset?.content || "";
+    if (!nextContent) return;
+    editorStore.updateNode(node.id, { detailConfig: nextContent });
+    void editorStore.saveCurrentPage?.();
+  },
+  { immediate: true },
+);
+
 /**
  * 获取组件 Manifest
  */
@@ -2224,14 +2267,14 @@ const groupedProps = computed(() => {
     }
     groups.get(groupName).props.push(prop);
   }
-  const result = Array.from(groups.values());
-
-  if (result.length > 0 && activeGroupNames.value.length === 0) {
-    activeGroupNames.value = result.map((g) => g.name);
+  let result = Array.from(groups.values());
+  if (isElementPlusType(currentElement.value?.type)) {
+    result = result.filter((group) => group.name !== "数据");
   }
 
   return result;
 });
+
 
 const pageVars = computed(() => {
   docVersion.value;
@@ -2847,10 +2890,29 @@ const handleStyleChange = (newStyle) => {
 const openConfigDialog = (type) => {
   if (!selectedNode.value) return;
   configDialogType.value = type === "detail" ? "detail" : "style";
-  configDraft.value =
-    configDialogType.value === "detail"
-      ? selectedNode.value.detailConfig || ""
-      : selectedNode.value.styleConfig || "";
+  if (configDialogType.value === "detail") {
+    const rawDetail = selectedNode.value.detailConfig || "";
+    if (!rawDetail && isElementPlusType(selectedNode.value.type)) {
+      const presets = resolveElementPlusDetailPresets(
+        selectedNode.value.type,
+      );
+      const basicId = buildPresetId(selectedNode.value.type, "basic");
+      const preset =
+        presets.find((item) => item.id === basicId) || presets[0];
+      const nextContent = preset?.content || "";
+      configDraft.value = nextContent;
+      if (nextContent) {
+        editorStore.updateNode(selectedNode.value.id, {
+          detailConfig: nextContent,
+        });
+        void editorStore.saveCurrentPage?.();
+      }
+    } else {
+      configDraft.value = rawDetail;
+    }
+  } else {
+    configDraft.value = selectedNode.value.styleConfig || "";
+  }
   selectedPresetId.value = "";
   presetSearch.value = "";
   configDialogVisible.value = true;
