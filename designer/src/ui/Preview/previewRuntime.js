@@ -140,6 +140,213 @@ const applyPendingCalls = (pageId, name, refInfo) => {
 };
 
 const buildComponentStub = (pageId, name) => ({
+  get Name() {
+    return name || "";
+  },
+  get Comment() {
+    return "";
+  },
+  get Location() {
+    return {
+      get X() {
+        return 0;
+      },
+      set X(value) {
+        const next = Number(value);
+        if (!Number.isFinite(next)) return;
+        queueComponentCall(pageId, name, "setStyle", [{ left: `${next}px` }]);
+      },
+      get Y() {
+        return 0;
+      },
+      set Y(value) {
+        const next = Number(value);
+        if (!Number.isFinite(next)) return;
+        queueComponentCall(pageId, name, "setStyle", [{ top: `${next}px` }]);
+      },
+    };
+  },
+  get Size() {
+    return {
+      get Width() {
+        return 0;
+      },
+      set Width(value) {
+        const next = Number(value);
+        if (!Number.isFinite(next)) return;
+        queueComponentCall(pageId, name, "setStyle", [{ width: `${next}px` }]);
+      },
+      get Height() {
+        return 0;
+      },
+      set Height(value) {
+        const next = Number(value);
+        if (!Number.isFinite(next)) return;
+        queueComponentCall(pageId, name, "setStyle", [{ height: `${next}px` }]);
+      },
+    };
+  },
+  get Visible() {
+    return true;
+  },
+  set Visible(_value) {},
+  get Enable() {
+    return true;
+  },
+  set Enable(value) {
+    queueComponentCall(pageId, name, "setProps", [{ disabled: !Boolean(value) }]);
+  },
+  get Caption() {
+    return "";
+  },
+  set Caption(value) {
+    queueComponentCall(pageId, name, "setProps", [{ text: String(value ?? "") }]);
+  },
+  get Image() {
+    return "";
+  },
+  set Image(value) {
+    queueComponentCall(pageId, name, "setProps", [{ src: String(value ?? "") }]);
+  },
+  SetText: (...args) => queueComponentCall(pageId, name, "SetText", args),
+  GetText: () => undefined,
+  SetType: (...args) => queueComponentCall(pageId, name, "SetType", args),
+  SetEllipsis: (...args) => queueComponentCall(pageId, name, "SetEllipsis", args),
+  SetTooltip: (...args) => queueComponentCall(pageId, name, "SetTooltip", args),
+  SetLoading: (...args) => queueComponentCall(pageId, name, "SetLoading", args),
+  SetDisabled: (...args) => queueComponentCall(pageId, name, "SetDisabled", args),
+  Click: (...args) => queueComponentCall(pageId, name, "Click", args),
+  SetSrc: (...args) => queueComponentCall(pageId, name, "SetSrc", args),
+  GetSrc: () => undefined,
+  Preview: (...args) => queueComponentCall(pageId, name, "Preview", args),
+  Reload: (...args) => queueComponentCall(pageId, name, "Reload", args),
+  InsertItem: (...args) => queueComponentCall(pageId, name, "InsertItem", args),
+  GetCommandItem: () => undefined,
+  GetMenuItem: () => undefined,
+  DeleteItem: (...args) => queueComponentCall(pageId, name, "DeleteItem", args),
+  ClearAll: (...args) => queueComponentCall(pageId, name, "ClearAll", args),
+  ClearSelection: (...args) => queueComponentCall(pageId, name, "ClearSelection", args),
+  AppendRow: (...args) => queueComponentCall(pageId, name, "AppendRow", args),
+  ToggleRowSelection: (...args) =>
+    queueComponentCall(pageId, name, "ToggleRowSelection", args),
+  ToggleAllSelection: (...args) =>
+    queueComponentCall(pageId, name, "ToggleAllSelection", args),
+  ToggleRowExpansion: (...args) =>
+    queueComponentCall(pageId, name, "ToggleRowExpansion", args),
+  SetCurrentRow: (...args) => queueComponentCall(pageId, name, "SetCurrentRow", args),
+  ClearSort: (...args) => queueComponentCall(pageId, name, "ClearSort", args),
+  ClearFilter: (...args) => queueComponentCall(pageId, name, "ClearFilter", args),
+  Dolayout: (...args) => queueComponentCall(pageId, name, "Dolayout", args),
+  Sort: (...args) => queueComponentCall(pageId, name, "Sort", args),
+  SetData: (...args) => queueComponentCall(pageId, name, "SetData", args),
+  GetData: () => undefined,
+  GetRadioChecked: () => undefined,
+  GetRadioValue: () => undefined,
+  GetRadioLabel: () => undefined,
+  SetRadioEnable: (...args) => queueComponentCall(pageId, name, "SetRadioEnable", args),
+  GetRadioEnable: () => undefined,
+  SetRadioVisible: (...args) => queueComponentCall(pageId, name, "SetRadioVisible", args),
+  GetRadioVisible: () => undefined,
+  GetCheckState: () => undefined,
+  SetCheckState: (...args) => queueComponentCall(pageId, name, "SetCheckState", args),
+  SetCheckEnable: (...args) => queueComponentCall(pageId, name, "SetCheckEnable", args),
+  GetCheckEnable: () => undefined,
+  SetCheckVisible: (...args) => queueComponentCall(pageId, name, "SetCheckVisible", args),
+  GetCheckVisible: () => undefined,
+  CheckAll: (...args) => queueComponentCall(pageId, name, "CheckAll", args),
+  UpdateKeyChildren: (...args) =>
+    queueComponentCall(pageId, name, "UpdateKeyChildren", args),
+  GetCheckedNodes: () => undefined,
+  SetCheckedNodes: (...args) =>
+    queueComponentCall(pageId, name, "SetCheckedNodes", args),
+  GetCheckedKeys: () => undefined,
+  SetCheckedKeys: (...args) =>
+    queueComponentCall(pageId, name, "SetCheckedKeys", args),
+  SetChecked: (...args) => queueComponentCall(pageId, name, "SetChecked", args),
+  GetHalfCheckedNodes: () => undefined,
+  GetHalfCheckedKeys: () => undefined,
+  GetCurrentKey: () => undefined,
+  GetCurrentNode: () => undefined,
+  SetCurrentKey: (...args) =>
+    queueComponentCall(pageId, name, "SetCurrentKey", args),
+  SetCurrentNode: (...args) =>
+    queueComponentCall(pageId, name, "SetCurrentNode", args),
+  GetNode: () => undefined,
+  Remove: (...args) => queueComponentCall(pageId, name, "Remove", args),
+  Append: (...args) => queueComponentCall(pageId, name, "Append", args),
+  InsertBefore: (...args) => queueComponentCall(pageId, name, "InsertBefore", args),
+  InsertAfter: (...args) => queueComponentCall(pageId, name, "InsertAfter", args),
+  Open: (...args) => queueComponentCall(pageId, name, "Open", args),
+  Close: (...args) => queueComponentCall(pageId, name, "Close", args),
+  Toggle: (...args) => queueComponentCall(pageId, name, "Toggle", args),
+  GetVisible: () => undefined,
+  SetActive: (...args) => queueComponentCall(pageId, name, "SetActive", args),
+  GetActive: () => undefined,
+  Collapse: (...args) => queueComponentCall(pageId, name, "Collapse", args),
+  Next: (...args) => queueComponentCall(pageId, name, "Next", args),
+  Prev: (...args) => queueComponentCall(pageId, name, "Prev", args),
+  AddTab: (...args) => queueComponentCall(pageId, name, "AddTab", args),
+  RemoveTab: (...args) => queueComponentCall(pageId, name, "RemoveTab", args),
+  MoveToRight: (...args) => queueComponentCall(pageId, name, "MoveToRight", args),
+  MoveToLeft: (...args) => queueComponentCall(pageId, name, "MoveToLeft", args),
+  Increase: (...args) => queueComponentCall(pageId, name, "Increase", args),
+  Decrease: (...args) => queueComponentCall(pageId, name, "Decrease", args),
+  SetItems: (...args) => queueComponentCall(pageId, name, "SetItems", args),
+  AppendItem: (...args) => queueComponentCall(pageId, name, "AppendItem", args),
+  Play: (...args) => queueComponentCall(pageId, name, "Play", args),
+  Pause: (...args) => queueComponentCall(pageId, name, "Pause", args),
+  SetActiveItem: (...args) => queueComponentCall(pageId, name, "SetActiveItem", args),
+  Load: (...args) => queueComponentCall(pageId, name, "Load", args),
+  PostMessage: (...args) => queueComponentCall(pageId, name, "PostMessage", args),
+  GetUrl: () => undefined,
+  Back: (...args) => queueComponentCall(pageId, name, "Back", args),
+  Forward: (...args) => queueComponentCall(pageId, name, "Forward", args),
+  Reset: (...args) => queueComponentCall(pageId, name, "Reset", args),
+  SetTitle: (...args) => queueComponentCall(pageId, name, "SetTitle", args),
+  GetPage: () => undefined,
+  GetPageSize: () => undefined,
+  SetTotal: (...args) => queueComponentCall(pageId, name, "SetTotal", args),
+  GetTotal: () => undefined,
+  GetActiveNames: () => undefined,
+  SetActiveNames: (...args) => queueComponentCall(pageId, name, "SetActiveNames", args),
+  Filter: (...args) => queueComponentCall(pageId, name, "Filter", args),
+  ExpandAll: (...args) => queueComponentCall(pageId, name, "ExpandAll", args),
+  CollapseAll: (...args) => queueComponentCall(pageId, name, "CollapseAll", args),
+  SetExpandedKeys: (...args) => queueComponentCall(pageId, name, "SetExpandedKeys", args),
+  GetExpandedKeys: () => undefined,
+  ScrollToTop: (...args) => queueComponentCall(pageId, name, "ScrollToTop", args),
+  ScrollToRow: (...args) => queueComponentCall(pageId, name, "ScrollToRow", args),
+  DoLayoutSafe: (...args) => queueComponentCall(pageId, name, "DoLayoutSafe", args),
+  GetSelection: () => undefined,
+  SetSelectionByKeys: (...args) =>
+    queueComponentCall(pageId, name, "SetSelectionByKeys", args),
+  GetSelectionKeys: () => undefined,
+  SetPage: (...args) => queueComponentCall(pageId, name, "SetPage", args),
+  SetPageSize: (...args) => queueComponentCall(pageId, name, "SetPageSize", args),
+  GetPageData: () => undefined,
+  UpdateRowByKey: (...args) => queueComponentCall(pageId, name, "UpdateRowByKey", args),
+  RemoveRowByKey: (...args) => queueComponentCall(pageId, name, "RemoveRowByKey", args),
+  UpsertRowByKey: (...args) => queueComponentCall(pageId, name, "UpsertRowByKey", args),
+  Clear: (...args) => queueComponentCall(pageId, name, "Clear", args),
+  SetValue: (...args) => queueComponentCall(pageId, name, "SetValue", args),
+  GetValue: () => undefined,
+  SetDate: (...args) => queueComponentCall(pageId, name, "SetDate", args),
+  GetDate: () => undefined,
+  Today: (...args) => queueComponentCall(pageId, name, "Today", args),
+  GetImage: () => undefined,
+  SetImage: (...args) => queueComponentCall(pageId, name, "SetImage", args),
+  IsEmpty: () => undefined,
+  SetPen: (...args) => queueComponentCall(pageId, name, "SetPen", args),
+  Render: (...args) => queueComponentCall(pageId, name, "Render", args),
+  Download: (...args) => queueComponentCall(pageId, name, "Download", args),
+  Focus: (...args) => queueComponentCall(pageId, name, "Focus", args),
+  Blur: (...args) => queueComponentCall(pageId, name, "Blur", args),
+  Select: (...args) => queueComponentCall(pageId, name, "Select", args),
+  GetInputValue: () => undefined,
+  SetInputValue: (...args) => queueComponentCall(pageId, name, "SetInputValue", args),
+  ClearQuery: (...args) => queueComponentCall(pageId, name, "ClearQuery", args),
+  SetValue: (...args) => queueComponentCall(pageId, name, "SetValue", args),
+  GetValue: () => undefined,
   setText: (...args) => queueComponentCall(pageId, name, "setText", args),
   setTableHeader: (...args) => queueComponentCall(pageId, name, "setTableHeader", args),
   setTableData: (...args) => queueComponentCall(pageId, name, "setTableData", args),

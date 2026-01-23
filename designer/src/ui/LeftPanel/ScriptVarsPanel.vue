@@ -516,6 +516,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import { useEditorStore } from "@/stores/editor-store";
+import { buildComponentMethodCompletions } from "@/ui/utils/component-methods";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpTimer from "~icons/ep/timer";
 import IconEpRefresh from "~icons/ep/refresh";
@@ -527,7 +528,7 @@ import IconEpList from "~icons/ep/list";
 import IconEpDocument from "~icons/ep/document";
 
 const editorStore = useEditorStore();
-const { projectId, globalScripts, projectVariables, projectVariableGroups, pages } =
+const { projectId, globalScripts, projectVariables, projectVariableGroups, pages, doc, docVersion, currentPage } =
   storeToRefs(editorStore);
 const maxGroupDepth = 5;
 
@@ -646,6 +647,31 @@ const enumVariableRows = computed(() => {
     }));
 });
 
+const pageComponentTree = computed(() => {
+  docVersion.value;
+  const rootId = currentPage.value?.rootNodeId;
+  if (!rootId || !doc.value) return [];
+  const buildNode = (nodeId) => {
+    const node = doc.value.getNode(nodeId);
+    if (!node) return null;
+    const children = (node.children || [])
+      .map((childId) => buildNode(childId))
+      .filter(Boolean);
+    const label = node.label || node.type || "组件";
+    return {
+      id: node.id,
+      label,
+      type: children.length ? "group" : "component",
+      componentName: node.label || "",
+      componentType: node.type || "",
+      children,
+    };
+  };
+  const root = buildNode(rootId);
+  if (!root) return [];
+  return root.children?.length ? root.children : [root];
+});
+
 const jsCompletions = computed(() => {
   const items = [
     { label: "console.log", insertText: "console.log()", kind: "Function", detail: "Log output" },
@@ -680,6 +706,8 @@ const jsCompletions = computed(() => {
       prefix: "customScripts.",
     });
   });
+
+  items.push(...buildComponentMethodCompletions(pageComponentTree.value));
 
   return items;
 });

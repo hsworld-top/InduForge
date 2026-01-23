@@ -245,6 +245,7 @@
 import { ref, watch, computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
+import { buildComponentMethodCompletions } from "@/ui/utils/component-methods";
 import { usePanelState } from "./use-panel-state";
 import { componentRegistry } from "@/editor-core";
 import { normalizeEventDefinitions } from "@/editor-core/registry/componentEvents.js";
@@ -559,6 +560,7 @@ const pageComponentTree = computed(() => {
       label,
       type: children.length ? "group" : "component",
       componentName: node.label || "",
+      componentType: node.type || "",
       children,
     };
   };
@@ -616,6 +618,7 @@ const jsCompletions = computed(() => {
     });
   });
 
+  items.push(...buildComponentMethodCompletions(pageComponentTree.value));
   return items;
 });
 

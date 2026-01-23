@@ -376,6 +376,7 @@ import { computed, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useEditorStore } from "@/stores/editor-store";
+import { buildComponentMethodCompletions } from "@/ui/utils/component-methods";
 import { usePanelState } from "./use-panel-state";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import IconEpEditPen from "~icons/ep/edit-pen";
@@ -674,6 +675,7 @@ const pageComponentTree = computed(() => {
       label,
       type: children.length ? "group" : "component",
       componentName: node.label || "",
+      componentType: node.type || "",
       children,
     };
   };
@@ -768,6 +770,7 @@ const jsCompletions = computed(() => {
     });
   });
 
+  items.push(...buildComponentMethodCompletions(pageComponentTree.value));
   return items;
 });
 
