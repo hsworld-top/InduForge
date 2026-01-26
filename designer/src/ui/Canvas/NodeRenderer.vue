@@ -4661,6 +4661,19 @@ const resolveAbsoluteLayout = (currentNode) => {
 };
 
 /**
+ * 生成流式布局下的尺寸样式（清理绝对布局尺寸）
+ * @param {Record<string, any> | undefined} currentStyle - 当前样式
+ * @returns {Record<string, any>}
+ * @throws {Error} 无
+ */
+const buildFlowResetStyle = (currentStyle) => {
+  const nextStyle = { ...(currentStyle || {}) };
+  delete nextStyle.width;
+  delete nextStyle.height;
+  return nextStyle;
+};
+
+/**
  * 解析尺寸为像素值
  * @param {string | number | undefined | null} value - 尺寸值
  * @returns {number | undefined}
@@ -5164,6 +5177,10 @@ const handleResizePointerDown = (event, handle) => {
   }
 };
 
+/**
+ * 处理节点指针按下事件
+ * @param {PointerEvent} event - 指针事件
+ */
 const handlePointerDown = (event) => {
   if (props.readonly) return;
   if (activeDragHandlers) return;
@@ -5174,6 +5191,7 @@ const handlePointerDown = (event) => {
   const targetNodeEl = event.target?.closest?.("[data-node-id]");
   const targetNodeId = targetNodeEl?.getAttribute?.("data-node-id");
   if (targetNodeId && targetNodeId !== node.value.id) {
+    if (event.altKey) return;
     if (!isContainer.value) return;
   }
 
@@ -5217,33 +5235,56 @@ const handlePointerDown = (event) => {
       upEvent.clientX,
       upEvent.clientY
     );
+    const childType = node.value?.type;
     let containerNode = null;
+    /**
+     * 判断是否为区域容器类型
+     * @param {string} type - 组件类型
+     * @returns {boolean}
+     */
+    const isRegionType = (type) =>
+      type === "ElHeader" ||
+      type === "ElAside" ||
+      type === "ElMain" ||
+      type === "ElFooter";
+    /**
+     * 获取容器的 Main 区域节点
+     * @param {import('@/editor-core').ComponentNode} container - 容器节点
+     * @returns {import('@/editor-core').ComponentNode | null}
+     */
+    const resolveContainerMain = (container) => {
+      if (!container || container.type !== "ElContainer") return null;
+      const mainChildId = (container.children || []).find((childId) => {
+        const childNode = doc.value?.getNode?.(childId);
+        return childNode?.type === "ElMain";
+      });
+      return mainChildId ? doc.value?.getNode?.(mainChildId) || null : null;
+    };
+
     for (const hit of hitList) {
       const nodeElement = hit.closest?.("[data-node-id]");
       const nodeId = nodeElement?.getAttribute?.("data-node-id");
       if (!nodeId) continue;
       const targetNode = doc.value?.getNode?.(nodeId);
       if (!targetNode) continue;
-      if (
-        targetNode.type === "ElHeader" ||
-        targetNode.type === "ElAside" ||
-        targetNode.type === "ElMain" ||
-        targetNode.type === "ElFooter"
-      ) {
+      if (isRegionType(targetNode.type)) {
+        if (childType && !canAcceptChild(targetNode, childType)) continue;
         return targetNode;
       }
-      if (targetNode.type === "ElContainer" && !containerNode) {
-        containerNode = targetNode;
+      if (targetNode.type === "ElContainer") {
+        if (!containerNode) {
+          containerNode = resolveContainerMain(targetNode) || targetNode;
+        }
+        continue;
+      }
+      const manifest = componentRegistry.get(targetNode.type);
+      if (manifest?.isContainer) {
+        if (childType && !canAcceptChild(targetNode, childType)) continue;
+        return targetNode;
       }
     }
-    if (containerNode) {
-      const mainChildId = (containerNode.children || []).find((childId) => {
-        const childNode = doc.value?.getNode?.(childId);
-        return childNode?.type === "ElMain";
-      });
-      if (mainChildId) {
-        return doc.value?.getNode?.(mainChildId) || null;
-      }
+    if (containerNode && (!childType || canAcceptChild(containerNode, childType))) {
+      return containerNode;
     }
     return null;
   };
@@ -5405,12 +5446,18 @@ const handlePointerDown = (event) => {
           dropRegion.id,
           insertIndex
         );
-        const updateCommand = new UpdateNodeCommand(node.value.id, {
+        const shouldResetSize =
+          node.value.positioning === "absolute" || node.value.layoutItem?.free;
+        const updatePatch = {
           positioning: "flow",
           absolutePos: undefined,
           flowLayout: undefined,
           layoutItem: undefined,
-        });
+        };
+        if (shouldResetSize) {
+          updatePatch.style = buildFlowResetStyle(node.value.style);
+        }
+        const updateCommand = new UpdateNodeCommand(node.value.id, updatePatch);
         if (history.value?.isInTransaction?.()) {
           history.value.executeInTransaction(moveCommand);
           history.value.executeInTransaction(updateCommand);
