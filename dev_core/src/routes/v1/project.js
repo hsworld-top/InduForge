@@ -453,7 +453,7 @@ router.post('/import', authenticateToken, validate(Joi.object({
      * @param {Map<string, string>} idMap - 旧查询ID -> 新查询ID
      * @returns {Object} 重写后的变量定义
      */
-    const remapQueryVariableDefinitions = (definitions, idMap) => {
+    const remapVariableDefinitions = (definitions, maps) => {
       if (!definitions || typeof definitions !== 'object') return definitions;
       const next = {};
       Object.entries(definitions).forEach(([name, detail]) => {
@@ -462,20 +462,38 @@ router.post('/import', authenticateToken, validate(Joi.object({
           return;
         }
         const nextDetail = { ...detail };
-        if (
-          nextDetail.sourceType &&
-          String(nextDetail.sourceType).includes('query') &&
-          nextDetail.sourceId &&
-          idMap.has(nextDetail.sourceId)
-        ) {
-          nextDetail.sourceId = idMap.get(nextDetail.sourceId);
+        const pickMappedId = (sourceType, sourceId) => {
+          if (!sourceId) return null;
+          const type = String(sourceType || '').toLowerCase();
+          if (type.includes('query')) return maps.queryIdMap.get(sourceId) || null;
+          if (type.includes('tag')) return maps.mqttTagIdMap.get(sourceId) || null;
+          if (type.includes('subscription')) {
+            return maps.mqttSubscriptionIdMap.get(sourceId) || null;
+          }
+          return null;
+        };
+        if (nextDetail.sourceType && nextDetail.sourceId) {
+          const mappedId = pickMappedId(nextDetail.sourceType, nextDetail.sourceId);
+          if (mappedId) nextDetail.sourceId = mappedId;
         }
         if (nextDetail.source && typeof nextDetail.source === 'object') {
-          const sourceType = String(nextDetail.source.sourceType || '');
-          if (sourceType.includes('query') && nextDetail.source.sourceId && idMap.has(nextDetail.source.sourceId)) {
+          const sourceType = nextDetail.source.sourceType || nextDetail.sourceType;
+          if (nextDetail.source.sourceId) {
+            const mappedId = pickMappedId(sourceType, nextDetail.source.sourceId);
+            if (mappedId) {
+              nextDetail.source = {
+                ...nextDetail.source,
+                sourceId: mappedId,
+              };
+            }
+          }
+          if (
+            nextDetail.source.datapointId &&
+            maps.datapointIdMap.has(nextDetail.source.datapointId)
+          ) {
             nextDetail.source = {
               ...nextDetail.source,
-              sourceId: idMap.get(nextDetail.source.sourceId),
+              datapointId: maps.datapointIdMap.get(nextDetail.source.datapointId),
             };
           }
         }
@@ -484,22 +502,21 @@ router.post('/import', authenticateToken, validate(Joi.object({
       return next;
     };
     /**
-     * 重写工程变量结构中的查询映射ID
-     * @param {Object} payload - 工程变量结构
-     * @param {Map<string, string>} idMap - 旧查询ID -> 新查询ID
-     * @returns {Object} 重写后的结构
+     * ?????????? sourceId / datapointId
+     * @param {Object} payload - ??????
+     * @param {Object} maps - ??ID??
+     * @returns {Object} ??????
      */
-    const remapQueryVariables = (payload, idMap) => {
+    const remapVariables = (payload, maps) => {
       if (!payload || typeof payload !== 'object') return payload;
       if (payload.definitions || payload.groups) {
         return {
           ...payload,
-          definitions: remapQueryVariableDefinitions(payload.definitions || {}, idMap),
+          definitions: remapVariableDefinitions(payload.definitions || {}, maps),
         };
       }
-      return remapQueryVariableDefinitions(payload, idMap);
+      return remapVariableDefinitions(payload, maps);
     };
-
     const connectionIdMap = new Map();
     const relationalConfigIdMap = new Map();
     const queryIdMap = new Map();
@@ -507,6 +524,7 @@ router.post('/import', authenticateToken, validate(Joi.object({
     const mqttSubscriptionIdMap = new Map();
     const mqttTagGroupIdMap = new Map();
     const mqttTagIdMap = new Map();
+    const datapointIdMap = new Map();
 
     const connectionRows = normalizeList(datacenter.connections).map((item) => {
       const newId = randomUUID();
@@ -559,25 +577,6 @@ router.post('/import', authenticateToken, validate(Joi.object({
     if (queryRows.length) {
       await DataQuery.bulkCreate(queryRows);
     }
-    if (queryIdMap.size) {
-      const remappedProjectVariables = remapQueryVariables(projectVariables, queryIdMap);
-      const remappedGlobalVariables = remapQueryVariables(globalVariables, queryIdMap);
-      await project.update({ projectVariables: remappedProjectVariables });
-      await Project.sequelize.query(
-        `UPDATE design_project_settings
-          SET globalVariables = ?, updatedBy = ?, updatedAt = ?
-          WHERE projectId = ?`,
-        {
-          replacements: [
-            JSON.stringify(remappedGlobalVariables),
-            userId,
-            new Date(),
-            project.id,
-          ],
-        },
-      );
-    }
-
     const mqttConfigRows = normalizeList(datacenter.mqttConfigs)
       .map((item) => {
         const newConnectionId = connectionIdMap.get(item.connectionId);
@@ -666,17 +665,53 @@ router.post('/import', authenticateToken, validate(Joi.object({
       return sourceId;
     };
 
-    const datapointRows = normalizeList(datacenter.datapoints).map((item) => ({
-      ...stripMeta(item),
-      id: randomUUID(),
-      projectId: project.id,
-      sourceId: resolveSourceId(item.sourceType, item.sourceId),
-      createdBy: userId,
-      updatedBy: userId,
-    }));
+    const datapointRows = normalizeList(datacenter.datapoints).map((item) => {
+      const newId = randomUUID();
+      if (item?.id) {
+        datapointIdMap.set(item.id, newId);
+      }
+      return {
+        ...stripMeta(item),
+        id: newId,
+        projectId: project.id,
+        sourceId: resolveSourceId(item.sourceType, item.sourceId),
+        createdBy: userId,
+        updatedBy: userId,
+      };
+    });
     if (datapointRows.length) {
       await DataPoint.bulkCreate(datapointRows);
     }
+    const remapNeeded =
+      queryIdMap.size ||
+      mqttTagIdMap.size ||
+      mqttSubscriptionIdMap.size ||
+      datapointIdMap.size;
+    if (remapNeeded) {
+      const maps = {
+        queryIdMap,
+        mqttTagIdMap,
+        mqttSubscriptionIdMap,
+        datapointIdMap,
+      };
+      const remappedProjectVariables = remapVariables(projectVariables, maps);
+      const remappedGlobalVariables = remapVariables(globalVariables, maps);
+      await project.update({ projectVariables: remappedProjectVariables });
+      await Project.sequelize.query(
+        `UPDATE design_project_settings
+          SET globalVariables = ?, updatedBy = ?, updatedAt = ?
+          WHERE projectId = ?`,
+        {
+          replacements: [
+            JSON.stringify(remappedGlobalVariables),
+            userId,
+            new Date(),
+            project.id,
+          ],
+        },
+      );
+    }
+
 
     return ApiResponse.success(res, { projectId: project.id }, 'project_import_success', {}, 201);
   } catch (error) {

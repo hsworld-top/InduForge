@@ -1,4 +1,4 @@
-import { datacenterApi } from "@/services";
+﻿import { datacenterApi } from "@/services";
 import { DataService } from "@/data";
 import { Storage } from "@/utils/storage";
 import { io } from "socket.io-client";
@@ -21,6 +21,8 @@ const previewMqttState = {
   subscriptionValues: new Map(),
   datapointValues: new Map(),
   datapointSubscribed: new Set(),
+  tagSubscribed: new Set(),
+  subscriptionSubscribed: new Set(),
   tagIdToProps: new Map(),
   subscriptionIdToProps: new Map(),
   onValueUpdate: null,
@@ -480,10 +482,10 @@ const ensurePreviewMqttSocket = async (projectId) => {
   });
 
   socket.on("connect", () => {
-    previewMqttState.tagIdToProps.forEach((_props, tagId) => {
+    previewMqttState.tagSubscribed.forEach((tagId) => {
       socket.emit("mqtt:tag:subscribe", { tagId });
     });
-    previewMqttState.subscriptionIdToProps.forEach((_props, subscriptionId) => {
+    previewMqttState.subscriptionSubscribed.forEach((subscriptionId) => {
       socket.emit("mqtt:subscribe", { subscriptionId });
     });
   });
@@ -619,12 +621,21 @@ const subscribeMqttSource = async (projectId, detail) => {
   const sourceId = resolved.sourceId;
   const path = resolved.path;
   const socket = await ensurePreviewMqttSocket(projectId);
-  if (!socket?.connected) return;
   if (sourceId) {
     if (sourceType.includes("tag")) {
-      socket.emit("mqtt:tag:subscribe", { tagId: sourceId });
+      if (!previewMqttState.tagSubscribed.has(sourceId)) {
+        previewMqttState.tagSubscribed.add(sourceId);
+        if (socket?.connected) {
+          socket.emit("mqtt:tag:subscribe", { tagId: sourceId });
+        }
+      }
     } else if (sourceType.includes("subscription")) {
-      socket.emit("mqtt:subscribe", { subscriptionId: sourceId });
+      if (!previewMqttState.subscriptionSubscribed.has(sourceId)) {
+        previewMqttState.subscriptionSubscribed.add(sourceId);
+        if (socket?.connected) {
+          socket.emit("mqtt:subscribe", { subscriptionId: sourceId });
+        }
+      }
     }
   }
   if (path && !previewMqttState.datapointSubscribed.has(path)) {
@@ -1174,7 +1185,11 @@ export const clearPreviewRuntime = () => {
   previewMqttState.subscriptionValues.clear();
   previewMqttState.datapointValues.clear();
   previewMqttState.datapointSubscribed.clear();
+  previewMqttState.tagSubscribed.clear();
+  previewMqttState.subscriptionSubscribed.clear();
   previewMqttState.tagIdToProps.clear();
   previewMqttState.subscriptionIdToProps.clear();
   previewMqttState.onValueUpdate = null;
 };
+
+
