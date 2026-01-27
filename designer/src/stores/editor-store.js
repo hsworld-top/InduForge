@@ -2532,6 +2532,10 @@ export const useEditorStore = defineStore("editor", () => {
         width: "100%",
         height: "100%",
       };
+      if (isLayoutContainer) {
+        delete nodeStyle.minHeight;
+        delete nodeStyle.minWidth;
+      }
     }
 
     const baseLabel = manifest?.name || type;

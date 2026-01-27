@@ -1895,8 +1895,8 @@ const parseSizeToNumber = (value) => {
  */
 const getRegionSizeText = (item) => {
   if (!item) return "";
-  if (item.key === "aside") return "??";
-  if (item.key === "header" || item.key === "footer") return "??";
+  if (item.key === "aside") return "宽度";
+  if (item.key === "header" || item.key === "footer") return "高度";
   return "";
 };
 

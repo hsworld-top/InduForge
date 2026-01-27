@@ -585,6 +585,26 @@ const isFlexDropContainer = (type) => {
 };
 
 /**
+ * 判断是否为布局类节点
+ * @param {string} type - 组件类型
+ * @returns {boolean}
+ */
+const isLayoutNodeType = (type) => {
+  return [
+    "ElLayout",
+    "ElLayoutRow",
+    "ElCol",
+    "FlexContainer",
+    "GridContainer",
+    "FreeContainer",
+    "ResponsiveLayout",
+    "ColumnLayout1",
+    "ColumnLayout2",
+    "ColumnLayout4",
+  ].includes(type);
+};
+
+/**
  * 获取 Flex 方向
  * @param {string} type - 组件类型
  * @param {HTMLElement} element - 目标元素
@@ -995,6 +1015,14 @@ const contentStyle = computed(() => {
     node.value.type === "ElFooter"
   ) {
     style.padding = "0";
+  }
+  if (
+    node.value.type === "ElHeader" ||
+    node.value.type === "ElAside" ||
+    node.value.type === "ElMain" ||
+    node.value.type === "ElFooter"
+  ) {
+    style.overflow = "auto";
   }
   if (parentNode?.type === "ElContainer") {
     if (node.value.type === "ElHeader") {
@@ -1896,9 +1924,11 @@ const handleClick = (event) => {
         parentNode.type === "ElMain" ||
         parentNode.type === "ElFooter")
     ) {
-      const containerNode = doc.value?.getParent?.(parentNode.id);
-      if (containerNode?.type === "ElContainer" && !containerNode.locked) {
-        targetNode = containerNode;
+      if (!isLayoutNodeType(node.value.type)) {
+        const containerNode = doc.value?.getParent?.(parentNode.id);
+        if (containerNode?.type === "ElContainer" && !containerNode.locked) {
+          targetNode = containerNode;
+        }
       }
     }
   }
@@ -4004,8 +4034,23 @@ const handleContextMenu = (event) => {
   );
 
   if (!isSelected) {
-    const element = createSelectableElement("node", node.value.id);
-    selection.value.select(element);
+    // 若已选中外层容器且当前节点是其子孙，保持外层选中
+    const primary = selection.value.getPrimaryElement?.();
+    let keepSelection = false;
+    if (primary?.kind === "node" && doc.value) {
+      let parent = doc.value.getParent?.(node.value.id);
+      while (parent) {
+        if (parent.id === primary.id) {
+          keepSelection = true;
+          break;
+        }
+        parent = doc.value.getParent?.(parent.id);
+      }
+    }
+    if (!keepSelection) {
+      const element = createSelectableElement("node", node.value.id);
+      selection.value.select(element);
+    }
   }
 
   // ✅ 显示右键菜单
@@ -4629,7 +4674,10 @@ const isInteractiveTarget = (target) => {
  */
 const resolveAbsoluteLayout = (currentNode) => {
   const fallbackAbs = currentNode.layoutItem?.free?.abs || {};
-  const absolutePos = currentNode.absolutePos || fallbackAbs;
+  const useAbsolute =
+    currentNode.positioning === "absolute" ||
+    currentNode.layoutItem?.free?.mode === "abs";
+  const absolutePos = useAbsolute ? currentNode.absolutePos || fallbackAbs : {};
   const rect = nodeRef.value?.getBoundingClientRect?.();
   const width = Number.isFinite(absolutePos.w)
     ? absolutePos.w
@@ -4671,6 +4719,18 @@ const buildFlowResetStyle = (currentStyle) => {
   delete nextStyle.width;
   delete nextStyle.height;
   return nextStyle;
+};
+
+/**
+ * 计算 Layout 布局最小高度，避免行区域溢出
+ * @param {import('@/editor-core').ComponentNode | null} layoutNode - Layout 节点
+ * @returns {number}
+ * @throws {Error} 无
+ */
+const resolveElLayoutMinHeight = (layoutNode) => {
+  if (!layoutNode || layoutNode.type !== "ElLayout") return 0;
+  const rows = Math.max(1, Number(layoutNode.props?.rows) || 1);
+  return rows * 80;
 };
 
 /**
@@ -4743,6 +4803,143 @@ const resolveElContainerMinSize = (containerNode) => {
 
   if (minWidth <= 0 && minHeight <= 0) return null;
   return { width: minWidth, height: minHeight };
+};
+
+/**
+ * 根据容器高度缩放 Header/Footer 尺寸
+ * @param {import('@/editor-core').ComponentNode} containerNode - 容器节点
+ * @param {number} baseWidth - 原始宽度
+ * @param {number} nextWidth - 目标宽度
+ * @param {number} baseHeight - 原始高度
+ * @param {number} nextHeight - 目标高度
+ * @param {{ headerHeight?: number, footerHeight?: number, asideWidth?: number }} baseSectionSizes - 基础区域尺寸
+ * @returns {Record<string, string> | null}
+ */
+const buildContainerSectionSizePatch = (
+  containerNode,
+  baseWidth,
+  nextWidth,
+  baseHeight,
+  nextHeight,
+  baseSectionSizes
+) => {
+  if (!containerNode || containerNode.type !== "ElContainer") return null;
+  const scaleX =
+    Number.isFinite(baseWidth) && baseWidth > 0 && Number.isFinite(nextWidth)
+      ? nextWidth / baseWidth
+      : 1;
+  const scaleY =
+    Number.isFinite(baseHeight) && baseHeight > 0 && Number.isFinite(nextHeight)
+      ? nextHeight / baseHeight
+      : 1;
+  const hasScaleX = Number.isFinite(scaleX) && Math.abs(scaleX - 1) >= 0.001;
+  const hasScaleY = Number.isFinite(scaleY) && Math.abs(scaleY - 1) >= 0.001;
+  if (!hasScaleX && !hasScaleY) return null;
+  const props = containerNode.props || {};
+  const minSectionSize = 40;
+  const patch = {};
+
+  if (hasScaleY && props.showHeader !== false) {
+    const headerHeight = baseSectionSizes?.headerHeight;
+    if (Number.isFinite(headerHeight)) {
+      patch.headerHeight = `${Math.max(
+        minSectionSize,
+        Math.round(headerHeight * scaleY)
+      )}px`;
+    }
+  }
+  if (hasScaleY && props.showFooter !== false) {
+    const footerHeight = baseSectionSizes?.footerHeight;
+    if (Number.isFinite(footerHeight)) {
+      patch.footerHeight = `${Math.max(
+        minSectionSize,
+        Math.round(footerHeight * scaleY)
+      )}px`;
+    }
+  }
+  if (hasScaleX && props.showAside !== false) {
+    const asideWidth = baseSectionSizes?.asideWidth;
+    if (Number.isFinite(asideWidth)) {
+      patch.asideWidth = `${Math.max(
+        minSectionSize,
+        Math.round(asideWidth * scaleX)
+      )}px`;
+    }
+  }
+
+  return Object.keys(patch).length > 0 ? patch : null;
+};
+
+/**
+ * 按容器尺寸限制区域大小，避免超出容器
+ * @param {import('@/editor-core').ComponentNode} containerNode - 容器节点
+ * @param {number} width - 容器宽度
+ * @param {number} height - 容器高度
+ * @returns {Record<string, string> | null}
+ */
+const clampElContainerPropsBySize = (containerNode, width, height) => {
+  if (!containerNode || containerNode.type !== "ElContainer") return null;
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+  if (width <= 0 || height <= 0) return null;
+  const props = containerNode.props || {};
+  const hasHeader = props.showHeader !== false;
+  const hasFooter = props.showFooter !== false;
+  const hasAside = props.showAside !== false;
+  const hasMain = props.showMain !== false;
+  const hasBody = hasAside || hasMain;
+  const minBodySize = 40;
+  const minSectionSize = 40;
+  let headerHeight = parseSizeToNumber(props.headerHeight) ?? 60;
+  let footerHeight = parseSizeToNumber(props.footerHeight) ?? 60;
+  let asideWidth = parseSizeToNumber(props.asideWidth) ?? 200;
+  const patch = {};
+
+  if (hasAside) {
+    const maxAside = Math.max(0, width - (hasMain ? minBodySize : 0));
+    if (Number.isFinite(maxAside)) {
+      asideWidth = Math.min(asideWidth, maxAside);
+      asideWidth = Math.max(minSectionSize, asideWidth);
+      const nextAside = `${Math.round(asideWidth)}px`;
+      if (nextAside !== props.asideWidth) {
+        patch.asideWidth = nextAside;
+      }
+    }
+  }
+
+  if (hasHeader || hasFooter) {
+    const available = Math.max(0, height - (hasBody ? minBodySize : 0));
+    let nextHeader = hasHeader ? headerHeight : 0;
+    let nextFooter = hasFooter ? footerHeight : 0;
+    const total = nextHeader + nextFooter;
+    if (total > available && total > 0) {
+      const scale = available / total;
+      nextHeader = Math.max(
+        minSectionSize,
+        Math.round(nextHeader * scale)
+      );
+      nextFooter = Math.max(
+        minSectionSize,
+        Math.round(nextFooter * scale)
+      );
+    } else {
+      if (hasHeader) nextHeader = Math.min(nextHeader, available);
+      if (hasFooter) nextFooter = Math.min(nextFooter, available);
+    }
+    if (hasHeader) {
+      const nextHeaderText = `${nextHeader}px`;
+      if (nextHeaderText !== props.headerHeight) {
+        patch.headerHeight = nextHeaderText;
+      }
+    }
+    if (hasFooter) {
+      const nextFooterText = `${nextFooter}px`;
+      if (nextFooterText !== props.footerHeight) {
+        patch.footerHeight = nextFooterText;
+      }
+    }
+  }
+
+  return Object.keys(patch).length > 0 ? patch : null;
 };
 
 let activeDragHandlers = null;
@@ -4824,8 +5021,20 @@ const handleResizePointerDown = (event, handle) => {
   const zoomValue = Number(canvasZoom?.value) || 1;
   const baseLayout = resolveAbsoluteLayout(node.value);
   const rect = nodeRef.value?.getBoundingClientRect?.();
-  const baseWidth = baseLayout.w || rect?.width || 120;
-  const baseHeight = baseLayout.h || rect?.height || 40;
+  const rectWidth = rect ? rect.width / zoomValue : undefined;
+  const rectHeight = rect ? rect.height / zoomValue : undefined;
+  const baseWidth = baseLayout.w || rectWidth || 120;
+  const baseHeight = baseLayout.h || rectHeight || 40;
+  const baseSectionSizes =
+    node.value.type === "ElContainer"
+      ? {
+          headerHeight:
+            parseSizeToNumber(node.value.props?.headerHeight) ?? 60,
+          footerHeight:
+            parseSizeToNumber(node.value.props?.footerHeight) ?? 60,
+          asideWidth: parseSizeToNumber(node.value.props?.asideWidth) ?? 200,
+        }
+      : null;
   const startClientX = event.clientX;
   const startClientY = event.clientY;
   const minSize = 40;
@@ -5065,13 +5274,30 @@ const handleResizePointerDown = (event, handle) => {
     nextX = Math.max(0, Math.round(nextX));
     nextY = Math.max(0, Math.round(nextY));
 
+    const sectionPatch =
+      node.value.type === "ElContainer"
+        ? buildContainerSectionSizePatch(
+            node.value,
+            baseWidth,
+            nextWidth,
+            baseHeight,
+            nextHeight,
+            baseSectionSizes
+          )
+        : null;
+
     const nextStyle = {
       ...(node.value.style || {}),
       width: `${nextWidth}px`,
       height: `${nextHeight}px`,
     };
 
-    let patch = { style: nextStyle };
+    let patch = sectionPatch
+      ? {
+          style: nextStyle,
+          props: { ...(node.value.props || {}), ...sectionPatch },
+        }
+      : { style: nextStyle };
 
     if (shouldUpdateAbsolute) {
       const nextAbs = {
@@ -5203,6 +5429,29 @@ const handlePointerDown = (event) => {
     selection.value.select(element);
   }
 
+  const resetFlowStyle = () => {
+    if (!node.value) return;
+    const parentNode = doc.value?.getParent?.(node.value.id);
+    const isFlow =
+      parentNode?.type &&
+      parentNode.type !== "FreeContainer" &&
+      node.value.positioning !== "absolute";
+    if (!isFlow) return;
+    const patch = { ...(node.value.style || {}) };
+    delete patch.width;
+    delete patch.height;
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+    if (history.value?.execute) {
+      history.value.execute(new UpdateNodeCommand(node.value.id, { style: patch }));
+      return;
+    }
+    if (doc.value?._updateNode) {
+      doc.value._updateNode(node.value.id, { style: patch });
+    }
+  };
+
   const originParent = doc.value?.getParent?.(node.value.id);
   const isRegionNode =
     node.value.type === "ElHeader" ||
@@ -5331,6 +5580,7 @@ const handlePointerDown = (event) => {
       if (!startedDragFromMove) {
         startDrag(node.value.type);
         startedDragFromMove = true;
+        resetFlowStyle();
       }
       const dropRegion = resolveDropRegion(moveEvent);
       if (dropRegion?.id) {
@@ -5365,6 +5615,19 @@ const handlePointerDown = (event) => {
       h: baseLayout.h,
       z: baseLayout.z,
     };
+    if (node.value.type === "ElLayout") {
+      const defaultSize = resolveDefaultSize("ElLayout");
+      const minHeight = resolveElLayoutMinHeight(node.value);
+      if (defaultSize?.width) {
+        nextAbs.w = Math.max(nextAbs.w, defaultSize.width);
+      }
+      if (defaultSize?.height) {
+        nextAbs.h = Math.max(nextAbs.h, defaultSize.height);
+      }
+      if (minHeight) {
+        nextAbs.h = Math.max(nextAbs.h, minHeight);
+      }
+    }
 
     if (nodeRef.value) {
       nodeRef.value.style.position = "absolute";
@@ -5384,10 +5647,17 @@ const handlePointerDown = (event) => {
     };
 
     // 同步新旧布局字段，确保自由拖动可见
+    const regionClampPatch =
+      node.value.type === "ElContainer"
+        ? clampElContainerPropsBySize(node.value, nextAbs.w, nextAbs.h)
+        : null;
     const patch = {
       positioning: "absolute",
       absolutePos: nextAbs,
       layoutItem: nextLayoutItem,
+      ...(regionClampPatch
+        ? { props: { ...(node.value.props || {}), ...regionClampPatch } }
+        : {}),
     };
     if (history.value?.isInTransaction?.()) {
       history.value.executeInTransaction(
@@ -5516,6 +5786,30 @@ const handlePointerDown = (event) => {
           h: baseLayout.h,
           z: baseLayout.z,
         };
+        if (node.value.type === "ElLayout") {
+          const defaultSize = resolveDefaultSize("ElLayout");
+          const minHeight = resolveElLayoutMinHeight(node.value);
+          if (defaultSize?.width) {
+            nextAbs.w = Math.max(nextAbs.w, defaultSize.width);
+          }
+          if (defaultSize?.height) {
+            nextAbs.h = Math.max(nextAbs.h, defaultSize.height);
+          }
+          if (minHeight) {
+            nextAbs.h = Math.max(nextAbs.h, minHeight);
+          }
+        }
+        if (node.value.type === "ElContainer") {
+          const minSize = resolveElContainerMinSize(node.value);
+          if (minSize) {
+            if (Number.isFinite(minSize.width) && nextAbs.w < minSize.width) {
+              nextAbs.w = minSize.width;
+            }
+            if (Number.isFinite(minSize.height) && nextAbs.h < minSize.height) {
+              nextAbs.h = minSize.height;
+            }
+          }
+        }
         const nextLayoutItem = {
           ...(node.value.layoutItem || {}),
           free: {
