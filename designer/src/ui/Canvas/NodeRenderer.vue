@@ -2517,7 +2517,13 @@ const buildRefInfo = () => {
         props: { ...(node.value.props || {}), ...patch },
       });
     },
-    setStyle: (patch) => {
+        echarts: (method, ...args) => {
+      if (node.value?.type !== "EChart") return;
+      const chartApi = contentRef.value;
+      if (chartApi?.callECharts) {
+        return chartApi.callECharts(method, ...args);
+      }
+    },setStyle: (patch) => {
       if (!patch || typeof patch !== "object") return;
       if (props.readonly) {
         applyPreviewPatch({ style: patch });
@@ -2525,6 +2531,26 @@ const buildRefInfo = () => {
       }
       editorStore.updateNode(node.value.id, {
         style: { ...(node.value.style || {}), ...patch },
+      });
+    },
+        setOption: (option, notMergeOrOpts, lazyUpdate = false, silent = false, replaceMerge) => {
+      if (node.value?.type !== "EChart") return;
+      if (option && typeof option.then === "function") {
+        option.then((resolved) => {
+          refInfo.setOption?.(resolved, notMergeOrOpts, lazyUpdate, silent, replaceMerge);
+        });
+        return;
+      }
+      const chartApi = contentRef.value;
+      if (chartApi?.setOption) {
+        chartApi.setOption(option, notMergeOrOpts, lazyUpdate, silent, replaceMerge);
+      }
+      if (props.readonly) {
+        applyPreviewPatch({ props: { option } });
+        return;
+      }
+      editorStore.updateNode(node.value.id, {
+        props: { ...(node.value.props || {}), option },
       });
     },
     setText: (text) => {

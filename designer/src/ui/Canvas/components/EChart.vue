@@ -1,9 +1,15 @@
-﻿<template>
-  <VChart class="echart-canvas" :option="chartOption" autoresize />
+<template>
+  <VChart
+    ref="chartRef"
+    class="echart-canvas"
+    :option="chartOption"
+    :update-options="updateOptions"
+    autoresize
+  />
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref, onMounted, watch } from "vue";
 import { use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import {
@@ -40,6 +46,56 @@ use([
   RadarComponent,
 ]);
 
+const chartRef = ref(null);
+const pendingOption = ref(null);
+const updateOptions = computed(() => ({ notMerge: true }));
+const getInstance = () => chartRef.value?.getEChartsInstance?.();
+const normalizeSetOptionArgs = (notMergeOrOpts, lazyUpdate, silent, replaceMerge) => {
+  if (notMergeOrOpts && typeof notMergeOrOpts === "object") {
+    return { ...notMergeOrOpts };
+  }
+  const opts = {
+    notMerge:
+      typeof notMergeOrOpts === "boolean" ? notMergeOrOpts : notMergeOrOpts === undefined,
+    lazyUpdate: Boolean(lazyUpdate),
+    silent: Boolean(silent),
+  };
+  if (replaceMerge) opts.replaceMerge = replaceMerge;
+  return opts;
+};
+const applyPendingOption = () => {
+  const payload = pendingOption.value;
+  if (!payload) return;
+  const instance = getInstance();
+  if (!instance) return;
+  pendingOption.value = null;
+  if (payload.opts?.notMerge) {
+    instance.clear();
+  }
+  instance.setOption(payload.option || {}, payload.opts || {});
+};
+const setOption = (option, notMergeOrOpts, lazyUpdate, silent, replaceMerge) => {
+  const opts = normalizeSetOptionArgs(notMergeOrOpts, lazyUpdate, silent, replaceMerge);
+  if (opts.notMerge) {
+    opts.lazyUpdate = false;
+  }
+  const instance = getInstance();
+  if (!instance) {
+    pendingOption.value = { option, opts };
+    return;
+  }
+  if (opts.notMerge) {
+    instance.clear();
+  }
+  instance.setOption(option || {}, opts);
+};
+const callECharts = (method, ...args) => {
+  const instance = getInstance();
+  if (!instance) return;
+  const target = instance[method];
+  if (typeof target !== "function") return;
+  return target.apply(instance, args);
+};
 const props = defineProps({
   option: {
     type: [Object, String],
@@ -78,12 +134,22 @@ const parseOptionSource = (source) => {
   }
 };
 
+onMounted(() => {
+  applyPendingOption();
+});
+
+watch(chartRef, () => {
+  applyPendingOption();
+});
+
 const chartOption = computed(() => {
   if (typeof props.option === "string") {
     return parseOptionSource(props.option);
   }
   return props.option || {};
 });
+
+defineExpose({ setOption, callECharts, getInstance });
 </script>
 
 <style scoped>

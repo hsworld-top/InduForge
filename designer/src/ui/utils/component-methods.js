@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 组件方法补全配置
  * @typedef {Object} CompletionItem
  * @property {string} label - 展示文本
@@ -18,11 +18,10 @@ const COMMON_PROPERTIES = [
   { label: "Size.Width", insertText: "Size.Width", detail: "宽度" },
   { label: "Size.Height", insertText: "Size.Height", detail: "高度" },
   { label: "Visible", insertText: "Visible", detail: "显示状态" },
-  { label: "Enable", insertText: "Enable", detail: "使能状态" },
+  { label: "Enable", insertText: "Enable", detail: "启用状态" },
   { label: "Caption", insertText: "Caption", detail: "显示文本" },
   { label: "Image", insertText: "Image", detail: "图片地址" },
 ];
-
 const METHOD_MAP = {
   Text: ["SetText", "GetText", "SetType", "SetEllipsis", "SetTooltip"],
   Tag: ["SetText", "SetType", "Close"],
@@ -151,6 +150,7 @@ const METHOD_MAP = {
   Slider: ["SetValue", "GetValue", "Reset", "Disable"],
   Calendar: ["SetDate", "GetDate", "Today"],
   Signature: ["Clear", "GetImage", "SetImage", "IsEmpty", "SetPen"],
+  EChart: ["setOption", "echarts"],
 };
 
 /**
@@ -212,3 +212,6 @@ export function buildComponentMethodCompletions(tree) {
   });
   return items;
 }
+
+
+

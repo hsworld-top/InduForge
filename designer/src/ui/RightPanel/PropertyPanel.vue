@@ -2639,6 +2639,30 @@ const detailCompletions = computed(() => {
   });
 
   pageComponentNames.value.forEach((name) => {
+  const chartMethodCompletions = [
+    {
+      label: "setOption",
+      insertText: "setOption(${1:option}, ${2:false})",
+      kind: "Method",
+      detail: "图表方法",
+      prefix: ".",
+    },
+    {
+      label: "echarts",
+      insertText: "echarts(${1:\"setOption\"}, ${2:option})",
+      kind: "Method",
+      detail: "图表方法",
+      prefix: ".",
+    },
+    {
+      label: "getInstance",
+      insertText: "getInstance()",
+      kind: "Method",
+      detail: "图表方法",
+      prefix: ".",
+    },
+  ];
+  chartMethodCompletions.forEach((item) => items.push(item));
     items.push({
       label: name,
       insertText: name,

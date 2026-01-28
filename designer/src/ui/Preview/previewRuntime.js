@@ -1,4 +1,4 @@
-import { datacenterApi } from "@/services";
+﻿import { datacenterApi } from "@/services";
 import { DataService } from "@/data";
 import { Storage } from "@/utils/storage";
 import { io } from "socket.io-client";
@@ -198,27 +198,35 @@ const buildComponentStub = (pageId, name) => ({
     return true;
   },
   set Enable(value) {
-    queueComponentCall(pageId, name, "setProps", [{ disabled: !Boolean(value) }]);
+    queueComponentCall(pageId, name, "setProps", [
+      { disabled: !Boolean(value) },
+    ]);
   },
   get Caption() {
     return "";
   },
   set Caption(value) {
-    queueComponentCall(pageId, name, "setProps", [{ text: String(value ?? "") }]);
+    queueComponentCall(pageId, name, "setProps", [
+      { text: String(value ?? "") },
+    ]);
   },
   get Image() {
     return "";
   },
   set Image(value) {
-    queueComponentCall(pageId, name, "setProps", [{ src: String(value ?? "") }]);
+    queueComponentCall(pageId, name, "setProps", [
+      { src: String(value ?? "") },
+    ]);
   },
   SetText: (...args) => queueComponentCall(pageId, name, "SetText", args),
   GetText: () => undefined,
   SetType: (...args) => queueComponentCall(pageId, name, "SetType", args),
-  SetEllipsis: (...args) => queueComponentCall(pageId, name, "SetEllipsis", args),
+  SetEllipsis: (...args) =>
+    queueComponentCall(pageId, name, "SetEllipsis", args),
   SetTooltip: (...args) => queueComponentCall(pageId, name, "SetTooltip", args),
   SetLoading: (...args) => queueComponentCall(pageId, name, "SetLoading", args),
-  SetDisabled: (...args) => queueComponentCall(pageId, name, "SetDisabled", args),
+  SetDisabled: (...args) =>
+    queueComponentCall(pageId, name, "SetDisabled", args),
   Click: (...args) => queueComponentCall(pageId, name, "Click", args),
   SetSrc: (...args) => queueComponentCall(pageId, name, "SetSrc", args),
   GetSrc: () => undefined,
@@ -229,7 +237,8 @@ const buildComponentStub = (pageId, name) => ({
   GetMenuItem: () => undefined,
   DeleteItem: (...args) => queueComponentCall(pageId, name, "DeleteItem", args),
   ClearAll: (...args) => queueComponentCall(pageId, name, "ClearAll", args),
-  ClearSelection: (...args) => queueComponentCall(pageId, name, "ClearSelection", args),
+  ClearSelection: (...args) =>
+    queueComponentCall(pageId, name, "ClearSelection", args),
   AppendRow: (...args) => queueComponentCall(pageId, name, "AppendRow", args),
   ToggleRowSelection: (...args) =>
     queueComponentCall(pageId, name, "ToggleRowSelection", args),
@@ -237,9 +246,11 @@ const buildComponentStub = (pageId, name) => ({
     queueComponentCall(pageId, name, "ToggleAllSelection", args),
   ToggleRowExpansion: (...args) =>
     queueComponentCall(pageId, name, "ToggleRowExpansion", args),
-  SetCurrentRow: (...args) => queueComponentCall(pageId, name, "SetCurrentRow", args),
+  SetCurrentRow: (...args) =>
+    queueComponentCall(pageId, name, "SetCurrentRow", args),
   ClearSort: (...args) => queueComponentCall(pageId, name, "ClearSort", args),
-  ClearFilter: (...args) => queueComponentCall(pageId, name, "ClearFilter", args),
+  ClearFilter: (...args) =>
+    queueComponentCall(pageId, name, "ClearFilter", args),
   Dolayout: (...args) => queueComponentCall(pageId, name, "Dolayout", args),
   Sort: (...args) => queueComponentCall(pageId, name, "Sort", args),
   SetData: (...args) => queueComponentCall(pageId, name, "SetData", args),
@@ -247,15 +258,20 @@ const buildComponentStub = (pageId, name) => ({
   GetRadioChecked: () => undefined,
   GetRadioValue: () => undefined,
   GetRadioLabel: () => undefined,
-  SetRadioEnable: (...args) => queueComponentCall(pageId, name, "SetRadioEnable", args),
+  SetRadioEnable: (...args) =>
+    queueComponentCall(pageId, name, "SetRadioEnable", args),
   GetRadioEnable: () => undefined,
-  SetRadioVisible: (...args) => queueComponentCall(pageId, name, "SetRadioVisible", args),
+  SetRadioVisible: (...args) =>
+    queueComponentCall(pageId, name, "SetRadioVisible", args),
   GetRadioVisible: () => undefined,
   GetCheckState: () => undefined,
-  SetCheckState: (...args) => queueComponentCall(pageId, name, "SetCheckState", args),
-  SetCheckEnable: (...args) => queueComponentCall(pageId, name, "SetCheckEnable", args),
+  SetCheckState: (...args) =>
+    queueComponentCall(pageId, name, "SetCheckState", args),
+  SetCheckEnable: (...args) =>
+    queueComponentCall(pageId, name, "SetCheckEnable", args),
   GetCheckEnable: () => undefined,
-  SetCheckVisible: (...args) => queueComponentCall(pageId, name, "SetCheckVisible", args),
+  SetCheckVisible: (...args) =>
+    queueComponentCall(pageId, name, "SetCheckVisible", args),
   GetCheckVisible: () => undefined,
   CheckAll: (...args) => queueComponentCall(pageId, name, "CheckAll", args),
   UpdateKeyChildren: (...args) =>
@@ -278,8 +294,10 @@ const buildComponentStub = (pageId, name) => ({
   GetNode: () => undefined,
   Remove: (...args) => queueComponentCall(pageId, name, "Remove", args),
   Append: (...args) => queueComponentCall(pageId, name, "Append", args),
-  InsertBefore: (...args) => queueComponentCall(pageId, name, "InsertBefore", args),
-  InsertAfter: (...args) => queueComponentCall(pageId, name, "InsertAfter", args),
+  InsertBefore: (...args) =>
+    queueComponentCall(pageId, name, "InsertBefore", args),
+  InsertAfter: (...args) =>
+    queueComponentCall(pageId, name, "InsertAfter", args),
   Open: (...args) => queueComponentCall(pageId, name, "Open", args),
   Close: (...args) => queueComponentCall(pageId, name, "Close", args),
   Toggle: (...args) => queueComponentCall(pageId, name, "Toggle", args),
@@ -291,7 +309,8 @@ const buildComponentStub = (pageId, name) => ({
   Prev: (...args) => queueComponentCall(pageId, name, "Prev", args),
   AddTab: (...args) => queueComponentCall(pageId, name, "AddTab", args),
   RemoveTab: (...args) => queueComponentCall(pageId, name, "RemoveTab", args),
-  MoveToRight: (...args) => queueComponentCall(pageId, name, "MoveToRight", args),
+  MoveToRight: (...args) =>
+    queueComponentCall(pageId, name, "MoveToRight", args),
   MoveToLeft: (...args) => queueComponentCall(pageId, name, "MoveToLeft", args),
   Increase: (...args) => queueComponentCall(pageId, name, "Increase", args),
   Decrease: (...args) => queueComponentCall(pageId, name, "Decrease", args),
@@ -299,9 +318,11 @@ const buildComponentStub = (pageId, name) => ({
   AppendItem: (...args) => queueComponentCall(pageId, name, "AppendItem", args),
   Play: (...args) => queueComponentCall(pageId, name, "Play", args),
   Pause: (...args) => queueComponentCall(pageId, name, "Pause", args),
-  SetActiveItem: (...args) => queueComponentCall(pageId, name, "SetActiveItem", args),
+  SetActiveItem: (...args) =>
+    queueComponentCall(pageId, name, "SetActiveItem", args),
   Load: (...args) => queueComponentCall(pageId, name, "Load", args),
-  PostMessage: (...args) => queueComponentCall(pageId, name, "PostMessage", args),
+  PostMessage: (...args) =>
+    queueComponentCall(pageId, name, "PostMessage", args),
   GetUrl: () => undefined,
   Back: (...args) => queueComponentCall(pageId, name, "Back", args),
   Forward: (...args) => queueComponentCall(pageId, name, "Forward", args),
@@ -312,25 +333,35 @@ const buildComponentStub = (pageId, name) => ({
   SetTotal: (...args) => queueComponentCall(pageId, name, "SetTotal", args),
   GetTotal: () => undefined,
   GetActiveNames: () => undefined,
-  SetActiveNames: (...args) => queueComponentCall(pageId, name, "SetActiveNames", args),
+  SetActiveNames: (...args) =>
+    queueComponentCall(pageId, name, "SetActiveNames", args),
   Filter: (...args) => queueComponentCall(pageId, name, "Filter", args),
   ExpandAll: (...args) => queueComponentCall(pageId, name, "ExpandAll", args),
-  CollapseAll: (...args) => queueComponentCall(pageId, name, "CollapseAll", args),
-  SetExpandedKeys: (...args) => queueComponentCall(pageId, name, "SetExpandedKeys", args),
+  CollapseAll: (...args) =>
+    queueComponentCall(pageId, name, "CollapseAll", args),
+  SetExpandedKeys: (...args) =>
+    queueComponentCall(pageId, name, "SetExpandedKeys", args),
   GetExpandedKeys: () => undefined,
-  ScrollToTop: (...args) => queueComponentCall(pageId, name, "ScrollToTop", args),
-  ScrollToRow: (...args) => queueComponentCall(pageId, name, "ScrollToRow", args),
-  DoLayoutSafe: (...args) => queueComponentCall(pageId, name, "DoLayoutSafe", args),
+  ScrollToTop: (...args) =>
+    queueComponentCall(pageId, name, "ScrollToTop", args),
+  ScrollToRow: (...args) =>
+    queueComponentCall(pageId, name, "ScrollToRow", args),
+  DoLayoutSafe: (...args) =>
+    queueComponentCall(pageId, name, "DoLayoutSafe", args),
   GetSelection: () => undefined,
   SetSelectionByKeys: (...args) =>
     queueComponentCall(pageId, name, "SetSelectionByKeys", args),
   GetSelectionKeys: () => undefined,
   SetPage: (...args) => queueComponentCall(pageId, name, "SetPage", args),
-  SetPageSize: (...args) => queueComponentCall(pageId, name, "SetPageSize", args),
+  SetPageSize: (...args) =>
+    queueComponentCall(pageId, name, "SetPageSize", args),
   GetPageData: () => undefined,
-  UpdateRowByKey: (...args) => queueComponentCall(pageId, name, "UpdateRowByKey", args),
-  RemoveRowByKey: (...args) => queueComponentCall(pageId, name, "RemoveRowByKey", args),
-  UpsertRowByKey: (...args) => queueComponentCall(pageId, name, "UpsertRowByKey", args),
+  UpdateRowByKey: (...args) =>
+    queueComponentCall(pageId, name, "UpdateRowByKey", args),
+  RemoveRowByKey: (...args) =>
+    queueComponentCall(pageId, name, "RemoveRowByKey", args),
+  UpsertRowByKey: (...args) =>
+    queueComponentCall(pageId, name, "UpsertRowByKey", args),
   Clear: (...args) => queueComponentCall(pageId, name, "Clear", args),
   SetValue: (...args) => queueComponentCall(pageId, name, "SetValue", args),
   GetValue: () => undefined,
@@ -347,13 +378,18 @@ const buildComponentStub = (pageId, name) => ({
   Blur: (...args) => queueComponentCall(pageId, name, "Blur", args),
   Select: (...args) => queueComponentCall(pageId, name, "Select", args),
   GetInputValue: () => undefined,
-  SetInputValue: (...args) => queueComponentCall(pageId, name, "SetInputValue", args),
+  SetInputValue: (...args) =>
+    queueComponentCall(pageId, name, "SetInputValue", args),
   ClearQuery: (...args) => queueComponentCall(pageId, name, "ClearQuery", args),
   SetValue: (...args) => queueComponentCall(pageId, name, "SetValue", args),
   GetValue: () => undefined,
   setText: (...args) => queueComponentCall(pageId, name, "setText", args),
-  setTableHeader: (...args) => queueComponentCall(pageId, name, "setTableHeader", args),
-  setTableData: (...args) => queueComponentCall(pageId, name, "setTableData", args),
+  setTableHeader: (...args) =>
+    queueComponentCall(pageId, name, "setTableHeader", args),
+  setOption: (...args) => queueComponentCall(pageId, name, "setOption", args),
+  echarts: (...args) => queueComponentCall(pageId, name, "echarts", args),
+  setTableData: (...args) =>
+    queueComponentCall(pageId, name, "setTableData", args),
   setProps: (...args) => queueComponentCall(pageId, name, "setProps", args),
   setStyle: (...args) => queueComponentCall(pageId, name, "setStyle", args),
   button: (...args) => queueComponentCall(pageId, name, "button", args),
@@ -409,7 +445,10 @@ const resolveQuery = async (projectId, connectionId, queryName) => {
     queries = data.queries || data.items || data.list || [];
     queryCache.set(cacheKey, queries);
   }
-  return queries.find((item) => item.name === queryName || item.id === queryName) || null;
+  return (
+    queries.find((item) => item.name === queryName || item.id === queryName) ||
+    null
+  );
 };
 
 const executeQueryByPath = async (projectId, path) => {
@@ -496,7 +535,12 @@ const ensurePreviewMqttSocket = async (projectId) => {
     if (!data?.subscriptionId) return;
     const value = data.payload ?? data.message ?? data.value ?? data;
     previewMqttState.subscriptionValues.set(data.subscriptionId, value);
-    previewMqttState.onValueUpdate?.("subscription", data.subscriptionId, value, data);
+    previewMqttState.onValueUpdate?.(
+      "subscription",
+      data.subscriptionId,
+      value,
+      data,
+    );
   });
 
   socket.on("datapoint:value", (data) => {
@@ -688,18 +732,31 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
   if (!projectId) return normalizeGlobalValue(detail);
   const fallbackValue = normalizeGlobalValue(detail);
 
-  if (source.datapointId || source.sourceType || source.sourceId || source.path) {
+  if (
+    source.datapointId ||
+    source.sourceType ||
+    source.sourceId ||
+    source.path
+  ) {
     const resolved = await resolveSourceInfo(projectId, detail);
     const sourceType = String(resolved.sourceType || "");
-    if (sourceType.includes("query") && (resolved.sourceId || source.sourceId)) {
+    if (
+      sourceType.includes("query") &&
+      (resolved.sourceId || source.sourceId)
+    ) {
       try {
-        const result = await datacenterApi.executeQuery(resolved.sourceId || source.sourceId);
+        const result = await datacenterApi.executeQuery(
+          resolved.sourceId || source.sourceId,
+        );
         const payload = unwrapApiData(result) || result;
         const value = payload?.data ?? payload;
         return value ?? fallbackValue;
       } catch (error) {
         try {
-          const fallbackResult = await executeQueryByPath(projectId, source.path);
+          const fallbackResult = await executeQueryByPath(
+            projectId,
+            source.path,
+          );
           if (fallbackResult !== undefined) return fallbackResult;
         } catch (fallbackError) {
           // ignore
@@ -710,12 +767,14 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
     if (sourceType.includes("subscription") || sourceType.includes("tag")) {
       await subscribeMqttSource(projectId, detail);
       if (sourceType.includes("tag")) {
-        const value = previewMqttState.tagValues.get(resolved.sourceId || source.sourceId);
+        const value = previewMqttState.tagValues.get(
+          resolved.sourceId || source.sourceId,
+        );
         if (value !== undefined) return value;
       }
       if (sourceType.includes("subscription")) {
         const value = previewMqttState.subscriptionValues.get(
-          resolved.sourceId || source.sourceId
+          resolved.sourceId || source.sourceId,
         );
         if (value !== undefined) return value;
       }
@@ -733,7 +792,7 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
         const payload = unwrapApiData(result) || result;
         const picked = extractDatapointValue(
           payload,
-          resolved.datapointId || source.datapointId
+          resolved.datapointId || source.datapointId,
         );
         return picked ?? payload?.data ?? payload ?? fallbackValue;
       } catch (error) {
@@ -837,15 +896,36 @@ const extractDatapointValue = (payload, datapointId) => {
   }
   if (Array.isArray(payload.values)) {
     const hit = payload.values.find((item) => item?.id === datapointId);
-    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+    if (hit)
+      return (
+        hit.value ??
+        hit.currentValue ??
+        hit.dataValue ??
+        hit.lastValue ??
+        hit.rawValue
+      );
   }
   if (Array.isArray(payload.datapoints)) {
     const hit = payload.datapoints.find((item) => item?.id === datapointId);
-    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+    if (hit)
+      return (
+        hit.value ??
+        hit.currentValue ??
+        hit.dataValue ??
+        hit.lastValue ??
+        hit.rawValue
+      );
   }
   if (Array.isArray(payload)) {
     const hit = payload.find((item) => item?.id === datapointId);
-    if (hit) return hit.value ?? hit.currentValue ?? hit.dataValue ?? hit.lastValue ?? hit.rawValue;
+    if (hit)
+      return (
+        hit.value ??
+        hit.currentValue ??
+        hit.dataValue ??
+        hit.lastValue ??
+        hit.rawValue
+      );
   }
   if (payload && typeof payload === "object" && datapointId in payload) {
     return payload[datapointId];
@@ -894,7 +974,7 @@ export const initPreviewRuntime = (options) => {
           })
           .finally(() => {
             mappedValuePending.delete(name);
-          })
+          }),
       );
     });
     if (tasks.length > 0) {
@@ -953,7 +1033,8 @@ export const initPreviewRuntime = (options) => {
               }
             }
             if (sourceType.includes("subscription")) {
-              const liveValue = previewMqttState.subscriptionValues.get(sourceId);
+              const liveValue =
+                previewMqttState.subscriptionValues.get(sourceId);
               if (liveValue !== undefined) {
                 updateMappedValue(prop, liveValue, detail);
                 return liveValue;
@@ -974,7 +1055,7 @@ export const initPreviewRuntime = (options) => {
                 updateMappedValue(
                   prop,
                   value ?? normalizeGlobalValue(detail),
-                  detail
+                  detail,
                 );
               })
               .finally(() => {
@@ -990,14 +1071,16 @@ export const initPreviewRuntime = (options) => {
       },
       set(_target, prop, value) {
         if (typeof prop !== "string") return false;
-        const prev = overrides.has(prop) ? overrides.get(prop) : projectVariables?.[prop]?.default;
+        const prev = overrides.has(prop)
+          ? overrides.get(prop)
+          : projectVariables?.[prop]?.default;
         overrides.set(prop, value);
         if (prev !== value) {
           triggerVariableChange(prop, value, prev);
         }
         return true;
       },
-    }
+    },
   );
 
   const buildCustomScripts = () => {
@@ -1023,7 +1106,7 @@ export const initPreviewRuntime = (options) => {
         try {
           const runner = new Function(
             ...localKeys,
-            `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`
+            `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`,
           );
           return await runner.call(undefined, ...localValues);
         } catch (error) {
@@ -1052,7 +1135,7 @@ export const initPreviewRuntime = (options) => {
                   if (typeof name !== "string") return undefined;
                   return buildComponentStub(prop, name);
                 },
-              }
+              },
             );
           }
           return new Proxy(
@@ -1062,10 +1145,10 @@ export const initPreviewRuntime = (options) => {
                 if (typeof name !== "string") return undefined;
                 return pageMap.get(name) || buildComponentStub(prop, name);
               },
-            }
+            },
           );
         },
-      }
+      },
     );
 
   const getComponentsProxy = (pageId) =>
@@ -1077,10 +1160,11 @@ export const initPreviewRuntime = (options) => {
           if (prop === "pages") return buildPageProxy();
           const pageMap = componentRefsByPage.get(pageId);
           if (pageMap && pageMap.has(prop)) return pageMap.get(prop);
-          if (componentRefsByName.has(prop)) return componentRefsByName.get(prop);
+          if (componentRefsByName.has(prop))
+            return componentRefsByName.get(prop);
           return buildComponentStub(pageId, prop);
         },
-      }
+      },
     );
 
   const runCode = async (code, event, thisArg, pageId) => {
@@ -1097,7 +1181,7 @@ export const initPreviewRuntime = (options) => {
     try {
       const runner = new Function(
         ...Object.keys(context),
-        `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`
+        `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`,
       );
       return await runner.call(thisArg || null, ...Object.values(context));
     } catch (error) {
@@ -1108,7 +1192,7 @@ export const initPreviewRuntime = (options) => {
   const triggerVariableChange = async (name, value, previous) => {
     const items = globalScripts?.variableChanges?.items || [];
     const hits = items.filter(
-      (item) => (item.variable || item.name) === name && item?.code
+      (item) => (item.variable || item.name) === name && item?.code,
     );
     for (const item of hits) {
       await runCode(item.code, { name, value, previous });
@@ -1122,9 +1206,12 @@ export const initPreviewRuntime = (options) => {
     timers.forEach((item) => {
       const interval = Number(item.interval || item.time || 1000);
       if (!item?.code) return;
-      const id = setInterval(() => {
-        void runCode(item.code, { type: "timer", name: item.name });
-      }, Math.max(100, interval));
+      const id = setInterval(
+        () => {
+          void runCode(item.code, { type: "timer", name: item.name });
+        },
+        Math.max(100, interval),
+      );
       timerIds.add(id);
     });
   };
@@ -1226,13 +1313,3 @@ export const clearPreviewRuntime = () => {
   previewMqttState.emitDedup.clear();
   previewMqttState.onValueUpdate = null;
 };
-
-
-
-
-
-
-
-
-
-
