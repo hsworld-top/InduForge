@@ -263,6 +263,7 @@ import {
 } from "@/editor-core";
 import { normalizeEventDefinitions } from "@/editor-core/registry/componentEvents.js";
 import { createDragDropManager } from "./DragDropManager";
+import EChart from "./components/EChart.vue";
 import {
   useDragState,
   startDrag,
@@ -907,6 +908,8 @@ const renderTag = computed(() => {
       return "el-row";
     case "ElCol":
       return "el-col";
+    case "EChart":
+      return EChart;
     case "Text":
       return "div";
     default:

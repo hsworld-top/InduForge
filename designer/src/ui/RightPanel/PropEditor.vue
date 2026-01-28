@@ -1,8 +1,16 @@
-<template>
+﻿<template>
   <div class="prop-editor">
+    <MonacoEditor
+      v-if="isCodeEditor"
+      v-model="codeDraft"
+      :language="prop.language || 'javascript'"
+      :height="prop.height || '220px'"
+      @update:model-value="handleCodeChange"
+    />
+
     <!-- 字符串类型 -->
     <el-input
-      v-if="prop.type === 'string'"
+      v-else-if="prop.type === 'string'"
       :model-value="modelValue"
       :placeholder="prop.placeholder || '请输入'"
       size="small"
@@ -53,18 +61,17 @@
       />
     </el-select>
 
-    <!-- JSON ?? -->
+    <!-- JSON -->
     <el-input
       v-else-if="isJsonType"
       :model-value="jsonDraft"
       type="textarea"
       :rows="3"
-      :placeholder="prop.placeholder || '??? JSON'"
+      :placeholder="prop.placeholder || '请输入 JSON'"
       size="small"
       @update:model-value="handleJsonInput"
       @change="commitJsonDraft"
     />
-
 
     <!-- 默认：文本输入 -->
     <el-input
@@ -84,8 +91,9 @@
 
 import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
 
-defineOptions({ name: 'PropEditor' });
+defineOptions({ name: "PropEditor" });
 
 const props = defineProps({
   /** 属性定义 */
@@ -100,18 +108,20 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(["update:modelValue"]);
 
+const isCodeEditor = computed(() => props.prop?.editor === "code");
 const isJsonType = computed(() =>
   ["object", "array"].includes(props.prop?.type)
 );
 const jsonDraft = ref("");
+const codeDraft = ref("");
 
 /**
- * ?? JSON ????
+ * 同步 JSON 草稿
  */
 const syncJsonDraft = () => {
-  if (!isJsonType.value) return;
+  if (!isJsonType.value || isCodeEditor.value) return;
   if (props.modelValue === undefined || props.modelValue === null) {
     jsonDraft.value = "";
     return;
@@ -123,29 +133,61 @@ const syncJsonDraft = () => {
   }
 };
 
+/**
+ * 同步代码草稿
+ */
+const syncCodeDraft = () => {
+  if (!isCodeEditor.value) return;
+  if (props.modelValue === undefined || props.modelValue === null) {
+    codeDraft.value = "";
+    return;
+  }
+  if (typeof props.modelValue === "string") {
+    codeDraft.value = props.modelValue;
+    return;
+  }
+  try {
+    codeDraft.value = JSON.stringify(props.modelValue, null, 2);
+  } catch (error) {
+    codeDraft.value = String(props.modelValue);
+  }
+};
+
 watch([() => props.modelValue, () => props.prop?.type], syncJsonDraft, {
   immediate: true,
 });
 
+watch([() => props.modelValue, () => props.prop?.editor], syncCodeDraft, {
+  immediate: true,
+});
 
 /**
  * 处理值变更
  * @param {any} value - 新值
  */
 const handleChange = (value) => {
-  emit('update:modelValue', value);
+  emit("update:modelValue", value);
 };
 
 /**
- * ?? JSON ??
- * @param {string} value - ???
+ * 处理代码输入
+ * @param {string} value - 新值
+ */
+const handleCodeChange = (value) => {
+  codeDraft.value = value;
+  emit("update:modelValue", value);
+};
+
+/**
+ * 处理 JSON 输入
+ * @param {string} value - 新值
  */
 const handleJsonInput = (value) => {
   jsonDraft.value = value;
 };
 
 /**
- * ?? JSON ??
+ * 提交 JSON 草稿
  */
 const commitJsonDraft = () => {
   const trimmed = String(jsonDraft.value ?? "").trim();
@@ -156,10 +198,9 @@ const commitJsonDraft = () => {
   try {
     emit("update:modelValue", JSON.parse(trimmed));
   } catch (error) {
-    ElMessage.warning("?????? JSON");
+    ElMessage.warning("请输入合法的 JSON");
   }
 };
-
 </script>
 
 <style scoped>
@@ -173,5 +214,11 @@ const commitJsonDraft = () => {
 
 .prop-editor :deep(.el-select) {
   width: 100%;
+}
+
+.prop-editor :deep(.monaco-editor-container) {
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  overflow: hidden;
 }
 </style>

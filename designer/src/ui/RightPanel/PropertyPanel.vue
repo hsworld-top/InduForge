@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="flex flex-col gap-3">
     <!-- 页面设置面板：未选中任何元素 -->
     <PageInspectorPanel v-if="panelState === 'page'" />
@@ -144,8 +144,9 @@
             </template>
             <template v-else>
               <div
-                v-for="propDef in group.props"
-                :key="propDef.name"
+                v-for="(propDef, propIndex) in group.props"
+                :key="propDef?.name || propIndex"
+                v-if="propDef && (!isEChart || propDef.name !== 'option')"
                 class="prop-item"
               >
                 <div class="prop-label">
@@ -204,7 +205,7 @@
   >
     <div class="config-toolbar">
       <div class="config-toolbar-item">
-        <span class="config-label">样式模板：</span>
+        <span class="config-label">{{ presetLabel }}</span>
         <el-select
           v-model="selectedPresetId"
           size="small"
@@ -637,6 +638,67 @@ const detailPresets = [
     id: "comment",
     label: "\u6ce8\u91ca\u6a21\u677f",
     content: "/* id\u4e3a\u7ec4\u4ef6\u7684\u552f\u4e00\u6807\u8bc6 */\n",
+  },
+];
+const echartDetailPresets = [
+  {
+    id: "echart-line",
+    label: "折线图模板",
+    content:
+      'const option = {\n  title: { text: "折线图" },\n  tooltip: { trigger: "axis" },\n  xAxis: { type: "category", data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] },\n  yAxis: { type: "value" },\n  series: [{ name: "访问量", type: "line", data: [120, 200, 150, 80, 70, 110, 130] }],\n};\nreturn option;',
+  },
+  {
+    id: "echart-bar",
+    label: "柱状图模板",
+    content:
+      'const option = {\n  title: { text: "柱状图" },\n  tooltip: { trigger: "axis" },\n  xAxis: { type: "category", data: ["A", "B", "C", "D", "E"] },\n  yAxis: { type: "value" },\n  series: [{ type: "bar", data: [12, 20, 15, 8, 25] }],\n};\nreturn option;',
+  },
+  {
+    id: "echart-pie",
+    label: "饼图模板",
+    content:
+      'const option = {\n  title: { text: "饼图", left: "center" },\n  tooltip: { trigger: "item" },\n  legend: { bottom: 0 },\n  series: [{ type: "pie", radius: ["30%", "70%"], data: [\n    { value: 1048, name: "A" },\n    { value: 735, name: "B" },\n    { value: 580, name: "C" },\n    { value: 484, name: "D" },\n  ] }],\n};\nreturn option;',
+  },
+  {
+    id: "echart-radar",
+    label: "雷达图模板",
+    content:
+      'const option = {\n  title: { text: "雷达图" },\n  tooltip: {},\n  radar: {\n    indicator: [\n      { name: "指标A", max: 100 },\n      { name: "指标B", max: 100 },\n      { name: "指标C", max: 100 },\n      { name: "指标D", max: 100 },\n    ],\n  },\n  series: [{ type: "radar", data: [{ value: [80, 90, 60, 70], name: "数据" }] }],\n};\nreturn option;',
+  },
+  {
+    id: "echart-scatter",
+    label: "散点图模板",
+    content:
+      'const option = {\n  title: { text: "散点图" },\n  xAxis: {},\n  yAxis: {},\n  series: [{ type: "scatter", data: [[10, 8], [12, 16], [15, 12], [20, 6]] }],\n};\nreturn option;',
+  },
+  {
+    id: "echart-gauge",
+    label: "仪表盘模板",
+    content:
+      'const option = {\n  title: { text: "仪表盘" },\n  series: [{\n    type: "gauge",\n    progress: { show: true },\n    detail: { valueAnimation: true, formatter: "{value}%" },\n    data: [{ value: 50, name: "完成率" }],\n  }],\n};\nreturn option;',
+  },  {
+    id: "echart-area",
+    label: "面积折线图",
+    content:
+      'const option = {\n  title: { text: "面积折线" },\n  tooltip: { trigger: "axis" },\n  xAxis: { type: "category", data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] },\n  yAxis: { type: "value" },\n  series: [{ type: "line", areaStyle: {}, data: [220, 182, 191, 234, 290, 330, 310] }],\n};\nreturn option;',
+  },
+  {
+    id: "echart-stacked-bar",
+    label: "堆叠柱状图",
+    content:
+      'const option = {\n  title: { text: "堆叠柱状" },\n  tooltip: { trigger: "axis" },\n  legend: { bottom: 0 },\n  xAxis: { type: "category", data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] },\n  yAxis: { type: "value" },\n  series: [\n    { name: "A", type: "bar", stack: "total", data: [120, 132, 101, 134, 90, 230, 210] },\n    { name: "B", type: "bar", stack: "total", data: [220, 182, 191, 234, 290, 330, 310] },\n  ],\n};\nreturn option;',
+  },
+  {
+    id: "echart-donut",
+    label: "环形饼图",
+    content:
+      'const option = {\n  title: { text: "环形饼图", left: "center" },\n  tooltip: { trigger: "item" },\n  legend: { bottom: 0 },\n  series: [{\n    type: "pie",\n    radius: ["45%", "70%"],\n    data: [\n      { value: 335, name: "A" },\n      { value: 310, name: "B" },\n      { value: 234, name: "C" },\n      { value: 135, name: "D" },\n    ],\n  }],\n};\nreturn option;',
+  },
+  {
+    id: "echart-multi-line",
+    label: "多折线图",
+    content:
+      'const option = {\n  title: { text: "多折线" },\n  tooltip: { trigger: "axis" },\n  legend: { bottom: 0 },\n  xAxis: { type: "category", data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] },\n  yAxis: { type: "value" },\n  series: [\n    { name: "A", type: "line", data: [120, 132, 101, 134, 90, 230, 210] },\n    { name: "B", type: "line", data: [220, 182, 191, 234, 290, 330, 310] },\n  ],\n};\nreturn option;',
   },
 ];
 const buttonDetailPresets = [
@@ -2162,9 +2224,13 @@ const configDialogTitle = computed(() =>
 const configEditorLanguage = computed(() =>
   configDialogType.value === "detail" ? "javascript" : "css",
 );
+const presetLabel = computed(() =>
+  configDialogType.value === "detail" ? "详细模板：" : "样式模板：",
+);
 const currentPresetOptions = computed(() => {
   const type = currentElement.value?.type;
   if (configDialogType.value === "detail") {
+    if (type === "EChart") return echartDetailPresets;
     if (type === "Button") {
       return buttonDetailPresets
         .map((preset) => normalizeDslPreset(type, preset))
@@ -2217,6 +2283,7 @@ const bindingDialogDescription = computed(() => {
 });
 
 const isElContainer = computed(() => elementType.value === "ElContainer");
+const isEChart = computed(() => elementType.value === "EChart");
 const regionPropRows = computed(() => [
   {
     key: "header",
@@ -2838,6 +2905,10 @@ const hasPropBinding = (propName) => {
 const hasStyleSelection = computed(() => selectedNode.value !== null);
 
 const hasDetailConfig = computed(() => {
+  if (isEChart.value) {
+    const value = currentElement.value?.props?.option;
+    return Boolean(String(value || "").trim());
+  }
   const value = currentElement.value?.detailConfig;
   return Boolean(String(value || "").trim());
 });
@@ -2891,24 +2962,37 @@ const openConfigDialog = (type) => {
   if (!selectedNode.value) return;
   configDialogType.value = type === "detail" ? "detail" : "style";
   if (configDialogType.value === "detail") {
-    const rawDetail = selectedNode.value.detailConfig || "";
-    if (!rawDetail && isElementPlusType(selectedNode.value.type)) {
-      const presets = resolveElementPlusDetailPresets(
-        selectedNode.value.type,
-      );
-      const basicId = buildPresetId(selectedNode.value.type, "basic");
-      const preset =
-        presets.find((item) => item.id === basicId) || presets[0];
-      const nextContent = preset?.content || "";
-      configDraft.value = nextContent;
-      if (nextContent) {
-        editorStore.updateNode(selectedNode.value.id, {
-          detailConfig: nextContent,
-        });
-        void editorStore.saveCurrentPage?.();
+    const node = selectedNode.value;
+    if (node?.type === "EChart") {
+      const rawOption = node?.props?.option || "";
+      if (!rawOption) {
+        const preset = echartDetailPresets[0];
+        const nextContent = preset?.content || "";
+        configDraft.value = nextContent;
+        if (nextContent) {
+          editorStore.updateNode(node.id, {
+            props: { ...(node.props || {}), option: nextContent },
+          });
+          void editorStore.saveCurrentPage?.();
+        }
+      } else {
+        configDraft.value = rawOption;
       }
     } else {
-      configDraft.value = rawDetail;
+      const rawDetail = node.detailConfig || "";
+      if (!rawDetail && isElementPlusType(node.type)) {
+        const presets = resolveElementPlusDetailPresets(node.type);
+        const basicId = buildPresetId(node.type, "basic");
+        const preset = presets.find((item) => item.id === basicId) || presets[0];
+        const nextContent = preset?.content || "";
+        configDraft.value = nextContent;
+        if (nextContent) {
+          editorStore.updateNode(node.id, { detailConfig: nextContent });
+          void editorStore.saveCurrentPage?.();
+        }
+      } else {
+        configDraft.value = rawDetail;
+      }
     }
   } else {
     configDraft.value = selectedNode.value.styleConfig || "";
@@ -2929,7 +3013,7 @@ const saveConfigDialog = () => {
     const normalized = formatStyleConfigOutput(content);
     content = prefixStyleConfigScope(normalized);
     configDraft.value = content;
-  } else {
+  } else if (!isEChart.value) {
     content = normalizeDetailConfigBindings(content);
     configDraft.value = content;
     const validation = validateDetailConfig(content);
@@ -2937,9 +3021,18 @@ const saveConfigDialog = () => {
       ElMessage.warning(validation.message || "详细配置未通过校验");
       return;
     }
+  } else {
+    configDraft.value = content;
   }
+
   if (configDialogType.value === "detail") {
-    editorStore.updateNode(node.id, { detailConfig: content });
+    if (isEChart.value) {
+      editorStore.updateNode(node.id, {
+        props: { ...(node.props || {}), option: content },
+      });
+    } else {
+      editorStore.updateNode(node.id, { detailConfig: content });
+    }
   } else {
     editorStore.updateNode(node.id, { styleConfig: content });
   }
@@ -2955,7 +3048,13 @@ const clearConfigDialog = () => {
   if (!node) return;
   configDraft.value = "";
   if (configDialogType.value === "detail") {
-    editorStore.updateNode(node.id, { detailConfig: "" });
+    if (isEChart.value) {
+      editorStore.updateNode(node.id, {
+        props: { ...(node.props || {}), option: "" },
+      });
+    } else {
+      editorStore.updateNode(node.id, { detailConfig: "" });
+    }
   } else {
     editorStore.updateNode(node.id, { styleConfig: "" });
   }

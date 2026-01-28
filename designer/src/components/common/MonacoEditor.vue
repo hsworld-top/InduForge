@@ -1,4 +1,4 @@
-Ôªø<template>
+<template>
   <div ref="editorContainerRef" class="monaco-editor-container" :style="{ height }"></div>
 </template>
 
@@ -422,7 +422,7 @@ function initEditor() {
     });
   }
   if (props.language === "javascript" || props.language === "typescript") {
-    const ignoreDiagnostics = [1003, 1308, 1375, 1378, 1379, 2391, 80007, 80008];
+    const ignoreDiagnostics = [1003, 1108, 1308, 1375, 1378, 1379, 2391, 80007, 80008];
     const compilerOptions = {
       allowJs: true,
       allowNonTsExtensions: true,
@@ -477,7 +477,7 @@ function initEditor() {
   };
   editorInstance.addAction({
     id: "format-document",
-    label: "Ê†ºÂºèÂåñÊñáÊ°£",
+    label: "∏Ò ΩªØŒƒµµ",
     keybindings: [
       monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
     ],
@@ -672,3 +672,4 @@ defineExpose({
   height: 100% !important;
 }
 </style>
+

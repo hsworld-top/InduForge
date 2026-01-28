@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="flex flex-col gap-3 component-panel">
     <el-input v-model="keyword" size="small" placeholder="搜索组件" clearable />
     <div class="component-list">
@@ -67,6 +67,35 @@
             </el-collapse-item>
           </el-collapse>
         </el-collapse-item>
+      
+        <el-collapse-item name="chart">
+          <template #title>
+            <div class="component-section-title">图表</div>
+          </template>
+          <div v-if="chartItems.length" class="grid grid-cols-2 gap-2">
+            <div
+              v-for="item in chartItems"
+              :key="item.type"
+              class="component-card"
+              draggable="true"
+              @mousedown="handlePointerStart(item, $event)"
+              @dragstart="handleDragStart(item, $event)"
+              @dragend="handleDragEnd"
+            >
+              <div class="card-preview">
+                <component :is="getPreviewComponent(item.type)" />
+              </div>
+              <div class="card-info">
+                <div class="text-xs font-medium text-gray-800 dark:text-gray-200">
+                  {{ item.name }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-sm text-gray-400 text-center py-6">
+            暂无可用组件
+          </div>
+        </el-collapse-item>
       </el-collapse>
     </div>
   </div>
@@ -85,7 +114,7 @@ const keyword = ref("");
 /**
  * 折叠面板状态
  */
-const activeSections = ref(["layout", "ui"]);
+const activeSections = ref(["layout", "ui", "chart"]);
 const activeUiSections = ref(["pc"]);
 
 /**
@@ -117,6 +146,7 @@ const filterItemsByCategory = (category) => {
 
 const layoutItems = computed(() => filterItemsByCategory("layout"));
 const pcItems = computed(() => filterItemsByCategory("uiPc"));
+const chartItems = computed(() => filterItemsByCategory("chart"));
 
 /**
  * 获取组件预览组件
@@ -374,6 +404,15 @@ const getPreviewComponent = (type) => {
         h("div", { class: "preview-image" }, [
           h("div", { class: "preview-image-mountain" }),
           h("div", { class: "preview-image-sun" }),
+        ]),
+    },
+    EChart: {
+      render: () =>
+        h("div", { class: "preview-chart" }, [
+          h("span", { class: "preview-chart-bar" }),
+          h("span", { class: "preview-chart-bar" }),
+          h("span", { class: "preview-chart-bar" }),
+          h("span", { class: "preview-chart-bar" }),
         ]),
     },
   };
@@ -1358,5 +1397,29 @@ const getPreviewIcon = (type) => {
   font-weight: 500;
   color: #303133;
   text-align: center;
+}
+
+.preview-chart {
+  width: 60px;
+  height: 40px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.preview-chart-bar {
+  flex: 1;
+  height: 60%;
+  background: #3b6cff;
+  border-radius: 2px;
+}
+
+.preview-chart-bar:nth-child(2) {
+  height: 85%;
+}
+
+.preview-chart-bar:nth-child(3) {
+  height: 45%;
 }
 </style>

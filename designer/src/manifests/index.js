@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 组件 Manifest 注册表
  * 定义组件的属性、样式和事件配置
  */
@@ -2060,9 +2060,153 @@ registerManifest({
   ],
 });
 
+// EChart 图表组件
+registerManifest({
+  type: "EChart",
+  name: "图表",
+  category: "图表",
+  defaultSize: { width: 480, height: 300 },
+  events: [
+    { name: "click", label: "点击", description: "鼠标点击图表元素触发" },
+    { name: "dblclick", label: "双击", description: "鼠标双击图表元素触发" },
+    { name: "mouseover", label: "鼠标移入", description: "鼠标移入图表元素触发" },
+    { name: "mouseout", label: "鼠标移出", description: "鼠标移出图表元素触发" },
+    { name: "mousemove", label: "鼠标移动", description: "鼠标在图表内移动触发" },
+    { name: "mousedown", label: "鼠标按下", description: "鼠标按下触发" },
+    { name: "mouseup", label: "鼠标抬起", description: "鼠标抬起触发" },
+    { name: "legendselectchanged", label: "图例切换", description: "图例选择变化触发" },
+    { name: "datazoom", label: "缩放", description: "数据缩放触发" },
+    { name: "brushselected", label: "刷选", description: "刷选触发" },
+    { name: "finished", label: "渲染完成", description: "渲染完成触发" },
+    { name: "rendered", label: "渲染中", description: "渲染过程中触发" },
+  ],
+  props: [
+    {
+      name: "option",
+      type: "object",
+      label: "详细配置",
+      group: "详细配置",
+      editor: "code",
+      language: "javascript",
+      height: "260px",
+      defaultValue: `// 折线图模板
+const option = {
+  title: { text: "折线图" },
+  tooltip: { trigger: "axis" },
+  xAxis: { type: "category", data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] },
+  yAxis: { type: "value" },
+  series: [
+    { name: "访问量", type: "line", data: [120, 200, 150, 80, 70, 110, 130] },
+  ],
+};
+return option;
+
+// 柱状图模板
+// const option = {
+//   title: { text: "柱状图" },
+//   tooltip: { trigger: "axis" },
+//   xAxis: { type: "category", data: ["A", "B", "C", "D", "E"] },
+//   yAxis: { type: "value" },
+//   series: [{ type: "bar", data: [12, 20, 15, 8, 25] }],
+// };
+// return option;
+
+// 饼图模板
+// const option = {
+//   title: { text: "饼图", left: "center" },
+//   tooltip: { trigger: "item" },
+//   legend: { bottom: 0 },
+//   series: [
+//     {
+//       type: "pie",
+//       radius: ["30%", "70%"],
+//       data: [
+//         { value: 1048, name: "A" },
+//         { value: 735, name: "B" },
+//         { value: 580, name: "C" },
+//         { value: 484, name: "D" },
+//         { value: 300, name: "E" },
+//       ],
+//     },
+//   ],
+// };
+// return option;
+
+// 面积图模板
+// const option = {
+//   title: { text: "面积图" },
+//   tooltip: { trigger: "axis" },
+//   xAxis: { type: "category", boundaryGap: false, data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] },
+//   yAxis: { type: "value" },
+//   series: [{ type: "line", areaStyle: {}, data: [820, 932, 901, 934, 1290, 1330, 1320] }],
+// };
+// return option;`
+// 雷达图模板
+// const option = {
+//   title: { text: "雷达图" },
+//   tooltip: {},
+//   legend: { data: ["预算分配", "实际开销"] },
+//   radar: {
+//     indicator: [
+//       { name: "销售", max: 6500 },
+//       { name: "管理", max: 16000 },
+//       { name: "技术", max: 30000 },
+//       { name: "客服", max: 38000 },
+//       { name: "研发", max: 52000 },
+//       { name: "市场", max: 25000 },
+//     ],
+//   },
+//   series: [
+//     {
+//       type: "radar",
+//       data: [
+//         { value: [4300, 10000, 28000, 35000, 50000, 19000], name: "预算分配" },
+//         { value: [5000, 14000, 28000, 31000, 42000, 21000], name: "实际开销" },
+//       ],
+//     },
+//   ],
+// };
+// return option;
+
+// 散点图模板
+// const option = {
+//   title: { text: "散点图" },
+//   tooltip: { trigger: "item" },
+//   xAxis: {},
+//   yAxis: {},
+//   series: [
+//     {
+//       type: "scatter",
+//       data: [
+//         [10, 8], [15, 12], [18, 16], [20, 6], [25, 18], [30, 14],
+//       ],
+//     },
+//   ],
+// };
+// return option;
+
+// 仪表盘模板
+// const option = {
+//   title: { text: "仪表盘" },
+//   series: [
+//     {
+//       type: "gauge",
+//       progress: { show: true },
+//       detail: { valueAnimation: true, formatter: "{value}%" },
+//       data: [{ value: 70, name: "完成率" }],
+//     },
+//   ],
+// };
+// return option;`',
+    },
+  ],
+});
+
 export default {
   registerManifest,
   getManifest,
   getAllManifests,
   getManifestsByCategory,
 };
+
+

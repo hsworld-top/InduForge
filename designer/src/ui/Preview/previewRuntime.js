@@ -1,4 +1,4 @@
-﻿import { datacenterApi } from "@/services";
+import { datacenterApi } from "@/services";
 import { DataService } from "@/data";
 import { Storage } from "@/utils/storage";
 import { io } from "socket.io-client";
@@ -25,6 +25,8 @@ const previewMqttState = {
   subscriptionSubscribed: new Set(),
   tagIdToProps: new Map(),
   subscriptionIdToProps: new Map(),
+  subscribePending: new Set(),
+  emitDedup: new Map(),
   onValueUpdate: null,
 };
 const pendingComponentCalls = new Map();
@@ -395,7 +397,7 @@ const resolveConnection = async (projectId, name) => {
 
 const resolveQuery = async (projectId, connectionId, queryName) => {
   if (!projectId) return null;
-  const cacheKey = `${connectionId}`;
+  const cacheKey = `${event}:${key}`;
   let queries = queryCache.get(cacheKey);
   if (!queries) {
     const result = await datacenterApi.getQueries(projectId, {
@@ -508,6 +510,15 @@ const ensurePreviewMqttSocket = async (projectId) => {
   return socket;
 };
 
+const emitWithDedup = (socket, event, key, payload, ttl = 800) => {
+  if (!socket || !event || !key) return;
+  const now = Date.now();
+  const cacheKey = `${event}:${key}`;
+  const last = previewMqttState.emitDedup.get(cacheKey);
+  if (last && now - last < ttl) return;
+  previewMqttState.emitDedup.set(cacheKey, now);
+  socket.emit(event, payload);
+};
 const cacheDatapointMetaList = (projectId, items) => {
   if (!projectId || !Array.isArray(items)) return;
   items.forEach((item) => {
@@ -594,12 +605,18 @@ const resolveSourceInfo = async (projectId, detail) => {
   let sourceType = String(source.sourceType || "");
   let sourceId = source.sourceId || "";
   let datapointId = source.datapointId || "";
-  if ((!sourceType || !sourceId || !datapointId) && path) {
+  if (projectId && path) {
     const meta = await resolveDatapointMeta(projectId, path);
     if (meta) {
-      sourceType = sourceType || meta.sourceType || "";
-      sourceId = sourceId || meta.sourceId || "";
-      datapointId = datapointId || meta.id || "";
+      if (!sourceType || sourceType !== meta.sourceType) {
+        sourceType = meta.sourceType || sourceType;
+      }
+      if (!sourceId || sourceId !== meta.sourceId) {
+        sourceId = meta.sourceId || sourceId;
+      }
+      if (!datapointId || datapointId !== meta.id) {
+        datapointId = meta.id || datapointId;
+      }
     }
   }
   return { path, sourceType, sourceId, datapointId };
@@ -621,32 +638,48 @@ const subscribeMqttSource = async (projectId, detail) => {
   const sourceId = resolved.sourceId;
   const path = resolved.path;
   const socket = await ensurePreviewMqttSocket(projectId);
-  if (sourceId) {
-    if (sourceType.includes("tag")) {
-      if (!previewMqttState.tagSubscribed.has(sourceId)) {
-        previewMqttState.tagSubscribed.add(sourceId);
-        if (socket?.connected) {
-          socket.emit("mqtt:tag:subscribe", { tagId: sourceId });
+  const pendingKey = sourceId
+    ? `${sourceType}:${sourceId}`
+    : path
+      ? `datapoint:${path}`
+      : "";
+  if (pendingKey) {
+    if (previewMqttState.subscribePending.has(pendingKey)) return;
+    previewMqttState.subscribePending.add(pendingKey);
+  }
+  try {
+    if (sourceId) {
+      if (sourceType.includes("tag")) {
+        if (!previewMqttState.tagSubscribed.has(sourceId)) {
+          previewMqttState.tagSubscribed.add(sourceId);
+          if (socket?.connected) {
+            emitWithDedup(socket, "mqtt:tag:subscribe", sourceId, {
+              tagId: sourceId,
+            });
+          }
         }
-      }
-    } else if (sourceType.includes("subscription")) {
-      if (!previewMqttState.subscriptionSubscribed.has(sourceId)) {
-        previewMqttState.subscriptionSubscribed.add(sourceId);
-        if (socket?.connected) {
-          socket.emit("mqtt:subscribe", { subscriptionId: sourceId });
+      } else if (sourceType.includes("subscription")) {
+        if (!previewMqttState.subscriptionSubscribed.has(sourceId)) {
+          previewMqttState.subscriptionSubscribed.add(sourceId);
+          if (socket?.connected) {
+            emitWithDedup(socket, "mqtt:subscribe", sourceId, {
+              subscriptionId: sourceId,
+            });
+          }
         }
       }
     }
-  }
-  if (path && !previewMqttState.datapointSubscribed.has(path)) {
-    socket.emit("datapoint:subscribe", {
-      projectId,
-      paths: [path],
-    });
-    previewMqttState.datapointSubscribed.add(path);
+    if (path && !previewMqttState.datapointSubscribed.has(path)) {
+      emitWithDedup(socket, "datapoint:subscribe", `${projectId}:${path}`, {
+        projectId,
+        paths: [path],
+      });
+      previewMqttState.datapointSubscribed.add(path);
+    }
+  } finally {
+    if (pendingKey) previewMqttState.subscribePending.delete(pendingKey);
   }
 };
-
 const resolveMappedGlobalValue = async (projectId, detail) => {
   const source = detail?.source;
   if (!source || source.type !== "dataCenter" || !source.path) {
@@ -658,9 +691,9 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
   if (source.datapointId || source.sourceType || source.sourceId || source.path) {
     const resolved = await resolveSourceInfo(projectId, detail);
     const sourceType = String(resolved.sourceType || "");
-    if (sourceType.includes("query") && source.sourceId) {
+    if (sourceType.includes("query") && (resolved.sourceId || source.sourceId)) {
       try {
-        const result = await datacenterApi.executeQuery(source.sourceId);
+        const result = await datacenterApi.executeQuery(resolved.sourceId || source.sourceId);
         const payload = unwrapApiData(result) || result;
         const value = payload?.data ?? payload;
         return value ?? fallbackValue;
@@ -1189,7 +1222,17 @@ export const clearPreviewRuntime = () => {
   previewMqttState.subscriptionSubscribed.clear();
   previewMqttState.tagIdToProps.clear();
   previewMqttState.subscriptionIdToProps.clear();
+  previewMqttState.subscribePending.clear();
+  previewMqttState.emitDedup.clear();
   previewMqttState.onValueUpdate = null;
 };
+
+
+
+
+
+
+
+
 
 

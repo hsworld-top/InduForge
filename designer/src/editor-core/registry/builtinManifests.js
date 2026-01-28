@@ -144,6 +144,7 @@ function mapCategory(category) {
     图形: "canvas",
     UI组件: "ui",
     PC端组件: "uiPc",
+    图表: "chart",
   };
   return categoryMap[category] || "custom";
 }
