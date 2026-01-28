@@ -2,6 +2,19 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug Go NodeAgent",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/runtime/node_agent/cmd",
+      "cwd": "${workspaceFolder}/runtime/node_agent",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_AGENT_ENV": "development",
+        "NODE_AGENT_CONFIG": "${workspaceFolder}/runtime/node_agent/cmd/config.yaml"
+      }
+    },
+    {
       "name": "启动后端服务 (Dev Core)",
       "type": "node",
       "request": "launch",

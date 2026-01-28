@@ -17,6 +17,7 @@ router.post("/register", authenticate, async (req, res) => {
     const { name, description, agentVersion, ipAddress, port } = req.body;
     const tenantId = req.user.tenantId;
     const createdBy = req.user.id;
+    const role = req.user.role;
 
     if (!name) {
       return res.status(400).json({ error: "节点名称不能为空" });
@@ -30,6 +31,7 @@ router.post("/register", authenticate, async (req, res) => {
       ipAddress: ipAddress || req.ip,
       port,
       createdBy,
+      role,
     });
 
     res.status(201).json({

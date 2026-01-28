@@ -37,7 +37,7 @@ go build -o node_agent ./cmd/main.go
 
 ### 3. 配置
 
-编辑 `configs/config.yaml` 文件：
+配置文件 `config.yaml` 在首次运行时会自动生成在当前目录。如需自定义，可以编辑该文件：
 
 ```yaml
 agent:
@@ -53,16 +53,19 @@ agent:
 ### 4. 运行
 
 ```bash
-# 创建数据目录
-mkdir -p /var/lib/node_agent/data
-mkdir -p /var/lib/node_agent/runtime
-mkdir -p /var/log/node_agent/runtime
-
-# 启动 NodeAgent
+# 直接运行（配置文件将自动生成）
 ./node_agent
+
+# 或者后台运行
+./node_agent --hidden
 ```
 
-服务将在 `http://127.0.0.1:8080` 启动。
+首次运行时，程序会：
+1. 自动生成默认配置文件（如果不存在）
+2. 引导您完成交互式配置（开机自启动、端口设置等）
+3. 启动后台服务进程
+4. 显示服务信息（PID、端口、访问地址等）
+5. 等待您按键后关闭交互窗口（后台服务继续运行）
 
 ## API 接口
 

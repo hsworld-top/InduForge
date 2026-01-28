@@ -5,34 +5,75 @@
 import axios from 'axios'
 
 /**
- * 提交带用户认证的注册申请
+ * 登录获取访问令牌
  * @param {Object} data - 注册数据
  * @param {string} data.centerUrl - 运维中心地址
  * @param {string} data.username - 用户名
  * @param {string} data.password - 密码
- * @param {string} data.nodeName - 节点名称
- * @param {string} data.nodeDescription - 节点描述
- * @param {string} data.ipAddress - IP地址
- * @param {number} data.port - 端口
- * @param {string} data.agentVersion - Agent版本
- * @param {string} data.mode - 节点模式
- * @returns {Promise<Object>} 注册结果
+ * @param {string} data.tenantCode - 租户代码（多租户必填）
+ * @returns {Promise<Object>} 登录结果
  */
-export async function registerWithAuth(data) {
+export async function loginWithAuth(data) {
   const { centerUrl, ...requestData } = data
   
   try {
     const response = await axios.post(
-      `${centerUrl}/api/v1/node-register/register-with-auth`,
-      requestData,
+      `/api/v1/center/login`,
+      { centerUrl, ...requestData },
       {
         timeout: 10000,
       }
     )
     
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || '登录失败')
+    }
+
     return response.data
   } catch (error) {
-    throw new Error(error.response?.data?.error || error.message || '注册请求失败')
+    throw new Error(error.response?.data?.message || error.response?.data?.error || error.message || '登录请求失败')
+  }
+}
+
+/**
+ * 提交节点注册申请（需 token）
+ * @param {Object} data - 注册数据
+ * @param {string} data.centerUrl - 运维中心地址
+ * @param {string} data.accessToken - 访问令牌
+ * @param {string} data.nodeName - 节点名称
+ * @param {string} data.nodeDescription - 节点描述
+ * @param {string} data.ipAddress - IP地址
+ * @param {number} data.port - 端口
+ * @param {string} data.agentVersion - Agent版本
+ * @returns {Promise<Object>} 注册结果
+ */
+export async function registerNodeWithToken(data) {
+  const { centerUrl, accessToken, nodeName, nodeDescription, ipAddress, port, agentVersion } = data
+
+  try {
+    const response = await axios.post(
+      `/api/v1/center/register`,
+      {
+        centerUrl,
+        accessToken,
+        nodeName,
+        nodeDescription,
+        agentVersion,
+        ipAddress,
+        port,
+      },
+      {
+        timeout: 10000,
+      }
+    )
+
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || '注册失败')
+    }
+
+    return response.data
+  } catch (error) {
+    throw new Error(error.response?.data?.message || error.response?.data?.error || error.message || '注册请求失败')
   }
 }
 
@@ -45,8 +86,9 @@ export async function registerWithAuth(data) {
 export async function checkApprovalStatus(centerUrl, nodeId) {
   try {
     const response = await axios.get(
-      `${centerUrl}/api/v1/node-register/${nodeId}/approval-status`,
+      `/api/v1/center/approval-status`,
       {
+        params: { centerUrl, nodeId },
         timeout: 5000,
       }
     )
@@ -64,7 +106,8 @@ export async function checkApprovalStatus(centerUrl, nodeId) {
  */
 export async function testCenterConnection(centerUrl) {
   try {
-    const response = await axios.get(`${centerUrl}/health`, {
+    const response = await axios.get(`/api/v1/center/health`, {
+      params: { centerUrl },
       timeout: 3000,
     })
     return response.status === 200

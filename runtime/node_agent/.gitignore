@@ -60,3 +60,6 @@ secrets.yaml
 
 # Docker 相关
 .dockerignore
+
+config.y*
+__debug*

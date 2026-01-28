@@ -95,6 +95,14 @@
               </el-form-item>
 
               <el-divider content-position="left">用户认证</el-divider>
+              <el-form-item label="租户代码">
+                <el-input
+                  v-model="wizardData.online.tenantCode"
+                  placeholder="多租户必填，如：default"
+                  clearable
+                />
+                <div class="form-hint">多租户环境下必填，单租户可留空</div>
+              </el-form-item>
               <el-form-item label="用户名" prop="username">
                 <el-input
                   v-model="wizardData.online.username"
@@ -143,10 +151,9 @@
                 <div class="form-hint">留空将自动获取客户端IP</div>
               </el-form-item>
               <el-form-item label="管理端口">
-                <el-input-number
-                  v-model="wizardData.online.port"
-                  :min="1"
-                  :max="65535"
+                <el-input
+                  :model-value="wizardData.online.port"
+                  readonly
                   class="w-full"
                 />
               </el-form-item>
@@ -314,9 +321,9 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh, Right, Loading } from '@element-plus/icons-vue'
-import { registerWithAuth, checkApprovalStatus, testCenterConnection } from '@/api/registerApi'
+import { loginWithAuth, registerNodeWithToken, checkApprovalStatus, testCenterConnection } from '@/api/registerApi'
 import { validateNodeName, getNameRuleHint } from '@/utils/nameValidator'
-import { saveNodeConfig, getCenterUrl } from '@/utils/initCheck'
+// 前端不再存储初始化信息
 import { nodeApi } from '@/api/nodeApi'
 import dayjs from 'dayjs'
 
@@ -329,12 +336,13 @@ const wizardData = reactive({
   approvalStatus: '',
   online: {
     centerUrl: '',
+    tenantCode: '',
     username: '',
     password: '',
     nodeName: '',
     nodeDescription: '',
     ipAddress: '',
-    port: 8080,
+    port: 8081,
     agentVersion: '1.0.0',
   },
   offline: {
@@ -504,45 +512,47 @@ const submitRegistration = async () => {
 
   try {
     if (wizardData.mode === 'online') {
-      // 在线模式：提交注册申请
-      const result = await registerWithAuth({
+      // 在线模式：先登录获取 token
+      const loginResult = await loginWithAuth({
         centerUrl: wizardData.online.centerUrl,
+        tenantCode: wizardData.online.tenantCode,
         username: wizardData.online.username,
         password: wizardData.online.password,
+      })
+
+      const accessToken = loginResult.data?.accessToken
+      if (!accessToken) {
+        throw new Error('登录成功但未返回访问令牌')
+      }
+
+      // 在线模式：使用 token 提交注册申请
+      const registerResult = await registerNodeWithToken({
+        centerUrl: wizardData.online.centerUrl,
+        accessToken,
         nodeName: wizardData.online.nodeName,
         nodeDescription: wizardData.online.nodeDescription,
         ipAddress: wizardData.online.ipAddress,
         port: wizardData.online.port,
         agentVersion: wizardData.online.agentVersion,
-        mode: 'online',
       })
 
-      if (result.success) {
-        wizardData.nodeId = result.data.nodeId
-        wizardData.approvalStatus = result.data.approvalStatus
+      if (registerResult.success) {
+        wizardData.nodeId = registerResult.data.nodeId
+        wizardData.approvalStatus = registerResult.data.approvalStatus
 
-        // 保存基础配置
-        saveNodeConfig({
-          mode: 'online',
-          nodeId: result.data.nodeId,
-          nodeName: wizardData.online.nodeName,
+        // 保存基础配置到后端
+        await saveBackendConfig('online', {
           centerUrl: wizardData.online.centerUrl,
-          approvalStatus: result.data.approvalStatus,
-          ipAddress: wizardData.online.ipAddress,
-          port: wizardData.online.port,
+          nodeId: registerResult.data.nodeId,
+          registrationToken: registerResult.data.registrationToken,
         })
 
-        if (result.data.autoApproved) {
-          // 自动审批通过
-          saveNodeConfig({
-            registrationToken: result.data.registrationToken,
-          })
-          
-          // 通知 NodeAgent 后端保存配置
+        if (registerResult.data.autoApproved) {
+          // 自动审批通过时，确保配置已保存
           await saveBackendConfig('online', {
             centerUrl: wizardData.online.centerUrl,
-            nodeId: result.data.nodeId,
-            registrationToken: result.data.registrationToken,
+            nodeId: registerResult.data.nodeId,
+            registrationToken: registerResult.data.registrationToken,
           })
           
           ElMessage.success('注册成功，已自动审批通过')
@@ -555,10 +565,10 @@ const submitRegistration = async () => {
         }
       }
     } else {
-      // 离线模式：直接保存配置
-      saveNodeConfig({
-        mode: 'offline',
+      // 离线模式：直接保存配置到后端
+      await saveBackendConfig('offline', {
         nodeName: wizardData.offline.nodeName,
+        nodeDescription: wizardData.offline.nodeDescription,
       })
       ElMessage.success('离线模式配置完成')
       currentStep.value = 2
@@ -613,12 +623,6 @@ const checkApproval = async () => {
 
       if (result.data.approvalStatus === 'approved') {
         stopPolling()
-        
-        // 保存 token
-        saveNodeConfig({
-          approvalStatus: 'approved',
-          registrationToken: result.data.registrationToken,
-        })
 
         // 通知 NodeAgent 后端保存配置
         await saveBackendConfig('online', {
@@ -654,14 +658,16 @@ const resetWizard = () => {
   wizardData.mode = ''
   wizardData.nodeId = ''
   wizardData.approvalStatus = ''
+  // 保留当前端口配置，不重置
   wizardData.online = {
     centerUrl: '',
+    tenantCode: '',
     username: '',
     password: '',
     nodeName: '',
     nodeDescription: '',
     ipAddress: '',
-    port: 8080,
+    port: wizardData.online.port,  // 保留当前端口
     agentVersion: '1.0.0',
   }
   wizardData.offline = {
@@ -672,6 +678,19 @@ const resetWizard = () => {
 
 const formatTime = (time) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+}
+
+// 从后端获取服务配置
+const fetchServiceConfig = async () => {
+  try {
+    const config = await nodeApi.getServiceConfig()
+    if (config.listen && config.listen.port) {
+      wizardData.online.port = config.listen.port
+    }
+  } catch (error) {
+    console.error('获取服务配置失败:', error)
+    // 使用默认值
+  }
 }
 
 // 保存配置到 NodeAgent 后端
@@ -689,6 +708,11 @@ const saveBackendConfig = async (mode, config) => {
 
 onBeforeUnmount(() => {
   stopPolling()
+})
+
+// 组件挂载时获取服务配置
+onMounted(() => {
+  fetchServiceConfig()
 })
 </script>
 

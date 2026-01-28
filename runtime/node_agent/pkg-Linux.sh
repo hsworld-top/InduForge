@@ -27,8 +27,18 @@ echo "Go 版本:"
 go version
 echo ""
 
+# 设置静态目录
+STATIC_DIR="$SCRIPT_DIR/internal/web/static/dist"
+BUILD_STATIC_DIR="$SCRIPT_DIR/build/internal/web/static/dist"
+
 # 创建构建目录
 mkdir -p build
+
+# 如果存在前端构建产物，复制到 build 目录，方便随二进制一起分发
+if [ -d "$STATIC_DIR" ]; then
+    mkdir -p "$BUILD_STATIC_DIR"
+    cp -r "$STATIC_DIR/." "$BUILD_STATIC_DIR/"
+fi
 
 echo "============================================================"
 echo "  构建 Linux 版本"
@@ -41,7 +51,7 @@ rm -f build/node_agent_linux.pdb
 
 # 构建
 echo "正在构建 Linux 版本..."
-CGO_ENABLED=0 go build -ldflags "-X main.version=1.0.0" -o build/node_agent_linux cmd/main.go
+CGO_ENABLED=0 go build -ldflags "-X main.version=1.0.0" -o build/node_agent_linux ./cmd
 
 if [ $? -ne 0 ]; then
     echo ""

@@ -34,3 +34,5 @@ docker/images/*
 
 pnpm-lock.yaml
 pnpm-workspace.yaml
+
+miniio/data*

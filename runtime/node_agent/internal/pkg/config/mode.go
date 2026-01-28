@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -104,6 +103,10 @@ func SaveOnlineConfig(configPath string, onlineConfig OnlineConfig) error {
 		"nodeId":            onlineConfig.NodeID,
 		"registrationToken": onlineConfig.RegistrationToken,
 	}
+	// 切换为在线模式时，清理离线标记（若有）
+	if _, exists := agent["offline"]; exists {
+		delete(agent, "offline")
+	}
 
 	// 写回配置文件
 	newData, err := yaml.Marshal(config)
@@ -118,6 +121,49 @@ func SaveOnlineConfig(configPath string, onlineConfig OnlineConfig) error {
 	}
 
 	// 写入新配置
+	if err := os.WriteFile(configPath, newData, 0644); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SaveOfflineConfig 保存离线模式配置
+func SaveOfflineConfig(configPath string, nodeName string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return err
+	}
+
+	agent, ok := config["agent"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid config structure")
+	}
+
+	agent["mode"] = string(ModeOffline)
+	if nodeName != "" {
+		agent["id"] = nodeName
+	}
+	// 清理在线配置
+	if _, exists := agent["online"]; exists {
+		delete(agent, "online")
+	}
+
+	newData, err := yaml.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	backupPath := configPath + ".backup"
+	if err := os.WriteFile(backupPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
+	}
+
 	if err := os.WriteFile(configPath, newData, 0644); err != nil {
 		return err
 	}
@@ -146,6 +192,32 @@ func GetConfigPath() string {
 		return path
 	}
 
-	// 默认路径
-	return filepath.Join(".", "configs", "config.yaml")
+	// 默认路径（直接在当前目录）
+	return "./config.yaml"
+}
+
+// ListenConfig 监听配置
+type ListenConfig struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
+
+// GetListenConfig 获取监听配置
+func GetListenConfig(configPath string) (*ListenConfig, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var config struct {
+		Agent struct {
+			Listen ListenConfig `yaml:"listen"`
+		} `yaml:"agent"`
+	}
+
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	return &config.Agent.Listen, nil
 }

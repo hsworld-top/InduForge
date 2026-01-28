@@ -14,17 +14,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/viper"
-	"golang.org/x/sys/windows"
 	"github.com/indu-forge/node_agent/internal/agent/executor"
 	"github.com/indu-forge/node_agent/internal/agent/health"
 	"github.com/indu-forge/node_agent/internal/agent/network"
 	"github.com/indu-forge/node_agent/internal/agent/orchestrator"
 	"github.com/indu-forge/node_agent/internal/agent/store"
 	"github.com/indu-forge/node_agent/internal/pkg/autostart"
+	pkgConfig "github.com/indu-forge/node_agent/internal/pkg/config"
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
 	"github.com/indu-forge/node_agent/internal/web/handler"
-	pkgConfig "github.com/indu-forge/node_agent/internal/pkg/config"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -74,6 +74,12 @@ var fileLogger *logger.FileLogger
 var consoleLogger *logger.SimpleLogger
 
 func main() {
+	// 开发模式：跳过交互，直接运行服务
+	if isDevMode() {
+		runDaemon()
+		return
+	}
+
 	// 检查是否后台运行模式
 	daemonMode := false
 	for _, arg := range os.Args {
@@ -120,35 +126,29 @@ func main() {
 	}
 
 	// 打印欢迎界面
-	printWelcome(*config)
+	printWelcome()
 
 	// 获取节点模式
 	configPath := pkgConfig.GetConfigPath()
 	nodeMode, _ := pkgConfig.GetMode(configPath)
 
-	// 初始化组件
-	storeInstance := store.NewLocalStore("./data")
-	execInstance, err := createExecutor(config.Agent.Executor)
-	if err != nil {
-		consoleLogger.Error(fmt.Sprintf("创建执行器失败: %v", err))
-		pauseExit()
-		return
-	}
-
-	orchInstance := orchestrator.NewOrchestrator(execInstance, storeInstance)
-
-	healthChecker := health.NewHealthChecker(health.HealthConfig{
-		Enabled:  true,
-		Interval: 30 * time.Second,
-		Timeout:  5 * time.Second,
-		Retries:  3,
-	})
-
 	// 显示配置信息
-	printConfigInfo(*config, nodeMode, workDir)
+	printConfigInfo(*config, nodeMode)
 
 	// 询问是否设置开机自启动
-	askAutoStart(*config)
+	askAutoStart()
+
+	// 询问端口配置
+	newPort := askPort(config.Agent.Listen.Port)
+	if newPort != config.Agent.Listen.Port {
+		// 端口已更改，保存到配置文件
+		if err := savePortConfig(configPath, newPort); err != nil {
+			fmt.Printf("  警告: 保存端口配置失败: %v\n", err)
+		} else {
+			config.Agent.Listen.Port = newPort
+			fmt.Printf("  端口配置已更新为: %d\n", newPort)
+		}
+	}
 
 	// 询问是否立即启动
 	if !askStart() {
@@ -158,12 +158,20 @@ func main() {
 	}
 
 	// 启动服务 - 交互模式下启动后台进程
-	startServiceBackground(*config, storeInstance, orchInstance, healthChecker, nodeMode, configPath)
+	startServiceBackground(*config, nodeMode, newPort)
+}
+
+// isDevMode 判断是否为开发模式
+func isDevMode() bool {
+	return strings.ToLower(os.Getenv("NODE_AGENT_ENV")) == "development"
 }
 
 // checkSingleInstance 检查是否已运行实例
 // daemonMode: true 表示后台模式，不删除已有的 lock 文件
 func checkSingleInstance(daemonMode bool) bool {
+	if isDevMode() {
+		return true
+	}
 	// 锁定文件路径
 	lockFile := filepath.Join(os.TempDir(), "node_agent.lock")
 
@@ -177,23 +185,22 @@ func checkSingleInstance(daemonMode bool) bool {
 			fmt.Sscanf(string(content), "%d", &pid)
 
 			if pid > 0 {
-				// 检查进程是否存在
-				process, err := os.FindProcess(pid)
-				if err == nil {
-					// Windows 上 FindProcess 总是成功，需要用 Signal 检查
-					// 发送信号 0 来检查进程是否存在
-					err := process.Signal(syscall.Signal(0))
-					if err == nil {
+				// 守护进程模式下，如果锁文件是由当前父进程（交互窗口）写入，则允许接管
+				if daemonMode && pid == os.Getppid() {
+					_ = os.Remove(lockFile)
+				} else {
+					// 检查进程是否存在
+					if isProcessRunning(pid) {
 						// 进程还在运行
 						return false
 					}
-				}
 
-				// 进程已不存在，清理残留的锁定文件
-				if !daemonMode {
-					// 只有交互模式才清理残留的 lock 文件
-					fmt.Println("检测到残留的锁定文件，正在清理...")
-					os.Remove(lockFile)
+					// 进程已不存在，清理残留的锁定文件
+					if !daemonMode {
+						// 只有交互模式才清理残留的 lock 文件
+						fmt.Println("检测到残留的锁定文件，正在清理...")
+						os.Remove(lockFile)
+					}
 				}
 			}
 		}
@@ -250,7 +257,7 @@ func initFileLogger(config Config) error {
 }
 
 // printWelcome 打印欢迎界面
-func printWelcome(config Config) {
+func printWelcome() {
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println("  NodeAgent 节点管理服务")
 	fmt.Println(strings.Repeat("=", 60))
@@ -262,7 +269,7 @@ func printWelcome(config Config) {
 }
 
 // printConfigInfo 打印配置信息
-func printConfigInfo(config Config, mode pkgConfig.NodeMode, workDir string) {
+func printConfigInfo(config Config, mode pkgConfig.NodeMode) {
 	fmt.Println("【配置信息】")
 	fmt.Printf("  节点ID: %s\n", config.Agent.ID)
 	fmt.Printf("  运行模式: %s\n", mode)
@@ -274,7 +281,7 @@ func printConfigInfo(config Config, mode pkgConfig.NodeMode, workDir string) {
 }
 
 // askAutoStart 询问是否设置开机自启动
-func askAutoStart(config Config) {
+func askAutoStart() {
 	fmt.Println("【开机自启动】")
 	fmt.Println("  是否设置开机自启动？")
 	fmt.Println("  [Y] 是")
@@ -286,7 +293,7 @@ func askAutoStart(config Config) {
 	input = strings.TrimSpace(input)
 
 	if strings.ToUpper(input) == "Y" {
-		if err := setAutoStart(config); err != nil {
+		if err := setAutoStart(); err != nil {
 			consoleLogger.Error(fmt.Sprintf("设置开机自启动失败: %v", err))
 			fmt.Printf("  设置失败: %v\n", err)
 		} else {
@@ -299,7 +306,7 @@ func askAutoStart(config Config) {
 }
 
 // setAutoStart 设置开机自启动
-func setAutoStart(config Config) error {
+func setAutoStart() error {
 	exePath, _ := os.Executable()
 	exePath, _ = filepath.Abs(exePath)
 
@@ -312,6 +319,63 @@ func setAutoStart(config Config) error {
 	}
 
 	return starter.Enable(cfg)
+}
+
+// savePortConfig 保存端口配置到配置文件
+func savePortConfig(configPath string, port int) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return err
+	}
+
+	// 更新配置
+	agent, ok := config["agent"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid config structure")
+	}
+
+	listen, ok := agent["listen"].(map[string]interface{})
+	if !ok {
+		listen = make(map[string]interface{})
+		agent["listen"] = listen
+	}
+	listen["port"] = port
+
+	// 写回配置文件
+	newData, err := yaml.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, newData, 0644)
+}
+
+// askPort 询问监听端口
+func askPort(currentPort int) int {
+	fmt.Println("【端口配置】")
+	fmt.Printf("  当前监听端口: %d\n", currentPort)
+	fmt.Println("  请输入新的监听端口（1-65535），或直接按 Enter 使用当前端口: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	if input == "" {
+		return currentPort
+	}
+
+	var newPort int
+	if _, err := fmt.Sscanf(input, "%d", &newPort); err != nil || newPort < 1 || newPort > 65535 {
+		fmt.Println("  无效的端口号，将使用当前端口")
+		return currentPort
+	}
+
+	return newPort
 }
 
 // askStart 询问是否立即启动
@@ -335,105 +399,117 @@ func askStart() bool {
 }
 
 // startServiceBackground 启动后台服务进程
-func startServiceBackground(config Config, storeInstance *store.LocalStore, orchInstance *orchestrator.Orchestrator, healthChecker *health.HealthChecker, nodeMode pkgConfig.NodeMode, configPath string) {
+func startServiceBackground(config Config, nodeMode pkgConfig.NodeMode, customPort int) {
 	fmt.Println()
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println("  正在启动后台服务...")
+	fmt.Println(strings.Repeat("=", 60))
 
 	// 获取程序路径和工作目录
 	exePath, _ := os.Executable()
 	workDir := filepath.Dir(exePath)
 
-	// 启动后台进程 - 使用 DETACHED_PROCESS 创建完全独立的进程
-	cmd := exec.Command(exePath, "--hidden")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | 0x00000008, // DETACHED_PROCESS = 0x00000008
+	// 构建启动参数
+	args := []string{"--hidden"}
+	if customPort != 0 && customPort != config.Agent.Listen.Port {
+		args = append(args, "--port", fmt.Sprintf("%d", customPort))
 	}
+
+	// 启动完全独立的后台进程
+	var processPID int
+
+	// 构建命令
+	cmd := exec.Command(exePath, args...)
 	cmd.Dir = workDir
 
-	// 启动后台进程
+	// 使用平台特定的设置，确保进程完全脱离
+	setupDetachedProcess(cmd)
+
+	// 启动进程
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("  启动失败: %v\n", err)
-		fmt.Println("\n按 Enter 退出...")
-		bufio.NewReader(os.Stdin).ReadBytes('\n')
-		cleanupLockFile()
+		pauseBeforeExit()
 		os.Exit(1)
 	}
 
-	// 打印启动成功信息（不等待 lock 文件）
+	// 获取进程 PID
+	processPID = cmd.Process.Pid
+
+	// 释放进程句柄，使进程完全独立
+	// 这样即使父进程退出，子进程也不会受影响
+	if err := cmd.Process.Release(); err != nil {
+		fmt.Printf("  警告: 无法释放进程句柄: %v\n", err)
+	}
+
+	// 确定实际使用的端口
+	actualPort := config.Agent.Listen.Port
+	if customPort != 0 && customPort != config.Agent.Listen.Port {
+		actualPort = customPort
+	}
+
+	fmt.Println()
+	fmt.Println("  ⏳ 启动中，请稍候...")
+	fmt.Println()
+
+	// 等待服务初始化并检查健康状态
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
+		time.Sleep(1 * time.Second)
+		fmt.Printf("\r  正在检查服务状态... [%d/%d]", i+1, maxRetries)
+
+		// 尝试连接健康检查端点
+		healthURL := fmt.Sprintf("http://%s:%d/health", config.Agent.Listen.Host, actualPort)
+		resp, err := http.Get(healthURL)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			fmt.Println(" ✓")
+			break
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+
+		if i == maxRetries-1 {
+			fmt.Println(" !")
+			fmt.Println("\n  警告: 服务可能未完全启动，请检查日志")
+		}
+	}
+
+	// 打印启动成功信息
 	fmt.Println()
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Println("  服务已启动！")
-	fmt.Printf("  监听地址: http://%s:%d\n", config.Agent.Listen.Host, config.Agent.Listen.Port)
-	fmt.Printf("  健康检查: http://%s:%d/health\n", config.Agent.Listen.Host, config.Agent.Listen.Port)
+	fmt.Println("  ✓ 服务启动成功！")
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println()
+	fmt.Println("【服务信息】")
+	if processPID > 0 {
+		fmt.Printf("  进程 PID: %d\n", processPID)
+	}
+	fmt.Printf("  监听地址: http://%s:%d\n", config.Agent.Listen.Host, actualPort)
+	fmt.Printf("  健康检查: http://%s:%d/health\n", config.Agent.Listen.Host, actualPort)
+	fmt.Printf("  工作目录: %s\n", workDir)
 	if nodeMode == pkgConfig.ModeOnline {
 		fmt.Println("  运行模式: 在线模式")
 	} else {
 		fmt.Println("  运行模式: 离线模式")
 	}
 	fmt.Println()
-	fmt.Println("  服务正在后台运行...")
+	fmt.Println("【运行状态】")
+	fmt.Println("  服务已在后台运行")
+	fmt.Println("  关闭此窗口不会影响服务运行")
+	fmt.Println()
 	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println()
+	fmt.Println("  提示: 按任意键关闭此窗口...")
 
-	// 直接退出，强制关闭控制台窗口
-	if runtime.GOOS == "windows" {
-		user32 := windows.NewLazySystemDLL("user32.dll")
-		kernel32 := windows.NewLazySystemDLL("kernel32.dll")
-
-		// 获取并关闭控制台窗口
-		getConsoleWindow := kernel32.NewProc("GetConsoleWindow")
-		hwnd, _, _ := getConsoleWindow.Call()
-		if hwnd != 0 {
-			postMessage := user32.NewProc("PostMessageW")
-			postMessage.Call(hwnd, 0x0010, 0, 0) // WM_CLOSE
-		}
-
-		// 分离控制台
-		freeConsole := kernel32.NewProc("FreeConsole")
-		freeConsole.Call()
-
-		// 直接退出进程
-		exitProcess := kernel32.NewProc("ExitProcess")
-		exitProcess.Call(0)
-	}
-	os.Exit(0)
-}
-
-// exitProcess 直接退出进程
-func exitProcess(exitCode int) {
-	if runtime.GOOS == "windows" {
-		kernel32 := windows.NewLazySystemDLL("kernel32.dll")
-		ep := kernel32.NewProc("ExitProcess")
-		ep.Call(uintptr(exitCode))
-	}
-}
-
-// closeConsole 关闭控制台窗口
-func closeConsole() {
-	if runtime.GOOS == "windows" {
-		user32 := windows.NewLazySystemDLL("user32.dll")
-		kernel32 := windows.NewLazySystemDLL("kernel32.dll")
-
-		// 获取控制台窗口句柄
-		getConsoleWindow := kernel32.NewProc("GetConsoleWindow")
-		hwnd, _, _ := getConsoleWindow.Call()
-
-		if hwnd != 0 {
-			// 发送 WM_CLOSE 消息关闭控制台窗口
-			postQuitMessage := user32.NewProc("PostMessageW")
-			postQuitMessage.Call(hwnd, 0x0010, 0, 0) // WM_CLOSE = 0x0010
-		}
-
-		// 分离控制台
-		freeConsole := kernel32.NewProc("FreeConsole")
-		freeConsole.Call()
-	}
+	// 等待用户按键
+	waitForKeyPress()
 }
 
 // runDaemon 后台守护进程模式（由 startServiceBackground 启动）
 func runDaemon() {
 	// 单例检查 - 只能运行一个实例
-	if !checkSingleInstance() {
+	if !checkSingleInstance(true) {
 		writeDaemonLog("单例检查失败，退出")
 		os.Exit(1)
 	}
@@ -443,11 +519,29 @@ func runDaemon() {
 	workDir := filepath.Dir(exePath)
 	os.Chdir(workDir)
 
+	// 解析命令行参数
+	customPort := 0
+	for i := 0; i < len(os.Args); i++ {
+		if os.Args[i] == "--port" && i+1 < len(os.Args) {
+			fmt.Sscanf(os.Args[i+1], "%d", &customPort)
+			break
+		}
+	}
+
 	// 加载配置
 	config, err := loadConfig()
 	if err != nil {
 		writeDaemonLog(fmt.Sprintf("加载配置失败: %v", err))
 		os.Exit(1)
+	}
+
+	// 如果指定了自定义端口，先保存再使用
+	if customPort > 0 && customPort != config.Agent.Listen.Port {
+		configPath := pkgConfig.GetConfigPath()
+		if err := savePortConfig(configPath, customPort); err != nil {
+			writeDaemonLog(fmt.Sprintf("保存端口配置失败: %v", err))
+		}
+		config.Agent.Listen.Port = customPort
 	}
 
 	// 初始化文件日志器
@@ -557,12 +651,6 @@ func writeDaemonLog(message string) {
 	}
 }
 
-// pauseExit 暂停并退出
-func pauseExit() {
-	fmt.Println("\n按 Enter 退出...")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
-	os.Exit(1)
-}
 
 // getWorkDir 获取工作目录
 func getWorkDir() string {
@@ -571,9 +659,23 @@ func getWorkDir() string {
 }
 
 func loadConfig() (*Config, error) {
+	if consoleLogger == nil {
+		consoleLogger = logger.NewSimpleLogger(logger.LevelInfo)
+	}
+	// 配置文件直接放在当前目录
+	configPath := "./config.yaml"
+
+	// 检查配置文件是否存在，不存在则生成默认配置
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if err := generateDefaultConfig(configPath); err != nil {
+			return nil, fmt.Errorf("生成默认配置失败: %w", err)
+		}
+		consoleLogger.Info(fmt.Sprintf("已生成默认配置文件: %s", configPath))
+	}
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./configs")
+	viper.AddConfigPath(".")
 
 	viper.AutomaticEnv()
 
@@ -599,4 +701,70 @@ func createExecutor(config ExecutorConfig) (executor.Executor, error) {
 	}
 
 	return executor.NewProcessExecutor(config.Process.WorkDir, config.Process.LogDir, config.Process.Binary), nil
+}
+
+// generateDefaultConfig 生成默认配置文件
+func generateDefaultConfig(configPath string) error {
+	defaultConfig := `agent:
+    executor:
+        docker:
+            enabled: false
+            imagePrefix: node_agent_runtime
+            network: node_agent
+            socket: /var/run/docker.sock
+        process:
+            binary: runtime_engine
+            logDir: ./logs
+            workDir: ./runtime
+        systemd:
+            enabled: false
+            unitTemplate: /etc/systemd/system/node_agent_{project}.service
+        type: process
+    listen:
+        host: 0.0.0.0
+        port: 8081
+    mode: offline
+    network:
+        heartbeat:
+            enabled: true
+            endpoint: http://manager:9099/api/v1/nodes/heartbeat
+            interval: 10s
+    online:
+        centerUrl: ""
+        nodeId: ""
+        registrationToken: ""
+    runtime:
+        healthCheck:
+            enabled: true
+            endpoint: /health
+            interval: 30s
+            retries: 3
+            timeout: 5s
+        workDir: ./runtime
+logging:
+    file: ./logs/agent.log
+    format: json
+    level: info
+    output: stdout
+storage:
+    local:
+        dataDir: ./data
+    type: local
+`
+
+	return os.WriteFile(configPath, []byte(defaultConfig), 0644)
+}
+
+// waitForKeyPress 等待用户按键
+func waitForKeyPress() {
+	reader := bufio.NewReader(os.Stdin)
+	reader.ReadByte()
+}
+
+// pauseBeforeExit 暂停并等待用户按键后退出
+func pauseBeforeExit() {
+	fmt.Println()
+	fmt.Println("  按任意键退出...")
+	waitForKeyPress()
+	cleanupLockFile()
 }

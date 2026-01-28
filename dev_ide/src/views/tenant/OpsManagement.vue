@@ -120,21 +120,13 @@
               </div>
             </div>
 
-            <!-- Disk & Network Bars -->
+            <!-- Disk Bars -->
             <div class="text-xs space-y-2">
               <div class="flex justify-between items-center text-gray-600 dark:text-gray-400">
                 <span>磁盘 ({{ getDiskLabel(node) }})</span>
                 <span class="font-mono">{{ getMetricValue(node, 'disk') }}%</span>
               </div>
               <el-progress :percentage="getMetricValue(node, 'disk')" :show-text="false" :stroke-width="6" class="mb-3" />
-              
-              <div class="flex justify-between items-center text-gray-600 dark:text-gray-400">
-                <div class="flex items-center">
-                  <el-icon class="mr-1"><Top /></el-icon> {{ formatNet(getMetricValue(node, 'tx_sec')) }}
-                  <el-icon class="ml-2 mr-1"><Bottom /></el-icon> {{ formatNet(getMetricValue(node, 'rx_sec')) }}
-                </div>
-                <span class="text-[10px] text-gray-400">网络吞吐</span>
-              </div>
             </div>
           </div>
 
@@ -461,10 +453,10 @@ const fetchNodes = async () => {
         approvalStatus: 'approved',
       },
     })
-    if (res.data.success) {
-      nodeList.value = res.data.data.items
-      nodePagination.total = res.data.data.total
-      approvedCount.value = res.data.data.total
+    if (res.success) {
+      nodeList.value = res.data.items
+      nodePagination.total = res.data.total
+      approvedCount.value = res.data.total
     }
   } catch (error) {
     console.error('获取节点失败:', error)
@@ -484,9 +476,9 @@ const fetchPendingList = async () => {
         approvalStatus: 'pending',
       },
     })
-    if (res.data.success) {
-      pendingList.value = res.data.data.items
-      pendingCount.value = res.data.data.total
+    if (res.success) {
+      pendingList.value = res.data.items
+      pendingCount.value = res.data.total
     }
   } catch (error) {
     console.error('获取待审核申请失败:', error)
@@ -496,10 +488,10 @@ const fetchPendingList = async () => {
 const handleApprove = async (node) => {
   try {
     const res = await request.put(`/nodes/${node.id}/approve`)
-    if (res.data.success) {
+    if (res.success) {
       ElMessage.success('节点审批已通过')
-      registrationToken.value = res.data.data.registrationToken
-      newNodeId.value = res.data.data.id
+      registrationToken.value = res.data.registrationToken
+      newNodeId.value = res.data.id
       showTokenDialog.value = true
       showPendingDialog.value = false
       fetchNodes()
@@ -519,11 +511,11 @@ const handleReject = (node) => {
   }).then(async () => {
     try {
       const res = await request.put(`/nodes/${node.id}/reject`)
-      if (res.data.success) {
-        ElMessage.warning('已拒绝该节点接入申请')
-        showPendingDialog.value = false
-        fetchNodes()
-        fetchPendingList()
+    if (res.success) {
+      ElMessage.warning('已拒绝该节点接入申请')
+      showPendingDialog.value = false
+      fetchNodes()
+      fetchPendingList()
         updateCounts()
       }
     } catch (error) {
@@ -538,8 +530,8 @@ const updateCounts = async () => {
       request.get('/nodes', { params: { pageSize: 1, approvalStatus: 'approved' } }),
       request.get('/nodes', { params: { pageSize: 1, approvalStatus: 'pending' } })
     ])
-    approvedCount.value = resApproved.data.data.total
-    pendingCount.value = resPending.data.data.total
+    approvedCount.value = resApproved.data.total
+    pendingCount.value = resPending.data.total
   } catch (e) {}
 }
 
@@ -572,8 +564,6 @@ const getMetricValue = (node, type) => {
     case 'cpu': return Math.round((node.metrics.cpu || 0) * 100)
     case 'memory': return Math.round((node.metrics.memory || 0) * 100)
     case 'disk': return Math.round((node.metrics.disk || 0) * 100)
-    case 'tx_sec': return node.metrics.network?.tx_sec || 0
-    case 'rx_sec': return node.metrics.network?.rx_sec || 0
     default: return 0
   }
 }
@@ -587,13 +577,6 @@ const getProgressColor = (percentage) => {
   if (percentage < 60) return '#10b981' // Green
   if (percentage < 85) return '#f59e0b' // Yellow
   return '#ef4444' // Red
-}
-
-const formatNet = (bytesPerSec) => {
-  if (bytesPerSec === 0) return '0 B/s'
-  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-  const i = Math.floor(Math.log(bytesPerSec) / Math.log(1024))
-  return `${(bytesPerSec / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
 const formatTime = (time) => time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-'

@@ -42,8 +42,8 @@ const router = createRouter({
 })
 
 // 全局路由守卫 - 检查初始化状态
-router.beforeEach((to, from, next) => {
-  const initialized = isInitialized()
+router.beforeEach(async (to, from, next) => {
+  const initialized = await isInitialized()
 
   // 如果未初始化且不是访问初始化页面，重定向到初始化页面
   if (!initialized && to.path !== '/init') {

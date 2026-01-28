@@ -71,4 +71,9 @@ export const nodeApi = {
   saveConfig(data) {
     return api.post('/config/save', data).then(res => res.data)
   },
+
+  // 获取服务配置
+  getServiceConfig() {
+    return api.get('/config/service').then(res => res.data)
+  },
 }

@@ -25,9 +25,9 @@ func TestLogLevel(t *testing.T) {
 
 // TestNewLogger 测试创建日志器
 func TestNewLogger(t *testing.T) {
-	logger := NewLogger(LevelInfo)
+	logger := NewSimpleLogger(LevelInfo)
 	if logger == nil {
-		t.Error("NewLogger 不应返回 nil")
+		t.Error("NewSimpleLogger 不应返回 nil")
 	}
 	if logger.level != LevelInfo {
 		t.Errorf("日志级别期望 %s，实际 %s", LevelInfo, logger.level)
@@ -53,7 +53,7 @@ func TestSimpleLogger_LevelComparison(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		logger := NewLogger(tt.loggerLevel)
+		logger := NewSimpleLogger(tt.loggerLevel)
 		result := logger.shouldLog(tt.msgLevel)
 		if result != tt.expected {
 			t.Errorf("shouldLog(%s, %s) 期望 %v，实际 %v",
@@ -64,7 +64,7 @@ func TestSimpleLogger_LevelComparison(t *testing.T) {
 
 // TestSimpleLogger_LogMethods 测试日志方法不 panic
 func TestSimpleLogger_LogMethods(t *testing.T) {
-	logger := NewLogger(LevelDebug)
+	logger := NewSimpleLogger(LevelDebug)
 
 	// 测试所有日志级别方法
 	logger.Debug("debug message", "key", "value")

@@ -53,14 +53,7 @@ if not exist "%FRONTEND_DIR%" (
     echo 前端目录: %FRONTEND_DIR%
     echo.
 ) else (
-    REM 检查 pnpm 是否安装
-    where pnpm >nul 2>&1
-    if %errorlevel% neq 0 (
-        echo 警告: pnpm 未安装，跳过前端构建
-        echo 请先安装 pnpm: https://pnpm.io/installation
-        echo.
-    ) else (
-        echo 正在构建前端...
+    echo 正在构建前端...
 
         REM 进入前端目录并执行 pnpm 命令（使用 call 以确保变量正确展开）
         echo 当前目录: %FRONTEND_DIR%
@@ -108,9 +101,7 @@ if not exist "%FRONTEND_DIR%" (
         echo 复制前端资源...
         if not exist "%STATIC_DIR%" mkdir "%STATIC_DIR%"
         xcopy "%FRONTEND_DIR%\dist\*" "%STATIC_DIR%" /E /Y /Q
-
         echo 前端资源复制完成！
-    )
 )
 
 echo.
@@ -129,7 +120,7 @@ del /q build\node_agent.pdb 2>nul
 
 REM 构建
 echo 正在构建 Windows 版本...
-go build -ldflags "-X main.version=1.0.0" -o build\node_agent.exe cmd\main.go
+go build -ldflags "-X main.version=1.0.0" -o build\node_agent.exe .\cmd
 
 if %errorlevel% neq 0 (
     echo.
@@ -166,8 +157,8 @@ echo ============================================================
 echo.
 echo 下一步:
 echo   1. 复制 build\node_agent.exe 到目标机器
-echo   2. 复制 configs\config.yaml 到同目录
-echo   3. 运行 node_agent.exe 进行配置
+echo   2. 运行 node_agent.exe（配置文件将自动生成）
+echo   3. 按照提示完成配置
 echo.
 echo 按任意键退出...
 pause >nul

@@ -10,6 +10,7 @@ type NodeInfo struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
 	Version      string    `json:"version"`
+	Mode         string    `json:"mode"`
 	ExecutorType string    `json:"executorType"`
 	WorkDir      string    `json:"workDir"`
 	CreatedAt    time.Time `json:"createdAt"`

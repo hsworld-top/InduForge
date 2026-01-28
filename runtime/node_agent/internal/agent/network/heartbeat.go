@@ -7,10 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 
-	"github.com/indu-forge/node_agent/internal/pkg/types"
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
+	"github.com/indu-forge/node_agent/internal/pkg/types"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 // HeartbeatConfig 心跳配置
@@ -128,14 +133,28 @@ func (h *HeartbeatSender) sendHeartbeat(ctx context.Context) {
 func (h *HeartbeatSender) collectMetrics() map[string]interface{} {
 	metrics := make(map[string]interface{})
 
-	// CPU 使用率（简化示例）
-	metrics["cpu_usage"] = 0.0
+	// CPU 使用率（0~1）
+	if percents, err := cpu.Percent(0, false); err == nil && len(percents) > 0 {
+		metrics["cpu"] = percents[0] / 100.0
+	} else {
+		metrics["cpu"] = 0.0
+	}
 
-	// 内存使用（简化示例）
-	metrics["memory_usage"] = 0.0
+	// 内存使用率（0~1）
+	if vm, err := mem.VirtualMemory(); err == nil {
+		metrics["memory"] = float64(vm.UsedPercent) / 100.0
+	} else {
+		metrics["memory"] = 0.0
+	}
 
-	// 磁盘使用（简化示例）
-	metrics["disk_usage"] = 0.0
+	// 磁盘使用率（0~1）
+	diskPath, diskLabel := getDiskPath()
+	if du, err := disk.Usage(diskPath); err == nil {
+		metrics["disk"] = float64(du.UsedPercent) / 100.0
+	} else {
+		metrics["disk"] = 0.0
+	}
+	metrics["disk_label"] = diskLabel
 
 	// 运行时数量
 	metrics["running_projects"] = len(h.projects)
@@ -150,6 +169,30 @@ func (h *HeartbeatSender) collectMetrics() map[string]interface{} {
 
 	return metrics
 }
+
+// getDiskPath 获取当前系统默认磁盘路径与标签
+func getDiskPath() (string, string) {
+	exePath, err := os.Executable()
+	if err != nil {
+		if runtime.GOOS == "windows" {
+			return "C:\\", "C"
+		}
+		return "/", "System"
+	}
+
+	exeDir := filepath.Dir(exePath)
+	if runtime.GOOS == "windows" {
+		volume := filepath.VolumeName(exeDir) // e.g. C:
+		if volume == "" {
+			return "C:\\", "C"
+		}
+		return volume + "\\", volume
+	}
+
+	// Linux/Unix 直接使用程序所在路径，disk.Usage 会解析到对应挂载点
+	return exeDir, "System"
+}
+
 
 // UpdateProjects 更新项目列表
 func (h *HeartbeatSender) UpdateProjects(projects []string) {

@@ -9,6 +9,7 @@ const {
   stopDbHealthCheck,
 } = require("./config/database");
 const { initRedis, close: closeRedis } = require("./utils/redis");
+const { initStorage } = require("./services/storageService");
 const socketService = require("./services/socketService");
 
 // 环境变量配置
@@ -108,6 +109,18 @@ const initializeServices = async () => {
     logger.warn("Redis connection failed", { error: error.message });
     logger.info(
       "Continuing without Redis (some features may be unavailable)..."
+    );
+  }
+
+  // 3. 初始化 MinIO（非阻塞，失败不影响启动）
+  try {
+    logger.info("Initializing MinIO connection...");
+    await initStorage();
+    logger.info("MinIO connection initialized");
+  } catch (error) {
+    logger.warn("MinIO connection failed", { error: error.message });
+    logger.info(
+      "Continuing without MinIO (storage features may be unavailable)..."
     );
   }
 };

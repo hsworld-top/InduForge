@@ -14,6 +14,7 @@ import (
 	"github.com/indu-forge/node_agent/internal/pkg/types"
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
 	pkgConfig "github.com/indu-forge/node_agent/internal/pkg/config"
+	"gopkg.in/yaml.v3"
 )
 
 // APIHandler API 处理器
@@ -36,11 +37,14 @@ func NewAPIHandler(orch *orchestrator.Orchestrator, st *store.LocalStore) *APIHa
 func (h *APIHandler) GetNodeInfo(w http.ResponseWriter, r *http.Request) {
 	// 获取当前工作目录
 	workDir, _ := os.Getwd()
+	configPath := pkgConfig.GetConfigPath()
+	nodeMode, _ := pkgConfig.GetMode(configPath)
 	
 	nodeInfo := types.NodeInfo{
 		ID:           "node-001",
 		Name:         "Node Agent",
 		Version:      "1.0.0",
+		Mode:         string(nodeMode),
 		ExecutorType: "process",
 		WorkDir:      filepath.ToSlash(workDir), // 使用实际工作目录，转换为正斜杠
 		CreatedAt:    now(),
@@ -281,6 +285,8 @@ func (h *APIHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 		CenterURL         string `json:"centerUrl"`
 		NodeID            string `json:"nodeId"`
 		RegistrationToken string `json:"registrationToken"`
+		NodeName          string `json:"nodeName"`
+		NodeDescription   string `json:"nodeDescription"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -288,10 +294,9 @@ func (h *APIHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 仅在线模式需要保存配置
+	configPath := pkgConfig.GetConfigPath()
+
 	if req.Mode == "online" {
-		configPath := pkgConfig.GetConfigPath()
-		
 		onlineConfig := pkgConfig.OnlineConfig{
 			CenterURL:         req.CenterURL,
 			NodeID:            req.NodeID,
@@ -304,12 +309,64 @@ func (h *APIHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.logger.Info("在线模式配置已保存", "nodeId", req.NodeID)
+	} else if req.Mode == "offline" {
+		if err := pkgConfig.SaveOfflineConfig(configPath, req.NodeName); err != nil {
+			h.errorResponse(w, http.StatusInternalServerError, err)
+			return
+		}
+		h.logger.Info("离线模式配置已保存", "nodeName", req.NodeName)
 	}
 
 	h.jsonResponse(w, http.StatusOK, map[string]string{
 		"status":  "success",
 		"message": "配置保存成功",
 	})
+}
+
+// GetServiceConfig 获取服务配置
+func (h *APIHandler) GetServiceConfig(w http.ResponseWriter, r *http.Request) {
+	configPath := pkgConfig.GetConfigPath()
+
+	listenConfig, err := pkgConfig.GetListenConfig(configPath)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// 读取完整配置以返回在线/离线信息
+	var config struct {
+		Agent struct {
+			ID     string              `yaml:"id"`
+			Mode   pkgConfig.NodeMode  `yaml:"mode"`
+			Online pkgConfig.OnlineConfig `yaml:"online"`
+		} `yaml:"agent"`
+	}
+
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := yaml.Unmarshal(configData, &config); err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	response := map[string]interface{}{
+		"listen": map[string]interface{}{
+			"host": listenConfig.Host,
+			"port": listenConfig.Port,
+		},
+		"mode":     string(config.Agent.Mode),
+		"nodeName": config.Agent.ID,
+		"online": map[string]interface{}{
+			"centerUrl":         config.Agent.Online.CenterURL,
+			"nodeId":            config.Agent.Online.NodeID,
+			"registrationToken": config.Agent.Online.RegistrationToken,
+		},
+	}
+
+	h.jsonResponse(w, http.StatusOK, response)
 }
 
 // now 获取当前时间

@@ -28,6 +28,14 @@
           <span class="value">{{ nodeStore.nodeInfo?.version || '-' }}</span>
         </div>
         <div class="info-item">
+          <span class="label">运行模式:</span>
+          <span class="value">
+            <el-tag :type="nodeStore.nodeInfo?.mode === 'online' ? 'success' : 'info'">
+              {{ formatMode(nodeStore.nodeInfo?.mode) }}
+            </el-tag>
+          </span>
+        </div>
+        <div class="info-item">
           <span class="label">执行器类型:</span>
           <span class="value">{{ nodeStore.nodeInfo?.executorType || '-' }}</span>
         </div>
@@ -146,6 +154,12 @@ const getStatusType = (status) => {
     deploying: 'warning',
   }
   return map[status] || 'info'
+}
+
+const formatMode = (mode) => {
+  if (mode === 'online') return '在线'
+  if (mode === 'offline') return '离线'
+  return '-'
 }
 </script>
 

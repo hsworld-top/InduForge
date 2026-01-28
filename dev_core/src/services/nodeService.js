@@ -16,6 +16,18 @@ function generateRegistrationToken() {
 }
 
 /**
+ * 规范化 IP 地址（处理 ::ffff: 前缀与本地回环）
+ * @param {string} ip
+ * @returns {string}
+ */
+function normalizeIp(ip) {
+  if (!ip) return ip;
+  if (ip === "::1") return "127.0.0.1";
+  if (ip.startsWith("::ffff:")) return ip.slice(7);
+  return ip;
+}
+
+/**
  * 节点服务类
  */
 class NodeService {
@@ -28,10 +40,11 @@ class NodeService {
    * @param {string} data.ipAddress - IP地址
    * @param {number} data.port - 端口
    * @param {string} data.createdBy - 创建者ID
+   * @param {string} data.role - 创建者角色
    * @returns {Promise<Object>} 节点信息及注册令牌
    */
   async register(data) {
-    const { tenantId, name, agentVersion, ipAddress, port, createdBy, description } = data;
+    const { tenantId, name, agentVersion, ipAddress, port, createdBy, description, role } = data;
 
     // 检查节点名称是否重复
     const existing = await Node.findOne({
@@ -42,7 +55,11 @@ class NodeService {
     }
 
     const id = crypto.randomUUID();
-    const registrationToken = generateRegistrationToken();
+
+    // 具备运维权限的用户自动审批通过
+    const hasOpsPermission = ["OPS_ADMIN", "SYSTEM_ADMIN"].includes(role);
+    const approvalStatus = hasOpsPermission ? "approved" : "pending";
+    const registrationToken = hasOpsPermission ? generateRegistrationToken() : null;
 
     const node = await Node.create({
       id,
@@ -50,21 +67,25 @@ class NodeService {
       name,
       description,
       agentVersion,
-      ipAddress,
+      ipAddress: normalizeIp(ipAddress),
       port: port || 8080,
       status: "offline", // 注册后默认为离线，等待审批
-      approvalStatus: "pending",
+      approvalStatus,
       registrationToken,
       lastHeartbeatAt: null,
+      approvedAt: hasOpsPermission ? new Date() : null,
+      approvedBy: hasOpsPermission ? createdBy : null,
       createdBy,
       updatedBy: createdBy,
     });
 
     return {
-      id: node.id,
-      name: node.name,
-      registrationToken,
-      status: node.status,
+      nodeId: node.id,
+      nodeName: node.name,
+      approvalStatus: node.approvalStatus,
+      registrationToken: hasOpsPermission ? registrationToken : null,
+      message: hasOpsPermission ? "自动审批通过" : "申请已提交，等待管理员审批",
+      autoApproved: hasOpsPermission,
     };
   }
 
@@ -134,7 +155,7 @@ class NodeService {
       name: nodeName,
       description: nodeDescription,
       agentVersion: agentVersion || "1.0.0",
-      ipAddress,
+      ipAddress: normalizeIp(ipAddress),
       port: port || 8080,
       mode,
       status: "offline",
@@ -221,7 +242,7 @@ class NodeService {
     };
 
     if (ipAddress) {
-      updateData.ipAddress = ipAddress;
+      updateData.ipAddress = normalizeIp(ipAddress);
     }
 
     // 更新各工程运行状态与指标
