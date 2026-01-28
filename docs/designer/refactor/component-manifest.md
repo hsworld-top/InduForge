@@ -474,3 +474,27 @@ for (const [path, manifest] of Object.entries(manifests)) {
 - [Schema 设计](./schema-design.md)
 - [设计态交互](./design-interaction.md)
 - [渲染架构](./rendering.md)
+
+#### 6.6.1 ECharts 组件方法
+适用：图表（EChart）组件。
+
+- `setOption(option, notMergeOrOpts, lazyUpdate, silent, replaceMerge)`
+  - `notMergeOrOpts` 支持两种写法：
+    - `true/false`：`true` 表示替换旧配置（清空后重绘），`false` 表示增量更新。
+    - `{ notMerge, lazyUpdate, silent, replaceMerge }`：与 ECharts 官方参数一致。
+- `echarts(method, ...args)`：调用任意 ECharts 实例方法（如 `dispatchAction`）。
+
+示例：
+```js
+// 替换整个 option（清空旧图）
+components.图表1.setOption(option, true);
+
+// 增量更新
+components.图表1.setOption(option, false);
+
+// 传 opts（与 ECharts 官网一致）
+components.图表1.setOption(option, { notMerge: true, lazyUpdate: false });
+
+// 调用任意 ECharts 方法
+components.图表1.echarts("dispatchAction", { type: "highlight", seriesIndex: 0 });
+```
