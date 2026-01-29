@@ -36,7 +36,7 @@ export function computePanelState(count) {
  */
 export function usePanelState() {
   const editorStore = useEditorStore();
-  const { doc, selection, docVersion } = storeToRefs(editorStore);
+  const { doc, selection, docVersion, currentPage } = storeToRefs(editorStore);
 
   /** @type {import('vue').Ref<number>} */
   const selectedCount = ref(0);
@@ -162,10 +162,10 @@ export function usePanelState() {
    * @type {import('vue').ComputedRef<PanelState>}
    */
   const panelState = computed(() => {
-    // ✅ 选中根容器时，显示页面属性面板
+    // 选中根容器时，显示页面属性面板
     if (selectedCount.value === 1 && selectedNode.value) {
-      const currentPage = doc.value?.getCurrentPage?.();
-      if (currentPage && selectedNode.value.id === currentPage.rootNodeId) {
+      const page = currentPage.value || doc.value?.getCurrentPage?.();
+      if (page && selectedNode.value.id === page.rootNodeId) {
         return "page";
       }
     }

@@ -83,6 +83,17 @@
           @change="handleConfigUpdate"
         />
       </el-form-item>
+      <el-form-item label="样式配置">
+        <el-button
+          size="small"
+          :disabled="!rootNode"
+          :class="{ 'is-active': hasCanvasStyleConfig }"
+          @click="openCanvasStyleDialog"
+        >
+          配置
+        </el-button>
+      </el-form-item>
+
 
       <el-divider />
 
@@ -131,6 +142,57 @@
       </el-form-item>
     </el-form>
   </div>
+
+  <el-dialog
+    v-model="canvasStyleDialogVisible"
+    title="样式配置"
+    width="980px"
+    top="4vh"
+    :close-on-click-modal="false"
+    :lock-scroll="false"
+  >
+    <div class="config-toolbar">
+      <div class="config-toolbar-item">
+        <span class="config-label">样式模板：</span>
+        <el-select
+          v-model="selectedCanvasPresetId"
+          size="small"
+          class="config-select preset-select"
+          placeholder="请选择"
+          @change="handleCanvasPresetChange"
+        >
+          <el-option
+            v-for="item in filteredCanvasPresetOptions"
+            :key="item.id"
+            :label="item.label"
+            :value="item.id"
+          />
+        </el-select>
+      </div>
+      <div class="config-toolbar-item">
+        <span class="config-label">筛选：</span>
+        <el-input
+          v-model="canvasPresetSearch"
+          size="small"
+          class="config-select"
+          placeholder="搜索模板"
+          clearable
+        />
+      </div>
+    </div>
+    <div class="config-editor">
+      <MonacoEditor
+        v-model="canvasStyleDraft"
+        language="css"
+        height="520px"
+      />
+    </div>
+    <template #footer>
+      <el-button @click="clearCanvasStyleDialog">清除</el-button>
+      <el-button @click="canvasStyleDialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="saveCanvasStyleDialog">保存</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -139,10 +201,11 @@
  * 显示和编辑当前页面的配置信息
  */
 
-import { computed, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { ElMessage } from "element-plus";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import IconEpHomeFilled from "~icons/ep/home-filled";
 import { VIEW_PRESETS } from "@/constants";
 
@@ -163,7 +226,47 @@ const form = reactive({
   backgroundValue: "#ffffff",
 });
 
-// 诊断信息
+const canvasStyleDialogVisible = ref(false);
+const canvasStyleDraft = ref("");
+const canvasStylePresets = [
+  { id: "empty", label: "空模板", content: "" },
+  {
+    id: "center",
+    label: "居中布局",
+    content: "display: flex;\nalign-items: center;\njustify-content: center;",
+  },
+];
+const selectedCanvasPresetId = ref("");
+const canvasPresetSearch = ref("");
+
+/**
+ * 根据搜索关键字过滤样式模板
+ */
+const filteredCanvasPresetOptions = computed(() => {
+  const keyword = String(canvasPresetSearch.value || "").trim().toLowerCase();
+  if (!keyword) return canvasStylePresets;
+  return canvasStylePresets.filter((item) =>
+    String(item.label || "").toLowerCase().includes(keyword)
+  );
+});
+
+/**
+ * 获取当前页面根节点
+ */
+const rootNode = computed(() => {
+  if (!currentPage.value || !doc.value) return null;
+  return doc.value.getNode?.(currentPage.value.rootNodeId) || null;
+});
+
+/**
+ * 判断是否存在画布样式配置
+ */
+const hasCanvasStyleConfig = computed(() => {
+  const value = rootNode.value?.styleConfig;
+  return Boolean(String(value || "").trim());
+});
+
+// 诊断统计
 const diagnostic = reactive({
   total: 0,
   active: 0,
@@ -231,8 +334,8 @@ const getPageType = (page) => {
 };
 
 /**
- * 获取页面固定路径
- * @param {Object} page - 页面
+ * 根据页面信息与名称生成路由
+ * @param {Object} page - 页面对象
  * @param {string} name - 页面名称
  * @returns {string}
  */
@@ -242,13 +345,13 @@ const resolvePath = (page, name) => {
   if (page.path === "/login") return "/login";
   if (page.path === "/logout") return "/logout";
   if (page.name?.includes("登录")) return "/login";
-  if (page.name?.includes("登出")) return "/logout";
+  if (page.name?.includes("退出")) return "/logout";
   return toRoutePath(name);
 };
 
 /**
- * 校验名称唯一
- * @param {string} name - 名称
+ * 判断页面名称是否唯一
+ * @param {string} name - 页面名称
  * @param {string} excludeId - 排除的页面 ID
  * @returns {boolean}
  */
@@ -262,11 +365,11 @@ const isNameUnique = (name, excludeId) => {
 };
 
 /**
- * 同步页面配置到表单
- * @param {Object | null} page - 页面
+ * 同步表单状态
+ * @param {Object} page - 页面对象
  */
 const syncForm = (page) => {
-  // 优先从 pages 列表获取页面信息（更准确）
+  // 优先使用列表中的页面数据，避免脏缓存
   const pageFromList = currentPageId.value
     ? pages.value.find((p) => p.id === currentPageId.value)
     : null;
@@ -275,11 +378,11 @@ const syncForm = (page) => {
     return;
   }
 
-  // 使用 pages 列表的数据优先
+  // 更新名称
   const nextName = pageFromList?.name || page?.name || "";
   form.name = nextName;
 
-  // 路由路径优先从 pages 列表获取
+  // 更新路由路径
   const path = pageFromList?.path || page?.path || resolvePath(page, nextName);
   form.path = formatPathForDisplay(path);
 
@@ -293,21 +396,68 @@ const syncForm = (page) => {
   form.backgroundKind = page?.config?.background?.kind || "color";
   form.backgroundValue = page?.config?.background?.value || "#ffffff";
 
-  // 更新诊断信息（模拟数据，实际应从 DataService 获取）
+  // 更新诊断统计
   updateDiagnostic();
 };
 
 /**
- * 更新诊断信息
+ * 更新诊断统计
  */
 const updateDiagnostic = () => {
-  // TODO: 从 DataService 获取实际数据点状态
+  // 当前暂无实时诊断来源，先重置为 0
   diagnostic.total = 0;
   diagnostic.active = 0;
   diagnostic.invalid = 0;
 };
 
-// 监听 currentPage 和 currentPageId 变化，同步表单
+/**
+ * 规范化样式输出，保证包含选择器
+ * @param {string} content - 样式内容
+ * @returns {string}
+ */
+const formatCanvasStyleOutput = (content) => {
+  const text = String(content || "");
+  if (text.includes("{")) return text;
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  return `#domId {
+${trimmed}
+}`;
+};
+
+/**
+ * 为样式补全 #domId 作用域
+ * @param {string} content - 样式内容
+ * @returns {string}
+ */
+const prefixCanvasStyleScope = (content) => {
+  const text = String(content || "").trim();
+  if (!text || !text.includes("{")) return text;
+  const blocks = text.split("}");
+  const rebuilt = blocks
+    .map((block) => {
+      const [selector, body] = block.split("{");
+      if (!body) return "";
+      const trimmedSelector = selector.trim();
+      if (!trimmedSelector) return "";
+      if (trimmedSelector.startsWith("@")) {
+        return `${trimmedSelector} {${body}`;
+      }
+      const selectors = trimmedSelector.split(",").map((item) => {
+        const sel = item.trim();
+        if (!sel) return "";
+        if (sel.includes("#domId")) return sel;
+        if (sel.startsWith(":")) return `#domId${sel}`;
+        return `#domId ${sel}`;
+      });
+      return `${selectors.filter(Boolean).join(", ")} {${body}`;
+    })
+    .filter(Boolean)
+    .join("}\n");
+  return rebuilt ? `${rebuilt}}` : text;
+};
+
+// 监听页面切换，同步表单
 watch(
   [() => currentPage.value, () => currentPageId.value, () => pages.value],
   () => {
@@ -317,7 +467,7 @@ watch(
 );
 
 /**
- * 更新页面名称
+ * 更新页面名称并同步路由路径
  */
 const handleNameUpdate = async () => {
   if (!currentPage.value) return;
@@ -348,7 +498,7 @@ const handleNameUpdate = async () => {
 };
 
 /**
- * 处理页面类型变化
+ * 切换页面类型并更新入口配置
  * @param {string} type - 页面类型
  */
 const handlePageTypeChange = (type) => {
@@ -366,7 +516,7 @@ const handlePageTypeChange = (type) => {
     editorStore.updateEntry({ logoutPageId: pageId });
     void editorStore.persistEntry();
   } else {
-    // 业务页，清除特殊入口
+    // 普通业务页，清理入口配置
     const entry = doc.value.entry || {};
     if (entry.loginPageId === pageId) {
       editorStore.updateEntry({ loginPageId: null });
@@ -384,7 +534,7 @@ const handlePageTypeChange = (type) => {
 };
 
 /**
- * 设为首页
+ * 设置当前页面为首页
  */
 const handleSetAsHome = () => {
   if (!currentPageId.value) return;
@@ -394,8 +544,8 @@ const handleSetAsHome = () => {
 };
 
 /**
- * 选择画布预设
- * @param {string} key - 预设键
+ * 应用画布预设
+ * @param {any} key - 预设键值
  */
 const handlePresetChange = (key) => {
   const preset = VIEW_PRESETS.find((item) => item.key === key);
@@ -406,7 +556,21 @@ const handlePresetChange = (key) => {
 };
 
 /**
- * 更新页面配置
+ * 插入画布样式模板
+ * @param {any} id - 模板 ID
+ */
+const handleCanvasPresetChange = (id) => {
+  const target = canvasStylePresets.find((item) => item.id === id);
+  if (!target) return;
+  const nextContent = formatCanvasStyleOutput(target.content || "");
+  if (!nextContent) return;
+  const current = String(canvasStyleDraft.value || "").trim();
+  const separator = current ? "\\n\\n" : "";
+  canvasStyleDraft.value = `${current}${separator}${nextContent}`;
+};
+
+/**
+ * 更新画布配置
  */
 const handleConfigUpdate = () => {
   if (!currentPage.value) return;
@@ -420,6 +584,38 @@ const handleConfigUpdate = () => {
   };
   editorStore.updateCurrentPage({ config: nextConfig });
   form.presetKey = resolvePresetKey(form.width, form.height);
+};
+
+/**
+ * 打开样式配置弹窗
+ */
+const openCanvasStyleDialog = () => {
+  if (!rootNode.value) return;
+  canvasStyleDraft.value = rootNode.value.styleConfig || "";
+  canvasStyleDialogVisible.value = true;
+};
+
+/**
+ * 保存样式配置
+ */
+const saveCanvasStyleDialog = () => {
+  if (!rootNode.value) return;
+  let content = String(canvasStyleDraft.value || "");
+  content = formatCanvasStyleOutput(content);
+  content = prefixCanvasStyleScope(content);
+  editorStore.updateNode(rootNode.value.id, { styleConfig: content });
+  void editorStore.saveCurrentPage?.();
+  canvasStyleDialogVisible.value = false;
+};
+
+/**
+ * 清空样式配置
+ */
+const clearCanvasStyleDialog = () => {
+  if (!rootNode.value) return;
+  canvasStyleDraft.value = "";
+  editorStore.updateNode(rootNode.value.id, { styleConfig: "" });
+  void editorStore.saveCurrentPage?.();
 };
 
 /**
@@ -438,6 +634,8 @@ const handleBackgroundUpdate = () => {
 };
 </script>
 
+
+
 <style scoped>
 .page-inspector-panel {
   padding: 12px;
@@ -445,7 +643,6 @@ const handleBackgroundUpdate = () => {
 
 .panel-title {
   display: flex;
-  align-items: center;
   gap: 8px;
   font-size: 14px;
   font-weight: 500;
@@ -467,5 +664,41 @@ const handleBackgroundUpdate = () => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.config-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.config-toolbar-item {
+  display: flex;
+  gap: 6px;
+}
+
+.config-label {
+  font-size: 12px;
+  color: #606266;
+}
+
+.config-select {
+  width: 180px;
+}
+
+.config-editor {
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.is-active {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
 }
 </style>
