@@ -81,9 +81,25 @@ export function usePanelState() {
     if (primary && doc.value) {
       if (primary.kind === "node") {
         const node = doc.value.getNode?.(primary.id) || null;
+        const normalizeType = (type) => {
+          if (!type) return type;
+          if (type === "Elayout" || type === "EILayout") return "ElLayout";
+          if (type === "ElayoutRow" || type === "EILayoutRow") return "ElLayoutRow";
+          if (type === "Elcol" || type === "EICol") return "ElCol";
+          if (type.startsWith("EI")) return `El${type.slice(2)}`;
+          return type;
+        };
+        if (node?.type) {
+          const normalizedType = normalizeType(node.type);
+          if (normalizedType && normalizedType !== node.type) {
+            editorStore.updateNode(node.id, { type: normalizedType });
+            node.type = normalizedType;
+          }
+        }
         selectedNode.value = node
           ? {
               ...node,
+              type: normalizeType(node.type),
               props: { ...(node.props || {}) },
               style: { ...(node.style || {}) },
               children: Array.isArray(node.children)

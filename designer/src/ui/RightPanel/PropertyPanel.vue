@@ -69,9 +69,46 @@
       </template>
 
       <!-- 属性表单：根据 Manifest 生成 -->
-      <template v-if="manifest && manifest.props.length > 0">
+      <template v-if="layoutForceProps.length > 0">
         <div class="prop-list">
-          <template v-for="group in groupedProps" :key="group.name">
+          <div
+            v-for="(propDef, propIndex) in layoutForceProps"
+            :key="propDef?.name || propIndex"
+            class="prop-item"
+          >
+            <div class="prop-label">
+              <span>{{ propDef.label }}</span>
+              <el-tooltip
+                v-if="shouldShowBindButton(propDef)"
+                content="绑定数据"
+                placement="top"
+              >
+                <el-button
+                  size="small"
+                  text
+                  class="bind-btn"
+                  :class="{ 'is-active': hasPropBinding(propDef.name) }"
+                  @click="handleBindClick(propDef)"
+                >
+                  <IconEpLink />
+                </el-button>
+              </el-tooltip>
+            </div>
+            <PropEditor
+              :prop="propDef"
+              :model-value="getPropValue(propDef.name)"
+              @update:model-value="
+                (val) => handlePropChange(propDef.name, val)
+              "
+            />
+          </div>
+        </div>
+      </template>
+      <template
+        v-else-if="effectiveManifest && effectiveManifest.props.length > 0"
+      >
+        <div class="prop-list">
+          <template v-for="group in displayPropGroups" :key="group.name">
             <template v-if="isElContainer && isRegionGroup(group)">
               <div
                 v-for="item in regionPropRows"
@@ -516,6 +553,7 @@ import SpacingEditor from "./StylePanel/SpacingEditor.vue";
 import PositionEditor from "./StylePanel/PositionEditor.vue";
 import { usePanelState } from "./use-panel-state";
 import { getManifest } from "@/manifests";
+import { componentRegistry } from "@/editor-core";
 import { useEditorStore } from "@/stores/editor-store";
 import { ElMessage } from "element-plus";
 import IconEpLink from "~icons/ep/link";
@@ -549,11 +587,48 @@ const currentElement = computed(
 const elementId = computed(() => currentElement.value?.id || "-");
 
 /** ???? */
-const elementType = computed(() => currentElement.value?.type || "-");
+const elementType = computed(
+  () => normalizeElementType(currentElement.value?.type) || "-"
+);
 
 /** ????????? */
 const elementLabel = ref("");
 const regionSizeState = ref({});
+
+watch(
+  () => selectedNode.value?.type,
+  (type) => {
+    if (!selectedNode.value || !type) return;
+    const normalized = normalizeElementType(type);
+    if (!normalized || normalized === type) return;
+    editorStore.updateNode(selectedNode.value.id, { type: normalized });
+  },
+  { immediate: true },
+);
+
+watch(
+  () => selectedNode.value?.id,
+  () => {
+    if (!selectedNode.value) return;
+    const type = normalizeElementType(selectedNode.value.type);
+    const manifest = type ? getManifest(type) : null;
+    const defaults = manifest?.defaultProps || {};
+    if (!defaults || Object.keys(defaults).length === 0) return;
+    const props = selectedNode.value.props || {};
+    let changed = false;
+    const nextProps = { ...props };
+    Object.entries(defaults).forEach(([key, value]) => {
+      if (nextProps[key] === undefined) {
+        nextProps[key] = value;
+        changed = true;
+      }
+    });
+    if (changed) {
+      editorStore.updateNode(selectedNode.value.id, { props: nextProps });
+    }
+  },
+  { immediate: true },
+);
 
 const regionSizeDefaults = {
   headerHeight: "60px",
@@ -776,14 +851,31 @@ const elementPlusTypes = new Set([
 ]);
 
 /**
+ * 兼容历史组件类型拼写
+ * @param {string | undefined} type - 组件类型
+ * @returns {string}
+ */
+const normalizeElementType = (type) => {
+  if (!type) return "";
+  if (type === "Elayout" || type === "EILayout") return "ElLayout";
+  if (type === "ElayoutRow" || type === "EILayoutRow") return "ElLayoutRow";
+  if (type === "Elcol" || type === "EICol") return "ElCol";
+  if (type.startsWith("EI")) {
+    return `El${type.slice(2)}`;
+  }
+  return type;
+};
+
+/**
  * 是否为 Element Plus 组件
  * @param {string | undefined} type - 组件类型
  * @returns {boolean}
  */
 const isElementPlusType = (type) => {
-  if (!type) return false;
-  if (type.startsWith("El")) return true;
-  return elementPlusTypes.has(type);
+  const normalized = normalizeElementType(type);
+  if (!normalized) return false;
+  if (normalized.startsWith("El")) return true;
+  return elementPlusTypes.has(normalized);
 };
 
 /**
@@ -2213,9 +2305,114 @@ watch(
  * 获取组件 Manifest
  */
 const manifest = computed(() => {
-  const type = currentElement.value?.type;
+  const type = normalizeElementType(currentElement.value?.type);
   if (!type) return null;
-  return getManifest(type);
+  const resolved = getManifest(type);
+  if (resolved) return resolved;
+  if (type.startsWith("El")) {
+    const fallback = getManifest(`El${type.slice(2)}`);
+    if (fallback) return fallback;
+  }
+  return componentRegistry.get(type) || null;
+});
+
+const layoutFallbackProps = {
+  ElLayout: [
+    {
+      name: "rows",
+      type: "number",
+      label: "行数",
+      group: "布局",
+      defaultValue: 1,
+      min: 1,
+      max: 24,
+    },
+    {
+      name: "gutter",
+      type: "number",
+      label: "行间距",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 100,
+    },
+  ],
+  ElLayoutRow: [
+    {
+      name: "columns",
+      type: "number",
+      label: "列数",
+      group: "布局",
+      defaultValue: 3,
+      min: 1,
+      max: 24,
+    },
+    {
+      name: "gutter",
+      type: "number",
+      label: "列间距",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 100,
+    },
+  ],
+  ElCol: [
+    {
+      name: "span",
+      type: "number",
+      label: "栅格",
+      group: "布局",
+      defaultValue: 24,
+      min: 1,
+      max: 24,
+    },
+    {
+      name: "offset",
+      type: "number",
+      label: "偏移",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 24,
+    },
+    {
+      name: "push",
+      type: "number",
+      label: "向右移动",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 24,
+    },
+    {
+      name: "pull",
+      type: "number",
+      label: "向左移动",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 24,
+    },
+  ],
+};
+
+const effectiveManifest = computed(() => {
+  if (manifest.value) return manifest.value;
+  const type = normalizeElementType(currentElement.value?.type);
+  const fallback = layoutFallbackProps[type];
+  if (!fallback) return null;
+  return {
+    type,
+    name: type,
+    category: "布局",
+    props: fallback,
+  };
+});
+
+const layoutForceProps = computed(() => {
+  const type = normalizeElementType(currentElement.value?.type);
+  return layoutFallbackProps[type] || [];
 });
 
 const configDialogTitle = computed(() =>
@@ -2324,10 +2521,10 @@ const isRegionGroup = (group) => {
  * ???????
  */
 const groupedProps = computed(() => {
-  if (!manifest.value) return [];
+  if (!effectiveManifest.value) return [];
 
   const groups = new Map();
-  for (const prop of manifest.value.props) {
+  for (const prop of effectiveManifest.value.props) {
     const groupName = prop.group || "??";
     if (!groups.has(groupName)) {
       groups.set(groupName, { name: groupName, props: [] });
@@ -2340,6 +2537,15 @@ const groupedProps = computed(() => {
   }
 
   return result;
+});
+
+const displayPropGroups = computed(() => {
+  const groups = groupedProps.value;
+  if (groups.length > 0) return groups;
+  if (effectiveManifest.value?.props?.length) {
+    return [{ name: "属性", props: effectiveManifest.value.props }];
+  }
+  return [];
 });
 
 

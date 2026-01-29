@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 组件 Manifest 注册表
  * 定义组件的属性、样式和事件配置
  */
@@ -81,7 +81,7 @@ export function getManifestsByCategory(category) {
 // FlexContainer 布局容器
 registerManifest({
   type: "FlexContainer",
-  name: "弹性容器",
+  name: "Flex布局",
   category: "布局",
   isContainer: true,
   props: [
@@ -90,12 +90,12 @@ registerManifest({
       type: "enum",
       label: "方向",
       group: "布局",
-      defaultValue: "column",
+      defaultValue: "row",
       options: [
-        { label: "垂直", value: "column" },
         { label: "水平", value: "row" },
-        { label: "垂直反向", value: "column-reverse" },
+        { label: "垂直", value: "column" },
         { label: "水平反向", value: "row-reverse" },
+        { label: "垂直反向", value: "column-reverse" },
       ],
     },
     {
@@ -151,89 +151,12 @@ registerManifest({
   ],
 });
 
-// FreeContainer 自由容器
-registerManifest({
-  type: "FreeContainer",
-  name: "自由容器",
-  category: "布局",
-  isContainer: true,
-  props: [
-    {
-      name: "overflow",
-      type: "enum",
-      label: "溢出处理",
-      group: "布局",
-      defaultValue: "visible",
-      options: [
-        { label: "可见", value: "visible" },
-        { label: "隐藏", value: "hidden" },
-        { label: "滚动", value: "auto" },
-        { label: "强制滚动", value: "scroll" },
-      ],
-    },
-  ],
-});
-
-// GridContainer 网格容器
-registerManifest({
-  type: "GridContainer",
-  name: "网格容器",
-  category: "布局",
-  isContainer: true,
-  props: [
-    {
-      name: "columns",
-      type: "number",
-      label: "列数",
-      group: "布局",
-      defaultValue: 3,
-      min: 1,
-      max: 12,
-    },
-    {
-      name: "rows",
-      type: "number",
-      label: "行数",
-      group: "布局",
-      defaultValue: 3,
-      min: 1,
-      max: 12,
-    },
-    {
-      name: "gap",
-      type: "number",
-      label: "间距",
-      group: "布局",
-      defaultValue: 8,
-      min: 0,
-      max: 50,
-    },
-    {
-      name: "columnTemplate",
-      type: "string",
-      label: "列模板",
-      group: "高级",
-      defaultValue: "1fr 1fr 1fr",
-      placeholder: "例如: 1fr 1fr 1fr 或 repeat(3, 1fr)",
-    },
-    {
-      name: "rowTemplate",
-      type: "string",
-      label: "行模板",
-      group: "高级",
-      defaultValue: "auto auto auto",
-      placeholder: "例如: auto auto auto 或 repeat(3, auto)",
-    },
-  ],
-});
-
-// ResponsiveLayout 响应式布局
+// ResponsiveLayout 响应式容器
 registerManifest({
   type: "ResponsiveLayout",
   name: "响应式布局",
   category: "布局",
   isContainer: true,
-  defaultSize: { width: 360, height: 200 },
   props: [
     {
       name: "direction",
@@ -242,10 +165,10 @@ registerManifest({
       group: "布局",
       defaultValue: "row",
       options: [
-        { label: "垂直", value: "column" },
         { label: "水平", value: "row" },
-        { label: "垂直反向", value: "column-reverse" },
+        { label: "垂直", value: "column" },
         { label: "水平反向", value: "row-reverse" },
+        { label: "垂直反向", value: "column-reverse" },
       ],
     },
     {
@@ -294,14 +217,69 @@ registerManifest({
       type: "number",
       label: "间距",
       group: "布局",
-      defaultValue: 8,
+      defaultValue: 0,
       min: 0,
       max: 100,
     },
   ],
 });
 
-// ColumnLayout1 分栏*1
+// GridContainer 网格布局
+registerManifest({
+  type: "GridContainer",
+  name: "网格布局",
+  category: "布局",
+  isContainer: true,
+  props: [
+    {
+      name: "columns",
+      type: "string",
+      label: "列模板",
+      group: "布局",
+      defaultValue: "repeat(3, 1fr)",
+    },
+    {
+      name: "rows",
+      type: "string",
+      label: "行模板",
+      group: "布局",
+      defaultValue: "repeat(2, 1fr)",
+    },
+    {
+      name: "gap",
+      type: "number",
+      label: "间距",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 100,
+    },
+  ],
+});
+
+// FreeContainer 自由布局
+registerManifest({
+  type: "FreeContainer",
+  name: "自由布局",
+  category: "布局",
+  isContainer: true,
+  props: [
+    {
+      name: "overflow",
+      type: "enum",
+      label: "溢出",
+      group: "布局",
+      defaultValue: "visible",
+      options: [
+        { label: "可见", value: "visible" },
+        { label: "隐藏", value: "hidden" },
+        { label: "滚动", value: "auto" },
+      ],
+    },
+  ],
+});
+
+// ColumnLayout 分栏
 registerManifest({
   type: "ColumnLayout1",
   name: "分栏*1",
@@ -332,30 +310,13 @@ registerManifest({
       type: "number",
       label: "间距",
       group: "布局",
-      defaultValue: 8,
+      defaultValue: 0,
       min: 0,
-      max: 50,
-    },
-    {
-      name: "columnTemplate",
-      type: "string",
-      label: "列模板",
-      group: "高级",
-      defaultValue: "1fr",
-      placeholder: "例如: 1fr 或 repeat(1, 1fr)",
-    },
-    {
-      name: "rowTemplate",
-      type: "string",
-      label: "行模板",
-      group: "高级",
-      defaultValue: "auto",
-      placeholder: "例如: auto 或 repeat(1, auto)",
+      max: 100,
     },
   ],
 });
 
-// ColumnLayout2 分栏*2
 registerManifest({
   type: "ColumnLayout2",
   name: "分栏*2",
@@ -386,30 +347,13 @@ registerManifest({
       type: "number",
       label: "间距",
       group: "布局",
-      defaultValue: 8,
+      defaultValue: 0,
       min: 0,
-      max: 50,
-    },
-    {
-      name: "columnTemplate",
-      type: "string",
-      label: "列模板",
-      group: "高级",
-      defaultValue: "1fr 1fr",
-      placeholder: "例如: 1fr 1fr 或 repeat(2, 1fr)",
-    },
-    {
-      name: "rowTemplate",
-      type: "string",
-      label: "行模板",
-      group: "高级",
-      defaultValue: "auto",
-      placeholder: "例如: auto 或 repeat(1, auto)",
+      max: 100,
     },
   ],
 });
 
-// ColumnLayout4 分栏*4
 registerManifest({
   type: "ColumnLayout4",
   name: "分栏*4",
@@ -440,89 +384,72 @@ registerManifest({
       type: "number",
       label: "间距",
       group: "布局",
-      defaultValue: 8,
+      defaultValue: 0,
       min: 0,
-      max: 50,
-    },
-    {
-      name: "columnTemplate",
-      type: "string",
-      label: "列模板",
-      group: "高级",
-      defaultValue: "1fr 1fr 1fr 1fr",
-      placeholder: "例如: 1fr 1fr 1fr 1fr 或 repeat(4, 1fr)",
-    },
-    {
-      name: "rowTemplate",
-      type: "string",
-      label: "行模板",
-      group: "高级",
-      defaultValue: "auto",
-      placeholder: "例如: auto 或 repeat(1, auto)",
+      max: 100,
     },
   ],
 });
 
-// Diagram2D 2D流程图组件
+// Element Plus Container
 registerManifest({
   type: "ElContainer",
-  name: "Container布局",
+  name: "Container容器",
   category: "布局",
   isContainer: true,
   props: [
     {
       name: "showHeader",
       type: "boolean",
-      label: "el-header",
-      group: "区域",
+      label: "Header区域",
+      group: "显示",
+      defaultValue: true,
+    },
+    {
+      name: "showAside",
+      type: "boolean",
+      label: "Aside区域",
+      group: "显示",
+      defaultValue: true,
+    },
+    {
+      name: "showMain",
+      type: "boolean",
+      label: "Main区域",
+      group: "显示",
+      defaultValue: true,
+    },
+    {
+      name: "showFooter",
+      type: "boolean",
+      label: "Footer区域",
+      group: "显示",
       defaultValue: true,
     },
     {
       name: "headerHeight",
       type: "string",
       label: "Header高度",
-      group: "区域",
+      group: "布局",
       defaultValue: "60px",
-    },
-    {
-      name: "showAside",
-      type: "boolean",
-      label: "el-aside",
-      group: "区域",
-      defaultValue: true,
     },
     {
       name: "asideWidth",
       type: "string",
       label: "Aside宽度",
-      group: "区域",
+      group: "布局",
       defaultValue: "200px",
-    },
-    {
-      name: "showMain",
-      type: "boolean",
-      label: "el-main",
-      group: "区域",
-      defaultValue: true,
-    },
-    {
-      name: "showFooter",
-      type: "boolean",
-      label: "el-footer",
-      group: "区域",
-      defaultValue: true,
     },
     {
       name: "footerHeight",
       type: "string",
       label: "Footer高度",
-      group: "区域",
+      group: "布局",
       defaultValue: "60px",
     },
   ],
 });
 
-// Element Plus Header 容器
 registerManifest({
   type: "ElHeader",
   name: "Header",
@@ -539,7 +466,6 @@ registerManifest({
   ],
 });
 
-// Element Plus Aside 容器
 registerManifest({
   type: "ElAside",
   name: "Aside",
@@ -556,7 +482,6 @@ registerManifest({
   ],
 });
 
-// Element Plus Main 容器
 registerManifest({
   type: "ElMain",
   name: "Main",
@@ -565,7 +490,6 @@ registerManifest({
   props: [],
 });
 
-// Element Plus Footer 容器
 registerManifest({
   type: "ElFooter",
   name: "Footer",
@@ -598,6 +522,15 @@ registerManifest({
       min: 1,
       max: 24,
     },
+    {
+      name: "gutter",
+      type: "number",
+      label: "行间距",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 100,
+    },
   ],
 });
 
@@ -620,53 +553,46 @@ registerManifest({
     {
       name: "gutter",
       type: "number",
-      label: "间距",
+      label: "列间距",
       group: "布局",
       defaultValue: 0,
       min: 0,
       max: 100,
     },
     {
-      name: "tag",
-      type: "string",
-      label: "标签",
-      group: "布局",
-      defaultValue: "div",
-    },
-    {
       name: "xs",
       type: "object",
       label: "XS (<768px)",
       group: "响应式",
-      placeholder: '4 或 {"span":4,"offset":4}',
+      placeholder: "4 或 {\"span\":4,\"offset\":4}",
     },
     {
       name: "sm",
       type: "object",
       label: "SM (≥768px)",
       group: "响应式",
-      placeholder: '4 或 {"span":4,"offset":4}',
+      placeholder: "4 或 {\"span\":4,\"offset\":4}",
     },
     {
       name: "md",
       type: "object",
       label: "MD (≥992px)",
       group: "响应式",
-      placeholder: '4 或 {"span":4,"offset":4}',
+      placeholder: "4 或 {\"span\":4,\"offset\":4}",
     },
     {
       name: "lg",
       type: "object",
       label: "LG (≥1200px)",
       group: "响应式",
-      placeholder: '4 或 {"span":4,"offset":4}',
+      placeholder: "4 或 {\"span\":4,\"offset\":4}",
     },
     {
       name: "xl",
       type: "object",
       label: "XL (≥1920px)",
       group: "响应式",
-      placeholder: '4 或 {"span":4,"offset":4}',
+      placeholder: "4 或 {\"span\":4,\"offset\":4}",
     },
   ],
 });
@@ -2208,5 +2134,4 @@ export default {
   getAllManifests,
   getManifestsByCategory,
 };
-
 

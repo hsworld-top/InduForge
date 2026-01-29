@@ -1017,13 +1017,17 @@ const contentStyle = computed(() => {
   }
   if (node.value.type === "ElCol" && parentNode?.type === "ElLayoutRow") {
     style.height = "auto";
-    if (!style.minHeight) {
+    if (!style.minHeight && !hasChildren.value) {
       style.minHeight = "80px";
     }
   }
   if (parentNode?.type === "ElCol" && isMovable.value) {
     style.width = "100%";
-    style.height = "100%";
+    if (isContainer.value) {
+      style.height = "100%";
+    } else if (!style.height) {
+      style.height = "auto";
+    }
   }
   if (
     node.value.type === "ElContainer" ||
@@ -1126,6 +1130,7 @@ const wrapperComponentStyle = computed(() => {
     style.flex = "1 1 0";
     style.width = "100%";
     style.height = "100%";
+    style.minHeight = "0";
     style.alignItems = "stretch";
   }
   if (type === "ElLayoutRow") {
@@ -1138,6 +1143,8 @@ const wrapperComponentStyle = computed(() => {
     style["--row-columns"] = String(columns);
     if (!gutter) {
       style["--el-row-gutter"] = "0px";
+      style.paddingTop = "0";
+      style.paddingBottom = "0";
     }
     if (gutter > 0) {
       style.marginLeft = "0";
@@ -1154,11 +1161,14 @@ const wrapperComponentStyle = computed(() => {
     style.height = "100%";
     style.alignSelf = "stretch";
     style.boxSizing = "border-box";
+    const colProps = resolvedProps.value || node.value?.props || {};
     const gutter = Number(parentNode.props?.gutter) || 0;
     if (!gutter) {
       style.paddingLeft = "0";
       style.paddingRight = "0";
       style["--col-gutter-x"] = "0px";
+      style.paddingTop = "0";
+      style.paddingBottom = "0";
     } else {
       const halfGutter = "calc(var(--row-gutter) / 2)";
       const halfCol = "calc(100% / var(--row-columns) / 2)";
@@ -1167,36 +1177,21 @@ const wrapperComponentStyle = computed(() => {
       style.paddingRight = clampedHalf;
       style["--col-gutter-x"] = clampedHalf;
     }
-    const rawColumns = Number(parentNode.props?.columns);
-    if (Number.isFinite(rawColumns)) {
-      const offset = Math.max(
-        0,
-        Math.min(24, Number(node.value?.props?.offset) || 0)
-      );
-      if (offset > 0) {
-        style.marginLeft = `${(offset / 24) * 100}%`;
-      }
-      const span = Math.max(
-        1,
-        Math.min(24, Number(node.value?.props?.span) || 1)
-      );
-      const percent = (span / 24) * 100;
-      style.flex = `0 0 ${percent}%`;
-      style.maxWidth = `${percent}%`;
-      style.width = `${percent}%`;
-      const push = Math.max(
-        0,
-        Math.min(24, Number(node.value?.props?.push) || 0)
-      );
-      const pull = Math.max(
-        0,
-        Math.min(24, Number(node.value?.props?.pull) || 0)
-      );
-      const shift = push - pull;
-      if (shift !== 0) {
-        style.position = "relative";
-        style.left = `${(shift / 24) * 100}%`;
-      }
+    const offset = Math.max(0, Math.min(24, Number(colProps?.offset) || 0));
+    if (offset > 0) {
+      style.marginLeft = `${(offset / 24) * 100}%`;
+    }
+    const span = Math.max(1, Math.min(24, Number(colProps?.span) || 24));
+    const percent = (span / 24) * 100;
+    style.flex = `0 0 ${percent}%`;
+    style.maxWidth = `${percent}%`;
+    style.width = `${percent}%`;
+    const push = Math.max(0, Math.min(24, Number(colProps?.push) || 0));
+    const pull = Math.max(0, Math.min(24, Number(colProps?.pull) || 0));
+    const shift = push - pull;
+    if (shift !== 0) {
+      style.position = "relative";
+      style.left = `${(shift / 24) * 100}%`;
     }
   }
   return style;
@@ -4611,9 +4606,11 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     style.overflow = "hidden";
     style.position = "relative";
   } else if (currentNode.type === "ElLayout") {
+    const rowGap = Math.max(0, Number(currentNode.props?.gutter) || 0);
     style.display = "flex";
     style.flexDirection = "column";
     style.alignItems = "stretch";
+    style.rowGap = `${rowGap}px`;
     style.width = "100%";
     style.height = "100%";
     style.overflow = "hidden";

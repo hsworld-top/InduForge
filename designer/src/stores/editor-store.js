@@ -413,6 +413,34 @@ const normalizeLayoutSchema = (schema) => {
   for (const node of Object.values(schema.nodesById)) {
     if (!node || !node.type) continue;
 
+    // 兼容历史拼写错误的布局类型
+    if (node.type === "Elayout" || node.type === "EILayout") {
+      node.type = "ElLayout";
+    } else if (node.type === "ElayoutRow" || node.type === "EILayoutRow") {
+      node.type = "ElLayoutRow";
+    } else if (node.type === "Elcol" || node.type === "EICol") {
+      node.type = "ElCol";
+    }
+
+    // 补齐布局组件默认属性
+    if (
+      node.type === "ElLayout" ||
+      node.type === "ElLayoutRow" ||
+      node.type === "ElCol"
+    ) {
+      const manifest = componentRegistry.get(node.type);
+      if (manifest?.defaultProps) {
+        if (!node.props || typeof node.props !== "object") {
+          node.props = {};
+        }
+        Object.entries(manifest.defaultProps).forEach(([key, value]) => {
+          if (node.props[key] === undefined) {
+            node.props[key] = value;
+          }
+        });
+      }
+    }
+
     if (node.type === "Container") {
       node.type = "FlexContainer";
       node.props = {
@@ -1942,16 +1970,20 @@ export const useEditorStore = defineStore("editor", () => {
     const parentNode = doc.value?.getParent?.(node.id);
     if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
 
-    const siblings = parentNode.children || [];
-    let total = 0;
-    for (const childId of siblings) {
-      if (childId === node.id) continue;
+    const colIds = (parentNode.children || []).filter((childId) => {
       const childNode = doc.value?.getNode?.(childId);
-      if (!childNode || childNode.type !== "ElCol") continue;
-      const span = Number(childNode.props?.span) || 0;
-      total += Math.max(0, Math.min(24, span));
-    }
-    const maxSpan = Math.max(1, 24 - total);
+      return childNode?.type === "ElCol";
+    });
+    const anchorIndex = colIds.indexOf(node.id);
+    const leftIds = anchorIndex >= 0 ? colIds.slice(0, anchorIndex) : [];
+    const rightCount =
+      anchorIndex >= 0 ? Math.max(0, colIds.length - anchorIndex - 1) : 0;
+    const leftTotal = leftIds.reduce((sum, colId) => {
+      const colNode = doc.value?.getNode?.(colId);
+      const span = Number(colNode?.props?.span) || 0;
+      return sum + Math.max(1, Math.min(24, span));
+    }, 0);
+    const maxSpan = Math.max(1, 24 - leftTotal - rightCount);
     const nextSpan = Number(patch.props.span) || 1;
     const clamped = Math.max(1, Math.min(maxSpan, nextSpan));
     if (clamped === nextSpan) return patch;
@@ -2140,7 +2172,8 @@ export const useEditorStore = defineStore("editor", () => {
     const shouldSyncLayoutRowFromCol =
       node?.type === "ElCol" &&
       nextPatch?.props &&
-      Object.prototype.hasOwnProperty.call(nextPatch.props, "offset");
+      (Object.prototype.hasOwnProperty.call(nextPatch.props, "offset") ||
+        Object.prototype.hasOwnProperty.call(nextPatch.props, "span"));
 
     if (
       !shouldSyncContainer &&
