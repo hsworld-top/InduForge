@@ -148,6 +148,9 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {number} width - 页面宽度
  * @property {number} height - 页面高度
  * @property {FitMode} [fitMode] - 适配模式
+ * @property {boolean} [showGrid] - 显示网格
+ * @property {boolean} [enableSnap] - 启用吸附
+ * @property {boolean} [autoFit] - 预览自适应
  * @property {BackgroundConfig} [background] - 背景配置
  */
 
@@ -818,6 +821,9 @@ export function createPageNode(options = {}) {
       width: 1920,
       height: 1080,
       fitMode: "contain",
+      showGrid: false,
+      enableSnap: true,
+      autoFit: false,
       background: { kind: "color", value: "#ffffff" },
       ...options.config,
     },

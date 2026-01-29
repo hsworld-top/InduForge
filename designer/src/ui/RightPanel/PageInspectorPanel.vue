@@ -61,15 +61,6 @@
         />
       </el-form-item>
 
-      <el-form-item label="适配模式">
-        <el-select v-model="form.fitMode" @change="handleConfigUpdate">
-          <el-option label="contain" value="contain" />
-          <el-option label="cover" value="cover" />
-          <el-option label="fill" value="fill" />
-          <el-option label="none" value="none" />
-        </el-select>
-      </el-form-item>
-
       <el-form-item label="显示网格">
         <el-switch
           v-model="form.showGrid"
@@ -80,6 +71,12 @@
       <el-form-item label="启用吸附">
         <el-switch
           v-model="form.enableSnap"
+          @change="handleConfigUpdate"
+        />
+      </el-form-item>
+      <el-form-item label="自适应">
+        <el-switch
+          v-model="form.autoFit"
           @change="handleConfigUpdate"
         />
       </el-form-item>
@@ -219,9 +216,9 @@ const form = reactive({
   presetKey: "",
   width: 1920,
   height: 1080,
-  fitMode: "contain",
   showGrid: false,
   enableSnap: true,
+  autoFit: false,
   backgroundKind: "color",
   backgroundValue: "#ffffff",
 });
@@ -390,9 +387,9 @@ const syncForm = (page) => {
   form.width = page?.config?.width ?? 1920;
   form.height = page?.config?.height ?? 1080;
   form.presetKey = resolvePresetKey(form.width, form.height);
-  form.fitMode = page?.config?.fitMode || "contain";
   form.showGrid = page?.config?.showGrid ?? false;
   form.enableSnap = page?.config?.enableSnap ?? true;
+  form.autoFit = page?.config?.autoFit ?? false;
   form.backgroundKind = page?.config?.background?.kind || "color";
   form.backgroundValue = page?.config?.background?.value || "#ffffff";
 
@@ -578,9 +575,9 @@ const handleConfigUpdate = () => {
     ...currentPage.value.config,
     width: Number(form.width) || currentPage.value.config?.width || 1920,
     height: Number(form.height) || currentPage.value.config?.height || 1080,
-    fitMode: form.fitMode,
     showGrid: form.showGrid,
     enableSnap: form.enableSnap,
+    autoFit: form.autoFit,
   };
   editorStore.updateCurrentPage({ config: nextConfig });
   form.presetKey = resolvePresetKey(form.width, form.height);

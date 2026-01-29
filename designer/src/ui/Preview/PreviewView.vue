@@ -95,15 +95,29 @@ const canvasStyle = computed(() => {
   docVersion.value;
   const config = currentPage.value?.config || {};
   const preset = viewPresets.find((item) => item.key === viewKey.value);
-  const width = config.width || preset?.width || 1200;
-  const height = config.height || preset?.height || 800;
+  const autoFit = Boolean(config.autoFit);
+  const width = autoFit ? "100%" : config.width || preset?.width || 1200;
+  const height = autoFit ? "100%" : config.height || preset?.height || 800;
   const style = {
-    width: `${width}px`,
-    height: `${height}px`,
+    width: typeof width === "number" ? `${width}px` : width,
+    height: typeof height === "number" ? `${height}px` : height,
     backgroundColor: config.backgroundColor || "#ffffff",
     position: "relative",
   };
-  if (config.backgroundImage) {
+  const background = config.background || null;
+  if (background?.kind === "color") {
+    style.backgroundColor = background.value || "#ffffff";
+  } else if (background?.kind === "image") {
+    style.backgroundImage = `url(${background.value || ""})`;
+    style.backgroundSize = "cover";
+    style.backgroundRepeat = "no-repeat";
+    style.backgroundPosition = "center";
+  } else if (background?.kind === "gradient") {
+    style.backgroundImage = background.value || "";
+    style.backgroundSize = "cover";
+    style.backgroundRepeat = "no-repeat";
+    style.backgroundPosition = "center";
+  } else if (config.backgroundImage) {
     style.backgroundImage = `url(${config.backgroundImage})`;
     style.backgroundSize = config.backgroundSize || "cover";
     style.backgroundRepeat = "no-repeat";

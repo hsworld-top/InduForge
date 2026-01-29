@@ -91,11 +91,13 @@ const containerRef = ref(null);
 const wrapperRef = ref(null);
 const canvasRef = ref(null);
 const editorStore = useEditorStore();
-const { doc, history, selection, currentPage } = storeToRefs(editorStore);
+const { doc, history, selection, currentPage, docVersion } =
+  storeToRefs(editorStore);
 const dragState = useDragState();
 const minorStep = 10;
 const majorStep = 100;
 const rulerMax = 5000;
+const rulerSize = 18;
 const containerSize = ref({ width: 0, height: 0 });
 const pointerX = ref(-9999);
 const pointerY = ref(-9999);
@@ -132,11 +134,11 @@ const handleNodeTransform = (event) => {
   const x = Number(event.detail.x) || 0;
   const y = Number(event.detail.y) || 0;
   pointerX.value = Math.min(
-    Math.max(0, x * zoom.value + translateX.value),
+    Math.max(0, x * zoom.value + translateX.value + rulerSize),
     rect.width
   );
   pointerY.value = Math.min(
-    Math.max(0, y * zoom.value + translateY.value),
+    Math.max(0, y * zoom.value + translateY.value + rulerSize),
     rect.height
   );
   isNodeTransforming.value = true;
@@ -202,20 +204,48 @@ const translateX = ref(0);
 const translateY = ref(0);
 
 const canvasStyle = computed(() => {
+  docVersion.value;
+  const config = currentPage.value?.config || {};
+  const background = config.background || null;
+  const showGrid = Boolean(config.showGrid);
+  const gridSize = 10;
   const style = {
     width: `${width.value}px`,
     height: `${height.value}px`,
-    transform: `translate(${translateX.value}px, ${translateY.value}px) scale(${zoom.value})`,
+    transform: `translate(${translateX.value + rulerSize}px, ${
+      translateY.value + rulerSize
+    }px) scale(${zoom.value})`,
+    backgroundColor: "#ffffff",
   };
 
-  // 显示网格
-  if (currentPage.value?.config?.showGrid) {
-    const gridSize = 10;
-    style.backgroundImage = `
+  if (background?.kind === "color") {
+    style.backgroundColor = background.value || "#ffffff";
+  } else if (background?.kind === "image") {
+    style.backgroundImage = `url(${background.value || ""})`;
+    style.backgroundSize = "cover";
+    style.backgroundRepeat = "no-repeat";
+    style.backgroundPosition = "center";
+  } else if (background?.kind === "gradient") {
+    style.backgroundImage = background.value || "";
+    style.backgroundSize = "cover";
+    style.backgroundRepeat = "no-repeat";
+    style.backgroundPosition = "center";
+  }
+
+  if (showGrid) {
+    const gridLayer = `
       linear-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px),
       linear-gradient(90deg, rgba(0, 0, 0, 0.08) 1px, transparent 1px)
     `;
-    style.backgroundSize = `${gridSize}px ${gridSize}px`;
+    if (style.backgroundImage) {
+      style.backgroundImage = `${gridLayer}, ${style.backgroundImage}`;
+      style.backgroundSize = `${gridSize}px ${gridSize}px, ${style.backgroundSize || "cover"}`;
+      style.backgroundRepeat = `repeat, ${style.backgroundRepeat || "no-repeat"}`;
+      style.backgroundPosition = `0 0, ${style.backgroundPosition || "center"}`;
+    } else {
+      style.backgroundImage = gridLayer;
+      style.backgroundSize = `${gridSize}px ${gridSize}px`;
+    }
   }
 
   return style;
@@ -227,7 +257,7 @@ const rulerXStyle = computed(() => {
   return {
     "--ruler-minor": `${minor}px`,
     "--ruler-major": `${major}px`,
-    "--ruler-offset": `${translateX.value}px`,
+    "--ruler-offset": `${translateX.value + rulerSize}px`,
   };
 });
 
@@ -237,7 +267,7 @@ const rulerYStyle = computed(() => {
   return {
     "--ruler-minor": `${minor}px`,
     "--ruler-major": `${major}px`,
-    "--ruler-offset": `${translateY.value}px`,
+    "--ruler-offset": `${translateY.value + rulerSize}px`,
   };
 });
 
@@ -245,7 +275,7 @@ const rulerMarksX = computed(() => {
   const marks = [];
   const max = rulerMax;
   for (let value = 0; value <= max; value += majorStep) {
-    const pos = value * zoom.value + translateX.value;
+    const pos = value * zoom.value + translateX.value + rulerSize;
     if (pos < -majorStep || pos > containerSize.value.width) continue;
     marks.push(value);
   }
@@ -256,7 +286,7 @@ const rulerMarksY = computed(() => {
   const marks = [];
   const max = rulerMax;
   for (let value = 0; value <= max; value += majorStep) {
-    const pos = value * zoom.value + translateY.value;
+    const pos = value * zoom.value + translateY.value + rulerSize;
     if (pos < -majorStep || pos > containerSize.value.height) continue;
     marks.push(value);
   }
@@ -648,20 +678,9 @@ onBeforeUnmount(() => {
 .canvas {
   position: relative;
   transform-origin: 0 0;
-  background-image: linear-gradient(
-      rgba(0, 0, 0, 0.05) 1px,
-      transparent 1px
-    ),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
-  background-size: 10px 10px;
 }
 
 .dark .canvas {
-  background-image: linear-gradient(
-      rgba(255, 255, 255, 0.05) 1px,
-      transparent 1px
-    ),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
 }
 .ruler-layer {
   position: absolute;
@@ -790,5 +809,3 @@ onBeforeUnmount(() => {
 }
 
 </style>
-
-

@@ -628,12 +628,26 @@ const hasChildren = computed(() => {
 });
 
 /**
+ * 判断是否为根画布下的 ElContainer
+ * @param {import('@/editor-core').ComponentNode | null} currentNode - 当前节点
+ * @returns {boolean}
+ */
+const isRootCanvasContainer = (currentNode) => {
+  if (!currentNode || currentNode.type !== "ElContainer") return false;
+  const rootId = currentPage.value?.rootNodeId;
+  if (!rootId) return false;
+  const parentNode = doc.value?.getParent?.(currentNode.id);
+  return parentNode?.id === rootId;
+};
+
+/**
  * 判断节点是否可自由拖动
  * @returns {boolean} 是否允许拖动
  * @throws {Error} 无
  */
 const isMovable = computed(() => {
   if (!node.value || props.isRoot || node.value.locked) return false;
+  if (isRootCanvasContainer(node.value)) return false;
   if (
     node.value.type === "ElHeader" ||
     node.value.type === "ElAside" ||
@@ -684,6 +698,7 @@ const showResizeHandles = computed(() => {
   selectionVersion.value;
   if (props.readonly || props.isRoot) return false;
   if (!node.value || node.value.locked) return false;
+  if (isRootCanvasContainer(node.value)) return false;
   if (node.value.type === "ElMain") return false;
   const parentNode = doc.value?.getParent?.(node.value.id);
   if (
@@ -4296,6 +4311,20 @@ const resolveLayoutStyle = (currentNode, isRoot) => {
   }
 
   const style = {};
+
+  if (isRootCanvasContainer(currentNode)) {
+    const zIndex =
+      currentNode.absolutePos?.z ?? currentNode.layoutItem?.free?.abs?.z;
+    return {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: "100%",
+      height: "100%",
+      boxSizing: "border-box",
+      ...(zIndex !== undefined ? { zIndex } : {}),
+    };
+  }
 
   // ✅ 新架构：positioning + absolutePos/flowLayout
   if (currentNode.positioning === "absolute" && currentNode.absolutePos) {
