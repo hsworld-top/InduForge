@@ -13,7 +13,9 @@
       <div class="resource-folders">
         <div class="pane-title">
           <span>资源分组</span>
-          <el-button size="small" text @click="handleCreateFolder">新建文件夹</el-button>
+          <el-button size="small" text @click="handleCreateFolder"
+            >新建文件夹</el-button
+          >
         </div>
         <el-scrollbar class="folder-scroll">
           <el-tree
@@ -36,7 +38,9 @@
                 @drop.prevent="handleDropToFolder(data)"
               >
                 <span class="folder-icon">📁</span>
-                <span class="folder-label" :title="data.label">{{ data.label }}</span>
+                <span class="folder-label" :title="data.label">{{
+                  data.label
+                }}</span>
               </div>
             </template>
           </el-tree>
@@ -47,15 +51,17 @@
         <div class="asset-header">
           <div class="asset-title">
             <span>{{ selectedFolderLabel }}</span>
+          </div>
+          <div class="asset-body">
+            <el-input
+              v-model="assetSearch"
+              size="small"
+              placeholder="搜索资源"
+              clearable
+              class="asset-search"
+            />
             <span class="asset-count">{{ filteredAssets.length }} 项</span>
           </div>
-          <el-input
-            v-model="assetSearch"
-            size="small"
-            placeholder="搜索资源"
-            clearable
-            class="asset-search"
-          />
         </div>
 
         <div
@@ -92,7 +98,7 @@
                 {{ asset.displayName }}
               </div>
               <div class="asset-meta">
-                <span>{{ asset.ext || asset.type || '-' }}</span>
+                <span>{{ asset.ext || asset.type || "-" }}</span>
                 <span>{{ formatSize(asset.size) }}</span>
               </div>
             </div>
@@ -113,8 +119,10 @@
               @dblclick="openPreview(asset)"
               @contextmenu.prevent.stop="openAssetContextMenu($event, asset)"
             >
-              <span class="col-name" :title="asset.displayName">{{ asset.displayName }}</span>
-              <span class="col-type">{{ asset.ext || asset.type || '-' }}</span>
+              <span class="col-name" :title="asset.displayName">{{
+                asset.displayName
+              }}</span>
+              <span class="col-type">{{ asset.ext || asset.type || "-" }}</span>
               <span class="col-size">{{ formatSize(asset.size) }}</span>
             </div>
           </div>
@@ -161,13 +169,25 @@
         <div class="context-item" @click="handleMoveAsset">移动</div>
         <div class="context-item" @click="handleCopyAsset">复制</div>
         <div class="context-item" @click="handleCutAsset">剪切</div>
-        <div class="context-item" @click="handlePasteAsset" :class="{ disabled: !clipboardAsset }">粘贴</div>
+        <div
+          class="context-item"
+          @click="handlePasteAsset"
+          :class="{ disabled: !clipboardAsset }"
+        >
+          粘贴
+        </div>
         <div class="context-item danger" @click="handleDeleteAsset">删除</div>
       </template>
       <template v-else>
         <div class="context-item" @click="handleCreateFolder">新建文件夹</div>
         <div class="context-item" @click="handleRenameFolder">重命名</div>
-        <div class="context-item" @click="handlePasteAsset" :class="{ disabled: !clipboardAsset }">粘贴</div>
+        <div
+          class="context-item"
+          @click="handlePasteAsset"
+          :class="{ disabled: !clipboardAsset }"
+        >
+          粘贴
+        </div>
         <div class="context-item danger" @click="handleDeleteFolder">删除</div>
       </template>
     </div>
@@ -175,7 +195,7 @@
     <el-dialog
       v-model="previewVisible"
       title="资源预览"
-      width="640px"
+      width="70vw"
       top="6vh"
       :close-on-click-modal="false"
       append-to-body
@@ -194,7 +214,10 @@
           ></iframe>
           <div v-else class="preview-file">
             <div class="preview-file-name">{{ previewAsset.displayName }}</div>
-            <div class="preview-file-meta">{{ previewAsset.ext || '-' }} | {{ formatSize(previewAsset.size) }}</div>
+            <div class="preview-file-meta">
+              {{ previewAsset.ext || "-" }} |
+              {{ formatSize(previewAsset.size) }}
+            </div>
           </div>
         </template>
       </div>
@@ -204,14 +227,32 @@
       v-model="detailVisible"
       title="资源详情"
       width="520px"
-      top="8vh"
+      top="30vh"
       append-to-body
     >
       <div v-if="detailAsset" class="detail-body">
-        <div class="detail-row"><span>名称</span><span>{{ detailAsset.displayName }}</span></div>
-        <div class="detail-row"><span>格式</span><span>{{ detailAsset.ext || '-' }}</span></div>
-        <div class="detail-row"><span>大小</span><span>{{ formatSize(detailAsset.size) }}</span></div>
-        <div class="detail-row"><span>类型</span><span>{{ detailAsset.type || '-' }}</span></div>
+        <div class="detail-row">
+          <span>名称</span><span>{{ detailAsset.displayName }}</span>
+        </div>
+        <div class="detail-row">
+          <span>格式</span><span>{{ detailAsset.ext || "-" }}</span>
+        </div>
+        <div class="detail-row">
+          <span>大小</span><span>{{ formatSize(detailAsset.size) }}</span>
+        </div>
+        <div class="detail-row">
+          <span>类型</span><span>{{ detailAsset.type || "-" }}</span>
+        </div>
+        <div class="detail-row">
+          <span>链接</span>
+          <span
+            class="detail-link"
+            :title="detailAsset.url"
+            @click="handleCopyUrl(detailAsset.url)"
+          >
+            {{ detailAsset.url || "-" }}
+          </span>
+        </div>
       </div>
     </el-dialog>
 
@@ -234,7 +275,9 @@
         <template #default="{ data }">
           <div class="folder-node">
             <span class="folder-icon">📁</span>
-            <span class="folder-label" :title="data.label">{{ data.label }}</span>
+            <span class="folder-label" :title="data.label">{{
+              data.label
+            }}</span>
           </div>
         </template>
       </el-tree>
@@ -247,7 +290,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  watch,
+  nextTick,
+} from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import IconEpGrid from "~icons/ep/grid";
 import IconEpList from "~icons/ep/list";
@@ -255,7 +305,9 @@ import { useEditorStore } from "@/stores/editor-store";
 import assetApi from "@/services/assetApi";
 
 const editorStore = useEditorStore();
-const projectId = computed(() => editorStore.projectId || editorStore.project?.id || "");
+const projectId = computed(
+  () => editorStore.projectId || editorStore.project?.id || "",
+);
 
 const folderSearch = ref("");
 const assetSearch = ref("");
@@ -268,7 +320,9 @@ const assets = ref([]);
 const selectedFolderId = ref("root");
 const selectedFolderLabel = computed(() => {
   if (selectedFolderId.value === "root") return "全部资源";
-  const found = folders.value.find((item) => item.id === selectedFolderId.value);
+  const found = folders.value.find(
+    (item) => item.id === selectedFolderId.value,
+  );
   return found?.name || "全部资源";
 });
 
@@ -300,7 +354,39 @@ const contextMenuStyle = computed(() => ({
   top: `${contextMenu.value.y}px`,
 }));
 
-const unwrapApiData = (response) => response?.data?.data ?? response?.data ?? response;
+const adjustContextMenuPosition = async () => {
+  await nextTick();
+  const menuEl = contextMenuRef.value;
+  if (!menuEl) return;
+  const rect = menuEl.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  let nextX = contextMenu.value.x;
+  let nextY = contextMenu.value.y;
+  const padding = 8;
+  if (rect.right > viewportWidth - padding) {
+    nextX = Math.max(padding, viewportWidth - rect.width - padding);
+  }
+  if (rect.bottom > viewportHeight - padding) {
+    nextY = Math.max(padding, viewportHeight - rect.height - padding);
+  }
+  if (nextX !== contextMenu.value.x || nextY !== contextMenu.value.y) {
+    contextMenu.value.x = nextX;
+    contextMenu.value.y = nextY;
+  }
+};
+
+const handleCopyUrl = async (value) => {
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    ElMessage.success("链接已复制");
+  } catch (error) {
+    ElMessage.error("复制失败");
+  }
+};
+const unwrapApiData = (response) =>
+  response?.data?.data ?? response?.data ?? response;
 
 const decodeAssetName = (value) => {
   if (!value) return "";
@@ -387,7 +473,9 @@ const filteredFolderTree = computed(() => folderTree.value);
 
 const filterFolderNode = (value, data) => {
   if (!value) return true;
-  return String(data?.label || "").toLowerCase().includes(String(value).toLowerCase());
+  return String(data?.label || "")
+    .toLowerCase()
+    .includes(String(value).toLowerCase());
 };
 
 watch(folderSearch, () => {
@@ -423,7 +511,9 @@ const filteredAssets = computed(() => {
   }
   if (assetSearch.value) {
     const keyword = assetSearch.value.toLowerCase();
-    list = list.filter((item) => item.displayName.toLowerCase().includes(keyword));
+    list = list.filter((item) =>
+      item.displayName.toLowerCase().includes(keyword),
+    );
   }
   return list;
 });
@@ -502,7 +592,9 @@ const handleRenameFolder = async () => {
     inputValue: folder.label,
   }).catch(() => null);
   if (!result?.value) return;
-  await assetApi.renameFolder(projectId.value, folder.id, { name: result.value });
+  await assetApi.renameFolder(projectId.value, folder.id, {
+    name: result.value,
+  });
   await loadFolders();
 };
 
@@ -510,9 +602,13 @@ const handleDeleteFolder = async () => {
   const folder = contextMenu.value.folder;
   closeContextMenu();
   if (!folder || folder.id === "root") return;
-  await ElMessageBox.confirm("确认删除该文件夹吗？删除后无法恢复。", "删除确认", {
-    type: "warning",
-  }).catch(() => null);
+  await ElMessageBox.confirm(
+    "确认删除该文件夹吗？删除后无法恢复。",
+    "删除确认",
+    {
+      type: "warning",
+    },
+  ).catch(() => null);
   await assetApi.deleteFolder(projectId.value, folder.id);
   await loadFolders();
   await loadAssets();
@@ -536,9 +632,9 @@ const handleDeleteAsset = async () => {
   const asset = contextMenu.value.asset;
   closeContextMenu();
   if (!asset) return;
-  await ElMessageBox.confirm("确认删除该资源吗？", "删除确认", { type: "warning" }).catch(
-    () => null,
-  );
+  await ElMessageBox.confirm("确认删除该资源吗？", "删除确认", {
+    type: "warning",
+  }).catch(() => null);
   await assetApi.deleteAsset(projectId.value, asset.id);
   await loadAssets();
 };
@@ -560,9 +656,13 @@ const handlePasteAsset = async () => {
   if (!clipboardAsset.value || !projectId.value) return;
   const folderId = targetFolderId === "root" ? null : targetFolderId;
   if (clipboardMode.value === "copy") {
-    await assetApi.copyAsset(projectId.value, clipboardAsset.value.id, { folderId });
+    await assetApi.copyAsset(projectId.value, clipboardAsset.value.id, {
+      folderId,
+    });
   } else if (clipboardMode.value === "cut") {
-    await assetApi.updateAsset(projectId.value, clipboardAsset.value.id, { folderId });
+    await assetApi.updateAsset(projectId.value, clipboardAsset.value.id, {
+      folderId,
+    });
     clipboardAsset.value = null;
     clipboardMode.value = null;
   }
@@ -584,7 +684,8 @@ const handleMoveFolderSelect = (data) => {
 const confirmMove = async () => {
   const asset = moveAssetTarget.value || clipboardAsset.value;
   if (!asset) return;
-  const folderId = moveTargetFolderId.value === "root" ? null : moveTargetFolderId.value;
+  const folderId =
+    moveTargetFolderId.value === "root" ? null : moveTargetFolderId.value;
   await assetApi.updateAsset(projectId.value, asset.id, { folderId });
   moveDialogVisible.value = false;
   moveAssetTarget.value = null;
@@ -604,13 +705,19 @@ const handleFileInputChange = async (event) => {
   const files = Array.from(event.target.files || []);
   event.target.value = "";
   if (!files.length) return;
-  await uploadFiles(files, selectedFolderId.value === "root" ? null : selectedFolderId.value);
+  await uploadFiles(
+    files,
+    selectedFolderId.value === "root" ? null : selectedFolderId.value,
+  );
 };
 
 const handleUploadDrop = async (event) => {
   const files = Array.from(event.dataTransfer?.files || []);
   if (!files.length) return;
-  await uploadFiles(files, selectedFolderId.value === "root" ? null : selectedFolderId.value);
+  await uploadFiles(
+    files,
+    selectedFolderId.value === "root" ? null : selectedFolderId.value,
+  );
 };
 
 const handleDropToFolder = (folder) => async (event) => {
@@ -640,19 +747,27 @@ const uploadFiles = async (files, folderId) => {
   if (!projectId.value || !files.length) return;
   const duplicated = files.some((file) =>
     normalizedAssets.value.some(
-      (asset) => asset.displayName === file.name && (asset.folderId || null) === (folderId || null),
+      (asset) =>
+        asset.displayName === file.name &&
+        (asset.folderId || null) === (folderId || null),
     ),
   );
   let conflictStrategy = "rename";
   if (duplicated) {
-    const result = await ElMessageBox.confirm("存在同名资源，是否替换？", "上传冲突", {
-      confirmButtonText: "替换",
-      cancelButtonText: "重命名",
-      type: "warning",
-    }).catch(() => null);
+    const result = await ElMessageBox.confirm(
+      "存在同名资源，是否替换？",
+      "上传冲突",
+      {
+        confirmButtonText: "替换",
+        cancelButtonText: "重命名",
+        type: "warning",
+      },
+    ).catch(() => null);
     conflictStrategy = result ? "replace" : "rename";
   }
-  await assetApi.uploadAssets(projectId.value, files, folderId, { conflictStrategy });
+  await assetApi.uploadAssets(projectId.value, files, folderId, {
+    conflictStrategy,
+  });
   ElMessage.success("上传成功");
   await loadAssets();
 };
@@ -848,7 +963,16 @@ watch(projectId, (value) => {
   font-size: 11px;
   color: #8b95a6;
 }
-
+.asset-search {
+  width: 80%;
+}
+.asset-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  width: 100%;
+}
 .asset-table {
   display: flex;
   flex-direction: column;
@@ -987,5 +1111,60 @@ watch(projectId, (value) => {
 :deep(.el-scrollbar__thumb) {
   background-color: rgba(96, 98, 102, 0.35);
   border-radius: 6px;
+}
+.asset-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.asset-title-line {
+  width: 100%;
+}
+
+.asset-title-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.asset-subline {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detail-link {
+  color: #2f6fe4;
+  cursor: pointer;
+  word-break: break-all;
+  width: 90%;
+}
+
+.detail-link:hover {
+  text-decoration: underline;
+}
+
+.preview-pdf-wrap {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-link {
+  align-self: flex-end;
+  margin-top: 8px;
+}
+
+.asset-table :deep(.el-scrollbar__wrap) {
+  overflow-x: hidden;
 }
 </style>
