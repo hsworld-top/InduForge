@@ -20,6 +20,8 @@ const DataQueryFn = require("./DataQuery"); // 数据查询模型
 const DataSqlConfigFn = require("./DataSqlConfig"); // SQL配置模型
 const DataQueryLogFn = require("./DataQueryLog"); // 查询日志模型
 const DesignPage = require("./DesignPage"); // 设计页面模型
+const DesignAssetFolder = require("./DesignAssetFolder"); // 资源文件夹模型
+const DesignAsset = require("./DesignAsset"); // 资源文件模型
 const DataPointFn = require("./DataPoint"); // 数据点模型
 
 // 运维模块模型
@@ -395,6 +397,64 @@ DesignPage.belongsTo(Project, {
   as: "project",
 });
 
+// 工程和资源文件夹：一对多
+Project.hasMany(DesignAssetFolder, {
+  foreignKey: "projectId",
+  as: "assetFolders",
+  onDelete: "CASCADE",
+});
+
+DesignAssetFolder.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+// 资源文件夹自关联
+DesignAssetFolder.hasMany(DesignAssetFolder, {
+  foreignKey: "parentId",
+  as: "children",
+  onDelete: "CASCADE",
+});
+
+DesignAssetFolder.belongsTo(DesignAssetFolder, {
+  foreignKey: "parentId",
+  as: "parent",
+});
+
+// 工程和资源文件：一对多
+Project.hasMany(DesignAsset, {
+  foreignKey: "projectId",
+  as: "assets",
+  onDelete: "CASCADE",
+});
+
+DesignAsset.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+// 文件夹和资源文件
+DesignAssetFolder.hasMany(DesignAsset, {
+  foreignKey: "folderId",
+  as: "assets",
+});
+
+DesignAsset.belongsTo(DesignAssetFolder, {
+  foreignKey: "folderId",
+  as: "folder",
+});
+
+// 用户和资源文件：上传者
+User.hasMany(DesignAsset, {
+  foreignKey: "uploadedBy",
+  as: "uploadedAssets",
+});
+
+DesignAsset.belongsTo(User, {
+  foreignKey: "uploadedBy",
+  as: "uploader",
+});
+
 // 设计页面自关联：父子关系（文件夹结构）
 DesignPage.hasMany(DesignPage, {
   foreignKey: "parentId",
@@ -614,6 +674,8 @@ module.exports = {
   DataSqlConfig, // SQL配置模型
   DataQueryLog, // 查询日志模型
   DesignPage, // 设计页面模型
+  DesignAssetFolder, // 资源文件夹模型
+  DesignAsset, // 资源文件模型
   DataPoint, // 数据点模型
   // 运维模块模型
   Node, // 节点模型

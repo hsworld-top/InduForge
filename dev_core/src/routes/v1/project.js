@@ -9,6 +9,8 @@ const ApiResponse = require('../../utils/response');
 const ErrorCodes = require('../../constants/errorCodes');
 const appConfig = require('../../config/app');
 
+const designAssetService = require('../../services/designAssetService');
+
 const router = express.Router();
 
 // 导入模型和中间件
@@ -502,10 +504,10 @@ router.post('/import', authenticateToken, validate(Joi.object({
       return next;
     };
     /**
-     * ?????????? sourceId / datapointId
-     * @param {Object} payload - ??????
-     * @param {Object} maps - ??ID??
-     * @returns {Object} ??????
+     * 重映射变量中的 sourceId / datapointId
+     * @param {Object} payload - 变量配置
+     * @param {Object} maps - 新旧ID映射
+     * @returns {Object} 重映射后的配置
      */
     const remapVariables = (payload, maps) => {
       if (!payload || typeof payload !== 'object') return payload;
@@ -937,6 +939,8 @@ router.delete('/:id', authenticateToken, requireResourceOwnership('project'), va
       return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
     }
 
+    await designAssetService.deleteAssetsByProject(id);
+    await designAssetService.deleteFoldersByProject(id);
     await project.destroy();
 
     return ApiResponse.success(res, null, 'delete_success');

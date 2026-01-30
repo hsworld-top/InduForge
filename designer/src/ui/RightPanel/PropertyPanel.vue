@@ -97,9 +97,7 @@
             <PropEditor
               :prop="propDef"
               :model-value="getPropValue(propDef.name)"
-              @update:model-value="
-                (val) => handlePropChange(propDef.name, val)
-              "
+              @update:model-value="(val) => handlePropChange(propDef.name, val)"
             />
           </div>
         </div>
@@ -160,9 +158,7 @@
                     @update:model-value="
                       (val) => handleSizeUnitChange(item.sizeProp, val)
                     "
-                    @change="
-                      (val) => handleSizeUnitChange(item.sizeProp, val)
-                    "
+                    @change="(val) => handleSizeUnitChange(item.sizeProp, val)"
                   >
                     <el-option label="px" value="px" />
                     <el-option label="%" value="%" />
@@ -226,7 +222,10 @@
         >
       </template>
 
-      <div v-if="!hasStyleSelection" class="text-sm text-gray-400 text-center py-6">
+      <div
+        v-if="!hasStyleSelection"
+        class="text-sm text-gray-400 text-center py-6"
+      >
         请选择组件
       </div>
     </div>
@@ -269,14 +268,53 @@
         />
       </div>
     </div>
-    <div class="config-editor">
-      <MonacoEditor
-        ref="configEditorRef"
-        v-model="configDraft"
-        :language="configEditorLanguage"
-        height="520px"
-        :completions="configEditorCompletions"
-      />
+    <div class="config-body">
+      <div class="config-editor">
+        <MonacoEditor
+          ref="configEditorRef"
+          v-model="configDraft"
+          :language="configEditorLanguage"
+          height="520px"
+          :completions="configEditorCompletions"
+        />
+      </div>
+      <div v-if="configDialogType === 'style'" class="config-assets">
+        <div class="config-assets-header">
+          <span>资源库</span>
+        </div>
+        <el-input
+          v-model="configAssetSearch"
+          size="small"
+          placeholder="搜索资源"
+          clearable
+        />
+        <div class="config-assets-body">
+          <el-scrollbar>
+            <el-tree
+              ref="configAssetTreeRef"
+              :data="configAssetTree"
+              node-key="id"
+              default-expand-all
+              :expand-on-click-node="false"
+              :filter-node-method="filterConfigAssetNode"
+            >
+              <template #default="{ data }">
+                <div
+                  class="tree-node"
+                  :class="`node-${data.type}`"
+                  @dblclick.stop="handleConfigAssetNodeDblClick(data)"
+                >
+                  <el-icon class="node-icon">
+                    <IconEpFolder v-if="data.type === 'folder'" />
+                    <IconEpPictureFilled v-else />
+                  </el-icon>
+                  <span class="node-label">{{ data.label }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </el-scrollbar>
+        </div>
+      </div>
     </div>
     <template #footer>
       <el-button @click="clearConfigDialog">清除</el-button>
@@ -561,6 +599,8 @@ import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpList from "~icons/ep/list";
 import IconEpGrid from "~icons/ep/grid";
+import IconEpPictureFilled from "~icons/ep/picture-filled";
+import assetApi from "@/services/assetApi";
 
 const editorStore = useEditorStore();
 const {
@@ -572,6 +612,14 @@ const {
   projectVariableGroups,
   globalScripts,
 } = storeToRefs(editorStore);
+
+const projectId = computed(
+  () =>
+    editorStore.projectId ||
+    editorStore.project?.id ||
+    currentPage.value?.projectId ||
+    "",
+);
 
 /** ??????? */
 
@@ -588,7 +636,7 @@ const elementId = computed(() => currentElement.value?.id || "-");
 
 /** ???? */
 const elementType = computed(
-  () => normalizeElementType(currentElement.value?.type) || "-"
+  () => normalizeElementType(currentElement.value?.type) || "-",
 );
 
 /** ????????? */
@@ -642,6 +690,109 @@ const configDraft = ref("");
 const configEditorRef = ref(null);
 const selectedPresetId = ref("");
 const presetSearch = ref("");
+const configAssetFolders = ref([]);
+const configAssets = ref([]);
+const configAssetSearch = ref("");
+const configAssetTreeRef = ref(null);
+
+const unwrapApiData = (response) =>
+  response?.data?.data ?? response?.data ?? response;
+
+const decodeAssetName = (value) => {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch (error) {
+    return value;
+  }
+};
+
+const resolveConfigAssetUrl = (asset) => {
+  if (!asset) return "";
+  return asset.url || asset.src || asset.path || "";
+};
+
+const buildConfigAssetTree = (folders, assets) => {
+  const folderNodes = (folders || []).map((folder) => ({
+    id: folder.id,
+    label: decodeAssetName(folder.name || "未命名文件夹"),
+    type: "folder",
+    raw: folder,
+    children: [],
+  }));
+  const folderMap = new Map(folderNodes.map((node) => [node.id, node]));
+  const root = {
+    id: "all",
+    label: "全部资源",
+    type: "folder",
+    raw: null,
+    children: [],
+  };
+  folderNodes.forEach((node) => {
+    const parentId = node.raw?.parentId;
+    if (parentId && folderMap.has(parentId)) {
+      folderMap.get(parentId).children.push(node);
+    } else {
+      root.children.push(node);
+    }
+  });
+
+  (assets || []).forEach((asset) => {
+    const node = {
+      id: asset.id,
+      label: decodeAssetName(asset.name || asset.originalName || "未命名资源"),
+      type: "asset",
+      raw: asset,
+    };
+    const folderId = asset.folderId;
+    if (folderId && folderMap.has(folderId)) {
+      folderMap.get(folderId).children.push(node);
+    } else {
+      root.children.push(node);
+    }
+  });
+
+  return [root];
+};
+
+const configAssetTree = computed(() =>
+  buildConfigAssetTree(configAssetFolders.value, configAssets.value),
+);
+
+const filterConfigAssetNode = (value, data) => {
+  if (!value) return true;
+  return String(data?.label || "")
+    .toLowerCase()
+    .includes(String(value).toLowerCase());
+};
+
+const handleConfigAssetNodeDblClick = (data) => {
+  if (!data || data.type !== "asset") return;
+  const url = resolveConfigAssetUrl(data.raw);
+  if (!url) return;
+  const snippet = `url(\"${url}\")`;
+  configEditorRef.value?.insertText?.(snippet);
+};
+
+const loadConfigAssetFolders = async () => {
+  if (!projectId.value) return;
+  const response = await assetApi.getFolders(projectId.value);
+  const data = unwrapApiData(response);
+  const list = data?.folders || data?.items || data || [];
+  configAssetFolders.value = Array.isArray(list) ? list : [];
+};
+
+const loadConfigAssets = async () => {
+  if (!projectId.value) return;
+  const response = await assetApi.getAssets(projectId.value);
+  const data = unwrapApiData(response);
+  const list = data?.assets || data?.items || data || [];
+  configAssets.value = Array.isArray(list) ? list : [];
+};
+
+watch(configAssetSearch, () => {
+  configAssetTreeRef.value?.filter?.(configAssetSearch.value);
+});
 const bindingDialogVisible = ref(false);
 const bindingEditorCode = ref("");
 const bindingEditorRef = ref(null);
@@ -751,7 +902,8 @@ const echartDetailPresets = [
     label: "仪表盘模板",
     content:
       'const option = {\n  title: { text: "仪表盘" },\n  series: [{\n    type: "gauge",\n    progress: { show: true },\n    detail: { valueAnimation: true, formatter: "{value}%" },\n    data: [{ value: 50, name: "完成率" }],\n  }],\n};\nreturn option;',
-  },  {
+  },
+  {
     id: "echart-area",
     label: "面积折线图",
     content:
@@ -1263,11 +1415,10 @@ const elementPlusPresetGroups = [
     types: ["Table", "BigDataTable"],
     detail: (methodName, type) => {
       const dataDefault = getManifestDefaultValue(type, "data") || [];
-      const columnsDefault =
-        getManifestDefaultValue(type, "columns") || [
-          { prop: "name", label: "名称" },
-          { prop: "value", label: "值" },
-        ];
+      const columnsDefault = getManifestDefaultValue(type, "columns") || [
+        { prop: "name", label: "名称" },
+        { prop: "value", label: "值" },
+      ];
       return [
         {
           id: buildPresetId(type, "basic"),
@@ -1280,28 +1431,28 @@ const elementPlusPresetGroups = [
             )},\n  columns: ${formatDslValue(columnsDefault, 2)},`,
           ),
         },
-      {
-        id: buildPresetId(type, "layout"),
-        label: "表格布局配置",
-        content: buildDslTemplate(
-          methodName,
-          "  stripe: true,\n  border: true,\n  height: 360,",
-        ),
-      },
-      {
-        id: buildPresetId(type, "full-dsl"),
-        label: "完整 DSL 模板",
-        content: buildDslTemplate(
-          methodName,
-          `  /** 基础 */\n  id: "tableList",\n  data: ${formatDslValue(
-            dataDefault,
-            2,
-          )},\n  columns: ${formatDslValue(
-            columnsDefault,
-            2,
-          )},\n\n  /** 表格属性 */\n  stripe: true,\n  border: true,\n  rowKey: "id",\n  height: 360,\n\n  /** 样式 */\n  className: "custom-table",\n\n  /** 事件 */\n  onRowClick: {\n    action: "setVar",\n    target: "$vars.currentRow",\n  },`,
-        ),
-      },
+        {
+          id: buildPresetId(type, "layout"),
+          label: "表格布局配置",
+          content: buildDslTemplate(
+            methodName,
+            "  stripe: true,\n  border: true,\n  height: 360,",
+          ),
+        },
+        {
+          id: buildPresetId(type, "full-dsl"),
+          label: "完整 DSL 模板",
+          content: buildDslTemplate(
+            methodName,
+            `  /** 基础 */\n  id: "tableList",\n  data: ${formatDslValue(
+              dataDefault,
+              2,
+            )},\n  columns: ${formatDslValue(
+              columnsDefault,
+              2,
+            )},\n\n  /** 表格属性 */\n  stripe: true,\n  border: true,\n  rowKey: "id",\n  height: 360,\n\n  /** 样式 */\n  className: "custom-table",\n\n  /** 事件 */\n  onRowClick: {\n    action: "setVar",\n    target: "$vars.currentRow",\n  },`,
+          ),
+        },
       ];
     },
     style: (type) => [
@@ -1339,25 +1490,25 @@ const elementPlusPresetGroups = [
             )},\n  props: { label: "label", children: "children" },`,
           ),
         },
-      {
-        id: buildPresetId(type, "check"),
-        label: "树勾选配置",
-        content: buildDslTemplate(
-          methodName,
-          '  showCheckbox: true,\n  nodeKey: "id",\n  defaultExpandAll: true,',
-        ),
-      },
-      {
-        id: buildPresetId(type, "full-dsl"),
-        label: "完整 DSL 模板",
-        content: buildDslTemplate(
-          methodName,
-          `  /** 基础 */\n  id: "treeData",\n  data: ${formatDslValue(
-            dataDefault,
-            2,
-          )},\n  props: { label: "label", children: "children" },\n\n  /** 属性 */\n  showCheckbox: true,\n  nodeKey: "id",\n  defaultExpandAll: true,\n\n  /** 样式 */\n  className: "custom-tree",\n\n  /** 事件 */\n  onNodeClick: {\n    action: "setVar",\n    target: "$vars.activeNode",\n  },`,
-        ),
-      },
+        {
+          id: buildPresetId(type, "check"),
+          label: "树勾选配置",
+          content: buildDslTemplate(
+            methodName,
+            '  showCheckbox: true,\n  nodeKey: "id",\n  defaultExpandAll: true,',
+          ),
+        },
+        {
+          id: buildPresetId(type, "full-dsl"),
+          label: "完整 DSL 模板",
+          content: buildDslTemplate(
+            methodName,
+            `  /** 基础 */\n  id: "treeData",\n  data: ${formatDslValue(
+              dataDefault,
+              2,
+            )},\n  props: { label: "label", children: "children" },\n\n  /** 属性 */\n  showCheckbox: true,\n  nodeKey: "id",\n  defaultExpandAll: true,\n\n  /** 样式 */\n  className: "custom-tree",\n\n  /** 事件 */\n  onNodeClick: {\n    action: "setVar",\n    target: "$vars.activeNode",\n  },`,
+          ),
+        },
       ];
     },
     style: (type) => [
@@ -2548,7 +2699,6 @@ const displayPropGroups = computed(() => {
   return [];
 });
 
-
 const pageVars = computed(() => {
   docVersion.value;
   const pageId = currentPageId.value;
@@ -2845,30 +2995,30 @@ const detailCompletions = computed(() => {
   });
 
   pageComponentNames.value.forEach((name) => {
-  const chartMethodCompletions = [
-    {
-      label: "setOption",
-      insertText: "setOption(${1:option}, ${2:false})",
-      kind: "Method",
-      detail: "图表方法",
-      prefix: ".",
-    },
-    {
-      label: "echarts",
-      insertText: "echarts(${1:\"setOption\"}, ${2:option})",
-      kind: "Method",
-      detail: "图表方法",
-      prefix: ".",
-    },
-    {
-      label: "getInstance",
-      insertText: "getInstance()",
-      kind: "Method",
-      detail: "图表方法",
-      prefix: ".",
-    },
-  ];
-  chartMethodCompletions.forEach((item) => items.push(item));
+    const chartMethodCompletions = [
+      {
+        label: "setOption",
+        insertText: "setOption(${1:option}, ${2:false})",
+        kind: "Method",
+        detail: "图表方法",
+        prefix: ".",
+      },
+      {
+        label: "echarts",
+        insertText: 'echarts(${1:"setOption"}, ${2:option})',
+        kind: "Method",
+        detail: "图表方法",
+        prefix: ".",
+      },
+      {
+        label: "getInstance",
+        insertText: "getInstance()",
+        kind: "Method",
+        detail: "图表方法",
+        prefix: ".",
+      },
+    ];
+    chartMethodCompletions.forEach((item) => items.push(item));
     items.push({
       label: name,
       insertText: name,
@@ -3213,7 +3363,8 @@ const openConfigDialog = (type) => {
       if (!rawDetail && isElementPlusType(node.type)) {
         const presets = resolveElementPlusDetailPresets(node.type);
         const basicId = buildPresetId(node.type, "basic");
-        const preset = presets.find((item) => item.id === basicId) || presets[0];
+        const preset =
+          presets.find((item) => item.id === basicId) || presets[0];
         const nextContent = preset?.content || "";
         configDraft.value = nextContent;
         if (nextContent) {
@@ -3229,6 +3380,11 @@ const openConfigDialog = (type) => {
   }
   selectedPresetId.value = "";
   presetSearch.value = "";
+  if (configDialogType.value === "style") {
+    configAssetSearch.value = "";
+    loadConfigAssetFolders();
+    loadConfigAssets();
+  }
   configDialogVisible.value = true;
 };
 
@@ -3712,8 +3868,39 @@ const handlePropChange = (propName, value) => {
   width: 180px;
 }
 
+.config-body {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
 .config-editor {
   min-height: 520px;
+  flex: 1;
+}
+
+.config-assets {
+  width: 240px;
+  border-left: 1px solid #e4e7ed;
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-assets-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+}
+
+.config-assets-body {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  padding: 6px;
+  background: #fff;
 }
 
 .editor-meta {

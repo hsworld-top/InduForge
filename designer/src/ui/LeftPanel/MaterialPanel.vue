@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col gap-3 material-panel">
-    <!-- 页面编辑模式：组件 + 绘图区 -->
+    <!-- 页面编辑模式：组件 + 绘图区 + 资源 -->
     <template v-if="editMode === 'page'">
       <el-tabs v-model="activeTab">
         <el-tab-pane label="组件" name="components">
@@ -9,10 +9,13 @@
         <el-tab-pane label="绘图区" name="diagram">
           <DiagramAreaPanel />
         </el-tab-pane>
+        <el-tab-pane label="资源" name="resources">
+          <ResourcePanel />
+        </el-tab-pane>
       </el-tabs>
     </template>
 
-    <!-- Canvas绘图模式：绘图工具 -->
+    <!-- Canvas 绘图模式：绘图工具 -->
     <template v-else-if="editMode === 'canvas'">
       <div class="canvas-tools-panel">
         <div class="panel-header">
@@ -33,11 +36,12 @@ import { computed, ref } from "vue";
 import ComponentPanel from "./ComponentPanel.vue";
 import DiagramAreaPanel from "./DiagramAreaPanel.vue";
 import CanvasToolsPanel from "./CanvasToolsPanel.vue";
+import ResourcePanel from "./ResourcePanel.vue";
 import IconEpBack from "~icons/ep/back";
 
 const props = defineProps({
   /**
-   * 编辑模式：page - 页面编辑，canvas - Canvas绘图
+   * 编辑模式：page - 页面编辑，canvas - Canvas 绘图
    */
   editMode: {
     type: String,

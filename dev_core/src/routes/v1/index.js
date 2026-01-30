@@ -9,6 +9,7 @@ const logRoutes = require("./log");
 const roleRoutes = require("./role");
 const dataRoutes = require("./data");
 const designRoutes = require("./design");
+const designAssetsRoutes = require("./designAssets");
 const pageLockRoutes = require("./pageLock");
 // 运维模块路由
 const nodeRoutes = require("./node");
@@ -32,6 +33,7 @@ function buildV1Router(options = {}) {
   router.use("/roles", roleRoutes);
   router.use("/data", dataRoutes);
   router.use("/design", designRoutes);
+  router.use("/design", designAssetsRoutes);
   router.use("/pages", pageLockRoutes);
   // 运维模块路由
   router.use("/nodes", nodeRoutes);

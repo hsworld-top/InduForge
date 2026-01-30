@@ -1,7 +1,7 @@
-const Minio = require('minio');
-const dayjs = require('dayjs');
-const { logger } = require('../utils/logger');
-const { TIME_FORMAT } = require('../constants/time');
+const Minio = require("minio");
+const dayjs = require("dayjs");
+const { logger } = require("../utils/logger");
+const { TIME_FORMAT } = require("../constants/time");
 
 let minioClient = null;
 let storageStatus = {
@@ -20,7 +20,16 @@ const getStorageConfig = () => {
   const bucketDesign = process.env.MINIO_BUCKET_DESIGN || 'design-assets';
   const region = process.env.MINIO_REGION || 'us-east-1';
 
-  return { endpoint, port, useSSL, accessKey, secretKey, bucketIfp, bucketDesign, region };
+  return {
+    endpoint,
+    port,
+    useSSL,
+    accessKey,
+    secretKey,
+    bucketIfp,
+    bucketDesign,
+    region,
+  };
 };
 
 const buildClient = () => {
@@ -131,6 +140,19 @@ const removeObject = async (bucketType, objectKey) => {
   return client.removeObject(bucket, objectKey);
 };
 
+/**
+ * ????
+ * @param {string} bucketType
+ * @param {string} sourceKey
+ * @param {string} targetKey
+ */
+const copyObject = async (bucketType, sourceKey, targetKey) => {
+  const client = await getClient();
+  const bucket = getBucketName(bucketType);
+  const source = "/" + bucket + "/" + sourceKey;
+  return client.copyObject(bucket, targetKey, source);
+};
+
 const getStorageStatus = () => ({
   ...storageStatus,
 });
@@ -143,5 +165,6 @@ module.exports = {
   getObjectStream,
   statObject,
   removeObject,
+  copyObject,
   getStorageStatus,
 };

@@ -4,4 +4,4 @@
 
 export { projectApi } from "./projectApi.js";
 export { datacenterApi } from "./datacenterApi.js";
-
+export { assetApi } from "./assetApi.js";
