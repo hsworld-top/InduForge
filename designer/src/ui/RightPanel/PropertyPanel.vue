@@ -2487,6 +2487,15 @@ const layoutFallbackProps = {
       min: 0,
       max: 100,
     },
+    {
+      name: "padding",
+      type: "number",
+      label: "内边距",
+      group: "布局",
+      defaultValue: 0,
+      min: 0,
+      max: 200,
+    },
   ],
   ElLayoutRow: [
     {

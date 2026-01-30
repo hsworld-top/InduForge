@@ -393,6 +393,10 @@ const buildComponentStub = (pageId, name) => ({
   setProps: (...args) => queueComponentCall(pageId, name, "setProps", args),
   setStyle: (...args) => queueComponentCall(pageId, name, "setStyle", args),
   button: (...args) => queueComponentCall(pageId, name, "button", args),
+  elContainer: () => null,
+  elMain: () => null,
+  elLayout: () => null,
+  elLayoutRow: () => null,
 });
 
 const getApiBase = () => {

@@ -1008,6 +1008,24 @@ const contentStyle = computed(() => {
     style.overflow = "visible";
   }
   if (
+    !props.readonly &&
+    (node.value.type === "ElLayout" ||
+      node.value.type === "ElLayoutRow" ||
+      node.value.type === "ElCol")
+  ) {
+    style.overflow = "visible";
+  }
+  if (node.value.type === "ElLayout") {
+    const rawPadding = node.value.props?.padding;
+    const paddingValue =
+      typeof rawPadding === "number" && Number.isFinite(rawPadding)
+        ? `${rawPadding}px`
+        : rawPadding !== undefined
+          ? String(rawPadding)
+          : "0px";
+    style.padding = paddingValue;
+  }
+  if (
     parentNode?.type === "ElHeader" ||
     parentNode?.type === "ElAside" ||
     parentNode?.type === "ElMain" ||
@@ -1141,10 +1159,18 @@ const wrapperComponentStyle = computed(() => {
     );
     style["--row-gutter"] = `${Math.max(0, gutter)}px`;
     style["--row-columns"] = String(columns);
+    style.paddingLeft = "0";
+    style.paddingRight = "0";
     if (!gutter) {
       style["--el-row-gutter"] = "0px";
       style.paddingTop = "0";
       style.paddingBottom = "0";
+      style.marginLeft = "0";
+      style.marginRight = "0";
+      style.columnGap = "0px";
+      style.gap = "0px";
+      style.margin = "0";
+      style.padding = "0";
     }
     if (gutter > 0) {
       style.marginLeft = "0";
@@ -1169,6 +1195,10 @@ const wrapperComponentStyle = computed(() => {
       style["--col-gutter-x"] = "0px";
       style.paddingTop = "0";
       style.paddingBottom = "0";
+      style.marginLeft = "0";
+      style.marginRight = "0";
+      style.margin = "0";
+      style.padding = "0";
     } else {
       const halfGutter = "calc(var(--row-gutter) / 2)";
       const halfCol = "calc(100% / var(--row-columns) / 2)";
@@ -1918,12 +1948,97 @@ const resolveClickSelectionTarget = (event) => {
   return parentNode;
 };
 
+/**
+ * 获取布局节点的最外层 ElLayout
+ * @param {import('@/editor-core').ComponentNode | null} currentNode - 当前节点
+ * @returns {import('@/editor-core').ComponentNode | null}
+ */
+const resolveLayoutRootNode = (currentNode) => {
+  if (!currentNode) return null;
+  if (
+    currentNode.type !== "ElLayout" &&
+    currentNode.type !== "ElLayoutRow" &&
+    currentNode.type !== "ElCol"
+  ) {
+    return null;
+  }
+  if (currentNode.type === "ElLayout") return currentNode;
+  let parentNode = doc.value?.getParent?.(currentNode.id);
+  while (parentNode) {
+    if (parentNode.type === "ElLayout") return parentNode;
+    parentNode = doc.value?.getParent?.(parentNode.id);
+  }
+  return null;
+};
+
+/**
+ * 获取布局节点所在的 ElLayoutRow
+ * @param {import('@/editor-core').ComponentNode | null} currentNode - 当前节点
+ * @returns {import('@/editor-core').ComponentNode | null}
+ */
+const resolveLayoutRowNode = (currentNode) => {
+  if (!currentNode) return null;
+  if (currentNode.type === "ElLayoutRow") return currentNode;
+  if (currentNode.type === "ElCol") {
+    const parentNode = doc.value?.getParent?.(currentNode.id);
+    if (parentNode?.type === "ElLayoutRow") return parentNode;
+  }
+  return null;
+};
+
+/**
+ * 判断是否点击在容器边框区域
+ * @param {MouseEvent} event - 鼠标事件
+ * @returns {boolean}
+ */
+const isClickOnContainerBorder = (event) => {
+  if (!node.value || !isContainer.value) return false;
+  const element = nodeRef.value;
+  if (!element || !event || typeof event.clientX !== "number") return false;
+  const rect = element.getBoundingClientRect?.();
+  if (!rect) return false;
+  const x = event.clientX;
+  const y = event.clientY;
+  if (
+    x < rect.left ||
+    x > rect.right ||
+    y < rect.top ||
+    y > rect.bottom
+  ) {
+    return false;
+  }
+  const edge = 6;
+  const nearEdge =
+    x - rect.left <= edge ||
+    rect.right - x <= edge ||
+    y - rect.top <= edge ||
+    rect.bottom - y <= edge;
+  if (!nearEdge) return false;
+  const hitNodeEl = event.target?.closest?.("[data-node-id]");
+  if (!hitNodeEl) return true;
+  return hitNodeEl.getAttribute("data-node-id") === node.value.id;
+};
+
 const handleClick = (event) => {
   if (props.readonly) {
     void runPreviewScript("click", event);
     return;
   }
+  if (isClickOnContainerBorder(event)) {
+    handleSelect(event);
+    return;
+  }
   let targetNode = resolveClickSelectionTarget(event);
+  const layoutRow = event?.ctrlKey ? resolveLayoutRowNode(node.value) : null;
+  const forceRowSelection = Boolean(layoutRow);
+  if (forceRowSelection) {
+    targetNode = layoutRow;
+  } else {
+    const layoutRoot = resolveLayoutRootNode(node.value);
+    if (layoutRoot && layoutRoot.id !== node.value?.id) {
+      targetNode = layoutRoot;
+    }
+  }
   if (
     targetNode === node.value &&
     !isRegionContainer.value &&
@@ -1951,7 +2066,7 @@ const handleClick = (event) => {
     selection.value.selectRange(element);
     return;
   }
-  if (event.metaKey || event.ctrlKey) {
+  if (!forceRowSelection && (event.metaKey || event.ctrlKey)) {
     selection.value.toggleSelect(element);
     return;
   }
@@ -1961,6 +2076,14 @@ const handleClick = (event) => {
 const handleDoubleClick = (event) => {
   if (props.readonly) return;
   if (!node.value || !selection.value) return;
+  if (node.value.type === "ElCol") {
+    const layoutRoot = resolveLayoutRootNode(node.value);
+    if (layoutRoot) {
+      const element = createSelectableElement("node", node.value.id);
+      selection.value.select(element);
+      return;
+    }
+  }
   if (!isRegionContainer.value) return;
   const parentNode = doc.value?.getParent?.(node.value.id);
   if (!parentNode || parentNode.type !== "ElContainer") return;
@@ -2516,6 +2639,10 @@ const buildRefInfo = () => {
     id: node.value.id,
     el: nodeRef.value || null,
     component: contentRef.value || null,
+    elContainer: () => nodeRef.value || null,
+    elMain: () => nodeRef.value || null,
+    elLayout: () => nodeRef.value || null,
+    elLayoutRow: () => nodeRef.value || null,
     node: node.value,
     setProps: (patch) => {
       if (!patch || typeof patch !== "object") return;
@@ -4160,6 +4287,14 @@ const handleDrop = (event) => {
   insertLineStyle.value = null;
 
     const resolveElContainerTarget = () => {
+      const currentType = node.value?.type;
+      const isElContainerScope =
+        currentType === "ElContainer" ||
+        currentType === "ElHeader" ||
+        currentType === "ElAside" ||
+        currentType === "ElMain" ||
+        currentType === "ElFooter";
+      if (!isElContainerScope) return null;
       const isRegionType = (type) =>
         type === "ElHeader" ||
         type === "ElAside" ||
@@ -4605,12 +4740,47 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     style.padding = "0";
     style.overflow = "hidden";
     style.position = "relative";
+  } else if (currentNode.type === "ElLayoutRow") {
+    const gutter = Math.max(0, Number(currentNode.props?.gutter) || 0);
+    const halfGutter = gutter ? gutter / 2 : 0;
+    style.display = "flex";
+    style.flexWrap = "wrap";
+    style.alignItems = "stretch";
+    if (halfGutter) {
+      style.marginLeft = `${-halfGutter}px`;
+      style.marginRight = `${-halfGutter}px`;
+    }
+    style.width = "100%";
+    style.position = "relative";
+    style.boxSizing = "border-box";
+  } else if (currentNode.type === "ElCol") {
+    const parentNode = doc.value?.getParent?.(currentNode.id);
+    const gutter = Math.max(0, Number(parentNode?.props?.gutter) || 0);
+    const halfGutter = gutter ? gutter / 2 : 0;
+    if (halfGutter) {
+      style.paddingLeft = `${halfGutter}px`;
+      style.paddingRight = `${halfGutter}px`;
+    }
+    style.display = "flex";
+    style.flexDirection = "column";
+    style.alignItems = "stretch";
+    style.width = "100%";
+    style.position = "relative";
+    style.boxSizing = "border-box";
   } else if (currentNode.type === "ElLayout") {
     const rowGap = Math.max(0, Number(currentNode.props?.gutter) || 0);
+    const rawPadding = currentNode.props?.padding;
+    const layoutPadding =
+      typeof rawPadding === "number" && Number.isFinite(rawPadding)
+        ? `${rawPadding}px`
+        : rawPadding !== undefined
+          ? String(rawPadding)
+          : "0px";
     style.display = "flex";
     style.flexDirection = "column";
     style.alignItems = "stretch";
     style.rowGap = `${rowGap}px`;
+    style.padding = layoutPadding;
     style.width = "100%";
     style.height = "100%";
     style.overflow = "hidden";
@@ -5569,6 +5739,7 @@ const handlePointerDown = (event) => {
       const nodeElement = hit.closest?.("[data-node-id]");
       const nodeId = nodeElement?.getAttribute?.("data-node-id");
       if (!nodeId) continue;
+      if (isSelfOrDescendant(nodeId)) continue;
       const targetNode = doc.value?.getNode?.(nodeId);
       if (!targetNode) continue;
       if (isRegionType(targetNode.type)) {
@@ -5638,7 +5809,7 @@ const handlePointerDown = (event) => {
         resetFlowStyle();
       }
       const dropRegion = resolveDropRegion(moveEvent);
-      if (dropRegion?.id) {
+      if (dropRegion?.id && !isSelfOrDescendant(dropRegion.id)) {
         const rect = document
           .querySelector(`[data-node-id="${dropRegion.id}"]`)
           ?.getBoundingClientRect?.();
@@ -5943,6 +6114,7 @@ const handlePointerDown = (event) => {
 
 .designer-node.is-selected {
   outline: 2px solid #3b82f6;
+  z-index: 2;
 }
 
 .designer-node.is-draggable {
