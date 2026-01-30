@@ -5,7 +5,7 @@
     @pointerdown.capture="handleCanvasPointerDown"
     @keydown="handleKeyDown"
     @dragover.prevent
-    @drop.prevent.stop="handleCanvasDrop"
+    @drop.prevent="handleCanvasDrop"
   >
     <NodeRenderer v-if="rootNodeId" :node-id="rootNodeId" :is-root="true" />
     <div v-if="!hasContent" class="empty-placeholder">
@@ -177,13 +177,21 @@ const handleCanvasDrop = (event) => {
   const offsetX = (event.clientX - rect.left) / zoomValue;
   const offsetY = (event.clientY - rect.top) / zoomValue;
 
-  editorStore.insertNode(componentType, currentPage.value.rootNodeId, undefined, {
-    dropPosition: {
-      x: Math.max(0, Math.round(offsetX)),
-      y: Math.max(0, Math.round(offsetY)),
-    },
-  });
+  const inserted = editorStore.insertNode(
+    componentType,
+    currentPage.value.rootNodeId,
+    undefined,
+    {
+      dropPosition: {
+        x: Math.max(0, Math.round(offsetX)),
+        y: Math.max(0, Math.round(offsetY)),
+      },
+    }
+  );
   endDrag();
+  if (inserted) {
+    event.stopPropagation();
+  }
 };
 
 /**

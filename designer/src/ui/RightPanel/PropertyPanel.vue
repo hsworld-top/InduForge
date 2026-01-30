@@ -176,38 +176,41 @@
               </div>
             </template>
             <template v-else>
-              <div
+              <template
                 v-for="(propDef, propIndex) in group.props"
                 :key="propDef?.name || propIndex"
-                v-if="propDef && (!isEChart || propDef.name !== 'option')"
-                class="prop-item"
               >
-                <div class="prop-label">
-                  <span>{{ propDef.label }}</span>
-                  <el-tooltip
-                    v-if="shouldShowBindButton(propDef)"
-                    content="绑定数据"
-                    placement="top"
-                  >
-                    <el-button
-                      size="small"
-                      text
-                      class="bind-btn"
-                      :class="{ 'is-active': hasPropBinding(propDef.name) }"
-                      @click="handleBindClick(propDef)"
+                <div
+                  v-if="propDef && (!isEChart || propDef.name !== 'option')"
+                  class="prop-item"
+                >
+                  <div class="prop-label">
+                    <span>{{ propDef.label }}</span>
+                    <el-tooltip
+                      v-if="shouldShowBindButton(propDef)"
+                      content="绑定数据"
+                      placement="top"
                     >
-                      <IconEpLink />
-                    </el-button>
-                  </el-tooltip>
+                      <el-button
+                        size="small"
+                        text
+                        class="bind-btn"
+                        :class="{ 'is-active': hasPropBinding(propDef.name) }"
+                        @click="handleBindClick(propDef)"
+                      >
+                        <IconEpLink />
+                      </el-button>
+                    </el-tooltip>
+                  </div>
+                  <PropEditor
+                    :prop="propDef"
+                    :model-value="getPropValue(propDef.name)"
+                    @update:model-value="
+                      (val) => handlePropChange(propDef.name, val)
+                    "
+                  />
                 </div>
-                <PropEditor
-                  :prop="propDef"
-                  :model-value="getPropValue(propDef.name)"
-                  @update:model-value="
-                    (val) => handlePropChange(propDef.name, val)
-                  "
-                />
-              </div>
+              </template>
             </template>
           </template>
         </div>
@@ -1007,7 +1010,7 @@ const elementPlusTypes = new Set([
  * @param {string | undefined} type - 组件类型
  * @returns {string}
  */
-const normalizeElementType = (type) => {
+function normalizeElementType(type) {
   if (!type) return "";
   if (type === "Elayout" || type === "EILayout") return "ElLayout";
   if (type === "ElayoutRow" || type === "EILayoutRow") return "ElLayoutRow";
@@ -1016,7 +1019,7 @@ const normalizeElementType = (type) => {
     return `El${type.slice(2)}`;
   }
   return type;
-};
+}
 
 /**
  * 是否为 Element Plus 组件
