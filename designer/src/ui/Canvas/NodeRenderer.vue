@@ -810,6 +810,9 @@ const nodeClass = computed(() => {
   if (isContainer.value) classes.push("is-container");
   if (isMovable.value && !props.readonly) classes.push("is-draggable");
   if (node.value.locked) classes.push("is-locked");
+  if (node.value.type === "ElLayoutRow") {
+    classes.push("el-layout-row");
+  }
   if (node.value.type === "ElCol") {
     classes.push("el-col");
     const parentNode = doc.value?.getParent?.(node.value.id);
@@ -1024,6 +1027,11 @@ const contentStyle = computed(() => {
           ? String(rawPadding)
           : "0px";
     style.padding = paddingValue;
+    const minHeight = resolveElLayoutMinHeight(node.value);
+    const currentMinHeight = parseSizeToNumber(style.minHeight) ?? 0;
+    if (minHeight > currentMinHeight) {
+      style.minHeight = `${minHeight}px`;
+    }
   }
   if (
     parentNode?.type === "ElHeader" ||
@@ -1035,9 +1043,6 @@ const contentStyle = computed(() => {
   }
   if (node.value.type === "ElCol" && parentNode?.type === "ElLayoutRow") {
     style.height = "auto";
-    if (!style.minHeight && !hasChildren.value) {
-      style.minHeight = "80px";
-    }
   }
   if (parentNode?.type === "ElCol" && isMovable.value) {
     style.width = "100%";
@@ -4947,18 +4952,6 @@ const buildFlowResetStyle = (currentStyle) => {
 };
 
 /**
- * 计算 Layout 布局最小高度，避免行区域溢出
- * @param {import('@/editor-core').ComponentNode | null} layoutNode - Layout 节点
- * @returns {number}
- * @throws {Error} 无
- */
-const resolveElLayoutMinHeight = (layoutNode) => {
-  if (!layoutNode || layoutNode.type !== "ElLayout") return 0;
-  const rows = Math.max(1, Number(layoutNode.props?.rows) || 1);
-  return rows * 80;
-};
-
-/**
  * 解析尺寸为像素值
  * @param {string | number | undefined | null} value - 尺寸值
  * @returns {number | undefined}
@@ -4977,6 +4970,47 @@ const parseSizeToNumber = (value) => {
     return Number.isFinite(num) ? num : undefined;
   }
   return undefined;
+};
+
+/**
+ * 计算 Layout 布局最小高度，避免行区域溢出
+ * @param {import('@/editor-core').ComponentNode | null} layoutNode - Layout 节点
+ * @returns {number}
+ * @throws {Error} 无
+ */
+const resolveElLayoutMinHeight = (layoutNode) => {
+  if (!layoutNode || layoutNode.type !== "ElLayout") return 0;
+  const rows = Math.max(1, Number(layoutNode.props?.rows) || 1);
+  const rowGap = Math.max(0, Number(layoutNode.props?.gutter) || 0);
+  const rawPadding = layoutNode.props?.padding;
+  const parsePaddingToken = (token) =>
+    token !== undefined ? parseSizeToNumber(token) : undefined;
+  const tokens =
+    typeof rawPadding === "string" ? rawPadding.trim().split(/\s+/) : [];
+  let paddingTop = 0;
+  let paddingBottom = 0;
+  if (typeof rawPadding === "number" && Number.isFinite(rawPadding)) {
+    paddingTop = rawPadding;
+    paddingBottom = rawPadding;
+  } else if (tokens.length === 1) {
+    const value = parsePaddingToken(tokens[0]) ?? 0;
+    paddingTop = value;
+    paddingBottom = value;
+  } else if (tokens.length === 2) {
+    const value = parsePaddingToken(tokens[0]) ?? 0;
+    paddingTop = value;
+    paddingBottom = value;
+  } else if (tokens.length === 3) {
+    paddingTop = parsePaddingToken(tokens[0]) ?? 0;
+    paddingBottom = parsePaddingToken(tokens[2]) ?? 0;
+  } else if (tokens.length >= 4) {
+    paddingTop = parsePaddingToken(tokens[0]) ?? 0;
+    paddingBottom = parsePaddingToken(tokens[2]) ?? 0;
+  }
+  const baseRowHeight = 80;
+  const totalGap = rowGap * Math.max(0, rows - 1);
+  const totalPadding = paddingTop + paddingBottom;
+  return rows * baseRowHeight + totalGap + totalPadding;
 };
 
 /**
@@ -5491,6 +5525,15 @@ const handleResizePointerDown = (event, handle) => {
         nextHeight = childMinSize.height;
       } else if (handle.y === 1 && nextHeight < childMinSize.height) {
         nextHeight = childMinSize.height;
+      }
+    }
+    if (node.value.type === "ElLayout") {
+      const layoutMinHeight = resolveElLayoutMinHeight(node.value);
+      if (layoutMinHeight > 0 && nextHeight < layoutMinHeight) {
+        if (handle.y === -1) {
+          nextY = baseLayout.y + (baseHeight - layoutMinHeight);
+        }
+        nextHeight = layoutMinHeight;
       }
     }
 
@@ -6123,6 +6166,10 @@ const handlePointerDown = (event) => {
 
 .designer-node.is-container {
   min-height: 40px;
+}
+
+.designer-node.el-layout-row {
+  min-height: 0;
 }
 
 .designer-node.el-col {

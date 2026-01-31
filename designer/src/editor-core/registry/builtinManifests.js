@@ -75,7 +75,7 @@ function getDefaultStyle(type) {
       ...baseStyle,
       width: "100%",
       padding: "8px",
-      minHeight: "80px",
+      minHeight: "40px",
     };
   }
 

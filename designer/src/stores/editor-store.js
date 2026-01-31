@@ -1852,6 +1852,46 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
+   * 计算 Layout 布局最小高度，避免行区域溢出
+   * @param {Record<string, any> | undefined} layoutProps - 布局属性
+   * @returns {number}
+   */
+  const resolveElLayoutMinHeight = (layoutProps) => {
+    const props = layoutProps || {};
+    const rows = Math.max(1, Number(props.rows) || 1);
+    const rowGap = Math.max(0, Number(props.gutter) || 0);
+    const rawPadding = props.padding;
+    const parsePaddingToken = (token) =>
+      token !== undefined ? parseSizeToNumber(token) : undefined;
+    const tokens =
+      typeof rawPadding === "string" ? rawPadding.trim().split(/\s+/) : [];
+    let paddingTop = 0;
+    let paddingBottom = 0;
+    if (typeof rawPadding === "number" && Number.isFinite(rawPadding)) {
+      paddingTop = rawPadding;
+      paddingBottom = rawPadding;
+    } else if (tokens.length === 1) {
+      const value = parsePaddingToken(tokens[0]) ?? 0;
+      paddingTop = value;
+      paddingBottom = value;
+    } else if (tokens.length === 2) {
+      const value = parsePaddingToken(tokens[0]) ?? 0;
+      paddingTop = value;
+      paddingBottom = value;
+    } else if (tokens.length === 3) {
+      paddingTop = parsePaddingToken(tokens[0]) ?? 0;
+      paddingBottom = parsePaddingToken(tokens[2]) ?? 0;
+    } else if (tokens.length >= 4) {
+      paddingTop = parsePaddingToken(tokens[0]) ?? 0;
+      paddingBottom = parsePaddingToken(tokens[2]) ?? 0;
+    }
+    const baseRowHeight = 80;
+    const totalGap = rowGap * Math.max(0, rows - 1);
+    const totalPadding = paddingTop + paddingBottom;
+    return rows * baseRowHeight + totalGap + totalPadding;
+  };
+
+  /**
    * 同步绝对定位节点的尺寸数据
    * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
    * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
@@ -1895,6 +1935,46 @@ export const useEditorStore = defineStore("editor", () => {
       ...(nextLayoutItem ? { layoutItem: nextLayoutItem } : {}),
     };
   };
+
+  /**
+   * 同步 ElLayout 的最小高度到绝对定位尺寸
+   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
+   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
+   * @param {Record<string, any>} nextProps - 合并后的属性
+   * @returns {Partial<import('@/editor-core').ComponentNode>}
+   */
+  const syncElLayoutMinHeightPatch = (node, patch, nextProps) => {
+    if (!node || node.type !== "ElLayout") return patch;
+    const nextPositioning = patch.positioning ?? node.positioning;
+    const baseAbs =
+      patch.absolutePos || node.absolutePos || node.layoutItem?.free?.abs;
+    if (nextPositioning !== "absolute" || !baseAbs) return patch;
+    const minHeight = resolveElLayoutMinHeight(nextProps);
+    if (!minHeight) return patch;
+    const currentHeight = Number(baseAbs.h) || 0;
+    if (currentHeight >= minHeight) return patch;
+    const nextAbs = { ...baseAbs, h: Math.max(1, minHeight) };
+    const baseLayoutItem = patch.layoutItem || node.layoutItem;
+    let nextLayoutItem = baseLayoutItem;
+    if (baseLayoutItem?.free?.abs) {
+      nextLayoutItem = {
+        ...(baseLayoutItem || {}),
+        free: {
+          ...(baseLayoutItem.free || {}),
+          abs: {
+            ...(baseLayoutItem.free.abs || {}),
+            h: nextAbs.h,
+          },
+        },
+      };
+    }
+    return {
+      ...patch,
+      absolutePos: nextAbs,
+      ...(nextLayoutItem ? { layoutItem: nextLayoutItem } : {}),
+    };
+  };
+
 
   /**
    * 限制容器最小尺寸，避免小于内部区域
@@ -2161,17 +2241,27 @@ export const useEditorStore = defineStore("editor", () => {
     const clampedOffsetPatch = clampElColOffsetPatch(node, clampedSpanPatch);
     const clampedShiftPatch = clampElColShiftPatch(node, clampedOffsetPatch);
     const nextPatch = syncAbsoluteSizePatch(node, clampedShiftPatch);
+    const hasPropPatch =
+      nextPatch?.props && typeof nextPatch === "object";
+    const mergedProps = hasPropPatch
+      ? { ...(node.props || {}), ...(nextPatch.props || {}) }
+      : { ...(node.props || {}) };
+    const mergedPatch = hasPropPatch
+      ? { ...nextPatch, props: mergedProps }
+      : nextPatch;
+    const layoutAdjustedPatch = hasPropPatch
+      ? syncElLayoutMinHeightPatch(node, mergedPatch, mergedProps || {})
+      : mergedPatch;
     const shouldSyncContainer =
-      node?.type === "ElContainer" && nextPatch?.props && typeof nextPatch === "object";
+      node?.type === "ElContainer" && hasPropPatch;
     const shouldSyncLayout =
-      node?.type === "ElLayout" && nextPatch?.props && typeof nextPatch === "object";
+      node?.type === "ElLayout" && hasPropPatch;
     const shouldSyncLayoutRow =
       node?.type === "ElLayoutRow" &&
-      nextPatch?.props &&
-      typeof nextPatch === "object";
+      hasPropPatch;
     const shouldSyncLayoutRowFromCol =
       node?.type === "ElCol" &&
-      nextPatch?.props &&
+      hasPropPatch &&
       (Object.prototype.hasOwnProperty.call(nextPatch.props, "offset") ||
         Object.prototype.hasOwnProperty.call(nextPatch.props, "span"));
 
@@ -2181,32 +2271,28 @@ export const useEditorStore = defineStore("editor", () => {
       !shouldSyncLayoutRow &&
       !shouldSyncLayoutRowFromCol
     ) {
-      history.value.execute(new UpdateNodeCommand(nodeId, nextPatch));
+      history.value.execute(new UpdateNodeCommand(nodeId, layoutAdjustedPatch));
       return true;
     }
 
-    const mergedProps = {
-      ...(node.props || {}),
-      ...(nextPatch.props || {}),
-    };
-    const mergedPatch = { ...nextPatch, props: mergedProps };
+    const finalPatch = layoutAdjustedPatch;
     const shouldCommit = !history.value.isInTransaction?.();
     if (shouldCommit) {
       history.value.beginTransaction();
     }
 
-    history.value.executeInTransaction(new UpdateNodeCommand(nodeId, mergedPatch));
+    history.value.executeInTransaction(new UpdateNodeCommand(nodeId, finalPatch));
     if (shouldSyncContainer) {
-      syncElContainerSections(nodeId, mergedProps);
+      syncElContainerSections(nodeId, mergedProps || {});
     }
     if (shouldSyncLayout) {
-      syncElLayoutRows(nodeId, mergedProps);
+      syncElLayoutRows(nodeId, mergedProps || {});
     }
     if (
       shouldSyncLayoutRow &&
       Object.prototype.hasOwnProperty.call(nextPatch.props || {}, "columns")
     ) {
-      syncElLayoutRowColumns(nodeId, mergedProps, { forceSpanUpdate: true });
+      syncElLayoutRowColumns(nodeId, mergedProps || {}, { forceSpanUpdate: true });
     }
     if (shouldSyncLayoutRowFromCol) {
       const parentNode = doc.value.getParent(nodeId);
@@ -2738,9 +2824,65 @@ export const useEditorStore = defineStore("editor", () => {
 
     if (!deletable.length) return false;
 
+    const affectedRowIds = new Set();
+    const affectedLayoutIds = new Set();
+    deletable.forEach((nodeId) => {
+      const node = doc.value.getNode(nodeId);
+      if (node?.type !== "ElCol") return;
+      const parentNode = doc.value.getParent(nodeId);
+      if (parentNode?.type === "ElLayoutRow") {
+        affectedRowIds.add(parentNode.id);
+      }
+    });
+    deletable.forEach((nodeId) => {
+      const node = doc.value.getNode(nodeId);
+      if (node?.type !== "ElLayoutRow") return;
+      const parentNode = doc.value.getParent(nodeId);
+      if (parentNode?.type === "ElLayout") {
+        affectedLayoutIds.add(parentNode.id);
+      }
+    });
+    const shouldWrapTransaction =
+      (affectedRowIds.size > 0 || affectedLayoutIds.size > 0) &&
+      !history.value.isInTransaction?.();
+    if (shouldWrapTransaction) {
+      history.value.beginTransaction();
+    }
+
     deletable.forEach((nodeId) => {
       history.value.execute(new RemoveNodeCommand(nodeId));
     });
+    affectedRowIds.forEach((rowId) => {
+      const rowNode = doc.value.getNode(rowId);
+      if (!rowNode) return;
+      const colCount = (rowNode.children || []).filter((childId) => {
+        const childNode = doc.value.getNode(childId);
+        return childNode?.type === "ElCol";
+      }).length;
+      const nextColumns = Math.max(1, colCount || 1);
+      if ((rowNode.props?.columns || 0) !== nextColumns) {
+        updateNode(rowId, {
+          props: { ...(rowNode.props || {}), columns: nextColumns },
+        });
+      }
+    });
+    affectedLayoutIds.forEach((layoutId) => {
+      const layoutNode = doc.value.getNode(layoutId);
+      if (!layoutNode) return;
+      const rowCount = (layoutNode.children || []).filter((childId) => {
+        const childNode = doc.value.getNode(childId);
+        return childNode?.type === "ElLayoutRow";
+      }).length;
+      const nextRows = Math.max(1, rowCount || 1);
+      if ((layoutNode.props?.rows || 0) !== nextRows) {
+        updateNode(layoutId, {
+          props: { ...(layoutNode.props || {}), rows: nextRows },
+        });
+      }
+    });
+    if (shouldWrapTransaction) {
+      history.value.commitTransaction("调整布局列");
+    }
     selection.value.clearSelection?.();
     return true;
   };
@@ -2757,7 +2899,54 @@ export const useEditorStore = defineStore("editor", () => {
     const rootId = currentPage.value?.rootNodeId;
     if (nodeId === rootId) return false;
 
+    const node = doc.value.getNode(nodeId);
+    const colParentNode =
+      node?.type === "ElCol" ? doc.value.getParent(nodeId) : null;
+    const rowParentNode =
+      node?.type === "ElLayoutRow" ? doc.value.getParent(nodeId) : null;
+    const shouldSyncRow = colParentNode?.type === "ElLayoutRow";
+    const shouldSyncLayout = rowParentNode?.type === "ElLayout";
+    const shouldWrapTransaction =
+      (shouldSyncRow || shouldSyncLayout) &&
+      !history.value.isInTransaction?.();
+    if (shouldWrapTransaction) {
+      history.value.beginTransaction();
+    }
+
     history.value.execute(new RemoveNodeCommand(nodeId));
+    if (shouldSyncRow) {
+      const rowNode = doc.value.getNode(colParentNode.id);
+      if (rowNode) {
+        const colCount = (rowNode.children || []).filter((childId) => {
+          const childNode = doc.value.getNode(childId);
+          return childNode?.type === "ElCol";
+        }).length;
+        const nextColumns = Math.max(1, colCount || 1);
+        if ((rowNode.props?.columns || 0) !== nextColumns) {
+          updateNode(rowNode.id, {
+            props: { ...(rowNode.props || {}), columns: nextColumns },
+          });
+        }
+      }
+    }
+    if (shouldSyncLayout) {
+      const layoutNode = doc.value.getNode(rowParentNode.id);
+      if (layoutNode) {
+        const rowCount = (layoutNode.children || []).filter((childId) => {
+          const childNode = doc.value.getNode(childId);
+          return childNode?.type === "ElLayoutRow";
+        }).length;
+        const nextRows = Math.max(1, rowCount || 1);
+        if ((layoutNode.props?.rows || 0) !== nextRows) {
+          updateNode(layoutNode.id, {
+            props: { ...(layoutNode.props || {}), rows: nextRows },
+          });
+        }
+      }
+    }
+    if (shouldWrapTransaction) {
+      history.value.commitTransaction("调整布局列");
+    }
     selection.value?.clearSelection?.();
     return true;
   };
