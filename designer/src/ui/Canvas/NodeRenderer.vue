@@ -4446,6 +4446,23 @@ const resolveLayoutStyle = (currentNode, isRoot) => {
   }
 
   const style = {};
+  const parentNode = doc.value?.getParent?.(currentNode.id);
+  if (
+    parentNode?.type === "ElHeader" ||
+    parentNode?.type === "ElAside" ||
+    parentNode?.type === "ElMain" ||
+    parentNode?.type === "ElFooter"
+  ) {
+    return {
+      position: "relative",
+      width: "100%",
+      height: "100%",
+      flexGrow: 1,
+      flexShrink: 1,
+      alignSelf: "stretch",
+      justifySelf: "stretch",
+    };
+  }
 
   if (isRootCanvasContainer(currentNode)) {
     const zIndex =
@@ -4501,7 +4518,6 @@ const resolveLayoutStyle = (currentNode, isRoot) => {
     // 流式布局默认占据整行
     style.position = "relative";
     style.display = "block";
-    const parentNode = doc.value?.getParent?.(currentNode.id);
     if (parentNode?.type === "ElCol") {
       style.width = "100%";
       style.alignSelf = "stretch";
@@ -5738,6 +5754,33 @@ const handlePointerDown = (event) => {
       : null;
   const allowRegionMoveOut = isRegionNode;
   const rootNodeId = currentPage.value?.rootNodeId || "";
+  const isInsideElContainer = (targetNode) => {
+    if (!targetNode || !doc.value) return false;
+    if (targetNode.type === "ElContainer") return true;
+    let current = doc.value.getParent?.(targetNode.id);
+    while (current) {
+      if (current.type === "ElContainer") return true;
+      current = doc.value.getParent?.(current.id);
+    }
+    return false;
+  };
+  /**
+   * 获取最近的 ElContainer 祖先
+   * @param {string} nodeId - 节点 ID
+   * @returns {import('@/editor-core').ComponentNode | null}
+   */
+  const resolveAncestorContainer = (nodeId) => {
+    if (!nodeId || !doc.value) return null;
+    let current = doc.value.getParent?.(nodeId);
+    while (current) {
+      if (current.type === "ElContainer") return current;
+      current = doc.value.getParent?.(current.id);
+    }
+    return null;
+  };
+  const dragContainer = resolveAncestorContainer(node.value?.id);
+  const restrictToContainer =
+    Boolean(dragContainer) && node.value?.type !== "ElContainer";
 
   const zoomValue = Number(canvasZoom?.value) || 1;
   const baseLayout = resolveAbsoluteLayout(node.value);
@@ -5785,6 +5828,9 @@ const handlePointerDown = (event) => {
       if (isSelfOrDescendant(nodeId)) continue;
       const targetNode = doc.value?.getNode?.(nodeId);
       if (!targetNode) continue;
+      if (restrictToContainer && !isInsideElContainer(targetNode)) {
+        continue;
+      }
       if (isRegionType(targetNode.type)) {
         if (childType && !canAcceptChild(targetNode, childType)) continue;
         return targetNode;
@@ -5872,6 +5918,21 @@ const handlePointerDown = (event) => {
         });
       } else {
         clearDropTarget();
+      }
+      if (restrictToContainer && dragContainer) {
+        const containerEl = document.querySelector(
+          `[data-node-id="${dragContainer.id}"]`
+        );
+        const containerRect = containerEl?.getBoundingClientRect?.();
+        const isInsideContainer = containerRect
+          ? moveEvent.clientX >= containerRect.left &&
+            moveEvent.clientX <= containerRect.right &&
+            moveEvent.clientY >= containerRect.top &&
+            moveEvent.clientY <= containerRect.bottom
+          : true;
+        if (isInsideContainer) {
+          return;
+        }
       }
     }
     const nextX = Math.max(0, Math.round(baseLayout.x + deltaX));
@@ -5973,6 +6034,14 @@ const handlePointerDown = (event) => {
     if (hasMoved && !isRegionNode && upEvent) {
       const dropRegion = resolveDropRegion(upEvent);
       if (
+        restrictToContainer &&
+        dropRegion &&
+        isInsideElContainer(dropRegion)
+      ) {
+        clearDropTarget();
+        return;
+      }
+      if (
         dropRegion &&
         dropRegion.id &&
         dropRegion.id !== originParent?.id &&
@@ -6013,13 +6082,91 @@ const handlePointerDown = (event) => {
           });
         }
       }
+      if (restrictToContainer && dragContainer && rootNodeId) {
+        const containerEl = document.querySelector(
+          `[data-node-id="${dragContainer.id}"]`
+        );
+        const containerRect = containerEl?.getBoundingClientRect?.();
+        const isInsideContainer = containerRect
+          ? upEvent.clientX >= containerRect.left &&
+            upEvent.clientX <= containerRect.right &&
+            upEvent.clientY >= containerRect.top &&
+            upEvent.clientY <= containerRect.bottom
+          : false;
+        if (!isInsideContainer) {
+          const rootEl = document.querySelector(
+            `[data-node-id="${rootNodeId}"]`
+          );
+          const rootRect = rootEl?.getBoundingClientRect?.();
+          const nextX = rootRect
+            ? (upEvent.clientX - rootRect.left) / zoomValue
+            : 0;
+          const nextY = rootRect
+            ? (upEvent.clientY - rootRect.top) / zoomValue
+            : 0;
+          const nextAbs = {
+            x: Math.max(0, Math.round(nextX)),
+            y: Math.max(0, Math.round(nextY)),
+            w: baseLayout.w,
+            h: baseLayout.h,
+            z: baseLayout.z,
+          };
+          if (node.value.type === "ElLayout") {
+            const defaultSize = resolveDefaultSize("ElLayout");
+            const minHeight = resolveElLayoutMinHeight(node.value);
+            if (defaultSize?.width) {
+              nextAbs.w = Math.max(nextAbs.w, defaultSize.width);
+            }
+            if (defaultSize?.height) {
+              nextAbs.h = Math.max(nextAbs.h, defaultSize.height);
+            }
+            if (minHeight) {
+              nextAbs.h = Math.max(nextAbs.h, minHeight);
+            }
+          }
+          const nextLayoutItem = {
+            ...(node.value.layoutItem || {}),
+            free: {
+              mode: "abs",
+              abs: { ...nextAbs },
+            },
+          };
+          const rootNode = doc.value?.getNode?.(rootNodeId);
+          const insertIndex = rootNode?.children?.length ?? 0;
+          const moveCommand = new MoveNodeCommand(
+            node.value.id,
+            rootNodeId,
+            insertIndex
+          );
+          const updateCommand = new UpdateNodeCommand(node.value.id, {
+            positioning: "absolute",
+            absolutePos: nextAbs,
+            layoutItem: nextLayoutItem,
+          });
+          if (history.value?.isInTransaction?.()) {
+            history.value.executeInTransaction(moveCommand);
+            history.value.executeInTransaction(updateCommand);
+          } else if (history.value?.execute) {
+            history.value.execute(moveCommand);
+            history.value.execute(updateCommand);
+          } else if (doc.value?._moveNode && doc.value?._updateNode) {
+            doc.value._moveNode(node.value.id, rootNodeId, insertIndex);
+            doc.value._updateNode(node.value.id, {
+              positioning: "absolute",
+              absolutePos: nextAbs,
+              layoutItem: nextLayoutItem,
+            });
+          }
+        }
+      }
     }
     if (
       hasMoved &&
       (isRegionParent || allowRegionMoveOut) &&
       originContainer?.type === "ElContainer" &&
       rootNodeId &&
-      upEvent
+      upEvent &&
+      !restrictToContainer
     ) {
       const containerEl = document.querySelector(
         `[data-node-id="${originContainer.id}"]`
