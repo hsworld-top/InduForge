@@ -388,7 +388,7 @@ const normalizeLayoutSchema = (schema) => {
     });
     const resolvedColumns = resolveLayoutCount(
       rowNode.props.columns,
-      colIds.length || 3,
+      colIds.length || 1,
       24
     );
     rowNode.props.columns = resolvedColumns;
@@ -522,7 +522,7 @@ const normalizeLayoutSchema = (schema) => {
         const rowNode = createComponentNode("ElLayoutRow", {
           parentNode: node,
           label: rowManifest?.name || "行",
-          props: { ...(rowManifest?.defaultProps || {}), columns: 3 },
+          props: { ...(rowManifest?.defaultProps || {}), columns: 1 },
           style: { ...(rowManifest?.defaultStyle || {}) },
         });
         schema.nodesById[rowNode.id] = rowNode;
@@ -1785,7 +1785,7 @@ export const useEditorStore = defineStore("editor", () => {
       const childNode = createComponentNode("ElLayoutRow", {
         parentNode: refreshedNode,
         label: buildElLayoutUniqueLabel(manifest?.name || "行"),
-        props: { ...(manifest?.defaultProps || {}), columns: 3 },
+        props: { ...(manifest?.defaultProps || {}), columns: 1 },
         style: { ...(manifest?.defaultStyle || {}) },
         layoutItem: buildFlexLayoutItem(),
       });
@@ -2685,6 +2685,14 @@ export const useEditorStore = defineStore("editor", () => {
       style: nodeStyle,
       layoutItem,
     });
+    if (type === "ElLayoutRow") {
+      const rawColumns = Number(node.props?.columns);
+      const normalizedColumns =
+        Number.isFinite(rawColumns) && rawColumns > 0
+          ? Math.min(24, Math.floor(rawColumns))
+          : 3;
+      node.props = { ...(node.props || {}), columns: normalizedColumns };
+    }
     if (parentNode.type === "FreeContainer") {
       node.positioning = "absolute";
       node.absolutePos = {
@@ -2774,6 +2782,83 @@ export const useEditorStore = defineStore("editor", () => {
     selection.value?.select(createSelectableElement("node", node.id));
 
     return node;
+  };
+
+  /**
+   * 在 ElLayoutRow 中按左右插入列
+   * @param {"left" | "right"} direction - 插入方向
+   * @param {string} [colId] - 参考列节点 ID
+   * @returns {boolean}
+   */
+  const insertElColByDirection = (direction, colId) => {
+    if (!doc.value || !history.value) return false;
+    if (!ensureEditable()) return false;
+
+    const targetId = colId || resolveLayerTarget();
+    if (!targetId) return false;
+    const targetNode = doc.value.getNode(targetId);
+    if (targetNode?.type !== "ElCol") return false;
+
+    const rowNode = doc.value.getParent(targetId);
+    if (!rowNode || rowNode.type !== "ElLayoutRow") return false;
+
+    const children = [...(rowNode.children || [])];
+    const currentIndex = children.indexOf(targetId);
+    if (currentIndex < 0) return false;
+
+    const colCount = children.filter((childId) => {
+      const childNodeItem = doc.value.getNode(childId);
+      return childNodeItem?.type === "ElCol";
+    }).length;
+    if (colCount >= 24) return false;
+
+    const manifest = componentRegistry.get("ElCol");
+    const childNode = createComponentNode("ElCol", {
+      parentNode: rowNode,
+      label: buildElLayoutUniqueLabel(manifest?.name || "Col"),
+      props: { ...(manifest?.defaultProps || {}) },
+      style: { ...(manifest?.defaultStyle || {}) },
+      layoutItem: buildFlexLayoutItem(),
+    });
+
+    const insertIndex =
+      direction === "left" ? currentIndex : currentIndex + 1;
+    const shouldCommit = !history.value.isInTransaction?.();
+    if (shouldCommit) {
+      history.value.beginTransaction();
+    }
+
+    history.value.executeInTransaction(
+      new InsertNodeCommand(rowNode.id, insertIndex, childNode)
+    );
+    const nextColumns = Math.max(1, colCount + 1);
+    updateNode(rowNode.id, {
+      props: { ...(rowNode.props || {}), columns: nextColumns },
+    });
+
+    selection.value?.select(createSelectableElement("node", childNode.id));
+    if (shouldCommit) {
+      history.value.commitTransaction("新增布局列");
+    }
+    return true;
+  };
+
+  /**
+   * 在当前列左侧新增一列
+   * @param {string} [colId] - 参考列节点 ID
+   * @returns {boolean}
+   */
+  const insertElColLeft = (colId) => {
+    return insertElColByDirection("left", colId);
+  };
+
+  /**
+   * 在当前列右侧新增一列
+   * @param {string} [colId] - 参考列节点 ID
+   * @returns {boolean}
+   */
+  const insertElColRight = (colId) => {
+    return insertElColByDirection("right", colId);
   };
 
   /**
@@ -3102,6 +3187,8 @@ export const useEditorStore = defineStore("editor", () => {
     isLabelUnique,
     updateGraphic,
     insertNode,
+    insertElColLeft,
+    insertElColRight,
     removeSelectedNodes,
     removeNode,
     moveNodeUp,

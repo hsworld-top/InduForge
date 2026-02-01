@@ -48,6 +48,23 @@
         </div>
         <div v-if="hasSelection" class="menu-divider"></div>
         <div
+          v-if="isElColSelected"
+          class="menu-item"
+          @click="handleInsertColLeft"
+        >
+          <IconEpPlus />
+          <span>左侧新加一列</span>
+        </div>
+        <div
+          v-if="isElColSelected"
+          class="menu-item"
+          @click="handleInsertColRight"
+        >
+          <IconEpPlus />
+          <span>右侧新加一列</span>
+        </div>
+        <div v-if="isElColSelected" class="menu-divider"></div>
+        <div
           class="menu-item"
           @click="handleUndo"
           :class="{ disabled: !canUndo }"
@@ -85,7 +102,8 @@ import IconEpRefreshRight from "~icons/ep/refresh-right";
 import { useDragState, endDrag } from "./use-drag-state";
 
 const editorStore = useEditorStore();
-const { doc, currentPage, selection, history, docVersion } = storeToRefs(editorStore);
+const { doc, currentPage, selection, history, docVersion, selectionVersion } =
+  storeToRefs(editorStore);
 const canvasZoom = inject("canvasZoom", ref(1));
 const dragState = useDragState();
 
@@ -106,9 +124,12 @@ const handleCanvasPointerDown = (event) => {
   if (!selection.value) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
   if (!(event.target instanceof Element)) {
+    closeContextMenu();
     selection.value?.clearSelection();
     return;
   }
+
+  closeContextMenu();
 
   const nodeElement = event.target.closest(".designer-node");
   if (nodeElement && !nodeElement.classList.contains("is-root")) {
@@ -139,7 +160,16 @@ const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 
 const hasSelection = computed(() => {
+  selectionVersion.value;
   return selection.value?.getSelectedElements?.().length > 0;
+});
+
+const isElColSelected = computed(() => {
+  selectionVersion.value;
+  const primary = selection.value?.getPrimarySelection?.();
+  if (primary?.type === "ElCol") return true;
+  const selectedNodes = selection.value?.getSelectedNodes?.() || [];
+  return selectedNodes.some((node) => node?.type === "ElCol");
 });
 
 const canUndo = computed(() => history.value?.canUndo?.() || false);
@@ -206,8 +236,8 @@ const showContextMenu = (event, forceShow = true) => {
     return;
   }
 
-  // ✅ 只有选中组件时才显示右键菜单
-  // forceShow 为 true 时表示组件已经被选中（从 NodeRenderer 触发）
+  // 只有选中组件时才显示右键菜单
+  // forceShow 为 true 时表示组件已从 NodeRenderer 选中
   if (!forceShow && !hasSelection.value) {
     return;
   }
@@ -271,6 +301,22 @@ const handleMoveToTop = () => {
  */
 const handleMoveToBottom = () => {
   editorStore.moveNodeToBottom();
+  closeContextMenu();
+};
+
+/**
+ * �������һ��
+ */
+const handleInsertColLeft = () => {
+  editorStore.insertElColLeft();
+  closeContextMenu();
+};
+
+/**
+ * �Ҳ�����һ��
+ */
+const handleInsertColRight = () => {
+  editorStore.insertElColRight();
   closeContextMenu();
 };
 
