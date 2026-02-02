@@ -65,6 +65,23 @@
         </div>
         <div v-if="isElColSelected" class="menu-divider"></div>
         <div
+          v-if="isElLayoutRowSelected"
+          class="menu-item"
+          @click="handleInsertRowUp"
+        >
+          <IconEpPlus />
+          <span>上方新加一行</span>
+        </div>
+        <div
+          v-if="isElLayoutRowSelected"
+          class="menu-item"
+          @click="handleInsertRowDown"
+        >
+          <IconEpPlus />
+          <span>下方新加一行</span>
+        </div>
+        <div v-if="isElLayoutRowSelected" class="menu-divider"></div>
+        <div
           class="menu-item"
           @click="handleUndo"
           :class="{ disabled: !canUndo }"
@@ -92,6 +109,7 @@ import { computed, ref, onMounted, onBeforeUnmount, provide, inject } from "vue"
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { createSelectableElement } from "@/editor-core";
+import { ElMessage } from "element-plus";
 import NodeRenderer from "./NodeRenderer.vue";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpDelete from "~icons/ep/delete";
@@ -102,7 +120,7 @@ import IconEpRefreshRight from "~icons/ep/refresh-right";
 import { useDragState, endDrag } from "./use-drag-state";
 
 const editorStore = useEditorStore();
-const { doc, currentPage, selection, history, docVersion, selectionVersion } =
+const { doc, currentPage, selection, history, docVersion, selectionVersion, error } =
   storeToRefs(editorStore);
 const canvasZoom = inject("canvasZoom", ref(1));
 const dragState = useDragState();
@@ -171,6 +189,13 @@ const isElColSelected = computed(() => {
   const selectedNodes = selection.value?.getSelectedNodes?.() || [];
   return selectedNodes.some((node) => node?.type === "ElCol");
 });
+const isElLayoutRowSelected = computed(() => {
+  selectionVersion.value;
+  const primary = selection.value?.getPrimarySelection?.();
+  if (primary?.type === "ElLayoutRow") return true;
+  const selectedNodes = selection.value?.getSelectedNodes?.() || [];
+  return selectedNodes.some((node) => node?.type === "ElLayoutRow");
+});
 
 const canUndo = computed(() => history.value?.canUndo?.() || false);
 const canRedo = computed(() => history.value?.canRedo?.() || false);
@@ -207,7 +232,67 @@ const handleCanvasDrop = (event) => {
   const offsetX = (event.clientX - rect.left) / zoomValue;
   const offsetY = (event.clientY - rect.top) / zoomValue;
 
-  const inserted = editorStore.insertNode(
+  const insertIntoElLayout = (layoutId) => {
+    const layoutNode = doc.value?.getNode?.(layoutId);
+    if (!layoutNode || layoutNode.type !== "ElLayout") return false;
+    const rowCount = (layoutNode.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      return childNode?.type === "ElLayoutRow";
+    }).length;
+    const rowNode = editorStore.insertNode("ElLayoutRow", layoutId, rowCount);
+    if (!rowNode) return false;
+
+    const latestLayout = doc.value?.getNode?.(layoutId);
+    const nextRows = Math.max(1, rowCount + 1);
+    if ((latestLayout?.props?.rows || 0) !== nextRows) {
+      editorStore.updateNode(layoutId, {
+        props: { ...(latestLayout?.props || layoutNode.props || {}), rows: nextRows },
+      });
+    }
+
+    editorStore.updateNode(rowNode.id, {
+      props: { ...(rowNode.props || {}), columns: 1 },
+    });
+    const latestRow = doc.value?.getNode?.(rowNode.id);
+    const colIds = (latestRow?.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      return childNode?.type === "ElCol";
+    });
+    let colId = colIds[0];
+    if (!colId) {
+      const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+      if (!colNode) return false;
+      colId = colNode.id;
+    }
+    const inserted = editorStore.insertNode(componentType, colId);
+    return Boolean(inserted);
+  };
+
+  const resolveLayoutFromPoint = () => {
+    const layoutElements = Array.from(
+      document.querySelectorAll('[data-node-type="ElLayout"][data-node-id]')
+    );
+    if (!layoutElements.length) return null;
+    const pointX = event.clientX;
+    const pointY = event.clientY;
+    let candidate = null;
+    let minDistance = Number.POSITIVE_INFINITY;
+    for (const element of layoutElements) {
+      const rect = element.getBoundingClientRect();
+      const withinX = pointX >= rect.left && pointX <= rect.right;
+      const withinY = pointY >= rect.top && pointY <= rect.bottom + 24;
+      if (!withinX || !withinY) continue;
+      const distance = Math.max(0, pointY - rect.bottom);
+      if (distance < minDistance) {
+        minDistance = distance;
+        candidate = element;
+      }
+    }
+    if (!candidate) return null;
+    return candidate.getAttribute("data-node-id");
+  };
+
+  let inserted = editorStore.insertNode(
     componentType,
     currentPage.value.rootNodeId,
     undefined,
@@ -218,10 +303,19 @@ const handleCanvasDrop = (event) => {
       },
     }
   );
+  if (!inserted) {
+    const layoutId = resolveLayoutFromPoint();
+    if (layoutId) {
+      inserted = insertIntoElLayout(layoutId);
+    }
+  }
   endDrag();
   if (inserted) {
     event.stopPropagation();
+    return;
   }
+  const message = error.value || "插入失败：页面未就绪或处于只读状态";
+  ElMessage.warning(message);
 };
 
 /**
@@ -317,6 +411,22 @@ const handleInsertColLeft = () => {
  */
 const handleInsertColRight = () => {
   editorStore.insertElColRight();
+  closeContextMenu();
+};
+
+/**
+ * 在选中行上方插入一行
+ */
+const handleInsertRowUp = () => {
+  editorStore.insertElLayoutRowUp();
+  closeContextMenu();
+};
+
+/**
+ * 在选中行下方插入一行
+ */
+const handleInsertRowDown = () => {
+  editorStore.insertElLayoutRowDown();
   closeContextMenu();
 };
 

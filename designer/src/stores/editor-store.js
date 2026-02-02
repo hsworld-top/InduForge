@@ -2862,6 +2862,88 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
+   * 在 ElLayoutRow 上下插入行
+   * @param {"up" | "down"} direction - 插入方向
+   * @param {string} [rowId] - 参考行节点 ID
+   * @returns {boolean}
+   */
+  const insertElLayoutRowByDirection = (direction, rowId) => {
+    if (!doc.value || !history.value) return false;
+    if (!ensureEditable()) return false;
+
+    const targetId = rowId || resolveLayerTarget();
+    if (!targetId) return false;
+    const targetNode = doc.value.getNode(targetId);
+    if (targetNode?.type !== "ElLayoutRow") return false;
+
+    const layoutNode = doc.value.getParent(targetId);
+    if (!layoutNode || layoutNode.type !== "ElLayout") return false;
+
+    const children = [...(layoutNode.children || [])];
+    const currentIndex = children.indexOf(targetId);
+    if (currentIndex < 0) return false;
+
+    const manifest = componentRegistry.get("ElLayoutRow");
+    const rowNode = createComponentNode("ElLayoutRow", {
+      parentNode: layoutNode,
+      label: buildElLayoutUniqueLabel(manifest?.name || "行"),
+      props: { ...(manifest?.defaultProps || {}) },
+      style: { ...(manifest?.defaultStyle || {}) },
+      layoutItem: buildFlexLayoutItem(),
+    });
+    rowNode.props = { ...(rowNode.props || {}), columns: 1 };
+
+    const insertIndex = direction === "up" ? currentIndex : currentIndex + 1;
+    const shouldCommit = !history.value.isInTransaction?.();
+    if (shouldCommit) {
+      history.value.beginTransaction();
+    }
+
+    history.value.executeInTransaction(
+      new InsertNodeCommand(layoutNode.id, insertIndex, rowNode)
+    );
+    syncElLayoutRowColumns(rowNode.id, rowNode.props || {}, {
+      forceSpanUpdate: true,
+    });
+
+    const refreshedLayout = doc.value.getNode(layoutNode.id);
+    const rowCount = (refreshedLayout?.children || []).filter((childId) => {
+      const childNode = doc.value.getNode(childId);
+      return childNode?.type === "ElLayoutRow";
+    }).length;
+    const nextRows = Math.max(1, rowCount);
+    if ((refreshedLayout?.props?.rows || 0) !== nextRows) {
+      updateNode(layoutNode.id, {
+        props: { ...(refreshedLayout?.props || {}), rows: nextRows },
+      });
+    }
+
+    selection.value?.select(createSelectableElement("node", rowNode.id));
+    if (shouldCommit) {
+      history.value.commitTransaction("新增布局行");
+    }
+    return true;
+  };
+
+  /**
+   * 在当前行上方新增一行
+   * @param {string} [rowId] - 参考行节点 ID
+   * @returns {boolean}
+   */
+  const insertElLayoutRowUp = (rowId) => {
+    return insertElLayoutRowByDirection("up", rowId);
+  };
+
+  /**
+   * 在当前行下方新增一行
+   * @param {string} [rowId] - 参考行节点 ID
+   * @returns {boolean}
+   */
+  const insertElLayoutRowDown = (rowId) => {
+    return insertElLayoutRowByDirection("down", rowId);
+  };
+
+  /**
    * 校验当前页面组件名称是否唯一
    * @param {string} name - 组件名称
    * @param {string} [excludeId] - 排除的节点ID
@@ -3189,6 +3271,8 @@ export const useEditorStore = defineStore("editor", () => {
     insertNode,
     insertElColLeft,
     insertElColRight,
+    insertElLayoutRowUp,
+    insertElLayoutRowDown,
     removeSelectedNodes,
     removeNode,
     moveNodeUp,
