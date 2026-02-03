@@ -671,6 +671,22 @@ const isLayoutNodeType = (type) => {
 };
 
 /**
+ * 获取节点所在的 ElLayoutRow 祖先
+ * @param {import('@/editor-core').ComponentNode | null} currentNode - 当前节点
+ * @returns {import('@/editor-core').ComponentNode | null}
+ */
+const resolveAncestorLayoutRow = (currentNode) => {
+  if (!currentNode || !doc.value) return null;
+  if (currentNode.type === "ElLayoutRow") return currentNode;
+  let parentNode = doc.value.getParent?.(currentNode.id);
+  while (parentNode) {
+    if (parentNode.type === "ElLayoutRow") return parentNode;
+    parentNode = doc.value.getParent?.(parentNode.id);
+  }
+  return null;
+};
+
+/**
  * 获取 Flex 方向
  * @param {string} type - 组件类型
  * @param {HTMLElement} element - 目标元素
@@ -886,6 +902,9 @@ const nodeClass = computed(() => {
   if (isContainer.value) classes.push("is-container");
   if (isMovable.value && !props.readonly) classes.push("is-draggable");
   if (node.value.locked) classes.push("is-locked");
+  if (node.value.type === "ElLayout") {
+    classes.push("el-layout");
+  }
   if (node.value.type === "ElLayoutRow") {
     classes.push("el-layout-row");
   }
@@ -1086,13 +1105,15 @@ const contentStyle = computed(() => {
   if (node.value.type === "ElLayoutRow") {
     style.overflow = "visible";
   }
-  if (
-    !props.readonly &&
-    (node.value.type === "ElLayout" ||
+  if (!props.readonly) {
+    if (node.value.type === "ElLayout") {
+      style.overflow = "hidden";
+    } else if (
       node.value.type === "ElLayoutRow" ||
-      node.value.type === "ElCol")
-  ) {
-    style.overflow = "visible";
+      node.value.type === "ElCol"
+    ) {
+      style.overflow = "visible";
+    }
   }
   if (node.value.type === "ElLayout") {
     const rawPadding = node.value.props?.padding;
@@ -1103,11 +1124,7 @@ const contentStyle = computed(() => {
           ? String(rawPadding)
           : "0px";
     style.padding = paddingValue;
-    const minHeight = resolveElLayoutMinHeight(node.value);
-    const currentMinHeight = parseSizeToNumber(style.minHeight) ?? 0;
-    if (minHeight > currentMinHeight) {
-      style.minHeight = `${minHeight}px`;
-    }
+    delete style.minHeight;
   }
   if (
     parentNode?.type === "ElHeader" ||
@@ -1228,9 +1245,17 @@ const wrapperComponentStyle = computed(() => {
   if (type === "ElLayoutRow" && parentNode?.type === "ElLayout") {
     style.flex = "1 1 0";
     style.width = "100%";
-    style.height = "100%";
     style.minHeight = "0";
+    style.maxHeight = "100%";
     style.alignItems = "stretch";
+    style.overflow = "visible";
+    style.columnGap = "0";
+    style.gap = "0";
+    style.padding = "0";
+    style.paddingTop = "0";
+    style.paddingRight = "0";
+    style.paddingBottom = "0";
+    style.paddingLeft = "0";
   }
   if (type === "ElLayoutRow") {
     const gutter = Number(node.value?.props?.gutter) || 0;
@@ -1265,9 +1290,12 @@ const wrapperComponentStyle = computed(() => {
     delete style.flexGrow;
     delete style.flexShrink;
     delete style.flexBasis;
-    style.height = "100%";
     style.alignSelf = "stretch";
     style.boxSizing = "border-box";
+    style.maxHeight = "100%";
+    style.overflow = "visible";
+    style.minHeight = "0";
+    style.padding = "0";
     const colProps = resolvedProps.value || node.value?.props || {};
     const gutter = Number(parentNode.props?.gutter) || 0;
     if (!gutter) {
@@ -1293,10 +1321,27 @@ const wrapperComponentStyle = computed(() => {
       style.marginLeft = `${(offset / 24) * 100}%`;
     }
     const span = Math.max(1, Math.min(24, Number(colProps?.span) || 24));
-    const percent = (span / 24) * 100;
-    style.flex = `0 0 ${percent}%`;
-    style.maxWidth = `${percent}%`;
-    style.width = `${percent}%`;
+    const cols = (parentNode?.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      return childNode?.type === "ElCol";
+    });
+    const colCount = Math.max(1, cols.length);
+    const spans = cols.map((colId) => {
+      const colNode = doc.value?.getNode?.(colId);
+      const colSpan = Number(colNode?.props?.span);
+      if (Number.isFinite(colSpan) && colSpan > 0) {
+        return Math.max(1, Math.min(24, colSpan));
+      }
+      return Math.max(1, Math.floor(24 / colCount));
+    });
+    const totalSpan = Math.max(
+      1,
+      spans.reduce((sum, value) => sum + value, 0)
+    );
+    const percent = `${(span / totalSpan) * 100}%`;
+    style.flex = `0 0 ${percent}`;
+    style.maxWidth = percent;
+    style.width = percent;
     const push = Math.max(0, Math.min(24, Number(colProps?.push) || 0));
     const pull = Math.max(0, Math.min(24, Number(colProps?.pull) || 0));
     const shift = push - pull;
@@ -2173,14 +2218,11 @@ const handleDoubleClick = (event) => {
   if (props.readonly) return;
   if (!node.value || !selection.value) return;
   if (event && (event.ctrlKey || event.metaKey)) {
-    const parentNode = doc.value?.getParent?.(node.value.id);
-    if (parentNode?.type === "ElCol") {
-      const rowNode = doc.value?.getParent?.(parentNode.id);
-      if (rowNode?.type === "ElLayoutRow" && !rowNode.locked) {
-        const element = createSelectableElement("node", rowNode.id);
-        selection.value.select(element);
-        return;
-      }
+    const rowNode = resolveAncestorLayoutRow(node.value);
+    if (rowNode && !rowNode.locked) {
+      const element = createSelectableElement("node", rowNode.id);
+      selection.value.select(element);
+      return;
     }
   }
   if (node.value.type !== "ElCol") {
@@ -5755,44 +5797,14 @@ const parseSizeToNumber = (value) => {
 };
 
 /**
- * 计算 Layout 布局最小高度，避免行区域溢出
+ * 计算 Layout 布局最小高度（当前不强制最小高度）
  * @param {import('@/editor-core').ComponentNode | null} layoutNode - Layout 节点
  * @returns {number}
  * @throws {Error} 无
  */
 const resolveElLayoutMinHeight = (layoutNode) => {
   if (!layoutNode || layoutNode.type !== "ElLayout") return 0;
-  const rows = Math.max(1, Number(layoutNode.props?.rows) || 1);
-  const rowGap = Math.max(0, Number(layoutNode.props?.gutter) || 0);
-  const rawPadding = layoutNode.props?.padding;
-  const parsePaddingToken = (token) =>
-    token !== undefined ? parseSizeToNumber(token) : undefined;
-  const tokens =
-    typeof rawPadding === "string" ? rawPadding.trim().split(/\s+/) : [];
-  let paddingTop = 0;
-  let paddingBottom = 0;
-  if (typeof rawPadding === "number" && Number.isFinite(rawPadding)) {
-    paddingTop = rawPadding;
-    paddingBottom = rawPadding;
-  } else if (tokens.length === 1) {
-    const value = parsePaddingToken(tokens[0]) ?? 0;
-    paddingTop = value;
-    paddingBottom = value;
-  } else if (tokens.length === 2) {
-    const value = parsePaddingToken(tokens[0]) ?? 0;
-    paddingTop = value;
-    paddingBottom = value;
-  } else if (tokens.length === 3) {
-    paddingTop = parsePaddingToken(tokens[0]) ?? 0;
-    paddingBottom = parsePaddingToken(tokens[2]) ?? 0;
-  } else if (tokens.length >= 4) {
-    paddingTop = parsePaddingToken(tokens[0]) ?? 0;
-    paddingBottom = parsePaddingToken(tokens[2]) ?? 0;
-  }
-  const baseRowHeight = 80;
-  const totalGap = rowGap * Math.max(0, rows - 1);
-  const totalPadding = paddingTop + paddingBottom;
-  return rows * baseRowHeight + totalGap + totalPadding;
+  return 0;
 };
 
 /**
@@ -6219,10 +6231,18 @@ const handleResizePointerDown = (event, handle) => {
       : null;
   const startClientX = event.clientX;
   const startClientY = event.clientY;
-  const minSize = 40;
+  const minSize = ["ElLayout", "ElLayoutRow", "ElCol"].includes(node.value?.type)
+    ? 1
+    : 40;
   const containerMinSize = resolveElContainerMinSize(node.value);
   const childMinSize = (() => {
-    if (!nodeRef.value || !node.value?.children?.length) return null;
+    if (
+      !nodeRef.value ||
+      !node.value?.children?.length ||
+      ["ElLayout", "ElLayoutRow", "ElCol"].includes(node.value?.type)
+    ) {
+      return null;
+    }
     const parentRect = nodeRef.value.getBoundingClientRect?.();
     if (!parentRect) return null;
     let minLeft = Number.POSITIVE_INFINITY;
@@ -7000,15 +7020,8 @@ const handlePointerDown = (event) => {
     };
     if (node.value.type === "ElLayout") {
       const defaultSize = resolveDefaultSize("ElLayout");
-      const minHeight = resolveElLayoutMinHeight(node.value);
       if (defaultSize?.width) {
         nextAbs.w = Math.max(nextAbs.w, defaultSize.width);
-      }
-      if (defaultSize?.height) {
-        nextAbs.h = Math.max(nextAbs.h, defaultSize.height);
-      }
-      if (minHeight) {
-        nextAbs.h = Math.max(nextAbs.h, minHeight);
       }
     }
 
@@ -7319,15 +7332,8 @@ const handlePointerDown = (event) => {
           };
           if (node.value.type === "ElLayout") {
             const defaultSize = resolveDefaultSize("ElLayout");
-            const minHeight = resolveElLayoutMinHeight(node.value);
             if (defaultSize?.width) {
               nextAbs.w = Math.max(nextAbs.w, defaultSize.width);
-            }
-            if (defaultSize?.height) {
-              nextAbs.h = Math.max(nextAbs.h, defaultSize.height);
-            }
-            if (minHeight) {
-              nextAbs.h = Math.max(nextAbs.h, minHeight);
             }
           }
           const nextLayoutItem = {
@@ -7410,15 +7416,8 @@ const handlePointerDown = (event) => {
         };
         if (node.value.type === "ElLayout") {
           const defaultSize = resolveDefaultSize("ElLayout");
-          const minHeight = resolveElLayoutMinHeight(node.value);
           if (defaultSize?.width) {
             nextAbs.w = Math.max(nextAbs.w, defaultSize.width);
-          }
-          if (defaultSize?.height) {
-            nextAbs.h = Math.max(nextAbs.h, defaultSize.height);
-          }
-          if (minHeight) {
-            nextAbs.h = Math.max(nextAbs.h, minHeight);
           }
         }
         if (node.value.type === "ElContainer") {
@@ -7521,13 +7520,62 @@ const handlePointerDown = (event) => {
   min-height: 40px;
 }
 
+.designer-node.el-layout {
+  min-height: 0;
+}
+
 .designer-node.el-layout-row {
   min-height: 0;
 }
 
 .designer-node.el-col {
-  outline-offset: calc(-1 * var(--col-gutter-x, 0));
+  min-height: 0;
+  outline-offset: 0;
 }
+
+.designer-node.el-layout-row.is-selected,
+.designer-node.el-layout-row:hover {
+  outline: none;
+}
+
+.designer-node.el-col.is-selected,
+.designer-node.el-col:hover {
+  outline: none;
+}
+
+.designer-node.el-layout-row.is-selected::after,
+.designer-node.el-layout-row:hover::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--row-gutter, 0));
+  right: calc(-1 * var(--row-gutter, 0));
+  border: 2px solid #3b82f6;
+  border-radius: 2px;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.designer-node.el-layout-row:hover::after {
+  border-width: 1px;
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.designer-node.el-col.is-selected::after,
+.designer-node.el-col:hover::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--col-gutter-x, 0));
+  right: calc(-1 * var(--col-gutter-x, 0));
+  border: 2px solid #3b82f6;
+  border-radius: 2px;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
 
 .designer-node.is-locked {
   opacity: 0.6;
@@ -7555,6 +7603,18 @@ const handlePointerDown = (event) => {
   border: 1px dashed #d1d5db;
   border-radius: 4px;
   transition: all 0.2s ease;
+}
+
+.designer-node.el-layout .empty-container-hint,
+.designer-node.el-layout-row .empty-container-hint,
+.designer-node.el-col .empty-container-hint {
+  min-height: 0;
+}
+
+.designer-node.el-layout-row .empty-container-hint,
+.designer-node.el-col .empty-container-hint {
+  left: calc(-1 * var(--col-gutter-x, 0));
+  right: calc(-1 * var(--col-gutter-x, 0));
 }
 
 .empty-container-hint.is-region-hint {
