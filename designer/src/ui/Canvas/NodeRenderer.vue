@@ -781,6 +781,11 @@ const visibleResizeHandles = computed(() => {
       ["e", "w"].includes(handle.key)
     );
   }
+  if (node.value?.type === "ElLayoutRow") {
+    return resizeHandles.filter((handle) =>
+      ["n", "s"].includes(handle.key)
+    );
+  }
   const config = getRegionResizeConfig(node.value?.type);
   if (!config) return resizeHandles;
   return resizeHandles.filter((handle) => config.handles.includes(handle.key));
@@ -1239,14 +1244,16 @@ const wrapperComponentStyle = computed(() => {
   const style = { ...wrapperStyle.value, ...contentStyle.value };
   const type = node.value?.type;
   const parentNode = doc.value?.getParent?.(node.value?.id);
+  const customStyle = normalizeStyleObject(node.value?.style || {});
+  const hasCustomHeight = Boolean(customStyle.height);
   if (type === "ElLayoutRow" || type === "ElCol") {
     delete style.display;
   }
   if (type === "ElLayoutRow" && parentNode?.type === "ElLayout") {
-    style.flex = "1 1 0";
+    style.flex = hasCustomHeight ? "0 0 auto" : "1 1 0";
     style.width = "100%";
     style.minHeight = "0";
-    style.maxHeight = "100%";
+    style.maxHeight = hasCustomHeight ? "none" : "100%";
     style.alignItems = "stretch";
     style.overflow = "visible";
     style.columnGap = "0";
@@ -6055,7 +6062,13 @@ onBeforeUnmount(() => {
 const handleResizePointerDown = (event, handle) => {
   if (props.readonly) return;
   if (activeDragHandlers) return;
-  if (!node.value || (!isMovable.value && !isElColInRow.value)) return;
+  if (
+    !node.value ||
+    (!isMovable.value &&
+      !isElColInRow.value &&
+      node.value.type !== "ElLayoutRow")
+  )
+    return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
 
   event.preventDefault();
@@ -6497,11 +6510,16 @@ const handleResizePointerDown = (event, handle) => {
           )
         : null;
 
-    const nextStyle = {
-      ...(node.value.style || {}),
-      width: `${nextWidth}px`,
-      height: `${nextHeight}px`,
-    };
+    const nextStyle = { ...(node.value.style || {}) };
+    if (node.value.type === "ElLayoutRow") {
+      nextStyle.height = `${nextHeight}px`;
+      if (handle.x !== 0) {
+        nextStyle.width = `${nextWidth}px`;
+      }
+    } else {
+      nextStyle.width = `${nextWidth}px`;
+      nextStyle.height = `${nextHeight}px`;
+    }
 
     let patch = sectionPatch
       ? {
@@ -6543,7 +6561,9 @@ const handleResizePointerDown = (event, handle) => {
         layoutItem: nextLayoutItem,
       };
     } else if (nodeRef.value) {
-      nodeRef.value.style.width = `${nextWidth}px`;
+      if (node.value.type !== "ElLayoutRow" || handle.x !== 0) {
+        nodeRef.value.style.width = `${nextWidth}px`;
+      }
       nodeRef.value.style.height = `${nextHeight}px`;
     }
 
