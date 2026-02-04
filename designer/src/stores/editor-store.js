@@ -2578,6 +2578,9 @@ export const useEditorStore = defineStore("editor", () => {
         }
       }
     }
+    if (parentNode.type === "ElCol" && (parentNode.children || []).length > 0) {
+      return null;
+    }
 
     const manifest = componentRegistry.get(type);
     const defaultSize = resolveDefaultSize(type, manifest);
@@ -2617,11 +2620,21 @@ export const useEditorStore = defineStore("editor", () => {
     ].includes(parentNode.type);
     if (isRegionContainer) {
       // 区域容器内默认填满
-      nodeStyle = {
-        ...nodeStyle,
-        width: "100%",
-        height: "100%",
-      };
+      if (parentNode.type === "ElCol") {
+        nodeStyle = {
+          ...nodeStyle,
+          width: "100%",
+        };
+        if (isLayoutContainer || manifest?.isContainer) {
+          nodeStyle.height = "100%";
+        }
+      } else {
+        nodeStyle = {
+          ...nodeStyle,
+          width: "100%",
+          height: "100%",
+        };
+      }
       if (isLayoutContainer) {
         delete nodeStyle.minHeight;
         delete nodeStyle.minWidth;

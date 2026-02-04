@@ -218,7 +218,7 @@ const form = reactive({
   height: 1080,
   showGrid: false,
   enableSnap: true,
-  autoFit: false,
+  autoFit: true,
   backgroundKind: "color",
   backgroundValue: "#ffffff",
 });
@@ -389,7 +389,7 @@ const syncForm = (page) => {
   form.presetKey = resolvePresetKey(form.width, form.height);
   form.showGrid = page?.config?.showGrid ?? false;
   form.enableSnap = page?.config?.enableSnap ?? true;
-  form.autoFit = page?.config?.autoFit ?? false;
+  form.autoFit = page?.config?.autoFit ?? true;
   form.backgroundKind = page?.config?.background?.kind || "color";
   form.backgroundValue = page?.config?.background?.value || "#ffffff";
 

@@ -512,8 +512,21 @@ const showInsertLine = ref(false);
 const insertLineStyle = ref(null);
 const rowInsertInfo = ref(null);
 const layoutInsertInfo = ref(null);
+const rowInsertEdgeThreshold = 8;
+const colInsertEdgeThreshold = 8;
 const insertLineBox = computed(
   () => rowInsertInfo.value?.lineBox || layoutInsertInfo.value?.lineBox || null
+);
+watch(
+  () => dragState.dragType,
+  (value) => {
+    if (!value) {
+      showInsertLine.value = false;
+      insertLineStyle.value = null;
+      rowInsertInfo.value = null;
+      layoutInsertInfo.value = null;
+    }
+  }
 );
 const dragDropManager = createDragDropManager();
 const tableRenderVersion = ref(0);
@@ -775,7 +788,18 @@ const isElColInRow = computed(() => {
   return parentNode?.type === "ElLayoutRow";
 });
 
+/**
+ * 判断节点是否被放入 ElCol 中
+ * @returns {boolean} 是否为 ElCol 子节点
+ */
+const isChildInElCol = computed(() => {
+  if (!node.value) return false;
+  const parentNode = doc.value?.getParent?.(node.value.id);
+  return parentNode?.type === "ElCol";
+});
+
 const visibleResizeHandles = computed(() => {
+  if (isChildInElCol.value) return [];
   if (isElColInRow.value) {
     return resizeHandles.filter((handle) =>
       ["e", "w"].includes(handle.key)
@@ -797,6 +821,7 @@ const showResizeHandles = computed(() => {
   if (!node.value || node.value.locked) return false;
   if (isRootCanvasContainer(node.value)) return false;
   if (node.value.type === "ElMain") return false;
+  if (isChildInElCol.value) return false;
   const parentNode = doc.value?.getParent?.(node.value.id);
   if (
     parentNode?.type === "ElHeader" ||
@@ -834,8 +859,105 @@ const canAcceptChild = (parentNode, childType) => {
   if (parentNode.type === "ElLayoutRow") {
     return childType === "ElCol";
   }
+  if (parentNode.type === "ElCol") {
+    return (parentNode.children || []).length === 0;
+  }
   if (!Array.isArray(allowed) || allowed.length === 0) return true;
   return allowed.includes(childType);
+};
+
+/**
+ * 判断节点是否为可放置容器
+ * @param {import('@/editor-core').ComponentNode | null} targetNode - 目标节点
+ * @returns {boolean}
+ */
+const isDroppableContainer = (targetNode) => {
+  if (!targetNode) return false;
+  if (
+    targetNode.type === "ElLayout" ||
+    targetNode.type === "ElLayoutRow" ||
+    targetNode.type === "ElCol" ||
+    targetNode.type === "ElContainer" ||
+    targetNode.type === "ElHeader" ||
+    targetNode.type === "ElAside" ||
+    targetNode.type === "ElMain" ||
+    targetNode.type === "ElFooter"
+  ) {
+    return true;
+  }
+  const manifest = componentRegistry.get(targetNode.type);
+  return Boolean(manifest?.isContainer);
+};
+
+/**
+ * 从鼠标位置解析可放置容器
+ * @param {DragEvent} event - 拖拽事件
+ * @param {string} childType - 子组件类型
+ * @returns {{ node: import('@/editor-core').ComponentNode, element: HTMLElement | null } | null}
+ */
+const resolveDropContainer = (event, childType) => {
+  if (!doc.value || !event) return null;
+  const hitList = document.elementsFromPoint(event.clientX, event.clientY);
+  let containerNode = null;
+  const isRegionType = (type) =>
+    type === "ElHeader" ||
+    type === "ElAside" ||
+    type === "ElMain" ||
+    type === "ElFooter";
+  const resolveContainerMain = (container) => {
+    if (!container || container.type !== "ElContainer") return null;
+    const mainChildId = (container.children || []).find((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      return childNode?.type === "ElMain";
+    });
+    return mainChildId ? doc.value?.getNode?.(mainChildId) || null : null;
+  };
+
+  const canAcceptByAutoInsert = (targetNode, nextChildType) => {
+    if (!targetNode || !nextChildType) return false;
+    if (targetNode.type === "ElLayout") {
+      return nextChildType !== "ElLayoutRow";
+    }
+    if (targetNode.type === "ElLayoutRow") {
+      return nextChildType !== "ElCol";
+    }
+    if (targetNode.type === "ElCol") {
+      return nextChildType !== "ElCol";
+    }
+    return false;
+  };
+
+  for (const hit of hitList) {
+    if (!(hit instanceof Element)) continue;
+    const nodeElement = hit.closest?.("[data-node-id][data-node-type]");
+    if (!nodeElement) continue;
+    const nodeId = nodeElement.getAttribute("data-node-id");
+    const targetNode = nodeId ? doc.value?.getNode?.(nodeId) : null;
+    if (!targetNode) continue;
+    if (isRegionType(targetNode.type)) {
+      if (childType && !canAcceptChild(targetNode, childType)) continue;
+      return { node: targetNode, element: nodeElement };
+    }
+    if (targetNode.type === "ElContainer") {
+      if (!containerNode) {
+        containerNode = resolveContainerMain(targetNode) || targetNode;
+      }
+      continue;
+    }
+    if (isDroppableContainer(targetNode)) {
+      if (childType && !canAcceptChild(targetNode, childType)) {
+        if (!canAcceptByAutoInsert(targetNode, childType)) continue;
+      }
+      return { node: targetNode, element: nodeElement };
+    }
+  }
+  if (containerNode && (!childType || canAcceptChild(containerNode, childType))) {
+    const containerElement = document.querySelector(
+      `[data-node-id="${containerNode.id}"]`
+    );
+    return { node: containerNode, element: containerElement };
+  }
+  return null;
 };
 
 /**
@@ -1140,7 +1262,16 @@ const contentStyle = computed(() => {
     style.overflow = "hidden";
   }
   if (node.value.type === "ElCol" && parentNode?.type === "ElLayoutRow") {
-    style.height = "auto";
+    style.height = "100%";
+  }
+  if (parentNode?.type === "ElCol") {
+    style.width = "100%";
+    style.height = "100%";
+    style.minHeight = "100%";
+    style.alignSelf = "stretch";
+    if (!style.display) {
+      style.display = "block";
+    }
   }
   if (parentNode?.type === "ElCol" && isMovable.value) {
     style.width = "100%";
@@ -1148,6 +1279,36 @@ const contentStyle = computed(() => {
       style.height = "100%";
     } else if (!style.height) {
       style.height = "auto";
+    }
+    const rowParent = doc.value?.getParent?.(parentNode.id);
+    const rowHeight =
+      rowParent?.type === "ElLayoutRow"
+        ? rowParent.style?.height
+        : undefined;
+    const normalizedRowHeight =
+      rowHeight === undefined || rowHeight === null
+        ? ""
+        : String(rowHeight).trim();
+    const hasFixedRowHeight =
+      normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
+    if (hasFixedRowHeight && (!style.height || style.height === "auto")) {
+      style.height = "100%";
+    }
+  }
+  if (parentNode?.type === "ElCol") {
+    const rowParent = doc.value?.getParent?.(parentNode.id);
+    const rowHeight =
+      rowParent?.type === "ElLayoutRow"
+        ? rowParent.style?.height
+        : undefined;
+    const normalizedRowHeight =
+      rowHeight === undefined || rowHeight === null
+        ? ""
+        : String(rowHeight).trim();
+    const hasFixedRowHeight =
+      normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
+    if (hasFixedRowHeight) {
+      style.height = "100%";
     }
   }
   if (
@@ -1165,7 +1326,7 @@ const contentStyle = computed(() => {
     node.value.type === "ElMain" ||
     node.value.type === "ElFooter"
   ) {
-    style.overflow = "auto";
+    style.overflow = "hidden";
   }
   if (parentNode?.type === "ElContainer") {
     if (node.value.type === "ElHeader") {
@@ -1303,6 +1464,20 @@ const wrapperComponentStyle = computed(() => {
     style.overflow = "visible";
     style.minHeight = "0";
     style.padding = "0";
+    style.height = "100%";
+    const rowHeight =
+      parentNode?.style?.height !== undefined
+        ? parentNode.style.height
+        : undefined;
+    const normalizedRowHeight =
+      rowHeight === undefined || rowHeight === null
+        ? ""
+        : String(rowHeight).trim();
+    const hasFixedRowHeight =
+      normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
+    if (hasFixedRowHeight) {
+      style.height = "100%";
+    }
     const colProps = resolvedProps.value || node.value?.props || {};
     const gutter = Number(parentNode.props?.gutter) || 0;
     if (!gutter) {
@@ -4396,36 +4571,43 @@ const handleContextMenu = (event) => {
  */
 const handleDragOver = (event) => {
   if (props.readonly) return;
-  // ✅ 阻止事件冒泡
-  event.stopPropagation();
 
   const resolveLayoutInsertFromPoint = () => {
-    const hit = event.target instanceof Element ? event.target : null;
-    const layoutElement = hit?.closest?.('[data-node-type="ElLayout"][data-node-id]');
-    if (!layoutElement) return null;
-    const layoutId = layoutElement.getAttribute("data-node-id");
-    const layoutNode = layoutId ? doc.value?.getNode?.(layoutId) : null;
-    if (!layoutNode || layoutNode.type !== "ElLayout") return null;
+    const hitList = document.elementsFromPoint(
+      event.clientX,
+      event.clientY
+    );
+    for (const hit of hitList) {
+      const layoutElement = hit?.closest?.(
+        '[data-node-type="ElLayout"][data-node-id]'
+      );
+      if (!layoutElement) continue;
+      const layoutId = layoutElement.getAttribute("data-node-id");
+      const layoutNode = layoutId ? doc.value?.getNode?.(layoutId) : null;
+      if (!layoutNode || layoutNode.type !== "ElLayout") continue;
 
-    const rowIds = (layoutNode.children || []).filter((childId) => {
-      const childNode = doc.value?.getNode?.(childId);
-      return childNode?.type === "ElLayoutRow";
-    });
-    if (rowIds.length === 0) return null;
+      const rowIds = (layoutNode.children || []).filter((childId) => {
+        const childNode = doc.value?.getNode?.(childId);
+        return childNode?.type === "ElLayoutRow";
+      });
+      if (rowIds.length === 0) return null;
 
-    const pointY = event.clientY;
-    const threshold = 12;
-    for (let i = 0; i < rowIds.length; i += 1) {
-      const rowId = rowIds[i];
-      const rowElement = layoutElement.querySelector(`[data-node-id="${rowId}"]`);
-      if (!rowElement) continue;
-      const rect = rowElement.getBoundingClientRect?.();
-      if (!rect) continue;
-      if (Math.abs(pointY - rect.top) <= threshold) {
-        return { layoutNode, layoutElement, index: i, lineY: rect.top };
-      }
-      if (Math.abs(pointY - rect.bottom) <= threshold) {
-        return { layoutNode, layoutElement, index: i + 1, lineY: rect.bottom };
+      const pointY = event.clientY;
+      const threshold = rowInsertEdgeThreshold;
+      for (let i = 0; i < rowIds.length; i += 1) {
+        const rowId = rowIds[i];
+        const rowElement = layoutElement.querySelector(
+          `[data-node-id="${rowId}"]`
+        );
+        if (!rowElement) continue;
+        const rect = rowElement.getBoundingClientRect?.();
+        if (!rect) continue;
+        if (Math.abs(pointY - rect.top) <= threshold) {
+          return { layoutNode, layoutElement, index: i, lineY: rect.top };
+        }
+        if (Math.abs(pointY - rect.bottom) <= threshold) {
+          return { layoutNode, layoutElement, index: i + 1, lineY: rect.bottom };
+        }
       }
     }
     return null;
@@ -4450,7 +4632,7 @@ const handleDragOver = (event) => {
         nodeElement.closest?.(rowSelector);
       if (!rowElement) continue;
       const colRect = nodeElement.getBoundingClientRect?.();
-      const edgeThreshold = 12;
+      const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? event.clientX - colRect.left <= edgeThreshold ||
           colRect.right - event.clientX <= edgeThreshold
@@ -4478,7 +4660,7 @@ const handleDragOver = (event) => {
         nodeElement.closest?.(layoutSelector);
       if (!layoutElement) continue;
       const rowRect = nodeElement.getBoundingClientRect?.();
-      const edgeThreshold = 12;
+      const edgeThreshold = rowInsertEdgeThreshold;
       const nearEdge = rowRect
         ? event.clientY - rowRect.top <= edgeThreshold ||
           rowRect.bottom - event.clientY <= edgeThreshold
@@ -4489,6 +4671,8 @@ const handleDragOver = (event) => {
   };
 
   if (!isContainer.value) return;
+  // ✅ 阻止事件冒泡
+  event.stopPropagation();
   const hasComponent =
     event.dataTransfer?.types?.includes("application/x-designer-component") ||
     event.dataTransfer?.types?.includes("application/x-designer-node") ||
@@ -4713,7 +4897,7 @@ const handleDrop = (event) => {
     if (rowIds.length === 0) return null;
 
     const pointY = event.clientY;
-    const threshold = 12;
+    const threshold = rowInsertEdgeThreshold;
     for (let i = 0; i < rowIds.length; i += 1) {
       const rowId = rowIds[i];
       const rowElement = layoutElement.querySelector(`[data-node-id="${rowId}"]`);
@@ -4728,6 +4912,40 @@ const handleDrop = (event) => {
       }
     }
     return null;
+  };
+  /**
+   * 在 ElLayout 中按行插入组件
+   * @param {import('@/editor-core').ComponentNode} layoutNode - 布局节点
+   * @param {number} insertIndex - 行插入位置
+   * @param {string} componentType - 组件类型
+   */
+  const insertIntoLayoutByRow = (layoutNode, insertIndex, componentType) => {
+    if (!layoutNode || layoutNode.type !== "ElLayout") return false;
+    const rowNode = editorStore.insertNode("ElLayoutRow", layoutNode.id, insertIndex);
+    if (!rowNode) return false;
+    const latestLayout = doc.value?.getNode?.(layoutNode.id);
+    const rowCount = (latestLayout?.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      return childNode?.type === "ElLayoutRow";
+    }).length;
+    editorStore.updateNode(layoutNode.id, {
+      props: { ...(latestLayout?.props || layoutNode.props || {}), rows: Math.max(1, rowCount) },
+    });
+    editorStore.updateNode(rowNode.id, {
+      props: { ...(rowNode.props || {}), columns: 1 },
+    });
+    const latestRow = doc.value?.getNode?.(rowNode.id);
+    const colIds = (latestRow?.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      return childNode?.type === "ElCol";
+    });
+    let colId = colIds[0];
+    if (!colId) {
+      const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+      if (!colNode) return false;
+      colId = colNode.id;
+    }
+    return Boolean(editorStore.insertNode(componentType, colId));
   };
 
   const resolveRowInsertTarget = () => {
@@ -4748,12 +4966,22 @@ const handleDrop = (event) => {
         document.querySelector(rowSelector) ||
         nodeElement.closest?.(rowSelector);
       const colRect = nodeElement.getBoundingClientRect?.();
-      const edgeThreshold = 12;
+      const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? event.clientX - colRect.left <= edgeThreshold ||
           colRect.right - event.clientX <= edgeThreshold
         : false;
-      return { rowNode: parentNode, rowElement, nearEdge };
+      let index = null;
+      if (colRect && nearEdge) {
+        const colIds = (parentNode.children || []).filter((childId) => {
+          const childNode = doc.value?.getNode?.(childId);
+          return childNode?.type === "ElCol";
+        });
+        const currentIndex = Math.max(0, colIds.indexOf(colNode.id));
+        const nearLeft = event.clientX - colRect.left <= edgeThreshold;
+        index = nearLeft ? currentIndex : currentIndex + 1;
+      }
+      return { rowNode: parentNode, rowElement, nearEdge, index };
     }
     return null;
   };
@@ -4775,7 +5003,7 @@ const handleDrop = (event) => {
         document.querySelector(layoutSelector) ||
         nodeElement.closest?.(layoutSelector);
       const rowRect = nodeElement.getBoundingClientRect?.();
-      const edgeThreshold = 12;
+      const edgeThreshold = rowInsertEdgeThreshold;
       const nearEdge = rowRect
         ? event.clientY - rowRect.top <= edgeThreshold ||
           rowRect.bottom - event.clientY <= edgeThreshold
@@ -4794,6 +5022,17 @@ const handleDrop = (event) => {
         currentType === "ElMain" ||
         currentType === "ElFooter";
       if (!isElContainerScope) return null;
+      const resolveLayoutTarget = (element) => {
+        if (!element) return null;
+        const nodeElement = element.closest?.("[data-node-id][data-node-type]");
+        if (!nodeElement) return null;
+        const nodeType = nodeElement.getAttribute("data-node-type");
+        if (nodeType !== "ElLayout" && nodeType !== "ElLayoutRow") return null;
+        const nodeId = nodeElement.getAttribute("data-node-id");
+        const targetNode = nodeId ? doc.value?.getNode?.(nodeId) : null;
+        if (!targetNode) return null;
+        return { node: targetNode, element: nodeElement };
+      };
       const isRegionType = (type) =>
         type === "ElHeader" ||
         type === "ElAside" ||
@@ -4823,6 +5062,8 @@ const handleDrop = (event) => {
       };
       const resolveFromElement = (element) => {
         if (!element) return null;
+        const layoutTarget = resolveLayoutTarget(element);
+        if (layoutTarget) return layoutTarget;
         const nodeElement = element.closest?.("[data-node-id]");
         if (!nodeElement) return null;
         const nodeId = nodeElement.getAttribute("data-node-id");
@@ -4830,6 +5071,16 @@ const handleDrop = (event) => {
         if (!resolved) return null;
         return { node: resolved.node, element: nodeElement };
       };
+
+      const hitList = document.elementsFromPoint(
+        event.clientX,
+        event.clientY
+      );
+      for (const item of hitList) {
+        if (!(item instanceof Element)) continue;
+        const resolved = resolveFromElement(item);
+        if (resolved) return resolved;
+      }
 
       const path = event.composedPath?.() || [];
       for (const item of path) {
@@ -4857,10 +5108,49 @@ const handleDrop = (event) => {
     if (!type && !fallbackType) return;
     const resolvedType = type || fallbackType;
     if (!node.value) return;
+    if (!layoutInsertSnapshot) {
+      const resolvedLayoutByPoint = resolveLayoutInsertFromPoint();
+      if (resolvedLayoutByPoint && resolvedType !== "ElLayoutRow") {
+        const inserted = insertIntoLayoutByRow(
+          resolvedLayoutByPoint.layoutNode,
+          resolvedLayoutByPoint.index,
+          resolvedType
+        );
+        if (!inserted) {
+          notifyInsertFailure();
+        }
+        endDrag();
+        return;
+      }
+    }
+    if (
+      layoutInsertSnapshot?.layoutId &&
+      resolvedType !== "ElLayoutRow" &&
+      doc.value?.getNode?.(layoutInsertSnapshot.layoutId)?.type === "ElLayout"
+    ) {
+      const layoutNode = doc.value.getNode(layoutInsertSnapshot.layoutId);
+      const inserted = insertIntoLayoutByRow(
+        layoutNode,
+        layoutInsertSnapshot.index,
+        resolvedType
+      );
+      if (!inserted) notifyInsertFailure();
+      endDrag();
+      return;
+    }
     const resolvedTarget = resolveElContainerTarget();
     let targetNode = (resolvedTarget && resolvedTarget.node) || node.value;
     let targetElement =
       (resolvedTarget && resolvedTarget.element) || event.currentTarget;
+    if (!isDroppableContainer(targetNode)) {
+      const resolvedContainer = resolveDropContainer(event, resolvedType);
+      if (resolvedContainer) {
+        targetNode = resolvedContainer.node;
+        targetElement = resolvedContainer.element || targetElement;
+      } else {
+        return;
+      }
+    }
     const rowResolved = resolveRowInsertTarget();
     const layoutResolved = resolveLayoutInsertTarget();
     const layoutResolvedByPoint = resolveLayoutInsertFromPoint();
@@ -4887,6 +5177,107 @@ const handleDrop = (event) => {
           document.querySelector(rowSelector) ||
           event.currentTarget.closest?.(rowSelector) ||
           targetElement;
+      }
+    }
+    if (
+      targetNode?.type === "ElCol" &&
+      resolvedType !== "ElCol" &&
+      doc.value?.getParent?.(targetNode.id)?.type === "ElLayoutRow"
+    ) {
+      const rowNode = doc.value.getParent(targetNode.id);
+      const layoutNode = rowNode ? doc.value.getParent?.(rowNode.id) : null;
+      if (
+        layoutInsertSnapshot?.layoutId &&
+        layoutNode?.type === "ElLayout" &&
+        layoutInsertSnapshot.layoutId === layoutNode.id &&
+        resolvedType !== "ElLayoutRow"
+      ) {
+        const rowNodeInserted = editorStore.insertNode(
+          "ElLayoutRow",
+          layoutNode.id,
+          layoutInsertSnapshot.index
+        );
+        if (rowNodeInserted) {
+          const latestLayout = doc.value?.getNode?.(layoutNode.id);
+          const rowCount = (latestLayout?.children || []).filter((childId) => {
+            const childNode = doc.value?.getNode?.(childId);
+            return childNode?.type === "ElLayoutRow";
+          }).length;
+          editorStore.updateNode(layoutNode.id, {
+            props: {
+              ...(latestLayout?.props || layoutNode.props || {}),
+              rows: Math.max(1, rowCount),
+            },
+          });
+          editorStore.updateNode(rowNodeInserted.id, {
+            props: { ...(rowNodeInserted.props || {}), columns: 1 },
+          });
+          const latestRow = doc.value?.getNode?.(rowNodeInserted.id);
+          const colIds = (latestRow?.children || []).filter((childId) => {
+            const childNode = doc.value?.getNode?.(childId);
+            return childNode?.type === "ElCol";
+          });
+          let colId = colIds[0];
+          if (!colId) {
+            const colNode = editorStore.insertNode(
+              "ElCol",
+              rowNodeInserted.id,
+              0
+            );
+            if (!colNode) {
+              notifyInsertFailure();
+              endDrag();
+              return;
+            }
+            colId = colNode.id;
+          }
+          const inserted = editorStore.insertNode(resolvedType, colId);
+          if (!inserted) {
+            notifyInsertFailure();
+          }
+        } else {
+          notifyInsertFailure();
+        }
+        endDrag();
+        return;
+      }
+      const colHasChild = (targetNode.children || []).length > 0;
+      if (colHasChild) {
+        const rowResolved = resolveRowInsertTarget();
+        const colIds = (rowNode?.children || []).filter((childId) => {
+          const childNode = doc.value?.getNode?.(childId);
+          return childNode?.type === "ElCol";
+        });
+        const currentIndex = Math.max(0, colIds.indexOf(targetNode.id));
+        let insertIndex = currentIndex + 1;
+        if (rowInsertSnapshot?.rowId === rowNode.id) {
+          insertIndex = rowInsertSnapshot.index;
+        } else if (Number.isInteger(rowResolved?.index)) {
+          insertIndex = rowResolved.index;
+        }
+        const colNode = editorStore.insertNode(
+          "ElCol",
+          rowNode.id,
+          insertIndex
+        );
+        if (colNode) {
+          const latestRow = doc.value?.getNode?.(rowNode.id);
+          const colCount = (latestRow?.children || []).filter((childId) => {
+            const childNode = doc.value?.getNode?.(childId);
+            return childNode?.type === "ElCol";
+          }).length;
+          editorStore.updateNode(rowNode.id, {
+            props: { ...(latestRow?.props || rowNode.props || {}), columns: colCount },
+          });
+          const inserted = editorStore.insertNode(resolvedType, colNode.id);
+          if (!inserted) {
+            notifyInsertFailure();
+          }
+        } else {
+          notifyInsertFailure();
+        }
+        endDrag();
+        return;
       }
     }
     if (
@@ -5052,9 +5443,48 @@ const handleDrop = (event) => {
     const type = payload || fallbackType;
     if (!type) return;
     if (!node.value) return;
+    if (!layoutInsertSnapshot) {
+      const resolvedLayoutByPoint = resolveLayoutInsertFromPoint();
+      if (resolvedLayoutByPoint && type !== "ElLayoutRow") {
+        const inserted = insertIntoLayoutByRow(
+          resolvedLayoutByPoint.layoutNode,
+          resolvedLayoutByPoint.index,
+          type
+        );
+        if (!inserted) {
+          notifyInsertFailure();
+        }
+        endDrag();
+        return;
+      }
+    }
+    if (
+      layoutInsertSnapshot?.layoutId &&
+      type !== "ElLayoutRow" &&
+      doc.value?.getNode?.(layoutInsertSnapshot.layoutId)?.type === "ElLayout"
+    ) {
+      const layoutNode = doc.value.getNode(layoutInsertSnapshot.layoutId);
+      const inserted = insertIntoLayoutByRow(
+        layoutNode,
+        layoutInsertSnapshot.index,
+        type
+      );
+      if (!inserted) notifyInsertFailure();
+      endDrag();
+      return;
+    }
     const resolvedTarget = resolveElContainerTarget();
     let targetNode = resolvedTarget?.node || node.value;
     let targetElement = resolvedTarget?.element || event.currentTarget;
+    if (!isDroppableContainer(targetNode)) {
+      const resolvedContainer = resolveDropContainer(event, type);
+      if (resolvedContainer) {
+        targetNode = resolvedContainer.node;
+        targetElement = resolvedContainer.element || targetElement;
+      } else {
+        return;
+      }
+    }
     const rowResolved = resolveRowInsertTarget();
     const layoutResolved = resolveLayoutInsertTarget();
     const layoutResolvedByPoint = resolveLayoutInsertFromPoint();
@@ -5081,6 +5511,103 @@ const handleDrop = (event) => {
           document.querySelector(rowSelector) ||
           event.currentTarget.closest?.(rowSelector) ||
           targetElement;
+      }
+    }
+    if (
+      targetNode?.type === "ElCol" &&
+      type !== "ElCol" &&
+      doc.value?.getParent?.(targetNode.id)?.type === "ElLayoutRow"
+    ) {
+      const rowNode = doc.value.getParent(targetNode.id);
+      const layoutNode = rowNode ? doc.value.getParent?.(rowNode.id) : null;
+      if (
+        layoutInsertSnapshot?.layoutId &&
+        layoutNode?.type === "ElLayout" &&
+        layoutInsertSnapshot.layoutId === layoutNode.id &&
+        type !== "ElLayoutRow"
+      ) {
+        const rowNodeInserted = editorStore.insertNode(
+          "ElLayoutRow",
+          layoutNode.id,
+          layoutInsertSnapshot.index
+        );
+        if (rowNodeInserted) {
+          const latestLayout = doc.value?.getNode?.(layoutNode.id);
+          const rowCount = (latestLayout?.children || []).filter((childId) => {
+            const childNode = doc.value?.getNode?.(childId);
+            return childNode?.type === "ElLayoutRow";
+          }).length;
+          editorStore.updateNode(layoutNode.id, {
+            props: {
+              ...(latestLayout?.props || layoutNode.props || {}),
+              rows: Math.max(1, rowCount),
+            },
+          });
+          editorStore.updateNode(rowNodeInserted.id, {
+            props: { ...(rowNodeInserted.props || {}), columns: 1 },
+          });
+          const latestRow = doc.value?.getNode?.(rowNodeInserted.id);
+          const colIds = (latestRow?.children || []).filter((childId) => {
+            const childNode = doc.value?.getNode?.(childId);
+            return childNode?.type === "ElCol";
+          });
+          let colId = colIds[0];
+          if (!colId) {
+            const colNode = editorStore.insertNode(
+              "ElCol",
+              rowNodeInserted.id,
+              0
+            );
+            if (!colNode) {
+              notifyInsertFailure();
+              endDrag();
+              return;
+            }
+            colId = colNode.id;
+          }
+          const inserted = editorStore.insertNode(type, colId);
+          if (!inserted) {
+            notifyInsertFailure();
+          }
+        } else {
+          notifyInsertFailure();
+        }
+        endDrag();
+        return;
+      }
+      const colHasChild = (targetNode.children || []).length > 0;
+      if (colHasChild) {
+        const rowResolved = resolveRowInsertTarget();
+        const colIds = (rowNode?.children || []).filter((childId) => {
+          const childNode = doc.value?.getNode?.(childId);
+          return childNode?.type === "ElCol";
+        });
+        const currentIndex = Math.max(0, colIds.indexOf(targetNode.id));
+        let insertIndex = currentIndex + 1;
+        if (rowInsertSnapshot?.rowId === rowNode.id) {
+          insertIndex = rowInsertSnapshot.index;
+        } else if (Number.isInteger(rowResolved?.index)) {
+          insertIndex = rowResolved.index;
+        }
+        const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
+        if (colNode) {
+          const latestRow = doc.value?.getNode?.(rowNode.id);
+          const colCount = (latestRow?.children || []).filter((childId) => {
+            const childNode = doc.value?.getNode?.(childId);
+            return childNode?.type === "ElCol";
+          }).length;
+          editorStore.updateNode(rowNode.id, {
+            props: { ...(latestRow?.props || rowNode.props || {}), columns: colCount },
+          });
+          const inserted = editorStore.insertNode(type, colNode.id);
+          if (!inserted) {
+            notifyInsertFailure();
+          }
+        } else {
+          notifyInsertFailure();
+        }
+        endDrag();
+        return;
       }
     }
     if (
@@ -5579,9 +6106,27 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
   } else if (currentNode.type === "ElLayoutRow") {
     const gutter = Math.max(0, Number(currentNode.props?.gutter) || 0);
     const halfGutter = gutter ? gutter / 2 : 0;
+    const parentNode = doc.value?.getParent?.(currentNode.id);
+    const rawHeight = currentNode.style?.height;
+    const normalizedHeight =
+      rawHeight === undefined || rawHeight === null
+        ? ""
+        : String(rawHeight).trim();
+    const hasFixedHeight =
+      normalizedHeight !== "" && normalizedHeight !== "auto";
     style.display = "flex";
     style.flexWrap = "wrap";
     style.alignItems = "stretch";
+    if (parentNode?.type === "ElLayout") {
+      if (hasFixedHeight) {
+        style.flexGrow = 0;
+        style.flexShrink = 0;
+      } else {
+        style.flexGrow = 1;
+        style.flexShrink = 1;
+        style.flexBasis = "0%";
+      }
+    }
     if (halfGutter) {
       style.marginLeft = `${-halfGutter}px`;
       style.marginRight = `${-halfGutter}px`;
@@ -6064,6 +6609,7 @@ const handleResizePointerDown = (event, handle) => {
   if (activeDragHandlers) return;
   if (
     !node.value ||
+    isChildInElCol.value ||
     (!isMovable.value &&
       !isElColInRow.value &&
       node.value.type !== "ElLayoutRow")
@@ -6223,6 +6769,152 @@ const handleResizePointerDown = (event, handle) => {
       document.addEventListener("mouseup", up, { once: true });
     }
     return;
+  }
+
+  if (node.value.type === "ElLayoutRow" && handle.x === 0 && handle.y !== 0) {
+    const parentNode = doc.value?.getParent?.(node.value.id);
+    if (parentNode?.type === "ElLayout") {
+      const rowChildren = Array.isArray(parentNode.children)
+        ? parentNode.children
+        : [];
+      const rowIds = rowChildren.filter((childId) => {
+        const childNode = doc.value?.getNode?.(childId);
+        return childNode?.type === "ElLayoutRow";
+      });
+      const currentIndex = rowIds.indexOf(node.value.id);
+      const targetIndex = handle.y === -1 ? currentIndex - 1 : currentIndex + 1;
+      const targetRowId = targetIndex >= 0 ? rowIds[targetIndex] : "";
+      const targetRowNode = targetRowId
+        ? doc.value?.getNode?.(targetRowId)
+        : null;
+      const currentEl = nodeRef.value;
+      const targetEl = targetRowId
+        ? document.querySelector(`[data-node-id="${targetRowId}"]`)
+        : null;
+      const zoomValue = Number(canvasZoom?.value) || 1;
+      const currentRect = currentEl?.getBoundingClientRect?.();
+      const targetRect = targetEl?.getBoundingClientRect?.();
+      if (
+        targetRowNode &&
+        currentRect &&
+        targetRect &&
+        currentRect.height > 0 &&
+        targetRect.height > 0
+      ) {
+        const baseCurrentHeight = currentRect.height / zoomValue;
+        const baseTargetHeight = targetRect.height / zoomValue;
+        const startClientY = event.clientY;
+        cleanupDragHandlers();
+        const originalUserSelect = document.body.style.userSelect;
+        document.body.style.userSelect = "none";
+
+        if (history.value && !history.value.isInTransaction?.()) {
+          history.value.beginTransaction();
+        }
+
+        const usePointer = event.type === "pointerdown";
+        const pointerTarget =
+          event.target instanceof Element ? event.target : nodeRef.value?.$el;
+        if (
+          usePointer &&
+          pointerTarget?.setPointerCapture &&
+          event.pointerId !== undefined
+        ) {
+          try {
+            pointerTarget.setPointerCapture(event.pointerId);
+          } catch (error) {
+            // 忽略捕获失败
+          }
+        }
+
+        const minSize = 1;
+        const move = (moveEvent) => {
+          if (!node.value || !targetRowNode) return;
+          const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
+          let nextCurrentHeight =
+            handle.y === -1
+              ? baseCurrentHeight - deltaY
+              : baseCurrentHeight + deltaY;
+          let nextTargetHeight =
+            handle.y === -1
+              ? baseTargetHeight + deltaY
+              : baseTargetHeight - deltaY;
+
+          if (nextTargetHeight < minSize) {
+            nextTargetHeight = minSize;
+            nextCurrentHeight = Math.max(
+              minSize,
+              baseCurrentHeight + (baseTargetHeight - nextTargetHeight)
+            );
+          }
+          if (nextCurrentHeight < minSize) {
+            nextCurrentHeight = minSize;
+            nextTargetHeight = Math.max(
+              minSize,
+              baseTargetHeight + (baseCurrentHeight - nextCurrentHeight)
+            );
+          }
+
+          const currentPatch = {
+            style: {
+              ...(node.value.style || {}),
+              height: `${Math.round(nextCurrentHeight)}px`,
+            },
+          };
+          const targetPatch = {
+            style: {
+              ...(targetRowNode.style || {}),
+              height: `${Math.round(nextTargetHeight)}px`,
+            },
+          };
+
+          if (history.value?.isInTransaction?.()) {
+            history.value.executeInTransaction(
+              new UpdateNodeCommand(node.value.id, currentPatch)
+            );
+            history.value.executeInTransaction(
+              new UpdateNodeCommand(targetRowNode.id, targetPatch)
+            );
+          } else if (history.value?.execute) {
+            history.value.execute(
+              new UpdateNodeCommand(node.value.id, currentPatch)
+            );
+            history.value.execute(
+              new UpdateNodeCommand(targetRowNode.id, targetPatch)
+            );
+          } else if (doc.value?._updateNode) {
+            doc.value._updateNode(node.value.id, currentPatch);
+            doc.value._updateNode(targetRowNode.id, targetPatch);
+          }
+        };
+
+        const up = () => {
+          if (history.value?.isInTransaction?.()) {
+            history.value.commitTransaction("调整布局行高度");
+          }
+          cleanupDragHandlers();
+        };
+
+        activeDragHandlers = {
+          move,
+          up,
+          userSelect: originalUserSelect,
+          pointerTarget,
+          pointerId: event.pointerId,
+          usePointer,
+        };
+
+        if (usePointer) {
+          document.addEventListener("pointermove", move);
+          document.addEventListener("pointerup", up, { once: true });
+          document.addEventListener("pointercancel", up, { once: true });
+        } else {
+          document.addEventListener("mousemove", move);
+          document.addEventListener("mouseup", up, { once: true });
+        }
+        return;
+      }
+    }
   }
 
   const zoomValue = Number(canvasZoom?.value) || 1;
@@ -6431,7 +7123,6 @@ const handleResizePointerDown = (event, handle) => {
     let nextHeight = baseHeight;
     let nextX = baseLayout.x;
     let nextY = baseLayout.y;
-
     if (handle.x === 1) {
       nextWidth = baseWidth + deltaX;
     } else if (handle.x === -1) {
@@ -6849,7 +7540,7 @@ const handlePointerDown = (event) => {
       const parentNode = doc.value?.getParent?.(colNode.id);
       if (parentNode?.type !== "ElLayoutRow") continue;
       const colRect = nodeElement.getBoundingClientRect?.();
-      const edgeThreshold = 12;
+      const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? pointEvent.clientX - colRect.left <= edgeThreshold ||
           colRect.right - pointEvent.clientX <= edgeThreshold
@@ -6883,7 +7574,7 @@ const handlePointerDown = (event) => {
       });
       if (rowIds.length === 0) return null;
       const pointY = pointEvent.clientY;
-      const threshold = 12;
+      const threshold = rowInsertEdgeThreshold;
       for (let i = 0; i < rowIds.length; i += 1) {
         const rowId = rowIds[i];
         const rowElement = layoutElement.querySelector(
@@ -7175,7 +7866,7 @@ const handlePointerDown = (event) => {
               style: {
                 ...(buildFlowResetStyle(node.value.style) || {}),
                 width: "100%",
-                height: "100%",
+                height: isContainer.value ? "100%" : "auto",
               },
             };
             const updateCommand = new UpdateNodeCommand(
@@ -7234,13 +7925,13 @@ const handlePointerDown = (event) => {
             updatePatch.style = {
               ...(buildFlowResetStyle(node.value.style) || {}),
               width: "100%",
-              height: "100%",
+              height: isContainer.value ? "100%" : "auto",
             };
             if (shouldResetSize) {
               updatePatch.style = {
                 ...(buildFlowResetStyle(node.value.style) || {}),
                 width: "100%",
-                height: "100%",
+                height: isContainer.value ? "100%" : "auto",
               };
             }
             const updateCommand = new UpdateNodeCommand(
@@ -7299,7 +7990,7 @@ const handlePointerDown = (event) => {
           updatePatch.style = {
             ...(buildFlowResetStyle(node.value.style) || {}),
             width: "100%",
-            height: "100%",
+            height: isContainer.value ? "100%" : "auto",
           };
         } else if (shouldResetSize) {
           updatePatch.style = buildFlowResetStyle(node.value.style);
@@ -7603,8 +8294,8 @@ const handlePointerDown = (event) => {
 }
 
 .designer-node.drag-over {
-  outline: 2px solid #3b82f6;
-  background-color: rgba(59, 130, 246, 0.05);
+  outline: none;
+  background-color: transparent;
 }
 
 .empty-container-hint {

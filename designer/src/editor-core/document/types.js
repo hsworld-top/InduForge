@@ -823,7 +823,7 @@ export function createPageNode(options = {}) {
       fitMode: "contain",
       showGrid: false,
       enableSnap: true,
-      autoFit: false,
+      autoFit: true,
       background: { kind: "color", value: "#ffffff" },
       ...options.config,
     },
