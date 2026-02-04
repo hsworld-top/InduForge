@@ -10,7 +10,7 @@
           :min="0"
           :step="1"
           controls-position="right"
-          @update:model-value="handleWidthChange"
+          @update:modelValue="handleWidthChange"
         />
       </div>
       <div class="form-item">
@@ -18,7 +18,7 @@
         <el-select
           :model-value="borderStyle"
           size="small"
-          @update:model-value="handleStyleChange"
+          @update:modelValue="handleStyleChange"
         >
           <el-option label="无" value="none" />
           <el-option label="实线" value="solid" />
@@ -31,7 +31,7 @@
         <el-color-picker
           :model-value="borderColor"
           size="small"
-          @update:model-value="handleColorChange"
+          @update:modelValue="handleColorChange"
         />
       </div>
       <div class="form-item">
@@ -42,7 +42,7 @@
           :min="0"
           :step="1"
           controls-position="right"
-          @update:model-value="handleRadiusChange"
+          @update:modelValue="handleRadiusChange"
         />
       </div>
     </div>

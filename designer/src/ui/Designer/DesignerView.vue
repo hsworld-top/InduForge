@@ -231,6 +231,7 @@ const {
   currentPage,
   isLocked,
   readonlyState,
+  pageTabState,
 } = storeToRefs(editorStore);
 
 const zoom = ref(1);
@@ -250,6 +251,11 @@ const drawingTool = ref("");
 /** @type {import('vue').Ref<PageTab[]>} */
 const pageTabs = ref([]);
 const activePageTabId = ref("");
+
+if (pageTabState.value?.tabs?.length) {
+  pageTabs.value = pageTabState.value.tabs.map((item) => ({ ...item }));
+  activePageTabId.value = pageTabState.value.activeId || "";
+}
 
 /**
  * 打开页面标签页
@@ -378,10 +384,21 @@ watch(
   async (newTabId, oldTabId) => {
     // 标签页切换时，直接同步到 store
     if (newTabId && newTabId !== oldTabId) {
+      if (canUndo.value && currentPageId.value) {
+        editorStore.saveCurrentPageDraft();
+      }
       await editorStore.setCurrentPage(newTabId);
     }
   },
   { flush: "sync" }
+);
+
+watch(
+  [pageTabs, activePageTabId],
+  () => {
+    editorStore.setPageTabState(pageTabs.value, activePageTabId.value);
+  },
+  { deep: true }
 );
 
 // 初始化时打开当前页面
@@ -553,7 +570,10 @@ const handleRedo = () => {
  */
 const handlePreview = () => {
   const projectId = route.meta.project?.id;
-  router.push({ path: "/preview", query: { pid: projectId } });
+  router.push({
+    path: "/preview",
+    query: { pid: projectId, pageId: currentPageId.value || "" },
+  });
 };
 
 /**
@@ -784,10 +804,17 @@ const handleLayerMoveToBottom = () => {
 const loadProject = async () => {
   const project = route.meta.project;
   if (!project?.id) return;
-
+  if (editorStore.projectId === project.id && editorStore.doc) {
+    return;
+  }
   const result = await editorStore.loadProject(project.id);
   if (!result.ok) {
     ElMessage.error(result.error?.message || "加载工程失败");
+    return;
+  }
+  const targetPageId = String(route.query.pageId || "");
+  if (targetPageId) {
+    await editorStore.setCurrentPage(targetPageId);
   }
 };
 

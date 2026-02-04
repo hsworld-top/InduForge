@@ -7,7 +7,7 @@
         <el-select
           :model-value="position"
           size="small"
-          @update:model-value="handlePositionChange"
+          @update:modelValue="handlePositionChange"
         >
           <el-option label="relative" value="relative" />
           <el-option label="absolute" value="absolute" />
@@ -24,7 +24,7 @@
             size="small"
             :step="1"
             controls-position="right"
-            @update:model-value="handleLeftChange"
+            @update:modelValue="handleLeftChange"
           />
         </div>
         <div class="form-item">
@@ -34,7 +34,7 @@
             size="small"
             :step="1"
             controls-position="right"
-            @update:model-value="handleTopChange"
+            @update:modelValue="handleTopChange"
           />
         </div>
         <div class="form-item">
@@ -44,7 +44,7 @@
             size="small"
             :step="1"
             controls-position="right"
-            @update:model-value="handleRightChange"
+            @update:modelValue="handleRightChange"
           />
         </div>
         <div class="form-item">
@@ -54,7 +54,7 @@
             size="small"
             :step="1"
             controls-position="right"
-            @update:model-value="handleBottomChange"
+            @update:modelValue="handleBottomChange"
           />
         </div>
       </template>
@@ -66,7 +66,7 @@
           size="small"
           :step="1"
           controls-position="right"
-          @update:model-value="handleZIndexChange"
+          @update:modelValue="handleZIndexChange"
         />
       </div>
 
@@ -75,7 +75,7 @@
         <el-select
           :model-value="overflow"
           size="small"
-          @update:model-value="handleOverflowChange"
+          @update:modelValue="handleOverflowChange"
         >
           <el-option label="visible" value="visible" />
           <el-option label="hidden" value="hidden" />

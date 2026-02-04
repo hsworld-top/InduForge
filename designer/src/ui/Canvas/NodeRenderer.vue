@@ -1151,7 +1151,7 @@ const renderTag = computed(() => {
     case "EChart":
       return EChart;
     case "Text":
-      return "div";
+      return resolvedNodeProps.value?.tag || "div";
     default:
       return "div";
   }
@@ -1221,9 +1221,14 @@ const contentStyle = computed(() => {
   if (!node.value) return {};
   const containerStyle = resolveContainerStyle(node.value, {});
   const customStyle = normalizeStyleObject(node.value.style || {});
+  const textStyle =
+    node.value.type === "Text"
+      ? normalizeStyleObject(resolveTextPropStyle(resolvedNodeProps.value || {}))
+      : {};
   const parentNode = doc.value?.getParent?.(node.value.id);
   const style = {
     ...containerStyle,
+    ...textStyle,
     ...customStyle,
   };
   if (!style.overflow && !isContainer.value) {
@@ -2209,11 +2214,47 @@ const extractDatapointValue = (payload, datapointId) => {
   return null;
 };
 
+const modelValueTypes = new Set([
+  "Input",
+  "InputNumber",
+  "Select",
+  "Switch",
+  "Radio",
+  "Checkbox",
+  "Cascader",
+  "Transfer",
+  "Slider",
+  "Rate",
+  "ColorPicker",
+]);
+const supportsModelValue = computed(() =>
+  modelValueTypes.has(node.value?.type)
+);
+
+/**
+ * 更新组件的 modelValue
+ * @param {any} value - 新值
+ */
+const handleModelValueUpdate = (value) => {
+  if (!node.value) return;
+  if (props.readonly) {
+    applyPreviewPatch({ props: { modelValue: value } });
+    return;
+  }
+  editorStore.updateNode(node.value.id, {
+    props: { ...(node.value.props || {}), modelValue: value },
+  });
+};
+
 const componentEventListeners = computed(() => {
-  if (!props.readonly || !node.value) return {};
+  if (!node.value) return {};
+  const listeners = {};
+  if (supportsModelValue.value) {
+    listeners["update:modelValue"] = handleModelValueUpdate;
+  }
+  if (!props.readonly) return listeners;
   const manifest = componentRegistry.get(node.value.type);
   const definitions = normalizeEventDefinitions(manifest?.events || []);
-  const listeners = {};
   definitions.forEach((eventItem) => {
     if (!eventItem?.name || eventItem.name === "click") return;
     listeners[eventItem.name] = (...args) => {
@@ -2620,6 +2661,105 @@ const buildButtonDslPatch = (config) => {
 
 const buildRefInfo = () => {
   if (!node.value) return null;
+  const dslMethodMap = {
+    Input: "input",
+    InputNumber: "inputNumber",
+    Select: "select",
+    Cascader: "cascader",
+    Radio: "radio",
+    Checkbox: "checkbox",
+    Switch: "switch",
+    Table: "table",
+    BigDataTable: "bigDataTable",
+    Tree: "tree",
+    Dropdown: "dropdown",
+    Menu: "menu",
+    Tabs: "tabs",
+    Transfer: "transfer",
+    Tag: "tag",
+    Timeline: "timeline",
+    Steps: "steps",
+    ImageCarousel: "imageCarousel",
+    CarouselComponent: "carouselComponent",
+    Card: "card",
+    Pagination: "pagination",
+    Collapse: "collapse",
+    Slider: "slider",
+    Calendar: "calendar",
+    WebContainer: "webContainer",
+    Text: "text",
+  };
+  const applyCommonDslConfig = (config) => {
+    if (!config || typeof config !== "object") return;
+    const reservedKeys = new Set([
+      "id",
+      "label",
+      "type",
+      "props",
+      "state",
+      "style",
+      "className",
+      "events",
+      "visible",
+      "disabled",
+      "loading",
+      "permission",
+      "onClick",
+    ]);
+    const rawProps =
+      config.props && typeof config.props === "object" ? { ...config.props } : {};
+    Object.entries(config).forEach(([key, value]) => {
+      if (reservedKeys.has(key)) return;
+      if (rawProps[key] === undefined) {
+        rawProps[key] = value;
+      }
+    });
+    if (
+      Object.prototype.hasOwnProperty.call(rawProps, "value") &&
+      !Object.prototype.hasOwnProperty.call(rawProps, "modelValue")
+    ) {
+      rawProps.modelValue = rawProps.value;
+      delete rawProps.value;
+    }
+    const nextPatch = {};
+    if (Object.keys(rawProps).length > 0) {
+      nextPatch.props = { ...(node.value.props || {}), ...rawProps };
+    }
+    if (config.style && typeof config.style === "object") {
+      nextPatch.style = { ...(node.value.style || {}), ...config.style };
+    }
+    if (typeof config.className === "string" && config.className.trim()) {
+      const className = config.className.trim();
+      nextPatch.props = {
+        ...(nextPatch.props || node.value.props || {}),
+        class: className,
+      };
+    }
+    if (typeof config.label === "string" && config.label.trim()) {
+      nextPatch.label = config.label.trim();
+    }
+    if (typeof config.visible === "boolean") {
+      nextPatch.hidden = !config.visible;
+    }
+    if (typeof config.disabled === "boolean") {
+      nextPatch.props = {
+        ...(nextPatch.props || node.value.props || {}),
+        disabled: config.disabled,
+      };
+    }
+    if (typeof config.loading === "boolean") {
+      nextPatch.props = {
+        ...(nextPatch.props || node.value.props || {}),
+        loading: config.loading,
+      };
+    }
+    if (Object.keys(nextPatch).length === 0) return;
+    if (props.readonly) {
+      applyPreviewPatch(nextPatch);
+      return;
+    }
+    editorStore.updateNode(node.value.id, nextPatch);
+  };
   /**
    * 规范化下拉菜单项数据
    * @param {Record<string, any>} input - 菜单项数据
@@ -4368,6 +4508,17 @@ const buildRefInfo = () => {
       if (node.value?.type !== "Signature") return;
     },
   };
+  const currentType = node.value.type;
+  const dslMethodName = dslMethodMap[currentType];
+  if (
+    dslMethodName &&
+    !Object.prototype.hasOwnProperty.call(refInfo, dslMethodName)
+  ) {
+    refInfo[dslMethodName] = (config) => {
+      if (node.value?.type !== currentType) return;
+      applyCommonDslConfig(config);
+    };
+  }
   return refInfo;
 };
 
@@ -4423,7 +4574,6 @@ const scheduleDetailConfig = (force = false) => {
 watch(
   () => [props.readonly, node.value?.id, detailConfigText.value],
   () => {
-    if (!props.readonly) return;
     scheduleDetailConfig(true);
   },
   { immediate: true }
@@ -6209,10 +6359,51 @@ const normalizeStyleObject = (rawStyle) => {
  */
 const normalizeStyleValue = (key, value) => {
   if (value === null || value === undefined) return value;
+  if (typeof value === "string" && needsPxUnit(key)) {
+    const trimmed = value.trim();
+    if (trimmed && /^-?\d+(\.\d+)?$/.test(trimmed)) {
+      return `${trimmed}px`;
+    }
+  }
   if (typeof value === "number" && needsPxUnit(key)) {
     return `${value}px`;
   }
   return value;
+};
+
+/**
+ * 解析文本组件的样式属性
+ * @param {Record<string, any>} props - 文本属性
+ * @returns {Record<string, any>}
+ */
+const resolveTextPropStyle = (props) => {
+  if (!props || typeof props !== "object") return {};
+  const style = {};
+  if (props.fontSize !== undefined) style.fontSize = props.fontSize;
+  if (props.fontWeight !== undefined) style.fontWeight = props.fontWeight;
+  if (props.fontFamily) style.fontFamily = props.fontFamily;
+  if (props.color) style.color = props.color;
+  if (props.textAlign) style.textAlign = props.textAlign;
+  if (props.textAlign === "justify") {
+    style.textAlignLast = "justify";
+  }
+  if (props.lineHeight !== undefined) style.lineHeight = props.lineHeight;
+  if (props.letterSpacing !== undefined) style.letterSpacing = props.letterSpacing;
+  if (props.wordBreak) style.wordBreak = props.wordBreak;
+
+  const lineClamp = Number(props.lineClamp);
+  if (Number.isFinite(lineClamp) && lineClamp > 0) {
+    style.display = "-webkit-box";
+    style.overflow = "hidden";
+    style.WebkitLineClamp = lineClamp;
+    style.WebkitBoxOrient = "vertical";
+  } else if (props.truncate) {
+    style.whiteSpace = "nowrap";
+    style.overflow = "hidden";
+    style.textOverflow = "ellipsis";
+  }
+
+  return style;
 };
 
 /**
@@ -6233,6 +6424,7 @@ const needsPxUnit = (key) => {
     "maxWidth",
     "maxHeight",
     "fontSize",
+    "letterSpacing",
     "borderRadius",
     "gap",
     "padding",
@@ -6269,7 +6461,16 @@ const formatGridTemplate = (value) => {
 const isInteractiveTarget = (target) => {
   if (!target || !(target instanceof Element)) return false;
   if (target.isContentEditable) return true;
-  return Boolean(target.closest("[contenteditable='true']"));
+  if (target.closest("[contenteditable='true']")) return true;
+  if (target.closest("input,textarea,select,button")) return true;
+  if (
+    target.closest(
+      ".el-input,.el-input__inner,.el-textarea__inner,.el-select,.el-select__input,.el-select__wrapper,.el-radio,.el-checkbox,.el-switch,.el-slider,.el-cascader"
+    )
+  ) {
+    return true;
+  }
+  return false;
 };
 
 /**

@@ -751,6 +751,8 @@ export const useEditorStore = defineStore("editor", () => {
   const selection = shallowRef(null);
   /** @type {import('vue').ShallowRef<import('@/editor-core').Serializer>} */
   const serializer = shallowRef(markRaw(new Serializer()));
+  const pageDrafts = ref({});
+  const pageTabState = ref({ tabs: [], activeId: "" });
   /** @type {import('vue').ShallowRef<import('@/editor-core').PageLockManager | null>} */
   const lockManager = shallowRef(null);
   /** @type {import('vue').Ref<import('@/editor-core').PageLockState | null>} */
@@ -1136,6 +1138,17 @@ export const useEditorStore = defineStore("editor", () => {
 
     try {
       await releasePageLock();
+      const draft = pageDrafts.value?.[pageId];
+      if (draft) {
+        let nextSchema = resolveProjectSchema(draft, projectId.value, pageId);
+        const existingEntry = doc.value?.entry;
+        if (existingEntry) {
+          nextSchema.entry = { ...nextSchema.entry, ...existingEntry };
+        }
+        initEditor(nextSchema);
+        currentPageId.value = pageId;
+        return { ok: true };
+      }
       const pageResponse = await projectApi.getPage(projectId.value, pageId);
       const pagePayload = unwrapApiData(pageResponse) || {
         page: { id: pageId },
@@ -1419,9 +1432,61 @@ export const useEditorStore = defineStore("editor", () => {
         currentPageId.value
       );
       await projectApi.updatePage(projectId.value, currentPageId.value, payload);
+      if (pageDrafts.value[currentPageId.value]) {
+        const nextDrafts = { ...(pageDrafts.value || {}) };
+        delete nextDrafts[currentPageId.value];
+        pageDrafts.value = nextDrafts;
+      }
     } finally {
       saving.value = false;
     }
+  };
+
+  /**
+   * 暂存页面草稿（未保存的编辑内容）
+   * @param {string} pageId - 页面 ID
+   * @returns {void}
+   */
+  const savePageDraft = (pageId) => {
+    if (!doc.value || !pageId) return;
+    try {
+      const payload = serializer.value.exportPage(doc.value, pageId);
+      pageDrafts.value = { ...(pageDrafts.value || {}), [pageId]: payload };
+    } catch (error) {
+      // ignore
+    }
+  };
+
+  /**
+   * 保存当前页面草稿
+   * @returns {void}
+   */
+  const saveCurrentPageDraft = () => {
+    if (!currentPageId.value) return;
+    savePageDraft(currentPageId.value);
+  };
+
+  /**
+   * 获取页面草稿
+   * @param {string} pageId - 页面 ID
+   * @returns {Object | null}
+   */
+  const getPageDraft = (pageId) => {
+    if (!pageId) return null;
+    return pageDrafts.value?.[pageId] || null;
+  };
+
+  /**
+   * 更新页面标签状态
+   * @param {Array} tabs - 标签列表
+   * @param {string} activeId - 当前激活标签 ID
+   * @returns {void}
+   */
+  const setPageTabState = (tabs, activeId) => {
+    pageTabState.value = {
+      tabs: Array.isArray(tabs) ? tabs.map((item) => ({ ...item })) : [],
+      activeId: activeId || "",
+    };
   };
 
   /**
@@ -3248,6 +3313,12 @@ export const useEditorStore = defineStore("editor", () => {
     updateEntry,
     persistEntry,
     saveCurrentPage,
+    savePageDraft,
+    saveCurrentPageDraft,
+    getPageDraft,
+    pageDrafts,
+    pageTabState,
+    setPageTabState,
     updateCurrentPage,
     updateNode,
     isLabelUnique,

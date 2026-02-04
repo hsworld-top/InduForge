@@ -8,7 +8,7 @@
           :model-value="widthInput"
           size="small"
           placeholder="auto"
-          @update:model-value="handleWidthInput"
+          @update:modelValue="handleWidthInput"
           @change="handleWidthChange"
           @blur="handleWidthChange"
         >
@@ -17,7 +17,7 @@
               :model-value="widthUnit"
               size="small"
               style="width: 60px"
-              @update:model-value="handleWidthUnitChange"
+              @update:modelValue="handleWidthUnitChange"
             >
               <el-option label="px" value="px" />
               <el-option label="%" value="%" />
@@ -32,7 +32,7 @@
           :model-value="heightInput"
           size="small"
           placeholder="auto"
-          @update:model-value="handleHeightInput"
+          @update:modelValue="handleHeightInput"
           @change="handleHeightChange"
           @blur="handleHeightChange"
         >
@@ -41,7 +41,7 @@
               :model-value="heightUnit"
               size="small"
               style="width: 60px"
-              @update:model-value="handleHeightUnitChange"
+              @update:modelValue="handleHeightUnitChange"
             >
               <el-option label="px" value="px" />
               <el-option label="%" value="%" />

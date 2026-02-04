@@ -10,7 +10,7 @@
           :min="0"
           :step="1"
           controls-position="right"
-          @update:model-value="handleTopChange"
+          @update:modelValue="handleTopChange"
         />
       </div>
       <div class="form-item">
@@ -21,7 +21,7 @@
           :min="0"
           :step="1"
           controls-position="right"
-          @update:model-value="handleRightChange"
+          @update:modelValue="handleRightChange"
         />
       </div>
       <div class="form-item">
@@ -32,7 +32,7 @@
           :min="0"
           :step="1"
           controls-position="right"
-          @update:model-value="handleBottomChange"
+          @update:modelValue="handleBottomChange"
         />
       </div>
       <div class="form-item">
@@ -43,7 +43,7 @@
           :min="0"
           :step="1"
           controls-position="right"
-          @update:model-value="handleLeftChange"
+          @update:modelValue="handleLeftChange"
         />
       </div>
     </div>

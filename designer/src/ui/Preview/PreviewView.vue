@@ -131,7 +131,8 @@ const canvasStyle = computed(() => {
  */
 const handleBack = () => {
   const projectId = route.query.pid;
-  router.push({ path: "/", query: { pid: projectId } });
+  const pageId = route.query.pageId || "";
+  router.push({ path: "/", query: { pid: projectId, pageId } });
 };
 
 /**
@@ -159,7 +160,11 @@ onMounted(() => {
     projectId: projectId.value || editorStore.projectId,
     projectVariables: projectVariables.value || {},
     globalScripts: globalScripts.value || {},
-    pageId: currentPage.value?.name || currentPage.value?.id || null,
+    pageId:
+      currentPage.value?.name ||
+      currentPage.value?.id ||
+      route.query.pageId ||
+      null,
   });
   previewRuntime = runtime || null;
   runtime?.start?.();

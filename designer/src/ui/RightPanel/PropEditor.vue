@@ -5,54 +5,45 @@
       v-model="codeDraft"
       :language="prop.language || 'javascript'"
       :height="prop.height || '220px'"
-      @update:model-value="handleCodeChange"
+      @update:modelValue="handleCodeChange"
     />
 
     <!-- 字符串类型 -->
     <el-input
       v-else-if="prop.type === 'string'"
-      :model-value="modelValue"
+      v-model="modelProxy"
       :placeholder="prop.placeholder || '请输入'"
       size="small"
-      @update:model-value="handleChange"
     />
 
     <!-- 数字类型 -->
     <el-input-number
       v-else-if="prop.type === 'number'"
-      :model-value="modelValue"
+      v-model="modelProxy"
       :min="prop.min"
       :max="prop.max"
       :step="prop.step || 1"
       size="small"
       controls-position="right"
-      @update:model-value="handleChange"
     />
 
     <!-- 布尔类型 -->
     <el-switch
       v-else-if="prop.type === 'boolean'"
-      :model-value="modelValue"
+      v-model="modelProxy"
       size="small"
-      @update:model-value="handleChange"
     />
 
     <!-- 颜色类型 -->
     <el-color-picker
       v-else-if="prop.type === 'color'"
-      :model-value="modelValue"
+      v-model="modelProxy"
       size="small"
       show-alpha
-      @update:model-value="handleChange"
     />
 
     <!-- 枚举类型 -->
-    <el-select
-      v-else-if="prop.type === 'enum'"
-      :model-value="modelValue"
-      size="small"
-      @update:model-value="handleChange"
-    >
+    <el-select v-else-if="prop.type === 'enum'" v-model="modelProxy" size="small">
       <el-option
         v-for="opt in prop.options"
         :key="opt.value"
@@ -69,17 +60,13 @@
       :rows="3"
       :placeholder="prop.placeholder || '请输入 JSON'"
       size="small"
-      @update:model-value="handleJsonInput"
+      @update:modelValue="handleJsonInput"
+      @input="handleJsonInput"
       @change="commitJsonDraft"
     />
 
     <!-- 默认：文本输入 -->
-    <el-input
-      v-else
-      :model-value="String(modelValue ?? '')"
-      size="small"
-      @update:model-value="handleChange"
-    />
+    <el-input v-else v-model="modelProxy" size="small" />
   </div>
 </template>
 
@@ -109,6 +96,13 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["update:modelValue"]);
+
+const modelProxy = computed({
+  get: () => props.modelValue,
+  set: (value) => {
+    emit("update:modelValue", value);
+  },
+});
 
 const isCodeEditor = computed(() => props.prop?.editor === "code");
 const isJsonType = computed(() =>

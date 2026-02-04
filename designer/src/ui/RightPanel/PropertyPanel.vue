@@ -37,7 +37,7 @@
             :model-value="currentStyle"
             :min-width="containerMinSize?.width"
             :min-height="containerMinSize?.height"
-            @update:model-value="handleStyleChange"
+            @update:modelValue="handleStyleChange"
           />
           <el-divider style="margin: 12px 0" />
         </template>
@@ -97,7 +97,7 @@
             <PropEditor
               :prop="propDef"
               :model-value="getPropValue(propDef.name)"
-              @update:model-value="(val) => handlePropChange(propDef.name, val)"
+              @update:modelValue="(val) => handlePropChange(propDef.name, val)"
             />
           </div>
         </div>
@@ -134,7 +134,7 @@
                     class="region-toggle"
                     :model-value="Boolean(getPropValue(item.toggleProp))"
                     size="small"
-                    @update:model-value="
+                    @update:modelValue="
                       (val) => handlePropChange(item.toggleProp, Boolean(val))
                     "
                   />
@@ -146,7 +146,7 @@
                     size="small"
                     placeholder="auto"
                     :disabled="!isRegionEnabled(item)"
-                    @update:model-value="
+                    @update:modelValue="
                       (val) => handleSizeValueChange(item.sizeProp, val)
                     "
                   />
@@ -155,7 +155,7 @@
                     size="small"
                     class="region-unit-select"
                     :disabled="!isRegionEnabled(item)"
-                    @update:model-value="
+                    @update:modelValue="
                       (val) => handleSizeUnitChange(item.sizeProp, val)
                     "
                     @change="(val) => handleSizeUnitChange(item.sizeProp, val)"
@@ -168,7 +168,7 @@
                     class="region-toggle"
                     :model-value="Boolean(getPropValue(item.toggleProp))"
                     size="small"
-                    @update:model-value="
+                    @update:modelValue="
                       (val) => handlePropChange(item.toggleProp, Boolean(val))
                     "
                   />
@@ -205,7 +205,7 @@
                   <PropEditor
                     :prop="propDef"
                     :model-value="getPropValue(propDef.name)"
-                    @update:model-value="
+                    @update:modelValue="
                       (val) => handlePropChange(propDef.name, val)
                     "
                   />
@@ -596,7 +596,36 @@ import { usePanelState } from "./use-panel-state";
 import { getManifest } from "@/manifests";
 import { componentRegistry } from "@/editor-core";
 import { useEditorStore } from "@/stores/editor-store";
-import { ElMessage } from "element-plus";
+import {
+  ElMessage,
+  ElSelect,
+  ElInput,
+  ElInputNumber,
+  ElSwitch,
+  ElTable,
+  ElDropdown,
+  ElRadioGroup,
+  ElCheckboxGroup,
+  ElCascader,
+  ElImage,
+  ElTabs,
+  ElTimeline,
+  ElCarousel,
+  ElCard,
+  ElSteps,
+  ElPagination,
+  ElCollapse,
+  ElSlider,
+  ElCalendar,
+  ElContainer,
+  ElHeader,
+  ElAside,
+  ElMain,
+  ElFooter,
+  ElRow,
+  ElCol,
+  ElTransfer,
+} from "element-plus";
 import IconEpLink from "~icons/ep/link";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
@@ -1031,6 +1060,263 @@ const isElementPlusType = (type) => {
   if (!normalized) return false;
   if (normalized.startsWith("El")) return true;
   return elementPlusTypes.has(normalized);
+};
+
+/**
+ * 获取 Element Plus 组件定义
+ * @param {string | undefined} type - 组件类型
+ * @returns {any}
+ */
+const resolveElementPlusComponent = (type) => {
+  const normalized = normalizeElementType(type);
+  if (!normalized) return null;
+  const map = {
+    Input: ElInput,
+    InputNumber: ElInputNumber,
+    Select: ElSelect,
+    Switch: ElSwitch,
+    Table: ElTable,
+    BigDataTable: ElTable,
+    Dropdown: ElDropdown,
+    Radio: ElRadioGroup,
+    Checkbox: ElCheckboxGroup,
+    Cascader: ElCascader,
+    Image: ElImage,
+    Tabs: ElTabs,
+    Timeline: ElTimeline,
+    ImageCarousel: ElCarousel,
+    CarouselComponent: ElCarousel,
+    WebContainer: ElCard,
+    Card: ElCard,
+    BusinessCard: ElCard,
+    Steps: ElSteps,
+    Pagination: ElPagination,
+    Collapse: ElCollapse,
+    Slider: ElSlider,
+    Calendar: ElCalendar,
+    Signature: ElInput,
+    ElContainer: ElContainer,
+    ElHeader: ElHeader,
+    ElAside: ElAside,
+    ElMain: ElMain,
+    ElFooter: ElFooter,
+    ElLayoutRow: ElRow,
+    ElCol: ElCol,
+    Transfer: ElTransfer,
+  };
+  return map[normalized] || null;
+};
+
+/**
+ * 构建 Element Plus 组件的属性定义
+ * @param {string | undefined} type - 组件类型
+ * @returns {Array<{ name: string, type: string, label: string, group: string, defaultValue?: any, options?: Array<{label: string, value: any}> }>}
+ */
+const elementPlusPropLabelMap = {
+  Input: {
+    modelValue: "输入值",
+    placeholder: "占位符",
+    type: "类型",
+    disabled: "禁用",
+    readonly: "只读",
+    clearable: "可清空",
+    showPassword: "显示密码",
+    maxlength: "最大长度",
+    minlength: "最小长度",
+    rows: "行数",
+    autosize: "自适应高度",
+  },
+  Select: {
+    modelValue: "选中值",
+    placeholder: "占位符",
+    multiple: "多选",
+    clearable: "可清空",
+    filterable: "可搜索",
+    disabled: "禁用",
+    collapseTags: "折叠标签",
+    collapseTagsTooltip: "折叠提示",
+    multipleLimit: "多选上限",
+    emptyValues: "空值列表",
+    valueKey: "值字段",
+  },
+  Table: {
+    data: "数据",
+    columns: "列配置",
+    stripe: "斑马纹",
+    border: "边框",
+    size: "尺寸",
+    height: "高度",
+    maxHeight: "最大高度",
+    rowKey: "行键",
+    highlightCurrentRow: "高亮当前行",
+    showHeader: "显示表头",
+    fit: "列宽自适应",
+    emptyText: "空提示",
+  },
+  BigDataTable: {
+    data: "数据",
+    columns: "列配置",
+    stripe: "斑马纹",
+    border: "边框",
+    size: "尺寸",
+    height: "高度",
+    maxHeight: "最大高度",
+    rowKey: "行键",
+    highlightCurrentRow: "高亮当前行",
+    showHeader: "显示表头",
+    fit: "列宽自适应",
+    emptyText: "空提示",
+  },
+  Dropdown: {
+    trigger: "触发方式",
+    placement: "弹出位置",
+    hideOnClick: "点击关闭",
+    splitButton: "分裂按钮",
+    disabled: "禁用",
+  },
+  Radio: {
+    modelValue: "选中值",
+    size: "尺寸",
+    disabled: "禁用",
+  },
+  Checkbox: {
+    modelValue: "选中值",
+    size: "尺寸",
+    disabled: "禁用",
+    min: "最少选中",
+    max: "最多选中",
+  },
+  Cascader: {
+    modelValue: "选中值",
+    options: "级联数据",
+    placeholder: "占位符",
+    clearable: "可清空",
+    filterable: "可搜索",
+    disabled: "禁用",
+    showAllLevels: "显示全路径",
+    collapseTags: "折叠标签",
+    separator: "分隔符",
+    props: "字段映射",
+  },
+  Transfer: {
+    modelValue: "选中值",
+    data: "数据",
+    filterable: "可搜索",
+    filterPlaceholder: "搜索占位",
+    titles: "标题",
+    buttonTexts: "按钮文本",
+    props: "字段映射",
+  },
+  InputNumber: {
+    modelValue: "数值",
+    min: "最小值",
+    max: "最大值",
+    step: "步长",
+    precision: "精度",
+    controls: "显示控制",
+    controlsPosition: "控制位置",
+    disabled: "禁用",
+  },
+  Image: {
+    src: "图片地址",
+    fit: "填充模式",
+    alt: "替代文本",
+    lazy: "懒加载",
+    previewSrcList: "预览列表",
+    initialIndex: "预览索引",
+  },
+  ImageCarousel: {
+    height: "高度",
+    autoplay: "自动播放",
+    interval: "间隔",
+    indicatorPosition: "指示器位置",
+    arrow: "箭头显示",
+    loop: "循环",
+  },
+  CarouselComponent: {
+    height: "高度",
+    autoplay: "自动播放",
+    interval: "间隔",
+    indicatorPosition: "指示器位置",
+    arrow: "箭头显示",
+    loop: "循环",
+  },
+  WebContainer: {
+    header: "标题",
+    shadow: "阴影",
+    bodyStyle: "内容样式",
+  },
+  Card: {
+    header: "标题",
+    shadow: "阴影",
+    bodyStyle: "内容样式",
+  },
+  BusinessCard: {
+    header: "标题",
+    shadow: "阴影",
+    bodyStyle: "内容样式",
+  },
+  Collapse: {
+    modelValue: "展开项",
+    accordion: "手风琴",
+  },
+  Slider: {
+    modelValue: "数值",
+    min: "最小值",
+    max: "最大值",
+    step: "步长",
+    showInput: "显示输入框",
+    range: "范围选择",
+    vertical: "竖向",
+    height: "高度",
+    disabled: "禁用",
+  },
+  Signature: {
+    modelValue: "内容",
+    disabled: "禁用",
+    readonly: "只读",
+    placeholder: "占位符",
+  },
+};
+
+const buildElementPlusPropDefs = (type) => {
+  const comp = resolveElementPlusComponent(type);
+  const rawProps = comp?.props || comp?.__props || null;
+  if (!rawProps || typeof rawProps !== "object") return [];
+  const labelMap = elementPlusPropLabelMap[normalizeElementType(type)] || null;
+  if (!labelMap) return [];
+  const entries = Array.isArray(rawProps)
+    ? rawProps.map((key) => [key, {}])
+    : Object.entries(rawProps);
+
+  const resolvePropType = (prop) => {
+    const typeDef = prop?.type;
+    const typeValue = Array.isArray(typeDef) ? typeDef[0] : typeDef;
+    if (typeValue === Boolean) return "boolean";
+    if (typeValue === Number) return "number";
+    if (typeValue === Array) return "array";
+    if (typeValue === Object) return "object";
+    return "string";
+  };
+
+  return entries
+    .filter(([name]) => Object.prototype.hasOwnProperty.call(labelMap, name))
+    .map(([name, prop]) => {
+    const typeValue = resolvePropType(prop);
+    const def =
+      typeof prop?.default === "function" ? prop.default() : prop?.default;
+    const options = Array.isArray(prop?.values)
+      ? prop.values.map((value) => ({ label: String(value), value }))
+      : undefined;
+    return {
+      name,
+      type: options ? "enum" : typeValue,
+      label: labelMap[name] || name,
+      group: "官方属性",
+      defaultValue: def,
+      options,
+    };
+  });
 };
 
 /**
@@ -2450,10 +2736,23 @@ watch(
     const nextContent = preset?.content || "";
     if (!nextContent) return;
     editorStore.updateNode(node.id, { detailConfig: nextContent });
-    void editorStore.saveCurrentPage?.();
   },
   { immediate: true },
 );
+
+/**
+ * 直接应用节点补丁（兜底处理编辑器状态异常）
+ * @param {string} nodeId - 节点 ID
+ * @param {Record<string, any>} patch - 更新补丁
+ * @returns {boolean}
+ */
+const applyNodePatch = (nodeId, patch) => {
+  if (!doc.value || !nodeId || !patch) return false;
+  if (typeof doc.value._updateNode !== "function") return false;
+  doc.value._updateNode(nodeId, patch);
+  docVersion.value += 1;
+  return true;
+};
 
 /**
  * 获取组件 Manifest
@@ -2561,8 +2860,34 @@ const layoutFallbackProps = {
 };
 
 const effectiveManifest = computed(() => {
-  if (manifest.value) return manifest.value;
   const type = normalizeElementType(currentElement.value?.type);
+  const elementPlusProps = isElementPlusType(type)
+    ? buildElementPlusPropDefs(type)
+    : [];
+  if (manifest.value) {
+    const baseProps = Array.isArray(manifest.value.props)
+      ? manifest.value.props
+      : Array.isArray(manifest.value.propsSchema)
+        ? manifest.value.propsSchema
+        : [];
+    if (elementPlusProps.length === 0) {
+      return { ...manifest.value, props: baseProps };
+    }
+    const existing = new Set(baseProps.map((item) => item.name));
+    const mergedProps = [
+      ...baseProps,
+      ...elementPlusProps.filter((item) => !existing.has(item.name)),
+    ];
+    return { ...manifest.value, props: mergedProps };
+  }
+  if (elementPlusProps.length > 0) {
+    return {
+      type: type || "ElementPlus",
+      name: type || "ElementPlus",
+      category: "组件",
+      props: elementPlusProps,
+    };
+  }
   const fallback = layoutFallbackProps[type];
   if (!fallback) return null;
   return {
@@ -2694,12 +3019,7 @@ const groupedProps = computed(() => {
     }
     groups.get(groupName).props.push(prop);
   }
-  let result = Array.from(groups.values());
-  if (isElementPlusType(currentElement.value?.type)) {
-    result = result.filter((group) => group.name !== "数据");
-  }
-
-  return result;
+  return Array.from(groups.values());
 });
 
 const displayPropGroups = computed(() => {
@@ -2798,6 +3118,7 @@ const bindingPageVariableRows = computed(() => {
         .includes(keyword);
     });
 });
+
 
 const bindingPageComponentTree = computed(() => {
   docVersion.value;
@@ -3181,14 +3502,59 @@ const normalizeDetailConfigBindings = (content) => {
   return text;
 };
 
+const textStylePropNames = new Set([
+  "fontSize",
+  "fontWeight",
+  "fontFamily",
+  "color",
+  "textAlign",
+  "lineHeight",
+  "letterSpacing",
+  "wordBreak",
+]);
+const textStyleNumberProps = new Set([
+  "fontSize",
+  "lineHeight",
+  "letterSpacing",
+]);
+
+/**
+ * 读取文本样式值（将 px 转成数字）
+ * @param {string} propName - 属性名
+ * @param {any} value - 原始值
+ * @returns {any}
+ */
+const resolveTextStyleValue = (propName, value) => {
+  if (value === null || value === undefined) return value;
+  if (textStyleNumberProps.has(propName)) {
+    if (typeof value === "number") return value;
+    const text = String(value).trim();
+    if (!text) return undefined;
+    const match = text.match(/^(-?\d+(\.\d+)?)/);
+    if (match) {
+      const num = Number.parseFloat(match[1]);
+      return Number.isFinite(num) ? num : value;
+    }
+  }
+  return value;
+};
+
 /**
  * ?????
  * @param {string} propName - ???
  */
 const getPropValue = (propName) => {
   const el = currentElement.value;
-  if (!el?.props) return undefined;
-  return el.props[propName];
+  if (!el) return undefined;
+  const propValue = el.props ? el.props[propName] : undefined;
+  if (propValue !== undefined) return propValue;
+  if (
+    normalizeElementType(el.type) === "Text" &&
+    textStylePropNames.has(propName)
+  ) {
+    return resolveTextStyleValue(propName, el.style?.[propName]);
+  }
+  return propValue;
 };
 
 /**
@@ -3343,7 +3709,15 @@ const currentStyle = computed(() => {
  */
 const handleStyleChange = (newStyle) => {
   if (!selectedNode.value) return;
-  editorStore.updateNode(selectedNode.value.id, { style: newStyle });
+  const nodeId = selectedNode.value.id;
+  const ok = editorStore.updateNode(nodeId, { style: newStyle });
+  const latest = doc.value?.getNode?.(nodeId);
+  const shouldPatch =
+    !ok || (latest && JSON.stringify(latest.style || {}) !== JSON.stringify(newStyle || {}));
+  if (shouldPatch) {
+    applyNodePatch(nodeId, { style: newStyle });
+  }
+  docVersion.value += 1;
 };
 
 /**
@@ -3365,7 +3739,6 @@ const openConfigDialog = (type) => {
           editorStore.updateNode(node.id, {
             props: { ...(node.props || {}), option: nextContent },
           });
-          void editorStore.saveCurrentPage?.();
         }
       } else {
         configDraft.value = rawOption;
@@ -3381,7 +3754,6 @@ const openConfigDialog = (type) => {
         configDraft.value = nextContent;
         if (nextContent) {
           editorStore.updateNode(node.id, { detailConfig: nextContent });
-          void editorStore.saveCurrentPage?.();
         }
       } else {
         configDraft.value = rawDetail;
@@ -3434,7 +3806,6 @@ const saveConfigDialog = () => {
   } else {
     editorStore.updateNode(node.id, { styleConfig: content });
   }
-  void editorStore.saveCurrentPage?.();
   configDialogVisible.value = false;
 };
 
@@ -3456,7 +3827,6 @@ const clearConfigDialog = () => {
   } else {
     editorStore.updateNode(node.id, { styleConfig: "" });
   }
-  void editorStore.saveCurrentPage?.();
 };
 
 /**
@@ -3677,7 +4047,6 @@ const saveBinding = () => {
   } else if (selectedGraphic.value) {
     editorStore.updateGraphic(target.id, { bindings: nextBindings });
   }
-  void editorStore.saveCurrentPage?.();
   bindingEditorCode.value = normalizeBindingReference(code);
   bindingDialogVisible.value = false;
 };
@@ -3716,13 +4085,101 @@ const handlePropChange = (propName, value) => {
   if (!el) return;
 
   const newProps = { ...el.props, [propName]: value };
+  const isTextComponent = normalizeElementType(el.type) === "Text";
+  let nextStyle = null;
+  if (isTextComponent) {
+    nextStyle = { ...(el.style || {}) };
+    const stylePatch = {};
+    if (propName === "fontSize") stylePatch.fontSize = value;
+    if (propName === "fontWeight") stylePatch.fontWeight = value;
+    if (propName === "fontFamily") stylePatch.fontFamily = value;
+    if (propName === "color") stylePatch.color = value;
+    if (propName === "textAlign") {
+      stylePatch.textAlign = value;
+      if (value === "justify") {
+        stylePatch.textAlignLast = "justify";
+      } else {
+        delete nextStyle.textAlignLast;
+      }
+      if (value && value !== "left") {
+        if (!nextStyle.width) {
+          nextStyle.width = "100%";
+        }
+        if (!nextStyle.display) {
+          nextStyle.display = "block";
+        }
+      }
+    }
+    if (propName === "lineHeight") stylePatch.lineHeight = value;
+    if (propName === "letterSpacing") stylePatch.letterSpacing = value;
+    if (propName === "wordBreak") stylePatch.wordBreak = value;
+
+    const lineClampValue =
+      propName === "lineClamp" ? Number(value) : Number(newProps.lineClamp);
+    const truncateValue =
+      propName === "truncate" ? Boolean(value) : Boolean(newProps.truncate);
+    if (Number.isFinite(lineClampValue) && lineClampValue > 0) {
+      nextStyle.display = "-webkit-box";
+      nextStyle.overflow = "hidden";
+      nextStyle.WebkitLineClamp = lineClampValue;
+      nextStyle.WebkitBoxOrient = "vertical";
+      nextStyle.whiteSpace = "normal";
+      nextStyle.textOverflow = "clip";
+    } else if (truncateValue) {
+      nextStyle.whiteSpace = "nowrap";
+      nextStyle.overflow = "hidden";
+      nextStyle.textOverflow = "ellipsis";
+      delete nextStyle.WebkitLineClamp;
+      delete nextStyle.WebkitBoxOrient;
+      if (nextStyle.display === "-webkit-box") {
+        delete nextStyle.display;
+      }
+    } else {
+      delete nextStyle.WebkitLineClamp;
+      delete nextStyle.WebkitBoxOrient;
+      if (nextStyle.display === "-webkit-box") {
+        delete nextStyle.display;
+      }
+      delete nextStyle.whiteSpace;
+      delete nextStyle.textOverflow;
+    }
+
+    if (Object.keys(stylePatch).length > 0) {
+      Object.assign(nextStyle, stylePatch);
+    }
+  }
+  const currentBindings = el.bindings || {};
+  const hasBinding = Object.prototype.hasOwnProperty.call(
+    currentBindings,
+    propName,
+  );
+  const nextBindings = hasBinding
+    ? Object.fromEntries(
+        Object.entries(currentBindings).filter(([key]) => key !== propName),
+      )
+    : currentBindings;
   if (regionSizeDefaults[propName]) {
     const parsed = parseSize(value);
     setRegionSizeState(propName, parsed.value, parsed.unit);
   }
 
   if (selectedNode.value) {
-    editorStore.updateNode(el.id, { props: newProps });
+    const patch = { props: newProps };
+    if (nextStyle) {
+      patch.style = nextStyle;
+    }
+    if (hasBinding) {
+      patch.bindings = nextBindings;
+    }
+    const nodeId = el.id;
+    const ok = editorStore.updateNode(nodeId, patch);
+    const latest = doc.value?.getNode?.(nodeId);
+    const latestValue = latest?.props?.[propName];
+    const shouldPatch = !ok || latestValue !== value;
+    if (shouldPatch) {
+      applyNodePatch(nodeId, patch);
+    }
+    docVersion.value += 1;
   } else if (selectedGraphic.value) {
     editorStore.updateGraphic(el.id, { props: newProps });
   }

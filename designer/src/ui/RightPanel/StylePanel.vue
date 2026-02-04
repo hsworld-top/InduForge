@@ -9,18 +9,18 @@
               :model-value="currentStyle"
               :min-width="containerMinSize?.width"
               :min-height="containerMinSize?.height"
-              @update:model-value="handleStyleChange"
+              @update:modelValue="handleStyleChange"
             />
             <el-divider style="margin: 12px 0" />
           </template>
           <BackgroundEditor
             :model-value="currentStyle"
-            @update:model-value="handleStyleChange"
+            @update:modelValue="handleStyleChange"
           />
           <el-divider style="margin: 12px 0" />
           <BorderEditor
             :model-value="currentStyle"
-            @update:model-value="handleStyleChange"
+            @update:modelValue="handleStyleChange"
           />
         </el-collapse-item>
 
@@ -28,21 +28,21 @@
         <el-collapse-item title="布局样式" name="layout">
           <PositionEditor
             :model-value="currentStyle"
-            @update:model-value="handleStyleChange"
+            @update:modelValue="handleStyleChange"
           />
           <el-divider style="margin: 12px 0" />
           <SpacingEditor
             title="内边距"
             prefix="padding"
             :model-value="currentStyle"
-            @update:model-value="handleStyleChange"
+            @update:modelValue="handleStyleChange"
           />
           <el-divider style="margin: 12px 0" />
           <SpacingEditor
             title="外边距"
             prefix="margin"
             :model-value="currentStyle"
-            @update:model-value="handleStyleChange"
+            @update:modelValue="handleStyleChange"
           />
         </el-collapse-item>
       </el-collapse>

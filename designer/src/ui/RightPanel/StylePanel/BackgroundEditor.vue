@@ -7,7 +7,7 @@
         :model-value="backgroundColor"
         size="small"
         show-alpha
-        @update:model-value="handleColorChange"
+        @update:modelValue="handleColorChange"
       />
     </div>
   </div>
