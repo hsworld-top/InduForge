@@ -2683,6 +2683,7 @@ export const useEditorStore = defineStore("editor", () => {
       "ElFooter",
       "ElCol",
     ].includes(parentNode.type);
+    const isTabsContainer = parentNode.type === "Tabs";
     if (isRegionContainer) {
       // 区域容器内默认填满
       if (parentNode.type === "ElCol") {
@@ -2700,6 +2701,17 @@ export const useEditorStore = defineStore("editor", () => {
           height: "100%",
         };
       }
+      if (isLayoutContainer) {
+        delete nodeStyle.minHeight;
+        delete nodeStyle.minWidth;
+      }
+    }
+    if (isTabsContainer) {
+      nodeStyle = {
+        ...nodeStyle,
+        width: "100%",
+        height: "100%",
+      };
       if (isLayoutContainer) {
         delete nodeStyle.minHeight;
         delete nodeStyle.minWidth;

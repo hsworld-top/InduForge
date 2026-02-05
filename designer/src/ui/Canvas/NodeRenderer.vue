@@ -9,7 +9,7 @@
     :id="useComponentWrapper ? nodeDomId : null"
     :ref="setNodeRef"
     v-bind="useComponentWrapper ? resolvedProps : {}"
-    v-on="useComponentWrapper ? componentEventListeners : {}"
+    v-on="useComponentWrapper ? mergedEventListeners : {}"
     @click.stop="handleClick"
     @dblclick.stop="handleDoubleClick"
     @pointerdown.capture="handlePointerDown"
@@ -26,7 +26,7 @@
       :id="!useComponentWrapper ? nodeDomId : null"
       :style="contentStyleWithConfig"
       v-bind="resolvedProps"
-      v-on="componentEventListeners"
+      v-on="mergedEventListeners"
       ref="contentRef"
     >
       <template v-if="displayContent !== null">{{ displayContent }}</template>
@@ -99,7 +99,43 @@
           :label="tab.label"
           :name="tab.name"
         >
-          {{ tab.content }}
+          <div
+            class="tabs-pane-body"
+            :class="{ 'is-drop-active': isDropActive }"
+            :data-node-id="node.id"
+            :data-node-type="node.type"
+            @dragover.prevent="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop.prevent="handleDrop"
+          >
+            <template v-if="isActiveTab(tab)">
+              <template
+                v-if="isContainer && activeTabChildIds.length === 0 && !props.isRoot"
+              >
+                <div class="empty-container-hint">
+                  <span v-if="isDropActive">释放以添加组件</span>
+                  <span v-else>拖拽组件到此处</span>
+                </div>
+              </template>
+              <span
+                v-if="activeTabChildIds.length === 0 && tab.content"
+                class="tabs-pane-placeholder"
+              >
+                {{ tab.content }}
+              </span>
+              <NodeRenderer
+                v-for="childId in activeTabChildIds"
+                :key="childId"
+                :node-id="childId"
+                :readonly="props.readonly"
+              />
+            </template>
+            <template v-else>
+              <span class="tabs-pane-placeholder">
+                {{ tab.content }}
+              </span>
+            </template>
+          </div>
         </el-tab-pane>
       </template>
       <template v-if="node?.type === 'Collapse'">
@@ -151,6 +187,7 @@
           isContainer &&
           !hasChildren &&
           !props.isRoot &&
+          node?.type !== 'Tabs' &&
           !(
             props.readonly &&
             (isRegionContainer ||
@@ -209,6 +246,7 @@
       />
       <NodeRenderer
         v-for="childId in node.children || []"
+        v-if="node?.type !== 'Tabs'"
         :key="childId"
         :node-id="childId"
         :readonly="props.readonly"
@@ -421,9 +459,9 @@ const fallbackTimelineItems = [
   { label: "步骤三", timestamp: "2024-01-03" },
 ];
 const fallbackTabs = [
-  { name: "tab1", label: "标签一", content: "内容一" },
-  { name: "tab2", label: "标签二", content: "内容二" },
-  { name: "tab3", label: "标签三", content: "内容三" },
+  { name: "tab1", label: "标签一", content: "" },
+  { name: "tab2", label: "标签二", content: "" },
+  { name: "tab3", label: "标签三", content: "" },
 ];
 const fallbackStepsItems = [
   { title: "步骤一" },
@@ -548,6 +586,24 @@ const resolvedProps = computed(() => {
     node.value.type,
     resolvedNodeProps.value || {}
   );
+  if (node.value.type === "Tabs") {
+    const hasModelValue =
+      Object.prototype.hasOwnProperty.call(nextProps, "modelValue") &&
+      nextProps.modelValue !== undefined &&
+      nextProps.modelValue !== null &&
+      String(nextProps.modelValue).trim();
+    const hasActiveName =
+      Object.prototype.hasOwnProperty.call(nextProps, "activeName") &&
+      nextProps.activeName !== undefined &&
+      nextProps.activeName !== null &&
+      String(nextProps.activeName).trim();
+    if (!hasModelValue && hasActiveName) {
+      nextProps.modelValue = nextProps.activeName;
+    }
+    if (!hasModelValue && !hasActiveName && activeTabName.value) {
+      nextProps.modelValue = activeTabName.value;
+    }
+  }
   if (node.value.type === "ElCol") {
     const parentNode = doc.value?.getParent?.(node.value.id);
     const rawColumns = Number(parentNode?.props?.columns);
@@ -606,7 +662,221 @@ const timelineItems = computed(() => {
   return normalizeOptions(node.value?.props?.items, fallbackTimelineItems);
 });
 const tabsList = computed(() => {
+  docVersion.value;
   return normalizeOptions(node.value?.props?.tabs, fallbackTabs);
+});
+const activeTabName = ref("");
+const tabHeaderWidth = ref(0);
+
+/**
+ * 同步 Tabs 激活项（编辑态跟随点击）
+ */
+const syncActiveTabName = () => {
+  if (!node.value || node.value.type !== "Tabs") return;
+  const resolvedPropsValue = resolvedNodeProps.value || {};
+  const rawActiveName =
+    resolvedPropsValue.modelValue ??
+    resolvedPropsValue.activeName ??
+    node.value?.props?.activeName;
+  if (rawActiveName !== undefined && rawActiveName !== null) {
+    const normalized = String(rawActiveName).trim();
+    if (normalized) {
+      activeTabName.value = normalized;
+      return;
+    }
+  }
+  const firstTab = tabsList.value?.[0];
+  if (!firstTab) return;
+  const fallbackName = firstTab.name ?? firstTab.label;
+  if (fallbackName) activeTabName.value = String(fallbackName);
+};
+
+watch(
+  () => [
+    node.value?.id,
+    resolvedNodeProps.value?.modelValue,
+    resolvedNodeProps.value?.activeName,
+    tabsList.value?.length,
+  ],
+  () => {
+    syncActiveTabName();
+  },
+  { immediate: true }
+);
+
+/**
+ * 同步 Tabs 头部宽度（用于左右布局）
+ */
+const syncTabsHeaderWidth = () => {
+  if (!node.value || node.value.type !== "Tabs") return;
+  const tabPosition =
+    resolvedNodeProps.value?.tabPosition ||
+    node.value?.props?.tabPosition ||
+    "top";
+  if (tabPosition !== "left" && tabPosition !== "right") return;
+  const rootEl = nodeRef.value;
+  if (!rootEl) return;
+  const headerSelector =
+    tabPosition === "left"
+      ? ".el-tabs__header-vertical.is-left"
+      : tabPosition === "right"
+        ? ".el-tabs__header-vertical.is-right"
+        : ".el-tabs__header";
+  const headerEl = rootEl.querySelector?.(headerSelector);
+  if (!headerEl) return;
+  const rect = headerEl.getBoundingClientRect?.();
+  if (!rect) return;
+  const nextWidth = Math.max(0, Math.round(rect.width));
+  if (!nextWidth) return;
+  if (tabHeaderWidth.value !== nextWidth) {
+    tabHeaderWidth.value = nextWidth;
+  }
+  rootEl.style.setProperty("--tabs-vertical-width", `${nextWidth}px`);
+};
+
+watch(
+  () => [
+    node.value?.type,
+    resolvedNodeProps.value?.tabPosition,
+    tabsList.value?.length,
+  ],
+  async () => {
+    await nextTick();
+    syncTabsHeaderWidth();
+  },
+  { immediate: true }
+);
+
+/**
+ * 处理 Tabs 点击事件
+ * @param {Object} pane - Tab 面板
+ */
+const handleTabsClick = (pane) => {
+  if (!pane) return;
+  const name =
+    pane?.props?.name ??
+    pane?.name ??
+    pane?.paneName ??
+    pane?.label ??
+    "";
+  if (name) {
+    activeTabName.value = String(name);
+  }
+};
+
+/**
+ * 处理 Tabs 切换事件
+ * @param {string} name - 激活名称
+ */
+const handleTabsChange = (name) => {
+  if (!name) return;
+  activeTabName.value = String(name);
+};
+
+/**
+ * 处理 Tabs 删除事件
+ * @param {string} name - Tab 名称
+ */
+const resolveTabNameValue = (input) => {
+  if (input && typeof input === "object") {
+    return (
+      input?.props?.name ??
+      input?.name ??
+      input?.paneName ??
+      input?.label ??
+      ""
+    );
+  }
+  return input ?? "";
+};
+
+const handleTabsRemove = (name) => {
+  if (node.value?.type !== "Tabs") return;
+  const resolvedName = resolveTabNameValue(name);
+  if (!resolvedName) return;
+  const tabs = Array.isArray(node.value?.props?.tabs)
+    ? [...node.value.props.tabs]
+    : [];
+  if (!tabs.length) return;
+  const normalizedName = String(resolvedName);
+  const updateTabsProps = (patch) => {
+    if (!node.value || !patch || typeof patch !== "object") return;
+    editorStore.updateNode(node.value.id, {
+      props: { ...(node.value.props || {}), ...patch },
+    });
+  };
+  const removeIndex = tabs.findIndex((item) => {
+    const tabName = item?.name ?? item?.label ?? "";
+    return String(tabName) === normalizedName;
+  });
+  let targetIndex = removeIndex;
+  if (targetIndex < 0) {
+    const numericIndex = Number(normalizedName);
+    if (Number.isFinite(numericIndex)) {
+      const candidate = Math.trunc(numericIndex);
+      if (candidate >= 0 && candidate < tabs.length) {
+        targetIndex = candidate;
+      }
+    }
+  }
+  if (targetIndex < 0) return;
+  tabs.splice(targetIndex, 1);
+  updateTabsProps({ tabs });
+
+  const childIds = Array.isArray(node.value?.children)
+    ? [...node.value.children]
+    : [];
+  childIds.forEach((childId) => {
+    const childNode = doc.value?.getNode?.(childId);
+    if (!childNode) return;
+    const tabKey = childNode.props?.tabKey ?? "";
+    if (String(tabKey) === normalizedName) {
+      editorStore.removeNode(childId);
+    }
+  });
+
+  const nextTab =
+    tabs[targetIndex] ||
+    tabs[targetIndex - 1] ||
+    tabs[0] ||
+    null;
+  const nextName = nextTab?.name ?? nextTab?.label ?? "";
+  updateTabsProps({ activeName: nextName ? String(nextName) : "" });
+};
+
+/**
+ * 处理 Tabs 编辑事件
+ * @param {string} name - Tab 名称
+ * @param {string} action - edit 动作
+ */
+const handleTabsEdit = (name, action) => {
+  if (action !== "remove") return;
+  handleTabsRemove(name);
+};
+const isActiveTab = (tab) => {
+  if (!tab) return false;
+  const name = tab.name ?? tab.label ?? "";
+  return String(name) === activeTabName.value;
+};
+
+/**
+ * Tabs 激活内容区子节点
+ * @returns {string[]} 子节点ID列表
+ */
+const activeTabChildIds = computed(() => {
+  docVersion.value;
+  if (!node.value || node.value.type !== "Tabs" || !doc.value) return [];
+  const current = activeTabName.value;
+  return (node.value.children || []).filter((childId) => {
+    const childNode = doc.value?.getNode?.(childId);
+    if (!childNode) return false;
+    const tabKey = childNode.props?.tabKey;
+    if (!tabKey) {
+      // 兼容历史数据：未标记的默认归属当前激活页
+      return Boolean(current);
+    }
+    return String(tabKey) === String(current);
+  });
 });
 const stepsItems = computed(() => {
   return normalizeOptions(node.value?.props?.items, fallbackStepsItems);
@@ -1035,6 +1305,14 @@ const nodeClass = computed(() => {
   if (node.value.type === "ElLayoutRow") {
     classes.push("el-layout-row");
   }
+  if (node.value.type === "Tabs") {
+    classes.push("tabs-container");
+    const position =
+      resolvedNodeProps.value?.tabPosition ||
+      node.value.props?.tabPosition ||
+      "top";
+    classes.push(`tabs-pos-${position}`);
+  }
   if (node.value.type === "ElCol") {
     classes.push("el-col");
     const parentNode = doc.value?.getParent?.(node.value.id);
@@ -1177,6 +1455,19 @@ const renderKey = computed(() => {
       : 0;
     return `${node.value.id}-${columnsSize}-${dataSize}-${tableRenderVersion.value}`;
   }
+  if (node.value.type === "Tabs") {
+    const tabs = Array.isArray(node.value.props?.tabs)
+      ? node.value.props.tabs
+      : [];
+    const tabKey = tabs
+      .map((item) => item?.name ?? item?.label ?? "")
+      .join("|");
+    const activeName =
+      node.value.props?.activeName ??
+      resolvedNodeProps.value?.activeName ??
+      "";
+    return `${node.value.id}-${tabKey}-${String(activeName)}`;
+  }
   return node.value.id || "";
 });
 
@@ -1274,6 +1565,16 @@ const contentStyle = computed(() => {
     style.height = "100%";
     style.minHeight = "100%";
     style.alignSelf = "stretch";
+    if (!style.display) {
+      style.display = "block";
+    }
+  }
+  if (parentNode?.type === "Tabs") {
+    style.width = "100%";
+    style.height = "100%";
+    style.minHeight = "100%";
+    style.alignSelf = "stretch";
+    style.flex = "1 1 auto";
     if (!style.display) {
       style.display = "block";
     }
@@ -1391,6 +1692,14 @@ const wrapperStyle = computed(() => {
     style.height = "auto";
   }
   if (parentNode?.type === "ElCol" && isMovable.value) {
+    style.width = "100%";
+    style.height = "100%";
+    if (style.position === "absolute") {
+      style.left = "0";
+      style.top = "0";
+    }
+  }
+  if (parentNode?.type === "Tabs") {
     style.width = "100%";
     style.height = "100%";
     if (style.position === "absolute") {
@@ -1870,21 +2179,21 @@ const normalizeGlobalValue = (detail) => {
  * @param {Record<string, { default?: any }>} definitions - 变量定义
  * @returns {Record<string, any>}
  */
-const buildVarValuesFromDefinitions = (definitions) => {
+function buildVarValuesFromDefinitions(definitions) {
   const result = {};
   if (!definitions || typeof definitions !== "object") return result;
   Object.entries(definitions).forEach(([name, detail]) => {
     result[name] = normalizeGlobalValue(detail);
   });
   return result;
-};
+}
 
 /**
  * 构建表达式上下文
  * @param {Record<string, any>} propsValue - 当前组件属性
  * @returns {import("@/data").ExpressionContext}
  */
-const buildExpressionContext = (propsValue = {}) => {
+function buildExpressionContext(propsValue = {}) {
   const pageId = currentPage.value?.id;
   const pageDefs = doc.value?.vars?.pages?.[pageId] || {};
   const globalDefs = projectVariables.value || {};
@@ -1900,7 +2209,7 @@ const buildExpressionContext = (propsValue = {}) => {
     $props: propsValue,
     state: globalValues,
   };
-};
+}
 
 /**
  * 解析表达式值
@@ -1909,14 +2218,14 @@ const buildExpressionContext = (propsValue = {}) => {
  * @param {*} fallback - 兜底值
  * @returns {*}
  */
-const resolveExpressionValue = (expr, context, fallback) => {
+function resolveExpressionValue(expr, context, fallback) {
   if (typeof expr !== "string" || !expr.trim()) return fallback;
   const text = expr.trim();
   const value = text.includes("{{")
     ? evaluateTemplate(text, context)
     : evaluate(text, context);
   return value === undefined ? fallback : value;
-};
+}
 
 /**
  * 解析表达式绑定
@@ -1924,7 +2233,7 @@ const resolveExpressionValue = (expr, context, fallback) => {
  * @param {Record<string, any>} propsValue - 当前组件属性
  * @returns {Record<string, any>}
  */
-const resolveExprBindings = (bindings, propsValue) => {
+function resolveExprBindings(bindings, propsValue) {
   if (!bindings || typeof bindings !== "object") return {};
   const context = buildExpressionContext(propsValue);
   const resolved = {};
@@ -1941,7 +2250,7 @@ const resolveExprBindings = (bindings, propsValue) => {
     }
   });
   return resolved;
-};
+}
 
 const connectionCache = new Map();
 const queryCache = new Map();
@@ -2265,6 +2574,28 @@ const componentEventListeners = computed(() => {
   return listeners;
 });
 
+/**
+ * 编辑态组件事件监听
+ */
+const designEventListeners = computed(() => {
+  if (props.readonly || !node.value) return {};
+  if (node.value.type !== "Tabs") return {};
+  return {
+    "tab-click": handleTabsClick,
+    "tab-change": handleTabsChange,
+    "update:modelValue": handleTabsChange,
+    "tab-remove": handleTabsRemove,
+    edit: handleTabsEdit,
+  };
+});
+
+/**
+ * 合并事件监听
+ */
+const mergedEventListeners = computed(() => {
+  return { ...componentEventListeners.value, ...designEventListeners.value };
+});
+
 const handleSelect = (event) => {
   if (!node.value || !selection.value) return;
   // 锁定的节点不能选中
@@ -2372,6 +2703,13 @@ const handleClick = (event) => {
   if (props.readonly) {
     void runPreviewScript("click", event);
     return;
+  }
+  if (node.value?.type === "Tabs") {
+    const hitNodeEl = event.target?.closest?.("[data-node-id]");
+    const hitNodeId = hitNodeEl?.getAttribute?.("data-node-id");
+    if (hitNodeId && hitNodeId !== node.value.id) {
+      return;
+    }
   }
   if (isClickOnContainerBorder(event)) {
     handleSelect(event);
@@ -3437,6 +3775,50 @@ const buildRefInfo = () => {
       }
       if (typeof patch.hidden === "boolean") {
         nextPatch.hidden = patch.hidden;
+      }
+      if (Object.keys(nextPatch).length === 0) return;
+      if (props.readonly) {
+        applyPreviewPatch(nextPatch);
+        return;
+      }
+      editorStore.updateNode(node.value.id, nextPatch);
+    },
+    /**
+     * 应用 Tabs DSL 配置
+     * @param {Record<string, any>} config - Tabs DSL 配置
+     * @returns {void}
+     */
+    tabs: (config) => {
+      if (node.value?.type !== "Tabs" || !config || typeof config !== "object") {
+        return;
+      }
+      if (config.type && String(config.type) !== "Tabs") return;
+      const nextPatch = {};
+      if (Object.prototype.hasOwnProperty.call(config, "label")) {
+        nextPatch.label = String(config.label ?? "");
+      }
+      const propsPatch = { ...(node.value.props || {}) };
+      if (Object.prototype.hasOwnProperty.call(config, "id")) {
+        const value = String(config.id ?? "");
+        if (value) propsPatch.id = value;
+      }
+      if (config.className && String(config.className).trim()) {
+        propsPatch.class = String(config.className).trim();
+      }
+      if (config.props && typeof config.props === "object") {
+        const rawProps = { ...config.props };
+        if (Array.isArray(rawProps.items) && !Array.isArray(rawProps.tabs)) {
+          rawProps.tabs = rawProps.items;
+          delete rawProps.items;
+        }
+        Object.assign(propsPatch, rawProps);
+      }
+      nextPatch.props = propsPatch;
+      if (config.style && typeof config.style === "object") {
+        nextPatch.style = {
+          ...(node.value.style || {}),
+          ...config.style,
+        };
       }
       if (Object.keys(nextPatch).length === 0) return;
       if (props.readonly) {
@@ -5588,6 +5970,18 @@ const handleDrop = (event) => {
     if (!inserted) {
       notifyInsertFailure();
     }
+    if (inserted && targetNode?.type === "Tabs") {
+      const tabKey =
+        activeTabName.value ||
+        tabsList.value?.[0]?.name ||
+        tabsList.value?.[0]?.label ||
+        "";
+      if (tabKey) {
+        editorStore.updateNode(inserted.id, {
+          props: { ...(inserted.props || {}), tabKey: String(tabKey) },
+        });
+      }
+    }
     endDrag();
   } catch (err) {
     const type = payload || fallbackType;
@@ -5917,6 +6311,18 @@ const handleDrop = (event) => {
     if (!inserted) {
       notifyInsertFailure();
     }
+    if (inserted && targetNode?.type === "Tabs") {
+      const tabKey =
+        activeTabName.value ||
+        tabsList.value?.[0]?.name ||
+        tabsList.value?.[0]?.label ||
+        "";
+      if (tabKey) {
+        editorStore.updateNode(inserted.id, {
+          props: { ...(inserted.props || {}), tabKey: String(tabKey) },
+        });
+      }
+    }
     endDrag();
   }
 };
@@ -6202,6 +6608,11 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
 
     style.gridTemplateRows = rows.join(" ");
     style.gridTemplateAreas = areas.join(" ");
+  } else if (currentNode.type === "Tabs") {
+    style.display = "flex";
+    style.flexDirection = "column";
+    style.position = "relative";
+    style.overflow = "hidden";
   } else if (currentNode.type === "ElHeader") {
     const parentNode = doc.value?.getParent?.(currentNode.id);
     const headerHeight =
@@ -7539,6 +7950,13 @@ const handlePointerDown = (event) => {
   if (isInteractiveTarget(event.target)) return;
   const targetNodeEl = event.target?.closest?.("[data-node-id]");
   const targetNodeId = targetNodeEl?.getAttribute?.("data-node-id");
+  if (
+    node.value.type === "Tabs" &&
+    targetNodeId &&
+    targetNodeId !== node.value.id
+  ) {
+    return;
+  }
   if (targetNodeId && targetNodeId !== node.value.id) {
     if (event.altKey) return;
     if (!isContainer.value) return;
@@ -8181,6 +8599,56 @@ const handlePointerDown = (event) => {
         );
         const shouldResetSize =
           node.value.positioning === "absolute" || node.value.layoutItem?.free;
+        if (dropRegion?.type === "FreeContainer") {
+          const containerEl = document.querySelector(
+            `[data-node-id="${dropRegion.id}"]`
+          );
+          const containerRect = containerEl?.getBoundingClientRect?.();
+          const nextX = containerRect
+            ? (upEvent.clientX - containerRect.left) / zoomValue
+            : 0;
+          const nextY = containerRect
+            ? (upEvent.clientY - containerRect.top) / zoomValue
+            : 0;
+          const defaultSize = resolveDefaultSize(node.value.type);
+          const nextAbs = {
+            x: Math.max(0, Math.round(nextX)),
+            y: Math.max(0, Math.round(nextY)),
+            w: defaultSize.width,
+            h: defaultSize.height,
+            z: baseLayout.z,
+          };
+          const nextLayoutItem = {
+            ...(node.value.layoutItem || {}),
+            free: { mode: "abs", abs: { ...nextAbs } },
+          };
+          const nextProps = { ...(node.value.props || {}) };
+          if ("tabKey" in nextProps) delete nextProps.tabKey;
+          const updateCommand = new UpdateNodeCommand(node.value.id, {
+            positioning: "absolute",
+            absolutePos: nextAbs,
+            flowLayout: undefined,
+            layoutItem: nextLayoutItem,
+            props: nextProps,
+          });
+          if (history.value?.isInTransaction?.()) {
+            history.value.executeInTransaction(moveCommand);
+            history.value.executeInTransaction(updateCommand);
+          } else if (history.value?.execute) {
+            history.value.execute(moveCommand);
+            history.value.execute(updateCommand);
+          } else if (doc.value?._moveNode && doc.value?._updateNode) {
+            doc.value._moveNode(node.value.id, dropRegion.id, insertIndex);
+            doc.value._updateNode(node.value.id, {
+              positioning: "absolute",
+              absolutePos: nextAbs,
+              flowLayout: undefined,
+              layoutItem: nextLayoutItem,
+              props: nextProps,
+            });
+          }
+          return;
+        }
         const updatePatch = {
           positioning: "flow",
           absolutePos: undefined,
@@ -8193,6 +8661,23 @@ const handlePointerDown = (event) => {
             width: "100%",
             height: isContainer.value ? "100%" : "auto",
           };
+        } else if (dropRegion?.type === "Tabs") {
+          updatePatch.style = {
+            ...(buildFlowResetStyle(node.value.style) || {}),
+            width: "100%",
+            height: "100%",
+          };
+          const tabKey =
+            activeTabName.value ||
+            tabsList.value?.[0]?.name ||
+            tabsList.value?.[0]?.label ||
+            "";
+          if (tabKey) {
+            updatePatch.props = {
+              ...(node.value.props || {}),
+              tabKey: String(tabKey),
+            };
+          }
         } else if (shouldResetSize) {
           updatePatch.style = buildFlowResetStyle(node.value.style);
         }
@@ -8430,6 +8915,133 @@ const handlePointerDown = (event) => {
 
 .designer-node.is-container {
   min-height: 40px;
+}
+
+.designer-node.tabs-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.designer-node.tabs-container :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: visible;
+}
+
+.designer-node.tabs-container :deep(.el-tab-pane) {
+  flex: 1;
+  min-height: 0;
+  overflow: visible;
+}
+
+.designer-node.tabs-container :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.designer-node.tabs-container :deep(.el-tabs--border-card > .el-tabs__content) {
+  padding: 0;
+}
+
+.designer-node.tabs-container :deep(.el-tabs) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.designer-node.tabs-container.tabs-pos-left :deep(.el-tabs),
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs) {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch;
+}
+
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs) {
+  flex-direction: row !important;
+}
+
+.designer-node.tabs-container.tabs-pos-left :deep(.el-tabs__header),
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs__header) {
+  width: auto;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  float: none;
+  clear: none;
+  align-self: stretch;
+}
+
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs__header) {
+  order: 2;
+}
+
+.designer-node.tabs-container.tabs-pos-left :deep(.el-tabs__content),
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs__content) {
+  width: auto;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+  float: none;
+  clear: none;
+}
+
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs__content) {
+  order: 1;
+}
+
+.designer-node.tabs-container.tabs-pos-left :deep(.el-tabs__nav-wrap),
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs__nav-wrap) {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.designer-node.tabs-container.tabs-pos-left :deep(.el-tabs__nav-scroll),
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs__nav-scroll) {
+  height: 100%;
+}
+
+.designer-node.tabs-container.tabs-pos-left :deep(.el-tabs__nav),
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs__nav) {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  margin-top: 0;
+}
+
+.designer-node.tabs-container.tabs-pos-left :deep(.el-tabs__content),
+.designer-node.tabs-container.tabs-pos-right :deep(.el-tabs__content) {
+  min-height: 100%;
+}
+
+.tabs-pane-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+  min-height: 40px;
+  overflow: visible;
+}
+
+.tabs-pane-body .designer-node {
+  flex: 1 1 auto;
+}
+
+.tabs-pane-body.is-drop-active .empty-container-hint {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.tabs-pane-placeholder {
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 .designer-node.el-layout {

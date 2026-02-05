@@ -1388,6 +1388,7 @@ registerManifest({
   type: "Tabs",
   name: "标签页",
   category: "PC端组件",
+  isContainer: true,
   defaultSize: { width: 360, height: 200 },
   props: [
     {
@@ -1410,14 +1411,41 @@ registerManifest({
       ],
     },
     {
+      name: "closable",
+      type: "boolean",
+      label: "可关闭",
+      group: "功能",
+      defaultValue: false,
+    },
+    {
+      name: "tabPosition",
+      type: "enum",
+      label: "标签位置",
+      group: "样式",
+      defaultValue: "top",
+      options: [
+        { label: "上", value: "top" },
+        { label: "右", value: "right" },
+        { label: "下", value: "bottom" },
+        { label: "左", value: "left" },
+      ],
+    },
+    {
+      name: "stretch",
+      type: "boolean",
+      label: "宽度自撑",
+      group: "样式",
+      defaultValue: false,
+    },
+    {
       name: "tabs",
       type: "array",
       label: "标签页",
       group: "数据",
       defaultValue: [
-        { name: "tab1", label: "标签一", content: "内容一" },
-        { name: "tab2", label: "标签二", content: "内容二" },
-        { name: "tab3", label: "标签三", content: "内容三" },
+        { name: "tab1", label: "标签一", content: "" },
+        { name: "tab2", label: "标签二", content: "" },
+        { name: "tab3", label: "标签三", content: "" },
       ],
     },
   ],
@@ -2143,4 +2171,3 @@ export default {
   getAllManifests,
   getManifestsByCategory,
 };
-
