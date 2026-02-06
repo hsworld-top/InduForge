@@ -946,9 +946,14 @@ const parseParamNames = (value) => {
 };
 
 export const initPreviewRuntime = (options) => {
-  const { projectId, projectVariables, globalScripts } = options || {};
+  const { projectId, projectVariables, globalScripts, pageLifecycle, pageVariables } =
+    options || {};
   const overrides = new Map();
   const timerIds = new Set();
+  const pageTimerIds = new Set();
+  const lifecycleConfig = pageLifecycle || {};
+  const pageVarOverrides = new Map();
+  const pageVarDefs = pageVariables && typeof pageVariables === "object" ? pageVariables : {};
 
   const updateMappedValue = (prop, nextValue, detail) => {
     const fallbackValue = normalizeGlobalValue(detail);
@@ -1087,6 +1092,56 @@ export const initPreviewRuntime = (options) => {
     },
   );
 
+
+  const normalizePageValue = (detail) => {
+    if (!detail || typeof detail !== "object") return detail ?? null;
+    if (detail.default === undefined && detail.defaultValue !== undefined) {
+      return normalizeGlobalValue({ ...detail, default: detail.defaultValue });
+    }
+    return normalizeGlobalValue(detail);
+  };
+
+  const triggerPageVariableChange = async (name, value, previous) => {
+    const itemsRaw = lifecycleConfig?.variableChanges;
+    const items = Array.isArray(itemsRaw)
+      ? itemsRaw
+      : itemsRaw?.items || [];
+    const hits = items.filter(
+      (item) => (item.variable || item.name) === name && item?.code,
+    );
+    for (const item of hits) {
+      if (item?.enabled === false) continue;
+      await runCode(item.code, { name, value, previous }, null, options?.pageId);
+    }
+  };
+
+  const pageVarsProxy = new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (typeof prop !== "string") return undefined;
+        if (pageVarOverrides.has(prop)) return pageVarOverrides.get(prop);
+        const detail = pageVarDefs?.[prop];
+        if (!detail) return undefined;
+        return normalizePageValue(detail);
+      },
+      set(_target, prop, value) {
+        if (typeof prop !== "string") return false;
+        const detail = pageVarDefs?.[prop];
+        const prev = pageVarOverrides.has(prop)
+          ? pageVarOverrides.get(prop)
+          : detail
+            ? normalizePageValue(detail)
+            : undefined;
+        pageVarOverrides.set(prop, value);
+        if (prev !== value) {
+          triggerPageVariableChange(prop, value, prev);
+        }
+        return true;
+      },
+    },
+  );
+
   const buildCustomScripts = () => {
     const items = globalScripts?.custom?.items || [];
     const handlers = {};
@@ -1098,6 +1153,7 @@ export const initPreviewRuntime = (options) => {
         if (!code.trim()) return undefined;
         const scope = {
           $global: globalsProxy,
+          $vars: pageVarsProxy,
           customScripts: handlers,
           console,
           $event: undefined,
@@ -1178,6 +1234,7 @@ export const initPreviewRuntime = (options) => {
     const context = {
       $event: event,
       $global: globalsProxy,
+      $vars: pageVarsProxy,
       customScripts,
       components,
       console,
@@ -1203,9 +1260,31 @@ export const initPreviewRuntime = (options) => {
     }
   };
 
+  /**
+   * 启动页面定时器
+   * @returns {void}
+   */
+  const startPageTimers = () => {
+    const timers = Array.isArray(lifecycleConfig?.timers)
+      ? lifecycleConfig.timers
+      : lifecycleConfig?.timers?.items || [];
+    timers.forEach((item) => {
+      if (!item?.code || item?.enabled === false) return;
+      const interval = Number(item.interval || item.time || 1000);
+      const id = setInterval(
+        () => {
+          void runCode(item.code, { type: "timer", name: item.name }, null, options?.pageId);
+        },
+        Math.max(100, interval),
+      );
+      pageTimerIds.add(id);
+    });
+  };
+
   const start = async () => {
     const systemCode = globalScripts?.system?.startup?.code;
     await runCode(systemCode, { type: "startup" });
+    await runPageLifecycleHandlers("onMounted");
     const timers = globalScripts?.timers?.items || [];
     timers.forEach((item) => {
       const interval = Number(item.interval || item.time || 1000);
@@ -1218,11 +1297,15 @@ export const initPreviewRuntime = (options) => {
       );
       timerIds.add(id);
     });
+    startPageTimers();
   };
 
   const stop = async () => {
     timerIds.forEach((id) => clearInterval(id));
     timerIds.clear();
+    pageTimerIds.forEach((id) => clearInterval(id));
+    pageTimerIds.clear();
+    await runPageLifecycleHandlers("onUnmounted");
     const shutdownCode = globalScripts?.system?.shutdown?.code;
     await runCode(shutdownCode, { type: "shutdown" });
   };

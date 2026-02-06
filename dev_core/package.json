@@ -8,6 +8,7 @@
     "dev": "nodemon src/index.js",
     "db:init": "node scripts/init-database.js init",
     "db:reset": "node scripts/init-database.js reset && node scripts/init-database.js init",
+    "mqtt:test": "node scripts/test_mqtt_server.js",
     "test": "cross-env NODE_ENV=test ENABLE_DB_SYNC=false ENABLE_SWAGGER=false jest --runInBand"
   },
   "keywords": [],

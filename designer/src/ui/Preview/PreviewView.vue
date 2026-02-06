@@ -160,6 +160,8 @@ onMounted(() => {
     projectId: projectId.value || editorStore.projectId,
     projectVariables: projectVariables.value || {},
     globalScripts: globalScripts.value || {},
+    pageLifecycle: currentPage.value?.lifecycle || {},
+    pageVariables: doc.value?.vars?.pages?.[currentPageId.value] || {},
     pageId:
       currentPage.value?.name ||
       currentPage.value?.id ||

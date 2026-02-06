@@ -656,6 +656,20 @@ const buildSchemaFromPagePayload = (payload, projectId) => {
   });
 
   const page = createPageNode(payload.page || payload);
+  if (payload?.vars && typeof payload.vars === "object") {
+    const nextPages =
+      payload.vars.pages && typeof payload.vars.pages === "object"
+        ? payload.vars.pages
+        : {};
+    schema.vars = {
+      ...schema.vars,
+      ...payload.vars,
+      pages: {
+        ...(schema.vars?.pages || {}),
+        ...nextPages,
+      },
+    };
+  }
   if (payload?.entry && typeof payload.entry === "object") {
     schema.entry = { ...schema.entry, ...payload.entry };
   }
@@ -1465,6 +1479,22 @@ export const useEditorStore = defineStore("editor", () => {
         doc.value,
         currentPageId.value
       );
+      const pageVars = doc.value?.schema?.vars?.pages?.[currentPageId.value];
+      if (pageVars && typeof pageVars === "object") {
+        const existingVars =
+          payload.vars && typeof payload.vars === "object" ? payload.vars : {};
+        const existingPages =
+          existingVars.pages && typeof existingVars.pages === "object"
+            ? existingVars.pages
+            : {};
+        payload.vars = {
+          ...existingVars,
+          pages: {
+            ...existingPages,
+            [currentPageId.value]: pageVars,
+          },
+        };
+      }
       await projectApi.updatePage(projectId.value, currentPageId.value, payload);
       if (pageDrafts.value[currentPageId.value]) {
         const nextDrafts = { ...(pageDrafts.value || {}) };
