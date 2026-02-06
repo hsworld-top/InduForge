@@ -134,6 +134,10 @@ const hasContent = computed(() => {
   return (root?.children || []).length > 0;
 });
 
+const handleForceRefresh = () => {
+  docVersion.value += 1;
+};
+
 /**
  * 兜底处理画布点击选中，避免组件内部阻止冒泡导致无法选中
  * @param {PointerEvent | MouseEvent} event - 鼠标事件
@@ -459,10 +463,12 @@ const handleClickOutside = (event) => {
 
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
+  window.addEventListener("designer:force-refresh", handleForceRefresh);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
+  window.removeEventListener("designer:force-refresh", handleForceRefresh);
 });
 
 /**

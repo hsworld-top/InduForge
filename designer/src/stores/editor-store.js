@@ -125,6 +125,40 @@ const normalizeGlobalScripts = (raw) => {
 };
 
 /**
+ * 获取 Menu 组件默认详细配置
+ * @returns {string}
+ */
+const getMenuDefaultDetailConfig = () =>
+  'this.menu({\n' +
+  '  id: "menuNav",\n' +
+  '  label: "菜单基础配置",\n' +
+  '  type: "Menu",\n' +
+  '  props: {\n' +
+  '    defaultActive: "2",\n' +
+  '    items: [\n' +
+  '      { index: "1", label: "导航一", icon: "location" },\n' +
+  '      { index: "2", label: "导航二", icon: "menu" },\n' +
+  '      { index: "3", label: "导航三", icon: "document", disabled: true },\n' +
+  '      { index: "4", label: "导航四", icon: "setting" },\n' +
+  '    ],\n' +
+  '  },\n' +
+  '});';
+
+/**
+ * 获取 Menu 组件默认属性
+ * @returns {Record<string, any>}
+ */
+const getMenuDefaultProps = () => ({
+  defaultActive: "2",
+  items: [
+    { index: "1", label: "导航一", icon: "location" },
+    { index: "2", label: "导航二", icon: "menu" },
+    { index: "3", label: "导航三", icon: "document", disabled: true },
+    { index: "4", label: "导航四", icon: "setting" },
+  ],
+});
+
+/**
  * 规范化页面列表
  * @param {*} payload - 原始响应
  * @returns {Array}
@@ -2746,6 +2780,10 @@ export const useEditorStore = defineStore("editor", () => {
       style: nodeStyle,
       layoutItem,
     });
+    if (type === "Menu") {
+      node.detailConfig = getMenuDefaultDetailConfig();
+      node.props = { ...(node.props || {}), ...getMenuDefaultProps() };
+    }
     if (type === "ElLayoutRow") {
       const rawColumns = Number(node.props?.columns);
       const normalizedColumns =

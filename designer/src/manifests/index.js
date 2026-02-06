@@ -1272,11 +1272,6 @@ registerManifest({
       type: "array",
       label: "菜单项",
       group: "数据",
-      defaultValue: [
-        { index: "1", label: "菜单一" },
-        { index: "2", label: "菜单二" },
-        { index: "3", label: "菜单三" },
-      ],
     },
   ],
 });
@@ -1442,11 +1437,6 @@ registerManifest({
       type: "array",
       label: "标签页",
       group: "数据",
-      defaultValue: [
-        { name: "tab1", label: "标签一", content: "" },
-        { name: "tab2", label: "标签二", content: "" },
-        { name: "tab3", label: "标签三", content: "" },
-      ],
     },
   ],
 });

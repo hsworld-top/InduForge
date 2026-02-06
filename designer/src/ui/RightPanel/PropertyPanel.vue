@@ -76,29 +76,31 @@
             :key="propDef?.name || propIndex"
             class="prop-item"
           >
-            <div class="prop-label">
-              <span>{{ propDef.label }}</span>
-              <el-tooltip
-                v-if="shouldShowBindButton(propDef)"
-                content="绑定数据"
-                placement="top"
-              >
-                <el-button
-                  size="small"
-                  text
-                  class="bind-btn"
-                  :class="{ 'is-active': hasPropBinding(propDef.name) }"
-                  @click="handleBindClick(propDef)"
+            <template v-if="!shouldHideProp(propDef)">
+              <div class="prop-label">
+                <span>{{ propDef.label }}</span>
+                <el-tooltip
+                  v-if="shouldShowBindButton(propDef)"
+                  content="绑定数据"
+                  placement="top"
                 >
-                  <IconEpLink />
-                </el-button>
-              </el-tooltip>
-            </div>
-            <PropEditor
-              :prop="propDef"
-              :model-value="getPropValue(propDef.name)"
-              @update:modelValue="(val) => handlePropChange(propDef.name, val)"
-            />
+                  <el-button
+                    size="small"
+                    text
+                    class="bind-btn"
+                    :class="{ 'is-active': hasPropBinding(propDef.name) }"
+                    @click="handleBindClick(propDef)"
+                  >
+                    <IconEpLink />
+                  </el-button>
+                </el-tooltip>
+              </div>
+              <PropEditor
+                :prop="propDef"
+                :model-value="getPropValue(propDef.name)"
+                @update:modelValue="(val) => handlePropChange(propDef.name, val)"
+              />
+            </template>
           </div>
         </div>
       </template>
@@ -181,7 +183,11 @@
                 :key="propDef?.name || propIndex"
               >
                 <div
-                  v-if="propDef && (!isEChart || propDef.name !== 'option')"
+                  v-if="
+                    propDef &&
+                    (!isEChart || propDef.name !== 'option') &&
+                    !shouldHideProp(propDef)
+                  "
                   class="prop-item"
                 >
                   <div class="prop-label">
@@ -322,7 +328,7 @@
     <template #footer>
       <el-button @click="clearConfigDialog">清除</el-button>
       <el-button @click="configDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveConfigDialog">保存</el-button>
+      <el-button type="primary" @click="saveConfigDialog(true)">保存</el-button>
     </template>
   </el-dialog>
 
@@ -726,6 +732,15 @@ const configAssetFolders = ref([]);
 const configAssets = ref([]);
 const configAssetSearch = ref("");
 const configAssetTreeRef = ref(null);
+let detailDraftTimer = null;
+const emitDetailConfig = (nodeId, code) => {
+  if (!nodeId || !code) return;
+  window.dispatchEvent(
+    new CustomEvent("designer:detail-config", {
+      detail: { nodeId, code },
+    }),
+  );
+};
 
 const unwrapApiData = (response) =>
   response?.data?.data ?? response?.data ?? response;
@@ -843,6 +858,279 @@ const bindingEnumSelectedProjectGroupId = ref(null);
 const bindingEnumSelectedPageGroupId = ref("page-root");
 const bindingEnumSelectedProjectVar = ref(null);
 const bindingEnumSelectedPageVar = ref(null);
+
+/**
+ * 应用本地补丁（用于设计态强制刷新）
+ * @param {import('@/editor-core').ComponentNode} node - 目标节点
+ * @param {Partial<import('@/editor-core').ComponentNode>} patch - 补丁
+ */
+const applyLocalNodePatch = (node, patch) => {
+  if (!node || !patch || typeof patch !== "object") return;
+  if (doc.value?._updateNode && node.id) {
+    doc.value._updateNode(node.id, patch);
+    docVersion.value += 1;
+    return;
+  }
+  if (patch.props) {
+    node.props = { ...(node.props || {}), ...patch.props };
+  }
+  if (patch.style) {
+    node.style = { ...(node.style || {}), ...patch.style };
+  }
+  if (patch.detailConfig !== undefined) {
+    node.detailConfig = patch.detailConfig;
+  }
+  if (patch.styleConfig !== undefined) {
+    node.styleConfig = patch.styleConfig;
+  }
+  if (typeof patch.hidden === "boolean") {
+    node.hidden = patch.hidden;
+  }
+  if (patch.label !== undefined) {
+    node.label = patch.label;
+  }
+  docVersion.value += 1;
+};
+
+/**
+ * 强制更新节点（绕过只读限制）
+ * @param {string} nodeId - 节点 ID
+ * @param {Partial<import('@/editor-core').ComponentNode>} patch - 补丁
+ */
+const forceUpdateNode = (nodeId, patch) => {
+  if (!nodeId || !patch || typeof patch !== "object") return;
+  const target = doc.value?.getNode?.(nodeId);
+  if (doc.value?._updateNode) {
+    doc.value._updateNode(nodeId, patch);
+    docVersion.value += 1;
+  } else if (target) {
+    applyLocalNodePatch(target, patch);
+  }
+  if (target && target !== selectedNode.value) {
+    applyLocalNodePatch(target, patch);
+  }
+};
+
+/**
+ * 规范化菜单项
+ * @param {Array} items - 菜单项
+ * @returns {Array}
+ */
+const normalizeMenuItems = (items) => {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      if (!item) return null;
+      if (typeof item === "string") {
+        return { label: item, index: item };
+      }
+      if (typeof item !== "object") return null;
+      const label = item.label ?? item.title ?? item.name ?? "";
+      const index =
+        item.index ??
+        item.command ??
+        item.key ??
+        (label ? String(label) : undefined);
+      return { ...item, label, index };
+    })
+    .filter(Boolean);
+};
+
+/**
+ * 提取 Menu DSL 配置对象
+ * @param {string} content - DSL 内容
+ * @returns {Record<string, any> | null}
+ */
+const extractMenuDslConfig = (content) => {
+  const text = String(content || "");
+  if (!text.trim()) return null;
+  const marker = /this\s*\.\s*menu\s*\(/;
+  const match = marker.exec(text);
+  if (!match) return null;
+  let i = match.index + match[0].length;
+  // 找到第一个对象起始 "{"
+  while (i < text.length && text[i] !== "{") i += 1;
+  if (i >= text.length) return null;
+  let depth = 0;
+  let inStr = false;
+  let strQuote = "";
+  let start = i;
+  for (; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === "\\" && i + 1 < text.length) {
+        i += 1;
+        continue;
+      }
+      if (ch === strQuote) {
+        inStr = false;
+        strQuote = "";
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inStr = true;
+      strQuote = ch;
+      continue;
+    }
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        const body = text.slice(start, i + 1);
+        try {
+          return new Function(`return (${body});`)();
+        } catch (error) {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+};
+
+/**
+ * 执行 Menu DSL 并捕获配置
+ * @param {string} content - DSL 内容
+ * @returns {Record<string, any> | null}
+ */
+const captureMenuDslConfig = (content) => {
+  const text = String(content || "");
+  if (!text.trim()) return null;
+  let captured = null;
+  try {
+    const runner = new Function(
+      "context",
+      `"use strict";\nreturn (function() {\n${text}\n}).call(context);`
+    );
+    runner({
+      menu: (config) => {
+        captured = config;
+      },
+    });
+  } catch (error) {
+    return null;
+  }
+  return captured;
+};
+
+/**
+ * 设计态本地执行 Menu 详细配置
+ * @param {import('@/editor-core').ComponentNode} node - 目标节点
+ * @param {Record<string, any>} config - 配置
+ */
+const applyMenuDetailConfig = (node, config) => {
+  const normalizedType = normalizeElementType(node?.type);
+  if (!node || normalizedType !== "Menu" || !config || typeof config !== "object") {
+    return;
+  }
+  const propsPatch = { ...(node.props || {}) };
+  const rawProps =
+    config.props && typeof config.props === "object" ? { ...config.props } : {};
+  if (Array.isArray(config.items)) {
+    rawProps.items = config.items;
+  }
+  if (Array.isArray(rawProps.items)) {
+    rawProps.items = normalizeMenuItems(rawProps.items);
+  }
+  Object.assign(propsPatch, rawProps);
+  if (config.className && String(config.className).trim()) {
+    propsPatch.class = String(config.className).trim();
+  }
+  const nextPatch = { props: propsPatch };
+  if (config.style && typeof config.style === "object") {
+    nextPatch.style = { ...(node.style || {}), ...config.style };
+  }
+  const ok = editorStore.updateNode(node.id, nextPatch);
+  if (!ok) {
+    applyLocalNodePatch(node, nextPatch);
+  }
+};
+
+/**
+ * 设计态执行详细配置脚本
+ * @param {import('@/editor-core').ComponentNode} node - 目标节点
+ * @param {string} content - 脚本
+ */
+/**
+ * 构建 Menu DSL 脚本内容
+ * @param {string} content - 原始配置内容
+ * @param {string} methodName - DSL 方法名
+ * @returns {string}
+ */
+const buildMenuDslContent = (content, methodName) => {
+  const text = String(content || "").trim();
+  if (!text) return "";
+  if (/this\s*\.\s*menu\s*\(/.test(text)) return text;
+  if (text.startsWith("{") && text.endsWith("}")) {
+    return `this.${methodName}(${text});`;
+  }
+  return `this.${methodName}({\n${content}\n});`;
+};
+
+/**
+ * 尝试解析 Menu 配置对象
+ * @param {string} content - 配置内容
+ * @returns {Record<string, any> | null}
+ */
+/**
+ * 清理 DSL 内容中的常见全角符号
+ * @param {string} content - 原始内容
+ * @returns {string}
+ */
+const sanitizeDslContent = (content) => {
+  return String(content || "")
+    .replace(/[，]/g, ",")
+    .replace(/[；]/g, ";")
+    .replace(/[：]/g, ":");
+};
+
+const resolveMenuConfigFromContent = (content) => {
+  const text = sanitizeDslContent(content).trim();
+  if (!text) return null;
+  const direct = extractMenuDslConfig(text) || captureMenuDslConfig(text);
+  if (direct) return direct;
+  if (text.startsWith("{") && text.endsWith("}")) {
+    try {
+      return new Function(`return (${text});`)();
+    } catch (error) {
+      return null;
+    }
+  }
+  try {
+    return new Function(`return ({${text}});`)();
+  } catch (error) {
+    return null;
+  }
+};
+
+const runDetailConfigLocal = (node, content) => {
+  if (!node || !content || !content.trim()) return;
+  const normalizedType = normalizeElementType(node?.type);
+  const methodName = getDslMethodName(normalizedType || "");
+  const safeContent =
+    normalizedType === "Menu"
+      ? buildMenuDslContent(content, methodName)
+      : content;
+  let lastMenuConfig = null;
+  const runner = new Function(
+    `"use strict";\nreturn (function() {\n${safeContent}\n}).call(this);`
+  );
+  const context = {
+    menu: (config) => {
+      lastMenuConfig = config;
+      applyMenuDetailConfig(node, config);
+    },
+  };
+  try {
+    runner.call(context);
+    if (lastMenuConfig) {
+      applyMenuDetailConfig(node, lastMenuConfig);
+    }
+  } catch (error) {
+    console.error("[Designer] Detail config error:", error);
+  }
+};
 
 const stylePresets = [
   { id: "empty", label: "\u7a7a\u6a21\u677f", content: "" },
@@ -1827,7 +2115,7 @@ const elementPlusPresetGroups = [
         label: "菜单基础配置",
         content: buildDslTemplate(
           methodName,
-          '  id: "menuNav",\n  items: [\n    { label: "编辑", command: "edit" },\n    { label: "删除", command: "delete" },\n  ],',
+          '  id: "menuNav",\n  label: "菜单基础配置",\n  type: "Menu",\n  props: {\n    defaultActive: "2",\n    items: [\n      { index: "1", label: "导航一", icon: "location" },\n      { index: "2", label: "导航二", icon: "menu" },\n      { index: "3", label: "导航三", icon: "document", disabled: true },\n      { index: "4", label: "导航四", icon: "setting" },\n    ],\n  },',
         ),
       },
       {
@@ -1874,7 +2162,7 @@ const elementPlusPresetGroups = [
         label: "标签/折叠基础配置",
         content: buildDslTemplate(
           methodName,
-          '  id: "tabsPanel",\n  activeName: "tab1",\n  items: [\n    { name: "tab1", label: "标签一" },\n    { name: "tab2", label: "标签二" },\n  ],',
+          '  /* 标签/折叠基础配置 */\n  id: "tabsPanel",\n  label: "标签/折叠基础配置",\n  type: "Tabs",\n  props: {\n    activeName: "tab1",\n    items: [\n      { name: "tab1", label: "标签一" },\n      { name: "tab2", label: "标签二" },\n      { name: "tab3", label: "标签三" },\n    ],\n  },',
         ),
       },
       {
@@ -3677,6 +3965,19 @@ const hasStyleConfig = computed(() => {
 });
 
 /**
+ * 判断属性是否需要隐藏
+ * @param {any} propDef - 属性定义
+ * @returns {boolean}
+ */
+const shouldHideProp = (propDef) => {
+  if (!propDef || !propDef.name) return false;
+  const nodeType = normalizeElementType(selectedNode.value?.type);
+  if (nodeType === "Tabs" && propDef.name === "tabs") return true;
+  if (nodeType === "Menu" && propDef.name === "items") return true;
+  return false;
+};
+
+/**
  * ?????????
  */
 const showSizeEditor = computed(() => {
@@ -3775,10 +4076,11 @@ const openConfigDialog = (type) => {
 /**
  * ??????
  */
-const saveConfigDialog = () => {
+const saveConfigDialog = (forceApply = false) => {
   const node = selectedNode.value;
   if (!node) return;
-  let content = String(configDraft.value || "");
+  const rawContent = String(configDraft.value || "");
+  let content = rawContent;
   if (configDialogType.value === "style") {
     const normalized = formatStyleConfigOutput(content);
     content = prefixStyleConfigScope(normalized);
@@ -3801,13 +4103,95 @@ const saveConfigDialog = () => {
         props: { ...(node.props || {}), option: content },
       });
     } else {
-      editorStore.updateNode(node.id, { detailConfig: content });
+      const ok = editorStore.updateNode(node.id, { detailConfig: content });
+      if (!ok) {
+        applyLocalNodePatch(node, { detailConfig: content });
+      }
+      emitDetailConfig(node.id, content);
+      if (normalizeElementType(node.type) === "Menu") {
+        const config =
+          resolveMenuConfigFromContent(rawContent) ||
+          resolveMenuConfigFromContent(content);
+        if (config) {
+          applyMenuDetailConfig(node, config);
+          const propsPatch = {
+            ...(node.props || {}),
+            ...(config.props && typeof config.props === "object"
+              ? { ...config.props }
+              : {}),
+          };
+          if (Array.isArray(config.items)) {
+            propsPatch.items = config.items;
+          }
+          if (Array.isArray(propsPatch.items)) {
+            propsPatch.items = normalizeMenuItems(propsPatch.items);
+          }
+          const nextPatch = { detailConfig: content, props: propsPatch };
+          if (config.style && typeof config.style === "object") {
+            nextPatch.style = { ...(node.style || {}), ...config.style };
+          }
+          forceUpdateNode(node.id, nextPatch);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("designer:force-refresh"));
+          }
+        }
+      }
+      runDetailConfigLocal(node, content);
+      if (forceApply && normalizeElementType(node.type) === "Menu") {
+        const fallbackConfig = resolveMenuConfigFromContent(rawContent);
+        if (fallbackConfig) {
+          const propsPatch = {
+            ...(node.props || {}),
+            ...(fallbackConfig.props && typeof fallbackConfig.props === "object"
+              ? { ...fallbackConfig.props }
+              : {}),
+          };
+          if (Array.isArray(fallbackConfig.items)) {
+            propsPatch.items = fallbackConfig.items;
+          }
+          if (Array.isArray(propsPatch.items)) {
+            propsPatch.items = normalizeMenuItems(propsPatch.items);
+          }
+          forceUpdateNode(node.id, { props: propsPatch });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("designer:force-refresh"));
+          }
+        }
+      }
     }
   } else {
     editorStore.updateNode(node.id, { styleConfig: content });
   }
   configDialogVisible.value = false;
 };
+
+/**
+ * 详情配置编辑时实时应用到组件（设计态）
+ */
+watch(
+  [configDraft, configDialogVisible, configDialogType, () => selectedNode.value?.id],
+  () => {
+    if (!configDialogVisible.value) return;
+    if (configDialogType.value !== "detail") return;
+    const node = selectedNode.value;
+    if (!node) return;
+    if (detailDraftTimer) clearTimeout(detailDraftTimer);
+    detailDraftTimer = setTimeout(() => {
+      const raw = String(configDraft.value || "");
+      if (isEChart.value) {
+        editorStore.updateNode(node.id, {
+          props: { ...(node.props || {}), option: raw },
+        });
+        return;
+      }
+      const content = normalizeDetailConfigBindings(raw);
+      const validation = validateDetailConfig(content);
+      if (!validation.valid) return;
+      editorStore.updateNode(node.id, { detailConfig: content });
+      emitDetailConfig(node.id, content);
+    }, 200);
+  },
+);
 
 /**
  * 清除配置内容

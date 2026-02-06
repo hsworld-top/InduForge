@@ -79,7 +79,11 @@
           v-for="item in menuItems"
           :key="item.index ?? item.label"
           :index="item.index ?? item.label"
+          :disabled="Boolean(item.disabled)"
         >
+          <el-icon v-if="item.iconComponent" class="menu-item-icon">
+            <component :is="item.iconComponent" />
+          </el-icon>
           {{ item.label }}
         </el-menu-item>
       </template>
@@ -344,6 +348,10 @@ import {
 } from "vue";
 import { storeToRefs } from "pinia";
 import { ElMessage } from "element-plus";
+import IconEpLocation from "~icons/ep/location";
+import IconEpDocument from "~icons/ep/document";
+import IconEpMenu from "~icons/ep/menu";
+import IconEpSetting from "~icons/ep/setting";
 import { useEditorStore } from "@/stores/editor-store";
 import { datacenterApi } from "@/services";
 import { evaluate, evaluateTemplate } from "@/data";
@@ -647,8 +655,137 @@ const checkboxOptions = computed(() => {
 const dropdownItems = computed(() => {
   return normalizeOptions(node.value?.props?.items, fallbackDropdownItems);
 });
+const normalizeMenuItems = (items) => {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      if (!item) return null;
+      if (typeof item === "string") {
+        return { label: item, index: item };
+      }
+      if (typeof item !== "object") return null;
+      const label = item.label ?? item.title ?? item.name ?? "";
+      const index =
+        item.index ??
+        item.command ??
+        item.key ??
+        (label ? String(label) : undefined);
+      return { ...item, label, index };
+    })
+    .filter(Boolean);
+};
+const captureMenuDslConfig = (content) => {
+  const text = String(content || "");
+  if (!text.trim()) return null;
+  let captured = null;
+  const replaced = text.replace(/this\s*\.\s*menu\s*\(/g, "__menu__(");
+  try {
+    const runner = new Function(
+      "__menu__",
+      `"use strict";\n${replaced}\nreturn null;`
+    );
+    runner((config) => {
+      captured = config;
+    });
+  } catch (error) {
+    return null;
+  }
+  return captured;
+};
+const sanitizeDslContent = (content) => {
+  return String(content || "")
+    .replace(/[，]/g, ",")
+    .replace(/[；]/g, ";")
+    .replace(/[：]/g, ":");
+};
+const resolveMenuConfigFromContent = (content) => {
+  const text = sanitizeDslContent(content).trim();
+  if (!text) return null;
+  const captured = captureMenuDslConfig(text);
+  if (captured) return captured;
+  if (text.startsWith("{") && text.endsWith("}")) {
+    try {
+      return new Function(`return (${text});`)();
+    } catch (error) {
+      return null;
+    }
+  }
+  try {
+    return new Function(`return ({${text}});`)();
+  } catch (error) {
+    return null;
+  }
+};
+const applyMenuDslConfig = (config) => {
+  if (!config || typeof config !== "object") return;
+  if (node.value?.type !== "Menu") return;
+  const propsPatch = { ...(node.value?.props || {}) };
+  const rawProps =
+    config.props && typeof config.props === "object" ? { ...config.props } : {};
+  if (Array.isArray(config.items)) {
+    rawProps.items = config.items;
+  }
+  if (Array.isArray(rawProps.items)) {
+    rawProps.items = normalizeMenuItems(rawProps.items);
+  }
+  Object.assign(propsPatch, rawProps);
+  if (config.className && String(config.className).trim()) {
+    propsPatch.class = String(config.className).trim();
+  }
+  const nextPatch = { props: propsPatch };
+  if (config.style && typeof config.style === "object") {
+    nextPatch.style = { ...(node.value?.style || {}), ...config.style };
+  }
+  if (props.readonly) {
+    applyPreviewPatch(nextPatch);
+    return;
+  }
+  const ok = editorStore.updateNode(node.value.id, nextPatch);
+  if (!ok) {
+    applyPreviewPatch(nextPatch);
+  }
+};
+const resolveMenuIconComponent = (icon) => {
+  if (!icon) return null;
+  if (typeof icon === "object" || typeof icon === "function") return icon;
+  const key = String(icon).trim().toLowerCase();
+  if (!key) return null;
+  const map = {
+    location: IconEpLocation,
+    document: IconEpDocument,
+    menu: IconEpMenu,
+    setting: IconEpSetting,
+  };
+  return map[key] || null;
+};
 const menuItems = computed(() => {
-  return normalizeOptions(node.value?.props?.items, fallbackMenuItems);
+  const detailConfig = detailConfigText.value;
+  const detailMenuConfig =
+    node.value?.type === "Menu" && detailConfig
+      ? resolveMenuConfigFromContent(detailConfig)
+      : null;
+  const detailItems = detailMenuConfig?.props?.items || detailMenuConfig?.items;
+  const items = normalizeOptions(
+    Array.isArray(detailItems) ? detailItems : node.value?.props?.items,
+    fallbackMenuItems
+  );
+  return items
+    .map((item) => {
+      if (!item) return null;
+      if (typeof item === "string") {
+        return { label: item, index: item };
+      }
+      if (typeof item !== "object") return null;
+      const label = item.label ?? item.title ?? item.name ?? "";
+      const index =
+        item.index ??
+        item.command ??
+        item.key ??
+        (label ? String(label) : undefined);
+      const iconComponent = resolveMenuIconComponent(item.icon);
+      return { ...item, label, index, iconComponent };
+    })
+    .filter(Boolean);
 });
 const tableColumns = computed(() => {
   tableRenderVersion.value;
@@ -2102,7 +2239,7 @@ const contentStyleWithConfig = computed(() => {
  * 处理节点选中逻辑
  * @param {MouseEvent} event - 鼠标事件
  */
-const normalizeGlobalValue = (detail) => {
+function normalizeGlobalValue(detail) {
   const type = detail?.type;
   const raw = detail?.default;
   if (type === "function") {
@@ -2172,7 +2309,7 @@ const normalizeGlobalValue = (detail) => {
     }
   }
   return raw ?? null;
-};
+}
 
 /**
  * 构建变量默认值映射
@@ -3052,6 +3189,25 @@ const buildRefInfo = () => {
         rawProps[key] = value;
       }
     });
+    if (node.value?.type === "Menu" && Array.isArray(rawProps.items)) {
+      // 兼容 command/key 写法，确保 Menu 有可用的 index
+      rawProps.items = rawProps.items
+        .map((item) => {
+          if (!item) return null;
+          if (typeof item === "string") {
+            return { label: item, index: item };
+          }
+          if (typeof item !== "object") return null;
+          const label = item.label ?? item.title ?? item.name ?? "";
+          const index =
+            item.index ??
+            item.command ??
+            item.key ??
+            (label ? String(label) : undefined);
+          return { ...item, label, index };
+        })
+        .filter(Boolean);
+    }
     if (
       Object.prototype.hasOwnProperty.call(rawProps, "value") &&
       !Object.prototype.hasOwnProperty.call(rawProps, "modelValue")
@@ -3073,7 +3229,11 @@ const buildRefInfo = () => {
         class: className,
       };
     }
-    if (typeof config.label === "string" && config.label.trim()) {
+    if (
+      typeof config.label === "string" &&
+      config.label.trim() &&
+      !isRunningDetailConfig
+    ) {
       nextPatch.label = config.label.trim();
     }
     if (typeof config.visible === "boolean") {
@@ -3096,7 +3256,10 @@ const buildRefInfo = () => {
       applyPreviewPatch(nextPatch);
       return;
     }
-    editorStore.updateNode(node.value.id, nextPatch);
+    const ok = editorStore.updateNode(node.value.id, nextPatch);
+    if (!ok) {
+      applyPreviewPatch(nextPatch);
+    }
   };
   /**
    * 规范化下拉菜单项数据
@@ -3794,7 +3957,10 @@ const buildRefInfo = () => {
       }
       if (config.type && String(config.type) !== "Tabs") return;
       const nextPatch = {};
-      if (Object.prototype.hasOwnProperty.call(config, "label")) {
+      if (
+        Object.prototype.hasOwnProperty.call(config, "label") &&
+        !isRunningDetailConfig
+      ) {
         nextPatch.label = String(config.label ?? "");
       }
       const propsPatch = { ...(node.value.props || {}) };
@@ -4906,6 +5072,8 @@ const buildRefInfo = () => {
 
 let detailConfigTimer = null;
 let lastDetailConfigKey = "";
+let isRunningDetailConfig = false;
+let detailConfigListener = null;
 
 const runDetailConfigScript = async (code) => {
   if (!code || !code.trim()) return;
@@ -4913,19 +5081,24 @@ const runDetailConfigScript = async (code) => {
   const pageId = currentPage.value?.name || currentPage.value?.id;
   const instance = buildRefInfo();
   if (!instance) return;
-  if (runtime?.runCode) {
-    await runtime.runCode(code, { type: "detail" }, instance, pageId);
-    return;
+  if (node.value?.type === "Menu") {
+    const config = resolveMenuConfigFromContent(code);
+    if (config) applyMenuDslConfig(config);
   }
-  const globals = buildPreviewGlobals();
-  const customScripts = buildPreviewCustomScripts(globals);
-  const context = {
-    $event: { type: "detail" },
-    $global: globals,
-    customScripts,
-    console,
-  };
+  isRunningDetailConfig = true;
   try {
+    if (props.readonly && runtime?.runCode) {
+      await runtime.runCode(code, { type: "detail" }, instance, pageId);
+      return;
+    }
+    const globals = buildPreviewGlobals();
+    const customScripts = buildPreviewCustomScripts(globals);
+    const context = {
+      $event: { type: "detail" },
+      $global: globals,
+      customScripts,
+      console,
+    };
     const keys = Object.keys(context);
     const values = Object.values(context);
     const runner = new Function(
@@ -4935,11 +5108,12 @@ const runDetailConfigScript = async (code) => {
     await runner.call(instance || null, ...values);
   } catch (error) {
     console.error("[Preview] Detail script error:", error);
+  } finally {
+    isRunningDetailConfig = false;
   }
 };
 
 const scheduleDetailConfig = (force = false) => {
-  if (!props.readonly) return;
   const code = detailConfigText.value;
   if (!code) return;
   const key = `${node.value?.id || ""}::${code}`;
@@ -5038,6 +5212,14 @@ watch(
 onMounted(() => {
   registerAttempts = 0;
   scheduleRegisterPreviewRef(previewPageId.value);
+  detailConfigListener = (event) => {
+    const payload = event?.detail || {};
+    if (!payload || payload.nodeId !== node.value?.id) return;
+    const code = String(payload.code || "").trim();
+    if (!code) return;
+    runDetailConfigScript(code);
+  };
+  window.addEventListener("designer:detail-config", detailConfigListener);
 });
 
 onBeforeUnmount(() => {
@@ -5048,6 +5230,10 @@ onBeforeUnmount(() => {
   if (detailConfigTimer) {
     clearTimeout(detailConfigTimer);
     detailConfigTimer = null;
+  }
+  if (detailConfigListener) {
+    window.removeEventListener("designer:detail-config", detailConfigListener);
+    detailConfigListener = null;
   }
   if (node.value?.label) unregisterPreviewRef(node.value.label);
 });
@@ -8915,6 +9101,10 @@ const handlePointerDown = (event) => {
 
 .designer-node.is-container {
   min-height: 40px;
+}
+
+.menu-item-icon {
+  margin-right: 6px;
 }
 
 .designer-node.tabs-container {
