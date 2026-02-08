@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="flex flex-col h-screen bg-gray-100 dark:bg-gray-900">
     <!-- 工具栏 -->
     <header
@@ -68,8 +68,15 @@ import { VIEW_PRESETS } from "@/constants";
 const router = useRouter();
 const route = useRoute();
 const editorStore = useEditorStore();
-const { currentPage, docVersion, projectVariables, globalScripts, projectId } =
-  storeToRefs(editorStore);
+const {
+  currentPage,
+  currentPageId,
+  doc,
+  docVersion,
+  projectVariables,
+  globalScripts,
+  projectId,
+} = storeToRefs(editorStore);
 provide("canvasZoom", ref(1));
 
 const viewKey = ref("pc");
@@ -219,4 +226,3 @@ onBeforeUnmount(() => {
   scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
 }
 </style>
-

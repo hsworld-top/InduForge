@@ -1,4 +1,4 @@
-﻿import { datacenterApi } from "@/services";
+import { datacenterApi } from "@/services";
 import { DataService } from "@/data";
 import { Storage } from "@/utils/storage";
 import { io } from "socket.io-client";
@@ -1279,6 +1279,27 @@ export const initPreviewRuntime = (options) => {
       );
       pageTimerIds.add(id);
     });
+  };
+
+
+  /**
+   * 执行页面生命周期脚本
+   * @param {string} key - 生命周期 key
+   * @returns {Promise<void>} 执行结果
+   */
+  const runPageLifecycleHandlers = async (key) => {
+    if (!key) return;
+    const handlersRaw = lifecycleConfig?.[key];
+    const handlers = Array.isArray(handlersRaw)
+      ? handlersRaw
+      : handlersRaw?.items || [];
+    for (const handler of handlers) {
+      if (!handler) continue;
+      if (handler?.enabled === false) continue;
+      const code = typeof handler === "string" ? handler : handler?.code;
+      if (!code || !String(code).trim()) continue;
+      await runCode(code, { type: "lifecycle", name: key }, null, options?.pageId);
+    }
   };
 
   const start = async () => {

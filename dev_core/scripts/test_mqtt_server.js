@@ -9,8 +9,8 @@ const options = {
   host: "localhost",
   port: 1883,
   // 如果需要认证，可以添加用户名和密码
-  // username: 'your_username',
-  // password: 'your_password',
+  username: 'admin',
+  password: 'public',
   clientId: `mqtt_publisher_${Math.random().toString(16).substr(2, 8)}`,
 };
 
@@ -29,7 +29,7 @@ client.on("connect", () => {
     // 5. 生成模拟数据
     const payload = {
       N: "test",
-      V: 1,
+      V: Math.floor(Math.random() * 100) + 1,
       Q: 1,
       T: dayjs().format(TIME_FORMAT),
     };
