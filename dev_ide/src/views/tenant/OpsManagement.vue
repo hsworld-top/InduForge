@@ -285,6 +285,15 @@
                   <el-table-column label="操作" width="150">
                     <template #default="scope">
                       <el-button link type="primary" size="small" @click="handleViewLog(scope.row)">日志</el-button>
+                      <el-button
+                        v-if="isFailedDeploy(scope.row)"
+                        link
+                        type="danger"
+                        size="small"
+                        @click="openFailureDetail(scope.row)"
+                      >
+                        失败详情
+                      </el-button>
                       <el-button link type="warning" size="small" @click="handleStopProject(scope.row)">停止</el-button>
                     </template>
                   </el-table-column>
