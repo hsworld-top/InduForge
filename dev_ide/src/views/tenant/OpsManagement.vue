@@ -70,6 +70,35 @@
       </el-alert>
     </div>
 
+    <div class="px-6 mb-6">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="status-stat-card">
+          <div class="status-stat-label">运行中</div>
+          <div class="status-stat-value text-green-600 dark:text-green-400">
+            {{ deployStatusSummary.running }}
+          </div>
+        </div>
+        <div class="status-stat-card">
+          <div class="status-stat-label">部署中</div>
+          <div class="status-stat-value text-amber-600 dark:text-amber-400">
+            {{ deployStatusSummary.deploying }}
+          </div>
+        </div>
+        <div class="status-stat-card">
+          <div class="status-stat-label">已停止</div>
+          <div class="status-stat-value text-gray-700 dark:text-gray-300">
+            {{ deployStatusSummary.stopped }}
+          </div>
+        </div>
+        <div class="status-stat-card">
+          <div class="status-stat-label">异常</div>
+          <div class="status-stat-value text-red-600 dark:text-red-400">
+            {{ deployStatusSummary.failed }}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 视图：节点大盘 -->
     <div v-if="activeView === 'dashboard'" class="flex-1 overflow-y-auto px-6 pb-6">
       <div v-loading="nodeLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -188,12 +217,15 @@
                         <el-dropdown-item @click="handleRollback(deploy)" :disabled="deploy.mode === 'DEV'">
                           <el-icon class="mr-1"><RefreshLeft /></el-icon>回滚版本
                         </el-dropdown-item>
-                        <el-dropdown-item @click="handleViewLog(deploy)">
-                          <el-icon class="mr-1"><Document /></el-icon>查看日志
-                        </el-dropdown-item>
-                        <el-dropdown-item divided @click="handleUndeploy(deploy)" type="danger">
-                          <el-icon class="mr-1"><Remove /></el-icon>撤销部署
-                        </el-dropdown-item>
+	                        <el-dropdown-item @click="handleViewLog(deploy)">
+	                          <el-icon class="mr-1"><Document /></el-icon>查看日志
+	                        </el-dropdown-item>
+	                        <el-dropdown-item v-if="isFailedDeploy(deploy)" @click="openFailureDetail(deploy)">
+	                          <el-icon class="mr-1"><Warning /></el-icon>失败详情
+	                        </el-dropdown-item>
+	                        <el-dropdown-item divided @click="handleUndeploy(deploy)" type="danger">
+	                          <el-icon class="mr-1"><Remove /></el-icon>撤销部署
+	                        </el-dropdown-item>
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
@@ -397,6 +429,40 @@
         <div v-if="logContent.length === 0" class="text-gray-500 text-center mt-20">暂无实时日志上报</div>
       </div>
     </el-dialog>
+
+    <el-drawer v-model="showFailureDrawer" :title="`失败详情 - ${failedDeployment?.project?.name || '-'}`" size="520px">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="节点名称">
+          {{ failedDeployment?.node?.name || failedDeployment?.nodeName || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="版本">
+          {{ failedDeployment?.version || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getDeployStatusType(failedDeployment?.status)">
+            {{ getDeployLabel(failedDeployment?.status) }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="失败原因">
+          {{ getDeployFailureReason(failedDeployment) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="最后更新时间">
+          {{ formatTime(failedDeployment?.updatedAt || failedDeployment?.lastHeartbeatAt) }}
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <div class="mt-4">
+        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">最近日志</div>
+        <div class="bg-black text-green-400 rounded p-3 h-56 overflow-y-auto text-xs font-mono">
+          <template v-if="failedDeployLogs.length > 0">
+            <div v-for="(line, idx) in failedDeployLogs" :key="idx" class="mb-1">
+              [{{ line.time || '-' }}] {{ line.message || line }}
+            </div>
+          </template>
+          <div v-else class="text-gray-500 text-center mt-20">暂无失败日志</div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -405,7 +471,7 @@ import { ref, reactive, onMounted, computed, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Grid, List, Refresh, Search, MoreFilled,
-  User, Clock, Tools, Check, Close, Bell
+  User, Clock, Tools, Check, Close, Bell, Warning
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
@@ -454,6 +520,31 @@ const pendingList = ref([])
 const showLogDialog = ref(false)
 const currentDeployment = ref(null)
 const logContent = ref([])
+const showFailureDrawer = ref(false)
+const failedDeployment = ref(null)
+const failedDeployLogs = ref([])
+
+const deployStatusSummary = computed(() => {
+  const summary = {
+    running: 0,
+    deploying: 0,
+    stopped: 0,
+    failed: 0,
+  }
+
+  nodeList.value.forEach((node) => {
+    const deployments = Array.isArray(node.deployments) ? node.deployments : []
+    deployments.forEach((deploy) => {
+      const status = deploy?.status
+      if (status === 'running') summary.running++
+      else if (status === 'deploying' || status === 'pending') summary.deploying++
+      else if (status === 'stopped') summary.stopped++
+      else if (status === 'error' || status === 'failed') summary.failed++
+    })
+  })
+
+  return summary
+})
 
 // 获取节点数据
 const fetchNodes = async () => {
@@ -630,6 +721,14 @@ const getDeployLabel = (status) => {
   return map[status] || status
 }
 
+const isFailedDeploy = (deploy) => {
+  return ['error', 'failed'].includes(deploy?.status)
+}
+
+const getDeployFailureReason = (deploy) => {
+  return deploy?.errorMessage || deploy?.lastError || deploy?.message || '未提供失败原因'
+}
+
 // 运维操作
 const restartNode = (node) => ElMessage.info(`正在重启 ${node.name} Agent...`)
 const deleteNode = async (node) => {
@@ -679,6 +778,12 @@ const handleViewLog = (deploy) => {
   currentDeployment.value = deploy
   logContent.value = deploy.deployLog || []
   showLogDialog.value = true
+}
+
+const openFailureDetail = (deploy) => {
+  failedDeployment.value = deploy
+  failedDeployLogs.value = Array.isArray(deploy?.deployLog) ? deploy.deployLog.slice(-50) : []
+  showFailureDrawer.value = true
 }
 
 // 新增：重启工程
@@ -805,6 +910,18 @@ onBeforeUnmount(() => {
 }
 .node-card:hover {
   transform: translateY(-4px);
+}
+
+.status-stat-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4;
+}
+
+.status-stat-label {
+  @apply text-xs text-gray-500 dark:text-gray-400;
+}
+
+.status-stat-value {
+  @apply text-2xl font-semibold mt-2;
 }
 :deep(.el-progress-circle) {
   margin: 0 auto;
