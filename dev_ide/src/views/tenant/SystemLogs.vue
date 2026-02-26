@@ -247,7 +247,7 @@ export default {
       await Promise.all([fetchLogs(), fetchStats()])
     }
 
-    const applyQuickRange = (type) => {
+    const applyQuickRange = async (type) => {
       const now = dayjs()
       if (type === 'today') {
         filters.dateRange = [
@@ -265,6 +265,7 @@ export default {
           now.endOf('day').format('YYYY-MM-DD HH:mm:ss'),
         ]
       }
+      await handleSearch()
     }
 
     const handleExportCurrent = async () => {
