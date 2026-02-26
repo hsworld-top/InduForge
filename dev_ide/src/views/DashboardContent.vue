@@ -11,11 +11,12 @@
     <!-- 统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <div
+        v-if="canAccessUserManagement"
         :class="[
           'card transition-shadow duration-200',
-          canAccessUserManagement ? 'cursor-pointer hover:shadow-lg' : 'opacity-60 cursor-not-allowed',
+          'cursor-pointer hover:shadow-lg',
         ]"
-        @click="handleCardClick('user-management', canAccessUserManagement)"
+        @click="openTab('user-management')"
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-green-100 dark:bg-green-900">
@@ -43,13 +44,12 @@
       </div>
 
       <div
+        v-if="canAccessProjectManagement"
         :class="[
           'card transition-shadow duration-200',
-          canAccessProjectManagement
-            ? 'cursor-pointer hover:shadow-lg'
-            : 'opacity-60 cursor-not-allowed',
+          'cursor-pointer hover:shadow-lg',
         ]"
-        @click="handleCardClick('project-management', canAccessProjectManagement)"
+        @click="openTab('project-management')"
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-blue-100 dark:bg-blue-900">
@@ -107,11 +107,12 @@
       </div>
 
       <div
+        v-if="canAccessSystemLogs"
         :class="[
           'card transition-shadow duration-200',
-          canAccessSystemLogs ? 'cursor-pointer hover:shadow-lg' : 'opacity-60 cursor-not-allowed',
+          'cursor-pointer hover:shadow-lg',
         ]"
-        @click="handleCardClick('system-logs', canAccessSystemLogs)"
+        @click="openTab('system-logs')"
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-red-100 dark:bg-red-900">
@@ -198,7 +199,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/store'
 import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
-import { ElMessage } from 'element-plus'
 import { canAccessTab } from '@/permissions'
 import { ROLES } from '@/constants'
 
@@ -310,14 +310,6 @@ export default {
       emit('open-tab', tabKey)
     }
 
-    const handleCardClick = (tabKey, canAccess) => {
-      if (!canAccess) {
-        ElMessage.warning('您当前角色无权访问该功能')
-        return
-      }
-      openTab(tabKey)
-    }
-
     onMounted(() => {
       loadDashboardData()
     })
@@ -335,7 +327,6 @@ export default {
       recentActivities,
       openTab,
       loadDashboardData,
-      handleCardClick,
       formatDateTime,
     }
   },
