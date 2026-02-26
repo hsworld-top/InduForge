@@ -488,6 +488,7 @@ import { initSocket, getSocket } from '@/utils/socket'
 import { Storage } from '@/utils/storage'
 import { canApproveNodes } from '@/permissions'
 import { useAuthStore } from '@/store'
+import { RoleEnum, ENUM_LABELS } from '@/enums'
 
 const authStore = useAuthStore()
 const currentUserRole = computed(() => authStore.userInfo?.role || Storage.getUserInfo()?.role || '')
@@ -695,22 +696,17 @@ const formatTime = (time) => time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : 
 // 角色标签映射
 const getRoleTagType = (role) => {
   const map = {
-    'SYSTEM_ADMIN': 'danger',
-    'OPS_ADMIN': 'warning',
-    'PROJECT_ADMIN': 'primary',
-    'USER_ADMIN': 'info',
+    [RoleEnum.SUPER_ADMIN]: 'danger',
+    [RoleEnum.SYSTEM_ADMIN]: 'danger',
+    [RoleEnum.OPS_ADMIN]: 'warning',
+    [RoleEnum.PROJECT_ADMIN]: 'primary',
+    [RoleEnum.USER_ADMIN]: 'info',
   }
   return map[role] || 'info'
 }
 
 const getRoleLabel = (role) => {
-  const map = {
-    'SYSTEM_ADMIN': '系统管理员',
-    'OPS_ADMIN': '运维管理员',
-    'PROJECT_ADMIN': '项目管理员',
-    'USER_ADMIN': '用户管理员',
-  }
-  return map[role] || role
+  return ENUM_LABELS[role] || role
 }
 
 // 状态 Label 映射
