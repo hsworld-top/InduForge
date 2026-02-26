@@ -579,6 +579,7 @@ import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { buildAppUrl } from '@/utils/appUrl'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
+import { ROLES } from '@/constants'
 
 // 标签页组件懒加载，提升首次加载速度
 const DashboardContent = defineAsyncComponent(() => import('@/views/DashboardContent.vue'))
@@ -658,11 +659,11 @@ export default {
       return name.charAt(0).toUpperCase()
     })
     const isAdmin = computed(() => authStore.isAdmin)
-    const isSuperAdmin = computed(() => authStore.userInfo?.role === 'SUPER_ADMIN')
-    const isSystemAdmin = computed(() => authStore.userInfo?.role === 'SYSTEM_ADMIN')
-    const isOpsAdmin = computed(() => authStore.userInfo?.role === 'OPS_ADMIN')
-    const isProjectAdmin = computed(() => authStore.userInfo?.role === 'PROJECT_ADMIN')
-    const isUserAdmin = computed(() => authStore.userInfo?.role === 'USER_ADMIN')
+    const isSuperAdmin = computed(() => authStore.userInfo?.role === ROLES.SUPER_ADMIN)
+    const isSystemAdmin = computed(() => authStore.userInfo?.role === ROLES.SYSTEM_ADMIN)
+    const isOpsAdmin = computed(() => authStore.userInfo?.role === ROLES.OPS_ADMIN)
+    const isProjectAdmin = computed(() => authStore.userInfo?.role === ROLES.PROJECT_ADMIN)
+    const isUserAdmin = computed(() => authStore.userInfo?.role === ROLES.USER_ADMIN)
 
     /**
      * 检查标签页访问权限。

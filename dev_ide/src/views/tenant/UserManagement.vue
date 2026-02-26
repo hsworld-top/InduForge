@@ -119,7 +119,7 @@
               type="danger"
               size="small"
               @click="deleteUser(scope.row)"
-              v-if="scope.row.id !== currentUser?.id && scope.row.role !== 'SUPER_ADMIN'"
+              v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole"
             >
               删除
             </el-button>
@@ -299,6 +299,7 @@ import { userAPI } from '@/api/user.api'
 import { RoleEnum, UserStatusEnum, ENUM_LABELS } from '@/enums'
 import { formatDateTime } from '@/utils/date'
 import { canManageUsers } from '@/permissions'
+import { ROLES } from '@/constants'
 
 export default {
   name: 'TenantUserManagement',
@@ -719,6 +720,7 @@ export default {
       roleOptions,
       statusOptions,
       currentUser,
+      superAdminRole: ROLES.SUPER_ADMIN,
 
       // 表单
       createForm,

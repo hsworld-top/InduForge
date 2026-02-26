@@ -200,6 +200,7 @@ import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
 import { ElMessage } from 'element-plus'
 import { canAccessTab } from '@/permissions'
+import { ROLES } from '@/constants'
 
 export default {
   name: 'DashboardContent',
@@ -209,7 +210,7 @@ export default {
 
     const username = computed(() => authStore.userInfo?.username || '')
     const role = computed(() => authStore.userInfo?.role)
-    const isSuperAdmin = computed(() => role.value === 'SUPER_ADMIN')
+    const isSuperAdmin = computed(() => role.value === ROLES.SUPER_ADMIN)
     const canAccessUserManagement = computed(() => canAccessTab('user-management', role.value))
     const canAccessProjectManagement = computed(() => canAccessTab('project-management', role.value))
     const canAccessSystemLogs = computed(() => canAccessTab('system-logs', role.value))
