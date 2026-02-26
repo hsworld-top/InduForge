@@ -518,9 +518,21 @@ const nodePagination = reactive({
 })
 
 // 注册节点状态
+const showAddNodeDialog = ref(false)
+const submitting = ref(false)
 const showTokenDialog = ref(false)
 const registrationToken = ref('')
 const newNodeId = ref('')
+const nodeFormRef = ref(null)
+const nodeForm = reactive({
+  name: '',
+  description: '',
+  ipAddress: '',
+  port: 8080,
+})
+const nodeFormRules = {
+  name: [{ required: true, message: '请输入节点名称', trigger: 'blur' }],
+}
 
 // 待审核申请弹窗
 const showPendingDialog = ref(false)
@@ -655,6 +667,44 @@ const updateCounts = async () => {
   }
 }
 
+const resetNodeForm = () => {
+  nodeForm.name = ''
+  nodeForm.description = ''
+  nodeForm.ipAddress = ''
+  nodeForm.port = 8080
+  nodeFormRef.value?.clearValidate?.()
+}
+
+const submitNodeForm = async () => {
+  if (!nodeFormRef.value) return
+  try {
+    await nodeFormRef.value.validate()
+  } catch {
+    return
+  }
+
+  submitting.value = true
+  try {
+    let res
+    try {
+      res = await request.post('/nodes/register', { ...nodeForm })
+    } catch {
+      res = await request.post('/nodes', { ...nodeForm })
+    }
+
+    if (res?.success) {
+      ElMessage.success('节点注册请求已提交')
+      showAddNodeDialog.value = false
+      resetNodeForm()
+      await Promise.all([fetchPendingList(), updateCounts()])
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '创建节点失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
 const resetNodeSearch = () => {
   nodeSearch.status = ''
   nodeSearch.keyword = ''
@@ -736,6 +786,13 @@ const getDeployFailureReason = (deploy) => {
 
 // 运维操作
 const restartNode = (node) => ElMessage.info(`正在重启 ${node.name} Agent...`)
+const viewNodeDetail = (node) => {
+  ElMessageBox.alert(
+    `节点名称：${node?.name || '-'}\nIP：${node?.ipAddress || '-'}\n端口：${node?.port || '-'}\n状态：${getNodeStatusLabel(node?.status)}`,
+    '节点详情',
+    { confirmButtonText: '关闭' }
+  )
+}
 const deleteNode = async (node) => {
   try {
     await ElMessageBox.confirm(`确定要注销节点 "${node.name}" 吗？此操作不可撤销。`, '警告', { type: 'warning' })
