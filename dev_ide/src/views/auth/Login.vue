@@ -382,6 +382,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore, useAppStore } from '@/store'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
+import { ROLES, ROUTE_NAMES } from '@/constants'
 import { Storage } from '@/utils/storage'
 
 export default {
@@ -509,10 +510,10 @@ export default {
         ElMessage.success('登录成功')
 
         // 根据用户角色跳转到合适的页面
-        if (user.role === 'SUPER_ADMIN') {
+        if (user.role === ROLES.SUPER_ADMIN) {
           router.push('/admin')
         } else {
-          router.push({ name: 'dashboard' })
+          router.push({ name: ROUTE_NAMES.DASHBOARD })
         }
       } catch (error) {
         console.error('登录失败:', error)
@@ -547,7 +548,7 @@ export default {
     onMounted(async () => {
       // 检查是否已登录
       if (authStore.isAuthenticated) {
-        router.push({ name: 'dashboard' })
+        router.push({ name: ROUTE_NAMES.DASHBOARD })
         return
       }
 

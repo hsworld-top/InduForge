@@ -17,6 +17,14 @@ const request = axios.create({
 let isRefreshing = false
 let failedQueue = []
 
+const clearAuthAndRedirectToLogin = () => {
+  Storage.remove(STORAGE_KEYS.TOKEN)
+  Storage.remove(STORAGE_KEYS.REFRESH_TOKEN)
+  Storage.remove(STORAGE_KEYS.USER_INFO)
+  Storage.remove(STORAGE_KEYS.TENANT_ID)
+  window.location.href = '/login'
+}
+
 // 处理失败的请求队列
 const processQueue = (error, token = null) => {
   failedQueue.forEach(prom => {
@@ -74,11 +82,7 @@ request.interceptors.response.use(
           // 检查是否是刷新token接口的401错误
           if (config.url.includes('/auth/refresh')) {
             // 刷新token失败，跳转到登录页
-            Storage.remove(STORAGE_KEYS.TOKEN)
-            Storage.remove(STORAGE_KEYS.REFRESH_TOKEN)
-            Storage.remove(STORAGE_KEYS.USER_INFO)
-            Storage.remove(STORAGE_KEYS.TENANT_ID)
-            window.location.href = '/login'
+            clearAuthAndRedirectToLogin()
             return Promise.reject(error)
           }
 
@@ -86,11 +90,7 @@ request.interceptors.response.use(
           const refreshToken = Storage.getRefreshToken()
           if (!refreshToken) {
             // 没有refresh token，直接跳转登录页
-            Storage.remove(STORAGE_KEYS.TOKEN)
-            Storage.remove(STORAGE_KEYS.REFRESH_TOKEN)
-            Storage.remove(STORAGE_KEYS.USER_INFO)
-            Storage.remove(STORAGE_KEYS.TENANT_ID)
-            window.location.href = '/login'
+            clearAuthAndRedirectToLogin()
             return Promise.reject(error)
           }
 
@@ -121,11 +121,7 @@ request.interceptors.response.use(
               .catch(refreshError => {
                 // 刷新失败，跳转到登录页
                 processQueue(refreshError, null)
-                Storage.remove(STORAGE_KEYS.TOKEN)
-                Storage.remove(STORAGE_KEYS.REFRESH_TOKEN)
-                Storage.remove(STORAGE_KEYS.USER_INFO)
-                Storage.remove(STORAGE_KEYS.TENANT_ID)
-                window.location.href = '/login'
+                clearAuthAndRedirectToLogin()
                 return Promise.reject(refreshError)
               })
               .finally(() => {
