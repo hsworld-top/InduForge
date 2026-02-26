@@ -110,12 +110,12 @@
               v-if="showUserMenu"
               class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10"
             >
-              <router-link
-                to="/profile"
-                class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              <button
+                @click="openProfileDialog"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 个人资料
-              </router-link>
+              </button>
               <button
                 @click="handleLogout"
                 class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -568,6 +568,17 @@
         </div>
       </div>
     </div>
+
+    <el-dialog
+      v-model="showProfileDialog"
+      width="760px"
+      destroy-on-close
+      append-to-body
+      class="profile-dialog"
+      title="个人资料"
+    >
+      <Profile :embedded="true" />
+    </el-dialog>
   </div>
 </template>
 
@@ -589,12 +600,16 @@ const ProjectManagement = defineAsyncComponent(() => import('@/views/tenant/Proj
 const OpsManagement = defineAsyncComponent(() => import('@/views/tenant/OpsManagement.vue'))
 const SystemLogs = defineAsyncComponent(() => import('@/views/tenant/SystemLogs.vue'))
 const SystemSettings = defineAsyncComponent(() => import('@/views/tenant/SystemSettings.vue'))
+const Profile = defineAsyncComponent(() => import('@/views/profile/Profile.vue'))
 
 // 导入默认Logo图片
 import defaultLogo from '@/assets/images/demo.png'
 
 export default {
   name: 'Dashboard',
+  components: {
+    Profile,
+  },
   setup() {
     const router = useRouter()
     const { locale } = useI18n()
@@ -604,6 +619,7 @@ export default {
 
     const showUserMenu = ref(false)
     const showLanguageMenu = ref(false)
+    const showProfileDialog = ref(false)
 
     // 侧边栏折叠状态（持久化）
     const sidebarCollapsed = computed({
@@ -719,6 +735,15 @@ export default {
     }
 
     const currentLanguage = computed(() => appStore.language || 'zh')
+
+    /**
+     * 打开个人资料弹窗。
+     */
+    const openProfileDialog = () => {
+      showProfileDialog.value = true
+      showUserMenu.value = false
+    }
+
     const handleLogout = async () => {
       try {
         await ElMessageBox.confirm('确定要登出吗？', '提示', {
@@ -943,6 +968,8 @@ export default {
       toggleTheme,
       changeLanguage,
       currentLanguage,
+      showProfileDialog,
+      openProfileDialog,
       handleLogout,
       openTab,
       closeTab,
