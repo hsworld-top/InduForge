@@ -861,17 +861,18 @@ export default {
         openTab('dashboard')
       }
 
-      // 异步获取租户信息（如果用户属于某个租户），不阻塞页面渲染
-      if (authStore.userInfo?.tenantId) {
-        tenantStore.fetchTenants().then(() => {
-          // 设置当前租户
-          const userTenant = tenantStore.tenants.find((t) => t.id === authStore.userInfo.tenantId)
-          if (userTenant) {
-            tenantStore.setCurrentTenant(userTenant)
+      // 仅超级管理员按需获取租户详情，避免非超级管理员触发租户接口请求
+      if (isSuperAdmin.value && authStore.userInfo?.tenantId) {
+        try {
+          const { tenantAPI } = await import('@/api')
+          const response = await tenantAPI.getTenantById(authStore.userInfo.tenantId)
+          const currentTenantData = response?.data?.tenant || response?.data || null
+          if (currentTenantData) {
+            tenantStore.setCurrentTenant(currentTenantData)
           }
-        }).catch(error => {
-          console.error('Failed to fetch tenants:', error)
-        })
+        } catch (error) {
+          console.error('Failed to fetch current tenant:', error)
+        }
       }
     })
 

@@ -77,13 +77,13 @@
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="status-stat-card">
           <div class="status-stat-label">运行中</div>
-          <div class="status-stat-value text-green-600 dark:text-green-400">
+          <div class="status-stat-value text-status-success">
             {{ deployStatusSummary.running }}
           </div>
         </div>
         <div class="status-stat-card">
           <div class="status-stat-label">部署中</div>
-          <div class="status-stat-value text-amber-600 dark:text-amber-400">
+          <div class="status-stat-value text-status-warning">
             {{ deployStatusSummary.deploying }}
           </div>
         </div>
@@ -95,7 +95,7 @@
         </div>
         <div class="status-stat-card">
           <div class="status-stat-label">异常</div>
-          <div class="status-stat-value text-red-600 dark:text-red-400">
+          <div class="status-stat-value text-status-danger">
             {{ deployStatusSummary.failed }}
           </div>
         </div>
@@ -492,6 +492,16 @@ import { Storage } from '@/utils/storage'
 import { canApproveNodes } from '@/permissions'
 import { useAuthStore } from '@/store'
 import { RoleEnum, ENUM_LABELS } from '@/enums'
+import {
+  getNodeStatusType,
+  getNodeStatusLabel,
+  getDeployStatusType,
+  getDeployLabel,
+  isFailedDeploy,
+  getDeployFailureReason,
+  buildDeployStatusSummary,
+  getProgressColor,
+} from './utils/ops-status'
 
 const authStore = useAuthStore()
 const currentUserRole = computed(() => authStore.userInfo?.role || Storage.getUserInfo()?.role || '')
@@ -550,25 +560,7 @@ const failedDeployment = ref(null)
 const failedDeployLogs = ref([])
 
 const deployStatusSummary = computed(() => {
-  const summary = {
-    running: 0,
-    deploying: 0,
-    stopped: 0,
-    failed: 0,
-  }
-
-  nodeList.value.forEach((node) => {
-    const deployments = Array.isArray(node.deployments) ? node.deployments : []
-    deployments.forEach((deploy) => {
-      const status = deploy?.status
-      if (status === 'running') summary.running++
-      else if (status === 'deploying' || status === 'pending') summary.deploying++
-      else if (status === 'stopped') summary.stopped++
-      else if (status === 'error' || status === 'failed') summary.failed++
-    })
-  })
-
-  return summary
+  return buildDeployStatusSummary(nodeList.value)
 })
 
 // 获取节点数据
@@ -738,12 +730,6 @@ const getDiskLabel = (node) => {
   return node.metrics.disk_label
 }
 
-const getProgressColor = (percentage) => {
-  if (percentage < 60) return '#10b981' // Green
-  if (percentage < 85) return '#f59e0b' // Yellow
-  return '#ef4444' // Red
-}
-
 const formatTime = (time) => time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-'
 
 // 角色标签映射
@@ -760,31 +746,6 @@ const getRoleTagType = (role) => {
 
 const getRoleLabel = (role) => {
   return ENUM_LABELS[role] || role
-}
-
-// 状态 Label 映射
-const getNodeStatusType = (status) => status === 'online' ? 'success' : (status === 'offline' ? 'info' : 'danger')
-const getNodeStatusLabel = (status) => {
-  const map = { online: '在线', offline: '离线', error: '监控异常' }
-  return map[status] || status
-}
-
-const getDeployStatusType = (status) => {
-  const map = { running: 'success', stopped: 'info', deploying: 'warning', error: 'danger' }
-  return map[status] || 'info'
-}
-
-const getDeployLabel = (status) => {
-  const map = { running: '运行中', stopped: '已停止', deploying: '部署中', error: '故障', pending: '等待中' }
-  return map[status] || status
-}
-
-const isFailedDeploy = (deploy) => {
-  return ['error', 'failed'].includes(deploy?.status)
-}
-
-const getDeployFailureReason = (deploy) => {
-  return deploy?.errorMessage || deploy?.lastError || deploy?.message || '未提供失败原因'
 }
 
 // 运维操作

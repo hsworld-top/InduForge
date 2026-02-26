@@ -77,7 +77,7 @@
       </div>
 
       <div
-        v-if="isSuperAdmin"
+        v-if="canLoadTenantStats"
         class="card cursor-pointer hover:shadow-lg transition-shadow duration-200"
         @click="openTab('tenant-management')"
       >
@@ -210,7 +210,9 @@ export default {
 
     const username = computed(() => authStore.userInfo?.username || '')
     const role = computed(() => authStore.userInfo?.role)
-    const isSuperAdmin = computed(() => role.value === ROLES.SUPER_ADMIN)
+    const canLoadTenantStats = computed(
+      () => role.value === ROLES.SUPER_ADMIN && canAccessTab('tenant-management', role.value)
+    )
     const canAccessUserManagement = computed(() => canAccessTab('user-management', role.value))
     const canAccessProjectManagement = computed(() => canAccessTab('project-management', role.value))
     const canAccessSystemLogs = computed(() => canAccessTab('system-logs', role.value))
@@ -240,7 +242,7 @@ export default {
         if (canAccessSystemLogs.value) {
           requestEntries.push(['logs', logAPI.getLogs({ page: 1, limit: 5 })])
         }
-        if (isSuperAdmin.value) {
+        if (canLoadTenantStats.value) {
           requestEntries.push(['tenants', tenantAPI.getTenants({ page: 1, limit: 1 })])
         }
 
@@ -271,7 +273,7 @@ export default {
         stats.value.logs =
           logsResult?.status === 'fulfilled' ? logsResult.value?.pagination?.total || 0 : 0
         stats.value.tenants =
-          isSuperAdmin.value && tenantsResult?.status === 'fulfilled'
+          canLoadTenantStats.value && tenantsResult?.status === 'fulfilled'
             ? tenantsResult.value?.pagination?.total || 0
             : 0
 
@@ -326,7 +328,7 @@ export default {
 
     return {
       username,
-      isSuperAdmin,
+      canLoadTenantStats,
       canAccessUserManagement,
       canAccessProjectManagement,
       canAccessSystemLogs,

@@ -18,6 +18,10 @@
     --if-color-primary-600: #0d9488;
     --if-color-primary-700: #0f766e;
     --if-color-primary-50: #ecfdf5;
+    --if-color-success-500: #16a34a;
+    --if-color-warning-500: #d97706;
+    --if-color-danger-500: #dc2626;
+    --if-color-info-500: #0ea5e9;
     --if-color-secondary-bg: #e5e7eb;
     --if-color-secondary-bg-hover: #d1d5db;
     --if-color-focus-ring: rgba(15, 118, 110, 0.24);
@@ -43,6 +47,10 @@
     --if-color-primary-600: #2dd4bf;
     --if-color-primary-700: #14b8a6;
     --if-color-primary-50: #0f2b2b;
+    --if-color-success-500: #22c55e;
+    --if-color-warning-500: #f59e0b;
+    --if-color-danger-500: #ef4444;
+    --if-color-info-500: #38bdf8;
     --if-color-secondary-bg: #374151;
     --if-color-secondary-bg-hover: #4b5563;
     --if-color-focus-ring: rgba(45, 212, 191, 0.24);
@@ -74,6 +82,22 @@
 
   .btn-primary:hover {
     background: var(--if-color-primary-600);
+  }
+
+  .text-status-success {
+    color: var(--if-color-success-500);
+  }
+
+  .text-status-warning {
+    color: var(--if-color-warning-500);
+  }
+
+  .text-status-danger {
+    color: var(--if-color-danger-500);
+  }
+
+  .text-status-info {
+    color: var(--if-color-info-500);
   }
 
   .btn-secondary {
