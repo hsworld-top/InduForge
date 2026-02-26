@@ -69,6 +69,11 @@
           />
         </el-form-item>
         <el-form-item>
+          <el-button text @click="applyQuickRange('today')">今天</el-button>
+          <el-button text @click="applyQuickRange('last7')">近7天</el-button>
+          <el-button text @click="applyQuickRange('last30')">近30天</el-button>
+        </el-form-item>
+        <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
         </el-form-item>
@@ -150,6 +155,7 @@
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
+import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
@@ -239,6 +245,26 @@ export default {
 
     const handleRefresh = async () => {
       await Promise.all([fetchLogs(), fetchStats()])
+    }
+
+    const applyQuickRange = (type) => {
+      const now = dayjs()
+      if (type === 'today') {
+        filters.dateRange = [
+          now.startOf('day').format('YYYY-MM-DD HH:mm:ss'),
+          now.endOf('day').format('YYYY-MM-DD HH:mm:ss'),
+        ]
+      } else if (type === 'last7') {
+        filters.dateRange = [
+          now.subtract(7, 'day').startOf('day').format('YYYY-MM-DD HH:mm:ss'),
+          now.endOf('day').format('YYYY-MM-DD HH:mm:ss'),
+        ]
+      } else if (type === 'last30') {
+        filters.dateRange = [
+          now.subtract(30, 'day').startOf('day').format('YYYY-MM-DD HH:mm:ss'),
+          now.endOf('day').format('YYYY-MM-DD HH:mm:ss'),
+        ]
+      }
     }
 
     const handleExportCurrent = async () => {
@@ -399,6 +425,7 @@ export default {
       handleSearch,
       resetFilters,
       handleRefresh,
+      applyQuickRange,
       handleExportCurrent,
       saveCurrentView,
       handleApplySavedView,
