@@ -57,6 +57,19 @@
       </div>
     </div>
 
+    <div v-if="nodeLoadError" class="px-6 mb-4">
+      <el-alert
+        :title="nodeLoadError"
+        type="error"
+        show-icon
+        :closable="false"
+      >
+        <template #default>
+          <el-button text type="primary" @click="fetchNodes">重新加载</el-button>
+        </template>
+      </el-alert>
+    </div>
+
     <!-- 视图：节点大盘 -->
     <div v-if="activeView === 'dashboard'" class="flex-1 overflow-y-auto px-6 pb-6">
       <div v-loading="nodeLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -271,6 +284,7 @@
           </el-table-column>
         </el-table>
       </div>
+      <el-empty v-if="!nodeLoading && nodeList.length === 0" description="暂无节点数据" class="mt-6" />
     </div>
 
     <!-- 弹窗：待审核申请列表 -->
@@ -411,6 +425,7 @@ const canApproveNode = computed(() => {
 // 状态与视图控制
 const activeView = ref('dashboard')
 const nodeLoading = ref(false)
+const nodeLoadError = ref('')
 const nodeList = ref([])
 const approvedCount = ref(0)
 const pendingCount = ref(0)
@@ -443,6 +458,7 @@ const logContent = ref([])
 // 获取节点数据
 const fetchNodes = async () => {
   nodeLoading.value = true
+  nodeLoadError.value = ''
   try {
     const res = await request.get('/nodes', {
       params: {
@@ -460,6 +476,7 @@ const fetchNodes = async () => {
     }
   } catch (error) {
     console.error('获取节点失败:', error)
+    nodeLoadError.value = error.response?.data?.message || '无法同步节点监控数据，请检查网络或稍后重试'
     ElMessage.error('无法同步节点监控数据')
   } finally {
     nodeLoading.value = false
