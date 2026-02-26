@@ -349,6 +349,10 @@ export default {
     }
 
     const handleApplySavedView = async (viewId, silent = false) => {
+      if (!viewId) {
+        Storage.remove(STORAGE_KEYS.SYSTEM_LOG_LAST_VIEW_ID)
+        return
+      }
       const targetViewIndex = savedViews.value.findIndex((item) => item.id === viewId)
       const targetView = targetViewIndex > -1 ? savedViews.value[targetViewIndex] : null
       if (!targetView) return
