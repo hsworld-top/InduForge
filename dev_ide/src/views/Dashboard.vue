@@ -238,7 +238,7 @@
             </el-tooltip>
 
             <el-tooltip
-              v-if="isSuperAdmin || isSystemAdmin"
+              v-if="isSuperAdmin || isSystemAdmin || isUserAdmin"
               content="用户管理"
               placement="right"
               :show-after="500"
@@ -662,6 +662,7 @@ export default {
     const isSystemAdmin = computed(() => authStore.userInfo?.role === 'SYSTEM_ADMIN')
     const isOpsAdmin = computed(() => authStore.userInfo?.role === 'OPS_ADMIN')
     const isProjectAdmin = computed(() => authStore.userInfo?.role === 'PROJECT_ADMIN')
+    const isUserAdmin = computed(() => authStore.userInfo?.role === 'USER_ADMIN')
 
     /**
      * 检查标签页访问权限。
@@ -845,6 +846,8 @@ export default {
       // 其他用户默认打开他们有权限访问的功能
       if (isSuperAdmin.value || isSystemAdmin.value) {
         openTab('dashboard')
+      } else if (isUserAdmin.value) {
+        openTab('user-management')
       } else if (isProjectAdmin.value) {
         openTab('project-management')
       } else if (isOpsAdmin.value) {
@@ -928,6 +931,7 @@ export default {
       isSystemAdmin,
       isOpsAdmin,
       isProjectAdmin,
+      isUserAdmin,
       isTabVisible,
       currentTenant,
       tenantLogoUrl,

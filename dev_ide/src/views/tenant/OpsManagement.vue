@@ -398,14 +398,14 @@ import dayjs from 'dayjs'
 import { initSocket, getSocket } from '@/utils/socket'
 import { Storage } from '@/utils/storage'
 import { canApproveNodes } from '@/permissions'
+import { useAuthStore } from '@/store'
 
-// 获取当前用户角色
-const currentUserInfo = Storage.getUserInfo()
-const currentUserRole = currentUserInfo?.role || ''
+const authStore = useAuthStore()
+const currentUserRole = computed(() => authStore.userInfo?.role || Storage.getUserInfo()?.role || '')
 
 // 计算是否有审批权限
 const canApproveNode = computed(() => {
-  return canApproveNodes(currentUserRole)
+  return canApproveNodes(currentUserRole.value)
 })
 
 // 状态与视图控制
