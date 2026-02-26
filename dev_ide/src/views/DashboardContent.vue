@@ -3,7 +3,7 @@
     <!-- 欢迎信息 -->
     <div class="mb-8">
       <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-        欢迎回来，{{ username }}！
+        {{ t('dashboard.welcomeBack', { username }) }}
       </h2>
     </div>
 
@@ -34,7 +34,7 @@
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">用户数量</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.userCount') }}</p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.users }}
             </p>
@@ -67,7 +67,7 @@
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">工程数量</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.projectCount') }}</p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.projects }}
             </p>
@@ -97,7 +97,7 @@
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">租户数量</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.tenantCount') }}</p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.tenants }}
             </p>
@@ -130,7 +130,7 @@
             </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">系统日志</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.systemLogs') }}</p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.logs }}
             </p>
@@ -142,8 +142,8 @@
     <!-- 最近活动 -->
     <div class="card">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">最近活动</h3>
-        <el-button size="small" :loading="loading" @click="loadDashboardData">刷新数据</el-button>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('dashboard.recentActivity') }}</h3>
+        <el-button size="small" :loading="loading" @click="loadDashboardData">{{ t('common.refresh') }}</el-button>
       </div>
       <div
         v-if="loadError"
@@ -151,9 +151,9 @@
       >
         {{ loadError }}
       </div>
-      <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">数据加载中...</div>
+      <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">{{ t('dashboard.loadingData') }}</div>
       <div v-else-if="recentActivities.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
-        暂无活动记录
+        {{ t('dashboard.noActivity') }}
       </div>
       <div v-else class="space-y-4">
         <div
@@ -187,7 +187,7 @@
         </div>
       </div>
       <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">
-        最近更新时间：{{ formatDateTime(lastUpdatedAt) || '-' }}
+        {{ t('dashboard.lastUpdated', { time: formatDateTime(lastUpdatedAt) || '-' }) }}
       </p>
     </div>
   </div>
@@ -195,6 +195,7 @@
 
 <script>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/store'
 import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
@@ -205,6 +206,7 @@ export default {
   emits: ['open-tab'],
   setup(props, { emit }) {
     const authStore = useAuthStore()
+    const { t } = useI18n()
 
     const username = computed(() => authStore.userInfo?.username || '')
     const role = computed(() => authStore.userInfo?.role)
@@ -290,13 +292,17 @@ export default {
         const failedCount = failedEntries.length
         if (failedCount > 0) {
           const sourceLabelMap = {
-            users: '用户统计',
-            projects: '工程统计',
-            logs: '日志统计',
-            tenants: '租户统计',
+            users: t('dashboard.userCount'),
+            projects: t('dashboard.projectCount'),
+            logs: t('dashboard.systemLogs'),
+            tenants: t('dashboard.tenantCount'),
           }
           const failedSources = failedEntries.map((item) => sourceLabelMap[item.key] || item.key)
-          loadError.value = `部分数据加载失败（${failedCount}/${results.length}）：${failedSources.join('、')}，已展示可用数据。`
+          loadError.value = t('dashboard.partialLoadFailed', {
+            failed: failedCount,
+            total: results.length,
+            sources: failedSources.join('、'),
+          })
         }
         lastUpdatedAt.value = new Date().toISOString()
       } catch {
@@ -307,7 +313,7 @@ export default {
           logs: 0,
         }
         recentActivities.value = []
-        loadError.value = '仪表盘数据加载失败，请稍后重试。'
+        loadError.value = t('dashboard.loadFailed')
       } finally {
         loading.value = false
       }
@@ -333,6 +339,7 @@ export default {
       lastUpdatedAt,
       stats,
       recentActivities,
+      t,
       openTab,
       loadDashboardData,
       formatDateTime,

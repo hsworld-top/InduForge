@@ -114,20 +114,20 @@
                 @click="openProfileDialog"
                 class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
-                个人资料
+                {{ t('dashboard.profile') }}
               </button>
               <button
                 v-if="isSystemAdmin"
                 @click="openSystemSettingsDialog"
                 class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
-                系统设置
+                {{ t('dashboard.menuSettings') }}
               </button>
               <button
                 @click="handleLogout"
                 class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
-                登出
+                {{ t('auth.logout') }}
               </button>
             </div>
           </div>
@@ -150,7 +150,7 @@
           <nav class="space-y-2">
             <el-tooltip
               v-if="isSystemAdmin"
-              content="仪表盘"
+              :content="t('dashboard.title')"
               placement="right"
               :show-after="500"
               :disabled="!sidebarCollapsed"
@@ -194,14 +194,14 @@
                     activeTab === 'dashboard' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
-                  仪表盘
+                  {{ t('dashboard.title') }}
                 </span>
               </button>
             </el-tooltip>
 
             <el-tooltip
               v-if="isSuperAdmin"
-              content="租户管理"
+              :content="t('dashboard.menuTenant')"
               placement="right"
               :show-after="500"
               :disabled="!sidebarCollapsed"
@@ -239,14 +239,14 @@
                     activeTab === 'tenant-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
-                  租户管理
+                  {{ t('dashboard.menuTenant') }}
                 </span>
               </button>
             </el-tooltip>
 
             <el-tooltip
               v-if="isSuperAdmin || isSystemAdmin || isUserAdmin"
-              content="用户管理"
+              :content="t('dashboard.menuUser')"
               placement="right"
               :show-after="500"
               :disabled="!sidebarCollapsed"
@@ -284,14 +284,14 @@
                     activeTab === 'user-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
-                  用户管理
+                  {{ t('dashboard.menuUser') }}
                 </span>
               </button>
             </el-tooltip>
 
             <el-tooltip
               v-if="isSuperAdmin || isSystemAdmin || isProjectAdmin"
-              content="工程管理"
+              :content="t('dashboard.menuProject')"
               placement="right"
               :show-after="500"
               :disabled="!sidebarCollapsed"
@@ -329,14 +329,14 @@
                     activeTab === 'project-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
-                  工程管理
+                  {{ t('dashboard.menuProject') }}
                 </span>
               </button>
             </el-tooltip>
 
             <el-tooltip
               v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin"
-              content="运维管理"
+              :content="t('dashboard.menuOps')"
               placement="right"
               :show-after="500"
               :disabled="!sidebarCollapsed"
@@ -380,14 +380,14 @@
                     activeTab === 'ops-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
-                  运维管理
+                  {{ t('dashboard.menuOps') }}
                 </span>
               </button>
             </el-tooltip>
 
             <el-tooltip
               v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin"
-              content="系统日志"
+              :content="t('dashboard.menuLogs')"
               placement="right"
               :show-after="500"
               :disabled="!sidebarCollapsed"
@@ -425,7 +425,7 @@
                     activeTab === 'system-logs' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
-                  系统日志
+                  {{ t('dashboard.menuLogs') }}
                 </span>
               </button>
             </el-tooltip>
@@ -532,7 +532,7 @@
       destroy-on-close
       append-to-body
       class="profile-dialog"
-      title="个人资料"
+      :title="t('profile.title')"
     >
       <Profile :embedded="true" />
     </el-dialog>
@@ -542,7 +542,7 @@
       width="960px"
       destroy-on-close
       append-to-body
-      title="系统设置"
+      :title="t('dashboard.menuSettings')"
     >
       <SystemSettings />
     </el-dialog>
@@ -579,7 +579,7 @@ export default {
   },
   setup() {
     const router = useRouter()
-    const { locale } = useI18n()
+    const { locale, t } = useI18n()
     const authStore = useAuthStore()
     const appStore = useAppStore()
     const tenantStore = useTenantStore()
@@ -603,37 +603,37 @@ export default {
     // 标签页配置
     const tabConfigs = {
       dashboard: {
-        title: '仪表盘',
+        title: t('dashboard.title'),
         component: DashboardContent,
         icon: 'dashboard',
       },
       'tenant-management': {
-        title: '租户管理',
+        title: t('dashboard.menuTenant'),
         component: TenantManagement,
         icon: 'building',
       },
       'user-management': {
-        title: '用户管理',
+        title: t('dashboard.menuUser'),
         component: UserManagement,
         icon: 'users',
       },
       'project-management': {
-        title: '工程管理',
+        title: t('dashboard.menuProject'),
         component: ProjectManagement,
         icon: 'folder',
       },
       'ops-management': {
-        title: '运维管理',
+        title: t('dashboard.menuOps'),
         component: OpsManagement,
         icon: 'cog',
       },
       'system-logs': {
-        title: '系统日志',
+        title: t('dashboard.menuLogs'),
         component: SystemLogs,
         icon: 'clipboard',
       },
       'system-settings': {
-        title: '系统设置',
+        title: t('dashboard.menuSettings'),
         component: SystemSettings,
         icon: 'cog',
       },
@@ -723,9 +723,9 @@ export default {
 
     const handleLogout = async () => {
       try {
-        await ElMessageBox.confirm('确定要登出吗？', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
+        await ElMessageBox.confirm(t('common.logoutConfirm'), t('common.tip'), {
+          confirmButtonText: t('common.confirm'),
+          cancelButtonText: t('common.cancel'),
           type: 'warning',
         })
 
@@ -933,6 +933,7 @@ export default {
       isDark,
       username,
       userInitials,
+      t,
       isAdmin,
       isSuperAdmin,
       isSystemAdmin,

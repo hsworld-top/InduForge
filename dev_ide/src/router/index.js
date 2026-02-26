@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { ROLES, ROUTE_NAMES } from '@/constants'
 import { Storage } from '@/utils/storage'
 import { hasRole } from '@/permissions'
+import i18n from '@/lang'
 
 // 路由组件懒加载
 const Login = () => import('@/views/auth/Login.vue')
@@ -28,6 +29,7 @@ const routes = [
     component: Login,
     meta: {
       title: '登录',
+      titleKey: 'auth.login',
       requiresAuth: false,
     },
   },
@@ -41,6 +43,7 @@ const routes = [
     component: Dashboard,
     meta: {
       title: '仪表板',
+      titleKey: 'dashboard.title',
       requiresAuth: true,
     },
   },
@@ -65,6 +68,7 @@ const routes = [
         component: TenantManagement,
         meta: {
           title: '租户管理',
+          titleKey: 'tenant.management',
           requiresAuth: true,
           roles: [ROLES.SUPER_ADMIN],
         },
@@ -79,6 +83,7 @@ const routes = [
     component: TenantUserManagement,
     meta: {
       title: '用户管理',
+      titleKey: 'user.management',
       requiresAuth: true,
       roles: [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.USER_ADMIN],
     },
@@ -89,6 +94,7 @@ const routes = [
     component: ProjectManagement,
     meta: {
       title: '工程管理',
+      titleKey: 'project.management',
       requiresAuth: true,
       roles: [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PROJECT_ADMIN],
     },
@@ -101,6 +107,7 @@ const routes = [
     component: SystemLogs,
     meta: {
       title: '系统日志',
+      titleKey: 'system.logs',
       requiresAuth: true,
       roles: [ROLES.SYSTEM_ADMIN, ROLES.OPS_ADMIN],
     },
@@ -111,6 +118,7 @@ const routes = [
     component: SystemSettings,
     meta: {
       title: '系统设置',
+      titleKey: 'system.settings',
       requiresAuth: true,
       roles: [ROLES.SYSTEM_ADMIN],
     },
@@ -123,6 +131,7 @@ const routes = [
     component: Profile,
     meta: {
       title: '个人资料',
+      titleKey: 'profile.title',
       requiresAuth: true,
     },
   },
@@ -147,7 +156,8 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   // 设置页面标题
-  document.title = `${to.meta.title || 'InduForge'} - ProjectIDE`
+  const title = to.meta.titleKey ? i18n.global.t(to.meta.titleKey) : to.meta.title || 'InduForge'
+  document.title = `${title} - ProjectIDE`
 
   // 检查认证
   const token = Storage.getToken()

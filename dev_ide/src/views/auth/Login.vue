@@ -149,7 +149,7 @@
                 for="tenantCode"
                 class="block text-sm font-semibold text-gray-700 dark:text-gray-300"
               >
-                租户代码
+                {{ $t('auth.tenantCode') }}
               </label>
               <div class="relative">
                 <input
@@ -157,7 +157,7 @@
                   v-model="form.tenantCode"
                   type="text"
                   class="input-field"
-                  placeholder="输入租户代码"
+                  :placeholder="$t('auth.tenantCodePlaceholder')"
                 />
                 <svg
                   class="absolute right-3 top-3.5 h-5 w-5 input-icon"
@@ -230,7 +230,7 @@
                   type="button"
                   @click="togglePasswordVisibility"
                   class="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors cursor-pointer password-toggle-btn"
-                  :title="showPassword ? '隐藏密码' : '显示密码'"
+                  :title="showPassword ? $t('auth.hidePassword') : $t('auth.showPassword')"
                 >
                   <svg v-if="showPassword" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -292,7 +292,7 @@
                 <img
                   v-if="captchaData?.image"
                   :src="captchaData.image"
-                  alt="验证码"
+                  :alt="$t('auth.captchaAlt')"
                   class="h-12 w-28 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer captcha-img"
                   @click="refreshCaptcha"
                 />
@@ -301,7 +301,7 @@
                   class="h-12 w-28 border border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-gray-400 text-sm cursor-pointer"
                   @click="refreshCaptcha"
                 >
-                  加载中...
+                  {{ $t('auth.captchaLoading') }}
                 </div>
               </div>
             </div>
@@ -350,7 +350,7 @@
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   ></path>
                 </svg>
-                登录中...
+                {{ $t('auth.loading') }}
               </span>
               <span v-else class="flex items-center">
                 <svg
@@ -391,7 +391,7 @@ export default {
     const router = useRouter()
     const authStore = useAuthStore()
     const appStore = useAppStore()
-    const { locale } = useI18n()
+    const { locale, t } = useI18n()
 
     const form = reactive({
       tenantCode: '',
@@ -446,18 +446,18 @@ export default {
         captchaData.value = result.data // 提取响应中的data部分
       } catch (error) {
         console.error('获取验证码失败:', error)
-        ElMessage.error('获取验证码失败')
+        ElMessage.error(t('auth.getCaptchaFailed'))
       }
     }
 
     const handleLogin = async () => {
       if (!form.username || !form.password) {
-        ElMessage.warning('请输入用户名和密码')
+        ElMessage.warning(t('auth.pleaseInputUsernamePassword'))
         return
       }
 
       if (showCaptcha.value && !form.captcha) {
-        ElMessage.warning('请输入验证码')
+        ElMessage.warning(t('auth.pleaseInputCaptcha'))
         return
       }
 
@@ -507,7 +507,7 @@ export default {
         captchaData.value = null
         form.captcha = ''
 
-        ElMessage.success('登录成功')
+        ElMessage.success(t('auth.loginSuccess'))
 
         // 根据用户角色跳转到合适的页面
         if (user.role === ROLES.SUPER_ADMIN) {
@@ -523,7 +523,7 @@ export default {
           const errorCode = error.response.data.errorCode
           const isCaptchaError = errorCode === 'A0010' // AUTH_INVALID_CAPTCHA
 
-          ElMessage.error(error.response.data.message || '用户名或密码错误')
+          ElMessage.error(error.response.data.message || t('auth.invalidCredentials'))
 
           // 登录失败后显示验证码
           if (!showCaptcha.value) {
@@ -534,11 +534,11 @@ export default {
             await refreshCaptcha()
           }
         } else if (error.response?.status === 429) {
-          ElMessage.error('请求过于频繁，请稍后再试')
+          ElMessage.error(t('auth.tooManyRequests'))
         } else if (error.response?.data?.message) {
           ElMessage.error(error.response.data.message)
         } else {
-          ElMessage.error('登录失败，请重试')
+          ElMessage.error(t('auth.retry'))
         }
       } finally {
         loading.value = false

@@ -8,7 +8,7 @@
         <div class="header-meta">
           <h2 class="name">{{ profile.username || '-' }}</h2>
           <p class="role">{{ getRoleLabel(profile.role) }}</p>
-          <p class="tenant">{{ profile.tenant?.name || '未绑定租户' }}</p>
+          <p class="tenant">{{ profile.tenant?.name || t('profile.unboundTenant') }}</p>
         </div>
       </div>
       <div class="header-actions">
@@ -18,21 +18,21 @@
           :on-change="handleAvatarChange"
           accept="image/png,image/jpeg,image/webp"
         >
-          <el-button>上传头像</el-button>
+          <el-button>{{ t('profile.uploadAvatar') }}</el-button>
         </el-upload>
         <el-button @click="loadProfile" :loading="loading">
           <el-icon><Refresh /></el-icon>
-          刷新
+          {{ t('common.refresh') }}
         </el-button>
       </div>
     </div>
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
       <div class="panel">
-        <div class="panel-title">账户信息</div>
+        <div class="panel-title">{{ t('profile.accountInfo') }}</div>
         <div class="meta-list">
           <div class="meta-item">
-            <span class="label">用户ID</span>
+            <span class="label">{{ t('profile.userId') }}</span>
             <span class="value">{{ profile.id || '-' }}</span>
           </div>
           <div class="meta-item">
@@ -40,38 +40,38 @@
             <span class="value">{{ profile.username || '-' }}</span>
           </div>
           <div class="meta-item">
-            <span class="label">角色</span>
+            <span class="label">{{ t('profile.role') }}</span>
             <span class="value">{{ getRoleLabel(profile.role) }}</span>
           </div>
           <div class="meta-item">
-            <span class="label">租户ID</span>
+            <span class="label">{{ t('profile.tenantId') }}</span>
             <span class="value">{{ profile.tenant?.id || '-' }}</span>
           </div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-title">修改密码</div>
+        <div class="panel-title">{{ t('profile.changePassword') }}</div>
         <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="92px">
-          <el-form-item label="新密码" prop="newPassword">
+          <el-form-item :label="t('profile.newPassword')" prop="newPassword">
             <el-input
               v-model="passwordForm.newPassword"
               type="password"
               show-password
-              placeholder="请输入新密码（至少6位）"
+              :placeholder="t('profile.newPasswordPlaceholder')"
             />
           </el-form-item>
-          <el-form-item label="确认密码" prop="confirmPassword">
+          <el-form-item :label="t('profile.confirmPassword')" prop="confirmPassword">
             <el-input
               v-model="passwordForm.confirmPassword"
               type="password"
               show-password
-              placeholder="请再次输入新密码"
+              :placeholder="t('profile.confirmPasswordPlaceholder')"
             />
           </el-form-item>
           <el-form-item>
             <el-button type="primary" :loading="savingPassword" @click="handleChangePassword">
-              保存新密码
+              {{ t('profile.savePassword') }}
             </el-button>
           </el-form-item>
         </el-form>
@@ -82,6 +82,7 @@
 
 <script>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { authAPI, userAPI } from '@/api'
 import { useAuthStore } from '@/store'
@@ -99,6 +100,7 @@ export default {
     },
   },
   setup() {
+    const { t } = useI18n()
     const authStore = useAuthStore()
     const loading = ref(false)
     const savingPassword = ref(false)
@@ -124,15 +126,15 @@ export default {
 
     const passwordRules = {
       newPassword: [
-        { required: true, message: '请输入新密码', trigger: 'blur' },
-        { min: 6, message: '密码长度不能少于 6 个字符', trigger: 'blur' },
+        { required: true, message: t('profile.requireNewPassword'), trigger: 'blur' },
+        { min: 6, message: t('profile.passwordMinLength'), trigger: 'blur' },
       ],
       confirmPassword: [
-        { required: true, message: '请再次输入新密码', trigger: 'blur' },
+        { required: true, message: t('profile.requireConfirmPassword'), trigger: 'blur' },
         {
           validator: (rule, value, callback) => {
             if (value !== passwordForm.newPassword) {
-              callback(new Error('两次输入密码不一致'))
+              callback(new Error(t('profile.passwordMismatch')))
             } else {
               callback()
             }
@@ -192,7 +194,7 @@ export default {
           tenant: localUser?.tenant || null,
           avatarUrl: localUser?.avatarUrl || avatarFromCache || '',
         }
-        ElMessage.warning('获取个人资料失败，已显示本地缓存信息')
+        ElMessage.warning(t('profile.profileLoadFailed'))
       } finally {
         loading.value = false
       }
@@ -209,11 +211,11 @@ export default {
       const isValidSize = rawFile.size / 1024 / 1024 < 2
 
       if (!isImage) {
-        ElMessage.error('仅支持图片文件')
+        ElMessage.error(t('profile.avatarOnlyImage'))
         return
       }
       if (!isValidSize) {
-        ElMessage.error('头像大小不能超过 2MB')
+        ElMessage.error(t('profile.avatarMaxSize'))
         return
       }
 
@@ -225,7 +227,7 @@ export default {
           localStorage.setItem(getAvatarStorageKey(profile.value.id), avatarUrl)
         }
         syncUserCache()
-        ElMessage.success('头像已更新')
+        ElMessage.success(t('profile.avatarUpdated'))
       }
       reader.readAsDataURL(rawFile)
     }
@@ -240,19 +242,23 @@ export default {
 
       const userId = profile.value.id || authStore.userInfo?.id
       if (!userId) {
-        ElMessage.error('未获取到当前用户信息，请刷新后重试')
+        ElMessage.error(t('profile.noUserInfo'))
         return
       }
 
       savingPassword.value = true
       try {
         await userAPI.updatePassword(userId, passwordForm.newPassword)
-        ElMessage.success('密码修改成功')
+        ElMessage.success(t('profile.passwordUpdated'))
         passwordForm.newPassword = ''
         passwordForm.confirmPassword = ''
         passwordFormRef.value?.clearValidate()
       } catch (error) {
-        ElMessage.error(`密码修改失败：${error.response?.data?.message || error.message}`)
+        ElMessage.error(
+          t('profile.passwordUpdateFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
       } finally {
         savingPassword.value = false
       }
@@ -271,6 +277,7 @@ export default {
       passwordRules,
       passwordFormRef,
       getRoleLabel,
+      t,
       loadProfile,
       handleAvatarChange,
       handleChangePassword,
