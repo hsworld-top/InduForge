@@ -62,10 +62,12 @@
           </el-form-item>
           <el-form-item label="日志默认页长">
             <el-select v-model="settingsForm.logPageSize" style="width: 220px">
-              <el-option label="10 条" :value="10" />
-              <el-option label="20 条" :value="20" />
-              <el-option label="50 条" :value="50" />
-              <el-option label="100 条" :value="100" />
+              <el-option
+                v-for="size in systemLogPageSizeOptions"
+                :key="size"
+                :label="`${size} 条`"
+                :value="size"
+              />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -96,6 +98,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { authAPI } from '@/api'
 import { useAppStore } from '@/store'
 import { Storage } from '@/utils/storage'
+import { SYSTEM_LOG_PAGE_SIZE_OPTIONS } from '@/constants'
 
 export default {
   name: 'SystemSettings',
@@ -229,6 +232,7 @@ export default {
       saveSettings,
       resetToLastSaved,
       resetToDefault,
+      systemLogPageSizeOptions: SYSTEM_LOG_PAGE_SIZE_OPTIONS,
     }
   },
 }

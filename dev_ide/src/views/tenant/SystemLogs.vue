@@ -114,7 +114,7 @@
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.limit"
-          :page-sizes="[10, 20, 50, 100]"
+          :page-sizes="systemLogPageSizeOptions"
           :total="pagination.total"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
@@ -131,6 +131,7 @@ import { ElMessage } from 'element-plus'
 import { logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
 import { Storage } from '@/utils/storage'
+import { SYSTEM_LOG_PAGE_SIZE_OPTIONS } from '@/constants'
 
 export default {
   name: 'SystemLogs',
@@ -266,6 +267,7 @@ export default {
       getLevelTagType,
       getLevelLabel,
       formatDateTime,
+      systemLogPageSizeOptions: SYSTEM_LOG_PAGE_SIZE_OPTIONS,
     }
   },
 }
@@ -292,3 +294,4 @@ export default {
   @apply text-2xl font-semibold mt-2;
 }
 </style>
+

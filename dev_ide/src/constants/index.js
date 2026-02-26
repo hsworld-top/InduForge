@@ -69,6 +69,8 @@ export const PAGINATION = {
   PAGE_SIZE_OPTIONS: [10, 20, 50, 100],
 }
 
+export const SYSTEM_LOG_PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+
 // 正则表达式常量
 export const REGEX = {
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
