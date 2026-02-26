@@ -605,8 +605,11 @@ export default {
     const showUserMenu = ref(false)
     const showLanguageMenu = ref(false)
 
-    // 侧边栏折叠状态
-    const sidebarCollapsed = ref(true)
+    // 侧边栏折叠状态（持久化）
+    const sidebarCollapsed = computed({
+      get: () => appStore.sidebarCollapsed,
+      set: (value) => appStore.setSidebarCollapsed(value),
+    })
 
     // 标签页状态
     const tabs = ref([])
@@ -910,7 +913,7 @@ export default {
      * 切换侧边栏折叠状态。
      */
     const toggleSidebar = () => {
-      sidebarCollapsed.value = !sidebarCollapsed.value
+      appStore.toggleSidebar()
     }
 
     watch(isDark, (nextIsDark) => {

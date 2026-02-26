@@ -86,7 +86,7 @@ export const useAppStore = defineStore('app', {
     theme: Storage.getTheme(),
     language: Storage.getLanguage(),
     loading: false,
-    sidebarCollapsed: false,
+    sidebarCollapsed: Storage.getSidebarCollapsed(),
     config: null,
   }),
 
@@ -115,6 +115,12 @@ export const useAppStore = defineStore('app', {
 
     toggleSidebar() {
       this.sidebarCollapsed = !this.sidebarCollapsed
+      Storage.setSidebarCollapsed(this.sidebarCollapsed)
+    },
+
+    setSidebarCollapsed(collapsed) {
+      this.sidebarCollapsed = !!collapsed
+      Storage.setSidebarCollapsed(this.sidebarCollapsed)
     },
 
     setConfig(config) {

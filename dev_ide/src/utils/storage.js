@@ -153,6 +153,22 @@ export class Storage {
   }
 
   /**
+   * 获取侧边栏折叠状态
+   * @returns {boolean} 是否折叠
+   */
+  static getSidebarCollapsed() {
+    return this.get(STORAGE_KEYS.SIDEBAR_COLLAPSED, true)
+  }
+
+  /**
+   * 设置侧边栏折叠状态
+   * @param {boolean} collapsed - 是否折叠
+   */
+  static setSidebarCollapsed(collapsed) {
+    this.set(STORAGE_KEYS.SIDEBAR_COLLAPSED, !!collapsed)
+  }
+
+  /**
    * 获取记住我的凭据
    * @returns {object|null} 记住的凭据 {username, password, tenantCode, rememberMe}
    */
