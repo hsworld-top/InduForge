@@ -104,6 +104,13 @@
     </div>
 
     <div class="panel">
+      <div v-if="loadError" class="px-4 pt-4">
+        <el-alert :title="loadError" type="error" show-icon :closable="false">
+          <template #default>
+            <el-button text type="primary" @click="handleRefresh">重新加载</el-button>
+          </template>
+        </el-alert>
+      </div>
       <el-table
         :data="logs"
         v-loading="loading"
@@ -166,6 +173,7 @@ export default {
   name: 'SystemLogs',
   setup() {
     const loading = ref(false)
+    const loadError = ref('')
     const logs = ref([])
     const levelStats = ref({})
 
@@ -209,12 +217,14 @@ export default {
 
     const fetchLogs = async () => {
       loading.value = true
+      loadError.value = ''
       try {
         const response = await logAPI.getLogs(getQueryParams())
         logs.value = response.data?.logs || []
         pagination.total = response.pagination?.total || 0
         pagination.totalPages = response.pagination?.totalPages || 0
       } catch (error) {
+        loadError.value = error.response?.data?.message || '获取系统日志失败，请稍后重试'
         ElMessage.error('获取系统日志失败：' + (error.response?.data?.message || error.message))
       } finally {
         loading.value = false
@@ -423,6 +433,7 @@ export default {
 
     return {
       loading,
+      loadError,
       logs,
       filters,
       pagination,
