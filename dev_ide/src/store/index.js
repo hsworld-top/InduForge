@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia'
-import dayjs from 'dayjs'
 import { Storage } from '@/utils'
-import { TIME_FORMAT } from '@/constants'
 
 // 认证状态管理
 export const useAuthStore = defineStore('auth', {
@@ -200,19 +198,12 @@ export const useTenantStore = defineStore('tenant', {
 
     async createTenant(tenantData) {
       try {
-        // const newTenant = await tenantAPI.createTenant(tenantData)
-        // this.tenants.push(newTenant)
-        // return newTenant
-
-        // 模拟创建租户
-        const newTenant = {
-          id: Date.now(),
-          ...tenantData,
-          status: 'active',
-          createdAt: dayjs().format(TIME_FORMAT),
-          userCount: 0,
+        const { tenantAPI } = await import('@/api')
+        const response = await tenantAPI.createTenant(tenantData)
+        const newTenant = response.data?.tenant || response.data
+        if (newTenant) {
+          this.tenants.unshift(newTenant)
         }
-        this.tenants.push(newTenant)
         return newTenant
       } catch (error) {
         throw error
@@ -221,19 +212,19 @@ export const useTenantStore = defineStore('tenant', {
 
     async updateTenant(id, tenantData) {
       try {
-        // const updatedTenant = await tenantAPI.updateTenant(id, tenantData)
-        // const index = this.tenants.findIndex(t => t.id === id)
-        // if (index !== -1) {
-        //   this.tenants[index] = updatedTenant
-        // }
-        // return updatedTenant
-
-        // 模拟更新租户
         const index = this.tenants.findIndex((t) => t.id === id)
-        if (index !== -1) {
-          this.tenants[index] = { ...this.tenants[index], ...tenantData }
-          return this.tenants[index]
+        const targetTenant = index !== -1 ? this.tenants[index] : null
+        if (!targetTenant) {
+          throw new Error('租户不存在')
         }
+        const { tenantAPI } = await import('@/api')
+        const response = await tenantAPI.updateTenant(targetTenant.code || id, tenantData)
+        const updatedTenant = response.data?.tenant || response.data || {
+          ...targetTenant,
+          ...tenantData,
+        }
+        this.tenants[index] = updatedTenant
+        return updatedTenant
       } catch (error) {
         throw error
       }
@@ -241,10 +232,8 @@ export const useTenantStore = defineStore('tenant', {
 
     async deleteTenant(id) {
       try {
-        // await tenantAPI.deleteTenant(id)
-        // this.tenants = this.tenants.filter(t => t.id !== id)
-
-        // 模拟删除租户
+        const { tenantAPI } = await import('@/api')
+        await tenantAPI.deleteTenant(id)
         this.tenants = this.tenants.filter((t) => t.id !== id)
       } catch (error) {
         throw error
