@@ -67,6 +67,7 @@ request.interceptors.response.use(
   },
   (error) => {
     const { response, config } = error
+    const requestUrl = config?.url || ''
 
     if (response) {
       const { status, data } = response
@@ -74,13 +75,13 @@ request.interceptors.response.use(
       switch (status) {
         case 401: {
           // 检查是否是登录接口的401错误（用户名密码错误）
-          if (config.url.includes('/auth/login')) {
+          if (requestUrl.includes('/auth/login')) {
             // 登录接口的401错误不重定向，直接返回错误让页面处理
             return Promise.reject(error)
           }
 
           // 检查是否是刷新token接口的401错误
-          if (config.url.includes('/auth/refresh')) {
+          if (requestUrl.includes('/auth/refresh')) {
             // 刷新token失败，跳转到登录页
             clearAuthAndRedirectToLogin()
             return Promise.reject(error)
