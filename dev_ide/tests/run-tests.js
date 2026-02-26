@@ -16,6 +16,7 @@ import {
   isFailedDeploy,
   getDeployFailureReason,
 } from '../src/views/tenant/utils/ops-status.js'
+import { messages } from '../src/lang/index.js'
 
 const run = (name, fn) => {
   try {
@@ -64,6 +65,15 @@ run('运维状态：映射与失败判定', () => {
   assert.equal(getDeployLabel('pending'), '等待中')
   assert.equal(isFailedDeploy({ status: 'error' }), true)
   assert.equal(getDeployFailureReason({ errorMessage: 'network error' }), 'network error')
+})
+
+run('国际化：核心键值存在性', () => {
+  assert.equal(messages.zh.dashboard.title, '仪表盘')
+  assert.equal(messages.en.dashboard.title, 'Dashboard')
+  assert.equal(messages.zh.profile.uploadAvatar, '上传头像')
+  assert.equal(messages.en.profile.uploadAvatar, 'Upload Avatar')
+  assert.equal(messages.zh.auth.tenantCode, '租户代码')
+  assert.equal(messages.en.auth.tenantCode, 'Tenant Code')
 })
 
 if (process.exitCode !== 1) {

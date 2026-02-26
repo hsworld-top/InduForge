@@ -1,6 +1,6 @@
 import { createI18n } from 'vue-i18n'
 
-const messages = {
+export const messages = {
   zh: {
     common: {
       confirm: '确定',
