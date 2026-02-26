@@ -286,9 +286,19 @@ export default {
           recentActivities.value = []
         }
 
-        const failedCount = results.filter((item) => item.status === 'rejected').length
+        const failedEntries = requestEntries
+          .map(([key], index) => ({ key, result: results[index] }))
+          .filter((item) => item.result.status === 'rejected')
+        const failedCount = failedEntries.length
         if (failedCount > 0) {
-          loadError.value = `部分数据加载失败（${failedCount}/${results.length}），已展示可用数据。`
+          const sourceLabelMap = {
+            users: '用户统计',
+            projects: '工程统计',
+            logs: '日志统计',
+            tenants: '租户统计',
+          }
+          const failedSources = failedEntries.map((item) => sourceLabelMap[item.key] || item.key)
+          loadError.value = `部分数据加载失败（${failedCount}/${results.length}）：${failedSources.join('、')}，已展示可用数据。`
         }
         lastUpdatedAt.value = new Date().toISOString()
       } catch {
