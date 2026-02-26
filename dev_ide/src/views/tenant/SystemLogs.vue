@@ -262,12 +262,19 @@ export default {
         id: existingIndex > -1 ? savedViews.value[existingIndex].id : `view_${Date.now()}`,
         name,
         filters: currentFilters,
+        updatedAt: new Date().toISOString(),
       }
 
       if (existingIndex > -1) {
         savedViews.value.splice(existingIndex, 1, newView)
       } else {
         savedViews.value.push(newView)
+        if (savedViews.value.length > 20) {
+          savedViews.value = savedViews.value
+            .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+            .slice(0, 20)
+          ElMessage.warning('已超过20个筛选视图，已自动保留最近20个')
+        }
       }
 
       Storage.set(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, savedViews.value)
