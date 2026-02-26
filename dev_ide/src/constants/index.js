@@ -61,6 +61,7 @@ export const STORAGE_KEYS = {
   LANGUAGE: 'language',
   TENANT_ID: 'tenant_id',
   REMEMBER_ME: 'remember_me',
+  SYSTEM_LOG_SAVED_VIEWS: 'system_log_saved_views',
 }
 
 // 分页常量

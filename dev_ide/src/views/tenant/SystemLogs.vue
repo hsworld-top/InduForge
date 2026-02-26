@@ -72,6 +72,28 @@
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
         </el-form-item>
+        <el-form-item label="筛选视图">
+          <el-select
+            v-model="selectedViewId"
+            placeholder="选择已保存视图"
+            clearable
+            style="width: 220px"
+            @change="handleApplySavedView"
+          >
+            <el-option
+              v-for="view in savedViews"
+              :key="view.id"
+              :label="view.name"
+              :value="view.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="success" plain @click="saveCurrentView">保存当前筛选</el-button>
+          <el-button type="danger" plain :disabled="!selectedViewId" @click="removeSelectedView">
+            删除已选视图
+          </el-button>
+        </el-form-item>
       </el-form>
     </div>
 
@@ -127,11 +149,11 @@
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
 import { Storage } from '@/utils/storage'
-import { SYSTEM_LOG_PAGE_SIZE_OPTIONS } from '@/constants'
+import { STORAGE_KEYS, SYSTEM_LOG_PAGE_SIZE_OPTIONS } from '@/constants'
 
 export default {
   name: 'SystemLogs',
@@ -146,6 +168,8 @@ export default {
       resource: '',
       dateRange: [],
     })
+    const savedViews = ref(Storage.get(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, []))
+    const selectedViewId = ref('')
 
     const pagination = reactive({
       page: 1,
@@ -216,6 +240,79 @@ export default {
       await Promise.all([fetchLogs(), fetchStats()])
     }
 
+    const saveCurrentView = async () => {
+      const { value: name } = await ElMessageBox.prompt('请输入筛选视图名称', '保存筛选视图', {
+        confirmButtonText: '保存',
+        cancelButtonText: '取消',
+        inputPattern: /^.{1,20}$/,
+        inputErrorMessage: '名称长度需在 1 到 20 个字符',
+      }).catch(() => ({ value: '' }))
+
+      if (!name) return
+
+      const currentFilters = {
+        level: filters.level,
+        action: filters.action,
+        resource: filters.resource,
+        dateRange: Array.isArray(filters.dateRange) ? [...filters.dateRange] : [],
+      }
+
+      const existingIndex = savedViews.value.findIndex((item) => item.name === name)
+      const newView = {
+        id: existingIndex > -1 ? savedViews.value[existingIndex].id : `view_${Date.now()}`,
+        name,
+        filters: currentFilters,
+      }
+
+      if (existingIndex > -1) {
+        savedViews.value.splice(existingIndex, 1, newView)
+      } else {
+        savedViews.value.push(newView)
+      }
+
+      Storage.set(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, savedViews.value)
+      selectedViewId.value = newView.id
+      ElMessage.success(existingIndex > -1 ? '筛选视图已更新' : '筛选视图已保存')
+    }
+
+    const handleApplySavedView = async (viewId) => {
+      const targetView = savedViews.value.find((item) => item.id === viewId)
+      if (!targetView) return
+
+      filters.level = targetView.filters.level || ''
+      filters.action = targetView.filters.action || ''
+      filters.resource = targetView.filters.resource || ''
+      filters.dateRange = Array.isArray(targetView.filters.dateRange)
+        ? [...targetView.filters.dateRange]
+        : []
+      pagination.page = 1
+
+      await Promise.all([fetchLogs(), fetchStats()])
+      ElMessage.success(`已应用筛选视图：${targetView.name}`)
+    }
+
+    const removeSelectedView = async () => {
+      const targetView = savedViews.value.find((item) => item.id === selectedViewId.value)
+      if (!targetView) return
+
+      try {
+        await ElMessageBox.confirm(`确定删除筛选视图 "${targetView.name}" 吗？`, '删除确认', {
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+          type: 'warning',
+        })
+
+        savedViews.value = savedViews.value.filter((item) => item.id !== selectedViewId.value)
+        Storage.set(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, savedViews.value)
+        selectedViewId.value = ''
+        ElMessage.success('筛选视图已删除')
+      } catch (error) {
+        if (error !== 'cancel') {
+          ElMessage.error('删除筛选视图失败')
+        }
+      }
+    }
+
     const handleSizeChange = async (size) => {
       pagination.limit = size
       Storage.set('system_log_page_size', size)
@@ -262,11 +359,16 @@ export default {
       handleSearch,
       resetFilters,
       handleRefresh,
+      saveCurrentView,
+      handleApplySavedView,
+      removeSelectedView,
       handleSizeChange,
       handleCurrentChange,
       getLevelTagType,
       getLevelLabel,
       formatDateTime,
+      savedViews,
+      selectedViewId,
       systemLogPageSizeOptions: SYSTEM_LOG_PAGE_SIZE_OPTIONS,
     }
   },
