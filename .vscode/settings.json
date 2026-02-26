@@ -5,6 +5,8 @@
   //   "**/.vite": true,
   //   "**/pnpm-lock.yaml": false
   // },
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": true,
   "search.exclude": {
     "**/node_modules": true,
     "**/dist": true,

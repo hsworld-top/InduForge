@@ -67,7 +67,7 @@ router.get('/', authenticateToken, validate(Joi.object({
 
     // 检查当前用户是否有权限查看用户
     // 超级管理员只能查看用户，不能管理用户
-    const canViewUsers = ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
+    const canViewUsers = ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
     if (!canViewUsers) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
     }

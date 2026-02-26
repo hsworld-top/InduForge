@@ -99,24 +99,27 @@ router.get('/', authenticateToken, validate(Joi.object({
       if (endDate) where.createdAt[Op.lte] = dayjs(endDate).toDate();
     }
 
-    const offset = (page - 1) * limit;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const offset = (pageNum - 1) * limitNum;
 
     const { count, rows } = await Log.findAndCountAll({
       where,
+      attributes: { exclude: ['metadata'] },
       include: [
         { model: User, as: 'user', attributes: ['id', 'username', 'fullName'] },
         { model: Tenant, as: 'tenant', attributes: ['id', 'name'] }
       ],
-      limit,
+      limit: limitNum,
       offset,
       order: [['createdAt', 'DESC']],
     });
 
     return ApiResponse.paginated(res, { logs: rows }, {
       total: count,
-      page,
-      limit,
-      totalPages: Math.ceil(count / limit),
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(count / limitNum),
     });
   } catch (error) {
     logger.error('Get logs error', { error: error.message, requestId: req.requestId });

@@ -71,6 +71,7 @@ const Log = sequelize.define('Log', {
   },
 }, {
   tableName: 'logs',
+  timestamps: false,
   comment: '系统日志表',
   indexes: [
     {
