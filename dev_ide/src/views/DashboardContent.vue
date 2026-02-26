@@ -5,7 +5,6 @@
       <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
         欢迎回来，{{ username }}！
       </h2>
-      <p class="text-gray-600 dark:text-gray-400">这是您的多租户管理系统仪表板</p>
     </div>
 
     <!-- 统计卡片 -->
