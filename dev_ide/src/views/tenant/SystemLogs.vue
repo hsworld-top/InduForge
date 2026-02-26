@@ -282,7 +282,7 @@ export default {
       ElMessage.success(existingIndex > -1 ? '筛选视图已更新' : '筛选视图已保存')
     }
 
-    const handleApplySavedView = async (viewId) => {
+    const handleApplySavedView = async (viewId, silent = false) => {
       const targetView = savedViews.value.find((item) => item.id === viewId)
       if (!targetView) return
 
@@ -293,9 +293,12 @@ export default {
         ? [...targetView.filters.dateRange]
         : []
       pagination.page = 1
+      Storage.set(STORAGE_KEYS.SYSTEM_LOG_LAST_VIEW_ID, viewId)
 
       await Promise.all([fetchLogs(), fetchStats()])
-      ElMessage.success(`已应用筛选视图：${targetView.name}`)
+      if (!silent) {
+        ElMessage.success(`已应用筛选视图：${targetView.name}`)
+      }
     }
 
     const removeSelectedView = async () => {
@@ -311,6 +314,7 @@ export default {
 
         savedViews.value = savedViews.value.filter((item) => item.id !== selectedViewId.value)
         Storage.set(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, savedViews.value)
+        Storage.remove(STORAGE_KEYS.SYSTEM_LOG_LAST_VIEW_ID)
         selectedViewId.value = ''
         ElMessage.success('筛选视图已删除')
       } catch (error) {
@@ -354,6 +358,11 @@ export default {
 
     onMounted(async () => {
       await Promise.all([fetchLogs(), fetchStats()])
+      const lastViewId = Storage.get(STORAGE_KEYS.SYSTEM_LOG_LAST_VIEW_ID, '')
+      if (lastViewId && savedViews.value.some((item) => item.id === lastViewId)) {
+        selectedViewId.value = lastViewId
+        await handleApplySavedView(lastViewId, true)
+      }
     })
 
     return {

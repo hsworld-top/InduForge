@@ -62,6 +62,7 @@ export const STORAGE_KEYS = {
   TENANT_ID: 'tenant_id',
   REMEMBER_ME: 'remember_me',
   SYSTEM_LOG_SAVED_VIEWS: 'system_log_saved_views',
+  SYSTEM_LOG_LAST_VIEW_ID: 'system_log_last_view_id',
 }
 
 // 分页常量
