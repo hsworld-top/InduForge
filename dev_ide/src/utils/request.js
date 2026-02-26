@@ -74,6 +74,11 @@ request.interceptors.response.use(
 
       switch (status) {
         case 401: {
+          if (config?._retry) {
+            clearAuthAndRedirectToLogin()
+            return Promise.reject(error)
+          }
+
           // 检查是否是登录接口的401错误（用户名密码错误）
           if (requestUrl.includes('/auth/login')) {
             // 登录接口的401错误不重定向，直接返回错误让页面处理
@@ -116,6 +121,8 @@ request.interceptors.response.use(
                 processQueue(null, accessToken)
 
                 // 重新发起原始请求
+                config._retry = true
+                config.headers = config.headers || {}
                 config.headers.Authorization = `Bearer ${accessToken}`
                 return request(config)
               })

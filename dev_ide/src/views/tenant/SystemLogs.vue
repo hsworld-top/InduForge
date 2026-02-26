@@ -349,7 +349,8 @@ export default {
     }
 
     const handleApplySavedView = async (viewId, silent = false) => {
-      const targetView = savedViews.value.find((item) => item.id === viewId)
+      const targetViewIndex = savedViews.value.findIndex((item) => item.id === viewId)
+      const targetView = targetViewIndex > -1 ? savedViews.value[targetViewIndex] : null
       if (!targetView) return
 
       filters.level = targetView.filters.level || ''
@@ -358,6 +359,11 @@ export default {
       filters.dateRange = Array.isArray(targetView.filters.dateRange)
         ? [...targetView.filters.dateRange]
         : []
+      savedViews.value[targetViewIndex] = {
+        ...targetView,
+        updatedAt: new Date().toISOString(),
+      }
+      Storage.set(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, savedViews.value)
       pagination.page = 1
       Storage.set(STORAGE_KEYS.SYSTEM_LOG_LAST_VIEW_ID, viewId)
 
