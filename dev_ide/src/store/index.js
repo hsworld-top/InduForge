@@ -25,24 +25,26 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(credentials) {
       try {
-        // 这里会调用 API
-        // const response = await authAPI.login(credentials)
+        const { authAPI } = await import('@/api')
+        const response = await authAPI.login(credentials)
+        const user = response.data?.user
+        const token = response.data?.accessToken || response.data?.token
+        const refreshToken = response.data?.refreshToken || null
 
-        // 模拟登录成功
-        const mockUser = {
-          id: 1,
-          username: credentials.username,
-          email: 'admin@example.com',
-          role: 'SYSTEM_ADMIN',
-          tenantId: null,
+        if (!token || !user) {
+          throw new Error('登录响应缺少必要字段')
         }
 
-        const mockToken = 'mock-jwt-token'
-
-        this.setAuthData(mockToken, null, mockUser)
+        this.setAuthData(token, refreshToken, {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          tenantId: user.tenant?.id || user.tenantId || null,
+        })
         return { success: true }
       } catch (error) {
-        return { success: false, error: error.message }
+        return { success: false, error: error.response?.data?.message || error.message }
       }
     },
 

@@ -596,14 +596,14 @@ export default {
 
 /* 登录按钮悬停效果 */
 .login-button {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
   transition: all 0.3s ease;
 }
 
 .login-button:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  background: linear-gradient(135deg, #0d9488 0%, #115e59 100%);
   transform: translateY(-1px);
-  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 10px 25px rgba(13, 148, 136, 0.3);
 }
 
 /* 表单容器动画 */
@@ -630,7 +630,7 @@ export default {
 }
 
 input:focus + .input-icon {
-  color: #3b82f6;
+  color: #14b8a6;
 }
 
 /* 密码切换按钮样式 */
@@ -685,21 +685,21 @@ input:focus + .input-icon {
 }
 
 :deep(.el-dropdown-menu__item:hover) {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: rgb(59, 130, 246);
+  background-color: rgba(20, 184, 166, 0.1);
+  color: rgb(20, 184, 166);
 }
 
 :deep(.el-dropdown-menu__item.is-active) {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: rgb(59, 130, 246);
+  background-color: rgba(20, 184, 166, 0.1);
+  color: rgb(20, 184, 166);
   font-weight: 600;
 }
 
 :deep(.dark .el-dropdown-menu__item:hover) {
-  background-color: rgba(59, 130, 246, 0.2);
+  background-color: rgba(20, 184, 166, 0.2);
 }
 
 :deep(.dark .el-dropdown-menu__item.is-active) {
-  background-color: rgba(59, 130, 246, 0.2);
+  background-color: rgba(20, 184, 166, 0.2);
 }
 </style>

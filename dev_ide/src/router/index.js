@@ -52,7 +52,7 @@ const routes = [
     meta: {
       title: '超级管理员控制台',
       requiresAuth: true,
-      roles: ['SUPER_ADMIN'],
+      roles: [ROLES.SUPER_ADMIN],
     },
     children: [
       {
@@ -66,7 +66,7 @@ const routes = [
         meta: {
           title: '租户管理',
           requiresAuth: true,
-          roles: ['SUPER_ADMIN'],
+          roles: [ROLES.SUPER_ADMIN],
         },
       },
     ],
@@ -80,7 +80,7 @@ const routes = [
     meta: {
       title: '用户管理',
       requiresAuth: true,
-      roles: ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'USER_ADMIN'],
+      roles: [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.USER_ADMIN],
     },
   },
   {
@@ -90,7 +90,7 @@ const routes = [
     meta: {
       title: '工程管理',
       requiresAuth: true,
-      roles: ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'PROJECT_ADMIN'],
+      roles: [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PROJECT_ADMIN],
     },
   },
 
@@ -102,7 +102,7 @@ const routes = [
     meta: {
       title: '系统日志',
       requiresAuth: true,
-      roles: ['SYSTEM_ADMIN', 'OPS_ADMIN'],
+      roles: [ROLES.SYSTEM_ADMIN, ROLES.OPS_ADMIN],
     },
   },
   {
@@ -112,7 +112,7 @@ const routes = [
     meta: {
       title: '系统设置',
       requiresAuth: true,
-      roles: ['SYSTEM_ADMIN'],
+      roles: [ROLES.SYSTEM_ADMIN],
     },
   },
 

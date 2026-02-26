@@ -92,6 +92,7 @@ import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { authAPI } from '@/api'
 import { useAppStore } from '@/store'
 import { Storage } from '@/utils/storage'
@@ -210,6 +211,11 @@ export default {
 
     onUnmounted(() => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
+    })
+
+    onBeforeRouteLeave(() => {
+      if (!isDirty.value) return true
+      return window.confirm('当前设置尚未保存，确定要离开吗？')
     })
 
     return {
