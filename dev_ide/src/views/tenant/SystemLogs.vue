@@ -86,7 +86,7 @@
             @change="handleApplySavedView"
           >
             <el-option
-              v-for="view in savedViews"
+              v-for="view in sortedSavedViews"
               :key="view.id"
               :label="view.name"
               :value="view.id"
@@ -154,7 +154,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logAPI } from '@/api'
@@ -177,6 +177,11 @@ export default {
     })
     const savedViews = ref(Storage.get(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, []))
     const selectedViewId = ref('')
+    const sortedSavedViews = computed(() =>
+      [...savedViews.value].sort(
+        (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)
+      )
+    )
 
     const pagination = reactive({
       page: 1,
@@ -437,6 +442,7 @@ export default {
       getLevelLabel,
       formatDateTime,
       savedViews,
+      sortedSavedViews,
       selectedViewId,
       systemLogPageSizeOptions: SYSTEM_LOG_PAGE_SIZE_OPTIONS,
     }
