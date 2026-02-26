@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { ROUTE_NAMES } from '@/constants'
+import { ROLES, ROUTE_NAMES } from '@/constants'
 import { Storage } from '@/utils/storage'
+import { hasRole } from '@/permissions'
 
 // 路由组件懒加载
 const Login = () => import('@/views/auth/Login.vue')
@@ -161,7 +162,7 @@ router.beforeEach((to, from, next) => {
   // 如果已登录且访问登录页，根据角色重定向
   if (to.name === ROUTE_NAMES.LOGIN && isAuthenticated) {
     const userInfo = Storage.getUserInfo()
-    if (userInfo?.role === 'SUPER_ADMIN') {
+    if (userInfo?.role === ROLES.SUPER_ADMIN) {
       next('/admin')
     } else {
       next({ name: ROUTE_NAMES.DASHBOARD })
@@ -174,7 +175,7 @@ router.beforeEach((to, from, next) => {
     const userInfo = Storage.getUserInfo()
     const userRole = userInfo?.role
 
-    if (!userRole || !to.meta.roles.includes(userRole)) {
+    if (!hasRole(userRole, to.meta.roles)) {
       // 权限不足，重定向到仪表板
       next({ name: ROUTE_NAMES.DASHBOARD })
       return
@@ -186,7 +187,7 @@ router.beforeEach((to, from, next) => {
     const userInfo = Storage.getUserInfo()
     const userRole = userInfo?.role
 
-    if (userRole === 'SUPER_ADMIN') {
+    if (userRole === ROLES.SUPER_ADMIN) {
       // 超级管理员不能访问普通dashboard
       if (to.name === ROUTE_NAMES.DASHBOARD) {
         next('/admin')

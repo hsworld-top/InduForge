@@ -64,7 +64,7 @@ request.interceptors.response.use(
       const { status, data } = response
 
       switch (status) {
-        case 401:
+        case 401: {
           // 检查是否是登录接口的401错误（用户名密码错误）
           if (config.url.includes('/auth/login')) {
             // 登录接口的401错误不重定向，直接返回错误让页面处理
@@ -99,9 +99,13 @@ request.interceptors.response.use(
 
             return authAPI.refreshToken(refreshToken)
               .then(result => {
-                const { accessToken, refreshToken: newRefreshToken } = result.data
+                const accessToken = result.data?.accessToken || result.data?.token
+                const newRefreshToken = result.data?.refreshToken
 
                 // 更新存储的token
+                if (!accessToken) {
+                  throw new Error('刷新令牌响应缺少 accessToken/token 字段')
+                }
                 Storage.setToken(accessToken)
                 if (newRefreshToken) {
                   Storage.setRefreshToken(newRefreshToken)
@@ -139,6 +143,7 @@ request.interceptors.response.use(
               })
             })
           }
+        }
         case 403:
           ElMessage.error('没有权限访问此资源')
           break

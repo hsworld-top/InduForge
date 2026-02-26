@@ -185,32 +185,12 @@ export const useTenantStore = defineStore('tenant', {
     async fetchTenants() {
       this.loading = true
       try {
-        // const tenants = await tenantAPI.getTenants()
-        // this.tenants = tenants
-
-        // 模拟租户数据
-        this.tenants = [
-          {
-            id: 1,
-            name: '默认租户',
-            code: 'default',
-            status: 'active',
-            createdAt: '2024-01-01',
-            userCount: 10,
-            logoUrl: '/images/demo.png',
-          },
-          {
-            id: 2,
-            name: '示例公司',
-            code: 'example',
-            status: 'active',
-            createdAt: '2024-02-01',
-            userCount: 25,
-            logoUrl: '/images/demo.png',
-          },
-        ]
+        const { tenantAPI } = await import('@/api')
+        const response = await tenantAPI.getTenants({ page: 1, limit: 200 })
+        this.tenants = response.data?.tenants || []
       } catch (error) {
         console.error('Failed to fetch tenants:', error)
+        this.tenants = []
       } finally {
         this.loading = false
       }

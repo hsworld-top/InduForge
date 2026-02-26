@@ -199,6 +199,7 @@ import { useAuthStore } from '@/store'
 import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
 import { ElMessage } from 'element-plus'
+import { canAccessTab } from '@/permissions'
 
 export default {
   name: 'DashboardContent',
@@ -209,18 +210,9 @@ export default {
     const username = computed(() => authStore.userInfo?.username || '')
     const role = computed(() => authStore.userInfo?.role)
     const isSuperAdmin = computed(() => role.value === 'SUPER_ADMIN')
-    const canAccessUserManagement = computed(
-      () => role.value === 'SUPER_ADMIN' || role.value === 'SYSTEM_ADMIN'
-    )
-    const canAccessProjectManagement = computed(
-      () =>
-        role.value === 'SUPER_ADMIN' ||
-        role.value === 'SYSTEM_ADMIN' ||
-        role.value === 'PROJECT_ADMIN'
-    )
-    const canAccessSystemLogs = computed(
-      () => role.value === 'SUPER_ADMIN' || role.value === 'SYSTEM_ADMIN' || role.value === 'OPS_ADMIN'
-    )
+    const canAccessUserManagement = computed(() => canAccessTab('user-management', role.value))
+    const canAccessProjectManagement = computed(() => canAccessTab('project-management', role.value))
+    const canAccessSystemLogs = computed(() => canAccessTab('system-logs', role.value))
     const loading = ref(false)
     const loadError = ref('')
     const lastUpdatedAt = ref('')

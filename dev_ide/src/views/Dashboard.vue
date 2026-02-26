@@ -578,6 +578,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { buildAppUrl } from '@/utils/appUrl'
+import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 
 // 标签页组件懒加载，提升首次加载速度
 const DashboardContent = defineAsyncComponent(() => import('@/views/DashboardContent.vue'))
@@ -667,24 +668,7 @@ export default {
      * @param {string} tabKey - 标签页 key
      * @returns {boolean} 是否允许访问
      */
-    const hasTabPermission = (tabKey) => {
-      switch (tabKey) {
-        case 'tenant-management':
-          return isSuperAdmin.value
-        case 'user-management':
-          return isSuperAdmin.value || isSystemAdmin.value
-        case 'project-management':
-          return isSuperAdmin.value || isSystemAdmin.value || isProjectAdmin.value
-        case 'ops-management':
-        case 'system-logs':
-          return isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value
-        case 'system-settings':
-          return isSystemAdmin.value
-        case 'dashboard':
-        default:
-          return true
-      }
-    }
+    const hasTabPermission = (tabKey) => canAccessTab(tabKey, authStore.userInfo?.role)
 
     // 检查标签页是否可见
     const isTabVisible = (tabKey) => hasTabPermission(tabKey)
@@ -778,15 +762,7 @@ export default {
       // 权限检查（仅对标准标签页）
       if (!isObject) {
         if (!hasTabPermission(tabKey)) {
-          const permissionMessageMap = {
-            'tenant-management': '只有超级管理员才能访问租户管理',
-            'user-management': '仅超级管理员或系统管理员可访问用户管理',
-            'project-management': '您没有权限访问工程管理',
-            'ops-management': '仅超级管理员、系统管理员或运维管理员可访问运维管理',
-            'system-logs': '仅超级管理员、系统管理员或运维管理员可访问系统日志',
-            'system-settings': '只有系统管理员才能访问系统设置',
-          }
-          ElMessage.warning(permissionMessageMap[tabKey] || '您没有访问该功能的权限')
+          ElMessage.warning(getTabAccessDeniedMessage(tabKey))
           return
         }
       }

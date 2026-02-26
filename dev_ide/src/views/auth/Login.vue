@@ -382,7 +382,6 @@ import { useRouter } from 'vue-router'
 import { useAuthStore, useAppStore } from '@/store'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { ROUTE_NAMES } from '@/constants'
 import { Storage } from '@/utils/storage'
 
 export default {
@@ -478,7 +477,13 @@ export default {
         const result = await authAPI.login(loginParams)
 
         // 登录成功，保存token和用户信息
-        const { accessToken, refreshToken, user } = result.data
+        const user = result.data?.user
+        const accessToken = result.data?.accessToken || result.data?.token
+        const refreshToken = result.data?.refreshToken
+
+        if (!user || !accessToken) {
+          throw new Error('登录返回数据格式不正确')
+        }
 
         // 更新store状态
         authStore.setAuthData(accessToken, refreshToken, {

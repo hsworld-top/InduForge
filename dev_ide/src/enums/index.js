@@ -1,5 +1,6 @@
 // 角色枚举
 export const RoleEnum = {
+  SUPER_ADMIN: 'SUPER_ADMIN',
   SYSTEM_ADMIN: 'SYSTEM_ADMIN',
   PROJECT_ADMIN: 'PROJECT_ADMIN',
   OPS_ADMIN: 'OPS_ADMIN',
@@ -62,7 +63,8 @@ export const LanguageEnum = {
 
 // 枚举映射（用于显示）
 export const ENUM_LABELS = {
-  [RoleEnum.SYSTEM_ADMIN]: '超级管理员',
+  [RoleEnum.SUPER_ADMIN]: '超级管理员',
+  [RoleEnum.SYSTEM_ADMIN]: '系统管理员',
   [RoleEnum.PROJECT_ADMIN]: '工程管理员',
   [RoleEnum.OPS_ADMIN]: '运维管理员',
   [RoleEnum.USER_ADMIN]: '用户管理员',

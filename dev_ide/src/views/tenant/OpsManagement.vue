@@ -390,13 +390,14 @@
 import { ref, reactive, onMounted, computed, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Grid, List, Plus, Refresh, Search, MoreFilled,
-  Top, Bottom, User, Clock, Tools, Check, Close, Bell
+  Grid, List, Refresh, Search, MoreFilled,
+  User, Clock, Tools, Check, Close, Bell
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
 import { initSocket, getSocket } from '@/utils/socket'
 import { Storage } from '@/utils/storage'
+import { canApproveNodes } from '@/permissions'
 
 // 获取当前用户角色
 const currentUserInfo = Storage.getUserInfo()
@@ -404,7 +405,7 @@ const currentUserRole = currentUserInfo?.role || ''
 
 // 计算是否有审批权限
 const canApproveNode = computed(() => {
-  return ['OPS_ADMIN', 'SYSTEM_ADMIN'].includes(currentUserRole)
+  return canApproveNodes(currentUserRole)
 })
 
 // 状态与视图控制
@@ -413,7 +414,6 @@ const nodeLoading = ref(false)
 const nodeList = ref([])
 const approvedCount = ref(0)
 const pendingCount = ref(0)
-const refreshTimer = ref(null)
 
 // 节点查询
 const nodeSearch = reactive({
@@ -518,7 +518,7 @@ const handleReject = (node) => {
       fetchPendingList()
         updateCounts()
       }
-    } catch (error) {
+    } catch {
       ElMessage.error('操作失败')
     }
   })
@@ -532,7 +532,9 @@ const updateCounts = async () => {
     ])
     approvedCount.value = resApproved.data.total
     pendingCount.value = resPending.data.total
-  } catch (e) {}
+  } catch (error) {
+    console.error('更新节点统计失败:', error)
+  }
 }
 
 const resetNodeSearch = () => {
@@ -544,7 +546,7 @@ const resetNodeSearch = () => {
 
 const copyToken = () => {
   const text = `REGISTRATION_TOKEN=${registrationToken.value}\nNODE_ID=${newNodeId.value}`
-  navigator.clipboard.writeText(text)
+  window.navigator.clipboard.writeText(text)
   ElMessage.success('已复制到剪贴板')
   showTokenDialog.value = false
 }
@@ -619,11 +621,14 @@ const deleteNode = async (node) => {
     await request.delete(`/nodes/${node.id}`)
     ElMessage.success('节点注销成功')
     fetchNodes()
-  } catch {}
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.message || '节点注销失败')
+    }
+  }
 }
 
 const promptDeploy = (node) => ElMessage.info(`请在工程列表中选择版本并部署到节点 ${node.name}`)
-const undeployProject = (node, deploy) => ElMessage.error(`正在从节点卸载工程: ${deploy.project?.name}`)
 
 // 新增：启动工程
 const handleStartProject = async (deploy) => {

@@ -298,6 +298,7 @@ import { useAuthStore } from '@/store'
 import { userAPI } from '@/api/user.api'
 import { RoleEnum, UserStatusEnum, ENUM_LABELS } from '@/enums'
 import { formatDateTime } from '@/utils/date'
+import { canManageUsers } from '@/permissions'
 
 export default {
   name: 'TenantUserManagement',
@@ -471,14 +472,10 @@ export default {
     }
 
     // 检查是否可以编辑角色
-    const canEditRole = computed(() => {
-      return ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUser.value?.role)
-    })
+    const canEditRole = computed(() => canManageUsers(currentUser.value?.role))
 
     // 检查是否可以管理用户（创建、编辑、删除）
-    const canManageUsers = computed(() => {
-      return ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUser.value?.role)
-    })
+    const canManageUsersAction = computed(() => canManageUsers(currentUser.value?.role))
 
     // 获取用户列表
     const fetchUsers = async () => {
@@ -742,7 +739,7 @@ export default {
       getRoleTagType,
       getStatusTagType,
       canEditRole,
-      canManageUsers,
+      canManageUsers: canManageUsersAction,
       fetchUsers,
       handleSearch,
       resetSearch,
