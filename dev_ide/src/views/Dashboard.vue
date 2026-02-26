@@ -422,6 +422,57 @@
                 </span>
               </button>
             </el-tooltip>
+
+            <el-tooltip
+              v-if="isSystemAdmin"
+              content="系统设置"
+              placement="right"
+              :show-after="500"
+              :disabled="!sidebarCollapsed"
+            >
+              <button
+                @click="openTab('system-settings')"
+                :class="[
+                  'w-full h-11 flex items-center rounded-lg transition-colors',
+                  sidebarCollapsed ? 'justify-center' : 'px-3 gap-3 justify-start',
+                ]"
+              >
+                <span
+                  :class="[
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                    activeTab === 'system-settings'
+                      ? 'bg-blue-600 text-white'
+                      : isDark
+                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                  ]"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </span>
+                <span
+                  v-if="!sidebarCollapsed"
+                  :class="[
+                    'text-sm font-medium',
+                    activeTab === 'system-settings' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                  ]"
+                >
+                  系统设置
+                </span>
+              </button>
+            </el-tooltip>
           </nav>
         </div>
         <div class="px-2 py-2">
@@ -535,6 +586,7 @@ const UserManagement = defineAsyncComponent(() => import('@/views/tenant/UserMan
 const ProjectManagement = defineAsyncComponent(() => import('@/views/tenant/ProjectManagement.vue'))
 const OpsManagement = defineAsyncComponent(() => import('@/views/tenant/OpsManagement.vue'))
 const SystemLogs = defineAsyncComponent(() => import('@/views/tenant/SystemLogs.vue'))
+const SystemSettings = defineAsyncComponent(() => import('@/views/tenant/SystemSettings.vue'))
 
 // 导入默认Logo图片
 import defaultLogo from '@/assets/images/demo.png'
@@ -543,7 +595,7 @@ export default {
   name: 'Dashboard',
   setup() {
     const router = useRouter()
-    const { t, locale } = useI18n()
+    const { locale } = useI18n()
     const authStore = useAuthStore()
     const appStore = useAppStore()
     const tenantStore = useTenantStore()
@@ -591,10 +643,15 @@ export default {
         component: SystemLogs,
         icon: 'clipboard',
       },
+      'system-settings': {
+        title: '系统设置',
+        component: SystemSettings,
+        icon: 'cog',
+      },
     }
 
     const isDark = computed(() => appStore.isDark)
-    const username = computed(() => authStore.username)
+    const username = computed(() => authStore.userInfo?.username || '')
     const userInitials = computed(() => {
       const name = username.value || 'U'
       return name.charAt(0).toUpperCase()
@@ -605,8 +662,12 @@ export default {
     const isOpsAdmin = computed(() => authStore.userInfo?.role === 'OPS_ADMIN')
     const isProjectAdmin = computed(() => authStore.userInfo?.role === 'PROJECT_ADMIN')
 
-    // 检查标签页是否可见
-    const isTabVisible = (tabKey) => {
+    /**
+     * 检查标签页访问权限。
+     * @param {string} tabKey - 标签页 key
+     * @returns {boolean} 是否允许访问
+     */
+    const hasTabPermission = (tabKey) => {
       switch (tabKey) {
         case 'tenant-management':
           return isSuperAdmin.value
@@ -617,11 +678,16 @@ export default {
         case 'ops-management':
         case 'system-logs':
           return isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value
+        case 'system-settings':
+          return isSystemAdmin.value
         case 'dashboard':
         default:
           return true
       }
     }
+
+    // 检查标签页是否可见
+    const isTabVisible = (tabKey) => hasTabPermission(tabKey)
 
     // 监听超级管理员状态变化，如果不是超级管理员且当前激活的是租户管理，切换到dashboard
     watch(isSuperAdmin, (newVal) => {
@@ -711,29 +777,16 @@ export default {
 
       // 权限检查（仅对标准标签页）
       if (!isObject) {
-        if (tabKey === 'tenant-management' && !isSuperAdmin.value) {
-          ElMessage.warning('只有超级管理员才能访问租户管理')
-          return
-        }
-
-        if (tabKey === 'user-management' && !(isSuperAdmin.value || isSystemAdmin.value)) {
-          ElMessage.warning('只有系统管理员才能访问用户管理')
-          return
-        }
-
-        if (
-          tabKey === 'project-management' &&
-          !(isSuperAdmin.value || isSystemAdmin.value || isProjectAdmin.value)
-        ) {
-          ElMessage.warning('您没有权限访问工程管理')
-          return
-        }
-
-        if (
-          (tabKey === 'ops-management' || tabKey === 'system-logs') &&
-          !(isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value)
-        ) {
-          ElMessage.warning('只有运维管理员才能访问系统功能')
+        if (!hasTabPermission(tabKey)) {
+          const permissionMessageMap = {
+            'tenant-management': '只有超级管理员才能访问租户管理',
+            'user-management': '仅超级管理员或系统管理员可访问用户管理',
+            'project-management': '您没有权限访问工程管理',
+            'ops-management': '仅超级管理员、系统管理员或运维管理员可访问运维管理',
+            'system-logs': '仅超级管理员、系统管理员或运维管理员可访问系统日志',
+            'system-settings': '只有系统管理员才能访问系统设置',
+          }
+          ElMessage.warning(permissionMessageMap[tabKey] || '您没有访问该功能的权限')
           return
         }
       }

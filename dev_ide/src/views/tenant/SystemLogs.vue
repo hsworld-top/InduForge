@@ -130,6 +130,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
+import { Storage } from '@/utils/storage'
 
 export default {
   name: 'SystemLogs',
@@ -147,7 +148,7 @@ export default {
 
     const pagination = reactive({
       page: 1,
-      limit: 10,
+      limit: Storage.get('system_log_page_size', 20),
       total: 0,
       totalPages: 0,
     })
@@ -216,6 +217,7 @@ export default {
 
     const handleSizeChange = async (size) => {
       pagination.limit = size
+      Storage.set('system_log_page_size', size)
       pagination.page = 1
       await fetchLogs()
     }

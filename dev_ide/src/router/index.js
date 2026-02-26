@@ -16,6 +16,7 @@ const TenantUserManagement = () => import('@/views/tenant/UserManagement.vue')
 
 // 系统路由
 const SystemLogs = () => import('@/views/tenant/SystemLogs.vue')
+const SystemSettings = () => import('@/views/tenant/SystemSettings.vue')
 const Profile = () => import('@/views/profile/Profile.vue')
 
 // 路由配置
@@ -101,6 +102,16 @@ const routes = [
       title: '系统日志',
       requiresAuth: true,
       roles: ['SYSTEM_ADMIN', 'OPS_ADMIN'],
+    },
+  },
+  {
+    path: '/system/settings',
+    name: ROUTE_NAMES.SYSTEM_SETTINGS,
+    component: SystemSettings,
+    meta: {
+      title: '系统设置',
+      requiresAuth: true,
+      roles: ['SYSTEM_ADMIN'],
     },
   },
 

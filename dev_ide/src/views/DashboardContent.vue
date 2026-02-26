@@ -11,8 +11,11 @@
     <!-- 统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <div
-        class="card cursor-pointer hover:shadow-lg transition-shadow duration-200"
-        @click="openTab('user-management')"
+        :class="[
+          'card transition-shadow duration-200',
+          canAccessUserManagement ? 'cursor-pointer hover:shadow-lg' : 'opacity-60 cursor-not-allowed',
+        ]"
+        @click="handleCardClick('user-management', canAccessUserManagement)"
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-green-100 dark:bg-green-900">
@@ -32,14 +35,21 @@
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">用户数量</p>
-            <p class="text-2xl font-semibold text-gray-900 dark:text-white">{{ stats.users }}</p>
+            <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+              {{ loading ? '--' : stats.users }}
+            </p>
           </div>
         </div>
       </div>
 
       <div
-        class="card cursor-pointer hover:shadow-lg transition-shadow duration-200"
-        @click="openTab('project-management')"
+        :class="[
+          'card transition-shadow duration-200',
+          canAccessProjectManagement
+            ? 'cursor-pointer hover:shadow-lg'
+            : 'opacity-60 cursor-not-allowed',
+        ]"
+        @click="handleCardClick('project-management', canAccessProjectManagement)"
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-blue-100 dark:bg-blue-900">
@@ -60,13 +70,14 @@
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">工程数量</p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-              {{ stats.projects }}
+              {{ loading ? '--' : stats.projects }}
             </p>
           </div>
         </div>
       </div>
 
       <div
+        v-if="isSuperAdmin"
         class="card cursor-pointer hover:shadow-lg transition-shadow duration-200"
         @click="openTab('tenant-management')"
       >
@@ -89,15 +100,18 @@
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">租户数量</p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-              {{ stats.tenants }}
+              {{ loading ? '--' : stats.tenants }}
             </p>
           </div>
         </div>
       </div>
 
       <div
-        class="card cursor-pointer hover:shadow-lg transition-shadow duration-200"
-        @click="openTab('system-logs')"
+        :class="[
+          'card transition-shadow duration-200',
+          canAccessSystemLogs ? 'cursor-pointer hover:shadow-lg' : 'opacity-60 cursor-not-allowed',
+        ]"
+        @click="handleCardClick('system-logs', canAccessSystemLogs)"
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-red-100 dark:bg-red-900">
@@ -117,7 +131,9 @@
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">系统日志</p>
-            <p class="text-2xl font-semibold text-gray-900 dark:text-white">{{ stats.logs }}</p>
+            <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+              {{ loading ? '--' : stats.logs }}
+            </p>
           </div>
         </div>
       </div>
@@ -125,8 +141,21 @@
 
     <!-- 最近活动 -->
     <div class="card">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">最近活动</h3>
-      <div class="space-y-4">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">最近活动</h3>
+        <el-button size="small" :loading="loading" @click="loadDashboardData">刷新数据</el-button>
+      </div>
+      <div
+        v-if="loadError"
+        class="mb-4 text-sm px-3 py-2 rounded border border-red-200 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300"
+      >
+        {{ loadError }}
+      </div>
+      <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">数据加载中...</div>
+      <div v-else-if="recentActivities.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
+        暂无活动记录
+      </div>
+      <div v-else class="space-y-4">
         <div
           v-for="activity in recentActivities"
           :key="activity.id"
@@ -153,17 +182,23 @@
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-sm text-gray-900 dark:text-white">{{ activity.description }}</p>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ activity.time }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDateTime(activity.time) }}</p>
           </div>
         </div>
       </div>
+      <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+        最近更新时间：{{ formatDateTime(lastUpdatedAt) || '-' }}
+      </p>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/store'
+import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
+import { formatDateTime } from '@/utils/date'
+import { ElMessage } from 'element-plus'
 
 export default {
   name: 'DashboardContent',
@@ -171,7 +206,24 @@ export default {
   setup(props, { emit }) {
     const authStore = useAuthStore()
 
-    const username = computed(() => authStore.username)
+    const username = computed(() => authStore.userInfo?.username || '')
+    const role = computed(() => authStore.userInfo?.role)
+    const isSuperAdmin = computed(() => role.value === 'SUPER_ADMIN')
+    const canAccessUserManagement = computed(
+      () => role.value === 'SUPER_ADMIN' || role.value === 'SYSTEM_ADMIN'
+    )
+    const canAccessProjectManagement = computed(
+      () =>
+        role.value === 'SUPER_ADMIN' ||
+        role.value === 'SYSTEM_ADMIN' ||
+        role.value === 'PROJECT_ADMIN'
+    )
+    const canAccessSystemLogs = computed(
+      () => role.value === 'SUPER_ADMIN' || role.value === 'SYSTEM_ADMIN' || role.value === 'OPS_ADMIN'
+    )
+    const loading = ref(false)
+    const loadError = ref('')
+    const lastUpdatedAt = ref('')
     const stats = ref({
       projects: 0,
       users: 0,
@@ -179,32 +231,84 @@ export default {
       logs: 0,
     })
 
-    const recentActivities = ref([
-      {
-        id: 1,
-        description: '用户张三创建了新工程项目',
-        time: '2小时前',
-      },
-      {
-        id: 2,
-        description: '系统管理员更新了租户配置',
-        time: '4小时前',
-      },
-      {
-        id: 3,
-        description: '工程项目"网站重构"状态变更为进行中',
-        time: '1天前',
-      },
-    ])
+    const recentActivities = ref([])
 
-    // 加载统计数据
-    const loadStats = () => {
-      // 模拟加载统计数据
-      stats.value = {
-        projects: 12,
-        users: 156,
-        tenants: 8,
-        logs: 2340,
+    const loadDashboardData = async () => {
+      loading.value = true
+      loadError.value = ''
+      try {
+        const requestEntries = []
+        if (canAccessUserManagement.value) {
+          requestEntries.push(['users', userAPI.getUsers({ page: 1, limit: 1 })])
+        }
+        if (canAccessProjectManagement.value) {
+          requestEntries.push(['projects', projectAPI.getProjects({ page: 1, limit: 1 })])
+        }
+        if (canAccessSystemLogs.value) {
+          requestEntries.push(['logs', logAPI.getLogs({ page: 1, limit: 5 })])
+        }
+        if (isSuperAdmin.value) {
+          requestEntries.push(['tenants', tenantAPI.getTenants({ page: 1, limit: 1 })])
+        }
+
+        if (requestEntries.length === 0) {
+          stats.value = { projects: 0, users: 0, tenants: 0, logs: 0 }
+          recentActivities.value = []
+          lastUpdatedAt.value = new Date().toISOString()
+          return
+        }
+
+        const results = await Promise.allSettled(requestEntries.map((entry) => entry[1]))
+        const resultMap = {}
+        requestEntries.forEach(([key], index) => {
+          resultMap[key] = results[index]
+        })
+
+        const usersResult = resultMap.users
+        const projectsResult = resultMap.projects
+        const logsResult = resultMap.logs
+        const tenantsResult = resultMap.tenants
+
+        stats.value.users =
+          usersResult?.status === 'fulfilled' ? usersResult.value?.pagination?.total || 0 : 0
+        stats.value.projects =
+          projectsResult?.status === 'fulfilled'
+            ? projectsResult.value?.pagination?.total || 0
+            : 0
+        stats.value.logs =
+          logsResult?.status === 'fulfilled' ? logsResult.value?.pagination?.total || 0 : 0
+        stats.value.tenants =
+          isSuperAdmin.value && tenantsResult?.status === 'fulfilled'
+            ? tenantsResult.value?.pagination?.total || 0
+            : 0
+
+        if (logsResult?.status === 'fulfilled') {
+          const logs = logsResult.value?.data?.logs || []
+          recentActivities.value = logs.slice(0, 5).map((log, index) => ({
+            id: log.id || `${log.createdAt}-${index}`,
+            description: log.message || `${log.action || '系统'} 操作`,
+            time: log.createdAt || '',
+          }))
+        } else {
+          recentActivities.value = []
+        }
+
+        const failedCount = results.filter((item) => item.status === 'rejected').length
+        if (failedCount > 0) {
+          loadError.value = `部分数据加载失败（${failedCount}/${results.length}），已展示可用数据。`
+        }
+        lastUpdatedAt.value = new Date().toISOString()
+      } catch {
+        stats.value = {
+          projects: 0,
+          users: 0,
+          tenants: 0,
+          logs: 0,
+        }
+        recentActivities.value = []
+        loadError.value = '仪表盘数据加载失败，请稍后重试。'
+      } finally {
+        loading.value = false
       }
     }
 
@@ -213,13 +317,33 @@ export default {
       emit('open-tab', tabKey)
     }
 
-    loadStats()
+    const handleCardClick = (tabKey, canAccess) => {
+      if (!canAccess) {
+        ElMessage.warning('您当前角色无权访问该功能')
+        return
+      }
+      openTab(tabKey)
+    }
+
+    onMounted(() => {
+      loadDashboardData()
+    })
 
     return {
       username,
+      isSuperAdmin,
+      canAccessUserManagement,
+      canAccessProjectManagement,
+      canAccessSystemLogs,
+      loading,
+      loadError,
+      lastUpdatedAt,
       stats,
       recentActivities,
       openTab,
+      loadDashboardData,
+      handleCardClick,
+      formatDateTime,
     }
   },
 }
