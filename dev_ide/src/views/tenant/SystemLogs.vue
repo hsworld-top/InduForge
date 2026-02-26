@@ -93,6 +93,7 @@
           <el-button type="danger" plain :disabled="!selectedViewId" @click="removeSelectedView">
             删除已选视图
           </el-button>
+          <el-button type="primary" plain @click="handleExportCurrent">导出当前结果</el-button>
         </el-form-item>
       </el-form>
     </div>
@@ -240,6 +241,29 @@ export default {
       await Promise.all([fetchLogs(), fetchStats()])
     }
 
+    const handleExportCurrent = async () => {
+      try {
+        const params = getQueryParams()
+        delete params.page
+        delete params.limit
+
+        const response = await logAPI.exportLogs(params)
+        const blob =
+          response instanceof window.Blob
+            ? response
+            : new window.Blob([response], { type: 'text/csv;charset=utf-8;' })
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `system-logs-${Date.now()}.csv`
+        link.click()
+        window.URL.revokeObjectURL(url)
+        ElMessage.success('日志导出成功')
+      } catch (error) {
+        ElMessage.error('日志导出失败：' + (error.response?.data?.message || error.message))
+      }
+    }
+
     const saveCurrentView = async () => {
       const { value: name } = await ElMessageBox.prompt('请输入筛选视图名称', '保存筛选视图', {
         confirmButtonText: '保存',
@@ -375,6 +399,7 @@ export default {
       handleSearch,
       resetFilters,
       handleRefresh,
+      handleExportCurrent,
       saveCurrentView,
       handleApplySavedView,
       removeSelectedView,
