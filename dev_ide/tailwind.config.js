@@ -19,7 +19,13 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: [
+          'Source Han Sans SC',
+          'PingFang SC',
+          'Microsoft YaHei',
+          'Helvetica Neue',
+          'sans-serif',
+        ],
       },
     },
   },

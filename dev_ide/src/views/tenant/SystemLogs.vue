@@ -1,12 +1,292 @@
 <template>
   <div class="system-logs">
-    <h1>系统日志</h1>
-    <p>系统日志查看功能正在开发中...</p>
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">系统日志</h1>
+      <el-button @click="handleRefresh" :loading="loading">
+        <el-icon><Refresh /></el-icon>
+        刷新
+      </el-button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      <div class="stat-card">
+        <div class="stat-label">错误</div>
+        <div class="stat-value text-red-600 dark:text-red-400">{{ levelStats.error || 0 }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">警告</div>
+        <div class="stat-value text-orange-600 dark:text-orange-400">
+          {{ levelStats.warning || 0 }}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">信息</div>
+        <div class="stat-value text-blue-600 dark:text-blue-400">{{ levelStats.info || 0 }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">调试</div>
+        <div class="stat-value text-gray-700 dark:text-gray-300">{{ levelStats.debug || 0 }}</div>
+      </div>
+    </div>
+
+    <div class="panel mb-6">
+      <el-form :inline="true" :model="filters" class="flex flex-wrap gap-3">
+        <el-form-item label="级别">
+          <el-select v-model="filters.level" placeholder="全部级别" clearable style="width: 140px">
+            <el-option label="错误" value="error" />
+            <el-option label="警告" value="warning" />
+            <el-option label="信息" value="info" />
+            <el-option label="调试" value="debug" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="操作">
+          <el-input
+            v-model="filters.action"
+            placeholder="输入操作名"
+            clearable
+            style="width: 180px"
+            @keyup.enter="handleSearch"
+          />
+        </el-form-item>
+        <el-form-item label="资源">
+          <el-input
+            v-model="filters.resource"
+            placeholder="输入资源名"
+            clearable
+            style="width: 180px"
+            @keyup.enter="handleSearch"
+          />
+        </el-form-item>
+        <el-form-item label="时间范围">
+          <el-date-picker
+            v-model="filters.dateRange"
+            type="datetimerange"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            range-separator="至"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            style="width: 360px"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="resetFilters">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </div>
+
+    <div class="panel">
+      <el-table
+        :data="logs"
+        v-loading="loading"
+        style="width: 100%"
+        :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
+      >
+        <el-table-column prop="createdAt" label="时间" width="180">
+          <template #default="scope">
+            {{ formatDateTime(scope.row.createdAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="level" label="级别" width="90">
+          <template #default="scope">
+            <el-tag :type="getLevelTagType(scope.row.level)" size="small">
+              {{ getLevelLabel(scope.row.level) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="action" label="操作" width="180" show-overflow-tooltip />
+        <el-table-column prop="resource" label="资源" width="180" show-overflow-tooltip />
+        <el-table-column prop="message" label="日志内容" min-width="280" show-overflow-tooltip />
+        <el-table-column prop="ip" label="IP" width="140" />
+        <el-table-column label="操作用户" width="140">
+          <template #default="scope">
+            {{ scope.row.user?.fullName || scope.row.user?.username || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="租户" width="140">
+          <template #default="scope">
+            {{ scope.row.tenant?.name || '-' }}
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="flex justify-end items-center p-4 border-t border-gray-200 dark:border-gray-700">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.limit"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { logAPI } from '@/api'
+import { formatDateTime } from '@/utils/date'
+
 export default {
   name: 'SystemLogs',
+  setup() {
+    const loading = ref(false)
+    const logs = ref([])
+    const levelStats = ref({})
+
+    const filters = reactive({
+      level: '',
+      action: '',
+      resource: '',
+      dateRange: [],
+    })
+
+    const pagination = reactive({
+      page: 1,
+      limit: 10,
+      total: 0,
+      totalPages: 0,
+    })
+
+    const getQueryParams = () => {
+      const [startDate, endDate] = Array.isArray(filters.dateRange) ? filters.dateRange : []
+      const params = {
+        page: pagination.page,
+        limit: pagination.limit,
+        level: filters.level || undefined,
+        action: filters.action || undefined,
+        resource: filters.resource || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      }
+      Object.keys(params).forEach((key) => {
+        if (params[key] === undefined) delete params[key]
+      })
+      return params
+    }
+
+    const fetchLogs = async () => {
+      loading.value = true
+      try {
+        const response = await logAPI.getLogs(getQueryParams())
+        logs.value = response.data?.logs || []
+        pagination.total = response.pagination?.total || 0
+        pagination.totalPages = response.pagination?.totalPages || 0
+      } catch (error) {
+        ElMessage.error('获取系统日志失败：' + (error.response?.data?.message || error.message))
+      } finally {
+        loading.value = false
+      }
+    }
+
+    const fetchStats = async () => {
+      try {
+        const [startDate, endDate] = Array.isArray(filters.dateRange) ? filters.dateRange : []
+        const response = await logAPI.getLogStats({
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        })
+        levelStats.value = response.data?.levelStats || {}
+      } catch {
+        levelStats.value = {}
+      }
+    }
+
+    const handleSearch = async () => {
+      pagination.page = 1
+      await Promise.all([fetchLogs(), fetchStats()])
+    }
+
+    const resetFilters = async () => {
+      filters.level = ''
+      filters.action = ''
+      filters.resource = ''
+      filters.dateRange = []
+      pagination.page = 1
+      await Promise.all([fetchLogs(), fetchStats()])
+    }
+
+    const handleRefresh = async () => {
+      await Promise.all([fetchLogs(), fetchStats()])
+    }
+
+    const handleSizeChange = async (size) => {
+      pagination.limit = size
+      pagination.page = 1
+      await fetchLogs()
+    }
+
+    const handleCurrentChange = async (page) => {
+      pagination.page = page
+      await fetchLogs()
+    }
+
+    const getLevelTagType = (level) => {
+      const map = {
+        error: 'danger',
+        warning: 'warning',
+        info: 'primary',
+        debug: 'info',
+      }
+      return map[level] || 'info'
+    }
+
+    const getLevelLabel = (level) => {
+      const map = {
+        error: '错误',
+        warning: '警告',
+        info: '信息',
+        debug: '调试',
+      }
+      return map[level] || level || '-'
+    }
+
+    onMounted(async () => {
+      await Promise.all([fetchLogs(), fetchStats()])
+    })
+
+    return {
+      loading,
+      logs,
+      filters,
+      pagination,
+      levelStats,
+      fetchLogs,
+      handleSearch,
+      resetFilters,
+      handleRefresh,
+      handleSizeChange,
+      handleCurrentChange,
+      getLevelTagType,
+      getLevelLabel,
+      formatDateTime,
+    }
+  },
 }
 </script>
+
+<style scoped>
+.system-logs {
+  padding: 20px;
+}
+
+.panel {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700;
+}
+
+.stat-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4;
+}
+
+.stat-label {
+  @apply text-sm text-gray-500 dark:text-gray-400;
+}
+
+.stat-value {
+  @apply text-2xl font-semibold mt-2;
+}
+</style>

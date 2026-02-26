@@ -45,7 +45,7 @@
               v-model="nodeSearch.keyword"
               placeholder="名称 / IP 地址"
               clearable
-              prefix-icon="Search"
+              :prefix-icon="Search"
               style="width: 220px"
             />
           </el-form-item>
@@ -79,7 +79,7 @@
               </div>
               <el-dropdown trigger="click">
                 <el-button link><el-icon><MoreFilled /></el-icon></el-button>
-                <template #footer>
+                <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="viewNodeDetail(node)">详细信息</el-dropdown-item>
                     <el-dropdown-item @click="restartNode(node)" :disabled="node.status !== 'online'">重启 Agent</el-dropdown-item>
@@ -542,14 +542,6 @@ const resetNodeSearch = () => {
   fetchNodes()
 }
 
-// 初始加载
-onMounted(() => {
-  fetchNodes()
-  fetchPendingList()
-  updateCounts()
-  setupRealtimeUpdates()
-})
-
 const copyToken = () => {
   const text = `REGISTRATION_TOKEN=${registrationToken.value}\nNODE_ID=${newNodeId.value}`
   navigator.clipboard.writeText(text)
@@ -762,6 +754,8 @@ const setupRealtimeUpdates = () => {
 // 挂载与卸载
 onMounted(async () => {
   await fetchNodes()
+  fetchPendingList()
+  updateCounts()
   setupRealtimeUpdates()
 })
 

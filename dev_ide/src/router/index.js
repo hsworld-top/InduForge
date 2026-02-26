@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { ROUTE_NAMES, STORAGE_KEYS } from '@/constants'
+import { ROUTE_NAMES } from '@/constants'
 import { Storage } from '@/utils/storage'
 
 // 路由组件懒加载
@@ -78,7 +78,7 @@ const routes = [
     meta: {
       title: '用户管理',
       requiresAuth: true,
-      roles: ['TENANT_ADMIN', 'SYSTEM_ADMIN'],
+      roles: ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'USER_ADMIN'],
     },
   },
   {
@@ -88,7 +88,7 @@ const routes = [
     meta: {
       title: '工程管理',
       requiresAuth: true,
-      roles: ['TENANT_ADMIN', 'PROJECT_ADMIN', 'SYSTEM_ADMIN'],
+      roles: ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'PROJECT_ADMIN'],
     },
   },
 

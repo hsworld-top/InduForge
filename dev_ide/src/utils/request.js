@@ -2,6 +2,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { Storage } from '@/utils/storage'
 import { authAPI } from '@/api/auth.api'
+import { STORAGE_KEYS } from '@/constants'
 
 // 创建 axios 实例
 const request = axios.create({

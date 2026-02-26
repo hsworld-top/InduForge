@@ -4,30 +4,111 @@
 
 /* 自定义样式 */
 @layer base {
+  :root {
+    --if-font-sans:
+      'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+
+    --if-color-bg: #f5f7fb;
+    --if-color-text: #111827;
+    --if-color-text-muted: #4b5563;
+    --if-color-surface: #ffffff;
+    --if-color-border: #e5e7eb;
+
+    --if-color-primary-500: #0f766e;
+    --if-color-primary-600: #0d9488;
+    --if-color-primary-700: #0f766e;
+    --if-color-primary-50: #ecfdf5;
+    --if-color-secondary-bg: #e5e7eb;
+    --if-color-secondary-bg-hover: #d1d5db;
+    --if-color-focus-ring: rgba(15, 118, 110, 0.24);
+
+    --if-color-input-bg: #ffffff;
+    --if-color-input-border: #d1d5db;
+    --if-color-input-placeholder: #9ca3af;
+
+    --if-radius-md: 8px;
+    --if-radius-lg: 12px;
+    --if-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+    --if-shadow-md: 0 10px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .dark {
+    --if-color-bg: #0b1220;
+    --if-color-text: #e5e7eb;
+    --if-color-text-muted: #9ca3af;
+    --if-color-surface: #111827;
+    --if-color-border: #374151;
+
+    --if-color-primary-500: #14b8a6;
+    --if-color-primary-600: #2dd4bf;
+    --if-color-primary-700: #14b8a6;
+    --if-color-primary-50: #0f2b2b;
+    --if-color-secondary-bg: #374151;
+    --if-color-secondary-bg-hover: #4b5563;
+    --if-color-focus-ring: rgba(45, 212, 191, 0.24);
+
+    --if-color-input-bg: #1f2937;
+    --if-color-input-border: #4b5563;
+    --if-color-input-placeholder: #9ca3af;
+  }
+
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--if-font-sans);
   }
 
   body {
-    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
-    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--if-color-bg);
+    color: var(--if-color-text);
+    font-family: var(--if-font-sans);
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+    background: var(--if-color-primary-500);
+    color: #ffffff;
+    border-radius: var(--if-radius-md);
+    box-shadow: var(--if-shadow-sm);
+    @apply font-medium py-2 px-4 transition-colors duration-200;
+  }
+
+  .btn-primary:hover {
+    background: var(--if-color-primary-600);
   }
 
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+    background: var(--if-color-secondary-bg);
+    color: var(--if-color-text);
+    border-radius: var(--if-radius-md);
+    @apply font-medium py-2 px-4 transition-colors duration-200;
+  }
+
+  .btn-secondary:hover {
+    background: var(--if-color-secondary-bg-hover);
   }
 
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6;
+    background: var(--if-color-surface);
+    border: 1px solid var(--if-color-border);
+    border-radius: var(--if-radius-lg);
+    box-shadow: var(--if-shadow-sm);
+    @apply p-6;
   }
 
   .input-field {
-    @apply border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200;
+    border: 1px solid var(--if-color-input-border);
+    border-radius: var(--if-radius-md);
+    background: var(--if-color-input-bg);
+    color: var(--if-color-text);
+    @apply px-3 py-2 focus:outline-none transition-colors duration-200;
+  }
+
+  .input-field::placeholder {
+    color: var(--if-color-input-placeholder);
+  }
+
+  .input-field:focus {
+    border-color: var(--if-color-primary-500);
+    box-shadow: 0 0 0 2px var(--if-color-focus-ring);
   }
 }

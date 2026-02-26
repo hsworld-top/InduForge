@@ -681,20 +681,12 @@ export default {
 
     // 打开标签页
     const openTab = (tabData) => {
-      console.log('Dashboard: openTab called with:', tabData)
-      console.log('Dashboard: tabData type:', typeof tabData)
-      console.log('Dashboard: tabData keys:', tabData && typeof tabData === 'object' ? Object.keys(tabData) : 'N/A')
-
       // 支持两种调用方式：字符串key或对象
       const isObject = typeof tabData === 'object'
       const tabKey = isObject ? tabData.key : tabData
       const customTitle = isObject ? tabData.title : null
       const customComponent = isObject ? tabData.component : null
       const customProps = isObject ? tabData.props : null
-
-      console.log('Dashboard: isObject:', isObject)
-      console.log('Dashboard: tabKey:', tabKey)
-      console.log('Dashboard: customComponent exists:', !!customComponent)
 
       let config
       if (isObject && customComponent) {
@@ -708,8 +700,6 @@ export default {
           component: component,
           icon: tabData.icon || 'folder',
         }
-        console.log('Dashboard: Custom tab config created:', config)
-        console.log('Dashboard: Component type:', typeof config.component)
       } else {
         // 标准标签页配置
         config = tabConfigs[tabKey]
@@ -765,16 +755,10 @@ export default {
         props: customProps,
       }
 
-      console.log('Dashboard: Adding new tab:', newTab)
-      console.log('Dashboard: Tab component:', newTab.component)
-      console.log('Dashboard: Tab props:', newTab.props)
-
       tabs.value.push(newTab)
-      console.log('Dashboard: Tabs array after push:', tabs.value)
 
       // 激活新标签页
       activeTab.value = tabKey
-      console.log('Dashboard: Active tab set to:', activeTab.value)
     }
 
     // 关闭标签页
@@ -856,9 +840,9 @@ export default {
     })
 
     // 组件卸载时移除事件监听
-    const onUnmounted = () => {
+    onUnmounted(() => {
       document.removeEventListener('click', handleClickOutside)
-    }
+    })
 
     // 最大化标签页
     const maximizeTab = (tabKey) => {
@@ -930,7 +914,6 @@ export default {
       openExternalTab,
       toggleSidebar,
       isTabMaximized,
-      onUnmounted,
     }
   },
 }

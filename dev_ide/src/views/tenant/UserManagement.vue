@@ -82,7 +82,7 @@
         <el-table-column prop="username" label="用户名" width="120" />
         <el-table-column prop="fullName" label="真实姓名" width="120" />
         <el-table-column prop="email" label="邮箱" width="300" />
-        <el-table-column prop="role" label="角色" width="min-200">
+        <el-table-column prop="role" label="角色" min-width="200">
           <template #default="scope">
             <el-tag :type="getRoleTagType(scope.row.role)">
               {{ getRoleLabel(scope.row.role) }}
@@ -107,7 +107,7 @@
             {{ formatDateTime(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="min-200" fixed="right" v-if="canManageUsers">
+        <el-table-column label="操作" min-width="220" fixed="right" v-if="canManageUsers">
           <template #default="scope">
             <el-button type="primary" size="small" @click="editUser(scope.row)" class="mr-2">
               编辑
@@ -292,9 +292,8 @@
 </template>
 
 <script>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store'
 import { userAPI } from '@/api/user.api'
 import { RoleEnum, UserStatusEnum, ENUM_LABELS } from '@/enums'
@@ -334,6 +333,7 @@ export default {
       role: '',
       status: '',
     })
+    const searchTimer = ref(null)
 
     // 角色选项
     const roleOptions = [
@@ -507,14 +507,27 @@ export default {
       }
     }
 
-    // 搜索处理
-    const handleSearch = () => {
+    // 执行搜索
+    const executeSearch = () => {
       pagination.page = 1
       fetchUsers()
     }
 
+    // 搜索处理（防抖）
+    const handleSearch = () => {
+      if (searchTimer.value) {
+        window.clearTimeout(searchTimer.value)
+      }
+      searchTimer.value = window.setTimeout(() => {
+        executeSearch()
+      }, 300)
+    }
+
     // 重置搜索
     const resetSearch = () => {
+      if (searchTimer.value) {
+        window.clearTimeout(searchTimer.value)
+      }
       Object.keys(searchForm).forEach((key) => {
         searchForm[key] = ''
       })
@@ -541,7 +554,7 @@ export default {
 
       try {
         await createFormRef.value.validate()
-      } catch (error) {
+      } catch {
         return
       }
 
@@ -595,7 +608,7 @@ export default {
 
       try {
         await editFormRef.value.validate()
-      } catch (error) {
+      } catch {
         return
       }
 
@@ -641,7 +654,7 @@ export default {
 
       try {
         await passwordFormRef.value.validate()
-      } catch (error) {
+      } catch {
         return
       }
 
@@ -684,6 +697,12 @@ export default {
     // 组件挂载时获取数据
     onMounted(() => {
       fetchUsers()
+    })
+
+    onUnmounted(() => {
+      if (searchTimer.value) {
+        window.clearTimeout(searchTimer.value)
+      }
     })
 
     return {

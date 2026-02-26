@@ -16,7 +16,10 @@ export const useAuthStore = defineStore('auth', {
     getUserRole: (state) => state.userInfo?.role,
     getUserId: (state) => state.userInfo?.id,
     getUsername: (state) => state.userInfo?.username,
-    isAdmin: (state) => ['SYSTEM_ADMIN', 'TENANT_ADMIN'].includes(state.userInfo?.role),
+    isAdmin: (state) =>
+      ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'PROJECT_ADMIN', 'OPS_ADMIN', 'USER_ADMIN'].includes(
+        state.userInfo?.role
+      ),
   },
 
   actions: {

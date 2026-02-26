@@ -295,7 +295,7 @@
           </el-table-column>
           <el-table-column
             label="操作"
-            width="min-320"
+            min-width="320"
             fixed="right"
             v-if="canManageProjects || canPerformOps"
           >
@@ -893,18 +893,15 @@
 </template>
 
 <script>
-import { ref, reactive, computed, onMounted, getCurrentInstance } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
 import {
-  Plus,
-  Refresh,
-  Grid,
-  List,
-  Upload,
-  Download,
-  Select,
-  Delete,
-} from "@element-plus/icons-vue";
+  ref,
+  reactive,
+  computed,
+  onMounted,
+  onUnmounted,
+  getCurrentInstance,
+} from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import JSZip from "jszip";
 import { useAuthStore } from "@/store";
 import request from "@/utils/request";
@@ -971,6 +968,7 @@ export default {
     const searchForm = reactive({
       name: "",
     });
+    const searchTimer = ref(null);
 
     // 颜色标签选项
     const colorTagOptions = [
@@ -1070,14 +1068,27 @@ export default {
       }
     };
 
-    // 搜索处理
-    const handleSearch = () => {
+    // 执行搜索
+    const executeSearch = () => {
       pagination.page = 1;
       fetchProjects();
     };
 
+    // 搜索处理（防抖）
+    const handleSearch = () => {
+      if (searchTimer.value) {
+        window.clearTimeout(searchTimer.value);
+      }
+      searchTimer.value = window.setTimeout(() => {
+        executeSearch();
+      }, 300);
+    };
+
     // 重置搜索
     const resetSearch = () => {
+      if (searchTimer.value) {
+        window.clearTimeout(searchTimer.value);
+      }
       Object.keys(searchForm).forEach((key) => {
         searchForm[key] = "";
       });
@@ -1104,7 +1115,7 @@ export default {
 
       try {
         await createFormRef.value.validate();
-      } catch (error) {
+      } catch {
         return;
       }
 
@@ -1173,7 +1184,7 @@ export default {
 
       try {
         await editFormRef.value.validate();
-      } catch (error) {
+      } catch {
         return;
       }
 
@@ -1230,9 +1241,9 @@ export default {
       try {
         const response = await projectAPI.exportProject(project.id);
         const blob =
-          response instanceof Blob
+          response instanceof window.Blob
             ? response
-            : new Blob([response], { type: "application/zip" });
+            : new window.Blob([response], { type: "application/zip" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -1552,7 +1563,7 @@ export default {
     };
 
     // 获取工程运行模式显示
-    const getProjectModeDisplay = (project) => {
+    const getProjectModeDisplay = (_project) => {
       // 从缓存中获取该工程在任意节点上的模式
       for (const nodeId in nodeModes) {
         if (nodeModes[nodeId]) {
@@ -1821,6 +1832,12 @@ export default {
     // 组件挂载时获取数据
     onMounted(() => {
       fetchProjects();
+    });
+
+    onUnmounted(() => {
+      if (searchTimer.value) {
+        window.clearTimeout(searchTimer.value);
+      }
     });
 
     return {
