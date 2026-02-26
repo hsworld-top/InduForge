@@ -17,6 +17,9 @@
             <el-icon class="mr-1"><List /></el-icon> 详细列表
           </el-radio-button>
         </el-radio-group>
+        <el-button v-if="canApproveNode" type="primary" @click="showAddNodeDialog = true">
+          注册节点
+        </el-button>
         <!-- 待审核申请通知图标 -->
         <el-badge :value="pendingCount" :hidden="pendingCount === 0" class="cursor-pointer" @click="showPendingDialog = true">
           <el-button :type="pendingCount > 0 ? 'warning' : 'default'" :plain="pendingCount === 0" circle>
