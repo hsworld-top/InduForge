@@ -199,8 +199,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/store'
 import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
-import { canAccessTab } from '@/permissions'
-import { ROLES } from '@/constants'
+import { canAccessTab, canRequestTenantStats } from '@/permissions'
 
 export default {
   name: 'DashboardContent',
@@ -210,9 +209,7 @@ export default {
 
     const username = computed(() => authStore.userInfo?.username || '')
     const role = computed(() => authStore.userInfo?.role)
-    const canLoadTenantStats = computed(
-      () => role.value === ROLES.SUPER_ADMIN && canAccessTab('tenant-management', role.value)
-    )
+    const canLoadTenantStats = computed(() => canRequestTenantStats(role.value))
     const canAccessUserManagement = computed(() => canAccessTab('user-management', role.value))
     const canAccessProjectManagement = computed(() => canAccessTab('project-management', role.value))
     const canAccessSystemLogs = computed(() => canAccessTab('system-logs', role.value))

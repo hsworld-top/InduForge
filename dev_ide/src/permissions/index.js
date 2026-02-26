@@ -6,4 +6,5 @@ export {
   getTabAccessDeniedMessage,
   canManageUsers,
   canApproveNodes,
+  canRequestTenantStats,
 } from './rules.js'

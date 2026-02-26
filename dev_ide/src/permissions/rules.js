@@ -50,3 +50,12 @@ export const canManageUsers = (userRole) => {
 export const canApproveNodes = (userRole) => {
   return hasRole(userRole, [ROLES.SYSTEM_ADMIN, ROLES.OPS_ADMIN])
 }
+
+/**
+ * 判断当前角色是否允许请求租户统计。
+ * @param {string} userRole - 当前用户角色
+ * @returns {boolean} 是否允许请求租户统计
+ */
+export const canRequestTenantStats = (userRole) => {
+  return userRole === ROLES.SUPER_ADMIN && canAccessTab('tenant-management', userRole)
+}

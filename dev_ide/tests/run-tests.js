@@ -6,6 +6,7 @@ import {
   canAccessTab,
   canManageUsers,
   canApproveNodes,
+  canRequestTenantStats,
   getTabAccessDeniedMessage,
 } from '../src/permissions/rules.js'
 import {
@@ -44,6 +45,8 @@ run('权限规则：业务判定函数', () => {
   assert.equal(canManageUsers(ROLES.OPS_ADMIN), false)
   assert.equal(canApproveNodes(ROLES.SYSTEM_ADMIN), true)
   assert.equal(canApproveNodes(ROLES.USER_ADMIN), false)
+  assert.equal(canRequestTenantStats(ROLES.SUPER_ADMIN), true)
+  assert.equal(canRequestTenantStats(ROLES.SYSTEM_ADMIN), false)
   assert.equal(getTabAccessDeniedMessage('system-settings'), '只有系统管理员才能访问系统设置')
 })
 
