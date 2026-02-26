@@ -10,7 +10,7 @@
         <div class="flex items-center">
           <img :src="tenantLogoUrl" :alt="currentTenant?.name || 'Logo'" class="h-7 w-auto mr-2" />
           <h1 class="text-base font-semibold text-gray-800 dark:text-white hidden sm:block">
-            {{ currentTenant?.name || '多租户管理系统' }}
+            {{ currentTenant?.name || 'InduForge' }}
           </h1>
         </div>
         <div class="flex items-center space-x-2">

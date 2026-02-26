@@ -147,7 +147,7 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   // 设置页面标题
-  document.title = `${to.meta.title || '多租户管理系统'} - ProjectIDE`
+  document.title = `${to.meta.title || 'InduForge'} - ProjectIDE`
 
   // 检查认证
   const token = Storage.getToken()

@@ -154,7 +154,7 @@ export const useAppStore = defineStore('app', {
         console.error('Failed to load config:', error)
         // 如果API调用失败，使用默认配置（单租户模式）
         const defaultConfig = {
-          name: '多租户管理系统',
+          name: 'InduForge',
           description: '高效、安全的企业级解决方案',
           logoUrl: '/images/logo.png',
           loginBackgroundUrl: '/images/login-bg.jpg',

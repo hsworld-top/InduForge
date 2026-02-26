@@ -106,7 +106,7 @@
 
           <!-- 品牌标题 -->
           <h1 class="text-4xl font-bold text-white mb-4">
-            {{ appConfig?.name || '多租户管理系统' }}
+            {{ appConfig?.name || 'InduForge' }}
           </h1>
           <p class="text-xl text-white text-opacity-90">
             {{ appConfig?.description || '高效、安全的企业级解决方案' }}
