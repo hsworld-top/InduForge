@@ -84,6 +84,7 @@
               size="small"
               @click="batchExportProjects"
               :disabled="selectedProjects.length === 0"
+              :loading="batchOperationLoading"
             >
               <el-icon class="mr-1"><Download /></el-icon>
               批量导出 ({{ selectedProjects.length }})
@@ -94,6 +95,7 @@
               size="small"
               @click="batchDeleteProjects"
               :disabled="selectedProjects.length === 0"
+              :loading="batchOperationLoading"
             >
               <el-icon class="mr-1"><Delete /></el-icon>
               批量删除 ({{ selectedProjects.length }})
@@ -923,6 +925,7 @@ export default {
     const createLoading = ref(false);
     const editLoading = ref(false);
     const operationLoading = ref(false);
+    const batchOperationLoading = ref(false);
 
     // 对话框显示状态
     const showCreateDialog = ref(false);
@@ -1156,17 +1159,15 @@ export default {
       }
     };
 
-    // 导入工程（暂未实现）
+    // 导入工程
     const importProject = () => {
-      ElMessage.info("导入工程功能待实现");
-      // TODO: 实现文件选择和解析逻辑
+      handleImportProject();
     };
 
-    // 导出工程（暂未实现）
+    // 导出工程
     const exportProject = (project) => {
       if (!project) return;
-      ElMessage.info("导出工程功能待实现");
-      // TODO: 实现导出逻辑
+      handleExportProject(project);
     };
 
     // 编辑工程
@@ -1454,8 +1455,58 @@ export default {
       if (selectedProjects.value.length === 0) {
         return ElMessage.warning("请先选择要导出的工程");
       }
-      ElMessage.info(`准备导出 ${selectedProjects.value.length} 个工程`);
-      // TODO: 实现批量导出逻辑
+
+      batchOperationLoading.value = true;
+      try {
+        const zip = new JSZip();
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const projectId of selectedProjects.value) {
+          const targetProject = projectList.value.find((item) => item.id === projectId);
+          if (!targetProject) {
+            failCount++;
+            continue;
+          }
+
+          try {
+            const response = await projectAPI.exportProject(projectId);
+            const blob =
+              response instanceof window.Blob
+                ? response
+                : new window.Blob([response], { type: "application/zip" });
+            const arrayBuffer = await blob.arrayBuffer();
+            zip.file(`${targetProject.name || projectId}.zip`, arrayBuffer);
+            successCount++;
+          } catch (error) {
+            console.error(`导出工程 ${projectId} 失败:`, error);
+            failCount++;
+          }
+        }
+
+        if (successCount === 0) {
+          ElMessage.error("批量导出失败，请检查网络或稍后重试");
+          return;
+        }
+
+        const packageBlob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(packageBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `projects-export-${Date.now()}.zip`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        if (failCount > 0) {
+          ElMessage.warning(`导出完成：成功 ${successCount} 个，失败 ${failCount} 个`);
+        } else {
+          ElMessage.success(`批量导出成功，共 ${successCount} 个工程`);
+        }
+      } catch (error) {
+        ElMessage.error("批量导出失败：" + (error.response?.data?.message || error.message));
+      } finally {
+        batchOperationLoading.value = false;
+      }
     };
 
     // 批量删除工程
@@ -1463,6 +1514,7 @@ export default {
       if (selectedProjects.value.length === 0) {
         return ElMessage.warning("请先选择要删除的工程");
       }
+      batchOperationLoading.value = true;
       try {
         await ElMessageBox.confirm(
           `确定要删除选中的 ${selectedProjects.value.length} 个工程吗？此操作不可恢复。`,
@@ -1503,6 +1555,8 @@ export default {
             "批量删除失败：" + (error.response?.data?.message || error.message),
           );
         }
+      } finally {
+        batchOperationLoading.value = false;
       }
     };
 
@@ -1846,6 +1900,7 @@ export default {
       createLoading,
       editLoading,
       operationLoading,
+      batchOperationLoading,
       showCreateDialog,
       showEditDialog,
       showOperationDialog,
