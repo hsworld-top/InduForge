@@ -19,19 +19,7 @@
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-green-100 dark:bg-green-900">
-            <svg
-              class="w-6 h-6 text-green-600 dark:text-green-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
-              />
-            </svg>
+            <el-icon class="w-6 h-6 text-green-600 dark:text-green-400"><UserFilled /></el-icon>
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.userCount') }}</p>
@@ -52,19 +40,7 @@
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-blue-100 dark:bg-blue-900">
-            <svg
-              class="w-6 h-6 text-blue-600 dark:text-blue-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
+            <el-icon class="w-6 h-6 text-blue-600 dark:text-blue-400"><FolderOpened /></el-icon>
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.projectCount') }}</p>
@@ -82,19 +58,7 @@
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-900">
-            <svg
-              class="w-6 h-6 text-yellow-600 dark:text-yellow-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-              />
-            </svg>
+            <el-icon class="w-6 h-6 text-yellow-600 dark:text-yellow-400"><OfficeBuilding /></el-icon>
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.tenantCount') }}</p>
@@ -115,19 +79,7 @@
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-red-100 dark:bg-red-900">
-            <svg
-              class="w-6 h-6 text-red-600 dark:text-red-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
+            <el-icon class="w-6 h-6 text-red-600 dark:text-red-400"><DocumentCopy /></el-icon>
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.systemLogs') }}</p>
@@ -165,19 +117,7 @@
             <div
               class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center"
             >
-              <svg
-                class="w-4 h-4 text-blue-600 dark:text-blue-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+              <el-icon class="w-4 h-4 text-blue-600 dark:text-blue-400"><InfoFilled /></el-icon>
             </div>
           </div>
           <div class="flex-1 min-w-0">
@@ -196,6 +136,13 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  UserFilled,
+  FolderOpened,
+  OfficeBuilding,
+  DocumentCopy,
+  InfoFilled,
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store'
 import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
@@ -340,6 +287,11 @@ export default {
       stats,
       recentActivities,
       t,
+      UserFilled,
+      FolderOpened,
+      OfficeBuilding,
+      DocumentCopy,
+      InfoFilled,
       openTab,
       loadDashboardData,
       formatDateTime,
