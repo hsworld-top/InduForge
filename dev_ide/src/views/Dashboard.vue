@@ -117,6 +117,13 @@
                 个人资料
               </button>
               <button
+                v-if="isSystemAdmin"
+                @click="openSystemSettingsDialog"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                系统设置
+              </button>
+              <button
                 @click="handleLogout"
                 class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
@@ -423,56 +430,6 @@
               </button>
             </el-tooltip>
 
-            <el-tooltip
-              v-if="isSystemAdmin"
-              content="系统设置"
-              placement="right"
-              :show-after="500"
-              :disabled="!sidebarCollapsed"
-            >
-              <button
-                @click="openTab('system-settings')"
-                :class="[
-                  'w-full h-11 flex items-center rounded-lg transition-colors',
-                  sidebarCollapsed ? 'justify-center' : 'px-3 gap-3 justify-start',
-                ]"
-              >
-                <span
-                  :class="[
-                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                    activeTab === 'system-settings'
-                      ? 'bg-blue-600 text-white'
-                      : isDark
-                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
-                  ]"
-                >
-                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                </span>
-                <span
-                  v-if="!sidebarCollapsed"
-                  :class="[
-                    'text-sm font-medium',
-                    activeTab === 'system-settings' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
-                  ]"
-                >
-                  系统设置
-                </span>
-              </button>
-            </el-tooltip>
           </nav>
         </div>
         <div class="px-2 py-2">
@@ -579,6 +536,16 @@
     >
       <Profile :embedded="true" />
     </el-dialog>
+
+    <el-dialog
+      v-model="showSystemSettingsDialog"
+      width="960px"
+      destroy-on-close
+      append-to-body
+      title="系统设置"
+    >
+      <SystemSettings />
+    </el-dialog>
   </div>
 </template>
 
@@ -620,6 +587,7 @@ export default {
     const showUserMenu = ref(false)
     const showLanguageMenu = ref(false)
     const showProfileDialog = ref(false)
+    const showSystemSettingsDialog = ref(false)
 
     // 侧边栏折叠状态（持久化）
     const sidebarCollapsed = computed({
@@ -741,6 +709,15 @@ export default {
      */
     const openProfileDialog = () => {
       showProfileDialog.value = true
+      showUserMenu.value = false
+    }
+
+    /**
+     * 打开系统设置弹窗。
+     */
+    const openSystemSettingsDialog = () => {
+      if (!isSystemAdmin.value) return
+      showSystemSettingsDialog.value = true
       showUserMenu.value = false
     }
 
@@ -969,7 +946,9 @@ export default {
       changeLanguage,
       currentLanguage,
       showProfileDialog,
+      showSystemSettingsDialog,
       openProfileDialog,
+      openSystemSettingsDialog,
       handleLogout,
       openTab,
       closeTab,
