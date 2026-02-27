@@ -531,14 +531,27 @@ router.get('/me', async (req, res) => {
  *                   type: integer
  *                   description: 活跃租户数量
  */
-router.get('/config', async (req, res) => {
+router.get('/config', validate(Joi.object({
+  query: Joi.object({
+    tenantCode: Joi.string().optional().allow(''),
+  }),
+})), async (req, res) => {
   try {
+    const { tenantCode } = req.query;
     // 从package.json或其他配置文件读取应用信息
     const packageInfo = require('../../../package.json');
 
     // 获取活跃租户数量，决定是否启用多租户模式
     const { Tenant } = require('../../models');
     const activeTenantsCount = await Tenant.count({ where: { status: 'active' } });
+    let tenantBranding = null;
+
+    if (tenantCode && String(tenantCode).trim()) {
+      tenantBranding = await Tenant.findOne({
+        where: { code: String(tenantCode).trim(), status: 'active' },
+        attributes: ['logoUrl', 'loginBackgroundUrl'],
+      });
+    }
 
     const config = {
       title: packageInfo.name || '管理系统',
@@ -548,7 +561,9 @@ router.get('/config', async (req, res) => {
       buildTime: dayjs().format(TIME_FORMAT),
       // 如果活跃租户数量大于1，则启用多租户模式
       multiTenant: activeTenantsCount > 1,
-      activeTenantsCount
+      activeTenantsCount,
+      logoUrl: tenantBranding?.logoUrl || null,
+      loginBackgroundUrl: tenantBranding?.loginBackgroundUrl || null,
     };
 
     return ApiResponse.success(res, config);

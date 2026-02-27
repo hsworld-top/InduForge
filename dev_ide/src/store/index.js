@@ -129,10 +129,10 @@ export const useAppStore = defineStore('app', {
       this.config = config
     },
 
-    async loadConfig() {
+    async loadConfig(tenantCode) {
       try {
         const { authAPI } = await import('@/api')
-        const { data: config } = await authAPI.getConfig()
+        const { data: config } = await authAPI.getConfig(tenantCode)
         // 合并后端配置和前端默认配置
         const mergedConfig = {
           ...config,

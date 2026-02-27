@@ -377,7 +377,7 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useAppStore } from '@/store'
 import { ElMessage } from 'element-plus'
@@ -407,6 +407,7 @@ export default {
     const showCaptcha = ref(false)
     const captchaData = ref(null) // { key, image, expireSeconds }
     const showPassword = ref(false) // 密码可见性
+    let tenantConfigTimer = null
 
     // 背景图和Logo（可以从应用配置中获取）
     const backgroundImageUrl = computed(() => {
@@ -564,11 +565,23 @@ export default {
       }
 
       // 异步加载应用配置，不阻塞页面渲染
-      appStore.loadConfig().catch(error => {
+      appStore.loadConfig(form.tenantCode || undefined).catch(error => {
         console.error('Failed to load config:', error)
         // 错误已在 loadConfig 中处理，这里只记录日志
       })
     })
+
+    watch(
+      () => form.tenantCode,
+      (value) => {
+        window.clearTimeout(tenantConfigTimer)
+        tenantConfigTimer = window.setTimeout(() => {
+          appStore.loadConfig(value || undefined).catch((error) => {
+            console.error('Failed to load tenant config:', error)
+          })
+        }, 300)
+      }
+    )
 
     return {
       form,

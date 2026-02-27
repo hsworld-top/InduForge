@@ -35,8 +35,10 @@ export const authAPI = {
    * 获取应用配置
    * @returns {Promise} 应用配置
    */
-  getConfig() {
-    return request.get('/auth/config')
+  getConfig(tenantCode) {
+    return request.get('/auth/config', {
+      params: tenantCode ? { tenantCode } : undefined,
+    })
   },
 
   /**
