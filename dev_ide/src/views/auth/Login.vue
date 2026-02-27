@@ -109,7 +109,7 @@
             {{ appConfig?.name || 'InduForge' }}
           </h1>
           <p class="text-xl text-white text-opacity-90">
-            {{ appConfig?.description || t('auth.defaultDescription') }}
+            {{ appConfig?.description || $t('auth.defaultDescription') }}
           </p>
         </div>
       </div>
