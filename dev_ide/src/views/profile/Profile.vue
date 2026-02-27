@@ -36,7 +36,7 @@
             <span class="value">{{ profile.id || '-' }}</span>
           </div>
           <div class="meta-item">
-            <span class="label">用户名</span>
+            <span class="label">{{ t('profile.username') }}</span>
             <span class="value">{{ profile.username || '-' }}</span>
           </div>
           <div class="meta-item">
