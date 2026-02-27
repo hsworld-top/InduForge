@@ -2,7 +2,7 @@
   <div class="user-management">
     <!-- 页面标题和操作栏 -->
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">用户管理</h1>
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('userManagement.title') }}</h1>
       <el-button
         v-if="canManageUsers"
         type="primary"
@@ -10,7 +10,7 @@
         class="bg-blue-600 hover:bg-blue-700"
       >
         <el-icon class="mr-2"><Plus /></el-icon>
-        添加用户
+        {{ t('userManagement.addUser') }}
       </el-button>
     </div>
 
@@ -19,19 +19,19 @@
       class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6"
     >
       <el-form :inline="true" :model="searchForm" class="flex flex-wrap gap-4">
-        <el-form-item label="用户名">
+        <el-form-item :label="t('userManagement.username')">
           <el-input
             v-model="searchForm.username"
-            placeholder="输入用户名搜索"
+            :placeholder="t('userManagement.searchUsername')"
             clearable
             style="width: 200px"
             @input="handleSearch"
           />
         </el-form-item>
-        <el-form-item label="角色">
+        <el-form-item :label="t('userManagement.role')">
           <el-select
             v-model="searchForm.role"
-            placeholder="选择角色"
+            :placeholder="t('userManagement.selectRole')"
             clearable
             style="width: 150px"
             @change="handleSearch"
@@ -44,10 +44,10 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
+        <el-form-item :label="t('userManagement.status')">
           <el-select
             v-model="searchForm.status"
-            placeholder="选择状态"
+            :placeholder="t('userManagement.selectStatus')"
             clearable
             style="width: 150px"
             @change="handleSearch"
@@ -63,7 +63,7 @@
         <el-form-item>
           <el-button @click="resetSearch" type="default">
             <el-icon><Refresh /></el-icon>
-            重置
+            {{ t('userManagement.reset') }}
           </el-button>
         </el-form-item>
       </el-form>
@@ -79,41 +79,41 @@
         style="width: 100%"
         :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
       >
-        <el-table-column prop="username" label="用户名" width="120" />
-        <el-table-column prop="fullName" label="真实姓名" width="120" />
-        <el-table-column prop="email" label="邮箱" width="300" />
-        <el-table-column prop="role" label="角色" min-width="200">
+        <el-table-column prop="username" :label="t('userManagement.username')" width="120" />
+        <el-table-column prop="fullName" :label="t('userManagement.fullName')" width="120" />
+        <el-table-column prop="email" :label="t('userManagement.email')" width="300" />
+        <el-table-column prop="role" :label="t('userManagement.role')" min-width="200">
           <template #default="scope">
             <el-tag :type="getRoleTagType(scope.row.role)">
               {{ getRoleLabel(scope.row.role) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="status" :label="t('userManagement.status')" width="100">
           <template #default="scope">
             <el-tag :type="getStatusTagType(scope.row.status)">
               {{ getStatusLabel(scope.row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="tenant.name" label="所属租户" width="120" />
-        <el-table-column prop="lastLoginAt" label="最后登录" width="200">
+        <el-table-column prop="tenant.name" :label="t('userManagement.tenant')" width="120" />
+        <el-table-column prop="lastLoginAt" :label="t('userManagement.lastLogin')" width="200">
           <template #default="scope">
             {{ formatDateTime(scope.row.lastLoginAt) }}
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" width="200">
+        <el-table-column prop="createdAt" :label="t('userManagement.createdAt')" width="200">
           <template #default="scope">
             {{ formatDateTime(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" min-width="220" fixed="right" v-if="canManageUsers">
+        <el-table-column :label="t('userManagement.actions')" min-width="220" fixed="right" v-if="canManageUsers">
           <template #default="scope">
             <el-button type="primary" size="small" @click="editUser(scope.row)" class="mr-2">
-              编辑
+              {{ t('userManagement.edit') }}
             </el-button>
             <el-button type="warning" size="small" @click="resetPassword(scope.row)" class="mr-2">
-              重置密码
+              {{ t('userManagement.resetPassword') }}
             </el-button>
             <el-button
               type="danger"
@@ -121,7 +121,7 @@
               @click="deleteUser(scope.row)"
               v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole"
             >
-              删除
+              {{ t('userManagement.delete') }}
             </el-button>
           </template>
         </el-table-column>
@@ -132,9 +132,13 @@
         class="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700"
       >
         <div class="text-sm text-gray-500 dark:text-gray-400">
-          显示第 {{ (pagination.page - 1) * pagination.limit + 1 }} 到
-          {{ Math.min(pagination.page * pagination.limit, pagination.total) }} 条， 共
-          {{ pagination.total }} 条记录
+          {{
+            t('userManagement.totalRange', {
+              start: (pagination.page - 1) * pagination.limit + 1,
+              end: Math.min(pagination.page * pagination.limit, pagination.total),
+              total: pagination.total,
+            })
+          }}
         </div>
         <el-pagination
           v-model:current-page="pagination.page"
@@ -151,38 +155,38 @@
     <!-- 创建用户对话框 -->
     <el-dialog
       v-model="showCreateDialog"
-      title="创建用户"
+      :title="t('userManagement.createUser')"
       width="500px"
       :close-on-click-modal="false"
     >
       <el-form ref="createFormRef" :model="createForm" :rules="createFormRules" label-width="100px">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="createForm.username" placeholder="请输入用户名" />
+        <el-form-item :label="t('userManagement.username')" prop="username">
+          <el-input v-model="createForm.username" :placeholder="t('userManagement.inputUsername')" />
         </el-form-item>
-        <el-form-item label="密码" prop="password">
+        <el-form-item :label="t('auth.password')" prop="password">
           <el-input
             v-model="createForm.password"
             type="password"
-            placeholder="请输入密码"
+            :placeholder="t('userManagement.inputPassword')"
             show-password
           />
         </el-form-item>
-        <el-form-item label="确认密码" prop="confirmPassword">
+        <el-form-item :label="t('profile.confirmPassword')" prop="confirmPassword">
           <el-input
             v-model="createForm.confirmPassword"
             type="password"
-            placeholder="请再次输入密码"
+            :placeholder="t('userManagement.inputConfirmPassword')"
             show-password
           />
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="createForm.email" placeholder="请输入邮箱" />
+        <el-form-item :label="t('userManagement.email')" prop="email">
+          <el-input v-model="createForm.email" :placeholder="t('userManagement.inputEmail')" />
         </el-form-item>
-        <el-form-item label="真实姓名" prop="fullName">
-          <el-input v-model="createForm.fullName" placeholder="请输入真实姓名" />
+        <el-form-item :label="t('userManagement.fullName')" prop="fullName">
+          <el-input v-model="createForm.fullName" :placeholder="t('userManagement.inputFullName')" />
         </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="createForm.role" placeholder="请选择角色" style="width: 100%">
+        <el-form-item :label="t('userManagement.role')" prop="role">
+          <el-select v-model="createForm.role" :placeholder="t('userManagement.chooseRole')" style="width: 100%">
             <el-option
               v-for="role in roleOptions"
               :key="role.value"
@@ -193,9 +197,9 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
+        <el-button @click="showCreateDialog = false">{{ t('userManagement.cancel') }}</el-button>
         <el-button type="primary" @click="handleCreateUser" :loading="createLoading">
-          创建
+          {{ t('userManagement.create') }}
         </el-button>
       </template>
     </el-dialog>
@@ -203,24 +207,24 @@
     <!-- 编辑用户对话框 -->
     <el-dialog
       v-model="showEditDialog"
-      title="编辑用户"
+      :title="t('userManagement.editUser')"
       width="500px"
       :close-on-click-modal="false"
     >
       <el-form ref="editFormRef" :model="editForm" :rules="editFormRules" label-width="100px">
-        <el-form-item label="用户名">
+        <el-form-item :label="t('userManagement.username')">
           <el-input v-model="editForm.username" disabled />
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="editForm.email" placeholder="请输入邮箱" />
+        <el-form-item :label="t('userManagement.email')" prop="email">
+          <el-input v-model="editForm.email" :placeholder="t('userManagement.inputEmail')" />
         </el-form-item>
-        <el-form-item label="真实姓名" prop="fullName">
-          <el-input v-model="editForm.fullName" placeholder="请输入真实姓名" />
+        <el-form-item :label="t('userManagement.fullName')" prop="fullName">
+          <el-input v-model="editForm.fullName" :placeholder="t('userManagement.inputFullName')" />
         </el-form-item>
-        <el-form-item label="角色" prop="role">
+        <el-form-item :label="t('userManagement.role')" prop="role">
           <el-select
             v-model="editForm.role"
-            placeholder="请选择角色"
+            :placeholder="t('userManagement.chooseRole')"
             style="width: 100%"
             :disabled="!canEditRole"
           >
@@ -232,8 +236,8 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-select v-model="editForm.status" placeholder="请选择状态" style="width: 100%">
+        <el-form-item :label="t('userManagement.status')" prop="status">
+          <el-select v-model="editForm.status" :placeholder="t('userManagement.chooseStatus')" style="width: 100%">
             <el-option
               v-for="status in statusOptions"
               :key="status.value"
@@ -244,9 +248,9 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showEditDialog = false">取消</el-button>
+        <el-button @click="showEditDialog = false">{{ t('userManagement.cancel') }}</el-button>
         <el-button type="primary" @click="handleUpdateUser" :loading="editLoading">
-          保存
+          {{ t('userManagement.save') }}
         </el-button>
       </template>
     </el-dialog>
@@ -254,7 +258,7 @@
     <!-- 重置密码对话框 -->
     <el-dialog
       v-model="showPasswordDialog"
-      title="重置密码"
+      :title="t('userManagement.resetPassword')"
       width="400px"
       :close-on-click-modal="false"
     >
@@ -264,27 +268,27 @@
         :rules="passwordFormRules"
         label-width="100px"
       >
-        <el-form-item label="新密码" prop="newPassword">
+        <el-form-item :label="t('profile.newPassword')" prop="newPassword">
           <el-input
             v-model="passwordForm.newPassword"
             type="password"
-            placeholder="请输入新密码"
+            :placeholder="t('userManagement.inputNewPassword')"
             show-password
           />
         </el-form-item>
-        <el-form-item label="确认密码" prop="confirmPassword">
+        <el-form-item :label="t('profile.confirmPassword')" prop="confirmPassword">
           <el-input
             v-model="passwordForm.confirmPassword"
             type="password"
-            placeholder="请再次输入密码"
+            :placeholder="t('userManagement.inputConfirmPassword')"
             show-password
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showPasswordDialog = false">取消</el-button>
+        <el-button @click="showPasswordDialog = false">{{ t('userManagement.cancel') }}</el-button>
         <el-button type="primary" @click="handleResetPassword" :loading="passwordLoading">
-          重置
+          {{ t('userManagement.resetAction') }}
         </el-button>
       </template>
     </el-dialog>
@@ -293,10 +297,11 @@
 
 <script>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/store'
 import { userAPI } from '@/api/user.api'
-import { RoleEnum, UserStatusEnum, ENUM_LABELS } from '@/enums'
+import { RoleEnum, UserStatusEnum } from '@/enums'
 import { formatDateTime } from '@/utils/date'
 import { canManageUsers } from '@/permissions'
 import { ROLES } from '@/constants'
@@ -304,6 +309,7 @@ import { ROLES } from '@/constants'
 export default {
   name: 'TenantUserManagement',
   setup() {
+    const { t } = useI18n()
     const authStore = useAuthStore()
 
     // 当前用户信息
@@ -339,17 +345,17 @@ export default {
 
     // 角色选项
     const roleOptions = [
-      { value: RoleEnum.SYSTEM_ADMIN, label: ENUM_LABELS[RoleEnum.SYSTEM_ADMIN] },
-      { value: RoleEnum.PROJECT_ADMIN, label: ENUM_LABELS[RoleEnum.PROJECT_ADMIN] },
-      { value: RoleEnum.OPS_ADMIN, label: ENUM_LABELS[RoleEnum.OPS_ADMIN] },
-      { value: RoleEnum.USER_ADMIN, label: ENUM_LABELS[RoleEnum.USER_ADMIN] },
+      { value: RoleEnum.SYSTEM_ADMIN, label: t('userManagement.roleSystemAdmin') },
+      { value: RoleEnum.PROJECT_ADMIN, label: t('userManagement.roleProjectAdmin') },
+      { value: RoleEnum.OPS_ADMIN, label: t('userManagement.roleOpsAdmin') },
+      { value: RoleEnum.USER_ADMIN, label: t('userManagement.roleUserAdmin') },
     ]
 
     // 状态选项
     const statusOptions = [
-      { value: UserStatusEnum.ACTIVE, label: ENUM_LABELS[UserStatusEnum.ACTIVE] },
-      { value: UserStatusEnum.INACTIVE, label: ENUM_LABELS[UserStatusEnum.INACTIVE] },
-      { value: UserStatusEnum.SUSPENDED, label: ENUM_LABELS[UserStatusEnum.SUSPENDED] },
+      { value: UserStatusEnum.ACTIVE, label: t('userManagement.statusActive') },
+      { value: UserStatusEnum.INACTIVE, label: t('userManagement.statusInactive') },
+      { value: UserStatusEnum.SUSPENDED, label: t('userManagement.statusSuspended') },
     ]
 
     // 创建用户表单
@@ -365,19 +371,19 @@ export default {
     // 创建表单验证规则
     const createFormRules = {
       username: [
-        { required: true, message: '请输入用户名', trigger: 'blur' },
-        { min: 3, max: 50, message: '用户名长度在 3 到 50 个字符', trigger: 'blur' },
+        { required: true, message: t('userManagement.inputUsername'), trigger: 'blur' },
+        { min: 3, max: 50, message: t('userManagement.usernameLength'), trigger: 'blur' },
       ],
       password: [
-        { required: true, message: '请输入密码', trigger: 'blur' },
-        { min: 6, message: '密码长度不能少于 6 个字符', trigger: 'blur' },
+        { required: true, message: t('userManagement.inputPassword'), trigger: 'blur' },
+        { min: 6, message: t('userManagement.passwordMinLength'), trigger: 'blur' },
       ],
       confirmPassword: [
-        { required: true, message: '请再次输入密码', trigger: 'blur' },
+        { required: true, message: t('userManagement.inputConfirmPassword'), trigger: 'blur' },
         {
           validator: (rule, value, callback) => {
             if (value !== createForm.password) {
-              callback(new Error('两次输入密码不一致'))
+              callback(new Error(t('userManagement.passwordMismatch')))
             } else {
               callback()
             }
@@ -385,9 +391,9 @@ export default {
           trigger: 'blur',
         },
       ],
-      email: [{ type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }],
-      fullName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
-      role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+      email: [{ type: 'email', message: t('userManagement.invalidEmail'), trigger: 'blur' }],
+      fullName: [{ required: true, message: t('userManagement.inputFullName'), trigger: 'blur' }],
+      role: [{ required: true, message: t('userManagement.chooseRole'), trigger: 'change' }],
     }
 
     // 编辑用户表单
@@ -402,10 +408,10 @@ export default {
 
     // 编辑表单验证规则
     const editFormRules = {
-      email: [{ type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }],
-      fullName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
-      role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-      status: [{ required: true, message: '请选择状态', trigger: 'change' }],
+      email: [{ type: 'email', message: t('userManagement.invalidEmail'), trigger: 'blur' }],
+      fullName: [{ required: true, message: t('userManagement.inputFullName'), trigger: 'blur' }],
+      role: [{ required: true, message: t('userManagement.chooseRole'), trigger: 'change' }],
+      status: [{ required: true, message: t('userManagement.chooseStatus'), trigger: 'change' }],
     }
 
     // 密码表单
@@ -418,15 +424,15 @@ export default {
     // 密码表单验证规则
     const passwordFormRules = {
       newPassword: [
-        { required: true, message: '请输入新密码', trigger: 'blur' },
-        { min: 6, message: '密码长度不能少于 6 个字符', trigger: 'blur' },
+        { required: true, message: t('userManagement.inputNewPassword'), trigger: 'blur' },
+        { min: 6, message: t('userManagement.passwordMinLength'), trigger: 'blur' },
       ],
       confirmPassword: [
-        { required: true, message: '请再次输入密码', trigger: 'blur' },
+        { required: true, message: t('userManagement.inputConfirmPassword'), trigger: 'blur' },
         {
           validator: (rule, value, callback) => {
             if (value !== passwordForm.newPassword) {
-              callback(new Error('两次输入密码不一致'))
+              callback(new Error(t('userManagement.passwordMismatch')))
             } else {
               callback()
             }
@@ -443,12 +449,23 @@ export default {
 
     // 获取角色标签
     const getRoleLabel = (role) => {
-      return ENUM_LABELS[role] || role
+      const map = {
+        [RoleEnum.SYSTEM_ADMIN]: t('userManagement.roleSystemAdmin'),
+        [RoleEnum.PROJECT_ADMIN]: t('userManagement.roleProjectAdmin'),
+        [RoleEnum.OPS_ADMIN]: t('userManagement.roleOpsAdmin'),
+        [RoleEnum.USER_ADMIN]: t('userManagement.roleUserAdmin'),
+      }
+      return map[role] || role
     }
 
     // 获取状态标签
     const getStatusLabel = (status) => {
-      return ENUM_LABELS[status] || status
+      const map = {
+        [UserStatusEnum.ACTIVE]: t('userManagement.statusActive'),
+        [UserStatusEnum.INACTIVE]: t('userManagement.statusInactive'),
+        [UserStatusEnum.SUSPENDED]: t('userManagement.statusSuspended'),
+      }
+      return map[status] || status
     }
 
     // 获取角色标签类型
@@ -499,7 +516,11 @@ export default {
         pagination.total = response.pagination?.total || 0
         pagination.totalPages = response.pagination?.totalPages || 0
       } catch (error) {
-        ElMessage.error('获取用户列表失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          t('userManagement.fetchUsersFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
       } finally {
         loading.value = false
       }
@@ -568,12 +589,16 @@ export default {
 
         await userAPI.createUser(userData)
 
-        ElMessage.success('用户创建成功')
+        ElMessage.success(t('userManagement.createUserSuccess'))
         showCreateDialog.value = false
         resetCreateForm()
         fetchUsers()
       } catch (error) {
-        ElMessage.error('创建用户失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          t('userManagement.createUserFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
       } finally {
         createLoading.value = false
       }
@@ -628,11 +653,15 @@ export default {
 
         await userAPI.updateUser(editForm.id, userData)
 
-        ElMessage.success('用户更新成功')
+        ElMessage.success(t('userManagement.updateUserSuccess'))
         showEditDialog.value = false
         fetchUsers()
       } catch (error) {
-        ElMessage.error('更新用户失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          t('userManagement.updateUserFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
       } finally {
         editLoading.value = false
       }
@@ -660,10 +689,14 @@ export default {
       try {
         await userAPI.updatePassword(passwordForm.userId, passwordForm.newPassword)
 
-        ElMessage.success('密码重置成功')
+        ElMessage.success(t('userManagement.resetPasswordSuccess'))
         showPasswordDialog.value = false
       } catch (error) {
-        ElMessage.error('重置密码失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          t('userManagement.resetPasswordFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
       } finally {
         passwordLoading.value = false
       }
@@ -673,21 +706,25 @@ export default {
     const deleteUser = async (user) => {
       try {
         await ElMessageBox.confirm(
-          `确定要删除用户 "${user.username}" 吗？此操作不可恢复。`,
-          '确认删除',
+          t('userManagement.deleteConfirmText', { username: user.username }),
+          t('userManagement.deleteConfirmTitle'),
           {
-            confirmButtonText: '确定删除',
-            cancelButtonText: '取消',
+            confirmButtonText: t('userManagement.deleteConfirmButton'),
+            cancelButtonText: t('userManagement.cancel'),
             type: 'warning',
           }
         )
 
         await userAPI.deleteUser(user.id)
-        ElMessage.success('用户删除成功')
+        ElMessage.success(t('userManagement.deleteUserSuccess'))
         fetchUsers()
       } catch (error) {
         if (error !== 'cancel') {
-          ElMessage.error('删除用户失败：' + (error.response?.data?.message || error.message))
+          ElMessage.error(
+            t('userManagement.deleteUserFailed', {
+              message: error.response?.data?.message || error.message,
+            })
+          )
         }
       }
     }
@@ -736,6 +773,7 @@ export default {
       passwordFormRef,
 
       // 方法
+      t,
       getRoleLabel,
       getStatusLabel,
       getRoleTagType,
