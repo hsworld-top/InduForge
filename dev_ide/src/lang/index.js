@@ -1239,9 +1239,19 @@ export const messages = {
   },
 }
 
+const resolveInitialLocale = () => {
+  try {
+    const rawLocale = localStorage.getItem('language')
+    const parsedLocale = rawLocale ? JSON.parse(rawLocale) : 'zh'
+    return Object.prototype.hasOwnProperty.call(messages, parsedLocale) ? parsedLocale : 'zh'
+  } catch {
+    return 'zh'
+  }
+}
+
 const i18n = createI18n({
   legacy: false,
-  locale: 'zh',
+  locale: resolveInitialLocale(),
   fallbackLocale: 'zh',
   messages,
 })
