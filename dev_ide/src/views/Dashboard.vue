@@ -148,7 +148,7 @@
       <div
         v-if="!isTabMaximized"
         :class="[
-          'border-r transition-all duration-200 flex flex-col',
+          'relative border-r transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col',
           isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200',
           sidebarCollapsed ? 'w-12' : 'w-44',
         ]"
@@ -444,32 +444,28 @@
 
           </nav>
         </div>
-        <div class="px-2 py-2">
-          <div :class="['h-px', isDark ? 'bg-gray-800/50' : 'bg-gray-200/60']"></div>
-          <button
-            @click="toggleSidebar"
+        <button
+          @click="toggleSidebar"
+          :class="[
+            'absolute top-1/2 -right-3 -translate-y-1/2 h-9 w-6 rounded-full border shadow-sm flex items-center justify-center transition-all duration-200',
+            isDark
+              ? 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 hover:border-gray-600'
+              : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300',
+          ]"
+          aria-label="Toggle sidebar"
+        >
+          <svg
             :class="[
-              'mt-2 mx-auto h-8 w-8 rounded-md flex items-center justify-center transition-colors',
-              isDark
-                ? 'text-gray-400 hover:text-white hover:bg-gray-800'
-                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100',
+              'w-3.5 h-3.5 transition-transform duration-200 ease-out',
+              sidebarCollapsed ? 'rotate-180' : '',
             ]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
           >
-            <svg
-              :class="['w-4 h-4 transition-transform', sidebarCollapsed ? '' : 'rotate-180']"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-              />
-            </svg>
-          </button>
-        </div>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 6l-6 6 6 6" />
+          </svg>
+        </button>
       </div>
 
       <!-- 右侧标签页区域 -->
