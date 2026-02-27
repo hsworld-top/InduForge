@@ -98,6 +98,14 @@
       <div class="panel">
         <div class="panel-title">{{ t('profile.changePassword') }}</div>
         <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="92px">
+          <el-form-item :label="t('profile.oldPassword')" prop="oldPassword">
+            <el-input
+              v-model="passwordForm.oldPassword"
+              type="password"
+              show-password
+              :placeholder="t('profile.oldPasswordPlaceholder')"
+            />
+          </el-form-item>
           <el-form-item :label="t('profile.newPassword')" prop="newPassword">
             <el-input
               v-model="passwordForm.newPassword"
@@ -172,6 +180,7 @@ export default {
     })
 
     const passwordForm = reactive({
+      oldPassword: '',
       newPassword: '',
       confirmPassword: '',
     })
@@ -198,6 +207,7 @@ export default {
     const preferencesRules = {}
 
     const passwordRules = {
+      oldPassword: [{ required: true, message: t('profile.requireOldPassword'), trigger: 'blur' }],
       newPassword: [
         { required: true, message: t('profile.requireNewPassword'), trigger: 'blur' },
         { min: 6, message: t('profile.passwordMinLength'), trigger: 'blur' },
@@ -441,16 +451,14 @@ export default {
         return
       }
 
-      const userId = profile.value.id || authStore.userInfo?.id
-      if (!userId) {
-        ElMessage.error(t('profile.noUserInfo'))
-        return
-      }
-
       savingPassword.value = true
       try {
-        await userAPI.updatePassword(userId, passwordForm.newPassword)
+        await authAPI.changePassword({
+          oldPassword: passwordForm.oldPassword,
+          newPassword: passwordForm.newPassword,
+        })
         ElMessage.success(t('profile.passwordUpdated'))
+        passwordForm.oldPassword = ''
         passwordForm.newPassword = ''
         passwordForm.confirmPassword = ''
         passwordFormRef.value?.clearValidate()

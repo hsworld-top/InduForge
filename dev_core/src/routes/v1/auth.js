@@ -369,6 +369,79 @@ router.post('/logout',
 
 /**
  * @swagger
+ * /api/v1/auth/password:
+ *   put:
+ *     summary: 修改当前用户密码（需验证旧密码）
+ *     tags: [认证]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - oldPassword
+ *               - newPassword
+ *             properties:
+ *               oldPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: 修改成功
+ *       401:
+ *         description: 旧密码错误或 token 无效
+ */
+router.put('/password',
+  validate(Joi.object({
+    body: Joi.object({
+      oldPassword: Joi.string().required(),
+      newPassword: Joi.string().min(6).required()
+    }).required()
+  })),
+  async (req, res) => {
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 401);
+      }
+
+      const isBlacklisted = await TokenManager.isAccessTokenBlacklisted(token);
+      if (isBlacklisted) {
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+      }
+
+      const decoded = TokenManager.verifyAccessToken(token);
+      if (!decoded) {
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+      }
+
+      const user = await User.findByPk(decoded.userId);
+      if (!user) {
+        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 404);
+      }
+
+      const { oldPassword, newPassword } = req.body;
+      const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
+      if (!isOldPasswordValid) {
+        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 401);
+      }
+
+      await user.update({ password: newPassword });
+      return ApiResponse.success(res, null, 'password_update_success');
+    } catch (error) {
+      logger.error('Change password error', { error: error.message, requestId: req.requestId });
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    }
+  }
+);
+
+/**
+ * @swagger
  * /api/auth/me:
  *   get:
  *     summary: 获取当前用户信息
