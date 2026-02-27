@@ -39,7 +39,7 @@
             <span class="label">{{ t('profile.role') }}</span>
             <span class="value">{{ getRoleLabel(profile.role) }}</span>
           </div>
-          <div class="meta-item">
+          <div class="meta-item email-row" @click="startEmailEdit">
             <span class="label">{{ t('profile.email') }}</span>
             <div class="flex items-center gap-2">
               <template v-if="isEditingEmail">
@@ -48,12 +48,11 @@
                   :placeholder="t('profile.emailPlaceholder')"
                   clearable
                   style="width: 240px"
+                  @click.stop
                 />
-                <el-button text @click="cancelEmailEdit">{{ t('common.cancel') }}</el-button>
               </template>
               <template v-else>
                 <span class="value">{{ profile.email || '-' }}</span>
-                <el-button text type="primary" @click="startEmailEdit">{{ t('common.edit') }}</el-button>
               </template>
             </div>
           </div>
@@ -308,11 +307,6 @@ export default {
       isEditingEmail.value = true
     }
 
-    const cancelEmailEdit = () => {
-      accountForm.email = profile.value.email || ''
-      isEditingEmail.value = false
-    }
-
     const handleSaveAccountInfo = async () => {
       const userId = profile.value.id || authStore.userInfo?.id
       if (!userId) {
@@ -468,7 +462,6 @@ export default {
       t,
       loadProfile,
       startEmailEdit,
-      cancelEmailEdit,
       handleAvatarChange,
       handleSaveAccountInfo,
       handleSavePreferences,
@@ -529,6 +522,10 @@ export default {
 
 .meta-item {
   @apply flex items-center justify-between py-2 border-b border-dashed border-gray-200 dark:border-gray-700;
+}
+
+.email-row {
+  cursor: pointer;
 }
 
 .meta-item:last-child {

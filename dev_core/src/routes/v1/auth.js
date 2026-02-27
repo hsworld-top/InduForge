@@ -146,6 +146,8 @@ router.post('/login',
           user: {
             id: appConfig.superAdmin.userId,
             username: appConfig.superAdmin.username,
+            email: appConfig.superAdmin.email || '',
+            avatarUrl: appConfig.superAdmin.avatarUrl || '',
             role: appConfig.superAdmin.role,
             tenant: {
               id: appConfig.defaultTenant.id,
@@ -216,6 +218,8 @@ router.post('/login',
         user: {
           id: user.id,
           username: user.username,
+          email: user.email || '',
+          avatarUrl: user.avatarUrl || '',
           role: user.role,
           tenant: user.tenant
         }
@@ -406,6 +410,8 @@ router.get('/me', async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
+        email: user.email || '',
+        avatarUrl: user.avatarUrl || '',
         role: user.role,
         tenant: user.tenant
       }
