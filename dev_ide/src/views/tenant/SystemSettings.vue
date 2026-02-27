@@ -1,15 +1,15 @@
 <template>
   <div class="system-settings">
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">系统设置</h1>
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('systemSettings.title') }}</h1>
       <el-button @click="loadSystemConfig" :loading="loading">
         <el-icon><Refresh /></el-icon>
-        刷新
+        {{ t('systemSettings.refresh') }}
       </el-button>
     </div>
 
     <el-alert
-      title="该页面仅用于 SYSTEM_ADMIN 的系统级配置，修改后会立即在当前浏览器生效。"
+      :title="t('systemSettings.infoAlert')"
       type="info"
       :closable="false"
       class="mb-6"
@@ -17,55 +17,55 @@
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div class="panel">
-        <div class="panel-title">系统信息</div>
+        <div class="panel-title">{{ t('systemSettings.systemInfo') }}</div>
         <el-descriptions :column="1" border>
-          <el-descriptions-item label="系统名称">
+          <el-descriptions-item :label="t('systemSettings.systemName')">
             {{ systemInfo.title || '-' }}
           </el-descriptions-item>
-          <el-descriptions-item label="版本">
+          <el-descriptions-item :label="t('systemSettings.version')">
             {{ systemInfo.version || '-' }}
           </el-descriptions-item>
-          <el-descriptions-item label="描述">
+          <el-descriptions-item :label="t('systemSettings.description')">
             {{ systemInfo.description || '-' }}
           </el-descriptions-item>
-          <el-descriptions-item label="作者">
+          <el-descriptions-item :label="t('systemSettings.author')">
             {{ systemInfo.author || '-' }}
           </el-descriptions-item>
-          <el-descriptions-item label="多租户模式">
+          <el-descriptions-item :label="t('systemSettings.multiTenantMode')">
             <el-tag :type="systemInfo.multiTenant ? 'success' : 'info'" size="small">
-              {{ systemInfo.multiTenant ? '启用' : '关闭' }}
+              {{ systemInfo.multiTenant ? t('systemSettings.enabled') : t('systemSettings.disabled') }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="活跃租户数">
+          <el-descriptions-item :label="t('systemSettings.activeTenantsCount')">
             {{ systemInfo.activeTenantsCount ?? '-' }}
           </el-descriptions-item>
-          <el-descriptions-item label="配置更新时间">
+          <el-descriptions-item :label="t('systemSettings.configUpdatedAt')">
             {{ formattedBuildTime }}
           </el-descriptions-item>
         </el-descriptions>
       </div>
 
       <div class="panel">
-        <div class="panel-title">界面偏好</div>
+        <div class="panel-title">{{ t('systemSettings.uiPreference') }}</div>
         <el-form :model="settingsForm" label-width="110px">
-          <el-form-item label="系统主题">
+          <el-form-item :label="t('systemSettings.theme')">
             <el-select v-model="settingsForm.theme" style="width: 220px">
-              <el-option label="浅色" value="light" />
-              <el-option label="深色" value="dark" />
+              <el-option :label="t('systemSettings.light')" value="light" />
+              <el-option :label="t('systemSettings.dark')" value="dark" />
             </el-select>
           </el-form-item>
-          <el-form-item label="系统语言">
+          <el-form-item :label="t('systemSettings.language')">
             <el-select v-model="settingsForm.language" style="width: 220px">
               <el-option label="中文" value="zh" />
               <el-option label="English" value="en" />
             </el-select>
           </el-form-item>
-          <el-form-item label="日志默认页长">
+          <el-form-item :label="t('systemSettings.logPageSize')">
             <el-select v-model="settingsForm.logPageSize" style="width: 220px">
               <el-option
                 v-for="size in systemLogPageSizeOptions"
                 :key="size"
-                :label="`${size} 条`"
+                :label="`${size} ${t('systemSettings.itemsUnit')}`"
                 :value="size"
               />
             </el-select>
@@ -73,14 +73,14 @@
           <el-form-item>
             <el-space wrap>
               <el-button type="primary" @click="saveSettings" :loading="saving" :disabled="!isDirty">
-                保存设置
+                {{ t('systemSettings.saveSettings') }}
               </el-button>
-              <el-button @click="resetToLastSaved" :disabled="!isDirty">撤销修改</el-button>
-              <el-button @click="resetToDefault">恢复默认</el-button>
+              <el-button @click="resetToLastSaved" :disabled="!isDirty">{{ t('systemSettings.undoChanges') }}</el-button>
+              <el-button @click="resetToDefault">{{ t('systemSettings.resetDefault') }}</el-button>
             </el-space>
           </el-form-item>
           <el-form-item v-if="isDirty">
-            <span class="text-sm text-orange-600 dark:text-orange-300">当前存在未保存修改</span>
+            <span class="text-sm text-orange-600 dark:text-orange-300">{{ t('systemSettings.unsavedHint') }}</span>
           </el-form-item>
         </el-form>
       </div>
@@ -106,7 +106,7 @@ export default {
     Refresh,
   },
   setup() {
-    const { locale } = useI18n()
+    const { locale, t } = useI18n()
     const appStore = useAppStore()
     const loading = ref(false)
     const saving = ref(false)
@@ -160,7 +160,11 @@ export default {
           activeTenantsCount: response.data?.activeTenantsCount ?? 0,
         }
       } catch (error) {
-        ElMessage.error('加载系统设置失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          t('systemSettings.loadFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
       } finally {
         loading.value = false
       }
@@ -180,7 +184,7 @@ export default {
 
     const saveSettings = async () => {
       if (!isDirty.value) {
-        ElMessage.info('当前没有需要保存的修改')
+        ElMessage.info(t('systemSettings.noChanges'))
         return
       }
       saving.value = true
@@ -194,8 +198,8 @@ export default {
           language: settingsForm.language,
           logPageSize: settingsForm.logPageSize,
         }
-        ElMessage.success('设置已保存')
-        ElMessage.info('日志默认页长将在系统日志页刷新后生效')
+        ElMessage.success(t('systemSettings.saved'))
+        ElMessage.info(t('systemSettings.logPageSizeTip'))
       } finally {
         saving.value = false
       }
@@ -218,7 +222,7 @@ export default {
 
     onBeforeRouteLeave(() => {
       if (!isDirty.value) return true
-      return window.confirm('当前设置尚未保存，确定要离开吗？')
+      return window.confirm(t('systemSettings.leaveConfirm'))
     })
 
     return {
@@ -232,6 +236,7 @@ export default {
       saveSettings,
       resetToLastSaved,
       resetToDefault,
+      t,
       systemLogPageSizeOptions: SYSTEM_LOG_PAGE_SIZE_OPTIONS,
     }
   },
