@@ -1056,10 +1056,14 @@ export default {
   border-radius: 4px 4px 0 0;
   margin-right: 4px;
   color: rgb(55 65 81);
-  padding: 6px 14px;
+  padding: 6px 12px;
   height: 36px;
   line-height: 22px;
   font-size: 14px;
+}
+
+.dashboard-tabs :deep(.el-tabs__item:first-child) {
+  padding-left: 10px;
 }
 
 .dashboard-tabs :deep(.el-tabs__item:hover) {
