@@ -302,13 +302,14 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obj
     companyName: Joi.string().optional().allow(''),
     companyAddress: Joi.string().optional().allow(''),
     companyPhone: Joi.string().optional().allow(''),
-    companyWebsite: Joi.string().optional().allow('')
+    companyWebsite: Joi.string().optional().allow(''),
+    settings: Joi.object().optional().allow(null)
   }).required()
 })), async (req, res) => {
   try {
     const {
       name, code, description, contactEmail, contactPhone, maxUsers, maxProjects,
-      logoUrl, loginBackgroundUrl, companyName, companyAddress, companyPhone, companyWebsite
+      logoUrl, loginBackgroundUrl, companyName, companyAddress, companyPhone, companyWebsite, settings
     } = req.body;
 
     // 检查租户代码是否已存在
@@ -332,6 +333,7 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obj
       companyAddress: companyAddress || null,
       companyPhone: companyPhone || null,
       companyWebsite: companyWebsite || null,
+      settings: settings || null,
     });
 
     const brandingUpdates = {};
@@ -441,7 +443,8 @@ router.put('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.o
     companyName: Joi.string().optional().allow(''),
     companyAddress: Joi.string().optional().allow(''),
     companyPhone: Joi.string().optional().allow(''),
-    companyWebsite: Joi.string().optional().allow('')
+    companyWebsite: Joi.string().optional().allow(''),
+    settings: Joi.object().optional().allow(null)
   }).min(1)
 })), async (req, res) => {
   try {

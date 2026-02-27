@@ -373,6 +373,26 @@
         </div>
       </div>
     </div>
+
+    <div
+      v-if="loginDisplayItems.length"
+      class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-lg bg-black/25 text-white text-xs md:text-sm max-w-[90vw]"
+    >
+      <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+        <template v-for="item in loginDisplayItems" :key="item.key">
+          <a
+            v-if="item.isLink"
+            :href="item.href || item.value"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:underline"
+          >
+            {{ item.label }}{{ item.value }}
+          </a>
+          <span v-else>{{ item.label }}{{ item.value }}</span>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -422,6 +442,34 @@ export default {
 
     const appConfig = computed(() => appStore.config)
     const isDark = computed(() => appStore.isDark)
+    const loginDisplay = computed(() => appConfig.value?.loginDisplay || {})
+    const loginDisplayItems = computed(() => {
+      const list = []
+      if (loginDisplay.value.showCompanyName && loginDisplay.value.companyName) {
+        list.push({ key: 'companyName', label: `${t('auth.companyLabel')}: `, value: loginDisplay.value.companyName })
+      }
+      if (loginDisplay.value.showCompanyPhone && loginDisplay.value.companyPhone) {
+        list.push({ key: 'companyPhone', label: `${t('auth.phoneLabel')}: `, value: loginDisplay.value.companyPhone })
+      }
+      if (loginDisplay.value.showCompanyAddress && loginDisplay.value.companyAddress) {
+        list.push({ key: 'companyAddress', label: `${t('auth.addressLabel')}: `, value: loginDisplay.value.companyAddress })
+      }
+      if (loginDisplay.value.showCompanyWebsite && loginDisplay.value.companyWebsite) {
+        const website = String(loginDisplay.value.companyWebsite)
+        const websiteHref = /^https?:\/\//i.test(website) ? website : `https://${website}`
+        list.push({
+          key: 'companyWebsite',
+          label: `${t('auth.websiteLabel')}: `,
+          value: website,
+          href: websiteHref,
+          isLink: true,
+        })
+      }
+      if (loginDisplay.value.showIcp && loginDisplay.value.icpNumber) {
+        list.push({ key: 'icp', label: `${t('auth.icpLabel')}: `, value: loginDisplay.value.icpNumber })
+      }
+      return list
+    })
 
     // 语言相关
     const languages = computed(() => [
@@ -592,6 +640,7 @@ export default {
       backgroundImageUrl,
       logoUrl,
       appConfig,
+      loginDisplayItems,
       isDark,
       languages,
       handleLogin,

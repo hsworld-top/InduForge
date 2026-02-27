@@ -549,9 +549,31 @@ router.get('/config', validate(Joi.object({
     if (tenantCode && String(tenantCode).trim()) {
       tenantBranding = await Tenant.findOne({
         where: { code: String(tenantCode).trim(), status: 'active' },
-        attributes: ['logoUrl', 'loginBackgroundUrl'],
+        attributes: [
+          'logoUrl',
+          'loginBackgroundUrl',
+          'companyName',
+          'companyPhone',
+          'companyAddress',
+          'companyWebsite',
+          'settings',
+        ],
       });
     }
+
+    const loginDisplayConfig = tenantBranding?.settings?.loginDisplay || {};
+    const loginDisplay = {
+      showCompanyName: Boolean(loginDisplayConfig.showCompanyName),
+      showCompanyPhone: Boolean(loginDisplayConfig.showCompanyPhone),
+      showCompanyAddress: Boolean(loginDisplayConfig.showCompanyAddress),
+      showCompanyWebsite: Boolean(loginDisplayConfig.showCompanyWebsite),
+      showIcp: Boolean(loginDisplayConfig.showIcp),
+      icpNumber: loginDisplayConfig.icpNumber || '',
+      companyName: tenantBranding?.companyName || '',
+      companyPhone: tenantBranding?.companyPhone || '',
+      companyAddress: tenantBranding?.companyAddress || '',
+      companyWebsite: tenantBranding?.companyWebsite || '',
+    };
 
     const config = {
       title: packageInfo.name || '管理系统',
@@ -564,6 +586,7 @@ router.get('/config', validate(Joi.object({
       activeTenantsCount,
       logoUrl: tenantBranding?.logoUrl || null,
       loginBackgroundUrl: tenantBranding?.loginBackgroundUrl || null,
+      loginDisplay,
     };
 
     return ApiResponse.success(res, config);

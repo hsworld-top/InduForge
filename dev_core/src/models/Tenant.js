@@ -56,7 +56,7 @@ const Tenant = sequelize.define('Tenant', {
   loginBackgroundUrl: {
     type: DataTypes.TEXT,
     allowNull: true,
-    comment: '登录页面背景图base64数据',
+    comment: '登录页面背景图路径',
   },
   companyName: {
     type: DataTypes.STRING(200),
@@ -77,6 +77,11 @@ const Tenant = sequelize.define('Tenant', {
     type: DataTypes.STRING(500),
     allowNull: true,
     comment: '公司网站',
+  },
+  settings: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: '租户配置（含登录页展示配置）',
   },
   createdAt: {
     type: DataTypes.DATE,
