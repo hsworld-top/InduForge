@@ -87,7 +87,7 @@ import { ElMessage } from 'element-plus'
 import { authAPI, userAPI } from '@/api'
 import { useAuthStore } from '@/store'
 import { Storage } from '@/utils/storage'
-import { ENUM_LABELS } from '@/enums'
+import { RoleEnum } from '@/enums'
 
 const AVATAR_KEY_PREFIX = 'profile_avatar_'
 
@@ -168,7 +168,17 @@ export default {
       Storage.setUserInfo(authStore.userInfo)
     }
 
-    const getRoleLabel = (role) => ENUM_LABELS[role] || role || '-'
+    const getRoleLabel = (role) => {
+      const roleLabelMap = {
+        [RoleEnum.SUPER_ADMIN]: t('profile.roleSuperAdmin'),
+        [RoleEnum.SYSTEM_ADMIN]: t('profile.roleSystemAdmin'),
+        [RoleEnum.PROJECT_ADMIN]: t('profile.roleProjectAdmin'),
+        [RoleEnum.OPS_ADMIN]: t('profile.roleOpsAdmin'),
+        [RoleEnum.USER_ADMIN]: t('profile.roleUserAdmin'),
+        [RoleEnum.USER]: t('profile.roleUser'),
+      }
+      return roleLabelMap[role] || role || '-'
+    }
 
     const loadProfile = async () => {
       loading.value = true
