@@ -684,7 +684,7 @@
     <!-- 工程功能选择弹窗 -->
     <el-dialog
       v-model="projectDialogVisible"
-      :title="`${t('projectManagement.designCenter')} / ${t('projectManagement.dataCenter')} - ${selectedProject?.name || t('projectManagement.unknownProject')}`"
+      :title="`${t('projectManagement.chooseFeature')} - ${selectedProject?.name || t('projectManagement.unknownProject')}`"
       width="600px"
       center
       :close-on-click-modal="false"
@@ -729,12 +729,12 @@
               <h4
                 class="text-xl font-semibold text-gray-900 dark:text-white mb-2"
               >
-                设计中心
+                {{ t('projectManagement.designCenter') }}
               </h4>
 
               <!-- 描述 -->
               <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                拖拽式页面设计，组件配置，样式编辑，数据绑定
+                {{ t('projectManagement.designCenterDesc') }}
               </p>
 
               <!-- 统计信息 -->
@@ -755,7 +755,7 @@
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  {{ selectedProject?.pageCount || 0 }} 个页面
+                  {{ t('projectManagement.pageCount', { count: selectedProject?.pageCount || 0 }) }}
                 </span>
                 <span class="flex items-center">
                   <svg
@@ -771,7 +771,7 @@
                       d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-9 0V1m10 3V1m0 3l1 1v16a2 2 0 01-2 2H6a2 2 0 01-2-2V5l1-1z"
                     />
                   </svg>
-                  {{ selectedProject?.componentCount || 0 }} 个组件
+                  {{ t('projectManagement.componentCount', { count: selectedProject?.componentCount || 0 }) }}
                 </span>
               </div>
 
@@ -779,7 +779,7 @@
               <div
                 class="mt-4 text-xs text-blue-600 dark:text-blue-400 font-medium"
               >
-                点击进入设计中心 →
+                {{ t('projectManagement.openDesignCenter') }}
               </div>
             </div>
           </div>
@@ -813,12 +813,12 @@
               <h4
                 class="text-xl font-semibold text-gray-900 dark:text-white mb-2"
               >
-                数据中心
+                {{ t('projectManagement.dataCenter') }}
               </h4>
 
               <!-- 描述 -->
               <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                数据库设计，脚本编辑，数据连接，多源数据管理
+                {{ t('projectManagement.dataCenterDesc') }}
               </p>
 
               <!-- 统计信息 -->
@@ -839,7 +839,7 @@
                       d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4"
                     />
                   </svg>
-                  {{ selectedProject?.dataSourceCount || 0 }} 个数据源
+                  {{ t('projectManagement.dataSourceCount', { count: selectedProject?.dataSourceCount || 0 }) }}
                 </span>
                 <span class="flex items-center">
                   <svg
@@ -855,7 +855,7 @@
                       d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
                     />
                   </svg>
-                  {{ selectedProject?.scriptCount || 0 }} 个脚本
+                  {{ t('projectManagement.scriptCount', { count: selectedProject?.scriptCount || 0 }) }}
                 </span>
               </div>
 
@@ -863,7 +863,7 @@
               <div
                 class="mt-4 text-xs text-green-600 dark:text-green-400 font-medium"
               >
-                点击进入数据中心 →
+                {{ t('projectManagement.openDataCenter') }}
               </div>
             </div>
           </div>
@@ -875,21 +875,21 @@
         <div class="flex justify-between items-center">
           <div class="text-sm text-gray-500 dark:text-gray-400">
             <span v-if="selectedProject?.updatedAt">
-              最后更新: {{ formatDateTime(selectedProject.updatedAt) }}
+              {{ t('projectManagement.lastUpdated') }}: {{ formatDateTime(selectedProject.updatedAt) }}
             </span>
           </div>
           <div class="space-x-2">
             <el-button type="success" @click="exportProject(selectedProject)">
               <el-icon class="mr-1"><Download /></el-icon>
-              导出工程
+              {{ t('projectManagement.exportProject') }}
             </el-button>
-            <el-button @click="projectDialogVisible = false">取消</el-button>
+            <el-button @click="projectDialogVisible = false">{{ t('projectManagement.cancel') }}</el-button>
             <el-button
               v-if="canManageProjects"
               type="primary"
               @click="editProject(selectedProject)"
             >
-              工程设置
+              {{ t('projectManagement.settings') }}
             </el-button>
           </div>
         </div>
@@ -913,7 +913,7 @@ import JSZip from "jszip";
 import { useAuthStore } from "@/store";
 import request from "@/utils/request";
 import { projectAPI } from "@/api/project.api";
-import { ColorTagEnum, ENUM_LABELS } from "@/enums";
+import { ColorTagEnum } from "@/enums";
 import { formatDateTime, formatDate, formatCurrency } from "@/utils";
 
 export default {
@@ -981,13 +981,13 @@ export default {
 
     // 颜色标签选项
     const colorTagOptions = [
-      { value: ColorTagEnum.BLUE, label: ENUM_LABELS[ColorTagEnum.BLUE] },
-      { value: ColorTagEnum.RED, label: ENUM_LABELS[ColorTagEnum.RED] },
-      { value: ColorTagEnum.GREEN, label: ENUM_LABELS[ColorTagEnum.GREEN] },
-      { value: ColorTagEnum.YELLOW, label: ENUM_LABELS[ColorTagEnum.YELLOW] },
-      { value: ColorTagEnum.PURPLE, label: ENUM_LABELS[ColorTagEnum.PURPLE] },
-      { value: ColorTagEnum.PINK, label: ENUM_LABELS[ColorTagEnum.PINK] },
-      { value: ColorTagEnum.GRAY, label: ENUM_LABELS[ColorTagEnum.GRAY] },
+      { value: ColorTagEnum.BLUE, label: t("projectManagement.colorBlue") },
+      { value: ColorTagEnum.RED, label: t("projectManagement.colorRed") },
+      { value: ColorTagEnum.GREEN, label: t("projectManagement.colorGreen") },
+      { value: ColorTagEnum.YELLOW, label: t("projectManagement.colorYellow") },
+      { value: ColorTagEnum.PURPLE, label: t("projectManagement.colorPurple") },
+      { value: ColorTagEnum.PINK, label: t("projectManagement.colorPink") },
+      { value: ColorTagEnum.GRAY, label: t("projectManagement.colorGray") },
     ];
 
     // 创建工程表单
@@ -1221,7 +1221,7 @@ export default {
         fetchProjects();
       } catch (error) {
         ElMessage.error(
-          t("projectManagement.updateFailed", {
+          t("projectManagement.updateDevFailed", {
             message: error.response?.data?.message || error.message,
           }),
         );
@@ -1733,7 +1733,9 @@ export default {
         showDeployDialog.value = true;
       } catch (error) {
         ElMessage.error(
-          "加载数据失败：" + (error.response?.data?.message || error.message),
+          t("projectManagement.loadDataFailed", {
+            message: error.response?.data?.message || error.message,
+          }),
         );
       }
     };
@@ -1757,7 +1759,7 @@ export default {
         );
 
         if (devDeployments.length === 0) {
-          return ElMessage.warning("没有找到DEV模式的部署");
+          return ElMessage.warning(t("projectManagement.noDevDeployment"));
         }
 
         // 对每个DEV部署发送更新命令
@@ -1771,10 +1773,14 @@ export default {
           }
         }
 
-        ElMessage.success(`成功更新 ${successCount} 个节点的DEV实例`);
+        ElMessage.success(
+          t("projectManagement.updateDevSuccess", { count: successCount }),
+        );
       } catch (error) {
         ElMessage.error(
-          "更新失败：" + (error.response?.data?.message || error.message),
+          t("projectManagement.updateFailed", {
+            message: error.response?.data?.message || error.message,
+          }),
         );
       }
     };
@@ -1784,11 +1790,11 @@ export default {
       const { project, mode, targetNodes, version } = deployForm;
 
       if (targetNodes.length === 0) {
-        return ElMessage.warning("请选择目标节点");
+        return ElMessage.warning(t("projectManagement.selectTargetNodes"));
       }
 
       if (mode === "RELEASE" && !version) {
-        return ElMessage.warning("请填写或选择版本号");
+        return ElMessage.warning(t("projectManagement.selectVersion"));
       }
 
       deployLoading.value = true;
@@ -1808,10 +1814,12 @@ export default {
             const publishRes = await request.post(`/publish/${project.id}`, {
               version,
               name: `v${version}`,
-              description: "通过部署界面发布",
+              description: t("projectManagement.publishByDeployDialog"),
             });
             if (!publishRes.data.success) {
-              throw new Error(publishRes.data.message || "发布失败");
+              throw new Error(
+                publishRes.data.message || t("projectManagement.publishFailed"),
+              );
             }
             deploymentId = publishRes.data.data.id;
           }
@@ -1820,8 +1828,8 @@ export default {
           const devNodes = targetNodes.filter((n) => getNodeMode(n) === "DEV");
           if (devNodes.length > 0) {
             await ElMessageBox.confirm(
-              `将停止选中的 ${devNodes.length} 个节点的DEV实例，切换到RELEASE模式`,
-              "确认切换",
+              t("projectManagement.switchConfirm", { count: devNodes.length }),
+              t("projectManagement.switchConfirmTitle"),
               { type: "warning" },
             );
           }
@@ -1838,7 +1846,9 @@ export default {
 
           if (deployRes.data.success) {
             ElMessage.success(
-              `部署成功：${deployRes.data.data.summary.success} 个节点成功`,
+              t("projectManagement.deploySuccess", {
+                count: deployRes.data.data.summary.success,
+              }),
             );
           }
         } else {
@@ -1848,13 +1858,13 @@ export default {
           );
           if (releaseNodes.length > 0) {
             return ElMessage.warning(
-              "选中的节点中有RELEASE部署，请先撤销部署后再切换到DEV模式",
+              t("projectManagement.releaseConflict"),
             );
           }
 
           // 使用最新版本作为DEV源
           if (projectVersions.value.length === 0) {
-            throw new Error("没有可用的发布版本");
+            throw new Error(t("projectManagement.noReleaseVersion"));
           }
 
           const latestVersion = projectVersions.value[0];
@@ -1871,7 +1881,9 @@ export default {
 
           if (deployRes.data.success) {
             ElMessage.success(
-              `DEV模式部署成功：${deployRes.data.data.summary.success} 个节点成功`,
+              t("projectManagement.devDeploySuccess", {
+                count: deployRes.data.data.summary.success,
+              }),
             );
           }
         }
@@ -1881,7 +1893,9 @@ export default {
       } catch (error) {
         if (error !== "cancel") {
           ElMessage.error(
-            error.response?.data?.message || error.message || "操作失败",
+            error.response?.data?.message ||
+              error.message ||
+              t("opsManagement.operationFailedFallback"),
           );
         }
       } finally {
