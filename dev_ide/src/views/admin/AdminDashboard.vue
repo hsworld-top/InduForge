@@ -8,7 +8,7 @@
         <!-- Logo 图片 -->
         <div class="flex items-center">
           <img :src="logoUrl" alt="Logo" class="h-7 w-auto mr-2" />
-          <h1 class="text-base font-semibold text-gray-800 dark:text-white hidden sm:block">超级管理员控制台</h1>
+          <h1 class="text-base font-semibold text-gray-800 dark:text-white hidden sm:block">{{ t('adminDashboard.title') }}</h1>
         </div>
         <div class="flex items-center space-x-2">
           <!-- 主题切换 -->
@@ -53,7 +53,7 @@
                   {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'A' }}
                 </span>
               </div>
-              <span class="text-xs text-gray-600 dark:text-gray-400">{{ userInfo?.username || '管理员' }}</span>
+              <span class="text-xs text-gray-600 dark:text-gray-400">{{ userInfo?.username || t('adminDashboard.admin') }}</span>
             </button>
 
             <!-- 下拉菜单 -->
@@ -65,13 +65,13 @@
                 to="/profile"
                 class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
-                个人资料
+                {{ t('adminDashboard.profile') }}
               </router-link>
               <button
                 @click="handleLogout"
                 class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
-                登出
+                {{ t('auth.logout') }}
               </button>
             </div>
           </div>
@@ -85,7 +85,7 @@
       <div class="bg-gray-900 border-r border-gray-800 w-14">
         <div class="p-2">
           <nav class="space-y-2">
-            <el-tooltip content="租户管理" placement="right" :show-after="500">
+            <el-tooltip :content="t('adminDashboard.tenantManagement')" placement="right" :show-after="500">
               <router-link
                 to="/admin/tenants"
                 class="w-full h-11 flex items-center justify-center"
@@ -124,11 +124,13 @@
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/store'
 
 export default {
   name: 'AdminDashboard',
   setup() {
+    const { t } = useI18n()
     const router = useRouter()
     const authStore = useAuthStore()
     const appStore = useAppStore()
@@ -147,7 +149,7 @@ export default {
         await authStore.logout()
         router.push({ name: 'login' })
       } catch (error) {
-        console.error('登出失败:', error)
+        console.error(t('adminDashboard.logoutFailed'), error)
       }
     }
 
@@ -169,6 +171,7 @@ export default {
 
     return {
       showUserMenu,
+      t,
       userInfo,
       isDark,
       logoUrl,

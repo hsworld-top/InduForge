@@ -452,6 +452,13 @@ export const messages = {
       undeployFailed: '撤销失败',
       systemDisk: 'System',
     },
+    adminDashboard: {
+      title: '超级管理员控制台',
+      admin: '管理员',
+      profile: '个人资料',
+      tenantManagement: '租户管理',
+      logoutFailed: '登出失败',
+    },
   },
   en: {
     common: {
@@ -903,6 +910,13 @@ export const messages = {
       undeploySuccess: 'Undeploy successful',
       undeployFailed: 'Undeploy failed',
       systemDisk: 'System',
+    },
+    adminDashboard: {
+      title: 'Super Admin Console',
+      admin: 'Admin',
+      profile: 'Profile',
+      tenantManagement: 'Tenant Management',
+      logoutFailed: 'Logout failed',
     },
   },
 }
