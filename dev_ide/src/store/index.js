@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { Storage } from '@/utils'
+import defaultLogoUrl from '@/assets/images/default-logo.svg'
+import defaultLoginBgUrl from '@/assets/images/default-login-bg.svg'
 
 // 认证状态管理
 export const useAuthStore = defineStore('auth', {
@@ -135,8 +137,8 @@ export const useAppStore = defineStore('app', {
         const mergedConfig = {
           ...config,
           // 添加前端特定的配置
-          logoUrl: '/images/logo.png',
-          loginBackgroundUrl: '/images/login-bg.jpg',
+          logoUrl: config.logoUrl || defaultLogoUrl,
+          loginBackgroundUrl: config.loginBackgroundUrl || defaultLoginBgUrl,
           // 使用后端返回的multiTenant配置，如果后端没有返回则默认为false（单租户模式）
           multiTenant: config.multiTenant || false,
           allowRegistration: false,
@@ -156,8 +158,8 @@ export const useAppStore = defineStore('app', {
         const defaultConfig = {
           name: 'InduForge',
           description: '高效、安全的企业级解决方案',
-          logoUrl: '/images/logo.png',
-          loginBackgroundUrl: '/images/login-bg.jpg',
+          logoUrl: defaultLogoUrl,
+          loginBackgroundUrl: defaultLoginBgUrl,
           multiTenant: false, // 默认单租户模式
           allowRegistration: false,
           defaultLanguage: 'zh',

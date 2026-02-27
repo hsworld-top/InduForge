@@ -384,6 +384,8 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { ROLES, ROUTE_NAMES } from '@/constants'
 import { Storage } from '@/utils/storage'
+import defaultLogoUrl from '@/assets/images/default-logo.svg'
+import defaultLoginBgUrl from '@/assets/images/default-login-bg.svg'
 
 export default {
   name: 'Login',
@@ -409,12 +411,12 @@ export default {
     // 背景图和Logo（可以从应用配置中获取）
     const backgroundImageUrl = computed(() => {
       // 优先使用租户配置的背景图，然后是平台默认背景图
-      return appStore.config?.loginBackgroundUrl || '/images/login-bg.jpg'
+      return appStore.config?.loginBackgroundUrl || defaultLoginBgUrl
     })
 
     const logoUrl = computed(() => {
       // 优先使用租户配置的Logo，然后是平台默认Logo
-      return appStore.config?.logoUrl || '/images/logo.png'
+      return appStore.config?.logoUrl || defaultLogoUrl
     })
 
     const appConfig = computed(() => appStore.config)

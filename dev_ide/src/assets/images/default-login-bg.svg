@@ -1,0 +1,24 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Default Login Background">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="45%" stop-color="#0b3b63" />
+      <stop offset="100%" stop-color="#1e3a8a" />
+    </linearGradient>
+    <radialGradient id="glow1" cx="0%" cy="0%" r="60%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.32" />
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glow2" cx="100%" cy="100%" r="55%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.28" />
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bgGrad)" />
+  <circle cx="320" cy="200" r="420" fill="url(#glow1)" />
+  <circle cx="1620" cy="900" r="420" fill="url(#glow2)" />
+  <g opacity="0.24" stroke="#93c5fd" stroke-width="1">
+    <path d="M0 190h1920M0 390h1920M0 590h1920M0 790h1920M0 990h1920" />
+    <path d="M180 0v1080M420 0v1080M660 0v1080M900 0v1080M1140 0v1080M1380 0v1080M1620 0v1080M1860 0v1080" />
+  </g>
+</svg>

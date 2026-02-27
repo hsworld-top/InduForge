@@ -578,7 +578,7 @@ const SystemSettings = defineAsyncComponent(() => import('@/views/tenant/SystemS
 const Profile = defineAsyncComponent(() => import('@/views/profile/Profile.vue'))
 
 // 导入默认Logo图片
-import defaultLogo from '@/assets/images/demo.png'
+import defaultLogo from '@/assets/images/default-logo.svg'
 
 export default {
   name: 'Dashboard',
@@ -693,7 +693,7 @@ export default {
     // 租户相关计算属性
     const currentTenant = computed(() => tenantStore.currentTenant)
     const tenantLogoUrl = computed(() => {
-      // 优先使用租户的logo，然后使用默认的demo.png
+      // 优先使用租户的logo，然后使用平台默认logo
       const tenantLogo = currentTenant.value?.logoUrl
       if (tenantLogo) {
         // 如果是完整URL，直接使用；如果是相对路径，拼接public路径

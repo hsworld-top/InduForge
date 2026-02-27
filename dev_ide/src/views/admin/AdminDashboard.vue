@@ -126,6 +126,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/store'
+import defaultLogoUrl from '@/assets/images/default-logo.svg'
 
 export default {
   name: 'AdminDashboard',
@@ -138,7 +139,7 @@ export default {
 
     const userInfo = computed(() => authStore.userInfo)
     const isDark = computed(() => appStore.isDark)
-    const logoUrl = computed(() => appStore.config?.logoUrl || '/images/logo.png')
+    const logoUrl = computed(() => appStore.config?.logoUrl || defaultLogoUrl)
 
     const toggleTheme = () => {
       appStore.setTheme(isDark.value ? 'light' : 'dark')
