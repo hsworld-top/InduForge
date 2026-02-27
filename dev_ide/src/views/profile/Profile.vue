@@ -32,20 +32,12 @@
         <div class="panel-title">{{ t('profile.accountInfo') }}</div>
         <div class="meta-list">
           <div class="meta-item">
-            <span class="label">{{ t('profile.userId') }}</span>
-            <span class="value">{{ profile.id || '-' }}</span>
-          </div>
-          <div class="meta-item">
             <span class="label">{{ t('profile.username') }}</span>
             <span class="value">{{ profile.username || '-' }}</span>
           </div>
           <div class="meta-item">
             <span class="label">{{ t('profile.role') }}</span>
             <span class="value">{{ getRoleLabel(profile.role) }}</span>
-          </div>
-          <div class="meta-item">
-            <span class="label">{{ t('profile.tenantId') }}</span>
-            <span class="value">{{ profile.tenant?.id || '-' }}</span>
           </div>
         </div>
       </div>
