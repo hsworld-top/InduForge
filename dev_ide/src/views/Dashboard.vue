@@ -97,7 +97,14 @@
               @click="showUserMenu = !showUserMenu"
               class="flex items-center gap-2 h-8 px-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
             >
+              <img
+                v-if="userAvatarUrl"
+                :src="userAvatarUrl"
+                alt="avatar"
+                class="w-6 h-6 rounded-full object-cover"
+              />
               <div
+                v-else
                 class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-medium"
               >
                 {{ userInitials }}
@@ -645,6 +652,7 @@ export default {
       const name = username.value || 'U'
       return name.charAt(0).toUpperCase()
     })
+    const userAvatarUrl = computed(() => authStore.userInfo?.avatarUrl || '')
     const isAdmin = computed(() => authStore.isAdmin)
     const isSuperAdmin = computed(() => authStore.userInfo?.role === ROLES.SUPER_ADMIN)
     const isSystemAdmin = computed(() => authStore.userInfo?.role === ROLES.SYSTEM_ADMIN)
@@ -933,6 +941,7 @@ export default {
       isDark,
       username,
       userInitials,
+      userAvatarUrl,
       t,
       isAdmin,
       isSuperAdmin,

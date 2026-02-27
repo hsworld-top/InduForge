@@ -16,6 +16,21 @@ const sequelize = new Sequelize(
     logging: process.env.NODE_ENV === 'development' ? (msg) => logger.debug(msg) : false,
     // 添加查询超时
     queryTimeout: Number(process.env.DB_QUERY_TIMEOUT || 30000),  // 30 秒查询超时
+    // 查询级重试（针对连接瞬断、连接被服务端回收等可恢复错误）
+    retry: {
+      max: Number(process.env.DB_QUERY_RETRY_MAX || 2),
+      match: [
+        /SequelizeConnectionError/i,
+        /SequelizeConnectionRefusedError/i,
+        /SequelizeConnectionAcquireTimeoutError/i,
+        /SequelizeHostNotReachableError/i,
+        /SequelizeConnectionTimedOutError/i,
+        /PROTOCOL_CONNECTION_LOST/i,
+        /ECONNRESET/i,
+        /ETIMEDOUT/i,
+        /closed state/i
+      ]
+    },
     // 连接池配置（连接池会自动处理重连）
     pool: {
       max: Number(process.env.DB_MAX_CONNECTIONS || 50),                    // 最大连接数
@@ -24,9 +39,16 @@ const sequelize = new Sequelize(
       idle: 30000,               // 连接空闲时间（毫秒），超过此时间未使用的连接会被释放
       evict: 5000,               // 检查空闲连接的间隔（毫秒）
       handleDisconnects: true,    // 自动处理断开连接
-      // 添加连接验证（高并发时确保连接有效）
+      // 添加连接验证（高并发时确保连接有效，避免复用已关闭连接）
       validate: (connection) => {
-        return connection && !connection._invalid;
+        if (!connection) return false;
+        if (connection._invalid) return false;
+        if (connection._closing) return false;
+        if (connection.stream?.destroyed) return false;
+        if (connection.stream?.readable === false && connection.stream?.writable === false) return false;
+        if (connection._fatalError) return false;
+        if (connection._protocolError) return false;
+        return true;
       }
     },
     // 连接选项
@@ -37,6 +59,9 @@ const sequelize = new Sequelize(
       bigNumberStrings: true, // 大数字以字符串返回
       // 添加连接选项
       multipleStatements: false,  // 禁用多语句执行（防止 SQL 注入）
+      // 启用 TCP keepalive，降低长连接被中间网络设备回收概率
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 0,
       // 字符集和时区配置（高并发时重要）
       charset: 'utf8mb4',           // 使用 utf8mb4 支持完整的 Unicode（包括 emoji）
     },
