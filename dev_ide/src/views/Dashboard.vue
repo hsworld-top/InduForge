@@ -150,10 +150,10 @@
         :class="[
           'relative border-r transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col',
           isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200',
-          sidebarCollapsed ? 'w-12' : 'w-44',
+          sidebarCollapsed ? 'w-10' : 'w-44',
         ]"
       >
-        <div :class="[sidebarCollapsed ? 'p-2' : 'p-3', 'flex-1 overflow-y-auto']">
+        <div :class="[sidebarCollapsed ? 'p-1.5' : 'p-3', 'flex-1 overflow-y-auto']">
           <nav class="space-y-2">
             <el-tooltip
               v-if="isSystemAdmin"
