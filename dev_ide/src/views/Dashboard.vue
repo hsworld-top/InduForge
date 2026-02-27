@@ -1031,7 +1031,7 @@ export default {
 /* 标签页样式 */
 .dashboard-tabs :deep(.el-tabs__header) {
   margin: 0;
-  padding: 4px 6px 0 6px;
+  padding: 4px 0 0 0;
 }
 
 .dashboard-tabs :deep(.el-tabs__nav-wrap) {
