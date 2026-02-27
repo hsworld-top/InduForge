@@ -30,7 +30,7 @@
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
       <div class="panel">
         <div class="panel-title">{{ t('profile.accountInfo') }}</div>
-        <div class="meta-list">
+        <el-form ref="accountFormRef" :model="accountForm" :rules="accountRules" label-width="92px">
           <div class="meta-item">
             <span class="label">{{ t('profile.username') }}</span>
             <span class="value">{{ profile.username || '-' }}</span>
@@ -39,15 +39,20 @@
             <span class="label">{{ t('profile.role') }}</span>
             <span class="value">{{ getRoleLabel(profile.role) }}</span>
           </div>
-        </div>
+          <el-form-item :label="t('profile.email')" prop="email" class="mt-3">
+            <el-input v-model="accountForm.email" :placeholder="t('profile.emailPlaceholder')" clearable />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="savingAccount" @click="handleSaveAccountInfo">
+              {{ t('profile.saveAccountInfo') }}
+            </el-button>
+          </el-form-item>
+        </el-form>
       </div>
 
       <div class="panel">
         <div class="panel-title">{{ t('profile.preferences') }}</div>
         <el-form ref="preferencesFormRef" :model="preferencesForm" :rules="preferencesRules" label-width="92px">
-          <el-form-item :label="t('profile.email')" prop="email">
-            <el-input v-model="preferencesForm.email" :placeholder="t('profile.emailPlaceholder')" clearable />
-          </el-form-item>
           <el-form-item :label="t('profile.language')" prop="language">
             <el-select v-model="preferencesForm.language" style="width: 100%">
               <el-option
@@ -131,8 +136,10 @@ export default {
     const appStore = useAppStore()
     const loading = ref(false)
     const savingPassword = ref(false)
+    const savingAccount = ref(false)
     const savingPreferences = ref(false)
     const passwordFormRef = ref(null)
+    const accountFormRef = ref(null)
     const preferencesFormRef = ref(null)
 
     const profile = ref({
@@ -154,8 +161,11 @@ export default {
       confirmPassword: '',
     })
 
-    const preferencesForm = reactive({
+    const accountForm = reactive({
       email: '',
+    })
+
+    const preferencesForm = reactive({
       language: appStore.language || 'zh',
       theme: appStore.theme || 'light',
     })
@@ -170,9 +180,11 @@ export default {
       { value: 'dark', label: t('system.dark') },
     ])
 
-    const preferencesRules = {
+    const accountRules = {
       email: [{ type: 'email', message: t('profile.invalidEmail'), trigger: 'blur' }],
     }
+
+    const preferencesRules = {}
 
     const passwordRules = {
       newPassword: [
@@ -254,7 +266,7 @@ export default {
           tenant: user.tenant || null,
           avatarUrl: user.avatarUrl || avatarFromCache || authStore.userInfo?.avatarUrl || '',
         }
-        preferencesForm.email = profile.value.email
+        accountForm.email = profile.value.email
         preferencesForm.language = appStore.language || 'zh'
         preferencesForm.theme = appStore.theme || 'light'
         syncUserCache()
@@ -269,7 +281,7 @@ export default {
           tenant: localUser?.tenant || null,
           avatarUrl: localUser?.avatarUrl || avatarFromCache || '',
         }
-        preferencesForm.email = profile.value.email
+        accountForm.email = profile.value.email
         preferencesForm.language = appStore.language || 'zh'
         preferencesForm.theme = appStore.theme || 'light'
         ElMessage.warning(t('profile.profileLoadFailed'))
@@ -278,11 +290,11 @@ export default {
       }
     }
 
-    const handleSavePreferences = async () => {
-      if (!preferencesFormRef.value) return
+    const handleSaveAccountInfo = async () => {
+      if (!accountFormRef.value) return
 
       try {
-        await preferencesFormRef.value.validate()
+        await accountFormRef.value.validate()
       } catch {
         return
       }
@@ -293,15 +305,31 @@ export default {
         return
       }
 
-      savingPreferences.value = true
+      savingAccount.value = true
       try {
-        const nextEmail = (preferencesForm.email || '').trim()
+        const nextEmail = (accountForm.email || '').trim()
         if (nextEmail !== (profile.value.email || '')) {
           await userAPI.updateUser(userId, { email: nextEmail })
           profile.value.email = nextEmail
           syncUserCache()
         }
+        ElMessage.success(t('profile.accountUpdated'))
+      } catch (error) {
+        ElMessage.error(
+          t('profile.accountUpdateFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
+      } finally {
+        savingAccount.value = false
+      }
+    }
 
+    const handleSavePreferences = async () => {
+      if (!preferencesFormRef.value) return
+
+      savingPreferences.value = true
+      try {
         if (preferencesForm.language !== appStore.language) {
           appStore.setLanguage(preferencesForm.language)
           locale.value = preferencesForm.language
@@ -394,12 +422,16 @@ export default {
     return {
       loading,
       savingPassword,
+      savingAccount,
       savingPreferences,
       profile,
       userInitials,
       passwordForm,
       passwordRules,
       passwordFormRef,
+      accountFormRef,
+      accountForm,
+      accountRules,
       preferencesFormRef,
       preferencesForm,
       preferencesRules,
@@ -410,6 +442,7 @@ export default {
       t,
       loadProfile,
       handleAvatarChange,
+      handleSaveAccountInfo,
       handleSavePreferences,
       handleChangePassword,
     }

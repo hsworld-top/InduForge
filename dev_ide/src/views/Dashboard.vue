@@ -494,7 +494,7 @@
             >
               <template #label>
                 <div class="flex items-center space-x-2">
-                  <span>{{ tab.title }}</span>
+                  <span>{{ getTabTitle(tab) }}</span>
                   <el-button
                     v-if="tab.props?.appType"
                     size="small"
@@ -608,43 +608,43 @@ export default {
     const isTabMaximized = ref(false)
 
     // 标签页配置
-    const tabConfigs = {
+    const getTabConfigMap = () => ({
       dashboard: {
-        title: t('dashboard.title'),
+        titleKey: 'dashboard.title',
         component: DashboardContent,
         icon: 'dashboard',
       },
       'tenant-management': {
-        title: t('dashboard.menuTenant'),
+        titleKey: 'dashboard.menuTenant',
         component: TenantManagement,
         icon: 'building',
       },
       'user-management': {
-        title: t('dashboard.menuUser'),
+        titleKey: 'dashboard.menuUser',
         component: UserManagement,
         icon: 'users',
       },
       'project-management': {
-        title: t('dashboard.menuProject'),
+        titleKey: 'dashboard.menuProject',
         component: ProjectManagement,
         icon: 'folder',
       },
       'ops-management': {
-        title: t('dashboard.menuOps'),
+        titleKey: 'dashboard.menuOps',
         component: OpsManagement,
         icon: 'cog',
       },
       'system-logs': {
-        title: t('dashboard.menuLogs'),
+        titleKey: 'dashboard.menuLogs',
         component: SystemLogs,
         icon: 'clipboard',
       },
       'system-settings': {
-        title: t('dashboard.menuSettings'),
+        titleKey: 'dashboard.menuSettings',
         component: SystemSettings,
         icon: 'cog',
       },
-    }
+    })
 
     const isDark = computed(() => appStore.isDark)
     const username = computed(() => authStore.userInfo?.username || '')
@@ -764,9 +764,11 @@ export default {
           title: customTitle,
           component: component,
           icon: tabData.icon || 'folder',
+          titleKey: tabData.titleKey || null,
         }
       } else {
         // 标准标签页配置
+        const tabConfigs = getTabConfigMap()
         config = tabConfigs[tabKey]
         if (!config) {
           console.warn('Dashboard: No config found for tab:', tabKey)
@@ -793,7 +795,8 @@ export default {
       // 添加新标签页
       const newTab = {
         key: tabKey,
-        title: config.title,
+        title: config.titleKey ? t(config.titleKey) : config.title,
+        titleKey: config.titleKey || null,
         component: config.component,
         icon: config.icon,
         props: customProps,
@@ -904,9 +907,15 @@ export default {
     }
 
     // 获取当前标签页标题
+    const getTabTitle = (tab) => {
+      if (!tab) return ''
+      if (tab.titleKey) return t(tab.titleKey)
+      return tab.title || ''
+    }
+
     const getCurrentTabTitle = () => {
       const tab = tabs.value.find(t => t.key === activeTab.value)
-      return tab ? tab.title : ''
+      return getTabTitle(tab)
     }
 
     /**
@@ -930,6 +939,18 @@ export default {
     watch(isDark, (nextIsDark) => {
       const theme = nextIsDark ? 'dark' : 'light'
       syncEmbeddedTheme(theme)
+    })
+
+    watch(locale, () => {
+      tabs.value = tabs.value.map((tab) => {
+        if (tab.titleKey) {
+          return {
+            ...tab,
+            title: t(tab.titleKey),
+          }
+        }
+        return tab
+      })
     })
 
     return {
@@ -964,6 +985,7 @@ export default {
       closeTab,
       maximizeTab,
       restoreTab,
+      getTabTitle,
       getCurrentTabTitle,
       openExternalTab,
       toggleSidebar,
