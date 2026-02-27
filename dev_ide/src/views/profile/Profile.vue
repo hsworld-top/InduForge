@@ -30,7 +30,7 @@
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
       <div class="panel">
         <div class="panel-title">{{ t('profile.accountInfo') }}</div>
-        <el-form ref="accountFormRef" :model="accountForm" :rules="accountRules" label-width="92px">
+        <div class="meta-list">
           <div class="meta-item">
             <span class="label">{{ t('profile.username') }}</span>
             <span class="value">{{ profile.username || '-' }}</span>
@@ -39,15 +39,30 @@
             <span class="label">{{ t('profile.role') }}</span>
             <span class="value">{{ getRoleLabel(profile.role) }}</span>
           </div>
-          <el-form-item :label="t('profile.email')" prop="email" class="mt-3">
-            <el-input v-model="accountForm.email" :placeholder="t('profile.emailPlaceholder')" clearable />
-          </el-form-item>
-          <el-form-item>
+          <div class="meta-item">
+            <span class="label">{{ t('profile.email') }}</span>
+            <div class="flex items-center gap-2">
+              <template v-if="isEditingEmail">
+                <el-input
+                  v-model="accountForm.email"
+                  :placeholder="t('profile.emailPlaceholder')"
+                  clearable
+                  style="width: 240px"
+                />
+                <el-button text @click="cancelEmailEdit">{{ t('common.cancel') }}</el-button>
+              </template>
+              <template v-else>
+                <span class="value">{{ profile.email || '-' }}</span>
+                <el-button text type="primary" @click="startEmailEdit">{{ t('common.edit') }}</el-button>
+              </template>
+            </div>
+          </div>
+          <div class="pt-3">
             <el-button type="primary" :loading="savingAccount" @click="handleSaveAccountInfo">
               {{ t('profile.saveAccountInfo') }}
             </el-button>
-          </el-form-item>
-        </el-form>
+          </div>
+        </div>
       </div>
 
       <div class="panel">
@@ -138,8 +153,8 @@ export default {
     const savingPassword = ref(false)
     const savingAccount = ref(false)
     const savingPreferences = ref(false)
+    const isEditingEmail = ref(false)
     const passwordFormRef = ref(null)
-    const accountFormRef = ref(null)
     const preferencesFormRef = ref(null)
 
     const profile = ref({
@@ -179,10 +194,6 @@ export default {
       { value: 'light', label: t('system.light') },
       { value: 'dark', label: t('system.dark') },
     ])
-
-    const accountRules = {
-      email: [{ type: 'email', message: t('profile.invalidEmail'), trigger: 'blur' }],
-    }
 
     const preferencesRules = {}
 
@@ -267,6 +278,7 @@ export default {
           avatarUrl: user.avatarUrl || avatarFromCache || authStore.userInfo?.avatarUrl || '',
         }
         accountForm.email = profile.value.email
+        isEditingEmail.value = false
         preferencesForm.language = appStore.language || 'zh'
         preferencesForm.theme = appStore.theme || 'light'
         syncUserCache()
@@ -282,6 +294,7 @@ export default {
           avatarUrl: localUser?.avatarUrl || avatarFromCache || '',
         }
         accountForm.email = profile.value.email
+        isEditingEmail.value = false
         preferencesForm.language = appStore.language || 'zh'
         preferencesForm.theme = appStore.theme || 'light'
         ElMessage.warning(t('profile.profileLoadFailed'))
@@ -290,15 +303,17 @@ export default {
       }
     }
 
+    const startEmailEdit = () => {
+      accountForm.email = profile.value.email || ''
+      isEditingEmail.value = true
+    }
+
+    const cancelEmailEdit = () => {
+      accountForm.email = profile.value.email || ''
+      isEditingEmail.value = false
+    }
+
     const handleSaveAccountInfo = async () => {
-      if (!accountFormRef.value) return
-
-      try {
-        await accountFormRef.value.validate()
-      } catch {
-        return
-      }
-
       const userId = profile.value.id || authStore.userInfo?.id
       if (!userId) {
         ElMessage.error(t('profile.noUserInfo'))
@@ -308,11 +323,23 @@ export default {
       savingAccount.value = true
       try {
         const nextEmail = (accountForm.email || '').trim()
+        if (!nextEmail) {
+          ElMessage.warning(t('profile.emailRequired'))
+          return
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(nextEmail)) {
+          ElMessage.warning(t('profile.invalidEmail'))
+          return
+        }
+
         if (nextEmail !== (profile.value.email || '')) {
           await userAPI.updateUser(userId, { email: nextEmail })
           profile.value.email = nextEmail
           syncUserCache()
         }
+        isEditingEmail.value = false
         ElMessage.success(t('profile.accountUpdated'))
       } catch (error) {
         ElMessage.error(
@@ -424,14 +451,13 @@ export default {
       savingPassword,
       savingAccount,
       savingPreferences,
+      isEditingEmail,
       profile,
       userInitials,
       passwordForm,
       passwordRules,
       passwordFormRef,
-      accountFormRef,
       accountForm,
-      accountRules,
       preferencesFormRef,
       preferencesForm,
       preferencesRules,
@@ -441,6 +467,8 @@ export default {
       getTenantLabel,
       t,
       loadProfile,
+      startEmailEdit,
+      cancelEmailEdit,
       handleAvatarChange,
       handleSaveAccountInfo,
       handleSavePreferences,
