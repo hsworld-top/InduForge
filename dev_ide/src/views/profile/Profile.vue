@@ -43,23 +43,23 @@
             <span class="label">{{ t('profile.email') }}</span>
             <div class="flex items-center gap-2">
               <template v-if="isEditingEmail">
+                <div ref="emailRowRef" class="w-[240px]" @click.stop>
                 <el-input
+                  ref="emailInputRef"
                   v-model="accountForm.email"
                   :placeholder="t('profile.emailPlaceholder')"
                   clearable
-                  style="width: 240px"
+                  style="width: 100%"
                   @click.stop
+                  @mousedown.stop
+                  @keydown.enter.stop.prevent="exitEmailEdit(true)"
+                  @keydown.esc.stop.prevent="cancelEmailEdit"
+                  @blur="handleEmailBlur"
                 />
+                </div>
               </template>
-              <template v-else>
-                <span class="value">{{ profile.email || '-' }}</span>
-              </template>
+              <span v-else class="value">{{ profile.email || '-' }}</span>
             </div>
-          </div>
-          <div class="pt-3">
-            <el-button type="primary" :loading="savingAccount" @click="handleSaveAccountInfo">
-              {{ t('profile.saveAccountInfo') }}
-            </el-button>
           </div>
         </div>
       </div>
@@ -126,7 +126,7 @@
 </template>
 
 <script>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { authAPI, userAPI } from '@/api'
@@ -150,9 +150,10 @@ export default {
     const appStore = useAppStore()
     const loading = ref(false)
     const savingPassword = ref(false)
-    const savingAccount = ref(false)
     const savingPreferences = ref(false)
     const isEditingEmail = ref(false)
+    const emailInputRef = ref(null)
+    const emailRowRef = ref(null)
     const passwordFormRef = ref(null)
     const preferencesFormRef = ref(null)
 
@@ -302,47 +303,75 @@ export default {
       }
     }
 
-    const startEmailEdit = () => {
+    const startEmailEdit = async () => {
+      if (isEditingEmail.value) return
       accountForm.email = profile.value.email || ''
       isEditingEmail.value = true
+      await nextTick()
+      emailInputRef.value?.focus?.()
     }
 
     const handleSaveAccountInfo = async () => {
       const userId = profile.value.id || authStore.userInfo?.id
       if (!userId) {
         ElMessage.error(t('profile.noUserInfo'))
-        return
+        return false
       }
 
-      savingAccount.value = true
       try {
         const nextEmail = (accountForm.email || '').trim()
-        if (!nextEmail) {
-          ElMessage.warning(t('profile.emailRequired'))
-          return
-        }
 
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-        if (!emailRegex.test(nextEmail)) {
+        if (nextEmail && !emailRegex.test(nextEmail)) {
           ElMessage.warning(t('profile.invalidEmail'))
-          return
+          return false
         }
 
         if (nextEmail !== (profile.value.email || '')) {
           await userAPI.updateUser(userId, { email: nextEmail })
           profile.value.email = nextEmail
           syncUserCache()
+          ElMessage.success(t('profile.accountUpdated'))
         }
-        isEditingEmail.value = false
-        ElMessage.success(t('profile.accountUpdated'))
+        return true
       } catch (error) {
         ElMessage.error(
           t('profile.accountUpdateFailed', {
             message: error.response?.data?.message || error.message,
           })
         )
-      } finally {
-        savingAccount.value = false
+        return false
+      }
+    }
+
+    const exitEmailEdit = async (autoSave = false) => {
+      if (!isEditingEmail.value) return
+      if (autoSave) {
+        const saved = await handleSaveAccountInfo()
+        if (!saved) return
+      } else {
+        accountForm.email = profile.value.email || ''
+      }
+      isEditingEmail.value = false
+    }
+
+    const cancelEmailEdit = () => {
+      if (!isEditingEmail.value) return
+      accountForm.email = profile.value.email || ''
+      isEditingEmail.value = false
+    }
+
+    const handleEmailBlur = () => {
+      window.setTimeout(() => {
+        void exitEmailEdit(true)
+      }, 0)
+    }
+
+    const handleDocumentClick = (event) => {
+      if (!isEditingEmail.value) return
+      const rowEl = emailRowRef.value
+      if (rowEl && !rowEl.contains(event.target)) {
+        void exitEmailEdit(true)
       }
     }
 
@@ -438,14 +467,20 @@ export default {
 
     onMounted(() => {
       loadProfile()
+      document.addEventListener('mousedown', handleDocumentClick)
+    })
+
+    onUnmounted(() => {
+      document.removeEventListener('mousedown', handleDocumentClick)
     })
 
     return {
       loading,
       savingPassword,
-      savingAccount,
       savingPreferences,
       isEditingEmail,
+      emailInputRef,
+      emailRowRef,
       profile,
       userInitials,
       passwordForm,
@@ -462,6 +497,9 @@ export default {
       t,
       loadProfile,
       startEmailEdit,
+      exitEmailEdit,
+      cancelEmailEdit,
+      handleEmailBlur,
       handleAvatarChange,
       handleSaveAccountInfo,
       handleSavePreferences,
