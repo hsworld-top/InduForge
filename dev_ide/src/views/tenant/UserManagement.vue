@@ -96,7 +96,11 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="tenant.name" :label="t('userManagement.tenant')" width="120" />
+        <el-table-column :label="t('userManagement.tenant')" width="140">
+          <template #default="scope">
+            {{ getTenantLabel(scope.row.tenant) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="lastLoginAt" :label="t('userManagement.lastLogin')" width="200">
           <template #default="scope">
             {{ formatDateTime(scope.row.lastLoginAt) }}
@@ -468,6 +472,16 @@ export default {
       return map[status] || status
     }
 
+    // 获取租户展示名称
+    const getTenantLabel = (tenant) => {
+      const tenantName = tenant?.name?.trim()
+      if (!tenantName) return '-'
+      if (tenantName === '默认租户' || tenantName === 'Default Tenant') {
+        return t('profile.defaultTenant')
+      }
+      return tenantName
+    }
+
     // 获取角色标签类型
     const getRoleTagType = (role) => {
       const typeMap = {
@@ -774,6 +788,7 @@ export default {
 
       // 方法
       t,
+      getTenantLabel,
       getRoleLabel,
       getStatusLabel,
       getRoleTagType,
