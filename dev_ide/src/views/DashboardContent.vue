@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-content">
+  <div class="dashboard-content p-6">
     <!-- 欢迎信息 -->
     <div class="mb-6">
       <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
