@@ -56,8 +56,8 @@
           </el-form-item>
           <el-form-item :label="t('systemSettings.language')">
             <el-select v-model="settingsForm.language" style="width: 220px">
-              <el-option label="中文" value="zh" />
-              <el-option label="English" value="en" />
+              <el-option :label="t('system.languageZh')" value="zh" />
+              <el-option :label="t('system.languageEn')" value="en" />
             </el-select>
           </el-form-item>
           <el-form-item :label="t('systemSettings.logPageSize')">

@@ -421,10 +421,10 @@ export default {
     const isDark = computed(() => appStore.isDark)
 
     // 语言相关
-    const languages = [
-      { code: 'zh', name: '中文' },
-      { code: 'en', name: 'English' },
-    ]
+    const languages = computed(() => [
+      { code: 'zh', name: t('system.languageZh') },
+      { code: 'en', name: t('system.languageEn') },
+    ])
 
     const toggleTheme = () => {
       appStore.setTheme(isDark.value ? 'light' : 'dark')

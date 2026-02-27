@@ -44,7 +44,7 @@
                     : 'text-gray-700 dark:text-gray-300',
                 ]"
               >
-                中文
+                {{ t('system.languageZh') }}
               </button>
               <button
                 @click="changeLanguage('en')"
@@ -55,7 +55,7 @@
                     : 'text-gray-700 dark:text-gray-300',
                 ]"
               >
-                English
+                {{ t('system.languageEn') }}
               </button>
             </div>
           </div>
