@@ -41,6 +41,15 @@ const processQueue = (error, token = null) => {
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
+    // FormData 请求必须移除默认 JSON Content-Type，让浏览器自动带 boundary
+    if (config.data instanceof window.FormData) {
+      if (typeof config.headers?.delete === 'function') {
+        config.headers.delete('Content-Type')
+      } else if (config.headers) {
+        delete config.headers['Content-Type']
+      }
+    }
+
     // 添加认证 token
     const token = Storage.getToken()
     if (token) {

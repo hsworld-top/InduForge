@@ -1,18 +1,108 @@
 const express = require('express');
 const multer = require('multer');
 const Joi = require('joi');
+const sharp = require('sharp');
+const { randomUUID } = require('crypto');
+const { Readable } = require('stream');
 const { validate } = require('../../middlewares/validate');
 const { logger } = require('../../utils/logger');
 const ApiResponse = require('../../utils/response');
 const ErrorCodes = require('../../constants/errorCodes');
 const AppError = require('../../utils/AppError');
 const appConfig = require('../../config/app');
+const storageService = require('../../services/storageService');
 
 const router = express.Router();
 
 // 导入模型和中间件
 const { Tenant, User } = require('../../models');
 const { authenticateToken, requireRole } = require('../../middlewares/auth');
+
+/**
+ * 构建租户资产访问 URL。
+ * @param {string} objectKey - MinIO 对象键
+ * @returns {string} 对外访问 URL
+ */
+const buildTenantAssetUrl = (objectKey) =>
+  `/api/v1/tenants/assets?key=${encodeURIComponent(objectKey)}`;
+
+/**
+ * 判断是否为 base64 图片 DataURL。
+ * @param {string|null|undefined} value - 图片字段值
+ * @returns {boolean} 是否为 DataURL
+ */
+const isImageDataUrl = (value) =>
+  typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value);
+
+/**
+ * 解析 base64 图片 DataURL。
+ * @param {string} dataUrl - DataURL 字符串
+ * @returns {{mimeType: string, buffer: Buffer}} 解析结果
+ * @throws {Error} 非法格式抛错
+ */
+const parseImageDataUrl = (dataUrl) => {
+  const matched = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!matched) {
+    throw new Error('图片数据格式不正确');
+  }
+  return {
+    mimeType: matched[1],
+    buffer: Buffer.from(matched[2], 'base64'),
+  };
+};
+
+/**
+ * 上传租户品牌资产到 MinIO。
+ * Logo 生成缩略图并返回缩略图 URL；背景图进行压缩后返回 URL。
+ * @param {Object} params - 上传参数
+ * @param {string} params.tenantId - 租户 ID
+ * @param {'logo'|'background'} params.type - 资产类型
+ * @param {Buffer} params.buffer - 原始图片数据
+ * @returns {Promise<{fileUrl: string}>} 上传结果
+ */
+const uploadTenantAsset = async ({ tenantId, type, buffer }) => {
+  const assetPrefix = `tenant-assets/${tenantId}`;
+  const objectId = randomUUID();
+
+  if (type === 'logo') {
+    const thumbnailBuffer = await sharp(buffer)
+      .rotate()
+      .resize(96, 96, { fit: 'cover' })
+      .webp({ quality: 82 })
+      .toBuffer();
+
+    const objectKey = `${assetPrefix}/logo-thumb-${objectId}.webp`;
+    await storageService.uploadObject(
+      'ifp',
+      objectKey,
+      Readable.from(thumbnailBuffer),
+      thumbnailBuffer.length,
+      { 'Content-Type': 'image/webp' }
+    );
+    return { fileUrl: buildTenantAssetUrl(objectKey) };
+  }
+
+  const backgroundBuffer = await sharp(buffer)
+    .rotate()
+    .resize({
+      width: 1920,
+      height: 1080,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 86 })
+    .toBuffer();
+
+  const objectKey = `${assetPrefix}/background-${objectId}.webp`;
+  await storageService.uploadObject(
+    'ifp',
+    objectKey,
+    Readable.from(backgroundBuffer),
+    backgroundBuffer.length,
+    { 'Content-Type': 'image/webp' }
+  );
+  return { fileUrl: buildTenantAssetUrl(objectKey) };
+};
 
 // 配置文件上传
 
@@ -39,6 +129,52 @@ const upload = multer({
 });
 
 // 使用统一的认证和角色检查中间件
+
+/**
+ * @swagger
+ * /api/v1/tenants/assets:
+ *   get:
+ *     summary: 获取租户品牌资产文件
+ *     tags: [租户管理]
+ *     parameters:
+ *       - in: query
+ *         name: key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: MinIO 对象键
+ *     responses:
+ *       200:
+ *         description: 获取成功
+ */
+router.get('/assets', validate(Joi.object({
+  query: Joi.object({
+    key: Joi.string().required(),
+  }),
+})), async (req, res) => {
+  try {
+    const { key } = req.query;
+    if (!key.startsWith('tenant-assets/')) {
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '非法资源路径' }, 400);
+    }
+
+    const [stat, stream] = await Promise.all([
+      storageService.statObject('ifp', key),
+      storageService.getObjectStream('ifp', key),
+    ]);
+
+    if (stat.metaData?.['content-type']) {
+      res.setHeader('Content-Type', stat.metaData['content-type']);
+    } else {
+      res.setHeader('Content-Type', 'application/octet-stream');
+    }
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return stream.pipe(res);
+  } catch (error) {
+    logger.error('Get tenant asset error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 404);
+  }
+});
 
 /**
  * @swagger
@@ -161,8 +297,8 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obj
     maxUsers: Joi.number().integer().min(1).optional(),
     maxProjects: Joi.number().integer().min(1).optional(),
     // 新增字段
-    logoUrl: Joi.string().optional().allow(''),
-    loginBackgroundUrl: Joi.string().optional().allow(''),
+    logoUrl: Joi.string().optional().allow('', null),
+    loginBackgroundUrl: Joi.string().optional().allow('', null),
     companyName: Joi.string().optional().allow(''),
     companyAddress: Joi.string().optional().allow(''),
     companyPhone: Joi.string().optional().allow(''),
@@ -181,7 +317,7 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obj
       return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 400);
     }
 
-    // 创建租户
+    // 创建租户（品牌图先置空，后续若有 base64 则上传到 MinIO 并回写 URL）
     const tenant = await Tenant.create({
       name,
       code,
@@ -190,13 +326,43 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obj
       contactPhone: contactPhone || null,
       maxUsers: maxUsers || appConfig.tenantDefaults.defaultMaxUsers,
       maxProjects: maxProjects || appConfig.tenantDefaults.defaultMaxProjects,
-      logoUrl: logoUrl || null,
-      loginBackgroundUrl: loginBackgroundUrl || null,
+      logoUrl: null,
+      loginBackgroundUrl: null,
       companyName: companyName || null,
       companyAddress: companyAddress || null,
       companyPhone: companyPhone || null,
       companyWebsite: companyWebsite || null,
     });
+
+    const brandingUpdates = {};
+    if (isImageDataUrl(logoUrl)) {
+      const parsed = parseImageDataUrl(logoUrl);
+      brandingUpdates.logoUrl = (await uploadTenantAsset({
+        tenantId: tenant.id,
+        type: 'logo',
+        buffer: parsed.buffer,
+      })).fileUrl;
+    } else if (logoUrl && !String(logoUrl).includes('/assets/images/default-logo.svg')) {
+      brandingUpdates.logoUrl = logoUrl;
+    }
+
+    if (isImageDataUrl(loginBackgroundUrl)) {
+      const parsed = parseImageDataUrl(loginBackgroundUrl);
+      brandingUpdates.loginBackgroundUrl = (await uploadTenantAsset({
+        tenantId: tenant.id,
+        type: 'background',
+        buffer: parsed.buffer,
+      })).fileUrl;
+    } else if (
+      loginBackgroundUrl &&
+      !String(loginBackgroundUrl).includes('/assets/images/default-login-bg.svg')
+    ) {
+      brandingUpdates.loginBackgroundUrl = loginBackgroundUrl;
+    }
+
+    if (Object.keys(brandingUpdates).length > 0) {
+      await tenant.update(brandingUpdates);
+    }
 
     // 创建默认的系统管理员用户
     await User.create({
@@ -270,8 +436,8 @@ router.put('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.o
     maxUsers: Joi.number().integer().min(1).optional(),
     maxProjects: Joi.number().integer().min(1).optional(),
     // 新增字段
-    logoUrl: Joi.string().optional().allow(''),
-    loginBackgroundUrl: Joi.string().optional().allow(''),
+    logoUrl: Joi.string().optional().allow('', null),
+    loginBackgroundUrl: Joi.string().optional().allow('', null),
     companyName: Joi.string().optional().allow(''),
     companyAddress: Joi.string().optional().allow(''),
     companyPhone: Joi.string().optional().allow(''),
@@ -312,6 +478,24 @@ router.put('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.o
         processedData[field] = null;
       }
     });
+
+    if (isImageDataUrl(processedData.logoUrl)) {
+      const parsed = parseImageDataUrl(processedData.logoUrl);
+      processedData.logoUrl = (await uploadTenantAsset({
+        tenantId: tenant.id,
+        type: 'logo',
+        buffer: parsed.buffer,
+      })).fileUrl;
+    }
+
+    if (isImageDataUrl(processedData.loginBackgroundUrl)) {
+      const parsed = parseImageDataUrl(processedData.loginBackgroundUrl);
+      processedData.loginBackgroundUrl = (await uploadTenantAsset({
+        tenantId: tenant.id,
+        type: 'background',
+        buffer: parsed.buffer,
+      })).fileUrl;
+    }
 
     await tenant.update(processedData);
 
@@ -432,23 +616,24 @@ router.post('/:id/upload', authenticateToken, requireRole('SUPER_ADMIN'),
         return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 404);
       }
 
-      // 将文件转换为base64格式
-      const fileBuffer = req.file.buffer;
-      const mimeType = req.file.mimetype;
-      const base64Data = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+      const uploadResult = await uploadTenantAsset({
+        tenantId: tenant.id,
+        type,
+        buffer: req.file.buffer,
+      });
 
       // 更新租户的对应字段
       const updateData = {};
       if (type === 'logo') {
-        updateData.logoUrl = base64Data;
+        updateData.logoUrl = uploadResult.fileUrl;
       } else if (type === 'background') {
-        updateData.loginBackgroundUrl = base64Data;
+        updateData.loginBackgroundUrl = uploadResult.fileUrl;
       }
 
       await tenant.update(updateData);
 
       return ApiResponse.success(res, {
-        fileUrl: base64Data,
+        fileUrl: uploadResult.fileUrl,
         message: `${type === 'logo' ? 'Logo' : '背景图'}上传成功`
       });
 

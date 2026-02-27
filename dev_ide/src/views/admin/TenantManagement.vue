@@ -89,20 +89,12 @@
             >
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
-                  <div v-if="tenant.logoUrl" class="w-10 h-10 rounded-lg overflow-hidden mr-3">
+                  <div class="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 mr-3">
                     <img
-                      :src="tenant.logoUrl"
+                      :src="tenant.logoUrl || defaultLogoUrl"
                       :alt="tenant.name"
                       class="w-full h-full object-cover"
                     />
-                  </div>
-                  <div
-                    v-else
-                    class="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-lg flex items-center justify-center mr-3"
-                  >
-                    <span class="text-gray-500 dark:text-gray-400 text-sm font-medium">{{
-                      tenant.name.charAt(0)
-                    }}</span>
                   </div>
                   <div>
                     <div class="text-sm font-medium text-gray-900 dark:text-white">
@@ -379,11 +371,8 @@
                   {{ t('tenantManagement.logo') }}
                 </label>
                 <div class="flex items-center space-x-4">
-                  <div
-                    v-if="tenantForm.logoUrl"
-                    class="w-16 h-16 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600"
-                  >
-                    <img :src="tenantForm.logoUrl" alt="Logo" class="w-full h-full object-cover" />
+                  <div class="w-16 h-16 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+                    <img :src="logoPreviewUrl" alt="Logo" class="w-full h-full object-cover" />
                   </div>
                   <div class="flex-1">
                     <input
@@ -410,12 +399,9 @@
                   {{ t('tenantManagement.loginBackground') }}
                 </label>
                 <div class="flex items-center space-x-4">
-                  <div
-                    v-if="tenantForm.loginBackgroundUrl"
-                    class="w-16 h-16 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600"
-                  >
+                  <div class="w-16 h-16 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
                     <img
-                      :src="tenantForm.loginBackgroundUrl"
+                      :src="backgroundPreviewUrl"
                       :alt="t('tenantManagement.backgroundImageAlt')"
                       class="w-full h-full object-cover"
                     />
@@ -467,12 +453,14 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { tenantAPI } from '@/api'
 import { TIME_FORMAT } from '@/constants'
+import defaultLogoUrl from '@/assets/images/default-logo.svg'
+import defaultLoginBgUrl from '@/assets/images/default-login-bg.svg'
 
 export default {
   name: 'TenantManagement',
@@ -521,6 +509,10 @@ export default {
     // 文件输入引用
     const logoInput = ref(null)
     const backgroundInput = ref(null)
+    const logoPreviewUrl = computed(() => tenantForm.logoUrl || defaultLogoUrl)
+    const backgroundPreviewUrl = computed(
+      () => tenantForm.loginBackgroundUrl || defaultLoginBgUrl
+    )
 
     // 防抖搜索
     let searchTimeout = null
@@ -619,11 +611,17 @@ export default {
     const saveTenant = async () => {
       saving.value = true
       try {
+        const payload = {
+          ...tenantForm,
+          logoUrl: tenantForm.logoUrl || '',
+          loginBackgroundUrl: tenantForm.loginBackgroundUrl || '',
+        }
+
         if (showAddDialog.value) {
-          await tenantAPI.createTenant(tenantForm)
+          await tenantAPI.createTenant(payload)
           ElMessage.success(t('tenantManagement.createSuccess'))
         } else {
-          await tenantAPI.updateTenant(tenantForm.code, tenantForm)
+          await tenantAPI.updateTenant(tenantForm.code, payload)
           ElMessage.success(t('tenantManagement.updateSuccess'))
         }
 
@@ -659,7 +657,22 @@ export default {
         companyPhone: '',
         companyWebsite: '',
       })
+      if (logoInput.value) logoInput.value.value = ''
+      if (backgroundInput.value) backgroundInput.value.value = ''
     }
+
+    /**
+     * 将图片文件转换为 base64 DataURL。
+     * @param {File} file - 图片文件
+     * @returns {Promise<string>} base64 数据
+     */
+    const fileToDataUrl = (file) =>
+      new Promise((resolve, reject) => {
+        const reader = new window.FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => reject(new Error('文件读取失败'))
+        reader.readAsDataURL(file)
+      })
 
     // 处理Logo上传
     const handleLogoUpload = async (event) => {
@@ -667,11 +680,18 @@ export default {
       if (!file) return
 
       try {
+        // 新增租户时尚未有租户实体，使用本地base64并在创建接口中一并提交
+        if (showAddDialog.value) {
+          tenantForm.logoUrl = await fileToDataUrl(file)
+          ElMessage.success(t('tenantManagement.logoUploadSuccess'))
+          return
+        }
+
         const formData = new window.FormData()
         formData.append('file', file)
 
         const response = await tenantAPI.uploadFile(
-          showEditDialog.value ? tenantForm.code : 'temp',
+          tenantForm.code,
           'logo',
           formData
         )
@@ -680,7 +700,9 @@ export default {
         ElMessage.success(t('tenantManagement.logoUploadSuccess'))
       } catch (error) {
         console.error('Logo上传失败:', error)
-        ElMessage.error(t('tenantManagement.logoUploadFailed'))
+        ElMessage.error(error.response?.data?.message || t('tenantManagement.logoUploadFailed'))
+      } finally {
+        event.target.value = ''
       }
     }
 
@@ -690,11 +712,18 @@ export default {
       if (!file) return
 
       try {
+        // 新增租户时尚未有租户实体，使用本地base64并在创建接口中一并提交
+        if (showAddDialog.value) {
+          tenantForm.loginBackgroundUrl = await fileToDataUrl(file)
+          ElMessage.success(t('tenantManagement.backgroundUploadSuccess'))
+          return
+        }
+
         const formData = new window.FormData()
         formData.append('file', file)
 
         const response = await tenantAPI.uploadFile(
-          showEditDialog.value ? tenantForm.code : 'temp',
+          tenantForm.code,
           'background',
           formData
         )
@@ -703,7 +732,9 @@ export default {
         ElMessage.success(t('tenantManagement.backgroundUploadSuccess'))
       } catch (error) {
         console.error('背景图上传失败:', error)
-        ElMessage.error(t('tenantManagement.backgroundUploadFailed'))
+        ElMessage.error(error.response?.data?.message || t('tenantManagement.backgroundUploadFailed'))
+      } finally {
+        event.target.value = ''
       }
     }
 
@@ -722,6 +753,8 @@ export default {
       showEditDialog,
       logoInput,
       backgroundInput,
+      logoPreviewUrl,
+      backgroundPreviewUrl,
       t,
       loadTenants,
       formatDate,

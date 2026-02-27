@@ -87,10 +87,6 @@ export const tenantAPI = {
    * @returns {Promise} 上传结果
    */
   uploadFile(tenantId, type, formData) {
-    return request.post(`/tenants/${tenantId}/upload?type=${type}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+    return request.post(`/tenants/${tenantId}/upload?type=${type}`, formData)
   },
 }
