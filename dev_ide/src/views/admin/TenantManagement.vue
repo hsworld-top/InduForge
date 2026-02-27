@@ -2,7 +2,7 @@
   <div class="tenant-management">
     <!-- 页面头部 -->
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-3xl font-bold text-gray-900 dark:text-white">租户管理</h1>
+      <h1 class="text-3xl font-bold text-gray-900 dark:text-white">{{ t('tenantManagement.title') }}</h1>
       <button
         @click="showAddDialog = true"
         class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -15,7 +15,7 @@
             d="M12 6v6m0 0v6m0-6h6m-6 0H6"
           />
         </svg>
-        添加租户
+        {{ t('tenantManagement.addTenant') }}
       </button>
     </div>
 
@@ -23,7 +23,7 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">租户列表</h2>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('tenantManagement.list') }}</h2>
           <div class="flex items-center space-x-4">
             <!-- 状态筛选 -->
             <select
@@ -31,10 +31,10 @@
               @change="loadTenants"
               class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
-              <option value="">全部状态</option>
-              <option value="active">活跃</option>
-              <option value="inactive">未激活</option>
-              <option value="suspended">暂停</option>
+              <option value="">{{ t('tenantManagement.allStatus') }}</option>
+              <option value="active">{{ t('tenantManagement.statusActive') }}</option>
+              <option value="inactive">{{ t('tenantManagement.statusInactive') }}</option>
+              <option value="suspended">{{ t('tenantManagement.statusSuspended') }}</option>
             </select>
 
             <!-- 搜索框 -->
@@ -42,7 +42,7 @@
               v-model="filters.search"
               @input="debouncedSearch"
               type="text"
-              placeholder="搜索租户名称或代码..."
+              :placeholder="t('tenantManagement.searchPlaceholder')"
               class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
           </div>
@@ -57,27 +57,27 @@
               <th
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
               >
-                租户信息
+                {{ t('tenantManagement.tenantInfo') }}
               </th>
               <th
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
               >
-                联系方式
+                {{ t('tenantManagement.contact') }}
               </th>
               <th
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
               >
-                状态
+                {{ t('tenantManagement.status') }}
               </th>
               <th
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
               >
-                创建时间
+                {{ t('tenantManagement.createdAt') }}
               </th>
               <th
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
               >
-                操作
+                {{ t('tenantManagement.actions') }}
               </th>
             </tr>
           </thead>
@@ -109,7 +109,7 @@
                       {{ tenant.name }}
                     </div>
                     <div class="text-sm text-gray-500 dark:text-gray-400">
-                      代码: {{ tenant.code }}
+                      {{ t('tenantManagement.codePrefix') }}: {{ tenant.code }}
                     </div>
                   </div>
                 </div>
@@ -135,10 +135,10 @@
                 >
                   {{
                     tenant.status === 'active'
-                      ? '活跃'
+                      ? t('tenantManagement.statusActive')
                       : tenant.status === 'inactive'
-                        ? '未激活'
-                        : '暂停'
+                        ? t('tenantManagement.statusInactive')
+                        : t('tenantManagement.statusSuspended')
                   }}
                 </span>
               </td>
@@ -151,13 +151,13 @@
                     @click="editTenant(tenant)"
                     class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
                   >
-                    编辑
+                    {{ t('tenantManagement.edit') }}
                   </button>
                   <button
                     @click="deleteTenant(tenant)"
                     class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                   >
-                    删除
+                    {{ t('tenantManagement.delete') }}
                   </button>
                 </div>
               </td>
@@ -170,9 +170,13 @@
       <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
         <div class="flex items-center justify-between">
           <div class="text-sm text-gray-700 dark:text-gray-300">
-            显示 {{ (pagination.page - 1) * pagination.limit + 1 }} -
-            {{ Math.min(pagination.page * pagination.limit, pagination.total) }} 条， 共
-            {{ pagination.total }} 条
+            {{
+              t('tenantManagement.pageSummary', {
+                start: (pagination.page - 1) * pagination.limit + 1,
+                end: Math.min(pagination.page * pagination.limit, pagination.total),
+                total: pagination.total,
+              })
+            }}
           </div>
           <div class="flex items-center space-x-2">
             <button
@@ -180,17 +184,17 @@
               :disabled="pagination.page <= 1"
               class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              上一页
+              {{ t('tenantManagement.prevPage') }}
             </button>
             <span class="text-sm text-gray-700 dark:text-gray-300">
-              第 {{ pagination.page }} 页，共 {{ pagination.totalPages }} 页
+              {{ t('tenantManagement.pageInfo', { page: pagination.page, totalPages: pagination.totalPages }) }}
             </span>
             <button
               @click="changePage(pagination.page + 1)"
               :disabled="pagination.page >= pagination.totalPages"
               class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              下一页
+              {{ t('tenantManagement.nextPage') }}
             </button>
           </div>
         </div>
@@ -208,7 +212,7 @@
       >
         <div class="p-6">
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            {{ showAddDialog ? '添加租户' : '编辑租户' }}
+            {{ showAddDialog ? t('tenantManagement.addDialogTitle') : t('tenantManagement.editDialogTitle') }}
           </h3>
 
           <form @submit.prevent="saveTenant" class="space-y-4">
@@ -216,7 +220,7 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  租户名称 *
+                  {{ t('tenantManagement.tenantName') }} *
                 </label>
                 <input
                   v-model="tenantForm.name"
@@ -227,7 +231,7 @@
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  租户代码 *
+                  {{ t('tenantManagement.tenantCode') }} *
                 </label>
                 <input
                   v-model="tenantForm.code"
@@ -241,7 +245,7 @@
 
             <div>
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                描述
+                {{ t('tenantManagement.description') }}
               </label>
               <textarea
                 v-model="tenantForm.description"
@@ -254,7 +258,7 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  联系邮箱
+                  {{ t('tenantManagement.contactEmail') }}
                 </label>
                 <input
                   v-model="tenantForm.contactEmail"
@@ -264,7 +268,7 @@
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  联系电话
+                  {{ t('tenantManagement.contactPhone') }}
                 </label>
                 <input
                   v-model="tenantForm.contactPhone"
@@ -278,7 +282,7 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  最大用户数
+                  {{ t('tenantManagement.maxUsers') }}
                 </label>
                 <input
                   v-model.number="tenantForm.maxUsers"
@@ -289,7 +293,7 @@
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  最大工程数
+                  {{ t('tenantManagement.maxProjects') }}
                 </label>
                 <input
                   v-model.number="tenantForm.maxProjects"
@@ -303,26 +307,26 @@
             <!-- 状态 -->
             <div v-if="showEditDialog">
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                状态
+                {{ t('tenantManagement.status') }}
               </label>
               <select
                 v-model="tenantForm.status"
                 class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
-                <option value="active">活跃</option>
-                <option value="inactive">未激活</option>
-                <option value="suspended">暂停</option>
+                <option value="active">{{ t('tenantManagement.statusActive') }}</option>
+                <option value="inactive">{{ t('tenantManagement.statusInactive') }}</option>
+                <option value="suspended">{{ t('tenantManagement.statusSuspended') }}</option>
               </select>
             </div>
 
             <!-- 公司信息 -->
             <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">公司信息</h4>
+              <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">{{ t('tenantManagement.companyInfo') }}</h4>
 
               <div class="grid grid-cols-2 gap-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    公司名称
+                    {{ t('tenantManagement.companyName') }}
                   </label>
                   <input
                     v-model="tenantForm.companyName"
@@ -332,7 +336,7 @@
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    公司电话
+                    {{ t('tenantManagement.companyPhone') }}
                   </label>
                   <input
                     v-model="tenantForm.companyPhone"
@@ -344,7 +348,7 @@
 
               <div class="mt-4">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  公司地址
+                  {{ t('tenantManagement.companyAddress') }}
                 </label>
                 <textarea
                   v-model="tenantForm.companyAddress"
@@ -355,7 +359,7 @@
 
               <div class="mt-4">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  公司网站
+                  {{ t('tenantManagement.companyWebsite') }}
                 </label>
                 <input
                   v-model="tenantForm.companyWebsite"
@@ -367,12 +371,12 @@
 
             <!-- 文件上传 -->
             <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">品牌资产</h4>
+              <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">{{ t('tenantManagement.brandAssets') }}</h4>
 
               <!-- Logo上传 -->
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Logo
+                  {{ t('tenantManagement.logo') }}
                 </label>
                 <div class="flex items-center space-x-4">
                   <div
@@ -394,7 +398,7 @@
                       @click="$refs.logoInput.click()"
                       class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                     >
-                      {{ tenantForm.logoUrl ? '更换Logo' : '上传Logo' }}
+                      {{ tenantForm.logoUrl ? t('tenantManagement.replaceLogo') : t('tenantManagement.uploadLogo') }}
                     </button>
                   </div>
                 </div>
@@ -403,7 +407,7 @@
               <!-- 背景图上传 -->
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  登录页面背景图
+                  {{ t('tenantManagement.loginBackground') }}
                 </label>
                 <div class="flex items-center space-x-4">
                   <div
@@ -412,7 +416,7 @@
                   >
                     <img
                       :src="tenantForm.loginBackgroundUrl"
-                      alt="背景图"
+                      :alt="t('tenantManagement.backgroundImageAlt')"
                       class="w-full h-full object-cover"
                     />
                   </div>
@@ -429,7 +433,7 @@
                       @click="$refs.backgroundInput.click()"
                       class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                     >
-                      {{ tenantForm.loginBackgroundUrl ? '更换背景图' : '上传背景图' }}
+                      {{ tenantForm.loginBackgroundUrl ? t('tenantManagement.replaceBackground') : t('tenantManagement.uploadBackground') }}
                     </button>
                   </div>
                 </div>
@@ -445,14 +449,14 @@
                 @click="closeDialog"
                 class="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                取消
+                {{ t('tenantManagement.cancel') }}
               </button>
               <button
                 type="submit"
                 :disabled="saving"
                 class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {{ saving ? '保存中...' : '保存' }}
+                {{ saving ? t('tenantManagement.saving') : t('tenantManagement.save') }}
               </button>
             </div>
           </form>
@@ -464,6 +468,7 @@
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { tenantAPI } from '@/api'
@@ -472,6 +477,7 @@ import { TIME_FORMAT } from '@/constants'
 export default {
   name: 'TenantManagement',
   setup() {
+    const { t } = useI18n()
     const tenants = ref([])
     const loading = ref(false)
     const saving = ref(false)
@@ -519,15 +525,14 @@ export default {
     // 防抖搜索
     let searchTimeout = null
     const debouncedSearch = () => {
-      clearTimeout(searchTimeout)
-      searchTimeout = setTimeout(() => {
+      window.clearTimeout(searchTimeout)
+      searchTimeout = window.setTimeout(() => {
         loadTenants()
       }, 500)
     }
 
     // 加载租户列表
     const loadTenants = async () => {
-      debugger
       loading.value = true
       try {
         const params = {
@@ -545,7 +550,7 @@ export default {
         pagination.totalPages = response.pagination.totalPages
       } catch (error) {
         console.error('加载租户列表失败:', error)
-        ElMessage.error('加载租户列表失败')
+        ElMessage.error(t('tenantManagement.loadFailed'))
       } finally {
         loading.value = false
       }
@@ -590,22 +595,22 @@ export default {
     const deleteTenant = async (tenant) => {
       try {
         await ElMessageBox.confirm(
-          `确定要删除租户 "${tenant.name}" 吗？此操作不可恢复。`,
-          '确认删除',
+          t('tenantManagement.deleteConfirmText', { name: tenant.name }),
+          t('tenantManagement.deleteConfirmTitle'),
           {
-            confirmButtonText: '确定删除',
-            cancelButtonText: '取消',
+            confirmButtonText: t('tenantManagement.deleteConfirmButton'),
+            cancelButtonText: t('tenantManagement.cancel'),
             type: 'warning',
           }
         )
 
         await tenantAPI.deleteTenant(tenant.id)
-        ElMessage.success('租户删除成功')
+        ElMessage.success(t('tenantManagement.deleteSuccess'))
         loadTenants()
       } catch (error) {
         if (error !== 'cancel') {
           console.error('删除租户失败:', error)
-          ElMessage.error('删除租户失败')
+          ElMessage.error(t('tenantManagement.deleteFailed'))
         }
       }
     }
@@ -616,17 +621,17 @@ export default {
       try {
         if (showAddDialog.value) {
           await tenantAPI.createTenant(tenantForm)
-          ElMessage.success('租户创建成功')
+          ElMessage.success(t('tenantManagement.createSuccess'))
         } else {
           await tenantAPI.updateTenant(tenantForm.code, tenantForm)
-          ElMessage.success('租户更新成功')
+          ElMessage.success(t('tenantManagement.updateSuccess'))
         }
 
         closeDialog()
         loadTenants()
       } catch (error) {
         console.error('保存租户失败:', error)
-        ElMessage.error(error.response?.data?.message || '保存租户失败')
+        ElMessage.error(error.response?.data?.message || t('tenantManagement.saveFailed'))
       } finally {
         saving.value = false
       }
@@ -662,7 +667,7 @@ export default {
       if (!file) return
 
       try {
-        const formData = new FormData()
+        const formData = new window.FormData()
         formData.append('file', file)
 
         const response = await tenantAPI.uploadFile(
@@ -672,10 +677,10 @@ export default {
         )
 
         tenantForm.logoUrl = response.data.fileUrl
-        ElMessage.success('Logo上传成功')
+        ElMessage.success(t('tenantManagement.logoUploadSuccess'))
       } catch (error) {
         console.error('Logo上传失败:', error)
-        ElMessage.error('Logo上传失败')
+        ElMessage.error(t('tenantManagement.logoUploadFailed'))
       }
     }
 
@@ -685,7 +690,7 @@ export default {
       if (!file) return
 
       try {
-        const formData = new FormData()
+        const formData = new window.FormData()
         formData.append('file', file)
 
         const response = await tenantAPI.uploadFile(
@@ -695,10 +700,10 @@ export default {
         )
 
         tenantForm.loginBackgroundUrl = response.data.fileUrl
-        ElMessage.success('背景图上传成功')
+        ElMessage.success(t('tenantManagement.backgroundUploadSuccess'))
       } catch (error) {
         console.error('背景图上传失败:', error)
-        ElMessage.error('背景图上传失败')
+        ElMessage.error(t('tenantManagement.backgroundUploadFailed'))
       }
     }
 
@@ -717,6 +722,7 @@ export default {
       showEditDialog,
       logoInput,
       backgroundInput,
+      t,
       loadTenants,
       formatDate,
       changePage,
