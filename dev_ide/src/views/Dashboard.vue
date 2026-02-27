@@ -447,7 +447,7 @@
         <button
           @click="toggleSidebar"
           :class="[
-            'absolute top-1/2 -right-3 -translate-y-1/2 h-9 w-6 rounded-full border shadow-sm flex items-center justify-center transition-all duration-200',
+            'absolute z-30 top-1/2 -right-3 -translate-y-1/2 h-9 w-6 rounded-full border shadow-sm flex items-center justify-center transition-all duration-200',
             isDark
               ? 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 hover:border-gray-600'
               : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300',
@@ -469,7 +469,7 @@
       </div>
 
       <!-- 右侧标签页区域 -->
-      <div :class="['flex-1 overflow-hidden', isTabMaximized ? '' : 'pl-2']">
+      <div :class="['flex-1 overflow-hidden', isTabMaximized ? '' : 'pl-3']">
         <div v-if="tabs.length > 0" class="h-full">
           <!-- 最大化时的工具栏 -->
           <div v-if="isTabMaximized" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center justify-between">

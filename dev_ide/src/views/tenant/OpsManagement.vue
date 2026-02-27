@@ -1,9 +1,9 @@
 <template>
   <div class="ops-management h-full flex flex-col">
     <!-- 页面标题和页头操作 -->
-    <div class="flex justify-between items-center mb-6 px-6 pt-6">
+    <div class="flex justify-between items-center mb-6 px-6">
       <div class="flex items-center space-x-4">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('opsManagement.title') }}</h1>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('opsManagement.title') }}</h1>
         <el-tag border size="large" type="info" class="rounded-full">
           {{ t('opsManagement.totalNodes') }}: {{ nodePagination.total }}
         </el-tag>

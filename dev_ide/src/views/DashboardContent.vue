@@ -1,10 +1,10 @@
 <template>
   <div class="dashboard-content">
     <!-- 欢迎信息 -->
-    <div class="mb-8">
-      <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+    <div class="mb-6">
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
         {{ t('dashboard.welcomeBack', { username }) }}
-      </h2>
+      </h1>
     </div>
 
     <!-- 统计卡片 -->
