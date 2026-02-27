@@ -43,6 +43,40 @@
       </div>
 
       <div class="panel">
+        <div class="panel-title">{{ t('profile.preferences') }}</div>
+        <el-form ref="preferencesFormRef" :model="preferencesForm" :rules="preferencesRules" label-width="92px">
+          <el-form-item :label="t('profile.email')" prop="email">
+            <el-input v-model="preferencesForm.email" :placeholder="t('profile.emailPlaceholder')" clearable />
+          </el-form-item>
+          <el-form-item :label="t('profile.language')" prop="language">
+            <el-select v-model="preferencesForm.language" style="width: 100%">
+              <el-option
+                v-for="lang in languageOptions"
+                :key="lang.value"
+                :label="lang.label"
+                :value="lang.value"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('profile.theme')" prop="theme">
+            <el-select v-model="preferencesForm.theme" style="width: 100%">
+              <el-option
+                v-for="theme in themeOptions"
+                :key="theme.value"
+                :label="theme.label"
+                :value="theme.value"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="savingPreferences" @click="handleSavePreferences">
+              {{ t('profile.savePreferences') }}
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <div class="panel">
         <div class="panel-title">{{ t('profile.changePassword') }}</div>
         <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="92px">
           <el-form-item :label="t('profile.newPassword')" prop="newPassword">
@@ -77,7 +111,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { authAPI, userAPI } from '@/api'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useAppStore } from '@/store'
 import { Storage } from '@/utils/storage'
 import { RoleEnum } from '@/enums'
 
@@ -92,15 +126,19 @@ export default {
     },
   },
   setup() {
-    const { t } = useI18n()
+    const { t, locale } = useI18n()
     const authStore = useAuthStore()
+    const appStore = useAppStore()
     const loading = ref(false)
     const savingPassword = ref(false)
+    const savingPreferences = ref(false)
     const passwordFormRef = ref(null)
+    const preferencesFormRef = ref(null)
 
     const profile = ref({
       id: '',
       username: '',
+      email: '',
       role: '',
       tenant: null,
       avatarUrl: '',
@@ -115,6 +153,26 @@ export default {
       newPassword: '',
       confirmPassword: '',
     })
+
+    const preferencesForm = reactive({
+      email: '',
+      language: appStore.language || 'zh',
+      theme: appStore.theme || 'light',
+    })
+
+    const languageOptions = computed(() => [
+      { value: 'zh', label: t('system.languageZh') },
+      { value: 'en', label: t('system.languageEn') },
+    ])
+
+    const themeOptions = computed(() => [
+      { value: 'light', label: t('system.light') },
+      { value: 'dark', label: t('system.dark') },
+    ])
+
+    const preferencesRules = {
+      email: [{ type: 'email', message: t('profile.invalidEmail'), trigger: 'blur' }],
+    }
 
     const passwordRules = {
       newPassword: [
@@ -152,6 +210,7 @@ export default {
         ...authStore.userInfo,
         id: profile.value.id,
         username: profile.value.username,
+        email: profile.value.email,
         role: profile.value.role,
         tenantId: profile.value.tenant?.id || authStore.userInfo?.tenantId,
         tenant: profile.value.tenant,
@@ -190,10 +249,14 @@ export default {
         profile.value = {
           id: user.id || '',
           username: user.username || '',
+          email: user.email || authStore.userInfo?.email || '',
           role: user.role || '',
           tenant: user.tenant || null,
           avatarUrl: user.avatarUrl || avatarFromCache || authStore.userInfo?.avatarUrl || '',
         }
+        preferencesForm.email = profile.value.email
+        preferencesForm.language = appStore.language || 'zh'
+        preferencesForm.theme = appStore.theme || 'light'
         syncUserCache()
       } catch {
         const localUser = Storage.getUserInfo()
@@ -201,13 +264,62 @@ export default {
         profile.value = {
           id: localUser?.id || '',
           username: localUser?.username || '',
+          email: localUser?.email || '',
           role: localUser?.role || '',
           tenant: localUser?.tenant || null,
           avatarUrl: localUser?.avatarUrl || avatarFromCache || '',
         }
+        preferencesForm.email = profile.value.email
+        preferencesForm.language = appStore.language || 'zh'
+        preferencesForm.theme = appStore.theme || 'light'
         ElMessage.warning(t('profile.profileLoadFailed'))
       } finally {
         loading.value = false
+      }
+    }
+
+    const handleSavePreferences = async () => {
+      if (!preferencesFormRef.value) return
+
+      try {
+        await preferencesFormRef.value.validate()
+      } catch {
+        return
+      }
+
+      const userId = profile.value.id || authStore.userInfo?.id
+      if (!userId) {
+        ElMessage.error(t('profile.noUserInfo'))
+        return
+      }
+
+      savingPreferences.value = true
+      try {
+        const nextEmail = (preferencesForm.email || '').trim()
+        if (nextEmail !== (profile.value.email || '')) {
+          await userAPI.updateUser(userId, { email: nextEmail })
+          profile.value.email = nextEmail
+          syncUserCache()
+        }
+
+        if (preferencesForm.language !== appStore.language) {
+          appStore.setLanguage(preferencesForm.language)
+          locale.value = preferencesForm.language
+        }
+
+        if (preferencesForm.theme !== appStore.theme) {
+          appStore.setTheme(preferencesForm.theme)
+        }
+
+        ElMessage.success(t('profile.preferencesUpdated'))
+      } catch (error) {
+        ElMessage.error(
+          t('profile.preferencesUpdateFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
+      } finally {
+        savingPreferences.value = false
       }
     }
 
@@ -282,16 +394,23 @@ export default {
     return {
       loading,
       savingPassword,
+      savingPreferences,
       profile,
       userInitials,
       passwordForm,
       passwordRules,
       passwordFormRef,
+      preferencesFormRef,
+      preferencesForm,
+      preferencesRules,
+      languageOptions,
+      themeOptions,
       getRoleLabel,
       getTenantLabel,
       t,
       loadProfile,
       handleAvatarChange,
+      handleSavePreferences,
       handleChangePassword,
     }
   },
