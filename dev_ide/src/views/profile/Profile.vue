@@ -8,7 +8,7 @@
         <div class="header-meta">
           <h2 class="name">{{ profile.username || '-' }}</h2>
           <p class="role">{{ getRoleLabel(profile.role) }}</p>
-          <p class="tenant">{{ profile.tenant?.name || t('profile.unboundTenant') }}</p>
+          <p class="tenant">{{ getTenantLabel(profile.tenant) }}</p>
         </div>
       </div>
       <div class="header-actions">
@@ -180,6 +180,15 @@ export default {
       return roleLabelMap[role] || role || '-'
     }
 
+    const getTenantLabel = (tenant) => {
+      const tenantName = tenant?.name?.trim()
+      if (!tenantName) return t('profile.unboundTenant')
+      if (tenantName === '默认租户' || tenantName === 'Default Tenant') {
+        return t('profile.defaultTenant')
+      }
+      return tenantName
+    }
+
     const loadProfile = async () => {
       loading.value = true
       try {
@@ -287,6 +296,7 @@ export default {
       passwordRules,
       passwordFormRef,
       getRoleLabel,
+      getTenantLabel,
       t,
       loadProfile,
       handleAvatarChange,
