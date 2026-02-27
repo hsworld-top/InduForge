@@ -195,9 +195,9 @@
                   </svg>
                 </span>
                 <span
-                  v-if="!sidebarCollapsed"
                   :class="[
-                    'text-sm font-medium',
+                    'sidebar-menu-label text-sm font-medium',
+                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
                     activeTab === 'dashboard' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
@@ -240,9 +240,9 @@
                   </svg>
                 </span>
                 <span
-                  v-if="!sidebarCollapsed"
                   :class="[
-                    'text-sm font-medium',
+                    'sidebar-menu-label text-sm font-medium',
+                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
                     activeTab === 'tenant-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
@@ -278,9 +278,9 @@
                   <el-icon class="w-5 h-5"><UserFilled /></el-icon>
                 </span>
                 <span
-                  v-if="!sidebarCollapsed"
                   :class="[
-                    'text-sm font-medium',
+                    'sidebar-menu-label text-sm font-medium',
+                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
                     activeTab === 'user-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
@@ -329,9 +329,9 @@
                   </svg>
                 </span>
                 <span
-                  v-if="!sidebarCollapsed"
                   :class="[
-                    'text-sm font-medium',
+                    'sidebar-menu-label text-sm font-medium',
+                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
                     activeTab === 'project-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
@@ -380,9 +380,9 @@
                   </svg>
                 </span>
                 <span
-                  v-if="!sidebarCollapsed"
                   :class="[
-                    'text-sm font-medium',
+                    'sidebar-menu-label text-sm font-medium',
+                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
                     activeTab === 'ops-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
@@ -431,9 +431,9 @@
                   </svg>
                 </span>
                 <span
-                  v-if="!sidebarCollapsed"
                   :class="[
-                    'text-sm font-medium',
+                    'sidebar-menu-label text-sm font-medium',
+                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
                     activeTab === 'system-logs' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
                   ]"
                 >
@@ -1003,6 +1003,29 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.sidebar-menu-label {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  transform-origin: left center;
+  transition:
+    max-width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-menu-label-expanded {
+  max-width: 120px;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sidebar-menu-label-collapsed {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-4px);
 }
 
 /* 标签页样式 */
