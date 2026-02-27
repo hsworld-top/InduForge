@@ -3,7 +3,7 @@
     <!-- 页面标题和操作栏 -->
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
-        工程管理
+        {{ t('projectManagement.title') }}
       </h1>
       <div class="flex items-center space-x-4">
         <!-- 视图切换 -->
@@ -20,7 +20,7 @@
             ]"
           >
             <el-icon class="mr-1"><Grid /></el-icon>
-            卡片
+            {{ t('projectManagement.cardView') }}
           </button>
           <button
             @click="viewMode = 'list'"
@@ -32,7 +32,7 @@
             ]"
           >
             <el-icon class="mr-1"><List /></el-icon>
-            列表
+            {{ t('projectManagement.listView') }}
           </button>
         </div>
 
@@ -44,7 +44,7 @@
           class="bg-blue-600 hover:bg-blue-700"
         >
           <el-icon class="mr-2"><Plus /></el-icon>
-          添加工程
+          {{ t('projectManagement.addProject') }}
         </el-button>
         <el-button
           v-if="canManageProjects"
@@ -52,7 +52,7 @@
           @click="handleImportProject"
         >
           <el-icon class="mr-2"><Upload /></el-icon>
-          导入工程
+          {{ t('projectManagement.importProject') }}
         </el-button>
       </div>
     </div>
@@ -66,7 +66,7 @@
         <div class="flex items-center space-x-3">
           <el-input
             v-model="searchForm.name"
-            placeholder="输入工程名称搜索"
+            :placeholder="t('projectManagement.searchPlaceholder')"
             clearable
             style="width: 200px"
             @input="handleSearch"
@@ -87,7 +87,7 @@
               :loading="batchOperationLoading"
             >
               <el-icon class="mr-1"><Download /></el-icon>
-              批量导出 ({{ selectedProjects.length }})
+              {{ t('projectManagement.batchExport') }} ({{ selectedProjects.length }})
             </el-button>
             <el-button
               v-if="canManageProjects"
@@ -98,7 +98,7 @@
               :loading="batchOperationLoading"
             >
               <el-icon class="mr-1"><Delete /></el-icon>
-              批量删除 ({{ selectedProjects.length }})
+              {{ t('projectManagement.batchDelete') }} ({{ selectedProjects.length }})
             </el-button>
             <el-divider direction="vertical" />
           </template>
@@ -110,7 +110,7 @@
             @click="toggleSelectionMode"
           >
             <el-icon class="mr-1"><Select /></el-icon>
-            {{ selectionMode ? "取消选择" : "多选" }}
+            {{ selectionMode ? t("projectManagement.cancelSelection") : t("projectManagement.multiSelect") }}
           </el-button>
         </div>
       </div>
@@ -126,7 +126,7 @@
           v-if="projectList.length === 0 && !loading"
           class="text-center py-12"
         >
-          <el-empty description="暂无工程数据" />
+          <el-empty :description="t('projectManagement.emptyProjects')" />
         </div>
         <div
           v-else
@@ -174,19 +174,19 @@
 
             <!-- 工程描述 -->
             <p class="text-sm text-white opacity-90 mb-4 line-clamp-2">
-              {{ project.description || "暂无描述" }}
+              {{ project.description || t("projectManagement.noDescription") }}
             </p>
 
             <!-- 工程信息 -->
             <div class="space-y-2 mb-4">
               <div class="flex justify-between text-sm">
-                <span class="text-white opacity-75">创建者:</span>
+                <span class="text-white opacity-75">{{ t('projectManagement.creator') }}:</span>
                 <span class="text-white font-medium">{{
-                  project.creator?.fullName || "未知"
+                  project.creator?.fullName || t("projectManagement.unknown")
                 }}</span>
               </div>
               <div class="flex justify-between text-sm">
-                <span class="text-white opacity-75">运行模式:</span>
+                <span class="text-white opacity-75">{{ t('projectManagement.runtimeMode') }}:</span>
                 <el-tag
                   :type="getProjectModeTagType(project)"
                   size="small"
@@ -205,7 +205,7 @@
                 size="small"
                 @click.stop="updateDevProject(project)"
               >
-                更新
+                {{ t('projectManagement.update') }}
               </el-button>
               <el-button
                 v-if="canPerformOps"
@@ -213,17 +213,17 @@
                 size="small"
                 @click.stop="openDeployDialog(project)"
               >
-                部署
+                {{ t('projectManagement.deploy') }}
               </el-button>
               <el-button
                 v-if="
-                  canPerformOps && getProjectModeDisplay(project) !== '未部署'
+                  canPerformOps && getProjectModeDisplay(project) !== t('projectManagement.notDeployed')
                 "
                 type="warning"
                 size="small"
                 @click.stop="undeployProject(project)"
               >
-                撤销部署
+                {{ t('projectManagement.undeploy') }}
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -232,7 +232,7 @@
                 @click.stop="handleExportProject(project)"
               >
                 <el-icon class="mr-1"><Download /></el-icon>
-                导出
+                {{ t('projectManagement.export') }}
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -240,7 +240,7 @@
                 size="small"
                 @click.stop="deleteProject(project)"
               >
-                删除
+                {{ t('projectManagement.delete') }}
               </el-button>
             </div>
           </div>
@@ -263,7 +263,7 @@
             width="55"
             fixed="left"
           />
-          <el-table-column label="颜色" width="80">
+          <el-table-column :label="t('projectManagement.color')" width="80">
             <template #default="scope">
               <div
                 class="w-6 h-6 rounded-full border-2 border-white shadow-sm"
@@ -271,7 +271,7 @@
               ></div>
             </template>
           </el-table-column>
-          <el-table-column prop="name" label="工程名称" width="200">
+          <el-table-column prop="name" :label="t('projectManagement.projectName')" width="200">
             <template #default="scope">
               <span
                 class="cursor-pointer text-blue-600 hover:text-blue-800 underline"
@@ -281,14 +281,14 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="description" label="描述" width="200" />
-          <el-table-column prop="creator.fullName" label="创建者" width="200" />
-          <el-table-column prop="createdAt" label="创建时间" width="200">
+          <el-table-column prop="description" :label="t('projectManagement.description')" width="200" />
+          <el-table-column prop="creator.fullName" :label="t('projectManagement.createdBy')" width="200" />
+          <el-table-column prop="createdAt" :label="t('projectManagement.createdAt')" width="200">
             <template #default="scope">
               {{ formatDateTime(scope.row.createdAt) }}
             </template>
           </el-table-column>
-          <el-table-column label="运行模式" width="120" align="center">
+          <el-table-column :label="t('projectManagement.runtimeMode')" width="120" align="center">
             <template #default="scope">
               <el-tag :type="getProjectModeTagType(scope.row)" size="small">
                 {{ getProjectModeDisplay(scope.row) }}
@@ -296,7 +296,7 @@
             </template>
           </el-table-column>
           <el-table-column
-            label="操作"
+            :label="t('projectManagement.actions')"
             min-width="320"
             fixed="right"
             v-if="canManageProjects || canPerformOps"
@@ -311,7 +311,7 @@
                 @click="updateDevProject(scope.row)"
                 class="mr-2"
               >
-                更新
+                {{ t('projectManagement.update') }}
               </el-button>
               <el-button
                 v-if="canPerformOps"
@@ -320,18 +320,18 @@
                 @click="openDeployDialog(scope.row)"
                 class="mr-2"
               >
-                部署
+                {{ t('projectManagement.deploy') }}
               </el-button>
               <el-button
                 v-if="
-                  canPerformOps && getProjectModeDisplay(scope.row) !== '未部署'
+                  canPerformOps && getProjectModeDisplay(scope.row) !== t('projectManagement.notDeployed')
                 "
                 type="warning"
                 size="small"
                 @click="undeployProject(scope.row)"
                 class="mr-2"
               >
-                撤销部署
+                {{ t('projectManagement.undeploy') }}
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -341,7 +341,7 @@
                 class="mr-2"
               >
                 <el-icon class="mr-1"><Download /></el-icon>
-                导出
+                {{ t('projectManagement.export') }}
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -349,7 +349,7 @@
                 size="small"
                 @click="deleteProject(scope.row)"
               >
-                删除
+                {{ t('projectManagement.delete') }}
               </el-button>
             </template>
           </el-table-column>
@@ -362,9 +362,13 @@
         class="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700"
       >
         <div class="text-sm text-gray-500 dark:text-gray-400">
-          显示第 {{ (pagination.page - 1) * pagination.limit + 1 }} 到
-          {{ Math.min(pagination.page * pagination.limit, pagination.total) }}
-          条， 共 {{ pagination.total }} 条记录
+          {{
+            t('projectManagement.pageSummary', {
+              start: (pagination.page - 1) * pagination.limit + 1,
+              end: Math.min(pagination.page * pagination.limit, pagination.total),
+              total: pagination.total,
+            })
+          }}
         </div>
         <el-pagination
           v-model:current-page="pagination.page"
@@ -381,7 +385,7 @@
     <!-- 创建工程对话框 -->
     <el-dialog
       v-model="showCreateDialog"
-      title="创建工程"
+      :title="t('projectManagement.createDialog')"
       width="600px"
       :close-on-click-modal="false"
     >
@@ -391,21 +395,21 @@
         :rules="createFormRules"
         label-width="100px"
       >
-        <el-form-item label="工程名称" prop="name">
-          <el-input v-model="createForm.name" placeholder="请输入工程名称" />
+        <el-form-item :label="t('projectManagement.projectName')" prop="name">
+          <el-input v-model="createForm.name" :placeholder="t('projectManagement.inputProjectName')" />
         </el-form-item>
-        <el-form-item label="描述">
+        <el-form-item :label="t('projectManagement.description')">
           <el-input
             v-model="createForm.description"
             type="textarea"
-            placeholder="请输入工程描述"
+            :placeholder="t('projectManagement.inputProjectDescription')"
             :rows="3"
           />
         </el-form-item>
-        <el-form-item label="颜色标签">
+        <el-form-item :label="t('projectManagement.colorTag')">
           <el-select
             v-model="createForm.colorTag"
-            placeholder="请选择颜色标签"
+            :placeholder="t('projectManagement.selectColorTag')"
             style="width: 100%"
           >
             <el-option
@@ -428,15 +432,15 @@
       <template #footer>
         <el-button type="success" @click="importProject">
           <el-icon class="mr-1"><Upload /></el-icon>
-          导入工程
+          {{ t('projectManagement.importAction') }}
         </el-button>
-        <el-button @click="showCreateDialog = false">取消</el-button>
+        <el-button @click="showCreateDialog = false">{{ t('projectManagement.cancel') }}</el-button>
         <el-button
           type="primary"
           @click="handleCreateProject"
           :loading="createLoading"
         >
-          创建
+          {{ t('projectManagement.create') }}
         </el-button>
       </template>
     </el-dialog>
@@ -444,7 +448,7 @@
     <!-- 编辑工程对话框 -->
     <el-dialog
       v-model="showEditDialog"
-      title="编辑工程"
+      :title="t('projectManagement.editDialog')"
       width="600px"
       :close-on-click-modal="false"
     >
@@ -454,21 +458,21 @@
         :rules="editFormRules"
         label-width="100px"
       >
-        <el-form-item label="工程名称" prop="name">
-          <el-input v-model="editForm.name" placeholder="请输入工程名称" />
+        <el-form-item :label="t('projectManagement.projectName')" prop="name">
+          <el-input v-model="editForm.name" :placeholder="t('projectManagement.inputProjectName')" />
         </el-form-item>
-        <el-form-item label="描述">
+        <el-form-item :label="t('projectManagement.description')">
           <el-input
             v-model="editForm.description"
             type="textarea"
-            placeholder="请输入工程描述"
+            :placeholder="t('projectManagement.inputProjectDescription')"
             :rows="3"
           />
         </el-form-item>
-        <el-form-item label="颜色标签">
+        <el-form-item :label="t('projectManagement.colorTag')">
           <el-select
             v-model="editForm.colorTag"
-            placeholder="请选择颜色标签"
+            :placeholder="t('projectManagement.selectColorTag')"
             style="width: 100%"
           >
             <el-option
@@ -489,13 +493,13 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showEditDialog = false">取消</el-button>
+        <el-button @click="showEditDialog = false">{{ t('projectManagement.cancel') }}</el-button>
         <el-button
           type="primary"
           @click="handleUpdateProject"
           :loading="editLoading"
         >
-          保存
+          {{ t('projectManagement.save') }}
         </el-button>
       </template>
     </el-dialog>
@@ -503,7 +507,7 @@
     <!-- 运维操作对话框 -->
     <el-dialog
       v-model="showOperationDialog"
-      :title="`运维操作 - ${currentProject?.name || ''}`"
+      :title="t('projectManagement.operationDialog', { name: currentProject?.name || '' })"
       width="400px"
       :close-on-click-modal="false"
     >
@@ -516,7 +520,7 @@
           :loading="operationLoading"
         >
           <el-icon class="mr-2"><VideoPlay /></el-icon>
-          启动工程
+          {{ t('projectManagement.startProject') }}
         </el-button>
         <el-button
           type="warning"
@@ -526,7 +530,7 @@
           :loading="operationLoading"
         >
           <el-icon class="mr-2"><VideoPause /></el-icon>
-          停止工程
+          {{ t('projectManagement.stopProject') }}
         </el-button>
         <el-button
           type="info"
@@ -536,7 +540,7 @@
           :loading="operationLoading"
         >
           <el-icon class="mr-2"><RefreshRight /></el-icon>
-          重启工程
+          {{ t('projectManagement.restartProject') }}
         </el-button>
         <el-button
           type="primary"
@@ -546,7 +550,7 @@
           :loading="operationLoading"
         >
           <el-icon class="mr-2"><Upload /></el-icon>
-          部署工程
+          {{ t('projectManagement.deployProject') }}
         </el-button>
         <el-button
           type="danger"
@@ -556,7 +560,7 @@
           :loading="operationLoading"
         >
           <el-icon class="mr-2"><CopyDocument /></el-icon>
-          备份工程
+          {{ t('projectManagement.backupProject') }}
         </el-button>
       </div>
     </el-dialog>
@@ -564,33 +568,33 @@
     <!-- 部署对话框 -->
     <el-dialog
       v-model="showDeployDialog"
-      :title="`部署工程 - ${deployForm.project?.name || ''}`"
+      :title="t('projectManagement.deployDialog', { name: deployForm.project?.name || '' })"
       width="600px"
       :close-on-click-modal="false"
     >
       <!-- 当前模式显示 -->
       <div class="mb-4 p-3 bg-gray-100 dark:bg-gray-800 rounded">
-        <span class="text-gray-600 dark:text-gray-400">当前运行模式：</span>
+        <span class="text-gray-600 dark:text-gray-400">{{ t('projectManagement.currentMode') }}</span>
         <el-tag :type="getModeTagType(deployForm.currentMode)">
-          {{ deployForm.currentMode || "未部署" }}
+          {{ deployForm.currentMode || t('projectManagement.notDeployed') }}
         </el-tag>
       </div>
 
       <!-- 部署模式选择 -->
       <el-form :model="deployForm" label-width="100px">
-        <el-form-item label="部署模式">
+        <el-form-item :label="t('projectManagement.deployMode')">
           <el-radio-group v-model="deployForm.mode">
-            <el-radio value="RELEASE"> RELEASE（选择版本，独立运行） </el-radio>
-            <el-radio value="DEV"> DEV（选择节点，实时同步） </el-radio>
+            <el-radio value="RELEASE">{{ t('projectManagement.releaseModeDesc') }}</el-radio>
+            <el-radio value="DEV">{{ t('projectManagement.devModeDesc') }}</el-radio>
           </el-radio-group>
         </el-form-item>
 
         <!-- RELEASE模式：选择版本 -->
         <template v-if="deployForm.mode === 'RELEASE'">
-          <el-form-item label="版本号" required>
+          <el-form-item :label="t('projectManagement.version')" required>
             <el-select
               v-model="deployForm.version"
-              placeholder="选择已有版本或输入新版本"
+              :placeholder="t('projectManagement.selectOrInputVersion')"
               filterable
               allow-create
               style="width: 100%"
@@ -603,13 +607,13 @@
               />
             </el-select>
             <div class="text-xs text-gray-500 mt-1">
-              选择已有版本或输入新版本号进行发布部署
+              {{ t('projectManagement.versionHelp') }}
             </div>
           </el-form-item>
         </template>
 
         <!-- 选择节点 -->
-        <el-form-item label="目标节点" required>
+        <el-form-item :label="t('projectManagement.targetNode')" required>
           <el-checkbox-group v-model="deployForm.targetNodes">
             <el-checkbox v-for="n in availableNodes" :key="n.id" :value="n.id">
               {{ n.name }} ({{ n.ipAddress }})
@@ -641,11 +645,11 @@
           show-icon
           class="mt-4"
         >
-          <template #title> RELEASE 模式说明 </template>
+          <template #title>{{ t('projectManagement.releaseGuideTitle') }}</template>
           <ul class="text-sm mt-1">
-            <li>将停止选中节点上的所有DEV实例</li>
-            <li>切换数据库连接（开发库 → 本地库）</li>
-            <li>记录版本发布历史</li>
+            <li>{{ t('projectManagement.releaseGuide1') }}</li>
+            <li>{{ t('projectManagement.releaseGuide2') }}</li>
+            <li>{{ t('projectManagement.releaseGuide3') }}</li>
           </ul>
         </el-alert>
 
@@ -656,23 +660,23 @@
           show-icon
           class="mt-4"
         >
-          <template #title> DEV 模式说明 </template>
+          <template #title>{{ t('projectManagement.devGuideTitle') }}</template>
           <ul class="text-sm mt-1">
-            <li>节点直接连接开发环境数据库</li>
-            <li>实时同步设计修改（无需重新部署）</li>
-            <li>不记录版本发布历史</li>
+            <li>{{ t('projectManagement.devGuide1') }}</li>
+            <li>{{ t('projectManagement.devGuide2') }}</li>
+            <li>{{ t('projectManagement.devGuide3') }}</li>
           </ul>
         </el-alert>
       </el-form>
 
       <template #footer>
-        <el-button @click="showDeployDialog = false">取消</el-button>
+        <el-button @click="showDeployDialog = false">{{ t('projectManagement.cancel') }}</el-button>
         <el-button
           type="primary"
           @click="confirmDeploy"
           :loading="deployLoading"
         >
-          {{ deployForm.mode === "RELEASE" ? "发布并部署" : "部署DEV模式" }}
+          {{ deployForm.mode === "RELEASE" ? t('projectManagement.publishAndDeploy') : t('projectManagement.deployDevMode') }}
         </el-button>
       </template>
     </el-dialog>
@@ -680,7 +684,7 @@
     <!-- 工程功能选择弹窗 -->
     <el-dialog
       v-model="projectDialogVisible"
-      :title="'选择功能 - ' + (selectedProject?.name || '未知工程')"
+      :title="`${t('projectManagement.designCenter')} / ${t('projectManagement.dataCenter')} - ${selectedProject?.name || t('projectManagement.unknownProject')}`"
       width="600px"
       center
       :close-on-click-modal="false"
@@ -690,7 +694,7 @@
         <!-- 工程信息展示 -->
         <div class="text-center mb-6">
           <p class="text-sm text-gray-600 dark:text-gray-400">
-            {{ selectedProject?.description || "暂无描述" }}
+            {{ selectedProject?.description || t('projectManagement.noDescription') }}
           </p>
         </div>
 
@@ -903,6 +907,7 @@ import {
   onUnmounted,
   getCurrentInstance,
 } from "vue";
+import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import JSZip from "jszip";
 import { useAuthStore } from "@/store";
@@ -914,6 +919,7 @@ import { formatDateTime, formatDate, formatCurrency } from "@/utils";
 export default {
   name: "ProjectManagement",
   setup() {
+    const { t } = useI18n();
     const { emit } = getCurrentInstance();
     const authStore = useAuthStore();
 
@@ -994,11 +1000,15 @@ export default {
     // 创建表单验证规则
     const createFormRules = {
       name: [
-        { required: true, message: "请输入工程名称", trigger: "blur" },
+        {
+          required: true,
+          message: t("projectManagement.nameRequired"),
+          trigger: "blur",
+        },
         {
           min: 2,
           max: 100,
-          message: "工程名称长度在 2 到 100 个字符",
+          message: t("projectManagement.nameLength"),
           trigger: "blur",
         },
       ],
@@ -1015,11 +1025,15 @@ export default {
     // 编辑表单验证规则
     const editFormRules = {
       name: [
-        { required: true, message: "请输入工程名称", trigger: "blur" },
+        {
+          required: true,
+          message: t("projectManagement.nameRequired"),
+          trigger: "blur",
+        },
         {
           min: 2,
           max: 100,
-          message: "工程名称长度在 2 到 100 个字符",
+          message: t("projectManagement.nameLength"),
           trigger: "blur",
         },
       ],
@@ -1063,8 +1077,9 @@ export default {
         pagination.totalPages = response.pagination?.totalPages || 0;
       } catch (error) {
         ElMessage.error(
-          "获取工程列表失败：" +
-            (error.response?.data?.message || error.message),
+          t("projectManagement.fetchFailed", {
+            message: error.response?.data?.message || error.message,
+          }),
         );
       } finally {
         loading.value = false;
@@ -1132,13 +1147,15 @@ export default {
 
         await projectAPI.createProject(projectData);
 
-        ElMessage.success("工程创建成功");
+        ElMessage.success(t("projectManagement.createSuccess"));
         showCreateDialog.value = false;
         resetCreateForm();
         fetchProjects();
       } catch (error) {
         ElMessage.error(
-          "创建工程失败：" + (error.response?.data?.message || error.message),
+          t("projectManagement.createFailed", {
+            message: error.response?.data?.message || error.message,
+          }),
         );
       } finally {
         createLoading.value = false;
@@ -1199,12 +1216,14 @@ export default {
 
         await projectAPI.updateProject(editForm.id, projectData);
 
-        ElMessage.success("工程更新成功");
+        ElMessage.success(t("projectManagement.updateSuccess"));
         showEditDialog.value = false;
         fetchProjects();
       } catch (error) {
         ElMessage.error(
-          "更新工程失败：" + (error.response?.data?.message || error.message),
+          t("projectManagement.updateFailed", {
+            message: error.response?.data?.message || error.message,
+          }),
         );
       } finally {
         editLoading.value = false;
@@ -1215,22 +1234,24 @@ export default {
     const deleteProject = async (project) => {
       try {
         await ElMessageBox.confirm(
-          `确定要删除工程 "${project.name}" 吗？此操作不可恢复。`,
-          "确认删除",
+          t("projectManagement.deleteConfirm", { name: project.name }),
+          t("projectManagement.deleteConfirmTitle"),
           {
-            confirmButtonText: "确定删除",
-            cancelButtonText: "取消",
+            confirmButtonText: t("projectManagement.deleteConfirmButton"),
+            cancelButtonText: t("projectManagement.cancel"),
             type: "warning",
           },
         );
 
         await projectAPI.deleteProject(project.id);
-        ElMessage.success("工程删除成功");
+        ElMessage.success(t("projectManagement.deleteSuccess"));
         fetchProjects();
       } catch (error) {
         if (error !== "cancel") {
           ElMessage.error(
-            "删除工程失败：" + (error.response?.data?.message || error.message),
+            t("projectManagement.deleteFailed", {
+              message: error.response?.data?.message || error.message,
+            }),
           );
         }
       }
@@ -1251,10 +1272,12 @@ export default {
         link.download = `${project.name || "project"}.zip`;
         link.click();
         URL.revokeObjectURL(url);
-        ElMessage.success("工程已导出");
+        ElMessage.success(t("projectManagement.exportSuccess"));
       } catch (error) {
         ElMessage.error(
-          "导出工程失败：" + (error.response?.data?.message || error.message),
+          t("projectManagement.exportFailed", {
+            message: error.response?.data?.message || error.message,
+          }),
         );
       }
     };
@@ -1280,7 +1303,7 @@ export default {
 
             const projectJson = await readJson("project.json");
             if (!projectJson?.project) {
-              ElMessage.error("未找到project.json");
+              ElMessage.error(t("projectManagement.importMissingManifest"));
               return;
             }
             const globalVariables = await readJson(
@@ -1344,15 +1367,17 @@ export default {
           }
 
           if (!payload) {
-            ElMessage.error("工程数据格式不正确");
+            ElMessage.error(t("projectManagement.importInvalidFormat"));
             return;
           }
           await projectAPI.importProject({ payload });
-          ElMessage.success("工程已导入");
+          ElMessage.success(t("projectManagement.importSuccess"));
           fetchProjects();
         } catch (error) {
           ElMessage.error(
-            "导入工程失败：" + (error.response?.data?.message || error.message),
+            t("projectManagement.importFailed", {
+              message: error.response?.data?.message || error.message,
+            }),
           );
         }
       };
@@ -1374,24 +1399,27 @@ export default {
         await projectAPI.performOperation(currentProject.value.id, operation);
 
         ElMessage.success(
-          `工程${
-            operation === "start"
-              ? "启动"
-              : operation === "stop"
-                ? "停止"
-                : operation === "restart"
-                  ? "重启"
-                  : operation === "deploy"
-                    ? "部署"
-                    : "备份"
-          }操作成功`,
+          t("projectManagement.operationSuccess", {
+            action:
+              operation === "start"
+                ? t("projectManagement.actionStart")
+                : operation === "stop"
+                  ? t("projectManagement.actionStop")
+                  : operation === "restart"
+                    ? t("projectManagement.actionRestart")
+                    : operation === "deploy"
+                      ? t("projectManagement.actionDeploy")
+                      : t("projectManagement.actionBackup"),
+          }),
         );
 
         showOperationDialog.value = false;
         currentProject.value = null;
       } catch (error) {
         ElMessage.error(
-          `工程操作失败：${error.response?.data?.message || error.message}`,
+          t("projectManagement.operationFailed", {
+            message: error.response?.data?.message || error.message,
+          }),
         );
       } finally {
         operationLoading.value = false;
@@ -1453,7 +1481,7 @@ export default {
     // 批量导出工程
     const batchExportProjects = async () => {
       if (selectedProjects.value.length === 0) {
-        return ElMessage.warning("请先选择要导出的工程");
+        return ElMessage.warning(t("projectManagement.selectForExport"));
       }
 
       batchOperationLoading.value = true;
@@ -1485,7 +1513,7 @@ export default {
         }
 
         if (successCount === 0) {
-          ElMessage.error("批量导出失败，请检查网络或稍后重试");
+          ElMessage.error(t("projectManagement.batchExportFailed"));
           return;
         }
 
@@ -1498,12 +1526,25 @@ export default {
         URL.revokeObjectURL(url);
 
         if (failCount > 0) {
-          ElMessage.warning(`导出完成：成功 ${successCount} 个，失败 ${failCount} 个`);
+          ElMessage.warning(
+            t("projectManagement.batchExportSummary", {
+              success: successCount,
+              fail: failCount,
+            }),
+          );
         } else {
-          ElMessage.success(`批量导出成功，共 ${successCount} 个工程`);
+          ElMessage.success(
+            t("projectManagement.batchExportAllSuccess", {
+              success: successCount,
+            }),
+          );
         }
       } catch (error) {
-        ElMessage.error("批量导出失败：" + (error.response?.data?.message || error.message));
+        ElMessage.error(
+          t("projectManagement.batchExportError", {
+            message: error.response?.data?.message || error.message,
+          }),
+        );
       } finally {
         batchOperationLoading.value = false;
       }
@@ -1512,16 +1553,18 @@ export default {
     // 批量删除工程
     const batchDeleteProjects = async () => {
       if (selectedProjects.value.length === 0) {
-        return ElMessage.warning("请先选择要删除的工程");
+        return ElMessage.warning(t("projectManagement.selectForDelete"));
       }
       batchOperationLoading.value = true;
       try {
         await ElMessageBox.confirm(
-          `确定要删除选中的 ${selectedProjects.value.length} 个工程吗？此操作不可恢复。`,
-          "确认批量删除",
+          t("projectManagement.batchDeleteConfirm", {
+            count: selectedProjects.value.length,
+          }),
+          t("projectManagement.batchDeleteTitle"),
           {
-            confirmButtonText: "确定删除",
-            cancelButtonText: "取消",
+            confirmButtonText: t("projectManagement.deleteConfirmButton"),
+            cancelButtonText: t("projectManagement.cancel"),
             type: "warning",
           },
         );
@@ -1540,10 +1583,18 @@ export default {
         }
 
         if (successCount > 0) {
-          ElMessage.success(`成功删除 ${successCount} 个工程`);
+          ElMessage.success(
+            t("projectManagement.batchDeleteSuccess", {
+              success: successCount,
+            }),
+          );
         }
         if (failCount > 0) {
-          ElMessage.warning(`删除失败 ${failCount} 个工程`);
+          ElMessage.warning(
+            t("projectManagement.batchDeleteFail", {
+              fail: failCount,
+            }),
+          );
         }
 
         // 清除选择并刷新列表
@@ -1552,7 +1603,9 @@ export default {
       } catch (error) {
         if (error !== "cancel") {
           ElMessage.error(
-            "批量删除失败：" + (error.response?.data?.message || error.message),
+            t("projectManagement.batchDeleteError", {
+              message: error.response?.data?.message || error.message,
+            }),
           );
         }
       } finally {
@@ -1574,7 +1627,7 @@ export default {
         const EmbeddedApp = module.default;
         emit("open-tab", {
           key: `design-center-${project.id}`,
-          title: `${project.name} - 设计中心`,
+          title: `${project.name} - ${t("projectManagement.designCenter")}`,
           component: EmbeddedApp,
           props: {
             appType: "designer",
@@ -1593,7 +1646,7 @@ export default {
         const EmbeddedApp = module.default;
         emit("open-tab", {
           key: `data-center-${project.id}`,
-          title: `${project.name} - 数据中心`,
+          title: `${project.name} - ${t("projectManagement.dataCenter")}`,
           component: EmbeddedApp,
           props: {
             appType: "datacenter",
@@ -1621,16 +1674,18 @@ export default {
       // 从缓存中获取该工程在任意节点上的模式
       for (const nodeId in nodeModes) {
         if (nodeModes[nodeId]) {
-          return nodeModes[nodeId] === "DEV" ? "DEV" : "RELEASE";
+          return nodeModes[nodeId] === "DEV"
+            ? t("projectManagement.modeDisplayDev")
+            : t("projectManagement.modeDisplayRelease");
         }
       }
-      return "未部署";
+      return t("projectManagement.notDeployed");
     };
 
     // 获取工程模式标签类型
     const getProjectModeTagType = (project) => {
       const mode = getProjectModeDisplay(project);
-      return getModeTagType(mode === "未部署" ? null : mode);
+      return getModeTagType(mode === t("projectManagement.notDeployed") ? null : mode);
     };
 
     // 打开部署对话框
@@ -1838,11 +1893,11 @@ export default {
     const undeployProject = async (project) => {
       try {
         await ElMessageBox.confirm(
-          `确定要撤销工程 "${project.name}" 在所有节点上的部署吗？`,
-          "确认撤销",
+          t("opsManagement.undeployAllConfirm", { name: project.name }),
+          t("opsManagement.undeployAllTitle"),
           {
-            confirmButtonText: "确定撤销",
-            cancelButtonText: "取消",
+            confirmButtonText: t("opsManagement.undeployAllButton"),
+            cancelButtonText: t("projectManagement.cancel"),
             type: "warning",
           },
         );
@@ -1858,7 +1913,7 @@ export default {
           : deploymentsData.items || deploymentsData || [];
 
         if (nodeDeployments.length === 0) {
-          return ElMessage.warning("该工程没有部署记录");
+          return ElMessage.warning(t("opsManagement.noDeployRecord"));
         }
 
         // 逐个撤销部署
@@ -1872,12 +1927,18 @@ export default {
           }
         }
 
-        ElMessage.success(`成功撤销 ${successCount} 个节点的部署`);
+        ElMessage.success(
+          t("opsManagement.undeployAllSuccess", {
+            count: successCount,
+          }),
+        );
         fetchProjects();
       } catch (error) {
         if (error !== "cancel") {
           ElMessage.error(
-            "撤销部署失败：" + (error.response?.data?.message || error.message),
+            t("opsManagement.undeployFailed") +
+              "：" +
+              (error.response?.data?.message || error.message),
           );
         }
       }
@@ -1941,6 +2002,7 @@ export default {
       editFormRef,
 
       // 方法
+      t,
       canManageProjects,
       canPerformOps,
       fetchProjects,
