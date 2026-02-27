@@ -459,6 +459,11 @@ export const messages = {
       tenantManagement: '租户管理',
       logoutFailed: '登出失败',
     },
+    notFound: {
+      title: '页面未找到',
+      description: '抱歉，您访问的页面不存在或已被移除。',
+      backDashboard: '返回仪表板',
+    },
   },
   en: {
     common: {
@@ -917,6 +922,11 @@ export const messages = {
       profile: 'Profile',
       tenantManagement: 'Tenant Management',
       logoutFailed: 'Logout failed',
+    },
+    notFound: {
+      title: 'Page Not Found',
+      description: 'Sorry, the page you visited does not exist or has been removed.',
+      backDashboard: 'Back to Dashboard',
     },
   },
 }
