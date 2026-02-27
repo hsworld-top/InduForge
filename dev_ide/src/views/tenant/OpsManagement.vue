@@ -937,6 +937,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .ops-management {
+  padding: 20px;
   background-color: #f8fafc;
 }
 .dark .ops-management {
