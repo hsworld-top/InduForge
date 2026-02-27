@@ -109,7 +109,7 @@
             {{ appConfig?.name || 'InduForge' }}
           </h1>
           <p class="text-xl text-white text-opacity-90">
-            {{ appConfig?.description || '高效、安全的企业级解决方案' }}
+            {{ appConfig?.description || t('auth.defaultDescription') }}
           </p>
         </div>
       </div>

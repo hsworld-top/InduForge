@@ -7,7 +7,7 @@
       allow="cookies"
       sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-top-navigation allow-downloads"
     >
-      您的浏览器不支持 iframe。
+      {{ $t('common.iframeNotSupported') }}
     </iframe>
   </div>
 </template>

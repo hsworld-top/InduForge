@@ -226,7 +226,11 @@ export default {
           const logs = logsResult.value?.data?.logs || []
           recentActivities.value = logs.slice(0, 5).map((log, index) => ({
             id: log.id || `${log.createdAt}-${index}`,
-            description: log.message || `${log.action || '系统'} 操作`,
+            description:
+              log.message ||
+              t('dashboard.activityFallback', {
+                action: log.action || t('dashboard.systemAction'),
+              }),
             time: log.createdAt || '',
           }))
         } else {
