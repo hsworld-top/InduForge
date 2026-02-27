@@ -12,7 +12,7 @@ let storageStatus = {
 
 const getStorageConfig = () => {
   const endpoint = process.env.MINIO_ENDPOINT || '127.0.0.1';
-  const port = Number(process.env.MINIO_PORT || 9000);
+  const port = Number(process.env.MINIO_PORT || 25000);
   const useSSL = String(process.env.MINIO_USE_SSL || 'false') === 'true';
   const accessKey = process.env.MINIO_ACCESS_KEY || '';
   const secretKey = process.env.MINIO_SECRET_KEY || '';

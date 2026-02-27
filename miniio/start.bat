@@ -12,6 +12,6 @@ echo Access Key: %MINIO_ROOT_USER%
 echo Secret Key: %MINIO_ROOT_PASSWORD%
 echo.
 
-bin\minio.exe server data --address ":9000" --console-address ":9001"
+bin\minio.exe server data --address ":25000" --console-address ":25001"
 
 pause

@@ -753,6 +753,7 @@ export default {
       showEditDialog,
       logoInput,
       backgroundInput,
+      defaultLogoUrl,
       logoPreviewUrl,
       backgroundPreviewUrl,
       t,
