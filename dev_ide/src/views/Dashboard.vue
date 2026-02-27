@@ -583,6 +583,7 @@ export default {
   name: 'Dashboard',
   components: {
     Profile,
+    SystemSettings,
   },
   setup() {
     const router = useRouter()
