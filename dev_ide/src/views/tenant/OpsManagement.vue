@@ -1,7 +1,7 @@
 <template>
   <div class="ops-management h-full flex flex-col">
     <!-- 页面标题和页头操作 -->
-    <div class="flex justify-between items-center mb-6 px-6">
+    <div class="flex justify-between items-center mb-6">
       <div class="flex items-center space-x-4">
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('opsManagement.title') }}</h1>
         <el-tag border size="large" type="info" class="rounded-full">
@@ -33,7 +33,7 @@
     </div>
 
     <!-- 过滤器面板 -->
-    <div class="px-6 mb-6">
+    <div class="mb-6">
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
         <el-form :inline="true" :model="nodeSearch" class="flex flex-wrap gap-4 -mb-4">
           <el-form-item :label="t('opsManagement.nodeStatus')">
@@ -60,7 +60,7 @@
       </div>
     </div>
 
-    <div v-if="nodeLoadError" class="px-6 mb-4">
+    <div v-if="nodeLoadError" class="mb-4">
       <el-alert
         :title="nodeLoadError"
         type="error"
@@ -73,7 +73,7 @@
       </el-alert>
     </div>
 
-    <div class="px-6 mb-6">
+    <div class="mb-6">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="status-stat-card">
           <div class="status-stat-label">{{ t('opsManagement.running') }}</div>
@@ -103,7 +103,7 @@
     </div>
 
     <!-- 视图：节点大盘 -->
-    <div v-if="activeView === 'dashboard'" class="flex-1 overflow-y-auto px-6 pb-6">
+    <div v-if="activeView === 'dashboard'" class="flex-1 overflow-y-auto pb-6">
       <div v-loading="nodeLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <el-card
           v-for="node in nodeList"
@@ -260,7 +260,7 @@
     </div>
 
     <!-- 视图：详细列表 -->
-    <div v-else-if="activeView === 'list'" class="flex-1 overflow-y-auto px-6 pb-6">
+    <div v-else-if="activeView === 'list'" class="flex-1 overflow-y-auto pb-6">
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <el-table :data="nodeList" style="width: 100%">
           <el-table-column type="expand">
