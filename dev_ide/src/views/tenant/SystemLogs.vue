@@ -1,86 +1,86 @@
 <template>
   <div class="system-logs">
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">系统日志</h1>
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('systemLogs.title') }}</h1>
       <el-button @click="handleRefresh" :loading="loading">
         <el-icon><Refresh /></el-icon>
-        刷新
+        {{ t('systemLogs.refresh') }}
       </el-button>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
       <div class="stat-card">
-        <div class="stat-label">错误</div>
+        <div class="stat-label">{{ t('systemLogs.levelError') }}</div>
         <div class="stat-value text-red-600 dark:text-red-400">{{ levelStats.error || 0 }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">警告</div>
+        <div class="stat-label">{{ t('systemLogs.levelWarning') }}</div>
         <div class="stat-value text-orange-600 dark:text-orange-400">
           {{ levelStats.warning || 0 }}
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">信息</div>
+        <div class="stat-label">{{ t('systemLogs.levelInfo') }}</div>
         <div class="stat-value text-blue-600 dark:text-blue-400">{{ levelStats.info || 0 }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">调试</div>
+        <div class="stat-label">{{ t('systemLogs.levelDebug') }}</div>
         <div class="stat-value text-gray-700 dark:text-gray-300">{{ levelStats.debug || 0 }}</div>
       </div>
     </div>
 
     <div class="panel mb-6">
       <el-form :inline="true" :model="filters" class="flex flex-wrap gap-3">
-        <el-form-item label="级别">
-          <el-select v-model="filters.level" placeholder="全部级别" clearable style="width: 140px">
-            <el-option label="错误" value="error" />
-            <el-option label="警告" value="warning" />
-            <el-option label="信息" value="info" />
-            <el-option label="调试" value="debug" />
+        <el-form-item :label="t('systemLogs.level')">
+          <el-select v-model="filters.level" :placeholder="t('systemLogs.allLevel')" clearable style="width: 140px">
+            <el-option :label="t('systemLogs.levelError')" value="error" />
+            <el-option :label="t('systemLogs.levelWarning')" value="warning" />
+            <el-option :label="t('systemLogs.levelInfo')" value="info" />
+            <el-option :label="t('systemLogs.levelDebug')" value="debug" />
           </el-select>
         </el-form-item>
-        <el-form-item label="操作">
+        <el-form-item :label="t('systemLogs.action')">
           <el-input
             v-model="filters.action"
-            placeholder="输入操作名"
+            :placeholder="t('systemLogs.actionPlaceholder')"
             clearable
             style="width: 180px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
-        <el-form-item label="资源">
+        <el-form-item :label="t('systemLogs.resource')">
           <el-input
             v-model="filters.resource"
-            placeholder="输入资源名"
+            :placeholder="t('systemLogs.resourcePlaceholder')"
             clearable
             style="width: 180px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
-        <el-form-item label="时间范围">
+        <el-form-item :label="t('systemLogs.timeRange')">
           <el-date-picker
             v-model="filters.dateRange"
             type="datetimerange"
             value-format="YYYY-MM-DD HH:mm:ss"
-            range-separator="至"
-            start-placeholder="开始时间"
-            end-placeholder="结束时间"
+            :range-separator="t('systemLogs.rangeTo')"
+            :start-placeholder="t('systemLogs.startTime')"
+            :end-placeholder="t('systemLogs.endTime')"
             style="width: 360px"
           />
         </el-form-item>
         <el-form-item>
-          <el-button text @click="applyQuickRange('today')">今天</el-button>
-          <el-button text @click="applyQuickRange('last7')">近7天</el-button>
-          <el-button text @click="applyQuickRange('last30')">近30天</el-button>
+          <el-button text @click="applyQuickRange('today')">{{ t('systemLogs.today') }}</el-button>
+          <el-button text @click="applyQuickRange('last7')">{{ t('systemLogs.last7Days') }}</el-button>
+          <el-button text @click="applyQuickRange('last30')">{{ t('systemLogs.last30Days') }}</el-button>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
+          <el-button type="primary" @click="handleSearch">{{ t('systemLogs.query') }}</el-button>
+          <el-button @click="resetFilters">{{ t('systemLogs.reset') }}</el-button>
         </el-form-item>
-        <el-form-item label="筛选视图">
+        <el-form-item :label="t('systemLogs.filterView')">
           <el-select
             v-model="selectedViewId"
-            placeholder="选择已保存视图"
+            :placeholder="t('systemLogs.selectSavedView')"
             clearable
             style="width: 220px"
             @change="handleApplySavedView"
@@ -94,11 +94,11 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="success" plain @click="saveCurrentView">保存当前筛选</el-button>
+          <el-button type="success" plain @click="saveCurrentView">{{ t('systemLogs.saveCurrentFilter') }}</el-button>
           <el-button type="danger" plain :disabled="!selectedViewId" @click="removeSelectedView">
-            删除已选视图
+            {{ t('systemLogs.deleteSelectedView') }}
           </el-button>
-          <el-button type="primary" plain @click="handleExportCurrent">导出当前结果</el-button>
+          <el-button type="primary" plain @click="handleExportCurrent">{{ t('systemLogs.exportCurrentResult') }}</el-button>
         </el-form-item>
       </el-form>
     </div>
@@ -107,7 +107,7 @@
       <div v-if="loadError" class="px-4 pt-4">
         <el-alert :title="loadError" type="error" show-icon :closable="false">
           <template #default>
-            <el-button text type="primary" @click="handleRefresh">重新加载</el-button>
+            <el-button text type="primary" @click="handleRefresh">{{ t('systemLogs.reload') }}</el-button>
           </template>
         </el-alert>
       </div>
@@ -117,28 +117,28 @@
         style="width: 100%"
         :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
       >
-        <el-table-column prop="createdAt" label="时间" width="180">
+        <el-table-column prop="createdAt" :label="t('systemLogs.time')" width="180">
           <template #default="scope">
             {{ formatDateTime(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column prop="level" label="级别" width="90">
+        <el-table-column prop="level" :label="t('systemLogs.level')" width="90">
           <template #default="scope">
             <el-tag :type="getLevelTagType(scope.row.level)" size="small">
               {{ getLevelLabel(scope.row.level) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="action" label="操作" width="180" show-overflow-tooltip />
-        <el-table-column prop="resource" label="资源" width="180" show-overflow-tooltip />
-        <el-table-column prop="message" label="日志内容" min-width="280" show-overflow-tooltip />
-        <el-table-column prop="ip" label="IP" width="140" />
-        <el-table-column label="操作用户" width="140">
+        <el-table-column prop="action" :label="t('systemLogs.action')" width="180" show-overflow-tooltip />
+        <el-table-column prop="resource" :label="t('systemLogs.resource')" width="180" show-overflow-tooltip />
+        <el-table-column prop="message" :label="t('systemLogs.logContent')" min-width="280" show-overflow-tooltip />
+        <el-table-column prop="ip" :label="t('systemLogs.ip')" width="140" />
+        <el-table-column :label="t('systemLogs.user')" width="140">
           <template #default="scope">
             {{ scope.row.user?.fullName || scope.row.user?.username || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="租户" width="140">
+        <el-table-column :label="t('systemLogs.tenant')" width="140">
           <template #default="scope">
             {{ scope.row.tenant?.name || '-' }}
           </template>
@@ -163,6 +163,7 @@
 <script>
 import { ref, reactive, onMounted, computed } from 'vue'
 import dayjs from 'dayjs'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
@@ -172,6 +173,7 @@ import { STORAGE_KEYS, SYSTEM_LOG_PAGE_SIZE_OPTIONS } from '@/constants'
 export default {
   name: 'SystemLogs',
   setup() {
+    const { t } = useI18n()
     const loading = ref(false)
     const loadError = ref('')
     const logs = ref([])
@@ -224,8 +226,12 @@ export default {
         pagination.total = response.pagination?.total || 0
         pagination.totalPages = response.pagination?.totalPages || 0
       } catch (error) {
-        loadError.value = error.response?.data?.message || '获取系统日志失败，请稍后重试'
-        ElMessage.error('获取系统日志失败：' + (error.response?.data?.message || error.message))
+        loadError.value = error.response?.data?.message || t('systemLogs.fetchFailedRetry')
+        ElMessage.error(
+          t('systemLogs.fetchFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
       } finally {
         loading.value = false
       }
@@ -300,19 +306,27 @@ export default {
         link.download = `system-logs-${Date.now()}.csv`
         link.click()
         window.URL.revokeObjectURL(url)
-        ElMessage.success('日志导出成功')
+        ElMessage.success(t('systemLogs.exportSuccess'))
       } catch (error) {
-        ElMessage.error('日志导出失败：' + (error.response?.data?.message || error.message))
+        ElMessage.error(
+          t('systemLogs.exportFailed', {
+            message: error.response?.data?.message || error.message,
+          })
+        )
       }
     }
 
     const saveCurrentView = async () => {
-      const { value: name } = await ElMessageBox.prompt('请输入筛选视图名称', '保存筛选视图', {
-        confirmButtonText: '保存',
-        cancelButtonText: '取消',
+      const { value: name } = await ElMessageBox.prompt(
+        t('systemLogs.promptViewName'),
+        t('systemLogs.promptViewTitle'),
+        {
+          confirmButtonText: t('systemLogs.save'),
+          cancelButtonText: t('systemLogs.cancel'),
         inputPattern: /^.{1,20}$/,
-        inputErrorMessage: '名称长度需在 1 到 20 个字符',
-      }).catch(() => ({ value: '' }))
+          inputErrorMessage: t('systemLogs.nameLengthError'),
+        }
+      ).catch(() => ({ value: '' }))
 
       if (!name) return
 
@@ -339,13 +353,13 @@ export default {
           savedViews.value = savedViews.value
             .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
             .slice(0, 20)
-          ElMessage.warning('已超过20个筛选视图，已自动保留最近20个')
+          ElMessage.warning(t('systemLogs.limitViewsWarning'))
         }
       }
 
       Storage.set(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, savedViews.value)
       selectedViewId.value = newView.id
-      ElMessage.success(existingIndex > -1 ? '筛选视图已更新' : '筛选视图已保存')
+      ElMessage.success(existingIndex > -1 ? t('systemLogs.viewUpdated') : t('systemLogs.viewSaved'))
     }
 
     const handleApplySavedView = async (viewId, silent = false) => {
@@ -373,7 +387,7 @@ export default {
 
       await Promise.all([fetchLogs(), fetchStats()])
       if (!silent) {
-        ElMessage.success(`已应用筛选视图：${targetView.name}`)
+        ElMessage.success(t('systemLogs.viewApplied', { name: targetView.name }))
       }
     }
 
@@ -382,20 +396,24 @@ export default {
       if (!targetView) return
 
       try {
-        await ElMessageBox.confirm(`确定删除筛选视图 "${targetView.name}" 吗？`, '删除确认', {
-          confirmButtonText: '删除',
-          cancelButtonText: '取消',
+        await ElMessageBox.confirm(
+          t('systemLogs.removeViewConfirm', { name: targetView.name }),
+          t('systemLogs.removeViewTitle'),
+          {
+          confirmButtonText: t('systemLogs.remove'),
+          cancelButtonText: t('systemLogs.cancel'),
           type: 'warning',
-        })
+          }
+        )
 
         savedViews.value = savedViews.value.filter((item) => item.id !== selectedViewId.value)
         Storage.set(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, savedViews.value)
         Storage.remove(STORAGE_KEYS.SYSTEM_LOG_LAST_VIEW_ID)
         selectedViewId.value = ''
-        ElMessage.success('筛选视图已删除')
+        ElMessage.success(t('systemLogs.viewDeleted'))
       } catch (error) {
         if (error !== 'cancel') {
-          ElMessage.error('删除筛选视图失败')
+          ElMessage.error(t('systemLogs.viewDeleteFailed'))
         }
       }
     }
@@ -424,10 +442,10 @@ export default {
 
     const getLevelLabel = (level) => {
       const map = {
-        error: '错误',
-        warning: '警告',
-        info: '信息',
-        debug: '调试',
+        error: t('systemLogs.levelError'),
+        warning: t('systemLogs.levelWarning'),
+        info: t('systemLogs.levelInfo'),
+        debug: t('systemLogs.levelDebug'),
       }
       return map[level] || level || '-'
     }
@@ -443,6 +461,7 @@ export default {
 
     return {
       loading,
+      t,
       loadError,
       logs,
       filters,
