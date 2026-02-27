@@ -3,66 +3,40 @@
     <!-- 页面标题和操作栏 -->
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('userManagement.title') }}</h1>
-      <el-button
-        v-if="canManageUsers"
-        type="primary"
-        @click="showCreateDialog = true"
-        class="bg-blue-600 hover:bg-blue-700"
-      >
-        <el-icon class="mr-2"><Plus /></el-icon>
+      <el-button v-if="canManageUsers" type="primary" @click="showCreateDialog = true"
+        class="bg-blue-600 hover:bg-blue-700">
+        <el-icon class="mr-2">
+          <Plus />
+        </el-icon>
         {{ t('userManagement.addUser') }}
       </el-button>
     </div>
 
     <!-- 搜索和筛选栏 -->
-    <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6"
-    >
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
       <el-form :inline="true" :model="searchForm" class="flex flex-wrap gap-4">
         <el-form-item :label="t('userManagement.username')">
-          <el-input
-            v-model="searchForm.username"
-            :placeholder="t('userManagement.searchUsername')"
-            clearable
-            style="width: 200px"
-            @input="handleSearch"
-          />
+          <el-input v-model="searchForm.username" :placeholder="t('userManagement.searchUsername')" clearable
+            style="width: 200px" @input="handleSearch" />
         </el-form-item>
         <el-form-item :label="t('userManagement.role')">
-          <el-select
-            v-model="searchForm.role"
-            :placeholder="t('userManagement.selectRole')"
-            clearable
-            style="width: 150px"
-            @change="handleSearch"
-          >
-            <el-option
-              v-for="role in roleOptions"
-              :key="role.value"
-              :label="role.label"
-              :value="role.value"
-            />
+          <el-select v-model="searchForm.role" :placeholder="t('userManagement.selectRole')" clearable
+            style="width: 150px" @change="handleSearch">
+            <el-option v-for="role in roleOptions" :key="role.value" :label="role.label" :value="role.value" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('userManagement.status')">
-          <el-select
-            v-model="searchForm.status"
-            :placeholder="t('userManagement.selectStatus')"
-            clearable
-            style="width: 150px"
-            @change="handleSearch"
-          >
-            <el-option
-              v-for="status in statusOptions"
-              :key="status.value"
-              :label="status.label"
-              :value="status.value"
-            />
+          <el-select v-model="searchForm.status" :placeholder="t('userManagement.selectStatus')" clearable
+            style="width: 150px" @change="handleSearch">
+            <el-option v-for="status in statusOptions" :key="status.value" :label="status.label"
+              :value="status.value" />
           </el-select>
         </el-form-item>
         <el-form-item>
           <el-button @click="resetSearch" type="default">
-            <el-icon><Refresh /></el-icon>
+            <el-icon>
+              <Refresh />
+            </el-icon>
             {{ t('userManagement.reset') }}
           </el-button>
         </el-form-item>
@@ -70,15 +44,9 @@
     </div>
 
     <!-- 用户列表 -->
-    <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
-    >
-      <el-table
-        :data="userList"
-        v-loading="loading"
-        style="width: 100%"
-        :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
-      >
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+      <el-table :data="userList" v-loading="loading" style="width: 100%"
+        :header-cell-style="{ background: '#f9fafb', color: '#374151' }">
         <el-table-column prop="username" :label="t('userManagement.username')" width="120" />
         <el-table-column prop="fullName" :label="t('userManagement.fullName')" width="120" />
         <el-table-column prop="email" :label="t('userManagement.email')" width="300" />
@@ -119,12 +87,8 @@
             <el-button type="warning" size="small" @click="resetPassword(scope.row)" class="mr-2">
               {{ t('userManagement.resetPassword') }}
             </el-button>
-            <el-button
-              type="danger"
-              size="small"
-              @click="deleteUser(scope.row)"
-              v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole"
-            >
+            <el-button type="danger" size="small" @click="deleteUser(scope.row)"
+              v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole">
               {{ t('userManagement.delete') }}
             </el-button>
           </template>
@@ -132,9 +96,7 @@
       </el-table>
 
       <!-- 分页 -->
-      <div
-        class="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700"
-      >
+      <div class="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700">
         <div class="text-sm text-gray-500 dark:text-gray-400">
           {{
             t('userManagement.totalRange', {
@@ -144,44 +106,26 @@
             })
           }}
         </div>
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.limit"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
+        <el-pagination v-model:current-page="pagination.page" v-model:page-size="pagination.limit"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total" layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange" @current-change="handleCurrentChange" />
       </div>
     </div>
 
     <!-- 创建用户对话框 -->
-    <el-dialog
-      v-model="showCreateDialog"
-      :title="t('userManagement.createUser')"
-      width="500px"
-      :close-on-click-modal="false"
-    >
+    <el-dialog v-model="showCreateDialog" :title="t('userManagement.createUser')" width="500px"
+      :close-on-click-modal="false">
       <el-form ref="createFormRef" :model="createForm" :rules="createFormRules" label-width="100px">
         <el-form-item :label="t('userManagement.username')" prop="username">
           <el-input v-model="createForm.username" :placeholder="t('userManagement.inputUsername')" />
         </el-form-item>
         <el-form-item :label="t('auth.password')" prop="password">
-          <el-input
-            v-model="createForm.password"
-            type="password"
-            :placeholder="t('userManagement.inputPassword')"
-            show-password
-          />
+          <el-input v-model="createForm.password" type="password" :placeholder="t('userManagement.inputPassword')"
+            show-password />
         </el-form-item>
         <el-form-item :label="t('profile.confirmPassword')" prop="confirmPassword">
-          <el-input
-            v-model="createForm.confirmPassword"
-            type="password"
-            :placeholder="t('userManagement.inputConfirmPassword')"
-            show-password
-          />
+          <el-input v-model="createForm.confirmPassword" type="password"
+            :placeholder="t('userManagement.inputConfirmPassword')" show-password />
         </el-form-item>
         <el-form-item :label="t('userManagement.email')" prop="email">
           <el-input v-model="createForm.email" :placeholder="t('userManagement.inputEmail')" />
@@ -191,12 +135,7 @@
         </el-form-item>
         <el-form-item :label="t('userManagement.role')" prop="role">
           <el-select v-model="createForm.role" :placeholder="t('userManagement.chooseRole')" style="width: 100%">
-            <el-option
-              v-for="role in roleOptions"
-              :key="role.value"
-              :label="role.label"
-              :value="role.value"
-            />
+            <el-option v-for="role in roleOptions" :key="role.value" :label="role.label" :value="role.value" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -209,12 +148,8 @@
     </el-dialog>
 
     <!-- 编辑用户对话框 -->
-    <el-dialog
-      v-model="showEditDialog"
-      :title="t('userManagement.editUser')"
-      width="500px"
-      :close-on-click-modal="false"
-    >
+    <el-dialog v-model="showEditDialog" :title="t('userManagement.editUser')" width="500px"
+      :close-on-click-modal="false">
       <el-form ref="editFormRef" :model="editForm" :rules="editFormRules" label-width="100px">
         <el-form-item :label="t('userManagement.username')">
           <el-input v-model="editForm.username" disabled />
@@ -226,28 +161,15 @@
           <el-input v-model="editForm.fullName" :placeholder="t('userManagement.inputFullName')" />
         </el-form-item>
         <el-form-item :label="t('userManagement.role')" prop="role">
-          <el-select
-            v-model="editForm.role"
-            :placeholder="t('userManagement.chooseRole')"
-            style="width: 100%"
-            :disabled="!canEditRole"
-          >
-            <el-option
-              v-for="role in roleOptions"
-              :key="role.value"
-              :label="role.label"
-              :value="role.value"
-            />
+          <el-select v-model="editForm.role" :placeholder="t('userManagement.chooseRole')" style="width: 100%"
+            :disabled="!canEditRole">
+            <el-option v-for="role in roleOptions" :key="role.value" :label="role.label" :value="role.value" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('userManagement.status')" prop="status">
           <el-select v-model="editForm.status" :placeholder="t('userManagement.chooseStatus')" style="width: 100%">
-            <el-option
-              v-for="status in statusOptions"
-              :key="status.value"
-              :label="status.label"
-              :value="status.value"
-            />
+            <el-option v-for="status in statusOptions" :key="status.value" :label="status.label"
+              :value="status.value" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -260,33 +182,16 @@
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog
-      v-model="showPasswordDialog"
-      :title="t('userManagement.resetPassword')"
-      width="400px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="passwordFormRef"
-        :model="passwordForm"
-        :rules="passwordFormRules"
-        label-width="100px"
-      >
+    <el-dialog v-model="showPasswordDialog" :title="t('userManagement.resetPassword')" width="400px"
+      :close-on-click-modal="false">
+      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordFormRules" label-width="100px">
         <el-form-item :label="t('profile.newPassword')" prop="newPassword">
-          <el-input
-            v-model="passwordForm.newPassword"
-            type="password"
-            :placeholder="t('userManagement.inputNewPassword')"
-            show-password
-          />
+          <el-input v-model="passwordForm.newPassword" type="password"
+            :placeholder="t('userManagement.inputNewPassword')" show-password />
         </el-form-item>
         <el-form-item :label="t('profile.confirmPassword')" prop="confirmPassword">
-          <el-input
-            v-model="passwordForm.confirmPassword"
-            type="password"
-            :placeholder="t('userManagement.inputConfirmPassword')"
-            show-password
-          />
+          <el-input v-model="passwordForm.confirmPassword" type="password"
+            :placeholder="t('userManagement.inputConfirmPassword')" show-password />
         </el-form-item>
       </el-form>
       <template #footer>

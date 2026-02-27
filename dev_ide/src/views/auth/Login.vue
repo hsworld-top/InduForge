@@ -4,8 +4,8 @@
     class="min-h-screen bg-cover bg-center bg-no-repeat relative"
     :style="{ backgroundImage: `url(${backgroundImageUrl})` }"
   >
-    <!-- 背景遮罩层 -->
-    <div class="absolute inset-0 bg-black bg-opacity-50"></div>
+    <!-- 背景遮罩层：使用轻量蓝色蒙层，避免默认背景被压灰 -->
+    <div class="absolute inset-0 bg-blue-900 bg-opacity-20"></div>
 
     <!-- 右上角控制按钮 -->
     <div class="absolute top-4 right-4 flex items-center space-x-2 z-10">

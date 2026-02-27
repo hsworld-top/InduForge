@@ -1,9 +1,9 @@
 <svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Default Login Background">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f172a" />
-      <stop offset="45%" stop-color="#0b3b63" />
-      <stop offset="100%" stop-color="#1e3a8a" />
+      <stop offset="0%" stop-color="#0b4fd6" />
+      <stop offset="45%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#2563eb" />
     </linearGradient>
     <radialGradient id="glow1" cx="0%" cy="0%" r="60%">
       <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.32" />
