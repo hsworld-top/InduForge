@@ -1038,8 +1038,18 @@ export default {
   margin-bottom: 0;
 }
 
+.dashboard-tabs :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
 .dashboard-tabs :deep(.el-tabs__nav) {
   border-radius: 6px;
+  border-bottom: 1px solid rgb(229 231 235);
+  overflow: hidden;
+}
+
+.dashboard-tabs :deep(.dark .el-tabs__nav) {
+  border-bottom-color: rgb(55 65 81);
 }
 
 .dashboard-tabs :deep(.el-tabs__item) {
