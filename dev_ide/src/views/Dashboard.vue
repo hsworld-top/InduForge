@@ -1,10 +1,8 @@
 <template>
   <div class="dashboard" :class="{ 'dashboard-maximized': isTabMaximized }">
     <!-- 页面头部 -->
-    <div
-      v-if="!isTabMaximized"
-      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 h-12 px-4"
-    >
+    <div v-if="!isTabMaximized"
+      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 h-12 px-4">
       <div class="flex items-center justify-between h-full">
         <!-- Logo 图片 -->
         <div class="flex items-center">
@@ -16,76 +14,46 @@
         <div class="flex items-center space-x-2">
           <!-- 语言切换 -->
           <div class="relative language-menu">
-            <button
-              @click="showLanguageMenu = !showLanguageMenu"
-              class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
+            <button @click="showLanguageMenu = !showLanguageMenu"
+              class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
-                />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
               </svg>
             </button>
 
             <!-- 语言选择下拉菜单 -->
-            <div
-              v-if="showLanguageMenu"
-              class="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10"
-            >
-              <button
-                @click="changeLanguage('zh')"
-                :class="[
-                  'block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
-                  currentLanguage === 'zh'
-                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                    : 'text-gray-700 dark:text-gray-300',
-                ]"
-              >
+            <div v-if="showLanguageMenu"
+              class="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
+              <button @click="changeLanguage('zh')" :class="[
+                'block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
+                currentLanguage === 'zh'
+                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                  : 'text-gray-700 dark:text-gray-300',
+              ]">
                 {{ t('system.languageZh') }}
               </button>
-              <button
-                @click="changeLanguage('en')"
-                :class="[
-                  'block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
-                  currentLanguage === 'en'
-                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                    : 'text-gray-700 dark:text-gray-300',
-                ]"
-              >
+              <button @click="changeLanguage('en')" :class="[
+                'block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
+                currentLanguage === 'en'
+                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                  : 'text-gray-700 dark:text-gray-300',
+              ]">
                 {{ t('system.languageEn') }}
               </button>
             </div>
           </div>
 
           <!-- 主题切换 -->
-          <button
-            @click="toggleTheme"
-            class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            <svg
-              v-if="isDark"
-              class="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-              />
+          <button @click="toggleTheme"
+            class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <svg v-if="isDark" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
             <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-              />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
             </svg>
           </button>
 
@@ -93,47 +61,29 @@
 
           <!-- 用户菜单 -->
           <div class="relative user-menu">
-            <button
-              @click="showUserMenu = !showUserMenu"
-              class="flex items-center gap-2 h-8 px-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <img
-                v-if="userAvatarUrl"
-                :src="userAvatarUrl"
-                alt="avatar"
-                class="w-6 h-6 rounded-full object-cover"
-              />
-              <div
-                v-else
-                class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-medium"
-              >
+            <button @click="showUserMenu = !showUserMenu"
+              class="flex items-center gap-2 h-8 px-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+              <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="avatar" class="w-6 h-6 rounded-full object-cover" />
+              <div v-else
+                class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-medium">
                 {{ userInitials }}
               </div>
               <span class="text-xs text-gray-600 dark:text-gray-400">{{ username }}</span>
             </button>
 
             <!-- 下拉菜单 -->
-            <div
-              v-if="showUserMenu"
-              class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10"
-            >
-              <button
-                @click="openProfileDialog"
-                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
+            <div v-if="showUserMenu"
+              class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
+              <button @click="openProfileDialog"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                 {{ t('dashboard.profile') }}
               </button>
-              <button
-                v-if="isSystemAdmin"
-                @click="openSystemSettingsDialog"
-                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
+              <button v-if="isSystemAdmin" @click="openSystemSettingsDialog"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                 {{ t('dashboard.menuSettings') }}
               </button>
-              <button
-                @click="handleLogout"
-                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
+              <button @click="handleLogout"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                 {{ t('auth.logout') }}
               </button>
             </div>
@@ -145,298 +95,188 @@
     <!-- 主要内容区域 -->
     <div class="flex flex-1 overflow-hidden">
       <!-- 左侧菜单栏 -->
-      <div
-        v-if="!isTabMaximized"
-        :class="[
-          'relative border-r transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col',
-          isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200',
-          sidebarCollapsed ? 'w-10' : 'w-40',
-        ]"
-      >
+      <div v-if="!isTabMaximized" :class="[
+        'relative border-r transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col',
+        isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200',
+        sidebarCollapsed ? 'w-10' : 'w-40',
+      ]">
         <div :class="[sidebarCollapsed ? 'p-1.5' : 'p-2', 'flex-1 overflow-y-auto']">
           <nav class="space-y-2">
-            <el-tooltip
-              v-if="isSystemAdmin"
-              :content="t('dashboard.title')"
-              placement="right"
-              :show-after="500"
-              :disabled="!sidebarCollapsed"
-            >
-              <button
-                @click="openTab('dashboard')"
-                :class="[
-                  'w-full h-11 flex items-center rounded-lg transition-colors',
-                  sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
-                ]"
-              >
-                <span
-                  :class="[
-                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                    activeTab === 'dashboard'
-                      ? 'bg-blue-600 text-white'
-                      : isDark
-                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
-                  ]"
-                >
+            <el-tooltip v-if="isSystemAdmin" :content="t('dashboard.title')" placement="right" :show-after="500"
+              :disabled="!sidebarCollapsed">
+              <button @click="openTab('dashboard')" :class="[
+                'w-full h-11 flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
+              ]">
+                <span :class="[
+                  'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                  activeTab === 'dashboard'
+                    ? 'bg-blue-600 text-white'
+                    : isDark
+                      ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                ]">
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M4 5a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M12 5a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V5zM4 15a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM12 15a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4z"
-                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 5a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 5a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V5zM4 15a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM12 15a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4z" />
                   </svg>
                 </span>
-                <span
-                  :class="[
-                    'sidebar-menu-label text-sm font-medium',
-                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
-                    activeTab === 'dashboard' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
-                  ]"
-                >
+                <span :class="[
+                  'sidebar-menu-label text-sm font-medium',
+                  sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
+                  activeTab === 'dashboard' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                ]">
                   {{ t('dashboard.title') }}
                 </span>
               </button>
             </el-tooltip>
 
-            <el-tooltip
-              v-if="isSuperAdmin"
-              :content="t('dashboard.menuTenant')"
-              placement="right"
-              :show-after="500"
-              :disabled="!sidebarCollapsed"
-            >
-              <button
-                @click="openTab('tenant-management')"
-                :class="[
-                  'w-full h-11 flex items-center rounded-lg transition-colors',
-                  sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
-                ]"
-              >
-                <span
-                  :class="[
-                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                    activeTab === 'tenant-management'
-                      ? 'bg-blue-600 text-white'
-                      : isDark
-                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
-                  ]"
-                >
+            <el-tooltip v-if="isSuperAdmin" :content="t('dashboard.menuTenant')" placement="right" :show-after="500"
+              :disabled="!sidebarCollapsed">
+              <button @click="openTab('tenant-management')" :class="[
+                'w-full h-11 flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
+              ]">
+                <span :class="[
+                  'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                  activeTab === 'tenant-management'
+                    ? 'bg-blue-600 text-white'
+                    : isDark
+                      ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                ]">
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
                 </span>
-                <span
-                  :class="[
-                    'sidebar-menu-label text-sm font-medium',
-                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
-                    activeTab === 'tenant-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
-                  ]"
-                >
+                <span :class="[
+                  'sidebar-menu-label text-sm font-medium',
+                  sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
+                  activeTab === 'tenant-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                ]">
                   {{ t('dashboard.menuTenant') }}
                 </span>
               </button>
             </el-tooltip>
 
-            <el-tooltip
-              v-if="isSuperAdmin || isSystemAdmin || isUserAdmin"
-              :content="t('dashboard.menuUser')"
-              placement="right"
-              :show-after="500"
-              :disabled="!sidebarCollapsed"
-            >
-              <button
-                @click="openTab('user-management')"
-                :class="[
-                  'w-full h-11 flex items-center rounded-lg transition-colors',
-                  sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
-                ]"
-              >
-                <span
-                  :class="[
-                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                    activeTab === 'user-management'
-                      ? 'bg-blue-600 text-white'
-                      : isDark
-                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
-                  ]"
-                >
-                  <el-icon class="w-5 h-5"><UserFilled /></el-icon>
+            <el-tooltip v-if="isSuperAdmin || isSystemAdmin || isUserAdmin" :content="t('dashboard.menuUser')"
+              placement="right" :show-after="500" :disabled="!sidebarCollapsed">
+              <button @click="openTab('user-management')" :class="[
+                'w-full h-11 flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
+              ]">
+                <span :class="[
+                  'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                  activeTab === 'user-management'
+                    ? 'bg-blue-600 text-white'
+                    : isDark
+                      ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                ]">
+                  <el-icon class="w-5 h-5">
+                    <UserFilled />
+                  </el-icon>
                 </span>
-                <span
-                  :class="[
-                    'sidebar-menu-label text-sm font-medium',
-                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
-                    activeTab === 'user-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
-                  ]"
-                >
+                <span :class="[
+                  'sidebar-menu-label text-sm font-medium',
+                  sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
+                  activeTab === 'user-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                ]">
                   {{ t('dashboard.menuUser') }}
                 </span>
               </button>
             </el-tooltip>
 
-            <el-tooltip
-              v-if="isSuperAdmin || isSystemAdmin || isProjectAdmin"
-              :content="t('dashboard.menuProject')"
-              placement="right"
-              :show-after="500"
-              :disabled="!sidebarCollapsed"
-            >
-              <button
-                @click="openTab('project-management')"
-                :class="[
-                  'w-full h-11 flex items-center rounded-lg transition-colors',
-                  sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
-                ]"
-              >
-                <span
-                  :class="[
-                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                    activeTab === 'project-management'
-                      ? 'bg-blue-600 text-white'
-                      : isDark
-                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
-                  ]"
-                >
+            <el-tooltip v-if="isSuperAdmin || isSystemAdmin || isProjectAdmin" :content="t('dashboard.menuProject')"
+              placement="right" :show-after="500" :disabled="!sidebarCollapsed">
+              <button @click="openTab('project-management')" :class="[
+                'w-full h-11 flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
+              ]">
+                <span :class="[
+                  'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                  activeTab === 'project-management'
+                    ? 'bg-blue-600 text-white'
+                    : isDark
+                      ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                ]">
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M3 11h18"
-                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 11h18" />
                   </svg>
                 </span>
-                <span
-                  :class="[
-                    'sidebar-menu-label text-sm font-medium',
-                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
-                    activeTab === 'project-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
-                  ]"
-                >
+                <span :class="[
+                  'sidebar-menu-label text-sm font-medium',
+                  sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
+                  activeTab === 'project-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                ]">
                   {{ t('dashboard.menuProject') }}
                 </span>
               </button>
             </el-tooltip>
 
-            <el-tooltip
-              v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin"
-              :content="t('dashboard.menuOps')"
-              placement="right"
-              :show-after="500"
-              :disabled="!sidebarCollapsed"
-            >
-              <button
-                @click="openTab('ops-management')"
-                :class="[
-                  'w-full h-11 flex items-center rounded-lg transition-colors',
-                  sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
-                ]"
-              >
-                <span
-                  :class="[
-                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                    activeTab === 'ops-management'
-                      ? 'bg-blue-600 text-white'
-                      : isDark
-                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
-                  ]"
-                >
+            <el-tooltip v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin" :content="t('dashboard.menuOps')"
+              placement="right" :show-after="500" :disabled="!sidebarCollapsed">
+              <button @click="openTab('ops-management')" :class="[
+                'w-full h-11 flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
+              ]">
+                <span :class="[
+                  'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                  activeTab === 'ops-management'
+                    ? 'bg-blue-600 text-white'
+                    : isDark
+                      ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                ]">
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </span>
-                <span
-                  :class="[
-                    'sidebar-menu-label text-sm font-medium',
-                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
-                    activeTab === 'ops-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
-                  ]"
-                >
+                <span :class="[
+                  'sidebar-menu-label text-sm font-medium',
+                  sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
+                  activeTab === 'ops-management' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                ]">
                   {{ t('dashboard.menuOps') }}
                 </span>
               </button>
             </el-tooltip>
 
-            <el-tooltip
-              v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin"
-              :content="t('dashboard.menuLogs')"
-              placement="right"
-              :show-after="500"
-              :disabled="!sidebarCollapsed"
-            >
-              <button
-                @click="openTab('system-logs')"
-                :class="[
-                  'w-full h-11 flex items-center rounded-lg transition-colors',
-                  sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
-                ]"
-              >
-                <span
-                  :class="[
-                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                    activeTab === 'system-logs'
-                      ? 'bg-blue-600 text-white'
-                      : isDark
-                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
-                  ]"
-                >
+            <el-tooltip v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin" :content="t('dashboard.menuLogs')"
+              placement="right" :show-after="500" :disabled="!sidebarCollapsed">
+              <button @click="openTab('system-logs')" :class="[
+                'w-full h-11 flex items-center rounded-lg transition-colors',
+                sidebarCollapsed ? 'justify-center' : 'px-2 gap-2 justify-start',
+              ]">
+                <span :class="[
+                  'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                  activeTab === 'system-logs'
+                    ? 'bg-blue-600 text-white'
+                    : isDark
+                      ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
+                ]">
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M9 3h6a1 1 0 011 1v2H8V4a1 1 0 011-1zM9 11h6M9 15h6"
-                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 3h6a1 1 0 011 1v2H8V4a1 1 0 011-1zM9 11h6M9 15h6" />
                   </svg>
                 </span>
-                <span
-                  :class="[
-                    'sidebar-menu-label text-sm font-medium',
-                    sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
-                    activeTab === 'system-logs' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
-                  ]"
-                >
+                <span :class="[
+                  'sidebar-menu-label text-sm font-medium',
+                  sidebarCollapsed ? 'sidebar-menu-label-collapsed' : 'sidebar-menu-label-expanded',
+                  activeTab === 'system-logs' ? 'text-blue-600' : (isDark ? 'text-gray-200' : 'text-gray-700'),
+                ]">
                   {{ t('dashboard.menuLogs') }}
                 </span>
               </button>
@@ -444,25 +284,16 @@
 
           </nav>
         </div>
-        <button
-          @click="toggleSidebar"
-          :class="[
-            'absolute z-30 top-1/2 -right-3 -translate-y-1/2 h-9 w-6 rounded-full border shadow-sm flex items-center justify-center transition-all duration-200',
-            isDark
-              ? 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 hover:border-gray-600'
-              : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300',
-          ]"
-          aria-label="Toggle sidebar"
-        >
-          <svg
-            :class="[
-              'w-3.5 h-3.5 transition-transform duration-200 ease-out',
-              sidebarCollapsed ? 'rotate-180' : '',
-            ]"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
+        <button @click="toggleSidebar" :class="[
+          'absolute z-30 top-1/2 -right-3 -translate-y-1/2 h-9 w-6 rounded-full border shadow-sm flex items-center justify-center transition-all duration-200',
+          isDark
+            ? 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 hover:border-gray-600'
+            : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300',
+        ]" aria-label="Toggle sidebar">
+          <svg :class="[
+            'w-3.5 h-3.5 transition-transform duration-200 ease-out',
+            sidebarCollapsed ? 'rotate-180' : '',
+          ]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 6l-6 6 6 6" />
           </svg>
         </button>
@@ -472,56 +303,35 @@
       <div :class="['flex-1 overflow-hidden', isTabMaximized ? '' : 'pl-3']">
         <div v-if="tabs.length > 0" class="h-full">
           <!-- 最大化时的工具栏 -->
-          <div v-if="isTabMaximized" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center justify-between">
+          <div v-if="isTabMaximized"
+            class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center justify-between">
             <div class="flex items-center space-x-2">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ getCurrentTabTitle() }}</span>
             </div>
             <el-button size="small" circle @click="restoreTab">
-              <el-icon><FullScreen /></el-icon>
+              <el-icon>
+                <FullScreen />
+              </el-icon>
             </el-button>
           </div>
-          <el-tabs
-            v-model="activeTab"
-            type="card"
-            :closable="(tab) => tab.key !== 'dashboard'"
-            @tab-remove="closeTab"
-            :class="['dashboard-tabs h-full', isTabMaximized ? 'dashboard-tabs-maximized' : '']"
-          >
-            <el-tab-pane
-              v-for="tab in tabs"
-              :key="tab.key"
-              :name="tab.key"
-              :v-show="isTabVisible(tab.key)"
-            >
+          <el-tabs v-model="activeTab" type="card" :closable="(tab) => tab.key !== 'dashboard'" @tab-remove="closeTab"
+            :class="['dashboard-tabs h-full', isTabMaximized ? 'dashboard-tabs-maximized' : '']">
+            <el-tab-pane v-for="tab in tabs" :key="tab.key" :name="tab.key" :v-show="isTabVisible(tab.key)">
               <template #label>
                 <div class="flex items-center space-x-2">
                   <span>{{ getTabTitle(tab) }}</span>
-                  <el-button
-                    v-if="tab.props?.appType"
-                    size="small"
-                    text
-                    circle
-                    class="!p-0 !w-4 !h-4"
-                    @click.stop="openExternalTab(tab)"
-                  >
+                  <el-button v-if="tab.props?.appType" size="small" text circle class="!p-0 !w-4 !h-4"
+                    @click.stop="openExternalTab(tab)">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M14 3h7v7m0-7L10 14m-4 7h11a2 2 0 002-2V8"
-                      />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M14 3h7v7m0-7L10 14m-4 7h11a2 2 0 002-2V8" />
                     </svg>
                   </el-button>
-                  <el-button
-                    v-if="!isTabMaximized && tab.key !== 'dashboard'"
-                    size="small"
-                    text
-                    circle
-                    class="!p-0 !w-4 !h-4"
-                    @click.stop="maximizeTab(tab.key)"
-                  >
-                    <el-icon class="text-xs"><FullScreen /></el-icon>
+                  <el-button v-if="!isTabMaximized && tab.key !== 'dashboard'" size="small" text circle
+                    class="!p-0 !w-4 !h-4" @click.stop="maximizeTab(tab.key)">
+                    <el-icon class="text-xs">
+                      <FullScreen />
+                    </el-icon>
                   </el-button>
                 </div>
               </template>
@@ -534,24 +344,13 @@
       </div>
     </div>
 
-    <el-dialog
-      v-model="showProfileDialog"
-      width="760px"
-      destroy-on-close
-      append-to-body
-      class="profile-dialog"
-      :title="t('profile.title')"
-    >
+    <el-dialog v-model="showProfileDialog" width="760px" destroy-on-close append-to-body class="profile-dialog"
+      :title="t('profile.title')">
       <Profile :embedded="true" />
     </el-dialog>
 
-    <el-dialog
-      v-model="showSystemSettingsDialog"
-      width="960px"
-      destroy-on-close
-      append-to-body
-      :title="t('dashboard.menuSettings')"
-    >
+    <el-dialog v-model="showSystemSettingsDialog" width="960px" destroy-on-close append-to-body
+      :title="t('dashboard.menuSettings')">
       <SystemSettings />
     </el-dialog>
   </div>
@@ -761,7 +560,7 @@ export default {
       if (isObject && customComponent) {
         // 自定义标签页配置
         // 如果组件是函数（可能是动态导入），使用 defineAsyncComponent 包装以确保正确处理
-        const component = typeof customComponent === 'function' 
+        const component = typeof customComponent === 'function'
           ? defineAsyncComponent(customComponent)
           : customComponent
         config = {
@@ -1124,7 +923,6 @@ html.dark .dashboard-tabs :deep(.el-tabs__nav),
 
 .dashboard-tabs :deep(.el-tabs__item) {
   border-radius: 4px 4px 0 0;
-  margin-right: 4px;
   color: rgb(55 65 81);
   padding: 6px 12px;
   height: 36px;
