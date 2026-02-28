@@ -1,672 +1,788 @@
 <template>
-  <div class="tenant-management">
-    <!-- 页面头部 -->
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-3xl font-bold text-gray-900 dark:text-white">{{ t('tenantManagement.title') }}</h1>
+  <div class="tm-page">
+    <!-- 页头 -->
+    <div class="tm-header">
+      <div>
+        <h1 class="tm-title">{{ t("tenantManagement.title") }}</h1>
+        <p class="tm-desc">
+          {{ t("tenantManagement.list") }} ·
+          {{ t("tenantManagement.companyInfo") }} ·
+          {{ t("tenantManagement.brandAssets") }}
+        </p>
+      </div>
       <button
-        @click="showAddDialog = true"
-        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        class="tm-btn tm-btn-primary"
+        type="button"
+        @click="openAddDialog"
       >
-        <svg class="w-5 h-5 mr-2 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-          />
+        <svg
+          width="14"
+          height="14"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        {{ t('tenantManagement.addTenant') }}
+        {{ t("tenantManagement.addTenant") }}
       </button>
     </div>
 
-    <!-- 租户列表 -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('tenantManagement.list') }}</h2>
-          <div class="flex items-center space-x-4">
-            <!-- 状态筛选 -->
-            <select
-              v-model="filters.status"
-              @change="loadTenants"
-              class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value="">{{ t('tenantManagement.allStatus') }}</option>
-              <option value="active">{{ t('tenantManagement.statusActive') }}</option>
-              <option value="inactive">{{ t('tenantManagement.statusInactive') }}</option>
-              <option value="suspended">{{ t('tenantManagement.statusSuspended') }}</option>
-            </select>
-
-            <!-- 搜索框 -->
-            <input
-              v-model="filters.search"
-              @input="debouncedSearch"
-              type="text"
-              :placeholder="t('tenantManagement.searchPlaceholder')"
-              class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-          </div>
-        </div>
+    <!-- 统计 -->
+    <div class="tm-stats-bar">
+      <div class="tm-stat">
+        <span class="tm-stat-val">{{ tenantStats.total }}</span>
+        <span class="tm-stat-txt">{{ t("tenantManagement.allStatus") }}</span>
       </div>
-
-      <!-- 表格 -->
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead class="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-              >
-                {{ t('tenantManagement.tenantInfo') }}
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-              >
-                {{ t('tenantManagement.contact') }}
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-              >
-                {{ t('tenantManagement.status') }}
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-              >
-                {{ t('tenantManagement.createdAt') }}
-              </th>
-              <th
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
-              >
-                {{ t('tenantManagement.actions') }}
-              </th>
-            </tr>
-          </thead>
-          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            <tr
-              v-for="tenant in tenants"
-              :key="tenant.id"
-              class="hover:bg-gray-50 dark:hover:bg-gray-700"
-            >
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="flex items-center">
-                  <div class="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 mr-3">
-                    <img
-                      :src="tenant.logoUrl || defaultLogoUrl"
-                      :alt="tenant.name"
-                      class="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div>
-                    <div class="text-sm font-medium text-gray-900 dark:text-white">
-                      {{ tenant.name }}
-                    </div>
-                    <div class="text-sm text-gray-500 dark:text-gray-400">
-                      {{ t('tenantManagement.codePrefix') }}: {{ tenant.code }}
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-900 dark:text-white">
-                  {{ tenant.contactEmail || '-' }}
-                </div>
-                <div class="text-sm text-gray-500 dark:text-gray-400">
-                  {{ tenant.contactPhone || '-' }}
-                </div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span
-                  :class="[
-                    'inline-flex px-2 py-1 text-xs font-semibold rounded-full',
-                    tenant.status === 'active'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                      : tenant.status === 'inactive'
-                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-                  ]"
-                >
-                  {{
-                    tenant.status === 'active'
-                      ? t('tenantManagement.statusActive')
-                      : tenant.status === 'inactive'
-                        ? t('tenantManagement.statusInactive')
-                        : t('tenantManagement.statusSuspended')
-                  }}
-                </span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {{ formatDate(tenant.createdAt) }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                <div class="flex items-center space-x-2">
-                  <button
-                    @click="editTenant(tenant)"
-                    class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                  >
-                    {{ t('tenantManagement.edit') }}
-                  </button>
-                  <button
-                    @click="deleteTenant(tenant)"
-                    class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    {{ t('tenantManagement.delete') }}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <i class="tm-stat-sep"></i>
+      <div class="tm-stat">
+        <span class="tm-stat-val c-green">{{ tenantStats.active }}</span>
+        <span class="tm-stat-txt">{{
+          t("tenantManagement.statusActive")
+        }}</span>
       </div>
-
-      <!-- 分页 -->
-      <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-        <div class="flex items-center justify-between">
-          <div class="text-sm text-gray-700 dark:text-gray-300">
-            {{
-              t('tenantManagement.pageSummary', {
-                start: (pagination.page - 1) * pagination.limit + 1,
-                end: Math.min(pagination.page * pagination.limit, pagination.total),
-                total: pagination.total,
-              })
-            }}
-          </div>
-          <div class="flex items-center space-x-2">
-            <button
-              @click="changePage(pagination.page - 1)"
-              :disabled="pagination.page <= 1"
-              class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
-            >
-              {{ t('tenantManagement.prevPage') }}
-            </button>
-            <span class="text-sm text-gray-700 dark:text-gray-300">
-              {{ t('tenantManagement.pageInfo', { page: pagination.page, totalPages: pagination.totalPages }) }}
-            </span>
-            <button
-              @click="changePage(pagination.page + 1)"
-              :disabled="pagination.page >= pagination.totalPages"
-              class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
-            >
-              {{ t('tenantManagement.nextPage') }}
-            </button>
-          </div>
-        </div>
+      <i class="tm-stat-sep"></i>
+      <div class="tm-stat">
+        <span class="tm-stat-val c-orange">{{ tenantStats.inactive }}</span>
+        <span class="tm-stat-txt">{{
+          t("tenantManagement.statusInactive")
+        }}</span>
+      </div>
+      <i class="tm-stat-sep"></i>
+      <div class="tm-stat">
+        <span class="tm-stat-val c-red">{{ tenantStats.suspended }}</span>
+        <span class="tm-stat-txt">{{
+          t("tenantManagement.statusSuspended")
+        }}</span>
       </div>
     </div>
 
-    <!-- 添加/编辑租户对话框 -->
-    <div
-      v-if="showAddDialog || showEditDialog"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      @click.self="closeDialog"
-    >
-      <div
-        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+    <!-- 工具栏 -->
+    <div class="tm-toolbar">
+      <div class="tm-search">
+        <svg
+          class="tm-search-ico"
+          width="15"
+          height="15"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input
+          v-model="filters.search"
+          @input="debouncedSearch"
+          type="text"
+          :placeholder="t('tenantManagement.searchPlaceholder')"
+        />
+      </div>
+      <select
+        v-model="filters.status"
+        @change="handleStatusChange"
+        class="tm-filter-select"
       >
-        <div class="p-6">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            {{ showAddDialog ? t('tenantManagement.addDialogTitle') : t('tenantManagement.editDialogTitle') }}
-          </h3>
+        <option value="">{{ t("tenantManagement.allStatus") }}</option>
+        <option value="active">{{ t("tenantManagement.statusActive") }}</option>
+        <option value="inactive">
+          {{ t("tenantManagement.statusInactive") }}
+        </option>
+        <option value="suspended">
+          {{ t("tenantManagement.statusSuspended") }}
+        </option>
+      </select>
+    </div>
 
-          <form @submit.prevent="saveTenant" class="space-y-4">
-            <!-- 基本信息 -->
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {{ t('tenantManagement.tenantName') }} *
-                </label>
-                <input
-                  v-model="tenantForm.name"
-                  type="text"
-                  required
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
+    <!-- 表格 -->
+    <div class="tm-card">
+      <table class="tm-table">
+        <colgroup>
+          <col style="min-width: 200px" />
+          <col style="min-width: 180px" />
+          <col style="width: 100px" />
+          <col style="width: 160px" />
+          <col style="width: 160px" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>{{ t("tenantManagement.tenantInfo") }}</th>
+            <th>{{ t("tenantManagement.contact") }}</th>
+            <th>{{ t("tenantManagement.status") }}</th>
+            <th>{{ t("tenantManagement.createdAt") }}</th>
+            <th style="text-align: right">
+              {{ t("tenantManagement.actions") }}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="loading">
+            <td colspan="5" class="tm-table-empty">
+              <span class="tm-dots"><i /><i /><i /></span>
+            </td>
+          </tr>
+          <tr v-else-if="!tenants.length">
+            <td colspan="5" class="tm-table-empty">{{ t("common.noData") }}</td>
+          </tr>
+          <template v-else>
+            <tr v-for="tenant in tenants" :key="tenant.id">
+              <td>
+                <div class="tm-cell-tenant">
+                  <img
+                    class="tm-avatar"
+                    :src="tenant.logoUrl || defaultLogoUrl"
+                    :alt="tenant.name"
+                  />
+                  <div>
+                    <p class="tm-name">{{ tenant.name }}</p>
+                    <p class="tm-code">{{ tenant.code }}</p>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <p class="tm-contact-email">{{ tenant.contactEmail || "—" }}</p>
+                <p class="tm-contact-phone">{{ tenant.contactPhone || "" }}</p>
+              </td>
+              <td>
+                <span :class="['tm-tag', 'tm-tag-' + tenant.status]">
+                  {{
+                    tenant.status === "active"
+                      ? t("tenantManagement.statusActive")
+                      : tenant.status === "inactive"
+                        ? t("tenantManagement.statusInactive")
+                        : t("tenantManagement.statusSuspended")
+                  }}
+                </span>
+              </td>
+              <td class="tm-cell-date">{{ formatDate(tenant.createdAt) }}</td>
+              <td style="text-align: right">
+                <div class="tm-cell-ops">
+                  <button
+                    class="tm-op"
+                    @click="editTenant(tenant)"
+                    :title="t('tenantManagement.edit')"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                      />
+                      <path
+                        d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    class="tm-op tm-op-del"
+                    @click="deleteTenant(tenant)"
+                    :title="t('tenantManagement.delete')"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                      <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 分页 -->
+    <div class="tm-pager" v-if="pagination.total > 0">
+      <span class="tm-pager-text">
+        {{
+          t("tenantManagement.pageSummary", {
+            start: (pagination.page - 1) * pagination.limit + 1,
+            end: Math.min(pagination.page * pagination.limit, pagination.total),
+            total: pagination.total,
+          })
+        }}
+      </span>
+      <div class="tm-pager-nav">
+        <button
+          type="button"
+          :disabled="pagination.page <= 1"
+          @click="changePage(pagination.page - 1)"
+        >
+          <svg
+            width="14"
+            height="14"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+        <span>{{ pagination.page }}/{{ pagination.totalPages }}</span>
+        <button
+          type="button"
+          :disabled="pagination.page >= pagination.totalPages"
+          @click="changePage(pagination.page + 1)"
+        >
+          <svg
+            width="14"
+            height="14"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 遮罩 -->
+    <transition name="fade">
+      <div v-if="drawerVisible" class="tm-mask" @click.self="closeDialog"></div>
+    </transition>
+
+    <!-- 抽屉 -->
+    <transition name="slide">
+      <aside v-if="drawerVisible" class="tm-drawer">
+        <header class="tm-drawer-head">
+          <div>
+            <h2>
+              {{
+                showAddDialog
+                  ? t("tenantManagement.addDialogTitle")
+                  : t("tenantManagement.editDialogTitle")
+              }}
+            </h2>
+            <p>
+              {{ t("tenantManagement.tenantCode") }} /
+              {{ t("tenantManagement.companyInfo") }} /
+              {{ t("tenantManagement.brandAssets") }}
+            </p>
+          </div>
+          <button class="tm-drawer-x" type="button" @click="closeDialog">
+            <svg
+              width="18"
+              height="18"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </header>
+
+        <nav class="tm-tabs">
+          <button
+            type="button"
+            v-for="t2 in tabs"
+            :key="t2.k"
+            :class="{ active: curTab === t2.k }"
+            @click="curTab = t2.k"
+          >
+            {{ t2.l }}
+          </button>
+        </nav>
+
+        <div class="tm-drawer-body">
+          <!-- ====== 基本信息 ====== -->
+          <section v-show="curTab === 'basic'">
+            <div class="fm-row">
+              <div class="fm-col">
+                <label class="fm-lbl"
+                  >{{ t("tenantManagement.tenantName") }} <em>*</em></label
+                >
+                <input v-model="tenantForm.name" required class="fm-input" />
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {{ t('tenantManagement.tenantCode') }} *
-                </label>
+              <div class="fm-col">
+                <label class="fm-lbl"
+                  >{{ t("tenantManagement.tenantCode") }} <em>*</em></label
+                >
                 <input
                   v-model="tenantForm.code"
-                  type="text"
                   required
                   :disabled="showEditDialog"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-600"
+                  class="fm-input"
                 />
               </div>
             </div>
+            <label class="fm-lbl mt16">{{
+              t("tenantManagement.description")
+            }}</label>
+            <textarea
+              v-model="tenantForm.description"
+              rows="3"
+              class="fm-input fm-ta"
+            ></textarea>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {{ t('tenantManagement.description') }}
-              </label>
-              <textarea
-                v-model="tenantForm.description"
-                rows="3"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              ></textarea>
-            </div>
-
-            <!-- 联系信息 -->
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {{ t('tenantManagement.contactEmail') }}
-                </label>
+            <div class="fm-row mt16">
+              <div class="fm-col">
+                <label class="fm-lbl">{{
+                  t("tenantManagement.contactEmail")
+                }}</label>
                 <input
                   v-model="tenantForm.contactEmail"
                   type="email"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  class="fm-input"
+                  placeholder="name@example.com"
                 />
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {{ t('tenantManagement.contactPhone') }}
-                </label>
-                <input
-                  v-model="tenantForm.contactPhone"
-                  type="text"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
+              <div class="fm-col">
+                <label class="fm-lbl">{{
+                  t("tenantManagement.contactPhone")
+                }}</label>
+                <input v-model="tenantForm.contactPhone" class="fm-input" />
               </div>
             </div>
 
-            <!-- 资源限制 -->
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {{ t('tenantManagement.maxUsers') }}
-                </label>
+            <div class="fm-row mt16">
+              <div class="fm-col">
+                <label class="fm-lbl">{{
+                  t("tenantManagement.maxUsers")
+                }}</label>
                 <input
                   v-model.number="tenantForm.maxUsers"
                   type="number"
                   min="1"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  class="fm-input"
                 />
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {{ t('tenantManagement.maxProjects') }}
-                </label>
+              <div class="fm-col">
+                <label class="fm-lbl">{{
+                  t("tenantManagement.maxProjects")
+                }}</label>
                 <input
                   v-model.number="tenantForm.maxProjects"
                   type="number"
                   min="1"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  class="fm-input"
                 />
               </div>
             </div>
 
-            <!-- 状态 -->
-            <div v-if="showEditDialog">
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {{ t('tenantManagement.status') }}
-              </label>
-              <select
-                v-model="tenantForm.status"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value="active">{{ t('tenantManagement.statusActive') }}</option>
-                <option value="inactive">{{ t('tenantManagement.statusInactive') }}</option>
-                <option value="suspended">{{ t('tenantManagement.statusSuspended') }}</option>
+            <div v-if="showEditDialog" class="mt16">
+              <label class="fm-lbl">{{ t("tenantManagement.status") }}</label>
+              <select v-model="tenantForm.status" class="fm-input fm-sel">
+                <option value="active">
+                  {{ t("tenantManagement.statusActive") }}
+                </option>
+                <option value="inactive">
+                  {{ t("tenantManagement.statusInactive") }}
+                </option>
+                <option value="suspended">
+                  {{ t("tenantManagement.statusSuspended") }}
+                </option>
               </select>
             </div>
+          </section>
 
-            <!-- 公司信息 -->
-            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">{{ t('tenantManagement.companyInfo') }}</h4>
-
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {{ t('tenantManagement.companyName') }}
-                  </label>
-                  <input
-                    v-model="tenantForm.companyName"
-                    type="text"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {{ t('tenantManagement.companyPhone') }}
-                  </label>
-                  <input
-                    v-model="tenantForm.companyPhone"
-                    type="text"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
-                </div>
+          <!-- ====== 公司信息（含备案号） ====== -->
+          <section v-show="curTab === 'company'">
+            <div class="fm-row">
+              <div class="fm-col">
+                <label class="fm-lbl">{{
+                  t("tenantManagement.companyName")
+                }}</label>
+                <input v-model="tenantForm.companyName" class="fm-input" />
               </div>
-
-              <div class="mt-4">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {{ t('tenantManagement.companyAddress') }}
-                </label>
-                <textarea
-                  v-model="tenantForm.companyAddress"
-                  rows="2"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                ></textarea>
+              <div class="fm-col">
+                <label class="fm-lbl">{{
+                  t("tenantManagement.companyPhone")
+                }}</label>
+                <input v-model="tenantForm.companyPhone" class="fm-input" />
               </div>
+            </div>
 
-              <div class="mt-4">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {{ t('tenantManagement.companyWebsite') }}
-                </label>
+            <label class="fm-lbl mt16">{{
+              t("tenantManagement.companyAddress")
+            }}</label>
+            <textarea
+              v-model="tenantForm.companyAddress"
+              rows="2"
+              class="fm-input fm-ta"
+            ></textarea>
+
+            <div class="fm-row mt16">
+              <div class="fm-col">
+                <label class="fm-lbl">{{
+                  t("tenantManagement.companyWebsite")
+                }}</label>
                 <input
                   v-model="tenantForm.companyWebsite"
                   type="url"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  class="fm-input"
+                  placeholder="https://"
                 />
               </div>
-
-              <div class="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h5 class="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                  {{ t('tenantManagement.loginDisplaySettings') }}
-                </h5>
-                <div class="grid grid-cols-2 gap-3">
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input v-model="tenantForm.showCompanyName" type="checkbox" class="rounded" />
-                    {{ t('tenantManagement.showCompanyName') }}
-                  </label>
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input v-model="tenantForm.showCompanyPhone" type="checkbox" class="rounded" />
-                    {{ t('tenantManagement.showCompanyPhone') }}
-                  </label>
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input v-model="tenantForm.showCompanyAddress" type="checkbox" class="rounded" />
-                    {{ t('tenantManagement.showCompanyAddress') }}
-                  </label>
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input v-model="tenantForm.showCompanyWebsite" type="checkbox" class="rounded" />
-                    {{ t('tenantManagement.showCompanyWebsite') }}
-                  </label>
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input v-model="tenantForm.showIcp" type="checkbox" class="rounded" />
-                    {{ t('tenantManagement.showIcp') }}
-                  </label>
-                </div>
-                <div class="mt-3">
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {{ t('tenantManagement.icpNumber') }}
-                  </label>
-                  <input
-                    v-model="tenantForm.icpNumber"
-                    type="text"
-                    :placeholder="t('tenantManagement.icpPlaceholder')"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
-                </div>
+              <div class="fm-col">
+                <label class="fm-lbl">{{
+                  t("tenantManagement.icpNumber")
+                }}</label>
+                <input
+                  v-model="tenantForm.icpNumber"
+                  class="fm-input"
+                  :placeholder="t('tenantManagement.icpPlaceholder')"
+                />
               </div>
             </div>
 
-            <!-- 文件上传 -->
-            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">{{ t('tenantManagement.brandAssets') }}</h4>
+            <div class="fm-sep"></div>
+            <p class="fm-group-title">
+              {{ t("tenantManagement.loginDisplaySettings") }}
+            </p>
+            <div class="fm-checks">
+              <label
+                ><input
+                  v-model="tenantForm.showCompanyName"
+                  type="checkbox"
+                /><span>{{
+                  t("tenantManagement.showCompanyName")
+                }}</span></label
+              >
+              <label
+                ><input
+                  v-model="tenantForm.showCompanyPhone"
+                  type="checkbox"
+                /><span>{{
+                  t("tenantManagement.showCompanyPhone")
+                }}</span></label
+              >
+              <label
+                ><input
+                  v-model="tenantForm.showCompanyAddress"
+                  type="checkbox"
+                /><span>{{
+                  t("tenantManagement.showCompanyAddress")
+                }}</span></label
+              >
+              <label
+                ><input
+                  v-model="tenantForm.showCompanyWebsite"
+                  type="checkbox"
+                /><span>{{
+                  t("tenantManagement.showCompanyWebsite")
+                }}</span></label
+              >
+              <label
+                ><input v-model="tenantForm.showIcp" type="checkbox" /><span>{{
+                  t("tenantManagement.showIcp")
+                }}</span></label
+              >
+            </div>
+          </section>
 
-              <!-- Logo上传 -->
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {{ t('tenantManagement.logo') }}
-                </label>
-                <div class="flex items-center space-x-4">
-                  <div class="w-16 h-16 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
-                    <img :src="logoPreviewUrl" alt="Logo" class="w-full h-full object-cover" />
-                  </div>
-                  <div class="flex-1">
-                    <input
-                      ref="logoInput"
-                      type="file"
-                      accept="image/*"
-                      @change="handleLogoUpload"
-                      class="hidden"
-                    />
-                    <button
-                      type="button"
-                      @click="$refs.logoInput.click()"
-                      class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      {{ tenantForm.logoUrl ? t('tenantManagement.replaceLogo') : t('tenantManagement.uploadLogo') }}
-                    </button>
-                  </div>
-                </div>
-              </div>
+          <!-- ====== 品牌资产 ====== -->
+          <section v-show="curTab === 'brand'">
+            <div class="fm-upload-item">
+              <p class="fm-upload-name">{{ t("tenantManagement.logo") }}</p>
+              <p class="fm-upload-hint">推荐 200×200，PNG / JPG / SVG</p>
+              <el-upload
+                class="tm-upload-card"
+                list-type="picture-card"
+                :auto-upload="true"
+                accept="image/*"
+                :file-list="logoFileList"
+                :before-upload="beforeImageUpload"
+                :http-request="uploadLogoRequest"
+                :on-preview="handleUploadPreview"
+                :on-remove="removeLogo"
+              >
+                <span class="tm-upload-plus">+</span>
+              </el-upload>
+            </div>
 
-              <!-- 背景图上传 -->
+            <div class="fm-sep"></div>
+
+            <div class="fm-upload-item">
+              <p class="fm-upload-name">
+                {{ t("tenantManagement.loginBackground") }}
+              </p>
+              <p class="fm-upload-hint">推荐 1920×1080，JPG 或 PNG</p>
+              <el-upload
+                class="tm-upload-card tm-upload-card-bg"
+                list-type="picture-card"
+                :auto-upload="true"
+                accept="image/*"
+                :file-list="backgroundFileList"
+                :before-upload="beforeImageUpload"
+                :http-request="uploadBackgroundRequest"
+                :on-preview="handleUploadPreview"
+                :on-remove="removeBackground"
+              >
+                <span class="tm-upload-plus">+</span>
+              </el-upload>
+            </div>
+
+            <div class="fm-preview-card">
+              <img :src="logoPreviewUrl" alt="" class="fm-preview-logo" />
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {{ t('tenantManagement.loginBackground') }}
-                </label>
-                <div class="flex items-center space-x-4">
-                  <div class="w-16 h-16 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
-                    <img
-                      :src="backgroundPreviewUrl"
-                      :alt="t('tenantManagement.backgroundImageAlt')"
-                      class="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div class="flex-1">
-                    <input
-                      ref="backgroundInput"
-                      type="file"
-                      accept="image/*"
-                      @change="handleBackgroundUpload"
-                      class="hidden"
-                    />
-                    <button
-                      type="button"
-                      @click="$refs.backgroundInput.click()"
-                      class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      {{ tenantForm.loginBackgroundUrl ? t('tenantManagement.replaceBackground') : t('tenantManagement.uploadBackground') }}
-                    </button>
-                  </div>
-                </div>
+                <p class="fm-preview-name">
+                  {{ tenantForm.name || t("tenantManagement.tenantName") }}
+                </p>
+                <p class="fm-preview-code">
+                  {{ tenantForm.code || "tenant-code" }}
+                </p>
               </div>
             </div>
-
-            <!-- 操作按钮 -->
-            <div
-              class="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700"
-            >
-              <button
-                type="button"
-                @click="closeDialog"
-                class="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                {{ t('tenantManagement.cancel') }}
-              </button>
-              <button
-                type="submit"
-                :disabled="saving"
-                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {{ saving ? t('tenantManagement.saving') : t('tenantManagement.save') }}
-              </button>
-            </div>
-          </form>
+          </section>
         </div>
+
+        <footer class="tm-drawer-foot">
+          <button type="button" class="tm-btn" @click="closeDialog">
+            {{ t("tenantManagement.cancel") }}
+          </button>
+          <button
+            type="button"
+            class="tm-btn tm-btn-primary"
+            :disabled="saving"
+            @click="saveTenant"
+          >
+            {{
+              saving ? t("tenantManagement.saving") : t("tenantManagement.save")
+            }}
+          </button>
+        </footer>
+      </aside>
+    </transition>
+
+    <el-dialog
+      v-model="previewVisible"
+      width="680px"
+      :title="t('tenantManagement.preview')"
+      append-to-body
+    >
+      <div class="tm-preview-dialog">
+        <img :src="previewImageUrl" alt="preview" />
       </div>
-    </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { ref, reactive, onMounted, computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import dayjs from 'dayjs'
-import { tenantAPI } from '@/api'
-import { TIME_FORMAT } from '@/constants'
-import defaultLogoUrl from '@/assets/images/default-logo.svg'
-import defaultLoginBgUrl from '@/assets/images/default-login-bg.svg'
+import { ref, reactive, onMounted, computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { ElMessage, ElMessageBox } from "element-plus";
+import dayjs from "dayjs";
+import { tenantAPI } from "@/api";
+import { TIME_FORMAT } from "@/constants";
+import defaultLogoUrl from "@/assets/images/default-logo.svg";
+import defaultLoginBgUrl from "@/assets/images/default-login-bg.svg";
 
 export default {
-  name: 'TenantManagement',
+  name: "TenantManagement",
   setup() {
-    const { t } = useI18n()
-    const tenants = ref([])
-    const loading = ref(false)
-    const saving = ref(false)
+    const { t } = useI18n();
+    const tenants = ref([]);
+    const loading = ref(false);
+    const saving = ref(false);
+    const curTab = ref("basic");
 
-    // 对话框状态
-    const showAddDialog = ref(false)
-    const showEditDialog = ref(false)
+    const tabs = computed(() => [
+      { k: "basic", l: t("tenantManagement.tenantInfo") },
+      { k: "company", l: t("tenantManagement.companyInfo") },
+      { k: "brand", l: t("tenantManagement.brandAssets") },
+    ]);
 
-    // 分页信息
+    const showAddDialog = ref(false);
+    const showEditDialog = ref(false);
+    const drawerVisible = computed(
+      () => showAddDialog.value || showEditDialog.value,
+    );
+
     const pagination = reactive({
       page: 1,
       limit: 10,
       total: 0,
       totalPages: 0,
-    })
+    });
+    const filters = reactive({ status: "", search: "" });
 
-    // 筛选条件
-    const filters = reactive({
-      status: '',
-      search: '',
-    })
-
-    // 租户表单
     const tenantForm = reactive({
-      name: '',
-      code: '',
-      description: '',
-      contactEmail: '',
-      contactPhone: '',
+      name: "",
+      code: "",
+      description: "",
+      contactEmail: "",
+      contactPhone: "",
       maxUsers: 100,
       maxProjects: 50,
-      status: 'active',
-      logoUrl: '',
-      loginBackgroundUrl: '',
-      companyName: '',
-      companyAddress: '',
-      companyPhone: '',
-      companyWebsite: '',
+      status: "active",
+      logoUrl: "",
+      loginBackgroundUrl: "",
+      companyName: "",
+      companyAddress: "",
+      companyPhone: "",
+      companyWebsite: "",
       showCompanyName: true,
       showCompanyPhone: false,
       showCompanyAddress: false,
       showCompanyWebsite: false,
       showIcp: false,
-      icpNumber: '',
-    })
+      icpNumber: "",
+    });
 
-    // 文件输入引用
-    const logoInput = ref(null)
-    const backgroundInput = ref(null)
-    const logoPreviewUrl = computed(() => tenantForm.logoUrl || defaultLogoUrl)
+    const previewVisible = ref(false);
+    const previewImageUrl = ref("");
+    const logoPreviewUrl = computed(() => tenantForm.logoUrl || defaultLogoUrl);
     const backgroundPreviewUrl = computed(
-      () => tenantForm.loginBackgroundUrl || defaultLoginBgUrl
-    )
+      () => tenantForm.loginBackgroundUrl || defaultLoginBgUrl,
+    );
+    const logoFileList = computed(() =>
+      tenantForm.logoUrl
+        ? [{ name: "logo", url: tenantForm.logoUrl, status: "success" }]
+        : [],
+    );
+    const backgroundFileList = computed(() =>
+      tenantForm.loginBackgroundUrl
+        ? [
+            {
+              name: "background",
+              url: tenantForm.loginBackgroundUrl,
+              status: "success",
+            },
+          ]
+        : [],
+    );
 
-    // 防抖搜索
-    let searchTimeout = null
+    const tenantStats = computed(() => {
+      const l = tenants.value || [];
+      return {
+        total: l.length,
+        active: l.filter((i) => i.status === "active").length,
+        inactive: l.filter((i) => i.status === "inactive").length,
+        suspended: l.filter((i) => i.status === "suspended").length,
+      };
+    });
+
+    let searchTimer = null;
     const debouncedSearch = () => {
-      window.clearTimeout(searchTimeout)
-      searchTimeout = window.setTimeout(() => {
-        loadTenants()
-      }, 500)
-    }
+      if (searchTimer) {
+        window.clearTimeout(searchTimer);
+      }
+      searchTimer = window.setTimeout(() => {
+        pagination.page = 1;
+        loadTenants();
+      }, 400);
+    };
 
-    // 加载租户列表
+    const handleStatusChange = () => {
+      pagination.page = 1;
+      loadTenants();
+    };
+
     const loadTenants = async () => {
-      loading.value = true
+      loading.value = true;
       try {
-        const params = {
+        const res = await tenantAPI.getTenants({
           page: pagination.page,
           limit: Number(pagination.limit),
+          keyword: filters.search?.trim() || undefined,
           status: filters.status || undefined,
-        }
-
-        // 注意：这里需要扩展API以支持搜索功能
-        // 暂时只使用状态筛选
-        const response = await tenantAPI.getTenants(params)
-
-        tenants.value = response.data.tenants
-        pagination.total = response.pagination.total
-        pagination.totalPages = response.pagination.totalPages
-      } catch (error) {
-        console.error('加载租户列表失败:', error)
-        ElMessage.error(t('tenantManagement.loadFailed'))
+        });
+        tenants.value = res.data.tenants;
+        pagination.total = res.pagination.total;
+        pagination.totalPages = res.pagination.totalPages;
+      } catch (e) {
+        console.error("加载租户列表失败:", e);
+        ElMessage.error(t("tenantManagement.loadFailed"));
       } finally {
-        loading.value = false
+        loading.value = false;
       }
-    }
+    };
 
-    // 格式化日期
-    const formatDate = (date) => {
-      const parsed = dayjs(date)
-      return parsed.isValid() ? parsed.format(TIME_FORMAT) : ''
-    }
-
-    // 换页
-    const changePage = (page) => {
-      if (page >= 1 && page <= pagination.totalPages) {
-        pagination.page = page
-        loadTenants()
+    const formatDate = (d) => {
+      const p = dayjs(d);
+      return p.isValid() ? p.format(TIME_FORMAT) : "";
+    };
+    const changePage = (p) => {
+      if (p >= 1 && p <= pagination.totalPages) {
+        pagination.page = p;
+        loadTenants();
       }
-    }
+    };
 
-    // 编辑租户
+    const openAddDialog = () => {
+      curTab.value = "basic";
+      showAddDialog.value = true;
+    };
+
     const editTenant = (tenant) => {
-      const loginDisplay = tenant.settings?.loginDisplay || {}
+      const ld = tenant.settings?.loginDisplay || {};
       Object.assign(tenantForm, {
         name: tenant.name,
         code: tenant.code,
-        description: tenant.description || '',
-        contactEmail: tenant.contactEmail || '',
-        contactPhone: tenant.contactPhone || '',
+        description: tenant.description || "",
+        contactEmail: tenant.contactEmail || "",
+        contactPhone: tenant.contactPhone || "",
         maxUsers: tenant.maxUsers,
         maxProjects: tenant.maxProjects,
         status: tenant.status,
-        logoUrl: tenant.logoUrl || '',
-        loginBackgroundUrl: tenant.loginBackgroundUrl || '',
-        companyName: tenant.companyName || '',
-        companyAddress: tenant.companyAddress || '',
-        companyPhone: tenant.companyPhone || '',
-        companyWebsite: tenant.companyWebsite || '',
-        showCompanyName: loginDisplay.showCompanyName !== false,
-        showCompanyPhone: Boolean(loginDisplay.showCompanyPhone),
-        showCompanyAddress: Boolean(loginDisplay.showCompanyAddress),
-        showCompanyWebsite: Boolean(loginDisplay.showCompanyWebsite),
-        showIcp: Boolean(loginDisplay.showIcp),
-        icpNumber: loginDisplay.icpNumber || '',
-      })
-      showEditDialog.value = true
-    }
+        logoUrl: tenant.logoUrl || "",
+        loginBackgroundUrl: tenant.loginBackgroundUrl || "",
+        companyName: tenant.companyName || "",
+        companyAddress: tenant.companyAddress || "",
+        companyPhone: tenant.companyPhone || "",
+        companyWebsite: tenant.companyWebsite || "",
+        showCompanyName: ld.showCompanyName !== false,
+        showCompanyPhone: Boolean(ld.showCompanyPhone),
+        showCompanyAddress: Boolean(ld.showCompanyAddress),
+        showCompanyWebsite: Boolean(ld.showCompanyWebsite),
+        showIcp: Boolean(ld.showIcp),
+        icpNumber: ld.icpNumber || "",
+      });
+      curTab.value = "basic";
+      showEditDialog.value = true;
+    };
 
-    // 删除租户
     const deleteTenant = async (tenant) => {
       try {
         await ElMessageBox.confirm(
-          t('tenantManagement.deleteConfirmText', { name: tenant.name }),
-          t('tenantManagement.deleteConfirmTitle'),
+          t("tenantManagement.deleteConfirmText", { name: tenant.name }),
+          t("tenantManagement.deleteConfirmTitle"),
           {
-            confirmButtonText: t('tenantManagement.deleteConfirmButton'),
-            cancelButtonText: t('tenantManagement.cancel'),
-            type: 'warning',
-          }
-        )
-
-        await tenantAPI.deleteTenant(tenant.id)
-        ElMessage.success(t('tenantManagement.deleteSuccess'))
-        loadTenants()
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('删除租户失败:', error)
-          ElMessage.error(t('tenantManagement.deleteFailed'))
+            confirmButtonText: t("tenantManagement.deleteConfirmButton"),
+            cancelButtonText: t("tenantManagement.cancel"),
+            type: "warning",
+          },
+        );
+        await tenantAPI.deleteTenant(tenant.id);
+        ElMessage.success(t("tenantManagement.deleteSuccess"));
+        loadTenants();
+      } catch (e) {
+        if (e !== "cancel") {
+          console.error(e);
+          ElMessage.error(t("tenantManagement.deleteFailed"));
         }
       }
-    }
+    };
 
-    // 保存租户
     const saveTenant = async () => {
-      saving.value = true
+      saving.value = true;
       try {
         const payload = {
           ...tenantForm,
-          logoUrl: tenantForm.logoUrl || '',
-          loginBackgroundUrl: tenantForm.loginBackgroundUrl || '',
           settings: {
             loginDisplay: {
               showCompanyName: Boolean(tenantForm.showCompanyName),
@@ -674,143 +790,167 @@ export default {
               showCompanyAddress: Boolean(tenantForm.showCompanyAddress),
               showCompanyWebsite: Boolean(tenantForm.showCompanyWebsite),
               showIcp: Boolean(tenantForm.showIcp),
-              icpNumber: tenantForm.icpNumber || '',
+              icpNumber: tenantForm.icpNumber || "",
             },
           },
-        }
-
+        };
         if (showAddDialog.value) {
-          await tenantAPI.createTenant(payload)
-          ElMessage.success(t('tenantManagement.createSuccess'))
+          await tenantAPI.createTenant(payload);
+          ElMessage.success(t("tenantManagement.createSuccess"));
         } else {
-          await tenantAPI.updateTenant(tenantForm.code, payload)
-          ElMessage.success(t('tenantManagement.updateSuccess'))
+          await tenantAPI.updateTenant(tenantForm.code, payload);
+          ElMessage.success(t("tenantManagement.updateSuccess"));
         }
-
-        closeDialog()
-        loadTenants()
-      } catch (error) {
-        console.error('保存租户失败:', error)
-        ElMessage.error(error.response?.data?.message || t('tenantManagement.saveFailed'))
+        closeDialog();
+        loadTenants();
+      } catch (e) {
+        console.error(e);
+        ElMessage.error(
+          e.response?.data?.message || t("tenantManagement.saveFailed"),
+        );
       } finally {
-        saving.value = false
+        saving.value = false;
       }
-    }
+    };
 
-    // 关闭对话框
-    const closeDialog = () => {
-      showAddDialog.value = false
-      showEditDialog.value = false
-
-      // 重置表单
+    const resetForm = () => {
       Object.assign(tenantForm, {
-        name: '',
-        code: '',
-        description: '',
-        contactEmail: '',
-        contactPhone: '',
+        name: "",
+        code: "",
+        description: "",
+        contactEmail: "",
+        contactPhone: "",
         maxUsers: 100,
         maxProjects: 50,
-        status: 'active',
-        logoUrl: '',
-        loginBackgroundUrl: '',
-        companyName: '',
-        companyAddress: '',
-        companyPhone: '',
-        companyWebsite: '',
+        status: "active",
+        logoUrl: "",
+        loginBackgroundUrl: "",
+        companyName: "",
+        companyAddress: "",
+        companyPhone: "",
+        companyWebsite: "",
         showCompanyName: true,
         showCompanyPhone: false,
         showCompanyAddress: false,
         showCompanyWebsite: false,
         showIcp: false,
-        icpNumber: '',
-      })
-      if (logoInput.value) logoInput.value.value = ''
-      if (backgroundInput.value) backgroundInput.value.value = ''
-    }
+        icpNumber: "",
+      });
+    };
 
-    /**
-     * 将图片文件转换为 base64 DataURL。
-     * @param {File} file - 图片文件
-     * @returns {Promise<string>} base64 数据
-     */
+    const closeDialog = () => {
+      showAddDialog.value = false;
+      showEditDialog.value = false;
+      resetForm();
+      curTab.value = "basic";
+    };
+
+    const syncTenantBrandingInList = (updates) => {
+      const idx = tenants.value.findIndex((i) => i.code === tenantForm.code);
+      if (idx < 0) return;
+      tenants.value[idx] = {
+        ...tenants.value[idx],
+        ...updates,
+      };
+    };
+
     const fileToDataUrl = (file) =>
       new Promise((resolve, reject) => {
-        const reader = new window.FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = () => reject(new Error('文件读取失败'))
-        reader.readAsDataURL(file)
-      })
+        const r = new window.FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(new Error("读取失败"));
+        r.readAsDataURL(file);
+      });
 
-    // 处理Logo上传
-    const handleLogoUpload = async (event) => {
-      const file = event.target.files[0]
-      if (!file) return
-
-      try {
-        // 新增租户时尚未有租户实体，使用本地base64并在创建接口中一并提交
-        if (showAddDialog.value) {
-          tenantForm.logoUrl = await fileToDataUrl(file)
-          ElMessage.success(t('tenantManagement.logoUploadSuccess'))
-          return
-        }
-
-        const formData = new window.FormData()
-        formData.append('file', file)
-
-        const response = await tenantAPI.uploadFile(
-          tenantForm.code,
-          'logo',
-          formData
-        )
-
-        tenantForm.logoUrl = response.data.fileUrl
-        ElMessage.success(t('tenantManagement.logoUploadSuccess'))
-      } catch (error) {
-        console.error('Logo上传失败:', error)
-        ElMessage.error(error.response?.data?.message || t('tenantManagement.logoUploadFailed'))
-      } finally {
-        event.target.value = ''
+    const beforeImageUpload = (file) => {
+      const isImage = file.type.startsWith("image/");
+      if (!isImage) {
+        ElMessage.error(t("tenantManagement.uploadImageOnly"));
+        return false;
       }
-    }
-
-    // 处理背景图上传
-    const handleBackgroundUpload = async (event) => {
-      const file = event.target.files[0]
-      if (!file) return
-
-      try {
-        // 新增租户时尚未有租户实体，使用本地base64并在创建接口中一并提交
-        if (showAddDialog.value) {
-          tenantForm.loginBackgroundUrl = await fileToDataUrl(file)
-          ElMessage.success(t('tenantManagement.backgroundUploadSuccess'))
-          return
-        }
-
-        const formData = new window.FormData()
-        formData.append('file', file)
-
-        const response = await tenantAPI.uploadFile(
-          tenantForm.code,
-          'background',
-          formData
-        )
-
-        tenantForm.loginBackgroundUrl = response.data.fileUrl
-        ElMessage.success(t('tenantManagement.backgroundUploadSuccess'))
-      } catch (error) {
-        console.error('背景图上传失败:', error)
-        ElMessage.error(error.response?.data?.message || t('tenantManagement.backgroundUploadFailed'))
-      } finally {
-        event.target.value = ''
+      const isLt5MB = file.size / 1024 / 1024 < 5;
+      if (!isLt5MB) {
+        ElMessage.error(t("tenantManagement.uploadSizeLimit"));
+        return false;
       }
-    }
+      return true;
+    };
 
-    onMounted(() => {
-      loadTenants()
-    })
+    const uploadLogoRequest = async (options) => {
+      const f = options.file;
+      try {
+        if (showAddDialog.value) {
+          tenantForm.logoUrl = await fileToDataUrl(f);
+          ElMessage.success(t("tenantManagement.logoUploadSuccess"));
+          options.onSuccess?.({}, f);
+          return true;
+        }
+        const fd = new window.FormData();
+        fd.append("file", f);
+        const res = await tenantAPI.uploadFile(tenantForm.code, "logo", fd);
+        tenantForm.logoUrl = res.data.fileUrl;
+        syncTenantBrandingInList({ logoUrl: res.data.fileUrl });
+        ElMessage.success(t("tenantManagement.logoUploadSuccess"));
+        options.onSuccess?.(res, f);
+        return true;
+      } catch (err) {
+        ElMessage.error(
+          err.response?.data?.message || t("tenantManagement.logoUploadFailed"),
+        );
+        options.onError?.(err);
+        return false;
+      }
+    };
+
+    const uploadBackgroundRequest = async (options) => {
+      const f = options.file;
+      try {
+        if (showAddDialog.value) {
+          tenantForm.loginBackgroundUrl = await fileToDataUrl(f);
+          ElMessage.success(t("tenantManagement.backgroundUploadSuccess"));
+          options.onSuccess?.({}, f);
+          return true;
+        }
+        const fd = new window.FormData();
+        fd.append("file", f);
+        const res = await tenantAPI.uploadFile(
+          tenantForm.code,
+          "background",
+          fd,
+        );
+        tenantForm.loginBackgroundUrl = res.data.fileUrl;
+        syncTenantBrandingInList({ loginBackgroundUrl: res.data.fileUrl });
+        ElMessage.success(t("tenantManagement.backgroundUploadSuccess"));
+        options.onSuccess?.(res, f);
+        return true;
+      } catch (err) {
+        ElMessage.error(
+          err.response?.data?.message ||
+            t("tenantManagement.backgroundUploadFailed"),
+        );
+        options.onError?.(err);
+        return false;
+      }
+    };
+
+    const removeLogo = () => {
+      tenantForm.logoUrl = "";
+    };
+
+    const removeBackground = () => {
+      tenantForm.loginBackgroundUrl = "";
+    };
+
+    const handleUploadPreview = (file) => {
+      previewImageUrl.value = file.url || file.response?.data?.fileUrl || "";
+      if (!previewImageUrl.value) return;
+      previewVisible.value = true;
+    };
+
+    onMounted(loadTenants);
 
     return {
+      t,
       tenants,
       loading,
       saving,
@@ -819,29 +959,993 @@ export default {
       tenantForm,
       showAddDialog,
       showEditDialog,
-      logoInput,
-      backgroundInput,
+      drawerVisible,
       defaultLogoUrl,
       logoPreviewUrl,
       backgroundPreviewUrl,
-      t,
+      logoFileList,
+      backgroundFileList,
+      previewVisible,
+      previewImageUrl,
+      tenantStats,
+      curTab,
+      tabs,
       loadTenants,
+      handleStatusChange,
       formatDate,
       changePage,
+      openAddDialog,
       editTenant,
       deleteTenant,
       saveTenant,
       closeDialog,
-      handleLogoUpload,
-      handleBackgroundUpload,
+      beforeImageUpload,
+      uploadLogoRequest,
+      uploadBackgroundRequest,
+      removeLogo,
+      removeBackground,
+      handleUploadPreview,
       debouncedSearch,
-    }
+    };
   },
-}
+};
 </script>
 
 <style scoped>
-.tenant-management {
-  padding: 24px;
+/* === Reset & Page === */
+.tm-page {
+  padding: 20px 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* === Header === */
+.tm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.tm-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.tm-desc {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+/* === Stats === */
+.tm-stats-bar {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  background: var(--el-bg-color);
+  margin-bottom: 14px;
+  padding: 8px 0;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.tm-stat {
+  padding: 0 18px;
+  text-align: center;
+}
+
+.tm-stat-val {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  line-height: 1.1;
+}
+
+.tm-stat-txt {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+  display: block;
+}
+
+.tm-stat-sep {
+  display: block;
+  width: 1px;
+  height: 28px;
+  background: var(--el-border-color-lighter);
+}
+
+.c-green {
+  color: #16a34a;
+}
+
+.c-orange {
+  color: #d97706;
+}
+
+.c-red {
+  color: #dc2626;
+}
+
+/* === Toolbar === */
+.tm-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.tm-search {
+  position: relative;
+}
+
+.tm-search-ico {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--el-text-color-placeholder);
+  pointer-events: none;
+}
+
+.tm-search input {
+  height: 32px;
+  width: clamp(220px, 32vw, 320px);
+  padding: 0 10px 0 30px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  outline: none;
+}
+
+.tm-search input:focus {
+  border-color: var(--el-color-primary);
+}
+
+.tm-filter-select {
+  height: 32px;
+  min-width: 130px;
+  padding: 0 8px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  outline: none;
+  cursor: pointer;
+}
+
+/* === Card / Table === */
+.tm-card {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  background: var(--el-bg-color);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow-x: auto;
+}
+
+.tm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tm-table thead {
+  background: var(--el-fill-color-light);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.tm-table th {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.tm-table tbody tr {
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+  transition: background 0.1s;
+}
+
+.tm-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.tm-table tbody tr:hover {
+  background: var(--el-fill-color-lighter);
+}
+
+.tm-table td {
+  padding: 10px 14px;
+  vertical-align: middle;
+}
+
+.tm-cell-tenant {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tm-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color);
+}
+
+.tm-name {
+  margin: 0;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  line-height: 1.3;
+}
+
+.tm-code {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.tm-contact-email {
+  margin: 0;
+  color: var(--el-text-color-primary);
+}
+
+.tm-contact-phone {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.tm-cell-date {
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+/* Tag */
+.tm-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.tm-tag-active {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.tm-tag-inactive {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.tm-tag-suspended {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Ops */
+.tm-cell-ops {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.tm-op {
+  width: 30px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  background: none;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.12s;
+  backdrop-filter: blur(2px);
+}
+
+.tm-op:hover {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.tm-op-del:hover {
+  border-color: #f56c6c;
+  color: #f56c6c;
+  background: #fef0f0;
+}
+
+/* Empty / Loading */
+.tm-table-empty {
+  padding: 36px 0 !important;
+  text-align: center;
+  color: var(--el-text-color-placeholder);
+}
+
+.tm-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.tm-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+  animation: dot-b 1s infinite ease-in-out;
+}
+
+.tm-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.tm-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes dot-b {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* === Pager === */
+.tm-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 2px 0;
+}
+
+.tm-pager-text {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.tm-pager-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tm-pager-nav span {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  min-width: 50px;
+  text-align: center;
+}
+
+.tm-pager-nav button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+}
+
+.tm-pager-nav button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tm-pager-nav button:not(:disabled):hover {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+}
+
+/* === Buttons === */
+.tm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.tm-btn:hover {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+}
+
+.tm-btn-primary {
+  background: linear-gradient(
+    135deg,
+    var(--el-color-primary),
+    var(--el-color-primary-dark-2)
+  );
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.24);
+}
+
+.tm-btn-primary:hover {
+  background: var(--el-color-primary-dark-2);
+  border-color: var(--el-color-primary-dark-2);
+  color: #fff;
+}
+
+.tm-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tm-btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* === Mask & Drawer === */
+.tm-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  z-index: 1000;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.tm-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 100vw);
+  z-index: 1001;
+  background: var(--el-bg-color);
+  border-left: 1px solid var(--el-border-color);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
+}
+
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(100%);
+}
+
+.tm-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.tm-drawer-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.tm-drawer-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.tm-drawer-x {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--el-text-color-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tm-drawer-x:hover {
+  background: var(--el-fill-color);
+  color: var(--el-text-color-primary);
+}
+
+/* Tabs */
+.tm-tabs {
+  display: flex;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.tm-tabs button {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.tm-tabs button:hover {
+  color: var(--el-text-color-primary);
+}
+
+.tm-tabs button.active {
+  color: var(--el-color-primary);
+  border-bottom-color: var(--el-color-primary);
+}
+
+/* Drawer body */
+.tm-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  overscroll-behavior: contain;
+}
+
+.tm-drawer-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tm-drawer-body::-webkit-scrollbar-thumb {
+  background: var(--el-border-color);
+  border-radius: 2px;
+}
+
+/* Footer */
+.tm-drawer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--el-border-color-light);
+}
+
+/* === Form inside drawer === */
+.fm-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.fm-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.fm-lbl {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+  margin-bottom: 5px;
+}
+
+.fm-lbl em {
+  color: #f56c6c;
+  font-style: normal;
+}
+
+.fm-input {
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.fm-input:focus {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+
+.fm-input:disabled {
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-placeholder);
+  cursor: not-allowed;
+}
+
+.fm-ta {
+  height: auto;
+  padding: 7px 9px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.fm-sel {
+  cursor: pointer;
+}
+
+.mt16 {
+  margin-top: 16px;
+}
+
+.fm-sep {
+  height: 1px;
+  background: var(--el-border-color-extra-light);
+  margin: 18px 0;
+}
+
+.fm-group-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+/* Checkboxes */
+.fm-checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.fm-checks label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.fm-checks label:hover {
+  background: var(--el-fill-color-lighter);
+}
+
+.fm-checks input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--el-color-primary);
+  cursor: pointer;
+}
+
+/* Upload */
+.fm-upload {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.fm-upload-item {
+  min-width: 0;
+}
+
+:deep(.tm-upload-card .el-upload--picture-card),
+:deep(.tm-upload-card .el-upload-list__item) {
+  width: 112px;
+  height: 112px;
+  border-radius: 8px;
+}
+
+:deep(.tm-upload-card-bg .el-upload--picture-card),
+:deep(.tm-upload-card-bg .el-upload-list__item) {
+  width: 170px;
+  height: 112px;
+}
+
+:deep(.tm-upload-card .el-upload--picture-card) {
+  border-color: var(--el-border-color);
+  background: var(--el-fill-color-lighter);
+}
+
+:deep(.tm-upload-card .el-upload--picture-card:hover) {
+  border-color: var(--el-color-primary);
+}
+
+.tm-upload-plus {
+  font-size: 28px;
+  line-height: 1;
+  color: var(--el-text-color-placeholder);
+}
+
+.tm-preview-dialog {
+  display: flex;
+  justify-content: center;
+}
+
+.tm-preview-dialog img {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 8px;
+}
+
+.fm-upload-thumb {
+  flex-shrink: 0;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--el-fill-color);
+}
+
+.fm-upload-thumb.sq {
+  width: 64px;
+  height: 64px;
+}
+
+.fm-upload-thumb.wide {
+  width: 100px;
+  height: 64px;
+}
+
+.fm-upload-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.fm-upload-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fm-upload-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.fm-upload-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+}
+
+.fm-upload-body .tm-btn-sm {
+  margin-top: 4px;
+}
+
+/* Brand preview */
+.fm-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
+}
+
+.fm-preview-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.fm-preview-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.fm-preview-code {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+@media (max-width: 1024px) {
+  .tm-pager {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .tm-drawer {
+    width: min(100vw, 720px);
+  }
+}
+
+@media (max-width: 768px) {
+  .tm-page {
+    padding: 14px 12px;
+  }
+
+  .tm-title {
+    font-size: 17px;
+  }
+
+  .tm-desc {
+    font-size: 12px;
+  }
+
+  .tm-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .tm-stat-sep {
+    display: none;
+  }
+
+  .tm-stat {
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .tm-search {
+    flex: 1 1 100%;
+  }
+
+  .tm-search input {
+    width: 100%;
+  }
+
+  .tm-filter-select {
+    width: 100%;
+  }
+
+  .tm-drawer {
+    width: 100vw;
+  }
+
+  .tm-drawer-head,
+  .tm-drawer-foot,
+  .tm-tabs,
+  .tm-drawer-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .fm-row {
+    grid-template-columns: 1fr;
+  }
+
+  .fm-checks {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<style>
+html.dark .tm-page .tm-stats-bar,
+html.dark .tm-page .tm-card,
+html.dark .tm-page .tm-drawer,
+html.dark .tm-page .tm-search input,
+html.dark .tm-page .tm-filter-select,
+html.dark .tm-page .fm-input,
+html.dark .tm-page .fm-preview-card,
+[data-theme="dark"] .tm-page .tm-stats-bar,
+[data-theme="dark"] .tm-page .tm-card,
+[data-theme="dark"] .tm-page .tm-drawer,
+[data-theme="dark"] .tm-page .tm-search input,
+[data-theme="dark"] .tm-page .tm-filter-select,
+[data-theme="dark"] .tm-page .fm-input,
+[data-theme="dark"] .tm-page .fm-preview-card {
+  background: #111827 !important;
+  border-color: #374151 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .tm-page .tm-table thead,
+[data-theme="dark"] .tm-page .tm-table thead {
+  background: #1f2937 !important;
+}
+
+html.dark .tm-page .tm-table th,
+[data-theme="dark"] .tm-page .tm-table th {
+  color: #9ca3af !important;
+  border-bottom-color: #374151 !important;
+}
+
+html.dark .tm-page .tm-table tbody tr,
+[data-theme="dark"] .tm-page .tm-table tbody tr {
+  border-bottom-color: #2d3748 !important;
+}
+
+html.dark .tm-page .tm-table tbody tr:hover,
+[data-theme="dark"] .tm-page .tm-table tbody tr:hover {
+  background: #1b2535 !important;
+}
+
+html.dark .tm-page .tm-drawer-head,
+html.dark .tm-page .tm-tabs,
+html.dark .tm-page .tm-drawer-foot,
+[data-theme="dark"] .tm-page .tm-drawer-head,
+[data-theme="dark"] .tm-page .tm-tabs,
+[data-theme="dark"] .tm-page .tm-drawer-foot {
+  border-color: #374151 !important;
+}
+
+html.dark .tm-page .tm-title,
+html.dark .tm-page .tm-name,
+html.dark .tm-page .fm-upload-name,
+html.dark .tm-page .fm-preview-name,
+[data-theme="dark"] .tm-page .tm-title,
+[data-theme="dark"] .tm-page .tm-name,
+[data-theme="dark"] .tm-page .fm-upload-name,
+[data-theme="dark"] .tm-page .fm-preview-name {
+  color: #f3f4f6 !important;
+}
+
+html.dark .tm-page .tm-desc,
+html.dark .tm-page .tm-code,
+html.dark .tm-page .tm-contact-phone,
+html.dark .tm-page .fm-upload-hint,
+html.dark .tm-page .fm-preview-code,
+[data-theme="dark"] .tm-page .tm-desc,
+[data-theme="dark"] .tm-page .tm-code,
+[data-theme="dark"] .tm-page .tm-contact-phone,
+[data-theme="dark"] .tm-page .fm-upload-hint,
+[data-theme="dark"] .tm-page .fm-preview-code {
+  color: #9ca3af !important;
+}
+
+html.dark .tm-page .tm-mask,
+[data-theme="dark"] .tm-page .tm-mask {
+  background: rgba(2, 6, 23, 0.62) !important;
 }
 </style>

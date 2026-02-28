@@ -136,3 +136,74 @@
     box-shadow: 0 0 0 2px var(--if-color-focus-ring);
   }
 }
+
+/* Element Plus 暗色主题兜底（修复表头/标签页在深色下发白） */
+html.dark .el-table,
+html.dark .el-table__inner-wrapper,
+html.dark .el-table__header-wrapper,
+html.dark .el-table__body-wrapper,
+[data-theme='dark'] .el-table,
+[data-theme='dark'] .el-table__inner-wrapper,
+[data-theme='dark'] .el-table__header-wrapper,
+[data-theme='dark'] .el-table__body-wrapper {
+  background-color: #111827 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .el-table th.el-table__cell,
+html.dark .el-table thead th,
+[data-theme='dark'] .el-table th.el-table__cell,
+[data-theme='dark'] .el-table thead th {
+  background-color: #1f2937 !important;
+  color: #9ca3af !important;
+  border-bottom-color: #374151 !important;
+}
+
+html.dark .el-table td.el-table__cell,
+[data-theme='dark'] .el-table td.el-table__cell {
+  background-color: transparent !important;
+  border-bottom-color: #2d3748 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .el-table tr:hover > td.el-table__cell,
+[data-theme='dark'] .el-table tr:hover > td.el-table__cell {
+  background-color: #1b2535 !important;
+}
+
+html.dark .el-tabs__header,
+html.dark .el-tabs__nav-wrap,
+html.dark .el-tabs__nav,
+[data-theme='dark'] .el-tabs__header,
+[data-theme='dark'] .el-tabs__nav-wrap,
+[data-theme='dark'] .el-tabs__nav {
+  background-color: #111827 !important;
+}
+
+html.dark .el-tabs__nav-wrap::after,
+[data-theme='dark'] .el-tabs__nav-wrap::after {
+  background-color: #374151 !important;
+}
+
+html.dark .el-tabs__item,
+[data-theme='dark'] .el-tabs__item {
+  color: #9ca3af !important;
+}
+
+html.dark .el-tabs__item:hover,
+[data-theme='dark'] .el-tabs__item:hover {
+  color: #e5e7eb !important;
+}
+
+html.dark .el-tabs__item.is-active,
+[data-theme='dark'] .el-tabs__item.is-active {
+  color: #60a5fa !important;
+  background-color: rgba(30, 58, 138, 0.22) !important;
+  border-bottom-color: rgba(30, 58, 138, 0.22) !important;
+  border-radius: 6px 6px 0 0;
+}
+
+html.dark .el-tabs__active-bar,
+[data-theme='dark'] .el-tabs__active-bar {
+  background-color: #60a5fa !important;
+}

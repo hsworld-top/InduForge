@@ -286,6 +286,9 @@ export const messages = {
       logoUploadFailed: 'Logo上传失败',
       backgroundUploadSuccess: '背景图上传成功',
       backgroundUploadFailed: '背景图上传失败',
+      uploadImageOnly: '只能上传图片文件',
+      uploadSizeLimit: '图片大小不能超过 5MB',
+      preview: '图片预览',
       backgroundImageAlt: '背景图',
     },
     systemSettings: {
@@ -939,6 +942,9 @@ export const messages = {
       logoUploadFailed: 'Failed to upload logo',
       backgroundUploadSuccess: 'Background uploaded successfully',
       backgroundUploadFailed: 'Failed to upload background',
+      uploadImageOnly: 'Only image files are allowed',
+      uploadSizeLimit: 'Image size cannot exceed 5MB',
+      preview: 'Image Preview',
       backgroundImageAlt: 'Background',
     },
     systemSettings: {

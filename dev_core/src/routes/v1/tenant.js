@@ -4,6 +4,7 @@ const Joi = require('joi');
 const sharp = require('sharp');
 const { randomUUID } = require('crypto');
 const { Readable } = require('stream');
+const { Op } = require('sequelize');
 const { validate } = require('../../middlewares/validate');
 const { logger } = require('../../utils/logger');
 const ApiResponse = require('../../utils/response');
@@ -208,11 +209,12 @@ router.get('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obje
   query: Joi.object({
     page: Joi.number().integer().min(1).default(appConfig.pagination.defaultPage),
     limit: Joi.number().integer().min(1).max(appConfig.pagination.maxLimit).default(appConfig.pagination.defaultLimit),
-    status: Joi.string().valid('active','inactive','suspended').optional()
+    status: Joi.string().valid('active','inactive','suspended').optional(),
+    keyword: Joi.string().allow('').optional(),
   })
 })), async (req, res) => {
   try {
-    const { page, limit, status } = req.query;
+    const { page, limit, status, keyword } = req.query;
 
     // 将字符串转换为数字
     const pageNum = parseInt(page, 10);
@@ -221,6 +223,16 @@ router.get('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obje
     const where = {};
     if (status) {
       where.status = status;
+    }
+    const normalizedKeyword = typeof keyword === 'string' ? keyword.trim() : '';
+    if (normalizedKeyword) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${normalizedKeyword}%` } },
+        { code: { [Op.like]: `%${normalizedKeyword}%` } },
+        { companyName: { [Op.like]: `%${normalizedKeyword}%` } },
+        { contactEmail: { [Op.like]: `%${normalizedKeyword}%` } },
+        { contactPhone: { [Op.like]: `%${normalizedKeyword}%` } },
+      ];
     }
 
     const offset = (pageNum - 1) * limitNum;

@@ -1048,7 +1048,8 @@ export default {
   overflow: hidden;
 }
 
-.dashboard-tabs :deep(.dark .el-tabs__nav) {
+html.dark .dashboard-tabs :deep(.el-tabs__nav),
+[data-theme="dark"] .dashboard-tabs :deep(.el-tabs__nav) {
   border-bottom-color: rgb(55 65 81);
 }
 
@@ -1077,19 +1078,22 @@ export default {
   border-bottom-color: rgb(239 246 255);
 }
 
-.dashboard-tabs :deep(.dark .el-tabs__item) {
+html.dark .dashboard-tabs :deep(.el-tabs__item),
+[data-theme="dark"] .dashboard-tabs :deep(.el-tabs__item) {
   color: rgb(209 213 219);
 }
 
-.dashboard-tabs :deep(.dark .el-tabs__item:hover) {
+html.dark .dashboard-tabs :deep(.el-tabs__item:hover),
+[data-theme="dark"] .dashboard-tabs :deep(.el-tabs__item:hover) {
   color: rgb(147 197 253);
-  background-color: rgb(30 41 59);
+  background-color: rgb(31 41 55);
 }
 
-.dashboard-tabs :deep(.dark .el-tabs__item.is-active) {
+html.dark .dashboard-tabs :deep(.el-tabs__item.is-active),
+[data-theme="dark"] .dashboard-tabs :deep(.el-tabs__item.is-active) {
   color: rgb(191 219 254);
-  background-color: rgb(30 41 59);
-  border-bottom-color: rgb(30 41 59);
+  background-color: rgb(30 58 138 / 0.28);
+  border-bottom-color: rgb(30 58 138 / 0.28);
 }
 
 .dashboard-tabs :deep(.el-tabs__content) {

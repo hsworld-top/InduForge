@@ -104,6 +104,7 @@ export const useAppStore = defineStore('app', {
 
       // 应用主题到 body
       document.documentElement.classList.toggle('dark', theme === 'dark')
+      document.documentElement.setAttribute('data-theme', theme)
     },
 
     setLanguage(language) {
