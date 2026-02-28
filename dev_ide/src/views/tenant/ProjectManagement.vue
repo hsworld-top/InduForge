@@ -140,7 +140,7 @@
               'ring-4 ring-blue-500': selectedProjects.includes(project.id),
               'opacity-60': selectionMode,
             }"
-            :style="{ backgroundColor: project.colorTag || '#3b82f6' }"
+            :style="getProjectCardStyle(project)"
             @click="handleCardClick(project)"
           >
             <!-- 选择模式下的复选框 -->
@@ -910,7 +910,7 @@ import {
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import JSZip from "jszip";
-import { useAuthStore } from "@/store";
+import { useAuthStore, useAppStore } from "@/store";
 import request from "@/utils/request";
 import { projectAPI } from "@/api/project.api";
 import { ColorTagEnum } from "@/enums";
@@ -922,6 +922,8 @@ export default {
     const { t } = useI18n();
     const { emit } = getCurrentInstance();
     const authStore = useAuthStore();
+    const appStore = useAppStore();
+    const isDark = computed(() => appStore.isDark);
 
     // 当前用户信息
     const currentUser = computed(() => authStore.userInfo);
@@ -1054,6 +1056,50 @@ export default {
     const canPerformOps = computed(() => {
       return ["SYSTEM_ADMIN", "OPS_ADMIN"].includes(currentUser.value?.role);
     });
+
+    /**
+     * 将 HEX 颜色转为 RGB 对象。
+     * @param {string} hex - HEX 颜色值
+     * @returns {{r:number,g:number,b:number}|null}
+     */
+    const hexToRgb = (hex) => {
+      if (!hex || typeof hex !== "string") return null;
+      const normalized = hex.replace("#", "");
+      if (![3, 6].includes(normalized.length)) return null;
+      const fullHex =
+        normalized.length === 3
+          ? normalized
+              .split("")
+              .map((c) => c + c)
+              .join("")
+          : normalized;
+      const num = Number.parseInt(fullHex, 16);
+      if (Number.isNaN(num)) return null;
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255,
+      };
+    };
+
+    /**
+     * 根据主题生成工程卡片背景样式。
+     * @param {object} project - 工程对象
+     * @returns {Record<string,string>} 行内样式
+     */
+    const getProjectCardStyle = (project) => {
+      const baseColor = project?.colorTag || "#3b82f6";
+      const rgb = hexToRgb(baseColor);
+      if (!rgb) return { backgroundColor: baseColor };
+      if (isDark.value) {
+        return {
+          background: `linear-gradient(135deg, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.34) 0%, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.56) 100%)`,
+        };
+      }
+      return {
+        background: `linear-gradient(135deg, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.88) 0%, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.96) 100%)`,
+      };
+    };
 
     // 获取工程列表
     const fetchProjects = async () => {
@@ -2050,6 +2096,7 @@ export default {
       undeployProject,
       getNodeMode,
       getModeTagType,
+      getProjectCardStyle,
       getProjectModeDisplay,
       getProjectModeTagType,
       formatDateTime,
