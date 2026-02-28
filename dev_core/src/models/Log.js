@@ -60,11 +60,6 @@ const Log = sequelize.define('Log', {
     allowNull: true,
     comment: '用户代理',
   },
-  metadata: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    comment: '额外元数据',
-  },
   createdAt: {
     type: DataTypes.DATE,
     allowNull: false,

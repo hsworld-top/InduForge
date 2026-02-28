@@ -79,18 +79,20 @@
             {{ formatDateTime(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column :label="t('userManagement.actions')" min-width="220" fixed="right" v-if="canManageUsers">
+        <el-table-column :label="t('userManagement.actions')" width="300" fixed="right" v-if="canManageUsers">
           <template #default="scope">
-            <el-button type="primary" size="small" @click="editUser(scope.row)" class="mr-2">
-              {{ t('userManagement.edit') }}
-            </el-button>
-            <el-button type="warning" size="small" @click="resetPassword(scope.row)" class="mr-2">
-              {{ t('userManagement.resetPassword') }}
-            </el-button>
-            <el-button type="danger" size="small" @click="deleteUser(scope.row)"
-              v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole">
-              {{ t('userManagement.delete') }}
-            </el-button>
+            <div class="user-actions">
+              <el-button type="primary" size="small" @click="editUser(scope.row)">
+                {{ t('userManagement.edit') }}
+              </el-button>
+              <el-button type="warning" size="small" @click="resetPassword(scope.row)">
+                {{ t('userManagement.resetPassword') }}
+              </el-button>
+              <el-button type="danger" size="small" @click="deleteUser(scope.row)"
+                v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole">
+                {{ t('userManagement.delete') }}
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -722,6 +724,13 @@ export default {
   padding: 20px;
 }
 
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 /* 表格样式 */
 :deep(.el-table) {
   border-radius: 8px;
@@ -747,6 +756,12 @@ export default {
   border-radius: 12px 12px 0 0;
   margin: 0;
   padding: 20px;
+}
+
+html.dark :deep(.el-dialog__header),
+[data-theme='dark'] :deep(.el-dialog__header) {
+  background-color: #1f2937 !important;
+  border-bottom: 1px solid #374151;
 }
 
 :deep(.el-dialog__body) {

@@ -15,7 +15,7 @@ const { TIME_FORMAT } = require('../../constants/time');
 const router = express.Router();
 
 // 导入模型
-const { User, Tenant } = require('../../models');
+const { User, Tenant, Log } = require('../../models');
 
 /**
  * @swagger
@@ -107,6 +107,8 @@ router.post('/login',
   async (req, res) => {
     try {
       const { username, password, tenantCode, captchaKey, captchaCode } = req.body;
+      const loginIp = req.ip;
+      const loginUserAgent = req.get('user-agent') || null;
 
       // 验证码校验（只有当提供了有效的验证码参数时才验证）
       if (captchaKey && captchaCode && captchaKey.trim() && captchaCode.trim()) {
@@ -118,6 +120,23 @@ router.post('/login',
 
       // 检查是否为超级管理员登录（租户管理）
       if (username === appConfig.superAdmin.username && password === appConfig.superAdmin.password) {
+        // 记录超级管理员登录日志（该账号非数据库用户，userId 置空）
+        try {
+          await Log.create({
+            level: 'info',
+            message: `认证登录成功，操作者：${appConfig.superAdmin.username}（SUPER_ADMIN）`,
+            action: 'auth.login',
+            resource: 'auth',
+            userId: null,
+            tenantId: null,
+            ip: loginIp,
+            userAgent: loginUserAgent,
+            createdAt: new Date(),
+          });
+        } catch (logError) {
+          logger.warn('Write super admin login log failed', { error: logError.message, requestId: req.requestId });
+        }
+
         const payload = {
           userId: appConfig.superAdmin.userId,
           username: appConfig.superAdmin.username,
@@ -188,6 +207,26 @@ router.post('/login',
 
       if (!user || !(await bcrypt.compare(password, user.password))) {
         return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 401);
+      }
+
+      // 更新最后登录时间
+      await user.update({ lastLoginAt: new Date() });
+
+      // 记录登录日志（日志写入失败不影响登录成功）
+      try {
+        await Log.create({
+          level: 'info',
+          message: `认证登录成功，操作者：${user.username}（${user.role}）`,
+          action: 'auth.login',
+          resource: 'auth',
+          userId: user.id,
+          tenantId: user.tenantId,
+          ip: loginIp,
+          userAgent: loginUserAgent,
+          createdAt: new Date(),
+        });
+      } catch (logError) {
+        logger.warn('Write user login log failed', { error: logError.message, requestId: req.requestId });
       }
 
       const payload = {

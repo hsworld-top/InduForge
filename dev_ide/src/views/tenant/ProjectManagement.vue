@@ -2109,6 +2109,12 @@ export default {
   padding: 20px;
 }
 
+html.dark :deep(.el-dialog__header),
+[data-theme='dark'] :deep(.el-dialog__header) {
+  background-color: #1f2937 !important;
+  border-bottom: 1px solid #374151;
+}
+
 :deep(.el-dialog__body) {
   padding: 20px;
 }

@@ -207,3 +207,33 @@ html.dark .el-tabs__active-bar,
 [data-theme='dark'] .el-tabs__active-bar {
   background-color: #60a5fa !important;
 }
+
+html.dark .el-dialog,
+[data-theme='dark'] .el-dialog {
+  background-color: #111827 !important;
+}
+
+html.dark .el-dialog__header,
+[data-theme='dark'] .el-dialog__header {
+  background-color: #1f2937 !important;
+  border-bottom: 1px solid #374151 !important;
+}
+
+html.dark .el-dialog__body,
+[data-theme='dark'] .el-dialog__body {
+  background-color: #111827 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .el-dialog__footer,
+[data-theme='dark'] .el-dialog__footer {
+  background-color: #111827 !important;
+  border-top: 1px solid #374151 !important;
+}
+
+html.dark .el-dialog__title,
+html.dark .el-dialog__headerbtn .el-dialog__close,
+[data-theme='dark'] .el-dialog__title,
+[data-theme='dark'] .el-dialog__headerbtn .el-dialog__close {
+  color: #e5e7eb !important;
+}

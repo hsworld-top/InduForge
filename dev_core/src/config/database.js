@@ -143,6 +143,35 @@ const stopDbHealthCheck = () => {
 };
 
 /**
+ * 兼容历史数据库结构：扩展 users.role 枚举。
+ * 旧库中 role 可能仅包含 DEVELOPER/OPERATOR/VIEWER，导致新角色写入失败。
+ * @returns {Promise<void>}
+ */
+const ensureUserRoleEnumCompatibility = async () => {
+  try {
+    await sequelize.query(`
+      ALTER TABLE users
+      MODIFY COLUMN role ENUM(
+        'SUPER_ADMIN',
+        'SYSTEM_ADMIN',
+        'PROJECT_ADMIN',
+        'OPS_ADMIN',
+        'USER_ADMIN',
+        'DEVELOPER',
+        'OPERATOR',
+        'VIEWER'
+      ) NOT NULL COMMENT '系统角色'
+    `);
+    logger.info('✅ users.role 枚举兼容检查完成');
+  } catch (error) {
+    // 该修复属于兼容增强，失败不阻断服务启动
+    logger.warn('users.role 枚举兼容修复失败，将继续启动服务', {
+      error: error.message,
+    });
+  }
+};
+
+/**
  * 测试 MySQL 服务器连接（不指定数据库）
  * @returns {Promise<{success: boolean, error?: Error}>}
  */
@@ -295,6 +324,9 @@ const testConnection = async () => {
     logger.info('🔍 测试数据库连接...');
     await sequelize.authenticate();
     logger.info('✅ 数据库连接成功');
+
+    // 启动时自动修复历史库 role 枚举，避免新角色写入失败。
+    await ensureUserRoleEnumCompatibility();
     
     dbStatus.connected = true;
     dbStatus.degraded = false;

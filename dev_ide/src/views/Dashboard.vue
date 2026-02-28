@@ -562,10 +562,11 @@ import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } fr
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
+import { Storage } from '@/utils/storage'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { buildAppUrl } from '@/utils/appUrl'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
-import { ROLES } from '@/constants'
+import { ROLES, STORAGE_KEYS } from '@/constants'
 
 // 标签页组件懒加载，提升首次加载速度
 const DashboardContent = defineAsyncComponent(() => import('@/views/DashboardContent.vue'))
@@ -608,6 +609,7 @@ export default {
     const tabs = ref([])
     const activeTab = ref('')
     const isTabMaximized = ref(false)
+    const tabsInitialized = ref(false)
 
     // 标签页配置
     const getTabConfigMap = () => ({
@@ -810,6 +812,64 @@ export default {
       activeTab.value = tabKey
     }
 
+    /**
+     * 获取当前用户对应的标签持久化键。
+     * @returns {string} 本地存储键
+     */
+    const getTabStateStorageKey = () => {
+      const userId = authStore.userInfo?.id || 'anonymous'
+      return `${STORAGE_KEYS.DASHBOARD_TAB_STATE}_${userId}`
+    }
+
+    /**
+     * 持久化当前标签状态。
+     */
+    const persistTabState = () => {
+      if (!tabsInitialized.value) return
+      const tabConfigMap = getTabConfigMap()
+      const persistedKeys = tabs.value
+        .map((tab) => tab.key)
+        .filter((key) => tabConfigMap[key] && hasTabPermission(key))
+      const safeActiveTab = persistedKeys.includes(activeTab.value)
+        ? activeTab.value
+        : persistedKeys[0] || ''
+
+      Storage.set(getTabStateStorageKey(), {
+        tabs: persistedKeys,
+        activeTab: safeActiveTab,
+      })
+    }
+
+    /**
+     * 从本地存储恢复标签状态。
+     * @returns {boolean} 是否恢复成功
+     */
+    const restoreTabState = () => {
+      const savedState = Storage.get(getTabStateStorageKey(), null)
+      if (!savedState || !Array.isArray(savedState.tabs)) return false
+
+      const tabConfigMap = getTabConfigMap()
+      const restoredKeys = savedState.tabs.filter((key) => tabConfigMap[key] && hasTabPermission(key))
+      if (restoredKeys.length === 0) return false
+
+      tabs.value = restoredKeys.map((key) => ({
+        key,
+        title: t(tabConfigMap[key].titleKey),
+        titleKey: tabConfigMap[key].titleKey,
+        component: tabConfigMap[key].component,
+        icon: tabConfigMap[key].icon,
+        props: null,
+      }))
+
+      if (savedState.activeTab && restoredKeys.includes(savedState.activeTab)) {
+        activeTab.value = savedState.activeTab
+      } else {
+        activeTab.value = restoredKeys[0]
+      }
+
+      return true
+    }
+
     // 关闭标签页
     const closeTab = (tabKey) => {
       const index = tabs.value.findIndex((tab) => tab.key === tabKey)
@@ -860,21 +920,22 @@ export default {
       // 添加全局点击事件监听
       document.addEventListener('click', handleClickOutside)
 
-      // 根据用户角色决定默认打开的标签页
-      // 系统管理员和超级管理员默认打开仪表盘
-      // 其他用户默认打开他们有权限访问的功能
-      if (isSuperAdmin.value || isSystemAdmin.value) {
-        openTab('dashboard')
-      } else if (isUserAdmin.value) {
-        openTab('user-management')
-      } else if (isProjectAdmin.value) {
-        openTab('project-management')
-      } else if (isOpsAdmin.value) {
-        openTab('system-logs')
-      } else {
-        // 如果没有任何权限，打开仪表盘（虽然看不到菜单，但至少有内容）
-        openTab('dashboard')
+      // 优先恢复历史标签状态，未恢复成功时按角色打开默认标签
+      const restored = restoreTabState()
+      if (!restored) {
+        if (isSuperAdmin.value || isSystemAdmin.value) {
+          openTab('dashboard')
+        } else if (isUserAdmin.value) {
+          openTab('user-management')
+        } else if (isProjectAdmin.value) {
+          openTab('project-management')
+        } else if (isOpsAdmin.value) {
+          openTab('system-logs')
+        } else {
+          openTab('dashboard')
+        }
       }
+      tabsInitialized.value = true
 
       // 仅超级管理员按需获取租户详情，避免非超级管理员触发租户接口请求
       if (isSuperAdmin.value && authStore.userInfo?.tenantId) {
@@ -955,6 +1016,14 @@ export default {
       })
     })
 
+    watch(
+      [tabs, activeTab],
+      () => {
+        persistTabState()
+      },
+      { deep: true }
+    )
+
     return {
       showUserMenu,
       showLanguageMenu,
@@ -1031,7 +1100,7 @@ export default {
 /* 标签页样式 */
 .dashboard-tabs :deep(.el-tabs__header) {
   margin: 0;
-  padding: 4px 0 0 0;
+  padding: 0;
 }
 
 .dashboard-tabs :deep(.el-tabs__nav-wrap) {

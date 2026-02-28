@@ -1013,8 +1013,7 @@ router.post('/:id/operations/:operation', authenticateToken, requireResourceOwne
       resource: 'project',
       resourceId: id,
       userId: userId,
-      tenantId: project.tenantId,
-      metadata: { operation, projectId: id, projectName: project.name }
+      tenantId: project.tenantId
     });
 
     return ApiResponse.success(res, {

@@ -8,24 +8,32 @@
       </el-button>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
       <div class="stat-card">
-        <div class="stat-label">{{ t('systemLogs.levelError') }}</div>
-        <div class="stat-value text-red-600 dark:text-red-400">{{ levelStats.error || 0 }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">{{ t('systemLogs.levelWarning') }}</div>
-        <div class="stat-value text-orange-600 dark:text-orange-400">
-          {{ levelStats.warning || 0 }}
+        <div class="stat-line">
+          <span class="stat-label">{{ t('systemLogs.levelError') }}</span>
+          <span class="stat-value text-red-600 dark:text-red-400">{{ levelStats.error || 0 }}</span>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">{{ t('systemLogs.levelInfo') }}</div>
-        <div class="stat-value text-blue-600 dark:text-blue-400">{{ levelStats.info || 0 }}</div>
+        <div class="stat-line">
+          <span class="stat-label">{{ t('systemLogs.levelWarning') }}</span>
+          <span class="stat-value text-orange-600 dark:text-orange-400">
+          {{ levelStats.warning || 0 }}
+          </span>
+        </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">{{ t('systemLogs.levelDebug') }}</div>
-        <div class="stat-value text-gray-700 dark:text-gray-300">{{ levelStats.debug || 0 }}</div>
+        <div class="stat-line">
+          <span class="stat-label">{{ t('systemLogs.levelInfo') }}</span>
+          <span class="stat-value text-blue-600 dark:text-blue-400">{{ levelStats.info || 0 }}</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-line">
+          <span class="stat-label">{{ t('systemLogs.levelDebug') }}</span>
+          <span class="stat-value text-gray-700 dark:text-gray-300">{{ levelStats.debug || 0 }}</span>
+        </div>
       </div>
     </div>
 
@@ -103,7 +111,7 @@
       </el-form>
     </div>
 
-    <div class="panel">
+    <div class="panel logs-panel">
       <div v-if="loadError" class="px-4 pt-4">
         <el-alert :title="loadError" type="error" show-icon :closable="false">
           <template #default>
@@ -111,42 +119,49 @@
           </template>
         </el-alert>
       </div>
-      <el-table
-        :data="logs"
-        v-loading="loading"
-        style="width: 100%"
-        :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
-      >
-        <el-table-column prop="createdAt" :label="t('systemLogs.time')" width="180">
-          <template #default="scope">
-            {{ formatDateTime(scope.row.createdAt) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="level" :label="t('systemLogs.level')" width="90">
-          <template #default="scope">
-            <el-tag :type="getLevelTagType(scope.row.level)" size="small">
-              {{ getLevelLabel(scope.row.level) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="action" :label="t('systemLogs.action')" width="180" show-overflow-tooltip />
-        <el-table-column prop="resource" :label="t('systemLogs.resource')" width="180" show-overflow-tooltip />
-        <el-table-column prop="message" :label="t('systemLogs.logContent')" min-width="280" show-overflow-tooltip />
-        <el-table-column prop="ip" :label="t('systemLogs.ip')" width="140" />
-        <el-table-column :label="t('systemLogs.user')" width="140">
-          <template #default="scope">
-            {{ scope.row.user?.fullName || scope.row.user?.username || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('systemLogs.tenant')" width="140">
-          <template #default="scope">
-            {{ scope.row.tenant?.name || '-' }}
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="logs-table-wrap">
+        <el-table
+          :data="logs"
+          v-loading="loading"
+          :max-height="'calc(100vh - 430px)'"
+          style="width: 100%"
+          :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
+        >
+          <el-table-column prop="createdAt" :label="t('systemLogs.time')" width="180">
+            <template #default="scope">
+              {{ formatDateTime(scope.row.createdAt) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="level" :label="t('systemLogs.level')" width="90">
+            <template #default="scope">
+              <el-tag :type="getLevelTagType(scope.row.level)" size="small">
+                {{ getLevelLabel(scope.row.level) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="action" :label="t('systemLogs.action')" width="180" show-overflow-tooltip>
+            <template #default="scope">
+              {{ getActionLabel(scope.row.action) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="resource" :label="t('systemLogs.resource')" width="180" show-overflow-tooltip>
+            <template #default="scope">
+              {{ getResourceLabel(scope.row.resource, scope.row.action) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="message" :label="t('systemLogs.logContent')" min-width="280" show-overflow-tooltip />
+          <el-table-column prop="ip" :label="t('systemLogs.ip')" width="140" />
+          <el-table-column :label="t('systemLogs.user')" width="140">
+            <template #default="scope">
+              {{ scope.row.user?.fullName || scope.row.user?.username || '-' }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
-      <div class="flex justify-end items-center p-4 border-t border-gray-200 dark:border-gray-700">
+      <div class="logs-pagination flex justify-end items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
         <el-pagination
+          size="small"
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.limit"
           :page-sizes="systemLogPageSizeOptions"
@@ -200,6 +215,56 @@ export default {
       totalPages: 0,
     })
 
+
+    const actionLabelMap = {
+      create: 'systemLogs.actionCreate',
+      update: 'systemLogs.actionUpdate',
+      delete: 'systemLogs.actionDelete',
+      login: 'systemLogs.actionLogin',
+      logout: 'systemLogs.actionLogout',
+      reset_password: 'systemLogs.actionResetPassword',
+      resetpassword: 'systemLogs.actionResetPassword',
+      change_password: 'systemLogs.actionChangePassword',
+      changepassword: 'systemLogs.actionChangePassword',
+      query: 'systemLogs.actionQuery',
+      view: 'systemLogs.actionView',
+      list: 'systemLogs.actionList',
+      export: 'systemLogs.actionExport',
+      import: 'systemLogs.actionImport',
+      deploy: 'systemLogs.actionDeploy',
+      start: 'systemLogs.actionStart',
+      stop: 'systemLogs.actionStop',
+      restart: 'systemLogs.actionRestart',
+      rollback: 'systemLogs.actionRollback',
+      approve: 'systemLogs.actionApprove',
+      reject: 'systemLogs.actionReject',
+      register: 'systemLogs.actionRegister',
+      unregister: 'systemLogs.actionUnregister',
+      upload: 'systemLogs.actionUpload',
+      download: 'systemLogs.actionDownload',
+      save: 'systemLogs.actionSave',
+      update_settings: 'systemLogs.actionUpdateSettings',
+      updatesettings: 'systemLogs.actionUpdateSettings',
+    }
+
+    const resourceLabelMap = {
+      user: 'systemLogs.resourceUser',
+      users: 'systemLogs.resourceUser',
+      tenant: 'systemLogs.resourceTenant',
+      tenants: 'systemLogs.resourceTenant',
+      project: 'systemLogs.resourceProject',
+      projects: 'systemLogs.resourceProject',
+      log: 'systemLogs.resourceLog',
+      logs: 'systemLogs.resourceLog',
+      system: 'systemLogs.resourceSystem',
+      setting: 'systemLogs.resourceSetting',
+      settings: 'systemLogs.resourceSetting',
+      profile: 'systemLogs.resourceProfile',
+      auth: 'systemLogs.resourceAuth',
+      node: 'systemLogs.resourceNode',
+      nodes: 'systemLogs.resourceNode',
+      ops: 'systemLogs.resourceOps',
+    }
     const getQueryParams = () => {
       const [startDate, endDate] = Array.isArray(filters.dateRange) ? filters.dateRange : []
       const params = {
@@ -450,6 +515,59 @@ export default {
       return map[level] || level || '-'
     }
 
+
+    const normalizeLogToken = (value) => {
+      if (!value) return ''
+      return String(value).toLowerCase().replace(/[-\s]+/g, '_')
+    }
+
+    const getActionSegment = (action) => {
+      const normalized = normalizeLogToken(action)
+      if (!normalized) return ''
+      const dotSegments = normalized.split('.').filter(Boolean)
+      if (dotSegments.length > 1) {
+        return dotSegments[dotSegments.length - 1]
+      }
+      const underscoreSegments = normalized.split('_').filter(Boolean)
+      if (underscoreSegments.length > 1) {
+        return underscoreSegments[underscoreSegments.length - 1]
+      }
+      return normalized
+    }
+
+    const getResourceSegment = (resource, action) => {
+      const normalizedResource = normalizeLogToken(resource)
+      if (normalizedResource) return normalizedResource
+      const normalizedAction = normalizeLogToken(action)
+      if (!normalizedAction) return ''
+      const dotSegments = normalizedAction.split('.').filter(Boolean)
+      if (dotSegments.length > 1) {
+        return dotSegments[0]
+      }
+      const underscoreSegments = normalizedAction.split('_').filter(Boolean)
+      if (underscoreSegments.length > 1) {
+        return underscoreSegments[0]
+      }
+      return ''
+    }
+
+    const getActionLabel = (action) => {
+      const rawAction = action || ''
+      const normalizedAction = normalizeLogToken(rawAction)
+      const actionKey = actionLabelMap[normalizedAction]
+      if (actionKey) return t(actionKey)
+      const actionSegment = getActionSegment(rawAction)
+      const segmentKey = actionLabelMap[actionSegment]
+      if (segmentKey) return t(segmentKey)
+      return rawAction || '-'
+    }
+
+    const getResourceLabel = (resource, action) => {
+      const resourceSegment = getResourceSegment(resource, action)
+      const resourceKey = resourceLabelMap[resourceSegment]
+      if (resourceKey) return t(resourceKey)
+      return resource || resourceSegment || '-'
+    }
     onMounted(async () => {
       await Promise.all([fetchLogs(), fetchStats()])
       const lastViewId = Storage.get(STORAGE_KEYS.SYSTEM_LOG_LAST_VIEW_ID, '')
@@ -480,6 +598,8 @@ export default {
       handleCurrentChange,
       getLevelTagType,
       getLevelLabel,
+      getActionLabel,
+      getResourceLabel,
       formatDateTime,
       savedViews,
       sortedSavedViews,
@@ -500,15 +620,46 @@ export default {
 }
 
 .stat-card {
-  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4;
+  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 py-2 px-3;
+}
+
+.stat-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
 }
 
 .stat-label {
-  @apply text-sm text-gray-500 dark:text-gray-400;
+  @apply text-xs text-gray-500 dark:text-gray-400;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .stat-value {
-  @apply text-2xl font-semibold mt-2;
+  @apply text-base font-semibold;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.logs-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.logs-table-wrap {
+  overflow: hidden;
+}
+
+.logs-pagination {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--if-color-surface);
+  flex-shrink: 0;
 }
 </style>
+
+
 

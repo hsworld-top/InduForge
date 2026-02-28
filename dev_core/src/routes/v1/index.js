@@ -1,5 +1,6 @@
 const express = require("express");
 const { logger } = require("../../utils/logger");
+const { operationAuditLog } = require("../../middlewares/operationAuditLog");
 // Reuse existing route modules
 const authRoutes = require("./auth");
 const tenantRoutes = require("./tenant");
@@ -26,6 +27,7 @@ function buildV1Router(options = {}) {
   } else {
     router.use("/auth", authRoutes);
   }
+  router.use(operationAuditLog);
   router.use("/tenants", tenantRoutes);
   router.use("/users", userRoutes);
   router.use("/projects", projectRoutes);
