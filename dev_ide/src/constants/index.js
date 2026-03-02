@@ -63,6 +63,7 @@ export const STORAGE_KEYS = {
   REMEMBER_ME: 'remember_me',
   SIDEBAR_COLLAPSED: 'sidebar_collapsed',
   DASHBOARD_TAB_STATE: 'dashboard_tab_state',
+  OPS_OPEN_PENDING_REQUEST: 'ops_open_pending_request',
   SYSTEM_LOG_SAVED_VIEWS: 'system_log_saved_views',
   SYSTEM_LOG_LAST_VIEW_ID: 'system_log_last_view_id',
 }

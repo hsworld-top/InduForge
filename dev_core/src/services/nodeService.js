@@ -3,7 +3,7 @@
  * @description 处理 NodeAgent 的注册、心跳上报、状态查询等功能
  */
 const crypto = require("crypto");
-const { Node, NodeDeployment, Deployment, Project, Tenant, User } = require("../models");
+const { Node, NodeDeployment, Deployment, Project, Tenant, User, Log } = require("../models");
 const { Op } = require("sequelize");
 const socketService = require("./socketService");
 const bcrypt = require("bcryptjs");
@@ -103,7 +103,17 @@ class NodeService {
    * @returns {Promise<Object>} 注册结果
    */
   async registerWithAuth(data) {
-    const { username, password, nodeName, nodeDescription, agentVersion, ipAddress, port, mode = 'online' } = data;
+    const {
+      username,
+      password,
+      nodeName,
+      nodeDescription,
+      agentVersion,
+      ipAddress,
+      port,
+      mode = "online",
+      userAgent,
+    } = data;
 
     // 验证节点名称格式
     const namePattern = /^[a-zA-Z0-9_-]{3,50}$/;
@@ -167,6 +177,34 @@ class NodeService {
       createdBy: user.id,
       updatedBy: user.id,
     });
+
+    // 记录节点注册申请到系统日志，供“最近活动”展示。
+    if (!hasOpsPermission) {
+      await Log.create({
+        level: "info",
+        message: `节点注册申请已提交，节点：${node.name}，申请人：${user.username}`,
+        action: "node-register.create",
+        resource: "node-register",
+        resourceId: node.id,
+        userId: user.id,
+        tenantId,
+        ip: normalizeIp(ipAddress) || null,
+        userAgent: userAgent || null,
+        createdAt: new Date(),
+      });
+
+      socketService.broadcastNodePendingRequest(tenantId, {
+        nodeId: node.id,
+        nodeName: node.name,
+        applicant: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+        },
+        approvalStatus: node.approvalStatus,
+        createdAt: node.createdAt,
+      });
+    }
 
     return {
       nodeId: node.id,
@@ -545,10 +583,9 @@ class NodeService {
       updatedBy: userId,
     });
 
-    return {
-      ...node.toJSON(),
-      registrationToken, // 确保返回 token
-    };
+    const updatedNode = node.toJSON();
+    delete updatedNode.registrationToken;
+    return updatedNode;
   }
 
   /**

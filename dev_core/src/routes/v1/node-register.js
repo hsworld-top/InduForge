@@ -48,6 +48,7 @@ router.post("/register-with-auth", async (req, res) => {
       ipAddress: ipAddress || req.ip,
       port,
       mode: mode || "online",
+      userAgent: req.get("user-agent") || "",
     });
 
     res.status(201).json({

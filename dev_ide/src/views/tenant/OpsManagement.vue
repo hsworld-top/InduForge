@@ -17,9 +17,6 @@
             <el-icon class="mr-1"><List /></el-icon> {{ t('opsManagement.listView') }}
           </el-radio-button>
         </el-radio-group>
-        <el-button v-if="canApproveNode" type="primary" @click="showAddNodeDialog = true">
-          {{ t('opsManagement.registerNode') }}
-        </el-button>
         <!-- 待审核申请通知图标 -->
         <el-badge :value="pendingCount" :hidden="pendingCount === 0" class="cursor-pointer" @click="showPendingDialog = true">
           <el-button :type="pendingCount > 0 ? 'warning' : 'default'" :plain="pendingCount === 0" circle>
@@ -73,8 +70,8 @@
       </el-alert>
     </div>
 
-    <div class="mb-6">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="mb-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div class="status-stat-card">
           <div class="status-stat-label">{{ t('opsManagement.running') }}</div>
           <div class="status-stat-value text-status-success">
@@ -396,41 +393,6 @@
       </template>
     </el-dialog>
 
-    <!-- 弹窗：注册节点 -->
-    <el-dialog v-model="showAddNodeDialog" :title="t('opsManagement.registerNewNode')" width="500px">
-      <el-form ref="nodeFormRef" :model="nodeForm" :rules="nodeFormRules" label-width="100px" class="mt-4">
-        <el-form-item :label="t('opsManagement.nodeName')" prop="name">
-          <el-input v-model="nodeForm.name" :placeholder="t('opsManagement.nodeNamePlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('opsManagement.nodeDesc')" prop="description">
-          <el-input v-model="nodeForm.description" type="textarea" :placeholder="t('opsManagement.nodeDescPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('opsManagement.ipAddressLabel')">
-          <el-input v-model="nodeForm.ipAddress" :placeholder="t('opsManagement.ipPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('opsManagement.managePort')">
-          <el-input-number v-model="nodeForm.port" :min="1" :max="65535" class="w-full" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showAddNodeDialog = false">{{ t('opsManagement.cancel') }}</el-button>
-        <el-button type="primary" @click="submitNodeForm" :loading="submitting">{{ t('opsManagement.createAndToken') }}</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 弹窗：节点注册完成 -->
-    <el-dialog v-model="showTokenDialog" :title="t('opsManagement.approvePassed')" width="500px" :close-on-click-modal="false">
-      <el-result icon="success" :title="t('opsManagement.approveSuccessTitle')" :sub-title="t('opsManagement.approveSuccessSubtitle')">
-        <template #extra>
-          <div class="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 rounded-lg font-mono text-xs break-all mb-4 text-left select-all">
-            REGISTRATION_TOKEN={{ registrationToken }}<br/>
-            NODE_ID={{ newNodeId }}
-          </div>
-          <el-button type="primary" @click="copyToken">{{ t('opsManagement.copyAndClose') }}</el-button>
-        </template>
-      </el-result>
-    </el-dialog>
-
     <!-- 弹窗：详细日志 -->
     <el-dialog v-model="showLogDialog" :title="t('opsManagement.runtimeLogTitle', { name: currentDeployment?.project?.name || '' })" width="800px">
       <div class="bg-black text-green-500 p-4 rounded-lg h-96 overflow-y-auto font-mono text-xs">
@@ -492,6 +454,7 @@ import { initSocket, getSocket } from '@/utils/socket'
 import { Storage } from '@/utils/storage'
 import { canApproveNodes } from '@/permissions'
 import { useAuthStore } from '@/store'
+import { STORAGE_KEYS } from '@/constants'
 import { RoleEnum, ENUM_LABELS } from '@/enums'
 import {
   getNodeStatusType,
@@ -531,23 +494,6 @@ const nodePagination = reactive({
   pageSize: 12,
   total: 0,
 })
-
-// 注册节点状态
-const showAddNodeDialog = ref(false)
-const submitting = ref(false)
-const showTokenDialog = ref(false)
-const registrationToken = ref('')
-const newNodeId = ref('')
-const nodeFormRef = ref(null)
-const nodeForm = reactive({
-  name: '',
-  description: '',
-  ipAddress: '',
-  port: 8080,
-})
-const nodeFormRules = {
-  name: [{ required: true, message: t('opsManagement.inputNodeName'), trigger: 'blur' }],
-}
 
 // 待审核申请弹窗
 const showPendingDialog = ref(false)
@@ -617,9 +563,6 @@ const handleApprove = async (node) => {
     const res = await request.put(`/nodes/${node.id}/approve`)
     if (res.success) {
       ElMessage.success(t('opsManagement.approvePassed'))
-      registrationToken.value = res.data.registrationToken
-      newNodeId.value = res.data.id
-      showTokenDialog.value = true
       showPendingDialog.value = false
       fetchNodes()
       fetchPendingList() // 刷新待审核列表
@@ -664,56 +607,11 @@ const updateCounts = async () => {
   }
 }
 
-const resetNodeForm = () => {
-  nodeForm.name = ''
-  nodeForm.description = ''
-  nodeForm.ipAddress = ''
-  nodeForm.port = 8080
-  nodeFormRef.value?.clearValidate?.()
-}
-
-const submitNodeForm = async () => {
-  if (!nodeFormRef.value) return
-  try {
-    await nodeFormRef.value.validate()
-  } catch {
-    return
-  }
-
-  submitting.value = true
-  try {
-    let res
-    try {
-      res = await request.post('/nodes/register', { ...nodeForm })
-    } catch {
-      res = await request.post('/nodes', { ...nodeForm })
-    }
-
-    if (res?.success) {
-      ElMessage.success(t('opsManagement.submittedTip'))
-      showAddNodeDialog.value = false
-      resetNodeForm()
-      await Promise.all([fetchPendingList(), updateCounts()])
-    }
-  } catch (error) {
-    ElMessage.error(error.response?.data?.message || t('opsManagement.createNodeFailed'))
-  } finally {
-    submitting.value = false
-  }
-}
-
 const resetNodeSearch = () => {
   nodeSearch.status = ''
   nodeSearch.keyword = ''
   nodePagination.page = 1
   fetchNodes()
-}
-
-const copyToken = () => {
-  const text = `REGISTRATION_TOKEN=${registrationToken.value}\nNODE_ID=${newNodeId.value}`
-  window.navigator.clipboard.writeText(text)
-  ElMessage.success(t('opsManagement.copied'))
-  showTokenDialog.value = false
 }
 
 // 指标获取辅助函数
@@ -782,6 +680,14 @@ const deleteNode = async (node) => {
 }
 
 const promptDeploy = (node) => ElMessage.info(t('opsManagement.deployHint', { name: node.name }))
+
+/**
+ * 打开待审核申请弹窗并刷新数据。
+ */
+const openPendingRequestsDialog = async () => {
+  await fetchPendingList()
+  showPendingDialog.value = true
+}
 
 // 新增：启动工程
 const handleStartProject = async (deploy) => {
@@ -921,6 +827,11 @@ onMounted(async () => {
   fetchPendingList()
   updateCounts()
   setupRealtimeUpdates()
+  window.addEventListener('ops:open-pending-requests', openPendingRequestsDialog)
+  if (Storage.get(STORAGE_KEYS.OPS_OPEN_PENDING_REQUEST, false)) {
+    Storage.remove(STORAGE_KEYS.OPS_OPEN_PENDING_REQUEST)
+    openPendingRequestsDialog()
+  }
 })
 
 onBeforeUnmount(() => {
@@ -932,6 +843,7 @@ onBeforeUnmount(() => {
     socket.off('ops:node:status')
     socket.off('ops:project:metrics')
   }
+  window.removeEventListener('ops:open-pending-requests', openPendingRequestsDialog)
 })
 </script>
 
@@ -951,15 +863,23 @@ onBeforeUnmount(() => {
 }
 
 .status-stat-card {
-  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4;
+  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .status-stat-label {
   @apply text-xs text-gray-500 dark:text-gray-400;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .status-stat-value {
-  @apply text-2xl font-semibold mt-2;
+  @apply text-base font-semibold;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 :deep(.el-progress-circle) {
   margin: 0 auto;

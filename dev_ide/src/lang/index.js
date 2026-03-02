@@ -111,6 +111,8 @@ export const messages = {
       menuLogs: '系统日志',
       menuSettings: '系统设置',
       profile: '个人资料',
+      pendingNodeTitle: '新节点注册申请',
+      pendingNodeMessage: '节点“{nodeName}”由 {applicant} 提交注册申请，点击前往处理',
     },
     profile: {
       title: '个人资料',
@@ -802,6 +804,8 @@ export const messages = {
       menuLogs: 'System Logs',
       menuSettings: 'System Settings',
       profile: 'Profile',
+      pendingNodeTitle: 'New Node Registration Request',
+      pendingNodeMessage: 'Node "{nodeName}" was requested by {applicant}. Click to review',
     },
     profile: {
       title: 'Profile',

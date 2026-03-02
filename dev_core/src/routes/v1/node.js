@@ -5,45 +5,7 @@
 const express = require("express");
 const router = express.Router();
 const nodeService = require("../../services/nodeService");
-const { authenticate, checkProjectAccess } = require("../../middlewares/auth");
-
-/**
- * @route POST /api/v1/nodes/register
- * @desc 节点注册
- * @access Agent（使用租户API密钥）或管理员
- */
-router.post("/register", authenticate, async (req, res) => {
-  try {
-    const { name, description, agentVersion, ipAddress, port } = req.body;
-    const tenantId = req.user.tenantId;
-    const createdBy = req.user.id;
-    const role = req.user.role;
-
-    if (!name) {
-      return res.status(400).json({ error: "节点名称不能为空" });
-    }
-
-    const result = await nodeService.register({
-      tenantId,
-      name,
-      description,
-      agentVersion,
-      ipAddress: ipAddress || req.ip,
-      port,
-      createdBy,
-      role,
-    });
-
-    res.status(201).json({
-      success: true,
-      data: result,
-      message: "节点注册成功",
-    });
-  } catch (error) {
-    console.error("节点注册失败:", error);
-    res.status(400).json({ error: error.message });
-  }
-});
+const { authenticate } = require("../../middlewares/auth");
 
 /**
  * @route POST /api/v1/nodes/:nodeId/heartbeat

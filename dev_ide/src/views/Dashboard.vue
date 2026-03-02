@@ -362,10 +362,11 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { Storage } from '@/utils/storage'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { buildAppUrl } from '@/utils/appUrl'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
+import { initSocket, getSocket } from '@/utils/socket'
 
 // 标签页组件懒加载，提升首次加载速度
 const DashboardContent = defineAsyncComponent(() => import('@/views/DashboardContent.vue'))
@@ -397,6 +398,7 @@ export default {
     const showLanguageMenu = ref(false)
     const showProfileDialog = ref(false)
     const showSystemSettingsDialog = ref(false)
+    const pendingRequestNotifications = new Map()
 
     // 侧边栏折叠状态（持久化）
     const sidebarCollapsed = computed({
@@ -612,6 +614,57 @@ export default {
     }
 
     /**
+     * 打开运维待审核申请界面。
+     */
+    const openOpsPendingRequests = () => {
+      Storage.set(STORAGE_KEYS.OPS_OPEN_PENDING_REQUEST, true)
+      openTab('ops-management')
+      window.setTimeout(() => {
+        window.dispatchEvent(new window.CustomEvent('ops:open-pending-requests'))
+      }, 60)
+    }
+
+    /**
+     * 显示节点待审核的全局通知（常驻，手动关闭）。
+     * @param {object} payload - 节点申请事件载荷
+     */
+    const showNodePendingNotification = (payload = {}) => {
+      const nodeId = payload.nodeId || payload.id || `${Date.now()}`
+      if (pendingRequestNotifications.has(nodeId)) return
+
+      const nodeName = payload.nodeName || '-'
+      const applicantName = payload.applicant?.username || payload.username || '-'
+      let notificationRef = null
+      notificationRef = ElNotification({
+        title: t('dashboard.pendingNodeTitle'),
+        message: t('dashboard.pendingNodeMessage', { nodeName, applicant: applicantName }),
+        type: 'warning',
+        duration: 0,
+        showClose: true,
+        onClick: () => {
+          openOpsPendingRequests()
+          notificationRef?.close?.()
+        },
+        onClose: () => {
+          pendingRequestNotifications.delete(nodeId)
+        },
+      })
+
+      pendingRequestNotifications.set(nodeId, notificationRef)
+    }
+
+    /**
+     * 订阅运维事件并处理全局通知。
+     */
+    const setupOpsPendingSubscription = () => {
+      if (!(isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value)) return
+      const tenantId = Storage.getTenantId()
+      if (!tenantId) return
+      const socket = initSocket(tenantId)
+      socket.on('ops:node:pending', showNodePendingNotification)
+    }
+
+    /**
      * 获取当前用户对应的标签持久化键。
      * @returns {string} 本地存储键
      */
@@ -735,6 +788,7 @@ export default {
         }
       }
       tabsInitialized.value = true
+      setupOpsPendingSubscription()
 
       // 仅超级管理员按需获取租户详情，避免非超级管理员触发租户接口请求
       if (isSuperAdmin.value && authStore.userInfo?.tenantId) {
@@ -754,6 +808,12 @@ export default {
     // 组件卸载时移除事件监听
     onUnmounted(() => {
       document.removeEventListener('click', handleClickOutside)
+      const socket = getSocket()
+      if (socket) {
+        socket.off('ops:node:pending', showNodePendingNotification)
+      }
+      pendingRequestNotifications.forEach((notification) => notification?.close?.())
+      pendingRequestNotifications.clear()
     })
 
     // 最大化标签页

@@ -355,6 +355,20 @@ class SocketService {
   }
 
   /**
+   * 广播新的节点待审核申请
+   * @param {string} tenantId - 租户ID
+   * @param {object} payload - 待审核申请信息
+   */
+  broadcastNodePendingRequest(tenantId, payload) {
+    if (!this.io) return;
+    const room = `ops:tenant:${tenantId}`;
+    this.io.to(room).emit("ops:node:pending", {
+      ...payload,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
    * 广播部署日志
    */
   broadcastDeployLog(tenantId, deploymentId, log) {
