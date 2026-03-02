@@ -49,10 +49,6 @@
               style="width: 220px"
             />
           </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="fetchNodes">{{ t('opsManagement.query') }}</el-button>
-            <el-button @click="resetNodeSearch">{{ t('opsManagement.reset') }}</el-button>
-          </el-form-item>
         </el-form>
       </div>
     </div>
@@ -441,7 +437,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, onBeforeUnmount } from 'vue'
+import { ref, reactive, onMounted, computed, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -494,6 +490,7 @@ const nodePagination = reactive({
   pageSize: 12,
   total: 0,
 })
+const searchDebounceTimer = ref(null)
 
 // 待审核申请弹窗
 const showPendingDialog = ref(false)
@@ -605,13 +602,6 @@ const updateCounts = async () => {
   } catch (error) {
     console.error('更新节点统计失败:', error)
   }
-}
-
-const resetNodeSearch = () => {
-  nodeSearch.status = ''
-  nodeSearch.keyword = ''
-  nodePagination.page = 1
-  fetchNodes()
 }
 
 // 指标获取辅助函数
@@ -843,8 +833,33 @@ onBeforeUnmount(() => {
     socket.off('ops:node:status')
     socket.off('ops:project:metrics')
   }
+  if (searchDebounceTimer.value) {
+    window.clearTimeout(searchDebounceTimer.value)
+    searchDebounceTimer.value = null
+  }
   window.removeEventListener('ops:open-pending-requests', openPendingRequestsDialog)
 })
+
+watch(
+  () => nodeSearch.status,
+  () => {
+    nodePagination.page = 1
+    fetchNodes()
+  }
+)
+
+watch(
+  () => nodeSearch.keyword,
+  () => {
+    if (searchDebounceTimer.value) {
+      window.clearTimeout(searchDebounceTimer.value)
+    }
+    searchDebounceTimer.value = window.setTimeout(() => {
+      nodePagination.page = 1
+      fetchNodes()
+    }, 800)
+  }
+)
 </script>
 
 <style scoped>
