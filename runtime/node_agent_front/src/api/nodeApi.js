@@ -32,6 +32,14 @@ export const nodeApi = {
     return api.post(`/projects/${projectId}/deploy`, data).then(res => res.data)
   },
 
+  // 上传 IFP 并自动解析工程信息部署
+  deployProjectByIfp(file, autoStart = true) {
+    const formData = new FormData()
+    formData.append('ifpFile', file)
+    formData.append('autoStart', String(autoStart))
+    return api.post('/projects/deploy-ifp', formData).then(res => res.data)
+  },
+
   // 启动项目
   startProject(projectId) {
     return api.post(`/projects/${projectId}/start`).then(res => res.data)
@@ -75,5 +83,20 @@ export const nodeApi = {
   // 获取服务配置
   getServiceConfig() {
     return api.get('/config/service').then(res => res.data)
+  },
+
+  // 获取初始化状态
+  getBootstrapStatus() {
+    return api.get('/bootstrap/status').then(res => res.data)
+  },
+
+  // 完成初始化
+  completeBootstrap(data) {
+    return api.post('/bootstrap/complete', data).then(res => res.data)
+  },
+
+  // 设置开机自启动
+  saveBootstrapAutostart(enabled) {
+    return api.post('/bootstrap/autostart', { enabled }).then(res => res.data)
   },
 }

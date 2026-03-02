@@ -65,6 +65,27 @@ router.post("/:nodeId/deployment-status", async (req, res) => {
 });
 
 /**
+ * @route POST /api/v1/nodes/:nodeId/offline
+ * @desc 节点主动下线通知
+ * @access Agent
+ */
+router.post("/:nodeId/offline", async (req, res) => {
+  try {
+    const { nodeId } = req.params;
+    const { reason } = req.body || {};
+
+    const result = await nodeService.offline(nodeId, { reason: reason || "agent_shutdown" });
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("节点主动下线失败:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
  * @route GET /api/v1/nodes
  * @desc 获取节点列表
  * @access 租户管理员

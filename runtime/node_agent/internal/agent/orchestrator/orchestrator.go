@@ -7,8 +7,8 @@ import (
 
 	"github.com/indu-forge/node_agent/internal/agent/executor"
 	"github.com/indu-forge/node_agent/internal/agent/store"
-	"github.com/indu-forge/node_agent/internal/pkg/types"
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
+	"github.com/indu-forge/node_agent/internal/pkg/types"
 )
 
 // State 状态枚举
@@ -48,7 +48,7 @@ func NewStateMachine() *StateMachine {
 		current: StateStopped,
 		transitions: map[State]map[Event]State{
 			StateStopped: {
-				EventDeploy:  StateDeploying,
+				EventDeploy:   StateDeploying,
 				EventStart:    StateRunning,
 				EventRollback: StateStopped,
 			},
@@ -57,10 +57,10 @@ func NewStateMachine() *StateMachine {
 				EventError:    StateError,
 			},
 			StateRunning: {
-				EventStop:      StateStopping,
-				EventRestart:   StateRunning,
+				EventStop:     StateStopping,
+				EventRestart:  StateRunning,
 				EventRollback: StateRollingBack,
-				EventError:     StateError,
+				EventError:    StateError,
 			},
 			StateStopping: {
 				EventStop: StateStopped,
@@ -97,9 +97,9 @@ func (sm *StateMachine) Next(event Event) (State, error) {
 
 // Orchestrator 编排器
 type Orchestrator struct {
-	executor executor.Executor
-	store    *store.LocalStore
-	logger   *logger.SimpleLogger
+	executor      executor.Executor
+	store         *store.LocalStore
+	logger        *logger.SimpleLogger
 	stateMachines map[string]*StateMachine
 }
 
@@ -107,9 +107,9 @@ type Orchestrator struct {
 func NewOrchestrator(exec executor.Executor, store *store.LocalStore) *Orchestrator {
 	return &Orchestrator{
 		executor:      exec,
-		store:          store,
-		logger:         logger.GlobalLogger,
-		stateMachines:  make(map[string]*StateMachine),
+		store:         store,
+		logger:        logger.GlobalLogger,
+		stateMachines: make(map[string]*StateMachine),
 	}
 }
 
@@ -134,13 +134,18 @@ func (o *Orchestrator) Deploy(ctx context.Context, req types.DeployRequest) erro
 	}
 
 	// 2. 保存项目信息
+	source := req.Source
+	if source == "" {
+		source = types.ProjectSourceLocal
+	}
 	project := &types.ProjectInfo{
-		ID:             projectID,
-		Name:           req.ProjectID,
-		CurrentVersion: req.Version,
-		Status:         string(StateDeploying),
+		ID:                projectID,
+		Name:              req.ProjectID,
+		Source:            source,
+		CurrentVersion:    req.Version,
+		Status:            string(StateDeploying),
 		ConnectionProfile: req.ConnectionProfile,
-		DeployedAt:     &time.Time{},
+		DeployedAt:        &time.Time{},
 	}
 
 	*project.DeployedAt = time.Now()

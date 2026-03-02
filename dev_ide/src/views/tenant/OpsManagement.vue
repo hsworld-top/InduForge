@@ -450,7 +450,6 @@ import { initSocket, getSocket } from '@/utils/socket'
 import { Storage } from '@/utils/storage'
 import { canApproveNodes } from '@/permissions'
 import { useAuthStore } from '@/store'
-import { STORAGE_KEYS } from '@/constants'
 import { RoleEnum, ENUM_LABELS } from '@/enums'
 import {
   getNodeStatusType,
@@ -809,6 +808,12 @@ const setupRealtimeUpdates = () => {
       }
     }
   })
+
+  // 监听新的待审核节点注册申请
+  socket.on('ops:node:pending', async (data = {}) => {
+    console.log('[OpsManagement][WS] 收到待审核事件:', data)
+    await fetchPendingList()
+  })
 }
 
 // 挂载与卸载
@@ -818,10 +823,6 @@ onMounted(async () => {
   updateCounts()
   setupRealtimeUpdates()
   window.addEventListener('ops:open-pending-requests', openPendingRequestsDialog)
-  if (Storage.get(STORAGE_KEYS.OPS_OPEN_PENDING_REQUEST, false)) {
-    Storage.remove(STORAGE_KEYS.OPS_OPEN_PENDING_REQUEST)
-    openPendingRequestsDialog()
-  }
 })
 
 onBeforeUnmount(() => {
@@ -832,6 +833,7 @@ onBeforeUnmount(() => {
     socket.off('ops:node:metrics')
     socket.off('ops:node:status')
     socket.off('ops:project:metrics')
+    socket.off('ops:node:pending')
   }
   if (searchDebounceTimer.value) {
     window.clearTimeout(searchDebounceTimer.value)

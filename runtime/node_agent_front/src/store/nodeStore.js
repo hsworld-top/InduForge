@@ -1,11 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { nodeApi } from '@/api/nodeApi'
 
 export const useNodeStore = defineStore('node', () => {
   const nodeInfo = ref(null)
   const projects = ref([])
   const loading = ref(false)
+
+  const getErrorMessage = (error, fallback) => {
+    const code = error?.response?.data?.code
+    if (code === 'PROJECT_MANAGED_BY_CENTER') {
+      return '该工程由运维中心托管，请在运维中心执行状态变更'
+    }
+    return error?.response?.data?.error || fallback
+  }
 
   // 获取节点信息
   const fetchNodeInfo = async () => {
@@ -40,7 +49,21 @@ export const useNodeStore = defineStore('node', () => {
       return true
     } catch (error) {
       console.error('部署失败:', error)
-      ElMessage.error('部署失败')
+      ElMessage.error(getErrorMessage(error, '部署失败'))
+      return false
+    }
+  }
+
+  // 通过 IFP 文件部署项目（项目ID/版本由后端解析）
+  const deployProjectByIfp = async (file, autoStart) => {
+    try {
+      await nodeApi.deployProjectByIfp(file, autoStart)
+      ElMessage.success('部署成功')
+      await fetchProjects()
+      return true
+    } catch (error) {
+      console.error('部署失败:', error)
+      ElMessage.error(getErrorMessage(error, '部署失败'))
       return false
     }
   }
@@ -54,7 +77,7 @@ export const useNodeStore = defineStore('node', () => {
       return true
     } catch (error) {
       console.error('启动失败:', error)
-      ElMessage.error('启动失败')
+      ElMessage.error(getErrorMessage(error, '启动失败'))
       return false
     }
   }
@@ -68,7 +91,7 @@ export const useNodeStore = defineStore('node', () => {
       return true
     } catch (error) {
       console.error('停止失败:', error)
-      ElMessage.error('停止失败')
+      ElMessage.error(getErrorMessage(error, '停止失败'))
       return false
     }
   }
@@ -82,7 +105,7 @@ export const useNodeStore = defineStore('node', () => {
       return true
     } catch (error) {
       console.error('重启失败:', error)
-      ElMessage.error('重启失败')
+      ElMessage.error(getErrorMessage(error, '重启失败'))
       return false
     }
   }
@@ -96,7 +119,7 @@ export const useNodeStore = defineStore('node', () => {
       return true
     } catch (error) {
       console.error('回滚失败:', error)
-      ElMessage.error('回滚失败')
+      ElMessage.error(getErrorMessage(error, '回滚失败'))
       return false
     }
   }
@@ -118,6 +141,7 @@ export const useNodeStore = defineStore('node', () => {
     fetchNodeInfo,
     fetchProjects,
     deployProject,
+    deployProjectByIfp,
     startProject,
     stopProject,
     restartProject,

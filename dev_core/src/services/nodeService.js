@@ -28,6 +28,71 @@ function normalizeIp(ip) {
 }
 
 /**
+ * 校验节点名称是否可复用
+ * @param {string} tenantId - 租户ID
+ * @param {string} nodeName - 节点名称
+ * @throws {Error} 当存在未删除同名节点时抛出错误
+ */
+async function ensureNodeNameReusable(tenantId, nodeName) {
+  const activeNode = await Node.findOne({
+    where: { tenantId, name: nodeName, deletedAt: null },
+  });
+  if (activeNode) {
+    throw new Error(`节点名称 "${nodeName}" 已存在`);
+  }
+
+  const softDeletedNode = await Node.findOne({
+    where: { tenantId, name: nodeName },
+    paranoid: false,
+  });
+
+  // 兼容历史软删除数据：若同名节点已删除，物理清理后允许重新注册
+  if (softDeletedNode && softDeletedNode.deletedAt) {
+    await softDeletedNode.destroy({ force: true });
+  }
+}
+
+/**
+ * 规范化节点注册错误
+ * @param {Error} error - 原始错误
+ * @param {string} nodeName - 节点名称
+ * @returns {Error}
+ */
+function normalizeRegisterError(error, nodeName) {
+  if (error && error.name === "SequelizeUniqueConstraintError") {
+    const message = String(error.message || "").toLowerCase();
+    const conflictField = Object.keys(error.fields || {}).join(",").toLowerCase();
+    if (message.includes("primary") || conflictField.includes("id")) {
+      return new Error("节点ID已存在，请检查当前运维代理机器码");
+    }
+    return new Error(`节点名称 "${nodeName}" 已存在`);
+  }
+  return error;
+}
+
+/**
+ * 规范化节点ID为可落库格式（36位）。
+ * 规则：
+ * 1) 为空时返回随机 UUID；
+ * 2) 长度 <= 36 时直接使用；
+ * 3) 长度 > 36 时基于原值生成稳定 UUID（同输入同输出）。
+ * @param {string} rawNodeId - 原始节点ID
+ * @returns {string}
+ */
+function normalizeNodeId(rawNodeId) {
+  const value = String(rawNodeId || "").trim();
+  if (!value) {
+    return crypto.randomUUID();
+  }
+  if (value.length <= 36) {
+    return value;
+  }
+
+  const hash = crypto.createHash("sha256").update(value).digest("hex");
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
+
+/**
  * 节点服务类
  */
 class NodeService {
@@ -46,13 +111,8 @@ class NodeService {
   async register(data) {
     const { tenantId, name, agentVersion, ipAddress, port, createdBy, description, role } = data;
 
-    // 检查节点名称是否重复
-    const existing = await Node.findOne({
-      where: { tenantId, name, deletedAt: null },
-    });
-    if (existing) {
-      throw new Error(`节点名称 "${name}" 已存在`);
-    }
+    // 检查节点名称可用性（仅未删除同名视为冲突）
+    await ensureNodeNameReusable(tenantId, name);
 
     const id = crypto.randomUUID();
 
@@ -61,23 +121,28 @@ class NodeService {
     const approvalStatus = hasOpsPermission ? "approved" : "pending";
     const registrationToken = hasOpsPermission ? generateRegistrationToken() : null;
 
-    const node = await Node.create({
-      id,
-      tenantId,
-      name,
-      description,
-      agentVersion,
-      ipAddress: normalizeIp(ipAddress),
-      port: port || 8080,
-      status: "offline", // 注册后默认为离线，等待审批
-      approvalStatus,
-      registrationToken,
-      lastHeartbeatAt: null,
-      approvedAt: hasOpsPermission ? new Date() : null,
-      approvedBy: hasOpsPermission ? createdBy : null,
-      createdBy,
-      updatedBy: createdBy,
-    });
+    let node;
+    try {
+      node = await Node.create({
+        id,
+        tenantId,
+        name,
+        description,
+        agentVersion,
+        ipAddress: normalizeIp(ipAddress),
+        port: port || 8080,
+        status: "offline", // 注册后默认为离线，等待审批
+        approvalStatus,
+        registrationToken,
+        lastHeartbeatAt: null,
+        approvedAt: hasOpsPermission ? new Date() : null,
+        approvedBy: hasOpsPermission ? createdBy : null,
+        createdBy,
+        updatedBy: createdBy,
+      });
+    } catch (error) {
+      throw normalizeRegisterError(error, name);
+    }
 
     return {
       nodeId: node.id,
@@ -94,6 +159,7 @@ class NodeService {
    * @param {Object} data - 注册数据
    * @param {string} data.username - 用户名
    * @param {string} data.password - 密码
+   * @param {string} data.nodeId - 节点ID（可选，优先使用 Agent 机器码）
    * @param {string} data.nodeName - 节点名称
    * @param {string} data.nodeDescription - 节点描述
    * @param {string} data.agentVersion - Agent版本
@@ -106,6 +172,7 @@ class NodeService {
     const {
       username,
       password,
+      nodeId,
       nodeName,
       nodeDescription,
       agentVersion,
@@ -143,56 +210,93 @@ class NodeService {
     }
 
     const tenantId = user.tenantId;
-
-    // 检查节点名称是否重复
-    const existing = await Node.findOne({
-      where: { tenantId, name: nodeName, deletedAt: null },
-    });
-    if (existing) {
-      throw new Error(`节点名称 "${nodeName}" 已存在`);
-    }
-
-    const nodeId = crypto.randomUUID();
-    const registrationToken = generateRegistrationToken();
-
-    // 检查用户角色，决定是否自动审批
     const hasOpsPermission = ["OPS_ADMIN", "SYSTEM_ADMIN"].includes(user.role);
     const approvalStatus = hasOpsPermission ? "approved" : "pending";
+    const registrationToken = generateRegistrationToken();
+    const finalNodeId = normalizeNodeId(nodeId);
 
-    const node = await Node.create({
-      id: nodeId,
-      tenantId,
-      name: nodeName,
-      description: nodeDescription,
-      agentVersion: agentVersion || "1.0.0",
-      ipAddress: normalizeIp(ipAddress),
-      port: port || 8080,
-      mode,
-      status: "offline",
-      approvalStatus,
-      registrationToken: hasOpsPermission ? registrationToken : null, // 仅自动审批时生成token
-      approvedAt: hasOpsPermission ? new Date() : null,
-      approvedBy: hasOpsPermission ? user.id : null,
-      registeredBy: user.id,
-      createdBy: user.id,
-      updatedBy: user.id,
+    const existingNodeByName = await Node.findOne({
+      where: { tenantId, name: nodeName, deletedAt: null },
     });
 
-    // 记录节点注册申请到系统日志，供“最近活动”展示。
-    if (!hasOpsPermission) {
-      await Log.create({
-        level: "info",
-        message: `节点注册申请已提交，节点：${node.name}，申请人：${user.username}`,
-        action: "node-register.create",
-        resource: "node-register",
-        resourceId: node.id,
-        userId: user.id,
-        tenantId,
-        ip: normalizeIp(ipAddress) || null,
-        userAgent: userAgent || null,
-        createdAt: new Date(),
-      });
+    let node;
+    let isResubmitted = false;
 
+    // 同名且已拒绝：允许复用并重新提交流程。
+    if (existingNodeByName && existingNodeByName.approvalStatus === "rejected") {
+      isResubmitted = true;
+      await existingNodeByName.update({
+        description: nodeDescription,
+        agentVersion: agentVersion || "1.0.0",
+        ipAddress: normalizeIp(ipAddress),
+        port: port || 8080,
+        mode,
+        status: "offline",
+        approvalStatus,
+        registrationToken: hasOpsPermission ? registrationToken : null,
+        approvedAt: hasOpsPermission ? new Date() : null,
+        approvedBy: hasOpsPermission ? user.id : null,
+        registeredBy: user.id,
+        updatedBy: user.id,
+        lastErrorMessage: null,
+        lastErrorAt: null,
+        lastHeartbeatAt: null,
+      });
+      node = existingNodeByName;
+    } else {
+      // 检查节点名称可用性（仅未删除同名视为冲突）
+      await ensureNodeNameReusable(tenantId, nodeName);
+
+      const existingNodeById = await Node.findByPk(finalNodeId, { paranoid: false });
+      if (existingNodeById) {
+        if (existingNodeById.deletedAt) {
+          await existingNodeById.destroy({ force: true });
+        } else {
+          throw new Error("节点ID已存在，请检查当前运维代理机器码");
+        }
+      }
+
+      try {
+        node = await Node.create({
+          id: finalNodeId,
+          tenantId,
+          name: nodeName,
+          description: nodeDescription,
+          agentVersion: agentVersion || "1.0.0",
+          ipAddress: normalizeIp(ipAddress),
+          port: port || 8080,
+          mode,
+          status: "offline",
+          approvalStatus,
+          registrationToken: hasOpsPermission ? registrationToken : null, // 仅自动审批时生成token
+          approvedAt: hasOpsPermission ? new Date() : null,
+          approvedBy: hasOpsPermission ? user.id : null,
+          registeredBy: user.id,
+          createdBy: user.id,
+          updatedBy: user.id,
+        });
+      } catch (error) {
+        throw normalizeRegisterError(error, nodeName);
+      }
+    }
+
+    // 记录节点注册日志，供“最近活动”展示。
+    await Log.create({
+      level: "info",
+      message: hasOpsPermission
+        ? `${isResubmitted ? "节点重新注册并自动审批通过" : "节点注册并自动审批通过"}，节点：${node.name}，操作者：${user.username}（${user.role}）`
+        : `${isResubmitted ? "节点注册申请已重新提交" : "节点注册申请已提交"}，节点：${node.name}，申请人：${user.username}`,
+      action: hasOpsPermission ? "node-register.auto-approve" : "node-register.create",
+      resource: "node-register",
+      resourceId: node.id,
+      userId: user.id,
+      tenantId,
+      ip: normalizeIp(ipAddress) || null,
+      userAgent: userAgent || null,
+      createdAt: new Date(),
+    });
+
+    if (!hasOpsPermission) {
       socketService.broadcastNodePendingRequest(tenantId, {
         nodeId: node.id,
         nodeName: node.name,
@@ -211,7 +315,11 @@ class NodeService {
       nodeName: node.name,
       approvalStatus: node.approvalStatus,
       registrationToken: hasOpsPermission ? registrationToken : null,
-      message: hasOpsPermission ? "自动审批通过" : "申请已提交，等待管理员审批",
+      message: hasOpsPermission
+        ? "自动审批通过"
+        : isResubmitted
+          ? "申请已重新提交，等待管理员审批"
+          : "申请已提交，等待管理员审批",
       autoApproved: hasOpsPermission,
     };
   }
@@ -266,6 +374,7 @@ class NodeService {
     if (node.approvalStatus !== "approved") {
       throw new Error(`节点 ${nodeId} 未通过审批，无法上报心跳`);
     }
+    const previousStatus = node.status;
 
     // 更新节点状态
     const updateData = {
@@ -314,7 +423,7 @@ class NodeService {
 
     // 发送 WebSocket 广播
     socketService.broadcastNodeMetrics(node.tenantId, nodeId, updateData.metrics);
-    if (updateData.status !== node.status) {
+    if (updateData.status !== previousStatus) {
       socketService.broadcastNodeStatus(node.tenantId, nodeId, updateData.status);
     }
     if (projects && Array.isArray(projects)) {
@@ -536,8 +645,43 @@ class NodeService {
       throw new Error(`节点仍有 ${runningCount} 个工程在运行中，请先停止后再删除`);
     }
 
-    await node.destroy(); // 软删除
+    await node.destroy({ force: true }); // 物理删除，避免同名唯一约束残留
     return true;
+  }
+
+  /**
+   * 节点主动下线（Agent 正常停止时调用）
+   * @param {string} nodeId - 节点ID
+   * @param {Object} data - 下线附加信息
+   * @param {string} data.reason - 下线原因
+   * @returns {Promise<Object>} 下线后的节点状态
+   */
+  async offline(nodeId, data = {}) {
+    const node = await Node.findByPk(nodeId);
+    if (!node) {
+      throw new Error(`节点 ${nodeId} 不存在`);
+    }
+
+    const previousStatus = node.status;
+    const updateData = {
+      status: "offline",
+      updatedAt: new Date(),
+    };
+    if (data?.reason) {
+      updateData.lastErrorMessage = String(data.reason);
+      updateData.lastErrorAt = new Date();
+    }
+
+    await node.update(updateData);
+
+    if (previousStatus !== "offline") {
+      socketService.broadcastNodeStatus(node.tenantId, nodeId, "offline");
+    }
+
+    return {
+      nodeId: node.id,
+      status: "offline",
+    };
   }
 
   /**
@@ -548,17 +692,67 @@ class NodeService {
   async markOfflineNodes(timeoutMinutes = 5) {
     const threshold = new Date(Date.now() - timeoutMinutes * 60 * 1000);
 
+    const staleNodes = await Node.findAll({
+      attributes: ["id", "tenantId"],
+      where: {
+        status: "online",
+        lastHeartbeatAt: { [Op.lt]: threshold },
+        deletedAt: null,
+      },
+    });
+    if (staleNodes.length === 0) {
+      return 0;
+    }
+
+    const nodeIds = staleNodes.map((item) => item.id);
     const [affectedCount] = await Node.update(
       { status: "offline" },
       {
         where: {
+          id: { [Op.in]: nodeIds },
           status: "online",
-          lastHeartbeatAt: { [Op.lt]: threshold },
+          deletedAt: null,
         },
       }
     );
 
+    // 推送离线状态，确保运维前端实时更新而无需刷新页面。
+    staleNodes.forEach((node) => {
+      socketService.broadcastNodeStatus(node.tenantId, node.id, "offline");
+    });
+
     return affectedCount;
+  }
+
+  /**
+   * 计算下一次离线检测的建议延迟（毫秒）
+   * @param {number} timeoutSeconds - 心跳超时秒数
+   * @param {number} fallbackIntervalMs - 回退检测间隔
+   * @returns {Promise<number>} 建议延迟毫秒
+   */
+  async getNextOfflineCheckDelayMs(timeoutSeconds = 30, fallbackIntervalMs = 5000) {
+    const oldestOnline = await Node.findOne({
+      attributes: ["lastHeartbeatAt"],
+      where: {
+        status: "online",
+        deletedAt: null,
+      },
+      order: [["lastHeartbeatAt", "ASC"]],
+    });
+
+    // 没有在线节点时，降低检测频率
+    if (!oldestOnline || !oldestOnline.lastHeartbeatAt) {
+      return Math.max(fallbackIntervalMs * 6, 30000);
+    }
+
+    const expireAt = new Date(oldestOnline.lastHeartbeatAt).getTime() + timeoutSeconds * 1000;
+    const now = Date.now();
+    const delay = expireAt - now;
+
+    // 保障边界：最短 1 秒，最长 30 秒
+    if (delay <= 1000) return 1000;
+    if (delay >= 30000) return 30000;
+    return delay;
   }
 
   /**

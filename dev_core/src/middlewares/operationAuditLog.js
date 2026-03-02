@@ -86,7 +86,19 @@ function shouldLog(req) {
     "/api/v1/auth/config",
     "/api/v1/auth/refresh",
   ];
-  return !ignored.includes(path);
+  if (ignored.includes(path)) {
+    return false;
+  }
+
+  // 高频 Agent 心跳与部署状态回调不写审计日志，避免产生大量无业务价值日志写入。
+  if (/^\/api\/v1\/nodes\/[^/]+\/heartbeat$/.test(path)) {
+    return false;
+  }
+  if (/^\/api\/v1\/nodes\/[^/]+\/deployment-status$/.test(path)) {
+    return false;
+  }
+
+  return true;
 }
 
 /**

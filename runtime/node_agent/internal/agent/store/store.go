@@ -66,6 +66,9 @@ func (s *LocalStore) ListProjects() ([]*types.ProjectInfo, error) {
 	dir := filepath.Join(s.dataDir, "projects")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return []*types.ProjectInfo{}, nil
+		}
 		return nil, err
 	}
 

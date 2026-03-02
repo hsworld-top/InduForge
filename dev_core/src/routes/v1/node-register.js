@@ -16,6 +16,7 @@ router.post("/register-with-auth", async (req, res) => {
     const {
       username,
       password,
+      nodeId,
       nodeName,
       nodeDescription,
       agentVersion,
@@ -42,6 +43,7 @@ router.post("/register-with-auth", async (req, res) => {
     const result = await nodeService.registerWithAuth({
       username,
       password,
+      nodeId,
       nodeName,
       nodeDescription,
       agentVersion,

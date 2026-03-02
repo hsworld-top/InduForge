@@ -1,15 +1,13 @@
 <template>
   <div class="logs">
-    <!-- 头部 -->
-    <div class="header">
-      <div class="header-left">
+    <div class="toolbar">
+      <div class="toolbar-left">
         <el-button @click="$router.back()">
           <el-icon><ArrowLeft /></el-icon>
           返回
         </el-button>
-        <h1>项目日志 - {{ projectId }}</h1>
       </div>
-      <div class="header-actions">
+      <div class="toolbar-actions">
         <el-button @click="refreshLogs">
           <el-icon><Refresh /></el-icon>
           刷新
@@ -183,37 +181,31 @@ onUnmounted(() => {
 
 <style scoped>
 .logs {
-  min-height: 100vh;
-  padding: 20px;
-  background-color: #f5f7fa;
+  display: grid;
+  gap: 16px;
 }
 
-.header {
+.toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
 }
 
-.header-left {
+.toolbar-left {
   display: flex;
   align-items: center;
-  gap: 15px;
 }
 
-.header-left h1 {
-  font-size: 20px;
-  color: #303133;
-  margin: 0;
-}
-
-.header-actions {
+.toolbar-actions {
   display: flex;
   gap: 10px;
 }
 
 .box-card {
-  margin-bottom: 20px;
+  margin-bottom: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .log-controls {
@@ -223,7 +215,7 @@ onUnmounted(() => {
 }
 
 .log-content {
-  height: calc(100vh - 200px);
+  min-height: 460px;
 }
 
 .log-viewer {

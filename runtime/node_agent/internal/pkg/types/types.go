@@ -5,9 +5,15 @@ import (
 	"time"
 )
 
+const (
+	ProjectSourceLocal  = "local"
+	ProjectSourceCenter = "center"
+)
+
 // NodeInfo 节点信息
 type NodeInfo struct {
 	ID           string    `json:"id"`
+	MachineID    string    `json:"machineId"`
 	Name         string    `json:"name"`
 	Version      string    `json:"version"`
 	Mode         string    `json:"mode"`
@@ -19,14 +25,14 @@ type NodeInfo struct {
 
 // RuntimeStatus 运行时状态
 type RuntimeStatus struct {
-	ProjectID   string                 `json:"projectId"`
-	Version     string                 `json:"version"`
-	State       string                 `json:"state"`
-	PID         int                    `json:"pid"`
-	StartedAt   *time.Time             `json:"startedAt"`
-	Health      string                 `json:"health"`
-	Metrics     map[string]interface{}  `json:"metrics"`
-	LastCheck   time.Time              `json:"lastCheck"`
+	ProjectID string                 `json:"projectId"`
+	Version   string                 `json:"version"`
+	State     string                 `json:"state"`
+	PID       int                    `json:"pid"`
+	StartedAt *time.Time             `json:"startedAt"`
+	Health    string                 `json:"health"`
+	Metrics   map[string]interface{} `json:"metrics"`
+	LastCheck time.Time              `json:"lastCheck"`
 }
 
 // DeployRequest 部署请求
@@ -34,6 +40,7 @@ type DeployRequest struct {
 	ProjectID         string            `json:"projectId"`
 	Version           string            `json:"version"`
 	IFPPackage        string            `json:"ifpPackage"`
+	Source            string            `json:"source,omitempty"`
 	ExecutorType      string            `json:"executorType,omitempty"`
 	ConnectionProfile ConnectionProfile `json:"connectionProfile"`
 	EnvVars           map[string]string `json:"envVars,omitempty"`
@@ -42,12 +49,12 @@ type DeployRequest struct {
 
 // ConnectionProfile 连接配置
 type ConnectionProfile struct {
-	Name        string            `json:"name"`
-	Endpoint   string            `json:"endpoint"`
-	AuthType   string            `json:"authType"`
-	AuthData   map[string]string `json:"authData"`
-	Metadata   map[string]string `json:"metadata"`
-	Secrets    map[string]string `json:"secrets,omitempty"`
+	Name     string            `json:"name"`
+	Endpoint string            `json:"endpoint"`
+	AuthType string            `json:"authType"`
+	AuthData map[string]string `json:"authData"`
+	Metadata map[string]string `json:"metadata"`
+	Secrets  map[string]string `json:"secrets,omitempty"`
 }
 
 // RuntimeOperation 运行时操作
@@ -61,14 +68,15 @@ type RuntimeOperation struct {
 
 // ProjectInfo 项目信息
 type ProjectInfo struct {
-	ID               string          `json:"id"`
-	Name             string          `json:"name"`
-	CurrentVersion   string          `json:"currentVersion"`
-	Status           string          `json:"status"`
+	ID                string            `json:"id"`
+	Name              string            `json:"name"`
+	Source            string            `json:"source,omitempty"`
+	CurrentVersion    string            `json:"currentVersion"`
+	Status            string            `json:"status"`
 	ConnectionProfile ConnectionProfile `json:"connectionProfile"`
-	DeployedAt       *time.Time      `json:"deployedAt"`
-	LastStartedAt    *time.Time      `json:"lastStartedAt"`
-	RuntimeStatus    *RuntimeStatus  `json:"runtimeStatus,omitempty"`
+	DeployedAt        *time.Time        `json:"deployedAt"`
+	LastStartedAt     *time.Time        `json:"lastStartedAt"`
+	RuntimeStatus     *RuntimeStatus    `json:"runtimeStatus,omitempty"`
 }
 
 // HeartbeatRequest 心跳请求
@@ -84,15 +92,15 @@ type HeartbeatRequest struct {
 
 // HeartbeatResponse 心跳响应
 type HeartbeatResponse struct {
-	Success bool                   `json:"success"`
-	Data    HeartbeatResponseData  `json:"data"`
-	Message string                 `json:"message,omitempty"`
+	Success bool                  `json:"success"`
+	Data    HeartbeatResponseData `json:"data"`
+	Message string                `json:"message,omitempty"`
 }
 
 // HeartbeatResponseData 心跳响应数据
 type HeartbeatResponseData struct {
-	Status   string               `json:"status"`
-	Commands []PendingCommand     `json:"commands"`
+	Status   string           `json:"status"`
+	Commands []PendingCommand `json:"commands"`
 }
 
 // PendingCommand 待执行指令

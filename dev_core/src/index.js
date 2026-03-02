@@ -11,6 +11,7 @@ const {
 const { initRedis, close: closeRedis } = require("./utils/redis");
 const { initStorage } = require("./services/storageService");
 const socketService = require("./services/socketService");
+const nodeService = require("./services/nodeService");
 
 // 环境变量配置
 const config = {
@@ -19,7 +20,15 @@ const config = {
   ENABLE_SWAGGER: String(process.env.ENABLE_SWAGGER || "true") === "true",
   CORS_ORIGINS: process.env.CORS_ORIGINS || "http://localhost:5173",
   DB_HOST: process.env.DB_HOST || "127.0.0.1",
+  NODE_OFFLINE_CHECK_INTERVAL_MS: Number(
+    process.env.NODE_OFFLINE_CHECK_INTERVAL_MS || 5000
+  ),
+  NODE_OFFLINE_TIMEOUT_SECONDS: Number(
+    process.env.NODE_OFFLINE_TIMEOUT_SECONDS || 30
+  ),
 };
+
+let nodeOfflineCheckTimer = null;
 
 // 全局未捕获异常处理 - 必须在应用启动前设置
 process.on("uncaughtException", (error) => {
@@ -136,6 +145,12 @@ const setupGracefulShutdown = (server) => {
       // 停止数据库健康检查
       stopDbHealthCheck();
 
+      // 停止节点离线检测任务
+      if (nodeOfflineCheckTimer) {
+        clearTimeout(nodeOfflineCheckTimer);
+        nodeOfflineCheckTimer = null;
+      }
+
       // 关闭 Socket.IO 服务器
       socketService.close();
       logger.info("Socket.IO server closed");
@@ -171,6 +186,46 @@ const setupGracefulShutdown = (server) => {
 };
 
 /**
+ * 启动节点离线检测任务
+ * 定期将超过心跳超时时间的在线节点标记为离线。
+ */
+const startNodeOfflineCheck = () => {
+  const intervalMs = Math.max(1000, config.NODE_OFFLINE_CHECK_INTERVAL_MS);
+  const timeoutSeconds = Math.max(5, config.NODE_OFFLINE_TIMEOUT_SECONDS);
+  const timeoutMinutes = timeoutSeconds / 60;
+  const runCheck = async () => {
+    let nextDelay = intervalMs;
+    try {
+      const affectedCount = await nodeService.markOfflineNodes(timeoutMinutes);
+      if (affectedCount > 0) {
+        logger.info("Node offline check updated stale nodes", {
+          affectedCount,
+          timeoutSeconds,
+        });
+      }
+
+      nextDelay = await nodeService.getNextOfflineCheckDelayMs(
+        timeoutSeconds,
+        intervalMs
+      );
+    } catch (error) {
+      logger.error("Node offline check failed", { error: error.message });
+      nextDelay = intervalMs;
+    }
+
+    nodeOfflineCheckTimer = setTimeout(runCheck, nextDelay);
+  };
+
+  runCheck();
+
+  logger.info("Node offline check started", {
+    baseIntervalMs: intervalMs,
+    timeoutSeconds,
+    mode: "adaptive",
+  });
+};
+
+/**
  * 启动服务器
  */
 const startServer = async () => {
@@ -190,7 +245,10 @@ const startServer = async () => {
     socketService.initialize(server);
     logger.info("Socket.IO server initialized on the same port as HTTP server");
 
-    // 5. 设置优雅关闭
+    // 5. 启动节点离线检测
+    startNodeOfflineCheck();
+
+    // 6. 设置优雅关闭
     setupGracefulShutdown(server);
   } catch (error) {
     logger.error("Failed to start server", {

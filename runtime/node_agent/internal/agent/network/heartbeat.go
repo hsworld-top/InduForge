@@ -54,6 +54,9 @@ func (h *HeartbeatSender) Start(ctx context.Context) {
 		return
 	}
 
+	// 首次启动时立即上报一次，避免首次状态同步等待一个周期。
+	h.sendHeartbeat(ctx)
+
 	ticker := time.NewTicker(h.config.Interval)
 	defer ticker.Stop()
 

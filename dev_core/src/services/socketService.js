@@ -362,6 +362,9 @@ class SocketService {
   broadcastNodePendingRequest(tenantId, payload) {
     if (!this.io) return;
     const room = `ops:tenant:${tenantId}`;
+    logger.info(
+      `[SocketService] Broadcast ops:node:pending to room ${room}, nodeId=${payload?.nodeId || "-"}, nodeName=${payload?.nodeName || "-"}`,
+    );
     this.io.to(room).emit("ops:node:pending", {
       ...payload,
       timestamp: Date.now(),

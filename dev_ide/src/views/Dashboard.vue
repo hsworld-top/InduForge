@@ -367,6 +367,7 @@ import { buildAppUrl } from '@/utils/appUrl'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
 import { initSocket, getSocket } from '@/utils/socket'
+import request from '@/utils/request'
 
 // 标签页组件懒加载，提升首次加载速度
 const DashboardContent = defineAsyncComponent(() => import('@/views/DashboardContent.vue'))
@@ -399,6 +400,10 @@ export default {
     const showProfileDialog = ref(false)
     const showSystemSettingsDialog = ref(false)
     const pendingRequestNotifications = new Map()
+    const pendingPollingTimer = ref(null)
+    const lastPendingCount = ref(0)
+    const opsSocket = ref(null)
+    const wsConnectCheckTimer = ref(null)
 
     // 侧边栏折叠状态（持久化）
     const sidebarCollapsed = computed({
@@ -617,11 +622,13 @@ export default {
      * 打开运维待审核申请界面。
      */
     const openOpsPendingRequests = () => {
-      Storage.set(STORAGE_KEYS.OPS_OPEN_PENDING_REQUEST, true)
       openTab('ops-management')
-      window.setTimeout(() => {
-        window.dispatchEvent(new window.CustomEvent('ops:open-pending-requests'))
-      }, 60)
+      // 通过短时重试确保 OpsManagement 完成挂载后再打开弹窗。
+      ;[80, 220, 420].forEach((delay) => {
+        window.setTimeout(() => {
+          window.dispatchEvent(new window.CustomEvent('ops:open-pending-requests'))
+        }, delay)
+      })
     }
 
     /**
@@ -654,6 +661,33 @@ export default {
     }
 
     /**
+     * 页面初始化时检查是否存在未处理的待审核申请，并主动提醒一次。
+     */
+    const notifyExistingPendingRequests = async () => {
+      if (!(isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value)) return
+      try {
+        const res = await request.get('/nodes', {
+          params: {
+            page: 1,
+            pageSize: 5,
+            approvalStatus: 'pending',
+          },
+        })
+        const items = res?.data?.items || []
+        if (!Array.isArray(items) || items.length === 0) return
+
+        const first = items[0]
+        showNodePendingNotification({
+          nodeId: `pending-summary-${Date.now()}`,
+          nodeName: first?.name || '-',
+          applicant: { username: first?.registrant?.username || '-' },
+        })
+      } catch (error) {
+        console.warn('[OpsPending] 初始化待审核提醒失败:', error)
+      }
+    }
+
+    /**
      * 订阅运维事件并处理全局通知。
      */
     const setupOpsPendingSubscription = () => {
@@ -661,7 +695,104 @@ export default {
       const tenantId = Storage.getTenantId()
       if (!tenantId) return
       const socket = initSocket(tenantId)
-      socket.on('ops:node:pending', showNodePendingNotification)
+      opsSocket.value = socket
+
+      socket.on('connect', handleOpsSocketConnect)
+      socket.on('disconnect', handleOpsSocketDisconnect)
+      socket.on('connect_error', handleOpsSocketConnectError)
+      socket.on('ops:node:pending', handleOpsNodePending)
+
+      if (wsConnectCheckTimer.value) {
+        window.clearTimeout(wsConnectCheckTimer.value)
+      }
+      wsConnectCheckTimer.value = window.setTimeout(() => {
+        if (!socket.connected) {
+          console.warn('[OpsPending][WS] 连接超时，启用轮询兜底')
+          startPendingPolling('connect-timeout')
+        }
+      }, 6000)
+    }
+
+    /**
+     * 兜底：轮询待审核申请数量，避免 WebSocket 异常时无法实时提示。
+     */
+    const startPendingPolling = async (reason = 'unknown') => {
+      if (!(isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value)) return
+      if (pendingPollingTimer.value) return
+      console.warn(`[OpsPending][Polling] 已启用，原因: ${reason}`)
+
+      const pollPendingCount = async (notifyOnIncrease = false) => {
+        try {
+          const res = await request.get('/nodes', { params: { pageSize: 1, approvalStatus: 'pending' } })
+          const total = Number(res?.data?.total || 0)
+          if (notifyOnIncrease && total > lastPendingCount.value) {
+            console.log(`[OpsPending][Polling] 检测到待审核新增: ${lastPendingCount.value} -> ${total}`)
+            ElNotification({
+              title: t('dashboard.pendingNodeTitle'),
+              message: t('dashboard.pendingNodeMessage', { nodeName: '-', applicant: '-' }),
+              type: 'warning',
+              duration: 5000,
+              onClick: () => {
+                openOpsPendingRequests()
+              },
+            })
+          }
+          lastPendingCount.value = total
+        } catch (error) {
+          console.warn('轮询待审核申请失败:', error)
+        }
+      }
+
+      await pollPendingCount(false)
+      pendingPollingTimer.value = window.setInterval(() => {
+        pollPendingCount(true)
+      }, 8000)
+    }
+
+    /**
+     * 停止兜底轮询。
+     */
+    const stopPendingPolling = () => {
+      if (pendingPollingTimer.value) {
+        window.clearInterval(pendingPollingTimer.value)
+        pendingPollingTimer.value = null
+        console.log('[OpsPending][Polling] 已停止')
+      }
+    }
+
+    /**
+     * WebSocket 连接成功回调。
+     */
+    const handleOpsSocketConnect = () => {
+      console.log('[OpsPending][WS] 已连接')
+      stopPendingPolling()
+    }
+
+    /**
+     * WebSocket 连接断开回调。
+     * @param {string} reason - 断开原因
+     */
+    const handleOpsSocketDisconnect = (reason) => {
+      console.warn('[OpsPending][WS] 连接断开:', reason)
+      startPendingPolling(`disconnect:${reason || 'unknown'}`)
+    }
+
+    /**
+     * WebSocket 连接错误回调。
+     * @param {Error} error - 连接错误
+     */
+    const handleOpsSocketConnectError = (error) => {
+      console.warn('[OpsPending][WS] 连接失败:', error?.message || error)
+      startPendingPolling(`connect_error:${error?.message || 'unknown'}`)
+    }
+
+    /**
+     * 收到待审核事件回调。
+     * @param {object} payload - 节点申请事件载荷
+     */
+    const handleOpsNodePending = (payload = {}) => {
+      console.log('[OpsPending][WS] 收到待审核事件:', payload)
+      showNodePendingNotification(payload)
     }
 
     /**
@@ -789,6 +920,7 @@ export default {
       }
       tabsInitialized.value = true
       setupOpsPendingSubscription()
+      notifyExistingPendingRequests()
 
       // 仅超级管理员按需获取租户详情，避免非超级管理员触发租户接口请求
       if (isSuperAdmin.value && authStore.userInfo?.tenantId) {
@@ -810,10 +942,18 @@ export default {
       document.removeEventListener('click', handleClickOutside)
       const socket = getSocket()
       if (socket) {
-        socket.off('ops:node:pending', showNodePendingNotification)
+        socket.off('connect', handleOpsSocketConnect)
+        socket.off('disconnect', handleOpsSocketDisconnect)
+        socket.off('connect_error', handleOpsSocketConnectError)
+        socket.off('ops:node:pending', handleOpsNodePending)
       }
       pendingRequestNotifications.forEach((notification) => notification?.close?.())
       pendingRequestNotifications.clear()
+      stopPendingPolling()
+      if (wsConnectCheckTimer.value) {
+        window.clearTimeout(wsConnectCheckTimer.value)
+        wsConnectCheckTimer.value = null
+      }
     })
 
     // 最大化标签页

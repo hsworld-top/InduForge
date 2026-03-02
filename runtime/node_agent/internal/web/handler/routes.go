@@ -16,6 +16,7 @@ func (h *APIHandler) RegisterRoutes() *mux.Router {
 	// 项目管理
 	projects := router.PathPrefix("/api/v1/projects").Subrouter()
 	projects.HandleFunc("", h.ListProjects).Methods("GET")
+	projects.HandleFunc("/deploy-ifp", h.DeployProjectByIFP).Methods("POST")
 	projects.HandleFunc("/{id}", h.GetProject).Methods("GET")
 	projects.HandleFunc("/{id}/deploy", h.DeployProject).Methods("POST")
 	projects.HandleFunc("/{id}/start", h.StartProject).Methods("POST")
@@ -32,11 +33,24 @@ func (h *APIHandler) RegisterRoutes() *mux.Router {
 	router.HandleFunc("/api/v1/config/save", h.SaveConfig).Methods("POST")
 	router.HandleFunc("/api/v1/config/service", h.GetServiceConfig).Methods("GET")
 
+	// 初始化向导
+	router.HandleFunc("/api/v1/bootstrap/status", h.GetBootstrapStatus).Methods("GET")
+	router.HandleFunc("/api/v1/bootstrap/complete", h.CompleteBootstrap).Methods("POST")
+	router.HandleFunc("/api/v1/bootstrap/autostart", h.SaveAutoStart).Methods("POST")
+
 	// 运维中心代理
 	router.HandleFunc("/api/v1/center/login", h.CenterLogin).Methods("POST")
 	router.HandleFunc("/api/v1/center/register", h.CenterRegister).Methods("POST")
 	router.HandleFunc("/api/v1/center/approval-status", h.CenterApprovalStatus).Methods("GET")
 	router.HandleFunc("/api/v1/center/health", h.CenterHealth).Methods("GET")
+
+	// 运维中心控制入口（路由层统一标记为 center 来源）
+	centerProjects := router.PathPrefix("/api/v1/center/projects").Subrouter()
+	centerProjects.HandleFunc("/{id}/deploy", h.CenterDeployProject).Methods("POST")
+	centerProjects.HandleFunc("/{id}/start", h.CenterStartProject).Methods("POST")
+	centerProjects.HandleFunc("/{id}/stop", h.CenterStopProject).Methods("POST")
+	centerProjects.HandleFunc("/{id}/restart", h.CenterRestartProject).Methods("POST")
+	centerProjects.HandleFunc("/{id}/rollback", h.CenterRollbackProject).Methods("POST")
 
 	// 健康检查
 	router.HandleFunc("/health", h.HealthCheck).Methods("GET")

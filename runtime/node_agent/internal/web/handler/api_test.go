@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/gorilla/mux"
 	"github.com/indu-forge/node_agent/internal/agent/store"
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
+	"github.com/indu-forge/node_agent/internal/pkg/types"
 )
 
 // createTestHandler 创建用于测试的 API 处理器
@@ -36,8 +40,16 @@ func TestGetNodeInfo(t *testing.T) {
 		t.Fatalf("解析响应失败: %v", err)
 	}
 
-	if response["id"] == nil || response["id"] != "node-001" {
-		t.Errorf("期望节点 ID node-001，实际 %v", response["id"])
+	id, idOK := response["id"].(string)
+	if !idOK || id == "" {
+		t.Errorf("期望节点 ID 为非空字符串，实际 %v", response["id"])
+	}
+	machineID, machineIDOK := response["machineId"].(string)
+	if !machineIDOK || machineID == "" {
+		t.Errorf("期望 machineId 为非空字符串，实际 %v", response["machineId"])
+	}
+	if id != machineID {
+		t.Errorf("期望 id 与 machineId 一致，实际 id=%s machineId=%s", id, machineID)
 	}
 	if response["name"] == nil || response["name"] != "Node Agent" {
 		t.Errorf("期望节点名称 Node Agent，实际 %v", response["name"])
@@ -198,5 +210,59 @@ func TestLoggerNotNil(t *testing.T) {
 	// 测试日志级别
 	if handler.logger != logger.GlobalLogger {
 		t.Log("使用全局日志实例")
+	}
+}
+
+// TestStartProject_CenterManagedForbidden 测试中心托管项目禁止本地启动
+func TestStartProject_CenterManagedForbidden(t *testing.T) {
+	tmpDir := t.TempDir()
+	st := store.NewLocalStore(tmpDir)
+	_ = st.SaveProject(&types.ProjectInfo{
+		ID:             "center-proj",
+		Name:           "center-proj",
+		Source:         types.ProjectSourceCenter,
+		CurrentVersion: "1.0.0",
+		Status:         "stopped",
+	})
+
+	// 创建 bootstrap ready，避免被初始化拦截
+	bootstrapPath := filepath.Join(tmpDir, "bootstrap.json")
+	_ = os.WriteFile(bootstrapPath, []byte(`{"status":"READY","updatedAt":"2026-01-01T00:00:00Z"}`), 0644)
+
+	handler := NewAPIHandler(nil, st)
+	handler.bootstrapStore = &BootstrapStore{
+		filePath: bootstrapPath,
+		state: BootstrapState{
+			Status: BootstrapReady,
+		},
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/projects/center-proj/start", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "center-proj"})
+	rec := httptest.NewRecorder()
+	handler.StartProject(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusForbidden, rec.Code)
+	}
+}
+
+// TestEnsureProjectMutable_CenterSourceAllowed 测试中心来源可操作中心托管项目
+func TestEnsureProjectMutable_CenterSourceAllowed(t *testing.T) {
+	tmpDir := t.TempDir()
+	st := store.NewLocalStore(tmpDir)
+	_ = st.SaveProject(&types.ProjectInfo{
+		ID:             "center-proj",
+		Name:           "center-proj",
+		Source:         types.ProjectSourceCenter,
+		CurrentVersion: "1.0.0",
+		Status:         "stopped",
+	})
+
+	handler := NewAPIHandler(nil, st)
+	req := httptest.NewRequest("POST", "/api/v1/projects/center-proj/start?controlSource=center", nil)
+
+	if err := handler.ensureProjectMutable(req, "center-proj"); err != nil {
+		t.Fatalf("中心来源应允许操作中心托管项目，实际报错: %v", err)
 	}
 }

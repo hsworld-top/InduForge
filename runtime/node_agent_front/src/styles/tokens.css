@@ -1,0 +1,80 @@
+:root {
+  --bg-canvas: #f3f5f8;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f8fafc;
+  --bg-control: #eef2f7;
+  --fg-primary: #0f172a;
+  --fg-secondary: #334155;
+  --fg-muted: #64748b;
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.16);
+  --brand-500: #1769e0;
+  --brand-600: #1256b6;
+  --success-500: #127a4a;
+  --warning-500: #b26a00;
+  --danger-500: #b42318;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="dark"] {
+  --bg-canvas: #0b1220;
+  --bg-surface: #0f172a;
+  --bg-surface-2: #111f36;
+  --bg-control: #13233d;
+  --fg-primary: #e2e8f0;
+  --fg-secondary: #cbd5e1;
+  --fg-muted: #93a4bd;
+  --border-subtle: rgba(148, 163, 184, 0.2);
+  --border-strong: rgba(148, 163, 184, 0.34);
+  --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.5);
+  --shadow-md: 0 8px 24px rgba(2, 6, 23, 0.55);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg-canvas);
+  color: var(--fg-primary);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--fg-primary);
+}
+
+.page-subtitle {
+  margin: var(--space-2) 0 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.panel-card {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.mono {
+  font-family: "Cascadia Mono", "Fira Code", Consolas, monospace;
+}

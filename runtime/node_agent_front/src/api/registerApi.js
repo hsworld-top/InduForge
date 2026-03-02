@@ -36,10 +36,12 @@ export async function loginWithAuth(data) {
 }
 
 /**
- * 提交节点注册申请（需 token）
+ * 提交节点注册申请（用户名密码模式）
  * @param {Object} data - 注册数据
  * @param {string} data.centerUrl - 运维中心地址
- * @param {string} data.accessToken - 访问令牌
+ * @param {string} data.username - 用户名
+ * @param {string} data.password - 密码
+ * @param {string} data.tenantCode - 租户代码
  * @param {string} data.nodeName - 节点名称
  * @param {string} data.nodeDescription - 节点描述
  * @param {string} data.ipAddress - IP地址
@@ -48,14 +50,16 @@ export async function loginWithAuth(data) {
  * @returns {Promise<Object>} 注册结果
  */
 export async function registerNodeWithToken(data) {
-  const { centerUrl, accessToken, nodeName, nodeDescription, ipAddress, port, agentVersion } = data
+  const { centerUrl, username, password, tenantCode, nodeName, nodeDescription, ipAddress, port, agentVersion } = data
 
   try {
     const response = await axios.post(
       `/api/v1/center/register`,
       {
         centerUrl,
-        accessToken,
+        username,
+        password,
+        tenantCode,
         nodeName,
         nodeDescription,
         agentVersion,
@@ -95,7 +99,9 @@ export async function checkApprovalStatus(centerUrl, nodeId) {
     
     return response.data
   } catch (error) {
-    throw new Error(error.response?.data?.error || error.message || '查询审批状态失败')
+    const err = new Error(error.response?.data?.error || error.message || '查询审批状态失败')
+    err.status = error.response?.status
+    throw err
   }
 }
 

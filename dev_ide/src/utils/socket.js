@@ -7,14 +7,20 @@ export const initSocket = (tenantId) => {
   if (socket) return socket
 
   const token = Storage.getToken()
-  const baseURL = import.meta.env.VITE_API_BASE_URL || ''
-  
-  // 提取 socket.io 的 host
-  const socketHost = baseURL.replace('/api/v1', '')
+  const apiURL = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '').trim()
+  // 提取 socket.io 的 host，兼容 /api 或 /api/v1 结尾
+  const socketHost = apiURL
+    .replace(/\/api\/v1\/?$/i, '')
+    .replace(/\/api\/?$/i, '')
+    .replace(/\/$/, '')
+
+  console.log('[Socket] init host:', socketHost || '(same-origin)')
 
   socket = io(socketHost, {
     auth: { token },
+    path: '/socket.io',
     transports: ['websocket', 'polling'],
+    timeout: 8000,
   })
 
   socket.on('connect', () => {

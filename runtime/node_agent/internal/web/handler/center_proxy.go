@@ -2,12 +2,17 @@ package handler
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
+
+	pkgUtils "github.com/indu-forge/node_agent/internal/pkg/utils"
 )
 
 // CenterLogin 代理运维中心登录请求
@@ -50,42 +55,46 @@ func (h *APIHandler) CenterLogin(w http.ResponseWriter, r *http.Request) {
 func (h *APIHandler) CenterRegister(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CenterURL     string `json:"centerUrl"`
-		AccessToken   string `json:"accessToken"`
+		Username      string `json:"username"`
+		Password      string `json:"password"`
 		NodeName      string `json:"nodeName"`
 		NodeDesc      string `json:"nodeDescription"`
 		IPAddress     string `json:"ipAddress"`
 		Port          int    `json:"port"`
 		AgentVersion  string `json:"agentVersion"`
+		TenantCode    string `json:"tenantCode"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.errorResponse(w, http.StatusBadRequest, err)
 		return
 	}
-	if req.CenterURL == "" || req.AccessToken == "" || req.NodeName == "" {
-		h.errorResponse(w, http.StatusBadRequest, fmt.Errorf("centerUrl/accessToken/nodeName 不能为空"))
+	if req.CenterURL == "" || req.Username == "" || req.Password == "" || req.NodeName == "" {
+		h.errorResponse(w, http.StatusBadRequest, fmt.Errorf("centerUrl/username/password/nodeName 不能为空"))
 		return
 	}
 
-	targetURL, err := buildCenterURL(req.CenterURL, "/api/v1/nodes/register")
+	targetURL, err := buildCenterURL(req.CenterURL, "/api/v1/node-register/register-with-auth")
 	if err != nil {
 		h.errorResponse(w, http.StatusBadRequest, err)
 		return
 	}
 
 	payload := map[string]interface{}{
-		"name":         req.NodeName,
-		"description":  req.NodeDesc,
-		"agentVersion": req.AgentVersion,
-		"ipAddress":    req.IPAddress,
-		"port":         req.Port,
+		"username":        req.Username,
+		"password":        req.Password,
+		"tenantCode":      req.TenantCode,
+		"nodeId":          buildCenterNodeID(pkgUtils.GetMachineID()),
+		"nodeName":        req.NodeName,
+		"nodeDescription": req.NodeDesc,
+		"agentVersion":    req.AgentVersion,
+		"ipAddress":       req.IPAddress,
+		"port":            req.Port,
+		"mode":            "online",
 	}
 
 	body, _ := json.Marshal(payload)
-	headers := map[string]string{
-		"Authorization": fmt.Sprintf("Bearer %s", req.AccessToken),
-	}
-	h.proxyRequest(w, http.MethodPost, targetURL, body, headers)
+	h.proxyRequest(w, http.MethodPost, targetURL, body, nil)
 }
 
 // CenterApprovalStatus 代理运维中心审批状态查询
@@ -172,4 +181,21 @@ func buildCenterURL(baseURL, path string) (string, error) {
 	}
 
 	return parsed.ResolveReference(ref).String(), nil
+}
+
+// buildCenterNodeID 规范化用于运维中心注册的 nodeId（最长 36 位）。
+func buildCenterNodeID(machineID string) string {
+	id := strings.TrimSpace(machineID)
+	if id == "" {
+		return ""
+	}
+	id = strings.TrimPrefix(id, "node-")
+	if len(id) <= 36 {
+		return id
+	}
+
+	// 若机器码超长，回退为基于机器码哈希的稳定 UUID，确保同一机器恒定。
+	sum := sha256.Sum256([]byte(id))
+	hexText := hex.EncodeToString(sum[:16])
+	return fmt.Sprintf("%s-%s-%s-%s-%s", hexText[0:8], hexText[8:12], hexText[12:16], hexText[16:20], hexText[20:32])
 }

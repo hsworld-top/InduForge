@@ -11,19 +11,15 @@ import { nodeApi } from '@/api/nodeApi'
  */
 export async function isInitialized() {
   try {
+    // 新版初始化判断优先使用 bootstrap 状态机接口
+    const bootstrap = await nodeApi.getBootstrapStatus()
+    if (typeof bootstrap?.isInitialized === 'boolean') {
+      return bootstrap.isInitialized
+    }
+
+    // 兼容旧版本后端
     const config = await nodeApi.getServiceConfig()
-    const mode = config?.mode
-
-    if (!mode) {
-      return false
-    }
-
-    if (mode === 'offline') {
-      return !!config?.nodeName
-    }
-
-    const online = config?.online
-    return !!(online?.centerUrl && online?.nodeId && online?.registrationToken)
+    return !!config?.bootstrap?.isInitialized
   } catch (error) {
     console.error('获取服务配置失败:', error)
     return false
