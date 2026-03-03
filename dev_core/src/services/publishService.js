@@ -104,8 +104,8 @@ class PublishService {
         projectData
       );
 
-      // 5. 生成制品 URL
-      const artifactUrl = `/artifacts/${path.basename(ifpPath)}`;
+      // 5. 生成受控下载 URL（统一通过发布下载接口）。
+      const artifactUrl = `/api/v1/publish/deployment/${deploymentId}/download`;
 
       // 6. 更新发布记录
       await deployment.update({

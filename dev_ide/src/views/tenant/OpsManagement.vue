@@ -33,6 +33,22 @@
     <div class="mb-6">
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
         <el-form :inline="true" :model="nodeSearch" class="flex flex-wrap gap-4 -mb-4">
+          <el-form-item :label="t('projectManagement.projectName')">
+            <el-select
+              v-model="nodeSearch.projectName"
+              clearable
+              filterable
+              :placeholder="t('projectManagement.allProjects')"
+              style="width: 220px"
+            >
+              <el-option
+                v-for="item in projectOptions"
+                :key="item.id"
+                :label="item.name"
+                :value="item.name"
+              />
+            </el-select>
+          </el-form-item>
           <el-form-item :label="t('opsManagement.nodeStatus')">
             <el-select v-model="nodeSearch.status" :placeholder="t('opsManagement.allStatus')" clearable style="width: 120px">
               <el-option :label="t('opsManagement.online')" value="online" />
@@ -99,7 +115,7 @@
     <div v-if="activeView === 'dashboard'" class="flex-1 overflow-y-auto pb-6">
       <div v-loading="nodeLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <el-card
-          v-for="node in nodeList"
+          v-for="node in filteredNodeList"
           :key="node.id"
           shadow="hover"
           class="node-card border-none ring-1 ring-gray-200 dark:ring-gray-700"
@@ -171,13 +187,15 @@
           <!-- 卡片尾部：运行中工程列表 -->
           <div class="bg-gray-50/30 dark:bg-gray-900/20 p-2 border-t border-gray-100 dark:border-gray-700">
             <div class="text-[10px] font-bold text-gray-400 uppercase px-2 py-1 mb-1 flex justify-between">
-              <span>{{ t('opsManagement.runningProjects') }} ({{ node.deployments?.length || 0 }})</span>
-              <el-button link size="small" type="primary" class="text-[10px]" @click="promptDeploy(node)">{{ t('opsManagement.deploy') }}</el-button>
+              <span>{{ t('opsManagement.runningProjects') }} ({{ getVisibleDeployments(node).length }})</span>
+              <el-button link size="small" type="primary" class="text-[10px]" @click="openProjectManagement">
+                {{ t('projectManagement.publishAndDeploy') }}
+              </el-button>
             </div>
             
-            <div v-if="node.deployments?.length > 0" class="space-y-1">
+            <div v-if="getVisibleDeployments(node).length > 0" class="space-y-1">
               <div 
-                v-for="deploy in node.deployments" 
+                v-for="deploy in getVisibleDeployments(node)" 
                 :key="deploy.id"
                 class="bg-white dark:bg-gray-800 rounded p-2 text-xs ring-1 ring-gray-100 dark:ring-gray-700 flex justify-between items-center"
               >
@@ -236,7 +254,7 @@
       </div>
       
       <!-- 无数据 -->
-      <el-empty v-if="!nodeLoading && nodeList.length === 0" :description="t('opsManagement.noNodesOnline')" />
+      <el-empty v-if="!nodeLoading && filteredNodeList.length === 0" :description="t('opsManagement.noNodesOnline')" />
 
       <!-- 分页 -->
       <div class="flex justify-end mt-8">
@@ -255,12 +273,12 @@
     <!-- 视图：详细列表 -->
     <div v-else-if="activeView === 'list'" class="flex-1 overflow-y-auto pb-6">
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <el-table :data="nodeList" style="width: 100%">
+        <el-table :data="filteredNodeList" style="width: 100%">
           <el-table-column type="expand">
             <template #default="props">
               <div class="p-4 bg-gray-50/50 dark:bg-gray-900/50">
                 <h4 class="text-sm font-bold mb-3">{{ t('opsManagement.runningProjects') }}</h4>
-                <el-table :data="props.row.deployments" size="small" border>
+                <el-table :data="getVisibleDeployments(props.row)" size="small" border>
                   <el-table-column :label="t('opsManagement.projectName')" prop="project.name" />
                   <el-table-column :label="t('opsManagement.runtimeVersion')" prop="version" width="100" />
                   <el-table-column :label="t('opsManagement.runtimeStatus')" width="100">
@@ -314,14 +332,14 @@
             <template #default="scope">{{ getMetricValue(scope.row, 'disk') }}%</template>
           </el-table-column>
           <el-table-column :label="t('opsManagement.projectCount')" width="100">
-            <template #default="scope">{{ scope.row.deployments?.length || 0 }}</template>
+            <template #default="scope">{{ getVisibleDeployments(scope.row).length }}</template>
           </el-table-column>
           <el-table-column :label="t('opsManagement.lastHeartbeat')" prop="lastHeartbeatAt">
             <template #default="scope">{{ formatTime(scope.row.lastHeartbeatAt) }}</template>
           </el-table-column>
         </el-table>
       </div>
-      <el-empty v-if="!nodeLoading && nodeList.length === 0" :description="t('opsManagement.noNodes')" class="mt-6" />
+      <el-empty v-if="!nodeLoading && filteredNodeList.length === 0" :description="t('opsManagement.noNodes')" class="mt-6" />
     </div>
 
     <!-- 弹窗：待审核申请列表 -->
@@ -398,6 +416,26 @@
         </div>
         <div v-if="logContent.length === 0" class="text-gray-500 text-center mt-20">{{ t('opsManagement.noRealtimeLog') }}</div>
       </div>
+      <div class="mt-4">
+        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">{{ t('opsManagement.commandTimeline') }}</div>
+        <el-table :data="commandTimeline" size="small" border>
+          <el-table-column prop="type" :label="t('opsManagement.commandType')" width="120" />
+          <el-table-column :label="t('opsManagement.status')" width="140">
+            <template #default="scope">
+              <el-tag size="small" :type="getCommandStatusType(scope.row.status)">
+                {{ getCommandStatusLabel(scope.row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="attempts" :label="t('opsManagement.retryCount')" width="100" />
+          <el-table-column :label="t('opsManagement.lastUpdated')" min-width="180">
+            <template #default="scope">
+              {{ formatTime(scope.row.updatedAt || scope.row.completedAt || scope.row.issuedAt || scope.row.requestedAt) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="lastError" :label="t('opsManagement.failureReason')" min-width="220" />
+        </el-table>
+      </div>
     </el-dialog>
 
     <el-drawer v-model="showFailureDrawer" :title="t('opsManagement.failureDrawerTitle', { name: failedDeployment?.project?.name || '-' })" size="520px">
@@ -462,6 +500,7 @@ import {
   getProgressColor,
 } from './utils/ops-status'
 
+const emit = defineEmits(['open-tab'])
 const authStore = useAuthStore()
 const { t } = useI18n()
 const currentUserRole = computed(() => authStore.userInfo?.role || Storage.getUserInfo()?.role || '')
@@ -481,6 +520,7 @@ const pendingCount = ref(0)
 
 // 节点查询
 const nodeSearch = reactive({
+  projectName: '',
   status: '',
   keyword: '',
 })
@@ -499,12 +539,44 @@ const pendingList = ref([])
 const showLogDialog = ref(false)
 const currentDeployment = ref(null)
 const logContent = ref([])
+const commandTimeline = ref([])
 const showFailureDrawer = ref(false)
 const failedDeployment = ref(null)
 const failedDeployLogs = ref([])
 
 const deployStatusSummary = computed(() => {
-  return buildDeployStatusSummary(nodeList.value)
+  return buildDeployStatusSummary(filteredNodeList.value)
+})
+
+const projectOptions = computed(() => {
+  const projectMap = new Map()
+  nodeList.value.forEach((node) => {
+    ;(node.deployments || []).forEach((deploy) => {
+      if (!deploy?.projectId) return
+      if (!projectMap.has(deploy.projectId)) {
+        projectMap.set(deploy.projectId, {
+          id: deploy.projectId,
+          name: deploy.project?.name || deploy.projectId,
+        })
+      }
+    })
+  })
+  return Array.from(projectMap.values())
+})
+
+const getVisibleDeployments = (node) => {
+  const deployments = Array.isArray(node?.deployments) ? node.deployments : []
+  if (!nodeSearch.projectName) {
+    return deployments
+  }
+  return deployments.filter((deploy) => (deploy.project?.name || deploy.projectId) === nodeSearch.projectName)
+}
+
+const filteredNodeList = computed(() => {
+  if (!nodeSearch.projectName) {
+    return nodeList.value
+  }
+  return nodeList.value.filter((node) => getVisibleDeployments(node).length > 0)
 })
 
 // 获取节点数据
@@ -668,7 +740,9 @@ const deleteNode = async (node) => {
   }
 }
 
-const promptDeploy = (node) => ElMessage.info(t('opsManagement.deployHint', { name: node.name }))
+const openProjectManagement = () => {
+  emit('open-tab', 'project-management')
+}
 
 /**
  * 打开待审核申请弹窗并刷新数据。
@@ -709,7 +783,27 @@ const handleStopProject = async (deploy) => {
 const handleViewLog = (deploy) => {
   currentDeployment.value = deploy
   logContent.value = deploy.deployLog || []
+  commandTimeline.value = Array.isArray(deploy.commands) ? deploy.commands : []
   showLogDialog.value = true
+}
+
+const getCommandStatusType = (status) => {
+  if (status === 'completed') return 'success'
+  if (status === 'failed' || status === 'dead_letter') return 'danger'
+  if (status === 'pending' || status === 'issued' || status === 'acknowledged') return 'warning'
+  return 'info'
+}
+
+const getCommandStatusLabel = (status) => {
+  const map = {
+    pending: t('opsManagement.commandPending'),
+    issued: t('opsManagement.commandIssued'),
+    acknowledged: t('opsManagement.commandAck'),
+    completed: t('opsManagement.commandCompleted'),
+    failed: t('opsManagement.commandFailed'),
+    dead_letter: t('opsManagement.commandDeadLetter'),
+  }
+  return map[status] || status
 }
 
 const openFailureDetail = (deploy) => {
@@ -809,11 +903,55 @@ const setupRealtimeUpdates = () => {
     }
   })
 
+  socket.on('ops:deploy:status', (data) => {
+    const node = nodeList.value.find((n) => n.id === data.nodeId)
+    if (!node || !Array.isArray(node.deployments)) {
+      return
+    }
+    const deploy = node.deployments.find((d) => d.id === data.deploymentId)
+    if (!deploy) {
+      return
+    }
+    deploy.status = data.status || deploy.status
+    if (data.startedAt) {
+      deploy.startedAt = data.startedAt
+    }
+    if (data.stoppedAt) {
+      deploy.stoppedAt = data.stoppedAt
+    }
+    if (data.errorMessage) {
+      deploy.errorMessage = data.errorMessage
+    }
+  })
+
   // 监听新的待审核节点注册申请
   socket.on('ops:node:pending', async (data = {}) => {
     console.log('[OpsManagement][WS] 收到待审核事件:', data)
     await fetchPendingList()
   })
+}
+
+const handleSetProjectFilter = async (event) => {
+  const projectName = event?.detail?.projectName || ''
+  const projectId = event?.detail?.projectId || ''
+  if (projectName) {
+    nodeSearch.projectName = projectName
+  } else if (projectId) {
+    // 兼容旧事件：若仅传 projectId，尝试映射为工程名称。
+    let matchedName = ''
+    nodeList.value.forEach((node) => {
+      ;(node.deployments || []).forEach((deploy) => {
+        if (!matchedName && deploy.projectId === projectId) {
+          matchedName = deploy.project?.name || deploy.projectId
+        }
+      })
+    })
+    nodeSearch.projectName = matchedName
+  } else {
+    nodeSearch.projectName = ''
+  }
+  nodePagination.page = 1
+  await fetchNodes()
 }
 
 // 挂载与卸载
@@ -823,6 +961,7 @@ onMounted(async () => {
   updateCounts()
   setupRealtimeUpdates()
   window.addEventListener('ops:open-pending-requests', openPendingRequestsDialog)
+  window.addEventListener('ops:set-project-filter', handleSetProjectFilter)
 })
 
 onBeforeUnmount(() => {
@@ -833,6 +972,7 @@ onBeforeUnmount(() => {
     socket.off('ops:node:metrics')
     socket.off('ops:node:status')
     socket.off('ops:project:metrics')
+    socket.off('ops:deploy:status')
     socket.off('ops:node:pending')
   }
   if (searchDebounceTimer.value) {
@@ -840,6 +980,7 @@ onBeforeUnmount(() => {
     searchDebounceTimer.value = null
   }
   window.removeEventListener('ops:open-pending-requests', openPendingRequestsDialog)
+  window.removeEventListener('ops:set-project-filter', handleSetProjectFilter)
 })
 
 watch(

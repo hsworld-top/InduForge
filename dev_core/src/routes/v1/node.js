@@ -6,6 +6,8 @@ const express = require("express");
 const router = express.Router();
 const nodeService = require("../../services/nodeService");
 const { authenticate } = require("../../middlewares/auth");
+const ApiResponse = require("../../utils/response");
+const ErrorCodes = require("../../constants/errorCodes");
 
 /**
  * @route POST /api/v1/nodes/:nodeId/heartbeat
@@ -16,19 +18,18 @@ router.post("/:nodeId/heartbeat", async (req, res) => {
   try {
     const { nodeId } = req.params;
     const heartbeatData = req.body;
+    const registrationToken =
+      req.get("X-Registration-Token") || heartbeatData.registrationToken || "";
 
     // 从请求中获取 IP
     heartbeatData.ipAddress = heartbeatData.ipAddress || req.ip;
 
-    const result = await nodeService.heartbeat(nodeId, heartbeatData);
+    const result = await nodeService.heartbeat(nodeId, heartbeatData, registrationToken);
 
-    res.json({
-      success: true,
-      data: result,
-    });
+    return ApiResponse.success(res, result);
   } catch (error) {
     console.error("心跳上报失败:", error);
-    res.status(400).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
   }
 });
 
@@ -41,9 +42,10 @@ router.post("/:nodeId/deployment-status", async (req, res) => {
   try {
     const { nodeId } = req.params;
     const { deploymentId, status, error, startedAt, stoppedAt, message } = req.body;
+    const registrationToken = req.get("X-Registration-Token") || req.body?.registrationToken || "";
 
     if (!deploymentId || !status) {
-      return res.status(400).json({ error: "deploymentId 和 status 不能为空" });
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "deploymentId 和 status 不能为空" }, 400);
     }
 
     const result = await nodeService.updateDeploymentStatus(nodeId, deploymentId, {
@@ -52,15 +54,12 @@ router.post("/:nodeId/deployment-status", async (req, res) => {
       startedAt,
       stoppedAt,
       message,
-    });
+    }, registrationToken);
 
-    res.json({
-      success: true,
-      data: { id: result.id, status: result.status },
-    });
+    return ApiResponse.success(res, { id: result.id, status: result.status });
   } catch (error) {
     console.error("部署状态更新失败:", error);
-    res.status(400).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
   }
 });
 
@@ -73,15 +72,13 @@ router.post("/:nodeId/offline", async (req, res) => {
   try {
     const { nodeId } = req.params;
     const { reason } = req.body || {};
+    const registrationToken = req.get("X-Registration-Token") || req.body?.registrationToken || "";
 
-    const result = await nodeService.offline(nodeId, { reason: reason || "agent_shutdown" });
-    res.json({
-      success: true,
-      data: result,
-    });
+    const result = await nodeService.offline(nodeId, { reason: reason || "agent_shutdown" }, registrationToken);
+    return ApiResponse.success(res, result);
   } catch (error) {
     console.error("节点主动下线失败:", error);
-    res.status(400).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
   }
 });
 
@@ -103,13 +100,10 @@ router.get("/", authenticate, async (req, res) => {
       approvalStatus,
     });
 
-    res.json({
-      success: true,
-      data: result,
-    });
+    return ApiResponse.success(res, result);
   } catch (error) {
     console.error("获取节点列表失败:", error);
-    res.status(500).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, { message: error.message }, 500);
   }
 });
 
@@ -125,16 +119,13 @@ router.get("/:nodeId", authenticate, async (req, res) => {
 
     // 检查租户权限
     if (node.tenantId !== req.user.tenantId) {
-      return res.status(403).json({ error: "无权访问此节点" });
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, { message: "无权访问此节点" }, 403);
     }
 
-    res.json({
-      success: true,
-      data: node,
-    });
+    return ApiResponse.success(res, node);
   } catch (error) {
     console.error("获取节点详情失败:", error);
-    res.status(404).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: error.message }, 404);
   }
 });
 
@@ -152,19 +143,15 @@ router.put("/:nodeId", authenticate, async (req, res) => {
     // 先获取节点检查权限
     const existing = await nodeService.getById(nodeId);
     if (existing.tenantId !== req.user.tenantId) {
-      return res.status(403).json({ error: "无权修改此节点" });
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, { message: "无权修改此节点" }, 403);
     }
 
     const node = await nodeService.update(nodeId, { name, description, port, config }, userId);
 
-    res.json({
-      success: true,
-      data: node,
-      message: "节点更新成功",
-    });
+    return ApiResponse.success(res, node);
   } catch (error) {
     console.error("更新节点失败:", error);
-    res.status(400).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
   }
 });
 
@@ -180,18 +167,15 @@ router.delete("/:nodeId", authenticate, async (req, res) => {
     // 先获取节点检查权限
     const existing = await nodeService.getById(nodeId);
     if (existing.tenantId !== req.user.tenantId) {
-      return res.status(403).json({ error: "无权删除此节点" });
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, { message: "无权删除此节点" }, 403);
     }
 
     await nodeService.delete(nodeId);
 
-    res.json({
-      success: true,
-      message: "节点删除成功",
-    });
+    return ApiResponse.success(res, null);
   } catch (error) {
     console.error("删除节点失败:", error);
-    res.status(400).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
   }
 });
 
@@ -208,19 +192,15 @@ router.put("/:nodeId/approve", authenticate, async (req, res) => {
     // 权限检查
     const node = await nodeService.getById(nodeId);
     if (node.tenantId !== req.user.tenantId) {
-      return res.status(403).json({ error: "无权审批此节点" });
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, { message: "无权审批此节点" }, 403);
     }
 
     const result = await nodeService.approve(nodeId, userId);
 
-    res.json({
-      success: true,
-      data: result,
-      message: "节点审批通过",
-    });
+    return ApiResponse.success(res, result);
   } catch (error) {
     console.error("审批节点失败:", error);
-    res.status(400).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
   }
 });
 
@@ -237,19 +217,15 @@ router.put("/:nodeId/reject", authenticate, async (req, res) => {
     // 权限检查
     const node = await nodeService.getById(nodeId);
     if (node.tenantId !== req.user.tenantId) {
-      return res.status(403).json({ error: "无权操作此节点" });
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, { message: "无权操作此节点" }, 403);
     }
 
     const result = await nodeService.reject(nodeId, userId);
 
-    res.json({
-      success: true,
-      data: result,
-      message: "节点申请已拒绝",
-    });
+    return ApiResponse.success(res, result);
   } catch (error) {
     console.error("拒绝节点失败:", error);
-    res.status(400).json({ error: error.message });
+    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
   }
 });
 

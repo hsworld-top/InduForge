@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const {
   Deployment,
   NodeDeployment,
+  NodeCommand,
   Node,
   Project,
   User,
@@ -16,6 +17,95 @@ const { Op } = require("sequelize");
  * 部署服务类
  */
 class DeploymentService {
+  /**
+   * 获取工程基础信息
+   * @param {string} projectId - 工程ID
+   * @returns {Promise<Object>} 工程信息
+   */
+  async getProjectBase(projectId) {
+    const project = await Project.findByPk(projectId, {
+      attributes: ["id", "tenantId", "name"],
+    });
+    if (!project) {
+      throw new Error("工程不存在");
+    }
+    return project;
+  }
+
+  /**
+   * 获取或创建 DEV 模式源发布记录（无需业务版本号）
+   * @param {string} projectId - 工程ID
+   * @param {string} deployedBy - 操作者ID
+   * @returns {Promise<Object>} DEV 源发布记录
+   */
+  async ensureDevSourceDeployment(projectId, deployedBy) {
+    const project = await this.getProjectBase(projectId);
+    const devVersion = "__DEV__";
+
+    const existing = await Deployment.findOne({
+      where: {
+        projectId,
+        version: devVersion,
+        mode: "DEV",
+        deletedAt: null,
+      },
+    });
+    if (existing) {
+      if (existing.status !== "success") {
+        await existing.update({
+          status: "success",
+          completedAt: existing.completedAt || new Date(),
+        });
+      }
+      return existing;
+    }
+
+    const id = crypto.randomUUID();
+    return Deployment.create({
+      id,
+      projectId,
+      tenantId: project.tenantId,
+      version: devVersion,
+      name: "DEV 最新工程",
+      description: "DEV模式源记录（无需发布版本）",
+      type: "development",
+      mode: "DEV",
+      status: "success",
+      deployedBy,
+      startedAt: new Date(),
+      completedAt: new Date(),
+    });
+  }
+  /**
+   * 根据发布记录ID获取工程ID
+   * @param {string} deploymentId - 发布记录ID
+   * @returns {Promise<string>} 工程ID
+   */
+  async getProjectIdByDeploymentId(deploymentId) {
+    const deployment = await Deployment.findByPk(deploymentId, {
+      attributes: ["id", "projectId"],
+    });
+    if (!deployment) {
+      throw new Error("发布版本不存在");
+    }
+    return deployment.projectId;
+  }
+
+  /**
+   * 根据节点部署记录ID获取工程ID
+   * @param {string} nodeDeploymentId - 节点部署记录ID
+   * @returns {Promise<string>} 工程ID
+   */
+  async getProjectIdByNodeDeploymentId(nodeDeploymentId) {
+    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId, {
+      attributes: ["id", "projectId"],
+    });
+    if (!nodeDeployment) {
+      throw new Error("部署记录不存在");
+    }
+    return nodeDeployment.projectId;
+  }
+
   /**
    * 创建发布版本（发布流水线调用）
    * @param {Object} data - 发布数据
@@ -201,6 +291,9 @@ class DeploymentService {
     if (!sourceDeployment) {
       throw new Error("源部署记录不存在");
     }
+    if (sourceDeployment.status !== "success") {
+      throw new Error("仅支持使用构建成功的版本进行DEV部署");
+    }
 
     // 检查节点是否已有部署
     const existingDeployment = await NodeDeployment.findOne({
@@ -292,6 +385,12 @@ class DeploymentService {
     const deployment = await Deployment.findByPk(deploymentId);
     if (!deployment) {
       throw new Error("发布版本不存在");
+    }
+    if (deployment.mode !== "RELEASE") {
+      throw new Error("仅支持RELEASE模式的发布版本进行部署");
+    }
+    if (deployment.status !== "success") {
+      throw new Error("仅支持部署构建成功的发布版本");
     }
 
     // 检查节点是否已有DEV模式部署
@@ -422,6 +521,59 @@ class DeploymentService {
   }
 
   /**
+   * 下发节点运行控制命令（通过心跳通道执行）
+   * @param {Object} nodeDeployment - 节点部署记录
+   * @param {string} commandType - 命令类型 start|stop|restart
+   * @param {string} expectedStatus - 预期状态（用于界面即时反馈）
+   * @returns {Promise<Object>} 更新后的记录
+   */
+  async enqueueRuntimeCommand(nodeDeployment, commandType, expectedStatus) {
+    const commandId = crypto.randomUUID();
+    const requestedAt = new Date();
+
+    await nodeDeployment.update({
+      status: expectedStatus,
+      deployLog: [
+        ...(nodeDeployment.deployLog || []),
+        {
+          time: requestedAt.toISOString(),
+          status: expectedStatus,
+          message: `已下发${commandType}指令，等待节点执行`,
+        },
+      ],
+    });
+
+    const node = await Node.findByPk(nodeDeployment.nodeId, {
+      attributes: ["id", "tenantId"],
+    });
+    if (!node) {
+      throw new Error("节点不存在");
+    }
+
+    await NodeCommand.create({
+      id: commandId,
+      tenantId: node.tenantId,
+      nodeId: nodeDeployment.nodeId,
+      deploymentId: nodeDeployment.id,
+      projectId: nodeDeployment.projectId,
+      type: commandType,
+      status: "pending",
+      payload: {
+        commandId,
+        deploymentId: nodeDeployment.id,
+        projectId: nodeDeployment.projectId,
+        version: nodeDeployment.version,
+      },
+      attempts: 0,
+      maxAttempts: 3,
+      timeoutSeconds: 30,
+      requestedAt,
+    });
+
+    return nodeDeployment;
+  }
+
+  /**
    * 启动工程
    * @param {string} nodeDeploymentId - 节点部署记录ID
    */
@@ -430,31 +582,7 @@ class DeploymentService {
     if (!nodeDeployment) {
       throw new Error("部署记录不存在");
     }
-
-    await nodeDeployment.update({
-      status: "running",
-      startedAt: new Date(),
-      deployLog: [
-        ...(nodeDeployment.deployLog || []),
-        {
-          time: new Date().toISOString(),
-          status: "running",
-          message: "收到启动指令",
-        },
-      ],
-    });
-
-    // 更新节点当前工程信息
-    await Node.update(
-      {
-        currentProjectId: nodeDeployment.projectId,
-        currentVersion: nodeDeployment.version,
-        currentDeploymentId: nodeDeploymentId,
-      },
-      { where: { id: nodeDeployment.nodeId } }
-    );
-
-    return nodeDeployment;
+    return this.enqueueRuntimeCommand(nodeDeployment, "start", "deploying");
   }
 
   /**
@@ -466,31 +594,7 @@ class DeploymentService {
     if (!nodeDeployment) {
       throw new Error("部署记录不存在");
     }
-
-    await nodeDeployment.update({
-      status: "stopped",
-      stoppedAt: new Date(),
-      deployLog: [
-        ...(nodeDeployment.deployLog || []),
-        {
-          time: new Date().toISOString(),
-          status: "stopped",
-          message: "收到停止指令",
-        },
-      ],
-    });
-
-    // 清除节点当前工程信息
-    await Node.update(
-      {
-        currentProjectId: null,
-        currentVersion: null,
-        currentDeploymentId: null,
-      },
-      { where: { id: nodeDeployment.nodeId } }
-    );
-
-    return nodeDeployment;
+    return this.enqueueRuntimeCommand(nodeDeployment, "stop", "stopping");
   }
 
   /**
@@ -502,46 +606,7 @@ class DeploymentService {
     if (!nodeDeployment) {
       throw new Error("部署记录不存在");
     }
-
-    // 先停止
-    await nodeDeployment.update({
-      status: "stopped",
-      stoppedAt: new Date(),
-      deployLog: [
-        ...(nodeDeployment.deployLog || []),
-        {
-          time: new Date().toISOString(),
-          status: "stopped",
-          message: "收到重启指令（停止）",
-        },
-      ],
-    });
-
-    // 再启动
-    await nodeDeployment.update({
-      status: "running",
-      startedAt: new Date(),
-      deployLog: [
-        ...(nodeDeployment.deployLog || []),
-        {
-          time: new Date().toISOString(),
-          status: "running",
-          message: "收到重启指令（启动）",
-        },
-      ],
-    });
-
-    // 更新节点当前工程信息
-    await Node.update(
-      {
-        currentProjectId: nodeDeployment.projectId,
-        currentVersion: nodeDeployment.version,
-        currentDeploymentId: nodeDeploymentId,
-      },
-      { where: { id: nodeDeployment.nodeId } }
-    );
-
-    return nodeDeployment;
+    return this.enqueueRuntimeCommand(nodeDeployment, "restart", "deploying");
   }
 
   /**
@@ -613,8 +678,33 @@ class DeploymentService {
    * @param {string} deployedBy - 操作者ID
    */
   async rollback(nodeId, deploymentId, deployedBy) {
+    const targetDeployment = await Deployment.findByPk(deploymentId, {
+      attributes: ["id", "mode", "status"],
+    });
+    if (!targetDeployment) {
+      throw new Error("回滚目标版本不存在");
+    }
+    if (targetDeployment.mode !== "RELEASE") {
+      throw new Error("仅支持回滚到RELEASE模式版本");
+    }
+    if (targetDeployment.status !== "success") {
+      throw new Error("仅支持回滚到构建成功的版本");
+    }
+
     // 回滚仅作用于RELEASE模式
     return this.deployReleaseMode(deploymentId, nodeId, {}, deployedBy);
+  }
+
+  /**
+   * DEV 模式按工程直接部署（无需版本）
+   * @param {string} projectId - 工程ID
+   * @param {Array<string>} nodeIds - 节点ID列表
+   * @param {string} deployedBy - 操作者ID
+   * @returns {Promise<Array>} 部署结果
+   */
+  async deployDevToNodesByProject(projectId, nodeIds, deployedBy) {
+    const devSource = await this.ensureDevSourceDeployment(projectId, deployedBy);
+    return this.deployToNodes(devSource.id, nodeIds, "DEV", {}, deployedBy);
   }
 
   /**
@@ -657,6 +747,35 @@ class DeploymentService {
       pageSize,
       totalPages: Math.ceil(count / pageSize),
     };
+  }
+
+  /**
+   * 获取工程在各节点上的部署关系
+   * @param {string} projectId - 工程ID
+   * @returns {Promise<Array>} 节点部署列表
+   */
+  async listNodeDeploymentsByProject(projectId) {
+    return NodeDeployment.findAll({
+      where: { projectId, deletedAt: null },
+      include: [
+        {
+          model: Node,
+          as: "node",
+          attributes: ["id", "name", "status", "ipAddress", "port"],
+        },
+        {
+          model: Deployment,
+          as: "deployment",
+          attributes: ["id", "version", "name", "type", "mode"],
+        },
+        {
+          model: Project,
+          as: "project",
+          attributes: ["id", "name"],
+        },
+      ],
+      order: [["updatedAt", "DESC"]],
+    });
   }
 }
 

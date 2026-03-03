@@ -34,6 +34,7 @@ type HeartbeatSender struct {
 	logger            *logger.SimpleLogger
 	metrics           map[string]interface{}
 	projects          []string
+	commandHandler    func(context.Context, types.PendingCommand) error
 }
 
 // NewHeartbeatSender 创建心跳发送器
@@ -46,6 +47,11 @@ func NewHeartbeatSender(config HeartbeatConfig, nodeID string, registrationToken
 		metrics:           make(map[string]interface{}),
 		projects:          make([]string, 0),
 	}
+}
+
+// SetCommandHandler 设置心跳返回指令处理器。
+func (h *HeartbeatSender) SetCommandHandler(handler func(context.Context, types.PendingCommand) error) {
+	h.commandHandler = handler
 }
 
 // Start 开始发送心跳
@@ -121,15 +127,37 @@ func (h *HeartbeatSender) sendHeartbeat(ctx context.Context) {
 		h.logger.Warn("心跳响应异常", "status_code", resp.StatusCode)
 	} else {
 		h.logger.Debug("心跳发送成功")
-		
+
 		// 解析响应，获取待执行指令
 		var response types.HeartbeatResponse
 		if err := json.NewDecoder(resp.Body).Decode(&response); err == nil {
 			if response.Success && len(response.Data.Commands) > 0 {
 				h.logger.Info("收到待执行指令", "count", len(response.Data.Commands))
-				// TODO: 处理待执行指令
+				h.handlePendingCommands(ctx, response.Data.Commands)
 			}
 		}
+	}
+}
+
+// handlePendingCommands 处理心跳响应中的待执行指令。
+func (h *HeartbeatSender) handlePendingCommands(ctx context.Context, commands []types.PendingCommand) {
+	if len(commands) == 0 {
+		return
+	}
+	if h.commandHandler == nil {
+		h.logger.Warn("未配置指令处理器，忽略待执行指令", "count", len(commands))
+		return
+	}
+
+	for _, command := range commands {
+		cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err := h.commandHandler(cmdCtx, command)
+		cancel()
+		if err != nil {
+			h.logger.Error("执行待执行指令失败", "type", command.Type, "error", err)
+			continue
+		}
+		h.logger.Info("待执行指令执行完成", "type", command.Type)
 	}
 }
 
@@ -206,7 +234,6 @@ func getDiskPath() (string, string) {
 	// Linux/Unix 直接使用程序所在路径，disk.Usage 会解析到对应挂载点
 	return exeDir, "System"
 }
-
 
 // UpdateProjects 更新项目列表
 func (h *HeartbeatSender) UpdateProjects(projects []string) {

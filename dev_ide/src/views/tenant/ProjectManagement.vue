@@ -200,30 +200,20 @@
             <!-- 操作按钮 -->
             <div class="flex justify-end space-x-2">
               <el-button
-                v-if="canPerformOps && getProjectModeDisplay(project) === 'DEV'"
-                type="success"
-                size="small"
-                @click.stop="updateDevProject(project)"
-              >
-                {{ t('projectManagement.update') }}
-              </el-button>
-              <el-button
                 v-if="canPerformOps"
                 type="primary"
                 size="small"
                 @click.stop="openDeployDialog(project)"
               >
-                {{ t('projectManagement.deploy') }}
+                {{ t('projectManagement.publishAndDeploy') }}
               </el-button>
               <el-button
-                v-if="
-                  canPerformOps && getProjectModeDisplay(project) !== t('projectManagement.notDeployed')
-                "
-                type="warning"
+                v-if="canPerformOps && isProjectDeployed(project)"
+                type="info"
                 size="small"
-                @click.stop="undeployProject(project)"
+                @click.stop="openOpsManagement(project)"
               >
-                {{ t('projectManagement.undeploy') }}
+                {{ t('opsManagement.title') }}
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -303,35 +293,22 @@
           >
             <template #default="scope">
               <el-button
-                v-if="
-                  canPerformOps && getProjectModeDisplay(scope.row) === 'DEV'
-                "
-                type="success"
-                size="small"
-                @click="updateDevProject(scope.row)"
-                class="mr-2"
-              >
-                {{ t('projectManagement.update') }}
-              </el-button>
-              <el-button
                 v-if="canPerformOps"
                 type="primary"
                 size="small"
                 @click="openDeployDialog(scope.row)"
                 class="mr-2"
               >
-                {{ t('projectManagement.deploy') }}
+                {{ t('projectManagement.publishAndDeploy') }}
               </el-button>
               <el-button
-                v-if="
-                  canPerformOps && getProjectModeDisplay(scope.row) !== t('projectManagement.notDeployed')
-                "
-                type="warning"
+                v-if="canPerformOps && isProjectDeployed(scope.row)"
+                type="info"
                 size="small"
-                @click="undeployProject(scope.row)"
+                @click="openOpsManagement(scope.row)"
                 class="mr-2"
               >
-                {{ t('projectManagement.undeploy') }}
+                {{ t('opsManagement.title') }}
               </el-button>
               <el-button
                 v-if="canManageProjects"
@@ -965,6 +942,7 @@ export default {
     const projectVersions = ref([]);
     const availableNodes = ref([]);
     const nodeModes = reactive({}); // { nodeId: 'DEV' | 'RELEASE' | null }
+    const projectDeployState = reactive({}); // { projectId: { deployed: boolean, mode: 'DEV'|'RELEASE'|null } }
 
     // 工程列表和分页
     const projectList = ref([]);
@@ -1058,6 +1036,21 @@ export default {
     });
 
     /**
+     * 统一提取接口错误信息，兼容 message/error 字段。
+     * @param {any} error - 异常对象
+     * @param {string} fallback - 兜底文案
+     * @returns {string}
+     */
+    const getApiErrorMessage = (error, fallback) => {
+      return (
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        fallback
+      );
+    };
+
+    /**
      * 将 HEX 颜色转为 RGB 对象。
      * @param {string} hex - HEX 颜色值
      * @returns {{r:number,g:number,b:number}|null}
@@ -1121,6 +1114,7 @@ export default {
         projectList.value = response.data.projects || [];
         pagination.total = response.pagination?.total || 0;
         pagination.totalPages = response.pagination?.totalPages || 0;
+        await fetchProjectDeployState();
       } catch (error) {
         ElMessage.error(
           t("projectManagement.fetchFailed", {
@@ -1703,6 +1697,67 @@ export default {
       });
     };
 
+    // 打开运维管理并按工程过滤，运行态操作统一在运维管理执行。
+    const openOpsManagement = (project) => {
+      if (!isProjectDeployed(project)) {
+        ElMessage.warning(`${t("projectManagement.notDeployed")}，请先完成发布并部署`);
+        return;
+      }
+      emit("open-tab", "ops-management");
+      [80, 220, 420].forEach((delay) => {
+        window.setTimeout(() => {
+          window.dispatchEvent(
+            new window.CustomEvent("ops:set-project-filter", {
+              detail: { projectId: project?.id || "", projectName: project?.name || "" },
+            }),
+          );
+        }, delay);
+      });
+    };
+
+    // 同步工程部署状态，用于工程列表的运行模式展示与入口控制。
+    const fetchProjectDeployState = async () => {
+      Object.keys(projectDeployState).forEach((key) => {
+        delete projectDeployState[key];
+      });
+
+      try {
+        const res = await request.get("/nodes", {
+          params: {
+            page: 1,
+            pageSize: 500,
+            approvalStatus: "approved",
+          },
+        });
+        const payload = res?.data ?? res;
+        if (payload?.success === false) {
+          return;
+        }
+        const nodes = payload?.data?.items || payload?.items || [];
+        nodes.forEach((node) => {
+          const deployments = Array.isArray(node?.deployments) ? node.deployments : [];
+          deployments.forEach((deploy) => {
+            const projectId = deploy?.projectId;
+            if (!projectId) return;
+            if (!projectDeployState[projectId]) {
+              projectDeployState[projectId] = {
+                deployed: true,
+                mode: deploy.mode || null,
+              };
+            } else if (!projectDeployState[projectId].mode && deploy.mode) {
+              projectDeployState[projectId].mode = deploy.mode;
+            }
+          });
+        });
+      } catch (error) {
+        console.error("获取工程部署状态失败:", error);
+      }
+    };
+
+    const isProjectDeployed = (project) => {
+      return Boolean(projectDeployState[project?.id]?.deployed);
+    };
+
     // 获取节点当前模式
     const getNodeMode = (nodeId) => {
       return nodeModes[nodeId] || null;
@@ -1716,22 +1771,17 @@ export default {
     };
 
     // 获取工程运行模式显示
-    const getProjectModeDisplay = (_project) => {
-      // 从缓存中获取该工程在任意节点上的模式
-      for (const nodeId in nodeModes) {
-        if (nodeModes[nodeId]) {
-          return nodeModes[nodeId] === "DEV"
-            ? t("projectManagement.modeDisplayDev")
-            : t("projectManagement.modeDisplayRelease");
-        }
-      }
+    const getProjectModeDisplay = (project) => {
+      const mode = projectDeployState[project?.id]?.mode;
+      if (mode === "DEV") return t("projectManagement.modeDisplayDev");
+      if (mode === "RELEASE") return t("projectManagement.modeDisplayRelease");
       return t("projectManagement.notDeployed");
     };
 
     // 获取工程模式标签类型
     const getProjectModeTagType = (project) => {
-      const mode = getProjectModeDisplay(project);
-      return getModeTagType(mode === t("projectManagement.notDeployed") ? null : mode);
+      const mode = projectDeployState[project?.id]?.mode || null;
+      return getModeTagType(mode);
     };
 
     // 打开部署对话框
@@ -1748,28 +1798,33 @@ export default {
           params: { approvalStatus: "approved", status: "online" },
         });
         // 兼容不同的响应结构
-        const nodesData = nodesRes.data?.data || nodesRes.data || {};
+        const nodesPayload = nodesRes?.data ?? nodesRes;
+        const nodesData = nodesPayload?.data || nodesPayload || {};
         availableNodes.value = nodesData.items || nodesData || [];
 
-        // 获取每个节点的当前部署模式
-        for (const node of availableNodes.value) {
+        // 并行获取每个节点的当前部署模式，避免串行请求导致弹窗打开慢。
+        await Promise.all(availableNodes.value.map(async (node) => {
           try {
             const modeRes = await request.get(
               `/deployments/project/${project.id}/node/${node.id}/mode`,
             );
-            nodeModes[node.id] = modeRes.data.data.mode;
+            const modePayload = modeRes?.data ?? modeRes;
+            nodeModes[node.id] = modePayload?.data?.mode || null;
           } catch {
             nodeModes[node.id] = null;
           }
-        }
+        }));
 
         // 获取版本列表
         const versionsRes = await request.get(
           `/publish/${project.id}/versions`,
         );
         // 兼容不同的响应结构
-        const versionsData = versionsRes.data?.data || versionsRes.data || {};
-        projectVersions.value = versionsData.items || versionsData || [];
+        const versionsPayload = versionsRes?.data ?? versionsRes;
+        const versionsData = versionsPayload?.data || versionsPayload || {};
+        const allVersions = versionsData.items || versionsData || [];
+        // 仅保留构建成功的版本用于部署选择。
+        projectVersions.value = allVersions.filter((item) => item?.status === "success");
 
         // 设置当前模式（如果有节点部署的话）
         if (availableNodes.value.length > 0) {
@@ -1780,52 +1835,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t("projectManagement.loadDataFailed", {
-            message: error.response?.data?.message || error.message,
-          }),
-        );
-      }
-    };
-
-    // 更新DEV模式工程（通知节点重新加载配置）
-    const updateDevProject = async (project) => {
-      try {
-        // 获取该工程在DEV模式下的节点部署
-        const deploymentsRes = await request.get(
-          `/deployments/project/${project.id}/nodes`,
-        );
-        const deploymentsData =
-          deploymentsRes.data?.data || deploymentsRes.data || [];
-        const nodeDeployments = Array.isArray(deploymentsData)
-          ? deploymentsData
-          : deploymentsData.items || deploymentsData || [];
-
-        // 筛选出DEV模式的部署
-        const devDeployments = nodeDeployments.filter(
-          (nd) => nd.mode === "DEV",
-        );
-
-        if (devDeployments.length === 0) {
-          return ElMessage.warning(t("projectManagement.noDevDeployment"));
-        }
-
-        // 对每个DEV部署发送更新命令
-        let successCount = 0;
-        for (const nd of devDeployments) {
-          try {
-            await request.post(`/deployments/node-deployment/${nd.id}/restart`);
-            successCount++;
-          } catch (e) {
-            console.error(`更新节点 ${nd.nodeId} 失败:`, e);
-          }
-        }
-
-        ElMessage.success(
-          t("projectManagement.updateDevSuccess", { count: successCount }),
-        );
-      } catch (error) {
-        ElMessage.error(
-          t("projectManagement.updateFailed", {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t("opsManagement.operationFailedFallback")),
           }),
         );
       }
@@ -1891,11 +1901,17 @@ export default {
           );
 
           if (deployRes.data.success) {
-            ElMessage.success(
-              t("projectManagement.deploySuccess", {
-                count: deployRes.data.data.summary.success,
-              }),
-            );
+            const { success: successCount = 0, failed: failCount = 0 } =
+              deployRes.data?.data?.summary || {};
+            if (failCount > 0) {
+              ElMessage.warning(
+                `${t("projectManagement.deploySuccess", { count: successCount })}，失败 ${failCount} 个节点`,
+              );
+            } else {
+              ElMessage.success(
+                t("projectManagement.deploySuccess", { count: successCount }),
+              );
+            }
           }
         } else {
           // DEV模式：需要先确保没有RELEASE部署
@@ -1908,29 +1924,24 @@ export default {
             );
           }
 
-          // 使用最新版本作为DEV源
-          if (projectVersions.value.length === 0) {
-            throw new Error(t("projectManagement.noReleaseVersion"));
-          }
-
-          const latestVersion = projectVersions.value[0];
-
-          // 部署DEV模式
+          // DEV模式按工程直接部署，无需发布版本
           const deployRes = await request.post(
-            `/deployments/${latestVersion.id}/deploy`,
-            {
-              nodeIds: targetNodes,
-              mode: "DEV",
-              runtimeConfig: {},
-            },
+            `/deployments/project/${project.id}/deploy-dev`,
+            { nodeIds: targetNodes },
           );
 
           if (deployRes.data.success) {
-            ElMessage.success(
-              t("projectManagement.devDeploySuccess", {
-                count: deployRes.data.data.summary.success,
-              }),
-            );
+            const { success: successCount = 0, failed: failCount = 0 } =
+              deployRes.data?.data?.summary || {};
+            if (failCount > 0) {
+              ElMessage.warning(
+                `${t("projectManagement.devDeploySuccess", { count: successCount })}，失败 ${failCount} 个节点`,
+              );
+            } else {
+              ElMessage.success(
+                t("projectManagement.devDeploySuccess", { count: successCount }),
+              );
+            }
           }
         }
 
@@ -1939,68 +1950,11 @@ export default {
       } catch (error) {
         if (error !== "cancel") {
           ElMessage.error(
-            error.response?.data?.message ||
-              error.message ||
-              t("opsManagement.operationFailedFallback"),
+            getApiErrorMessage(error, t("opsManagement.operationFailedFallback")),
           );
         }
       } finally {
         deployLoading.value = false;
-      }
-    };
-
-    // 撤销部署
-    const undeployProject = async (project) => {
-      try {
-        await ElMessageBox.confirm(
-          t("opsManagement.undeployAllConfirm", { name: project.name }),
-          t("opsManagement.undeployAllTitle"),
-          {
-            confirmButtonText: t("opsManagement.undeployAllButton"),
-            cancelButtonText: t("projectManagement.cancel"),
-            type: "warning",
-          },
-        );
-
-        // 获取该工程在所有节点上的部署
-        const deploymentsRes = await request.get(
-          `/deployments/project/${project.id}/nodes`,
-        );
-        const deploymentsData =
-          deploymentsRes.data?.data || deploymentsRes.data || [];
-        const nodeDeployments = Array.isArray(deploymentsData)
-          ? deploymentsData
-          : deploymentsData.items || deploymentsData || [];
-
-        if (nodeDeployments.length === 0) {
-          return ElMessage.warning(t("opsManagement.noDeployRecord"));
-        }
-
-        // 逐个撤销部署
-        let successCount = 0;
-        for (const nd of nodeDeployments) {
-          try {
-            await request.delete(`/deployments/node-deployment/${nd.id}`);
-            successCount++;
-          } catch (e) {
-            console.error(`撤销节点 ${nd.nodeId} 部署失败:`, e);
-          }
-        }
-
-        ElMessage.success(
-          t("opsManagement.undeployAllSuccess", {
-            count: successCount,
-          }),
-        );
-        fetchProjects();
-      } catch (error) {
-        if (error !== "cancel") {
-          ElMessage.error(
-            t("opsManagement.undeployFailed") +
-              "：" +
-              (error.response?.data?.message || error.message),
-          );
-        }
       }
     };
 
@@ -2087,13 +2041,13 @@ export default {
       openProjectDialog,
       openDesignCenter,
       openDataCenter,
+      isProjectDeployed,
+      openOpsManagement,
       openDeployDialog,
-      updateDevProject,
       exportProject,
       batchExportProjects,
       batchDeleteProjects,
       confirmDeploy,
-      undeployProject,
       getNodeMode,
       getModeTagType,
       getProjectCardStyle,

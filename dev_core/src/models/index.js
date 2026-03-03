@@ -28,6 +28,7 @@ const DataPointFn = require("./DataPoint"); // 数据点模型
 const NodeFn = require("./Node"); // 节点模型
 const NodeDeploymentFn = require("./NodeDeployment"); // 节点部署关系模型
 const DeploymentFn = require("./Deployment"); // 发布版本模型
+const NodeCommandFn = require("./NodeCommand"); // 节点命令模型
 
 //===========================================
 // 初始化数据中心模型
@@ -54,6 +55,7 @@ const DataPoint = DataPointFn(sequelize, Sequelize.DataTypes); // 数据点模�
 const Node = NodeFn(sequelize, Sequelize.DataTypes); // 节点模型
 const NodeDeployment = NodeDeploymentFn(sequelize, Sequelize.DataTypes); // 节点部署关系模型
 const Deployment = DeploymentFn(sequelize, Sequelize.DataTypes); // 发布版本模型
+const NodeCommand = NodeCommandFn(sequelize, Sequelize.DataTypes); // 节点命令模型
 
 //===========================================
 // 定义模型关联关系
@@ -635,6 +637,41 @@ NodeDeployment.belongsTo(Project, {
   as: "project",
 });
 
+// 节点部署和命令：一对多
+NodeDeployment.hasMany(NodeCommand, {
+  foreignKey: "deploymentId",
+  as: "commands",
+  onDelete: "CASCADE",
+});
+
+NodeCommand.belongsTo(NodeDeployment, {
+  foreignKey: "deploymentId",
+  as: "deployment",
+});
+
+// 节点和命令：一对多
+Node.hasMany(NodeCommand, {
+  foreignKey: "nodeId",
+  as: "commands",
+  onDelete: "CASCADE",
+});
+
+NodeCommand.belongsTo(Node, {
+  foreignKey: "nodeId",
+  as: "node",
+});
+
+// 工程和命令：一对多
+Project.hasMany(NodeCommand, {
+  foreignKey: "projectId",
+  as: "nodeCommands",
+});
+
+NodeCommand.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
 // 用户和节点部署：部署者
 User.hasMany(NodeDeployment, {
   foreignKey: "deployedBy",
@@ -681,4 +718,5 @@ module.exports = {
   Node, // 节点模型
   NodeDeployment, // 节点部署关系模型
   Deployment, // 发布版本模型
+  NodeCommand, // 节点命令模型
 };

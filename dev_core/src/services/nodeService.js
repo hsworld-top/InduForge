@@ -3,7 +3,7 @@
  * @description 处理 NodeAgent 的注册、心跳上报、状态查询等功能
  */
 const crypto = require("crypto");
-const { Node, NodeDeployment, Deployment, Project, Tenant, User, Log } = require("../models");
+const { Node, NodeDeployment, NodeCommand, Deployment, Project, Tenant, User, Log } = require("../models");
 const { Op } = require("sequelize");
 const socketService = require("./socketService");
 const bcrypt = require("bcryptjs");
@@ -16,6 +16,20 @@ function generateRegistrationToken() {
 }
 
 /**
+ * 生成稳定命令ID（同一记录同一状态同一更新时间 => 同一 commandId）
+ * @param {string} type - 命令类型
+ * @param {Object} record - 数据记录
+ * @returns {string}
+ */
+function buildCommandId(type, record) {
+  const updatedAt = record?.updatedAt ? new Date(record.updatedAt).getTime() : 0;
+  const raw = [type, record?.id || "", record?.status || "", updatedAt].join(":");
+  return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 24);
+}
+
+const TERMINAL_COMMAND_STATUS = ["completed", "failed", "dead_letter"];
+
+/**
  * 规范化 IP 地址（处理 ::ffff: 前缀与本地回环）
  * @param {string} ip
  * @returns {string}
@@ -25,6 +39,22 @@ function normalizeIp(ip) {
   if (ip === "::1") return "127.0.0.1";
   if (ip.startsWith("::ffff:")) return ip.slice(7);
   return ip;
+}
+
+/**
+ * 校验节点注册令牌
+ * @param {Object} node - 节点模型
+ * @param {string} registrationToken - 请求携带令牌
+ */
+function ensureNodeTokenValid(node, registrationToken) {
+  const expectedToken = String(node?.registrationToken || "").trim();
+  const providedToken = String(registrationToken || "").trim();
+  if (!expectedToken) {
+    throw new Error(`节点 ${node?.id} 缺少注册令牌，请重新审批节点`);
+  }
+  if (!providedToken || providedToken !== expectedToken) {
+    throw new Error(`节点 ${node?.id} 令牌无效`);
+  }
 }
 
 /**
@@ -362,7 +392,7 @@ class NodeService {
    * @param {Object} heartbeatData.runningProject - 当前运行的工程信息
    * @returns {Promise<Object>} 更新后的节点状态及待执行指令
    */
-  async heartbeat(nodeId, heartbeatData) {
+  async heartbeat(nodeId, heartbeatData, registrationToken = "") {
     const { agentVersion, metrics, projects, ipAddress } = heartbeatData;
 
     const node = await Node.findByPk(nodeId);
@@ -374,6 +404,7 @@ class NodeService {
     if (node.approvalStatus !== "approved") {
       throw new Error(`节点 ${nodeId} 未通过审批，无法上报心跳`);
     }
+    ensureNodeTokenValid(node, registrationToken);
     const previousStatus = node.status;
 
     // 更新节点状态
@@ -447,8 +478,8 @@ class NodeService {
    * @returns {Promise<Array>} 待执行指令列表
    */
   async getPendingCommands(nodeId) {
-    // 检查是否有待部署的任务
-    const pendingDeployment = await NodeDeployment.findOne({
+    // 兼容旧数据：若存在 pending 部署但命令表无 deploy 命令，自动补一条
+    const pendingDeployments = await NodeDeployment.findAll({
       where: {
         nodeId,
         status: "pending",
@@ -463,22 +494,142 @@ class NodeService {
       ],
     });
 
-    if (pendingDeployment) {
-      return [
-        {
+    for (const pendingDeployment of pendingDeployments) {
+      const exists = await NodeCommand.findOne({
+        where: {
+          deploymentId: pendingDeployment.id,
           type: "deploy",
-          payload: {
-            deploymentId: pendingDeployment.id,
-            artifactUrl: pendingDeployment.deployment.artifactUrl,
-            artifactHash: pendingDeployment.deployment.artifactHash,
-            version: pendingDeployment.deployment.version,
-            runtimeConfig: pendingDeployment.runtimeConfig,
-          },
+          status: { [Op.notIn]: TERMINAL_COMMAND_STATUS },
+          deletedAt: null,
         },
-      ];
+      });
+      if (exists) continue;
+      const commandId = crypto.randomUUID();
+      await NodeCommand.create({
+        id: commandId,
+        tenantId: pendingDeployment.tenantId || (await Node.findByPk(nodeId, { attributes: ["tenantId"] })).tenantId,
+        nodeId,
+        deploymentId: pendingDeployment.id,
+        projectId: pendingDeployment.projectId,
+        type: "deploy",
+        status: "pending",
+        payload: {
+          commandId,
+          deploymentId: pendingDeployment.id,
+          projectId: pendingDeployment.projectId,
+          artifactUrl: pendingDeployment.deployment?.artifactUrl,
+          artifactHash: pendingDeployment.deployment?.artifactHash,
+          version: pendingDeployment.deployment?.version || pendingDeployment.version,
+          runtimeConfig: pendingDeployment.runtimeConfig || {},
+        },
+        attempts: 0,
+        maxAttempts: 3,
+        timeoutSeconds: 30,
+        requestedAt: new Date(),
+      });
     }
 
-    return [];
+    const queue = await NodeCommand.findAll({
+      where: {
+        nodeId,
+        status: { [Op.in]: ["pending", "issued"] },
+        deletedAt: null,
+      },
+      order: [["requestedAt", "ASC"]],
+      limit: 20,
+    });
+
+    const commands = [];
+    for (const command of queue) {
+      if (command.status === "pending") {
+        await command.update({
+          status: "issued",
+          issuedAt: command.issuedAt || new Date(),
+        });
+      }
+      commands.push({
+        type: command.type,
+        payload: {
+          commandId: command.id,
+          deploymentId: command.deploymentId,
+          projectId: command.projectId,
+          issuedAt: command.issuedAt || command.requestedAt,
+          ...(command.payload || {}),
+        },
+      });
+    }
+
+    return commands;
+  }
+
+  /**
+   * 扫描并处理命令超时（重试/死信）
+   * @returns {Promise<{retried:number,deadLetter:number}>}
+   */
+  async processCommandTimeouts() {
+    const now = new Date();
+    const commands = await NodeCommand.findAll({
+      where: {
+        status: "issued",
+        deletedAt: null,
+      },
+      order: [["issuedAt", "ASC"]],
+      limit: 200,
+    });
+
+    let retried = 0;
+    let deadLetter = 0;
+
+    for (const command of commands) {
+      const timeoutSeconds = Math.max(5, Number(command.timeoutSeconds || 30));
+      const issuedAt = command.issuedAt ? new Date(command.issuedAt).getTime() : 0;
+      if (!issuedAt) continue;
+      if (now.getTime() - issuedAt < timeoutSeconds * 1000) continue;
+
+      const nextAttempts = Number(command.attempts || 0) + 1;
+      if (nextAttempts >= Number(command.maxAttempts || 3)) {
+        const deadLetterMessage = `命令执行超时（>${timeoutSeconds}s），已进入死信队列`;
+        await command.update({
+          status: "dead_letter",
+          attempts: nextAttempts,
+          lastError: deadLetterMessage,
+          completedAt: now,
+        });
+        deadLetter += 1;
+
+        const nodeDeployment = await NodeDeployment.findByPk(command.deploymentId);
+        await NodeDeployment.update(
+          {
+            status: "error",
+            errorMessage: `命令 ${command.type} 执行超时，已超过最大重试次数`,
+          },
+          { where: { id: command.deploymentId } }
+        );
+        if (nodeDeployment) {
+          const tenantId = (await Node.findByPk(nodeDeployment.nodeId, { attributes: ["tenantId"] }))?.tenantId;
+          if (tenantId) {
+            socketService.broadcastDeployStatus(tenantId, {
+              nodeId: nodeDeployment.nodeId,
+              deploymentId: nodeDeployment.id,
+              projectId: nodeDeployment.projectId,
+              status: "error",
+              errorMessage: deadLetterMessage,
+            });
+          }
+        }
+        continue;
+      }
+
+      await command.update({
+        status: "pending",
+        attempts: nextAttempts,
+        issuedAt: null,
+        lastError: `命令执行超时（>${timeoutSeconds}s），准备第 ${nextAttempts} 次重试`,
+      });
+      retried += 1;
+    }
+
+    return { retried, deadLetter };
   }
 
   /**
@@ -516,6 +667,23 @@ class NodeService {
               model: Project,
               as: "project",
               attributes: ["id", "name", "code"],
+            },
+            {
+              model: NodeCommand,
+              as: "commands",
+              attributes: [
+                "id",
+                "type",
+                "status",
+                "attempts",
+                "maxAttempts",
+                "requestedAt",
+                "issuedAt",
+                "acknowledgedAt",
+                "completedAt",
+                "lastError",
+              ],
+              required: false,
             },
           ],
           where: { deletedAt: null },
@@ -656,11 +824,12 @@ class NodeService {
    * @param {string} data.reason - 下线原因
    * @returns {Promise<Object>} 下线后的节点状态
    */
-  async offline(nodeId, data = {}) {
+  async offline(nodeId, data = {}, registrationToken = "") {
     const node = await Node.findByPk(nodeId);
     if (!node) {
       throw new Error(`节点 ${nodeId} 不存在`);
     }
+    ensureNodeTokenValid(node, registrationToken);
 
     const previousStatus = node.status;
     const updateData = {
@@ -808,8 +977,14 @@ class NodeService {
    * @param {string} deploymentId - 节点部署记录ID
    * @param {Object} statusData - 状态数据
    */
-  async updateDeploymentStatus(nodeId, deploymentId, statusData) {
+  async updateDeploymentStatus(nodeId, deploymentId, statusData, registrationToken = "") {
     const { status, error, startedAt, stoppedAt } = statusData;
+
+    const node = await Node.findByPk(nodeId);
+    if (!node) {
+      throw new Error(`节点 ${nodeId} 不存在`);
+    }
+    ensureNodeTokenValid(node, registrationToken);
 
     const nodeDeployment = await NodeDeployment.findOne({
       where: { id: deploymentId, nodeId },
@@ -836,6 +1011,38 @@ class NodeService {
     updateData.deployLog = [...(nodeDeployment.deployLog || []), log].slice(-50);
 
     await nodeDeployment.update(updateData);
+
+    // 命令回执：将该部署下最近一条未完成命令标记为完成/失败
+    const activeCommand = await NodeCommand.findOne({
+      where: {
+        deploymentId,
+        nodeId,
+        status: { [Op.in]: ["pending", "issued", "acknowledged"] },
+        deletedAt: null,
+      },
+      order: [["updatedAt", "DESC"]],
+    });
+    if (activeCommand) {
+      const isFailure = status === "error";
+      await activeCommand.update({
+        status: isFailure ? "failed" : "completed",
+        acknowledgedAt: new Date(),
+        completedAt: new Date(),
+        lastError: isFailure
+          ? (error?.message || statusData?.message || "节点执行失败")
+          : null,
+      });
+    }
+
+    socketService.broadcastDeployStatus(node.tenantId, {
+      nodeId,
+      deploymentId: nodeDeployment.id,
+      projectId: nodeDeployment.projectId,
+      status,
+      startedAt: updateData.startedAt || nodeDeployment.startedAt || null,
+      stoppedAt: updateData.stoppedAt || nodeDeployment.stoppedAt || null,
+      errorMessage: updateData.errorMessage || "",
+    });
 
     // 更新节点当前状态指标
     if (status === "running") {

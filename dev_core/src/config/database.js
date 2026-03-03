@@ -143,6 +143,16 @@ const stopDbHealthCheck = () => {
 };
 
 /**
+ * 是否启用启动时数据库结构自动同步
+ * 优先读取 DB_AUTO_SCHEMA_SYNC，兼容历史 ENABLE_DB_SYNC 配置。
+ * @returns {boolean}
+ */
+const shouldAutoSyncSchema = () => {
+  const configuredValue = process.env.DB_AUTO_SCHEMA_SYNC ?? process.env.ENABLE_DB_SYNC ?? 'true';
+  return String(configuredValue).toLowerCase() === 'true';
+};
+
+/**
  * 兼容历史数据库结构：扩展 users.role 枚举。
  * 旧库中 role 可能仅包含 DEVELOPER/OPERATOR/VIEWER，导致新角色写入失败。
  * @returns {Promise<void>}
@@ -225,16 +235,10 @@ const checkDatabaseExists = async () => {
  */
 const autoInitializeDatabase = async () => {
   try {
-    logger.info('🔄 检测到数据库不存在，开始自动创建并初始化...');
-    
-    // 动态加载初始化脚本（避免循环依赖）
-    // 路径：从 src/config/ 向上两级到 backend/，然后进入 scripts/
-    const { executeSqlFile } = require('../../scripts/init-database');
-    
-    // 执行数据库初始化
-    await executeSqlFile();
-    
-    logger.info('✅ 数据库自动创建并初始化完成');
+    logger.info('🔄 检测到数据库不存在，开始自动创建并同步结构...');
+    const { syncDatabaseSchema } = require('../../scripts/init-database');
+    const syncResult = await syncDatabaseSchema({ reset: false, seed: true });
+    logger.info('✅ 数据库自动创建并同步完成', syncResult);
     return true;
   } catch (error) {
     logger.error('❌ 自动初始化数据库失败', {
@@ -324,6 +328,15 @@ const testConnection = async () => {
     logger.info('🔍 测试数据库连接...');
     await sequelize.authenticate();
     logger.info('✅ 数据库连接成功');
+
+    if (shouldAutoSyncSchema()) {
+      logger.info('🔄 开始数据库结构一致性同步（init.sql）...');
+      const { syncDatabaseSchema } = require('../../scripts/init-database');
+      const syncResult = await syncDatabaseSchema({ reset: false, seed: false });
+      logger.info('✅ 数据库结构一致性同步完成', syncResult);
+    } else {
+      logger.info('⏭️ 已禁用数据库结构自动同步（DB_AUTO_SCHEMA_SYNC=false）');
+    }
 
     // 启动时自动修复历史库 role 枚举，避免新角色写入失败。
     await ensureUserRoleEnumCompatibility();

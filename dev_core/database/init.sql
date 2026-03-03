@@ -963,6 +963,42 @@ CREATE INDEX `node_deploy_status_idx` ON `node_deployments` (`status`);
 CREATE INDEX `node_deploy_mode_idx` ON `node_deployments` (`mode`);
 CREATE UNIQUE INDEX `node_deploy_active_uq` ON `node_deployments` (`nodeId`, `projectId`) COMMENT '同一节点同一工程只能有一个活跃部署';
 
+-- 5.5 节点命令表
+CREATE TABLE IF NOT EXISTS `node_commands` (
+  `id` char(36) NOT NULL DEFAULT (uuid()),
+  `tenantId` char(36) NOT NULL COMMENT '租户ID',
+  `nodeId` char(36) NOT NULL COMMENT '节点ID',
+  `deploymentId` char(36) NOT NULL COMMENT '节点部署记录ID',
+  `projectId` char(36) NOT NULL COMMENT '工程ID',
+  `type` enum('deploy','start','stop','restart') NOT NULL COMMENT '命令类型',
+  `status` enum('pending','issued','acknowledged','completed','failed','dead_letter') NOT NULL DEFAULT 'pending' COMMENT '命令状态',
+  `payload` json DEFAULT NULL COMMENT '命令负载',
+  `attempts` int NOT NULL DEFAULT 0 COMMENT '重试次数',
+  `maxAttempts` int NOT NULL DEFAULT 3 COMMENT '最大重试次数',
+  `timeoutSeconds` int NOT NULL DEFAULT 30 COMMENT '超时秒数',
+  `requestedAt` datetime(6) NOT NULL COMMENT '请求时间',
+  `issuedAt` datetime(6) DEFAULT NULL COMMENT '下发时间',
+  `acknowledgedAt` datetime(6) DEFAULT NULL COMMENT '确认时间',
+  `completedAt` datetime(6) DEFAULT NULL COMMENT '完成时间',
+  `lastError` text DEFAULT NULL COMMENT '最近错误',
+  `createdAt` datetime(6) NOT NULL,
+  `updatedAt` datetime(6) NOT NULL,
+  `deletedAt` datetime(6) DEFAULT NULL COMMENT '软删除时间',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `node_command_fk_tenant` FOREIGN KEY (`tenantId`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `node_command_fk_node` FOREIGN KEY (`nodeId`) REFERENCES `nodes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `node_command_fk_deployment` FOREIGN KEY (`deploymentId`) REFERENCES `node_deployments` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `node_command_fk_project` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='节点命令表';
+
+CREATE INDEX `node_command_tenant_idx` ON `node_commands` (`tenantId`);
+CREATE INDEX `node_command_node_idx` ON `node_commands` (`nodeId`);
+CREATE INDEX `node_command_deploy_idx` ON `node_commands` (`deploymentId`);
+CREATE INDEX `node_command_project_idx` ON `node_commands` (`projectId`);
+CREATE INDEX `node_command_status_idx` ON `node_commands` (`status`);
+CREATE INDEX `node_command_type_idx` ON `node_commands` (`type`);
+CREATE INDEX `node_command_requested_idx` ON `node_commands` (`requestedAt`);
+
 -- ============================================
 -- 第六部分：运行时相关表
 -- ============================================

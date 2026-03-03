@@ -23,6 +23,14 @@ const dbConfig = {
   connectTimeout: 60000,
 };
 
+const NON_CRITICAL_SQL_ERROR_CODES = new Set([
+  "ER_TABLE_EXISTS_ERROR",
+  "ER_DUP_KEYNAME",
+  "ER_DUP_FIELDNAME",
+  "ER_FK_DUP_NAME",
+  "ER_DUP_ENTRY",
+]);
+
 // 初始数据配置
 const initialData = {
   superAdmin: {
@@ -132,63 +140,82 @@ async function insertInitialData(connection) {
 }
 
 /**
- * 执行 SQL 文件
+ * 将 SQL 脚本拆分为逐条可执行语句（去除注释）
+ * @param {string} sqlContent SQL 文件内容
+ * @returns {string[]}
  */
-async function executeSqlFile() {
+function splitSqlStatements(sqlContent) {
+  const lines = sqlContent
+    .split("\n")
+    .filter((line) => {
+      const trimmedLine = line.trim();
+      return !trimmedLine.startsWith("--");
+    });
+
+  return lines
+    .join("\n")
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 执行 init.sql 的结构同步，确保数据库结构与 SQL 定义一致
+ * @param {object} options 配置
+ * @param {boolean} [options.reset=false] 是否先重置数据库
+ * @param {boolean} [options.seed=true] 是否插入初始数据
+ * @returns {Promise<{total:number, executed:number, skipped:number}>}
+ */
+async function syncDatabaseSchema(options = {}) {
+  const { reset = false, seed = true } = options;
   let connection;
 
   try {
-    console.log("🔄 正在连接数据库...");
-
-    // 创建数据库连接（不指定数据库）
     const connectionConfig = { ...dbConfig };
     delete connectionConfig.database;
-
     connection = await mysql.createConnection(connectionConfig);
 
-    // 确保数据库存在
-    console.log(`📦 确保数据库 '${dbConfig.database}' 存在...`);
+    if (reset) {
+      await connection.query(`DROP DATABASE IF EXISTS \`${dbConfig.database}\``);
+    }
+
     await connection.query(
       `CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
     );
-
-    // 切换到目标数据库
     await connection.query(`USE \`${dbConfig.database}\``);
 
-    console.log("✅ 数据库连接成功");
-
-    // 读取 SQL 文件
     const sqlFilePath = path.join(__dirname, "..", "database", "init.sql");
-    console.log(`📖 读取 SQL 文件: ${sqlFilePath}`);
-
     if (!fs.existsSync(sqlFilePath)) {
       throw new Error(`SQL 文件不存在: ${sqlFilePath}`);
     }
 
     const sqlContent = fs.readFileSync(sqlFilePath, "utf8");
+    const statements = splitSqlStatements(sqlContent);
+    let executed = 0;
+    let skipped = 0;
 
-    console.log("⚡ 执行 SQL 文件...");
-
-    // 使用 query 方法执行整个 SQL 文件
-    try {
-      await connection.query(sqlContent);
-      console.log("✅ SQL 文件执行成功");
-    } catch (error) {
-      // 对于某些非关键错误（如索引已存在），继续执行
-      if (error.code === "ER_DUP_KEYNAME" || error.code === "ER_DUP_ENTRY") {
-        console.log(`⚠️  跳过已存在的项目: ${error.message}`);
-      } else {
+    for (const statement of statements) {
+      try {
+        await connection.query(statement);
+        executed += 1;
+      } catch (error) {
+        if (NON_CRITICAL_SQL_ERROR_CODES.has(error.code)) {
+          skipped += 1;
+          continue;
+        }
         throw error;
       }
     }
 
-    // 插入初始数据
-    await insertInitialData(connection);
+    if (seed) {
+      await insertInitialData(connection);
+    }
 
-    console.log("🎉 数据库初始化完成！");
-  } catch (error) {
-    console.error("❌ 数据库初始化失败:", error);
-    process.exit(1);
+    return {
+      total: statements.length,
+      executed,
+      skipped,
+    };
   } finally {
     if (connection) {
       await connection.end();
@@ -197,75 +224,36 @@ async function executeSqlFile() {
 }
 
 /**
+ * 执行 SQL 文件
+ */
+async function executeSqlFile() {
+  try {
+    console.log("🔄 正在同步数据库结构...");
+    const result = await syncDatabaseSchema({ reset: false, seed: true });
+    console.log(
+      `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`
+    );
+    console.log("🎉 数据库初始化完成！");
+  } catch (error) {
+    console.error("❌ 数据库初始化失败:", error);
+    process.exit(1);
+  }
+}
+
+/**
  * 重置数据库（删除数据库并重新创建所有表）
  */
 async function resetDatabase() {
-  let connection;
-
   try {
-    console.log("🔄 正在连接数据库进行重置...");
-
-    // 创建数据库连接（不指定数据库）
-    const connectionConfig = { ...dbConfig };
-    delete connectionConfig.database;
-
-    connection = await mysql.createConnection(connectionConfig);
-
-    console.log("✅ 数据库连接成功");
-
-    // 删除数据库（如果存在）
-    console.log(`🗑️  删除数据库 '${dbConfig.database}'...`);
-    try {
-      await connection.query(
-        `DROP DATABASE IF EXISTS \`${dbConfig.database}\``
-      );
-      console.log(`✅ 数据库 '${dbConfig.database}' 删除成功`);
-    } catch (error) {
-      console.log(`⚠️  删除数据库失败: ${error.message}`);
-      // 如果删除失败，可能是权限问题或其他原因，继续执行
-    }
-
-    // 重新创建数据库
-    console.log(`📦 重新创建数据库 '${dbConfig.database}'...`);
-    await connection.query(
-      `CREATE DATABASE \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    console.log("🔄 正在重置并同步数据库结构...");
+    const result = await syncDatabaseSchema({ reset: true, seed: true });
+    console.log(
+      `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`
     );
-    console.log(`✅ 数据库 '${dbConfig.database}' 创建成功`);
-
-    // 切换到目标数据库
-    await connection.query(`USE \`${dbConfig.database}\``);
-
-    // 读取并执行 SQL 文件
-    const sqlFilePath = path.join(__dirname, "..", "database", "init.sql");
-    console.log(`📖 读取 SQL 文件: ${sqlFilePath}`);
-
-    if (!fs.existsSync(sqlFilePath)) {
-      throw new Error(`SQL 文件不存在: ${sqlFilePath}`);
-    }
-
-    const sqlContent = fs.readFileSync(sqlFilePath, "utf8");
-
-    console.log("⚡ 执行 SQL 文件创建表结构...");
-
-    try {
-      await connection.query(sqlContent);
-      console.log("✅ SQL 文件执行成功，表结构创建完成");
-    } catch (error) {
-      console.error("❌ SQL 文件执行失败:", error);
-      throw error;
-    }
-
-    // 插入初始数据
-    await insertInitialData(connection);
-
     console.log("🎉 数据库重置完成！");
   } catch (error) {
     console.error("❌ 数据库重置失败:", error);
     process.exit(1);
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
   }
 }
 
@@ -295,4 +283,8 @@ if (require.main === module) {
   });
 }
 
-module.exports = { executeSqlFile, resetDatabase };
+module.exports = {
+  executeSqlFile,
+  resetDatabase,
+  syncDatabaseSchema,
+};

@@ -385,6 +385,18 @@ class SocketService {
   }
 
   /**
+   * 广播部署状态变化
+   */
+  broadcastDeployStatus(tenantId, payload) {
+    if (!this.io) return;
+    const room = `ops:tenant:${tenantId}`;
+    this.io.to(room).emit("ops:deploy:status", {
+      ...payload,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
    * 璁㈤槄鏁版嵁鐐瑰€兼洿鏂?   * @param {object} socket - Socket 瀹炰緥
    */
   setupDataPointSubscription(socket) {

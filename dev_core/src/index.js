@@ -204,6 +204,14 @@ const startNodeOfflineCheck = () => {
         });
       }
 
+      const commandResult = await nodeService.processCommandTimeouts();
+      if (commandResult.retried > 0 || commandResult.deadLetter > 0) {
+        logger.warn("Node command timeout processed", {
+          retried: commandResult.retried,
+          deadLetter: commandResult.deadLetter,
+        });
+      }
+
       nextDelay = await nodeService.getNextOfflineCheckDelayMs(
         timeoutSeconds,
         intervalMs

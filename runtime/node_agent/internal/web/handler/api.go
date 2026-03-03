@@ -33,6 +33,7 @@ type APIHandler struct {
 	logger         *logger.SimpleLogger
 	bootstrapStore *BootstrapStore
 	heartbeatCtrl  *heartbeatController
+	commandDeduper *centerCommandDeduper
 }
 
 // NewAPIHandler 创建 API 处理器
@@ -54,6 +55,7 @@ func NewAPIHandler(orch *orchestrator.Orchestrator, st *store.LocalStore) *APIHa
 		logger:         logger.GlobalLogger,
 		bootstrapStore: bootstrapStore,
 		heartbeatCtrl:  newHeartbeatController(),
+		commandDeduper: newCenterCommandDeduper(25 * time.Second),
 	}
 
 	h.reconcileBootstrapFromConfig()
@@ -398,10 +400,10 @@ func (h *APIHandler) StatusCheck(w http.ResponseWriter, r *http.Request) {
 	machineID := pkgUtils.GetMachineID()
 	status := map[string]interface{}{
 		"node": map[string]interface{}{
-			"id":       machineID,
+			"id":        machineID,
 			"machineId": machineID,
-			"status":   "healthy",
-			"projects": len(projects),
+			"status":    "healthy",
+			"projects":  len(projects),
 		},
 		"projects": projects,
 	}
