@@ -12,11 +12,85 @@ const {
   User,
 } = require("../models");
 const { Op } = require("sequelize");
+const socketService = require("./socketService");
 
 /**
  * 部署服务类
  */
 class DeploymentService {
+  /**
+   * 获取部署下仍在执行中的命令
+   * @param {Object} nodeDeployment - 节点部署记录
+   * @returns {Promise<Object|null>}
+   */
+  async getInFlightCommand(nodeDeployment) {
+    return NodeCommand.findOne({
+      where: {
+        deploymentId: nodeDeployment.id,
+        nodeId: nodeDeployment.nodeId,
+        status: { [Op.in]: ["pending", "issued", "acknowledged"] },
+        deletedAt: null,
+      },
+      order: [["updatedAt", "DESC"]],
+    });
+  }
+
+  /**
+   * 校验运行时指令是否可下发
+   * @param {Object} nodeDeployment - 节点部署记录
+   * @param {"start"|"stop"|"restart"} commandType - 指令类型
+   * @returns {Promise<void>}
+   */
+  async ensureRuntimeCommandAllowed(nodeDeployment, commandType) {
+    const inFlightCommand = await this.getInFlightCommand(nodeDeployment);
+    if (inFlightCommand) {
+      throw new Error(`当前存在未完成的 ${inFlightCommand.type} 指令，请稍后重试`);
+    }
+
+    const currentStatus = nodeDeployment.status;
+    if (commandType === "start") {
+      if (!["stopped", "error"].includes(currentStatus)) {
+        throw new Error(`当前状态为 ${currentStatus}，仅 stopped/error 状态可启动`);
+      }
+      return;
+    }
+
+    if (commandType === "stop") {
+      if (currentStatus !== "running") {
+        throw new Error(`当前状态为 ${currentStatus}，仅 running 状态可停止`);
+      }
+      return;
+    }
+
+    if (commandType === "restart") {
+      if (currentStatus !== "running") {
+        throw new Error(`当前状态为 ${currentStatus}，仅 running 状态可重启`);
+      }
+    }
+  }
+
+  /**
+   * 清理同节点同工程的软删除部署记录，避免唯一索引冲突。
+   * @param {string} nodeId - 节点ID
+   * @param {string} projectId - 工程ID
+   * @returns {Promise<void>}
+   */
+  async purgeSoftDeletedDeployments(nodeId, projectId) {
+    const staleDeployments = await NodeDeployment.findAll({
+      where: {
+        nodeId,
+        projectId,
+      },
+      paranoid: false,
+    });
+
+    for (const item of staleDeployments) {
+      if (item.deletedAt) {
+        await item.destroy({ force: true });
+      }
+    }
+  }
+
   /**
    * 获取工程基础信息
    * @param {string} projectId - 工程ID
@@ -340,6 +414,9 @@ class DeploymentService {
       }
     }
 
+    // 清理软删除残留，避免唯一索引冲突后无法重新部署
+    await this.purgeSoftDeletedDeployments(nodeId, sourceDeployment.projectId);
+
     // 创建新的DEV模式部署记录
     const id = crypto.randomUUID();
     const nodeDeployment = await NodeDeployment.create({
@@ -437,6 +514,9 @@ class DeploymentService {
       });
     }
 
+    // 清理软删除残留，避免唯一索引冲突后无法重新部署
+    await this.purgeSoftDeletedDeployments(nodeId, deployment.projectId);
+
     // 创建新的RELEASE部署记录
     const id = crypto.randomUUID();
     const nodeDeployment = await NodeDeployment.create({
@@ -527,21 +607,24 @@ class DeploymentService {
    * @param {string} expectedStatus - 预期状态（用于界面即时反馈）
    * @returns {Promise<Object>} 更新后的记录
    */
-  async enqueueRuntimeCommand(nodeDeployment, commandType, expectedStatus) {
+  async enqueueRuntimeCommand(nodeDeployment, commandType, expectedStatus, commandMessage = "") {
     const commandId = crypto.randomUUID();
     const requestedAt = new Date();
 
-    await nodeDeployment.update({
-      status: expectedStatus,
+    const updateData = {
       deployLog: [
         ...(nodeDeployment.deployLog || []),
         {
           time: requestedAt.toISOString(),
-          status: expectedStatus,
-          message: `已下发${commandType}指令，等待节点执行`,
+          status: expectedStatus || nodeDeployment.status,
+          message: commandMessage || `已下发${commandType}指令，等待节点执行`,
         },
       ],
-    });
+    };
+    if (expectedStatus) {
+      updateData.status = expectedStatus;
+    }
+    await nodeDeployment.update(updateData);
 
     const node = await Node.findByPk(nodeDeployment.nodeId, {
       attributes: ["id", "tenantId"],
@@ -582,7 +665,8 @@ class DeploymentService {
     if (!nodeDeployment) {
       throw new Error("部署记录不存在");
     }
-    return this.enqueueRuntimeCommand(nodeDeployment, "start", "deploying");
+    await this.ensureRuntimeCommandAllowed(nodeDeployment, "start");
+    return this.enqueueRuntimeCommand(nodeDeployment, "start", "deploying", "已下发启动指令，等待节点执行");
   }
 
   /**
@@ -594,7 +678,8 @@ class DeploymentService {
     if (!nodeDeployment) {
       throw new Error("部署记录不存在");
     }
-    return this.enqueueRuntimeCommand(nodeDeployment, "stop", "stopping");
+    await this.ensureRuntimeCommandAllowed(nodeDeployment, "stop");
+    return this.enqueueRuntimeCommand(nodeDeployment, "stop", null, "已下发停止指令，等待节点执行");
   }
 
   /**
@@ -606,7 +691,8 @@ class DeploymentService {
     if (!nodeDeployment) {
       throw new Error("部署记录不存在");
     }
-    return this.enqueueRuntimeCommand(nodeDeployment, "restart", "deploying");
+    await this.ensureRuntimeCommandAllowed(nodeDeployment, "restart");
+    return this.enqueueRuntimeCommand(nodeDeployment, "restart", null, "已下发重启指令，等待节点执行");
   }
 
   /**
@@ -619,28 +705,52 @@ class DeploymentService {
       throw new Error("部署记录不存在");
     }
 
+    const now = new Date();
+    const runtimeActiveStatuses = new Set(["pending", "deploying", "running"]);
+    const shouldStopRuntime = runtimeActiveStatuses.has(nodeDeployment.status);
+    const undeployMessage = shouldStopRuntime
+      ? "撤销部署：已停止运行并释放资源"
+      : "撤销部署：已释放资源";
+
     await nodeDeployment.update({
       status: "stopped",
-      stoppedAt: new Date(),
+      stoppedAt: now,
       deployLog: [
         ...(nodeDeployment.deployLog || []),
         {
-          time: new Date().toISOString(),
+          time: now.toISOString(),
           status: "stopped",
-          message: "已撤销部署",
+          message: undeployMessage,
         },
       ],
     });
 
-    // 清除节点当前工程信息
+    // 仅当该部署正作为节点当前部署时才清除指针，避免误清理其他工程
     await Node.update(
       {
         currentProjectId: null,
         currentVersion: null,
         currentDeploymentId: null,
       },
-      { where: { id: nodeDeployment.nodeId } }
+      { where: { id: nodeDeployment.nodeId, currentDeploymentId: nodeDeployment.id } }
     );
+
+    // 撤销部署后直接硬删除关系，避免唯一索引阻塞后续重新部署
+    await nodeDeployment.destroy({ force: true });
+
+    const node = await Node.findByPk(nodeDeployment.nodeId, {
+      attributes: ["id", "tenantId"],
+    });
+    if (node?.tenantId) {
+      socketService.broadcastDeployStatus(node.tenantId, {
+        nodeId: nodeDeployment.nodeId,
+        projectId: nodeDeployment.projectId,
+        deploymentId: nodeDeployment.id,
+        status: "undeployed",
+        removed: true,
+        stoppedAt: now.toISOString(),
+      });
+    }
 
     return nodeDeployment;
   }

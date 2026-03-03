@@ -892,6 +892,8 @@ import request from "@/utils/request";
 import { projectAPI } from "@/api/project.api";
 import { ColorTagEnum } from "@/enums";
 import { formatDateTime, formatDate, formatCurrency } from "@/utils";
+import { initSocket, getSocket } from "@/utils/socket";
+import { Storage } from "@/utils/storage";
 
 export default {
   name: "ProjectManagement",
@@ -925,6 +927,7 @@ export default {
     // 选择模式状态
     const selectionMode = ref(false);
     const selectedProjects = ref([]); // 选中的工程ID列表
+    const deployStateRefreshTimer = ref(null);
 
     // 当前操作的工程
     const currentProject = ref(null);
@@ -1784,6 +1787,26 @@ export default {
       return getModeTagType(mode);
     };
 
+    const scheduleDeployStateRefresh = () => {
+      if (deployStateRefreshTimer.value) {
+        window.clearTimeout(deployStateRefreshTimer.value);
+      }
+      deployStateRefreshTimer.value = window.setTimeout(() => {
+        fetchProjectDeployState();
+      }, 120);
+    };
+
+    const setupRealtimeUpdates = () => {
+      const tenantId = Storage.getTenantId() || "default";
+      const socket = initSocket(tenantId);
+      socket.on("ops:deploy:status", (data = {}) => {
+        if (!data?.projectId) {
+          return;
+        }
+        scheduleDeployStateRefresh();
+      });
+    };
+
     // 打开部署对话框
     const openDeployDialog = async (project) => {
       deployForm.project = project;
@@ -1872,12 +1895,16 @@ export default {
               name: `v${version}`,
               description: t("projectManagement.publishByDeployDialog"),
             });
-            if (!publishRes.data.success) {
+            const publishPayload = publishRes?.data ?? publishRes;
+            if (publishPayload?.success === false) {
               throw new Error(
-                publishRes.data.message || t("projectManagement.publishFailed"),
+                publishPayload?.message || t("projectManagement.publishFailed"),
               );
             }
-            deploymentId = publishRes.data.data.id;
+            deploymentId = publishPayload?.data?.id || publishPayload?.id;
+            if (!deploymentId) {
+              throw new Error(t("projectManagement.publishFailed"));
+            }
           }
 
           // 检查是否有DEV实例需要停止
@@ -1899,19 +1926,22 @@ export default {
               runtimeConfig: {},
             },
           );
-
-          if (deployRes.data.success) {
-            const { success: successCount = 0, failed: failCount = 0 } =
-              deployRes.data?.data?.summary || {};
-            if (failCount > 0) {
-              ElMessage.warning(
-                `${t("projectManagement.deploySuccess", { count: successCount })}，失败 ${failCount} 个节点`,
-              );
-            } else {
-              ElMessage.success(
-                t("projectManagement.deploySuccess", { count: successCount }),
-              );
-            }
+          const deployPayload = deployRes?.data ?? deployRes;
+          if (deployPayload?.success === false) {
+            throw new Error(
+              deployPayload?.message || t("opsManagement.operationFailedFallback"),
+            );
+          }
+          const { success: successCount = 0, failed: failCount = 0 } =
+            deployPayload?.data?.summary || deployPayload?.summary || {};
+          if (failCount > 0) {
+            ElMessage.warning(
+              `${t("projectManagement.deploySuccess", { count: successCount })}，失败 ${failCount} 个节点`,
+            );
+          } else {
+            ElMessage.success(
+              t("projectManagement.deploySuccess", { count: successCount }),
+            );
           }
         } else {
           // DEV模式：需要先确保没有RELEASE部署
@@ -1929,24 +1959,27 @@ export default {
             `/deployments/project/${project.id}/deploy-dev`,
             { nodeIds: targetNodes },
           );
-
-          if (deployRes.data.success) {
-            const { success: successCount = 0, failed: failCount = 0 } =
-              deployRes.data?.data?.summary || {};
-            if (failCount > 0) {
-              ElMessage.warning(
-                `${t("projectManagement.devDeploySuccess", { count: successCount })}，失败 ${failCount} 个节点`,
-              );
-            } else {
-              ElMessage.success(
-                t("projectManagement.devDeploySuccess", { count: successCount }),
-              );
-            }
+          const deployPayload = deployRes?.data ?? deployRes;
+          if (deployPayload?.success === false) {
+            throw new Error(
+              deployPayload?.message || t("opsManagement.operationFailedFallback"),
+            );
+          }
+          const { success: successCount = 0, failed: failCount = 0 } =
+            deployPayload?.data?.summary || deployPayload?.summary || {};
+          if (failCount > 0) {
+            ElMessage.warning(
+              `${t("projectManagement.devDeploySuccess", { count: successCount })}，失败 ${failCount} 个节点`,
+            );
+          } else {
+            ElMessage.success(
+              t("projectManagement.devDeploySuccess", { count: successCount }),
+            );
           }
         }
 
         showDeployDialog.value = false;
-        fetchProjects();
+        await fetchProjects();
       } catch (error) {
         if (error !== "cancel") {
           ElMessage.error(
@@ -1961,11 +1994,20 @@ export default {
     // 组件挂载时获取数据
     onMounted(() => {
       fetchProjects();
+      setupRealtimeUpdates();
     });
 
     onUnmounted(() => {
       if (searchTimer.value) {
         window.clearTimeout(searchTimer.value);
+      }
+      if (deployStateRefreshTimer.value) {
+        window.clearTimeout(deployStateRefreshTimer.value);
+        deployStateRefreshTimer.value = null;
+      }
+      const socket = getSocket();
+      if (socket) {
+        socket.off("ops:deploy:status");
       }
     });
 

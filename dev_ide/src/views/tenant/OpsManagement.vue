@@ -812,6 +812,10 @@ const openFailureDetail = (deploy) => {
   showFailureDrawer.value = true
 }
 
+const isRuntimeActiveDeploy = (status) => {
+  return ['pending', 'deploying', 'running'].includes(status)
+}
+
 // 新增：重启工程
 const handleRestartProject = async (deploy) => {
   try {
@@ -855,8 +859,12 @@ const handleRollback = async (deploy) => {
 // 新增：撤销部署
 const handleUndeploy = async (deploy) => {
   try {
+    const confirmMessageKey = isRuntimeActiveDeploy(deploy?.status)
+      ? 'opsManagement.undeployConfirmRunning'
+      : 'opsManagement.undeployConfirmStopped'
+
     await ElMessageBox.confirm(
-      t('opsManagement.undeployConfirm', { name: deploy.project?.name }),
+      t(confirmMessageKey, { name: deploy.project?.name }),
       t('opsManagement.undeployConfirmTitle'),
       { type: 'warning' }
     )
@@ -906,6 +914,10 @@ const setupRealtimeUpdates = () => {
   socket.on('ops:deploy:status', (data) => {
     const node = nodeList.value.find((n) => n.id === data.nodeId)
     if (!node || !Array.isArray(node.deployments)) {
+      return
+    }
+    if (data.removed) {
+      node.deployments = node.deployments.filter((d) => d.id !== data.deploymentId)
       return
     }
     const deploy = node.deployments.find((d) => d.id === data.deploymentId)
