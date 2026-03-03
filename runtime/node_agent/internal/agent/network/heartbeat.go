@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
@@ -175,22 +176,32 @@ func (h *HeartbeatSender) collectMetrics() map[string]interface{} {
 
 // getDiskPath 获取当前系统默认磁盘路径与标签
 func getDiskPath() (string, string) {
-	exePath, err := os.Executable()
-	if err != nil {
-		if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" {
+		// Windows 优先使用当前工作目录（程序运行目录）所在盘符，避免 go run 场景落到临时目录盘符。
+		if wd, err := os.Getwd(); err == nil {
+			volume := filepath.VolumeName(wd) // e.g. D:
+			if volume != "" {
+				return volume + "\\", strings.TrimSuffix(volume, ":")
+			}
+		}
+
+		exePath, err := os.Executable()
+		if err != nil {
 			return "C:\\", "C"
 		}
-		return "/", "System"
-	}
-
-	exeDir := filepath.Dir(exePath)
-	if runtime.GOOS == "windows" {
+		exeDir := filepath.Dir(exePath)
 		volume := filepath.VolumeName(exeDir) // e.g. C:
 		if volume == "" {
 			return "C:\\", "C"
 		}
-		return volume + "\\", volume
+		return volume + "\\", strings.TrimSuffix(volume, ":")
 	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return "/", "System"
+	}
+	exeDir := filepath.Dir(exePath)
 
 	// Linux/Unix 直接使用程序所在路径，disk.Usage 会解析到对应挂载点
 	return exeDir, "System"
