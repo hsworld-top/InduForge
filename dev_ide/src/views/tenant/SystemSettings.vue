@@ -1,8 +1,8 @@
 <template>
   <div class="system-settings">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('systemSettings.title') }}</h1>
-      <el-button @click="loadSystemConfig" :loading="loading">
+    <div class="flex justify-between items-center mb-3">
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('systemSettings.title') }}</h1>
+      <el-button @click="loadSystemConfig" :loading="loading" size="small">
         <el-icon><Refresh /></el-icon>
         {{ t('systemSettings.refresh') }}
       </el-button>

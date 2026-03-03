@@ -1,8 +1,8 @@
 <template>
   <div class="system-logs">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('systemLogs.title') }}</h1>
-      <el-button @click="handleRefresh" :loading="loading">
+    <div class="flex justify-between items-center mb-3">
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('systemLogs.title') }}</h1>
+      <el-button @click="handleRefresh" :loading="loading" size="small">
         <el-icon><Refresh /></el-icon>
         {{ t('systemLogs.refresh') }}
       </el-button>
@@ -159,7 +159,7 @@
         </el-table>
       </div>
 
-      <div class="logs-pagination flex justify-end items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
+      <div class="pagination-bar logs-pagination flex justify-end items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
         <el-pagination
           size="small"
           v-model:current-page="pagination.page"

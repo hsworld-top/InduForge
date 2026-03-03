@@ -658,6 +658,7 @@ class NodeService {
 
     const { rows, count } = await Node.findAndCountAll({
       where,
+      distinct: true,
       include: [
         {
           model: NodeDeployment,
@@ -1022,16 +1023,28 @@ class NodeService {
       },
       order: [["updatedAt", "DESC"]],
     });
+    let commandAck = null;
     if (activeCommand) {
       const isFailure = status === "error";
+      const acknowledgedAt = new Date();
+      const completedAt = new Date();
+      const commandStatus = isFailure ? "failed" : "completed";
+      const commandError = isFailure
+        ? (error?.message || statusData?.message || "节点执行失败")
+        : null;
       await activeCommand.update({
-        status: isFailure ? "failed" : "completed",
-        acknowledgedAt: new Date(),
-        completedAt: new Date(),
-        lastError: isFailure
-          ? (error?.message || statusData?.message || "节点执行失败")
-          : null,
+        status: commandStatus,
+        acknowledgedAt,
+        completedAt,
+        lastError: commandError,
       });
+      commandAck = {
+        id: activeCommand.id,
+        status: commandStatus,
+        acknowledgedAt,
+        completedAt,
+        lastError: commandError,
+      };
     }
 
     socketService.broadcastDeployStatus(node.tenantId, {
@@ -1042,6 +1055,7 @@ class NodeService {
       startedAt: updateData.startedAt || nodeDeployment.startedAt || null,
       stoppedAt: updateData.stoppedAt || nodeDeployment.stoppedAt || null,
       errorMessage: updateData.errorMessage || "",
+      commandAck,
     });
 
     // 更新节点当前状态指标

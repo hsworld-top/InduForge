@@ -1,11 +1,11 @@
 ﻿<template>
   <div class="project-management">
     <!-- 页面标题和操作栏 -->
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
+    <div class="flex justify-between items-center mb-3">
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
         {{ t('projectManagement.title') }}
       </h1>
-      <div class="flex items-center space-x-4">
+      <div class="flex items-center space-x-2">
         <!-- 视图切换 -->
         <div
           class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1"
@@ -13,7 +13,7 @@
           <button
             @click="viewMode = 'card'"
             :class="[
-              'px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
               viewMode === 'card'
                 ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
@@ -25,7 +25,7 @@
           <button
             @click="viewMode = 'list'"
             :class="[
-              'px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
               viewMode === 'list'
                 ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
@@ -41,6 +41,7 @@
           v-if="canManageProjects"
           type="primary"
           @click="showCreateDialog = true"
+          size="small"
           class="bg-blue-600 hover:bg-blue-700"
         >
           <el-icon class="mr-2"><Plus /></el-icon>
@@ -50,6 +51,7 @@
           v-if="canManageProjects"
           type="default"
           @click="handleImportProject"
+          size="small"
         >
           <el-icon class="mr-2"><Upload /></el-icon>
           {{ t('projectManagement.importProject') }}
@@ -336,9 +338,9 @@
       <!-- 分页 -->
       <div
         v-if="pagination.total > 0"
-        class="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700"
+        class="pagination-bar flex justify-between items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700"
       >
-        <div class="text-sm text-gray-500 dark:text-gray-400">
+        <div class="text-xs text-gray-500 dark:text-gray-400">
           {{
             t('projectManagement.pageSummary', {
               start: (pagination.page - 1) * pagination.limit + 1,
@@ -350,6 +352,7 @@
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.limit"
+          size="small"
           :page-sizes="[10, 20, 50, 100]"
           :total="pagination.total"
           layout="total, sizes, prev, pager, next, jumper"
@@ -1707,15 +1710,14 @@ export default {
         return;
       }
       emit("open-tab", "ops-management");
-      [80, 220, 420].forEach((delay) => {
-        window.setTimeout(() => {
-          window.dispatchEvent(
-            new window.CustomEvent("ops:set-project-filter", {
-              detail: { projectId: project?.id || "", projectName: project?.name || "" },
-            }),
-          );
-        }, delay);
-      });
+      // 从工程列表跳转运维管理时，不再自动按工程过滤；同时清空可能残留的筛选条件。
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new window.CustomEvent("ops:set-project-filter", {
+            detail: { projectId: "", projectName: "" },
+          }),
+        );
+      }, 80);
     };
 
     // 同步工程部署状态，用于工程列表的运行模式展示与入口控制。

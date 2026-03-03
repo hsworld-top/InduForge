@@ -92,6 +92,38 @@ class DeploymentService {
   }
 
   /**
+   * 创建 deploy 命令记录，避免首次部署时命令时间线为空。
+   * @param {Object} params - 参数
+   * @param {string} params.tenantId - 租户ID
+   * @param {Object} params.nodeDeployment - 节点部署记录
+   * @param {Object} params.payload - 命令负载
+   * @returns {Promise<void>}
+   */
+  async createDeployCommandRecord({ tenantId, nodeDeployment, payload = {} }) {
+    const commandId = crypto.randomUUID();
+    await NodeCommand.create({
+      id: commandId,
+      tenantId,
+      nodeId: nodeDeployment.nodeId,
+      deploymentId: nodeDeployment.id,
+      projectId: nodeDeployment.projectId,
+      type: "deploy",
+      status: "pending",
+      payload: {
+        commandId,
+        deploymentId: nodeDeployment.id,
+        projectId: nodeDeployment.projectId,
+        version: nodeDeployment.version,
+        ...(payload || {}),
+      },
+      attempts: 0,
+      maxAttempts: 3,
+      timeoutSeconds: 30,
+      requestedAt: new Date(),
+    });
+  }
+
+  /**
    * 获取工程基础信息
    * @param {string} projectId - 工程ID
    * @returns {Promise<Object>} 工程信息
@@ -438,6 +470,14 @@ class DeploymentService {
       ],
     });
 
+    await this.createDeployCommandRecord({
+      tenantId: sourceDeployment.tenantId,
+      nodeDeployment,
+      payload: {
+        runtimeConfig: { syncMode: "development_database" },
+      },
+    });
+
     // 更新节点当前工程信息
     await Node.update(
       {
@@ -536,6 +576,14 @@ class DeploymentService {
           message: "RELEASE模式部署任务已创建",
         },
       ],
+    });
+
+    await this.createDeployCommandRecord({
+      tenantId: deployment.tenantId,
+      nodeDeployment,
+      payload: {
+        runtimeConfig: { ...runtimeConfig, syncMode: "local_database" },
+      },
     });
 
     // 更新节点当前工程信息

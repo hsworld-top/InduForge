@@ -1,9 +1,9 @@
 <template>
   <div class="user-management">
     <!-- 页面标题和操作栏 -->
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('userManagement.title') }}</h1>
-      <el-button v-if="canManageUsers" type="primary" @click="showCreateDialog = true"
+    <div class="flex justify-between items-center mb-3">
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('userManagement.title') }}</h1>
+      <el-button v-if="canManageUsers" type="primary" @click="showCreateDialog = true" size="small"
         class="bg-blue-600 hover:bg-blue-700">
         <el-icon class="mr-2">
           <Plus />
@@ -98,8 +98,8 @@
       </el-table>
 
       <!-- 分页 -->
-      <div class="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700">
-        <div class="text-sm text-gray-500 dark:text-gray-400">
+      <div class="pagination-bar flex justify-between items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
+        <div class="text-xs text-gray-500 dark:text-gray-400">
           {{
             t('userManagement.totalRange', {
               start: (pagination.page - 1) * pagination.limit + 1,
@@ -108,7 +108,7 @@
             })
           }}
         </div>
-        <el-pagination v-model:current-page="pagination.page" v-model:page-size="pagination.limit"
+        <el-pagination size="small" v-model:current-page="pagination.page" v-model:page-size="pagination.limit"
           :page-sizes="[10, 20, 50, 100]" :total="pagination.total" layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange" @current-change="handleCurrentChange" />
       </div>

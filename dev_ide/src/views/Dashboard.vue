@@ -1,5 +1,10 @@
 <template>
-  <div class="dashboard" :class="{ 'dashboard-maximized': isTabMaximized }">
+  <div
+    class="dashboard"
+    :class="{ 'dashboard-maximized': isTabMaximized }"
+    @mousemove="handleMaximizedMouseMove"
+    @mouseleave="handleMaximizedMouseLeave"
+  >
     <!-- 页面头部 -->
     <div v-if="!isTabMaximized"
       class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 h-12 px-4">
@@ -300,22 +305,10 @@
       </div>
 
       <!-- 右侧标签页区域 -->
-      <div :class="['flex-1 overflow-hidden', isTabMaximized ? '' : 'pl-3']">
-        <div v-if="tabs.length > 0" class="h-full">
-          <!-- 最大化时的工具栏 -->
-          <div v-if="isTabMaximized"
-            class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ getCurrentTabTitle() }}</span>
-            </div>
-            <el-button size="small" circle @click="restoreTab">
-              <el-icon>
-                <FullScreen />
-              </el-icon>
-            </el-button>
-          </div>
+      <div :class="['flex-1 overflow-hidden relative', isTabMaximized ? '' : 'pl-3']">
+        <div v-if="tabs.length > 0" class="h-full flex flex-col">
           <el-tabs v-model="activeTab" type="card" :closable="(tab) => tab.key !== 'dashboard'" @tab-remove="closeTab"
-            :class="['dashboard-tabs h-full', isTabMaximized ? 'dashboard-tabs-maximized' : '']">
+            :class="['dashboard-tabs h-full flex-1 min-h-0', isTabMaximized ? 'dashboard-tabs-maximized' : '']">
             <el-tab-pane v-for="tab in tabs" :key="tab.key" :name="tab.key" :v-show="isTabVisible(tab.key)">
               <template #label>
                 <div class="flex items-center space-x-2">
@@ -340,6 +333,22 @@
               </div>
             </el-tab-pane>
           </el-tabs>
+          <Transition name="drop-down">
+            <div
+              v-if="isTabMaximized && showMaximizeRestoreButton"
+              class="maximize-restore-anchor"
+            >
+              <el-button
+                class="maximize-restore-floating-button"
+                circle
+                @click="restoreTab"
+              >
+                <el-icon>
+                  <Close />
+                </el-icon>
+              </el-button>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
@@ -415,6 +424,8 @@ export default {
     const tabs = ref([])
     const activeTab = ref('')
     const isTabMaximized = ref(false)
+    const showMaximizeRestoreButton = ref(false)
+    const maximizeRestoreHideTimer = ref(null)
     const tabsInitialized = ref(false)
 
     // 标签页配置
@@ -954,6 +965,10 @@ export default {
         window.clearTimeout(wsConnectCheckTimer.value)
         wsConnectCheckTimer.value = null
       }
+      if (maximizeRestoreHideTimer.value) {
+        window.clearTimeout(maximizeRestoreHideTimer.value)
+        maximizeRestoreHideTimer.value = null
+      }
     })
 
     // 最大化标签页
@@ -961,11 +976,50 @@ export default {
       if (tabKey === 'dashboard') return
       isTabMaximized.value = true
       activeTab.value = tabKey
+      showMaximizeRestoreButton.value = true
+      if (maximizeRestoreHideTimer.value) {
+        window.clearTimeout(maximizeRestoreHideTimer.value)
+      }
+      maximizeRestoreHideTimer.value = window.setTimeout(() => {
+        showMaximizeRestoreButton.value = false
+      }, 1200)
     }
 
     // 还原标签页
     const restoreTab = () => {
       isTabMaximized.value = false
+      showMaximizeRestoreButton.value = false
+      if (maximizeRestoreHideTimer.value) {
+        window.clearTimeout(maximizeRestoreHideTimer.value)
+        maximizeRestoreHideTimer.value = null
+      }
+    }
+
+    const handleMaximizedMouseMove = (event) => {
+      if (!isTabMaximized.value) return
+      if (event?.clientY <= 56) {
+        showMaximizeRestoreButton.value = true
+        if (maximizeRestoreHideTimer.value) {
+          window.clearTimeout(maximizeRestoreHideTimer.value)
+          maximizeRestoreHideTimer.value = null
+        }
+        return
+      }
+      if (showMaximizeRestoreButton.value && !maximizeRestoreHideTimer.value) {
+        maximizeRestoreHideTimer.value = window.setTimeout(() => {
+          showMaximizeRestoreButton.value = false
+          maximizeRestoreHideTimer.value = null
+        }, 220)
+      }
+    }
+
+    const handleMaximizedMouseLeave = () => {
+      if (!isTabMaximized.value) return
+      showMaximizeRestoreButton.value = false
+      if (maximizeRestoreHideTimer.value) {
+        window.clearTimeout(maximizeRestoreHideTimer.value)
+        maximizeRestoreHideTimer.value = null
+      }
     }
 
     // 获取当前标签页标题
@@ -973,11 +1027,6 @@ export default {
       if (!tab) return ''
       if (tab.titleKey) return t(tab.titleKey)
       return tab.title || ''
-    }
-
-    const getCurrentTabTitle = () => {
-      const tab = tabs.value.find(t => t.key === activeTab.value)
-      return getTabTitle(tab)
     }
 
     /**
@@ -1055,11 +1104,13 @@ export default {
       closeTab,
       maximizeTab,
       restoreTab,
+      handleMaximizedMouseMove,
+      handleMaximizedMouseLeave,
       getTabTitle,
-      getCurrentTabTitle,
       openExternalTab,
       toggleSidebar,
       isTabMaximized,
+      showMaximizeRestoreButton,
     }
   },
 }
@@ -1190,5 +1241,58 @@ html.dark .dashboard-tabs :deep(.el-tabs__item.is-active),
 
 .dashboard-tabs-maximized :deep(.el-tabs__content) {
   height: 100%;
+}
+
+.maximize-restore-floating-button {
+  pointer-events: auto;
+  z-index: 1100;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgb(31 41 55 / 45%);
+  background: rgb(17 24 39 / 88%);
+  color: #fff;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 28%);
+}
+
+.maximize-restore-floating-button:hover {
+  background: rgb(17 24 39 / 96%);
+  border-color: rgb(31 41 55 / 70%);
+}
+
+.maximize-restore-floating-button :deep(.el-icon) {
+  font-size: 16px;
+  color: #fff;
+}
+
+.maximize-restore-anchor {
+  position: fixed;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 1100;
+}
+
+html.dark .maximize-restore-floating-button,
+[data-theme="dark"] .maximize-restore-floating-button {
+  border-color: rgb(148 163 184 / 45%);
+  background: rgb(15 23 42 / 88%);
+}
+
+.drop-down-enter-active,
+.drop-down-leave-active {
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.drop-down-enter-from,
+.drop-down-leave-to {
+  transform: translate(-50%, -14px);
+  opacity: 0;
+}
+
+.drop-down-enter-to,
+.drop-down-leave-from {
+  transform: translate(-50%, 0);
+  opacity: 1;
 }
 </style>

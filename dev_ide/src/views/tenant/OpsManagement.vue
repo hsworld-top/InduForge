@@ -1,15 +1,15 @@
 <template>
   <div class="ops-management h-full flex flex-col">
     <!-- 页面标题和页头操作 -->
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex justify-between items-center mb-3">
       <div class="flex items-center space-x-4">
-        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('opsManagement.title') }}</h1>
-        <el-tag border size="large" type="info" class="rounded-full">
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('opsManagement.title') }}</h1>
+        <el-tag border size="small" type="info" class="rounded-full">
           {{ t('opsManagement.totalNodes') }}: {{ nodePagination.total }}
         </el-tag>
       </div>
-      <div class="flex items-center space-x-3">
-        <el-radio-group v-model="activeView" size="default">
+      <div class="flex items-center space-x-2">
+        <el-radio-group v-model="activeView" size="small">
           <el-radio-button value="dashboard">
             <el-icon class="mr-1"><Grid /></el-icon> {{ t('opsManagement.dashboardView') }}
           </el-radio-button>
@@ -23,7 +23,7 @@
             <el-icon><Bell /></el-icon>
           </el-button>
         </el-badge>
-        <el-button @click="fetchNodes" :loading="nodeLoading">
+        <el-button @click="fetchNodes" :loading="nodeLoading" size="small">
           <el-icon><Refresh /></el-icon>
         </el-button>
       </div>
@@ -112,7 +112,8 @@
     </div>
 
     <!-- 视图：节点大盘 -->
-    <div v-if="activeView === 'dashboard'" class="flex-1 overflow-y-auto pb-6">
+    <div v-if="activeView === 'dashboard'" class="flex-1 min-h-0 flex flex-col">
+      <div class="flex-1 min-h-0 overflow-y-auto pb-6">
       <div v-loading="nodeLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <el-card
           v-for="node in filteredNodeList"
@@ -210,7 +211,7 @@
                 </div>
                   <div class="flex items-center space-x-1">
                     <el-tag size="small" :type="getDeployStatusType(deploy.status)">
-                      {{ getDeployLabel(deploy.status) }}
+                      {{ getDeployDisplayLabel(deploy) }}
                     </el-tag>
                     <el-tag size="small" :type="deploy.mode === 'DEV' ? 'warning' : 'success'">
                       {{ deploy.mode }}
@@ -256,24 +257,20 @@
       <!-- 无数据 -->
       <el-empty v-if="!nodeLoading && filteredNodeList.length === 0" :description="t('opsManagement.noNodesOnline')" />
 
-      <!-- 分页 -->
-      <div class="flex justify-end mt-8">
-        <el-pagination
-          v-model:current-page="nodePagination.page"
-          v-model:page-size="nodePagination.pageSize"
-          :total="nodePagination.total"
-          :page-sizes="[12, 24, 48]"
-          layout="total, sizes, prev, pager, next"
-          @size-change="fetchNodes"
-          @current-change="fetchNodes"
-        />
       </div>
     </div>
 
     <!-- 视图：详细列表 -->
-    <div v-else-if="activeView === 'list'" class="flex-1 overflow-y-auto pb-6">
+    <div v-else-if="activeView === 'list'" class="flex-1 min-h-0 flex flex-col">
+      <div class="flex-1 min-h-0 overflow-y-auto pb-6">
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <el-table :data="filteredNodeList" style="width: 100%">
+        <el-table
+          :data="filteredNodeList"
+          style="width: 100%"
+          row-key="id"
+          :expand-row-keys="expandedNodeRowKeys"
+          @expand-change="handleExpandChange"
+        >
           <el-table-column type="expand">
             <template #default="props">
               <div class="p-4 bg-gray-50/50 dark:bg-gray-900/50">
@@ -283,7 +280,7 @@
                   <el-table-column :label="t('opsManagement.runtimeVersion')" prop="version" width="100" />
                   <el-table-column :label="t('opsManagement.runtimeStatus')" width="100">
                     <template #default="scope">
-                      <el-tag size="small" :type="getDeployStatusType(scope.row.status)">{{ getDeployLabel(scope.row.status) }}</el-tag>
+                      <el-tag size="small" :type="getDeployStatusType(scope.row.status)">{{ getDeployDisplayLabel(scope.row) }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column :label="t('opsManagement.onlineUsers')" width="100">
@@ -340,6 +337,21 @@
         </el-table>
       </div>
       <el-empty v-if="!nodeLoading && filteredNodeList.length === 0" :description="t('opsManagement.noNodes')" class="mt-6" />
+      </div>
+    </div>
+
+    <!-- 固定分页区 -->
+    <div class="pagination-bar flex justify-end items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
+      <el-pagination
+        v-model:current-page="nodePagination.page"
+        v-model:page-size="nodePagination.pageSize"
+        :total="nodePagination.total"
+        :page-sizes="[12, 24, 48]"
+        size="small"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="fetchNodes"
+        @current-change="fetchNodes"
+      />
     </div>
 
     <!-- 弹窗：待审核申请列表 -->
@@ -448,7 +460,7 @@
         </el-descriptions-item>
         <el-descriptions-item :label="t('opsManagement.status')">
           <el-tag :type="getDeployStatusType(failedDeployment?.status)">
-            {{ getDeployLabel(failedDeployment?.status) }}
+            {{ getDeployDisplayLabel(failedDeployment) }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item :label="t('opsManagement.failureReason')">
@@ -493,7 +505,7 @@ import {
   getNodeStatusType,
   getNodeStatusLabel,
   getDeployStatusType,
-  getDeployLabel,
+  getDeployLabel as getDeployLabelByStatus,
   isFailedDeploy,
   getDeployFailureReason,
   buildDeployStatusSummary,
@@ -530,6 +542,7 @@ const nodePagination = reactive({
   total: 0,
 })
 const searchDebounceTimer = ref(null)
+const expandedNodeRowKeys = ref([])
 
 // 待审核申请弹窗
 const showPendingDialog = ref(false)
@@ -597,6 +610,9 @@ const fetchNodes = async () => {
       nodeList.value = res.data.items
       nodePagination.total = res.data.total
       approvedCount.value = res.data.total
+      // 刷新后保留仍存在的展开节点，避免展开态丢失
+      const currentNodeIdSet = new Set((res.data.items || []).map((item) => item.id))
+      expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) => currentNodeIdSet.has(id))
     }
   } catch (error) {
     console.error('获取节点失败:', error)
@@ -605,6 +621,10 @@ const fetchNodes = async () => {
   } finally {
     nodeLoading.value = false
   }
+}
+
+const handleExpandChange = (row, expandedRows) => {
+  expandedNodeRowKeys.value = expandedRows.map((item) => item.id)
 }
 
 // 获取待审核申请列表
@@ -752,6 +772,42 @@ const openPendingRequestsDialog = async () => {
   showPendingDialog.value = true
 }
 
+const toTimestamp = (value) => {
+  if (!value) return 0
+  const ts = new Date(value).getTime()
+  return Number.isNaN(ts) ? 0 : ts
+}
+
+const sortCommandTimeline = (commands = []) => {
+  return [...commands].sort((a, b) => {
+    const aTs = toTimestamp(a.requestedAt || a.issuedAt || a.createdAt || a.updatedAt)
+    const bTs = toTimestamp(b.requestedAt || b.issuedAt || b.createdAt || b.updatedAt)
+    return bTs - aTs
+  })
+}
+
+const getInFlightCommandType = (deploy) => {
+  const commands = Array.isArray(deploy?.commands) ? deploy.commands : []
+  const activeCommands = commands.filter((item) =>
+    ['pending', 'issued', 'acknowledged'].includes(item?.status)
+  )
+  if (activeCommands.length === 0) return ''
+  const latest = sortCommandTimeline(activeCommands)[0]
+  return latest?.type || ''
+}
+
+const getDeployDisplayLabel = (deploy) => {
+  const status = deploy?.status
+  const activeType = getInFlightCommandType(deploy)
+  if (activeType === 'stop') return t('opsManagement.stopping')
+  if (activeType === 'restart') return t('opsManagement.restarting')
+  if (activeType === 'start') return t('opsManagement.starting')
+  if (status === 'deploying') {
+    return t('opsManagement.deploying')
+  }
+  return getDeployLabelByStatus(status)
+}
+
 // 新增：启动工程
 const handleStartProject = async (deploy) => {
   try {
@@ -783,7 +839,7 @@ const handleStopProject = async (deploy) => {
 const handleViewLog = (deploy) => {
   currentDeployment.value = deploy
   logContent.value = deploy.deployLog || []
-  commandTimeline.value = Array.isArray(deploy.commands) ? deploy.commands : []
+  commandTimeline.value = sortCommandTimeline(Array.isArray(deploy.commands) ? deploy.commands : [])
   showLogDialog.value = true
 }
 
@@ -933,6 +989,24 @@ const setupRealtimeUpdates = () => {
     }
     if (data.errorMessage) {
       deploy.errorMessage = data.errorMessage
+    }
+
+    const ack = data.commandAck
+    if (!ack || !Array.isArray(deploy.commands)) {
+      return
+    }
+    const command = deploy.commands.find((item) => item.id === ack.id)
+    if (!command) {
+      return
+    }
+    command.status = ack.status || command.status
+    command.acknowledgedAt = ack.acknowledgedAt || command.acknowledgedAt
+    command.completedAt = ack.completedAt || command.completedAt
+    command.lastError = ack.lastError || null
+    command.updatedAt = ack.completedAt || ack.acknowledgedAt || command.updatedAt
+
+    if (currentDeployment.value?.id === deploy.id) {
+      commandTimeline.value = sortCommandTimeline(deploy.commands)
     }
   })
 
