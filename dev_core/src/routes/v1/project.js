@@ -10,6 +10,7 @@ const ErrorCodes = require('../../constants/errorCodes');
 const appConfig = require('../../config/app');
 
 const designAssetService = require('../../services/designAssetService');
+const deploymentService = require('../../services/deploymentService');
 
 const router = express.Router();
 
@@ -27,8 +28,9 @@ const {
   DataMqttTag,
   DataPoint,
   DataRelationalConfig,
+  NodeDeployment,
 } = require('../../models');
-const { authenticateToken, requireResourceOwnership } = require('../../middlewares/auth');
+const { authenticateToken, requireResourceOwnership, hasCapability } = require('../../middlewares/auth');
 const { randomUUID } = require('crypto');
 
 const parseJsonField = (value, fallback) => {
@@ -150,6 +152,10 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
 })), async (req, res) => {
   try {
     const { id } = req.params;
+    const { role } = req.user;
+    if (!['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+    }
     const project = await Project.findByPk(id);
     if (!project) {
       return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
@@ -923,20 +929,70 @@ router.put('/:id', authenticateToken, requireResourceOwnership('project'), valid
  *         description: 删除成功
  */
 router.delete('/:id', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
-  params: Joi.object({ id: Joi.string().uuid().required() })
+  params: Joi.object({ id: Joi.string().uuid().required() }),
+  body: Joi.object({
+    force: Joi.boolean().optional().default(false)
+  })
 })), async (req, res) => {
   try {
     const { id } = req.params;
     const { role } = req.user;
+    const forceDelete = Boolean(req.body?.force);
 
     // 检查权限：只有系统管理员和工程管理员可以删除工程
     if (!['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(role)) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
     }
+    if (forceDelete && role !== 'SYSTEM_ADMIN') {
+      return ApiResponse.error(
+        res,
+        ErrorCodes.PERMISSION_INSUFFICIENT,
+        { message: '仅系统管理员可执行强制删除' },
+        403
+      );
+    }
 
     const project = await Project.findByPk(id);
     if (!project) {
       return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+    }
+
+    const activeStatuses = ['pending', 'deploying', 'running'];
+    const activeDeployments = await NodeDeployment.findAll({
+      where: {
+        projectId: id,
+        status: { [Op.in]: activeStatuses },
+        deletedAt: null,
+      },
+      attributes: ['id', 'nodeId', 'status'],
+    });
+
+    if (activeDeployments.length > 0) {
+      if (!forceDelete) {
+        return ApiResponse.error(
+          res,
+          ErrorCodes.VALIDATION_FAILED,
+          {
+            message: `工程存在 ${activeDeployments.length} 个运行中部署，请先在运维中心下线后再删除`,
+            hasActiveDeployments: true,
+            activeDeploymentCount: activeDeployments.length,
+            canForceDelete: role === 'SYSTEM_ADMIN',
+          },
+          400
+        );
+      }
+    }
+
+    // 强制删除：先撤销该工程在所有节点的部署，再删除工程。
+    if (forceDelete) {
+      const allNodeDeployments = await NodeDeployment.findAll({
+        where: { projectId: id, deletedAt: null },
+        attributes: ['id'],
+      });
+      for (const item of allNodeDeployments) {
+        // 复用运维撤销流程，确保节点运行指针被清理。
+        await deploymentService.undeploy(item.id);
+      }
     }
 
     await designAssetService.deleteAssetsByProject(id);
@@ -948,6 +1004,64 @@ router.delete('/:id', authenticateToken, requireResourceOwnership('project'), va
   } catch (error) {
     logger.error('Delete project error', { error: error.message, requestId: req.requestId });
     return ApiResponse.error(res, ErrorCodes.PROJECT_DELETE_FAILED, {}, 500);
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/projects/{id}/delete-impact:
+ *   get:
+ *     summary: 获取删除工程影响评估
+ *     tags: [工程管理]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: 获取成功
+ */
+router.get('/:id/delete-impact', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() })
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user;
+    if (!['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+    }
+
+    const project = await Project.findByPk(id, {
+      attributes: ['id', 'name'],
+    });
+    if (!project) {
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+    }
+
+    const allDeployments = await NodeDeployment.findAll({
+      where: { projectId: id, deletedAt: null },
+      attributes: ['id', 'nodeId', 'status'],
+    });
+    const activeStatuses = new Set(['pending', 'deploying', 'running']);
+    const activeDeployments = allDeployments.filter((item) => activeStatuses.has(item.status));
+    const activeNodeIdSet = new Set(activeDeployments.map((item) => item.nodeId));
+
+    return ApiResponse.success(res, {
+      projectId: project.id,
+      projectName: project.name,
+      totalDeploymentCount: allDeployments.length,
+      activeDeploymentCount: activeDeployments.length,
+      activeNodeCount: activeNodeIdSet.size,
+      hasActiveDeployments: activeDeployments.length > 0,
+      canForceDelete: role === 'SYSTEM_ADMIN',
+    });
+  } catch (error) {
+    logger.error('Get project delete impact error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
   }
 });
 
@@ -985,8 +1099,8 @@ router.post('/:id/operations/:operation', authenticateToken, requireResourceOwne
     const { id, operation } = req.params;
     const { role, id: userId } = req.user;
 
-    // 检查权限：只有运维管理员可以执行运维操作
-    if (!['SYSTEM_ADMIN', 'OPS_ADMIN'].includes(role)) {
+    // 检查权限：具备 runtime:operate 能力方可执行运维操作
+    if (!hasCapability(role, 'runtime:operate')) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
     }
 

@@ -13,10 +13,10 @@ const router = express.Router();
 // 角色与权限说明（与中间件保持一致）
 const ROLE_PERMISSIONS = {
   SUPER_ADMIN: {
-    description: '超级管理员（全局权限）'
+    description: '超级管理员（仅租户管理）'
   },
   SYSTEM_ADMIN: {
-    description: '系统管理员（管理用户与工程）'
+    description: '平台管理员（除租户管理外的全平台权限）'
   },
   PROJECT_ADMIN: {
     description: '工程管理员（工程全权限）'
@@ -109,7 +109,7 @@ router.get('/me', authenticateToken, (req, res) => {
  */
 router.put('/users/:id',
   authenticateToken,
-  requireRole('SUPER_ADMIN', 'SYSTEM_ADMIN'),
+  requireRole('SYSTEM_ADMIN'),
   validate(Joi.object({
     params: Joi.object({ id: Joi.string().uuid().required() }),
     body: Joi.object({ role: Joi.string().valid('SYSTEM_ADMIN','PROJECT_ADMIN','OPS_ADMIN','USER_ADMIN').required() })
@@ -122,11 +122,6 @@ router.put('/users/:id',
       const user = await User.findByPk(id);
       if (!user) {
         return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 404);
-      }
-
-      // 非超级管理员只能修改同租户用户
-      if (req.user.role !== 'SUPER_ADMIN' && user.tenantId !== req.user.tenantId) {
-        return ApiResponse.error(res, ErrorCodes.PERMISSION_TENANT_MISMATCH, {}, 403);
       }
 
       // 不允许将任何人升级为 SUPER_ADMIN

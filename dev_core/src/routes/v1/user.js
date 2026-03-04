@@ -66,16 +66,13 @@ router.get('/', authenticateToken, validate(Joi.object({
     let where = {};
 
     // 检查当前用户是否有权限查看用户
-    // 超级管理员只能查看用户，不能管理用户
-    const canViewUsers = ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
+    const canViewUsers = ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
     if (!canViewUsers) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
     }
 
-    // 非超级管理员只能查看本租户的用户
-    if (currentUserRole !== 'SUPER_ADMIN') {
-      where.tenantId = currentUserTenantId;
-    }
+    // 平台管理员和用户管理员都只能查看本租户用户
+    where.tenantId = currentUserTenantId;
 
     // 角色筛选条件：永远不显示超级管理员
     if (role) {
@@ -167,7 +164,7 @@ router.post('/', authenticateToken, validate(Joi.object({
     const { tenantId: currentUserTenantId, role: currentUserRole } = req.user;
 
     // 检查创建用户的权限
-    // 只有系统管理员和用户管理员可以创建用户，超级管理员只能查看用户
+    // 只有系统管理员和用户管理员可以创建用户
     const canCreateUsers = ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
     if (!canCreateUsers) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
@@ -175,8 +172,8 @@ router.post('/', authenticateToken, validate(Joi.object({
 
     // 检查权限
     let targetTenantId = tenantId;
-    if (currentUserRole !== 'SUPER_ADMIN') {
-      // 普通管理员只能在自己的租户内创建用户
+    if (currentUserRole !== 'SYSTEM_ADMIN') {
+      // 非系统管理员只能在自己的租户内创建用户
       targetTenantId = currentUserTenantId;
     }
 
@@ -266,7 +263,7 @@ router.put('/:id', authenticateToken, validate(Joi.object({
     }
 
     // 检查权限
-    if (currentUserRole !== 'SUPER_ADMIN' && user.tenantId !== currentUserTenantId) {
+    if (currentUserRole !== 'SYSTEM_ADMIN' && user.tenantId !== currentUserTenantId) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
     }
 
@@ -275,7 +272,7 @@ router.put('/:id', authenticateToken, validate(Joi.object({
       return ApiResponse.error(res, ErrorCodes.RESOURCE_DELETE_SUPER_ADMIN, {}, 400);
     }
 
-    // 只允许系统管理员和用户管理员修改用户角色，超级管理员只能查看
+    // 只允许系统管理员和用户管理员修改用户角色
     if (updateData.role && !['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole)) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
     }
@@ -381,7 +378,7 @@ router.delete('/:id', authenticateToken, validate(Joi.object({
     const { tenantId: currentUserTenantId, role: currentUserRole, id: currentUserId } = req.user;
 
     // 检查删除用户的权限
-    // 只有系统管理员和用户管理员可以删除用户，超级管理员只能查看用户
+    // 只有系统管理员和用户管理员可以删除用户
     const canDeleteUsers = ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
     if (!canDeleteUsers) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
@@ -403,7 +400,7 @@ router.delete('/:id', authenticateToken, validate(Joi.object({
     }
 
     // 检查权限
-    if (currentUserRole !== 'SUPER_ADMIN' && user.tenantId !== currentUserTenantId) {
+    if (currentUserRole !== 'SYSTEM_ADMIN' && user.tenantId !== currentUserTenantId) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
     }
 

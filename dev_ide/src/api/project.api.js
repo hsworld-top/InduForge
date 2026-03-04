@@ -46,10 +46,25 @@ export const projectAPI = {
   /**
    * 删除工程
    * @param {string} id - 工程ID
+   * @param {object} options - 删除选项
+   * @param {boolean} options.force - 是否强制删除（系统管理员）
    * @returns {Promise} 删除结果
    */
-  deleteProject(id) {
-    return request.delete(`/projects/${id}`)
+  deleteProject(id, options = {}) {
+    return request.delete(`/projects/${id}`, {
+      data: {
+        force: Boolean(options.force),
+      },
+    })
+  },
+
+  /**
+   * 获取删除工程影响评估
+   * @param {string} id - 工程ID
+   * @returns {Promise} 影响评估结果
+   */
+  getDeleteImpact(id) {
+    return request.get(`/projects/${id}/delete-impact`)
   },
 
   /**

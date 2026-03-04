@@ -8,6 +8,7 @@ const nodeService = require("../../services/nodeService");
 const { authenticate } = require("../../middlewares/auth");
 const ApiResponse = require("../../utils/response");
 const ErrorCodes = require("../../constants/errorCodes");
+const NODE_ADMIN_ROLES = ["SYSTEM_ADMIN", "OPS_ADMIN"];
 
 /**
  * @route POST /api/v1/nodes/:nodeId/heartbeat
@@ -163,6 +164,10 @@ router.put("/:nodeId", authenticate, async (req, res) => {
 router.delete("/:nodeId", authenticate, async (req, res) => {
   try {
     const { nodeId } = req.params;
+    const role = req.user?.role;
+    if (!NODE_ADMIN_ROLES.includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, { message: "仅平台管理员或运维管理员可删除节点" }, 403);
+    }
 
     // 先获取节点检查权限
     const existing = await nodeService.getById(nodeId);
@@ -188,6 +193,10 @@ router.put("/:nodeId/approve", authenticate, async (req, res) => {
   try {
     const { nodeId } = req.params;
     const userId = req.user.id;
+    const role = req.user?.role;
+    if (!NODE_ADMIN_ROLES.includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, { message: "仅平台管理员或运维管理员可审批节点" }, 403);
+    }
 
     // 权限检查
     const node = await nodeService.getById(nodeId);
@@ -213,6 +222,10 @@ router.put("/:nodeId/reject", authenticate, async (req, res) => {
   try {
     const { nodeId } = req.params;
     const userId = req.user.id;
+    const role = req.user?.role;
+    if (!NODE_ADMIN_ROLES.includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, { message: "仅平台管理员或运维管理员可审批节点" }, 403);
+    }
 
     // 权限检查
     const node = await nodeService.getById(nodeId);

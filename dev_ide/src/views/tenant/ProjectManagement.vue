@@ -66,14 +66,14 @@
         <!-- 操作按钮组 -->
         <div class="flex items-center space-x-3">
           <template v-if="selectionMode">
-            <el-button type="success" size="small" @click="batchExportProjects"
+            <el-button v-if="canExportProjects" type="success" size="small" @click="batchExportProjects"
               :disabled="selectedProjects.length === 0" :loading="batchOperationLoading">
               <el-icon class="mr-1">
                 <Download />
               </el-icon>
               {{ t('projectManagement.batchExport') }} ({{ selectedProjects.length }})
             </el-button>
-            <el-button v-if="canManageProjects" type="danger" size="small" @click="batchDeleteProjects"
+            <el-button v-if="canDeleteProjects" type="danger" size="small" @click="batchDeleteProjects"
               :disabled="selectedProjects.length === 0" :loading="batchOperationLoading">
               <el-icon class="mr-1">
                 <Delete />
@@ -153,14 +153,14 @@
                 @click.stop="openOpsManagement(project)">
                 {{ t('opsManagement.title') }}
               </el-button>
-              <el-button v-if="canManageProjects" type="success" size="small"
+              <el-button v-if="canExportProjects" type="success" size="small"
                 @click.stop="handleExportProject(project)">
                 <el-icon class="mr-1">
                   <Download />
                 </el-icon>
                 {{ t('projectManagement.export') }}
               </el-button>
-              <el-button v-if="canManageProjects" type="danger" size="small" @click.stop="deleteProject(project)">
+              <el-button v-if="canDeleteProjects" type="danger" size="small" @click.stop="deleteProject(project)">
                 {{ t('projectManagement.delete') }}
               </el-button>
             </div>
@@ -217,14 +217,14 @@
                 @click="openOpsManagement(scope.row)" class="mr-2">
                 {{ t('opsManagement.title') }}
               </el-button>
-              <el-button v-if="canManageProjects" type="success" size="small" @click="handleExportProject(scope.row)"
+              <el-button v-if="canExportProjects" type="success" size="small" @click="handleExportProject(scope.row)"
                 class="mr-2">
                 <el-icon class="mr-1">
                   <Download />
                 </el-icon>
                 {{ t('projectManagement.export') }}
               </el-button>
-              <el-button v-if="canManageProjects" type="danger" size="small" @click="deleteProject(scope.row)">
+              <el-button v-if="canDeleteProjects" type="danger" size="small" @click="deleteProject(scope.row)">
                 {{ t('projectManagement.delete') }}
               </el-button>
             </template>
@@ -623,7 +623,7 @@
             </span>
           </div>
           <div class="space-x-2">
-            <el-button type="success" @click="exportProject(selectedProject)">
+            <el-button v-if="canExportProjects" type="success" @click="exportProject(selectedProject)">
               <el-icon class="mr-1">
                 <Download />
               </el-icon>
@@ -653,6 +653,7 @@ import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import JSZip from "jszip";
 import { useAuthStore, useAppStore } from "@/store";
+import { can } from "@/permissions";
 import request from "@/utils/request";
 import { projectAPI } from "@/api/project.api";
 import { ColorTagEnum } from "@/enums";
@@ -821,15 +822,24 @@ export default {
 
     // 检查是否可以管理工程
     const canManageProjects = computed(() => {
-      return ["SYSTEM_ADMIN", "PROJECT_ADMIN"].includes(
-        currentUser.value?.role,
-      );
+      return can(currentUser.value?.role, "project:write");
     });
+    const canExportProjects = computed(() => {
+      return canManageProjects.value || can(currentUser.value?.role, "project:export");
+    });
+    const canDeleteProjects = computed(() => {
+      return canManageProjects.value || can(currentUser.value?.role, "project:delete");
+    });
+    const canAccessProjectDetail = computed(() => {
+      return can(currentUser.value?.role, "project:read");
+    });
+    const isOpsAdminRole = computed(() => currentUser.value?.role === "OPS_ADMIN");
 
     // 检查是否可以执行运维操作
     const canPerformOps = computed(() => {
-      return ["SYSTEM_ADMIN", "OPS_ADMIN"].includes(currentUser.value?.role);
+      return can(currentUser.value?.role, "deploy:execute");
     });
+    const canForceDeleteProject = computed(() => can(currentUser.value?.role, "project:forceDelete"));
 
     /**
      * 统一提取接口错误信息，兼容 message/error 字段。
@@ -1068,9 +1078,52 @@ export default {
 
     // 删除工程
     const deleteProject = async (project) => {
+      if (!canDeleteProjects.value) {
+        ElMessage.warning(t("projectManagement.noPermission"));
+        return;
+      }
       try {
+        let impactData = null;
+        try {
+          const impactRes = await projectAPI.getDeleteImpact(project.id);
+          impactData = impactRes?.data ?? impactRes;
+        } catch (impactError) {
+          ElMessage.warning(t("projectManagement.deleteImpactLoadFailed"));
+        }
+
+        if (impactData?.hasActiveDeployments) {
+          if (!canForceDeleteProject.value) {
+            ElMessage.warning(
+              t("projectManagement.deleteBlockedByActiveDeployments", {
+                count: impactData?.activeDeploymentCount || 0,
+              }),
+            );
+            return;
+          }
+          await ElMessageBox.confirm(
+            t("projectManagement.forceDeleteConfirmWithImpact", {
+              name: project.name,
+              deploymentCount: impactData?.activeDeploymentCount || 0,
+              nodeCount: impactData?.activeNodeCount || 0,
+            }),
+            t("projectManagement.forceDeleteTitle"),
+            {
+              confirmButtonText: t("projectManagement.forceDeleteButton"),
+              cancelButtonText: t("projectManagement.cancel"),
+              type: "warning",
+            },
+          );
+          await projectAPI.deleteProject(project.id, { force: true });
+          ElMessage.success(t("projectManagement.forceDeleteSuccess"));
+          fetchProjects();
+          return;
+        }
+
         await ElMessageBox.confirm(
-          t("projectManagement.deleteConfirm", { name: project.name }),
+          t("projectManagement.deleteConfirmWithImpact", {
+            name: project.name,
+            deploymentCount: impactData?.totalDeploymentCount || 0,
+          }),
           t("projectManagement.deleteConfirmTitle"),
           {
             confirmButtonText: t("projectManagement.deleteConfirmButton"),
@@ -1096,6 +1149,10 @@ export default {
     // 导出工程
     const handleExportProject = async (project) => {
       if (!project?.id) return;
+      if (!canExportProjects.value) {
+        ElMessage.warning(t("projectManagement.noPermission"));
+        return;
+      }
       try {
         const response = await projectAPI.exportProject(project.id);
         const blob =
@@ -1277,6 +1334,10 @@ export default {
         // 在选择模式下点击切换选中状态
         toggleProjectSelection(project.id);
       } else {
+        if (!canAccessProjectDetail.value) {
+          ElMessage.warning(t("projectManagement.noPermission"));
+          return;
+        }
         // 非选择模式下打开工程详情
         openProjectDialog(project);
       }
@@ -1288,6 +1349,10 @@ export default {
         // 在选择模式下点击切换选中状态
         toggleProjectSelection(project.id);
       } else {
+        if (!canAccessProjectDetail.value) {
+          ElMessage.warning(t("projectManagement.noPermission"));
+          return;
+        }
         // 非选择模式下打开工程详情
         openProjectDialog(project);
       }
@@ -1451,6 +1516,10 @@ export default {
 
     // 打开工程功能选择弹窗
     const openProjectDialog = (project) => {
+      if (isOpsAdminRole.value) {
+        openDeployDialog(project);
+        return;
+      }
       selectedProject.value = project;
       projectDialogVisible.value = true;
     };
@@ -2152,7 +2221,11 @@ export default {
       // 方法
       t,
       canManageProjects,
+      canExportProjects,
+      canDeleteProjects,
+      canAccessProjectDetail,
       canPerformOps,
+      canForceDeleteProject,
       fetchProjects,
       handleSearch,
       resetSearch,

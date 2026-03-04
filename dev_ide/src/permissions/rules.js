@@ -1,8 +1,30 @@
 import { ROLES } from '../constants/index.js'
 
+export const ROLE_CAPABILITY_MAP = {
+  [ROLES.SUPER_ADMIN]: ['tenant:manage'],
+  [ROLES.SYSTEM_ADMIN]: ['*'],
+  [ROLES.PROJECT_ADMIN]: [
+    'project:read',
+    'project:write',
+    'release:publish',
+    'deploy:execute',
+    'runtime:operate',
+    'node:read',
+  ],
+  [ROLES.OPS_ADMIN]: [
+    'project:read',
+    'release:publish',
+    'deploy:execute',
+    'runtime:operate',
+    'node:read',
+    'node:approve',
+  ],
+  [ROLES.USER_ADMIN]: ['user:write'],
+  [ROLES.USER]: ['project:read'],
+}
+
 export const TAB_PERMISSION_MAP = {
   dashboard: [
-    ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.PROJECT_ADMIN,
     ROLES.OPS_ADMIN,
@@ -10,19 +32,19 @@ export const TAB_PERMISSION_MAP = {
     ROLES.USER,
   ],
   'tenant-management': [ROLES.SUPER_ADMIN],
-  'user-management': [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.USER_ADMIN],
-  'project-management': [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PROJECT_ADMIN],
-  'ops-management': [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.OPS_ADMIN],
-  'system-logs': [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.OPS_ADMIN],
+  'user-management': [ROLES.SYSTEM_ADMIN, ROLES.USER_ADMIN],
+  'project-management': [ROLES.SYSTEM_ADMIN, ROLES.PROJECT_ADMIN, ROLES.OPS_ADMIN],
+  'ops-management': [ROLES.SYSTEM_ADMIN, ROLES.PROJECT_ADMIN, ROLES.OPS_ADMIN],
+  'system-logs': [ROLES.SYSTEM_ADMIN, ROLES.OPS_ADMIN],
   'system-settings': [ROLES.SYSTEM_ADMIN],
 }
 
 export const TAB_DENIED_MESSAGE_MAP = {
   'tenant-management': '只有超级管理员才能访问租户管理',
-  'user-management': '仅超级管理员、系统管理员或用户管理员可访问用户管理',
-  'project-management': '仅超级管理员、系统管理员或工程管理员可访问工程管理',
-  'ops-management': '仅超级管理员、系统管理员或运维管理员可访问运维管理',
-  'system-logs': '仅超级管理员、系统管理员或运维管理员可访问系统日志',
+  'user-management': '仅系统管理员或用户管理员可访问用户管理',
+  'project-management': '仅系统管理员、工程管理员或运维管理员可访问工程管理',
+  'ops-management': '仅系统管理员、工程管理员或运维管理员可访问运维管理',
+  'system-logs': '仅系统管理员或运维管理员可访问系统日志',
   'system-settings': '只有系统管理员才能访问系统设置',
 }
 
@@ -31,6 +53,12 @@ export const hasRole = (userRole, allowedRoles = []) => {
     return false
   }
   return allowedRoles.includes(userRole)
+}
+
+export const can = (userRole, capability) => {
+  if (!userRole || !capability) return false
+  const caps = ROLE_CAPABILITY_MAP[userRole] || []
+  return caps.includes('*') || caps.includes(capability)
 }
 
 export const canAccessTab = (tabKey, userRole) => {
@@ -44,11 +72,11 @@ export const getTabAccessDeniedMessage = (tabKey) => {
 }
 
 export const canManageUsers = (userRole) => {
-  return hasRole(userRole, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.USER_ADMIN])
+  return can(userRole, 'user:write')
 }
 
 export const canApproveNodes = (userRole) => {
-  return hasRole(userRole, [ROLES.SYSTEM_ADMIN, ROLES.OPS_ADMIN])
+  return can(userRole, 'node:approve')
 }
 
 /**

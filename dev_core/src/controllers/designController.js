@@ -14,8 +14,8 @@ const ErrorCodes = require("../constants/errorCodes");
  * @param {string} projectId - 工程ID
  */
 async function checkProjectAccess(req, projectId) {
-  // 超级管理员和系统管理员可以访问所有工程
-  if (req.user.role === "SUPER_ADMIN" || req.user.role === "SYSTEM_ADMIN") {
+  // 系统管理员可以访问所有工程
+  if (req.user.role === "SYSTEM_ADMIN") {
     return;
   }
 

@@ -6,7 +6,7 @@ const express = require("express");
 const router = express.Router();
 const path = require("path");
 const publishService = require("../../services/publishService");
-const { authenticate, checkProjectAccess } = require("../../middlewares/auth");
+const { authenticate, checkProjectAccess, requireCapability } = require("../../middlewares/auth");
 const ApiResponse = require("../../utils/response");
 const ErrorCodes = require("../../constants/errorCodes");
 
@@ -15,7 +15,7 @@ const ErrorCodes = require("../../constants/errorCodes");
  * @desc 发布工程
  * @access 工程管理员
  */
-router.post("/:projectId", authenticate, async (req, res) => {
+router.post("/:projectId", authenticate, requireCapability("release:publish"), async (req, res) => {
   try {
     const { projectId } = req.params;
     const { version, name, description, type } = req.body;
@@ -114,7 +114,7 @@ router.get("/deployment/:id/download", authenticate, async (req, res) => {
  * @desc 删除发布记录（仅未被节点部署引用的记录）
  * @access 工程管理员
  */
-router.delete("/deployment/:id", authenticate, async (req, res) => {
+router.delete("/deployment/:id", authenticate, requireCapability("release:publish"), async (req, res) => {
   try {
     const { id } = req.params;
     const deployment = await publishService.getDeployment(id);

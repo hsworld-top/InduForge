@@ -18,7 +18,13 @@
           </el-radio-button>
         </el-radio-group>
         <!-- 待审核申请通知图标 -->
-        <el-badge :value="pendingCount" :hidden="pendingCount === 0" class="cursor-pointer" @click="showPendingDialog = true">
+        <el-badge
+          v-if="canApproveNode"
+          :value="pendingCount"
+          :hidden="pendingCount === 0"
+          class="cursor-pointer"
+          @click="showPendingDialog = true"
+        >
           <el-button :type="pendingCount > 0 ? 'warning' : 'default'" :plain="pendingCount === 0" circle>
             <el-icon><Bell /></el-icon>
           </el-button>
@@ -139,7 +145,11 @@
                 <el-button link><el-icon><MoreFilled /></el-icon></el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item @click="deleteNode(node)" type="danger">{{ t('opsManagement.deleteRegistration') }}</el-dropdown-item>
+                    <el-dropdown-item
+                      v-if="canDeleteNodeRegistration"
+                      @click="deleteNode(node)"
+                      type="danger"
+                    >{{ t('opsManagement.deleteRegistration') }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -591,6 +601,9 @@ const OPS_VIEW_MODE_STORAGE_KEY = 'ops_management_view_mode'
 const canApproveNode = computed(() => {
   return canApproveNodes(currentUserRole.value)
 })
+const canDeleteNodeRegistration = computed(() => {
+  return ['SYSTEM_ADMIN', 'OPS_ADMIN'].includes(currentUserRole.value)
+})
 
 // 状态与视图控制
 const activeView = ref('dashboard')
@@ -717,6 +730,11 @@ const handleExpandChange = (row, expandedRows) => {
 
 // 获取待审核申请列表
 const fetchPendingList = async () => {
+  if (!canApproveNode.value) {
+    pendingList.value = []
+    pendingCount.value = 0
+    return
+  }
   try {
     const res = await request.get('/nodes', {
       params: {
@@ -771,6 +789,10 @@ const handleReject = (node) => {
 }
 
 const updateCounts = async () => {
+  if (!canApproveNode.value) {
+    pendingCount.value = 0
+    return
+  }
   try {
     const [resApproved, resPending] = await Promise.all([
       request.get('/nodes', { params: { pageSize: 1, approvalStatus: 'approved' } }),
@@ -832,6 +854,10 @@ const viewNodeDetail = (node) => {
   )
 }
 const deleteNode = async (node) => {
+  if (!canDeleteNodeRegistration.value) {
+    ElMessage.warning(t('projectManagement.noPermission'))
+    return
+  }
   try {
     await ElMessageBox.confirm(
       t('opsManagement.nodeDeleteConfirm', { name: node.name }),
@@ -856,6 +882,7 @@ const openProjectManagement = () => {
  * 打开待审核申请弹窗并刷新数据。
  */
 const openPendingRequestsDialog = async () => {
+  if (!canApproveNode.value) return
   await fetchPendingList()
   showPendingDialog.value = true
 }
@@ -1165,10 +1192,12 @@ const setupRealtimeUpdates = () => {
   })
 
   // 监听新的待审核节点注册申请
-  socket.on('ops:node:pending', async (data = {}) => {
-    console.log('[OpsManagement][WS] 收到待审核事件:', data)
-    await fetchPendingList()
-  })
+  if (canApproveNode.value) {
+    socket.on('ops:node:pending', async (data = {}) => {
+      console.log('[OpsManagement][WS] 收到待审核事件:', data)
+      await fetchPendingList()
+    })
+  }
 }
 
 /**
@@ -1209,8 +1238,10 @@ const handleSetProjectFilter = async (event) => {
 onMounted(async () => {
   initActiveViewMode()
   await fetchNodes()
-  fetchPendingList()
-  updateCounts()
+  if (canApproveNode.value) {
+    fetchPendingList()
+    updateCounts()
+  }
   setupRealtimeUpdates()
   window.addEventListener('ops:open-pending-requests', openPendingRequestsDialog)
   window.addEventListener('ops:set-project-filter', handleSetProjectFilter)

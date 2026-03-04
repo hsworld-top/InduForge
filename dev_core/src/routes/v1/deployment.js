@@ -5,7 +5,7 @@
 const express = require("express");
 const router = express.Router();
 const deploymentService = require("../../services/deploymentService");
-const { authenticate, checkProjectAccess } = require("../../middlewares/auth");
+const { authenticate, checkProjectAccess, requireCapability } = require("../../middlewares/auth");
 const ApiResponse = require("../../utils/response");
 const ErrorCodes = require("../../constants/errorCodes");
 
@@ -59,7 +59,7 @@ router.get("/:id", authenticate, async (req, res) => {
  * @desc DEV模式按工程直接部署（无需版本）
  * @access 工程管理员
  */
-router.post("/project/:projectId/deploy-dev", authenticate, async (req, res) => {
+router.post("/project/:projectId/deploy-dev", authenticate, requireCapability("deploy:execute"), async (req, res) => {
   try {
     const { projectId } = req.params;
     const { nodeIds } = req.body;
@@ -98,7 +98,7 @@ router.post("/project/:projectId/deploy-dev", authenticate, async (req, res) => 
  * @desc 部署工程到节点（RELEASE模式）
  * @access 工程管理员
  */
-router.post("/:id/deploy", authenticate, async (req, res) => {
+router.post("/:id/deploy", authenticate, requireCapability("deploy:execute"), async (req, res) => {
   try {
     const { id: deploymentId } = req.params;
     const { nodeIds, mode, runtimeConfig } = req.body;
@@ -153,7 +153,7 @@ router.post("/:id/deploy", authenticate, async (req, res) => {
  * @desc 启动工程
  * @access 工程管理员
  */
-router.post("/node-deployment/:id/start", authenticate, async (req, res) => {
+router.post("/node-deployment/:id/start", authenticate, requireCapability("runtime:operate"), async (req, res) => {
   try {
     const { id } = req.params;
     const projectId = await deploymentService.getProjectIdByNodeDeploymentId(id);
@@ -172,7 +172,7 @@ router.post("/node-deployment/:id/start", authenticate, async (req, res) => {
  * @desc 停止工程
  * @access 工程管理员
  */
-router.post("/node-deployment/:id/stop", authenticate, async (req, res) => {
+router.post("/node-deployment/:id/stop", authenticate, requireCapability("runtime:operate"), async (req, res) => {
   try {
     const { id } = req.params;
     const projectId = await deploymentService.getProjectIdByNodeDeploymentId(id);
@@ -191,7 +191,7 @@ router.post("/node-deployment/:id/stop", authenticate, async (req, res) => {
  * @desc 重启工程
  * @access 工程管理员
  */
-router.post("/node-deployment/:id/restart", authenticate, async (req, res) => {
+router.post("/node-deployment/:id/restart", authenticate, requireCapability("runtime:operate"), async (req, res) => {
   try {
     const { id } = req.params;
     const projectId = await deploymentService.getProjectIdByNodeDeploymentId(id);
@@ -210,7 +210,7 @@ router.post("/node-deployment/:id/restart", authenticate, async (req, res) => {
  * @desc 撤销部署
  * @access 工程管理员
  */
-router.delete("/node-deployment/:id", authenticate, async (req, res) => {
+router.delete("/node-deployment/:id", authenticate, requireCapability("runtime:operate"), async (req, res) => {
   try {
     const { id } = req.params;
     const projectId = await deploymentService.getProjectIdByNodeDeploymentId(id);
@@ -254,7 +254,7 @@ router.get(
  * @desc 回滚到指定版本（仅RELEASE模式）
  * @access 工程管理员
  */
-router.post("/:id/rollback", authenticate, async (req, res) => {
+router.post("/:id/rollback", authenticate, requireCapability("runtime:operate"), async (req, res) => {
   try {
     const { id: deploymentId } = req.params;
     const { nodeId } = req.body;

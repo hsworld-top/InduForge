@@ -85,7 +85,7 @@ const routes = [
       title: '用户管理',
       titleKey: 'user.management',
       requiresAuth: true,
-      roles: [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.USER_ADMIN],
+      roles: [ROLES.SYSTEM_ADMIN, ROLES.USER_ADMIN],
     },
   },
   {
@@ -96,7 +96,7 @@ const routes = [
       title: '工程管理',
       titleKey: 'project.management',
       requiresAuth: true,
-      roles: [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PROJECT_ADMIN],
+      roles: [ROLES.SYSTEM_ADMIN, ROLES.PROJECT_ADMIN, ROLES.OPS_ADMIN],
     },
   },
 

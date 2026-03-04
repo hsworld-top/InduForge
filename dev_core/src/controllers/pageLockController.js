@@ -15,7 +15,7 @@ const { getErrorMessage } = require("../utils/i18n");
  * @param {string} projectId - 工程ID
  */
 async function checkProjectAccess(req, projectId) {
-  if (req.user.role === "SUPER_ADMIN" || req.user.role === "SYSTEM_ADMIN") {
+  if (req.user.role === "SYSTEM_ADMIN") {
     return;
   }
 
@@ -148,7 +148,7 @@ async function forceReleasePageLock(req, res, next) {
     const pageDetail = await designService.getPageDetail(pageId);
     await checkProjectAccess(req, pageDetail.projectId);
 
-    if (!["SUPER_ADMIN", "SYSTEM_ADMIN"].includes(req.user.role)) {
+    if (!["SYSTEM_ADMIN"].includes(req.user.role)) {
       throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
         message: "无权限强制释放页面锁",
       });

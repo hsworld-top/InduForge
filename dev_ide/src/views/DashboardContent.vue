@@ -186,6 +186,8 @@ export default {
         }
         if (canAccessSystemLogs.value) {
           requestEntries.push(['logs', logAPI.getLogs({ page: 1, limit: 5 })])
+        } else {
+          requestEntries.push(['recentActivities', logAPI.getRecentActivities({ limit: 5 })])
         }
         if (canLoadTenantStats.value) {
           requestEntries.push(['tenants', tenantAPI.getTenants({ page: 1, limit: 1 })])
@@ -207,6 +209,7 @@ export default {
         const usersResult = resultMap.users
         const projectsResult = resultMap.projects
         const logsResult = resultMap.logs
+        const recentActivitiesResult = resultMap.recentActivities
         const tenantsResult = resultMap.tenants
 
         stats.value.users =
@@ -233,6 +236,17 @@ export default {
               }),
             time: log.createdAt || '',
           }))
+        } else if (recentActivitiesResult?.status === 'fulfilled') {
+          const activities = recentActivitiesResult.value?.data?.activities || []
+          recentActivities.value = activities.slice(0, 5).map((log, index) => ({
+            id: log.id || `${log.createdAt}-${index}`,
+            description:
+              log.message ||
+              t('dashboard.activityFallback', {
+                action: log.action || t('dashboard.systemAction'),
+              }),
+            time: log.createdAt || '',
+          }))
         } else {
           recentActivities.value = []
         }
@@ -246,6 +260,7 @@ export default {
             users: t('dashboard.userCount'),
             projects: t('dashboard.projectCount'),
             logs: t('dashboard.systemLogs'),
+            recentActivities: t('dashboard.recentActivity'),
             tenants: t('dashboard.tenantCount'),
           }
           const failedSources = failedEntries.map((item) => sourceLabelMap[item.key] || item.key)

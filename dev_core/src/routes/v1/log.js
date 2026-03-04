@@ -14,6 +14,7 @@ const router = express.Router();
 // 导入模型和中间件
 const { Log, User, Tenant } = require('../../models');
 const { authenticateToken } = require('../../middlewares/auth');
+const ALLOWED_SYSTEM_LOG_ROLES = ['SYSTEM_ADMIN', 'OPS_ADMIN'];
 
 /**
  * @swagger
@@ -79,13 +80,11 @@ router.get('/', authenticateToken, validate(Joi.object({
       userId
     } = req.query;
     const { tenantId, role } = req.user;
-
-    const where = {};
-
-    // 超级管理员可以查看所有日志，其他用户只能查看本租户日志
-    if (role !== 'SUPER_ADMIN') {
-      where.tenantId = tenantId;
+    if (!ALLOWED_SYSTEM_LOG_ROLES.includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
     }
+
+    const where = { tenantId };
 
     if (level) where.level = level;
     if (action) where.action = action;
@@ -142,11 +141,11 @@ router.get('/', authenticateToken, validate(Joi.object({
 router.get('/stats', authenticateToken, async (req, res) => {
   try {
     const { tenantId, role } = req.user;
-
-    const where = {};
-    if (role !== 'SUPER_ADMIN') {
-      where.tenantId = tenantId;
+    if (!ALLOWED_SYSTEM_LOG_ROLES.includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
     }
+
+    const where = { tenantId };
 
     // 统计不同级别的日志数量
     const levelStats = await Log.findAll({
@@ -202,6 +201,49 @@ router.get('/stats', authenticateToken, async (req, res) => {
 
   } catch (error) {
     logger.error('Get log stats error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/logs/recent-activities:
+ *   get:
+ *     summary: 获取仪表盘最近活动
+ *     tags: [系统日志]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: 获取成功
+ */
+router.get('/recent-activities', authenticateToken, validate(Joi.object({
+  query: Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(5),
+  }),
+})), async (req, res) => {
+  try {
+    const { tenantId } = req.user;
+    if (!tenantId) {
+      return ApiResponse.success(res, { activities: [] });
+    }
+
+    const logs = await Log.findAll({
+      where: { tenantId },
+      attributes: ['id', 'message', 'action', 'createdAt'],
+      include: [{ model: User, as: 'user', attributes: ['id', 'username', 'fullName'] }],
+      order: [['createdAt', 'DESC']],
+      limit: Number(req.query.limit || 5),
+    });
+
+    return ApiResponse.success(res, { activities: logs });
+  } catch (error) {
+    logger.error('Get recent activities error', { error: error.message, requestId: req.requestId });
     return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
   }
 });

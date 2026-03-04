@@ -9,7 +9,7 @@ const ErrorCodes = require("../constants/errorCodes");
  * @param {string} projectId - 工程ID
  */
 async function checkProjectAccess(req, projectId) {
-  if (req.user.role === "SUPER_ADMIN" || req.user.role === "SYSTEM_ADMIN") {
+  if (req.user.role === "SYSTEM_ADMIN") {
     return;
   }
 

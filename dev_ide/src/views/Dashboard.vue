@@ -107,7 +107,7 @@
       ]">
         <div :class="[sidebarCollapsed ? 'p-1.5' : 'p-2', 'flex-1 overflow-y-auto']">
           <nav class="space-y-2">
-            <el-tooltip v-if="isSystemAdmin" :content="t('dashboard.title')" placement="right" :show-after="500"
+            <el-tooltip v-if="hasTabPermission('dashboard')" :content="t('dashboard.title')" placement="right" :show-after="500"
               :disabled="!sidebarCollapsed">
               <button @click="openTab('dashboard')" :class="[
                 'w-full h-11 flex items-center rounded-lg transition-colors',
@@ -138,7 +138,7 @@
               </button>
             </el-tooltip>
 
-            <el-tooltip v-if="isSuperAdmin" :content="t('dashboard.menuTenant')" placement="right" :show-after="500"
+            <el-tooltip v-if="hasTabPermission('tenant-management')" :content="t('dashboard.menuTenant')" placement="right" :show-after="500"
               :disabled="!sidebarCollapsed">
               <button @click="openTab('tenant-management')" :class="[
                 'w-full h-11 flex items-center rounded-lg transition-colors',
@@ -167,7 +167,7 @@
               </button>
             </el-tooltip>
 
-            <el-tooltip v-if="isSuperAdmin || isSystemAdmin || isUserAdmin" :content="t('dashboard.menuUser')"
+            <el-tooltip v-if="hasTabPermission('user-management')" :content="t('dashboard.menuUser')"
               placement="right" :show-after="500" :disabled="!sidebarCollapsed">
               <button @click="openTab('user-management')" :class="[
                 'w-full h-11 flex items-center rounded-lg transition-colors',
@@ -195,7 +195,7 @@
               </button>
             </el-tooltip>
 
-            <el-tooltip v-if="isSuperAdmin || isSystemAdmin || isProjectAdmin" :content="t('dashboard.menuProject')"
+            <el-tooltip v-if="hasTabPermission('project-management')" :content="t('dashboard.menuProject')"
               placement="right" :show-after="500" :disabled="!sidebarCollapsed">
               <button @click="openTab('project-management')" :class="[
                 'w-full h-11 flex items-center rounded-lg transition-colors',
@@ -225,7 +225,7 @@
               </button>
             </el-tooltip>
 
-            <el-tooltip v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin" :content="t('dashboard.menuOps')"
+            <el-tooltip v-if="hasTabPermission('ops-management')" :content="t('dashboard.menuOps')"
               placement="right" :show-after="500" :disabled="!sidebarCollapsed">
               <button @click="openTab('ops-management')" :class="[
                 'w-full h-11 flex items-center rounded-lg transition-colors',
@@ -256,7 +256,7 @@
               </button>
             </el-tooltip>
 
-            <el-tooltip v-if="isSuperAdmin || isSystemAdmin || isOpsAdmin" :content="t('dashboard.menuLogs')"
+            <el-tooltip v-if="hasTabPermission('system-logs')" :content="t('dashboard.menuLogs')"
               placement="right" :show-after="500" :disabled="!sidebarCollapsed">
               <button @click="openTab('system-logs')" :class="[
                 'w-full h-11 flex items-center rounded-lg transition-colors',
@@ -478,6 +478,7 @@ export default {
     const isSuperAdmin = computed(() => authStore.userInfo?.role === ROLES.SUPER_ADMIN)
     const isSystemAdmin = computed(() => authStore.userInfo?.role === ROLES.SYSTEM_ADMIN)
     const isOpsAdmin = computed(() => authStore.userInfo?.role === ROLES.OPS_ADMIN)
+    const canReceiveNodePendingAlerts = computed(() => isSystemAdmin.value || isOpsAdmin.value)
     const isProjectAdmin = computed(() => authStore.userInfo?.role === ROLES.PROJECT_ADMIN)
     const isUserAdmin = computed(() => authStore.userInfo?.role === ROLES.USER_ADMIN)
 
@@ -633,6 +634,7 @@ export default {
      * 打开运维待审核申请界面。
      */
     const openOpsPendingRequests = () => {
+      if (!canReceiveNodePendingAlerts.value) return
       openTab('ops-management')
       // 通过短时重试确保 OpsManagement 完成挂载后再打开弹窗。
       ;[80, 220, 420].forEach((delay) => {
@@ -675,7 +677,7 @@ export default {
      * 页面初始化时检查是否存在未处理的待审核申请，并主动提醒一次。
      */
     const notifyExistingPendingRequests = async () => {
-      if (!(isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value)) return
+      if (!canReceiveNodePendingAlerts.value) return
       try {
         const res = await request.get('/nodes', {
           params: {
@@ -702,7 +704,7 @@ export default {
      * 订阅运维事件并处理全局通知。
      */
     const setupOpsPendingSubscription = () => {
-      if (!(isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value)) return
+      if (!canReceiveNodePendingAlerts.value) return
       const tenantId = Storage.getTenantId()
       if (!tenantId) return
       const socket = initSocket(tenantId)
@@ -728,7 +730,7 @@ export default {
      * 兜底：轮询待审核申请数量，避免 WebSocket 异常时无法实时提示。
      */
     const startPendingPolling = async (reason = 'unknown') => {
-      if (!(isSuperAdmin.value || isSystemAdmin.value || isOpsAdmin.value)) return
+      if (!canReceiveNodePendingAlerts.value) return
       if (pendingPollingTimer.value) return
       console.warn(`[OpsPending][Polling] 已启用，原因: ${reason}`)
 
@@ -917,14 +919,8 @@ export default {
       // 优先恢复历史标签状态，未恢复成功时按角色打开默认标签
       const restored = restoreTabState()
       if (!restored) {
-        if (isSuperAdmin.value || isSystemAdmin.value) {
-          openTab('dashboard')
-        } else if (isUserAdmin.value) {
-          openTab('user-management')
-        } else if (isProjectAdmin.value) {
-          openTab('project-management')
-        } else if (isOpsAdmin.value) {
-          openTab('system-logs')
+        if (isSuperAdmin.value) {
+          openTab('tenant-management')
         } else {
           openTab('dashboard')
         }
@@ -1089,6 +1085,7 @@ export default {
       isOpsAdmin,
       isProjectAdmin,
       isUserAdmin,
+      hasTabPermission,
       isTabVisible,
       currentTenant,
       tenantLogoUrl,

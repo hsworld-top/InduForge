@@ -60,4 +60,14 @@ export const logAPI = {
   getLogStats(params = {}) {
     return request.get('/logs/stats', { params })
   },
+
+  /**
+   * 获取仪表盘最近活动（租户维度）
+   * @param {object} params - 查询参数
+   * @param {number} params.limit - 数量限制
+   * @returns {Promise} 最近活动
+   */
+  getRecentActivities(params = {}) {
+    return request.get('/logs/recent-activities', { params })
+  },
 }

@@ -1,8 +1,17 @@
-const { User, Tenant } = require('../models');
+const { User, Tenant, Project } = require('../models');
 const ApiResponse = require('../utils/response');
 const ErrorCodes = require('../constants/errorCodes');
 const AppError = require('../utils/AppError');
 const TokenManager = require('../utils/token');
+
+const ROLE_CAPABILITIES = {
+  SUPER_ADMIN: ['tenant:manage'],
+  SYSTEM_ADMIN: ['*'],
+  PROJECT_ADMIN: ['project:read', 'project:write', 'release:publish', 'deploy:execute', 'runtime:operate', 'node:read'],
+  OPS_ADMIN: ['project:read', 'release:publish', 'deploy:execute', 'runtime:operate', 'node:read', 'node:approve'],
+  USER_ADMIN: ['user:write'],
+  USER: ['project:read'],
+};
 
 // 验证JWT token中间件
 const authenticateToken = async (req, res, next) => {
@@ -111,17 +120,35 @@ const requireRole = (...allowedRoles) => {
       return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 401);
     }
 
-    // 超级管理员拥有所有权限
-    if (req.user.role === 'SUPER_ADMIN') {
-      return next();
-    }
-
     if (!allowedRoles.includes(req.user.role)) {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
       return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
     }
 
+    next();
+  };
+};
+
+const hasCapability = (userRole, capability) => {
+  if (!userRole || !capability) return false;
+  const caps = ROLE_CAPABILITIES[userRole] || [];
+  return caps.includes('*') || caps.includes(capability);
+};
+
+const requireCapability = (...capabilities) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      res.locals.language = req.language || 'zh-CN';
+      res.locals.requestId = req.requestId;
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 401);
+    }
+    const canPass = capabilities.some((cap) => hasCapability(req.user.role, cap));
+    if (!canPass) {
+      res.locals.language = req.language || 'zh-CN';
+      res.locals.requestId = req.requestId;
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+    }
     next();
   };
 };
@@ -174,12 +201,6 @@ const requireResourceOwnership = (resourceType) => {
         res.locals.language = req.language || 'zh-CN';
         res.locals.requestId = req.requestId;
         return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 404);
-      }
-
-      // 超级管理员可以访问所有资源
-      if (req.user.role === 'SUPER_ADMIN') {
-        req.resource = resource;
-        return next();
       }
 
       // 检查资源是否属于用户的租户
@@ -253,27 +274,46 @@ async function checkProjectAccess(req, projectId) {
     throw new AppError(ErrorCodes.AUTH_TOKEN_REQUIRED, 401);
   }
 
-  // 超级管理员和系统管理员拥有所有权限
-  if (req.user.role === "SUPER_ADMIN" || req.user.role === "SYSTEM_ADMIN") {
+  // 系统管理员拥有所有权限
+  if (req.user.role === "SYSTEM_ADMIN") {
     return true;
   }
 
-  // 其他角色检查所属租户和项目关联
-  const user = await User.findByPk(req.user.id);
-  const userProjects = await user.getProjects();
-  const hasAccess = userProjects.some((p) => p.id === projectId);
-
-  if (!hasAccess) {
-    throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-      message: "无权访问此工程",
+  // 其他角色：基于工程租户归属校验（兼容当前模型未定义 user.getProjects 的情况）。
+  const project = await Project.findByPk(projectId, {
+    attributes: ['id', 'tenantId'],
+  });
+  if (!project) {
+    throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+      message: "工程不存在",
     });
   }
+
+  if (project.tenantId === req.user.tenantId) {
+    return true;
+  }
+
+  // 兼容旧模型：若存在用户-工程关联方法，则作为补充判定。
+  const user = await User.findByPk(req.user.id);
+  if (user && typeof user.getProjects === 'function') {
+    const userProjects = await user.getProjects();
+    const hasAccess = userProjects.some((p) => p.id === projectId);
+    if (hasAccess) {
+      return true;
+    }
+  }
+
+  throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+    message: "无权访问此工程",
+  });
 }
 
 module.exports = {
   authenticateToken,
   authenticate: authenticateToken, // 别名，用于部分旧路由
   requireRole,
+  requireCapability,
+  hasCapability,
   requireTenantAccess,
   requireResourceOwnership,
   checkProjectAccess,

@@ -6,6 +6,7 @@ const dataQueryService = require("../../services/dataQueryService");
 const mqttConnectionController = require("../../controllers/mqttConnectionController");
 const mqttTagGroupController = require("../../controllers/mqttTagGroupController");
 const mqttTagController = require("../../controllers/mqttTagController");
+const { Project } = require("../../models");
 const AppError = require("../../utils/AppError");
 const ErrorCodes = require("../../constants/errorCodes");
 
@@ -14,12 +15,14 @@ const ErrorCodes = require("../../constants/errorCodes");
  * 检查用户是否有权限访问指定工程
  */
 async function ensureProjectAccess(req, projectId) {
-  if (req.user.role === "SUPER_ADMIN" || req.user.role === "SYSTEM_ADMIN") {
+  if (req.user.role === "SYSTEM_ADMIN") {
     return true;
   }
-  const userProjects = await req.user.getProjects();
-  const projectIds = userProjects.map((p) => p.id);
-  return projectIds.includes(projectId);
+  const project = await Project.findOne({
+    where: { id: projectId, tenantId: req.user.tenantId },
+    attributes: ["id"],
+  });
+  return !!project;
 }
 
 /**
