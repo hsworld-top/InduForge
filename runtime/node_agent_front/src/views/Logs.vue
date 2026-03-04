@@ -4,17 +4,17 @@
       <div class="toolbar-left">
         <el-button @click="$router.back()">
           <el-icon><ArrowLeft /></el-icon>
-          返回
+          {{ t('logs.back') }}
         </el-button>
       </div>
       <div class="toolbar-actions">
         <el-button @click="refreshLogs">
           <el-icon><Refresh /></el-icon>
-          刷新
+          {{ t('logs.refresh') }}
         </el-button>
         <el-button @click="downloadLogs">
           <el-icon><Download /></el-icon>
-          下载
+          {{ t('logs.download') }}
         </el-button>
       </div>
     </div>
@@ -22,8 +22,8 @@
     <!-- 日志控制 -->
     <el-card class="box-card">
       <div class="log-controls">
-        <el-select v-model="logLevel" placeholder="选择日志级别" style="width: 150px;">
-          <el-option label="全部" value="" />
+        <el-select v-model="logLevel" :placeholder="t('logs.levelPlaceholder')" style="width: 150px;">
+          <el-option :label="t('logs.all')" value="" />
           <el-option label="DEBUG" value="debug" />
           <el-option label="INFO" value="info" />
           <el-option label="WARN" value="warn" />
@@ -32,7 +32,7 @@
 
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索日志内容"
+          :placeholder="t('logs.search')"
           style="width: 300px; margin-left: 10px;"
           clearable
         >
@@ -43,7 +43,7 @@
 
         <el-switch
           v-model="autoRefresh"
-          active-text="自动刷新"
+          :active-text="t('logs.autoRefresh')"
           style="margin-left: 10px;"
         />
       </div>
@@ -53,7 +53,7 @@
     <el-card class="box-card log-content">
       <div v-loading="loading" class="log-viewer">
         <div v-if="filteredLogs.length === 0 && !loading" class="empty-state">
-          <el-empty description="暂无日志数据" />
+          <el-empty :description="t('logs.noData')" />
         </div>
         <div v-else class="log-list">
           <div
@@ -78,9 +78,11 @@ import { useRoute } from 'vue-router'
 import { useNodeStore } from '@/store/nodeStore'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Refresh, Download, Search } from '@element-plus/icons-vue'
+import { useI18nText } from '@/composables/useI18nText'
 
 const route = useRoute()
 const nodeStore = useNodeStore()
+const { locale, t } = useI18nText()
 
 const projectId = ref(route.params.projectId)
 const logs = ref([])
@@ -119,7 +121,7 @@ const loadLogs = async () => {
     logs.value = data || []
   } catch (error) {
     console.error('获取日志失败:', error)
-    ElMessage.error('获取日志失败')
+    ElMessage.error(t('logs.fetchFailed'))
   } finally {
     loading.value = false
   }
@@ -127,7 +129,7 @@ const loadLogs = async () => {
 
 const refreshLogs = async () => {
   await loadLogs()
-  ElMessage.success('日志刷新成功')
+  ElMessage.success(t('logs.refreshSuccess'))
 }
 
 const downloadLogs = () => {
@@ -145,12 +147,12 @@ const downloadLogs = () => {
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 
-  ElMessage.success('日志下载成功')
+  ElMessage.success(t('logs.downloadSuccess'))
 }
 
 const formatLogTime = (time) => {
   if (!time) return ''
-  return new Date(time).toLocaleString()
+  return new Date(time).toLocaleString(locale.value)
 }
 
 // 自动刷新
@@ -221,12 +223,13 @@ onUnmounted(() => {
 .log-viewer {
   height: 100%;
   overflow-y: auto;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
+  background-color: var(--log-viewer-bg);
+  color: var(--log-viewer-fg);
   font-family: 'Courier New', monospace;
   font-size: 13px;
   padding: 15px;
   border-radius: 4px;
+  border: 1px solid var(--border-subtle);
 }
 
 .log-list {
@@ -243,7 +246,7 @@ onUnmounted(() => {
 }
 
 .log-time {
-  color: #858585;
+  color: var(--log-time-fg);
   white-space: nowrap;
   min-width: 160px;
 }
@@ -260,19 +263,19 @@ onUnmounted(() => {
 }
 
 .log-debug .log-level {
-  color: #808080;
+  color: var(--log-level-debug);
 }
 
 .log-info .log-level {
-  color: #4fc3f7;
+  color: var(--log-level-info);
 }
 
 .log-warn .log-level {
-  color: #ffb74d;
+  color: var(--log-level-warn);
 }
 
 .log-error .log-level {
-  color: #f06292;
+  color: var(--log-level-error);
 }
 
 .empty-state {

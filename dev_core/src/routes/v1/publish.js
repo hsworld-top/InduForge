@@ -109,4 +109,26 @@ router.get("/deployment/:id/download", authenticate, async (req, res) => {
   }
 });
 
+/**
+ * @route DELETE /api/v1/publish/deployment/:id
+ * @desc 删除发布记录（仅未被节点部署引用的记录）
+ * @access 工程管理员
+ */
+router.delete("/deployment/:id", authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deployment = await publishService.getDeployment(id);
+    if (!deployment) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: "发布记录不存在" }, 404);
+    }
+    await checkProjectAccess(req, deployment.projectId);
+
+    const result = await publishService.deleteDeployment(id);
+    return ApiResponse.success(res, result);
+  } catch (error) {
+    console.error("删除发布记录失败:", error);
+    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+  }
+});
+
 module.exports = router;

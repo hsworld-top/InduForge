@@ -114,7 +114,10 @@
     <!-- 视图：节点大盘 -->
     <div v-if="activeView === 'dashboard'" class="flex-1 min-h-0 flex flex-col">
       <div class="flex-1 min-h-0 overflow-y-auto pb-6">
-      <div v-loading="nodeLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div
+        v-loading="nodeLoading"
+        :class="['grid grid-cols-1 md:grid-cols-2 gap-6', cardGridClass]"
+      >
         <el-card
           v-for="node in filteredNodeList"
           :key="node.id"
@@ -136,9 +139,7 @@
                 <el-button link><el-icon><MoreFilled /></el-icon></el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item @click="viewNodeDetail(node)">{{ t('opsManagement.detailInfo') }}</el-dropdown-item>
-                    <el-dropdown-item @click="restartNode(node)" :disabled="node.status !== 'online'">{{ t('opsManagement.restartAgent') }}</el-dropdown-item>
-                    <el-dropdown-item divided @click="deleteNode(node)" type="danger">{{ t('opsManagement.deleteRegistration') }}</el-dropdown-item>
+                    <el-dropdown-item @click="deleteNode(node)" type="danger">{{ t('opsManagement.deleteRegistration') }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -214,7 +215,7 @@
                       {{ getDeployDisplayLabel(deploy) }}
                     </el-tag>
                     <el-tag size="small" :type="deploy.mode === 'DEV' ? 'warning' : 'success'">
-                      {{ deploy.mode }}
+                      {{ getDeployModeLabel(deploy.mode) }}
                     </el-tag>
                     <el-dropdown trigger="hover">
                     <el-button link><el-icon size="small"><Tools /></el-icon></el-button>
@@ -293,19 +294,43 @@
                       {{ scope.row.runtimeMetrics?.concurrentUsers || 0 }}
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('opsManagement.actions')" width="150">
+                  <el-table-column :label="t('opsManagement.actions')" width="420">
                     <template #default="scope">
-                      <el-button link type="primary" size="small" @click="handleViewLog(scope.row)">{{ t('opsManagement.log') }}</el-button>
-                      <el-button
-                        v-if="isFailedDeploy(scope.row)"
-                        link
-                        type="danger"
-                        size="small"
-                        @click="openFailureDetail(scope.row)"
-                      >
-                        {{ t('opsManagement.failureDetail') }}
-                      </el-button>
-                      <el-button link type="warning" size="small" @click="handleStopProject(scope.row)">{{ t('opsManagement.stop') }}</el-button>
+                      <div class="flex flex-wrap gap-1">
+                        <el-button link type="success" size="small" @click="handleStartProject(scope.row)">
+                          {{ t('opsManagement.start') }}
+                        </el-button>
+                        <el-button link type="warning" size="small" @click="handleStopProject(scope.row)">
+                          {{ t('opsManagement.stop') }}
+                        </el-button>
+                        <el-button link type="primary" size="small" @click="handleRestartProject(scope.row)">
+                          {{ t('opsManagement.restart') }}
+                        </el-button>
+                        <el-button
+                          link
+                          type="primary"
+                          size="small"
+                          :disabled="scope.row.mode === 'DEV'"
+                          @click="handleRollback(scope.row)"
+                        >
+                          {{ t('opsManagement.rollback') }}
+                        </el-button>
+                        <el-button link type="primary" size="small" @click="handleViewLog(scope.row)">
+                          {{ t('opsManagement.viewLog') }}
+                        </el-button>
+                        <el-button
+                          v-if="isFailedDeploy(scope.row)"
+                          link
+                          type="danger"
+                          size="small"
+                          @click="openFailureDetail(scope.row)"
+                        >
+                          {{ t('opsManagement.failureDetail') }}
+                        </el-button>
+                        <el-button link type="danger" size="small" @click="handleUndeploy(scope.row)">
+                          {{ t('opsManagement.undeploy') }}
+                        </el-button>
+                      </div>
                     </template>
                   </el-table-column>
                 </el-table>
@@ -420,8 +445,8 @@
     </el-dialog>
 
     <!-- 弹窗：详细日志 -->
-    <el-dialog v-model="showLogDialog" :title="t('opsManagement.runtimeLogTitle', { name: currentDeployment?.project?.name || '' })" width="800px">
-      <div class="bg-black text-green-500 p-4 rounded-lg h-96 overflow-y-auto font-mono text-xs">
+    <el-dialog v-model="showLogDialog" :title="t('opsManagement.runtimeLogTitle', { name: currentDeployment?.project?.name || '' })" width="700px">
+      <div class="bg-black text-green-500 p-4 rounded-lg h-80 overflow-y-auto font-mono text-xs">
         <div v-for="(log, idx) in logContent" :key="idx" class="mb-1">
           <span class="text-gray-500">[{{ log.time }}]</span>
           <span class="ml-2">{{ log.message }}</span>
@@ -430,7 +455,7 @@
       </div>
       <div class="mt-4">
         <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">{{ t('opsManagement.commandTimeline') }}</div>
-        <el-table :data="commandTimeline" size="small" border>
+        <el-table :data="commandTimeline" size="small" border max-height="220">
           <el-table-column prop="type" :label="t('opsManagement.commandType')" width="120" />
           <el-table-column :label="t('opsManagement.status')" width="140">
             <template #default="scope">
@@ -448,6 +473,50 @@
           <el-table-column prop="lastError" :label="t('opsManagement.failureReason')" min-width="220" />
         </el-table>
       </div>
+    </el-dialog>
+
+    <el-dialog
+      v-model="showRollbackDialog"
+      :title="t('opsManagement.rollbackSelectTitle', { name: rollbackSourceDeploy?.project?.name || '-' })"
+      width="640px"
+      append-to-body
+    >
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mb-3"
+        :title="t('opsManagement.rollbackCurrentVersion', { version: rollbackSourceDeploy?.version || '-' })"
+      />
+      <el-select
+        v-model="rollbackTargetDeploymentId"
+        filterable
+        class="w-full"
+        :loading="rollbackDialogLoading"
+        :placeholder="t('opsManagement.rollbackSelectPlaceholder')"
+      >
+        <el-option
+          v-for="item in rollbackCandidateVersions"
+          :key="item.id"
+          :label="`v${item.version} · ${formatTime(item.createdAt)}`"
+          :value="item.id"
+        />
+      </el-select>
+      <div class="text-xs text-gray-500 mt-2">
+        {{ t('opsManagement.rollbackHint') }}
+      </div>
+
+      <template #footer>
+        <el-button @click="showRollbackDialog = false">{{ t('opsManagement.cancel') }}</el-button>
+        <el-button
+          type="primary"
+          :loading="rollbackSubmitLoading"
+          :disabled="!rollbackTargetDeploymentId"
+          @click="confirmRollback"
+        >
+          {{ t('opsManagement.rollbackExecute') }}
+        </el-button>
+      </template>
     </el-dialog>
 
     <el-drawer v-model="showFailureDrawer" :title="t('opsManagement.failureDrawerTitle', { name: failedDeployment?.project?.name || '-' })" size="520px">
@@ -516,6 +585,7 @@ const emit = defineEmits(['open-tab'])
 const authStore = useAuthStore()
 const { t } = useI18n()
 const currentUserRole = computed(() => authStore.userInfo?.role || Storage.getUserInfo()?.role || '')
+const OPS_VIEW_MODE_STORAGE_KEY = 'ops_management_view_mode'
 
 // 计算是否有审批权限
 const canApproveNode = computed(() => {
@@ -556,6 +626,12 @@ const commandTimeline = ref([])
 const showFailureDrawer = ref(false)
 const failedDeployment = ref(null)
 const failedDeployLogs = ref([])
+const showRollbackDialog = ref(false)
+const rollbackDialogLoading = ref(false)
+const rollbackSubmitLoading = ref(false)
+const rollbackSourceDeploy = ref(null)
+const rollbackTargetDeploymentId = ref('')
+const rollbackCandidateVersions = ref([])
 
 const deployStatusSummary = computed(() => {
   return buildDeployStatusSummary(filteredNodeList.value)
@@ -592,6 +668,13 @@ const filteredNodeList = computed(() => {
   return nodeList.value.filter((node) => getVisibleDeployments(node).length > 0)
 })
 
+const cardGridClass = computed(() => {
+  if (filteredNodeList.value.length > 0 && filteredNodeList.value.length < 4) {
+    return 'lg:grid-cols-2 xl:grid-cols-2'
+  }
+  return 'lg:grid-cols-3 xl:grid-cols-4'
+})
+
 // 获取节点数据
 const fetchNodes = async () => {
   nodeLoading.value = true
@@ -610,9 +693,14 @@ const fetchNodes = async () => {
       nodeList.value = res.data.items
       nodePagination.total = res.data.total
       approvedCount.value = res.data.total
-      // 刷新后保留仍存在的展开节点，避免展开态丢失
-      const currentNodeIdSet = new Set((res.data.items || []).map((item) => item.id))
-      expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) => currentNodeIdSet.has(id))
+      // 详细列表视图默认全展开；其他视图保持原展开态过滤。
+      const currentNodeIds = (res.data.items || []).map((item) => item.id)
+      if (activeView.value === 'list') {
+        expandedNodeRowKeys.value = currentNodeIds
+      } else {
+        const currentNodeIdSet = new Set(currentNodeIds)
+        expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) => currentNodeIdSet.has(id))
+      }
     }
   } catch (error) {
     console.error('获取节点失败:', error)
@@ -872,6 +960,12 @@ const isRuntimeActiveDeploy = (status) => {
   return ['pending', 'deploying', 'running'].includes(status)
 }
 
+const getDeployModeLabel = (mode) => {
+  if (mode === 'DEV') return t('projectManagement.modeDisplayDev')
+  if (mode === 'RELEASE') return t('projectManagement.modeDisplayRelease')
+  return mode || '-'
+}
+
 // 新增：重启工程
 const handleRestartProject = async (deploy) => {
   try {
@@ -888,27 +982,87 @@ const handleRestartProject = async (deploy) => {
   }
 }
 
-// 新增：回滚版本（仅RELEASE模式）
+/**
+ * 打开回滚弹窗并加载可回滚版本。
+ * @param {object} deploy - 当前部署对象
+ * @returns {Promise<void>}
+ */
 const handleRollback = async (deploy) => {
   if (deploy.mode === 'DEV') {
     return ElMessage.warning(t('opsManagement.rollbackUnsupported'))
   }
 
   try {
+    rollbackSourceDeploy.value = deploy
+    rollbackTargetDeploymentId.value = ''
+    rollbackCandidateVersions.value = []
+    showRollbackDialog.value = true
+    rollbackDialogLoading.value = true
+
+    const projectId = deploy?.projectId || deploy?.project?.id
+    if (!projectId) {
+      throw new Error(t('opsManagement.rollbackProjectMissing'))
+    }
+
+    const res = await request.get(`/publish/${projectId}/versions`, {
+      params: { page: 1, pageSize: 200 },
+    })
+    const payload = res?.data ?? res
+    const data = payload?.data || payload || {}
+    const allItems = Array.isArray(data.items) ? data.items : []
+    const candidates = allItems
+      .filter((item) => item?.mode === 'RELEASE')
+      .filter((item) => item?.status === 'success')
+      .filter((item) => item?.id !== deploy?.deploymentId)
+      .sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime())
+    rollbackCandidateVersions.value = candidates
+
+    if (candidates.length === 0) {
+      ElMessage.warning(t('opsManagement.rollbackNoCandidates'))
+    } else {
+      rollbackTargetDeploymentId.value = candidates[0].id
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || error.message || t('opsManagement.rollbackLoadFailed'))
+    showRollbackDialog.value = false
+  } finally {
+    rollbackDialogLoading.value = false
+  }
+}
+
+/**
+ * 执行回滚。
+ * @returns {Promise<void>}
+ */
+const confirmRollback = async () => {
+  const deploy = rollbackSourceDeploy.value
+  if (!deploy || !rollbackTargetDeploymentId.value) {
+    return ElMessage.warning(t('opsManagement.rollbackSelectRequired'))
+  }
+  if (!deploy.nodeId) {
+    return ElMessage.warning(t('opsManagement.rollbackNodeMissing'))
+  }
+
+  try {
     await ElMessageBox.confirm(
-      t('opsManagement.rollbackConfirm', { version: deploy.version }),
+      t('opsManagement.rollbackConfirmSelected'),
       t('opsManagement.rollbackConfirmTitle'),
       { type: 'warning' }
     )
 
-    await request.post(`/deployments/${deploy.deploymentId}/rollback`, {
-      nodeId: deploy.nodeId || nodeList.value.find(n => n.id === deploy.nodeId)?.id,
+    rollbackSubmitLoading.value = true
+    await request.post(`/deployments/${rollbackTargetDeploymentId.value}/rollback`, {
+      nodeId: deploy.nodeId,
     })
-
     ElMessage.success(t('opsManagement.rollbackCreated'))
-    fetchNodes()
+    showRollbackDialog.value = false
+    await fetchNodes()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error.response?.data?.message || t('opsManagement.rollbackFailed'))
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.message || t('opsManagement.rollbackFailed'))
+    }
+  } finally {
+    rollbackSubmitLoading.value = false
   }
 }
 
@@ -1017,6 +1171,17 @@ const setupRealtimeUpdates = () => {
   })
 }
 
+/**
+ * 初始化运维页面视图模式（持久化）。
+ * @returns {void}
+ */
+const initActiveViewMode = () => {
+  const storedMode = window.localStorage.getItem(OPS_VIEW_MODE_STORAGE_KEY)
+  if (storedMode === 'dashboard' || storedMode === 'list') {
+    activeView.value = storedMode
+  }
+}
+
 const handleSetProjectFilter = async (event) => {
   const projectName = event?.detail?.projectName || ''
   const projectId = event?.detail?.projectId || ''
@@ -1042,6 +1207,7 @@ const handleSetProjectFilter = async (event) => {
 
 // 挂载与卸载
 onMounted(async () => {
+  initActiveViewMode()
   await fetchNodes()
   fetchPendingList()
   updateCounts()
@@ -1087,6 +1253,18 @@ watch(
       nodePagination.page = 1
       fetchNodes()
     }, 800)
+  }
+)
+
+watch(
+  () => activeView.value,
+  (val) => {
+    if (val === 'dashboard' || val === 'list') {
+      window.localStorage.setItem(OPS_VIEW_MODE_STORAGE_KEY, val)
+      if (val === 'list') {
+        expandedNodeRowKeys.value = filteredNodeList.value.map((node) => node.id)
+      }
+    }
   }
 )
 </script>

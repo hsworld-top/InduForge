@@ -2,17 +2,17 @@
   <div class="projects">
     <el-card class="box-card panel-card">
       <template #header>
-        <span>运维中心绑定</span>
+        <span>{{ t('remote.bindTitle') }}</span>
       </template>
       <el-alert
         v-if="centerOffline"
         class="offline-alert"
         type="warning"
         :closable="false"
-        :title="centerStatusMessage || '运维中心暂时不可达，已保留本地绑定状态'"
+        :title="centerStatusMessage || t('remote.centerOfflineSaved')"
       />
       <el-form v-if="showBindForm" :model="centerForm" label-width="110px" class="center-form">
-        <el-form-item label="运维中心地址" required>
+        <el-form-item :label="t('remote.centerUrl')" required>
           <div class="address-row">
             <el-select v-model="centerForm.centerProtocol" style="width: 120px">
               <el-option label="http://" value="http" />
@@ -22,93 +22,93 @@
             <el-input v-model="centerForm.centerPort" placeholder="9099" style="width: 140px" />
           </div>
         </el-form-item>
-        <el-form-item label="租户代码">
-          <el-input v-model="centerForm.tenantCode" placeholder="default（可选）" />
+        <el-form-item :label="t('remote.tenantCode')">
+          <el-input v-model="centerForm.tenantCode" :placeholder="locale === 'en-US' ? 'default (optional)' : 'default（可选）'" />
         </el-form-item>
-        <el-form-item label="用户名" required>
+        <el-form-item :label="locale === 'en-US' ? 'Username' : '用户名'" required>
           <el-input v-model="centerForm.username" />
         </el-form-item>
-        <el-form-item label="密码" required>
+        <el-form-item :label="locale === 'en-US' ? 'Password' : '密码'" required>
           <el-input v-model="centerForm.password" type="password" show-password />
         </el-form-item>
-        <el-form-item label="节点名称" required>
+        <el-form-item :label="t('remote.nodeName')" required>
           <el-input v-model="centerForm.nodeName" />
         </el-form-item>
-        <el-form-item label="节点ID">
-          <el-input :model-value="machineId || '-'" readonly />
+        <el-form-item :label="t('remote.nodeId')">
+          <el-input :model-value="machineId || t('common.na')" readonly />
         </el-form-item>
-        <el-form-item label="节点描述">
+        <el-form-item :label="locale === 'en-US' ? 'Node Description' : '节点描述'">
           <el-input v-model="centerForm.nodeDescription" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
       <el-descriptions v-else :column="1" border>
-        <el-descriptions-item label="绑定状态">
-          <el-tag v-if="approvalPending" type="warning">审批中</el-tag>
-          <el-tag v-else type="success">已绑定</el-tag>
+        <el-descriptions-item :label="t('remote.bindTitle')">
+          <el-tag class="status-tag" v-if="approvalPending" type="warning">{{ t('remote.pendingApproval') }}</el-tag>
+          <el-tag class="status-tag" v-else type="success">{{ t('remote.bound') }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="中心连接状态">
-          <el-tag :type="centerOffline ? 'danger' : 'success'">
-            {{ centerOffline ? '离线' : '在线' }}
+        <el-descriptions-item :label="t('remote.centerStatus')">
+          <el-tag class="status-tag" :type="centerOffline ? 'danger' : 'success'">
+            {{ centerOffline ? t('remote.offline') : t('remote.online') }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="运维中心地址">
-          {{ bindingSnapshot.centerUrl || '-' }}
+        <el-descriptions-item :label="t('remote.centerUrl')">
+          {{ bindingSnapshot.centerUrl || t('common.na') }}
         </el-descriptions-item>
-        <el-descriptions-item label="租户代码">
-          {{ bindingSnapshot.tenantCode || '-' }}
+        <el-descriptions-item :label="t('remote.tenantCode')">
+          {{ bindingSnapshot.tenantCode || t('common.na') }}
         </el-descriptions-item>
-        <el-descriptions-item label="节点名称">
-          {{ bindingSnapshot.nodeName || '-' }}
+        <el-descriptions-item :label="t('remote.nodeName')">
+          {{ bindingSnapshot.nodeName || t('common.na') }}
         </el-descriptions-item>
-        <el-descriptions-item label="节点ID">
-          {{ machineId || '-' }}
+        <el-descriptions-item :label="t('remote.nodeId')">
+          {{ machineId || t('common.na') }}
         </el-descriptions-item>
       </el-descriptions>
       <div class="bind-actions">
-        <el-button v-if="showBindForm" type="primary" :loading="binding" @click="bindCenter">注册并绑定</el-button>
+        <el-button v-if="showBindForm" type="primary" :loading="binding" @click="bindCenter">{{ t('remote.bindSubmit') }}</el-button>
         <el-button v-else-if="approvalPending" type="primary" :loading="checkingApproval" @click="checkApproval">
-          刷新审批状态
+          {{ t('remote.refreshApproval') }}
         </el-button>
         <el-button v-if="centerOffline" @click="reconcileCenterBindingState">
-          重试连接
+          {{ t('remote.retry') }}
         </el-button>
       </div>
     </el-card>
 
     <el-card class="box-card panel-card">
       <template #header>
-        <span>中心托管工程状态</span>
+        <span>{{ t('remote.managedTitle') }}</span>
       </template>
       <el-table v-loading="nodeStore.loading" :data="onlineProjects" style="width: 100%">
-        <el-table-column prop="id" label="项目ID" min-width="170" />
-        <el-table-column label="来源" width="120">
+        <el-table-column prop="id" :label="t('local.projectId')" min-width="170" />
+        <el-table-column :label="t('remote.source')" width="120">
           <template #default>
-            <el-tag type="warning">中心托管</el-tag>
+            <el-tag class="status-tag" type="warning">{{ t('remote.centerManaged') }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="currentVersion" label="当前版本" width="120" />
-        <el-table-column label="状态" width="100">
+        <el-table-column prop="currentVersion" :label="t('local.version')" width="120" />
+        <el-table-column :label="t('local.status')" width="110">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">{{ row.status }}</el-tag>
+            <el-tag class="status-tag" :type="getStatusType(row.status)">{{ formatStatus(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="运行时状态" width="140">
-          <template #default="{ row }">{{ row.runtimeStatus?.state || 'stopped' }}</template>
+        <el-table-column :label="t('local.runtimeStatus')" width="140">
+          <template #default="{ row }">{{ formatStatus(row.runtimeStatus?.state || 'stopped') }}</template>
         </el-table-column>
-        <el-table-column label="PID" width="100">
-          <template #default="{ row }">{{ row.runtimeStatus?.pid || '-' }}</template>
+        <el-table-column :label="t('local.pid')" width="100">
+          <template #default="{ row }">{{ row.runtimeStatus?.pid || t('common.na') }}</template>
         </el-table-column>
-        <el-table-column label="最后启动" width="180">
+        <el-table-column :label="t('local.lastStartedAt')" width="180">
           <template #default="{ row }">{{ formatTime(row.lastStartedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" min-width="220" fixed="right">
+        <el-table-column :label="t('local.actions')" min-width="220" fixed="right">
           <template #default="{ row }">
-            <el-tag type="info">仅展示状态，请在运维中心操作</el-tag>
-            <el-button type="success" size="small" style="margin-left: 8px" @click="viewLogs(row.id)">日志</el-button>
+            <el-tag class="status-tag" type="info">{{ t('remote.statusOnly') }}</el-tag>
+            <el-button type="success" size="small" style="margin-left: 8px" @click="viewLogs(row.id)">{{ t('local.logs') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!onlineProjects.length && !nodeStore.loading" description="暂无中心托管工程" />
+      <el-empty v-if="!onlineProjects.length && !nodeStore.loading" :description="t('remote.noManagedProjects')" />
     </el-card>
   </div>
 </template>
@@ -120,9 +120,11 @@ import { ElMessage } from 'element-plus'
 import { useNodeStore } from '@/store/nodeStore'
 import { checkApprovalStatus, registerNodeWithToken } from '@/api/registerApi'
 import { nodeApi } from '@/api/nodeApi'
+import { useI18nText } from '@/composables/useI18nText'
 
 const router = useRouter()
 const nodeStore = useNodeStore()
+const { locale, t } = useI18nText()
 
 const binding = ref(false)
 const checkingApproval = ref(false)
@@ -337,7 +339,7 @@ const resetBindingState = async (silent = false) => {
   }
 
   if (!silent) {
-    ElMessage.warning('中心节点不存在或已被删除，已自动切换为未绑定状态')
+    ElMessage.warning(t('remote.centerNodeMissing'))
   }
 }
 
@@ -387,20 +389,20 @@ const reconcileCenterBindingState = async () => {
       return
     }
     centerOffline.value = true
-    centerStatusMessage.value = '运维中心暂时不可达，已保留当前绑定状态'
+    centerStatusMessage.value = t('remote.centerOfflineSavedCurrent')
   }
 }
 
 const bindCenter = async () => {
   if (!centerForm.username || !centerForm.password || !centerForm.nodeName) {
-    ElMessage.warning('请完整填写绑定信息')
+    ElMessage.warning(t('remote.fillRequired'))
     return
   }
   let centerUrl = ''
   try {
     centerUrl = buildCenterUrl()
   } catch (error) {
-    ElMessage.warning(error.message || '运维中心地址格式不正确')
+    ElMessage.warning(error.message || t('remote.centerUrlInvalid'))
     return
   }
 
@@ -441,20 +443,20 @@ const bindCenter = async () => {
       approvalPending.value = false
       bindingSnapshot.status = 'approved'
       saveSnapshot()
-      ElMessage.success('绑定成功')
+      ElMessage.success(t('remote.bindSuccess'))
       await nodeStore.fetchProjects()
     } else {
       approvalPending.value = true
       bindingSnapshot.status = 'pending'
       saveSnapshot()
-      ElMessage.success('注册已提交，请等待审批')
+      ElMessage.success(t('remote.registerSubmitted'))
     }
   } catch (error) {
     if (isDuplicateNodeNameError(error?.message)) {
-      ElMessage.error('节点名称已存在，请修改后重试')
+      ElMessage.error(t('remote.duplicateNodeName'))
       return
     }
-    ElMessage.error(error?.message || '绑定失败')
+    ElMessage.error(error?.message || t('remote.bindFailed'))
   } finally {
     binding.value = false
   }
@@ -483,7 +485,7 @@ const checkApproval = async (silent = false) => {
       bindingSnapshot.nodeId = pendingRegistration.nodeId
       saveSnapshot()
       if (!silent) {
-        ElMessage.success('审批通过，绑定完成')
+        ElMessage.success(t('remote.approvalDone'))
       }
       await nodeStore.fetchProjects()
     } else if (status === 'rejected') {
@@ -493,11 +495,11 @@ const checkApproval = async (silent = false) => {
       bindingSnapshot.nodeId = ''
       localStorage.removeItem(snapshotStorageKey)
       if (!silent) {
-        ElMessage.error('审批被拒绝，请重新申请')
+        ElMessage.error(t('remote.approvalRejected'))
       }
     } else {
       if (!silent) {
-        ElMessage.info('审批中')
+        ElMessage.info(t('remote.approvalPendingToast'))
       }
     }
   } catch (error) {
@@ -506,9 +508,9 @@ const checkApproval = async (silent = false) => {
       return
     }
     centerOffline.value = true
-    centerStatusMessage.value = '运维中心暂时不可达，请稍后重试'
+    centerStatusMessage.value = t('remote.centerOfflineSavedCurrent')
     if (!silent) {
-      ElMessage.error(error?.message || '查询审批失败')
+      ElMessage.error(error?.message || t('remote.queryApprovalFailed'))
     }
   } finally {
     checkingApproval.value = false
@@ -522,7 +524,8 @@ const getStatusType = (status) => {
   return map[status] || 'info'
 }
 
-const formatTime = (time) => (time ? new Date(time).toLocaleString() : '-')
+const formatStatus = (status) => t(`status.${status || 'unknown'}`)
+const formatTime = (time) => (time ? new Date(time).toLocaleString(locale.value) : t('common.na'))
 const pendingPollIntervalMs = 3000
 const boundPollIntervalMs = 15000
 

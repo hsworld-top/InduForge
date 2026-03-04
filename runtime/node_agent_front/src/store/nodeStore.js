@@ -8,10 +8,33 @@ export const useNodeStore = defineStore('node', () => {
   const projects = ref([])
   const loading = ref(false)
 
+  /**
+   * 获取当前语言。
+   * @returns {'zh-CN'|'en-US'}
+   */
+  const getLocale = () => (localStorage.getItem('node_agent_locale') === 'en-US' ? 'en-US' : 'zh-CN')
+
+  /**
+   * 返回中英文文案。
+   * @param {string} zh 中文文案
+   * @param {string} en 英文文案
+   * @returns {string}
+   */
+  const text = (zh, en) => (getLocale() === 'en-US' ? en : zh)
+
+  /**
+   * 统一错误文案。
+   * @param {unknown} error 错误对象
+   * @param {string} fallback 默认文案
+   * @returns {string}
+   */
   const getErrorMessage = (error, fallback) => {
     const code = error?.response?.data?.code
     if (code === 'PROJECT_MANAGED_BY_CENTER') {
-      return '该工程由运维中心托管，请在运维中心执行状态变更'
+      return text(
+        '该工程由运维中心托管，请在运维中心执行状态变更',
+        'This project is managed by the center. Please change its status in the center.',
+      )
     }
     return error?.response?.data?.error || fallback
   }
@@ -34,7 +57,7 @@ export const useNodeStore = defineStore('node', () => {
       projects.value = data
     } catch (error) {
       console.error('获取项目列表失败:', error)
-      ElMessage.error('获取项目列表失败')
+      ElMessage.error(text('获取项目列表失败', 'Failed to fetch project list'))
     } finally {
       loading.value = false
     }
@@ -44,12 +67,12 @@ export const useNodeStore = defineStore('node', () => {
   const deployProject = async (projectId, data) => {
     try {
       await nodeApi.deployProject(projectId, data)
-      ElMessage.success('部署成功')
+      ElMessage.success(text('部署成功', 'Deployment succeeded'))
       await fetchProjects()
       return true
     } catch (error) {
       console.error('部署失败:', error)
-      ElMessage.error(getErrorMessage(error, '部署失败'))
+      ElMessage.error(getErrorMessage(error, text('部署失败', 'Deployment failed')))
       return false
     }
   }
@@ -58,12 +81,12 @@ export const useNodeStore = defineStore('node', () => {
   const deployProjectByIfp = async (file, autoStart) => {
     try {
       await nodeApi.deployProjectByIfp(file, autoStart)
-      ElMessage.success('部署成功')
+      ElMessage.success(text('部署成功', 'Deployment succeeded'))
       await fetchProjects()
       return true
     } catch (error) {
       console.error('部署失败:', error)
-      ElMessage.error(getErrorMessage(error, '部署失败'))
+      ElMessage.error(getErrorMessage(error, text('部署失败', 'Deployment failed')))
       return false
     }
   }
@@ -72,12 +95,12 @@ export const useNodeStore = defineStore('node', () => {
   const startProject = async (projectId) => {
     try {
       await nodeApi.startProject(projectId)
-      ElMessage.success('启动成功')
+      ElMessage.success(text('启动成功', 'Start succeeded'))
       await fetchProjects()
       return true
     } catch (error) {
       console.error('启动失败:', error)
-      ElMessage.error(getErrorMessage(error, '启动失败'))
+      ElMessage.error(getErrorMessage(error, text('启动失败', 'Start failed')))
       return false
     }
   }
@@ -86,12 +109,12 @@ export const useNodeStore = defineStore('node', () => {
   const stopProject = async (projectId) => {
     try {
       await nodeApi.stopProject(projectId)
-      ElMessage.success('停止成功')
+      ElMessage.success(text('停止成功', 'Stop succeeded'))
       await fetchProjects()
       return true
     } catch (error) {
       console.error('停止失败:', error)
-      ElMessage.error(getErrorMessage(error, '停止失败'))
+      ElMessage.error(getErrorMessage(error, text('停止失败', 'Stop failed')))
       return false
     }
   }
@@ -100,12 +123,12 @@ export const useNodeStore = defineStore('node', () => {
   const restartProject = async (projectId) => {
     try {
       await nodeApi.restartProject(projectId)
-      ElMessage.success('重启成功')
+      ElMessage.success(text('重启成功', 'Restart succeeded'))
       await fetchProjects()
       return true
     } catch (error) {
       console.error('重启失败:', error)
-      ElMessage.error(getErrorMessage(error, '重启失败'))
+      ElMessage.error(getErrorMessage(error, text('重启失败', 'Restart failed')))
       return false
     }
   }
@@ -114,12 +137,12 @@ export const useNodeStore = defineStore('node', () => {
   const rollbackProject = async (projectId, version) => {
     try {
       await nodeApi.rollbackProject(projectId, version)
-      ElMessage.success('回滚成功')
+      ElMessage.success(text('回滚成功', 'Rollback succeeded'))
       await fetchProjects()
       return true
     } catch (error) {
       console.error('回滚失败:', error)
-      ElMessage.error(getErrorMessage(error, '回滚失败'))
+      ElMessage.error(getErrorMessage(error, text('回滚失败', 'Rollback failed')))
       return false
     }
   }

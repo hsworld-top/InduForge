@@ -13,6 +13,7 @@ const {
   DataConnection,
   DataQuery,
   Deployment,
+  NodeDeployment,
   User,
 } = require("../models");
 const { sequelize } = require("../config/database");
@@ -55,12 +56,24 @@ class PublishService {
       throw new Error(`工程 ${projectId} 不存在`);
     }
 
-    // 检查版本号是否已存在
+    // 检查版本号是否已存在（包含软删除记录，避免唯一索引冲突）。
     const existingVersion = await Deployment.findOne({
-      where: { projectId, version, deletedAt: null },
+      where: { projectId, version },
+      paranoid: false,
     });
     if (existingVersion) {
-      throw new Error(`版本 ${version} 已存在`);
+      if (existingVersion.deletedAt) {
+        // 软删除记录在唯一索引中仍占位。若无部署引用则物理删除以释放版本号。
+        const referencedCount = await NodeDeployment.count({
+          where: { deploymentId: existingVersion.id },
+        });
+        if (referencedCount > 0) {
+          throw new Error(`版本 ${version} 已存在且被部署引用，无法复用`);
+        }
+        await existingVersion.destroy({ force: true });
+      } else {
+        throw new Error(`版本 ${version} 已存在`);
+      }
     }
 
     // 创建发布记录
@@ -422,14 +435,25 @@ class PublishService {
       where: { projectId },
       include: [
         { model: User, as: "deployer", attributes: ["id", "username"] },
+        { model: NodeDeployment, as: "nodeDeployments", attributes: ["id"] },
       ],
       order: [["createdAt", "DESC"]],
       limit: pageSize,
       offset,
     });
 
+    const items = rows.map((item) => {
+      const json = item.toJSON();
+      const refs = Array.isArray(json.nodeDeployments) ? json.nodeDeployments.length : 0;
+      return {
+        ...json,
+        nodeDeploymentRefCount: refs,
+        canDelete: refs === 0,
+      };
+    });
+
     return {
-      items: rows,
+      items,
       total: count,
       page,
       pageSize,
@@ -453,6 +477,30 @@ class PublishService {
     }
 
     return filePath;
+  }
+
+  /**
+   * 删除发布记录（软删除）。
+   * 仅允许删除未被节点部署引用的发布版本，避免破坏历史关联关系。
+   * @param {string} deploymentId - 发布记录ID
+   * @returns {Promise<{deleted:boolean,id:string}>}
+   */
+  async deleteDeployment(deploymentId) {
+    const deployment = await Deployment.findByPk(deploymentId);
+    if (!deployment) {
+      throw new Error("发布记录不存在");
+    }
+
+    const referencedCount = await NodeDeployment.count({
+      where: { deploymentId },
+    });
+    if (referencedCount > 0) {
+      throw new Error("发布版本已被部署引用，无法删除");
+    }
+
+    // 发布版本号受唯一索引约束，删除时必须物理删除以释放版本号。
+    await deployment.destroy({ force: true });
+    return { deleted: true, id: deploymentId };
   }
 }
 

@@ -510,73 +510,69 @@ class DeploymentService {
       throw new Error("仅支持部署构建成功的发布版本");
     }
 
-    // 检查节点是否已有DEV模式部署
-    const existingDevDeployment = await NodeDeployment.findOne({
+    // 检查节点当前是否已有该工程部署记录（数据库层对 nodeId+projectId 做了唯一约束）
+    const existingDeployment = await NodeDeployment.findOne({
       where: {
         nodeId,
         projectId: deployment.projectId,
-        mode: "DEV",
         deletedAt: null,
       },
     });
 
-    if (existingDevDeployment) {
-      // 自动停止DEV实例
-      await existingDevDeployment.update({
-        status: "stopped",
-        stoppedAt: new Date(),
+    let nodeDeployment;
+    if (existingDeployment) {
+      const nextLog = [...(existingDeployment.deployLog || [])];
+      if (existingDeployment.mode === "DEV") {
+        nextLog.push({
+          time: new Date().toISOString(),
+          status: "stopped",
+          message: "切换到RELEASE模式，停止DEV实例",
+        });
+      }
+      nextLog.push({
+        time: new Date().toISOString(),
+        status: "pending",
+        message: "RELEASE模式部署任务已创建",
+      });
+
+      await existingDeployment.update({
+        deploymentId,
+        version: deployment.version,
+        mode: "RELEASE",
+        status: "pending",
+        runtimeConfig: { ...runtimeConfig, syncMode: "local_database" },
+        deployedBy,
+        stoppedAt: null,
+        errorMessage: null,
+        errorStack: null,
+        deployLog: nextLog.slice(-50),
+      });
+      nodeDeployment = existingDeployment;
+    } else {
+      // 清理软删除残留，避免唯一索引冲突后无法重新部署
+      await this.purgeSoftDeletedDeployments(nodeId, deployment.projectId);
+
+      // 创建新的RELEASE部署记录
+      const id = crypto.randomUUID();
+      nodeDeployment = await NodeDeployment.create({
+        id,
+        nodeId,
+        deploymentId,
+        projectId: deployment.projectId,
+        version: deployment.version,
+        mode: "RELEASE",
+        status: "pending",
+        runtimeConfig: { ...runtimeConfig, syncMode: "local_database" },
+        deployedBy,
         deployLog: [
-          ...(existingDevDeployment.deployLog || []),
           {
             time: new Date().toISOString(),
-            status: "stopped",
-            message: "切换到RELEASE模式，停止DEV实例",
+            status: "pending",
+            message: "RELEASE模式部署任务已创建",
           },
         ],
       });
     }
-
-    // 检查是否有其他RELEASE部署
-    const existingRelease = await NodeDeployment.findOne({
-      where: {
-        nodeId,
-        projectId: deployment.projectId,
-        mode: "RELEASE",
-        status: { [Op.in]: ["pending", "deploying", "running"] },
-        deletedAt: null,
-      },
-    });
-
-    if (existingRelease) {
-      await existingRelease.update({
-        status: "stopped",
-        stoppedAt: new Date(),
-      });
-    }
-
-    // 清理软删除残留，避免唯一索引冲突后无法重新部署
-    await this.purgeSoftDeletedDeployments(nodeId, deployment.projectId);
-
-    // 创建新的RELEASE部署记录
-    const id = crypto.randomUUID();
-    const nodeDeployment = await NodeDeployment.create({
-      id,
-      nodeId,
-      deploymentId,
-      projectId: deployment.projectId,
-      version: deployment.version,
-      mode: "RELEASE",
-      status: "pending",
-      runtimeConfig: { ...runtimeConfig, syncMode: "local_database" },
-      deployedBy,
-      deployLog: [
-        {
-          time: new Date().toISOString(),
-          status: "pending",
-          message: "RELEASE模式部署任务已创建",
-        },
-      ],
-    });
 
     await this.createDeployCommandRecord({
       tenantId: deployment.tenantId,
@@ -591,7 +587,7 @@ class DeploymentService {
       {
         currentProjectId: deployment.projectId,
         currentVersion: deployment.version,
-        currentDeploymentId: id,
+        currentDeploymentId: nodeDeployment.id,
       },
       { where: { id: nodeId } }
     );
@@ -625,7 +621,12 @@ class DeploymentService {
         }
         results.push({ nodeId, success: true, deploymentId: result.id });
       } catch (error) {
-        results.push({ nodeId, success: false, error: error.message });
+        const detail =
+          Array.isArray(error?.errors) && error.errors.length > 0
+            ? error.errors.map((item) => item.message).join("; ")
+            : "";
+        const errorMessage = detail ? `${error.message}: ${detail}` : error.message;
+        results.push({ nodeId, success: false, error: errorMessage });
       }
     }
 

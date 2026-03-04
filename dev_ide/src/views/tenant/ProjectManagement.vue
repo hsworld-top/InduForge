@@ -7,110 +7,84 @@
       </h1>
       <div class="flex items-center space-x-2">
         <!-- 视图切换 -->
-        <div
-          class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1"
-        >
-          <button
-            @click="viewMode = 'card'"
-            :class="[
-              'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
-              viewMode === 'card'
-                ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
-            ]"
-          >
-            <el-icon class="mr-1"><Grid /></el-icon>
+        <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+          <button @click="viewMode = 'card'" :class="[
+            'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
+            viewMode === 'card'
+              ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
+          ]">
+            <el-icon class="mr-1">
+              <Grid />
+            </el-icon>
             {{ t('projectManagement.cardView') }}
           </button>
-          <button
-            @click="viewMode = 'list'"
-            :class="[
-              'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
-              viewMode === 'list'
-                ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
-            ]"
-          >
-            <el-icon class="mr-1"><List /></el-icon>
+          <button @click="viewMode = 'list'" :class="[
+            'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
+            viewMode === 'list'
+              ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
+          ]">
+            <el-icon class="mr-1">
+              <List />
+            </el-icon>
             {{ t('projectManagement.listView') }}
           </button>
         </div>
 
         <!-- 添加工程按钮 -->
-        <el-button
-          v-if="canManageProjects"
-          type="primary"
-          @click="showCreateDialog = true"
-          size="small"
-          class="bg-blue-600 hover:bg-blue-700"
-        >
-          <el-icon class="mr-2"><Plus /></el-icon>
+        <el-button v-if="canManageProjects" type="primary" @click="showCreateDialog = true" size="small"
+          class="bg-blue-600 hover:bg-blue-700">
+          <el-icon class="mr-2">
+            <Plus />
+          </el-icon>
           {{ t('projectManagement.addProject') }}
         </el-button>
-        <el-button
-          v-if="canManageProjects"
-          type="default"
-          @click="handleImportProject"
-          size="small"
-        >
-          <el-icon class="mr-2"><Upload /></el-icon>
+        <el-button v-if="canManageProjects" type="default" @click="handleImportProject" size="small">
+          <el-icon class="mr-2">
+            <Upload />
+          </el-icon>
           {{ t('projectManagement.importProject') }}
         </el-button>
       </div>
     </div>
 
     <!-- 搜索和筛选栏 -->
-    <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6"
-    >
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
       <div class="flex items-center justify-between">
         <!-- 搜索表单 -->
         <div class="flex items-center space-x-3">
-          <el-input
-            v-model="searchForm.name"
-            :placeholder="t('projectManagement.searchPlaceholder')"
-            clearable
-            style="width: 200px"
-            @input="handleSearch"
-          />
+          <el-input v-model="searchForm.name" :placeholder="t('projectManagement.searchPlaceholder')" clearable
+            style="width: 200px" @input="handleSearch" />
           <el-button @click="resetSearch" type="default" size="small">
-            <el-icon><Refresh /></el-icon>
+            <el-icon>
+              <Refresh />
+            </el-icon>
           </el-button>
         </div>
 
         <!-- 操作按钮组 -->
         <div class="flex items-center space-x-3">
           <template v-if="selectionMode">
-            <el-button
-              type="success"
-              size="small"
-              @click="batchExportProjects"
-              :disabled="selectedProjects.length === 0"
-              :loading="batchOperationLoading"
-            >
-              <el-icon class="mr-1"><Download /></el-icon>
+            <el-button type="success" size="small" @click="batchExportProjects"
+              :disabled="selectedProjects.length === 0" :loading="batchOperationLoading">
+              <el-icon class="mr-1">
+                <Download />
+              </el-icon>
               {{ t('projectManagement.batchExport') }} ({{ selectedProjects.length }})
             </el-button>
-            <el-button
-              v-if="canManageProjects"
-              type="danger"
-              size="small"
-              @click="batchDeleteProjects"
-              :disabled="selectedProjects.length === 0"
-              :loading="batchOperationLoading"
-            >
-              <el-icon class="mr-1"><Delete /></el-icon>
+            <el-button v-if="canManageProjects" type="danger" size="small" @click="batchDeleteProjects"
+              :disabled="selectedProjects.length === 0" :loading="batchOperationLoading">
+              <el-icon class="mr-1">
+                <Delete />
+              </el-icon>
               {{ t('projectManagement.batchDelete') }} ({{ selectedProjects.length }})
             </el-button>
             <el-divider direction="vertical" />
           </template>
 
           <!-- 多选切换按钮 -->
-          <el-button
-            :type="selectionMode ? 'primary' : 'default'"
-            size="small"
-            @click="toggleSelectionMode"
-          >
+          <el-button :type="selectionMode ? 'primary' : 'default'" size="small" @click="toggleSelectionMode">
             <el-icon class="mr-1"><Select /></el-icon>
             {{ selectionMode ? t("projectManagement.cancelSelection") : t("projectManagement.multiSelect") }}
           </el-button>
@@ -119,47 +93,26 @@
     </div>
 
     <!-- 工程列表 -->
-    <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
-    >
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
       <!-- 卡片视图 -->
       <div v-if="viewMode === 'card'" class="p-6">
-        <div
-          v-if="projectList.length === 0 && !loading"
-          class="text-center py-12"
-        >
+        <div v-if="projectList.length === 0 && !loading" class="text-center py-12">
           <el-empty :description="t('projectManagement.emptyProjects')" />
         </div>
-        <div
-          v-else
-          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-        >
-          <div
-            v-for="project in projectList"
-            :key="project.id"
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div v-for="project in projectList" :key="project.id"
             class="project-card relative border border-gray-200 dark:border-gray-600 rounded-lg p-6 hover:shadow-lg transition-all duration-200 cursor-pointer"
             :class="{
               'ring-4 ring-blue-500': selectedProjects.includes(project.id),
               'opacity-60': selectionMode,
-            }"
-            :style="getProjectCardStyle(project)"
-            @click="handleCardClick(project)"
-          >
+            }" :style="getProjectCardStyle(project)" @click="handleCardClick(project)">
             <!-- 选择模式下的复选框 -->
-            <div
-              v-if="selectionMode"
-              class="absolute top-2 right-2 z-10"
-              @click.stop
-            >
-              <el-checkbox
-                :model-value="selectedProjects.includes(project.id)"
-                @change="(val) => toggleProjectSelection(project.id, val)"
-                size="large"
-                :style="{
+            <div v-if="selectionMode" class="absolute top-2 right-2 z-10" @click.stop>
+              <el-checkbox :model-value="selectedProjects.includes(project.id)"
+                @change="(val) => toggleProjectSelection(project.id, val)" size="large" :style="{
                   '--el-checkbox-checked-bg-color': '#10b981',
                   '--el-checkbox-checked-input-border-color': '#10b981',
-                }"
-              />
+                }" />
             </div>
 
             <!-- 卡片头部 -->
@@ -169,9 +122,7 @@
                   {{ project.name }}
                 </h3>
               </div>
-              <div
-                class="w-6 h-6 rounded-full border-2 border-white shadow-sm bg-white opacity-20"
-              ></div>
+              <div class="w-6 h-6 rounded-full border-2 border-white shadow-sm bg-white opacity-20"></div>
             </div>
 
             <!-- 工程描述 -->
@@ -183,17 +134,11 @@
             <div class="space-y-2 mb-4">
               <div class="flex justify-between text-sm">
                 <span class="text-white opacity-75">{{ t('projectManagement.creator') }}:</span>
-                <span class="text-white font-medium">{{
-                  project.creator?.fullName || t("projectManagement.unknown")
-                }}</span>
+                <span class="text-white font-medium">{{ getProjectCreatorDisplay(project) }}</span>
               </div>
               <div class="flex justify-between text-sm">
                 <span class="text-white opacity-75">{{ t('projectManagement.runtimeMode') }}:</span>
-                <el-tag
-                  :type="getProjectModeTagType(project)"
-                  size="small"
-                  effect="dark"
-                >
+                <el-tag :type="getProjectModeTagType(project)" size="small" effect="dark">
                   {{ getProjectModeDisplay(project) }}
                 </el-tag>
               </div>
@@ -201,37 +146,21 @@
 
             <!-- 操作按钮 -->
             <div class="flex justify-end space-x-2">
-              <el-button
-                v-if="canPerformOps"
-                type="primary"
-                size="small"
-                @click.stop="openDeployDialog(project)"
-              >
+              <el-button v-if="canPerformOps" type="primary" size="small" @click.stop="openDeployDialog(project)">
                 {{ t('projectManagement.publishAndDeploy') }}
               </el-button>
-              <el-button
-                v-if="canPerformOps && isProjectDeployed(project)"
-                type="info"
-                size="small"
-                @click.stop="openOpsManagement(project)"
-              >
+              <el-button v-if="canPerformOps && isProjectDeployed(project)" type="info" size="small"
+                @click.stop="openOpsManagement(project)">
                 {{ t('opsManagement.title') }}
               </el-button>
-              <el-button
-                v-if="canManageProjects"
-                type="success"
-                size="small"
-                @click.stop="handleExportProject(project)"
-              >
-                <el-icon class="mr-1"><Download /></el-icon>
+              <el-button v-if="canManageProjects" type="success" size="small"
+                @click.stop="handleExportProject(project)">
+                <el-icon class="mr-1">
+                  <Download />
+                </el-icon>
                 {{ t('projectManagement.export') }}
               </el-button>
-              <el-button
-                v-if="canManageProjects"
-                type="danger"
-                size="small"
-                @click.stop="deleteProject(project)"
-              >
+              <el-button v-if="canManageProjects" type="danger" size="small" @click.stop="deleteProject(project)">
                 {{ t('projectManagement.delete') }}
               </el-button>
             </div>
@@ -241,40 +170,30 @@
 
       <!-- 列表视图 -->
       <div v-else>
-        <el-table
-          :data="projectList"
-          v-loading="loading"
-          style="width: 100%"
-          :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
-          @selection-change="handleSelectionChange"
-        >
+        <el-table :data="projectList" v-loading="loading" style="width: 100%"
+          :header-cell-style="{ background: '#f9fafb', color: '#374151' }" @selection-change="handleSelectionChange">
           <!-- 选择列（仅在选择模式显示） -->
-          <el-table-column
-            v-if="selectionMode"
-            type="selection"
-            width="55"
-            fixed="left"
-          />
+          <el-table-column v-if="selectionMode" type="selection" width="55" fixed="left" />
           <el-table-column :label="t('projectManagement.color')" width="80">
             <template #default="scope">
-              <div
-                class="w-6 h-6 rounded-full border-2 border-white shadow-sm"
-                :style="{ backgroundColor: scope.row.colorTag || '#3b82f6' }"
-              ></div>
+              <div class="w-6 h-6 rounded-full border-2 border-white shadow-sm"
+                :style="{ backgroundColor: scope.row.colorTag || '#3b82f6' }"></div>
             </template>
           </el-table-column>
           <el-table-column prop="name" :label="t('projectManagement.projectName')" width="200">
             <template #default="scope">
-              <span
-                class="cursor-pointer text-blue-600 hover:text-blue-800 underline"
-                @click="handleProjectNameClick(scope.row)"
-              >
+              <span class="cursor-pointer text-blue-600 hover:text-blue-800 underline"
+                @click="handleProjectNameClick(scope.row)">
                 {{ scope.row.name }}
               </span>
             </template>
           </el-table-column>
           <el-table-column prop="description" :label="t('projectManagement.description')" width="200" />
-          <el-table-column prop="creator.fullName" :label="t('projectManagement.createdBy')" width="200" />
+          <el-table-column :label="t('projectManagement.createdBy')" width="200">
+            <template #default="scope">
+              {{ getProjectCreatorDisplay(scope.row) }}
+            </template>
+          </el-table-column>
           <el-table-column prop="createdAt" :label="t('projectManagement.createdAt')" width="200">
             <template #default="scope">
               {{ formatDateTime(scope.row.createdAt) }}
@@ -287,47 +206,25 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column
-            :label="t('projectManagement.actions')"
-            min-width="320"
-            fixed="right"
-            v-if="canManageProjects || canPerformOps"
-          >
+          <el-table-column :label="t('projectManagement.actions')" min-width="320" fixed="right"
+            v-if="canManageProjects || canPerformOps">
             <template #default="scope">
-              <el-button
-                v-if="canPerformOps"
-                type="primary"
-                size="small"
-                @click="openDeployDialog(scope.row)"
-                class="mr-2"
-              >
+              <el-button v-if="canPerformOps" type="primary" size="small" @click="openDeployDialog(scope.row)"
+                class="mr-2">
                 {{ t('projectManagement.publishAndDeploy') }}
               </el-button>
-              <el-button
-                v-if="canPerformOps && isProjectDeployed(scope.row)"
-                type="info"
-                size="small"
-                @click="openOpsManagement(scope.row)"
-                class="mr-2"
-              >
+              <el-button v-if="canPerformOps && isProjectDeployed(scope.row)" type="info" size="small"
+                @click="openOpsManagement(scope.row)" class="mr-2">
                 {{ t('opsManagement.title') }}
               </el-button>
-              <el-button
-                v-if="canManageProjects"
-                type="success"
-                size="small"
-                @click="handleExportProject(scope.row)"
-                class="mr-2"
-              >
-                <el-icon class="mr-1"><Download /></el-icon>
+              <el-button v-if="canManageProjects" type="success" size="small" @click="handleExportProject(scope.row)"
+                class="mr-2">
+                <el-icon class="mr-1">
+                  <Download />
+                </el-icon>
                 {{ t('projectManagement.export') }}
               </el-button>
-              <el-button
-                v-if="canManageProjects"
-                type="danger"
-                size="small"
-                @click="deleteProject(scope.row)"
-              >
+              <el-button v-if="canManageProjects" type="danger" size="small" @click="deleteProject(scope.row)">
                 {{ t('projectManagement.delete') }}
               </el-button>
             </template>
@@ -336,10 +233,8 @@
       </div>
 
       <!-- 分页 -->
-      <div
-        v-if="pagination.total > 0"
-        class="pagination-bar flex justify-between items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700"
-      >
+      <div v-if="pagination.total > 0"
+        class="pagination-bar flex justify-between items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
         <div class="text-xs text-gray-500 dark:text-gray-400">
           {{
             t('projectManagement.pageSummary', {
@@ -349,60 +244,29 @@
             })
           }}
         </div>
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.limit"
-          size="small"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
+        <el-pagination v-model:current-page="pagination.page" v-model:page-size="pagination.limit" size="small"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total" layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange" @current-change="handleCurrentChange" />
       </div>
     </div>
 
     <!-- 创建工程对话框 -->
-    <el-dialog
-      v-model="showCreateDialog"
-      :title="t('projectManagement.createDialog')"
-      width="600px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="createFormRef"
-        :model="createForm"
-        :rules="createFormRules"
-        label-width="100px"
-      >
+    <el-dialog v-model="showCreateDialog" :title="t('projectManagement.createDialog')" width="600px"
+      :close-on-click-modal="false">
+      <el-form ref="createFormRef" :model="createForm" :rules="createFormRules" label-width="100px">
         <el-form-item :label="t('projectManagement.projectName')" prop="name">
           <el-input v-model="createForm.name" :placeholder="t('projectManagement.inputProjectName')" />
         </el-form-item>
         <el-form-item :label="t('projectManagement.description')">
-          <el-input
-            v-model="createForm.description"
-            type="textarea"
-            :placeholder="t('projectManagement.inputProjectDescription')"
-            :rows="3"
-          />
+          <el-input v-model="createForm.description" type="textarea"
+            :placeholder="t('projectManagement.inputProjectDescription')" :rows="3" />
         </el-form-item>
         <el-form-item :label="t('projectManagement.colorTag')">
-          <el-select
-            v-model="createForm.colorTag"
-            :placeholder="t('projectManagement.selectColorTag')"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="color in colorTagOptions"
-              :key="color.value"
-              :label="color.label"
-              :value="color.value"
-            >
+          <el-select v-model="createForm.colorTag" :placeholder="t('projectManagement.selectColorTag')"
+            style="width: 100%">
+            <el-option v-for="color in colorTagOptions" :key="color.value" :label="color.label" :value="color.value">
               <div class="flex items-center">
-                <div
-                  class="w-4 h-4 rounded mr-2"
-                  :style="{ backgroundColor: color.value }"
-                ></div>
+                <div class="w-4 h-4 rounded mr-2" :style="{ backgroundColor: color.value }"></div>
                 {{ color.label }}
               </div>
             </el-option>
@@ -411,61 +275,35 @@
       </el-form>
       <template #footer>
         <el-button type="success" @click="importProject">
-          <el-icon class="mr-1"><Upload /></el-icon>
+          <el-icon class="mr-1">
+            <Upload />
+          </el-icon>
           {{ t('projectManagement.importAction') }}
         </el-button>
         <el-button @click="showCreateDialog = false">{{ t('projectManagement.cancel') }}</el-button>
-        <el-button
-          type="primary"
-          @click="handleCreateProject"
-          :loading="createLoading"
-        >
+        <el-button type="primary" @click="handleCreateProject" :loading="createLoading">
           {{ t('projectManagement.create') }}
         </el-button>
       </template>
     </el-dialog>
 
     <!-- 编辑工程对话框 -->
-    <el-dialog
-      v-model="showEditDialog"
-      :title="t('projectManagement.editDialog')"
-      width="600px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="editFormRef"
-        :model="editForm"
-        :rules="editFormRules"
-        label-width="100px"
-      >
+    <el-dialog v-model="showEditDialog" :title="t('projectManagement.editDialog')" width="600px"
+      :close-on-click-modal="false">
+      <el-form ref="editFormRef" :model="editForm" :rules="editFormRules" label-width="100px">
         <el-form-item :label="t('projectManagement.projectName')" prop="name">
           <el-input v-model="editForm.name" :placeholder="t('projectManagement.inputProjectName')" />
         </el-form-item>
         <el-form-item :label="t('projectManagement.description')">
-          <el-input
-            v-model="editForm.description"
-            type="textarea"
-            :placeholder="t('projectManagement.inputProjectDescription')"
-            :rows="3"
-          />
+          <el-input v-model="editForm.description" type="textarea"
+            :placeholder="t('projectManagement.inputProjectDescription')" :rows="3" />
         </el-form-item>
         <el-form-item :label="t('projectManagement.colorTag')">
-          <el-select
-            v-model="editForm.colorTag"
-            :placeholder="t('projectManagement.selectColorTag')"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="color in colorTagOptions"
-              :key="color.value"
-              :label="color.label"
-              :value="color.value"
-            >
+          <el-select v-model="editForm.colorTag" :placeholder="t('projectManagement.selectColorTag')"
+            style="width: 100%">
+            <el-option v-for="color in colorTagOptions" :key="color.value" :label="color.label" :value="color.value">
               <div class="flex items-center">
-                <div
-                  class="w-4 h-4 rounded mr-2"
-                  :style="{ backgroundColor: color.value }"
-                ></div>
+                <div class="w-4 h-4 rounded mr-2" :style="{ backgroundColor: color.value }"></div>
                 {{ color.label }}
               </div>
             </el-option>
@@ -474,89 +312,59 @@
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">{{ t('projectManagement.cancel') }}</el-button>
-        <el-button
-          type="primary"
-          @click="handleUpdateProject"
-          :loading="editLoading"
-        >
+        <el-button type="primary" @click="handleUpdateProject" :loading="editLoading">
           {{ t('projectManagement.save') }}
         </el-button>
       </template>
     </el-dialog>
 
     <!-- 运维操作对话框 -->
-    <el-dialog
-      v-model="showOperationDialog"
-      :title="t('projectManagement.operationDialog', { name: currentProject?.name || '' })"
-      width="400px"
-      :close-on-click-modal="false"
-    >
+    <el-dialog v-model="showOperationDialog"
+      :title="t('projectManagement.operationDialog', { name: currentProject?.name || '' })" width="400px"
+      :close-on-click-modal="false">
       <div class="space-y-3">
-        <el-button
-          type="success"
-          plain
-          block
-          @click="performOperation('start')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2"><VideoPlay /></el-icon>
+        <el-button type="success" plain block @click="performOperation('start')" :loading="operationLoading">
+          <el-icon class="mr-2">
+            <VideoPlay />
+          </el-icon>
           {{ t('projectManagement.startProject') }}
         </el-button>
-        <el-button
-          type="warning"
-          plain
-          block
-          @click="performOperation('stop')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2"><VideoPause /></el-icon>
+        <el-button type="warning" plain block @click="performOperation('stop')" :loading="operationLoading">
+          <el-icon class="mr-2">
+            <VideoPause />
+          </el-icon>
           {{ t('projectManagement.stopProject') }}
         </el-button>
-        <el-button
-          type="info"
-          plain
-          block
-          @click="performOperation('restart')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2"><RefreshRight /></el-icon>
+        <el-button type="info" plain block @click="performOperation('restart')" :loading="operationLoading">
+          <el-icon class="mr-2">
+            <RefreshRight />
+          </el-icon>
           {{ t('projectManagement.restartProject') }}
         </el-button>
-        <el-button
-          type="primary"
-          plain
-          block
-          @click="performOperation('deploy')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2"><Upload /></el-icon>
+        <el-button type="primary" plain block @click="performOperation('deploy')" :loading="operationLoading">
+          <el-icon class="mr-2">
+            <Upload />
+          </el-icon>
           {{ t('projectManagement.deployProject') }}
         </el-button>
-        <el-button
-          type="danger"
-          plain
-          block
-          @click="performOperation('backup')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2"><CopyDocument /></el-icon>
+        <el-button type="danger" plain block @click="performOperation('backup')" :loading="operationLoading">
+          <el-icon class="mr-2">
+            <CopyDocument />
+          </el-icon>
           {{ t('projectManagement.backupProject') }}
         </el-button>
       </div>
     </el-dialog>
 
     <!-- 部署对话框 -->
-    <el-dialog
-      v-model="showDeployDialog"
-      :title="t('projectManagement.deployDialog', { name: deployForm.project?.name || '' })"
-      width="600px"
-      :close-on-click-modal="false"
-    >
+    <el-dialog v-model="showDeployDialog"
+      :title="t('projectManagement.deployDialog', { name: deployForm.project?.name || '' })" width="min(860px, 92vw)"
+      :close-on-click-modal="false" :lock-scroll="true" append-to-body class="deploy-dialog">
       <!-- 当前模式显示 -->
       <div class="mb-4 p-3 bg-gray-100 dark:bg-gray-800 rounded">
         <span class="text-gray-600 dark:text-gray-400">{{ t('projectManagement.currentMode') }}</span>
         <el-tag :type="getModeTagType(deployForm.currentMode)">
-          {{ deployForm.currentMode || t('projectManagement.notDeployed') }}
+          {{ getModeDisplayLabel(deployForm.currentMode) }}
         </el-tag>
       </div>
 
@@ -564,67 +372,70 @@
       <el-form :model="deployForm" label-width="100px">
         <el-form-item :label="t('projectManagement.deployMode')">
           <el-radio-group v-model="deployForm.mode">
-            <el-radio value="RELEASE">{{ t('projectManagement.releaseModeDesc') }}</el-radio>
             <el-radio value="DEV">{{ t('projectManagement.devModeDesc') }}</el-radio>
+            <el-radio value="RELEASE">{{ t('projectManagement.releaseModeDesc') }}</el-radio>
           </el-radio-group>
         </el-form-item>
 
         <!-- RELEASE模式：选择版本 -->
         <template v-if="deployForm.mode === 'RELEASE'">
+          <el-form-item :label="t('projectManagement.currentVersion')">
+            <el-tag type="info">
+              {{ deployForm.currentVersion ? `v${deployForm.currentVersion}` : t('projectManagement.noReleaseVersion')
+              }}
+            </el-tag>
+          </el-form-item>
           <el-form-item :label="t('projectManagement.version')" required>
-            <el-select
-              v-model="deployForm.version"
-              :placeholder="t('projectManagement.selectOrInputVersion')"
-              filterable
-              allow-create
-              style="width: 100%"
-            >
-              <el-option
-                v-for="v in projectVersions"
-                :key="v.id"
-                :label="`v${v.version} - ${formatDateTime(v.createdAt)}`"
-                :value="v.version"
-              />
+            <el-select v-model="deployForm.version" :placeholder="t('projectManagement.selectVersion')" filterable
+              style="width: 100%">
+              <el-option v-for="v in releaseVersionOptions" :key="v.id || v.version" :label="v.isGenerated
+                ? `v${v.version}（${t('projectManagement.newVersion')}）`
+                : `v${v.version} - ${formatDateTime(v.createdAt)}`" :value="v.version" />
             </el-select>
+            <el-button class="ml-2" type="primary" plain :disabled="!canAddReleaseVersion"
+              @click="addReleaseVersionOption">
+              {{ t('projectManagement.addVersion') }}
+            </el-button>
+            <el-button class="ml-2" type="info" plain @click="openVersionManageDialog">
+              {{ t('projectManagement.versionManage') }}
+            </el-button>
             <div class="text-xs text-gray-500 mt-1">
-              {{ t('projectManagement.versionHelp') }}
+              {{ t('projectManagement.versionHelpAuto') }}
             </div>
           </el-form-item>
         </template>
 
         <!-- 选择节点 -->
         <el-form-item :label="t('projectManagement.targetNode')" required>
-          <el-checkbox-group v-model="deployForm.targetNodes">
-            <el-checkbox v-for="n in availableNodes" :key="n.id" :value="n.id">
-              {{ n.name }} ({{ n.ipAddress }})
-              <el-tag
-                v-if="getNodeMode(n.id) === 'DEV'"
-                type="warning"
-                size="small"
-                class="ml-1"
-              >
-                DEV
-              </el-tag>
-              <el-tag
-                v-if="getNodeMode(n.id) === 'RELEASE'"
-                type="success"
-                size="small"
-                class="ml-1"
-              >
-                RELEASE
-              </el-tag>
-            </el-checkbox>
-          </el-checkbox-group>
+          <div class="deploy-node-selector w-full">
+            <div class="deploy-node-toolbar">
+              <el-input v-model="nodeKeyword" clearable :placeholder="t('projectManagement.nodeSearchPlaceholder')"
+                class="deploy-node-search" />
+            </div>
+
+            <div class="deploy-node-list" role="radiogroup">
+              <button v-for="n in filteredAvailableNodes" :key="n.id" type="button"
+                :class="['deploy-node-item', { 'is-selected': selectedTargetNodeId === n.id }]"
+                @click="selectedTargetNodeId = n.id">
+                <span class="deploy-node-indicator" :class="{ selected: selectedTargetNodeId === n.id }" />
+                <div class="deploy-node-option">
+                  <div class="deploy-node-row">
+                    <span class="deploy-node-name">{{ n.name || '-' }}</span>
+                    <span class="deploy-node-ip">{{ n.ipAddress || '-' }}</span>
+                    <el-tag size="small" :type="getModeTagType(nodeModes[n.id])">
+                      {{ getModeDisplayLabel(nodeModes[n.id]) }}
+                    </el-tag>
+                  </div>
+                </div>
+              </button>
+              <el-empty v-if="filteredAvailableNodes.length === 0" :description="t('projectManagement.noMatchedNodes')"
+                :image-size="72" />
+            </div>
+          </div>
         </el-form-item>
 
         <!-- 部署说明 -->
-        <el-alert
-          v-if="deployForm.mode === 'RELEASE'"
-          type="warning"
-          :closable="false"
-          show-icon
-          class="mt-4"
-        >
+        <el-alert v-if="deployForm.mode === 'RELEASE'" type="warning" :closable="false" show-icon class="mt-4">
           <template #title>{{ t('projectManagement.releaseGuideTitle') }}</template>
           <ul class="text-sm mt-1">
             <li>{{ t('projectManagement.releaseGuide1') }}</li>
@@ -633,13 +444,7 @@
           </ul>
         </el-alert>
 
-        <el-alert
-          v-if="deployForm.mode === 'DEV'"
-          type="info"
-          :closable="false"
-          show-icon
-          class="mt-4"
-        >
+        <el-alert v-if="deployForm.mode === 'DEV'" type="info" :closable="false" show-icon class="mt-4">
           <template #title>{{ t('projectManagement.devGuideTitle') }}</template>
           <ul class="text-sm mt-1">
             <li>{{ t('projectManagement.devGuide1') }}</li>
@@ -651,25 +456,56 @@
 
       <template #footer>
         <el-button @click="showDeployDialog = false">{{ t('projectManagement.cancel') }}</el-button>
-        <el-button
-          type="primary"
-          @click="confirmDeploy"
-          :loading="deployLoading"
-        >
-          {{ deployForm.mode === "RELEASE" ? t('projectManagement.publishAndDeploy') : t('projectManagement.deployDevMode') }}
+        <el-button type="primary" @click="confirmDeploy" :loading="deployLoading">
+          {{ deployForm.mode === "RELEASE" ? t('projectManagement.publishAndDeploy') :
+            t('projectManagement.deployDevMode') }}
         </el-button>
       </template>
     </el-dialog>
 
+    <el-dialog v-model="showVersionManageDialog" :title="t('projectManagement.versionManageDialog')" width="760px"
+      append-to-body>
+      <el-table v-loading="versionManageLoading" :data="versionManageList" size="small" style="width: 100%">
+        <el-table-column prop="version" :label="t('projectManagement.version')" width="120">
+          <template #default="scope">
+            v{{ scope.row.version }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('projectManagement.versionStatus')" width="130">
+          <template #default="scope">
+            <el-tag size="small" :type="getVersionStatusTagType(scope.row.status)">
+              {{ getVersionStatusLabel(scope.row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('projectManagement.versionRefCount')" width="130">
+          <template #default="scope">
+            {{ scope.row.nodeDeploymentRefCount || 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('projectManagement.createdAt')" min-width="180">
+          <template #default="scope">
+            {{ formatDateTime(scope.row.createdAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('projectManagement.actions')" width="150" align="center">
+          <template #default="scope">
+            <el-button type="danger" text :disabled="!canDeleteVersion(scope.row)" @click="deleteVersion(scope.row)">
+              {{ t('projectManagement.deleteVersion') }}
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <template #footer>
+        <el-button @click="showVersionManageDialog = false">{{ t('projectManagement.close') }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 工程功能选择弹窗 -->
-    <el-dialog
-      v-model="projectDialogVisible"
+    <el-dialog v-model="projectDialogVisible"
       :title="`${t('projectManagement.chooseFeature')} - ${selectedProject?.name || t('projectManagement.unknownProject')}`"
-      width="600px"
-      center
-      :close-on-click-modal="false"
-      append-to-body
-    >
+      width="600px" center :close-on-click-modal="false" append-to-body>
       <div class="project-dialog-content">
         <!-- 工程信息展示 -->
         <div class="text-center mb-6">
@@ -683,32 +519,18 @@
           <!-- 设计中心卡片 -->
           <div
             class="function-card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-2 border-blue-200 dark:border-blue-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300 hover:scale-105"
-            @click="openDesignCenter(selectedProject)"
-          >
+            @click="openDesignCenter(selectedProject)">
             <div class="text-center">
               <!-- 图标 -->
-              <div
-                class="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-full mb-4"
-              >
-                <svg
-                  class="w-8 h-8 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"
-                  />
+              <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-full mb-4">
+                <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
                 </svg>
               </div>
 
               <!-- 标题 -->
-              <h4
-                class="text-xl font-semibold text-gray-900 dark:text-white mb-2"
-              >
+              <h4 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                 {{ t('projectManagement.designCenter') }}
               </h4>
 
@@ -718,47 +540,25 @@
               </p>
 
               <!-- 统计信息 -->
-              <div
-                class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400"
-              >
+              <div class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                 <span class="flex items-center">
-                  <svg
-                    class="w-4 h-4 mr-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
+                  <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   {{ t('projectManagement.pageCount', { count: selectedProject?.pageCount || 0 }) }}
                 </span>
                 <span class="flex items-center">
-                  <svg
-                    class="w-4 h-4 mr-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-9 0V1m10 3V1m0 3l1 1v16a2 2 0 01-2 2H6a2 2 0 01-2-2V5l1-1z"
-                    />
+                  <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-9 0V1m10 3V1m0 3l1 1v16a2 2 0 01-2 2H6a2 2 0 01-2-2V5l1-1z" />
                   </svg>
                   {{ t('projectManagement.componentCount', { count: selectedProject?.componentCount || 0 }) }}
                 </span>
               </div>
 
               <!-- 操作提示 -->
-              <div
-                class="mt-4 text-xs text-blue-600 dark:text-blue-400 font-medium"
-              >
+              <div class="mt-4 text-xs text-blue-600 dark:text-blue-400 font-medium">
                 {{ t('projectManagement.openDesignCenter') }}
               </div>
             </div>
@@ -767,32 +567,18 @@
           <!-- 数据中心卡片 -->
           <div
             class="function-card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-2 border-green-200 dark:border-green-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-green-300 dark:hover:border-green-600 transition-all duration-300 hover:scale-105"
-            @click="openDataCenter(selectedProject)"
-          >
+            @click="openDataCenter(selectedProject)">
             <div class="text-center">
               <!-- 图标 -->
-              <div
-                class="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4"
-              >
-                <svg
-                  class="w-8 h-8 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
-                  />
+              <div class="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4">
+                <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                 </svg>
               </div>
 
               <!-- 标题 -->
-              <h4
-                class="text-xl font-semibold text-gray-900 dark:text-white mb-2"
-              >
+              <h4 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                 {{ t('projectManagement.dataCenter') }}
               </h4>
 
@@ -802,47 +588,25 @@
               </p>
 
               <!-- 统计信息 -->
-              <div
-                class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400"
-              >
+              <div class="flex justify-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                 <span class="flex items-center">
-                  <svg
-                    class="w-4 h-4 mr-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4"
-                    />
+                  <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4" />
                   </svg>
                   {{ t('projectManagement.dataSourceCount', { count: selectedProject?.dataSourceCount || 0 }) }}
                 </span>
                 <span class="flex items-center">
-                  <svg
-                    class="w-4 h-4 mr-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-                    />
+                  <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                   </svg>
                   {{ t('projectManagement.scriptCount', { count: selectedProject?.scriptCount || 0 }) }}
                 </span>
               </div>
 
               <!-- 操作提示 -->
-              <div
-                class="mt-4 text-xs text-green-600 dark:text-green-400 font-medium"
-              >
+              <div class="mt-4 text-xs text-green-600 dark:text-green-400 font-medium">
                 {{ t('projectManagement.openDataCenter') }}
               </div>
             </div>
@@ -860,15 +624,13 @@
           </div>
           <div class="space-x-2">
             <el-button type="success" @click="exportProject(selectedProject)">
-              <el-icon class="mr-1"><Download /></el-icon>
+              <el-icon class="mr-1">
+                <Download />
+              </el-icon>
               {{ t('projectManagement.exportProject') }}
             </el-button>
             <el-button @click="projectDialogVisible = false">{{ t('projectManagement.cancel') }}</el-button>
-            <el-button
-              v-if="canManageProjects"
-              type="primary"
-              @click="editProject(selectedProject)"
-            >
+            <el-button v-if="canManageProjects" type="primary" @click="editProject(selectedProject)">
               {{ t('projectManagement.settings') }}
             </el-button>
           </div>
@@ -922,6 +684,7 @@ export default {
     const showEditDialog = ref(false);
     const showOperationDialog = ref(false);
     const showDeployDialog = ref(false);
+    const showVersionManageDialog = ref(false);
     const projectDialogVisible = ref(false);
 
     // 视图模式
@@ -938,17 +701,44 @@ export default {
 
     // 部署相关状态
     const deployLoading = ref(false);
+    const versionManageLoading = ref(false);
+    const versionManageList = ref([]);
     const deployForm = reactive({
       project: null,
       currentMode: null,
+      currentVersion: "",
       mode: "RELEASE",
       version: "",
       targetNodes: [],
     });
     const projectVersions = ref([]);
+    const allReleaseVersions = ref([]);
+    const generatedReleaseVersions = ref([]);
+    const releaseVersionOptions = computed(() => {
+      return [...generatedReleaseVersions.value, ...projectVersions.value];
+    });
+    const canAddReleaseVersion = computed(() => generatedReleaseVersions.value.length === 0);
     const availableNodes = ref([]);
     const nodeModes = reactive({}); // { nodeId: 'DEV' | 'RELEASE' | null }
     const projectDeployState = reactive({}); // { projectId: { deployed: boolean, mode: 'DEV'|'RELEASE'|null } }
+    const nodeKeyword = ref("");
+    const filteredAvailableNodes = computed(() => {
+      const keyword = nodeKeyword.value.trim().toLowerCase();
+      return availableNodes.value.filter((node) => {
+        if (!keyword) {
+          return true;
+        }
+        const nodeName = (node?.name || "").toLowerCase();
+        const nodeIp = (node?.ipAddress || "").toLowerCase();
+        return nodeName.includes(keyword) || nodeIp.includes(keyword);
+      });
+    });
+    const selectedTargetNodeId = computed({
+      get: () => deployForm.targetNodes[0] || null,
+      set: (nodeId) => {
+        deployForm.targetNodes = nodeId ? [nodeId] : [];
+      },
+    });
 
     // 工程列表和分页
     const projectList = ref([]);
@@ -1068,9 +858,9 @@ export default {
       const fullHex =
         normalized.length === 3
           ? normalized
-              .split("")
-              .map((c) => c + c)
-              .join("")
+            .split("")
+            .map((c) => c + c)
+            .join("")
           : normalized;
       const num = Number.parseInt(fullHex, 16);
       if (Number.isNaN(num)) return null;
@@ -1775,6 +1565,12 @@ export default {
       return "info";
     };
 
+    const getModeDisplayLabel = (mode) => {
+      if (mode === "DEV") return t("projectManagement.modeDisplayDev");
+      if (mode === "RELEASE") return t("projectManagement.modeDisplayRelease");
+      return t("projectManagement.notDeployed");
+    };
+
     // 获取工程运行模式显示
     const getProjectModeDisplay = (project) => {
       const mode = projectDeployState[project?.id]?.mode;
@@ -1787,6 +1583,163 @@ export default {
     const getProjectModeTagType = (project) => {
       const mode = projectDeployState[project?.id]?.mode || null;
       return getModeTagType(mode);
+    };
+
+    const addReleaseVersionOption = () => {
+      if (!canAddReleaseVersion.value) {
+        ElMessage.warning(t("projectManagement.onlyOneGeneratedVersion"));
+        return;
+      }
+      const existing = [
+        ...allReleaseVersions.value
+          .filter((item) => item?.status === "success")
+          .map((item) => item?.version)
+          .filter(Boolean),
+        ...generatedReleaseVersions.value.map((item) => item?.version).filter(Boolean),
+      ];
+      const parse = (version) => {
+        if (typeof version !== "string") return null;
+        const match = version.trim().match(/^(\d+)\.(\d+)$/);
+        if (!match) return null;
+        return { major: Number(match[1]), minor: Number(match[2]) };
+      };
+      const parsed = existing.map(parse).filter(Boolean);
+      let nextVersion = "0.0";
+      if (parsed.length > 0) {
+        parsed.sort((a, b) => {
+          if (a.major !== b.major) return b.major - a.major;
+          return b.minor - a.minor;
+        });
+        const latest = parsed[0];
+        let nextMajor = latest.major;
+        let nextMinor = latest.minor + 1;
+        if (nextMinor >= 10) {
+          nextMajor += 1;
+          nextMinor = 0;
+        }
+        nextVersion = `${nextMajor}.${nextMinor}`;
+      }
+      const option = {
+        id: `generated-${nextVersion}`,
+        version: nextVersion,
+        createdAt: null,
+        isGenerated: true,
+      };
+      generatedReleaseVersions.value.unshift(option);
+      deployForm.version = nextVersion;
+    };
+
+    /**
+     * 规范化版本号文本，避免空白字符导致匹配失败。
+     * @param {string} version - 原始版本号
+     * @returns {string}
+     */
+    const normalizeVersion = (version) =>
+      typeof version === "string" ? version.trim() : "";
+
+    /**
+     * 打开版本管理弹窗并拉取当前工程版本。
+     * @returns {Promise<void>}
+     */
+    const openVersionManageDialog = async () => {
+      if (!deployForm.project?.id) return;
+      showVersionManageDialog.value = true;
+      await fetchVersionManageList();
+    };
+
+    /**
+     * 获取版本管理列表。
+     * @returns {Promise<void>}
+     */
+    const fetchVersionManageList = async () => {
+      if (!deployForm.project?.id) return;
+      versionManageLoading.value = true;
+      try {
+        const res = await request.get(`/publish/${deployForm.project.id}/versions`, {
+          params: { page: 1, pageSize: 200 },
+        });
+        const payload = res?.data ?? res;
+        const data = payload?.data || payload || {};
+        const rawItems = data.items || [];
+        versionManageList.value = rawItems.filter(
+          (item) => item?.mode !== "DEV" && item?.version !== "__DEV__",
+        );
+      } catch (error) {
+        ElMessage.error(
+          getApiErrorMessage(error, t("projectManagement.versionManageLoadFailed")),
+        );
+      } finally {
+        versionManageLoading.value = false;
+      }
+    };
+
+    /**
+     * 判断版本是否允许删除。
+     * @param {object} versionItem - 版本条目
+     * @returns {boolean}
+     */
+    const canDeleteVersion = (versionItem) => {
+      if (!versionItem) return false;
+      if ((versionItem.nodeDeploymentRefCount || 0) > 0) return false;
+      return ["success", "failed"].includes(versionItem.status);
+    };
+
+    /**
+     * 获取版本状态标签类型。
+     * @param {string} status - 状态
+     * @returns {string}
+     */
+    const getVersionStatusTagType = (status) => {
+      if (status === "success") return "success";
+      if (status === "failed") return "danger";
+      if (status === "building") return "warning";
+      return "info";
+    };
+
+    /**
+     * 获取版本状态显示文本。
+     * @param {string} status - 状态
+     * @returns {string}
+     */
+    const getVersionStatusLabel = (status) => {
+      return t(`projectManagement.versionStatus_${status || "pending"}`);
+    };
+
+    /**
+     * 删除发布版本。
+     * @param {object} versionItem - 版本条目
+     * @returns {Promise<void>}
+     */
+    const deleteVersion = async (versionItem) => {
+      if (!canDeleteVersion(versionItem)) {
+        return ElMessage.warning(t("projectManagement.deleteVersionBlocked"));
+      }
+      try {
+        await ElMessageBox.confirm(
+          t("projectManagement.deleteVersionConfirm", { version: versionItem.version }),
+          t("projectManagement.deleteConfirmTitle"),
+          { type: "warning" },
+        );
+      } catch {
+        return;
+      }
+
+      try {
+        await request.delete(`/publish/deployment/${versionItem.id}`);
+        ElMessage.success(t("projectManagement.deleteVersionSuccess"));
+        await fetchVersionManageList();
+        await openDeployDialog(deployForm.project);
+      } catch (error) {
+        ElMessage.error(
+          getApiErrorMessage(error, t("projectManagement.deleteVersionFailed")),
+        );
+      }
+    };
+
+    // 创建者展示统一使用用户名，避免显示角色/姓名造成歧义。
+    const getProjectCreatorDisplay = (project) => {
+      const creator = project?.creator || {};
+      return creator.username || creator.fullName || t("projectManagement.unknown");
     };
 
     const scheduleDeployStateRefresh = () => {
@@ -1813,47 +1766,119 @@ export default {
     const openDeployDialog = async (project) => {
       deployForm.project = project;
       deployForm.currentMode = null;
+      deployForm.currentVersion = "";
       deployForm.mode = "RELEASE";
       deployForm.version = "";
       deployForm.targetNodes = [];
+      nodeKeyword.value = "";
+      generatedReleaseVersions.value = [];
+      // 切换工程时清空节点模式缓存，避免沿用上一次工程的模式。
+      Object.keys(nodeModes).forEach((nodeId) => {
+        delete nodeModes[nodeId];
+      });
 
       try {
-        // 获取可用节点列表
-        const nodesRes = await request.get("/nodes", {
-          params: { approvalStatus: "approved", status: "online" },
-        });
+        const [nodesRes, projectNodeDeployRes, versionsRes] = await Promise.all([
+          // 获取可用节点列表
+          request.get("/nodes", {
+            params: { approvalStatus: "approved", status: "online" },
+          }),
+          // 获取工程在节点上的部署关系（用于回填模式与已部署节点）
+          request.get(`/deployments/project/${project.id}/nodes`),
+          // 获取版本列表
+          request.get(`/publish/${project.id}/versions`),
+        ]);
+
         // 兼容不同的响应结构
         const nodesPayload = nodesRes?.data ?? nodesRes;
         const nodesData = nodesPayload?.data || nodesPayload || {};
         availableNodes.value = nodesData.items || nodesData || [];
 
-        // 并行获取每个节点的当前部署模式，避免串行请求导致弹窗打开慢。
-        await Promise.all(availableNodes.value.map(async (node) => {
-          try {
-            const modeRes = await request.get(
-              `/deployments/project/${project.id}/node/${node.id}/mode`,
-            );
-            const modePayload = modeRes?.data ?? modeRes;
-            nodeModes[node.id] = modePayload?.data?.mode || null;
-          } catch {
-            nodeModes[node.id] = null;
+        const projectNodeDeployPayload =
+          projectNodeDeployRes?.data ?? projectNodeDeployRes;
+        const projectNodeDeployData =
+          projectNodeDeployPayload?.data || projectNodeDeployPayload || [];
+        const projectNodeDeployments = Array.isArray(projectNodeDeployData)
+          ? projectNodeDeployData
+          : (projectNodeDeployData.items || []);
+
+        // 以工程当前部署关系作为模式来源，保证“已部署但未运行”也能正确回填。
+        const deployedModeByNodeId = {};
+        const deployedNodeIds = [];
+        projectNodeDeployments.forEach((item) => {
+          const nodeId = item?.nodeId || item?.node?.id;
+          if (!nodeId) return;
+          const mode = item?.mode || item?.deployment?.mode || null;
+          if (mode) {
+            deployedModeByNodeId[nodeId] = mode;
           }
-        }));
+          deployedNodeIds.push(nodeId);
+        });
+
+        // 回填在线节点的模式展示。
+        availableNodes.value.forEach((node) => {
+          nodeModes[node.id] = deployedModeByNodeId[node.id] || null;
+        });
+
+        // 仅默认勾选“当前在线且已部署”的节点。
+        const defaultSelectedNodes = availableNodes.value
+          .map((node) => node.id)
+          .filter((nodeId) => deployedNodeIds.includes(nodeId));
+        deployForm.targetNodes = defaultSelectedNodes.length > 0 ? [defaultSelectedNodes[0]] : [];
+
+        // 当前模式：优先使用已部署节点的模式。
+        const selectedModeSet = new Set(
+          deployForm.targetNodes
+            .map((nodeId) => nodeModes[nodeId])
+            .filter(Boolean),
+        );
+        if (selectedModeSet.size === 1) {
+          const [singleMode] = Array.from(selectedModeSet);
+          deployForm.currentMode = singleMode;
+          deployForm.mode = singleMode;
+        } else if (selectedModeSet.size > 1) {
+          deployForm.currentMode = Array.from(selectedModeSet)[0];
+          // 混合模式时默认保持 RELEASE，用户可手动切换并选择节点。
+          deployForm.mode = "RELEASE";
+        }
 
         // 获取版本列表
-        const versionsRes = await request.get(
-          `/publish/${project.id}/versions`,
-        );
         // 兼容不同的响应结构
         const versionsPayload = versionsRes?.data ?? versionsRes;
         const versionsData = versionsPayload?.data || versionsPayload || {};
         const allVersions = versionsData.items || versionsData || [];
-        // 仅保留构建成功的版本用于部署选择。
-        projectVersions.value = allVersions.filter((item) => item?.status === "success");
+        // 发布版本全量集合（仅生产模式，含非成功状态），用于“是否已存在版本号”判定。
+        allReleaseVersions.value = allVersions
+          .filter((item) => item?.mode !== "DEV" && item?.type !== "SOURCE")
+          .sort((a, b) => {
+            const aTime = new Date(a?.createdAt || 0).getTime();
+            const bTime = new Date(b?.createdAt || 0).getTime();
+            return bTime - aTime;
+          });
 
-        // 设置当前模式（如果有节点部署的话）
-        if (availableNodes.value.length > 0) {
-          deployForm.currentMode = nodeModes[availableNodes.value[0].id];
+        // 可部署版本：仅保留构建成功版本。
+        projectVersions.value = allReleaseVersions.value
+          .filter((item) => item?.status === "success")
+          .sort((a, b) => {
+            const aTime = new Date(a?.createdAt || 0).getTime();
+            const bTime = new Date(b?.createdAt || 0).getTime();
+            return bTime - aTime;
+          });
+
+        // 当前版本号：优先展示当前已部署的生产模式版本；否则展示最新生产版本。
+        const currentReleaseDeploy = projectNodeDeployments.find(
+          (item) =>
+            (item?.mode || item?.deployment?.mode) === "RELEASE" &&
+            (item?.version || item?.deployment?.version),
+        );
+        deployForm.currentVersion =
+          currentReleaseDeploy?.version ||
+          currentReleaseDeploy?.deployment?.version ||
+          "";
+
+        // 生产模式默认选中当前版本；没有则保持空，等待用户新增版本。
+        if (deployForm.mode === "RELEASE") {
+          deployForm.version = deployForm.currentVersion || "";
         }
 
         showDeployDialog.value = true;
@@ -1869,12 +1894,13 @@ export default {
     // 确认部署
     const confirmDeploy = async () => {
       const { project, mode, targetNodes, version } = deployForm;
+      const normalizedVersion = normalizeVersion(version);
 
-      if (targetNodes.length === 0) {
-        return ElMessage.warning(t("projectManagement.selectTargetNodes"));
+      if (targetNodes.length !== 1) {
+        return ElMessage.warning(t("projectManagement.selectSingleTargetNode"));
       }
 
-      if (mode === "RELEASE" && !version) {
+      if (mode === "RELEASE" && !normalizedVersion) {
         return ElMessage.warning(t("projectManagement.selectVersion"));
       }
 
@@ -1883,18 +1909,50 @@ export default {
         if (mode === "RELEASE") {
           // RELEASE模式：需要选择或创建版本
           let deploymentId;
+          let isNewlyPublishedVersion = false;
 
           // 检查是否选择已有版本
-          const existingVersion = projectVersions.value.find(
-            (v) => v.version === version,
+          const existingVersion = allReleaseVersions.value.find(
+            (v) => normalizeVersion(v?.version) === normalizedVersion,
           );
           if (existingVersion) {
-            deploymentId = existingVersion.id;
+            if (existingVersion.status === "success") {
+              deploymentId = existingVersion.id;
+            } else if (existingVersion.status === "failed") {
+              // 失败版本允许重试：先删除失败记录，再用相同版本重新发布。
+              await request.delete(`/publish/deployment/${existingVersion.id}`);
+              const retryPublishRes = await request.post(`/publish/${project.id}`, {
+                version: normalizedVersion,
+                name: `v${normalizedVersion}`,
+                description: t("projectManagement.publishByDeployDialog"),
+              });
+              const retryPublishPayload = retryPublishRes?.data ?? retryPublishRes;
+              if (retryPublishPayload?.success === false) {
+                throw new Error(
+                  retryPublishPayload?.message || t("projectManagement.publishFailed"),
+                );
+              }
+              deploymentId = retryPublishPayload?.data?.id || retryPublishPayload?.id;
+              if (!deploymentId) {
+                throw new Error(t("projectManagement.publishFailed"));
+              }
+              isNewlyPublishedVersion = true;
+              ElMessage.info(
+                t("projectManagement.versionRetryFromFailed", {
+                  version: normalizedVersion,
+                }),
+              );
+            } else {
+              // building/pending 状态不可重建，避免并发构建冲突。
+              return ElMessage.warning(
+                t("projectManagement.versionNotReady", { version: normalizedVersion }),
+              );
+            }
           } else {
             // 需要先发布新版本
             const publishRes = await request.post(`/publish/${project.id}`, {
-              version,
-              name: `v${version}`,
+              version: normalizedVersion,
+              name: `v${normalizedVersion}`,
               description: t("projectManagement.publishByDeployDialog"),
             });
             const publishPayload = publishRes?.data ?? publishRes;
@@ -1907,6 +1965,7 @@ export default {
             if (!deploymentId) {
               throw new Error(t("projectManagement.publishFailed"));
             }
+            isNewlyPublishedVersion = true;
           }
 
           // 检查是否有DEV实例需要停止
@@ -1936,6 +1995,19 @@ export default {
           }
           const { success: successCount = 0, failed: failCount = 0 } =
             deployPayload?.data?.summary || deployPayload?.summary || {};
+
+          // 若本次为“新建版本后立即部署”，且全部节点部署失败，则自动回滚该发布记录。
+          if (isNewlyPublishedVersion && successCount === 0 && failCount > 0) {
+            try {
+              await request.delete(`/publish/deployment/${deploymentId}`);
+              ElMessage.warning(t("projectManagement.deployFailedAndVersionRolledBack"));
+            } catch (cleanupError) {
+              console.warn("部署失败后回滚发布记录失败:", cleanupError);
+              ElMessage.warning(t("projectManagement.deployFailedVersionKept"));
+            }
+            return;
+          }
+
           if (failCount > 0) {
             ElMessage.warning(
               `${t("projectManagement.deploySuccess", { count: successCount })}，失败 ${failCount} 个节点`,
@@ -1953,6 +2025,15 @@ export default {
           if (releaseNodes.length > 0) {
             return ElMessage.warning(
               t("projectManagement.releaseConflict"),
+            );
+          }
+          // DEV模式幂等保护：所选节点已全部处于DEV时，不再重复下发部署。
+          const alreadyDevNodes = targetNodes.filter(
+            (n) => getNodeMode(n) === "DEV",
+          );
+          if (alreadyDevNodes.length === targetNodes.length) {
+            return ElMessage.warning(
+              t("projectManagement.devAlreadyDeployed"),
             );
           }
 
@@ -2024,6 +2105,7 @@ export default {
       showEditDialog,
       showOperationDialog,
       showDeployDialog,
+      showVersionManageDialog,
       projectDialogVisible,
 
       // 视图
@@ -2044,10 +2126,18 @@ export default {
 
       // 部署相关
       deployLoading,
+      versionManageLoading,
+      versionManageList,
       deployForm,
       projectVersions,
+      releaseVersionOptions,
+      canAddReleaseVersion,
+      addReleaseVersionOption,
       availableNodes,
       nodeModes,
+      nodeKeyword,
+      filteredAvailableNodes,
+      selectedTargetNodeId,
 
       // 表单
       createForm,
@@ -2088,15 +2178,22 @@ export default {
       isProjectDeployed,
       openOpsManagement,
       openDeployDialog,
+      openVersionManageDialog,
+      canDeleteVersion,
+      getVersionStatusTagType,
+      getVersionStatusLabel,
+      deleteVersion,
       exportProject,
       batchExportProjects,
       batchDeleteProjects,
       confirmDeploy,
       getNodeMode,
       getModeTagType,
+      getModeDisplayLabel,
       getProjectCardStyle,
       getProjectModeDisplay,
       getProjectModeTagType,
+      getProjectCreatorDisplay,
       formatDateTime,
       formatDate,
       formatCurrency,
@@ -2197,6 +2294,194 @@ html.dark :deep(.el-dialog__header),
   width: 100%;
 }
 
+.deploy-node-selector {
+  border: 1px solid #dfe6ef;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  width: 100%;
+}
+
+.deploy-node-toolbar {
+  display: flex;
+  margin-bottom: 8px;
+}
+
+.deploy-node-search {
+  width: 100%;
+}
+
+.deploy-node-list {
+  display: block;
+  width: 100%;
+  max-height: clamp(220px, 38vh, 360px);
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 6px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.deploy-node-item {
+  width: 100%;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  border: none;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.deploy-node-item:last-child {
+  margin-bottom: 0;
+}
+
+.deploy-node-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #93c5fd;
+  background: #ffffff;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.deploy-node-indicator.selected {
+  border-color: #3b82f6;
+}
+
+.deploy-node-indicator.selected::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+  transform: translate(-50%, -50%);
+}
+
+.deploy-node-option {
+  flex: 1;
+  width: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+
+.deploy-node-item:hover .deploy-node-option {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.deploy-node-item.is-selected .deploy-node-option {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.deploy-node-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 160px) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.deploy-node-name {
+  font-weight: 500;
+  color: #1f2937;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deploy-node-ip {
+  min-width: 96px;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+html.dark .deploy-node-selector,
+[data-theme='dark'] .deploy-node-selector {
+  border-color: #3b4454;
+  background: #1f2937;
+}
+
+html.dark .deploy-node-list,
+[data-theme='dark'] .deploy-node-list {
+  border-color: #374151;
+  background: #111827;
+}
+
+html.dark .deploy-node-item,
+[data-theme='dark'] .deploy-node-item {
+  background: transparent;
+}
+
+html.dark .deploy-node-option,
+[data-theme='dark'] .deploy-node-option {
+  border-color: #374151;
+  background: #111827;
+}
+
+html.dark .deploy-node-indicator,
+[data-theme='dark'] .deploy-node-indicator {
+  background: #111827;
+  border-color: #60a5fa;
+}
+
+html.dark .deploy-node-item:hover .deploy-node-option,
+[data-theme='dark'] .deploy-node-item:hover .deploy-node-option {
+  border-color: #60a5fa;
+  background: #1e293b;
+}
+
+html.dark .deploy-node-item.is-selected .deploy-node-option,
+[data-theme='dark'] .deploy-node-item.is-selected .deploy-node-option {
+  border-color: #60a5fa;
+  background: #1d4f91;
+}
+
+html.dark .deploy-node-name,
+[data-theme='dark'] .deploy-node-name {
+  color: #e5e7eb;
+}
+
+html.dark .deploy-node-ip,
+[data-theme='dark'] .deploy-node-ip {
+  color: #9ca3af;
+}
+
+:deep(.deploy-dialog .el-dialog) {
+  margin-top: 6vh !important;
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.deploy-dialog .el-dialog__body) {
+  overflow: hidden;
+}
+
+:deep(.deploy-dialog .el-overlay-dialog) {
+  overflow: hidden;
+}
+
 /* 视图切换按钮样式 */
 :deep(.el-button-group .el-button) {
   border-radius: 6px;
@@ -2217,6 +2502,21 @@ html.dark :deep(.el-dialog__header),
 @media (min-width: 1024px) {
   .grid-cols-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .deploy-node-toolbar {
+    flex-direction: column;
+  }
+
+  .deploy-node-list {
+    max-height: clamp(180px, 32vh, 260px);
+  }
+
+  .deploy-node-row {
+    grid-template-columns: minmax(0, 1fr) minmax(80px, 120px) auto;
+    gap: 8px;
   }
 }
 </style>

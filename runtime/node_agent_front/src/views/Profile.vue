@@ -435,11 +435,13 @@ onMounted(async () => {
 }
 
 .metadata {
-  background-color: #f5f7fa;
+  background-color: var(--metadata-bg);
+  color: var(--metadata-fg);
   padding: 10px;
   border-radius: 4px;
   font-size: 12px;
   max-height: 200px;
   overflow-y: auto;
+  border: 1px solid var(--border-subtle);
 }
 </style>

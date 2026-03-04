@@ -3,51 +3,51 @@
     <div class="toolbar">
       <el-button type="primary" @click="showDeployDialog = true">
         <el-icon><Plus /></el-icon>
-        部署本地工程
+        {{ t('local.deploy') }}
       </el-button>
     </div>
 
     <el-card class="box-card panel-card">
       <template #header>
-        <span>本地工程列表</span>
+        <span>{{ t('local.listTitle') }}</span>
       </template>
       <el-table v-loading="nodeStore.loading" :data="localProjects" style="width: 100%">
-        <el-table-column prop="id" label="项目ID" min-width="170" />
-        <el-table-column prop="currentVersion" label="当前版本" width="120" />
-        <el-table-column label="状态" width="100">
+        <el-table-column prop="id" :label="t('local.projectId')" min-width="170" />
+        <el-table-column prop="currentVersion" :label="t('local.version')" width="120" />
+        <el-table-column :label="t('local.status')" width="110">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">{{ row.status }}</el-tag>
+            <el-tag class="status-tag" :type="getStatusType(row.status)">{{ formatStatus(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="运行时状态" width="140">
-          <template #default="{ row }">{{ row.runtimeStatus?.state || 'stopped' }}</template>
+        <el-table-column :label="t('local.runtimeStatus')" width="140">
+          <template #default="{ row }">{{ formatStatus(row.runtimeStatus?.state || 'stopped') }}</template>
         </el-table-column>
-        <el-table-column label="PID" width="100">
-          <template #default="{ row }">{{ row.runtimeStatus?.pid || '-' }}</template>
+        <el-table-column :label="t('local.pid')" width="100">
+          <template #default="{ row }">{{ row.runtimeStatus?.pid || t('common.na') }}</template>
         </el-table-column>
-        <el-table-column label="最后启动" width="180">
+        <el-table-column :label="t('local.lastStartedAt')" width="180">
           <template #default="{ row }">{{ formatTime(row.lastStartedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" min-width="320" fixed="right">
+        <el-table-column :label="t('local.actions')" min-width="320" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status !== 'running'" type="primary" size="small" @click="startProject(row.id)">
-              启动
+              {{ t('local.start') }}
             </el-button>
-            <el-button v-else type="warning" size="small" @click="stopProject(row.id)">停止</el-button>
-            <el-button type="info" size="small" @click="restartProject(row.id)">重启</el-button>
-            <el-button type="success" size="small" @click="viewLogs(row.id)">日志</el-button>
+            <el-button v-else type="warning" size="small" @click="stopProject(row.id)">{{ t('local.stop') }}</el-button>
+            <el-button type="info" size="small" @click="restartProject(row.id)">{{ t('local.restart') }}</el-button>
+            <el-button type="success" size="small" @click="viewLogs(row.id)">{{ t('local.logs') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!localProjects.length && !nodeStore.loading" description="暂无本地工程" />
+      <el-empty v-if="!localProjects.length && !nodeStore.loading" :description="t('local.empty')" />
     </el-card>
 
-    <el-dialog v-model="showDeployDialog" title="部署本地工程" width="600px">
+    <el-dialog v-model="showDeployDialog" :title="t('local.deployDialogTitle')" width="600px">
       <el-form :model="deployForm" label-width="120px">
-        <el-form-item label="IFP文件" required>
+        <el-form-item :label="t('local.ifpFile')" required>
           <div class="ifp-picker">
-            <el-input :model-value="deployForm.ifpPackage || '未选择文件'" readonly />
-            <el-button @click="triggerFilePick">选择文件</el-button>
+            <el-input :model-value="deployForm.ifpPackage || t('local.fileNotSelected')" readonly />
+            <el-button @click="triggerFilePick">{{ t('local.selectFile') }}</el-button>
           </div>
           <input
             ref="ifpFileInput"
@@ -57,13 +57,13 @@
             @change="handleIfpFileChange"
           />
         </el-form-item>
-        <el-form-item label="自动启动">
+        <el-form-item :label="t('local.autoStart')">
           <el-switch v-model="deployForm.autoStart" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showDeployDialog = false">取消</el-button>
-        <el-button type="primary" :loading="deploying" @click="deployProject">部署</el-button>
+        <el-button @click="showDeployDialog = false">{{ t('local.cancel') }}</el-button>
+        <el-button type="primary" :loading="deploying" @click="deployProject">{{ t('local.confirmDeploy') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -75,9 +75,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useNodeStore } from '@/store/nodeStore'
+import { useI18nText } from '@/composables/useI18nText'
 
 const router = useRouter()
 const nodeStore = useNodeStore()
+const { locale, t } = useI18nText()
 
 const showDeployDialog = ref(false)
 const deploying = ref(false)
@@ -105,7 +107,7 @@ const handleIfpFileChange = (event) => {
 
   const lowerName = file.name.toLowerCase()
   if (!lowerName.endsWith('.ifp')) {
-    ElMessage.warning('仅支持选择 .ifp 文件')
+    ElMessage.warning(t('local.onlyIfp'))
     selectedIfpFile.value = null
     deployForm.ifpPackage = ''
     event.target.value = ''
@@ -118,7 +120,7 @@ const handleIfpFileChange = (event) => {
 
 const deployProject = async () => {
   if (!selectedIfpFile.value || !deployForm.ifpPackage) {
-    ElMessage.warning('请选择 IFP 文件')
+    ElMessage.warning(t('local.pleaseSelectIfp'))
     return
   }
   deploying.value = true
@@ -144,7 +146,8 @@ const getStatusType = (status) => {
   return map[status] || 'info'
 }
 
-const formatTime = (time) => (time ? new Date(time).toLocaleString() : '-')
+const formatStatus = (status) => t(`status.${status || 'unknown'}`)
+const formatTime = (time) => (time ? new Date(time).toLocaleString(locale.value) : t('common.na'))
 
 onMounted(async () => {
   await nodeStore.fetchProjects()
