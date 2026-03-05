@@ -39,6 +39,11 @@ func (s *LocalStore) ensureDir(path string) error {
 	return utils.EnsureDir(path)
 }
 
+// DataDir 返回数据目录路径。
+func (s *LocalStore) DataDir() string {
+	return s.dataDir
+}
+
 func (s *LocalStore) initSQLite() error {
 	if err := s.ensureDir(s.dataDir); err != nil {
 		return err

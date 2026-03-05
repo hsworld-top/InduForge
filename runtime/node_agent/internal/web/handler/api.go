@@ -38,11 +38,14 @@ type APIHandler struct {
 
 // NewAPIHandler 创建 API 处理器
 func NewAPIHandler(orch *orchestrator.Orchestrator, st *store.LocalStore) *APIHandler {
-	bootstrapStore, err := NewBootstrapStore("")
+	bootstrapDataDir := ""
+	if st != nil {
+		bootstrapDataDir = st.DataDir()
+	}
+	bootstrapStore, err := NewBootstrapStore(bootstrapDataDir)
 	if err != nil {
 		logger.GlobalLogger.Warn("初始化 bootstrap 状态存储失败，使用内存默认状态", "error", err)
 		bootstrapStore = &BootstrapStore{
-			filePath: defaultBootstrapStatePath,
 			state: BootstrapState{
 				Status: BootstrapUninitialized,
 			},

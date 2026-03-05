@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -21,6 +19,10 @@ func createTestHandler(t *testing.T) *APIHandler {
 	st := store.NewLocalStore(tmpDir)
 	t.Cleanup(func() { _ = st.Close() })
 	handler := NewAPIHandler(nil, st)
+	if handler.bootstrapStore != nil {
+		bootstrapStore := handler.bootstrapStore
+		t.Cleanup(func() { _ = bootstrapStore.Close() })
+	}
 	return handler
 }
 
@@ -227,13 +229,12 @@ func TestStartProject_CenterManagedForbidden(t *testing.T) {
 		Status:         "stopped",
 	})
 
-	// 创建 bootstrap ready，避免被初始化拦截
-	bootstrapPath := filepath.Join(tmpDir, "bootstrap.json")
-	_ = os.WriteFile(bootstrapPath, []byte(`{"status":"READY","updatedAt":"2026-01-01T00:00:00Z"}`), 0644)
-
 	handler := NewAPIHandler(nil, st)
+	if handler.bootstrapStore != nil {
+		bootstrapStore := handler.bootstrapStore
+		t.Cleanup(func() { _ = bootstrapStore.Close() })
+	}
 	handler.bootstrapStore = &BootstrapStore{
-		filePath: bootstrapPath,
 		state: BootstrapState{
 			Status: BootstrapReady,
 		},
@@ -263,6 +264,10 @@ func TestEnsureProjectMutable_CenterSourceAllowed(t *testing.T) {
 	})
 
 	handler := NewAPIHandler(nil, st)
+	if handler.bootstrapStore != nil {
+		bootstrapStore := handler.bootstrapStore
+		t.Cleanup(func() { _ = bootstrapStore.Close() })
+	}
 	req := httptest.NewRequest("POST", "/api/v1/projects/center-proj/start?controlSource=center", nil)
 
 	if err := handler.ensureProjectMutable(req, "center-proj"); err != nil {
