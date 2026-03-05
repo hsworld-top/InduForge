@@ -3,9 +3,14 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -185,7 +190,7 @@ func (h *APIHandler) handleCenterCommand(
 		if projectID == "" {
 			return fmt.Errorf("start 指令缺少 projectId")
 		}
-		if err := h.mockSetProjectStatus(projectID, "running"); err != nil {
+		if err := h.orchestrator.Start(ctx, projectID); err != nil {
 			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("启动失败: %v", err))
 		}
 		if nodeDeploymentID != "" {
@@ -196,7 +201,7 @@ func (h *APIHandler) handleCenterCommand(
 		if projectID == "" {
 			return fmt.Errorf("stop 指令缺少 projectId")
 		}
-		if err := h.mockSetProjectStatus(projectID, "stopped"); err != nil {
+		if err := h.orchestrator.Stop(ctx, projectID); err != nil {
 			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("停止失败: %v", err))
 		}
 		if nodeDeploymentID != "" {
@@ -207,7 +212,7 @@ func (h *APIHandler) handleCenterCommand(
 		if projectID == "" {
 			return fmt.Errorf("restart 指令缺少 projectId")
 		}
-		if err := h.mockSetProjectStatus(projectID, "running"); err != nil {
+		if err := h.orchestrator.Restart(ctx, projectID); err != nil {
 			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("重启失败: %v", err))
 		}
 		if nodeDeploymentID != "" {
@@ -215,20 +220,88 @@ func (h *APIHandler) handleCenterCommand(
 		}
 		return nil
 	case "deploy":
-		// 引擎未完成前，deploy 采用假部署：落盘项目元数据并置为 running。
 		if nodeDeploymentID == "" {
 			return fmt.Errorf("deploy 指令缺少 deploymentId")
 		}
 		if projectID == "" {
 			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", "deploy 指令缺少 projectId")
 		}
-		if err := h.mockDeployProject(projectID, payload); err != nil {
+		artifactURL := toString(payload["artifactUrl"])
+		artifactHash := strings.ToLower(strings.TrimSpace(toString(payload["artifactHash"])))
+		version := toString(payload["version"])
+		if version == "" {
+			version = "dev"
+		}
+		if artifactURL == "" {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", "deploy 指令缺少 artifactUrl")
+		}
+
+		if err := h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "deploying", "开始拉取目标版本包"); err != nil {
+			h.logger.Warn("回传 deploying 状态失败", "error", err)
+		}
+
+		localArtifactPath, actualHash, err := h.fetchCenterArtifact(ctx, projectID, version, artifactURL)
+		if err != nil {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("拉取目标版本包失败: %v", err))
+		}
+		h.logger.Info("目标版本包下载完成", "projectId", projectID, "version", version, "path", localArtifactPath, "sha256", actualHash)
+		if artifactHash != "" && actualHash != artifactHash {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("包完整性校验失败: expected=%s actual=%s", artifactHash, actualHash))
+		}
+
+		if err := h.executeCenterDeploy(ctx, projectID, version, localArtifactPath); err != nil {
 			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("部署后启动失败: %v", err))
 		}
 		return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "running", "部署指令执行完成")
+	case "rollback":
+		if nodeDeploymentID == "" {
+			return fmt.Errorf("rollback 指令缺少 deploymentId")
+		}
+		if projectID == "" {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", "rollback 指令缺少 projectId")
+		}
+		artifactURL := toString(payload["artifactUrl"])
+		artifactHash := strings.ToLower(strings.TrimSpace(toString(payload["artifactHash"])))
+		version := toString(payload["version"])
+		if version == "" {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", "rollback 指令缺少 version")
+		}
+		if artifactURL == "" {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", "rollback 指令缺少 artifactUrl")
+		}
+
+		if err := h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "rolling_back", "开始拉取回滚目标版本包"); err != nil {
+			h.logger.Warn("回传 rolling_back 状态失败", "error", err)
+		}
+
+		localArtifactPath, actualHash, err := h.fetchCenterArtifact(ctx, projectID, version, artifactURL)
+		if err != nil {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("拉取回滚目标版本包失败: %v", err))
+		}
+		h.logger.Info("回滚目标版本包下载完成", "projectId", projectID, "version", version, "path", localArtifactPath, "sha256", actualHash)
+		if artifactHash != "" && actualHash != artifactHash {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("包完整性校验失败: expected=%s actual=%s", artifactHash, actualHash))
+		}
+
+		if err := h.executeCenterDeploy(ctx, projectID, version, localArtifactPath); err != nil {
+			return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "error", fmt.Sprintf("回滚后启动失败: %v", err))
+		}
+		return h.reportDeploymentStatus(centerURL, nodeID, registrationToken, nodeDeploymentID, "running", "回滚指令执行完成")
 	default:
 		return fmt.Errorf("暂不支持的指令类型: %s", commandType)
 	}
+}
+
+// executeCenterDeploy 以中心托管来源执行部署并自动启动。
+func (h *APIHandler) executeCenterDeploy(ctx context.Context, projectID string, version string, localArtifactPath string) error {
+	req := types.DeployRequest{
+		ProjectID:  projectID,
+		Version:    version,
+		IFPPackage: localArtifactPath,
+		Source:     types.ProjectSourceCenter,
+		AutoStart:  true,
+	}
+	return h.orchestrator.Deploy(ctx, req)
 }
 
 // reportDeploymentStatus 向中心回传部署状态。
@@ -297,6 +370,65 @@ func toString(value interface{}) string {
 	return strings.TrimSpace(fmt.Sprintf("%v", value))
 }
 
+// fetchCenterArtifact 下载中心下发的部署包并返回本地路径与 SHA256。
+func (h *APIHandler) fetchCenterArtifact(ctx context.Context, projectID string, version string, artifactURL string) (string, string, error) {
+	parsedURL, err := url.Parse(strings.TrimSpace(artifactURL))
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return "", "", fmt.Errorf("artifactUrl 无效")
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return "", "", err
+	}
+
+	client := &http.Client{Timeout: 2 * time.Minute}
+	response, err := client.Do(request)
+	if err != nil {
+		return "", "", err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusBadRequest {
+		return "", "", fmt.Errorf("下载失败: status=%d", response.StatusCode)
+	}
+
+	baseDir := filepath.Join("data", "projects", projectID, "artifacts", version)
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		return "", "", err
+	}
+
+	ext := strings.ToLower(filepath.Ext(parsedURL.Path))
+	if ext == "" {
+		ext = ".ifp"
+	}
+	targetPath := filepath.Join(baseDir, "package"+ext)
+	tempPath := targetPath + ".download"
+
+	file, err := os.Create(tempPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	hasher := sha256.New()
+	writer := io.MultiWriter(file, hasher)
+	_, copyErr := io.Copy(writer, response.Body)
+	closeErr := file.Close()
+	if copyErr != nil {
+		_ = os.Remove(tempPath)
+		return "", "", copyErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(tempPath)
+		return "", "", closeErr
+	}
+	if err := os.Rename(tempPath, targetPath); err != nil {
+		_ = os.Remove(tempPath)
+		return "", "", err
+	}
+
+	return targetPath, fmt.Sprintf("%x", hasher.Sum(nil)), nil
+}
+
 func buildCenterCommandKey(commandType string, payload map[string]interface{}) string {
 	commandID := toString(payload["commandId"])
 	if commandID != "" {
@@ -310,52 +442,4 @@ func buildCenterCommandKey(commandType string, payload map[string]interface{}) s
 		return ""
 	}
 	return fmt.Sprintf("%s|%s|%s|%s", commandType, deploymentID, projectID, version)
-}
-
-// mockSetProjectStatus 假执行项目状态变更（引擎未就绪期间使用）。
-func (h *APIHandler) mockSetProjectStatus(projectID string, status string) error {
-	project, err := h.store.GetProject(projectID)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
-	project.Status = status
-	if status == "running" {
-		project.LastStartedAt = &now
-	}
-	return h.store.SaveProject(project)
-}
-
-// mockDeployProject 假部署：创建/更新项目元数据并标记为运行中。
-func (h *APIHandler) mockDeployProject(projectID string, payload map[string]interface{}) error {
-	version := toString(payload["version"])
-	if version == "" {
-		version = "dev"
-	}
-
-	project, err := h.store.GetProject(projectID)
-	if err != nil {
-		now := time.Now()
-		project = &types.ProjectInfo{
-			ID:             projectID,
-			Name:           projectID,
-			Source:         types.ProjectSourceCenter,
-			CurrentVersion: version,
-			Status:         "running",
-			DeployedAt:     &now,
-			LastStartedAt:  &now,
-		}
-		return h.store.SaveProject(project)
-	}
-
-	now := time.Now()
-	project.Source = types.ProjectSourceCenter
-	project.CurrentVersion = version
-	project.Status = "running"
-	if project.DeployedAt == nil {
-		project.DeployedAt = &now
-	}
-	project.LastStartedAt = &now
-	return h.store.SaveProject(project)
 }
