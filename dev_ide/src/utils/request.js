@@ -158,7 +158,11 @@ request.interceptors.response.use(
           }
         }
         case 403:
-          ElMessage.error('没有权限访问此资源')
+          // 默认不弹全局 403 提示，避免与业务层 catch 中的错误提示重复。
+          // 如需全局提示，可在请求配置中显式传 forcePermissionToast: true。
+          if (config?.forcePermissionToast && !config?.skipPermissionToast) {
+            ElMessage.error(data?.message || '没有权限访问此资源')
+          }
           break
         case 404:
           ElMessage.error('请求的资源不存在')

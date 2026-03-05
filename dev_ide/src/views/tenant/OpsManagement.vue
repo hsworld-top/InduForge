@@ -145,11 +145,7 @@
                 <el-button link><el-icon><MoreFilled /></el-icon></el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item
-                      v-if="canDeleteNodeRegistration"
-                      @click="deleteNode(node)"
-                      type="danger"
-                    >{{ t('opsManagement.deleteRegistration') }}</el-dropdown-item>
+                    <el-dropdown-item @click="deleteNode(node)" type="danger">{{ t('opsManagement.deleteRegistration') }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -601,9 +597,6 @@ const OPS_VIEW_MODE_STORAGE_KEY = 'ops_management_view_mode'
 const canApproveNode = computed(() => {
   return canApproveNodes(currentUserRole.value)
 })
-const canDeleteNodeRegistration = computed(() => {
-  return ['SYSTEM_ADMIN', 'OPS_ADMIN'].includes(currentUserRole.value)
-})
 
 // 状态与视图控制
 const activeView = ref('dashboard')
@@ -854,17 +847,13 @@ const viewNodeDetail = (node) => {
   )
 }
 const deleteNode = async (node) => {
-  if (!canDeleteNodeRegistration.value) {
-    ElMessage.warning(t('projectManagement.noPermission'))
-    return
-  }
   try {
     await ElMessageBox.confirm(
       t('opsManagement.nodeDeleteConfirm', { name: node.name }),
       t('opsManagement.warning'),
       { type: 'warning' }
     )
-    await request.delete(`/nodes/${node.id}`)
+    await request.delete(`/nodes/${node.id}`, { skipPermissionToast: true })
     ElMessage.success(t('opsManagement.nodeDeleted'))
     fetchNodes()
   } catch (error) {
