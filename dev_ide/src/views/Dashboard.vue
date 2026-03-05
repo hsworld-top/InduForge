@@ -101,7 +101,7 @@
     <div class="flex flex-1 overflow-hidden">
       <!-- 左侧菜单栏 -->
       <div v-if="!isTabMaximized" :class="[
-        'relative border-r transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col',
+        'sidebar-panel relative border-r transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] flex flex-col',
         isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200',
         sidebarCollapsed ? 'w-10' : 'w-40',
       ]">
@@ -290,7 +290,7 @@
           </nav>
         </div>
         <button @click="toggleSidebar" :class="[
-          'absolute z-30 top-1/2 -right-3 -translate-y-1/2 h-9 w-6 rounded-full border shadow-sm flex items-center justify-center transition-all duration-200',
+          'sidebar-toggle-button absolute z-30 top-1/2 -right-3 -translate-y-1/2 h-9 w-6 rounded-full border shadow-sm flex items-center justify-center transition-all duration-200',
           isDark
             ? 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 hover:border-gray-600'
             : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300',
@@ -1142,6 +1142,17 @@ export default {
   max-width: 0;
   opacity: 0;
   transform: translateX(-4px);
+}
+
+.sidebar-toggle-button {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebar-panel:hover .sidebar-toggle-button,
+.sidebar-panel:focus-within .sidebar-toggle-button {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* 标签页样式 */
