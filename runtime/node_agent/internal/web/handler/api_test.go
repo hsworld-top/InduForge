@@ -19,6 +19,7 @@ import (
 func createTestHandler(t *testing.T) *APIHandler {
 	tmpDir := t.TempDir()
 	st := store.NewLocalStore(tmpDir)
+	t.Cleanup(func() { _ = st.Close() })
 	handler := NewAPIHandler(nil, st)
 	return handler
 }
@@ -217,6 +218,7 @@ func TestLoggerNotNil(t *testing.T) {
 func TestStartProject_CenterManagedForbidden(t *testing.T) {
 	tmpDir := t.TempDir()
 	st := store.NewLocalStore(tmpDir)
+	t.Cleanup(func() { _ = st.Close() })
 	_ = st.SaveProject(&types.ProjectInfo{
 		ID:             "center-proj",
 		Name:           "center-proj",
@@ -251,6 +253,7 @@ func TestStartProject_CenterManagedForbidden(t *testing.T) {
 func TestEnsureProjectMutable_CenterSourceAllowed(t *testing.T) {
 	tmpDir := t.TempDir()
 	st := store.NewLocalStore(tmpDir)
+	t.Cleanup(func() { _ = st.Close() })
 	_ = st.SaveProject(&types.ProjectInfo{
 		ID:             "center-proj",
 		Name:           "center-proj",

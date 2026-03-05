@@ -36,10 +36,10 @@ func TestStateMachine_Current(t *testing.T) {
 // TestStateMachine_Transitions 测试有效状态转换
 func TestStateMachine_Transitions(t *testing.T) {
 	tests := []struct {
-		name         string
-		events       []Event
-		expectState  State
-		expectError  bool
+		name        string
+		events      []Event
+		expectState State
+		expectError bool
 	}{
 		{
 			name:        "部署事件: stopped -> deploying",
@@ -136,33 +136,33 @@ func TestStateMachine_Transitions(t *testing.T) {
 // TestStateMachine_InvalidTransitions 测试无效状态转换
 func TestStateMachine_InvalidTransitions(t *testing.T) {
 	tests := []struct {
-		name        string
-		initState   State
-		initEvents  []Event
+		name         string
+		initState    State
+		initEvents   []Event
 		invalidEvent Event
 	}{
 		{
-			name:       "从 stopped 状态无法健康检查",
-			initState:  StateStopped,
-			initEvents: []Event{},
+			name:         "从 stopped 状态无法健康检查",
+			initState:    StateStopped,
+			initEvents:   []Event{},
 			invalidEvent: EventHealthOK,
 		},
 		{
-			name:       "从 stopped 状态无法重启",
-			initState:  StateStopped,
-			initEvents: []Event{},
+			name:         "从 stopped 状态无法重启",
+			initState:    StateStopped,
+			initEvents:   []Event{},
 			invalidEvent: EventRestart,
 		},
 		{
-			name:       "从 error 状态无法启动",
-			initState:  StateStopped,
-			initEvents: []Event{EventDeploy, EventError},
+			name:         "从 error 状态无法启动",
+			initState:    StateStopped,
+			initEvents:   []Event{EventDeploy, EventError},
 			invalidEvent: EventStart,
 		},
 		{
-			name:       "从 error 状态无法部署",
-			initState:  StateStopped,
-			initEvents: []Event{EventDeploy, EventError},
+			name:         "从 error 状态无法部署",
+			initState:    StateStopped,
+			initEvents:   []Event{EventDeploy, EventError},
 			invalidEvent: EventDeploy,
 		},
 	}
@@ -232,6 +232,7 @@ func TestOrchestrator_New(t *testing.T) {
 	exec := &mockExecutorImpl{}
 	tempDir := t.TempDir()
 	realStore := store.NewLocalStore(filepath.Join(tempDir, "data"))
+	t.Cleanup(func() { _ = realStore.Close() })
 
 	orch := NewOrchestrator(exec, realStore)
 
@@ -257,6 +258,7 @@ func TestOrchestrator_GetStateMachine(t *testing.T) {
 	exec := &mockExecutorImpl{}
 	tempDir := t.TempDir()
 	realStore := store.NewLocalStore(filepath.Join(tempDir, "data"))
+	t.Cleanup(func() { _ = realStore.Close() })
 
 	orch := NewOrchestrator(exec, realStore)
 
@@ -366,6 +368,7 @@ func TestOrchestrator_HealthCheck(t *testing.T) {
 	exec := &mockExecutorImpl{}
 	tempDir := t.TempDir()
 	realStore := store.NewLocalStore(filepath.Join(tempDir, "data"))
+	t.Cleanup(func() { _ = realStore.Close() })
 
 	orch := NewOrchestrator(exec, realStore)
 
@@ -402,6 +405,7 @@ func TestOrchestrator_HealthCheckError(t *testing.T) {
 	exec := &mockExecutorWithError{returnError: true}
 	tempDir := t.TempDir()
 	realStore := store.NewLocalStore(filepath.Join(tempDir, "data"))
+	t.Cleanup(func() { _ = realStore.Close() })
 
 	orch := NewOrchestrator(exec, realStore)
 
@@ -416,7 +420,7 @@ func TestOrchestrator_HealthCheckError(t *testing.T) {
 func TestStateMachine_MultipleTransitions(t *testing.T) {
 	// 部署流程
 	tests := []struct {
-		events    []Event
+		events     []Event
 		finalState State
 	}{
 		{[]Event{EventDeploy}, StateDeploying},
