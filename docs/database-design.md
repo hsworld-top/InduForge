@@ -1,62 +1,171 @@
-# 数据库设计（概览）
+# 数据库设计
 
-本文档面向内部开发，提供 InduForge 主要业务表的高层结构与关系说明。
+## 1. 现有表结构分析
 
-> **详细设计**：完整的数据库 Schema 设计请参阅 [高层设计 - 数据库设计](./高层设计.md#9-数据库设计)。
+### 当前已实现核心实体
 
-## 核心实体
+- 平台域：`tenants`、`users`、`projects`、`logs`
+- 设计域：`design_pages`、`design_project_settings`、`design_assets`、`design_asset_folders`
+- 数据域：`data_connections`、`data_queries`、`data_points`、`data_mqtt_*`、`data_relational_configs`
+- 发布运维域：`deployments`、`nodes`、`node_deployments`、`node_commands`
 
-| 模块 | 主要表 | 说明 |
-| --- | --- | --- |
-| 租户与用户 | `tenants`, `users` | 多租户与用户体系 |
-| 工程 | `projects`, `project_members` | 工程元数据与成员 |
-| 日志 | `logs` | 系统日志 |
-| 字典 | `dictionaries`, `dictionary_items` | 数据字典 |
-| 设计器 | `design_pages`, `design_assets` | 页面树、资源管理 |
-| 数据中心 | `data_connections`, `data_points` | 连接主表、数据点 |
-| 关系库配置 | `data_relational_configs` | 数据库连接配置 |
-| MQTT 配置 | `data_mqtt_configs` | MQTT 连接配置 |
-| MQTT 订阅 | `data_mqtt_subscriptions` | 订阅主题 |
-| MQTT 变量组 | `data_mqtt_tag_groups` | Tag 分组 |
-| MQTT 变量 | `data_mqtt_tags` | Tag 定义与解析规则 |
-| 数据查询 | `data_queries`, `data_sql_configs` | 查询定义与 SQL 配置 |
-| 告警系统 | `alarm_rules`, `alarm_records` | 告警规则与记录 |
-| 发布部署 | `deployments`, `deployment_pages` | 发布版本与页面快照 |
+### 现状判断
 
-## 关键关系
+- 现有表覆盖面已经足够支撑本期，不建议大规模推翻。
+- 重点应放在字段语义补强和约束统一。
 
-```
-tenants ──1:N──> users
-tenants ──1:N──> projects
-projects ──1:N──> data_connections
-projects ──1:N──> design_pages
-projects ──1:N──> data_points
-projects ──1:N──> deployments
+## 2. 核心实体
 
-data_connections ──1:1──> data_relational_configs
-data_connections ──1:1──> data_mqtt_configs
-data_connections ──1:N──> data_mqtt_subscriptions
-data_mqtt_subscriptions ──1:N──> data_mqtt_tags
-data_mqtt_tag_groups ──1:N──> data_mqtt_tags
+### 工程实体
 
-data_queries ──1:N──> data_query_logs
-deployments ──1:N──> deployment_pages
-```
+- 工程 `projects`
+- 页面 `design_pages`
+- 工程设置 `design_project_settings`
 
-## 设计要点
+### 数据实体
 
-- `data_connections.type` 使用 `relational|mqtt|websocket|opcua|modbus|http|s7`
-- `data_connections.category` 用于区分数据库/消息/协议/API
-- MQTT 变量值不落库，实时值通过 Redis + Socket.IO 推送
-- `data_points` 作为统一抽象层，支持 `status: active/invalid`
-- `design_pages` 支持多端视图（`logicalId`, `target`, `isDefaultTarget`）
+- 连接 `data_connections`
+- 查询 `data_queries`
+- 数据点 `data_points`
 
-## 相关文档
+### 运维实体
 
-- [高层设计 - 数据库设计](./高层设计.md#9-数据库设计) - 完整表结构
-- [init.sql](../dev_core/database/init.sql) - 数据库初始化脚本
+- 发布版本 `deployments`
+- 节点 `nodes`
+- 节点部署 `node_deployments`
+- 节点命令 `node_commands`
 
----
+## 3. 表设计建议
 
-**版本**: 3.0.0  
-**最后更新**: 2026-01
+### 3.1 `projects`
+
+建议继续作为工程主表，保留：
+
+- 名称、描述、颜色标签
+- 租户归属
+- 创建人/更新时间
+- 工程级变量入口
+
+建议明确：
+
+- `entryConfig` 的结构边界
+- 导入导出时的来源版本追踪
+
+### 3.2 `design_pages`
+
+建议继续作为页面树主表，保留：
+
+- 页面层级
+- 页面类型
+- 页面排序
+- 页面 Schema 内容
+
+建议补强：
+
+- `schemaVersion`
+- 页面根节点与入口一致性校验
+- 页面锁辅助字段和超时策略说明
+
+### 3.3 `design_project_settings`
+
+建议作为工程级设置聚合表，统一承载：
+
+- 全局变量
+- 全局脚本
+- 国际化资源
+- 主题配置
+- 工程入口相关元数据
+
+### 3.4 `data_points`
+
+建议明确字段：
+
+- `sourceType`
+- `sourceId`
+- `path`
+- `status`
+- `dataType`
+- `lastSeenAt`
+
+索引建议：
+
+- `(projectId, path)` 唯一或半唯一约束
+- `(projectId, status)` 普通索引
+- `(projectId, sourceType, sourceId)` 普通索引
+
+### 3.5 `deployments`
+
+建议明确字段语义：
+
+- `mode`
+- `status`
+- `artifactUrl`
+- `artifactHash`
+- `artifactSize`
+- `manifest`
+- `errorMessage`
+- `buildLog`
+- `completedAt`
+
+建议新增或补充：
+
+- `runtimeVersion`
+- `schemaVersion`
+- `entrySnapshot`
+- `assetSummary`
+
+### 3.6 `node_deployments`
+
+建议明确：
+
+- 一个节点与一个工程在同一时刻只保留一条有效部署关系
+- `mode`、`status`、`runtimeConfig`、`deployLog` 为核心字段
+
+建议增加：
+
+- `lastHeartbeatAt`
+- `runtimeHealth`
+- `lastStatusReason`
+
+### 3.7 `node_commands`
+
+建议作为节点命令队列表长期保留，补强以下字段语义：
+
+- 命令来源
+- 命令类型
+- 重试次数
+- 超时秒数
+- 结果错误摘要
+
+## 4. 字段、主键、索引、约束建议
+
+- 所有主业务表继续使用 UUID 主键
+- `deployments(projectId, version)` 保持强唯一语义
+- `node_deployments(nodeId, projectId)` 建议保持单活约束
+- `data_points(projectId, path)` 建议增加唯一性检查
+- `nodes(tenantId, name)` 应保持租户内名称唯一
+
+## 5. 表关系
+
+- 一个租户有多个用户、工程、节点
+- 一个工程有多个页面、连接、查询、数据点、发布版本
+- 一个发布版本可对应多个节点部署
+- 一个节点部署可关联多个命令
+
+## 6. 数据兼容与迁移建议
+
+### 当前已实现
+
+- 现有表结构已可用
+
+### 共创后建议目标
+
+- 采取增量迁移，不做破坏式重构
+- 对字段补充优先采用可空新增 + 兼容回填方式
+- 对唯一约束相关表，先清历史脏数据后再收紧约束
+
+## 7. 待确认事项
+
+- `design_project_settings` 是否统一收口国际化与主题资源
+- Runtime 运行状态是否需要独立持久化表
+- 是否需要新增制品元信息独立表而不是继续聚合在 `deployments.manifest`
