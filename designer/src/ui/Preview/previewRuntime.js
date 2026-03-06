@@ -397,6 +397,7 @@ const buildComponentStub = (pageId, name) => ({
   elMain: () => null,
   elLayout: () => null,
   elLayoutRow: () => null,
+  elCol: () => null,
 });
 
 const getApiBase = () => {
