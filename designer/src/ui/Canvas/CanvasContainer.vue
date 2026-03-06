@@ -7,9 +7,17 @@
     @mouseleave="handleRulerMouseLeave"
     @click="handleContainerClick"
   >
-    <div v-if="showRuler" class="ruler-layer">
+    <div
+      v-if="showRuler"
+      class="ruler-layer"
+      :style="{ '--ruler-size': `${rulerInset}px` }"
+    >
+      <div class="ruler-zero" />
       <div class="ruler ruler-x" :style="rulerXStyle">
-        <div class="ruler-crosshair-x" :style="{ left: `${pointerX}px` }" />
+        <div
+          class="ruler-crosshair-x"
+          :style="{ left: `${pointerXOnRuler}px` }"
+        />
         <span
           v-for="mark in rulerMarksX"
           :key="`x-${mark}`"
@@ -20,7 +28,10 @@
         </span>
       </div>
       <div class="ruler ruler-y" :style="rulerYStyle">
-        <div class="ruler-crosshair-y" :style="{ top: `${pointerY}px` }" />
+        <div
+          class="ruler-crosshair-y"
+          :style="{ top: `${pointerYOnRuler}px` }"
+        />
         <span
           v-for="mark in rulerMarksY"
           :key="`y-${mark}`"
@@ -32,7 +43,7 @@
       </div>
     </div>
     <div class="canvas-wrapper" ref="wrapperRef">
-      <div class="canvas-scroll-content" :style="scrollContentStyle">
+      <div class="canvas-scroll-content" :style="[scrollContentStyle, workbenchStyle]">
         <div
           class="canvas"
           ref="canvasRef"
@@ -103,6 +114,10 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  viewResetToken: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const emit = defineEmits(["zoomChange"]);
@@ -113,13 +128,17 @@ const containerRef = ref(null);
 const wrapperRef = ref(null);
 const canvasRef = ref(null);
 const editorStore = useEditorStore();
-const { doc, history, selection, currentPage, docVersion } =
+const { doc, history, selection, pages, currentPageId, currentPage, docVersion } =
   storeToRefs(editorStore);
 const dragState = useDragState();
 const minorStep = 10;
 const majorStep = 100;
 const rulerMax = 5000;
 const rulerSize = 18;
+const defaultPageMarginX = 72;
+const defaultPageMarginY = 52;
+const placementBiasX = 0.54;
+const placementBiasY = 0.56;
 const containerSize = ref({ width: 0, height: 0 });
 const pointerX = ref(-9999);
 const pointerY = ref(-9999);
@@ -182,11 +201,11 @@ const handleNodeTransform = (event) => {
   const x = Number(event.detail.x) || 0;
   const y = Number(event.detail.y) || 0;
   pointerX.value = Math.min(
-    Math.max(0, x * zoom.value + translateX.value + rulerSize),
+    Math.max(0, x * zoom.value + translateX.value + rulerInset.value),
     rect.width
   );
   pointerY.value = Math.min(
-    Math.max(0, y * zoom.value + translateY.value + rulerSize),
+    Math.max(0, y * zoom.value + translateY.value + rulerInset.value),
     rect.height
   );
   isNodeTransforming.value = true;
@@ -241,22 +260,138 @@ const handleGlobalMouseUp = (event) => {
 provide("canvasZoom", zoom);
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
+const currentPageSnapshot = computed(() => {
+  const page = pages.value.find((item) => item.id === currentPageId.value);
+  return page || currentPage.value || null;
+});
 const translateX = ref(0);
 const translateY = ref(0);
+const rulerInset = computed(() => (props.showRuler ? rulerSize : 0));
+const showWorkbenchGrid = computed(() =>
+  Boolean(currentPageSnapshot.value?.config?.showGrid)
+);
+const pointerXOnRuler = computed(() =>
+  Math.max(0, pointerX.value - rulerInset.value)
+);
+const pointerYOnRuler = computed(() =>
+  Math.max(0, pointerY.value - rulerInset.value)
+);
+
+/**
+ * 应用页面优先的默认落点
+ * 页面不贴左上，并在可视区有安全边距，首屏视觉更聚焦页面
+ */
+const applyDefaultPagePlacement = () => {
+  const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
+  const viewportHeight = Math.max(
+    0,
+    (containerSize.value.height || 0) - rulerInset.value
+  );
+  if (!viewportWidth || !viewportHeight) return;
+
+  const scaledWidth = width.value * zoom.value;
+  const scaledHeight = height.value * zoom.value;
+  const extraX = viewportWidth - scaledWidth - defaultPageMarginX * 2;
+  const extraY = viewportHeight - scaledHeight - defaultPageMarginY * 2;
+  const xShift = extraX > 0 ? Math.min(extraX * placementBiasX, viewportWidth * 0.32) : 0;
+  const yShift = extraY > 0 ? Math.min(extraY * placementBiasY, viewportHeight * 0.34) : 0;
+  const nextTranslateX =
+    defaultPageMarginX + xShift;
+  const nextTranslateY =
+    defaultPageMarginY + yShift;
+
+  translateX.value = Math.round(nextTranslateX);
+  translateY.value = Math.round(nextTranslateY);
+};
+
+/**
+ * 缩放时保持视口中心对应画布点稳定，避免缩放后页面跳角落
+ * @param {number} prevZoom - 旧缩放值
+ * @param {number} nextZoom - 新缩放值
+ */
+const keepViewportCenterStableOnZoom = (prevZoom, nextZoom) => {
+  const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
+  const viewportHeight = Math.max(
+    0,
+    (containerSize.value.height || 0) - rulerInset.value
+  );
+  if (!viewportWidth || !viewportHeight) return;
+  if (!prevZoom || !nextZoom || prevZoom === nextZoom) return;
+
+  const centerX = rulerInset.value + viewportWidth / 2;
+  const centerY = rulerInset.value + viewportHeight / 2;
+  const canvasX = (centerX - rulerInset.value - translateX.value) / prevZoom;
+  const canvasY = (centerY - rulerInset.value - translateY.value) / prevZoom;
+
+  translateX.value = Math.round(
+    centerX - rulerInset.value - canvasX * nextZoom
+  );
+  translateY.value = Math.round(
+    centerY - rulerInset.value - canvasY * nextZoom
+  );
+};
+
+const workbenchStyle = computed(() => {
+  const alpha = props.showRuler ? 0.04 : 0.03;
+  const style = {
+    backgroundColor: "#eef2f7",
+    backgroundImage: "none",
+  };
+  if (!showWorkbenchGrid.value) return style;
+  style.backgroundImage = `linear-gradient(rgba(100,116,139,${alpha}) 1px, transparent 1px), linear-gradient(90deg, rgba(100,116,139,${alpha}) 1px, transparent 1px)`;
+  style.backgroundSize = "24px 24px";
+  style.backgroundPosition = "0 0";
+  return style;
+});
+
+watch(
+  () => zoom.value,
+  (nextZoom, prevZoom) => {
+    if (!Number.isFinite(nextZoom) || !Number.isFinite(prevZoom)) return;
+    keepViewportCenterStableOnZoom(prevZoom, nextZoom);
+  }
+);
+
+watch(
+  () => rulerInset.value,
+  (nextInset, prevInset) => {
+    if (!Number.isFinite(nextInset) || !Number.isFinite(prevInset)) return;
+    const delta = prevInset - nextInset;
+    translateX.value += delta;
+    translateY.value += delta;
+  }
+);
+
+watch(
+  [() => rootNodeId.value, () => width.value, () => height.value, () => props.viewResetToken],
+  () => {
+    applyDefaultPagePlacement();
+  },
+  { immediate: true }
+);
+
+watch(
+  () => [containerSize.value.width, containerSize.value.height],
+  () => {
+    applyDefaultPagePlacement();
+  }
+);
 
 const canvasStyle = computed(() => {
   docVersion.value;
-  const config = currentPage.value?.config || {};
+  const config = currentPageSnapshot.value?.config || {};
   const background = config.background || null;
   const showGrid = Boolean(config.showGrid);
-  const gridSize = 10;
   const style = {
     width: `${width.value}px`,
     height: `${height.value}px`,
-    transform: `translate(${translateX.value + rulerSize}px, ${
-      translateY.value + rulerSize
+    transform: `translate(${translateX.value + rulerInset.value}px, ${
+      translateY.value + rulerInset.value
     }px) scale(${zoom.value})`,
     backgroundColor: "#ffffff",
+    border: "1px solid rgba(148, 163, 184, 0.45)",
+    boxShadow:
+      "0 0 0 1px rgba(255,255,255,0.85) inset, 0 10px 26px rgba(15, 23, 42, 0.08)",
   };
 
   if (background?.kind === "color") {
@@ -274,18 +409,22 @@ const canvasStyle = computed(() => {
   }
 
   if (showGrid) {
+    const minorStepSize = 12;
+    const majorStepSize = 48;
     const gridLayer = `
-      linear-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 0, 0, 0.08) 1px, transparent 1px)
+      linear-gradient(rgba(71, 85, 105, 0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(71, 85, 105, 0.12) 1px, transparent 1px),
+      linear-gradient(rgba(71, 85, 105, 0.2) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(71, 85, 105, 0.2) 1px, transparent 1px)
     `;
     if (style.backgroundImage) {
       style.backgroundImage = `${gridLayer}, ${style.backgroundImage}`;
-      style.backgroundSize = `${gridSize}px ${gridSize}px, ${style.backgroundSize || "cover"}`;
-      style.backgroundRepeat = `repeat, ${style.backgroundRepeat || "no-repeat"}`;
-      style.backgroundPosition = `0 0, ${style.backgroundPosition || "center"}`;
+      style.backgroundSize = `${minorStepSize}px ${minorStepSize}px, ${minorStepSize}px ${minorStepSize}px, ${majorStepSize}px ${majorStepSize}px, ${majorStepSize}px ${majorStepSize}px, ${style.backgroundSize || "cover"}`;
+      style.backgroundRepeat = `repeat, repeat, repeat, repeat, ${style.backgroundRepeat || "no-repeat"}`;
+      style.backgroundPosition = `0 0, 0 0, 0 0, 0 0, ${style.backgroundPosition || "center"}`;
     } else {
       style.backgroundImage = gridLayer;
-      style.backgroundSize = `${gridSize}px ${gridSize}px`;
+      style.backgroundSize = `${minorStepSize}px ${minorStepSize}px, ${minorStepSize}px ${minorStepSize}px, ${majorStepSize}px ${majorStepSize}px, ${majorStepSize}px ${majorStepSize}px`;
     }
   }
 
@@ -298,13 +437,56 @@ const canvasStyle = computed(() => {
 const scrollContentStyle = computed(() => {
   const scaledWidth = width.value * zoom.value;
   const scaledHeight = height.value * zoom.value;
-  const offsetX = Math.max(rulerSize, rulerSize + translateX.value);
-  const offsetY = Math.max(rulerSize, rulerSize + translateY.value);
+  const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
+  const viewportHeight = Math.max(
+    0,
+    (containerSize.value.height || 0) - rulerInset.value
+  );
+  // 右/下编辑扩展区保持“可编辑但不过度”，避免滚动后空白区域喧宾夺主
+  const workspaceExtraRight = Math.max(
+    24,
+    Math.min(68, Math.round(viewportWidth * 0.09))
+  );
+  const workspaceExtraBottom = Math.max(
+    28,
+    Math.min(76, Math.round(viewportHeight * 0.1))
+  );
+  const coverageX = scaledWidth / Math.max(1, viewportWidth);
+  const coverageY = scaledHeight / Math.max(1, viewportHeight);
+  const pageStartX = rulerInset.value + translateX.value;
+  const pageStartY = rulerInset.value + translateY.value;
+  const offsetX = Math.max(rulerInset.value, pageStartX);
+  const offsetY = Math.max(rulerInset.value, pageStartY);
+  const baseWidth = Math.ceil(scaledWidth + offsetX);
+  const baseHeight = Math.ceil(scaledHeight + offsetY);
   const minWidth = containerSize.value.width || 0;
   const minHeight = containerSize.value.height || 0;
+  // 当页面已经完整落在当前视口内时，不再追加右/下扩展区，避免出现“适配后右侧灰条”
+  const effectiveExtraRight =
+    baseWidth <= minWidth
+      ? 0
+      : coverageX >= 1.6
+        ? 0
+        : coverageX >= 1.2
+          ? Math.round(workspaceExtraRight * 0.25)
+          : workspaceExtraRight;
+  const effectiveExtraBottom =
+    baseHeight <= minHeight
+      ? 0
+      : coverageY >= 1.6
+        ? 0
+        : coverageY >= 1.2
+          ? Math.round(workspaceExtraBottom * 0.28)
+          : workspaceExtraBottom;
   return {
-    width: `${Math.max(minWidth, Math.ceil(scaledWidth + offsetX + 24))}px`,
-    height: `${Math.max(minHeight, Math.ceil(scaledHeight + offsetY + 24))}px`,
+    width: `${Math.max(
+      minWidth,
+      baseWidth + effectiveExtraRight
+    )}px`,
+    height: `${Math.max(
+      minHeight,
+      baseHeight + effectiveExtraBottom
+    )}px`,
   };
 });
 
@@ -312,9 +494,10 @@ const rulerXStyle = computed(() => {
   const minor = minorStep * zoom.value;
   const major = majorStep * zoom.value;
   return {
+    "--ruler-size": `${rulerInset.value}px`,
     "--ruler-minor": `${minor}px`,
     "--ruler-major": `${major}px`,
-    "--ruler-offset": `${translateX.value + rulerSize}px`,
+    "--ruler-offset": `${translateX.value}px`,
   };
 });
 
@@ -322,9 +505,10 @@ const rulerYStyle = computed(() => {
   const minor = minorStep * zoom.value;
   const major = majorStep * zoom.value;
   return {
+    "--ruler-size": `${rulerInset.value}px`,
     "--ruler-minor": `${minor}px`,
     "--ruler-major": `${major}px`,
-    "--ruler-offset": `${translateY.value + rulerSize}px`,
+    "--ruler-offset": `${translateY.value}px`,
   };
 });
 
@@ -332,7 +516,7 @@ const rulerMarksX = computed(() => {
   const marks = [];
   const max = rulerMax;
   for (let value = 0; value <= max; value += majorStep) {
-    const pos = value * zoom.value + translateX.value + rulerSize;
+    const pos = value * zoom.value + translateX.value + rulerInset.value;
     if (pos < -majorStep || pos > containerSize.value.width) continue;
     marks.push(value);
   }
@@ -343,7 +527,7 @@ const rulerMarksY = computed(() => {
   const marks = [];
   const max = rulerMax;
   for (let value = 0; value <= max; value += majorStep) {
-    const pos = value * zoom.value + translateY.value + rulerSize;
+    const pos = value * zoom.value + translateY.value + rulerInset.value;
     if (pos < -majorStep || pos > containerSize.value.height) continue;
     marks.push(value);
   }
@@ -1464,6 +1648,7 @@ onBeforeUnmount(() => {
   inset: 0;
   pointer-events: none;
   z-index: 5;
+  --ruler-size: 18px;
 }
 .canvas-insert-line {
   position: absolute;
@@ -1507,12 +1692,15 @@ onBeforeUnmount(() => {
 
 .ruler-zero {
   position: absolute;
-  left: 2px;
-  top: 2px;
-  font-size: 10px;
-  color: #606266;
+  left: 0;
+  top: 0;
+  width: var(--ruler-size);
+  height: var(--ruler-size);
+  box-sizing: border-box;
   background: #f5f7fa;
-  padding: 0 2px;
+  border-right: 1px solid #dcdfe6;
+  border-bottom: 1px solid #dcdfe6;
+  z-index: 3;
 }
 
 .ruler {
@@ -1525,7 +1713,7 @@ onBeforeUnmount(() => {
 }
 
 .ruler-x {
-  left: 0;
+  left: var(--ruler-size);
   top: 0;
   height: 18px;
   right: 0;
@@ -1535,7 +1723,7 @@ onBeforeUnmount(() => {
 
 .ruler-y {
   left: 0;
-  top: 0;
+  top: var(--ruler-size);
   width: 18px;
   bottom: 0;
   border-right: 1px solid #dcdfe6;

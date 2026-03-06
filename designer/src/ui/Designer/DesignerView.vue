@@ -42,6 +42,7 @@
             <!-- 画布容器 -->
             <template v-if="hasPages">
               <CanvasContainer :width="canvasWidth" :height="canvasHeight" :zoom="zoom" :show-ruler="showRuler"
+                :view-reset-token="viewResetToken"
                 @zoomChange="handleZoomChange" />
             </template>
 
@@ -175,6 +176,7 @@ const {
   canRedo,
   saving,
   selection,
+  pages,
   currentPageId,
   currentPage,
   isLocked,
@@ -184,6 +186,7 @@ const {
 
 const zoom = ref(1);
 const showRuler = ref(true);
+const viewResetToken = ref(0);
 const activeViewKey = ref("pc");
 const viewPresets = VIEW_PRESETS;
 const SAVE_SETTINGS_STORAGE_KEY = "designer_save_settings";
@@ -431,9 +434,15 @@ const activeView = computed(() =>
 
 const canvasWidth = computed(() => activeView.value?.width || 1920);
 const canvasHeight = computed(() => activeView.value?.height || 1080);
-const showGrid = computed(() => Boolean(currentPage.value?.config?.showGrid));
+const currentPageSnapshot = computed(() => {
+  const page = pages.value.find((item) => item.id === currentPageId.value);
+  return page || currentPage.value || null;
+});
+const showGrid = computed(() =>
+  Boolean(currentPageSnapshot.value?.config?.showGrid)
+);
 const enableSnap = computed(
-  () => currentPage.value?.config?.enableSnap ?? true
+  () => currentPageSnapshot.value?.config?.enableSnap ?? true
 );
 
 const leftRailItems = [
@@ -687,6 +696,7 @@ const handleZoomIn = () => {
  */
 const handleFitCanvas = () => {
   zoom.value = 1;
+  viewResetToken.value += 1;
 };
 
 /**
@@ -707,6 +717,7 @@ const handleFitScreen = () => {
     availableHeight / canvasHeight.value
   );
   zoom.value = clampZoom(fitZoom);
+  viewResetToken.value += 1;
 };
 
 /**
@@ -722,9 +733,10 @@ const handleToggleRuler = () => {
  * @returns {void}
  */
 const handleToggleGrid = () => {
-  if (!currentPage.value) return;
+  const page = currentPageSnapshot.value;
+  if (!page) return;
   const nextConfig = {
-    ...(currentPage.value.config || {}),
+    ...(page.config || {}),
     showGrid: !showGrid.value,
   };
   editorStore.updateCurrentPage({ config: nextConfig });
@@ -735,9 +747,10 @@ const handleToggleGrid = () => {
  * @returns {void}
  */
 const handleToggleSnap = () => {
-  if (!currentPage.value) return;
+  const page = currentPageSnapshot.value;
+  if (!page) return;
   const nextConfig = {
-    ...(currentPage.value.config || {}),
+    ...(page.config || {}),
     enableSnap: !enableSnap.value,
   };
   editorStore.updateCurrentPage({ config: nextConfig });
