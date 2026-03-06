@@ -35,11 +35,10 @@
     />
 
     <!-- 颜色类型 -->
-    <el-color-picker
+    <FriendlyColorPicker
       v-else-if="prop.type === 'color'"
       v-model="modelProxy"
-      size="small"
-      show-alpha
+      :show-alpha="true"
     />
 
     <!-- 枚举类型 -->
@@ -79,6 +78,7 @@
 import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 
 defineOptions({ name: "PropEditor" });
 

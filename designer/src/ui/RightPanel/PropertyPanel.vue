@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col gap-3">
-    <!-- 页面设置面板：未选中任何元素 -->
+    <!-- 页面属性面板：未选中任何元素 -->
     <PageInspectorPanel v-if="panelState === 'page'" />
 
     <!-- 多选面板：选中多个元素 -->

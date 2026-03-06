@@ -54,7 +54,7 @@
       <el-form label-width="72px" size="small">
         <el-form-item label="填充颜色">
           <div class="flex items-center gap-2">
-            <el-color-picker
+            <FriendlyColorPicker
               v-model="form.fill"
               :disabled="fillValue.type === 'mixed'"
               @change="handleFillChange"
@@ -66,7 +66,7 @@
         </el-form-item>
         <el-form-item label="描边颜色">
           <div class="flex items-center gap-2">
-            <el-color-picker
+            <FriendlyColorPicker
               v-model="form.stroke"
               :disabled="strokeValue.type === 'mixed'"
               @change="handleStrokeChange"
@@ -99,6 +99,7 @@
 
 import { reactive, watch } from "vue";
 import { useMultiSelect } from "./use-multi-select";
+import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 
 const props = defineProps({
   /** 选中的元素列表 */

@@ -1,13 +1,5 @@
 <template>
   <div class="page-inspector-panel">
-    <!-- 页面标题 -->
-    <div class="panel-title">
-      <span>页面设置</span>
-      <span class="page-name">{{ form.name || '未命名' }}</span>
-    </div>
-
-    <el-divider />
-
     <el-form label-width="72px" size="small">
       <!-- 基础信息 -->
       <div class="section-title">基础信息</div>
@@ -22,58 +14,8 @@
 
       <el-divider />
 
-      <!-- 画布设置 -->
-      <div class="section-title">画布设置</div>
-
-      <el-form-item label="画布预设">
-        <el-select
-          v-model="form.presetKey"
-          clearable
-          placeholder="自定义尺寸"
-          @change="handlePresetChange"
-        >
-          <el-option
-            v-for="preset in VIEW_PRESETS"
-            :key="preset.key"
-            :label="`${preset.label} (${preset.width}×${preset.height})`"
-            :value="preset.key"
-          />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item label="宽度">
-        <el-input-number
-          v-model="form.width"
-          :min="320"
-          :max="99999"
-          controls-position="right"
-          @change="handleConfigUpdate"
-        />
-      </el-form-item>
-
-      <el-form-item label="高度">
-        <el-input-number
-          v-model="form.height"
-          :min="240"
-          :max="99999"
-          controls-position="right"
-          @change="handleConfigUpdate"
-        />
-      </el-form-item>
-
-      <el-form-item label="显示网格">
-        <el-switch
-          v-model="form.showGrid"
-          @change="handleConfigUpdate"
-        />
-      </el-form-item>
-
-      <el-form-item label="启用吸附">
-        <el-switch
-          v-model="form.enableSnap"
-          @change="handleConfigUpdate"
-        />
-      </el-form-item>
+      <!-- 样式设置 -->
+      <div class="section-title">样式设置</div>
       <el-form-item label="自适应">
         <el-switch
           v-model="form.autoFit"
@@ -106,7 +48,7 @@
       </el-form-item>
 
       <el-form-item v-if="form.backgroundKind === 'color'" label="背景色">
-        <el-color-picker
+        <FriendlyColorPicker
           v-model="form.backgroundValue"
           @change="handleBackgroundUpdate"
         />
@@ -121,8 +63,8 @@
 
       <el-divider />
 
-      <!-- 诊断信息 -->
-      <div class="section-title">诊断信息</div>
+      <!-- 数据点状态 -->
+      <div class="section-title">数据点状态</div>
 
       <el-form-item label="数据点">
         <div class="diagnostic-info">
@@ -194,7 +136,7 @@
 
 <script setup>
 /**
- * 页面设置面板
+ * 页面属性面板
  * 显示和编辑当前页面的配置信息
  */
 
@@ -203,8 +145,8 @@ import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { ElMessage } from "element-plus";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 import IconEpHomeFilled from "~icons/ep/home-filled";
-import { VIEW_PRESETS } from "@/constants";
 
 const editorStore = useEditorStore();
 const { currentPage, currentPageId, pages, doc } = storeToRefs(editorStore);
@@ -213,7 +155,6 @@ const form = reactive({
   name: "",
   path: "",
   pageType: "business",
-  presetKey: "",
   width: 1920,
   height: 1080,
   showGrid: false,
@@ -287,19 +228,6 @@ const toRoutePath = (name) => {
   const normalized = name.trim().replace(/\s+/g, "-");
   const sanitized = normalized.replace(/[/?#\\]+/g, "-");
   return `/${sanitized || "page"}`;
-};
-
-/**
- * 根据尺寸匹配预设
- * @param {number} width - 宽度
- * @param {number} height - 高度
- * @returns {string}
- */
-const resolvePresetKey = (width, height) => {
-  const preset = VIEW_PRESETS.find(
-    (item) => item.width === Number(width) && item.height === Number(height)
-  );
-  return preset?.key || "";
 };
 
 /**
@@ -386,7 +314,6 @@ const syncForm = (page) => {
   form.pageType = getPageType(page || pageFromList);
   form.width = page?.config?.width ?? 1920;
   form.height = page?.config?.height ?? 1080;
-  form.presetKey = resolvePresetKey(form.width, form.height);
   form.showGrid = page?.config?.showGrid ?? false;
   form.enableSnap = page?.config?.enableSnap ?? true;
   form.autoFit = page?.config?.autoFit ?? true;
@@ -541,18 +468,6 @@ const handleSetAsHome = () => {
 };
 
 /**
- * 应用画布预设
- * @param {any} key - 预设键值
- */
-const handlePresetChange = (key) => {
-  const preset = VIEW_PRESETS.find((item) => item.key === key);
-  if (!preset) return;
-  form.width = preset.width;
-  form.height = preset.height;
-  handleConfigUpdate();
-};
-
-/**
  * 插入画布样式模板
  * @param {any} id - 模板 ID
  */
@@ -580,7 +495,6 @@ const handleConfigUpdate = () => {
     autoFit: form.autoFit,
   };
   editorStore.updateCurrentPage({ config: nextConfig });
-  form.presetKey = resolvePresetKey(form.width, form.height);
 };
 
 /**

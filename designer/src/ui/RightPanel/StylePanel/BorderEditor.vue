@@ -28,9 +28,8 @@
       </div>
       <div class="form-item">
         <label>颜色</label>
-        <el-color-picker
+        <FriendlyColorPicker
           :model-value="borderColor"
-          size="small"
           @update:modelValue="handleColorChange"
         />
       </div>
@@ -51,6 +50,7 @@
 
 <script setup>
 import { computed } from "vue";
+import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 
 const props = defineProps({
   modelValue: {

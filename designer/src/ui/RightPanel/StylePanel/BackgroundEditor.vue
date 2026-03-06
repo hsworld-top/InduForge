@@ -3,10 +3,9 @@
     <div class="editor-group-title">背景</div>
     <div class="form-item">
       <label>背景颜色</label>
-      <el-color-picker
+      <FriendlyColorPicker
         :model-value="backgroundColor"
-        size="small"
-        show-alpha
+        :show-alpha="true"
         @update:modelValue="handleColorChange"
       />
     </div>
@@ -15,6 +14,7 @@
 
 <script setup>
 import { computed } from "vue";
+import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 
 const props = defineProps({
   modelValue: {
