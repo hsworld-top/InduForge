@@ -17,7 +17,15 @@
 - **环境变量**：统一从项目根目录 `.env` 加载
 - **接口前缀**：后端 API 统一 `/api/v1`，健康检查 `/health`
 - **文档规则**：修改/新增文档需先与需求方确认
-- **GIT 提交**: commit 使用中文描述
+- **GIT 提交**：
+  - commit message 必须使用中文
+  - 推荐格式：`type(scope): 中文描述`
+  - `type` 推荐值：`feat`、`fix`、`refactor`、`docs`、`chore`、`test`
+  - `scope` 推荐值：`dev_core`、`dev_ide`、`datacenter`、`designer`、`node_agent`、`runtime`、`product`
+  - 示例：`feat(dev_core): 增加预览工程聚合接口`
+  - 示例：`docs(product): 同步开发态预览专项计划`
+  - 禁止提交无意义或异常描述（如乱码、占位文本、无上下文短语）
+  - 若本地最近一次提交信息不符合规则，提交前必须使用 `git commit --amend` 修正
 - **回答设置**: 开发完成后不需要生成.md 文件，在回答中做简要描述
 
 ## 通用开发约束
@@ -27,7 +35,10 @@
 - **数据库初始化**：使用 `dev_core/scripts/init-database.js`，不使用 `sequelize.sync()`
 - **端口默认值**：`dev_core` 9099，`dev_ide` 9091，`datacenter` 9092，`designer` 9093
 - **时间处理**：`dev_core`、`dev_ide`、`datacenter`、`designer` 统一使用 `dayjs`，字符串时间展示格式 `YYYY-MM-DD HH:mm:ss`
-- **提交规范**：git 提交时 `commit` 使用中文
+- **提交规范**：
+  - 提交信息需与改动范围一致，避免“一个提交覆盖多个无关主题”
+  - 单次提交优先聚焦单一目标（如“文档治理”“预览宿主接入”“协议冻结”）
+  - 需要拆分时使用多次提交，不要把无关改动混入同一提交
 - **注释与命名（全局）**：
   - 类/函数：必须添加文档注释，说明功能描述、参数含义、返回值类型及异常情况
   - 注释语言：统一使用中文，语法清晰、简洁，避免冗余描述
