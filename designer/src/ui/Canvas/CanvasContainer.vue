@@ -7,7 +7,7 @@
     @mouseleave="handleRulerMouseLeave"
     @click="handleContainerClick"
   >
-    <div class="ruler-layer">
+    <div v-if="showRuler" class="ruler-layer">
       <div class="ruler ruler-x" :style="rulerXStyle">
         <div class="ruler-crosshair-x" :style="{ left: `${pointerX}px` }" />
         <span
@@ -32,57 +32,49 @@
       </div>
     </div>
     <div class="canvas-wrapper" ref="wrapperRef">
-      <div
-        class="canvas"
-        ref="canvasRef"
-        :style="canvasStyle"
-        @dragover="handleDragOver"
-        @drop="handleDrop"
-      >
-        <teleport
-          v-if="showInsertLine && insertLineStyle && insertLineBox"
-          to="body"
+      <div class="canvas-scroll-content" :style="scrollContentStyle">
+        <div
+          class="canvas"
+          ref="canvasRef"
+          :style="canvasStyle"
+          @dragover="handleDragOver"
+          @drop="handleDrop"
         >
-          <div
-            class="canvas-insert-line"
-            :class="insertLineStyle.orientation"
-            :style="{
-              left:
-                insertLineStyle.orientation === 'vertical'
-                  ? insertLineBox.left + insertLineStyle.offset + 'px'
-                  : insertLineBox.left + 'px',
-              top:
-                insertLineStyle.orientation === 'horizontal'
-                  ? insertLineBox.top + insertLineStyle.offset + 'px'
-                  : insertLineBox.top + 'px',
-              width:
-                insertLineStyle.orientation === 'vertical'
-                  ? '2px'
-                  : insertLineBox.width + 'px',
-              height:
-                insertLineStyle.orientation === 'horizontal'
-                  ? '2px'
-                  : insertLineBox.height + 'px',
-            }"
-          />
-        </teleport>
-        <div class="absolute inset-0 pointer-events-none">
-          <slot name="canvas-layer" />
-        </div>
-        <div class="absolute inset-0">
-          <DesignCanvas />
+          <teleport
+            v-if="showInsertLine && insertLineStyle && insertLineBox"
+            to="body"
+          >
+            <div
+              class="canvas-insert-line"
+              :class="insertLineStyle.orientation"
+              :style="{
+                left:
+                  insertLineStyle.orientation === 'vertical'
+                    ? insertLineBox.left + insertLineStyle.offset + 'px'
+                    : insertLineBox.left + 'px',
+                top:
+                  insertLineStyle.orientation === 'horizontal'
+                    ? insertLineBox.top + insertLineStyle.offset + 'px'
+                    : insertLineBox.top + 'px',
+                width:
+                  insertLineStyle.orientation === 'vertical'
+                    ? '2px'
+                    : insertLineBox.width + 'px',
+                height:
+                  insertLineStyle.orientation === 'horizontal'
+                    ? '2px'
+                    : insertLineBox.height + 'px',
+              }"
+            />
+          </teleport>
+          <div class="absolute inset-0 pointer-events-none">
+            <slot name="canvas-layer" />
+          </div>
+          <div class="absolute inset-0">
+            <DesignCanvas />
+          </div>
         </div>
       </div>
-    </div>
-    <div class="canvas-statusbar">
-      <span>画布: {{ width }} × {{ height }}</span>
-      <el-divider direction="vertical" />
-      <span>缩放: {{ Math.round(zoom * 100) }}%</span>
-      <el-tooltip content="重置缩放">
-        <el-button size="small" text @click="handleZoomReset">
-          <IconEpRefresh />
-        </el-button>
-      </el-tooltip>
     </div>
   </main>
 </template>
@@ -91,7 +83,6 @@
 import { computed, onBeforeUnmount, onMounted, provide, ref, toRefs, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
-import IconEpRefresh from "~icons/ep/refresh";
 import { useDragState, endDrag } from "./use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 
@@ -107,6 +98,10 @@ const props = defineProps({
   zoom: {
     type: Number,
     default: 1,
+  },
+  showRuler: {
+    type: Boolean,
+    default: true,
   },
 });
 
@@ -158,6 +153,7 @@ watch(
  * @param {MouseEvent} event - 鼠标事件
  */
 const handleRulerMouseMove = (event) => {
+  if (!props.showRuler) return;
   if (isNodeTransforming.value) return;
   if (!containerRef.value) return;
   const rect = containerRef.value.getBoundingClientRect();
@@ -169,6 +165,7 @@ const handleRulerMouseMove = (event) => {
  * 处理鼠标离开，隐藏标尺指示线
  */
 const handleRulerMouseLeave = () => {
+  if (!props.showRuler) return;
   if (isNodeTransforming.value) return;
   pointerX.value = -9999;
   pointerY.value = -9999;
@@ -179,6 +176,7 @@ const handleRulerMouseLeave = () => {
  * @param {CustomEvent} event - 自定义事件
  */
 const handleNodeTransform = (event) => {
+  if (!props.showRuler) return;
   if (!containerRef.value || !event?.detail) return;
   const rect = containerRef.value.getBoundingClientRect();
   const x = Number(event.detail.x) || 0;
@@ -292,6 +290,22 @@ const canvasStyle = computed(() => {
   }
 
   return style;
+});
+
+/**
+ * 计算滚动内容尺寸，确保缩放后能触发滚动条
+ */
+const scrollContentStyle = computed(() => {
+  const scaledWidth = width.value * zoom.value;
+  const scaledHeight = height.value * zoom.value;
+  const offsetX = Math.max(rulerSize, rulerSize + translateX.value);
+  const offsetY = Math.max(rulerSize, rulerSize + translateY.value);
+  const minWidth = containerSize.value.width || 0;
+  const minHeight = containerSize.value.height || 0;
+  return {
+    width: `${Math.max(minWidth, Math.ceil(scaledWidth + offsetX + 24))}px`,
+    height: `${Math.max(minHeight, Math.ceil(scaledHeight + offsetY + 24))}px`,
+  };
 });
 
 const rulerXStyle = computed(() => {
@@ -1078,14 +1092,6 @@ const handleZoomWheel = (event) => {
 };
 
 /**
- * 重置缩放比例
- */
-const handleZoomReset = () => {
-  translateX.value = 0;
-  translateY.value = 0;
-  emit("zoomChange", 1);
-};
-/**
  * \u70b9\u51fb\u753b\u5e03\u5916\u90e8\u7a7a\u767d\u533a\u57df\u65f6\u663e\u793a\u9875\u9762\u4fe1\u606f
  * @param {MouseEvent} event - \u9f20\u6807\u4e8b\u4ef6
  */
@@ -1425,12 +1431,25 @@ onBeforeUnmount(() => {
 <style scoped>
 .canvas-container {
   position: relative;
+  height: 100%;
+  min-height: 0;
 }
 
 .canvas-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
   padding: 0 !important;
   align-items: flex-start !important;
   justify-content: flex-start !important;
+}
+
+.canvas-scroll-content {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
 }
 
 .canvas {

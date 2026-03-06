@@ -6,7 +6,7 @@
         <el-tab-pane label="组件" name="components">
           <ComponentPanel />
         </el-tab-pane>
-        <el-tab-pane label="绘图区" name="diagram">
+        <el-tab-pane label="绘图区(暂缓)" name="diagram" disabled>
           <DiagramAreaPanel />
         </el-tab-pane>
         <el-tab-pane label="资源" name="resources">

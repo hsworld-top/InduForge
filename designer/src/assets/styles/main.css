@@ -4,6 +4,14 @@
 
 /* 自定义样式 */
 @layer base {
+  :root {
+    --scrollbar-size: 8px;
+    --scrollbar-thumb: rgba(148, 163, 184, 0.22);
+    --scrollbar-thumb-hover: rgba(148, 163, 184, 0.36);
+    --scrollbar-thumb-active: rgba(100, 116, 139, 0.52);
+    --scrollbar-track: rgba(148, 163, 184, 0.04);
+  }
+
   html {
     font-family: "Inter", system-ui, sans-serif;
   }
@@ -11,6 +19,73 @@
   body {
     @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
     font-family: "Inter", system-ui, sans-serif;
+  }
+
+  /* 全局滚动条（原生） */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  *:hover {
+    scrollbar-color: var(--scrollbar-thumb-hover) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    background-color: var(--scrollbar-thumb);
+    transition: background-color 0.16s ease;
+  }
+
+  *:hover::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background-color: var(--scrollbar-thumb-active);
+  }
+
+  .dark {
+    --scrollbar-thumb: rgba(148, 163, 184, 0.18);
+    --scrollbar-thumb-hover: rgba(148, 163, 184, 0.3);
+    --scrollbar-thumb-active: rgba(148, 163, 184, 0.46);
+    --scrollbar-track: rgba(148, 163, 184, 0.03);
+  }
+
+  /* Element Plus 滚动条 */
+  .el-scrollbar__bar {
+    opacity: 0.05;
+    transition: opacity 0.16s ease;
+  }
+
+  .el-scrollbar:hover .el-scrollbar__bar,
+  .el-scrollbar__bar.is-dragging {
+    opacity: 0.22;
+  }
+
+  .el-scrollbar__thumb {
+    border-radius: 999px;
+    background-color: var(--scrollbar-thumb);
+  }
+
+  .el-scrollbar:hover .el-scrollbar__thumb {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  .el-scrollbar__thumb:active {
+    background-color: var(--scrollbar-thumb-active);
   }
 }
 
@@ -40,7 +115,8 @@
   }
 
   .designer-toolbar {
-    @apply flex items-center justify-between h-12 px-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0;
+    @apply flex items-center justify-between h-12 px-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 sticky top-0;
+    z-index: 30;
   }
 
   .designer-main {
@@ -94,7 +170,7 @@
 
   .tool-rail {
     @apply flex flex-col items-center justify-between bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700;
-    width: 52px;
+    width: 34px;
     flex-shrink: 0;
     border-left-width: 1px;
     border-right-width: 1px;
@@ -120,8 +196,9 @@
   }
 
   .tool-rail__button {
-    @apply flex flex-col items-center justify-center text-xs text-gray-500 dark:text-gray-300 rounded-md px-1 py-2 transition-colors;
-    width: 44px;
+    @apply flex items-center justify-center text-xs text-gray-500 dark:text-gray-300 rounded-md transition-colors;
+    width: 40px;
+    height: 36px;
   }
 
   .tool-rail__button:hover {
@@ -134,10 +211,6 @@
 
   .tool-rail__icon {
     @apply text-base;
-  }
-
-  .tool-rail__label {
-    @apply text-[10px] leading-tight;
   }
 
   .dock-panel {

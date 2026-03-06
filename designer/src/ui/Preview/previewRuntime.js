@@ -437,7 +437,7 @@ const resolveConnection = async (projectId, name) => {
 
 const resolveQuery = async (projectId, connectionId, queryName) => {
   if (!projectId) return null;
-  const cacheKey = `${event}:${key}`;
+  const cacheKey = `${projectId}:${connectionId || "all"}`;
   let queries = queryCache.get(cacheKey);
   if (!queries) {
     const result = await datacenterApi.getQueries(projectId, {

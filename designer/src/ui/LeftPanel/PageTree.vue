@@ -973,6 +973,20 @@ const openCreateDialog = () => {
 defineExpose({ openCreateDialog });
 
 /**
+ * 创建完成后打开对应标签并切换到页面
+ * @param {string} pageId - 页面 ID
+ */
+const openCreatedPageTab = async (pageId) => {
+  if (!pageId) return;
+  selectedNode.value = { id: pageId, type: "page" };
+  if (openPageTab) {
+    openPageTab(pageId);
+    return;
+  }
+  await editorStore.setCurrentPage(pageId);
+};
+
+/**
  * 移动页面到分组
  * @param {string} pageId - 页面 ID
  * @param {string | null} parentId - 分组 ID
@@ -1094,6 +1108,7 @@ const handleCreateConfirm = async () => {
       if (!pageId) throw new Error("登录页创建失败");
       editorStore.updateEntry({ loginPageId: pageId });
       await editorStore.persistEntry();
+      await openCreatedPageTab(pageId);
       ElMessage.success("登录页创建成功");
       createDialogVisible.value = false;
       return;
@@ -1120,6 +1135,7 @@ const handleCreateConfirm = async () => {
       if (!pageId) throw new Error("登出页创建失败");
       editorStore.updateEntry({ logoutPageId: pageId });
       await editorStore.persistEntry();
+      await openCreatedPageTab(pageId);
       ElMessage.success("登出页创建成功");
       createDialogVisible.value = false;
       return;
@@ -1138,6 +1154,7 @@ const handleCreateConfirm = async () => {
     });
     const pageId = result?.id;
     if (!pageId) throw new Error("页面创建失败");
+    await openCreatedPageTab(pageId);
     ElMessage.success("页面创建成功");
     createDialogVisible.value = false;
   } catch (error) {

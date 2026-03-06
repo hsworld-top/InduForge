@@ -1,6 +1,13 @@
 <template>
   <div class="flex flex-col gap-3 component-panel">
     <el-input v-model="keyword" size="small" placeholder="搜索组件" clearable />
+    <el-switch
+      v-model="showAllComponents"
+      size="small"
+      inline-prompt
+      active-text="全部"
+      inactive-text="常用"
+    />
     <div class="component-list">
       <el-collapse v-model="activeSections" class="component-collapse">
         <el-collapse-item name="layout">
@@ -110,6 +117,7 @@ import { startDrag, endDrag } from "@/ui/Canvas/use-drag-state";
  * 搜索关键字
  */
 const keyword = ref("");
+const showAllComponents = ref(false);
 
 /**
  * 折叠面板状态
@@ -121,7 +129,26 @@ const activeUiSections = ref(["pc"]);
  * 组件筛选范围
  */
 const allowedTypesByCategory = {
-  layout: ["ElContainer", "ElLayout"],
+  layout: ["ElContainer", "ElLayout", "FlexContainer", "GridContainer", "Tabs"],
+  uiPc: [
+    "Text",
+    "Button",
+    "Input",
+    "Select",
+    "Switch",
+    "Radio",
+    "Checkbox",
+    "InputNumber",
+    "Tag",
+    "Table",
+    "Card",
+    "Pagination",
+    "Menu",
+    "Dropdown",
+    "Collapse",
+    "Image",
+  ],
+  chart: ["EChart"],
 };
 
 /**
@@ -131,7 +158,9 @@ const allowedTypesByCategory = {
  */
 const filterItemsByCategory = (category) => {
   const keywordValue = keyword.value.trim().toLowerCase();
-  const allowedTypes = allowedTypesByCategory[category];
+  const allowedTypes = showAllComponents.value
+    ? null
+    : allowedTypesByCategory[category];
   return componentRegistry.getByCategory(category).filter((item) => {
     if (Array.isArray(allowedTypes) && !allowedTypes.includes(item.type)) {
       return false;

@@ -8,22 +8,14 @@
       <div class="dock-panel__actions">
         <slot name="actions" />
         <el-tooltip :content="floating ? '固定' : '悬浮'">
-          <el-button size="small" text @click="handleToggle">
-            <svg
-              class="dock-panel__pin-icon"
-              :class="{ 'is-floating': floating }"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <rect x="6" y="3" width="12" height="4" rx="1" />
-              <rect x="11" y="7" width="2" height="8" />
-              <polygon points="12,15 8,21 16,21" />
-            </svg>
+          <el-button class="dock-panel__action-btn" @click="handleToggle">
+            <IconLucidePinOff v-if="floating" />
+            <IconLucidePin v-else />
           </el-button>
         </el-tooltip>
         <el-tooltip content="关闭">
-          <el-button size="small" text @click="handleClose">
-            <IconEpClose />
+          <el-button class="dock-panel__action-btn" @click="handleClose">
+            <IconLucideX />
           </el-button>
         </el-tooltip>
       </div>
@@ -35,7 +27,9 @@
 </template>
 
 <script setup>
-import IconEpClose from "~icons/ep/close";
+import IconLucidePin from "~icons/lucide/pin";
+import IconLucidePinOff from "~icons/lucide/pin-off";
+import IconLucideX from "~icons/lucide/x";
 
 const props = defineProps({
   side: {
@@ -70,14 +64,18 @@ const handleToggle = () => {
 </script>
 
 <style scoped>
-.dock-panel__pin-icon {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-  transform: rotate(-28deg);
+.dock-panel__action-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
 }
 
-.dock-panel__pin-icon.is-floating {
-  opacity: 0.6;
+:deep(.dock-panel__action-btn svg) {
+  width: 14px;
+  height: 14px;
 }
 </style>

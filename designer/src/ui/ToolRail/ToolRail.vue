@@ -5,7 +5,7 @@
         v-for="item in topItems"
         :key="item.key"
         :content="item.label"
-        :placement="side === 'left' ? 'right' : 'left'"
+        :placement="side === 'left' ? 'right-end' : 'left-end'"
         :show-after="300"
       >
         <button
@@ -15,7 +15,6 @@
           @click="handleSelect(item.key)"
         >
           <component v-if="item.icon" :is="item.icon" class="tool-rail__icon" />
-          <span class="tool-rail__label">{{ item.label }}</span>
         </button>
       </el-tooltip>
     </div>
@@ -24,7 +23,7 @@
         v-for="item in bottomItems"
         :key="item.key"
         :content="item.label"
-        :placement="side === 'left' ? 'right' : 'left'"
+        :placement="side === 'left' ? 'right-end' : 'left-end'"
         :show-after="300"
       >
         <button
@@ -34,7 +33,6 @@
           @click="handleSelect(item.key)"
         >
           <component v-if="item.icon" :is="item.icon" class="tool-rail__icon" />
-          <span class="tool-rail__label">{{ item.label }}</span>
         </button>
       </el-tooltip>
     </div>

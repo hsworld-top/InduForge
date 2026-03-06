@@ -1,185 +1,132 @@
 <template>
   <div class="designer-layout">
     <!-- 顶部工具栏 -->
-    <TopToolbar
-      :page-name="pageName"
-      :is-locked="isLocked"
-      :is-dirty="isDirty"
-      :view-presets="viewPresets"
-      :active-view-key="activeViewKey"
-      :can-undo="canUndoEnabled"
-      :can-redo="canRedoEnabled"
-      :can-move-layer="canMoveLayer"
-      :zoom="zoom"
-      :saving="saving"
-      @update:activeViewKey="handleViewChange"
-      @undo="handleUndo"
-      @redo="handleRedo"
-      @preview="handlePreview"
-      @save="handleSave"
-      @export="handleExport"
-      @toggleLock="handleToggleLock"
-      @moveUp="handleLayerMoveUp"
-      @moveDown="handleLayerMoveDown"
-      @moveToTop="handleLayerMoveToTop"
-      @moveToBottom="handleLayerMoveToBottom"
-    />
+    <TopToolbar :page-name="pageName" :is-locked="isLocked" :is-dirty="isDirty" :view-presets="viewPresets"
+      :active-view-key="activeViewKey" :can-undo="canUndoEnabled" :can-redo="canRedoEnabled"
+      :can-move-layer="canMoveLayer" :zoom="zoom" :show-ruler="showRuler" :show-grid="showGrid"
+      :enable-snap="enableSnap" :saving="saving" :save-settings="saveSettings"
+      @update:activeViewKey="handleViewChange" @undo="handleUndo" @redo="handleRedo" @preview="handlePreview"
+      @previewApp="handlePreviewApp" @save="handleSave" @export="handleExport" @toggleLock="handleToggleLock"
+      @moveUp="handleLayerMoveUp" @moveDown="handleLayerMoveDown" @moveToTop="handleLayerMoveToTop"
+      @moveToBottom="handleLayerMoveToBottom" @openCollaboration="handleOpenCollaboration"
+      @refreshCanvas="handleRefreshCanvas" @toggleLocale="handleToggleLocale" @clearCanvas="handleClearCanvas"
+      @saveSettingsChange="handleSaveSettingsChange" @zoomIn="handleZoomIn" @zoomOut="handleZoomOut"
+      @fitCanvas="handleFitCanvas" @fitScreen="handleFitScreen" @toggleRuler="handleToggleRuler"
+      @toggleGrid="handleToggleGrid" @toggleSnap="handleToggleSnap" />
 
     <!-- 主体区域 -->
     <div class="designer-main">
-      <ToolRail
-        side="left"
-        :items="leftRailItems"
-        :active-key="leftActiveKey"
-        @select="handleLeftSelect"
-      />
+      <ToolRail side="left" :items="leftRailItems" :active-key="leftActiveKey" @select="handleLeftSelect" />
 
       <div class="designer-workspace">
-        <DockPanel
-          v-if="leftActiveKey && !leftFloating"
-          side="left"
-          :title="leftPanelTitle"
-          :floating="leftFloating"
-          @close="handleLeftClose"
-          @toggleFloating="toggleLeftFloating"
-        >
-          <template #actions>
-            <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
-              <el-button size="small" text @click="handlePageCreate">
-                <IconEpPlus />
-              </el-button>
-            </el-tooltip>
-            <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
-              <el-button size="small" text @click="handlePageImport">
-                <IconEpUpload />
-              </el-button>
-            </el-tooltip>
-          </template>
-          <component
-            :is="leftPanelComponent"
-            v-bind="leftPanelProps"
-            ref="leftPanelRef"
-            @update:drawingTool="(value) => (drawingTool.value = value)"
-          />
-        </DockPanel>
-
-        <div class="designer-canvas">
-          <!-- 页面标签栏 -->
-          <div v-if="pageTabs.length > 0" class="page-tabs-bar">
-            <el-tabs
-              v-model="activePageTabId"
-              type="card"
-              closable
-              @tab-remove="handleClosePageTab"
-            >
-              <el-tab-pane
-                v-for="tab in pageTabs"
-                :key="tab.id"
-                :name="tab.id"
-                closable
-              >
-                <template #label>
-                  <span class="page-tab-label">
-                    <IconEpDocument class="tab-icon" />
-                    <span class="tab-name">{{ tab.name }}</span>
-                    <IconEpWarning
-                      v-if="tab.isDirty"
-                      class="tab-dirty-icon"
-                      title="未保存"
-                    />
-                  </span>
-                </template>
-              </el-tab-pane>
-            </el-tabs>
-          </div>
-
-          <!-- 画布容器 -->
-          <template v-if="hasPages">
-            <CanvasContainer
-              :width="canvasWidth"
-              :height="canvasHeight"
-              :zoom="zoom"
-              @zoomChange="handleZoomChange"
-            />
-          </template>
-
-          <!-- 空页面提示 -->
-          <div v-else class="empty-canvas-placeholder">
-            <div class="empty-content">
-              <IconEpDocument class="empty-icon" />
-              <h3 class="empty-title">暂无页面</h3>
-              <p class="empty-desc">创建一个新页面开始设计</p>
-              <el-button type="primary" @click="handlePageCreate">
-                <IconEpPlus class="mr-1" />
-                新建页面
-              </el-button>
-            </div>
-          </div>
-
-          <DockPanel
-            v-if="leftActiveKey && leftFloating"
-            side="left"
-            :title="leftPanelTitle"
-            :floating="leftFloating"
-            @close="handleLeftClose"
-            @toggleFloating="toggleLeftFloating"
-          >
-          <template #actions>
-            <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
-              <el-button size="small" text @click="handlePageCreate">
-                <IconEpPlus />
-              </el-button>
-            </el-tooltip>
-            <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
-              <el-button size="small" text @click="handlePageImport">
-                <IconEpUpload />
-              </el-button>
-            </el-tooltip>
-          </template>
-            <component
-              :is="leftPanelComponent"
-              v-bind="leftPanelProps"
-              ref="leftPanelRef"
-              @update:drawingTool="(value) => (drawingTool.value = value)"
-            />
+        <div class="designer-workspace-main">
+          <DockPanel v-if="leftActiveKey && !leftFloating" side="left" :title="leftPanelTitle" :floating="leftFloating"
+            @close="handleLeftClose" @toggleFloating="toggleLeftFloating">
+            <template #actions>
+              <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+                <el-button size="small" text @click="handlePageCreate">
+                  <IconEpPlus />
+                </el-button>
+              </el-tooltip>
+              <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
+                <el-button size="small" text @click="handlePageImport">
+                  <IconEpUpload />
+                </el-button>
+              </el-tooltip>
+            </template>
+            <component :is="leftPanelComponent" v-bind="leftPanelProps" ref="leftPanelRef"
+              @update:drawingTool="(value) => (drawingTool.value = value)" />
           </DockPanel>
 
-          <DockPanel
-            v-if="rightActiveKey && rightFloating"
-            side="right"
-            :title="rightPanelTitle"
-            :floating="rightFloating"
-            @close="handleRightClose"
-            @toggleFloating="toggleRightFloating"
-          >
+          <div ref="canvasHostRef" class="designer-canvas">
+            <!-- 画布容器 -->
+            <template v-if="hasPages">
+              <CanvasContainer :width="canvasWidth" :height="canvasHeight" :zoom="zoom" :show-ruler="showRuler"
+                @zoomChange="handleZoomChange" />
+            </template>
+
+            <!-- 空页面提示 -->
+            <div v-else class="empty-canvas-placeholder">
+              <div class="empty-content">
+                <IconEpDocument class="empty-icon" />
+                <h3 class="empty-title">暂无页面</h3>
+                <p class="empty-desc">创建一个新页面开始设计</p>
+                <el-button type="primary" @click="handlePageCreate">
+                  <IconEpPlus class="mr-1" />
+                  新建页面
+                </el-button>
+              </div>
+            </div>
+
+            <DockPanel v-if="leftActiveKey && leftFloating" side="left" :title="leftPanelTitle" :floating="leftFloating"
+              @close="handleLeftClose" @toggleFloating="toggleLeftFloating">
+              <template #actions>
+                <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+                  <el-button size="small" text @click="handlePageCreate">
+                    <IconEpPlus />
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
+                  <el-button size="small" text @click="handlePageImport">
+                    <IconEpUpload />
+                  </el-button>
+                </el-tooltip>
+              </template>
+              <component :is="leftPanelComponent" v-bind="leftPanelProps" ref="leftPanelRef"
+                @update:drawingTool="(value) => (drawingTool.value = value)" />
+            </DockPanel>
+
+            <DockPanel v-if="rightActiveKey && rightFloating" side="right" :title="rightPanelTitle"
+              :floating="rightFloating" @close="handleRightClose" @toggleFloating="toggleRightFloating">
+              <component :is="rightPanelComponent" />
+            </DockPanel>
+          </div>
+
+          <DockPanel v-if="rightActiveKey && !rightFloating" side="right" :title="rightPanelTitle"
+            :floating="rightFloating" @close="handleRightClose" @toggleFloating="toggleRightFloating">
             <component :is="rightPanelComponent" />
           </DockPanel>
         </div>
 
-        <DockPanel
-          v-if="rightActiveKey && !rightFloating"
-          side="right"
-          :title="rightPanelTitle"
-          :floating="rightFloating"
-          @close="handleRightClose"
-          @toggleFloating="toggleRightFloating"
-        >
-          <component :is="rightPanelComponent" />
-        </DockPanel>
+        <div class="designer-bottom-toolbar">
+          <div class="page-tabs-bar">
+            <el-tabs v-if="pageTabs.length > 0" v-model="activePageTabId" type="card" closable addable
+              @tab-remove="handleClosePageTab" @tab-add="handlePageCreate">
+              <el-tab-pane v-for="tab in pageTabs" :key="tab.id" :name="tab.id" closable>
+                <template #label>
+                  <span class="page-tab-label">
+                    <IconEpDocument class="tab-icon" />
+                    <span class="tab-name">{{ tab.name }}</span>
+                    <IconEpWarning v-if="tab.isDirty" class="tab-dirty-icon" title="未保存" />
+                  </span>
+                </template>
+              </el-tab-pane>
+            </el-tabs>
+            <div v-else class="page-tabs-empty">
+              <span>暂无页面</span>
+              <el-button class="page-tabs-add-btn" text @click="handlePageCreate">
+                <IconEpPlus />
+              </el-button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <ToolRail
-        side="right"
-        :items="rightRailItems"
-        :active-key="rightActiveKey"
-        @select="handleRightSelect"
-      />
+      <ToolRail side="right" :items="rightRailItems" :active-key="rightActiveKey" @select="handleRightSelect" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch, provide } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+  provide,
+} from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
@@ -195,7 +142,6 @@ import {
   DataPanel,
   I18nPanel,
   ScriptVarsPanel,
-  AiPanel,
   RolePanel,
 } from "@/ui/LeftPanel";
 import {
@@ -205,18 +151,20 @@ import {
 } from "@/ui/RightPanel";
 import { VIEW_PRESETS } from "@/constants";
 import IconEpDocument from "~icons/ep/document";
-import IconEpMenu from "~icons/ep/menu";
-import IconEpBox from "~icons/ep/box";
-import IconEpDataAnalysis from "~icons/ep/data-analysis";
-import IconEpEdit from "~icons/ep/edit";
-import IconEpChatDotRound from "~icons/ep/chat-dot-round";
-import IconEpUser from "~icons/ep/user";
-import IconEpTools from "~icons/ep/tools";
-import IconEpSetting from "~icons/ep/setting";
-import IconEpList from "~icons/ep/list";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpWarning from "~icons/ep/warning";
 import IconEpUpload from "~icons/ep/upload";
+import IconLucideFileText from "~icons/lucide/file-text";
+import IconLucideList from "~icons/lucide/list";
+import IconLucideBox from "~icons/lucide/box";
+import IconLucideDatabase from "~icons/lucide/database";
+import IconLucideLanguages from "~icons/lucide/languages";
+import IconLucideFileCode from "~icons/lucide/file-code";
+import IconLucideUsers from "~icons/lucide/users";
+import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
+import IconLucideSettings from "~icons/lucide/settings";
+import IconLucideBraces from "~icons/lucide/braces";
+import { Storage } from "@/utils/storage";
 
 const route = useRoute();
 const router = useRouter();
@@ -235,8 +183,16 @@ const {
 } = storeToRefs(editorStore);
 
 const zoom = ref(1);
+const showRuler = ref(true);
 const activeViewKey = ref("pc");
 const viewPresets = VIEW_PRESETS;
+const SAVE_SETTINGS_STORAGE_KEY = "designer_save_settings";
+const saveSettings = ref({
+  autoSave: false,
+  intervalMinutes: 5,
+});
+const autoSaveTimer = ref(null);
+const autoSaving = ref(false);
 
 const drawingTool = ref("");
 
@@ -452,6 +408,7 @@ const rightActiveKey = ref("props");
 const leftFloating = ref(false);
 const rightFloating = ref(false);
 const leftPanelRef = ref(null);
+const canvasHostRef = ref(null);
 
 const pageName = computed(() => {
   // ✅ 如果没有页面，返回空
@@ -474,22 +431,25 @@ const activeView = computed(() =>
 
 const canvasWidth = computed(() => activeView.value?.width || 1920);
 const canvasHeight = computed(() => activeView.value?.height || 1080);
+const showGrid = computed(() => Boolean(currentPage.value?.config?.showGrid));
+const enableSnap = computed(
+  () => currentPage.value?.config?.enableSnap ?? true
+);
 
 const leftRailItems = [
-  { key: "pages", label: "页面", icon: IconEpDocument },
-  { key: "outline", label: "大纲", icon: IconEpMenu },
-  { key: "material", label: "物料", icon: IconEpBox },
-  { key: "data", label: "数据", icon: IconEpDataAnalysis },
-  { key: "i18n", label: "国际", icon: IconEpDocument },
-  { key: "script", label: "脚本", icon: IconEpEdit },
-  { key: "ai", label: "AI", icon: IconEpChatDotRound },
-  { key: "role", label: "角色", icon: IconEpUser, placement: "bottom" },
+  { key: "pages", label: "页面", icon: IconLucideFileText },
+  { key: "outline", label: "大纲", icon: IconLucideList },
+  { key: "material", label: "物料", icon: IconLucideBox },
+  { key: "data", label: "数据", icon: IconLucideDatabase },
+  { key: "i18n", label: "国际", icon: IconLucideLanguages },
+  { key: "script", label: "脚本", icon: IconLucideFileCode },
+  { key: "role", label: "角色", icon: IconLucideUsers, placement: "bottom" },
 ];
 
 const rightRailItems = [
-  { key: "props", label: "属性", icon: IconEpTools },
-  { key: "advanced", label: "高级", icon: IconEpSetting },
-  { key: "variables", label: "变量", icon: IconEpList },
+  { key: "props", label: "属性", icon: IconLucideSlidersHorizontal },
+  { key: "advanced", label: "高级", icon: IconLucideSettings },
+  { key: "variables", label: "变量", icon: IconLucideBraces },
 ];
 
 const leftPanelComponent = computed(() => {
@@ -506,8 +466,6 @@ const leftPanelComponent = computed(() => {
       return I18nPanel;
     case "script":
       return ScriptVarsPanel;
-    case "ai":
-      return AiPanel;
     case "role":
       return RolePanel;
     default:
@@ -574,6 +532,13 @@ const handlePreview = () => {
     path: "/preview",
     query: { pid: projectId, pageId: currentPageId.value || "" },
   });
+};
+
+/**
+ * 应用预览（占位）
+ */
+const handlePreviewApp = () => {
+  ElMessage.info("应用预览功能开发中");
 };
 
 /**
@@ -691,11 +656,103 @@ const handleZoomChange = (value) => {
 };
 
 /**
+ * 限制缩放范围
+ * @param {number} value - 缩放值
+ * @returns {number}
+ */
+const clampZoom = (value) => {
+  const next = Number.isFinite(value) ? value : 1;
+  return Math.min(5, Math.max(0.1, Number(next.toFixed(2))));
+};
+
+/**
+ * 工具栏：缩小
+ * @returns {void}
+ */
+const handleZoomOut = () => {
+  zoom.value = clampZoom(zoom.value - 0.1);
+};
+
+/**
+ * 工具栏：放大
+ * @returns {void}
+ */
+const handleZoomIn = () => {
+  zoom.value = clampZoom(zoom.value + 0.1);
+};
+
+/**
+ * 工具栏：适配画布（100%）
+ * @returns {void}
+ */
+const handleFitCanvas = () => {
+  zoom.value = 1;
+};
+
+/**
+ * 工具栏：适配屏幕
+ * @returns {void}
+ */
+const handleFitScreen = () => {
+  const host = canvasHostRef.value;
+  if (!host) {
+    zoom.value = 1;
+    return;
+  }
+  const rect = host.getBoundingClientRect();
+  const availableWidth = Math.max(1, rect.width - 48);
+  const availableHeight = Math.max(1, rect.height - 48);
+  const fitZoom = Math.min(
+    availableWidth / canvasWidth.value,
+    availableHeight / canvasHeight.value
+  );
+  zoom.value = clampZoom(fitZoom);
+};
+
+/**
+ * 切换标尺显示
+ * @returns {void}
+ */
+const handleToggleRuler = () => {
+  showRuler.value = !showRuler.value;
+};
+
+/**
+ * 切换网格显示
+ * @returns {void}
+ */
+const handleToggleGrid = () => {
+  if (!currentPage.value) return;
+  const nextConfig = {
+    ...(currentPage.value.config || {}),
+    showGrid: !showGrid.value,
+  };
+  editorStore.updateCurrentPage({ config: nextConfig });
+};
+
+/**
+ * 切换吸附开关
+ * @returns {void}
+ */
+const handleToggleSnap = () => {
+  if (!currentPage.value) return;
+  const nextConfig = {
+    ...(currentPage.value.config || {}),
+    enableSnap: !enableSnap.value,
+  };
+  editorStore.updateCurrentPage({ config: nextConfig });
+};
+
+/**
  * 打开页面新建弹窗
  * @returns {void}
  */
-const handlePageCreate = () => {
-  if (leftActiveKey.value !== "pages") return;
+const handlePageCreate = async () => {
+  if (leftActiveKey.value !== "pages") {
+    leftActiveKey.value = "pages";
+    leftFloating.value = false;
+    await nextTick();
+  }
   leftPanelRef.value?.openCreateDialog?.();
 };
 
@@ -799,6 +856,95 @@ const handleLayerMoveToBottom = () => {
 };
 
 /**
+ * 自动保存当前页面
+ * @returns {Promise<void>}
+ */
+const handleAutoSave = async () => {
+  if (!saveSettings.value.autoSave) return;
+  if (readonlyState.value?.readonly) return;
+  if (!currentPageId.value || autoSaving.value || saving.value) return;
+  try {
+    autoSaving.value = true;
+    await editorStore.saveCurrentPage();
+    const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
+    if (tab) {
+      tab.isDirty = false;
+    }
+  } catch (error) {
+    console.warn("自动保存失败:", error);
+  } finally {
+    autoSaving.value = false;
+  }
+};
+
+/**
+ * 清理自动保存定时器
+ * @returns {void}
+ */
+const clearAutoSaveTimer = () => {
+  if (autoSaveTimer.value) {
+    clearInterval(autoSaveTimer.value);
+    autoSaveTimer.value = null;
+  }
+};
+
+/**
+ * 根据当前设置更新自动保存定时器
+ * @returns {void}
+ */
+const syncAutoSaveTimer = () => {
+  clearAutoSaveTimer();
+  if (!saveSettings.value.autoSave) return;
+  const interval = Number(saveSettings.value.intervalMinutes) || 5;
+  autoSaveTimer.value = setInterval(() => {
+    void handleAutoSave();
+  }, interval * 60 * 1000);
+};
+
+/**
+ * 应用并持久化保存设置
+ * @param {{autoSave?: boolean, intervalMinutes?: number}} settings - 保存设置
+ * @returns {void}
+ */
+const handleSaveSettingsChange = (settings) => {
+  const nextSettings = {
+    autoSave: Boolean(settings?.autoSave),
+    intervalMinutes: Number(settings?.intervalMinutes) || 5,
+  };
+  saveSettings.value = nextSettings;
+  Storage.set(SAVE_SETTINGS_STORAGE_KEY, nextSettings);
+  syncAutoSaveTimer();
+};
+
+/**
+ * 更多设置：多人协作（占位）
+ */
+const handleOpenCollaboration = () => {
+  ElMessage.info("多人协作功能开发中");
+};
+
+/**
+ * 更多设置：刷新画布（占位）
+ */
+const handleRefreshCanvas = () => {
+  ElMessage.info("画布刷新功能开发中");
+};
+
+/**
+ * 更多设置：中英文切换（占位）
+ */
+const handleToggleLocale = () => {
+  ElMessage.info("中英文切换功能开发中");
+};
+
+/**
+ * 工具栏：清除当前界面（占位）
+ */
+const handleClearCanvas = () => {
+  ElMessage.info("清除当前界面功能开发中");
+};
+
+/**
  * 加载工程数据
  */
 const loadProject = async () => {
@@ -819,49 +965,133 @@ const loadProject = async () => {
 };
 
 onMounted(() => {
+  const cached = Storage.get(SAVE_SETTINGS_STORAGE_KEY, null);
+  if (cached && typeof cached === "object") {
+    saveSettings.value = {
+      autoSave: Boolean(cached.autoSave),
+      intervalMinutes: Number(cached.intervalMinutes) || 5,
+    };
+  }
+  syncAutoSaveTimer();
   void loadProject();
 });
 
 onBeforeUnmount(() => {
+  clearAutoSaveTimer();
   void editorStore.releasePageLock();
 });
 </script>
 
 <style scoped>
+.designer-workspace {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.designer-workspace-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #eef1f5;
+}
+
+.designer-canvas {
+  background: #f5f7fb;
+}
+
 /* 页面标签栏样式 */
 .page-tabs-bar {
-  flex-shrink: 0;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
 }
 
 .dark .page-tabs-bar {
-  background: #1a1a1a;
-  border-bottom-color: #3a3a3a;
+  background: transparent;
+  border-color: transparent;
 }
 
 .page-tabs-bar :deep(.el-tabs__header) {
   margin: 0;
   border-bottom: none;
+  height: 100%;
+}
+
+.page-tabs-bar :deep(.el-tabs__nav-wrap) {
+  padding: 0 2px 0 0;
 }
 
 .page-tabs-bar :deep(.el-tabs__nav-wrap::after) {
   display: none;
 }
 
+.page-tabs-bar :deep(.el-tabs__nav-wrap.is-scrollable) {
+  padding: 0 24px;
+}
+
+.page-tabs-bar :deep(.el-tabs__nav-prev),
+.page-tabs-bar :deep(.el-tabs__nav-next) {
+  width: 22px;
+  height: 100%;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  background: #f3f6fa;
+  z-index: 2;
+}
+
+.page-tabs-bar :deep(.el-tabs__nav-prev:hover),
+.page-tabs-bar :deep(.el-tabs__nav-next:hover) {
+  color: #2563eb;
+}
+
+.page-tabs-bar :deep(.el-tabs__nav-prev .el-icon),
+.page-tabs-bar :deep(.el-tabs__nav-next .el-icon) {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-tabs-bar :deep(.el-tabs__nav) {
+  border: none;
+}
+
 .page-tabs-bar :deep(.el-tabs__item) {
-  height: 36px;
-  line-height: 36px;
-  border: none !important;
-  background: transparent;
-  color: #606266;
-  padding: 0 16px;
+  height: 30px;
+  line-height: 30px;
+  font-size: 12px;
+  border: 1px solid transparent !important;
+  background: #eef2f7;
+  color: #6b7280;
+  padding: 0 14px;
+  border-radius: 8px 8px 0 0;
+  margin-right: 6px;
+  transition: all 0.15s ease;
 }
 
 .page-tabs-bar :deep(.el-tabs__item.is-active) {
-  background: white;
-  color: #409eff;
-  border-bottom: 2px solid #409eff !important;
+  background: #ffffff;
+  color: #1f2937;
+  border-color: #d5deea !important;
+  border-bottom-color: #ffffff !important;
+  box-shadow: 0 -1px 0 #ffffff inset;
+}
+
+.page-tabs-bar :deep(.el-tabs__item:hover) {
+  color: #374151;
+  background: #e8edf5;
 }
 
 .dark .page-tabs-bar :deep(.el-tabs__item.is-active) {
@@ -893,6 +1123,68 @@ onBeforeUnmount(() => {
   color: #e6a23c;
 }
 
+.designer-bottom-toolbar {
+  flex-shrink: 0;
+  border-top: 1px solid #dfe6ef;
+  background: #f3f6fa;
+  display: flex;
+  align-items: center;
+
+}
+
+.dark .designer-bottom-toolbar {
+  background: #0f172a;
+  border-top-color: #374151;
+}
+
+.designer-bottom-toolbar .page-tabs-bar {
+  width: 100%;
+  min-width: 0;
+}
+
+.page-tabs-add-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #d1d9e5;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #4b5563;
+  padding: 0;
+}
+
+.page-tabs-add-btn:hover {
+  border-color: #bfd2ee;
+  color: #2563eb;
+  background: #f8fbff;
+}
+
+.page-tabs-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-size: 12px;
+  padding: 0 6px;
+}
+
+.page-tabs-bar :deep(.el-tabs__new-tab) {
+  margin: 0 4px 0 2px;
+  width: 26px;
+  height: 26px;
+  line-height: 24px;
+  border-radius: 7px;
+  border: 1px solid #d1d9e5;
+  color: #4b5563;
+  background: #ffffff;
+}
+
+.page-tabs-bar :deep(.el-tabs__new-tab:hover) {
+  border-color: #bfd2ee;
+  color: #2563eb;
+  background: #f8fbff;
+}
+
 /* 空页面提示 */
 .empty-canvas-placeholder {
   flex: 1;
@@ -908,7 +1200,6 @@ onBeforeUnmount(() => {
 
 .empty-content {
   text-align: center;
-  padding: 40px;
 }
 
 .empty-icon {
