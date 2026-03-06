@@ -40,3 +40,8 @@ miniio/data*
 .npm-cache
 runtime/logs/
 runtime/logs/
+
+dev_ide/dist/
+designer/dist/
+dev_core/artifacts/
+*.task.md
