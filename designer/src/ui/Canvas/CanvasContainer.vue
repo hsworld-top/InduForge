@@ -137,8 +137,6 @@ const rulerMax = 5000;
 const rulerSize = 18;
 const defaultPageMarginX = 72;
 const defaultPageMarginY = 52;
-const placementBiasX = 0.54;
-const placementBiasY = 0.56;
 const containerSize = ref({ width: 0, height: 0 });
 const pointerX = ref(-9999);
 const pointerY = ref(-9999);
@@ -256,7 +254,7 @@ const handleGlobalMouseUp = (event) => {
   handleDropWithType(event, componentType);
 };
 
-// 向子组件提供当前缩放比例，用于拖拽落点换?
+// 向子组件提供当前缩放比例，用于拖拽落点换算
 provide("canvasZoom", zoom);
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
@@ -291,17 +289,17 @@ const applyDefaultPagePlacement = () => {
 
   const scaledWidth = width.value * zoom.value;
   const scaledHeight = height.value * zoom.value;
-  const extraX = viewportWidth - scaledWidth - defaultPageMarginX * 2;
-  const extraY = viewportHeight - scaledHeight - defaultPageMarginY * 2;
-  const xShift = extraX > 0 ? Math.min(extraX * placementBiasX, viewportWidth * 0.32) : 0;
-  const yShift = extraY > 0 ? Math.min(extraY * placementBiasY, viewportHeight * 0.34) : 0;
   const nextTranslateX =
-    defaultPageMarginX + xShift;
+    scaledWidth + defaultPageMarginX * 2 <= viewportWidth
+      ? Math.round(defaultPageMarginX + (viewportWidth - scaledWidth - defaultPageMarginX * 2) / 2)
+      : Math.max(0, Math.round((viewportWidth - scaledWidth) / 2));
   const nextTranslateY =
-    defaultPageMarginY + yShift;
+    scaledHeight + defaultPageMarginY * 2 <= viewportHeight
+      ? Math.round(defaultPageMarginY + (viewportHeight - scaledHeight - defaultPageMarginY * 2) / 2)
+      : Math.max(0, Math.round((viewportHeight - scaledHeight) / 2));
 
-  translateX.value = Math.round(nextTranslateX);
-  translateY.value = Math.round(nextTranslateY);
+  translateX.value = nextTranslateX;
+  translateY.value = nextTranslateY;
 };
 
 /**
@@ -1244,7 +1242,7 @@ const isLayoutContainerType = (type) => {
 /**
  * 插入组件节点
  * @param {string} type - 组件类型
- * @param {string} parentId - 父节?ID
+ * @param {string} parentId - 父节点ID
  * @param {number} x - X 坐标
  * @param {number} y - Y 坐标
  */
@@ -1270,8 +1268,6 @@ const handleZoomWheel = (event) => {
   const nextZoom = Math.min(5, Math.max(0.1, zoom.value + step * direction));
   if (nextZoom === zoom.value) return;
 
-  translateX.value = 0;
-  translateY.value = 0;
   emit("zoomChange", Number(nextZoom.toFixed(2)));
 };
 
@@ -1290,7 +1286,7 @@ const handleContainerClick = (event) => {
 
 /**
  * 构建布局配置
- * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节? * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
+ * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节点 * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
  * @returns {import('@/editor-core').LayoutItem | null}
  */
 const buildLayoutItem = (parentNode, dropInfo) => {
@@ -1365,7 +1361,7 @@ const buildFlexLayoutItem = () => {
 
 /**
  * 构建 Grid 布局配置
- * @param {import('@/editor-core').ComponentNode} parentNode - 父节? * @returns {import('@/editor-core').LayoutItem}
+ * @param {import('@/editor-core').ComponentNode} parentNode - 父节点 * @returns {import('@/editor-core').LayoutItem}
  */
 const buildGridLayoutItem = (parentNode) => {
   const columns = resolveGridCount(parentNode.props?.columns);
@@ -1386,7 +1382,7 @@ const buildGridLayoutItem = (parentNode) => {
 
 /**
  * 解析 Grid 列数
- * @param {string | number | undefined} value - 列配? * @returns {number}
+ * @param {string | number | undefined} value - 列配置 * @returns {number}
  */
 const resolveGridCount = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -1507,7 +1503,7 @@ const resolveLayoutRowByPoint = (layoutNode, layoutElement, event) => {
 };
 
 /**
- * 判断节点是否为容? * @param {string} nodeId - 节点 ID
+ * 判断节点是否为容器 * @param {string} nodeId - 节点 ID
  * @returns {boolean}
  */
 const isContainerNode = (nodeId) => {
@@ -1518,8 +1514,8 @@ const isContainerNode = (nodeId) => {
 };
 
 /**
- * 判断容器是否允许子组? * @param {string} parentId - 父节?ID
- * @param {string} childType - 子组件类? * @returns {boolean}
+ * 判断容器是否允许子组件 * @param {string} parentId - 父节点ID
+ * @param {string} childType - 子组件类型 * @returns {boolean}
  */
 const canAcceptChild = (parentId, childType) => {
   const node = doc.value?.getNode(parentId);

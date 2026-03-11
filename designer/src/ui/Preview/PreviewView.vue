@@ -16,7 +16,7 @@
       <div class="flex items-center gap-2">
         <el-radio-group v-model="viewKey" size="small">
           <el-radio-button
-            v-for="preset in viewPresets"
+            v-for="preset in previewOptions"
             :key="preset.key"
             :value="preset.key"
           >
@@ -79,13 +79,26 @@ const {
 } = storeToRefs(editorStore);
 provide("canvasZoom", ref(1));
 
-const viewKey = ref("pc");
+const viewKey = ref("page");
 const viewPresets = VIEW_PRESETS;
+const previewOptions = computed(() => [
+  { key: "page", label: "页面实际尺寸" },
+  ...viewPresets,
+]);
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
 
 // 预览框样式
 const frameStyle = computed(() => {
+  const config = currentPage.value?.config || {};
+  if (viewKey.value === "page") {
+    return {
+      width: `${config.width || 1366}px`,
+      height: `${config.height || 768}px`,
+      maxWidth: "100%",
+      maxHeight: "100%",
+    };
+  }
   const preset = viewPresets.find((item) => item.key === viewKey.value);
   const size = preset
     ? { width: `${preset.width}px`, height: `${preset.height}px` }

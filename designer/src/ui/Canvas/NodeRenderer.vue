@@ -1,86 +1,39 @@
 ﻿<template>
-  <component
-    v-if="node && isNodeVisible"
-    :is="outerTag"
-    :class="nodeClass"
-    :style="outerStyle"
-    :data-node-id="node.id"
-    :data-node-type="node.type"
-    :id="useComponentWrapper ? nodeDomId : null"
-    :ref="setNodeRef"
-    v-bind="useComponentWrapper ? resolvedProps : {}"
-    v-on="useComponentWrapper ? mergedEventListeners : {}"
-    @click.stop="handleClick"
-    @dblclick.stop="handleDoubleClick"
-    @pointerdown.capture="handlePointerDown"
-    @dragover.prevent="handleDragOver"
-    @dragstart.prevent
-    @dragleave="handleDragLeave"
-    @drop.prevent="handleDrop"
-    @contextmenu.prevent="handleContextMenu"
-  >
-    <component
-      v-if="!useComponentWrapper"
-      :is="renderTag"
-      :key="renderKey"
-      :id="!useComponentWrapper ? nodeDomId : null"
-      :style="contentStyleWithConfig"
-      v-bind="resolvedProps"
-      v-on="mergedEventListeners"
-      ref="contentRef"
-    >
+  <component v-if="node && isNodeVisible" :is="outerTag" :class="nodeClass" :style="outerStyle" :data-node-id="node.id"
+    :data-node-type="node.type" :id="useComponentWrapper ? nodeDomId : null" :ref="setNodeRef"
+    v-bind="useComponentWrapper ? resolvedProps : {}" v-on="useComponentWrapper ? mergedEventListeners : {}"
+    @click.stop="handleClick" @dblclick.stop="handleDoubleClick" @pointerdown.capture="handlePointerDown"
+    @dragover.prevent="handleDragOver" @dragstart.prevent @dragleave="handleDragLeave" @drop.prevent="handleDrop"
+    @contextmenu.prevent="handleContextMenu">
+    <component v-if="!useComponentWrapper" :is="renderTag" :key="renderKey"
+      :id="!useComponentWrapper ? nodeDomId : null" :style="contentStyleWithConfig" v-bind="resolvedProps"
+      v-on="mergedEventListeners" ref="contentRef">
       <template v-if="displayContent !== null">{{ displayContent }}</template>
       <template v-if="node?.type === 'Select'">
-        <el-option
-          v-for="option in selectOptions"
-          :key="option.value ?? option.label"
-          :label="option.label"
-          :value="option.value"
-        />
+        <el-option v-for="option in selectOptions" :key="option.value ?? option.label" :label="option.label"
+          :value="option.value" />
       </template>
       <template v-if="node?.type === 'Radio'">
-        <el-radio
-          v-for="option in radioOptions"
-          :key="option.value ?? option.label"
-          :label="option.value"
-          :disabled="Boolean(option.disabled)"
-          v-show="option.visible !== false"
-        >
+        <el-radio v-for="option in radioOptions" :key="option.value ?? option.label" :label="option.value"
+          :disabled="Boolean(option.disabled)" v-show="option.visible !== false">
           {{ option.label }}
         </el-radio>
       </template>
       <template v-if="node?.type === 'Checkbox'">
-        <el-checkbox
-          v-for="option in checkboxOptions"
-          :key="option.value ?? option.label"
-          :label="option.value"
-          :disabled="Boolean(option.disabled)"
-          v-show="option.visible !== false"
-        >
+        <el-checkbox v-for="option in checkboxOptions" :key="option.value ?? option.label" :label="option.value"
+          :disabled="Boolean(option.disabled)" v-show="option.visible !== false">
           {{ option.label }}
         </el-checkbox>
       </template>
       <template v-if="node?.type === 'Table'">
-        <el-table-column
-          v-for="column in tableColumns"
-          :key="column.prop ?? column.label"
-          v-bind="column"
-        />
+        <el-table-column v-for="column in tableColumns" :key="column.prop ?? column.label" v-bind="column" />
       </template>
       <template v-if="node?.type === 'BigDataTable'">
-        <el-table-column
-          v-for="column in bigTableColumns"
-          :key="column.prop ?? column.label"
-          v-bind="column"
-        />
+        <el-table-column v-for="column in bigTableColumns" :key="column.prop ?? column.label" v-bind="column" />
       </template>
       <template v-if="node?.type === 'Menu'">
-        <el-menu-item
-          v-for="item in menuItems"
-          :key="item.index ?? item.label"
-          :index="item.index ?? item.label"
-          :disabled="Boolean(item.disabled)"
-        >
+        <el-menu-item v-for="item in menuItems" :key="item.index ?? item.label" :index="item.index ?? item.label"
+          :disabled="Boolean(item.disabled)">
           <el-icon v-if="item.iconComponent" class="menu-item-icon">
             <component :is="item.iconComponent" />
           </el-icon>
@@ -88,51 +41,27 @@
         </el-menu-item>
       </template>
       <template v-if="node?.type === 'Timeline'">
-        <el-timeline-item
-          v-for="item in timelineItems"
-          :key="item.timestamp ?? item.label"
-          :timestamp="item.timestamp"
-        >
+        <el-timeline-item v-for="item in timelineItems" :key="item.timestamp ?? item.label" :timestamp="item.timestamp">
           {{ item.label }}
         </el-timeline-item>
       </template>
       <template v-if="node?.type === 'Tabs'">
-        <el-tab-pane
-          v-for="tab in tabsList"
-          :key="tab.name ?? tab.label"
-          :label="tab.label"
-          :name="tab.name"
-        >
-          <div
-            class="tabs-pane-body"
-            :class="{ 'is-drop-active': isDropActive }"
-            :data-node-id="node.id"
-            :data-node-type="node.type"
-            @dragover.prevent="handleDragOver"
-            @dragleave="handleDragLeave"
-            @drop.prevent="handleDrop"
-          >
+        <el-tab-pane v-for="tab in tabsList" :key="tab.name ?? tab.label" :label="tab.label" :name="tab.name">
+          <div class="tabs-pane-body" :class="{ 'is-drop-active': isDropActive }" :data-node-id="node.id"
+            :data-node-type="node.type" @dragover.prevent="handleDragOver" @dragleave="handleDragLeave"
+            @drop.prevent="handleDrop">
             <template v-if="isActiveTab(tab)">
-              <template
-                v-if="isContainer && activeTabChildIds.length === 0 && !props.isRoot"
-              >
+              <template v-if="isContainer && activeTabChildIds.length === 0 && !props.isRoot">
                 <div class="empty-container-hint">
                   <span v-if="isDropActive">释放以添加组件</span>
                   <span v-else>拖拽组件到此处</span>
                 </div>
               </template>
-              <span
-                v-if="activeTabChildIds.length === 0 && tab.content"
-                class="tabs-pane-placeholder"
-              >
+              <span v-if="activeTabChildIds.length === 0 && tab.content" class="tabs-pane-placeholder">
                 {{ tab.content }}
               </span>
-              <NodeRenderer
-                v-for="childId in activeTabChildIds"
-                :key="childId"
-                :node-id="childId"
-                :readonly="props.readonly"
-              />
+              <NodeRenderer v-for="childId in activeTabChildIds" :key="childId" :node-id="childId"
+                :readonly="props.readonly" />
             </template>
             <template v-else>
               <span class="tabs-pane-placeholder">
@@ -143,28 +72,17 @@
         </el-tab-pane>
       </template>
       <template v-if="node?.type === 'Collapse'">
-        <el-collapse-item
-          v-for="item in collapseItems"
-          :key="item.name ?? item.title"
-          :name="item.name"
-          :title="item.title"
-        >
+        <el-collapse-item v-for="item in collapseItems" :key="item.name ?? item.title" :name="item.name"
+          :title="item.title">
           {{ item.content }}
         </el-collapse-item>
       </template>
       <template v-if="node?.type === 'Steps'">
-        <el-step
-          v-for="item in stepsItems"
-          :key="item.title"
-          :title="item.title"
-          :description="item.description"
-        />
+        <el-step v-for="item in stepsItems" :key="item.title" :title="item.title" :description="item.description" />
       </template>
-      <template
-        v-if="
-          node?.type === 'ImageCarousel' || node?.type === 'CarouselComponent'
-        "
-      >
+      <template v-if="
+        node?.type === 'ImageCarousel' || node?.type === 'CarouselComponent'
+      ">
         <el-carousel-item v-for="item in carouselItems" :key="item.label">
           <div class="carousel-item-placeholder">{{ item.label }}</div>
         </el-carousel-item>
@@ -174,163 +92,111 @@
       </template>
       <template v-if="node?.type === 'Dropdown'" #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item
-            v-for="item in dropdownItems"
-            :key="item.value ?? item.label"
-            :command="item.value"
-            :disabled="Boolean(item.disabled)"
-            :divided="Boolean(item.divided ?? item.diveded)"
-            :icon="item.icon"
-          >
+          <el-dropdown-item v-for="item in dropdownItems" :key="item.value ?? item.label" :command="item.value"
+            :disabled="Boolean(item.disabled)" :divided="Boolean(item.divided ?? item.diveded)" :icon="item.icon">
             {{ item.label }}
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>
-      <template
-        v-if="
-          isContainer &&
-          !hasChildren &&
-          !props.isRoot &&
-          node?.type !== 'Tabs' &&
-          !(
-            props.readonly &&
-            (isRegionContainer ||
-              node?.type === 'ElLayout' ||
-              node?.type === 'ElLayoutRow' ||
-              node?.type === 'ElCol')
-          )
-        "
-      >
-        <div
-          class="empty-container-hint"
-          :class="{ 'is-region-hint': isRegionContainer }"
-        >
+      <template v-if="
+        isContainer &&
+        !hasChildren &&
+        !props.isRoot &&
+        node?.type !== 'Tabs' &&
+        !(
+          props.readonly &&
+          (isRegionContainer ||
+            node?.type === 'ElLayout' ||
+            node?.type === 'ElLayoutRow' ||
+            node?.type === 'ElCol')
+        )
+      ">
+        <div class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
           <span v-if="isDropActive">释放以添加组件</span>
           <span v-else>{{
             isRegionContainer ? regionHintText : "拖拽组件到此处"
-          }}</span>
+            }}</span>
         </div>
       </template>
       <!-- 插入线指示器 -->
-      <teleport
-        v-if="showInsertLine && insertLineStyle && insertLineBox"
-        to="body"
-      >
-        <div
-          class="insert-line"
-          :class="insertLineStyle.orientation"
-          :style="{
-            left:
-              insertLineStyle.orientation === 'vertical'
-                ? insertLineBox?.left + insertLineStyle.offset + 'px'
-                : insertLineBox?.left + 'px',
-            top:
-              insertLineStyle.orientation === 'horizontal'
-                ? insertLineBox?.top + insertLineStyle.offset + 'px'
-                : insertLineBox?.top + 'px',
-            width:
-              insertLineStyle.orientation === 'vertical'
-                ? '2px'
-                : insertLineBox?.width + 'px',
-            height:
-              insertLineStyle.orientation === 'horizontal'
-                ? '2px'
-                : insertLineBox?.height + 'px',
-          }"
-        />
+      <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
+        <div class="insert-line" :class="insertLineStyle.orientation" :style="{
+          left:
+            insertLineStyle.orientation === 'vertical'
+              ? insertLineBox?.left + insertLineStyle.offset + 'px'
+              : insertLineBox?.left + 'px',
+          top:
+            insertLineStyle.orientation === 'horizontal'
+              ? insertLineBox?.top + insertLineStyle.offset + 'px'
+              : insertLineBox?.top + 'px',
+          width:
+            insertLineStyle.orientation === 'vertical'
+              ? '2px'
+              : insertLineBox?.width + 'px',
+          height:
+            insertLineStyle.orientation === 'horizontal'
+              ? '2px'
+              : insertLineBox?.height + 'px',
+        }" />
       </teleport>
-      <div
-        v-else-if="showInsertLine && insertLineStyle"
-        class="insert-line"
-        :class="insertLineStyle.orientation"
+      <div v-else-if="showInsertLine && insertLineStyle" class="insert-line" :class="insertLineStyle.orientation"
         :style="{
           [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
             insertLineStyle.offset + 'px',
-        }"
-      />
-      <NodeRenderer
-        v-for="childId in node.children || []"
-        v-if="node?.type !== 'Tabs'"
-        :key="childId"
-        :node-id="childId"
-        :readonly="props.readonly"
-      />
+        }" />
+      <NodeRenderer v-for="childId in node.children || []" v-if="node?.type !== 'Tabs'" :key="childId"
+        :node-id="childId" :readonly="props.readonly" />
     </component>
     <template v-if="useComponentWrapper">
-      <div
-        v-if="
-          isContainer &&
-          !hasChildren &&
-          !props.isRoot &&
-          !(
-            props.readonly &&
-            (isRegionContainer ||
-              node?.type === 'ElLayout' ||
-              node?.type === 'ElLayoutRow' ||
-              node?.type === 'ElCol')
-          )
-        "
-        class="empty-container-hint"
-        :class="{ 'is-region-hint': isRegionContainer }"
-      >
+      <div v-if="
+        isContainer &&
+        !hasChildren &&
+        !props.isRoot &&
+        !(
+          props.readonly &&
+          (isRegionContainer ||
+            node?.type === 'ElLayout' ||
+            node?.type === 'ElLayoutRow' ||
+            node?.type === 'ElCol')
+        )
+      " class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
         <span v-if="isDropActive">释放以添加组件</span>
         <span v-else>{{
           isRegionContainer ? regionHintText : "拖拽组件到此处"
-        }}</span>
+          }}</span>
       </div>
       <!-- 插入线指示器 -->
-      <teleport
-        v-if="showInsertLine && insertLineStyle && insertLineBox"
-        to="body"
-      >
-        <div
-          class="insert-line"
-          :class="insertLineStyle.orientation"
-          :style="{
-            left:
-              insertLineStyle.orientation === 'vertical'
-                ? insertLineBox?.left + insertLineStyle.offset + 'px'
-                : insertLineBox?.left + 'px',
-            top:
-              insertLineStyle.orientation === 'horizontal'
-                ? insertLineBox?.top + insertLineStyle.offset + 'px'
-                : insertLineBox?.top + 'px',
-            width:
-              insertLineStyle.orientation === 'vertical'
-                ? '2px'
-                : insertLineBox?.width + 'px',
-            height:
-              insertLineStyle.orientation === 'horizontal'
-                ? '2px'
-                : insertLineBox?.height + 'px',
-          }"
-        />
+      <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
+        <div class="insert-line" :class="insertLineStyle.orientation" :style="{
+          left:
+            insertLineStyle.orientation === 'vertical'
+              ? insertLineBox?.left + insertLineStyle.offset + 'px'
+              : insertLineBox?.left + 'px',
+          top:
+            insertLineStyle.orientation === 'horizontal'
+              ? insertLineBox?.top + insertLineStyle.offset + 'px'
+              : insertLineBox?.top + 'px',
+          width:
+            insertLineStyle.orientation === 'vertical'
+              ? '2px'
+              : insertLineBox?.width + 'px',
+          height:
+            insertLineStyle.orientation === 'horizontal'
+              ? '2px'
+              : insertLineBox?.height + 'px',
+        }" />
       </teleport>
-      <div
-        v-else-if="showInsertLine && insertLineStyle"
-        class="insert-line"
-        :class="insertLineStyle.orientation"
+      <div v-else-if="showInsertLine && insertLineStyle" class="insert-line" :class="insertLineStyle.orientation"
         :style="{
           [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
             insertLineStyle.offset + 'px',
-        }"
-      />
-      <NodeRenderer
-        v-for="childId in node.children || []"
-        :key="childId"
-        :node-id="childId"
-        :readonly="props.readonly"
-      />
+        }" />
+      <NodeRenderer v-for="childId in node.children || []" :key="childId" :node-id="childId"
+        :readonly="props.readonly" />
     </template>
     <div v-if="showResizeHandles" class="resize-handles">
-      <span
-        v-for="handle in visibleResizeHandles"
-        :key="handle.key"
-        class="resize-handle"
-        :class="handle.key"
-        :style="{ cursor: handle.cursor }"
-        @pointerdown.stop="(event) => handleResizePointerDown(event, handle)"
-      />
+      <span v-for="handle in visibleResizeHandles" :key="handle.key" class="resize-handle" :class="handle.key"
+        :style="{ cursor: handle.cursor }" @pointerdown.stop="(event) => handleResizePointerDown(event, handle)" />
     </div>
   </component>
 </template>
@@ -639,6 +505,9 @@ const resolvedProps = computed(() => {
       const span = base + (colIndex < rem ? 1 : 0);
       nextProps.span = Math.max(1, span);
     }
+  }
+  if (props.readonly && node.value.type === "ElLayoutRow") {
+    nextProps.gutter = 0;
   }
   return nextProps;
 });
@@ -1676,14 +1545,21 @@ const contentStyle = computed(() => {
     }
   }
   if (node.value.type === "ElLayout") {
-    const rawPadding = node.value.props?.padding;
-    const paddingValue =
-      typeof rawPadding === "number" && Number.isFinite(rawPadding)
-        ? `${rawPadding}px`
-        : rawPadding !== undefined
-          ? String(rawPadding)
-          : "0px";
-    style.padding = paddingValue;
+    if (props.readonly) {
+      style.padding = "0";
+      style.gap = "0";
+      style.columnGap = "0";
+      style.rowGap = "0";
+    } else {
+      const rawPadding = node.value.props?.padding;
+      const paddingValue =
+        typeof rawPadding === "number" && Number.isFinite(rawPadding)
+          ? `${rawPadding}px`
+          : rawPadding !== undefined
+            ? String(rawPadding)
+            : "0px";
+      style.padding = paddingValue;
+    }
     delete style.minHeight;
   }
   if (
@@ -1858,8 +1734,15 @@ const wrapperComponentStyle = computed(() => {
   const parentNode = doc.value?.getParent?.(node.value?.id);
   const customStyle = normalizeStyleObject(node.value?.style || {});
   const hasCustomHeight = Boolean(customStyle.height);
+  const isEditingMode = !props.readonly;
+  const layoutSelectInset = isEditingMode ? 6 : 0;
+  const rowGuidePaddingX = isEditingMode ? 6 : 0;
+  const rowGuidePaddingY = isEditingMode ? 8 : 0;
+  const colContentInsetX = isEditingMode ? 10 : 0;
+  const colContentInsetY = isEditingMode ? 12 : 0;
   if (type === "ElLayoutRow" || type === "ElCol") {
     delete style.display;
+    style["--layout-select-inset"] = `${layoutSelectInset}px`;
   }
   if (type === "ElLayoutRow" && parentNode?.type === "ElLayout") {
     style.flex = hasCustomHeight ? "0 0 auto" : "1 1 0";
@@ -1877,7 +1760,7 @@ const wrapperComponentStyle = computed(() => {
     style.paddingLeft = "0";
   }
   if (type === "ElLayoutRow") {
-    const gutter = Number(node.value?.props?.gutter) || 0;
+    const gutter = props.readonly ? 0 : Number(node.value?.props?.gutter) || 0;
     const columns = Math.max(
       1,
       Math.min(24, Number(node.value?.props?.columns) || 1)
@@ -1904,6 +1787,16 @@ const wrapperComponentStyle = computed(() => {
     style.boxSizing = "border-box";
     style.flexWrap = "nowrap";
     style.overflow = "visible";
+    if (isEditingMode) {
+      style.paddingTop = `${rowGuidePaddingY}px`;
+      style.paddingBottom = `${rowGuidePaddingY}px`;
+      style.paddingLeft = `${rowGuidePaddingX}px`;
+      style.paddingRight = `${rowGuidePaddingX}px`;
+    }
+  }
+  if (type === "ElLayoutRow" && parentNode?.type === "ElLayout" && isEditingMode) {
+    style.marginTop = "6px";
+    style.marginBottom = "6px";
   }
   if (type === "ElCol" && parentNode?.type === "ElLayoutRow") {
     delete style.flexGrow;
@@ -1930,24 +1823,32 @@ const wrapperComponentStyle = computed(() => {
       style.height = "100%";
     }
     const colProps = resolvedProps.value || node.value?.props || {};
-    const gutter = Number(parentNode.props?.gutter) || 0;
+    const gutter =
+      props.readonly ? 0 : Number(parentNode.props?.gutter) || 0;
     if (!gutter) {
-      style.paddingLeft = "0";
-      style.paddingRight = "0";
+      style.paddingLeft = `${colContentInsetX}px`;
+      style.paddingRight = `${colContentInsetX}px`;
       style["--col-gutter-x"] = "0px";
-      style.paddingTop = "0";
-      style.paddingBottom = "0";
+      style.paddingTop = `${colContentInsetY}px`;
+      style.paddingBottom = `${colContentInsetY}px`;
       style.marginLeft = "0";
       style.marginRight = "0";
       style.margin = "0";
-      style.padding = "0";
     } else {
       const halfGutter = "calc(var(--row-gutter) / 2)";
       const halfCol = "calc(100% / var(--row-columns) / 2)";
       const clampedHalf = `min(${halfGutter}, ${halfCol})`;
-      style.paddingLeft = clampedHalf;
-      style.paddingRight = clampedHalf;
+      style.paddingLeft =
+        colContentInsetX > 0
+          ? `calc(${clampedHalf} + ${colContentInsetX}px)`
+          : clampedHalf;
+      style.paddingRight =
+        colContentInsetX > 0
+          ? `calc(${clampedHalf} + ${colContentInsetX}px)`
+          : clampedHalf;
       style["--col-gutter-x"] = clampedHalf;
+      style.paddingTop = `${colContentInsetY}px`;
+      style.paddingBottom = `${colContentInsetY}px`;
     }
     const offset = Math.max(0, Math.min(24, Number(colProps?.offset) || 0));
     if (offset > 0) {
@@ -2824,13 +2725,16 @@ const isClickOnContainerBorder = (event) => {
   ) {
     return false;
   }
-  const edge = 6;
+  const isLayoutNode =
+    node.value.type === "ElLayoutRow" || node.value.type === "ElCol";
+  const edge = node.value.type === "ElCol" ? 16 : isLayoutNode ? 10 : 6;
   const nearEdge =
     x - rect.left <= edge ||
     rect.right - x <= edge ||
     y - rect.top <= edge ||
     rect.bottom - y <= edge;
   if (!nearEdge) return false;
+  if (isLayoutNode) return true;
   const hitNodeEl = event.target?.closest?.("[data-node-id]");
   if (!hitNodeEl) return true;
   return hitNodeEl.getAttribute("data-node-id") === node.value.id;
@@ -2841,6 +2745,7 @@ const handleClick = (event) => {
     void runPreviewScript("click", event);
     return;
   }
+  if (!node.value || !selection.value) return;
   if (node.value?.type === "Tabs") {
     const hitNodeEl = event.target?.closest?.("[data-node-id]");
     const hitNodeId = hitNodeEl?.getAttribute?.("data-node-id");
@@ -2848,7 +2753,28 @@ const handleClick = (event) => {
       return;
     }
   }
-  if (isClickOnContainerBorder(event)) {
+  const isLayoutContainerNode =
+    node.value.type === "ElLayoutRow" || node.value.type === "ElCol";
+  const hasSelectionModifier =
+    event.shiftKey || event.altKey || event.metaKey || event.ctrlKey;
+  const isBorderClick = isClickOnContainerBorder(event);
+  if (
+    node.value.type === "ElCol" &&
+    !hasSelectionModifier
+  ) {
+    const rowNode = doc.value?.getParent?.(node.value.id);
+    const isColSelected = selection.value.isSelected?.(node.value.id);
+    if (
+      rowNode?.type === "ElLayoutRow" &&
+      !rowNode.locked &&
+      isColSelected
+    ) {
+      const rowElement = createSelectableElement("node", rowNode.id);
+      selection.value.select(rowElement);
+      return;
+    }
+  }
+  if (isBorderClick) {
     handleSelect(event);
     return;
   }
@@ -2866,13 +2792,15 @@ const handleClick = (event) => {
   let targetNode = resolveClickSelectionTarget(event);
   let forceRowSelection = false;
   const layoutRoot = resolveLayoutRootNode(node.value);
-  if (event.metaKey || event.ctrlKey) {
-    if (layoutRoot && layoutRoot.id !== node.value?.id) {
+  if (!isLayoutContainerNode) {
+    if (event.metaKey || event.ctrlKey) {
+      if (layoutRoot && layoutRoot.id !== node.value?.id) {
+        targetNode = layoutRoot;
+        forceRowSelection = true;
+      }
+    } else if (layoutRoot && layoutRoot.id !== node.value?.id) {
       targetNode = layoutRoot;
-      forceRowSelection = true;
     }
-  } else if (layoutRoot && layoutRoot.id !== node.value?.id) {
-    targetNode = layoutRoot;
   }
   if (
     targetNode === node.value &&
@@ -2895,7 +2823,7 @@ const handleClick = (event) => {
       }
     }
   }
-  if (!targetNode || !selection.value) return;
+  if (!targetNode) return;
   const element = createSelectableElement("node", targetNode.id);
   if (event.shiftKey) {
     selection.value.selectRange(element);
@@ -2933,6 +2861,13 @@ const handleDoubleClick = (event) => {
     }
   }
   if (node.value.type === "ElCol") {
+    const rowNode = doc.value?.getParent?.(node.value.id);
+    if (
+      rowNode?.type === "ElLayoutRow" &&
+      selection.value.isSelected?.(rowNode.id)
+    ) {
+      return;
+    }
     const layoutRoot = resolveLayoutRootNode(node.value);
     if (layoutRoot) {
       const element = createSelectableElement("node", node.value.id);
@@ -3076,7 +3011,7 @@ const buildButtonDslPatch = (config) => {
       expr: config.textExpr.trim(),
       fallback:
         Object.prototype.hasOwnProperty.call(config, "text") &&
-        config.text !== undefined
+          config.text !== undefined
           ? String(config.text ?? "")
           : undefined,
     };
@@ -3163,6 +3098,11 @@ const buildRefInfo = () => {
     Calendar: "calendar",
     WebContainer: "webContainer",
     Text: "text",
+    ElContainer: "elContainer",
+    ElMain: "elMain",
+    ElLayout: "elLayout",
+    ElLayoutRow: "elLayoutRow",
+    ElCol: "elCol",
   };
   const applyCommonDslConfig = (config) => {
     if (!config || typeof config !== "object") return;
@@ -3363,6 +3303,19 @@ const buildRefInfo = () => {
       return Number.isFinite(parsed) ? parsed : 0;
     }
     return 0;
+  };
+  /**
+   * 应用布局 DSL 配置，或返回当前节点 DOM 引用
+   * @param {string} expectedType - 期望组件类型
+   * @param {Record<string, any>} [config] - 布局 DSL 配置
+   * @returns {HTMLElement | null}
+   */
+  const applyLayoutDslOrGetElement = (expectedType, config) => {
+    if (node.value?.type !== expectedType) return nodeRef.value || null;
+    if (config && typeof config === "object") {
+      applyCommonDslConfig(config);
+    }
+    return nodeRef.value || null;
   };
   /**
    * 规范化单选/多选项数据
@@ -3620,10 +3573,13 @@ const buildRefInfo = () => {
     id: node.value.id,
     el: nodeRef.value || null,
     component: contentRef.value || null,
-    elContainer: () => nodeRef.value || null,
-    elMain: () => nodeRef.value || null,
-    elLayout: () => nodeRef.value || null,
-    elLayoutRow: () => nodeRef.value || null,
+    elContainer: (config) =>
+      applyLayoutDslOrGetElement("ElContainer", config),
+    elMain: (config) => applyLayoutDslOrGetElement("ElMain", config),
+    elLayout: (config) => applyLayoutDslOrGetElement("ElLayout", config),
+    elLayoutRow: (config) =>
+      applyLayoutDslOrGetElement("ElLayoutRow", config),
+    elCol: (config) => applyLayoutDslOrGetElement("ElCol", config),
     node: node.value,
     setProps: (patch) => {
       if (!patch || typeof patch !== "object") return;
@@ -3635,13 +3591,13 @@ const buildRefInfo = () => {
         props: { ...(node.value.props || {}), ...patch },
       });
     },
-        echarts: (method, ...args) => {
+    echarts: (method, ...args) => {
       if (node.value?.type !== "EChart") return;
       const chartApi = contentRef.value;
       if (chartApi?.callECharts) {
         return chartApi.callECharts(method, ...args);
       }
-    },setStyle: (patch) => {
+    }, setStyle: (patch) => {
       if (!patch || typeof patch !== "object") return;
       if (props.readonly) {
         applyPreviewPatch({ style: patch });
@@ -3651,7 +3607,7 @@ const buildRefInfo = () => {
         style: { ...(node.value.style || {}), ...patch },
       });
     },
-        setOption: (option, notMergeOrOpts, lazyUpdate = false, silent = false, replaceMerge) => {
+    setOption: (option, notMergeOrOpts, lazyUpdate = false, silent = false, replaceMerge) => {
       if (node.value?.type !== "EChart") return;
       if (option && typeof option.then === "function") {
         option.then((resolved) => {
@@ -3877,15 +3833,15 @@ const buildRefInfo = () => {
       const normalizedData =
         Array.isArray(rows) && Array.isArray(rows[0])
           ? rows.map((row) => {
-              if (!Array.isArray(row)) return row;
-              if (normalizedColumns.length === 0) return row;
-              const next = {};
-              normalizedColumns.forEach((col, index) => {
-                const key = col.prop ?? col.label ?? `col${index}`;
-                next[key] = row[index];
-              });
-              return next;
-            })
+            if (!Array.isArray(row)) return row;
+            if (normalizedColumns.length === 0) return row;
+            const next = {};
+            normalizedColumns.forEach((col, index) => {
+              const key = col.prop ?? col.label ?? `col${index}`;
+              next[key] = row[index];
+            });
+            return next;
+          })
           : rows;
       if (props.readonly) {
         applyPreviewPatch({ props: { data: normalizedData } });
@@ -5353,7 +5309,7 @@ const handleDragOver = (event) => {
       const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? event.clientX - colRect.left <= edgeThreshold ||
-          colRect.right - event.clientX <= edgeThreshold
+        colRect.right - event.clientX <= edgeThreshold
         : false;
       return { rowElement, parentNode, nearEdge, colRect };
     }
@@ -5381,7 +5337,7 @@ const handleDragOver = (event) => {
       const edgeThreshold = rowInsertEdgeThreshold;
       const nearEdge = rowRect
         ? event.clientY - rowRect.top <= edgeThreshold ||
-          rowRect.bottom - event.clientY <= edgeThreshold
+        rowRect.bottom - event.clientY <= edgeThreshold
         : false;
       return { layoutElement, parentNode, rowElement: nodeElement, nearEdge };
     }
@@ -5687,7 +5643,7 @@ const handleDrop = (event) => {
       const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? event.clientX - colRect.left <= edgeThreshold ||
-          colRect.right - event.clientX <= edgeThreshold
+        colRect.right - event.clientX <= edgeThreshold
         : false;
       let index = null;
       if (colRect && nearEdge) {
@@ -5724,95 +5680,95 @@ const handleDrop = (event) => {
       const edgeThreshold = rowInsertEdgeThreshold;
       const nearEdge = rowRect
         ? event.clientY - rowRect.top <= edgeThreshold ||
-          rowRect.bottom - event.clientY <= edgeThreshold
+        rowRect.bottom - event.clientY <= edgeThreshold
         : false;
       return { layoutNode: parentNode, layoutElement, nearEdge };
     }
     return null;
   };
 
-    const resolveElContainerTarget = () => {
-      const currentType = node.value?.type;
-      const isElContainerScope =
-        currentType === "ElContainer" ||
-        currentType === "ElHeader" ||
-        currentType === "ElAside" ||
-        currentType === "ElMain" ||
-        currentType === "ElFooter";
-      if (!isElContainerScope) return null;
-      const resolveLayoutTarget = (element) => {
-        if (!element) return null;
-        const nodeElement = element.closest?.("[data-node-id][data-node-type]");
-        if (!nodeElement) return null;
-        const nodeType = nodeElement.getAttribute("data-node-type");
-        if (nodeType !== "ElLayout" && nodeType !== "ElLayoutRow") return null;
-        const nodeId = nodeElement.getAttribute("data-node-id");
-        const targetNode = nodeId ? doc.value?.getNode?.(nodeId) : null;
-        if (!targetNode) return null;
-        return { node: targetNode, element: nodeElement };
-      };
-      const isRegionType = (type) =>
-        type === "ElHeader" ||
-        type === "ElAside" ||
-        type === "ElMain" ||
-        type === "ElFooter";
-      const resolveContainerMain = (containerNode) => {
-        if (!containerNode || containerNode.type !== "ElContainer") return null;
-        const mainChildId = (containerNode.children || []).find((childId) => {
-          const childNode = doc.value?.getNode?.(childId);
-          return childNode?.type === "ElMain";
-        });
-        if (!mainChildId) return null;
-        return doc.value?.getNode?.(mainChildId) || null;
-      };
-      const resolveNodeFromId = (nodeId) => {
-        if (!nodeId) return null;
-        const targetNode = doc.value?.getNode?.(nodeId);
-        if (!targetNode) return null;
-        if (isRegionType(targetNode.type)) {
-          return { node: targetNode, element: null };
-        }
-        if (targetNode.type === "ElContainer") {
-          const mainNode = resolveContainerMain(targetNode) || targetNode;
-          return { node: mainNode, element: null };
-        }
-        return null;
-      };
-      const resolveFromElement = (element) => {
-        if (!element) return null;
-        const layoutTarget = resolveLayoutTarget(element);
-        if (layoutTarget) return layoutTarget;
-        const nodeElement = element.closest?.("[data-node-id]");
-        if (!nodeElement) return null;
-        const nodeId = nodeElement.getAttribute("data-node-id");
-        const resolved = resolveNodeFromId(nodeId);
-        if (!resolved) return null;
-        return { node: resolved.node, element: nodeElement };
-      };
-
-      const hitList = document.elementsFromPoint(
-        event.clientX,
-        event.clientY
-      );
-      for (const item of hitList) {
-        if (!(item instanceof Element)) continue;
-        const resolved = resolveFromElement(item);
-        if (resolved) return resolved;
+  const resolveElContainerTarget = () => {
+    const currentType = node.value?.type;
+    const isElContainerScope =
+      currentType === "ElContainer" ||
+      currentType === "ElHeader" ||
+      currentType === "ElAside" ||
+      currentType === "ElMain" ||
+      currentType === "ElFooter";
+    if (!isElContainerScope) return null;
+    const resolveLayoutTarget = (element) => {
+      if (!element) return null;
+      const nodeElement = element.closest?.("[data-node-id][data-node-type]");
+      if (!nodeElement) return null;
+      const nodeType = nodeElement.getAttribute("data-node-type");
+      if (nodeType !== "ElLayout" && nodeType !== "ElLayoutRow") return null;
+      const nodeId = nodeElement.getAttribute("data-node-id");
+      const targetNode = nodeId ? doc.value?.getNode?.(nodeId) : null;
+      if (!targetNode) return null;
+      return { node: targetNode, element: nodeElement };
+    };
+    const isRegionType = (type) =>
+      type === "ElHeader" ||
+      type === "ElAside" ||
+      type === "ElMain" ||
+      type === "ElFooter";
+    const resolveContainerMain = (containerNode) => {
+      if (!containerNode || containerNode.type !== "ElContainer") return null;
+      const mainChildId = (containerNode.children || []).find((childId) => {
+        const childNode = doc.value?.getNode?.(childId);
+        return childNode?.type === "ElMain";
+      });
+      if (!mainChildId) return null;
+      return doc.value?.getNode?.(mainChildId) || null;
+    };
+    const resolveNodeFromId = (nodeId) => {
+      if (!nodeId) return null;
+      const targetNode = doc.value?.getNode?.(nodeId);
+      if (!targetNode) return null;
+      if (isRegionType(targetNode.type)) {
+        return { node: targetNode, element: null };
       }
-
-      const path = event.composedPath?.() || [];
-      for (const item of path) {
-        if (!(item instanceof Element)) continue;
-        const resolved = resolveFromElement(item);
-        if (resolved) return resolved;
+      if (targetNode.type === "ElContainer") {
+        const mainNode = resolveContainerMain(targetNode) || targetNode;
+        return { node: mainNode, element: null };
       }
-
-      const hit = document.elementFromPoint(event.clientX, event.clientY);
-      const resolvedHit = resolveFromElement(hit);
-      if (resolvedHit) return resolvedHit;
-
       return null;
     };
+    const resolveFromElement = (element) => {
+      if (!element) return null;
+      const layoutTarget = resolveLayoutTarget(element);
+      if (layoutTarget) return layoutTarget;
+      const nodeElement = element.closest?.("[data-node-id]");
+      if (!nodeElement) return null;
+      const nodeId = nodeElement.getAttribute("data-node-id");
+      const resolved = resolveNodeFromId(nodeId);
+      if (!resolved) return null;
+      return { node: resolved.node, element: nodeElement };
+    };
+
+    const hitList = document.elementsFromPoint(
+      event.clientX,
+      event.clientY
+    );
+    for (const item of hitList) {
+      if (!(item instanceof Element)) continue;
+      const resolved = resolveFromElement(item);
+      if (resolved) return resolved;
+    }
+
+    const path = event.composedPath?.() || [];
+    for (const item of path) {
+      if (!(item instanceof Element)) continue;
+      const resolved = resolveFromElement(item);
+      if (resolved) return resolved;
+    }
+
+    const hit = document.elementFromPoint(event.clientX, event.clientY);
+    const resolvedHit = resolveFromElement(hit);
+    if (resolvedHit) return resolvedHit;
+
+    return null;
+  };
 
   const payload =
     event.dataTransfer?.getData("application/x-designer-component") ||
@@ -6896,10 +6852,13 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     style.position = "relative";
     style.boxSizing = "border-box";
   } else if (currentNode.type === "ElLayout") {
-    const rowGap = Math.max(0, Number(currentNode.props?.gutter) || 0);
+    const rowGap = props.readonly
+      ? 0
+      : Math.max(0, Number(currentNode.props?.gutter) || 0);
     const rawPadding = currentNode.props?.padding;
-    const layoutPadding =
-      typeof rawPadding === "number" && Number.isFinite(rawPadding)
+    const layoutPadding = props.readonly
+      ? "0px"
+      : typeof rawPadding === "number" && Number.isFinite(rawPadding)
         ? `${rawPadding}px`
         : rawPadding !== undefined
           ? String(rawPadding)
@@ -7397,9 +7356,9 @@ onBeforeUnmount(() => {
  * @throws {Error} 无
  */
 /**
- * ??????
- * @param {PointerEvent} event - ????
- * @param {{ key: string, x: number, y: number }} handle - ????
+ * 处理尺寸拖拽开始
+ * @param {PointerEvent} event - 指针事件
+ * @param {{ key: string, x: number, y: number }} handle - 方向句柄
  * @returns {void}
  */
 const handleResizePointerDown = (event, handle) => {
@@ -7725,12 +7684,12 @@ const handleResizePointerDown = (event, handle) => {
   const baseSectionSizes =
     node.value.type === "ElContainer"
       ? {
-          headerHeight:
-            parseSizeToNumber(node.value.props?.headerHeight) ?? 60,
-          footerHeight:
-            parseSizeToNumber(node.value.props?.footerHeight) ?? 60,
-          asideWidth: parseSizeToNumber(node.value.props?.asideWidth) ?? 200,
-        }
+        headerHeight:
+          parseSizeToNumber(node.value.props?.headerHeight) ?? 60,
+        footerHeight:
+          parseSizeToNumber(node.value.props?.footerHeight) ?? 60,
+        asideWidth: parseSizeToNumber(node.value.props?.asideWidth) ?? 200,
+      }
       : null;
   const startClientX = event.clientX;
   const startClientY = event.clientY;
@@ -7807,7 +7766,7 @@ const handleResizePointerDown = (event, handle) => {
     try {
       pointerTarget.setPointerCapture(event.pointerId);
     } catch (error) {
-      // ??????
+      // 忽略捕获失败
     }
   }
 
@@ -7990,13 +7949,13 @@ const handleResizePointerDown = (event, handle) => {
     const sectionPatch =
       node.value.type === "ElContainer"
         ? buildContainerSectionSizePatch(
-            node.value,
-            baseWidth,
-            nextWidth,
-            baseHeight,
-            nextHeight,
-            baseSectionSizes
-          )
+          node.value,
+          baseWidth,
+          nextWidth,
+          baseHeight,
+          nextHeight,
+          baseSectionSizes
+        )
         : null;
 
     const nextStyle = { ...(node.value.style || {}) };
@@ -8012,9 +7971,9 @@ const handleResizePointerDown = (event, handle) => {
 
     let patch = sectionPatch
       ? {
-          style: nextStyle,
-          props: { ...(node.value.props || {}), ...sectionPatch },
-        }
+        style: nextStyle,
+        props: { ...(node.value.props || {}), ...sectionPatch },
+      }
       : { style: nextStyle };
 
     if (shouldUpdateAbsolute) {
@@ -8095,7 +8054,7 @@ const handleResizePointerDown = (event, handle) => {
   const up = () => {
     cleanupDragHandlers();
     if (history.value?.isInTransaction?.()) {
-      history.value.commitTransaction("????");
+      history.value.commitTransaction("调整尺寸");
     }
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("designer:node-transform-end"));
@@ -8340,15 +8299,17 @@ const handlePointerDown = (event) => {
       const nodeType = nodeElement.getAttribute("data-node-type");
       if (nodeType !== "ElCol") continue;
       const nodeId = nodeElement.getAttribute("data-node-id");
+      if (isSelfOrDescendant(nodeId)) continue;
       const colNode = nodeId ? doc.value?.getNode?.(nodeId) : null;
       if (!colNode) continue;
       const parentNode = doc.value?.getParent?.(colNode.id);
       if (parentNode?.type !== "ElLayoutRow") continue;
+      if (isSelfOrDescendant(parentNode.id)) continue;
       const colRect = nodeElement.getBoundingClientRect?.();
       const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? pointEvent.clientX - colRect.left <= edgeThreshold ||
-          colRect.right - pointEvent.clientX <= edgeThreshold
+        colRect.right - pointEvent.clientX <= edgeThreshold
         : false;
       const rowSelector = `[data-node-id="${parentNode.id}"]`;
       const rowElement =
@@ -8371,6 +8332,7 @@ const handlePointerDown = (event) => {
       );
       if (!layoutElement) continue;
       const layoutId = layoutElement.getAttribute("data-node-id");
+      if (isSelfOrDescendant(layoutId)) continue;
       const layoutNode = layoutId ? doc.value?.getNode?.(layoutId) : null;
       if (!layoutNode || layoutNode.type !== "ElLayout") continue;
       const rowIds = (layoutNode.children || []).filter((childId) => {
@@ -8493,11 +8455,11 @@ const handlePointerDown = (event) => {
           insertIndex: (dropRegion.children || []).length,
           position: rect
             ? {
-                x: rect.left,
-                y: rect.top,
-                width: rect.width,
-                height: rect.height,
-              }
+              x: rect.left,
+              y: rect.top,
+              width: rect.width,
+              height: rect.height,
+            }
             : { x: 0, y: 0, width: 0, height: 0 },
           layoutType: "flex",
           direction: "column",
@@ -8515,9 +8477,9 @@ const handlePointerDown = (event) => {
         const containerRect = containerEl?.getBoundingClientRect?.();
         const isInsideContainer = containerRect
           ? moveEvent.clientX >= containerRect.left &&
-            moveEvent.clientX <= containerRect.right &&
-            moveEvent.clientY >= containerRect.top &&
-            moveEvent.clientY <= containerRect.bottom
+          moveEvent.clientX <= containerRect.right &&
+          moveEvent.clientY >= containerRect.top &&
+          moveEvent.clientY <= containerRect.bottom
           : true;
         if (isInsideContainer) {
           return;
@@ -8622,6 +8584,7 @@ const handlePointerDown = (event) => {
     if (hasMoved && !isRegionNode && upEvent) {
       if (
         layoutInsertSnapshot?.layoutId &&
+        !isSelfOrDescendant(layoutInsertSnapshot.layoutId) &&
         node.value?.type !== "ElLayoutRow" &&
         node.value?.type !== "ElCol"
       ) {
@@ -8696,7 +8659,11 @@ const handlePointerDown = (event) => {
         }
         return;
       }
-      if (rowInsertSnapshot?.rowId && node.value?.type !== "ElCol") {
+      if (
+        rowInsertSnapshot?.rowId &&
+        !isSelfOrDescendant(rowInsertSnapshot.rowId) &&
+        node.value?.type !== "ElCol"
+      ) {
         const rowNode = doc.value?.getNode?.(rowInsertSnapshot.rowId);
         if (rowNode) {
           const colNode = editorStore.insertNode(
@@ -8891,9 +8858,9 @@ const handlePointerDown = (event) => {
         const containerRect = containerEl?.getBoundingClientRect?.();
         const isInsideContainer = containerRect
           ? upEvent.clientX >= containerRect.left &&
-            upEvent.clientX <= containerRect.right &&
-            upEvent.clientY >= containerRect.top &&
-            upEvent.clientY <= containerRect.bottom
+          upEvent.clientX <= containerRect.right &&
+          upEvent.clientY >= containerRect.top &&
+          upEvent.clientY <= containerRect.bottom
           : false;
         if (!isInsideContainer) {
           const rootEl = document.querySelector(
@@ -8969,16 +8936,16 @@ const handlePointerDown = (event) => {
       const containerRect = containerEl?.getBoundingClientRect?.();
       const isInsideContainer = containerRect
         ? upEvent.clientX >= containerRect.left &&
-          upEvent.clientX <= containerRect.right &&
-          upEvent.clientY >= containerRect.top &&
-          upEvent.clientY <= containerRect.bottom
+        upEvent.clientX <= containerRect.right &&
+        upEvent.clientY >= containerRect.top &&
+        upEvent.clientY <= containerRect.bottom
         : (() => {
-            const hit = document.elementFromPoint(
-              upEvent.clientX,
-              upEvent.clientY
-            );
-            return Boolean(containerEl && hit && containerEl.contains(hit));
-          })();
+          const hit = document.elementFromPoint(
+            upEvent.clientX,
+            upEvent.clientY
+          );
+          return Boolean(containerEl && hit && containerEl.contains(hit));
+        })();
       if (!isInsideContainer) {
         const rootEl = document.querySelector(
           `[data-node-id="${rootNodeId}"]`
@@ -9240,11 +9207,31 @@ const handlePointerDown = (event) => {
 
 .designer-node.el-layout-row {
   min-height: 0;
+  --layout-select-inset: 0px;
+}
+
+.designer-node.el-layout-row:not(.is-preview) {
+  border: 1px dashed rgba(59, 130, 246, 0.45);
+  border-radius: 2px;
+  background: transparent;
 }
 
 .designer-node.el-col {
   min-height: 0;
   outline-offset: 0;
+  --layout-select-inset: 0px;
+}
+
+.designer-node.el-col:not(.is-preview) {
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  border-radius: 4px;
+  background: transparent;
+  transition: border-color 0.15s ease;
+}
+
+.designer-node.el-col:not(.is-preview):hover {
+  border-color: rgba(59, 130, 246, 0.85);
+  background: transparent;
 }
 
 .designer-node.el-layout-row.is-selected,
@@ -9257,33 +9244,19 @@ const handlePointerDown = (event) => {
   outline: none;
 }
 
-.designer-node.el-layout-row.is-selected::after,
-.designer-node.el-layout-row:hover::after {
+.designer-node.el-layout-row.is-selected:not(.is-preview) {
+  border-style: solid;
+  border-color: #3b82f6;
+  background: transparent;
+}
+
+.designer-node.el-col.is-selected::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(-1 * var(--row-gutter, 0));
-  right: calc(-1 * var(--row-gutter, 0));
-  border: 2px solid #3b82f6;
-  border-radius: 2px;
-  pointer-events: none;
-  box-sizing: border-box;
-}
-
-.designer-node.el-layout-row:hover::after {
-  border-width: 1px;
-  border-color: rgba(59, 130, 246, 0.4);
-}
-
-.designer-node.el-col.is-selected::after,
-.designer-node.el-col:hover::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(-1 * var(--col-gutter-x, 0));
-  right: calc(-1 * var(--col-gutter-x, 0));
+  left: 0;
+  right: 0;
   border: 2px solid #3b82f6;
   border-radius: 2px;
   pointer-events: none;
@@ -9325,10 +9298,17 @@ const handlePointerDown = (event) => {
   min-height: 0;
 }
 
-.designer-node.el-layout-row .empty-container-hint,
-.designer-node.el-col .empty-container-hint {
+.designer-node.el-layout-row .empty-container-hint {
   left: calc(-1 * var(--col-gutter-x, 0));
   right: calc(-1 * var(--col-gutter-x, 0));
+}
+
+.designer-node.el-col .empty-container-hint {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
 }
 
 .empty-container-hint.is-region-hint {
@@ -9462,5 +9442,4 @@ const handlePointerDown = (event) => {
   top: 50%;
   transform: translateY(-50%);
 }
-
 </style>

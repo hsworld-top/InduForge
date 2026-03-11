@@ -10,6 +10,60 @@
     --scrollbar-thumb-hover: rgba(148, 163, 184, 0.36);
     --scrollbar-thumb-active: rgba(100, 116, 139, 0.52);
     --scrollbar-track: rgba(148, 163, 184, 0.04);
+    --designer-toolbar-height: 40px;
+    --designer-rail-width: 40px;
+    --designer-panel-width: 320px;
+    --designer-shell-padding: 8px;
+    --designer-control-height: 28px;
+    --designer-control-height-lg: 30px;
+    --designer-panel-control-height: 24px;
+    --designer-nav-icon: 16px;
+    --designer-icon-sm: 14px;
+    --designer-icon-md: 16px;
+    --designer-icon-lg: 16px;
+    --designer-panel-icon: 14px;
+    --designer-gap-2xs: 4px;
+    --designer-gap-xs: 4px;
+    --designer-gap-sm: 6px;
+    --designer-gap-md: 10px;
+    --designer-gap-lg: 16px;
+    --designer-radius-sm: 4px;
+    --designer-radius-md: 6px;
+    --designer-radius-lg: 8px;
+    --designer-font-xs: 12px;
+    --designer-font-sm: 12px;
+    --designer-font-md: 12px;
+    --designer-font-lg: 14px;
+    --designer-font-title: 14px;
+    --designer-nav-font: 12px;
+    --designer-panel-font: 12px;
+    --designer-panel-title-font: 12px;
+    --designer-shell-bg: #f5f5f5;
+    --designer-shell-surface: #ffffff;
+    --designer-surface-elevated: #ffffff;
+    --designer-group-surface: #fafafa;
+    --designer-chip-surface: #fafafa;
+    --designer-border-color: #e6e6e6;
+    --designer-border-soft: #f0f0f0;
+    --designer-border-strong: #d9d9d9;
+    --designer-text-primary: #191919;
+    --designer-text-regular: #191919;
+    --designer-text-secondary: #595959;
+    --designer-text-muted: #8c8c8c;
+    --designer-hover-surface: #f5f5f5;
+    --designer-active-surface: #f0f7ff;
+    --designer-primary: #2563eb;
+    --designer-primary-border: #1677ff;
+    --designer-primary-text: #2563eb;
+    --designer-primary-soft: #f0f7ff;
+    --designer-success-surface: #fafafa;
+    --designer-success-text: #8c8c8c;
+    --designer-warning-surface: #fff9f0;
+    --designer-warning-text: #ad6800;
+    --designer-info-surface: #f7fbff;
+    --designer-info-text: #4c88ff;
+    --designer-shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.06);
+    --designer-shadow-popover: 0 10px 28px rgba(0, 0, 0, 0.08);
   }
 
   html {
@@ -111,11 +165,15 @@
 
   /* 设计器布局 */
   .designer-layout {
-    @apply flex flex-col h-screen overflow-hidden bg-gray-100 dark:bg-gray-900;
+    @apply flex flex-col h-screen overflow-hidden;
+    background: var(--designer-shell-bg);
   }
 
   .designer-toolbar {
-    @apply flex items-center justify-between h-12 px-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 sticky top-0;
+    @apply flex items-center justify-between flex-shrink-0 sticky top-0;
+    height: var(--designer-toolbar-height);
+    background: var(--designer-shell-surface);
+    border-bottom: 1px solid var(--designer-border-color);
     z-index: 30;
   }
 
@@ -169,9 +227,11 @@
   }
 
   .tool-rail {
-    @apply flex flex-col items-center justify-between bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700;
-    width: 34px;
+    @apply flex flex-col items-center justify-between;
+    width: var(--designer-rail-width);
     flex-shrink: 0;
+    background: var(--designer-shell-surface);
+    border-color: var(--designer-border-color);
     border-left-width: 1px;
     border-right-width: 1px;
     border-style: solid;
@@ -188,7 +248,9 @@
   }
 
   .tool-rail__section {
-    @apply flex flex-col items-center gap-2 py-2;
+    @apply flex flex-col items-center;
+    gap: var(--designer-gap-xs);
+    padding: var(--designer-gap-sm) 0;
   }
 
   .tool-rail__section--bottom {
@@ -196,27 +258,34 @@
   }
 
   .tool-rail__button {
-    @apply flex items-center justify-center text-xs text-gray-500 dark:text-gray-300 rounded-md transition-colors;
-    width: 40px;
-    height: 36px;
+    @apply flex items-center justify-center transition-colors;
+    width: var(--designer-rail-width);
+    height: 28px;
+    color: var(--designer-text-secondary);
+    border-radius: var(--designer-radius-md);
   }
 
   .tool-rail__button:hover {
-    @apply bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100;
+    background: var(--designer-hover-surface);
+    color: var(--designer-text-primary);
   }
 
   .tool-rail__button.is-active {
-    @apply bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-200;
+    background: var(--designer-active-surface);
+    color: var(--designer-primary-text);
   }
 
   .tool-rail__icon {
-    @apply text-base;
+    width: var(--designer-nav-icon);
+    height: var(--designer-nav-icon);
   }
 
   .dock-panel {
-    @apply flex flex-col bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700;
-    width: 300px;
+    @apply flex flex-col;
+    width: var(--designer-panel-width);
     flex-shrink: 0;
+    background: var(--designer-shell-surface);
+    border-color: var(--designer-border-color);
     border-style: solid;
     border-left-width: 1px;
     border-right-width: 1px;
@@ -225,24 +294,44 @@
   }
 
   .dock-panel__header {
-    @apply flex items-center justify-between h-10 px-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0;
+    @apply flex items-center justify-between flex-shrink-0;
+    height: 32px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--designer-border-color);
   }
 
   .dock-panel__title {
-    @apply text-sm font-medium text-gray-700 dark:text-gray-200;
+    font-size: var(--designer-panel-title-font);
+    font-weight: 600;
+    color: var(--designer-text-primary);
+    line-height: 1;
   }
 
   .dock-panel__actions {
-    @apply flex items-center gap-1;
+    @apply flex items-center;
+    gap: var(--designer-gap-2xs);
   }
 
   .dock-panel__body {
-    @apply flex-1 overflow-auto p-2;
+    @apply flex-1 overflow-auto;
+    padding: 8px;
     min-height: 0;
+    font-size: var(--designer-panel-font);
+    color: var(--designer-text-regular);
+  }
+
+  .dock-panel__body :where(p, span, label, .el-form-item__label, .el-input__inner, .el-textarea__inner, .el-button, .el-radio__label, .el-checkbox__label, .el-select__placeholder, .el-tabs__item) {
+    font-size: var(--designer-panel-font);
+  }
+
+  .dock-panel__body :where(svg, .el-icon) {
+    width: var(--designer-panel-icon);
+    height: var(--designer-panel-icon);
   }
 
   .dock-panel.is-floating {
-    @apply absolute top-0 bottom-0 shadow-lg;
+    @apply absolute top-0 bottom-0;
+    box-shadow: var(--designer-shadow-panel);
     z-index: 20;
   }
 

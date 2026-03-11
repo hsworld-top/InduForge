@@ -2,14 +2,16 @@
   <div class="designer-layout">
     <!-- 顶部工具栏 -->
     <TopToolbar :page-name="pageName" :is-locked="isLocked" :is-dirty="isDirty" :view-presets="viewPresets"
-      :active-view-key="activeViewKey" :can-undo="canUndoEnabled" :can-redo="canRedoEnabled"
+      :active-view-key="activeViewKey" :canvas-width="canvasWidth" :canvas-height="canvasHeight"
+      :is-custom-view="isCustomView" :can-undo="canUndoEnabled" :can-redo="canRedoEnabled"
       :can-move-layer="canMoveLayer" :zoom="zoom" :show-ruler="showRuler" :show-grid="showGrid"
       :enable-snap="enableSnap" :saving="saving" :save-settings="saveSettings"
       @update:activeViewKey="handleViewChange" @undo="handleUndo" @redo="handleRedo" @preview="handlePreview"
       @previewApp="handlePreviewApp" @save="handleSave" @export="handleExport" @toggleLock="handleToggleLock"
       @moveUp="handleLayerMoveUp" @moveDown="handleLayerMoveDown" @moveToTop="handleLayerMoveToTop"
       @moveToBottom="handleLayerMoveToBottom" @openCollaboration="handleOpenCollaboration"
-      @refreshCanvas="handleRefreshCanvas" @toggleLocale="handleToggleLocale" @clearCanvas="handleClearCanvas"
+      @refreshCanvas="handleRefreshCanvas" @toggleLocale="handleToggleLocale" @openAi="handleOpenAi"
+      @toggleTheme="handleToggleTheme" @clearCanvas="handleClearCanvas" @applyCustomSize="handleApplyCustomSize"
       @saveSettingsChange="handleSaveSettingsChange" @zoomIn="handleZoomIn" @zoomOut="handleZoomOut"
       @fitCanvas="handleFitCanvas" @fitScreen="handleFitScreen" @toggleRuler="handleToggleRuler"
       @toggleGrid="handleToggleGrid" @toggleSnap="handleToggleSnap" />
@@ -190,12 +192,16 @@ const viewResetToken = ref(0);
 const activeViewKey = ref("pc");
 const viewPresets = VIEW_PRESETS;
 const SAVE_SETTINGS_STORAGE_KEY = "designer_save_settings";
+const AUTO_FIT_PADDING = 48;
 const saveSettings = ref({
   autoSave: false,
   intervalMinutes: 5,
 });
 const autoSaveTimer = ref(null);
 const autoSaving = ref(false);
+const autoZoomEnabled = ref(true);
+const autoFitFrame = ref(0);
+const canvasHostResizeObserver = ref(null);
 
 const drawingTool = ref("");
 
@@ -428,16 +434,39 @@ const pageName = computed(() => {
 
 const isDirty = computed(() => canUndo.value);
 
-const activeView = computed(() =>
-  viewPresets.find((preset) => preset.key === activeViewKey.value)
-);
-
-const canvasWidth = computed(() => activeView.value?.width || 1920);
-const canvasHeight = computed(() => activeView.value?.height || 1080);
 const currentPageSnapshot = computed(() => {
   const page = pages.value.find((item) => item.id === currentPageId.value);
   return page || currentPage.value || null;
 });
+const activeView = computed(() =>
+  viewPresets.find((preset) => preset.key === activeViewKey.value)
+);
+const defaultViewPreset = computed(
+  () => viewPresets.find((preset) => preset.key === "pc") || viewPresets[0] || { width: 1366, height: 768 }
+);
+const normalizeCanvasDimension = (value, fallback) => {
+  const next = Number(value);
+  return Number.isFinite(next) && next > 0 ? Math.round(next) : fallback;
+};
+const resolvedPageWidth = computed(() =>
+  normalizeCanvasDimension(currentPageSnapshot.value?.config?.width, defaultViewPreset.value.width)
+);
+const resolvedPageHeight = computed(() =>
+  normalizeCanvasDimension(currentPageSnapshot.value?.config?.height, defaultViewPreset.value.height)
+);
+const matchedViewPreset = computed(() =>
+  viewPresets.find(
+    (preset) =>
+      preset.width === resolvedPageWidth.value && preset.height === resolvedPageHeight.value
+  ) || null
+);
+const canvasWidth = computed(() =>
+  normalizeCanvasDimension(currentPageSnapshot.value?.config?.width, defaultViewPreset.value.width)
+);
+const canvasHeight = computed(() =>
+  normalizeCanvasDimension(currentPageSnapshot.value?.config?.height, defaultViewPreset.value.height)
+);
+const isCustomView = computed(() => !matchedViewPreset.value);
 const showGrid = computed(() =>
   Boolean(currentPageSnapshot.value?.config?.showGrid)
 );
@@ -575,6 +604,10 @@ const handleSave = async () => {
  * @param {string} key - 视图键值
  */
 const handleViewChange = (key) => {
+  if (key === "custom") {
+    activeViewKey.value = "custom";
+    return;
+  }
   activeViewKey.value = key;
   const targetView = viewPresets.find((preset) => preset.key === key);
   if (!targetView || !currentPage.value) return;
@@ -583,6 +616,23 @@ const handleViewChange = (key) => {
     width: targetView.width,
     height: targetView.height,
   };
+  editorStore.updateCurrentPage({ config: nextConfig });
+};
+
+/**
+ * 应用自定义画布尺寸
+ * @param {{width:number,height:number}} size - 自定义尺寸
+ * @returns {void}
+ */
+const handleApplyCustomSize = ({ width, height }) => {
+  const page = currentPageSnapshot.value;
+  if (!page) return;
+  const nextConfig = {
+    ...(page.config || {}),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+  activeViewKey.value = "custom";
   editorStore.updateCurrentPage({ config: nextConfig });
 };
 
@@ -661,6 +711,7 @@ const toggleRightFloating = () => {
  * @param {number} value - 缩放比例
  */
 const handleZoomChange = (value) => {
+  autoZoomEnabled.value = false;
   zoom.value = value;
 };
 
@@ -679,6 +730,7 @@ const clampZoom = (value) => {
  * @returns {void}
  */
 const handleZoomOut = () => {
+  autoZoomEnabled.value = false;
   zoom.value = clampZoom(zoom.value - 0.1);
 };
 
@@ -687,6 +739,7 @@ const handleZoomOut = () => {
  * @returns {void}
  */
 const handleZoomIn = () => {
+  autoZoomEnabled.value = false;
   zoom.value = clampZoom(zoom.value + 0.1);
 };
 
@@ -695,8 +748,63 @@ const handleZoomIn = () => {
  * @returns {void}
  */
 const handleFitCanvas = () => {
+  autoZoomEnabled.value = false;
   zoom.value = 1;
   viewResetToken.value += 1;
+};
+
+/**
+ * 计算适配当前工作区的推荐缩放比例
+ * 规则与参考页保持一致：能 100% 展示时保持 100%，不足时自动缩放到刚好适配
+ * @returns {number}
+ */
+const getRecommendedZoom = () => {
+  const host = canvasHostRef.value;
+  if (!host) {
+    return 1;
+  }
+  const rect = host.getBoundingClientRect();
+  const availableWidth = Math.max(1, rect.width - AUTO_FIT_PADDING);
+  const availableHeight = Math.max(1, rect.height - AUTO_FIT_PADDING);
+  const fitZoom = Math.min(
+    1,
+    availableWidth / canvasWidth.value,
+    availableHeight / canvasHeight.value
+  );
+  return clampZoom(fitZoom);
+};
+
+/**
+ * 应用推荐缩放比例
+ * @returns {void}
+ */
+const applyRecommendedZoom = () => {
+  const nextZoom = getRecommendedZoom();
+  if (Math.abs(nextZoom - zoom.value) < 0.001) {
+    if (viewResetToken.value === 0) {
+      viewResetToken.value += 1;
+    }
+    return;
+  }
+  zoom.value = nextZoom;
+  viewResetToken.value += 1;
+};
+
+/**
+ * 在布局稳定后重新计算自动缩放
+ * @returns {void}
+ */
+const scheduleAutoFit = () => {
+  if (!autoZoomEnabled.value) return;
+  if (typeof window === "undefined") return;
+  if (autoFitFrame.value) {
+    window.cancelAnimationFrame(autoFitFrame.value);
+  }
+  autoFitFrame.value = window.requestAnimationFrame(() => {
+    autoFitFrame.value = 0;
+    if (!autoZoomEnabled.value) return;
+    applyRecommendedZoom();
+  });
 };
 
 /**
@@ -704,20 +812,8 @@ const handleFitCanvas = () => {
  * @returns {void}
  */
 const handleFitScreen = () => {
-  const host = canvasHostRef.value;
-  if (!host) {
-    zoom.value = 1;
-    return;
-  }
-  const rect = host.getBoundingClientRect();
-  const availableWidth = Math.max(1, rect.width - 48);
-  const availableHeight = Math.max(1, rect.height - 48);
-  const fitZoom = Math.min(
-    availableWidth / canvasWidth.value,
-    availableHeight / canvasHeight.value
-  );
-  zoom.value = clampZoom(fitZoom);
-  viewResetToken.value += 1;
+  autoZoomEnabled.value = true;
+  applyRecommendedZoom();
 };
 
 /**
@@ -937,6 +1033,20 @@ const handleOpenCollaboration = () => {
 };
 
 /**
+ * 工具栏：AI 助手（占位）
+ */
+const handleOpenAi = () => {
+  ElMessage.info("AI 助手功能开发中");
+};
+
+/**
+ * 工具栏：主题切换（占位）
+ */
+const handleToggleTheme = () => {
+  ElMessage.info("主题设置功能开发中");
+};
+
+/**
  * 更多设置：刷新画布（占位）
  */
 const handleRefreshCanvas = () => {
@@ -956,6 +1066,18 @@ const handleToggleLocale = () => {
 const handleClearCanvas = () => {
   ElMessage.info("清除当前界面功能开发中");
 };
+
+watch(
+  [currentPageId, () => currentPageSnapshot.value?.config?.width, () => currentPageSnapshot.value?.config?.height],
+  () => {
+    activeViewKey.value = matchedViewPreset.value?.key || "custom";
+    autoZoomEnabled.value = true;
+    nextTick(() => {
+      scheduleAutoFit();
+    });
+  },
+  { immediate: true }
+);
 
 /**
  * 加载工程数据
@@ -987,9 +1109,24 @@ onMounted(() => {
   }
   syncAutoSaveTimer();
   void loadProject();
+  nextTick(() => {
+    scheduleAutoFit();
+    if (canvasHostRef.value && typeof ResizeObserver !== "undefined") {
+      canvasHostResizeObserver.value = new ResizeObserver(() => {
+        scheduleAutoFit();
+      });
+      canvasHostResizeObserver.value.observe(canvasHostRef.value);
+    }
+  });
 });
 
 onBeforeUnmount(() => {
+  if (typeof window !== "undefined" && autoFitFrame.value) {
+    window.cancelAnimationFrame(autoFitFrame.value);
+    autoFitFrame.value = 0;
+  }
+  canvasHostResizeObserver.value?.disconnect?.();
+  canvasHostResizeObserver.value = null;
   clearAutoSaveTimer();
   void editorStore.releasePageLock();
 });

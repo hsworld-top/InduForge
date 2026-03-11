@@ -65,17 +65,23 @@ const handleToggle = () => {
 
 <style scoped>
 .dock-panel__action-btn {
-  width: 26px;
-  height: 26px;
+  width: var(--designer-panel-control-height);
+  height: var(--designer-panel-control-height);
   padding: 0;
-  border-radius: 6px;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  color: #4b5563;
+  border-radius: var(--designer-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--designer-text-secondary);
+  box-shadow: none;
+}
+
+.dock-panel__action-btn:hover {
+  background: var(--designer-hover-surface);
+  color: var(--designer-text-primary);
 }
 
 :deep(.dock-panel__action-btn svg) {
-  width: 14px;
-  height: 14px;
+  width: var(--designer-panel-icon);
+  height: var(--designer-panel-icon);
 }
 </style>
