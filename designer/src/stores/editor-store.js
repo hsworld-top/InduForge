@@ -1088,7 +1088,7 @@ export const useEditorStore = defineStore("editor", () => {
       if (rejected) {
         return {
           ok: false,
-          error: rejected.reason instanceof Error ? rejected.reason : new Error("淇濆瓨澶辫触"),
+          error: rejected.reason instanceof Error ? rejected.reason : new Error("保存失败"),
         };
       }
 

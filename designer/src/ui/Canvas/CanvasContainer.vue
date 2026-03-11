@@ -256,7 +256,7 @@ const handleGlobalMouseUp = (event) => {
   handleDropWithType(event, componentType);
 };
 
-// 向子组件提供当前缩放比例，用于拖拽落点换?
+// 向子组件提供当前缩放比例，用于拖拽落点换算
 provide("canvasZoom", zoom);
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
@@ -1244,7 +1244,7 @@ const isLayoutContainerType = (type) => {
 /**
  * 插入组件节点
  * @param {string} type - 组件类型
- * @param {string} parentId - 父节?ID
+ * @param {string} parentId - 父节点ID
  * @param {number} x - X 坐标
  * @param {number} y - Y 坐标
  */
@@ -1290,7 +1290,7 @@ const handleContainerClick = (event) => {
 
 /**
  * 构建布局配置
- * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节? * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
+ * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节点 * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
  * @returns {import('@/editor-core').LayoutItem | null}
  */
 const buildLayoutItem = (parentNode, dropInfo) => {
@@ -1365,7 +1365,7 @@ const buildFlexLayoutItem = () => {
 
 /**
  * 构建 Grid 布局配置
- * @param {import('@/editor-core').ComponentNode} parentNode - 父节? * @returns {import('@/editor-core').LayoutItem}
+ * @param {import('@/editor-core').ComponentNode} parentNode - 父节点 * @returns {import('@/editor-core').LayoutItem}
  */
 const buildGridLayoutItem = (parentNode) => {
   const columns = resolveGridCount(parentNode.props?.columns);
@@ -1386,7 +1386,7 @@ const buildGridLayoutItem = (parentNode) => {
 
 /**
  * 解析 Grid 列数
- * @param {string | number | undefined} value - 列配? * @returns {number}
+ * @param {string | number | undefined} value - 列配置 * @returns {number}
  */
 const resolveGridCount = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -1507,7 +1507,7 @@ const resolveLayoutRowByPoint = (layoutNode, layoutElement, event) => {
 };
 
 /**
- * 判断节点是否为容? * @param {string} nodeId - 节点 ID
+ * 判断节点是否为容器 * @param {string} nodeId - 节点 ID
  * @returns {boolean}
  */
 const isContainerNode = (nodeId) => {
@@ -1518,8 +1518,8 @@ const isContainerNode = (nodeId) => {
 };
 
 /**
- * 判断容器是否允许子组? * @param {string} parentId - 父节?ID
- * @param {string} childType - 子组件类? * @returns {boolean}
+ * 判断容器是否允许子组件 * @param {string} parentId - 父节点ID
+ * @param {string} childType - 子组件类型 * @returns {boolean}
  */
 const canAcceptChild = (parentId, childType) => {
   const node = doc.value?.getNode(parentId);

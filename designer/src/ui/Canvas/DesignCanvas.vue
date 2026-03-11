@@ -403,7 +403,7 @@ const handleMoveToBottom = () => {
 };
 
 /**
- * �������һ��
+ * 在选中列左侧插入一列
  */
 const handleInsertColLeft = () => {
   editorStore.insertElColLeft();
@@ -411,7 +411,7 @@ const handleInsertColLeft = () => {
 };
 
 /**
- * �Ҳ�����һ��
+ * 在选中列右侧插入一列
  */
 const handleInsertColRight = () => {
   editorStore.insertElColRight();
