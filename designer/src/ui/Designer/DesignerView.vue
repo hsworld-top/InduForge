@@ -369,13 +369,16 @@ watch(
 // 初始化时打开当前页面
 watch(
   currentPageId,
-  (newPageId) => {
+  (newPageId, oldPageId) => {
     if (newPageId && !pageTabs.value.find((t) => t.id === newPageId)) {
       // ✅ 验证页面是否真的存在
       const pageExists = editorStore.pages.some((p) => p.id === newPageId);
       if (pageExists) {
         openPageTab(newPageId);
       }
+    }
+    if (newPageId && oldPageId && newPageId !== oldPageId) {
+      activateMaterialPanel();
     }
   },
   { immediate: true }
@@ -696,6 +699,14 @@ const handleLeftClose = () => {
 
 const handleRightClose = () => {
   rightActiveKey.value = "";
+};
+
+/**
+ * 页面切换后默认回到物料面板，便于继续拖拽组件
+ * @returns {void}
+ */
+const activateMaterialPanel = () => {
+  leftActiveKey.value = "material";
 };
 
 const toggleLeftFloating = () => {
