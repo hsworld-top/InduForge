@@ -13,111 +13,240 @@
 
     <!-- 页面树 -->
     <div class="page-tree-content">
-      <!-- 分组列表 -->
-      <template v-for="folder in filteredFolders" :key="folder.id">
-        <div
-          class="tree-node folder-node"
-          :class="{ 'is-active': selectedNode?.id === folder.id }"
-          @click="handleFolderClick(folder)"
-          @contextmenu.prevent="
-            handleNodeContextMenu($event, {
-              id: folder.id,
-              type: 'folder',
-              label: folder.name,
-            })
-          "
-        >
-          <div class="node-indent" />
-          <component
-            :is="folderStates[folder.id] ? IconEpArrowDown : IconEpArrowRight"
-            class="node-arrow"
-            @click.stop="toggleFolder(folder.id)"
-          />
-          <IconEpFolder class="node-icon folder" />
-          <span class="node-label">{{ folder.name }}</span>
-          <span class="node-count">{{ getChildrenCount(folder.id) }}</span>
+      <section class="page-section">
+        <div class="page-section__header">
+          <span class="page-section__title">基础页面</span>
         </div>
-        <div v-if="folderStates[folder.id]" class="tree-children">
+        <div v-if="filteredBasicSlots.length" class="page-section__body">
           <div
-            v-for="page in getFilteredChildren(folder.id)"
-            :key="page.id"
-            class="tree-node page-node level-1"
-            :class="{ 'is-active': isPageActive(page.id) }"
-            @click="handleNodeClick({ id: page.id, type: 'page' })"
-            @dblclick="
-              handleNodeDoubleClick({
-                id: page.id,
-                type: 'page',
-                label: getPageLabel(page),
-              })
-            "
-            @contextmenu.prevent="
-              handleNodeContextMenu($event, {
-                id: page.id,
-                type: 'page',
-                label: getPageLabel(page),
-                parentId: folder.id,
-              })
-            "
+            v-for="slot in filteredBasicSlots"
+            :key="slot.type"
+            class="tree-node page-node page-node--basic"
+            :class="{
+              'is-active': slot.page ? isPageActive(slot.page.id) : false,
+              'is-empty': !slot.page,
+            }"
+            @click="handleBasicSlotClick(slot)"
+            @dblclick="handleBasicSlotDoubleClick(slot)"
           >
-            <div class="node-indent">
-              <span class="tree-line vertical" />
-              <span class="tree-line horizontal" />
-            </div>
+            <div class="node-indent node-indent--basic" />
             <IconEpDocument class="node-icon page" />
-            <span class="node-label">{{ getPageLabel(page) }}</span>
-            <el-tag
-              v-for="badge in getPageBadges(page)"
-              :key="badge.text"
-              size="small"
-              :type="badge.type"
-              class="node-badge"
+            <span class="node-label">{{ slot.label }}</span>
+            <el-dropdown
+              trigger="click"
+              placement="bottom-end"
+              @command="(command) => handleBasicRowAction(command, slot)"
             >
-              {{ badge.text }}
-            </el-tag>
+              <el-button class="node-action-btn" text @click.stop>
+                <IconEpMoreFilled />
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="slot.page" command="open">打开</el-dropdown-item>
+                  <el-dropdown-item v-else command="create">创建</el-dropdown-item>
+                  <el-dropdown-item v-if="slot.page" command="export">导出页面</el-dropdown-item>
+                  <el-dropdown-item
+                    v-if="slot.page && slot.type !== 'home'"
+                    command="delete"
+                    divided
+                  >
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
-      </template>
+        <div v-else class="page-section__empty">暂无基础页面</div>
+      </section>
 
-      <!-- 根目录页面 -->
-      <div
-        v-for="page in filteredRootPages"
-        :key="page.id"
-        class="tree-node page-node"
-        :class="{ 'is-active': isPageActive(page.id) }"
-        @click="handleNodeClick({ id: page.id, type: 'page' })"
-        @dblclick="
-          handleNodeDoubleClick({
-            id: page.id,
-            type: 'page',
-            label: getPageLabel(page),
-          })
-        "
-        @contextmenu.prevent="
-          handleNodeContextMenu($event, {
-            id: page.id,
-            type: 'page',
-            label: getPageLabel(page),
-          })
-        "
+      <section
+        class="page-section"
+        @dragover.prevent="handleContainerDragOver($event, null)"
+        @drop.prevent="handleContainerDrop(null)"
       >
-        <div class="node-indent" />
-        <IconEpDocument class="node-icon page" />
-        <span class="node-label">{{ getPageLabel(page) }}</span>
-        <el-tag
-          v-for="badge in getPageBadges(page)"
-          :key="badge.text"
-          size="small"
-          :type="badge.type"
-          class="node-badge"
-        >
-          {{ badge.text }}
-        </el-tag>
-      </div>
+        <div class="page-section__header">
+          <span class="page-section__title">普通页面</span>
+        </div>
+        <div v-if="filteredBusinessRootItems.length" class="page-section__body">
+          <template v-for="item in filteredBusinessRootItems" :key="item.id">
+            <div
+              v-if="item.type === 'folder'"
+              class="tree-node folder-node"
+              :class="{
+                'is-active': selectedNode?.id === item.id,
+                'is-drop-target': dragOverTarget?.id === item.id && dragOverTarget?.mode === 'append',
+              }"
+              draggable="true"
+              @dragstart="handleDragStart(item, null)"
+              @dragend="handleDragEnd"
+              @dragover.prevent="handleFolderDragOver($event, item)"
+              @dragleave="handleDragLeave(item.id)"
+              @drop.prevent="handleFolderDrop(item)"
+              @click="handleFolderClick(item)"
+            >
+              <div class="node-indent node-indent--folder" />
+              <component
+                :is="folderStates[item.id] ? IconEpArrowDown : IconEpArrowRight"
+                class="node-arrow"
+                @click.stop="toggleFolder(item.id)"
+              />
+              <IconEpFolder class="node-icon folder" />
+              <span class="node-label">{{ item.name }}</span>
+              <span class="node-count">{{ getChildrenCount(item.id) }}</span>
+              <el-dropdown
+                trigger="click"
+                placement="bottom-end"
+                @command="(command) => handleRowAction(command, item)"
+              >
+                <el-button class="node-action-btn" text @click.stop>
+                  <IconEpMoreFilled />
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                    <el-dropdown-item command="createPage">新建页面</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除分组</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            <div
+              v-else
+              class="tree-node page-node"
+              :class="{
+                'is-active': isPageActive(item.id),
+                'is-drop-target': dragOverTarget?.id === item.id && dragOverTarget?.mode === 'before',
+              }"
+              draggable="true"
+              @dragstart="handleDragStart(item, null)"
+              @dragend="handleDragEnd"
+              @dragover.prevent="handleNodeDragOver($event, item, null)"
+              @dragleave="handleDragLeave(item.id)"
+              @drop.prevent="handleNodeDrop(item, null)"
+              @click="handleNodeClick({ id: item.id, type: 'page' })"
+              @dblclick="
+                handleNodeDoubleClick({
+                  id: item.id,
+                  type: 'page',
+                  label: getPageLabel(item),
+                })
+              "
+            >
+              <div class="node-indent" />
+              <IconEpDocument class="node-icon page" />
+              <span class="node-label">{{ getPageLabel(item) }}</span>
+              <el-dropdown
+                trigger="click"
+                placement="bottom-end"
+                @command="(command) => handleRowAction(command, item)"
+              >
+                <el-button class="node-action-btn" text @click.stop>
+                  <IconEpMoreFilled />
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="open">打开</el-dropdown-item>
+                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                    <el-dropdown-item command="export">导出页面</el-dropdown-item>
+                    <el-dropdown-item
+                      v-if="item.parentId"
+                      command="moveToRoot"
+                      divided
+                    >
+                      移到根目录
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      v-for="target in getMoveTargets(item)"
+                      :key="`root-${item.id}-${target.id ?? 'root'}`"
+                      :command="buildMoveCommand(target.id)"
+                    >
+                      {{ target.label }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
 
-      <!-- 空状态 -->
+            <div v-if="item.type === 'folder' && folderStates[item.id]" class="tree-children">
+              <div
+                v-for="page in getBusinessChildren(item.id)"
+                :key="page.id"
+                class="tree-node page-node level-1"
+                :class="{
+                  'is-active': isPageActive(page.id),
+                  'is-drop-target': dragOverTarget?.id === page.id && dragOverTarget?.mode === 'before',
+                }"
+                draggable="true"
+                @dragstart="handleDragStart(page, item.id)"
+                @dragend="handleDragEnd"
+                @dragover.prevent="handleNodeDragOver($event, page, item.id)"
+                @dragleave="handleDragLeave(page.id)"
+                @drop.prevent="handleNodeDrop(page, item.id)"
+                @click="handleNodeClick({ id: page.id, type: 'page' })"
+                @dblclick="
+                  handleNodeDoubleClick({
+                    id: page.id,
+                    type: 'page',
+                    label: getPageLabel(page),
+                  })
+                "
+              >
+                <div class="node-indent">
+                  <span class="tree-line horizontal" />
+                </div>
+                <IconEpDocument class="node-icon page" />
+                <span class="node-label">{{ getPageLabel(page) }}</span>
+                <el-dropdown
+                  trigger="click"
+                  placement="bottom-end"
+                  @command="(command) => handleRowAction(command, page)"
+                >
+                  <el-button class="node-action-btn" text @click.stop>
+                    <IconEpMoreFilled />
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="open">打开</el-dropdown-item>
+                      <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                      <el-dropdown-item command="export">导出页面</el-dropdown-item>
+                      <el-dropdown-item
+                        v-if="page.parentId"
+                        command="moveToRoot"
+                        divided
+                      >
+                        移到根目录
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        v-for="target in getMoveTargets(page)"
+                        :key="`${page.id}-${target.id ?? 'root'}`"
+                        :command="buildMoveCommand(target.id)"
+                      >
+                        {{ target.label }}
+                      </el-dropdown-item>
+                      <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+              <div
+                v-if="!getBusinessChildren(item.id).length && !searchText.trim()"
+                class="folder-dropzone"
+                @dragover.prevent="handleFolderDragOver($event, item)"
+                @dragleave="handleDragLeave(item.id)"
+                @drop.prevent="handleFolderDrop(item)"
+              >
+                拖拽页面到此分组
+              </div>
+            </div>
+          </template>
+        </div>
+        <div v-else class="page-section__empty">暂无普通页面</div>
+      </section>
+
       <div
-        v-if="filteredAllPages.length === 0 && filteredFolders.length === 0"
+        v-if="filteredBasicSlots.length === 0 && filteredBusinessRootItems.length === 0"
         class="empty-state"
       >
         <IconEpDocument class="empty-icon" />
@@ -160,6 +289,7 @@
       <el-form-item label="名称" prop="name">
         <el-input
           v-model="createForm.name"
+          :disabled="isFixedBasicCreateType(createForm.type)"
           placeholder="请输入名称"
           maxlength="50"
           show-word-limit
@@ -207,132 +337,6 @@
       </div>
     </template>
   </el-dialog>
-  <!-- 右键菜单 -->
-  <Teleport to="body">
-    <div
-      v-if="contextMenuVisible"
-      class="context-menu-overlay"
-      @click="contextMenuVisible = false"
-      @contextmenu.prevent="contextMenuVisible = false"
-    />
-    <div
-      v-if="contextMenuVisible"
-      class="context-menu-popup"
-      :style="{
-        left: contextMenuPoint.x + 'px',
-        top: contextMenuPoint.y + 'px',
-      }"
-    >
-      <!-- 页面操作 -->
-      <template v-if="contextMenuNode?.type === 'page'">
-        <div class="menu-item" @click="handleCommand('open', contextMenuNode)">
-          <IconEpView class="menu-icon" />
-          <span>打开</span>
-        </div>
-        <div
-          class="menu-item"
-          @click="handleCommand('rename', contextMenuNode)"
-        >
-          <IconEpEdit class="menu-icon" />
-          <span>重命名</span>
-        </div>
-        <div
-          class="menu-item"
-          @click="handleCommand('export', contextMenuNode)"
-        >
-          <IconEpDownload class="menu-icon" />
-          <span>导出页面</span>
-        </div>
-        <div
-          class="menu-item"
-          @click="handleCommand('setHome', contextMenuNode)"
-        >
-          <IconEpHomeFilled class="menu-icon" />
-          <span>设为首页</span>
-        </div>
-        <div class="menu-divider" />
-        <div
-          class="menu-submenu"
-          :class="{ 'is-disabled': isHomePageNode(contextMenuNode) }"
-        >
-          <div class="menu-item has-submenu">
-            <IconEpFolder class="menu-icon" />
-            <span>{{
-              isHomePageNode(contextMenuNode) ? "首页不可移动" : "移动到"
-            }}</span>
-            <IconEpArrowRight
-              v-if="!isHomePageNode(contextMenuNode)"
-              class="submenu-arrow"
-            />
-          </div>
-          <div v-if="!isHomePageNode(contextMenuNode)" class="submenu-content">
-            <div
-              v-for="target in getMoveTargets(contextMenuNode)"
-              :key="target.id ?? 'root'"
-              class="menu-item"
-              @click="handleMove(contextMenuNode.id, target.id)"
-            >
-              <component
-                :is="target.id ? IconEpFolder : IconEpFolderOpened"
-                class="menu-icon"
-                :class="target.id ? 'text-yellow-500' : 'text-gray-400'"
-              />
-              <span>{{ target.label }}</span>
-            </div>
-            <div
-              v-if="!getMoveTargets(contextMenuNode).length"
-              class="menu-empty"
-            >
-              无可选分组
-            </div>
-          </div>
-        </div>
-        <div class="menu-divider" />
-        <div
-          class="menu-item"
-          :class="{
-            danger: !isHomePageNode(contextMenuNode),
-            disabled: isHomePageNode(contextMenuNode),
-          }"
-          @click="
-            !isHomePageNode(contextMenuNode) &&
-            handleCommand('delete', contextMenuNode)
-          "
-        >
-          <IconEpDelete class="menu-icon" />
-          <span>{{
-            isHomePageNode(contextMenuNode) ? "首页不可删除" : "删除"
-          }}</span>
-        </div>
-      </template>
-
-      <!-- 分组操作 -->
-      <template v-else-if="contextMenuNode?.type === 'folder'">
-        <div
-          class="menu-item"
-          @click="handleCommand('rename', contextMenuNode)"
-        >
-          <IconEpEdit class="menu-icon" />
-          <span>重命名</span>
-        </div>
-        <div
-          class="menu-item"
-          @click="handleCreateInFolder(contextMenuNode.id)"
-        >
-          <IconEpPlus class="menu-icon" />
-          <span>新建页面</span>
-        </div>
-        <div class="menu-divider" />
-        <div
-          class="menu-item danger"
-          @click="handleCommand('delete', contextMenuNode)"
-        >
-          <IconEpDelete class="menu-icon" />
-          <span>删除分组</span>
-        </div>
-      </template>
-    </div>
-  </Teleport>
 </template>
 
 <script setup>
@@ -340,8 +344,6 @@ import {
   computed,
   h,
   inject,
-  onBeforeUnmount,
-  onMounted,
   ref,
   watch,
   watchEffect,
@@ -359,15 +361,13 @@ import IconEpLock from "~icons/ep/lock";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpEdit from "~icons/ep/edit";
 import IconEpDelete from "~icons/ep/delete";
-import IconEpView from "~icons/ep/view";
-import IconEpHomeFilled from "~icons/ep/home-filled";
-import IconEpDownload from "~icons/ep/download";
+import IconEpMoreFilled from "~icons/ep/more-filled";
 
 // 注入打开标签页的方法
 const openPageTab = inject("openPageTab", null);
 
 const editorStore = useEditorStore();
-const { pages, currentPageId, entryConfig, canUndo } = storeToRefs(editorStore);
+const { pages, currentPageId, entryConfig, canUndo, projectId } = storeToRefs(editorStore);
 const selectedNode = ref(null);
 const createDialogVisible = ref(false);
 const createFormRef = ref(null);
@@ -375,9 +375,13 @@ const createForm = ref({ type: "page", name: "", parentId: null });
 const creating = ref(false);
 const skipSwitchPrompt = ref(false);
 const pageSwitchPromptKey = "designer.pageSwitchPrompt.disabled";
-const contextMenuVisible = ref(false);
-const contextMenuNode = ref(null);
-const contextMenuPoint = ref({ x: 0, y: 0 });
+const PAGE_TREE_ORDER_PREFIX = "designer.pageTreeOrder";
+const ROOT_CONTAINER_KEY = "__root__";
+const pageOrderMap = ref({});
+const dragState = ref(null);
+const dragOverTarget = ref(null);
+let dragOverFrameId = 0;
+let pendingDragOverTarget = null;
 
 // 新建弹窗类型选项
 const createTypeOptions = [
@@ -392,18 +396,6 @@ const createTypeOptions = [
     label: "分组",
     desc: "创建一个分组来组织页面",
     icon: IconEpFolder,
-  },
-  {
-    value: "login",
-    label: "登录页",
-    desc: "创建系统登录页面",
-    icon: IconEpLock,
-  },
-  {
-    value: "logout",
-    label: "登出页",
-    desc: "创建系统登出页面",
-    icon: IconEpLock,
   },
 ];
 
@@ -420,7 +412,73 @@ const createFormRules = {
   name: [
     { required: true, message: "请输入名称", trigger: "blur" },
     { min: 1, max: 50, message: "名称长度在 1 到 50 个字符", trigger: "blur" },
+    {
+      validator: (_rule, value, callback) => {
+        const result = validatePageName(value);
+        if (!result.valid) {
+          callback(new Error(result.message));
+          return;
+        }
+        callback();
+      },
+      trigger: "blur",
+    },
   ],
+};
+
+const BASIC_PAGE_META = {
+  home: { label: "首页", path: "/" },
+  login: { label: "登录页", path: "/login" },
+  logout: { label: "登出页", path: "/logout" },
+};
+
+/**
+ * 获取基础页面固定配置
+ * @param {"home" | "login" | "logout"} type - 基础页面类型
+ * @returns {{ label: string, path: string }}
+ */
+const getBasicPageMeta = (type) => BASIC_PAGE_META[type] || { label: "", path: "/" };
+
+/**
+ * 判断是否为固定基础页创建类型
+ * @param {string} type - 创建类型
+ * @returns {boolean}
+ */
+const isFixedBasicCreateType = (type) => ["home", "login", "logout"].includes(type);
+
+/**
+ * 获取基础页面类型
+ * @param {import('@/editor-core').PageNode | undefined | null} page - 页面
+ * @returns {"home" | "login" | "logout" | null}
+ */
+const getFixedSystemType = (page) => {
+  if (!page) return null;
+  if (entryConfig.value?.homePageId === page.id) return "home";
+  if (entryConfig.value?.loginPageId === page.id || page.path === "/login") return "login";
+  if (entryConfig.value?.logoutPageId === page.id || page.path === "/logout") return "logout";
+  return null;
+};
+
+/**
+ * 校验页面名称是否合法
+ * @param {string} value - 页面名称
+ * @returns {{ valid: boolean, message: string }}
+ */
+const validatePageName = (value) => {
+  const name = String(value || "").trim();
+  if (!name) {
+    return { valid: false, message: "名称不能为空" };
+  }
+  if (/^[.]+$/.test(name)) {
+    return { valid: false, message: "页面名称不能仅包含点号" };
+  }
+  if (/[/?#\\%]/.test(name)) {
+    return { valid: false, message: "页面名称不能包含 / ? # % \\" };
+  }
+  if (/[\u0000-\u001f\u007f]/.test(name)) {
+    return { valid: false, message: "页面名称不能包含控制字符" };
+  }
+  return { valid: true, message: "" };
 };
 
 /**
@@ -428,7 +486,6 @@ const createFormRules = {
  * @param {string} folderId - 分组ID
  */
 const handleCreateInFolder = (folderId) => {
-  contextMenuVisible.value = false;
   createForm.value = { type: "page", name: "", parentId: folderId };
   createDialogVisible.value = true;
 };
@@ -454,120 +511,62 @@ const handleFolderClick = (folder) => {
   toggleFolder(folder.id);
 };
 
-/**
- * 过滤后的分组
- */
-const filteredFolders = computed(() => {
-  return appPages.value.filter((page) => page.type === "folder");
-});
+const getProjectOrderStorageKey = () =>
+  `${PAGE_TREE_ORDER_PREFIX}:${projectId.value || "default"}`;
 
-/**
- * 获取分组下的子页面数量
- * @param {string} folderId - 分组ID
- * @returns {number}
- */
-const getChildrenCount = (folderId) => {
-  return appPages.value.filter(
-    (page) => page.type === "page" && page.parentId === folderId
-  ).length;
+const loadPageOrderMap = () => {
+  try {
+    const raw = localStorage.getItem(getProjectOrderStorageKey());
+    pageOrderMap.value = raw ? JSON.parse(raw) || {} : {};
+  } catch (error) {
+    pageOrderMap.value = {};
+  }
 };
 
-/**
- * 获取分组下过滤后的子页面
- * @param {string} folderId - 分组ID
- * @returns {Array}
- */
-const getFilteredChildren = (folderId) => {
-  const keyword = searchText.value.trim().toLowerCase();
-  const children = appPages.value.filter(
-    (page) => page.type === "page" && page.parentId === folderId
-  );
-  if (!keyword) return children;
-  return children.filter(
-    (page) =>
-      (page.name || "").toLowerCase().includes(keyword) ||
-      (page.path || "").toLowerCase().includes(keyword)
-  );
+const persistPageOrderMap = () => {
+  try {
+    localStorage.setItem(
+      getProjectOrderStorageKey(),
+      JSON.stringify(pageOrderMap.value || {})
+    );
+  } catch (error) {
+    // ignore
+  }
 };
 
-/**
- * 页面排序权重（首页 > 登录/登出 > 其他）
- * @param {Object} page - 页面对象
- * @returns {number} 排序权重
- */
-const getPageSortWeight = (page) => {
-  const homePageId = entryConfig.value?.homePageId;
-  const loginPageId = entryConfig.value?.loginPageId;
-  const logoutPageId = entryConfig.value?.logoutPageId;
+const getContainerOrderKey = (parentId = null) => parentId || ROOT_CONTAINER_KEY;
 
-  if (page.id === homePageId) return 0; // 首页优先
-  if (page.id === loginPageId) return 1; // 登录页次之
-  if (page.id === logoutPageId) return 2; // 登出页再次
-  return 3; // 其他页面
+const updateContainerOrder = (containerKey, orderedIds) => {
+  const nextMap = { ...(pageOrderMap.value || {}) };
+  nextMap[containerKey] = Array.from(new Set((orderedIds || []).filter(Boolean)));
+  pageOrderMap.value = nextMap;
+  persistPageOrderMap();
 };
 
-/**
- * 过滤后的根目录页面（无分组），按优先级排序
- */
-const filteredRootPages = computed(() => {
-  const keyword = searchText.value.trim().toLowerCase();
-  let rootPages = appPages.value.filter(
-    (page) => page.type === "page" && !page.parentId
-  );
+const sortItemsByStoredOrder = (items, containerKey) => {
+  const source = Array.isArray(items) ? [...items] : [];
+  const stored = Array.isArray(pageOrderMap.value?.[containerKey])
+    ? pageOrderMap.value[containerKey]
+    : [];
+  const orderIndexMap = new Map(stored.map((id, index) => [id, index]));
+  return source.sort((a, b) => {
+    const aIndex = orderIndexMap.has(a.id) ? orderIndexMap.get(a.id) : Number.MAX_SAFE_INTEGER;
+    const bIndex = orderIndexMap.has(b.id) ? orderIndexMap.get(b.id) : Number.MAX_SAFE_INTEGER;
+    if (aIndex !== bIndex) {
+      return aIndex - bIndex;
+    }
+    return (a.name || "").localeCompare(b.name || "", "zh-CN");
+  });
+};
 
-  // 按优先级排序：首页 > 登录/登出 > 其他
-  rootPages = [...rootPages].sort(
-    (a, b) => getPageSortWeight(a) - getPageSortWeight(b)
-  );
-
-  if (!keyword) return rootPages;
-  return rootPages.filter(
-    (page) =>
-      (page.name || "").toLowerCase().includes(keyword) ||
-      (page.path || "").toLowerCase().includes(keyword)
-  );
-});
-
-/**
- * 过滤后的所有业务页（扁平化）
- */
-const filteredAppPagesFlat = computed(() => {
-  const keyword = searchText.value.trim().toLowerCase();
-  const allPages = appPages.value.filter((page) => page.type === "page");
-  if (!keyword) return allPages;
-  return allPages.filter(
-    (page) =>
-      (page.name || "").toLowerCase().includes(keyword) ||
-      (page.path || "").toLowerCase().includes(keyword)
-  );
-});
-
-/**
- * 过滤后的所有页面（统一列表）
- */
-const filteredAllPages = computed(() => {
-  const keyword = searchText.value.trim().toLowerCase();
-  const allPages = pages.value.filter((page) => page.type === "page");
-  if (!keyword) return allPages;
-  return allPages.filter(
-    (page) =>
-      (page.name || "").toLowerCase().includes(keyword) ||
-      (page.path || "").toLowerCase().includes(keyword)
-  );
-});
-
-const contextMenuVirtualRef = {
-  getBoundingClientRect: () => {
-    const { x, y } = contextMenuPoint.value;
-    return {
-      width: 0,
-      height: 0,
-      top: y,
-      bottom: y,
-      left: x,
-      right: x,
-    };
-  },
+const ensureContainerOrder = (containerKey, items) => {
+  const nextIds = (items || []).map((item) => item.id);
+  const currentIds = Array.isArray(pageOrderMap.value?.[containerKey])
+    ? pageOrderMap.value[containerKey].filter((id) => nextIds.includes(id))
+    : [];
+  const missingIds = nextIds.filter((id) => !currentIds.includes(id));
+  if (missingIds.length === 0 && currentIds.length === nextIds.length) return;
+  updateContainerOrder(containerKey, [...currentIds, ...missingIds]);
 };
 
 watch(
@@ -586,6 +585,15 @@ watch(
  */
 const getPageLabel = (page) => {
   return page.name || page.title || page.id;
+};
+
+const matchesKeyword = (page) => {
+  const keyword = searchText.value.trim().toLowerCase();
+  if (!keyword) return true;
+  return (
+    (page.name || "").toLowerCase().includes(keyword) ||
+    (page.path || "").toLowerCase().includes(keyword)
+  );
 };
 
 /**
@@ -633,91 +641,363 @@ watchEffect(() => {
 });
 
 /**
- * 获取页面标签数组
- * @param {import('@/editor-core').PageNode} page - 页面
- * @returns {Array<{text: string, type: string}>}
- */
-const getPageBadges = (page) => {
-  const badges = [];
-
-  if (entryConfig.value?.homePageId === page.id) {
-    badges.push({ text: "首页", type: "success" });
-  }
-  if (entryConfig.value?.loginPageId === page.id) {
-    badges.push({ text: "登录", type: "warning" });
-  }
-  if (entryConfig.value?.logoutPageId === page.id) {
-    badges.push({ text: "登出", type: "info" });
-  }
-
-  return badges;
-};
-
-/**
- * 页面标识（向后兼容，返回第一个标签）
- * @param {import('@/editor-core').PageNode} page - 页面
- * @returns {string}
- */
-const getPageBadge = (page) => {
-  const badges = getPageBadges(page);
-  return badges.length > 0 ? badges[0].text : "";
-};
-
-/**
- * 获取页面标签类型（向后兼容，返回第一个标签类型）
- * @param {import('@/editor-core').PageNode} page - 页面
- * @returns {string}
- */
-const getPageBadgeType = (page) => {
-  const badges = getPageBadges(page);
-  return badges.length > 0 ? badges[0].type : "info";
-};
-
-/**
  * 所有可见页面（包含登录页、登出页等系统页面）
  */
 const appPages = computed(() =>
   pages.value.filter((page) => page.type !== "dialog")
 );
+const systemPages = computed(() => ({
+  home:
+    appPages.value.find((page) => page.id === entryConfig.value?.homePageId) || null,
+  login:
+    appPages.value.find((page) => page.id === entryConfig.value?.loginPageId) ||
+    appPages.value.find((page) => getFixedSystemPath(page) === "/login") ||
+    null,
+  logout:
+    appPages.value.find((page) => page.id === entryConfig.value?.logoutPageId) ||
+    appPages.value.find((page) => getFixedSystemPath(page) === "/logout") ||
+    null,
+}));
+const basicPageIdSet = computed(
+  () =>
+    new Set(
+      [
+        systemPages.value.home?.id,
+        systemPages.value.login?.id,
+        systemPages.value.logout?.id,
+      ].filter(Boolean)
+    )
+);
 
-const buildAppTree = (pageList) => {
-  const nodeMap = new Map();
-  const roots = [];
+const basicPageMap = computed(() => {
+  const pageMap = new Map();
+  appPages.value.forEach((page) => {
+    pageMap.set(page.id, page);
+  });
+  return pageMap;
+});
 
-  for (const page of pageList) {
-    nodeMap.set(page.id, {
-      id: page.id,
-      label: getPageLabel(page),
-      type: page.type,
-      parentId: page.parentId || null,
-      badge: getPageBadge(page),
-      children: [],
-    });
+const basicPageSlots = computed(() => {
+  const slots = [
+    {
+      type: "home",
+      label: "首页",
+      pageId: systemPages.value.home?.id || "",
+    },
+    {
+      type: "login",
+      label: "登录页",
+      pageId: systemPages.value.login?.id || "",
+    },
+    {
+      type: "logout",
+      label: "登出页",
+      pageId: systemPages.value.logout?.id || "",
+    },
+  ];
+  return slots.map((slot) => ({
+    ...slot,
+    path: getBasicPageMeta(slot.type).path,
+    page: slot.pageId ? basicPageMap.value.get(slot.pageId) || null : null,
+  }));
+});
+
+const filteredBasicSlots = computed(() => {
+  const keyword = searchText.value.trim().toLowerCase();
+  if (!keyword) {
+    return basicPageSlots.value;
   }
+  return basicPageSlots.value.filter((slot) => {
+    const label = slot.label.toLowerCase();
+    const pageName = slot.page ? getPageLabel(slot.page).toLowerCase() : "";
+    return label.includes(keyword) || pageName.includes(keyword);
+  });
+});
 
-  for (const node of nodeMap.values()) {
-    if (node.parentId && nodeMap.has(node.parentId)) {
-      nodeMap.get(node.parentId).children.push(node);
-    } else {
-      roots.push(node);
+const businessPages = computed(() =>
+  appPages.value.filter((page) => !basicPageIdSet.value.has(page.id))
+);
+
+const businessFolders = computed(() =>
+  businessPages.value.filter((page) => page.type === "folder")
+);
+
+const businessRootItems = computed(() =>
+  sortItemsByStoredOrder(
+    businessPages.value.filter(
+      (page) =>
+        page.type === "folder" ||
+        (page.type === "page" && !page.parentId)
+    ),
+    ROOT_CONTAINER_KEY
+  ).sort((a, b) => {
+    if (a.type === b.type) return 0;
+    return a.type === "folder" ? -1 : 1;
+  })
+);
+
+const getChildrenCount = (folderId) =>
+  businessPages.value.filter(
+    (page) => page.type === "page" && page.parentId === folderId
+  ).length;
+
+const getBusinessChildren = (folderId) =>
+  sortItemsByStoredOrder(
+    businessPages.value.filter(
+      (page) =>
+        page.type === "page" &&
+        page.parentId === folderId &&
+        matchesKeyword(page)
+    ),
+    getContainerOrderKey(folderId)
+  );
+
+const filteredBusinessRootItems = computed(() =>
+  businessRootItems.value.filter((item) => {
+    if (item.type === "folder") {
+      return matchesKeyword(item) || getBusinessChildren(item.id).length > 0;
     }
-  }
+    return matchesKeyword(item);
+  })
+);
 
-  return roots;
+const moveIdBefore = (ids, sourceId, targetId) => {
+  const nextIds = ids.filter((id) => id !== sourceId);
+  const targetIndex = nextIds.indexOf(targetId);
+  if (targetIndex === -1) {
+    nextIds.push(sourceId);
+    return nextIds;
+  }
+  nextIds.splice(targetIndex, 0, sourceId);
+  return nextIds;
 };
 
-const appTreeData = computed(() => buildAppTree(appPages.value));
+const appendIdToContainer = (containerKey, sourceId, visibleItems) => {
+  const nextIds = (visibleItems || []).map((item) => item.id).filter((id) => id !== sourceId);
+  nextIds.push(sourceId);
+  updateContainerOrder(containerKey, nextIds);
+};
 
 /**
- * 选中分组名称
- * @returns {string}
+ * 仅在目标发生变化时更新拖拽高亮，避免 dragover 频繁触发整树重渲染
+ * @param {{ id: string, mode: string, parentId: string | null }} nextTarget - 新目标
  */
-const selectedGroupLabel = computed(() => {
-  if (selectedNode.value?.type === "folder") {
-    return selectedNode.value.label || "未命名分组";
+const setDragOverTarget = (nextTarget) => {
+  pendingDragOverTarget = nextTarget;
+  if (dragOverFrameId) return;
+  dragOverFrameId = requestAnimationFrame(() => {
+    dragOverFrameId = 0;
+    const current = dragOverTarget.value;
+    const target = pendingDragOverTarget;
+    if (!target) return;
+    if (
+      current?.id === target.id &&
+      current?.mode === target.mode &&
+      (current?.parentId || null) === (target.parentId || null)
+    ) {
+      return;
+    }
+    dragOverTarget.value = target;
+  });
+};
+
+const handleDragStart = (item, parentId) => {
+  dragState.value = {
+    id: item.id,
+    type: item.type,
+    parentId: parentId || null,
+  };
+};
+
+const handleDragEnd = () => {
+  if (dragOverFrameId) {
+    cancelAnimationFrame(dragOverFrameId);
+    dragOverFrameId = 0;
   }
-  return "根目录";
-});
+  pendingDragOverTarget = null;
+  dragState.value = null;
+  dragOverTarget.value = null;
+};
+
+const handleDragLeave = (targetId) => {
+  if (dragOverTarget.value?.id === targetId) {
+    dragOverTarget.value = null;
+  }
+  if (pendingDragOverTarget?.id === targetId) {
+    pendingDragOverTarget = null;
+  }
+};
+
+const handleNodeDragOver = (event, item, parentId) => {
+  if (!dragState.value || dragState.value.id === item.id) return;
+  event.dataTransfer.dropEffect = "move";
+  setDragOverTarget({
+    id: item.id,
+    mode: "before",
+    parentId: parentId || null,
+  });
+};
+
+const handleFolderDragOver = (event, folder) => {
+  if (!dragState.value || dragState.value.id === folder.id) return;
+  event.dataTransfer.dropEffect = "move";
+  setDragOverTarget({
+    id: folder.id,
+    mode: "append",
+    parentId: folder.id,
+  });
+};
+
+const handleContainerDragOver = (event, parentId) => {
+  if (!dragState.value) return;
+  event.dataTransfer.dropEffect = "move";
+  setDragOverTarget({
+    id: getContainerOrderKey(parentId),
+    mode: "append",
+    parentId: parentId || null,
+  });
+};
+
+const handleNodeDrop = async (targetItem, parentId) => {
+  if (!dragState.value || dragState.value.id === targetItem.id) return;
+  const source = { ...dragState.value };
+  const targetParentId = parentId || null;
+  const sourceParentId = source.parentId || null;
+
+  if (source.type === "page" && sourceParentId !== targetParentId) {
+    await editorStore.movePageToGroup(source.id, targetParentId);
+  }
+
+  const visibleItems =
+    targetParentId === null
+      ? businessRootItems.value
+      : businessPages.value.filter(
+          (page) => page.type === "page" && page.parentId === targetParentId
+        );
+  const nextOrder = moveIdBefore(
+    visibleItems.map((item) => item.id),
+    source.id,
+    targetItem.id
+  );
+  updateContainerOrder(getContainerOrderKey(targetParentId), nextOrder);
+
+  if (sourceParentId !== targetParentId) {
+    const sourceItems =
+      sourceParentId === null
+        ? businessRootItems.value.filter((item) => item.id !== source.id)
+        : businessPages.value.filter(
+            (page) =>
+              page.type === "page" &&
+              page.parentId === sourceParentId &&
+              page.id !== source.id
+          );
+    updateContainerOrder(
+      getContainerOrderKey(sourceParentId),
+      sourceItems.map((item) => item.id)
+    );
+  }
+  handleDragEnd();
+};
+
+const handleFolderDrop = async (folder) => {
+  if (!dragState.value || dragState.value.id === folder.id) return;
+  const source = { ...dragState.value };
+  if (source.type !== "page") {
+    handleDragEnd();
+    return;
+  }
+  if (source.parentId !== folder.id) {
+    await editorStore.movePageToGroup(source.id, folder.id);
+  }
+  appendIdToContainer(
+    getContainerOrderKey(folder.id),
+    source.id,
+    businessPages.value.filter(
+      (page) => page.type === "page" && page.parentId === folder.id
+    )
+  );
+  if (!folderStates.value[folder.id]) {
+    folderStates.value[folder.id] = true;
+  }
+  if ((source.parentId || null) !== folder.id) {
+    const sourceItems =
+      source.parentId === null
+        ? businessRootItems.value.filter((item) => item.id !== source.id)
+        : businessPages.value.filter(
+            (page) =>
+              page.type === "page" &&
+              page.parentId === source.parentId &&
+              page.id !== source.id
+          );
+    updateContainerOrder(
+      getContainerOrderKey(source.parentId),
+      sourceItems.map((item) => item.id)
+    );
+  }
+  handleDragEnd();
+};
+
+const handleContainerDrop = async (parentId) => {
+  if (!dragState.value) return;
+  const source = { ...dragState.value };
+  const targetParentId = parentId || null;
+
+  if (source.type === "page" && (source.parentId || null) !== targetParentId) {
+    await editorStore.movePageToGroup(source.id, targetParentId);
+  }
+
+  const visibleItems =
+    targetParentId === null
+      ? businessRootItems.value.filter((item) => item.id !== source.id)
+      : businessPages.value.filter(
+          (page) =>
+            page.type === "page" &&
+            page.parentId === targetParentId &&
+            page.id !== source.id
+        );
+  appendIdToContainer(getContainerOrderKey(targetParentId), source.id, visibleItems);
+
+  if ((source.parentId || null) !== targetParentId) {
+    const sourceItems =
+      source.parentId === null
+        ? businessRootItems.value.filter((item) => item.id !== source.id)
+        : businessPages.value.filter(
+            (page) =>
+              page.type === "page" &&
+              page.parentId === source.parentId &&
+              page.id !== source.id
+          );
+    updateContainerOrder(
+      getContainerOrderKey(source.parentId),
+      sourceItems.map((item) => item.id)
+    );
+  }
+  handleDragEnd();
+};
+
+watch(
+  projectId,
+  () => {
+    loadPageOrderMap();
+  },
+  { immediate: true }
+);
+
+watch(
+  [businessRootItems, businessFolders],
+  () => {
+    ensureContainerOrder(ROOT_CONTAINER_KEY, businessRootItems.value);
+    businessFolders.value.forEach((folder) => {
+      ensureContainerOrder(
+        getContainerOrderKey(folder.id),
+        businessPages.value.filter(
+          (page) => page.type === "page" && page.parentId === folder.id
+        )
+      );
+    });
+  },
+  { immediate: true, deep: true }
+);
 
 /**
  * 初始化切换提示配置
@@ -751,18 +1031,6 @@ const setSwitchPromptDisabled = (disabled) => {
 
 initSwitchPromptState();
 
-const handleGlobalClick = () => {
-  contextMenuVisible.value = false;
-};
-
-onMounted(() => {
-  document.addEventListener("click", handleGlobalClick);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("click", handleGlobalClick);
-});
-
 /**
  * 选中页面（只选中，不切换页面）
  * @param {{ id: string }} node - 点击的节点
@@ -771,6 +1039,33 @@ const handleNodeClick = (node) => {
   selectedNode.value = node;
   // 点击只选中节点，不切换页面
   // 页面切换通过双击 handleNodeDoubleClick 实现
+};
+
+/**
+ * 处理基础页面槽位点击
+ * @param {{ page?: import('@/editor-core').PageNode | null }} slot - 槽位
+ * @returns {void}
+ */
+const handleBasicSlotClick = (slot) => {
+  if (!slot?.page) {
+    selectedNode.value = null;
+    return;
+  }
+  handleNodeClick({ id: slot.page.id, type: "page" });
+};
+
+/**
+ * 处理基础页面槽位双击
+ * @param {{ page?: import('@/editor-core').PageNode | null }} slot - 槽位
+ * @returns {void}
+ */
+const handleBasicSlotDoubleClick = (slot) => {
+  if (!slot?.page) return;
+  void handleNodeDoubleClick({
+    id: slot.page.id,
+    type: "page",
+    label: slot.label,
+  });
 };
 
 /**
@@ -807,22 +1102,6 @@ const handleNodeDoubleClick = async (node) => {
   } catch (error) {
     ElMessage.error("切换页面失败");
   }
-};
-
-/**
- * 处理右键菜单
- * @param {MouseEvent} event - 鼠标事件
- * @param {{ id: string, type: string, label?: string }} node - 节点数据
- */
-const handleNodeContextMenu = (event, node) => {
-  if (!event) return;
-  event.preventDefault();
-  if (node) {
-    selectedNode.value = node;
-    contextMenuNode.value = node;
-  }
-  contextMenuPoint.value = { x: event.clientX, y: event.clientY };
-  contextMenuVisible.value = true;
 };
 
 /**
@@ -900,33 +1179,173 @@ const ensureUnsavedSwitch = async (targetName) => {
   }
 };
 
-/**
- * 右键菜单
- * @param {string} command - 命令
- * @param {{ id: string, type: string, label: string }} data - 节点
- */
-const handleCommand = (command, data) => {
-  selectedNode.value = data;
-  contextMenuVisible.value = false;
+const buildMoveCommand = (targetId) => `move:${targetId || "root"}`;
 
-  switch (command) {
-    case "open":
-      if (openPageTab && data.type === "page") {
-        openPageTab(data.id);
+/**
+ * 创建基础页面
+ * @param {"home" | "login" | "logout"} basicType - 基础页面类型
+ * @returns {Promise<void>}
+ */
+const createBasicPage = async (basicType) => {
+  if (basicType === "home") {
+    if (entryConfig.value?.homePageId) {
+      ElMessage.warning("首页已存在");
+      return;
+    }
+    if (!projectId.value) {
+      ElMessage.error("缺少工程信息");
+      return;
+    }
+    const result = await editorStore.createHomePage(projectId.value);
+    if (!result?.ok || !result.pageId) {
+      ElMessage.error(result?.error?.message || "首页创建失败");
+      return;
+    }
+    await openCreatedPageTab(result.pageId);
+    ElMessage.success("首页创建成功");
+    return;
+  }
+
+  if (basicType === "login") {
+    if (
+      entryConfig.value?.loginPageId ||
+      pages.value.some((page) => page.path === "/login")
+    ) {
+      ElMessage.warning("登录页已存在");
+      return;
+    }
+    try {
+      const meta = getBasicPageMeta("login");
+      const schemaContent = editorStore.buildNewPageSchema({
+        name: meta.label,
+        path: meta.path,
+      });
+      const result = await editorStore.createPage({
+        name: meta.label,
+        type: "page",
+        parentId: null,
+        schemaContent,
+      });
+      const pageId = result?.id;
+      if (!pageId) {
+        throw new Error("登录页创建失败");
       }
-      break;
-    case "rename":
-      void handleRename();
-      break;
-    case "delete":
-      void handleDelete();
-      break;
-    case "setHome":
-      handleSetHome(data.id);
-      break;
-    case "export":
-      handleExportPage(data.id, data.label);
-      break;
+      editorStore.updateEntry({ loginPageId: pageId });
+      await editorStore.persistEntry();
+      await openCreatedPageTab(pageId);
+      ElMessage.success("登录页创建成功");
+    } catch (error) {
+      ElMessage.error(error?.message || "登录页创建失败");
+    }
+    return;
+  }
+
+  if (basicType === "logout") {
+    if (
+      entryConfig.value?.logoutPageId ||
+      pages.value.some((page) => page.path === "/logout")
+    ) {
+      ElMessage.warning("登出页已存在");
+      return;
+    }
+    try {
+      const meta = getBasicPageMeta("logout");
+      const schemaContent = editorStore.buildNewPageSchema({
+        name: meta.label,
+        path: meta.path,
+      });
+      const result = await editorStore.createPage({
+        name: meta.label,
+        type: "page",
+        parentId: null,
+        schemaContent,
+      });
+      const pageId = result?.id;
+      if (!pageId) {
+        throw new Error("登出页创建失败");
+      }
+      editorStore.updateEntry({ logoutPageId: pageId });
+      await editorStore.persistEntry();
+      await openCreatedPageTab(pageId);
+      ElMessage.success("登出页创建成功");
+    } catch (error) {
+      ElMessage.error(error?.message || "登出页创建失败");
+    }
+  }
+};
+
+/**
+ * 基础页面行尾操作
+ * @param {string} command - 命令
+ * @param {{ type: "home" | "login" | "logout", page?: import('@/editor-core').PageNode | null }} slot - 槽位
+ * @returns {void}
+ */
+const handleBasicRowAction = (command, slot) => {
+  if (!slot) return;
+  if (command === "create") {
+    void createBasicPage(slot.type);
+    return;
+  }
+  if (!slot.page) return;
+  selectedNode.value = {
+    id: slot.page.id,
+    type: "page",
+    label: slot.label,
+    parentId: null,
+  };
+  handleRowAction(command, slot.page);
+};
+
+/**
+ * 行尾操作按钮
+ * @param {string} command - 命令
+ * @param {import('@/editor-core').PageNode} node - 节点
+ * @returns {void}
+ */
+const handleRowAction = (command, node) => {
+  if (!node) return;
+  selectedNode.value = {
+    id: node.id,
+    type: node.type,
+    label: getPageLabel(node),
+    parentId: node.parentId || null,
+  };
+
+  if (command === "open" && node.type === "page") {
+    void handleNodeDoubleClick({
+      id: node.id,
+      type: "page",
+      label: getPageLabel(node),
+    });
+    return;
+  }
+  if (command === "rename") {
+    if (getFixedSystemType(node)) {
+      ElMessage.warning("基础页面名称固定，不支持重命名");
+      return;
+    }
+    void handleRename();
+    return;
+  }
+  if (command === "export" && node.type === "page") {
+    handleExportPage(node.id, getPageLabel(node));
+    return;
+  }
+  if (command === "createPage" && node.type === "folder") {
+    handleCreateInFolder(node.id);
+    return;
+  }
+  if (command === "moveToRoot" && node.type === "page") {
+    void handleMove(node.id, null);
+    return;
+  }
+  if (command.startsWith("move:") && node.type === "page") {
+    const targetId = command.slice(5);
+    void handleMove(node.id, targetId === "root" ? null : targetId);
+    return;
+  }
+  if (command === "delete") {
+    void handleDelete();
   }
 };
 
@@ -993,22 +1412,27 @@ const openCreatedPageTab = async (pageId) => {
  */
 const handleMove = async (pageId, parentId) => {
   try {
-    await editorStore.movePageToGroup(pageId, parentId);
-    contextMenuVisible.value = false;
+    const page = pages.value.find((item) => item.id === pageId);
+    const currentParentId = page?.parentId || null;
+    if (currentParentId === (parentId || null)) {
+      return;
+    }
+    if (getFixedSystemType(page) && parentId) {
+      ElMessage.warning("基础页面不支持移动到分组");
+      return;
+    }
+    const nextPath = page?.type === "page"
+      ? getFixedSystemPath(page) || buildBusinessPagePath(getPageLabel(page), parentId)
+      : undefined;
+    await editorStore.movePageToGroup(pageId, parentId, nextPath);
+    const nextPage = pages.value.find((item) => item.id === pageId);
+    if (nextPage?.type === "page") {
+      await editorStore.renamePage(pageId, getPageLabel(nextPage), nextPath);
+    }
     ElMessage.success("移动成功");
   } catch (error) {
     ElMessage.error("移动失败");
   }
-};
-
-/**
- * 设置首页
- * @param {string} pageId - 页面 ID
- */
-const handleSetHome = (pageId) => {
-  editorStore.updateEntry({ homePageId: pageId });
-  void editorStore.persistEntry();
-  ElMessage.success("已设置为首页");
 };
 
 /**
@@ -1027,14 +1451,59 @@ const isNameUnique = (name, excludeId) => {
 };
 
 /**
- * 路由路径由名称生成
- * @param {string} name - 名称
+ * 规范化路由片段
+ * @param {string} value - 名称
  * @returns {string}
  */
-const toRoutePath = (name) => {
-  const normalized = name.trim().replace(/\s+/g, "-");
+const toPathSegment = (value) => {
+  const normalized = value.trim().replace(/\s+/g, "-");
   const sanitized = normalized.replace(/[/?#\\]+/g, "-");
-  return `/${sanitized || "page"}`;
+  return sanitized || "page";
+};
+
+/**
+ * 获取直属分组路由片段
+ * @param {string | null | undefined} parentId - 分组 ID
+ * @returns {string[]}
+ */
+const getFolderPathSegments = (parentId) => {
+  const folder = pages.value.find(
+    (page) => page.id === (parentId || null) && page.type === "folder"
+  );
+  if (!folder) {
+    return [];
+  }
+  return [toPathSegment(folder.name || folder.title || folder.id)];
+};
+
+/**
+ * 生成业务页面路径
+ * @param {string} name - 页面名称
+ * @param {string | null | undefined} parentId - 分组 ID
+ * @returns {string}
+ */
+const buildBusinessPagePath = (name, parentId) => {
+  const segments = [...getFolderPathSegments(parentId), toPathSegment(name)];
+  return `/${segments.filter(Boolean).join("/")}`;
+};
+
+/**
+ * 同步分组直接子页面路径
+ * @param {string} folderId - 分组 ID
+ * @returns {Promise<void>}
+ */
+const syncFolderDescendantPaths = async (folderId) => {
+  const descendants = pages.value.filter(
+    (page) => page.type === "page" && page.parentId === folderId
+  );
+  for (const page of descendants) {
+    const fixedPath = getFixedSystemPath(page);
+    if (fixedPath) continue;
+    const nextPath = buildBusinessPagePath(getPageLabel(page), page.parentId || null);
+    if (page.path !== nextPath) {
+      await editorStore.renamePage(page.id, getPageLabel(page), nextPath);
+    }
+  }
 };
 
 /**
@@ -1042,15 +1511,10 @@ const toRoutePath = (name) => {
  * @param {import('@/editor-core').PageNode | undefined} page - 页面
  * @returns {string | null}
  */
-const getFixedSystemPath = (page) => {
-  if (!page) return null;
-  if (entryConfig.value?.loginPageId === page.id) return "/login";
-  if (page.path === "/login") return "/login";
-  if (page.path === "/logout") return "/logout";
-  if (page.name?.includes("登录")) return "/login";
-  if (page.name?.includes("登出")) return "/logout";
-  return null;
-};
+function getFixedSystemPath(page) {
+  const systemType = getFixedSystemType(page);
+  return systemType ? getBasicPageMeta(systemType).path : null;
+}
 
 /**
  * 创建页面/分组
@@ -1061,18 +1525,18 @@ const handleCreateConfirm = async () => {
     ElMessage.warning("名称不能为空");
     return;
   }
+  const nameValidation = validatePageName(name);
+  if (!nameValidation.valid) {
+    ElMessage.warning(nameValidation.message);
+    return;
+  }
   if (!isNameUnique(name)) {
     ElMessage.warning("页面或分组名称已存在");
     return;
   }
 
   const type = createForm.value.type;
-  const parentId =
-    type === "page"
-      ? createForm.value.parentId || null
-      : selectedNode.value?.type === "folder"
-        ? selectedNode.value.id
-        : null;
+  const parentId = type === "page" ? createForm.value.parentId || null : null;
 
   creating.value = true;
   try {
@@ -1084,67 +1548,10 @@ const handleCreateConfirm = async () => {
       return;
     }
 
-    if (type === "login") {
-      if (
-        entryConfig.value?.loginPageId ||
-        pages.value.some((page) => page.path === "/login")
-      ) {
-        ElMessage.warning("登录页已存在");
-        creating.value = false;
-        return;
-      }
-      // 一次性创建带 schema 的页面
-      const schemaContent = editorStore.buildNewPageSchema({
-        name,
-        path: "/login",
-      });
-      const result = await editorStore.createPage({
-        name,
-        type: "page",
-        parentId: null,
-        schemaContent,
-      });
-      const pageId = result?.id;
-      if (!pageId) throw new Error("登录页创建失败");
-      editorStore.updateEntry({ loginPageId: pageId });
-      await editorStore.persistEntry();
-      await openCreatedPageTab(pageId);
-      ElMessage.success("登录页创建成功");
-      createDialogVisible.value = false;
-      return;
-    }
-
-    if (type === "logout") {
-      if (pages.value.some((page) => page.path === "/logout")) {
-        ElMessage.warning("登出页已存在");
-        creating.value = false;
-        return;
-      }
-      // 一次性创建带 schema 的页面
-      const schemaContent = editorStore.buildNewPageSchema({
-        name,
-        path: "/logout",
-      });
-      const result = await editorStore.createPage({
-        name,
-        type: "page",
-        parentId: null,
-        schemaContent,
-      });
-      const pageId = result?.id;
-      if (!pageId) throw new Error("登出页创建失败");
-      editorStore.updateEntry({ logoutPageId: pageId });
-      await editorStore.persistEntry();
-      await openCreatedPageTab(pageId);
-      ElMessage.success("登出页创建成功");
-      createDialogVisible.value = false;
-      return;
-    }
-
     // 普通页面：一次性创建带 schema 的页面
     const schemaContent = editorStore.buildNewPageSchema({
       name,
-      path: toRoutePath(name),
+      path: buildBusinessPagePath(name, parentId),
     });
     const result = await editorStore.createPage({
       name,
@@ -1186,6 +1593,11 @@ const handleRename = async () => {
       ElMessage.warning("名称不能为空");
       return;
     }
+    const nameValidation = validatePageName(name);
+    if (!nameValidation.valid) {
+      ElMessage.warning(nameValidation.message);
+      return;
+    }
     if (!isNameUnique(name, target.id)) {
       ElMessage.warning("页面或分组名称已存在");
       return;
@@ -1193,8 +1605,13 @@ const handleRename = async () => {
     const page = pages.value.find((item) => item.id === target.id);
     const fixedPath = getFixedSystemPath(page);
     const path =
-      page?.type === "page" ? fixedPath || toRoutePath(name) : undefined;
+      page?.type === "page"
+        ? fixedPath || buildBusinessPagePath(name, page?.parentId || null)
+        : undefined;
     await editorStore.renamePage(target.id, name, path);
+    if (page?.type === "folder") {
+      await syncFolderDescendantPaths(target.id);
+    }
     ElMessage.success("重命名成功");
   } catch (error) {
     if (error !== "cancel") {
@@ -1213,26 +1630,64 @@ const isHomePage = (pageId) => {
 };
 
 /**
- * 判断右键菜单节点是否为首页
- * @param {Object} node - 节点
- * @returns {boolean}
+ * 获取分组下的全部后代节点
+ * @param {string} folderId - 分组 ID
+ * @returns {{ pages: Array<any>, folders: Array<any> }}
  */
-const isHomePageNode = (node) => {
-  if (!node || node.type !== "page") return false;
-  return isHomePage(node.id);
+const getFolderDescendants = (folderId) => {
+  const descendantPages = [];
+  const descendantFolders = [];
+  const stack = [folderId];
+
+  while (stack.length) {
+    const currentFolderId = stack.pop();
+    const children = pages.value.filter((page) => page.parentId === currentFolderId);
+    children.forEach((child) => {
+      if (child.type === "folder") {
+        descendantFolders.push(child);
+        stack.push(child.id);
+        return;
+      }
+      if (child.type === "page") {
+        descendantPages.push(child);
+      }
+    });
+  }
+
+  return { pages: descendantPages, folders: descendantFolders };
 };
 
 /**
- * 判断页面是否可删除
- * @param {string} pageId - 页面 ID
- * @returns {boolean}
+ * 将分组内页面移动到根目录
+ * @param {Array<any>} pageList - 页面列表
+ * @returns {Promise<void>}
  */
-const canDeletePage = (pageId) => {
-  // 首页不可删除
-  if (isHomePage(pageId)) {
-    return false;
+const movePagesToRoot = async (pageList) => {
+  for (const page of pageList) {
+    const nextPath = getFixedSystemPath(page) || buildBusinessPagePath(getPageLabel(page), null);
+    await editorStore.movePageToGroup(page.id, null, nextPath);
+    await editorStore.renamePage(page.id, getPageLabel(page), nextPath);
   }
-  return true;
+};
+
+/**
+ * 递归删除分组及其子页面
+ * @param {string} folderId - 分组 ID
+ * @returns {Promise<void>}
+ */
+const deleteFolderCascade = async (folderId) => {
+  const descendants = getFolderDescendants(folderId);
+  const nestedFolders = [...descendants.folders].reverse();
+
+  for (const page of descendants.pages) {
+    await editorStore.deletePage(page.id);
+  }
+
+  for (const folder of nestedFolders) {
+    await editorStore.deletePage(folder.id);
+  }
+
+  await editorStore.deletePage(folderId);
 };
 
 /**
@@ -1252,6 +1707,69 @@ const handleDelete = async () => {
   }
 
   try {
+    if (target.type === "folder") {
+      const { pages: descendantPages, folders: descendantFolders } = getFolderDescendants(target.id);
+      const childCount = descendantPages.length + descendantFolders.length;
+      const deleteChildren = ref(false);
+
+      await ElMessageBox({
+        title: "删除分组",
+        message: h("div", { class: "flex flex-col gap-2" }, [
+          h(
+            "div",
+            childCount > 0
+              ? `分组 "${target.label}" 下还有 ${childCount} 个子项。`
+              : `确定删除分组 "${target.label}" 吗？`
+          ),
+          childCount > 0
+            ? h(
+                ElCheckbox,
+                {
+                  modelValue: deleteChildren.value,
+                  "onUpdate:modelValue": (value) => {
+                    deleteChildren.value = value;
+                  },
+                },
+                () => "同时删除分组下页面"
+              )
+            : null,
+          childCount > 0
+            ? h("div", { class: "text-xs text-gray-500" }, "不勾选时，仅删除分组，组内页面会自动移到根目录。")
+            : null,
+        ].filter(Boolean)),
+        showCancelButton: true,
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        type: "warning",
+        closeOnClickModal: false,
+      });
+
+      if (deleteChildren.value) {
+        const containsCurrentPage = descendantPages.some((page) => page.id === currentPageId.value);
+        if (containsCurrentPage) {
+          const homePageId = entryConfig.value?.homePageId;
+          if (homePageId) {
+            if (openPageTab) {
+              openPageTab(homePageId);
+            } else {
+              await editorStore.setCurrentPage(homePageId);
+            }
+          }
+        }
+        await deleteFolderCascade(target.id);
+      } else {
+        await movePagesToRoot(descendantPages);
+        for (const folder of [...descendantFolders].reverse()) {
+          await editorStore.deletePage(folder.id);
+        }
+        await editorStore.deletePage(target.id);
+      }
+
+      selectedNode.value = null;
+      ElMessage.success("删除成功");
+      return;
+    }
+
     await ElMessageBox.confirm(
       `确定删除 "${target.label}" 吗？此操作不可恢复。`,
       "删除确认",
@@ -1289,8 +1807,7 @@ const handleDelete = async () => {
  * 分组选项
  */
 const folderOptions = computed(() =>
-  appPages.value
-    .filter((page) => page.type === "folder")
+  businessFolders.value
     .map((page) => ({ id: page.id, name: page.name }))
 );
 
@@ -1300,16 +1817,11 @@ const folderOptions = computed(() =>
  * @returns {Array<{ id: string | null, label: string }>}
  */
 const getMoveTargets = (node) => {
-  // 首页禁止移动到分组
-  const homePageId = entryConfig.value?.homePageId;
-  if (node?.id === homePageId) {
+  if (getFixedSystemType(node)) {
     return [];
   }
 
   const targets = [];
-  if (node?.parentId) {
-    targets.push({ id: null, label: "根目录" });
-  }
   const groups = folderOptions.value.filter(
     (group) => group.id !== node.parentId
   );
@@ -1331,15 +1843,54 @@ const getMoveTargets = (node) => {
 
 /* 搜索框 */
 .page-search {
-  padding: 8px 12px;
+  padding: 6px 10px 8px;
   flex-shrink: 0;
+}
+
+.page-search :deep(.el-input__wrapper) {
+  min-height: 28px;
+  padding-inline: 8px;
+  box-shadow: 0 0 0 1px var(--designer-border-color, #e6e6e6) inset;
+}
+
+.page-search :deep(.el-input__inner) {
+  font-size: 12px;
 }
 
 /* 树内容区 */
 .page-tree-content {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 8px;
+  padding: 2px 6px 8px;
+}
+
+.page-section {
+  margin-bottom: 10px;
+}
+
+.page-section__header {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px 5px;
+}
+
+.page-section__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--designer-text-primary, #303133);
+}
+
+.page-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.page-section__empty {
+  padding: 4px 10px 2px;
+  font-size: 11px;
+  color: var(--designer-text-muted, #8c8c8c);
 }
 
 /* ==================== 树节点通用样式 ==================== */
@@ -1347,47 +1898,73 @@ const getMoveTargets = (node) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 10px;
+  min-height: 30px;
+  padding: 5px 8px;
   margin: 1px 0;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
   position: relative;
 }
 
 .tree-node:hover {
-  background-color: rgba(59, 130, 246, 0.08);
+  background-color: rgba(15, 23, 42, 0.04);
 }
 
 .tree-node.is-active {
-  background-color: rgba(59, 130, 246, 0.12);
+  background-color: rgba(15, 23, 42, 0.08);
 }
 
 .tree-node.is-active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 3px;
-  background-color: #409eff;
-  border-radius: 0 2px 2px 0;
+  content: none;
+}
+
+.tree-node.is-drop-target {
+  background-color: rgba(59, 130, 246, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.28);
+}
+
+.page-node--basic {
+  background: rgba(15, 23, 42, 0.024);
+}
+
+.page-node--basic.is-empty {
+  color: var(--designer-text-muted, #8c8c8c);
+}
+
+.folder-dropzone {
+  margin: 2px 0 2px 26px;
+  padding: 6px 8px;
+  border: 1px dashed #d0d7de;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--designer-text-muted, #8c8c8c);
 }
 
 .dark .tree-node:hover {
-  background-color: rgba(59, 130, 246, 0.15);
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 .dark .tree-node.is-active {
-  background-color: rgba(59, 130, 246, 0.2);
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* 节点缩进区域 */
 .node-indent {
   width: 16px;
-  height: 24px;
+  height: 20px;
   flex-shrink: 0;
   position: relative;
+}
+
+.node-indent--folder {
+  width: 6px;
+}
+
+.node-indent--basic {
+  width: 10px;
 }
 
 /* 层级连接线 */
@@ -1409,22 +1986,22 @@ const getMoveTargets = (node) => {
 
 .tree-line.horizontal {
   height: 1px;
-  width: 10px;
-  left: 6px;
+  width: 14px;
+  left: 2px;
   top: 50%;
 }
 
 /* 子节点容器 */
 .tree-children {
   position: relative;
-  margin-left: 12px;
-  padding-left: 8px;
+  margin-left: 4px;
+  padding-left: 12px;
 }
 
 .tree-children::before {
   content: "";
   position: absolute;
-  left: 12px;
+  left: 20px;
   top: 0;
   bottom: 12px;
   width: 1px;
@@ -1437,8 +2014,8 @@ const getMoveTargets = (node) => {
 
 /* 节点箭头 */
 .node-arrow {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   color: #909399;
   flex-shrink: 0;
   cursor: pointer;
@@ -1451,8 +2028,8 @@ const getMoveTargets = (node) => {
 
 /* 节点图标 */
 .node-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 
@@ -1465,13 +2042,13 @@ const getMoveTargets = (node) => {
 }
 
 .tree-node.is-active .node-icon.page {
-  color: #409eff;
+  color: #606266;
 }
 
 /* 节点标签 */
 .node-label {
   flex: 1;
-  font-size: 13px;
+  font-size: 12px;
   color: #606266;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1483,16 +2060,61 @@ const getMoveTargets = (node) => {
 }
 
 .tree-node.is-active .node-label {
-  color: #409eff;
+  color: #303133;
   font-weight: 500;
+}
+
+.node-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.node-main .node-label {
+  flex: none;
+}
+
+.node-meta {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--designer-text-muted, #8c8c8c);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-action-btn {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: #909399;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.tree-node:hover .node-action-btn,
+.tree-node.is-active .node-action-btn,
+.node-action-btn:focus-visible {
+  opacity: 1;
+}
+
+.node-action-btn:hover {
+  color: #606266;
+  background: rgba(15, 23, 42, 0.05);
 }
 
 /* 节点计数 */
 .node-count {
   font-size: 11px;
-  color: #909399;
-  background: #f0f2f5;
-  padding: 1px 6px;
+  color: #8c8c8c;
+  background: rgba(15, 23, 42, 0.04);
+  padding: 0 5px;
+  line-height: 16px;
   border-radius: 10px;
 }
 
@@ -1510,19 +2132,19 @@ const getMoveTargets = (node) => {
 
 /* ==================== 分组节点 ==================== */
 .folder-node:hover {
-  background-color: rgba(230, 162, 60, 0.08);
+  background-color: rgba(15, 23, 42, 0.04);
 }
 
 .folder-node.is-active {
-  background-color: rgba(230, 162, 60, 0.12);
-}
-
-.folder-node.is-active::before {
-  background-color: #e6a23c;
+  background-color: rgba(15, 23, 42, 0.08);
 }
 
 .dark .folder-node:hover {
-  background-color: rgba(230, 162, 60, 0.15);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.dark .folder-node.is-active {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* ==================== 空状态 ==================== */
@@ -1531,15 +2153,15 @@ const getMoveTargets = (node) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
+  padding: 28px 16px;
   color: #909399;
 }
 
 .empty-icon {
-  width: 48px;
-  height: 48px;
+  width: 32px;
+  height: 32px;
   color: #dcdfe6;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .dark .empty-icon {
@@ -1547,13 +2169,13 @@ const getMoveTargets = (node) => {
 }
 
 .empty-text {
-  font-size: 14px;
+  font-size: 12px;
   color: #909399;
-  margin: 0 0 4px 0;
+  margin: 0 0 2px 0;
 }
 
 .empty-hint {
-  font-size: 12px;
+  font-size: 11px;
   color: #c0c4cc;
   margin: 0;
 }
@@ -1644,151 +2266,4 @@ const getMoveTargets = (node) => {
   gap: 12px;
 }
 
-/* ==================== 右键菜单样式 ==================== */
-.context-menu-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-}
-
-.context-menu-popup {
-  position: fixed;
-  z-index: 1000;
-  min-width: 160px;
-  padding: 6px 0;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 1px solid #e4e7ed;
-}
-
-.dark .context-menu-popup {
-  background: #2a2a2a;
-  border-color: #3a3a3a;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  font-size: 13px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.menu-item:hover {
-  background-color: #f5f7fa;
-  color: #409eff;
-}
-
-.dark .menu-item {
-  color: #d1d5db;
-}
-
-.dark .menu-item:hover {
-  background-color: #3a3a3a;
-  color: #409eff;
-}
-
-.menu-item.danger {
-  color: #f56c6c;
-}
-
-.menu-item.danger:hover {
-  background-color: #fef0f0;
-  color: #f56c6c;
-}
-
-.dark .menu-item.danger:hover {
-  background-color: rgba(245, 108, 108, 0.1);
-}
-
-.menu-item.disabled {
-  color: #c0c4cc;
-  cursor: not-allowed;
-}
-
-.menu-item.disabled:hover {
-  background-color: transparent;
-  color: #c0c4cc;
-}
-
-.dark .menu-item.disabled {
-  color: #5a5a5a;
-}
-
-.dark .menu-item.disabled:hover {
-  background-color: transparent;
-}
-
-.menu-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-.menu-divider {
-  height: 1px;
-  background-color: #e4e7ed;
-  margin: 6px 0;
-}
-
-.dark .menu-divider {
-  background-color: #3a3a3a;
-}
-
-.menu-submenu {
-  position: relative;
-}
-
-.menu-submenu.is-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.menu-submenu.is-disabled .menu-item {
-  pointer-events: none;
-}
-
-.menu-item.has-submenu {
-  justify-content: space-between;
-}
-
-.submenu-arrow {
-  width: 12px;
-  height: 12px;
-  color: #909399;
-}
-
-.submenu-content {
-  display: none;
-  position: absolute;
-  left: 100%;
-  top: -6px;
-  min-width: 140px;
-  padding: 6px 0;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 1px solid #e4e7ed;
-}
-
-.dark .submenu-content {
-  background: #2a2a2a;
-  border-color: #3a3a3a;
-}
-
-.menu-submenu:hover .submenu-content {
-  display: block;
-}
-
-.menu-empty {
-  padding: 8px 16px;
-  font-size: 12px;
-  color: #909399;
-  text-align: center;
-}
 </style>

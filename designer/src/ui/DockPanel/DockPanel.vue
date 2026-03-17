@@ -71,7 +71,7 @@ const handleToggle = () => {
   border-radius: var(--designer-radius-sm);
   border: none;
   background: transparent;
-  color: var(--designer-text-secondary);
+  color: var(--designer-text-primary);
   box-shadow: none;
 }
 

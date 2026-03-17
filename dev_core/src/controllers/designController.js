@@ -189,7 +189,7 @@ async function renamePage(req, res, next) {
     const { projectId, pageId } = req.params;
     await checkProjectAccess(req, projectId);
 
-    const { name } = req.body;
+    const { name, path } = req.body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
@@ -205,7 +205,7 @@ async function renamePage(req, res, next) {
       });
     }
 
-    await designService.renamePage(pageId, name.trim(), req.user.id);
+    await designService.renamePage(pageId, name.trim(), req.user.id, path);
 
     res.json({
       success: true,
@@ -225,7 +225,7 @@ async function movePage(req, res, next) {
     const { projectId, pageId } = req.params;
     await checkProjectAccess(req, projectId);
 
-    const { parentId, sortOrder } = req.body;
+    const { parentId, sortOrder, path } = req.body;
 
     // 先验证页面属于该工程
     const existingPage = await designService.getPageDetail(pageId);
@@ -235,7 +235,7 @@ async function movePage(req, res, next) {
       });
     }
 
-    await designService.movePage(pageId, { parentId, sortOrder }, req.user.id);
+    await designService.movePage(pageId, { parentId, sortOrder, path }, req.user.id);
 
     res.json({
       success: true,

@@ -66,12 +66,13 @@ export const projectApi = {
    * @param {string} projectId - 项目ID
    * @param {string} pageId - 页面ID
    * @param {string} name - 新名称
+   * @param {string} [path] - 页面路径
    * @returns {Promise<void>}
    */
-  renamePage(projectId, pageId, name) {
+  renamePage(projectId, pageId, name, path) {
     return request.patch(
       `/design/projects/${projectId}/pages/${pageId}/rename`,
-      { name }
+      { name, path }
     );
   },
 
@@ -80,11 +81,13 @@ export const projectApi = {
    * @param {string} projectId - 项目ID
    * @param {string} pageId - 页面ID
    * @param {string|null} targetGroupId - 目标页面组ID
+   * @param {string} [path] - 页面路径
    * @returns {Promise<void>}
    */
-  movePageToGroup(projectId, pageId, targetGroupId) {
+  movePageToGroup(projectId, pageId, targetGroupId, path) {
     return request.patch(`/design/projects/${projectId}/pages/${pageId}/move`, {
       parentId: targetGroupId,
+      path,
     });
   },
 

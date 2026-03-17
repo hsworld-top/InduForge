@@ -440,9 +440,10 @@ class DesignService {
    * @param {string} pageId - 页面ID
    * @param {string} name - 新名称
    * @param {string} userId - 更新者用户ID
+   * @param {string} [path] - 页面路径
    * @returns {Promise<void>}
    */
-  async renamePage(pageId, name, userId) {
+  async renamePage(pageId, name, userId, path) {
     const page = await DesignPage.findByPk(pageId);
 
     if (!page) {
@@ -452,22 +453,29 @@ class DesignService {
       });
     }
 
-    await page.update({
+    const updatePayload = {
       name,
       updatedBy: userId,
-    });
+    };
 
-    // 如果页面有 schemaContent，同步更新 meta.name
-    if (page.schemaContent && page.schemaContent.meta) {
+    if (page.schemaContent && typeof page.schemaContent === "object") {
       const updatedSchema = {
         ...page.schemaContent,
         meta: {
-          ...page.schemaContent.meta,
+          ...(page.schemaContent.meta || {}),
           name,
         },
       };
-      await page.update({ schemaContent: updatedSchema });
+      if (path !== undefined && path !== null) {
+        updatedSchema.page = {
+          ...(page.schemaContent.page || {}),
+          path,
+        };
+      }
+      updatePayload.schemaContent = updatedSchema;
     }
+
+    await page.update(updatePayload);
   }
 
   /**
@@ -497,12 +505,12 @@ class DesignService {
   /**
    * 移动页面
    * @param {string} pageId - 页面ID
-   * @param {Object} data - 移动数据 { parentId, sortOrder }
+   * @param {Object} data - 移动数据 { parentId, sortOrder, path }
    * @param {string} userId - 更新者用户ID
    * @returns {Promise<void>}
    */
   async movePage(pageId, data, userId) {
-    const { parentId, sortOrder } = data;
+    const { parentId, sortOrder, path } = data;
 
     const page = await DesignPage.findByPk(pageId);
 
@@ -549,6 +557,16 @@ class DesignService {
 
     if (sortOrder !== undefined) {
       updateData.sortOrder = sortOrder;
+    }
+
+    if (path !== undefined && page.schemaContent && typeof page.schemaContent === "object") {
+      updateData.schemaContent = {
+        ...page.schemaContent,
+        page: {
+          ...(page.schemaContent.page || {}),
+          path,
+        },
+      };
     }
 
     await page.update(updateData);

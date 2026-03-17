@@ -36,7 +36,7 @@
                 </el-button>
               </el-tooltip>
             </template>
-            <component :is="leftPanelComponent" v-bind="leftPanelProps" ref="leftPanelRef"
+            <component :is="leftPanelComponent" :key="`left-panel-${leftActiveKey}`" v-bind="leftPanelProps" ref="leftPanelRef"
               @update:drawingTool="(value) => (drawingTool.value = value)" />
           </DockPanel>
 
@@ -75,7 +75,7 @@
                   </el-button>
                 </el-tooltip>
               </template>
-              <component :is="leftPanelComponent" v-bind="leftPanelProps" ref="leftPanelRef"
+              <component :is="leftPanelComponent" :key="`left-floating-panel-${leftActiveKey}`" v-bind="leftPanelProps" ref="leftPanelRef"
                 @update:drawingTool="(value) => (drawingTool.value = value)" />
             </DockPanel>
 

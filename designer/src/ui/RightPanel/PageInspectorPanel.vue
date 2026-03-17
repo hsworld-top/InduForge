@@ -5,7 +5,7 @@
       <div class="section-title">基础信息</div>
 
       <el-form-item label="页面名称">
-        <el-input v-model="form.name" @blur="handleNameUpdate" />
+        <el-input v-model="form.name" :disabled="isSystemPage" @blur="handleNameUpdate" />
       </el-form-item>
 
       <el-form-item label="路由路径">
@@ -218,16 +218,85 @@ const isHomePage = computed(() => {
   if (!currentPageId.value || !doc.value) return false;
   return doc.value.entry?.homePageId === currentPageId.value;
 });
+const isSystemPage = computed(
+  () => isHomePage.value || form.pageType === "login" || form.pageType === "logout"
+);
+const BASIC_PAGE_META = {
+  home: { label: "首页", path: "/" },
+  login: { label: "登录页", path: "/login" },
+  logout: { label: "登出页", path: "/logout" },
+};
 
 /**
- * 路由路径由名称生成
- * @param {string} name - 名称
+ * 获取基础页面类型
+ * @param {Object | null | undefined} page - 页面对象
+ * @returns {"home" | "login" | "logout" | null}
+ */
+const getFixedSystemType = (page) => {
+  if (!page) return null;
+  if (doc.value?.entry?.homePageId === page.id) return "home";
+  if (doc.value?.entry?.loginPageId === page.id || page.path === "/login") return "login";
+  if (doc.value?.entry?.logoutPageId === page.id || page.path === "/logout") return "logout";
+  return null;
+};
+
+/**
+ * 规范化路由片段
+ * @param {string} value - 名称
  * @returns {string}
  */
-const toRoutePath = (name) => {
-  const normalized = name.trim().replace(/\s+/g, "-");
+const toPathSegment = (value) => {
+  const normalized = value.trim().replace(/\s+/g, "-");
   const sanitized = normalized.replace(/[/?#\\]+/g, "-");
-  return `/${sanitized || "page"}`;
+  return sanitized || "page";
+};
+
+/**
+ * 校验页面名称是否合法
+ * @param {string} value - 页面名称
+ * @returns {{ valid: boolean, message: string }}
+ */
+const validatePageName = (value) => {
+  const name = String(value || "").trim();
+  if (!name) {
+    return { valid: false, message: "名称不能为空" };
+  }
+  if (/^[.]+$/.test(name)) {
+    return { valid: false, message: "页面名称不能仅包含点号" };
+  }
+  if (/[/?#\\%]/.test(name)) {
+    return { valid: false, message: "页面名称不能包含 / ? # % \\" };
+  }
+  if (/[\u0000-\u001f\u007f]/.test(name)) {
+    return { valid: false, message: "页面名称不能包含控制字符" };
+  }
+  return { valid: true, message: "" };
+};
+
+/**
+ * 获取直属分组路径片段
+ * @param {string | null | undefined} parentId - 分组 ID
+ * @returns {string[]}
+ */
+const getFolderPathSegments = (parentId) => {
+  const folder = pages.value.find(
+    (page) => page.id === (parentId || null) && page.type === "folder"
+  );
+  if (!folder) {
+    return [];
+  }
+  return [toPathSegment(folder.name || folder.title || folder.id)];
+};
+
+/**
+ * 生成业务页面路由
+ * @param {string} name - 页面名称
+ * @param {string | null | undefined} parentId - 分组 ID
+ * @returns {string}
+ */
+const buildBusinessPagePath = (name, parentId) => {
+  const segments = [...getFolderPathSegments(parentId), toPathSegment(name)];
+  return `/${segments.filter(Boolean).join("/")}`;
 };
 
 /**
@@ -266,12 +335,11 @@ const getPageType = (page) => {
  */
 const resolvePath = (page, name) => {
   if (!page) return "/";
-  if (doc.value?.entry?.loginPageId === page.id) return "/login";
-  if (page.path === "/login") return "/login";
-  if (page.path === "/logout") return "/logout";
-  if (page.name?.includes("登录")) return "/login";
-  if (page.name?.includes("退出")) return "/logout";
-  return toRoutePath(name);
+  const systemType = getFixedSystemType(page);
+  if (systemType) {
+    return BASIC_PAGE_META[systemType].path;
+  }
+  return buildBusinessPagePath(name, page.parentId || null);
 };
 
 /**
@@ -304,11 +372,15 @@ const syncForm = (page) => {
   }
 
   // 更新名称
-  const nextName = pageFromList?.name || page?.name || "";
+  const displayPage = pageFromList || page;
+  const systemType = getFixedSystemType(displayPage);
+  const nextName = systemType
+    ? BASIC_PAGE_META[systemType].label
+    : pageFromList?.name || page?.name || "";
   form.name = nextName;
 
   // 更新路由路径
-  const path = pageFromList?.path || page?.path || resolvePath(page, nextName);
+  const path = resolvePath(displayPage, nextName);
   form.path = formatPathForDisplay(path);
 
   form.pageType = getPageType(page || pageFromList);
@@ -395,9 +467,19 @@ watch(
  */
 const handleNameUpdate = async () => {
   if (!currentPage.value) return;
+  if (isSystemPage.value) {
+    syncForm(currentPage.value);
+    return;
+  }
   const name = form.name.trim();
   if (!name) {
     ElMessage.warning("名称不能为空");
+    syncForm(currentPage.value);
+    return;
+  }
+  const nameValidation = validatePageName(name);
+  if (!nameValidation.valid) {
+    ElMessage.warning(nameValidation.message);
     syncForm(currentPage.value);
     return;
   }
@@ -406,12 +488,13 @@ const handleNameUpdate = async () => {
     syncForm(currentPage.value);
     return;
   }
+  const currentPageFromList = pages.value.find((page) => page.id === currentPage.value.id) || currentPage.value;
   if (name === (currentPage.value.name || "")) {
-    const path = currentPage.value.path || resolvePath(currentPage.value, name);
+    const path = resolvePath(currentPageFromList, name);
     form.path = formatPathForDisplay(path);
     return;
   }
-  const path = resolvePath(currentPage.value, name);
+  const path = resolvePath(currentPageFromList, name);
   try {
     await editorStore.renamePage(currentPage.value.id, name, path);
     syncForm(currentPage.value);
@@ -450,7 +533,7 @@ const handlePageTypeChange = (type) => {
       editorStore.updateEntry({ logoutPageId: null });
       void editorStore.persistEntry();
     }
-    path = toRoutePath(form.name);
+    path = buildBusinessPagePath(form.name, currentPage.value.parentId || null);
   }
 
   form.path = path;

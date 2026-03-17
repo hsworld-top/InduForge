@@ -1385,9 +1385,10 @@ export const useEditorStore = defineStore("editor", () => {
    * 移动页面到指定分组
    * @param {string} pageId - 页面 ID
    * @param {string | null} targetGroupId - 分组 ID
+   * @param {string} [path] - 页面路径
    * @returns {Promise<void>}
    */
-  const movePageToGroup = async (pageId, targetGroupId) => {
+  const movePageToGroup = async (pageId, targetGroupId, path) => {
     if (!projectId.value) {
       throw new Error("缺少工程信息");
     }
@@ -1395,7 +1396,7 @@ export const useEditorStore = defineStore("editor", () => {
       throw new Error("缺少页面信息");
     }
 
-    await projectApi.movePageToGroup(projectId.value, pageId, targetGroupId);
+    await projectApi.movePageToGroup(projectId.value, pageId, targetGroupId, path);
     await refreshPages();
   };
 
@@ -1414,7 +1415,7 @@ export const useEditorStore = defineStore("editor", () => {
       throw new Error("缺少页面信息");
     }
 
-    await projectApi.renamePage(projectId.value, pageId, name);
+    await projectApi.renamePage(projectId.value, pageId, name, path);
 
     pages.value = pages.value.map((page) =>
       page.id === pageId
