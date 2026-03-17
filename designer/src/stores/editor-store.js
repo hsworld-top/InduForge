@@ -1332,9 +1332,10 @@ export const useEditorStore = defineStore("editor", () => {
   /**
    * 删除页面/分组
    * @param {string} pageId - 页面 ID
+   * @param {"single" | "folder-only" | "cascade"} [mode] - 删除模式
    * @returns {Promise<void>}
    */
-  const deletePage = async (pageId) => {
+  const deletePage = async (pageId, mode) => {
     if (!projectId.value) {
       throw new Error("缺少工程信息");
     }
@@ -1342,11 +1343,11 @@ export const useEditorStore = defineStore("editor", () => {
       throw new Error("缺少页面信息");
     }
 
-    await projectApi.deletePage(projectId.value, pageId);
+    await projectApi.deletePage(projectId.value, pageId, mode);
     const { pages: pageList, entryConfig: entryConfigResp } =
       await refreshPages();
 
-    if (currentPageId.value !== pageId) return;
+    if (currentPageId.value && pageList.some((page) => page.id === currentPageId.value)) return;
 
     const homeId = entryConfigResp?.homePageId;
     const nextId =

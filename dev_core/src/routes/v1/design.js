@@ -44,6 +44,7 @@ router.put("/projects/:projectId/pages/:pageId", designController.updatePage);
 /**
  * 删除页面
  * DELETE /api/v1/projects/:projectId/pages/:pageId
+ * Query: ?mode=single|folder-only|cascade
  * Requirements: 7.5
  */
 router.delete(

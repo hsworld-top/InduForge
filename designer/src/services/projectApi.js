@@ -55,10 +55,12 @@ export const projectApi = {
    * 删除页面
    * @param {string} projectId - 项目ID
    * @param {string} pageId - 页面ID
+   * @param {"single" | "folder-only" | "cascade"} [mode] - 删除模式
    * @returns {Promise<void>}
    */
-  deletePage(projectId, pageId) {
-    return request.delete(`/design/projects/${projectId}/pages/${pageId}`);
+  deletePage(projectId, pageId, mode) {
+    const query = mode ? `?mode=${encodeURIComponent(mode)}` : "";
+    return request.delete(`/design/projects/${projectId}/pages/${pageId}${query}`);
   },
 
   /**

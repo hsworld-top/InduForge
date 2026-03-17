@@ -159,6 +159,7 @@ async function updatePage(req, res, next) {
 async function deletePage(req, res, next) {
   try {
     const { projectId, pageId } = req.params;
+    const { mode } = req.query;
     await checkProjectAccess(req, projectId);
 
     // 先验证页面属于该工程
@@ -169,7 +170,7 @@ async function deletePage(req, res, next) {
       });
     }
 
-    await designService.deletePage(pageId);
+    await designService.deletePage(pageId, mode);
 
     res.json({
       success: true,

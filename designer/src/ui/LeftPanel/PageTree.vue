@@ -350,7 +350,7 @@ import {
 } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
-import { ElCheckbox, ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpFolderOpened from "~icons/ep/folder-opened";
 import IconEpDocument from "~icons/ep/document";
@@ -1630,64 +1630,22 @@ const isHomePage = (pageId) => {
 };
 
 /**
- * 获取分组下的全部后代节点
+ * 获取分组下的全部后代节点数量
  * @param {string} folderId - 分组 ID
- * @returns {{ pages: Array<any>, folders: Array<any> }}
+ * @returns {number}
  */
-const getFolderDescendants = (folderId) => {
-  const descendantPages = [];
-  const descendantFolders = [];
+const getFolderDescendantCount = (folderId) => {
+  let count = 0;
   const stack = [folderId];
-
   while (stack.length) {
     const currentFolderId = stack.pop();
     const children = pages.value.filter((page) => page.parentId === currentFolderId);
-    children.forEach((child) => {
-      if (child.type === "folder") {
-        descendantFolders.push(child);
-        stack.push(child.id);
-        return;
-      }
-      if (child.type === "page") {
-        descendantPages.push(child);
-      }
-    });
+    count += children.length;
+    children
+      .filter((page) => page.type === "folder")
+      .forEach((folder) => stack.push(folder.id));
   }
-
-  return { pages: descendantPages, folders: descendantFolders };
-};
-
-/**
- * 将分组内页面移动到根目录
- * @param {Array<any>} pageList - 页面列表
- * @returns {Promise<void>}
- */
-const movePagesToRoot = async (pageList) => {
-  for (const page of pageList) {
-    const nextPath = getFixedSystemPath(page) || buildBusinessPagePath(getPageLabel(page), null);
-    await editorStore.movePageToGroup(page.id, null, nextPath);
-    await editorStore.renamePage(page.id, getPageLabel(page), nextPath);
-  }
-};
-
-/**
- * 递归删除分组及其子页面
- * @param {string} folderId - 分组 ID
- * @returns {Promise<void>}
- */
-const deleteFolderCascade = async (folderId) => {
-  const descendants = getFolderDescendants(folderId);
-  const nestedFolders = [...descendants.folders].reverse();
-
-  for (const page of descendants.pages) {
-    await editorStore.deletePage(page.id);
-  }
-
-  for (const folder of nestedFolders) {
-    await editorStore.deletePage(folder.id);
-  }
-
-  await editorStore.deletePage(folderId);
+  return count;
 };
 
 /**
@@ -1708,61 +1666,32 @@ const handleDelete = async () => {
 
   try {
     if (target.type === "folder") {
-      const { pages: descendantPages, folders: descendantFolders } = getFolderDescendants(target.id);
-      const childCount = descendantPages.length + descendantFolders.length;
-      const deleteChildren = ref(false);
-
-      await ElMessageBox({
-        title: "删除分组",
-        message: h("div", { class: "flex flex-col gap-2" }, [
-          h(
-            "div",
-            childCount > 0
-              ? `分组 "${target.label}" 下还有 ${childCount} 个子项。`
-              : `确定删除分组 "${target.label}" 吗？`
-          ),
+      const childCount = getFolderDescendantCount(target.id);
+      try {
+        await ElMessageBox.confirm(
           childCount > 0
-            ? h(
-                ElCheckbox,
-                {
-                  modelValue: deleteChildren.value,
-                  "onUpdate:modelValue": (value) => {
-                    deleteChildren.value = value;
-                  },
-                },
-                () => "同时删除分组下页面"
-              )
-            : null,
-          childCount > 0
-            ? h("div", { class: "text-xs text-gray-500" }, "不勾选时，仅删除分组，组内页面会自动移到根目录。")
-            : null,
-        ].filter(Boolean)),
-        showCancelButton: true,
-        confirmButtonText: "删除",
-        cancelButtonText: "取消",
-        type: "warning",
-        closeOnClickModal: false,
-      });
-
-      if (deleteChildren.value) {
-        const containsCurrentPage = descendantPages.some((page) => page.id === currentPageId.value);
-        if (containsCurrentPage) {
-          const homePageId = entryConfig.value?.homePageId;
-          if (homePageId) {
-            if (openPageTab) {
-              openPageTab(homePageId);
-            } else {
-              await editorStore.setCurrentPage(homePageId);
-            }
+            ? `分组 "${target.label}" 下还有 ${childCount} 个子项。建议优先选择“仅删除分组”，组下页面会自动移到根目录；“删除组和页面”会一并删除全部子项，且不可恢复。`
+            : `确定删除分组 "${target.label}" 吗？`,
+          "删除分组",
+          {
+            confirmButtonText: childCount > 0 ? "仅删除分组" : "删除分组",
+            cancelButtonText: childCount > 0 ? "删除组和页面" : "取消",
+            type: "warning",
+            closeOnClickModal: false,
+            distinguishCancelAndClose: true,
           }
+        );
+        await editorStore.deletePage(target.id, childCount > 0 ? "folder-only" : "single");
+      } catch (error) {
+        if (error === "cancel" && childCount > 0) {
+          await editorStore.deletePage(target.id, "cascade");
+        } else if (error === "close") {
+          return;
+        } else if (error !== "cancel") {
+          throw error;
+        } else {
+          return;
         }
-        await deleteFolderCascade(target.id);
-      } else {
-        await movePagesToRoot(descendantPages);
-        for (const folder of [...descendantFolders].reverse()) {
-          await editorStore.deletePage(folder.id);
-        }
-        await editorStore.deletePage(target.id);
       }
 
       selectedNode.value = null;

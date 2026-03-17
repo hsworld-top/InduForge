@@ -4,6 +4,7 @@
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6
  */
 const { DesignPage, Project } = require("../models");
+const { sequelize } = require("../config/database");
 const { validatePageSchema } = require("../dsl/validators");
 const AppError = require("../utils/AppError");
 const ErrorCodes = require("../constants/errorCodes");
@@ -76,6 +77,12 @@ const normalizeGlobalScripts = (raw) => {
       items: Array.isArray(custom.items) ? custom.items : [],
     },
   };
+};
+
+const toPathSegment = (value) => {
+  const normalized = String(value || "").trim().replace(/\s+/g, "-");
+  const sanitized = normalized.replace(/[/?#\\%]+/g, "-");
+  return sanitized || "page";
 };
 /**
  * 设计服务类
@@ -404,9 +411,10 @@ class DesignService {
    * 删除页面
    * Requirements: 7.5, 7.6
    * @param {string} pageId - 页面ID
+   * @param {"single" | "folder-only" | "cascade"} [mode='single'] - 删除模式
    * @returns {Promise<void>}
    */
-  async deletePage(pageId) {
+  async deletePage(pageId, mode = "single") {
     const page = await DesignPage.findByPk(pageId);
 
     if (!page) {
@@ -416,23 +424,99 @@ class DesignService {
       });
     }
 
-    // 如果是文件夹，检查是否有子页面
-    // Requirements: 7.6 - 文件夹删除保护
-    if (page.type === "folder") {
-      const childCount = await DesignPage.count({
-        where: { parentId: pageId },
-      });
-
-      if (childCount > 0) {
-        throw new AppError(ErrorCodes.DESIGN_FOLDER_NOT_EMPTY, 400, {
-          message: "文件夹不为空，请先删除或移动子页面",
-          childCount,
-        });
-      }
+    if (page.type !== "folder") {
+      await page.destroy();
+      return;
     }
 
-    // 删除页面
-    await page.destroy();
+    if (!["single", "folder-only", "cascade"].includes(mode)) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "删除模式无效",
+        mode,
+      });
+    }
+
+    const descendants = await DesignPage.findAll({
+      where: { projectId: page.projectId },
+      order: [["createdAt", "ASC"]],
+    });
+    const childMap = new Map();
+    descendants.forEach((item) => {
+      const parentKey = item.parentId || "__root__";
+      if (!childMap.has(parentKey)) {
+        childMap.set(parentKey, []);
+      }
+      childMap.get(parentKey).push(item);
+    });
+    const collectDescendants = (folderId) => {
+      const pages = [];
+      const folders = [];
+      const stack = [folderId];
+      while (stack.length) {
+        const currentFolderId = stack.pop();
+        const children = childMap.get(currentFolderId) || [];
+        children.forEach((child) => {
+          if (child.type === "folder") {
+            folders.push(child);
+            stack.push(child.id);
+            return;
+          }
+          pages.push(child);
+        });
+      }
+      return { pages, folders };
+    };
+
+    const { pages: descendantPages, folders: descendantFolders } = collectDescendants(pageId);
+
+    if (mode === "single") {
+      if (descendantPages.length > 0 || descendantFolders.length > 0) {
+        throw new AppError(ErrorCodes.DESIGN_FOLDER_NOT_EMPTY, 400, {
+          message: "文件夹不为空，请先删除或移动子页面",
+          childCount: descendantPages.length + descendantFolders.length,
+        });
+      }
+      await page.destroy();
+      return;
+    }
+
+    await sequelize.transaction(async (transaction) => {
+      if (mode === "folder-only") {
+        for (const childPage of descendantPages) {
+          const schemaContent =
+            childPage.schemaContent && typeof childPage.schemaContent === "object"
+              ? {
+                  ...childPage.schemaContent,
+                  page: {
+                    ...(childPage.schemaContent.page || {}),
+                    path: `/${toPathSegment(childPage.name)}`,
+                  },
+                }
+              : childPage.schemaContent;
+          await childPage.update(
+            {
+              parentId: null,
+              schemaContent,
+            },
+            { transaction }
+          );
+        }
+
+        for (const folder of [...descendantFolders].reverse()) {
+          await folder.destroy({ transaction });
+        }
+        await page.destroy({ transaction });
+        return;
+      }
+
+      for (const childPage of descendantPages) {
+        await childPage.destroy({ transaction });
+      }
+      for (const folder of [...descendantFolders].reverse()) {
+        await folder.destroy({ transaction });
+      }
+      await page.destroy({ transaction });
+    });
   }
 
   /**
