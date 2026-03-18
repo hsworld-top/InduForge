@@ -331,6 +331,23 @@ const updateTabName = () => {
   }
 };
 
+/**
+ * 同步底部页面标签，清理已被删除的页面标签
+ * @returns {void}
+ */
+const syncPageTabsWithPages = () => {
+  const pageIdSet = new Set(editorStore.pages.map((page) => page.id));
+  const nextTabs = pageTabs.value.filter((tab) => pageIdSet.has(tab.id));
+  if (nextTabs.length !== pageTabs.value.length) {
+    pageTabs.value = nextTabs;
+  }
+  if (activePageTabId.value && !pageIdSet.has(activePageTabId.value)) {
+    activePageTabId.value = currentPageId.value && pageIdSet.has(currentPageId.value)
+      ? currentPageId.value
+      : nextTabs[0]?.id || "";
+  }
+};
+
 // 监听 canUndo 变化，更新标签页脏状态
 watch(canUndo, updateTabDirtyState);
 
@@ -338,6 +355,7 @@ watch(canUndo, updateTabDirtyState);
 watch(
   [() => editorStore.pages, currentPageId],
   () => {
+    syncPageTabsWithPages();
     updateTabName();
   },
   { deep: true }
