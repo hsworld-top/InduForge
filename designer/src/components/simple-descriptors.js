@@ -53,6 +53,16 @@ const SIMPLE_DESCRIPTOR_MAP = {
   Switch: { renderTag: "el-switch" },
   Table: {
     renderTag: "el-table",
+    renderKey: (node, ctx) => {
+      const v = ctx?.tableRenderVersion ?? 0;
+      const columnsSize = Array.isArray(node?.props?.columns)
+        ? node.props.columns.length
+        : 0;
+      const dataSize = Array.isArray(node?.props?.data)
+        ? node.props.data.length
+        : 0;
+      return `${node?.id ?? ""}-${columnsSize}-${dataSize}-${v}`;
+    },
     propsFilter: (resolvedProps) => {
       const { columns, ...rest } = resolvedProps ?? {};
       const nextProps = { ...rest };
@@ -62,6 +72,16 @@ const SIMPLE_DESCRIPTOR_MAP = {
   },
   BigDataTable: {
     renderTag: "el-table",
+    renderKey: (node, ctx) => {
+      const v = ctx?.tableRenderVersion ?? 0;
+      const columnsSize = Array.isArray(node?.props?.columns)
+        ? node.props.columns.length
+        : 0;
+      const dataSize = Array.isArray(node?.props?.data)
+        ? node.props.data.length
+        : 0;
+      return `${node?.id ?? ""}-${columnsSize}-${dataSize}-${v}`;
+    },
     propsFilter: (resolvedProps) => {
       const { columns, ...rest } = resolvedProps ?? {};
       const nextProps = { ...rest };
@@ -113,6 +133,16 @@ const SIMPLE_DESCRIPTOR_MAP = {
     renderTag: "el-tabs",
     isContainer: true,
     childLayout: "none",
+    renderKey: (node, ctx) => {
+      const resolved = ctx?.resolvedProps ?? {};
+      const tabs = Array.isArray(node?.props?.tabs) ? node.props.tabs : [];
+      const tabKey = tabs
+        .map((item) => item?.name ?? item?.label ?? "")
+        .join("|");
+      const activeName =
+        node?.props?.activeName ?? resolved.activeName ?? "";
+      return `${node?.id ?? ""}-${tabKey}-${String(activeName)}`;
+    },
     propsFilter: (resolvedProps) => {
       const { tabs, ...elProps } = resolvedProps ?? {};
       return elProps;
@@ -212,10 +242,38 @@ const SIMPLE_DESCRIPTOR_MAP = {
       return elProps;
     },
   },
-  ElHeader: { renderTag: "el-header", isContainer: true, childLayout: "flex", maxChildren: 1, isRegion: true },
-  ElAside: { renderTag: "el-aside", isContainer: true, childLayout: "flex", maxChildren: 1, isRegion: true },
-  ElMain: { renderTag: "el-main", isContainer: true, childLayout: "flex", maxChildren: 1, isRegion: true },
-  ElFooter: { renderTag: "el-footer", isContainer: true, childLayout: "flex", maxChildren: 1, isRegion: true },
+  ElHeader: {
+    renderTag: "el-header",
+    isContainer: true,
+    childLayout: "flex",
+    maxChildren: 1,
+    isRegion: true,
+    isMovable: false,
+  },
+  ElAside: {
+    renderTag: "el-aside",
+    isContainer: true,
+    childLayout: "flex",
+    maxChildren: 1,
+    isRegion: true,
+    isMovable: false,
+  },
+  ElMain: {
+    renderTag: "el-main",
+    isContainer: true,
+    childLayout: "flex",
+    maxChildren: 1,
+    isRegion: true,
+    isMovable: false,
+  },
+  ElFooter: {
+    renderTag: "el-footer",
+    isContainer: true,
+    childLayout: "flex",
+    maxChildren: 1,
+    isRegion: true,
+    isMovable: false,
+  },
   ElLayout: {
     renderTag: "div",
     isContainer: true,
@@ -232,12 +290,20 @@ const SIMPLE_DESCRIPTOR_MAP = {
     isContainer: true,
     childLayout: "flex",
     acceptChildren: ["ElCol"],
+    isMovable: false,
     propsFilter: (resolvedProps) => {
       const { columns, ...elProps } = resolvedProps ?? {};
       return elProps;
     },
   },
-  ElCol: { renderTag: "el-col", isContainer: true, childLayout: "flex", maxChildren: 1, isRegion: true },
+  ElCol: {
+    renderTag: "el-col",
+    isContainer: true,
+    childLayout: "flex",
+    maxChildren: 1,
+    isRegion: true,
+    isMovable: false,
+  },
   // 布局容器：Flex 布局
   FlexContainer: { renderTag: "div", isContainer: true, childLayout: "flex", defaultSize: { width: 360, height: 200 } },
   ResponsiveLayout: { renderTag: "div", isContainer: true, childLayout: "flex" },

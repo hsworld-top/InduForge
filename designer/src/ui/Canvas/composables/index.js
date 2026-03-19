@@ -14,3 +14,9 @@ export { usePreview } from "./use-preview.js";
 export { useNodeResize } from "./use-node-resize.js";
 export { useNodePointer } from "./use-node-pointer.js";
 export { useBuildRefInfo } from "./use-build-ref-info.js";
+export {
+  useNodeRendererDerivations,
+  createApplyMenuDslConfig,
+  resolveMenuConfigFromContent,
+  sanitizeDslContent,
+} from "./use-node-renderer-derivations.js";

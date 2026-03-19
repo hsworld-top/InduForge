@@ -31,7 +31,29 @@
  * @property {import('vue').Component|null} [customRenderer=null] - 复杂组件自定义渲染器（Vue 组件）
  * @property {'flex'|'grid'|'free'|'none'|null} [childLayout=null] - 子项布局类型；flex=Flex布局，grid=Grid布局，free=自由定位，none=非容器，null=未指定
  * @property {{ width: number, height: number }|null} [defaultSize=null] - 组件默认尺寸（插入时使用）
+ * @property {function(node: Object, context?: Object): string} [renderKey] - 渲染 key；context 可含 tableRenderVersion、resolvedProps 等
  */
+
+/** El 壳层内不可整体拖动的槽位类型（与 descriptor.isMovable:false 对齐） */
+const FIXED_LAYOUT_SHELL_SLOT_TYPES = new Set([
+  "ElHeader",
+  "ElAside",
+  "ElMain",
+  "ElFooter",
+  "ElCol",
+  "ElLayoutRow",
+]);
+
+const LEGACY_FLEX_DIRECTION_TYPES = new Set(["FlexContainer", "ResponsiveLayout"]);
+
+const REGION_DESIGNER_HINTS = {
+  ElHeader: "Header区域",
+  ElAside: "Aside区域",
+  ElMain: "Main区域",
+  ElFooter: "Footer区域",
+};
+
+const COMPONENT_WRAPPER_RENDER_TYPES = new Set(["ElLayoutRow", "ElCol"]);
 
 /** @type {Map<string, ComponentDescriptor>} */
 const _descriptors = new Map();
@@ -163,12 +185,87 @@ export function getDisplayContent(type, node, resolvedProps) {
  * 获取组件渲染 key
  * @param {string} type - 组件类型
  * @param {Object} node - 当前节点
+ * @param {{ tableRenderVersion?: number, resolvedProps?: Object }} [context] - Table/Tabs 等需要的额外依赖
  * @returns {string}
  */
-export function getRenderKey(type, node) {
+export function getRenderKey(type, node, context) {
   const descriptor = _descriptors.get(type);
   if (!descriptor?.renderKey) return node?.id ?? "";
-  return descriptor.renderKey(node);
+  return descriptor.renderKey(node, context || {});
+}
+
+/**
+ * Table / BigDataTable 等表格类组件
+ * @param {string} type
+ * @returns {boolean}
+ */
+export function isTableLikeType(type) {
+  return type === "Table" || type === "BigDataTable";
+}
+
+/**
+ * 设计画布内是否允许节点自由拖动（false 表示锁在布局壳上）
+ * @param {string} type
+ * @returns {boolean}
+ */
+export function isNodeDesignerMovable(type) {
+  if (!type) return true;
+  const descriptor = _descriptors.get(type);
+  if (descriptor && descriptor.isMovable === false) return false;
+  return !FIXED_LAYOUT_SHELL_SLOT_TYPES.has(type);
+}
+
+/**
+ * 是否用真实组件根作外层包装（el-row / el-col）
+ * @param {string} type
+ * @returns {boolean}
+ */
+export function usesComponentWrapper(type) {
+  return COMPONENT_WRAPPER_RENDER_TYPES.has(type);
+}
+
+/**
+ * Flex 方向是否应从 props.direction 读取（旧版容器）
+ * @param {string} type
+ * @returns {boolean}
+ */
+export function usesLegacyFlexDirectionProps(type) {
+  return LEGACY_FLEX_DIRECTION_TYPES.has(type);
+}
+
+/**
+ * 区域组件在设计器中的提示文案
+ * @param {string} type
+ * @returns {string}
+ */
+export function getRegionDesignerHint(type) {
+  return REGION_DESIGNER_HINTS[type] || "区域";
+}
+
+/**
+ * 设计器节点上除通用类名外的布局相关 class（el-layout、tabs 等）
+ * @param {string} type
+ * @param {{ tabPosition?: string, parentGutter?: number }} [ctx]
+ * @returns {string[]}
+ */
+export function getDesignerNodeLayoutClasses(type, ctx = {}) {
+  if (!type) return [];
+  const out = [];
+  if (type === "ElLayout") out.push("el-layout");
+  if (type === "ElLayoutRow") out.push("el-layout-row");
+  if (type === "HorizontalLayout" || type === "VerticalLayout") {
+    out.push("layout-container-visible");
+  }
+  if (type === "Tabs") {
+    out.push("tabs-container");
+    const position = ctx.tabPosition ?? "top";
+    out.push(`tabs-pos-${position}`);
+  }
+  if (type === "ElCol") {
+    out.push("el-col");
+    if ((ctx.parentGutter ?? 0) > 0) out.push("is-guttered");
+  }
+  return out;
 }
 
 /**
@@ -336,4 +433,10 @@ export default {
   canAcceptChildByDescriptor,
   isRegionType,
   getFlexDirection,
+  isTableLikeType,
+  isNodeDesignerMovable,
+  usesComponentWrapper,
+  usesLegacyFlexDirectionProps,
+  getRegionDesignerHint,
+  getDesignerNodeLayoutClasses,
 };

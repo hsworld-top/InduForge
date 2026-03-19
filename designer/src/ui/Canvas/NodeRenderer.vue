@@ -221,10 +221,6 @@ import {
 } from "vue";
 import { storeToRefs } from "pinia";
 import { ElMessage } from "element-plus";
-import IconEpLocation from "~icons/ep/location";
-import IconEpDocument from "~icons/ep/document";
-import IconEpMenu from "~icons/ep/menu";
-import IconEpSetting from "~icons/ep/setting";
 import { useEditorStore } from "@/stores/editor-store";
 import { datacenterApi } from "@/services";
 import { getPreviewRuntime } from "@/ui/Preview/previewRuntime";
@@ -233,7 +229,17 @@ import {
   createSelectableElement,
 } from "@/editor-core";
 import { normalizeEventDefinitions } from "@/editor-core/registry/componentEvents.js";
-import { getCustomRenderer, getDisplayContent, isFlexContainer, isChildResizable as isChildResizableByDescriptor, getFlexDirection, getRenderTag } from "@/components/registry.js";
+import {
+  getCustomRenderer,
+  getDisplayContent,
+  isFlexContainer,
+  isChildResizable as isChildResizableByDescriptor,
+  getFlexDirection,
+  getRenderTag,
+  isNodeDesignerMovable,
+  isTableLikeType,
+  usesLegacyFlexDirectionProps,
+} from "@/components/registry.js";
 import { createDragDropManager } from "./DragDropManager";
 import { createNodeStyleHelpers } from "./composables/use-node-style.js";
 import { useNodeContent } from "./composables/use-node-content.js";
@@ -244,6 +250,11 @@ import { usePreview } from "./composables/use-preview.js";
 import { useNodeResize } from "./composables/use-node-resize.js";
 import { useNodePointer } from "./composables/use-node-pointer.js";
 import { useBuildRefInfo } from "./composables/use-build-ref-info.js";
+import {
+  useNodeRendererDerivations,
+  createApplyMenuDslConfig,
+  resolveMenuConfigFromContent,
+} from "./composables/use-node-renderer-derivations.js";
 import EChart from "./components/EChart.vue";
 import {
   useDragState,
@@ -281,9 +292,41 @@ const {
   currentPage,
   error,
 } = storeToRefs(editorStore);
+const showContextMenu = inject("showContextMenu", null);
 const nodeStyleHelpers = createNodeStyleHelpers({ doc, currentPage, props });
 const resolveLayoutStyle = nodeStyleHelpers.resolveLayoutStyle;
 const isRootCanvasContainer = nodeStyleHelpers.isRootCanvasContainer;
+
+const node = computed(() => {
+  docVersion.value;
+  return doc.value?.getNode(props.nodeId) || null;
+});
+
+const detailConfigText = computed(() => {
+  docVersion.value;
+  return String(node.value?.detailConfig || "").trim();
+});
+
+let applyMenuDslConfig = () => {};
+
+/**
+ * 处理节点选中（Shift/Meta/Ctrl 多选）
+ * @param {MouseEvent} event - 鼠标事件
+ */
+function handleSelect(event) {
+  if (!node.value || !selection.value) return;
+  if (node.value.locked) return;
+  const element = createSelectableElement("node", node.value.id);
+  if (event.shiftKey) {
+    selection.value.selectRange(element);
+    return;
+  }
+  if (event.metaKey || event.ctrlKey) {
+    selection.value.toggleSelect(element);
+    return;
+  }
+  selection.value.select(element);
+}
 
 // 使用 usePreview composable（需要在 useNodeInteraction 之前，因为 runPreviewScript 需要传入）
 // buildRefInfo 由下方 useBuildRefInfo 赋值，此处先声明以便 usePreview 闭包引用
@@ -301,7 +344,7 @@ const previewRuntime = usePreview({
   readonly: computed(() => props.readonly),
   detailConfigText,
   resolveMenuConfigFromContent,
-  applyMenuDslConfig,
+  applyMenuDslConfig: (config) => applyMenuDslConfig(config),
 });
 const {
   runPreviewScript,
@@ -355,61 +398,6 @@ const notifyInsertFailure = (fallbackMessage) => {
   ElMessage.warning(message);
 };
 
-const node = computed(() => {
-  docVersion.value;
-  return doc.value?.getNode(props.nodeId) || null;
-});
-
-// Fallback 数据常量（仍需要用于其他计算）
-const fallbackMenuItems = [
-  { index: "1", label: "菜单一" },
-  { index: "2", label: "菜单二" },
-  { index: "3", label: "菜单三" },
-];
-const fallbackTableColumns = [
-  { label: "姓名", prop: "name" },
-  { label: "年龄", prop: "age" },
-  { label: "地址", prop: "address" },
-];
-const fallbackTableData = [
-  { name: "张三", age: 28, address: "上海" },
-  { name: "李四", age: 32, address: "北京" },
-];
-const fallbackBigTableColumns = [
-  { label: "名称", prop: "name" },
-  { label: "数值", prop: "value" },
-];
-const fallbackBigTableData = [
-  { name: "张三", value: 100 },
-  { name: "李四", value: 200 },
-];
-const fallbackTimelineItems = [
-  { label: "步骤一", timestamp: "2024-01-01" },
-  { label: "步骤二", timestamp: "2024-01-02" },
-  { label: "步骤三", timestamp: "2024-01-03" },
-];
-const fallbackStepsItems = [
-  { title: "步骤一" },
-  { title: "步骤二" },
-  { title: "步骤三" },
-];
-const fallbackCollapseItems = [
-  { name: "1", title: "面板一", content: "内容一" },
-  { name: "2", title: "面板二", content: "内容二" },
-];
-const fallbackCarouselItems = [{ label: "轮播一" }, { label: "轮播二" }];
-
-/**
- * 规范化选项列表
- * @param {Array} source - 原始列表
- * @param {Array} fallback - 默认列表
- * @returns {Array}
- */
-const normalizeOptions = (source, fallback) => {
-  if (Array.isArray(source)) return source;
-  return fallback;
-};
-
 // 使用 useNodeProps composable（不传 activeTabName，避免循环依赖）
 const nodeProps = useNodeProps({
   node,
@@ -430,7 +418,6 @@ const {
   dropdownItems,
   tabsList,
   normalizeMenuItems,
-  captureMenuDslConfig,
   activeTabName,
   tableRenderVersion,
   syncActiveTabName,
@@ -449,18 +436,42 @@ const { buildRefInfo: buildRefInfoImpl, applyPreviewPatch } = useBuildRefInfo({
 });
 buildRefInfo = buildRefInfoImpl;
 
+applyMenuDslConfig = createApplyMenuDslConfig({
+  node,
+  readonly: computed(() => props.readonly),
+  applyPreviewPatch,
+  editorStore,
+  normalizeMenuItems,
+});
+
 // 应用 Tabs modelValue 处理到 resolvedProps（通过 useNodeContent 的辅助函数）
 const resolvedProps = computed(() => {
   const base = resolvedPropsBase.value;
-  // 对于 Table/BigDataTable，需要 tableRenderVersion 触发更新
-  if (node.value?.type === "Table" || node.value?.type === "BigDataTable") {
+  if (isTableLikeType(node.value?.type)) {
     tableRenderVersion.value;
   }
-  // 应用 Tabs modelValue 处理
   return applyTabsModelValueToProps(base);
 });
 
 const dragDropManager = createDragDropManager();
+
+function resolveFlexDirection(type, element) {
+  const descriptorDirection = getFlexDirection(type);
+  if (descriptorDirection) {
+    return descriptorDirection;
+  }
+  if (usesLegacyFlexDirectionProps(type)) {
+    return node.value?.props?.direction || "column";
+  }
+  return dragDropManager.getContainerDirection(element);
+}
+
+const isMovable = computed(() => {
+  if (!node.value || props.isRoot || node.value.locked) return false;
+  if (isRootCanvasContainer(node.value)) return false;
+  return isNodeDesignerMovable(node.value.type);
+});
+
 const nodeDrop = useNodeDrop({
   node,
   doc,
@@ -510,114 +521,40 @@ const isDropActive = computed(() => {
   if (!node.value) return isDragOver.value;
   return isDragOver.value || dragState.targetContainerId === node.value.id;
 });
+
+const {
+  menuItems,
+  tableColumns,
+  bigTableColumns,
+  timelineItems,
+  stepsItems,
+  collapseItems,
+  carouselItems,
+  dropdownLabel,
+  activeTabChildIds,
+  regionHintText,
+  useComponentWrapper,
+  renderKey,
+  nodeClass,
+} = useNodeRendererDerivations({
+  node,
+  detailConfigText,
+  docVersion,
+  tableRenderVersion,
+  resolvedNodeProps,
+  selectionVersion,
+  selection,
+  doc,
+  isContainer: isContainerFromComposable,
+  isMovable,
+  isDropActive,
+  activeTabName,
+  tabsList,
+  props,
+});
+
 const filteredProps = filteredPropsFromComposable;
 
-const sanitizeDslContent = (content) => {
-  return String(content || "")
-    .replace(/[，]/g, ",")
-    .replace(/[；]/g, ";")
-    .replace(/[：]/g, ":");
-};
-const resolveMenuConfigFromContent = (content) => {
-  const text = sanitizeDslContent(content).trim();
-  if (!text) return null;
-  const captured = captureMenuDslConfig(text);
-  if (captured) return captured;
-  if (text.startsWith("{") && text.endsWith("}")) {
-    try {
-      return new Function(`return (${text});`)();
-    } catch (error) {
-      return null;
-    }
-  }
-  try {
-    return new Function(`return ({${text}});`)();
-  } catch (error) {
-    return null;
-  }
-};
-const applyMenuDslConfig = (config) => {
-  if (!config || typeof config !== "object") return;
-  if (node.value?.type !== "Menu") return;
-  const propsPatch = { ...(node.value?.props || {}) };
-  const rawProps =
-    config.props && typeof config.props === "object" ? { ...config.props } : {};
-  if (Array.isArray(config.items)) {
-    rawProps.items = config.items;
-  }
-  if (Array.isArray(rawProps.items)) {
-    rawProps.items = normalizeMenuItems(rawProps.items);
-  }
-  Object.assign(propsPatch, rawProps);
-  if (config.className && String(config.className).trim()) {
-    propsPatch.class = String(config.className).trim();
-  }
-  const nextPatch = { props: propsPatch };
-  if (config.style && typeof config.style === "object") {
-    nextPatch.style = { ...(node.value?.style || {}), ...config.style };
-  }
-  if (props.readonly) {
-    applyPreviewPatch(nextPatch);
-    return;
-  }
-  const ok = editorStore.updateNode(node.value.id, nextPatch);
-  if (!ok) {
-    applyPreviewPatch(nextPatch);
-  }
-};
-const resolveMenuIconComponent = (icon) => {
-  if (!icon) return null;
-  if (typeof icon === "object" || typeof icon === "function") return icon;
-  const key = String(icon).trim().toLowerCase();
-  if (!key) return null;
-  const map = {
-    location: IconEpLocation,
-    document: IconEpDocument,
-    menu: IconEpMenu,
-    setting: IconEpSetting,
-  };
-  return map[key] || null;
-};
-const menuItems = computed(() => {
-  const detailConfig = detailConfigText.value;
-  const detailMenuConfig =
-    node.value?.type === "Menu" && detailConfig
-      ? resolveMenuConfigFromContent(detailConfig)
-      : null;
-  const detailItems = detailMenuConfig?.props?.items || detailMenuConfig?.items;
-  const items = normalizeOptions(
-    Array.isArray(detailItems) ? detailItems : node.value?.props?.items,
-    fallbackMenuItems,
-  );
-  return items
-    .map((item) => {
-      if (!item) return null;
-      if (typeof item === "string") {
-        return { label: item, index: item };
-      }
-      if (typeof item !== "object") return null;
-      const label = item.label ?? item.title ?? item.name ?? "";
-      const index =
-        item.index ??
-        item.command ??
-        item.key ??
-        (label ? String(label) : undefined);
-      const iconComponent = resolveMenuIconComponent(item.icon);
-      return { ...item, label, index, iconComponent };
-    })
-    .filter(Boolean);
-});
-const tableColumns = computed(() => {
-  tableRenderVersion.value;
-  return normalizeOptions(node.value?.props?.columns, fallbackTableColumns);
-});
-const bigTableColumns = computed(() => {
-  tableRenderVersion.value;
-  return normalizeOptions(node.value?.props?.columns, fallbackBigTableColumns);
-});
-const timelineItems = computed(() => {
-  return normalizeOptions(node.value?.props?.items, fallbackTimelineItems);
-});
 const tabHeaderWidth = ref(0);
 
 /**
@@ -763,41 +700,6 @@ const isActiveTab = (tab) => {
   return String(name) === activeTabName.value;
 };
 
-/**
- * Tabs 激活内容区子节点
- * @returns {string[]} 子节点ID列表
- */
-const activeTabChildIds = computed(() => {
-  docVersion.value;
-  if (!node.value || node.value.type !== "Tabs" || !doc.value) return [];
-  const current = activeTabName.value;
-  return (node.value.children || []).filter((childId) => {
-    const childNode = doc.value?.getNode?.(childId);
-    if (!childNode) return false;
-    const tabKey = childNode.props?.tabKey;
-    if (!tabKey) {
-      // 兼容历史数据：未标记的默认归属当前激活页
-      return Boolean(current);
-    }
-    return String(tabKey) === String(current);
-  });
-});
-const stepsItems = computed(() => {
-  return normalizeOptions(node.value?.props?.items, fallbackStepsItems);
-});
-const collapseItems = computed(() => {
-  return normalizeOptions(node.value?.props?.items, fallbackCollapseItems);
-});
-const carouselItems = computed(() => {
-  return normalizeOptions(node.value?.props?.items, fallbackCarouselItems);
-});
-const dropdownLabel = computed(() => {
-  if (!node.value) return "下拉菜单";
-  return node.value.props?.label || node.value.label || "下拉菜单";
-});
-
-// ✅ 注入右键菜单显示函数
-const showContextMenu = inject("showContextMenu", null);
 const isContainer = isContainerFromComposable;
 
 const isNodeVisible = computed(() => {
@@ -812,26 +714,6 @@ const isNodeVisible = computed(() => {
   return Boolean(value);
 });
 
-/**
- * 获取 Flex 方向
- * @param {string} type - 组件类型
- * @param {HTMLElement} element - 目标元素
- * @returns {string}
- */
-const resolveFlexDirection = (type, element) => {
-  // 优先从 descriptor 读取（新架构组件）
-  const descriptorDirection = getFlexDirection(type);
-  if (descriptorDirection) {
-    return descriptorDirection;
-  }
-  // 向后兼容：FlexContainer/ResponsiveLayout 从 props.direction 读取
-  if (type === "FlexContainer" || type === "ResponsiveLayout") {
-    return node.value?.props?.direction || "column";
-  }
-  // 最终 fallback：从 DOM 元素读取 CSS computed style
-  return dragDropManager.getContainerDirection(element);
-};
-
 const hasChildren = computed(() => {
   docVersion.value;
   if (!node.value || !doc.value) return false;
@@ -839,26 +721,6 @@ const hasChildren = computed(() => {
     return doc.value.getChildren(node.value.id).length > 0;
   }
   return (node.value.children || []).length > 0;
-});
-
-/**
- * 判断节点是否可自由拖动
- * @returns {boolean} 是否允许拖动
- */
-const isMovable = computed(() => {
-  if (!node.value || props.isRoot || node.value.locked) return false;
-  if (isRootCanvasContainer(node.value)) return false;
-  if (
-    node.value.type === "ElHeader" ||
-    node.value.type === "ElAside" ||
-    node.value.type === "ElMain" ||
-    node.value.type === "ElFooter" ||
-    node.value.type === "ElCol" ||
-    node.value.type === "ElLayoutRow"
-  ) {
-    return false;
-  }
-  return true;
 });
 
 const nodePointer = useNodePointer({
@@ -904,60 +766,7 @@ const showResizeHandles = computed(() => {
 });
 
 
-const nodeClass = computed(() => {
-  selectionVersion.value;
-  if (!node.value) return "";
-  const classes = ["designer-node"];
-  if (props.isRoot) classes.push("is-root");
-  if (props.readonly) classes.push("is-preview");
-  if (isContainer.value) classes.push("is-container");
-  if (isMovable.value && !props.readonly) classes.push("is-draggable");
-  if (node.value.locked) classes.push("is-locked");
-  if (node.value.type === "ElLayout") {
-    classes.push("el-layout");
-  }
-  if (node.value.type === "ElLayoutRow") {
-    classes.push("el-layout-row");
-  }
-  if (
-    node.value.type === "HorizontalLayout" ||
-    node.value.type === "VerticalLayout"
-  ) {
-    classes.push("layout-container-visible");
-  }
-  if (node.value.type === "Tabs") {
-    classes.push("tabs-container");
-    const position =
-      resolvedNodeProps.value?.tabPosition ||
-      node.value.props?.tabPosition ||
-      "top";
-    classes.push(`tabs-pos-${position}`);
-  }
-  if (node.value.type === "ElCol") {
-    classes.push("el-col");
-    const parentNode = doc.value?.getParent?.(node.value.id);
-    const gutter = Number(parentNode?.props?.gutter) || 0;
-    if (gutter > 0) classes.push("is-guttered");
-  }
-  if (isDropActive.value && !props.readonly) classes.push("drag-over");
-  if (!props.readonly && selection.value?.isSelected(node.value.id)) {
-    classes.push("is-selected");
-  }
-  return classes.join(" ");
-});
-
 const isRegionContainer = isRegionContainerFromComposable;
-
-const regionHintText = computed(() => {
-  if (!node.value) return "";
-  const hintMap = {
-    ElHeader: "Header区域",
-    ElAside: "Aside区域",
-    ElMain: "Main区域",
-    ElFooter: "Footer区域",
-  };
-  return hintMap[node.value.type] || "区域";
-});
 
 const renderTag = computed(() => {
   if (!node.value) return "div";
@@ -977,38 +786,8 @@ const customRendererComponent = computed(() => {
   return getCustomRenderer(node.value.type) ?? null;
 });
 
-const useComponentWrapper = computed(() => {
-  const type = node.value?.type;
-  return type === "ElLayoutRow" || type === "ElCol";
-});
-
 const outerTag = computed(() => {
   return useComponentWrapper.value ? renderTag.value : "div";
-});
-
-const renderKey = computed(() => {
-  if (!node.value) return "";
-  if (node.value.type === "Table" || node.value.type === "BigDataTable") {
-    const columnsSize = Array.isArray(node.value.props?.columns)
-      ? node.value.props.columns.length
-      : 0;
-    const dataSize = Array.isArray(node.value.props?.data)
-      ? node.value.props.data.length
-      : 0;
-    return `${node.value.id}-${columnsSize}-${dataSize}-${tableRenderVersion.value}`;
-  }
-  if (node.value.type === "Tabs") {
-    const tabs = Array.isArray(node.value.props?.tabs)
-      ? node.value.props.tabs
-      : [];
-    const tabKey = tabs
-      .map((item) => item?.name ?? item?.label ?? "")
-      .join("|");
-    const activeName =
-      node.value.props?.activeName ?? resolvedNodeProps.value?.activeName ?? "";
-    return `${node.value.id}-${tabKey}-${String(activeName)}`;
-  }
-  return node.value.id || "";
 });
 
 const displayContent = computed(() => {
@@ -1331,33 +1110,6 @@ const designEventListeners = computed(() => {
  */
 const mergedEventListeners = computed(() => {
   return { ...componentEventListeners.value, ...designEventListeners.value };
-});
-
-/**
- * 处理节点选中（Shift/Meta/Ctrl 多选）
- * @param {MouseEvent} event - 鼠标事件
- * @returns {void}
- */
-const handleSelect = (event) => {
-  if (!node.value || !selection.value) return;
-  // 锁定的节点不能选中
-  if (node.value.locked) return;
-
-  const element = createSelectableElement("node", node.value.id);
-  if (event.shiftKey) {
-    selection.value.selectRange(element);
-    return;
-  }
-  if (event.metaKey || event.ctrlKey) {
-    selection.value.toggleSelect(element);
-    return;
-  }
-  selection.value.select(element);
-};
-
-const detailConfigText = computed(() => {
-  docVersion.value;
-  return String(node.value?.detailConfig || "").trim();
 });
 
 const tryRegisterPreviewRef = (pageIdValue) => {

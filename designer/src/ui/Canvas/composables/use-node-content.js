@@ -49,7 +49,7 @@ const fallbackTabs = [
  * @param {Array} items - 原始菜单项列表
  * @returns {Array} 规范化后的菜单项列表
  */
-const normalizeMenuItems = (items) => {
+export const normalizeMenuItems = (items) => {
   if (!Array.isArray(items)) return [];
   return items
     .map((item) => {
@@ -74,7 +74,7 @@ const normalizeMenuItems = (items) => {
  * @param {string} content - 内容文本
  * @returns {Object|null} 菜单配置对象，失败返回 null
  */
-const captureMenuDslConfig = (content) => {
+export const captureMenuDslConfig = (content) => {
   const text = String(content || "");
   if (!text.trim()) return null;
   let captured = null;
