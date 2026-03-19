@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(./node_modules/**)",
+      "Read(./**/node_modules/**)",
+      "Read(./dist/**)",
+      "Read(./**/dist/**)",
+      "Read(./build/**)",
+      "Read(./**/build/**)",
+      "Read(./coverage/**)",
+      "Read(./**/coverage/**)",
+      "Read(./.nyc_output/**)",
+      "Read(./runtime/logs/**)",
+      "Read(./**/logs/**)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./.git/**)",
+      "Read(./.svn/**)",
+      "Read(./docker/**)",
+      "Read(./docker/images/**)",
+      "Read(./dev_core/artifacts/**)",
+      "Read(./minio/data*/**)"
+    ]
+  }
+}

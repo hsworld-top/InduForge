@@ -1,0 +1,43 @@
+# Codex Agent 忽略文件
+# 使用 .gitignore 语法，减少 AI 索引与上下文检索，节省 token
+# 参考：https://github.com/openai/codex/issues/205
+
+# Node.js 依赖（体积大、无业务价值）
+node_modules/
+**/node_modules/
+
+# 构建产物
+dist/
+**/dist/
+build/
+**/build/
+.nyc_output/
+coverage/
+**/coverage/
+
+# 日志与缓存
+*.log
+*.pid
+*.seed
+.npm-cache/
+runtime/logs/
+**/logs/
+
+# 环境与密钥（安全）
+.env
+.env.*
+!.env.example
+
+# 版本控制与锁文件
+.git/
+.svn/
+*.lock
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# 其他大体积/低价值目录
+docker/
+docker/images/
+minio/data*/
+dev_core/artifacts/
