@@ -1,6 +1,6 @@
 <template>
   <div class="design-canvas" tabindex="0" @pointerdown.capture="handleCanvasPointerDown"
-    @pointermove="handleCanvasPointerMove" @keydown="handleKeyDown" @dragover.prevent @drop.prevent="handleCanvasDrop">
+    @pointermove="handleCanvasPointerMove" @pointerleave="handleCanvasPointerLeave" @keydown="handleKeyDown" @dragover.prevent @drop.prevent="handleCanvasDrop">
     <NodeRenderer v-if="rootNodeId" :node-id="rootNodeId" :is-root="true" />
     <div v-if="!hasContent" class="empty-placeholder">
       <IconEpPlus class="text-5xl mb-4" />
@@ -393,6 +393,14 @@ const handleCanvasPointerMove = (event) => {
   const hitEl = document.elementFromPoint(event.clientX, event.clientY);
   const nodeEl = hitEl?.closest?.("[data-node-type]");
   hoveredNodeType.value = nodeEl?.getAttribute?.("data-node-type") || "";
+};
+
+/**
+ * 鼠标离开画布时清空坐标与悬停信息
+ */
+const handleCanvasPointerLeave = () => {
+  lastMouseCanvasPos.value = null;
+  hoveredNodeType.value = "";
 };
 
 /** 右键菜单显示状态与坐标 */

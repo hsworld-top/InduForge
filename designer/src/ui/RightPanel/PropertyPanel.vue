@@ -6874,17 +6874,6 @@ const shouldHideProp = (propDef) => {
   if (nodeType === "Tabs" && propDef.name === "tabs") return true;
   if (nodeType === "Menu" && propDef.name === "items") return true;
 
-  // 尺寸策略：固定才显示固定尺寸输入
-  const node = selectedNode.value;
-  if (node && propDef.name === "fixedWidth") {
-    const hPolicy = node.props?.horizontalPolicy ?? "expanding";
-    if (hPolicy !== "fixed") return true;
-  }
-  if (node && propDef.name === "fixedHeight") {
-    const vPolicy = node.props?.verticalPolicy ?? "expanding";
-    if (vPolicy !== "fixed") return true;
-  }
-
   return false;
 };
 

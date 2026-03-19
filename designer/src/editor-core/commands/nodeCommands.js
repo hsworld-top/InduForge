@@ -681,19 +681,23 @@ export class ReorderNodeCommand extends Command {
 
     const childrenCount = parent.children.length;
 
-    // 计算新位置
+    // 计算新位置（同父下 DOM 顺序：索引越大越靠前显示，故置顶=末位，置底=首位）
     switch (this._direction) {
       case "up":
-        this._newIndex = Math.max(0, this._oldIndex - 1);
-        break;
-      case "down":
+        // 上移一层：在叠放顺序中更靠前 → 在 children 中后移
         this._newIndex = Math.min(childrenCount - 1, this._oldIndex + 1);
         break;
+      case "down":
+        // 下移一层：在叠放顺序中更靠后 → 在 children 中前移
+        this._newIndex = Math.max(0, this._oldIndex - 1);
+        break;
       case "top":
-        this._newIndex = 0;
+        // 置顶：置于最前 → 移到 children 末尾
+        this._newIndex = childrenCount - 1;
         break;
       case "bottom":
-        this._newIndex = childrenCount - 1;
+        // 置底：置于最后 → 移到 children 首位
+        this._newIndex = 0;
         break;
     }
 

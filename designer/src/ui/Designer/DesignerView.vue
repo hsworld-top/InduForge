@@ -6,79 +6,33 @@
 <template>
   <div class="designer-layout">
     <!-- 顶部工具栏 -->
-    <TopToolbar
-      :page-name="pageName"
-      :is-locked="isLocked"
-      :is-dirty="isDirty"
-      :view-presets="viewPresets"
-      :active-view-key="activeViewKey"
-      :canvas-width="canvasWidth"
-      :canvas-height="canvasHeight"
-      :is-custom-view="isCustomView"
-      :can-undo="canUndoEnabled"
-      :can-redo="canRedoEnabled"
-      :can-move-layer="canMoveLayer"
-      :zoom="zoom"
-      :show-ruler="showRuler"
-      :show-grid="showGrid"
-      :enable-snap="enableSnap"
-      :saving="saving"
-      :save-settings="saveSettings"
-      :has-selection="hasSelection"
-      :has-clipboard="hasClipboard"
-      @update:activeViewKey="handleViewChange"
-      @undo="handleUndo"
-      @redo="handleRedo"
-      @preview="handlePreview"
-      @previewApp="handlePreviewApp"
-      @save="handleSave"
-      @export="handleExport"
-      @toggleLock="handleToggleLock"
-      @moveUp="handleLayerMoveUp"
-      @moveDown="handleLayerMoveDown"
-      @moveToTop="handleLayerMoveToTop"
-      @moveToBottom="handleLayerMoveToBottom"
-      @openCollaboration="handleOpenCollaboration"
-      @refreshCanvas="handleRefreshCanvas"
-      @toggleLocale="handleToggleLocale"
-      @openAi="handleOpenAi"
-      @toggleTheme="handleToggleTheme"
-      @clearCanvas="handleClearCanvas"
-      @applyCustomSize="handleApplyCustomSize"
-      @saveSettingsChange="handleSaveSettingsChange"
-      @zoomIn="handleZoomIn"
-      @zoomOut="handleZoomOut"
-      @fitCanvas="handleFitCanvas"
-      @fitScreen="handleFitScreen"
-      @toggleRuler="handleToggleRuler"
-      @toggleGrid="handleToggleGrid"
-      @toggleSnap="handleToggleSnap"
-      @copy="handleCopy"
-      @paste="handlePaste"
-      @deleteSelected="handleDeleteSelected"
-    />
+    <TopToolbar :page-name="pageName" :is-locked="isLocked" :is-dirty="isDirty" :view-presets="viewPresets"
+      :active-view-key="activeViewKey" :canvas-width="canvasWidth" :canvas-height="canvasHeight"
+      :is-custom-view="isCustomView" :can-undo="canUndoEnabled" :can-redo="canRedoEnabled"
+      :can-move-layer="canMoveLayer" :zoom="zoom" :show-ruler="showRuler" :show-grid="showGrid"
+      :enable-snap="enableSnap" :saving="saving" :save-settings="saveSettings" :has-selection="hasSelection"
+      :has-clipboard="hasClipboard" @update:activeViewKey="handleViewChange" @undo="handleUndo" @redo="handleRedo"
+      @preview="handlePreview" @previewApp="handlePreviewApp" @save="handleSave" @export="handleExport"
+      @toggleLock="handleToggleLock" @moveUp="handleLayerMoveUp" @moveDown="handleLayerMoveDown"
+      @moveToTop="handleLayerMoveToTop" @moveToBottom="handleLayerMoveToBottom"
+      @openCollaboration="handleOpenCollaboration" @refreshCanvas="handleRefreshCanvas"
+      @toggleLocale="handleToggleLocale" @openAi="handleOpenAi" @toggleTheme="handleToggleTheme"
+      @clearCanvas="handleClearCanvas" @applyCustomSize="handleApplyCustomSize"
+      @saveSettingsChange="handleSaveSettingsChange" @zoomIn="handleZoomIn" @zoomOut="handleZoomOut"
+      @fitCanvas="handleFitCanvas" @fitScreen="handleFitScreen" @toggleRuler="handleToggleRuler"
+      @toggleGrid="handleToggleGrid" @toggleSnap="handleToggleSnap" @copy="handleCopy" @paste="handlePaste"
+      @deleteSelected="handleDeleteSelected" />
 
     <SelectionToolbar v-if="hasSelection && hasPages" />
 
     <!-- 主体区域 -->
     <div class="designer-main">
-      <ToolRail
-        side="left"
-        :items="leftRailItems"
-        :active-key="leftActiveKey"
-        @select="handleLeftSelect"
-      />
+      <ToolRail side="left" :items="leftRailItems" :active-key="leftActiveKey" @select="handleLeftSelect" />
 
       <div class="designer-workspace">
         <div class="designer-workspace-main">
-          <DockPanel
-            v-if="leftActiveKey && !leftFloating"
-            side="left"
-            :title="leftPanelTitle"
-            :floating="leftFloating"
-            @close="handleLeftClose"
-            @toggleFloating="toggleLeftFloating"
-          >
+          <DockPanel v-if="leftActiveKey && !leftFloating" side="left" :title="leftPanelTitle" :floating="leftFloating"
+            @close="handleLeftClose" @toggleFloating="toggleLeftFloating">
             <template #actions>
               <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
                 <el-button size="small" text @click="handlePageCreate">
@@ -91,26 +45,15 @@
                 </el-button>
               </el-tooltip>
             </template>
-            <component
-              :is="leftPanelComponent"
-              :key="`left-panel-${leftActiveKey}`"
-              v-bind="leftPanelProps"
-              ref="leftPanelRef"
-              @update:drawingTool="(value) => (drawingTool.value = value)"
-            />
+            <component :is="leftPanelComponent" :key="`left-panel-${leftActiveKey}`" v-bind="leftPanelProps"
+              ref="leftPanelRef" @update:drawingTool="(value) => (drawingTool.value = value)" />
           </DockPanel>
 
           <div ref="canvasHostRef" class="designer-canvas">
             <!-- 画布容器 -->
             <template v-if="hasPages">
-              <CanvasContainer
-                :width="canvasWidth"
-                :height="canvasHeight"
-                :zoom="zoom"
-                :show-ruler="showRuler"
-                :view-reset-token="viewResetToken"
-                @zoomChange="handleZoomChange"
-              />
+              <CanvasContainer :width="canvasWidth" :height="canvasHeight" :zoom="zoom" :show-ruler="showRuler"
+                :view-reset-token="viewResetToken" @zoomChange="handleZoomChange" />
             </template>
 
             <!-- 空页面提示 -->
@@ -126,14 +69,8 @@
               </div>
             </div>
 
-            <DockPanel
-              v-if="leftActiveKey && leftFloating"
-              side="left"
-              :title="leftPanelTitle"
-              :floating="leftFloating"
-              @close="handleLeftClose"
-              @toggleFloating="toggleLeftFloating"
-            >
+            <DockPanel v-if="leftActiveKey && leftFloating" side="left" :title="leftPanelTitle" :floating="leftFloating"
+              @close="handleLeftClose" @toggleFloating="toggleLeftFloating">
               <template #actions>
                 <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
                   <el-button size="small" text @click="handlePageCreate">
@@ -146,97 +83,70 @@
                   </el-button>
                 </el-tooltip>
               </template>
-              <component
-                :is="leftPanelComponent"
-                :key="`left-floating-panel-${leftActiveKey}`"
-                v-bind="leftPanelProps"
-                ref="leftPanelRef"
-                @update:drawingTool="(value) => (drawingTool.value = value)"
-              />
+              <component :is="leftPanelComponent" :key="`left-floating-panel-${leftActiveKey}`" v-bind="leftPanelProps"
+                ref="leftPanelRef" @update:drawingTool="(value) => (drawingTool.value = value)" />
             </DockPanel>
 
-            <DockPanel
-              v-if="rightActiveKey && rightFloating"
-              side="right"
-              :title="rightPanelTitle"
-              :floating="rightFloating"
-              @close="handleRightClose"
-              @toggleFloating="toggleRightFloating"
-            >
+            <DockPanel v-if="rightActiveKey && rightFloating" side="right" :title="rightPanelTitle"
+              :floating="rightFloating" @close="handleRightClose" @toggleFloating="toggleRightFloating">
               <component :is="rightPanelComponent" />
             </DockPanel>
           </div>
 
-          <DockPanel
-            v-if="rightActiveKey && !rightFloating"
-            side="right"
-            :title="rightPanelTitle"
-            :floating="rightFloating"
-            @close="handleRightClose"
-            @toggleFloating="toggleRightFloating"
-          >
+          <DockPanel v-if="rightActiveKey && !rightFloating" side="right" :title="rightPanelTitle"
+            :floating="rightFloating" @close="handleRightClose" @toggleFloating="toggleRightFloating">
             <component :is="rightPanelComponent" />
           </DockPanel>
         </div>
 
         <div class="designer-bottom-toolbar">
           <div class="page-tabs-bar">
-            <el-tabs
-              v-if="pageTabs.length > 0"
-              v-model="activePageTabId"
-              type="card"
-              closable
-              addable
-              @tab-remove="handleClosePageTab"
-              @tab-add="handlePageCreate"
-            >
-              <el-tab-pane
-                v-for="tab in pageTabs"
-                :key="tab.id"
-                :name="tab.id"
-                closable
-              >
+            <el-tabs v-if="pageTabs.length > 0" v-model="activePageTabId" type="card" closable addable
+              @tab-remove="handleClosePageTab" @tab-add="handlePageCreate">
+              <el-tab-pane v-for="tab in pageTabs" :key="tab.id" :name="tab.id" closable>
                 <template #label>
                   <span class="page-tab-label">
                     <IconEpDocument class="tab-icon" />
                     <span class="tab-name">{{ tab.name }}</span>
-                    <IconEpWarning
-                      v-if="tab.isDirty"
-                      class="tab-dirty-icon"
-                      title="未保存"
-                    />
+                    <IconEpWarning v-if="tab.isDirty" class="tab-dirty-icon" title="未保存" />
                   </span>
                 </template>
               </el-tab-pane>
             </el-tabs>
             <div v-else class="page-tabs-empty">
               <span>暂无页面</span>
-              <el-button
-                class="page-tabs-add-btn"
-                text
-                @click="handlePageCreate"
-              >
+              <el-button class="page-tabs-add-btn" text @click="handlePageCreate">
                 <IconEpPlus />
               </el-button>
             </div>
           </div>
           <!-- 底部右侧状态信息区 -->
           <div class="status-info-bar">
-            <template v-if="canvasMousePos">
-              <span class="status-item status-mouse">
-                X:&nbsp;{{ Math.round(canvasMousePos.x) }}&nbsp;&nbsp;Y:&nbsp;{{ Math.round(canvasMousePos.y) }}
+            <span class="status-item status-mouse">
+              {{ canvasMousePos ? `X: ${Math.round(canvasMousePos.x)}  Y: ${Math.round(canvasMousePos.y)}` : 'X: -  Y: -' }}
+            </span>
+            <span class="status-sep">|</span>
+            <template v-if="selectedNodeName">
+              <span class="status-item status-node-name" :title="selectedNodeName">
+                {{ selectedNodeName }}
               </span>
               <span class="status-sep">|</span>
             </template>
             <template v-if="selectedNodePos">
-              <span class="status-item">
-                @&nbsp;{{ selectedNodePos.x }},&nbsp;{{ selectedNodePos.y }}
+              <span class="status-item status-mouse">
+                {{ selectedNodePos.x }}, {{ selectedNodePos.y }}
               </span>
               <span class="status-sep">|</span>
             </template>
-            <span class="status-item">选中:&nbsp;{{ selectionCount }}</span>
+            <template v-if="selectedNodeSize">
+              <span class="status-item status-mouse">
+                {{ selectedNodeSize.w }} × {{ selectedNodeSize.h }}
+              </span>
+              <span class="status-sep">|</span>
+            </template>
+            <span class="status-item">选中: {{ selectionCount }}</span>
             <span class="status-sep">|</span>
-            <span class="status-item">共&nbsp;{{ totalNodeCount }}&nbsp;个</span>
+            <span class="status-item">共 {{ totalNodeCount }} 个</span>
             <template v-if="hoveredNodeType">
               <span class="status-sep">|</span>
               <span class="status-item status-hover">{{ hoveredNodeType }}</span>
@@ -245,12 +155,7 @@
         </div>
       </div>
 
-      <ToolRail
-        side="right"
-        :items="rightRailItems"
-        :active-key="rightActiveKey"
-        @select="handleRightSelect"
-      />
+      <ToolRail side="right" :items="rightRailItems" :active-key="rightActiveKey" @select="handleRightSelect" />
     </div>
   </div>
 </template>
@@ -595,6 +500,45 @@ const selectedNodePos = computed(() => {
     return {
       x: Math.round((nodeRect.left - rootRect.left) / zoomValue),
       y: Math.round((nodeRect.top - rootRect.top) / zoomValue),
+    };
+  }
+  return null;
+});
+
+/**
+ * 主选中节点的显示名称（label 优先，fallback 到 type）
+ */
+const selectedNodeName = computed(() => {
+  void editorStore.selectionVersion;
+  void editorStore.docVersion;
+  const primary = selection.value?.getPrimaryElement?.();
+  if (!primary || primary.kind !== "node") return "";
+  const node = doc.value?.getNode?.(primary.id);
+  if (!node) return "";
+  return node.label || node.type || "";
+});
+
+/**
+ * 主选中节点的尺寸（优先从 props/style 读取，fallback 到 DOM 实际渲染尺寸）
+ */
+const selectedNodeSize = computed(() => {
+  void editorStore.selectionVersion;
+  void editorStore.docVersion;
+  const primary = selection.value?.getPrimaryElement?.();
+  if (!primary || primary.kind !== "node") return null;
+  const node = doc.value?.getNode?.(primary.id);
+  if (!node) return null;
+  const pw = node.props?.width ?? node.style?.width;
+  const ph = node.props?.height ?? node.style?.height;
+  if (pw != null && ph != null) {
+    return { w: pw, h: ph };
+  }
+  const nodeEl = document.querySelector(`[data-node-id="${primary.id}"]`);
+  if (nodeEl) {
+    const zoomValue = zoom.value || 1;
+    return {
+      w: Math.round(nodeEl.offsetWidth / zoomValue),
+      h: Math.round(nodeEl.offsetHeight / zoomValue),
     };
   }
   return null;
@@ -1417,7 +1361,29 @@ onBeforeUnmount(() => {
   background: #f5f7fb;
 }
 
-/* 页面标签栏样式 */
+/* ====== 底部工具栏容器 ====== */
+.designer-bottom-toolbar {
+  flex-shrink: 0;
+  height: 34px;
+  border-top: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.dark .designer-bottom-toolbar {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-top-color: #334155;
+}
+
+.designer-bottom-toolbar .page-tabs-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ====== 页面标签栏 ====== */
 .page-tabs-bar {
   width: 100%;
   min-width: 0;
@@ -1428,7 +1394,6 @@ onBeforeUnmount(() => {
 
 .dark .page-tabs-bar {
   background: transparent;
-  border-color: transparent;
 }
 
 .page-tabs-bar :deep(.el-tabs__header) {
@@ -1457,14 +1422,15 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
-  background: #f3f6fa;
+  color: #94a3b8;
+  background: transparent;
   z-index: 2;
+  transition: color 0.15s;
 }
 
 .page-tabs-bar :deep(.el-tabs__nav-prev:hover),
 .page-tabs-bar :deep(.el-tabs__nav-next:hover) {
-  color: #2563eb;
+  color: #3b82f6;
 }
 
 .page-tabs-bar :deep(.el-tabs__nav-prev .el-icon),
@@ -1478,48 +1444,72 @@ onBeforeUnmount(() => {
 
 .page-tabs-bar :deep(.el-tabs__nav) {
   border: none;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
 }
 
 .page-tabs-bar :deep(.el-tabs__item) {
-  height: 30px;
-  line-height: 30px;
+  height: 28px;
+  line-height: 28px;
   font-size: 12px;
   border: 1px solid transparent !important;
-  background: #eef2f7;
-  color: #6b7280;
-  padding: 0 14px;
-  border-radius: 8px 8px 0 0;
-  margin-right: 6px;
-  transition: all 0.15s ease;
+  border-bottom: none !important;
+  background: transparent;
+  color: #64748b;
+  padding: 0 14px !important;
+  border-radius: 6px 6px 0 0;
+  margin-right: 2px;
+  transition: all 0.18s ease;
+  position: relative;
 }
 
 .page-tabs-bar :deep(.el-tabs__item.is-active) {
   background: #ffffff;
-  color: #1f2937;
-  border-color: #d5deea !important;
-  border-bottom-color: #ffffff !important;
-  box-shadow: 0 -1px 0 #ffffff inset;
+  color: #1e293b;
+  border-color: #e2e8f0 !important;
+  border-bottom-color: transparent !important;
+  font-weight: 500;
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.page-tabs-bar :deep(.el-tabs__item:hover) {
-  color: #374151;
-  background: #e8edf5;
+.page-tabs-bar :deep(.el-tabs__item:not(.is-active):hover) {
+  color: #475569;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.dark .page-tabs-bar :deep(.el-tabs__item) {
+  color: #94a3b8;
 }
 
 .dark .page-tabs-bar :deep(.el-tabs__item.is-active) {
-  background: #2a2a2a;
+  background: #1e293b;
+  color: #e2e8f0;
+  border-color: #334155 !important;
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.2);
 }
 
+.dark .page-tabs-bar :deep(.el-tabs__item:not(.is-active):hover) {
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
+}
+
+/* ====== 标签页内部元素 ====== */
 .page-tab-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .page-tab-label .tab-icon {
-  width: 14px;
-  height: 14px;
-  color: #909399;
+  width: 13px;
+  height: 13px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.page-tabs-bar :deep(.el-tabs__item.is-active) .page-tab-label .tab-icon {
+  color: #3b82f6;
 }
 
 .page-tab-label .tab-name {
@@ -1530,50 +1520,32 @@ onBeforeUnmount(() => {
 }
 
 .page-tab-label .tab-dirty-icon {
-  width: 12px;
-  height: 12px;
-  color: #e6a23c;
-}
-
-.designer-bottom-toolbar {
+  width: 8px;
+  height: 8px;
+  color: #f59e0b;
   flex-shrink: 0;
-  border-top: 1px solid #dfe6ef;
-  background: #f3f6fa;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
 }
 
-.dark .designer-bottom-toolbar {
-  background: #0f172a;
-  border-top-color: #374151;
-}
-
-.designer-bottom-toolbar .page-tabs-bar {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* 底部状态信息区 */
+/* ====== 状态信息栏 ====== */
 .status-info-bar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 0 10px;
-  border-left: 1px solid #dfe6ef;
+  padding: 0 12px;
+  border-left: 1px solid #e2e8f0;
   height: 100%;
   white-space: nowrap;
   font-size: 11px;
-  color: #6b7280;
+  color: #64748b;
   font-variant-numeric: tabular-nums;
   user-select: none;
+  letter-spacing: 0.01em;
 }
 
 .dark .status-info-bar {
-  border-left-color: #374151;
-  color: #9ca3af;
+  border-left-color: #334155;
+  color: #94a3b8;
 }
 
 .status-info-bar .status-item {
@@ -1581,8 +1553,21 @@ onBeforeUnmount(() => {
 }
 
 .status-info-bar .status-mouse {
-  font-family: monospace;
-  letter-spacing: 0.02em;
+  font-family: "SF Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.status-info-bar .status-node-name {
+  color: #1e40af;
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dark .status-info-bar .status-node-name {
+  color: #93c5fd;
 }
 
 .status-info-bar .status-hover {
@@ -1595,28 +1580,32 @@ onBeforeUnmount(() => {
 }
 
 .status-info-bar .status-sep {
-  color: #d1d5db;
-  padding: 0 2px;
+  color: #cbd5e1;
+  padding: 0 1px;
+  font-size: 10px;
 }
 
 .dark .status-info-bar .status-sep {
-  color: #374151;
+  color: #334155;
 }
 
+/* ====== 新增页面按钮 / 空状态 ====== */
 .page-tabs-add-btn {
-  width: 26px;
-  height: 26px;
-  border: 1px solid #d1d9e5;
-  border-radius: 7px;
-  background: #ffffff;
-  color: #4b5563;
+  width: 22px;
+  height: 22px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 5px;
+  background: transparent;
+  color: #94a3b8;
   padding: 0;
+  transition: all 0.15s ease;
 }
 
 .page-tabs-add-btn:hover {
-  border-color: #bfd2ee;
-  color: #2563eb;
-  background: #f8fbff;
+  border-color: #3b82f6;
+  border-style: solid;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.06);
 }
 
 .page-tabs-empty {
@@ -1624,26 +1613,28 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #9ca3af;
+  color: #94a3b8;
   font-size: 12px;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 .page-tabs-bar :deep(.el-tabs__new-tab) {
   margin: 0 4px 0 2px;
-  width: 26px;
-  height: 26px;
-  line-height: 24px;
-  border-radius: 7px;
-  border: 1px solid #d1d9e5;
-  color: #4b5563;
-  background: #ffffff;
+  width: 22px;
+  height: 22px;
+  line-height: 20px;
+  border-radius: 5px;
+  border: 1px dashed #cbd5e1;
+  color: #94a3b8;
+  background: transparent;
+  transition: all 0.15s ease;
 }
 
 .page-tabs-bar :deep(.el-tabs__new-tab:hover) {
-  border-color: #bfd2ee;
-  color: #2563eb;
-  background: #f8fbff;
+  border-color: #3b82f6;
+  border-style: solid;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.06);
 }
 
 /* 空页面提示 */

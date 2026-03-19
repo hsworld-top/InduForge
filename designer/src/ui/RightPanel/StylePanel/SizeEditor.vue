@@ -12,6 +12,7 @@
           :model-value="widthInput"
           size="small"
           placeholder="auto"
+          class="size-input-with-unit"
           @update:modelValue="handleWidthInput"
           @change="handleWidthChange"
           @blur="handleWidthChange"
@@ -21,6 +22,8 @@
               :model-value="widthUnit"
               size="small"
               class="size-unit-select"
+              teleported
+              popper-class="size-editor-unit-popper"
               @update:modelValue="handleWidthUnitChange"
             >
               <el-option label="px" value="px" />
@@ -38,6 +41,7 @@
           :model-value="heightInput"
           size="small"
           placeholder="auto"
+          class="size-input-with-unit"
           @update:modelValue="handleHeightInput"
           @change="handleHeightChange"
           @blur="handleHeightChange"
@@ -47,6 +51,8 @@
               :model-value="heightUnit"
               size="small"
               class="size-unit-select"
+              teleported
+              popper-class="size-editor-unit-popper"
               @update:modelValue="handleHeightUnitChange"
             >
               <el-option label="px" value="px" />
@@ -279,7 +285,22 @@ const handleHeightUnitChange = (unit) => {
   width: 100%;
 }
 
+/* 保证 append 区域和单位下拉可见，不被 flex 挤没 */
+.size-control :deep(.size-input-with-unit .el-input-group__append) {
+  padding: 0;
+  min-width: 64px;
+  flex-shrink: 0;
+}
+
 .size-unit-select {
-  width: 56px;
+  width: 64px;
+  min-width: 64px;
+}
+</style>
+
+<!-- 下拉层挂到 body，需单独设 z-index，否则可能被右侧栏遮挡 -->
+<style>
+.size-editor-unit-popper {
+  z-index: 4000 !important;
 }
 </style>

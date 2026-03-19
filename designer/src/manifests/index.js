@@ -946,6 +946,7 @@ registerManifest({
   type: "Button",
   name: "按钮",
   category: "PC端组件",
+  defaultStyle: { width: "auto", height: "auto" },
   props: [
     // ── 属性分组 ──────────────────────────────────────────────
     {
@@ -1014,47 +1015,6 @@ registerManifest({
       group: "属性",
       defaultValue: "",
       placeholder: "如: el-icon-search",
-    },
-    // ── 尺寸策略分组 ──────────────────────────────────────────
-    {
-      name: "horizontalPolicy",
-      type: "enum",
-      label: "水平策略",
-      group: "尺寸策略",
-      defaultValue: "expanding",
-      options: [
-        { label: "固定", value: "fixed" },
-        { label: "可延展", value: "expanding" },
-      ],
-    },
-    {
-      name: "fixedWidth",
-      type: "number",
-      label: "宽度",
-      group: "尺寸策略",
-      defaultValue: 90,
-      min: 10,
-      max: 2000,
-    },
-    {
-      name: "verticalPolicy",
-      type: "enum",
-      label: "垂直策略",
-      group: "尺寸策略",
-      defaultValue: "expanding",
-      options: [
-        { label: "固定", value: "fixed" },
-        { label: "可延展", value: "expanding" },
-      ],
-    },
-    {
-      name: "fixedHeight",
-      type: "number",
-      label: "高度",
-      group: "尺寸策略",
-      defaultValue: 106,
-      min: 10,
-      max: 2000,
     },
     // ── 安全策略分组 ──────────────────────────────────────────
     {

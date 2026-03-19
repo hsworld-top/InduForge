@@ -3,88 +3,41 @@
   递归渲染组件树，支持 DOM 组件与 Canvas 图形，处理绑定、事件、拖拽
 -->
 <template>
-  <component
-    v-if="node && isNodeVisible"
-    :is="outerTag"
-    :class="nodeClass"
-    :style="outerStyle"
-    :data-node-id="node.id"
-    :data-node-type="node.type"
-    :id="useComponentWrapper ? nodeDomId : null"
-    :ref="setNodeRef"
-    v-bind="useComponentWrapper ? resolvedProps : {}"
-    v-on="useComponentWrapper ? mergedEventListeners : {}"
-    @click.stop="handleClick"
-    @dblclick.stop="handleDoubleClick"
-    @pointerdown.capture="handlePointerDown"
-    @dragover.prevent="handleDragOver"
-    @dragstart.prevent
-    @dragleave="handleDragLeave"
-    @drop.prevent="handleDrop"
-    @contextmenu.prevent="handleContextMenu"
-  >
-    <component
-      v-if="!useComponentWrapper"
-      :is="renderTag"
-      :key="renderKey"
-      :id="!useComponentWrapper ? nodeDomId : null"
-      :style="contentStyleWithConfig"
-      v-bind="resolvedProps"
-      v-on="mergedEventListeners"
-      ref="contentRef"
-    >
+  <component v-if="node && isNodeVisible" :is="outerTag" :class="nodeClass" :style="outerStyle" :data-node-id="node.id"
+    :data-node-type="node.type" :id="useComponentWrapper ? nodeDomId : null" :ref="setNodeRef"
+    v-bind="useComponentWrapper ? resolvedProps : {}" v-on="useComponentWrapper ? mergedEventListeners : {}"
+    @click.stop="handleClick" @dblclick.stop="handleDoubleClick" @pointerdown.capture="handlePointerDown"
+    @dragover.prevent="handleDragOver" @dragstart.prevent @dragleave="handleDragLeave" @drop.prevent="handleDrop"
+    @contextmenu.prevent="handleContextMenu">
+    <component v-if="!useComponentWrapper" :is="renderTag" :key="renderKey"
+      :id="!useComponentWrapper ? nodeDomId : null" :style="contentStyleWithConfig" v-bind="resolvedProps"
+      v-on="mergedEventListeners" ref="contentRef">
       <template v-if="displayContent !== null">{{ displayContent }}</template>
       <template v-if="node?.type === 'Select'">
-        <el-option
-          v-for="option in selectOptions"
-          :key="option.value ?? option.label"
-          :label="option.label"
-          :value="option.value"
-        />
+        <el-option v-for="option in selectOptions" :key="option.value ?? option.label" :label="option.label"
+          :value="option.value" />
       </template>
       <template v-if="node?.type === 'Radio'">
-        <el-radio
-          v-for="option in radioOptions"
-          :key="option.value ?? option.label"
-          :label="option.value"
-          :disabled="Boolean(option.disabled)"
-          v-show="option.visible !== false"
-        >
+        <el-radio v-for="option in radioOptions" :key="option.value ?? option.label" :label="option.value"
+          :disabled="Boolean(option.disabled)" v-show="option.visible !== false">
           {{ option.label }}
         </el-radio>
       </template>
       <template v-if="node?.type === 'Checkbox'">
-        <el-checkbox
-          v-for="option in checkboxOptions"
-          :key="option.value ?? option.label"
-          :label="option.value"
-          :disabled="Boolean(option.disabled)"
-          v-show="option.visible !== false"
-        >
+        <el-checkbox v-for="option in checkboxOptions" :key="option.value ?? option.label" :label="option.value"
+          :disabled="Boolean(option.disabled)" v-show="option.visible !== false">
           {{ option.label }}
         </el-checkbox>
       </template>
       <template v-if="node?.type === 'Table'">
-        <el-table-column
-          v-for="column in tableColumns"
-          :key="column.prop ?? column.label"
-          v-bind="column"
-        />
+        <el-table-column v-for="column in tableColumns" :key="column.prop ?? column.label" v-bind="column" />
       </template>
       <template v-if="node?.type === 'BigDataTable'">
-        <el-table-column
-          v-for="column in bigTableColumns"
-          :key="column.prop ?? column.label"
-          v-bind="column"
-        />
+        <el-table-column v-for="column in bigTableColumns" :key="column.prop ?? column.label" v-bind="column" />
       </template>
       <template v-if="node?.type === 'Menu'">
-        <el-menu-item
-          v-for="item in menuItems"
-          :key="item.index ?? item.label"
-          :index="item.index ?? item.label"
-          :disabled="Boolean(item.disabled)"
-        >
+        <el-menu-item v-for="item in menuItems" :key="item.index ?? item.label" :index="item.index ?? item.label"
+          :disabled="Boolean(item.disabled)">
           <el-icon v-if="item.iconComponent" class="menu-item-icon">
             <component :is="item.iconComponent" />
           </el-icon>
@@ -92,53 +45,29 @@
         </el-menu-item>
       </template>
       <template v-if="node?.type === 'Timeline'">
-        <el-timeline-item
-          v-for="item in timelineItems"
-          :key="item.timestamp ?? item.label"
-          :timestamp="item.timestamp"
-        >
+        <el-timeline-item v-for="item in timelineItems" :key="item.timestamp ?? item.label" :timestamp="item.timestamp">
           {{ item.label }}
         </el-timeline-item>
       </template>
       <template v-if="node?.type === 'Tabs'">
-        <el-tab-pane
-          v-for="tab in tabsList"
-          :key="tab.name ?? tab.label"
-          :label="tab.label"
-          :name="tab.name"
-        >
-          <div
-            class="tabs-pane-body"
-            :class="{ 'is-drop-active': isDropActive }"
-            :data-node-id="node.id"
-            :data-node-type="node.type"
-            @dragover.prevent="handleDragOver"
-            @dragleave="handleDragLeave"
-            @drop.prevent="handleDrop"
-          >
+        <el-tab-pane v-for="tab in tabsList" :key="tab.name ?? tab.label" :label="tab.label" :name="tab.name">
+          <div class="tabs-pane-body" :class="{ 'is-drop-active': isDropActive }" :data-node-id="node.id"
+            :data-node-type="node.type" @dragover.prevent="handleDragOver" @dragleave="handleDragLeave"
+            @drop.prevent="handleDrop">
             <template v-if="isActiveTab(tab)">
-              <template
-                v-if="
-                  isContainer && activeTabChildIds.length === 0 && !props.isRoot
-                "
-              >
+              <template v-if="
+                isContainer && activeTabChildIds.length === 0 && !props.isRoot
+              ">
                 <div class="empty-container-hint">
                   <span v-if="isDropActive">释放以添加组件</span>
                   <span v-else>拖拽组件到此处</span>
                 </div>
               </template>
-              <span
-                v-if="activeTabChildIds.length === 0 && tab.content"
-                class="tabs-pane-placeholder"
-              >
+              <span v-if="activeTabChildIds.length === 0 && tab.content" class="tabs-pane-placeholder">
                 {{ tab.content }}
               </span>
-              <NodeRenderer
-                v-for="childId in activeTabChildIds"
-                :key="childId"
-                :node-id="childId"
-                :readonly="props.readonly"
-              />
+              <NodeRenderer v-for="childId in activeTabChildIds" :key="childId" :node-id="childId"
+                :readonly="props.readonly" />
             </template>
             <template v-else>
               <span class="tabs-pane-placeholder">
@@ -149,28 +78,17 @@
         </el-tab-pane>
       </template>
       <template v-if="node?.type === 'Collapse'">
-        <el-collapse-item
-          v-for="item in collapseItems"
-          :key="item.name ?? item.title"
-          :name="item.name"
-          :title="item.title"
-        >
+        <el-collapse-item v-for="item in collapseItems" :key="item.name ?? item.title" :name="item.name"
+          :title="item.title">
           {{ item.content }}
         </el-collapse-item>
       </template>
       <template v-if="node?.type === 'Steps'">
-        <el-step
-          v-for="item in stepsItems"
-          :key="item.title"
-          :title="item.title"
-          :description="item.description"
-        />
+        <el-step v-for="item in stepsItems" :key="item.title" :title="item.title" :description="item.description" />
       </template>
-      <template
-        v-if="
-          node?.type === 'ImageCarousel' || node?.type === 'CarouselComponent'
-        "
-      >
+      <template v-if="
+        node?.type === 'ImageCarousel' || node?.type === 'CarouselComponent'
+      ">
         <el-carousel-item v-for="item in carouselItems" :key="item.label">
           <div class="carousel-item-placeholder">{{ item.label }}</div>
         </el-carousel-item>
@@ -180,37 +98,26 @@
       </template>
       <template v-if="node?.type === 'Dropdown'" #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item
-            v-for="item in dropdownItems"
-            :key="item.value ?? item.label"
-            :command="item.value"
-            :disabled="Boolean(item.disabled)"
-            :divided="Boolean(item.divided ?? item.diveded)"
-            :icon="item.icon"
-          >
+          <el-dropdown-item v-for="item in dropdownItems" :key="item.value ?? item.label" :command="item.value"
+            :disabled="Boolean(item.disabled)" :divided="Boolean(item.divided ?? item.diveded)" :icon="item.icon">
             {{ item.label }}
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>
-      <template
-        v-if="
-          isContainer &&
-          !hasChildren &&
-          !props.isRoot &&
-          node?.type !== 'Tabs' &&
-          !(
-            props.readonly &&
-            (isRegionContainer ||
-              node?.type === 'ElLayout' ||
-              node?.type === 'ElLayoutRow' ||
-              node?.type === 'ElCol')
-          )
-        "
-      >
-        <div
-          class="empty-container-hint"
-          :class="{ 'is-region-hint': isRegionContainer }"
-        >
+      <template v-if="
+        isContainer &&
+        !hasChildren &&
+        !props.isRoot &&
+        node?.type !== 'Tabs' &&
+        !(
+          props.readonly &&
+          (isRegionContainer ||
+            node?.type === 'ElLayout' ||
+            node?.type === 'ElLayoutRow' ||
+            node?.type === 'ElCol')
+        )
+      ">
+        <div class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
           <span v-if="isDropActive">释放以添加组件</span>
           <span v-else>{{
             isRegionContainer ? regionHintText : "拖拽组件到此处"
@@ -218,125 +125,84 @@
         </div>
       </template>
       <!-- 插入线指示器 -->
-      <teleport
-        v-if="showInsertLine && insertLineStyle && insertLineBox"
-        to="body"
-      >
-        <div
-          class="insert-line"
-          :class="insertLineStyle.orientation"
-          :style="{
-            left:
-              insertLineStyle.orientation === 'vertical'
-                ? insertLineBox?.left + insertLineStyle.offset + 'px'
-                : insertLineBox?.left + 'px',
-            top:
-              insertLineStyle.orientation === 'horizontal'
-                ? insertLineBox?.top + insertLineStyle.offset + 'px'
-                : insertLineBox?.top + 'px',
-            width:
-              insertLineStyle.orientation === 'vertical'
-                ? '2px'
-                : insertLineBox?.width + 'px',
-            height:
-              insertLineStyle.orientation === 'horizontal'
-                ? '2px'
-                : insertLineBox?.height + 'px',
-          }"
-        />
+      <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
+        <div class="insert-line" :class="insertLineStyle.orientation" :style="{
+          left:
+            insertLineStyle.orientation === 'vertical'
+              ? insertLineBox?.left + insertLineStyle.offset + 'px'
+              : insertLineBox?.left + 'px',
+          top:
+            insertLineStyle.orientation === 'horizontal'
+              ? insertLineBox?.top + insertLineStyle.offset + 'px'
+              : insertLineBox?.top + 'px',
+          width:
+            insertLineStyle.orientation === 'vertical'
+              ? '2px'
+              : insertLineBox?.width + 'px',
+          height:
+            insertLineStyle.orientation === 'horizontal'
+              ? '2px'
+              : insertLineBox?.height + 'px',
+        }" />
       </teleport>
-      <div
-        v-else-if="showInsertLine && insertLineStyle"
-        class="insert-line"
-        :class="insertLineStyle.orientation"
+      <div v-else-if="showInsertLine && insertLineStyle" class="insert-line" :class="insertLineStyle.orientation"
         :style="{
           [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
             insertLineStyle.offset + 'px',
-        }"
-      />
-      <NodeRenderer
-        v-for="childId in node.children || []"
-        v-if="node?.type !== 'Tabs'"
-        :key="childId"
-        :node-id="childId"
-        :readonly="props.readonly"
-      />
+        }" />
+      <NodeRenderer v-for="childId in node.children || []" v-if="node?.type !== 'Tabs'" :key="childId"
+        :node-id="childId" :readonly="props.readonly" />
     </component>
     <template v-if="useComponentWrapper">
-      <div
-        v-if="
-          isContainer &&
-          !hasChildren &&
-          !props.isRoot &&
-          !(
-            props.readonly &&
-            (isRegionContainer ||
-              node?.type === 'ElLayout' ||
-              node?.type === 'ElLayoutRow' ||
-              node?.type === 'ElCol')
-          )
-        "
-        class="empty-container-hint"
-        :class="{ 'is-region-hint': isRegionContainer }"
-      >
+      <div v-if="
+        isContainer &&
+        !hasChildren &&
+        !props.isRoot &&
+        !(
+          props.readonly &&
+          (isRegionContainer ||
+            node?.type === 'ElLayout' ||
+            node?.type === 'ElLayoutRow' ||
+            node?.type === 'ElCol')
+        )
+      " class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
         <span v-if="isDropActive">释放以添加组件</span>
         <span v-else>{{
           isRegionContainer ? regionHintText : "拖拽组件到此处"
         }}</span>
       </div>
       <!-- 插入线指示器 -->
-      <teleport
-        v-if="showInsertLine && insertLineStyle && insertLineBox"
-        to="body"
-      >
-        <div
-          class="insert-line"
-          :class="insertLineStyle.orientation"
-          :style="{
-            left:
-              insertLineStyle.orientation === 'vertical'
-                ? insertLineBox?.left + insertLineStyle.offset + 'px'
-                : insertLineBox?.left + 'px',
-            top:
-              insertLineStyle.orientation === 'horizontal'
-                ? insertLineBox?.top + insertLineStyle.offset + 'px'
-                : insertLineBox?.top + 'px',
-            width:
-              insertLineStyle.orientation === 'vertical'
-                ? '2px'
-                : insertLineBox?.width + 'px',
-            height:
-              insertLineStyle.orientation === 'horizontal'
-                ? '2px'
-                : insertLineBox?.height + 'px',
-          }"
-        />
+      <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
+        <div class="insert-line" :class="insertLineStyle.orientation" :style="{
+          left:
+            insertLineStyle.orientation === 'vertical'
+              ? insertLineBox?.left + insertLineStyle.offset + 'px'
+              : insertLineBox?.left + 'px',
+          top:
+            insertLineStyle.orientation === 'horizontal'
+              ? insertLineBox?.top + insertLineStyle.offset + 'px'
+              : insertLineBox?.top + 'px',
+          width:
+            insertLineStyle.orientation === 'vertical'
+              ? '2px'
+              : insertLineBox?.width + 'px',
+          height:
+            insertLineStyle.orientation === 'horizontal'
+              ? '2px'
+              : insertLineBox?.height + 'px',
+        }" />
       </teleport>
-      <div
-        v-else-if="showInsertLine && insertLineStyle"
-        class="insert-line"
-        :class="insertLineStyle.orientation"
+      <div v-else-if="showInsertLine && insertLineStyle" class="insert-line" :class="insertLineStyle.orientation"
         :style="{
           [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
             insertLineStyle.offset + 'px',
-        }"
-      />
-      <NodeRenderer
-        v-for="childId in node.children || []"
-        :key="childId"
-        :node-id="childId"
-        :readonly="props.readonly"
-      />
+        }" />
+      <NodeRenderer v-for="childId in node.children || []" :key="childId" :node-id="childId"
+        :readonly="props.readonly" />
     </template>
     <div v-if="showResizeHandles" class="resize-handles">
-      <span
-        v-for="handle in visibleResizeHandles"
-        :key="handle.key"
-        class="resize-handle"
-        :class="handle.key"
-        :style="{ cursor: handle.cursor }"
-        @pointerdown.stop="(event) => handleResizePointerDown(event, handle)"
-      />
+      <span v-for="handle in visibleResizeHandles" :key="handle.key" class="resize-handle" :class="handle.key"
+        :style="{ cursor: handle.cursor }" @pointerdown.stop="(event) => handleResizePointerDown(event, handle)" />
     </div>
   </component>
 </template>
@@ -1637,8 +1503,8 @@ const contentStyle = computed(() => {
   const textStyle =
     node.value.type === "Text"
       ? normalizeStyleObject(
-          resolveTextPropStyle(resolvedNodeProps.value || {}),
-        )
+        resolveTextPropStyle(resolvedNodeProps.value || {}),
+      )
       : {};
   const parentNode = doc.value?.getParent?.(node.value.id);
   const style = {
@@ -1791,9 +1657,14 @@ const contentStyle = computed(() => {
   ) {
     style.height = "100%";
   }
+  // 绝对定位时外层框由 absolutePos 定尺寸（选择框），内层内容需填满框体，避免「框比按钮大」的空白
   if (props.isRoot || layoutStyle.value.position === "absolute") {
-    if (!style.width) style.width = "100%";
-    if (!style.height) style.height = "100%";
+    style.width = "100%";
+    style.height = "100%";
+    if (!isContainer.value) {
+      style.display = "block";
+      style.boxSizing = "border-box";
+    }
   }
   if (parentNode && node.value.positioning === "flow") {
     const parentDescriptor = getDescriptor(parentNode.type);
@@ -3130,7 +3001,7 @@ const buildButtonDslPatch = (config) => {
       expr: config.textExpr.trim(),
       fallback:
         Object.prototype.hasOwnProperty.call(config, "text") &&
-        config.text !== undefined
+          config.text !== undefined
           ? String(config.text ?? "")
           : undefined,
     };
@@ -3966,15 +3837,15 @@ const buildRefInfo = () => {
       const normalizedData =
         Array.isArray(rows) && Array.isArray(rows[0])
           ? rows.map((row) => {
-              if (!Array.isArray(row)) return row;
-              if (normalizedColumns.length === 0) return row;
-              const next = {};
-              normalizedColumns.forEach((col, index) => {
-                const key = col.prop ?? col.label ?? `col${index}`;
-                next[key] = row[index];
-              });
-              return next;
-            })
+            if (!Array.isArray(row)) return row;
+            if (normalizedColumns.length === 0) return row;
+            const next = {};
+            normalizedColumns.forEach((col, index) => {
+              const key = col.prop ?? col.label ?? `col${index}`;
+              next[key] = row[index];
+            });
+            return next;
+          })
           : rows;
       if (props.readonly) {
         applyPreviewPatch({ props: { data: normalizedData } });
@@ -5452,7 +5323,7 @@ const handleDragOver = (event) => {
       const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? event.clientX - colRect.left <= edgeThreshold ||
-          colRect.right - event.clientX <= edgeThreshold
+        colRect.right - event.clientX <= edgeThreshold
         : false;
       return { rowElement, parentNode, nearEdge, colRect };
     }
@@ -5480,7 +5351,7 @@ const handleDragOver = (event) => {
       const edgeThreshold = rowInsertEdgeThreshold;
       const nearEdge = rowRect
         ? event.clientY - rowRect.top <= edgeThreshold ||
-          rowRect.bottom - event.clientY <= edgeThreshold
+        rowRect.bottom - event.clientY <= edgeThreshold
         : false;
       return { layoutElement, parentNode, rowElement: nodeElement, nearEdge };
     }
@@ -5798,7 +5669,7 @@ const handleDrop = (event) => {
       const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? event.clientX - colRect.left <= edgeThreshold ||
-          colRect.right - event.clientX <= edgeThreshold
+        colRect.right - event.clientX <= edgeThreshold
         : false;
       let index = null;
       if (colRect && nearEdge) {
@@ -5835,7 +5706,7 @@ const handleDrop = (event) => {
       const edgeThreshold = rowInsertEdgeThreshold;
       const nearEdge = rowRect
         ? event.clientY - rowRect.top <= edgeThreshold ||
-          rowRect.bottom - event.clientY <= edgeThreshold
+        rowRect.bottom - event.clientY <= edgeThreshold
         : false;
       return { layoutNode: parentNode, layoutElement, nearEdge };
     }
@@ -7874,10 +7745,10 @@ const handleResizePointerDown = (event, handle) => {
   const baseSectionSizes =
     node.value.type === "ElContainer"
       ? {
-          headerHeight: parseSizeToNumber(node.value.props?.headerHeight) ?? 60,
-          footerHeight: parseSizeToNumber(node.value.props?.footerHeight) ?? 60,
-          asideWidth: parseSizeToNumber(node.value.props?.asideWidth) ?? 200,
-        }
+        headerHeight: parseSizeToNumber(node.value.props?.headerHeight) ?? 60,
+        footerHeight: parseSizeToNumber(node.value.props?.footerHeight) ?? 60,
+        asideWidth: parseSizeToNumber(node.value.props?.asideWidth) ?? 200,
+      }
       : null;
   const startClientX = event.clientX;
   const startClientY = event.clientY;
@@ -8139,13 +8010,13 @@ const handleResizePointerDown = (event, handle) => {
     const sectionPatch =
       node.value.type === "ElContainer"
         ? buildContainerSectionSizePatch(
-            node.value,
-            baseWidth,
-            nextWidth,
-            baseHeight,
-            nextHeight,
-            baseSectionSizes,
-          )
+          node.value,
+          baseWidth,
+          nextWidth,
+          baseHeight,
+          nextHeight,
+          baseSectionSizes,
+        )
         : null;
 
     const nextStyle = { ...(node.value.style || {}) };
@@ -8161,9 +8032,9 @@ const handleResizePointerDown = (event, handle) => {
 
     let patch = sectionPatch
       ? {
-          style: nextStyle,
-          props: { ...(node.value.props || {}), ...sectionPatch },
-        }
+        style: nextStyle,
+        props: { ...(node.value.props || {}), ...sectionPatch },
+      }
       : { style: nextStyle };
 
     if (shouldUpdateAbsolute) {
@@ -8477,6 +8348,19 @@ const handlePointerDown = (event) => {
       flowDragThresholdW = 20;
       flowDragThresholdH = 20;
     }
+    const pdDetail = {
+      nodeId: node.value?.id,
+      nodeType: node.value?.type,
+      positioning: node.value?.positioning,
+      originParentType: originParent?.type,
+      rectFound: Boolean(rect),
+      rectW: rect?.width,
+      rectH: rect?.height,
+      thresholdW: flowDragThresholdW,
+      thresholdH: flowDragThresholdH,
+    };
+    console.log("[FlowDrag][pointerdown] 流式子项 pointerdown", pdDetail);
+    console.log("[FlowDrag][pointerdown] 摘要: nodeId=%s, thresholdW=%s, thresholdH=%s", pdDetail.nodeId, pdDetail.thresholdW, pdDetail.thresholdH);
   }
 
   const resolveDropRegion = (upEvent) => {
@@ -8600,7 +8484,7 @@ const handlePointerDown = (event) => {
       const edgeThreshold = colInsertEdgeThreshold;
       const nearEdge = colRect
         ? pointEvent.clientX - colRect.left <= edgeThreshold ||
-          colRect.right - pointEvent.clientX <= edgeThreshold
+        colRect.right - pointEvent.clientX <= edgeThreshold
         : false;
       const rowSelector = `[data-node-id="${parentNode.id}"]`;
       const rowElement =
@@ -8739,8 +8623,20 @@ const handlePointerDown = (event) => {
         Math.abs(deltaX) <= flowDragThresholdW &&
         Math.abs(deltaY) <= flowDragThresholdH
       ) {
+        // 每 20px 打一次日志，避免刷屏
+        if (Math.round(Math.abs(deltaX) * 10) % 200 === 0 || Math.round(Math.abs(deltaY) * 10) % 200 === 0) {
+          console.log("[FlowDrag][move] 未超阈值，保持不动", {
+            deltaX: Math.round(deltaX),
+            deltaY: Math.round(deltaY),
+            thresholdW: flowDragThresholdW,
+            thresholdH: flowDragThresholdH,
+          });
+        }
         return;
       }
+      const moveDetail = { deltaX: Math.round(deltaX), deltaY: Math.round(deltaY), thresholdW: flowDragThresholdW, thresholdH: flowDragThresholdH, baseLayout: { x: baseLayout.x, y: baseLayout.y, w: baseLayout.w, h: baseLayout.h } };
+      console.log("[FlowDrag][move] 阈值超出，开始拖出", moveDetail);
+      console.log("[FlowDrag][move] 摘要: deltaX=%d, deltaY=%d, baseLayout(x=%d,y=%d)", moveDetail.deltaX, moveDetail.deltaY, moveDetail.baseLayout.x, moveDetail.baseLayout.y);
       flowDragExceeded = true;
     }
     if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
@@ -8761,11 +8657,11 @@ const handlePointerDown = (event) => {
             insertIndex: (dropRegion.children || []).length,
             position: rect
               ? {
-                  x: rect.left,
-                  y: rect.top,
-                  width: rect.width,
-                  height: rect.height,
-                }
+                x: rect.left,
+                y: rect.top,
+                width: rect.width,
+                height: rect.height,
+              }
               : { x: 0, y: 0, width: 0, height: 0 },
             layoutType: "flex",
             direction: "column",
@@ -8784,9 +8680,9 @@ const handlePointerDown = (event) => {
         const containerRect = containerEl?.getBoundingClientRect?.();
         const isInsideContainer = containerRect
           ? moveEvent.clientX >= containerRect.left &&
-            moveEvent.clientX <= containerRect.right &&
-            moveEvent.clientY >= containerRect.top &&
-            moveEvent.clientY <= containerRect.bottom
+          moveEvent.clientX <= containerRect.right &&
+          moveEvent.clientY >= containerRect.top &&
+          moveEvent.clientY <= containerRect.bottom
           : true;
         if (isInsideContainer) {
           return;
@@ -8872,8 +8768,22 @@ const handlePointerDown = (event) => {
   };
 
   const up = (upEvent) => {
+    // 统一记录鼠标释放位置，便于排查拖拽落点（对象 + 单行摘要便于直接看到具体值）
+    if (upEvent) {
+      const pos = {
+        clientX: upEvent.clientX,
+        clientY: upEvent.clientY,
+        pageX: upEvent.pageX,
+        pageY: upEvent.pageY,
+      };
+      console.log("[FlowDrag][up] 鼠标释放位置", pos);
+      console.log("[FlowDrag][up] 鼠标释放位置 摘要: clientX=%d, clientY=%d, pageX=%d, pageY=%d", pos.clientX, pos.clientY, pos.pageX, pos.pageY);
+    }
     // 流式容器子项：未超出阈值时回滚事务，保持原位
     if (isFlowChildInDescContainer && !flowDragExceeded) {
+      const rollbackDetail = { nodeId: node.value?.id, hasMoved, startedDragFromMove, isInTransaction: history.value?.isInTransaction?.() };
+      console.log("[FlowDrag][up] 未超阈值，回滚事务保持原位", rollbackDetail);
+      console.log("[FlowDrag][up] 未超阈值回滚 摘要: nodeId=%s, hasMoved=%s", rollbackDetail.nodeId, rollbackDetail.hasMoved);
       cleanupDragHandlers();
       if (history.value?.isInTransaction?.()) {
         history.value.rollbackTransaction();
@@ -8896,6 +8806,9 @@ const handlePointerDown = (event) => {
     if (hasMoved && !isRegionNode && upEvent && !isMultiDrag) {
       // 流式容器子项超出阈值：移出原容器，放入新容器或画布根
       if (isFlowChildInDescContainer && flowDragExceeded && originParent) {
+        const outDetail = { nodeId: node.value?.id, nodeType: node.value?.type, originParentId: originParent.id, originParentType: originParent.type, baseLayout: { x: baseLayout.x, y: baseLayout.y, w: baseLayout.w, h: baseLayout.h }, upEventClient: { x: upEvent?.clientX, y: upEvent?.clientY } };
+        console.log("[FlowDrag][up] 超阈值，开始移出流式容器", outDetail);
+        console.log("[FlowDrag][up] 超阈值移出 摘要: nodeId=%s, baseLayout(x=%d,y=%d), upClient(x=%d,y=%d)", outDetail.nodeId, outDetail.baseLayout.x, outDetail.baseLayout.y, outDetail.upEventClient.x, outDetail.upEventClient.y);
         if (startedDragFromMove) {
           endDrag();
           clearDropTarget();
@@ -8910,6 +8823,10 @@ const handlePointerDown = (event) => {
           canAcceptChild(dropRegion, node.value.type) &&
           !isSelfOrDescendant(dropRegion.id);
 
+        const dropDetail = { dropRegionId: dropRegion?.id, dropRegionType: dropRegion?.type, hasValidDrop, reasonNoValid: !dropRegion ? "dropRegion=null" : dropRegion.id === originParent.id ? "same as originParent" : !canAcceptChild(dropRegion, node.value.type) ? "cannot accept child" : isSelfOrDescendant(dropRegion.id) ? "self or descendant" : "ok" };
+        console.log("[FlowDrag][up] resolveDropRegion 结果", dropDetail);
+        console.log("[FlowDrag][up] resolveDropRegion 摘要: hasValidDrop=%s, dropRegionId=%s, reasonNoValid=%s", dropDetail.hasValidDrop, dropDetail.dropRegionId, dropDetail.reasonNoValid);
+
         if (hasValidDrop) {
           // 拖入其他容器
           const targetId = dropRegion.id;
@@ -8917,31 +8834,52 @@ const handlePointerDown = (event) => {
           const moveCmd = new MoveNodeCommand(node.value.id, targetId, insertIdx);
           const parentDesc = getDescriptor(dropRegion.type);
           const isFlowTarget = parentDesc?.childPositioning === "flow";
+          // 从流式容器拖出后落入绝对定位容器时，baseLayout 是原父坐标系，不能直接用；用鼠标释放位置相对目标容器计算落点
+          let absPosForTarget = baseLayout;
+          if (!isFlowTarget && isFlowChildInDescContainer) {
+            const targetEl = document.querySelector(`[data-node-id="${targetId}"]`);
+            const targetRect = targetEl?.getBoundingClientRect?.();
+            const nextX = targetRect ? (upEvent.clientX - targetRect.left) / zoomValue : 0;
+            const nextY = targetRect ? (upEvent.clientY - targetRect.top) / zoomValue : 0;
+            const nodeElRect = document.querySelector(`[data-node-id="${node.value.id}"]`)?.getBoundingClientRect?.();
+            const nodeW = nodeElRect ? nodeElRect.width / zoomValue : (baseLayout.w ?? 100);
+            const nodeH = nodeElRect ? nodeElRect.height / zoomValue : (baseLayout.h ?? 40);
+            absPosForTarget = {
+              x: Math.round(nextX - nodeW / 2),
+              y: Math.round(nextY - nodeH / 2),
+              w: Math.round(nodeW),
+              h: Math.round(nodeH),
+              z: baseLayout.z ?? 1,
+            };
+          }
           const updatePatch = isFlowTarget
             ? {
-                positioning: "flow",
-                absolutePos: undefined,
-                flowLayout: parentDesc.childFlowLayout
-                  ? { ...parentDesc.childFlowLayout }
-                  : undefined,
-                layoutItem: undefined,
-                style: {
-                  ...(buildFlowResetStyle(node.value.style) || {}),
-                  ...(parentDesc.childStyle
-                    ? parentDesc.childStyle(dropRegion.type)
-                    : {}),
-                },
-              }
+              positioning: "flow",
+              absolutePos: undefined,
+              flowLayout: parentDesc.childFlowLayout
+                ? { ...parentDesc.childFlowLayout }
+                : undefined,
+              layoutItem: undefined,
+              style: {
+                ...(buildFlowResetStyle(node.value.style) || {}),
+                ...(parentDesc.childStyle
+                  ? parentDesc.childStyle(dropRegion.type)
+                  : {}),
+              },
+            }
             : {
-                positioning: "absolute",
-                absolutePos: { ...baseLayout },
-                flowLayout: undefined,
-                layoutItem: {
-                  ...(node.value.layoutItem || {}),
-                  free: { mode: "abs", abs: { ...baseLayout } },
-                },
-              };
+              positioning: "absolute",
+              absolutePos: { ...absPosForTarget },
+              flowLayout: undefined,
+              layoutItem: {
+                ...(node.value.layoutItem || {}),
+                free: { mode: "abs", abs: { ...absPosForTarget } },
+              },
+            };
           const updateCmd = new UpdateNodeCommand(node.value.id, updatePatch);
+          const intoDetail = { targetId, isFlowTarget, updatePatch };
+          console.log("[FlowDrag][up] 拖入其他容器", intoDetail);
+          console.log("[FlowDrag][up] 拖入其他容器 摘要: targetId=%s, isFlowTarget=%s", intoDetail.targetId, intoDetail.isFlowTarget);
           if (history.value?.isInTransaction?.()) {
             history.value.executeInTransaction(moveCmd);
             history.value.executeInTransaction(updateCmd);
@@ -8951,9 +8889,10 @@ const handlePointerDown = (event) => {
           }
         } else {
           // 无合适容器：移到画布根，绝对定位，节点中心对准鼠标释放位置
-          const rootEl = document.querySelector(
-            `[data-node-id="${rootNodeId}"]`,
-          );
+          // 优先用根节点 DOM 的 rect；找不到时用 .design-canvas 作为坐标系，避免 nextX/nextY 为 0 导致节点跑到左上角
+          const rootEl =
+            document.querySelector(`[data-node-id="${rootNodeId}"]`) ??
+            document.querySelector(".design-canvas");
           const rootRect = rootEl?.getBoundingClientRect?.();
           const nextX = rootRect
             ? (upEvent.clientX - rootRect.left) / zoomValue
@@ -8978,6 +8917,24 @@ const handlePointerDown = (event) => {
             h: Math.round(nodeH),
             z: baseLayout.z ?? 1,
           };
+          const usedCanvasFallback = !document.querySelector(
+            `[data-node-id="${rootNodeId}"]`,
+          ) && Boolean(document.querySelector(".design-canvas"));
+          const moveToRootDetail = {
+            rootNodeId,
+            rootRectFound: Boolean(rootRect),
+            usedCanvasFallback: usedCanvasFallback && Boolean(rootRect),
+            upEventClient: { x: upEvent?.clientX, y: upEvent?.clientY },
+            nextX: Math.round(nextX),
+            nextY: Math.round(nextY),
+            nodeElRectFound: Boolean(nodeElRect),
+            nodeW: Math.round(nodeW),
+            nodeH: Math.round(nodeH),
+            nextAbs,
+            baseLayout: { x: baseLayout.x, y: baseLayout.y, w: baseLayout.w, h: baseLayout.h },
+          };
+          console.log("[FlowDrag][up] 移到画布根", moveToRootDetail);
+          console.log("[FlowDrag][up] 移到画布根 摘要: rootRectFound=%s, nextX=%d, nextY=%d, nextAbs=(x=%d,y=%d,w=%d,h=%d)", moveToRootDetail.rootRectFound, moveToRootDetail.nextX, moveToRootDetail.nextY, moveToRootDetail.nextAbs.x, moveToRootDetail.nextAbs.y, moveToRootDetail.nextAbs.w, moveToRootDetail.nextAbs.h);
           const rootNode = doc.value?.getNode?.(rootNodeId);
           const insertIdx = rootNode?.children?.length ?? 0;
           const moveCmd = new MoveNodeCommand(
@@ -9003,6 +8960,19 @@ const handlePointerDown = (event) => {
             history.value.execute(updateCmd);
           }
         }
+        // 打印拖出后元素位置（命令已执行，从 doc 读取当前节点状态）
+        const nodeAfter = doc.value?.getNode?.(node.value.id);
+        const parentAfter = nodeAfter ? doc.value?.getParent?.(nodeAfter.id) : null;
+        const posDetail = {
+          nodeId: node.value.id,
+          positioning: nodeAfter?.positioning,
+          absolutePos: nodeAfter?.absolutePos,
+          parentId: parentAfter?.id ?? null,
+          parentType: parentAfter?.type ?? null,
+        };
+        console.log("[FlowDrag][up] 拖出后元素位置", posDetail);
+        const ap = nodeAfter?.absolutePos;
+        console.log("[FlowDrag][up] 拖出后元素位置 摘要: positioning=%s, absolutePos=(x=%s,y=%s,w=%s,h=%s), parentId=%s", posDetail.positioning, ap?.x, ap?.y, ap?.w, ap?.h, posDetail.parentId);
         cleanupDragHandlers();
         if (history.value?.isInTransaction?.()) {
           history.value.commitTransaction("移出布局容器");
@@ -9294,9 +9264,9 @@ const handlePointerDown = (event) => {
         const containerRect = containerEl?.getBoundingClientRect?.();
         const isInsideContainer = containerRect
           ? upEvent.clientX >= containerRect.left &&
-            upEvent.clientX <= containerRect.right &&
-            upEvent.clientY >= containerRect.top &&
-            upEvent.clientY <= containerRect.bottom
+          upEvent.clientX <= containerRect.right &&
+          upEvent.clientY >= containerRect.top &&
+          upEvent.clientY <= containerRect.bottom
           : false;
         if (!isInsideContainer) {
           const rootEl = document.querySelector(
@@ -9372,16 +9342,16 @@ const handlePointerDown = (event) => {
       const containerRect = containerEl?.getBoundingClientRect?.();
       const isInsideContainer = containerRect
         ? upEvent.clientX >= containerRect.left &&
-          upEvent.clientX <= containerRect.right &&
-          upEvent.clientY >= containerRect.top &&
-          upEvent.clientY <= containerRect.bottom
+        upEvent.clientX <= containerRect.right &&
+        upEvent.clientY >= containerRect.top &&
+        upEvent.clientY <= containerRect.bottom
         : (() => {
-            const hit = document.elementFromPoint(
-              upEvent.clientX,
-              upEvent.clientY,
-            );
-            return Boolean(containerEl && hit && containerEl.contains(hit));
-          })();
+          const hit = document.elementFromPoint(
+            upEvent.clientX,
+            upEvent.clientY,
+          );
+          return Boolean(containerEl && hit && containerEl.contains(hit));
+        })();
       if (!isInsideContainer) {
         const rootEl = document.querySelector(`[data-node-id="${rootNodeId}"]`);
         const rootRect = rootEl?.getBoundingClientRect?.();
@@ -9716,7 +9686,8 @@ const handlePointerDown = (event) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 60px;  min-height: 40px;
+  min-height: 60px;
+  min-height: 40px;
   color: #9ca3af;
   font-size: 12px;
   pointer-events: none;
@@ -9758,17 +9729,17 @@ const handlePointerDown = (event) => {
   background-color: rgba(59, 130, 246, 0.05);
 }
 
-.designer-node.layout-container-visible:not(.is-preview) > div {
+.designer-node.layout-container-visible:not(.is-preview)>div {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   min-height: 60px;
 }
 
-.designer-node.layout-container-visible:not(.is-preview):hover > div {
+.designer-node.layout-container-visible:not(.is-preview):hover>div {
   border-color: #a0a8b4;
 }
 
-.designer-node.layout-container-visible.is-selected > div {
+.designer-node.layout-container-visible.is-selected>div {
   border-color: #409eff;
 }
 
