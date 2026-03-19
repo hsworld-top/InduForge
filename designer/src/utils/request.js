@@ -1,5 +1,11 @@
 /**
  * HTTP 请求封装
+ *
+ * 功能：
+ * - 统一 baseURL、超时、Content-Type
+ * - 请求拦截：自动附加 Authorization、X-Tenant-ID
+ * - 响应拦截：401 自动刷新 Token，失败队列重试，统一错误提示
+ * - 登出时清除 Storage 并通知父窗口（iframe 场景）
  */
 
 import axios from "axios";
@@ -7,7 +13,7 @@ import { ElMessage } from "element-plus";
 import { Storage } from "@/utils/storage";
 import { STORAGE_KEYS } from "@/constants";
 
-// 创建 axios 实例
+/** 创建 axios 实例，baseURL 与后端 /api/v1 一致 */
 const request = axios.create({
   baseURL: "/api/v1",
   timeout: 30000,
@@ -16,8 +22,9 @@ const request = axios.create({
   },
 });
 
-// 刷新 token 的状态标志
+/** 是否正在刷新 Token，用于串行化刷新请求 */
 let isRefreshing = false;
+/** 401 期间积压的失败请求队列，刷新成功后重试 */
 let failedQueue = [];
 
 /**
@@ -80,7 +87,7 @@ request.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // 响应拦截器
@@ -173,7 +180,7 @@ request.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default request;

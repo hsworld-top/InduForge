@@ -1,3 +1,7 @@
+<!--
+  CanvasToolsPanel - Canvas 绘图工具面板
+  选择、直线、矩形、圆形、椭圆、多边形、管道、文字等工具
+-->
 <template>
   <div class="canvas-tools-panel">
     <div class="tool-list">
@@ -15,7 +19,7 @@
 
       <!-- 基础图形 -->
       <div class="tool-group-title">基础图形</div>
-      
+
       <div
         class="tool-item"
         :class="{ active: modelValue === 'line' }"

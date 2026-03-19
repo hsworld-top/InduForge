@@ -1,3 +1,7 @@
+<!--
+  SizeEditor - 尺寸编辑器
+  编辑 width/height，支持 px/%/auto 单位
+-->
 <template>
   <div class="size-editor">
     <div class="editor-group-title">尺寸</div>
@@ -150,7 +154,7 @@ watch(
   (val) => {
     widthInput.value = parseSize(val).value;
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -158,7 +162,7 @@ watch(
   (val) => {
     heightInput.value = parseSize(val).value;
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const handleWidthInput = (value) => {
@@ -171,7 +175,12 @@ const handleHeightInput = (value) => {
 
 const handleWidthChange = () => {
   const unit = widthUnit.value === "auto" ? "px" : widthUnit.value;
-  const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, false);
+  const newWidth = buildSizeValue(
+    widthInput.value,
+    unit,
+    props.minWidth,
+    false,
+  );
   emit("update:modelValue", { ...props.modelValue, width: newWidth });
 };
 
@@ -179,7 +188,12 @@ const handleWidthUnitChange = (unit) => {
   if (unit === "auto") {
     emit("update:modelValue", { ...props.modelValue, width: "auto" });
   } else {
-    const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, true);
+    const newWidth = buildSizeValue(
+      widthInput.value,
+      unit,
+      props.minWidth,
+      true,
+    );
     emit("update:modelValue", { ...props.modelValue, width: newWidth });
   }
 };
@@ -190,7 +204,7 @@ const handleHeightChange = () => {
     heightInput.value,
     unit,
     props.minHeight,
-    false
+    false,
   );
   emit("update:modelValue", { ...props.modelValue, height: newHeight });
 };
@@ -203,7 +217,7 @@ const handleHeightUnitChange = (unit) => {
       heightInput.value,
       unit,
       props.minHeight,
-      true
+      true,
     );
     emit("update:modelValue", { ...props.modelValue, height: newHeight });
   }
@@ -242,7 +256,3 @@ const handleHeightUnitChange = (unit) => {
   color: var(--el-text-color-regular);
 }
 </style>
-
-
-
-

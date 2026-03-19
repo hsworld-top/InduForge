@@ -1,12 +1,20 @@
 /**
- * 常量定义
+ * 设计器常量定义
+ *
+ * 集中管理 API、存储键、数据模式、视图预设、网格配置等常量，
+ * 便于维护与多环境配置。
  */
 
-// API 相关常量
+/** API 基础路径，与后端 dev_core 保持一致 */
 export const API_BASE_URL = "/api/v1";
+
+/** 时间展示格式，与 AGENTS.md 约定一致 */
 export const TIME_FORMAT = "YYYY-MM-DD HH:mm:ss";
 
-// 本地存储键名常量
+/**
+ * 本地存储键名常量
+ * 用于 Storage 工具类，避免硬编码
+ */
 export const STORAGE_KEYS = {
   TOKEN: "auth_token",
   REFRESH_TOKEN: "refresh_token",
@@ -17,7 +25,12 @@ export const STORAGE_KEYS = {
   PROJECT_ID: "project_id",
 };
 
-// 数据模式
+/**
+ * 数据模式
+ * - edit: 设计态，使用 Mock 数据
+ * - preview: 预览态，使用真实数据
+ * - runtime: 运行态，由独立 RuntimeEngine 处理
+ */
 export const DATA_MODE = {
   EDIT: "edit",
   PREVIEW: "preview",
@@ -26,6 +39,7 @@ export const DATA_MODE = {
 
 /**
  * 视图预设（编辑器/预览通用）
+ * 用于画布尺寸切换与响应式预览
  * 对齐断点：大屏>=1200，平板<=992，手机竖向<=768，手机竖屏<=480
  */
 export const VIEW_PRESETS = [
@@ -37,10 +51,14 @@ export const VIEW_PRESETS = [
 ];
 
 /**
- * 网格配置
+ * 画布网格配置
+ * 用于拖拽吸附与辅助线显示
  */
 export const GRID_CONFIG = {
-  size: 10, // 网格大小(px)
-  enabled: true, // 是否启用吸附
-  showGrid: false, // 是否显示网格线(暂不支持)
+  /** 网格大小（px），吸附步长 */
+  size: 10,
+  /** 是否启用拖拽吸附 */
+  enabled: true,
+  /** 是否显示网格线（暂不支持） */
+  showGrid: false,
 };

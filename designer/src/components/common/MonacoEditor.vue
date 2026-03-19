@@ -1,8 +1,21 @@
+<!--
+  MonacoEditor - Monaco 代码编辑器封装
+  支持：CSS/HTML/JS/JSON/TS、主题、补全、格式化、错误标记
+  用于：脚本编辑、样式编辑、表达式编辑等
+-->
 <template>
-  <div ref="editorContainerRef" class="monaco-editor-container" :style="{ height }"></div>
+  <div
+    ref="editorContainerRef"
+    class="monaco-editor-container"
+    :style="{ height }"
+  ></div>
 </template>
 
 <script setup>
+/**
+ * Monaco 编辑器组件
+ * 封装 monaco-editor，支持 v-model、主题切换、自定义补全、错误标记
+ */
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -41,6 +54,7 @@ let latestMarkers = [];
 let extraLibDisposable = null;
 let prettierReady = null;
 
+/** 执行编辑器内置动作（如格式化、格式化文档） */
 const runEditorAction = async (id) => {
   const action = editorInstance?.getAction(id);
   if (!action) return false;
@@ -58,12 +72,14 @@ const mediaQuery =
     : null;
 const cleanupFns = [];
 
+/** 将主题名映射为 Monaco 主题 */
 const normalizeTheme = (theme) => {
   if (theme === "dark") return "vs-dark";
   if (theme === "light") return "vs";
   return theme || "vs";
 };
 
+/** 根据 document.documentElement 或系统偏好检测明暗主题 */
 const detectTheme = () => {
   if (typeof document !== "undefined") {
     const html = document.documentElement;
@@ -193,7 +209,7 @@ const pickMarkerAtPosition = (position) => {
   if (!position) return null;
   const markers = latestMarkers || [];
   const matches = markers.filter((marker) =>
-    markerContainsPosition(marker, position)
+    markerContainsPosition(marker, position),
   );
   if (!matches.length) return null;
   return matches.sort((a, b) => b.severity - a.severity)[0];
@@ -224,10 +240,7 @@ const showMarkerTooltip = (position) => {
 
 const resolveCompletionKind = (kind) => {
   if (typeof kind === "number") return kind;
-  if (
-    typeof kind === "string" &&
-    monaco.languages.CompletionItemKind[kind]
-  ) {
+  if (typeof kind === "string" && monaco.languages.CompletionItemKind[kind]) {
     return monaco.languages.CompletionItemKind[kind];
   }
   return monaco.languages.CompletionItemKind.Text;
@@ -239,7 +252,7 @@ const resolveCompletionItems = (model, position) => {
     position.lineNumber,
     word.startColumn,
     position.lineNumber,
-    word.endColumn
+    word.endColumn,
   );
   const lineText = model.getLineContent(position.lineNumber);
   const prefixText = lineText.slice(0, Math.max(0, word.startColumn - 1));
@@ -274,7 +287,7 @@ const registerCompletionProvider = () => {
       provideCompletionItems(model, position) {
         return { suggestions: resolveCompletionItems(model, position) };
       },
-    }
+    },
   );
 };
 
@@ -303,7 +316,12 @@ const buildSemicolonEdits = (model) => {
     const insertColumn =
       commentIndex >= 0 ? commentIndex + 1 : trimmed.length + 1;
     edits.push({
-      range: new monaco.Range(lineNumber, insertColumn, lineNumber, insertColumn),
+      range: new monaco.Range(
+        lineNumber,
+        insertColumn,
+        lineNumber,
+        insertColumn,
+      ),
       text: ";",
     });
   }
@@ -378,8 +396,14 @@ const ensureJsFormatter = () => {
       return buildSemicolonEdits(model);
     },
   };
-  monaco.languages.registerDocumentFormattingEditProvider("javascript", provider);
-  monaco.languages.registerDocumentFormattingEditProvider("typescript", provider);
+  monaco.languages.registerDocumentFormattingEditProvider(
+    "javascript",
+    provider,
+  );
+  monaco.languages.registerDocumentFormattingEditProvider(
+    "typescript",
+    provider,
+  );
 };
 
 const applyFormatEdits = async () => {
@@ -422,7 +446,9 @@ function initEditor() {
     });
   }
   if (props.language === "javascript" || props.language === "typescript") {
-    const ignoreDiagnostics = [1003, 1108, 1308, 1375, 1378, 1379, 2391, 80007, 80008];
+    const ignoreDiagnostics = [
+      1003, 1108, 1308, 1375, 1378, 1379, 2391, 80007, 80008,
+    ];
     const compilerOptions = {
       allowJs: true,
       allowNonTsExtensions: true,
@@ -437,13 +463,14 @@ function initEditor() {
     };
     if (
       monaco.languages.typescript.ModuleDetectionKind &&
-      typeof monaco.languages.typescript.ModuleDetectionKind.Force !== "undefined"
+      typeof monaco.languages.typescript.ModuleDetectionKind.Force !==
+        "undefined"
     ) {
       compilerOptions.moduleDetection =
         monaco.languages.typescript.ModuleDetectionKind.Force;
     }
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
-      compilerOptions
+      compilerOptions,
     );
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: false,
@@ -456,18 +483,22 @@ function initEditor() {
       extraLibDisposable.dispose();
       extraLibDisposable = null;
     }
-    extraLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
-      "declare const $global: Record<string, any>;\n" +
-        "declare const $vars: Record<string, any>;\n" +
-        "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
-        "declare const components: Record<string, any>;\n" +
-        "declare const $event: any;\n",
-      "ts:global-scripts.d.ts"
-    );
+    extraLibDisposable =
+      monaco.languages.typescript.javascriptDefaults.addExtraLib(
+        "declare const $global: Record<string, any>;\n" +
+          "declare const $vars: Record<string, any>;\n" +
+          "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
+          "declare const components: Record<string, any>;\n" +
+          "declare const $event: any;\n",
+        "ts:global-scripts.d.ts",
+      );
     ensureJsFormatter();
   }
 
-  editorInstance = monaco.editor.create(editorContainerRef.value, baseOptions());
+  editorInstance = monaco.editor.create(
+    editorContainerRef.value,
+    baseOptions(),
+  );
   applyTheme(props.theme);
   registerCompletionProvider();
   const runFormatCommand = () => {
@@ -477,14 +508,18 @@ function initEditor() {
   };
   editorInstance.addAction({
     id: "format-document",
-    label: "��ʽ���ĵ�",
+    label: "��ʽ���ĵ�",
     keybindings: [
       monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
     ],
     run: () => runFormatCommand(),
   });
   editorInstance.onKeyDown((event) => {
-    if (event.shiftKey && event.altKey && event.keyCode === monaco.KeyCode.KeyF) {
+    if (
+      event.shiftKey &&
+      event.altKey &&
+      event.keyCode === monaco.KeyCode.KeyF
+    ) {
       event.preventDefault();
       event.stopPropagation();
       runFormatCommand();
@@ -517,7 +552,6 @@ function initEditor() {
     requestAnimationFrame(() => (isInternalUpdate = false));
   });
 
-
   const mouseMoveListener = editorInstance.onMouseMove((event) => {
     if (!event?.target?.position) {
       hideMarkerTooltip();
@@ -526,10 +560,10 @@ function initEditor() {
     showMarkerTooltip(event.target.position);
   });
   const mouseLeaveListener = editorInstance.onMouseLeave(() =>
-    hideMarkerTooltip()
+    hideMarkerTooltip(),
   );
   const scrollListener = editorInstance.onDidScrollChange(() =>
-    hideMarkerTooltip()
+    hideMarkerTooltip(),
   );
   cleanupFns.push(() => mouseMoveListener.dispose());
   cleanupFns.push(() => mouseLeaveListener.dispose());
@@ -544,7 +578,7 @@ watch(
     isInternalUpdate = true;
     editorInstance.setValue(val || "");
     requestAnimationFrame(() => (isInternalUpdate = false));
-  }
+  },
 );
 
 watch(
@@ -553,14 +587,14 @@ watch(
     if (editorInstance) {
       monaco.editor.setModelLanguage(editorInstance.getModel(), lang);
     }
-  }
+  },
 );
 
 watch(
   () => props.theme,
   (theme) => {
     applyTheme(theme);
-  }
+  },
 );
 
 watch(
@@ -569,14 +603,14 @@ watch(
     completionItems.value = items || [];
     registerCompletionProvider();
   },
-  { deep: true }
+  { deep: true },
 );
 
 watch(
   () => props.language,
   () => {
     registerCompletionProvider();
-  }
+  },
 );
 
 function setupThemeListeners() {
@@ -588,7 +622,10 @@ function setupThemeListeners() {
 
   if (typeof document !== "undefined") {
     const observer = new MutationObserver(() => applyTheme());
-    const targetOptions = { attributes: true, attributeFilter: ["class", "data-theme"] };
+    const targetOptions = {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    };
     observer.observe(document.documentElement, targetOptions);
     if (document.body) observer.observe(document.body, targetOptions);
     cleanupFns.push(() => observer.disconnect());
@@ -648,10 +685,12 @@ defineExpose({
         position.lineNumber,
         position.column,
         position.lineNumber,
-        position.column
+        position.column,
       );
     editorInstance.pushUndoStop();
-    editorInstance.executeEdits("insert", [{ range, text, forceMoveMarkers: true }]);
+    editorInstance.executeEdits("insert", [
+      { range, text, forceMoveMarkers: true },
+    ]);
     editorInstance.pushUndoStop();
     editorInstance.focus();
   },
@@ -672,4 +711,3 @@ defineExpose({
   height: 100% !important;
 }
 </style>
-

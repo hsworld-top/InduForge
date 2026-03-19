@@ -60,7 +60,9 @@ export const projectApi = {
    */
   deletePage(projectId, pageId, mode) {
     const query = mode ? `?mode=${encodeURIComponent(mode)}` : "";
-    return request.delete(`/design/projects/${projectId}/pages/${pageId}${query}`);
+    return request.delete(
+      `/design/projects/${projectId}/pages/${pageId}${query}`,
+    );
   },
 
   /**
@@ -74,7 +76,7 @@ export const projectApi = {
   renamePage(projectId, pageId, name, path) {
     return request.patch(
       `/design/projects/${projectId}/pages/${pageId}/rename`,
-      { name, path }
+      { name, path },
     );
   },
 
@@ -109,7 +111,9 @@ export const projectApi = {
    * @returns {Promise<Object>}
    */
   updateProjectVariables(projectId, variables) {
-    return request.put(`/design/projects/${projectId}/variables`, { variables });
+    return request.put(`/design/projects/${projectId}/variables`, {
+      variables,
+    });
   },
 
   /**
@@ -129,6 +133,5 @@ export const projectApi = {
     return request.put(`/design/projects/${projectId}/settings`, settings);
   },
 };
-
 
 export default projectApi;

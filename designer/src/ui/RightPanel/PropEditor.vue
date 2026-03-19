@@ -42,7 +42,11 @@
     />
 
     <!-- 枚举类型 -->
-    <el-select v-else-if="prop.type === 'enum'" v-model="modelProxy" size="small">
+    <el-select
+      v-else-if="prop.type === 'enum'"
+      v-model="modelProxy"
+      size="small"
+    >
       <el-option
         v-for="opt in prop.options"
         :key="opt.value"
@@ -106,7 +110,7 @@ const modelProxy = computed({
 
 const isCodeEditor = computed(() => props.prop?.editor === "code");
 const isJsonType = computed(() =>
-  ["object", "array"].includes(props.prop?.type)
+  ["object", "array"].includes(props.prop?.type),
 );
 const jsonDraft = ref("");
 const codeDraft = ref("");

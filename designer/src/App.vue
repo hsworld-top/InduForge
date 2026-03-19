@@ -1,6 +1,11 @@
+<!--
+  App.vue - 设计器根组件
+  职责：路由视图、全局加载态（设计页切换时显示，预览页不显示）
+-->
 <template>
   <div id="app">
     <router-view />
+    <!-- 设计态路由切换时显示加载动画，预览态不显示 -->
     <div v-if="showLoading" class="app-loading">
       <div class="loading-card">
         <div class="loading-mark">
@@ -17,21 +22,35 @@
 </template>
 
 <script setup>
+/**
+ * 根组件脚本
+ * - loading: 全局加载态
+ * - 路由切换时显示至少 minLoadingMs 的加载动画，避免闪烁
+ * - 从预览页返回设计页时跳过加载（skipNextLoading）
+ */
 import { ref, nextTick, computed, onBeforeUnmount } from "vue";
 import { useRouter, useRoute } from "vue-router";
 
+/** 是否处于加载中 */
 const loading = ref(true);
+/** 本次加载开始时间戳 */
 let loadingStartAt = Date.now();
+/** 最小加载展示时长（ms），避免加载过快导致闪烁 */
 const minLoadingMs = 500;
 const router = useRouter();
 const route = useRoute();
+/** 当前是否为预览路由 */
 const isPreviewRoute = computed(
-  () => route?.name === "Preview" || String(route?.path || "").includes("/preview")
+  () =>
+    route?.name === "Preview" || String(route?.path || "").includes("/preview"),
 );
+/** 是否显示加载遮罩（设计页加载时显示，预览页不显示） */
 const showLoading = computed(() => loading.value && !isPreviewRoute.value);
 
+/** 是否跳过下一次加载（从预览返回设计时使用） */
 const skipNextLoading = ref(false);
 
+/** 开始加载，重置计时 */
 const startLoading = () => {
   if (skipNextLoading.value) {
     skipNextLoading.value = false;
@@ -42,6 +61,7 @@ const startLoading = () => {
   loading.value = true;
 };
 
+/** 结束加载，若未达到最小时长则等待补足 */
 const stopLoading = async () => {
   const elapsed = Date.now() - loadingStartAt;
   const waitMs = Math.max(0, minLoadingMs - elapsed);
@@ -52,20 +72,27 @@ const stopLoading = async () => {
   loading.value = false;
 };
 
+/** 路由进入前：启动加载 */
 const removeBefore = router.beforeEach((to, from, next) => {
-  if (from?.name === "Preview" || String(from?.path || "").includes("/preview")) {
+  if (
+    from?.name === "Preview" ||
+    String(from?.path || "").includes("/preview")
+  ) {
     skipNextLoading.value = true;
   }
   startLoading();
   next();
 });
+/** 路由完成后：结束加载 */
 const removeAfter = router.afterEach(() => {
   stopLoading();
 });
+/** 路由错误时：立即结束加载 */
 const removeError = router.onError(() => {
   loading.value = false;
 });
 
+/** 应用就绪时结束初始加载 */
 router.isReady().then(() => stopLoading());
 
 onBeforeUnmount(() => {
@@ -88,7 +115,11 @@ onBeforeUnmount(() => {
 .app-loading {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 30% 20%, rgba(37, 99, 235, 0.12), rgba(15, 23, 42, 0.2));
+  background: radial-gradient(
+    circle at 30% 20%,
+    rgba(37, 99, 235, 0.12),
+    rgba(15, 23, 42, 0.2)
+  );
   display: flex;
   align-items: center;
   justify-content: center;

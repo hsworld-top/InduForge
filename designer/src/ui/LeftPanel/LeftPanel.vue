@@ -87,12 +87,7 @@ const emit = defineEmits(["update:drawingTool"]);
 /**
  * 面板展开状态
  */
-const activeSections = ref([
-  "drawing",
-  "components",
-  "pages",
-  "outline",
-]);
+const activeSections = ref(["drawing", "components", "pages", "outline"]);
 
 /**
  * 绘图工具列表

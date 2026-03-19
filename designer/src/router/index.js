@@ -1,6 +1,12 @@
 /**
- * 路由配置
- * Designer 只包含设计态和预览态，运行态由独立的 RuntimeEngine 处理
+ * 设计器路由配置
+ *
+ * 路由说明：
+ * - / : 设计器主界面（DesignerView）
+ * - /preview : 预览界面（PreviewView）
+ *
+ * 运行态由独立的 RuntimeEngine 处理，不在此路由内。
+ * 鉴权、主题、工程 ID 等通过 URL 参数或 Storage 同步。
  */
 
 import { createRouter, createWebHistory } from "vue-router";
@@ -34,8 +40,8 @@ const router = createRouter({
 });
 
 /**
- * 应用主题到文档根节点
- * @param {string} theme - 主题
+ * 应用主题到 document.documentElement
+ * @param {string} theme - 主题，'dark' 时添加 dark 类
  */
 const applyTheme = (theme) => {
   document.documentElement.classList.toggle("dark", theme === "dark");
@@ -43,6 +49,8 @@ const applyTheme = (theme) => {
 
 /**
  * 从 URL 同步鉴权与主题配置
+ * 支持 token、refreshToken、theme、pid/id、tenant 等参数，
+ * 同步后从 URL 中移除敏感参数并 replaceState
  */
 const syncRuntimeSettings = () => {
   const url = new URL(window.location.href);
@@ -98,7 +106,7 @@ const syncRuntimeSettings = () => {
   }
 };
 
-// 路由守卫 - 鉴权检查和状态恢复
+/** 路由守卫：鉴权检查、页面标题、工程上下文同步 */
 router.beforeEach(async (to, from, next) => {
   // 设置页面标题
   document.title = `${to.meta.title || "设计器"} - InduForge`;

@@ -5,7 +5,11 @@
       <div class="section-title">基础信息</div>
 
       <el-form-item label="页面名称">
-        <el-input v-model="form.name" :disabled="isSystemPage" @blur="handleNameUpdate" />
+        <el-input
+          v-model="form.name"
+          :disabled="isSystemPage"
+          @blur="handleNameUpdate"
+        />
       </el-form-item>
 
       <el-form-item label="路由路径">
@@ -17,10 +21,7 @@
       <!-- 样式设置 -->
       <div class="section-title">样式设置</div>
       <el-form-item label="自适应">
-        <el-switch
-          v-model="form.autoFit"
-          @change="handleConfigUpdate"
-        />
+        <el-switch v-model="form.autoFit" @change="handleConfigUpdate" />
       </el-form-item>
       <el-form-item label="样式配置">
         <el-button
@@ -33,14 +34,16 @@
         </el-button>
       </el-form-item>
 
-
       <el-divider />
 
       <!-- 背景设置 -->
       <div class="section-title">背景设置</div>
 
       <el-form-item label="背景类型">
-        <el-select v-model="form.backgroundKind" @change="handleBackgroundUpdate">
+        <el-select
+          v-model="form.backgroundKind"
+          @change="handleBackgroundUpdate"
+        >
           <el-option label="颜色" value="color" />
           <el-option label="图片" value="image" />
           <el-option label="渐变" value="gradient" />
@@ -74,9 +77,7 @@
           <el-tag v-if="diagnostic.invalid > 0" type="danger" size="small">
             失效 {{ diagnostic.invalid }}
           </el-tag>
-          <el-tag type="info" size="small">
-            共 {{ diagnostic.total }}
-          </el-tag>
+          <el-tag type="info" size="small"> 共 {{ diagnostic.total }} </el-tag>
         </div>
       </el-form-item>
     </el-form>
@@ -120,11 +121,7 @@
       </div>
     </div>
     <div class="config-editor">
-      <MonacoEditor
-        v-model="canvasStyleDraft"
-        language="css"
-        height="520px"
-      />
+      <MonacoEditor v-model="canvasStyleDraft" language="css" height="520px" />
     </div>
     <template #footer>
       <el-button @click="clearCanvasStyleDialog">清除</el-button>
@@ -181,10 +178,14 @@ const canvasPresetSearch = ref("");
  * 根据搜索关键字过滤样式模板
  */
 const filteredCanvasPresetOptions = computed(() => {
-  const keyword = String(canvasPresetSearch.value || "").trim().toLowerCase();
+  const keyword = String(canvasPresetSearch.value || "")
+    .trim()
+    .toLowerCase();
   if (!keyword) return canvasStylePresets;
   return canvasStylePresets.filter((item) =>
-    String(item.label || "").toLowerCase().includes(keyword)
+    String(item.label || "")
+      .toLowerCase()
+      .includes(keyword),
   );
 });
 
@@ -219,7 +220,8 @@ const isHomePage = computed(() => {
   return doc.value.entry?.homePageId === currentPageId.value;
 });
 const isSystemPage = computed(
-  () => isHomePage.value || form.pageType === "login" || form.pageType === "logout"
+  () =>
+    isHomePage.value || form.pageType === "login" || form.pageType === "logout",
 );
 const BASIC_PAGE_META = {
   home: { label: "首页", path: "/" },
@@ -235,8 +237,10 @@ const BASIC_PAGE_META = {
 const getFixedSystemType = (page) => {
   if (!page) return null;
   if (doc.value?.entry?.homePageId === page.id) return "home";
-  if (doc.value?.entry?.loginPageId === page.id || page.path === "/login") return "login";
-  if (doc.value?.entry?.logoutPageId === page.id || page.path === "/logout") return "logout";
+  if (doc.value?.entry?.loginPageId === page.id || page.path === "/login")
+    return "login";
+  if (doc.value?.entry?.logoutPageId === page.id || page.path === "/logout")
+    return "logout";
   return null;
 };
 
@@ -280,7 +284,7 @@ const validatePageName = (value) => {
  */
 const getFolderPathSegments = (parentId) => {
   const folder = pages.value.find(
-    (page) => page.id === (parentId || null) && page.type === "folder"
+    (page) => page.id === (parentId || null) && page.type === "folder",
   );
   if (!folder) {
     return [];
@@ -353,7 +357,7 @@ const isNameUnique = (name, excludeId) => {
   return !pages.value.some(
     (page) =>
       page.id !== excludeId &&
-      (page.name || "").trim().toLowerCase() === lowerName
+      (page.name || "").trim().toLowerCase() === lowerName,
   );
 };
 
@@ -459,7 +463,7 @@ watch(
   () => {
     syncForm(currentPage.value);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 /**
@@ -488,7 +492,9 @@ const handleNameUpdate = async () => {
     syncForm(currentPage.value);
     return;
   }
-  const currentPageFromList = pages.value.find((page) => page.id === currentPage.value.id) || currentPage.value;
+  const currentPageFromList =
+    pages.value.find((page) => page.id === currentPage.value.id) ||
+    currentPage.value;
   if (name === (currentPage.value.name || "")) {
     const path = resolvePath(currentPageFromList, name);
     form.path = formatPathForDisplay(path);
@@ -627,8 +633,6 @@ const handleBackgroundUpdate = () => {
   editorStore.updateCurrentPage({ config: nextConfig });
 };
 </script>
-
-
 
 <style scoped>
 .page-inspector-panel {

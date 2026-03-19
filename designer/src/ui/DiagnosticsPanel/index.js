@@ -8,4 +8,3 @@
 // TODO: 实现 BindingErrorList - 绑定错误列表
 
 export default {};
-

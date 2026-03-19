@@ -37,9 +37,7 @@ export class UpdateEntryCommand extends Command {
     if (!entry) return;
     this._oldValues = {};
     for (const key of Object.keys(this._patch)) {
-      this._oldValues[key] = JSON.parse(
-        JSON.stringify(entry[key] ?? null)
-      );
+      this._oldValues[key] = JSON.parse(JSON.stringify(entry[key] ?? null));
     }
     doc._updateEntry(this._patch);
   }

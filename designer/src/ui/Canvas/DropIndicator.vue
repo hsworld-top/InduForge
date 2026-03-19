@@ -1,3 +1,7 @@
+<!--
+  DropIndicator - 拖拽放置指示器
+  根据 hint 显示：Flex 插入线、Grid 单元格高亮、Free 十字线
+-->
 <template>
   <!-- Flex 容器：插入线 -->
   <div
@@ -48,7 +52,7 @@ const insertLineStyle = computed(() => {
 
   const { orientation, offset } = props.hint.visualHint;
 
-  if (orientation === 'horizontal') {
+  if (orientation === "horizontal") {
     return {
       top: `${offset}px`,
     };

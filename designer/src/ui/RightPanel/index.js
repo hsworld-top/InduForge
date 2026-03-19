@@ -11,4 +11,3 @@ export { default as BindingPanel } from "./BindingPanel.vue";
 export { default as VariablesPanel } from "./VariablesPanel.vue";
 export { default as PageInspectorPanel } from "./PageInspectorPanel.vue";
 export { default as AdvancedPanel } from "./AdvancedPanel.vue";
-

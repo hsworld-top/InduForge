@@ -29,7 +29,7 @@
             @change="handleVisibleChange"
           />
           <span class="ml-2 text-xs text-gray-400">
-            {{ form.visible ? '显示' : '隐藏' }}
+            {{ form.visible ? "显示" : "隐藏" }}
           </span>
         </el-form-item>
         <el-form-item label="锁定">
@@ -40,7 +40,7 @@
             @change="handleLockedChange"
           />
           <span class="ml-2 text-xs text-gray-400">
-            {{ form.locked ? '已锁定' : '未锁定' }}
+            {{ form.locked ? "已锁定" : "未锁定" }}
           </span>
         </el-form-item>
       </el-form>
@@ -59,7 +59,10 @@
               :disabled="fillValue.type === 'mixed'"
               @change="handleFillChange"
             />
-            <span v-if="fillValue.type === 'mixed'" class="text-xs text-gray-400">
+            <span
+              v-if="fillValue.type === 'mixed'"
+              class="text-xs text-gray-400"
+            >
               混合值
             </span>
           </div>
@@ -71,7 +74,10 @@
               :disabled="strokeValue.type === 'mixed'"
               @change="handleStrokeChange"
             />
-            <span v-if="strokeValue.type === 'mixed'" class="text-xs text-gray-400">
+            <span
+              v-if="strokeValue.type === 'mixed'"
+              class="text-xs text-gray-400"
+            >
               混合值
             </span>
           </div>
@@ -109,11 +115,8 @@ const props = defineProps({
   },
 });
 
-const {
-  selectedCount,
-  getMultiSelectValue,
-  setUnifiedValue,
-} = useMultiSelect(props);
+const { selectedCount, getMultiSelectValue, setUnifiedValue } =
+  useMultiSelect(props);
 
 // 表单数据
 const form = reactive({
@@ -183,7 +186,7 @@ const syncForm = () => {
 watch(
   () => props.elements,
   () => syncForm(),
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 
 /**

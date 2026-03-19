@@ -98,7 +98,9 @@
               <PropEditor
                 :prop="propDef"
                 :model-value="getPropValue(propDef.name)"
-                @update:modelValue="(val) => handlePropChange(propDef.name, val)"
+                @update:modelValue="
+                  (val) => handlePropChange(propDef.name, val)
+                "
               />
             </template>
           </div>
@@ -1046,7 +1048,7 @@ const extractMenuDslConfig = (content) => {
   let depth = 0;
   let inStr = false;
   let strQuote = "";
-  let start = i;
+  const start = i;
   for (; i < text.length; i += 1) {
     const ch = text[i];
     if (inStr) {
@@ -1092,7 +1094,7 @@ const captureMenuDslConfig = (content) => {
   try {
     const runner = new Function(
       "context",
-      `"use strict";\nreturn (function() {\n${text}\n}).call(context);`
+      `"use strict";\nreturn (function() {\n${text}\n}).call(context);`,
     );
     runner({
       menu: (config) => {
@@ -1112,7 +1114,12 @@ const captureMenuDslConfig = (content) => {
  */
 const applyMenuDetailConfig = (node, config) => {
   const normalizedType = normalizeElementType(node?.type);
-  if (!node || normalizedType !== "Menu" || !config || typeof config !== "object") {
+  if (
+    !node ||
+    normalizedType !== "Menu" ||
+    !config ||
+    typeof config !== "object"
+  ) {
     return;
   }
   const propsPatch = { ...(node.props || {}) };
@@ -1205,7 +1212,7 @@ const runDetailConfigLocal = (node, content) => {
       : content;
   let lastMenuConfig = null;
   const runner = new Function(
-    `"use strict";\nreturn (function() {\n${safeContent}\n}).call(this);`
+    `"use strict";\nreturn (function() {\n${safeContent}\n}).call(this);`,
   );
   const context = {
     menu: (config) => {
@@ -1299,13 +1306,13 @@ const buttonStylePresets = [
     id: "btn-bg-image",
     label: "背景图片按钮",
     content:
-      "#domId .el-button--primary {\n  background: url(\"/static/images/images/login_run.png\") no-repeat;\n  background-size: 100% 100%;\n  background-position: center;\n  border-color: transparent;\n  background-color: transparent !important;\n  width: 100% !important;\n  height: 100% !important;\n}",
+      '#domId .el-button--primary {\n  background: url("/static/images/images/login_run.png") no-repeat;\n  background-size: 100% 100%;\n  background-position: center;\n  border-color: transparent;\n  background-color: transparent !important;\n  width: 100% !important;\n  height: 100% !important;\n}',
   },
   {
     id: "btn-bg-image-hover",
     label: "Hover 切换背景鍥",
     content:
-      "#domId .el-button--primary {\n  background: url(\"/static/images/btn_normal.png\") no-repeat;\n  background-size: 100% 100%;\n}\n\n#domId .el-button--primary:hover {\n  background: url(\"/static/images/btn_hover.png\") no-repeat;\n  background-size: 100% 100%;\n}",
+      '#domId .el-button--primary {\n  background: url("/static/images/btn_normal.png") no-repeat;\n  background-size: 100% 100%;\n}\n\n#domId .el-button--primary:hover {\n  background: url("/static/images/btn_hover.png") no-repeat;\n  background-size: 100% 100%;\n}',
   },
   {
     id: "btn-size-fixed",
@@ -1316,14 +1323,12 @@ const buttonStylePresets = [
   {
     id: "btn-size-lineheight",
     label: "自适应高度 + 行高居中",
-    content:
-      "#domId .el-button {\n  height: 48px;\n  line-height: 48px;\n}",
+    content: "#domId .el-button {\n  height: 48px;\n  line-height: 48px;\n}",
   },
   {
     id: "btn-size-block",
     label: "块级按钮00%",
-    content:
-      "#domId .el-button {\n  width: 100%;\n  display: block;\n}",
+    content: "#domId .el-button {\n  width: 100%;\n  display: block;\n}",
   },
   {
     id: "btn-icon-size",
@@ -1367,8 +1372,7 @@ const buttonStylePresets = [
   {
     id: "btn-group-radius",
     label: "按钮组去",
-    content:
-      "#domId .el-button-group .el-button {\n  border-radius: 0;\n}",
+    content: "#domId .el-button-group .el-button {\n  border-radius: 0;\n}",
   },
   {
     id: "btn-group-divider",
@@ -1385,8 +1389,7 @@ const buttonStylePresets = [
   {
     id: "btn-active-scale",
     label: "点击缩放",
-    content:
-      "#domId .el-button:active {\n  transform: scale(0.97);\n}",
+    content: "#domId .el-button:active {\n  transform: scale(0.97);\n}",
   },
 ];
 const textStylePresets = [
@@ -1454,13 +1457,13 @@ const textStylePresets = [
     id: "text-bg-image",
     label: "背景图片",
     content:
-      "#domId {\n  background: url(\"/static/images/images/login_run.png\") no-repeat;\n  background-size: 100% 100%;\n  background-position: center;\n  border-color: transparent;\n  background-color: transparent !important;\n  width: 100% !important;\n  height: 100% !important;\n}",
+      '#domId {\n  background: url("/static/images/images/login_run.png") no-repeat;\n  background-size: 100% 100%;\n  background-position: center;\n  border-color: transparent;\n  background-color: transparent !important;\n  width: 100% !important;\n  height: 100% !important;\n}',
   },
   {
     id: "text-bg-image-hover",
     label: "Hover 切换背景鍥",
     content:
-      "#domId {\n  background: url(\"/static/images/btn_normal.png\") no-repeat;\n  background-size: 100% 100%;\n}\n\n#domId:hover {\n  background: url(\"/static/images/btn_hover.png\") no-repeat;\n  background-size: 100% 100%;\n}",
+      '#domId {\n  background: url("/static/images/btn_normal.png") no-repeat;\n  background-size: 100% 100%;\n}\n\n#domId:hover {\n  background: url("/static/images/btn_hover.png") no-repeat;\n  background-size: 100% 100%;\n}',
   },
   {
     id: "text-size-fixed",
@@ -1490,7 +1493,8 @@ const textStylePresets = [
   {
     id: "text-icon-only",
     label: "纯图标",
-    content: "#domId.is-circle {\n  width: 48px;\n  height: 48px;\n  padding: 0;\n}",
+    content:
+      "#domId.is-circle {\n  width: 48px;\n  height: 48px;\n  padding: 0;\n}",
   },
   {
     id: "text-disabled",
@@ -2199,8 +2203,7 @@ const detailPresets = [
   {
     id: "empty",
     label: "空模板",
-    content:
-      "// 在这里编写详细配置脚本\n",
+    content: "// 在这里编写详细配置脚本\n",
   },
   {
     id: "comment",
@@ -2335,13 +2338,13 @@ const buttonDetailPresets = [
     id: "btn-block",
     label: "块级按钮（block/width）",
     content:
-      "this.button({\n  text: '立即支付',\n  type: 'primary',\n  block: true,\n  click: 'payNow',\n})\n\n// 示例: width=120 text='固定宽度' click='onFixedWidth'" ,
+      "this.button({\n  text: '立即支付',\n  type: 'primary',\n  block: true,\n  click: 'payNow',\n})\n\n// 示例: width=120 text='固定宽度' click='onFixedWidth'",
   },
   {
     id: "btn-confirm",
     label: "二次确认",
     content:
-      "this.button({\n  text: '删除',\n  type: 'danger',\n  click: 'onDelete',\n  confirm: '确定删除该条数据吗？',\n  confirmTitle: '删除确认',\n  confirmType: 'warning',\n})" ,
+      "this.button({\n  text: '删除',\n  type: 'danger',\n  click: 'onDelete',\n  confirm: '确定删除该条数据吗？',\n  confirmTitle: '删除确认',\n  confirmType: 'warning',\n})",
   },
   {
     id: "btn-throttle",
@@ -2672,21 +2675,21 @@ const buildElementPlusPropDefs = (type) => {
   return entries
     .filter(([name]) => Object.prototype.hasOwnProperty.call(labelMap, name))
     .map(([name, prop]) => {
-    const typeValue = resolvePropType(prop);
-    const def =
-      typeof prop?.default === "function" ? prop.default() : prop?.default;
-    const options = Array.isArray(prop?.values)
-      ? prop.values.map((value) => ({ label: String(value), value }))
-      : undefined;
-    return {
-      name,
-      type: options ? "enum" : typeValue,
-      label: labelMap[name] || name,
-      group: "官方属性",
-      defaultValue: def,
-      options,
-    };
-  });
+      const typeValue = resolvePropType(prop);
+      const def =
+        typeof prop?.default === "function" ? prop.default() : prop?.default;
+      const options = Array.isArray(prop?.values)
+        ? prop.values.map((value) => ({ label: String(value), value }))
+        : undefined;
+      return {
+        name,
+        type: options ? "enum" : typeValue,
+        label: labelMap[name] || name,
+        group: "官方属性",
+        defaultValue: def,
+        options,
+      };
+    });
 };
 
 /**
@@ -2734,23 +2737,23 @@ const textDetailPresets = [
   {
     id: "text-basic",
     label: "最文本",
-    content: buildDslTemplate('text', "  value: '这是一段文本',"),
+    content: buildDslTemplate("text", "  value: '这是一段文本',"),
   },
   {
     id: "text-bind",
     label: "绑定字段",
-    content: buildDslTemplate('text', "  text: 'username',"),
+    content: buildDslTemplate("text", "  text: 'username',"),
   },
   {
     id: "text-empty",
     label: "占位文本",
-    content: buildDslTemplate('text', "  text: 'remark',\n  empty: '--',"),
+    content: buildDslTemplate("text", "  text: 'remark',\n  empty: '--',"),
   },
   {
     id: "text-style",
     label: "样式",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  value: '重要信息',\n  color: '#f56c6c',\n  size: 14,\n  weight: 'bold',",
     ),
   },
@@ -2758,7 +2761,7 @@ const textDetailPresets = [
     id: "text-wrap",
     label: "多行文本",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'description',\n  lineHeight: 1.6,\n  wrap: true,",
     ),
   },
@@ -2766,7 +2769,7 @@ const textDetailPresets = [
     id: "text-ellipsis",
     label: "超出省略",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'content',\n  ellipsis: true,\n  maxWidth: 200,",
     ),
   },
@@ -2774,7 +2777,7 @@ const textDetailPresets = [
     id: "text-ellipsis-tooltip",
     label: "省略 + Tooltip",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'content',\n  ellipsis: true,\n  tooltip: true,\n  maxWidth: 200,",
     ),
   },
@@ -2782,7 +2785,7 @@ const textDetailPresets = [
     id: "text-dict",
     label: "状态文本映灏",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'status',\n  dict: {\n    0: '禁用',\n    1: '启用',\n  },",
     ),
   },
@@ -2790,7 +2793,7 @@ const textDetailPresets = [
     id: "text-dict-color",
     label: "+ 颜色",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'status',\n  dict: {\n    0: { label: '禁用', color: '#909399' },\n    1: { label: '启用', color: '#67c23a' },\n  },",
     ),
   },
@@ -2798,7 +2801,7 @@ const textDetailPresets = [
     id: "text-tag",
     label: "Tag 文本",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'status',\n  tag: true,\n  dict: {\n    0: { label: '禁用', type: 'info' },\n    1: { label: '启用', type: 'success' },\n  },",
     ),
   },
@@ -2806,7 +2809,7 @@ const textDetailPresets = [
     id: "text-link",
     label: "可点击文本",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  value: '查看详情',\n  link: true,\n  type: 'primary',\n  click: 'onViewDetail',",
     ),
   },
@@ -2814,20 +2817,20 @@ const textDetailPresets = [
     id: "text-tooltip",
     label: "Tooltip 文本",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  value: '鼠标移上来',\n  tooltip: '这是提示',",
     ),
   },
   {
     id: "text-copy",
     label: "复制文本",
-    content: buildDslTemplate('text', "  text: 'orderNo',\n  copy: true,"),
+    content: buildDslTemplate("text", "  text: 'orderNo',\n  copy: true,"),
   },
   {
     id: "text-format-money",
     label: "金额格式鍖",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'price',\n  format: 'money',\n  precision: 2,\n  unit: '元',",
     ),
   },
@@ -2835,7 +2838,7 @@ const textDetailPresets = [
     id: "text-format-datetime",
     label: "时间格式鍖",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'createTime',\n  format: 'datetime',\n  valueFormat: 'YYYY-MM-DD HH:mm:ss',",
     ),
   },
@@ -2843,7 +2846,7 @@ const textDetailPresets = [
     id: "text-action-edit",
     label: "表格操作-编辑",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  value: '编辑',\n  type: 'primary',\n  click: 'onEdit',",
     ),
   },
@@ -2851,23 +2854,20 @@ const textDetailPresets = [
     id: "text-action-delete",
     label: "表格操作-删除",
     content: buildDslTemplate(
-      'text',
-      "  value: '删除',\n  type: 'danger',\n  click: 'onDelete',\n  confirm: '确认删除该条数据吗？'," ,
+      "text",
+      "  value: '删除',\n  type: 'danger',\n  click: 'onDelete',\n  confirm: '确认删除该条数据吗？',",
     ),
   },
   {
     id: "text-multi-prefix",
     label: "多文本组鍚前缀",
-    content: buildDslTemplate(
-      'text',
-      "  value: '￥',\n  color: '#f56c6c',",
-    ),
+    content: buildDslTemplate("text", "  value: '￥',\n  color: '#f56c6c',"),
   },
   {
     id: "text-multi-price",
     label: "多文本组鍚金额",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: 'price',\n  color: '#f56c6c',\n  weight: 'bold',",
     ),
   },
@@ -2875,7 +2875,7 @@ const textDetailPresets = [
     id: "text-full-dsl",
     label: "完整配置模板",
     content: buildDslTemplate(
-      'text',
+      "text",
       "  text: '',\n  value: '',\n  empty: '--',\n\n  color: '',\n  size: 14,\n  weight: 'normal',\n  lineHeight: 1.5,\n\n  wrap: false,\n  ellipsis: false,\n  maxWidth: 200,\n\n  tooltip: false,\n\n  dict: null,\n  tag: false,\n\n  link: false,\n  type: 'default',\n  click: '',\n\n  copy: false,\n\n  format: '',\n  precision: 2,\n  unit: '',",
     ),
   },
@@ -3942,10 +3942,7 @@ const elementPlusPresetGroups = [
             {
               id: buildPresetId(type, "basic"),
               label: "基础",
-              content: buildDslTemplate(
-                methodName,
-                "  text:'calendarDate',",
-              ),
+              content: buildDslTemplate(methodName, "  text:'calendarDate',"),
             },
             {
               id: buildPresetId(type, "range"),
@@ -4097,7 +4094,7 @@ const elementPlusPresetGroups = [
               label: "多行文本",
               content: buildDslTemplate(
                 methodName,
-                "  text: 'remark',\n  type: 'textarea',\n  placeholder: '请输入备注',\n  rows: 4,\n  autosize: { minRows: 3, maxRows: 6 },\n  maxlength: 200,\n  showWordLimit: true," ,
+                "  text: 'remark',\n  type: 'textarea',\n  placeholder: '请输入备注',\n  rows: 4,\n  autosize: { minRows: 3, maxRows: 6 },\n  maxlength: 200,\n  showWordLimit: true,",
               ),
             },
             {
@@ -4213,7 +4210,7 @@ const elementPlusPresetGroups = [
         id: buildPresetId(type, "autocomplete"),
         label: "Autocomplete 面板",
         content:
-          "/* 建议：给 el-autocomplete 使用 popper-class=\"ac-popper\" */\n.ac-popper{ border-radius:12px; overflow:hidden; }\n.ac-popper .el-autocomplete-suggestion__list li:hover{ background:#ecf5ff; color:#409EFF; }",
+          '/* 建议：给 el-autocomplete 使用 popper-class="ac-popper" */\n.ac-popper{ border-radius:12px; overflow:hidden; }\n.ac-popper .el-autocomplete-suggestion__list li:hover{ background:#ecf5ff; color:#409EFF; }',
       },
     ],
   },
@@ -4458,7 +4455,7 @@ const elementPlusPresetGroups = [
         id: buildPresetId(type, "dropdown"),
         label: "下拉面板",
         content:
-          "/* 建议：select 使用 popper-class=\"select-popper\" */\n.select-popper{ border-radius:12px; overflow:hidden; }\n.select-popper .el-select-dropdown__item{ font-size:14px; line-height:38px; }\n.select-popper .el-select-dropdown__item:hover{ background:#ecf5ff; color:#409EFF; }\n.select-popper .el-select-dropdown__item.selected{ color:#409EFF; font-weight:600; }\n.select-popper .el-select-dropdown__empty{ color:#909399; padding:12px 0; }",
+          '/* 建议：select 使用 popper-class="select-popper" */\n.select-popper{ border-radius:12px; overflow:hidden; }\n.select-popper .el-select-dropdown__item{ font-size:14px; line-height:38px; }\n.select-popper .el-select-dropdown__item:hover{ background:#ecf5ff; color:#409EFF; }\n.select-popper .el-select-dropdown__item.selected{ color:#409EFF; font-weight:600; }\n.select-popper .el-select-dropdown__empty{ color:#909399; padding:12px 0; }',
       },
       {
         id: buildPresetId(type, "group"),
@@ -4550,7 +4547,7 @@ const elementPlusPresetGroups = [
             label: "选择 + 序号 + 固定列 + 操作列",
             content: buildDslTemplate(
               methodName,
-              "  data:'tableData',\n  rowKey:'id',\n  columns:[\n    { type:'selection', width:48 },\n    { type:'index', label:'#', width:60 },\n    { prop:'name', label:'姓名', minWidth:120, fixed:'left' },\n    { prop:'address', label:'地址', minWidth:220, showOverflowTooltip:true },\n    { label:'操作', width:180, fixed:'right',\n      actions:[\n        this.button({ text:'编辑', type:'text', click:'editRow(row)' }),\n        this.button({ text:'删除', type:'text', click:'deleteRow(row)', confirm:'确定删除该行吗？' }),\n      ]\n    }\n  ]," ,
+              "  data:'tableData',\n  rowKey:'id',\n  columns:[\n    { type:'selection', width:48 },\n    { type:'index', label:'#', width:60 },\n    { prop:'name', label:'姓名', minWidth:120, fixed:'left' },\n    { prop:'address', label:'地址', minWidth:220, showOverflowTooltip:true },\n    { label:'操作', width:180, fixed:'right',\n      actions:[\n        this.button({ text:'编辑', type:'text', click:'editRow(row)' }),\n        this.button({ text:'删除', type:'text', click:'deleteRow(row)', confirm:'确定删除该行吗？' }),\n      ]\n    }\n  ],",
             ),
           },
           {
@@ -4660,10 +4657,7 @@ const elementPlusPresetGroups = [
             `  /** ?? */\n  id: "tableList",\n  data: ${formatDslValue(
               dataDefault,
               2,
-            )},\n  columns: ${formatDslValue(
-              columnsDefault,
-              2,
-            )},
+            )},\n  columns: ${formatDslValue(columnsDefault, 2)},
 
   /** 表格属性 */
   stripe: true,
@@ -6014,7 +6008,8 @@ const currentPresetOptions = computed(() => {
       ...preset,
       tags: preset.tags || [type, "style", "text"],
       keywords:
-        preset.keywords || [preset.label, type, "text"].filter(Boolean).join(" "),
+        preset.keywords ||
+        [preset.label, type, "text"].filter(Boolean).join(" "),
     }));
   }
   if (customStylePresetMap[type]) {
@@ -6205,7 +6200,6 @@ const bindingPageVariableRows = computed(() => {
         .includes(keyword);
     });
 });
-
 
 const bindingPageComponentTree = computed(() => {
   docVersion.value;
@@ -6821,7 +6815,9 @@ const handleStyleChange = (newStyle) => {
   const ok = editorStore.updateNode(nodeId, { style: newStyle });
   const latest = doc.value?.getNode?.(nodeId);
   const shouldPatch =
-    !ok || (latest && JSON.stringify(latest.style || {}) !== JSON.stringify(newStyle || {}));
+    !ok ||
+    (latest &&
+      JSON.stringify(latest.style || {}) !== JSON.stringify(newStyle || {}));
   if (shouldPatch) {
     applyNodePatch(nodeId, { style: newStyle });
   }
@@ -6976,7 +6972,12 @@ const saveConfigDialog = (forceApply = false) => {
  * 详细配置编辑时实时应用到组件（草稿态）
  */
 watch(
-  [configDraft, configDialogVisible, configDialogType, () => selectedNode.value?.id],
+  [
+    configDraft,
+    configDialogVisible,
+    configDialogType,
+    () => selectedNode.value?.id,
+  ],
   () => {
     if (!configDialogVisible.value) return;
     if (configDialogType.value !== "detail") return;

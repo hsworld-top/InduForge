@@ -105,7 +105,12 @@ const componentEventMap = {
     "node-drag-enter",
     "node-drag-over",
   ],
-  Transfer: ["update:modelValue", "change", "left-check-change", "right-check-change"],
+  Transfer: [
+    "update:modelValue",
+    "change",
+    "left-check-change",
+    "right-check-change",
+  ],
   Tag: ["close", "click"],
   Dropdown: ["visible-change", "click", "command"],
   Menu: ["select", "open", "close"],
@@ -121,7 +126,14 @@ const componentEventMap = {
     "expand-change",
     "remove-tag",
   ],
-  Tabs: ["update:modelValue", "tab-click", "tab-change", "tab-remove", "tab-add", "edit"],
+  Tabs: [
+    "update:modelValue",
+    "tab-click",
+    "tab-change",
+    "tab-remove",
+    "tab-add",
+    "edit",
+  ],
   Timeline: [],
   Image: ["load", "error", "switch", "close", "show"],
   ImageCarousel: ["change"],
@@ -162,7 +174,7 @@ const componentEventMap = {
 const eventLabelMap = new Map(
   [...defaultEventDefinitions, ...Object.values(componentEventMap).flat()]
     .filter((item) => item?.name)
-    .map((item) => [item.name, item])
+    .map((item) => [item.name, item]),
 );
 
 /**

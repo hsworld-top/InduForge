@@ -1,3 +1,7 @@
+<!--
+  ToolRail - 工具轨
+  左右侧垂直工具按钮栏，用于切换页面树、组件、数据等面板
+-->
 <template>
   <nav class="tool-rail" :class="`tool-rail--${side}`">
     <div class="tool-rail__section">
@@ -60,11 +64,11 @@ const props = defineProps({
 const emit = defineEmits(["select"]);
 
 const topItems = computed(() =>
-  props.items.filter((item) => item.placement !== "bottom")
+  props.items.filter((item) => item.placement !== "bottom"),
 );
 
 const bottomItems = computed(() =>
-  props.items.filter((item) => item.placement === "bottom")
+  props.items.filter((item) => item.placement === "bottom"),
 );
 
 /**

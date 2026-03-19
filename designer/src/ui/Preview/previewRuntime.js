@@ -1,8 +1,19 @@
+/**
+ * 预览运行时（previewRuntime）
+ *
+ * 职责：
+ * - 初始化预览页面的数据绑定系统（DataService、MQTT、变量）
+ * - 管理组件引用（componentRefsByPage/ByName）供脚本调用
+ * - 数据点订阅、MQTT 订阅、变量映射、查询缓存
+ * - 提供 initPreviewRuntime、getComponentRef 等 API
+ */
+
 import { datacenterApi } from "@/services";
 import { DataService } from "@/data";
 import { Storage } from "@/utils/storage";
 import { io } from "socket.io-client";
 
+/** 当前预览运行时实例（单例） */
 let runtimeInstance = null;
 const componentRefsByPage = new Map();
 const componentRefsByName = new Map();
@@ -39,6 +50,11 @@ const mappedDetails = new Map();
 const datapointMetaCache = new Map();
 const datapointMetaPending = new Map();
 
+/**
+ * 解包 API 响应中的 data 字段
+ * @param {*} payload - 原始响应
+ * @returns {*} 解包后的数据
+ */
 const unwrapApiData = (payload) => {
   if (payload && typeof payload === "object" && "data" in payload) {
     return payload.data;
@@ -46,9 +62,16 @@ const unwrapApiData = (payload) => {
   return payload;
 };
 
+/**
+ * 规范化全局变量默认值
+ * 支持 function/set/map/regexp 等类型的序列化还原
+ * @param {Object} detail - 变量定义（含 type、default）
+ * @returns {*} 规范化后的值
+ */
 const normalizeGlobalValue = (detail) => {
   const type = detail?.type;
   const raw = detail?.default;
+  // function 类型：支持原生函数或字符串形式的函数体
   if (type === "function") {
     if (typeof raw === "function") return raw;
     if (typeof raw === "string") {
@@ -71,6 +94,7 @@ const normalizeGlobalValue = (detail) => {
     }
     return () => undefined;
   }
+  // set 类型：支持 Set 实例、数组、JSON 字符串
   if (type === "set") {
     if (raw instanceof Set) return raw;
     if (Array.isArray(raw)) return new Set(raw);
@@ -84,6 +108,7 @@ const normalizeGlobalValue = (detail) => {
     }
     return new Set();
   }
+  // map 类型：支持 Map 实例、[k,v] 数组、普通对象、JSON 字符串
   if (type === "map") {
     if (raw instanceof Map) return raw;
     if (Array.isArray(raw)) return new Map(raw);
@@ -101,6 +126,7 @@ const normalizeGlobalValue = (detail) => {
     }
     return new Map();
   }
+  // regexp 类型：支持 /pattern/flags 格式字符串
   if (type === "regexp") {
     if (raw instanceof RegExp) return raw;
     if (typeof raw === "string") {
@@ -198,9 +224,7 @@ const buildComponentStub = (pageId, name) => ({
     return true;
   },
   set Enable(value) {
-    queueComponentCall(pageId, name, "setProps", [
-      { disabled: !Boolean(value) },
-    ]);
+    queueComponentCall(pageId, name, "setProps", [{ disabled: !value }]);
   },
   get Caption() {
     return "";
@@ -947,14 +971,20 @@ const parseParamNames = (value) => {
 };
 
 export const initPreviewRuntime = (options) => {
-  const { projectId, projectVariables, globalScripts, pageLifecycle, pageVariables } =
-    options || {};
+  const {
+    projectId,
+    projectVariables,
+    globalScripts,
+    pageLifecycle,
+    pageVariables,
+  } = options || {};
   const overrides = new Map();
   const timerIds = new Set();
   const pageTimerIds = new Set();
   const lifecycleConfig = pageLifecycle || {};
   const pageVarOverrides = new Map();
-  const pageVarDefs = pageVariables && typeof pageVariables === "object" ? pageVariables : {};
+  const pageVarDefs =
+    pageVariables && typeof pageVariables === "object" ? pageVariables : {};
 
   const updateMappedValue = (prop, nextValue, detail) => {
     const fallbackValue = normalizeGlobalValue(detail);
@@ -1093,7 +1123,6 @@ export const initPreviewRuntime = (options) => {
     },
   );
 
-
   const normalizePageValue = (detail) => {
     if (!detail || typeof detail !== "object") return detail ?? null;
     if (detail.default === undefined && detail.defaultValue !== undefined) {
@@ -1104,15 +1133,18 @@ export const initPreviewRuntime = (options) => {
 
   const triggerPageVariableChange = async (name, value, previous) => {
     const itemsRaw = lifecycleConfig?.variableChanges;
-    const items = Array.isArray(itemsRaw)
-      ? itemsRaw
-      : itemsRaw?.items || [];
+    const items = Array.isArray(itemsRaw) ? itemsRaw : itemsRaw?.items || [];
     const hits = items.filter(
       (item) => (item.variable || item.name) === name && item?.code,
     );
     for (const item of hits) {
       if (item?.enabled === false) continue;
-      await runCode(item.code, { name, value, previous }, null, options?.pageId);
+      await runCode(
+        item.code,
+        { name, value, previous },
+        null,
+        options?.pageId,
+      );
     }
   };
 
@@ -1274,14 +1306,18 @@ export const initPreviewRuntime = (options) => {
       const interval = Number(item.interval || item.time || 1000);
       const id = setInterval(
         () => {
-          void runCode(item.code, { type: "timer", name: item.name }, null, options?.pageId);
+          void runCode(
+            item.code,
+            { type: "timer", name: item.name },
+            null,
+            options?.pageId,
+          );
         },
         Math.max(100, interval),
       );
       pageTimerIds.add(id);
     });
   };
-
 
   /**
    * 执行页面生命周期脚本
@@ -1299,7 +1335,12 @@ export const initPreviewRuntime = (options) => {
       if (handler?.enabled === false) continue;
       const code = typeof handler === "string" ? handler : handler?.code;
       if (!code || !String(code).trim()) continue;
-      await runCode(code, { type: "lifecycle", name: key }, null, options?.pageId);
+      await runCode(
+        code,
+        { type: "lifecycle", name: key },
+        null,
+        options?.pageId,
+      );
     }
   };
 

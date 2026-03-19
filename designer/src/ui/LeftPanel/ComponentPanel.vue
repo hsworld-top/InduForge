@@ -1,3 +1,7 @@
+<!--
+  ComponentPanel - 组件物料面板
+  展示可拖拽组件列表（布局、UI、图表等），支持搜索、常用/全部切换
+-->
 <template>
   <div class="flex flex-col gap-3 component-panel">
     <el-input v-model="keyword" size="small" placeholder="搜索组件" clearable />
@@ -28,7 +32,9 @@
                 <component :is="getPreviewComponent(item.type)" />
               </div>
               <div class="card-info">
-                <div class="text-xs font-medium text-gray-800 dark:text-gray-200">
+                <div
+                  class="text-xs font-medium text-gray-800 dark:text-gray-200"
+                >
                   {{ item.name }}
                 </div>
               </div>
@@ -62,7 +68,9 @@
                     <component :is="getPreviewComponent(item.type)" />
                   </div>
                   <div class="card-info">
-                    <div class="text-xs font-medium text-gray-800 dark:text-gray-200">
+                    <div
+                      class="text-xs font-medium text-gray-800 dark:text-gray-200"
+                    >
                       {{ item.name }}
                     </div>
                   </div>
@@ -74,7 +82,7 @@
             </el-collapse-item>
           </el-collapse>
         </el-collapse-item>
-      
+
         <el-collapse-item name="chart">
           <template #title>
             <div class="component-section-title">图表</div>
@@ -93,7 +101,9 @@
                 <component :is="getPreviewComponent(item.type)" />
               </div>
               <div class="card-info">
-                <div class="text-xs font-medium text-gray-800 dark:text-gray-200">
+                <div
+                  class="text-xs font-medium text-gray-800 dark:text-gray-200"
+                >
                   {{ item.name }}
                 </div>
               </div>
@@ -446,7 +456,9 @@ const getPreviewComponent = (type) => {
     },
   };
   return (
-    previewMap[type] || { render: () => h("div", { class: "preview-default" }, type) }
+    previewMap[type] || {
+      render: () => h("div", { class: "preview-default" }, type),
+    }
   );
 };
 
@@ -519,7 +531,8 @@ const handleDragEnd = () => {
  */
 const getPreviewIcon = (type) => {
   const iconMap = {
-    Button: '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
+    Button:
+      '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
     Text: '<div style="width:60px;height:20px;background:#606266;border-radius:2px;"></div>',
     FlexContainer:
       '<div style="width:60px;height:40px;background:#e4e7ed;border-radius:4px;display:flex;gap:4px;padding:4px;"><div style="flex:1;background:#909399;"></div><div style="flex:1;background:#909399;"></div></div>',
@@ -541,12 +554,10 @@ const getPreviewIcon = (type) => {
       '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;padding:4px;"><div style="background:#c0c4cc;"></div><div style="background:#c0c4cc;"></div><div style="background:#c0c4cc;"></div><div style="background:#c0c4cc;"></div></div>',
     Table:
       '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;"><div style="height:10px;background:#e4e7ed;"></div><div style="height:8px;margin:6px 6px 0;background:#c0c4cc;"></div><div style="height:8px;margin:4px 6px 0;background:#c0c4cc;"></div></div>',
-    Tree:
-      '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:6px;display:flex;flex-direction:column;gap:4px;"><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div></div>',
+    Tree: '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:6px;display:flex;flex-direction:column;gap:4px;"><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div></div>',
     Dropdown:
       '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
-    Menu:
-      '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:6px;display:flex;flex-direction:column;gap:4px;"><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div></div>',
+    Menu: '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:6px;display:flex;flex-direction:column;gap:4px;"><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div></div>',
     Radio:
       '<div style="width:60px;height:20px;border:1px solid #dcdfe6;border-radius:10px;"></div>',
     Checkbox:
@@ -555,12 +566,10 @@ const getPreviewIcon = (type) => {
       '<div style="width:60px;height:24px;border:1px solid #dcdfe6;border-radius:4px;"></div>',
     Cascader:
       '<div style="width:60px;height:24px;border:1px solid #dcdfe6;border-radius:4px;background:#f5f7fa;"></div>',
-    Tabs:
-      '<div style="width:60px;height:40px;border:1px solid #dcdfe6;border-radius:4px;"><div style="height:12px;background:#e4e7ed;"></div><div style="height:20px;margin:4px;background:#f5f7fa;"></div></div>',
+    Tabs: '<div style="width:60px;height:40px;border:1px solid #dcdfe6;border-radius:4px;"><div style="height:12px;background:#e4e7ed;"></div><div style="height:20px;margin:4px;background:#f5f7fa;"></div></div>',
     Transfer:
       '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;align-items:center;gap:4px;padding:4px;"><div style="flex:1;height:26px;border:1px solid #3b6cff;"></div><div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid #3b6cff;"></div><div style="flex:1;height:26px;border:1px solid #3b6cff;"></div></div>',
-    Tag:
-      '<div style="width:42px;height:18px;border:1px solid #3b6cff;border-radius:2px;background:#ffffff;"></div>',
+    Tag: '<div style="width:42px;height:18px;border:1px solid #3b6cff;border-radius:2px;background:#ffffff;"></div>',
     InputNumber:
       '<div style="width:60px;height:24px;border:1px solid #3b6cff;border-radius:4px;display:flex;align-items:center;gap:4px;padding:2px 4px;"><div style="width:8px;height:8px;background:#3b6cff;"></div><div style="flex:1;height:4px;background:#3b6cff;"></div><div style="width:8px;height:8px;background:#3b6cff;"></div></div>',
     Timeline:
@@ -573,8 +582,7 @@ const getPreviewIcon = (type) => {
       '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;"><div style="height:6px;background:#3b6cff;"></div><div style="height:20px;margin:6px;border:1px solid #3b6cff;"></div></div>',
     Steps:
       '<div style="width:60px;height:24px;border:1px solid #3b6cff;border-radius:4px;display:flex;align-items:center;gap:4px;padding:0 6px;"><div style="width:6px;height:6px;background:#3b6cff;border-radius:50%;"></div><div style="flex:1;height:2px;background:#3b6cff;"></div><div style="width:6px;height:6px;background:#3b6cff;border-radius:50%;"></div></div>',
-    Card:
-      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;"><div style="height:8px;background:#3b6cff;"></div><div style="height:16px;margin:6px;border:1px solid #3b6cff;"></div></div>',
+    Card: '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;"><div style="height:8px;background:#3b6cff;"></div><div style="height:16px;margin:6px;border:1px solid #3b6cff;"></div></div>',
     Pagination:
       '<div style="width:60px;height:18px;border:1px solid #3b6cff;border-radius:4px;display:flex;align-items:center;justify-content:space-around;"><div style="width:8px;height:8px;background:#3b6cff;"></div><div style="width:8px;height:8px;background:#3b6cff;"></div><div style="width:8px;height:8px;background:#3b6cff;"></div></div>',
     Collapse:

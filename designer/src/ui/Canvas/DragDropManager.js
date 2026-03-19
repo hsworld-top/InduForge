@@ -1,11 +1,14 @@
 /**
- * 拖拽管理器
- * 处理组件从物料面板拖拽到画布,以及画布内组件的拖拽排序
+ * 拖拽管理器（DragDropManager）
+ *
+ * 职责：
+ * - 查找拖拽目标容器（elementFromPoint + data-node-id）
+ * - 计算 Flex 容器内的插入位置（before/after/inside）
+ * - 管理当前放置目标与插入指示线
+ *
+ * 用于：组件从物料面板拖入画布、画布内组件拖拽排序
  */
 
-/**
- * 计算拖拽目标容器和插入位置
- */
 export class DragDropManager {
   constructor() {
     /** @type {HTMLElement | null} */
@@ -13,7 +16,7 @@ export class DragDropManager {
     /** @type {number} */
     this.insertIndex = -1;
     /** @type {'before' | 'after' | 'inside'} */
-    this.insertPosition = 'inside';
+    this.insertPosition = "inside";
   }
 
   /**
@@ -24,7 +27,7 @@ export class DragDropManager {
    */
   findDropTarget(event, canvasRoot) {
     const point = { x: event.clientX, y: event.clientY };
-    
+
     // 获取鼠标位置下的元素
     const element = document.elementFromPoint(point.x, point.y);
     if (!element) {
@@ -32,13 +35,13 @@ export class DragDropManager {
     }
 
     // 向上查找最近的节点元素
-    const nodeElement = element.closest('[data-node-id]');
+    const nodeElement = element.closest("[data-node-id]");
     if (!nodeElement || !canvasRoot.contains(nodeElement)) {
       return { element: null, nodeId: null, isContainer: false };
     }
 
-    const nodeId = nodeElement.getAttribute('data-node-id');
-    const nodeType = nodeElement.getAttribute('data-node-type');
+    const nodeId = nodeElement.getAttribute("data-node-id");
+    const nodeType = nodeElement.getAttribute("data-node-type");
     const isContainer = this._isContainerType(nodeType);
 
     return {
@@ -55,22 +58,22 @@ export class DragDropManager {
    * @param {string} direction - Flex 方向 (row | column)
    * @returns {{ index: number, position: 'before' | 'after', insertLine: { orientation: 'horizontal' | 'vertical', offset: number } }}
    */
-  calculateFlexInsertPosition(containerElement, event, direction = 'column') {
-    const children = Array.from(containerElement.children).filter(
-      (child) => child.hasAttribute('data-node-id')
+  calculateFlexInsertPosition(containerElement, event, direction = "column") {
+    const children = Array.from(containerElement.children).filter((child) =>
+      child.hasAttribute("data-node-id"),
     );
 
     if (children.length === 0) {
       return {
         index: 0,
-        position: 'inside',
+        position: "inside",
         insertLine: null,
       };
     }
 
     const point = { x: event.clientX, y: event.clientY };
     const containerRect = containerElement.getBoundingClientRect();
-    const isHorizontal = direction === 'row' || direction === 'row-reverse';
+    const isHorizontal = direction === "row" || direction === "row-reverse";
 
     // 遍历子元素找到最近的插入位置
     for (let i = 0; i < children.length; i++) {
@@ -83,9 +86,9 @@ export class DragDropManager {
         if (point.x < midX) {
           return {
             index: i,
-            position: 'before',
+            position: "before",
             insertLine: {
-              orientation: 'vertical',
+              orientation: "vertical",
               offset: rect.left - containerRect.left,
             },
           };
@@ -96,9 +99,9 @@ export class DragDropManager {
         if (point.y < midY) {
           return {
             index: i,
-            position: 'before',
+            position: "before",
             insertLine: {
-              orientation: 'horizontal',
+              orientation: "horizontal",
               offset: rect.top - containerRect.top,
             },
           };
@@ -112,9 +115,9 @@ export class DragDropManager {
 
     return {
       index: children.length,
-      position: 'after',
+      position: "after",
       insertLine: {
-        orientation: isHorizontal ? 'vertical' : 'horizontal',
+        orientation: isHorizontal ? "vertical" : "horizontal",
         offset: isHorizontal
           ? lastRect.right - containerRect.left
           : lastRect.bottom - containerRect.top,
@@ -145,21 +148,21 @@ export class DragDropManager {
   _isContainerType(nodeType) {
     if (!nodeType) return false;
     const containerTypes = [
-      'FlexContainer',
-      'FreeContainer',
-      'GridContainer',
-      'ResponsiveLayout',
-      'ColumnLayout1',
-      'ColumnLayout2',
-      'ColumnLayout4',
-      'ElContainer',
-      'ElLayout',
-      'ElLayoutRow',
-      'ElHeader',
-      'ElAside',
-      'ElMain',
-      'ElFooter',
-      'ElCol',
+      "FlexContainer",
+      "FreeContainer",
+      "GridContainer",
+      "ResponsiveLayout",
+      "ColumnLayout1",
+      "ColumnLayout2",
+      "ColumnLayout4",
+      "ElContainer",
+      "ElLayout",
+      "ElLayoutRow",
+      "ElHeader",
+      "ElAside",
+      "ElMain",
+      "ElFooter",
+      "ElCol",
     ];
     return containerTypes.includes(nodeType);
   }
@@ -171,7 +174,7 @@ export class DragDropManager {
    */
   getContainerDirection(containerElement) {
     const computedStyle = window.getComputedStyle(containerElement);
-    return computedStyle.flexDirection || 'column';
+    return computedStyle.flexDirection || "column";
   }
 
   /**
@@ -180,7 +183,7 @@ export class DragDropManager {
   clear() {
     this.currentDropTarget = null;
     this.insertIndex = -1;
-    this.insertPosition = 'inside';
+    this.insertPosition = "inside";
   }
 
   /**
@@ -189,7 +192,7 @@ export class DragDropManager {
    * @param {DragEvent} event - 拖拽事件
    * @param {HTMLElement} targetElement - 目标元素
    * @returns {DropDecision | null} 布局决策
-   * 
+   *
    * @typedef {Object} DropDecision
    * @property {'flex' | 'grid' | 'free'} containerType - 容器类型
    * @property {'absolute' | 'flow'} positioning - 定位模式
@@ -199,80 +202,88 @@ export class DragDropManager {
   calculateDropDecision(event, targetElement) {
     if (!targetElement) return null;
 
-    const nodeType = targetElement.getAttribute('data-node-type');
-    
-    switch(nodeType) {
-      case 'FlexContainer':
-      case 'ResponsiveLayout': {
+    const nodeType = targetElement.getAttribute("data-node-type");
+
+    switch (nodeType) {
+      case "FlexContainer":
+      case "ResponsiveLayout": {
         // Flex 容器：子节点使用流式布局
         const direction = this.getContainerDirection(targetElement);
-        const insertInfo = this.calculateFlexInsertPosition(targetElement, event, direction);
-        
+        const insertInfo = this.calculateFlexInsertPosition(
+          targetElement,
+          event,
+          direction,
+        );
+
         return {
-          containerType: 'flex',
-          positioning: 'flow',
+          containerType: "flex",
+          positioning: "flow",
           visualHint: {
-            orientation: insertInfo.insertLine?.orientation || 'horizontal',
+            orientation: insertInfo.insertLine?.orientation || "horizontal",
             offset: insertInfo.insertLine?.offset || 0,
             index: insertInfo.index,
           },
-          insertRule: 'before_after', // 显示主轴方向提示
+          insertRule: "before_after", // 显示主轴方向提示
         };
       }
-        
-      case 'GridContainer':
-      case 'ColumnLayout1':
-      case 'ColumnLayout2':
-      case 'ColumnLayout4': {
+
+      case "GridContainer":
+      case "ColumnLayout1":
+      case "ColumnLayout2":
+      case "ColumnLayout4": {
         // Grid 容器：子节点使用流式布局
         const gridInfo = this.calculateGridCell(targetElement, event);
-        
+
         return {
-          containerType: 'grid',
-          positioning: 'flow',
+          containerType: "grid",
+          positioning: "flow",
           visualHint: gridInfo,
-          insertRule: 'grid_cell', // 显示单元格高亮
+          insertRule: "grid_cell", // 显示单元格高亮
         };
       }
 
-      case 'ElContainer':
-      case 'ElLayout':
-      case 'ElLayoutRow':
-      case 'ElHeader':
-      case 'ElAside':
-      case 'ElMain':
-      case 'ElFooter':
-      case 'ElCol': {
+      case "ElContainer":
+      case "ElLayout":
+      case "ElLayoutRow":
+      case "ElHeader":
+      case "ElAside":
+      case "ElMain":
+      case "ElFooter":
+      case "ElCol": {
         const direction = this.getContainerDirection(targetElement);
-        const insertInfo = this.calculateFlexInsertPosition(targetElement, event, direction);
+        const insertInfo = this.calculateFlexInsertPosition(
+          targetElement,
+          event,
+          direction,
+        );
 
         return {
-          containerType: 'flex',
-          positioning: 'flow',
+          containerType: "flex",
+          positioning: "flow",
           visualHint: {
-            orientation: insertInfo.insertLine?.orientation || 'horizontal',
+            orientation: insertInfo.insertLine?.orientation || "horizontal",
             offset: insertInfo.insertLine?.offset || 0,
             index: insertInfo.index,
           },
-          insertRule: 'before_after',
+          insertRule: "before_after",
         };
       }
-        
-      case 'FreeContainer': {
+
+      case "FreeContainer": {
         // 自由容器：子节点使用绝对定位
         const position = this.calculateFreePosition(targetElement, event);
-        
+
         return {
-          containerType: 'free',
-          positioning: 'absolute',
+          containerType: "free",
+          positioning: "absolute",
           visualHint: {
             x: position.x,
             y: position.y,
           },
-          insertRule: 'absolute_position', // 只允许绝对定位
+          insertRule: "absolute_position", // 只允许绝对定位
         };
       }
-        
+
       default:
         return null;
     }
@@ -287,28 +298,34 @@ export class DragDropManager {
   calculateGridCell(containerElement, event) {
     const gridStyle = window.getComputedStyle(containerElement);
     const rect = containerElement.getBoundingClientRect();
-    
+
     // 解析 grid-template-columns
-    const colsStr = gridStyle.gridTemplateColumns || 'auto';
-    const rowsStr = gridStyle.gridTemplateRows || 'auto';
-    
+    const colsStr = gridStyle.gridTemplateColumns || "auto";
+    const rowsStr = gridStyle.gridTemplateRows || "auto";
+
     const cols = this._parseGridTemplate(colsStr);
     const rows = this._parseGridTemplate(rowsStr);
-    
+
     const colCount = cols.length || 3; // 默认 3 列
     const rowCount = rows.length || 3; // 默认 3 行
-    
+
     const colWidth = rect.width / colCount;
     const rowHeight = rect.height / rowCount;
-    
+
     const relativeX = event.clientX - rect.left;
     const relativeY = event.clientY - rect.top;
-    
-    const col = Math.max(0, Math.min(colCount - 1, Math.floor(relativeX / colWidth)));
-    const row = Math.max(0, Math.min(rowCount - 1, Math.floor(relativeY / rowHeight)));
-    
+
+    const col = Math.max(
+      0,
+      Math.min(colCount - 1, Math.floor(relativeX / colWidth)),
+    );
+    const row = Math.max(
+      0,
+      Math.min(rowCount - 1, Math.floor(relativeY / rowHeight)),
+    );
+
     return {
-      orientation: 'grid',
+      orientation: "grid",
       row: row + 1, // Grid 行列从 1 开始
       col: col + 1,
       highlightRect: {
@@ -327,8 +344,8 @@ export class DragDropManager {
    * @private
    */
   _parseGridTemplate(template) {
-    if (!template || template === 'none') return [];
-    
+    if (!template || template === "none") return [];
+
     // 处理 repeat() 函数
     const repeatMatch = template.match(/repeat\((\d+),\s*([^)]+)\)/i);
     if (repeatMatch) {
@@ -336,7 +353,7 @@ export class DragDropManager {
       const value = repeatMatch[2].trim();
       return Array(count).fill(value);
     }
-    
+
     // 按空格分割
     return template.split(/\s+/).filter(Boolean);
   }

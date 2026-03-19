@@ -1,5 +1,9 @@
 /**
  * 本地存储工具类
+ *
+ * 封装 localStorage，支持 JSON 序列化/反序列化，
+ * 提供 Token、用户信息、租户、工程等常用键的便捷方法。
+ * 异常时静默降级，不抛出错误。
  */
 
 import { STORAGE_KEYS } from "@/constants";

@@ -1,4 +1,8 @@
-﻿<template>
+<!--
+  PageTree - 页面树
+  展示工程页面层级（基础页面、自定义页面），支持搜索、新建、重命名、删除、拖拽排序
+-->
+<template>
   <div class="page-tree-container">
     <!-- 搜索框 -->
     <div class="page-search">
@@ -42,9 +46,15 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item v-if="slot.page" command="open">打开</el-dropdown-item>
-                  <el-dropdown-item v-else command="create">创建</el-dropdown-item>
-                  <el-dropdown-item v-if="slot.page" command="export">导出页面</el-dropdown-item>
+                  <el-dropdown-item v-if="slot.page" command="open"
+                    >打开</el-dropdown-item
+                  >
+                  <el-dropdown-item v-else command="create"
+                    >创建</el-dropdown-item
+                  >
+                  <el-dropdown-item v-if="slot.page" command="export"
+                    >导出页面</el-dropdown-item
+                  >
                   <el-dropdown-item
                     v-if="slot.page && slot.type !== 'home'"
                     command="delete"
@@ -75,7 +85,9 @@
               class="tree-node folder-node"
               :class="{
                 'is-active': selectedNode?.id === item.id,
-                'is-drop-target': dragOverTarget?.id === item.id && dragOverTarget?.mode === 'append',
+                'is-drop-target':
+                  dragOverTarget?.id === item.id &&
+                  dragOverTarget?.mode === 'append',
               }"
               draggable="true"
               @dragstart="handleDragStart(item, null)"
@@ -105,8 +117,12 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                    <el-dropdown-item command="createPage">新建页面</el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>删除分组</el-dropdown-item>
+                    <el-dropdown-item command="createPage"
+                      >新建页面</el-dropdown-item
+                    >
+                    <el-dropdown-item command="delete" divided
+                      >删除分组</el-dropdown-item
+                    >
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -116,7 +132,9 @@
               class="tree-node page-node"
               :class="{
                 'is-active': isPageActive(item.id),
-                'is-drop-target': dragOverTarget?.id === item.id && dragOverTarget?.mode === 'before',
+                'is-drop-target':
+                  dragOverTarget?.id === item.id &&
+                  dragOverTarget?.mode === 'before',
               }"
               draggable="true"
               @dragstart="handleDragStart(item, null)"
@@ -148,7 +166,9 @@
                   <el-dropdown-menu>
                     <el-dropdown-item command="open">打开</el-dropdown-item>
                     <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                    <el-dropdown-item command="export">导出页面</el-dropdown-item>
+                    <el-dropdown-item command="export"
+                      >导出页面</el-dropdown-item
+                    >
                     <el-dropdown-item
                       v-if="item.parentId"
                       command="moveToRoot"
@@ -163,20 +183,27 @@
                     >
                       {{ target.label }}
                     </el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided
+                      >删除</el-dropdown-item
+                    >
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
             </div>
 
-            <div v-if="item.type === 'folder' && folderStates[item.id]" class="tree-children">
+            <div
+              v-if="item.type === 'folder' && folderStates[item.id]"
+              class="tree-children"
+            >
               <div
                 v-for="page in getBusinessChildren(item.id)"
                 :key="page.id"
                 class="tree-node page-node level-1"
                 :class="{
                   'is-active': isPageActive(page.id),
-                  'is-drop-target': dragOverTarget?.id === page.id && dragOverTarget?.mode === 'before',
+                  'is-drop-target':
+                    dragOverTarget?.id === page.id &&
+                    dragOverTarget?.mode === 'before',
                 }"
                 draggable="true"
                 @dragstart="handleDragStart(page, item.id)"
@@ -209,8 +236,12 @@
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item command="open">打开</el-dropdown-item>
-                      <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                      <el-dropdown-item command="export">导出页面</el-dropdown-item>
+                      <el-dropdown-item command="rename"
+                        >重命名</el-dropdown-item
+                      >
+                      <el-dropdown-item command="export"
+                        >导出页面</el-dropdown-item
+                      >
                       <el-dropdown-item
                         v-if="page.parentId"
                         command="moveToRoot"
@@ -225,13 +256,17 @@
                       >
                         {{ target.label }}
                       </el-dropdown-item>
-                      <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                      <el-dropdown-item command="delete" divided
+                        >删除</el-dropdown-item
+                      >
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
               </div>
               <div
-                v-if="!getBusinessChildren(item.id).length && !searchText.trim()"
+                v-if="
+                  !getBusinessChildren(item.id).length && !searchText.trim()
+                "
                 class="folder-dropzone"
                 @dragover.prevent="handleFolderDragOver($event, item)"
                 @dragleave="handleDragLeave(item.id)"
@@ -246,7 +281,10 @@
       </section>
 
       <div
-        v-if="filteredBasicSlots.length === 0 && filteredBusinessRootItems.length === 0"
+        v-if="
+          filteredBasicSlots.length === 0 &&
+          filteredBusinessRootItems.length === 0
+        "
         class="empty-state"
       >
         <IconEpDocument class="empty-icon" />
@@ -340,14 +378,7 @@
 </template>
 
 <script setup>
-import {
-  computed,
-  h,
-  inject,
-  ref,
-  watch,
-  watchEffect,
-} from "vue";
+import { computed, h, inject, ref, watch, watchEffect } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -367,7 +398,8 @@ import IconEpMoreFilled from "~icons/ep/more-filled";
 const openPageTab = inject("openPageTab", null);
 
 const editorStore = useEditorStore();
-const { pages, currentPageId, entryConfig, canUndo, projectId } = storeToRefs(editorStore);
+const { pages, currentPageId, entryConfig, canUndo, projectId } =
+  storeToRefs(editorStore);
 const selectedNode = ref(null);
 const createDialogVisible = ref(false);
 const createFormRef = ref(null);
@@ -402,7 +434,7 @@ const createTypeOptions = [
 // 新建弹窗标题
 const createDialogTitle = computed(() => {
   const option = createTypeOptions.find(
-    (o) => o.value === createForm.value.type
+    (o) => o.value === createForm.value.type,
   );
   return `新建${option?.label || "页面"}`;
 });
@@ -437,14 +469,16 @@ const BASIC_PAGE_META = {
  * @param {"home" | "login" | "logout"} type - 基础页面类型
  * @returns {{ label: string, path: string }}
  */
-const getBasicPageMeta = (type) => BASIC_PAGE_META[type] || { label: "", path: "/" };
+const getBasicPageMeta = (type) =>
+  BASIC_PAGE_META[type] || { label: "", path: "/" };
 
 /**
  * 判断是否为固定基础页创建类型
  * @param {string} type - 创建类型
  * @returns {boolean}
  */
-const isFixedBasicCreateType = (type) => ["home", "login", "logout"].includes(type);
+const isFixedBasicCreateType = (type) =>
+  ["home", "login", "logout"].includes(type);
 
 /**
  * 获取基础页面类型
@@ -454,8 +488,10 @@ const isFixedBasicCreateType = (type) => ["home", "login", "logout"].includes(ty
 const getFixedSystemType = (page) => {
   if (!page) return null;
   if (entryConfig.value?.homePageId === page.id) return "home";
-  if (entryConfig.value?.loginPageId === page.id || page.path === "/login") return "login";
-  if (entryConfig.value?.logoutPageId === page.id || page.path === "/logout") return "logout";
+  if (entryConfig.value?.loginPageId === page.id || page.path === "/login")
+    return "login";
+  if (entryConfig.value?.logoutPageId === page.id || page.path === "/logout")
+    return "logout";
   return null;
 };
 
@@ -527,18 +563,21 @@ const persistPageOrderMap = () => {
   try {
     localStorage.setItem(
       getProjectOrderStorageKey(),
-      JSON.stringify(pageOrderMap.value || {})
+      JSON.stringify(pageOrderMap.value || {}),
     );
   } catch (error) {
     // ignore
   }
 };
 
-const getContainerOrderKey = (parentId = null) => parentId || ROOT_CONTAINER_KEY;
+const getContainerOrderKey = (parentId = null) =>
+  parentId || ROOT_CONTAINER_KEY;
 
 const updateContainerOrder = (containerKey, orderedIds) => {
   const nextMap = { ...(pageOrderMap.value || {}) };
-  nextMap[containerKey] = Array.from(new Set((orderedIds || []).filter(Boolean)));
+  nextMap[containerKey] = Array.from(
+    new Set((orderedIds || []).filter(Boolean)),
+  );
   pageOrderMap.value = nextMap;
   persistPageOrderMap();
 };
@@ -550,8 +589,12 @@ const sortItemsByStoredOrder = (items, containerKey) => {
     : [];
   const orderIndexMap = new Map(stored.map((id, index) => [id, index]));
   return source.sort((a, b) => {
-    const aIndex = orderIndexMap.has(a.id) ? orderIndexMap.get(a.id) : Number.MAX_SAFE_INTEGER;
-    const bIndex = orderIndexMap.has(b.id) ? orderIndexMap.get(b.id) : Number.MAX_SAFE_INTEGER;
+    const aIndex = orderIndexMap.has(a.id)
+      ? orderIndexMap.get(a.id)
+      : Number.MAX_SAFE_INTEGER;
+    const bIndex = orderIndexMap.has(b.id)
+      ? orderIndexMap.get(b.id)
+      : Number.MAX_SAFE_INTEGER;
     if (aIndex !== bIndex) {
       return aIndex - bIndex;
     }
@@ -575,7 +618,7 @@ watch(
     if (type !== "page") {
       createForm.value.parentId = null;
     }
-  }
+  },
 );
 
 /**
@@ -644,17 +687,20 @@ watchEffect(() => {
  * 所有可见页面（包含登录页、登出页等系统页面）
  */
 const appPages = computed(() =>
-  pages.value.filter((page) => page.type !== "dialog")
+  pages.value.filter((page) => page.type !== "dialog"),
 );
 const systemPages = computed(() => ({
   home:
-    appPages.value.find((page) => page.id === entryConfig.value?.homePageId) || null,
+    appPages.value.find((page) => page.id === entryConfig.value?.homePageId) ||
+    null,
   login:
     appPages.value.find((page) => page.id === entryConfig.value?.loginPageId) ||
     appPages.value.find((page) => getFixedSystemPath(page) === "/login") ||
     null,
   logout:
-    appPages.value.find((page) => page.id === entryConfig.value?.logoutPageId) ||
+    appPages.value.find(
+      (page) => page.id === entryConfig.value?.logoutPageId,
+    ) ||
     appPages.value.find((page) => getFixedSystemPath(page) === "/logout") ||
     null,
 }));
@@ -665,8 +711,8 @@ const basicPageIdSet = computed(
         systemPages.value.home?.id,
         systemPages.value.login?.id,
         systemPages.value.logout?.id,
-      ].filter(Boolean)
-    )
+      ].filter(Boolean),
+    ),
 );
 
 const basicPageMap = computed(() => {
@@ -715,30 +761,29 @@ const filteredBasicSlots = computed(() => {
 });
 
 const businessPages = computed(() =>
-  appPages.value.filter((page) => !basicPageIdSet.value.has(page.id))
+  appPages.value.filter((page) => !basicPageIdSet.value.has(page.id)),
 );
 
 const businessFolders = computed(() =>
-  businessPages.value.filter((page) => page.type === "folder")
+  businessPages.value.filter((page) => page.type === "folder"),
 );
 
 const businessRootItems = computed(() =>
   sortItemsByStoredOrder(
     businessPages.value.filter(
       (page) =>
-        page.type === "folder" ||
-        (page.type === "page" && !page.parentId)
+        page.type === "folder" || (page.type === "page" && !page.parentId),
     ),
-    ROOT_CONTAINER_KEY
+    ROOT_CONTAINER_KEY,
   ).sort((a, b) => {
     if (a.type === b.type) return 0;
     return a.type === "folder" ? -1 : 1;
-  })
+  }),
 );
 
 const getChildrenCount = (folderId) =>
   businessPages.value.filter(
-    (page) => page.type === "page" && page.parentId === folderId
+    (page) => page.type === "page" && page.parentId === folderId,
   ).length;
 
 const getBusinessChildren = (folderId) =>
@@ -747,9 +792,9 @@ const getBusinessChildren = (folderId) =>
       (page) =>
         page.type === "page" &&
         page.parentId === folderId &&
-        matchesKeyword(page)
+        matchesKeyword(page),
     ),
-    getContainerOrderKey(folderId)
+    getContainerOrderKey(folderId),
   );
 
 const filteredBusinessRootItems = computed(() =>
@@ -758,7 +803,7 @@ const filteredBusinessRootItems = computed(() =>
       return matchesKeyword(item) || getBusinessChildren(item.id).length > 0;
     }
     return matchesKeyword(item);
-  })
+  }),
 );
 
 const moveIdBefore = (ids, sourceId, targetId) => {
@@ -773,7 +818,9 @@ const moveIdBefore = (ids, sourceId, targetId) => {
 };
 
 const appendIdToContainer = (containerKey, sourceId, visibleItems) => {
-  const nextIds = (visibleItems || []).map((item) => item.id).filter((id) => id !== sourceId);
+  const nextIds = (visibleItems || [])
+    .map((item) => item.id)
+    .filter((id) => id !== sourceId);
   nextIds.push(sourceId);
   updateContainerOrder(containerKey, nextIds);
 };
@@ -872,12 +919,12 @@ const handleNodeDrop = async (targetItem, parentId) => {
     targetParentId === null
       ? businessRootItems.value
       : businessPages.value.filter(
-          (page) => page.type === "page" && page.parentId === targetParentId
+          (page) => page.type === "page" && page.parentId === targetParentId,
         );
   const nextOrder = moveIdBefore(
     visibleItems.map((item) => item.id),
     source.id,
-    targetItem.id
+    targetItem.id,
   );
   updateContainerOrder(getContainerOrderKey(targetParentId), nextOrder);
 
@@ -889,11 +936,11 @@ const handleNodeDrop = async (targetItem, parentId) => {
             (page) =>
               page.type === "page" &&
               page.parentId === sourceParentId &&
-              page.id !== source.id
+              page.id !== source.id,
           );
     updateContainerOrder(
       getContainerOrderKey(sourceParentId),
-      sourceItems.map((item) => item.id)
+      sourceItems.map((item) => item.id),
     );
   }
   handleDragEnd();
@@ -913,8 +960,8 @@ const handleFolderDrop = async (folder) => {
     getContainerOrderKey(folder.id),
     source.id,
     businessPages.value.filter(
-      (page) => page.type === "page" && page.parentId === folder.id
-    )
+      (page) => page.type === "page" && page.parentId === folder.id,
+    ),
   );
   if (!folderStates.value[folder.id]) {
     folderStates.value[folder.id] = true;
@@ -927,11 +974,11 @@ const handleFolderDrop = async (folder) => {
             (page) =>
               page.type === "page" &&
               page.parentId === source.parentId &&
-              page.id !== source.id
+              page.id !== source.id,
           );
     updateContainerOrder(
       getContainerOrderKey(source.parentId),
-      sourceItems.map((item) => item.id)
+      sourceItems.map((item) => item.id),
     );
   }
   handleDragEnd();
@@ -953,9 +1000,13 @@ const handleContainerDrop = async (parentId) => {
           (page) =>
             page.type === "page" &&
             page.parentId === targetParentId &&
-            page.id !== source.id
+            page.id !== source.id,
         );
-  appendIdToContainer(getContainerOrderKey(targetParentId), source.id, visibleItems);
+  appendIdToContainer(
+    getContainerOrderKey(targetParentId),
+    source.id,
+    visibleItems,
+  );
 
   if ((source.parentId || null) !== targetParentId) {
     const sourceItems =
@@ -965,11 +1016,11 @@ const handleContainerDrop = async (parentId) => {
             (page) =>
               page.type === "page" &&
               page.parentId === source.parentId &&
-              page.id !== source.id
+              page.id !== source.id,
           );
     updateContainerOrder(
       getContainerOrderKey(source.parentId),
-      sourceItems.map((item) => item.id)
+      sourceItems.map((item) => item.id),
     );
   }
   handleDragEnd();
@@ -980,7 +1031,7 @@ watch(
   () => {
     loadPageOrderMap();
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -991,12 +1042,12 @@ watch(
       ensureContainerOrder(
         getContainerOrderKey(folder.id),
         businessPages.value.filter(
-          (page) => page.type === "page" && page.parentId === folder.id
-        )
+          (page) => page.type === "page" && page.parentId === folder.id,
+        ),
       );
     });
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 
 /**
@@ -1123,7 +1174,7 @@ const confirmPageSwitch = async (targetName) => {
           skipPrompt.value = value;
         },
       },
-      () => "不再提示"
+      () => "不再提示",
     ),
   ]);
 
@@ -1162,7 +1213,7 @@ const ensureUnsavedSwitch = async (targetName) => {
         cancelButtonText: "不保存切换",
         distinguishCancelAndClose: true,
         closeOnClickModal: false,
-      }
+      },
     );
     if (action === "confirm") {
       await editorStore.saveCurrentPage();
@@ -1421,9 +1472,11 @@ const handleMove = async (pageId, parentId) => {
       ElMessage.warning("基础页面不支持移动到分组");
       return;
     }
-    const nextPath = page?.type === "page"
-      ? getFixedSystemPath(page) || buildBusinessPagePath(getPageLabel(page), parentId)
-      : undefined;
+    const nextPath =
+      page?.type === "page"
+        ? getFixedSystemPath(page) ||
+          buildBusinessPagePath(getPageLabel(page), parentId)
+        : undefined;
     await editorStore.movePageToGroup(pageId, parentId, nextPath);
     const nextPage = pages.value.find((item) => item.id === pageId);
     if (nextPage?.type === "page") {
@@ -1446,7 +1499,7 @@ const isNameUnique = (name, excludeId) => {
   return !pages.value.some(
     (page) =>
       page.id !== excludeId &&
-      (page.name || "").trim().toLowerCase() === lowerName
+      (page.name || "").trim().toLowerCase() === lowerName,
   );
 };
 
@@ -1468,7 +1521,7 @@ const toPathSegment = (value) => {
  */
 const getFolderPathSegments = (parentId) => {
   const folder = pages.value.find(
-    (page) => page.id === (parentId || null) && page.type === "folder"
+    (page) => page.id === (parentId || null) && page.type === "folder",
   );
   if (!folder) {
     return [];
@@ -1494,12 +1547,15 @@ const buildBusinessPagePath = (name, parentId) => {
  */
 const syncFolderDescendantPaths = async (folderId) => {
   const descendants = pages.value.filter(
-    (page) => page.type === "page" && page.parentId === folderId
+    (page) => page.type === "page" && page.parentId === folderId,
   );
   for (const page of descendants) {
     const fixedPath = getFixedSystemPath(page);
     if (fixedPath) continue;
-    const nextPath = buildBusinessPagePath(getPageLabel(page), page.parentId || null);
+    const nextPath = buildBusinessPagePath(
+      getPageLabel(page),
+      page.parentId || null,
+    );
     if (page.path !== nextPath) {
       await editorStore.renamePage(page.id, getPageLabel(page), nextPath);
     }
@@ -1639,7 +1695,9 @@ const getFolderDescendantCount = (folderId) => {
   const stack = [folderId];
   while (stack.length) {
     const currentFolderId = stack.pop();
-    const children = pages.value.filter((page) => page.parentId === currentFolderId);
+    const children = pages.value.filter(
+      (page) => page.parentId === currentFolderId,
+    );
     count += children.length;
     children
       .filter((page) => page.type === "folder")
@@ -1679,9 +1737,12 @@ const handleDelete = async () => {
             type: "warning",
             closeOnClickModal: false,
             distinguishCancelAndClose: true,
-          }
+          },
         );
-        await editorStore.deletePage(target.id, childCount > 0 ? "folder-only" : "single");
+        await editorStore.deletePage(
+          target.id,
+          childCount > 0 ? "folder-only" : "single",
+        );
       } catch (error) {
         if (error === "cancel" && childCount > 0) {
           await editorStore.deletePage(target.id, "cascade");
@@ -1707,7 +1768,7 @@ const handleDelete = async () => {
         cancelButtonText: "取消",
         type: "warning",
         confirmButtonClass: "el-button--danger",
-      }
+      },
     );
 
     // 如果删除的是当前页面，先切换到首页
@@ -1736,8 +1797,7 @@ const handleDelete = async () => {
  * 分组选项
  */
 const folderOptions = computed(() =>
-  businessFolders.value
-    .map((page) => ({ id: page.id, name: page.name }))
+  businessFolders.value.map((page) => ({ id: page.id, name: page.name })),
 );
 
 /**
@@ -1752,7 +1812,7 @@ const getMoveTargets = (node) => {
 
   const targets = [];
   const groups = folderOptions.value.filter(
-    (group) => group.id !== node.parentId
+    (group) => group.id !== node.parentId,
   );
   for (const group of groups) {
     targets.push({ id: group.id, label: group.name });
@@ -2194,5 +2254,4 @@ const getMoveTargets = (node) => {
   justify-content: flex-end;
   gap: 12px;
 }
-
 </style>

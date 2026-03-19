@@ -154,7 +154,7 @@ export class ComponentRegistry {
       (m) =>
         m.type.toLowerCase().includes(lowerKeyword) ||
         m.name.toLowerCase().includes(lowerKeyword) ||
-        m.description?.toLowerCase().includes(lowerKeyword)
+        m.description?.toLowerCase().includes(lowerKeyword),
     );
   }
 

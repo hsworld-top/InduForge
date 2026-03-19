@@ -1,3 +1,7 @@
+<!--
+  MaterialPanel - 物料面板
+  根据编辑模式切换：页面模式（组件/绘图区/资源 Tab）、Canvas 模式（绘图工具）
+-->
 <template>
   <div class="flex flex-col gap-3 material-panel">
     <!-- 页面编辑模式：组件 + 绘图区 + 资源 -->

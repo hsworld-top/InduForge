@@ -1,5 +1,12 @@
 /**
- * 编辑器状态管理
+ * 编辑器状态管理（editor-store）
+ *
+ * 职责：
+ * - 文档模型（doc）、历史（history）、选中（selection）
+ * - 当前工程、页面、数据绑定系统
+ * - 工程/页面 CRUD、Schema 加载与保存
+ * - 命令执行（插入、删除、更新、对齐等）
+ * - 规范化工具：API 响应解析、Schema 结构修复
  */
 
 import { defineStore } from "pinia";
@@ -10,6 +17,7 @@ import {
   createPageNode,
   buildPagePathFromName,
   History,
+  BatchCommand,
   UpdateNodeCommand,
   UpdateGraphicCommand,
   SelectionModel,
@@ -18,12 +26,16 @@ import {
   UpdateEntryCommand,
   InsertNodeCommand,
   RemoveNodeCommand,
+  DuplicateNodeCommand,
   ReorderNodeCommand,
   ToggleNodeVisibilityCommand,
   ToggleNodeLockCommand,
   PageLockManager,
   componentRegistry,
   createSelectableElement,
+  AlignElementsCommand,
+  DistributeElementsCommand,
+  MatchSizeCommand,
 } from "@/editor-core";
 import { projectApi } from "@/services";
 import request from "@/utils/request";
@@ -50,9 +62,16 @@ const getDefaultGlobalScripts = () => ({
   custom: { groups: [], items: [] },
 });
 
+/**
+ * 规范化变量定义
+ * 将 source 字符串转为 { type, path }，补齐 dataCenter 类型与 mapped 标记
+ * @param {Object} detail - 变量定义
+ * @returns {Object}
+ */
 const normalizeVariableDef = (detail) => {
   if (!detail || typeof detail !== "object") return detail;
   const next = { ...detail };
+  // 兼容旧版：source 为字符串时转为 { type: 'dataCenter', path }
   if (typeof next.source === "string") {
     next.source = { type: "dataCenter", path: next.source };
     next.mapped = true;
@@ -73,6 +92,13 @@ const normalizeVariableDef = (detail) => {
   return next;
 };
 
+/**
+ * 规范化全局变量配置
+ * 支持 definitions + groups 或扁平对象两种结构
+ * @param {*} raw - 原始配置
+ * @param {Object} fallbackDefinitions - 兜底定义
+ * @returns {{ definitions: Object, groups: Array }}
+ */
 const normalizeGlobalVariables = (raw, fallbackDefinitions = {}) => {
   if (!raw || typeof raw !== "object") {
     return { definitions: fallbackDefinitions, groups: [] };
@@ -98,6 +124,12 @@ const normalizeGlobalVariables = (raw, fallbackDefinitions = {}) => {
   return { definitions: normalizedDefinitions, groups: [] };
 };
 
+/**
+ * 规范化全局脚本配置
+ * 合并 system、timers、variableChanges、custom 各组，确保结构完整
+ * @param {*} raw - 原始配置
+ * @returns {Object}
+ */
 const normalizeGlobalScripts = (raw) => {
   const system = raw && raw.system ? raw.system : {};
   const timers = raw && raw.timers ? raw.timers : {};
@@ -114,7 +146,9 @@ const normalizeGlobalScripts = (raw) => {
       items: Array.isArray(timers.items) ? timers.items : [],
     },
     variableChanges: {
-      groups: Array.isArray(variableChanges.groups) ? variableChanges.groups : [],
+      groups: Array.isArray(variableChanges.groups)
+        ? variableChanges.groups
+        : [],
       items: Array.isArray(variableChanges.items) ? variableChanges.items : [],
     },
     custom: {
@@ -129,20 +163,20 @@ const normalizeGlobalScripts = (raw) => {
  * @returns {string}
  */
 const getMenuDefaultDetailConfig = () =>
-  'this.menu({\n' +
+  "this.menu({\n" +
   '  id: "menuNav",\n' +
   '  label: "菜单基础配置",\n' +
   '  type: "Menu",\n' +
-  '  props: {\n' +
+  "  props: {\n" +
   '    defaultActive: "2",\n' +
-  '    items: [\n' +
+  "    items: [\n" +
   '      { index: "1", label: "导航一", icon: "location" },\n' +
   '      { index: "2", label: "导航二", icon: "menu" },\n' +
   '      { index: "3", label: "导航三", icon: "document", disabled: true },\n' +
   '      { index: "4", label: "导航四", icon: "setting" },\n' +
-  '    ],\n' +
-  '  },\n' +
-  '});';
+  "    ],\n" +
+  "  },\n" +
+  "});";
 
 /**
  * 获取 Menu 组件默认属性
@@ -189,9 +223,9 @@ const normalizePageSchema = (payload) => {
 const isProjectSchemaPayload = (payload) => {
   return Boolean(
     payload &&
-      typeof payload === "object" &&
-      payload.pagesById &&
-      payload.nodesById
+    typeof payload === "object" &&
+    payload.pagesById &&
+    payload.nodesById,
   );
 };
 
@@ -341,7 +375,10 @@ const resolveProjectSchema = (payload, projectId, fallbackPageId) => {
     const ensured = ensurePagePayloadId(normalized, fallbackPageId);
     return buildSchemaFromPagePayload(ensured, projectId);
   }
-  return buildSchemaFromPagePayload({ page: { id: fallbackPageId } }, projectId);
+  return buildSchemaFromPagePayload(
+    { page: { id: fallbackPageId } },
+    projectId,
+  );
 };
 
 /**
@@ -407,7 +444,7 @@ const normalizeLayoutSchema = (schema) => {
     const base = Math.max(1, Math.floor(24 / count));
     const remainder = 24 - base * (count - 1);
     return Array.from({ length: count }, (_, index) =>
-      index === count - 1 ? Math.max(1, remainder) : base
+      index === count - 1 ? Math.max(1, remainder) : base,
     );
   };
   const ensureRowColumns = (rowNode) => {
@@ -423,7 +460,7 @@ const normalizeLayoutSchema = (schema) => {
     const resolvedColumns = resolveLayoutCount(
       rowNode.props.columns,
       colIds.length || 1,
-      24
+      24,
     );
     rowNode.props.columns = resolvedColumns;
     if (colIds.length >= resolvedColumns) return;
@@ -538,7 +575,10 @@ const normalizeLayoutSchema = (schema) => {
         const rowNode = createComponentNode("ElLayoutRow", {
           parentNode: node,
           label: rowManifest?.name || "行",
-          props: { ...(rowManifest?.defaultProps || {}), columns: orphanIds.length },
+          props: {
+            ...(rowManifest?.defaultProps || {}),
+            columns: orphanIds.length,
+          },
           style: { ...(rowManifest?.defaultStyle || {}) },
         });
         rowNode.children = orphanIds;
@@ -1022,7 +1062,7 @@ export const useEditorStore = defineStore("editor", () => {
    * @param {string} id - 工程 ID
    * @returns {Promise<{ok: boolean, error?: Error}>}
    */
-  
+
   /**
    * 加载工程级变量与脚本设置
    * @returns {Promise<void>}
@@ -1036,9 +1076,13 @@ export const useEditorStore = defineStore("editor", () => {
     ]);
 
     const varsResult =
-      results[0].status === "fulfilled" ? unwrapApiData(results[0].value) : null;
+      results[0].status === "fulfilled"
+        ? unwrapApiData(results[0].value)
+        : null;
     const settingsResult =
-      results[1].status === "fulfilled" ? unwrapApiData(results[1].value) : null;
+      results[1].status === "fulfilled"
+        ? unwrapApiData(results[1].value)
+        : null;
 
     const fallbackDefinitions =
       varsResult && typeof varsResult === "object" ? varsResult : {};
@@ -1046,11 +1090,13 @@ export const useEditorStore = defineStore("editor", () => {
     if (settingsResult && typeof settingsResult === "object") {
       const normalizedVariables = normalizeGlobalVariables(
         settingsResult.globalVariables,
-        fallbackDefinitions
+        fallbackDefinitions,
       );
       projectVariables.value = normalizedVariables.definitions;
       projectVariableGroups.value = normalizedVariables.groups;
-      globalScripts.value = normalizeGlobalScripts(settingsResult.globalScripts || {});
+      globalScripts.value = normalizeGlobalScripts(
+        settingsResult.globalScripts || {},
+      );
       return;
     }
 
@@ -1058,7 +1104,7 @@ export const useEditorStore = defineStore("editor", () => {
     projectVariableGroups.value = [];
     globalScripts.value = getDefaultGlobalScripts();
   };
-  
+
   /**
    * 保存工程级变量与脚本设置
    * @returns {Promise<{ok: boolean, error?: Error}>}
@@ -1079,16 +1125,23 @@ export const useEditorStore = defineStore("editor", () => {
     try {
       const results = await Promise.allSettled([
         projectApi.updateProjectSettings(projectId.value, payload),
-        projectApi.updateProjectVariables(projectId.value, projectVariables.value),
+        projectApi.updateProjectVariables(
+          projectId.value,
+          projectVariables.value,
+        ),
       ]);
       const settingsResult =
         results[0].status === "fulfilled" ? results[0].value : null;
-      const data = unwrapApiData(settingsResult) || settingsResult?.data || settingsResult;
+      const data =
+        unwrapApiData(settingsResult) || settingsResult?.data || settingsResult;
       const rejected = results.find((res) => res.status === "rejected");
       if (rejected) {
         return {
           ok: false,
-          error: rejected.reason instanceof Error ? rejected.reason : new Error("保存失败"),
+          error:
+            rejected.reason instanceof Error
+              ? rejected.reason
+              : new Error("保存失败"),
         };
       }
 
@@ -1096,7 +1149,7 @@ export const useEditorStore = defineStore("editor", () => {
         if (data.globalVariables) {
           const normalized = normalizeGlobalVariables(
             data.globalVariables,
-            projectVariables.value
+            projectVariables.value,
           );
           projectVariables.value = normalized.definitions;
           projectVariableGroups.value = normalized.groups;
@@ -1108,7 +1161,10 @@ export const useEditorStore = defineStore("editor", () => {
 
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err : new Error("保存失败") };
+      return {
+        ok: false,
+        error: err instanceof Error ? err : new Error("保存失败"),
+      };
     }
   };
   const loadProject = async (id) => {
@@ -1152,7 +1208,11 @@ export const useEditorStore = defineStore("editor", () => {
       const nextSchema = resolveProjectSchema(pagePayload, id, targetPageId);
       initEditor(nextSchema);
 
-      if (entryConfigResp && doc.value && Object.keys(entryConfigResp).length > 0) {
+      if (
+        entryConfigResp &&
+        doc.value &&
+        Object.keys(entryConfigResp).length > 0
+      ) {
         doc.value._updateEntry(entryConfigResp);
       }
 
@@ -1188,7 +1248,7 @@ export const useEditorStore = defineStore("editor", () => {
       await releasePageLock();
       const draft = pageDrafts.value?.[pageId];
       if (draft) {
-        let nextSchema = resolveProjectSchema(draft, projectId.value, pageId);
+        const nextSchema = resolveProjectSchema(draft, projectId.value, pageId);
         const existingEntry = doc.value?.entry;
         if (existingEntry) {
           nextSchema.entry = { ...nextSchema.entry, ...existingEntry };
@@ -1202,7 +1262,11 @@ export const useEditorStore = defineStore("editor", () => {
         page: { id: pageId },
       };
 
-      let nextSchema = resolveProjectSchema(pagePayload, projectId.value, pageId);
+      const nextSchema = resolveProjectSchema(
+        pagePayload,
+        projectId.value,
+        pageId,
+      );
       const existingEntry = doc.value?.entry;
 
       if (existingEntry) {
@@ -1322,7 +1386,11 @@ export const useEditorStore = defineStore("editor", () => {
     const pageId = data?.id || data?.page?.id;
 
     if (payload?.schemaContent && pageId) {
-      await projectApi.updatePage(projectId.value, pageId, payload.schemaContent);
+      await projectApi.updatePage(
+        projectId.value,
+        pageId,
+        payload.schemaContent,
+      );
     }
 
     await refreshPages();
@@ -1347,7 +1415,11 @@ export const useEditorStore = defineStore("editor", () => {
     const { pages: pageList, entryConfig: entryConfigResp } =
       await refreshPages();
 
-    if (currentPageId.value && pageList.some((page) => page.id === currentPageId.value)) return;
+    if (
+      currentPageId.value &&
+      pageList.some((page) => page.id === currentPageId.value)
+    )
+      return;
 
     const homeId = entryConfigResp?.homePageId;
     const nextId =
@@ -1397,7 +1469,12 @@ export const useEditorStore = defineStore("editor", () => {
       throw new Error("缺少页面信息");
     }
 
-    await projectApi.movePageToGroup(projectId.value, pageId, targetGroupId, path);
+    await projectApi.movePageToGroup(
+      projectId.value,
+      pageId,
+      targetGroupId,
+      path,
+    );
     await refreshPages();
   };
 
@@ -1425,7 +1502,7 @@ export const useEditorStore = defineStore("editor", () => {
             name,
             path: path ?? page.path,
           }
-        : page
+        : page,
     );
 
     if (doc.value && currentPageId.value === pageId && history.value) {
@@ -1479,7 +1556,7 @@ export const useEditorStore = defineStore("editor", () => {
     try {
       const payload = serializer.value.exportPage(
         doc.value,
-        currentPageId.value
+        currentPageId.value,
       );
       const pageVars = doc.value?.schema?.vars?.pages?.[currentPageId.value];
       if (pageVars && typeof pageVars === "object") {
@@ -1497,7 +1574,11 @@ export const useEditorStore = defineStore("editor", () => {
           },
         };
       }
-      await projectApi.updatePage(projectId.value, currentPageId.value, payload);
+      await projectApi.updatePage(
+        projectId.value,
+        currentPageId.value,
+        payload,
+      );
       if (pageDrafts.value[currentPageId.value]) {
         const nextDrafts = { ...(pageDrafts.value || {}) };
         delete nextDrafts[currentPageId.value];
@@ -1566,7 +1647,7 @@ export const useEditorStore = defineStore("editor", () => {
 
     history.value.execute(new UpdatePageCommand(currentPageId.value, patch));
     pages.value = pages.value.map((page) =>
-      page.id === currentPageId.value ? { ...page, ...patch } : page
+      page.id === currentPageId.value ? { ...page, ...patch } : page,
     );
     return true;
   };
@@ -1588,9 +1669,21 @@ export const useEditorStore = defineStore("editor", () => {
       { prop: "showFooter", type: "ElFooter" },
     ];
     const sectionSizeMap = {
-      ElHeader: { prop: "height", containerProp: "headerHeight", fallback: "60px" },
-      ElFooter: { prop: "height", containerProp: "footerHeight", fallback: "60px" },
-      ElAside: { prop: "width", containerProp: "asideWidth", fallback: "200px" },
+      ElHeader: {
+        prop: "height",
+        containerProp: "headerHeight",
+        fallback: "60px",
+      },
+      ElFooter: {
+        prop: "height",
+        containerProp: "footerHeight",
+        fallback: "60px",
+      },
+      ElAside: {
+        prop: "width",
+        containerProp: "asideWidth",
+        fallback: "200px",
+      },
     };
     const sectionOrder = sectionDefs.map((item) => item.type);
     const getOrderIndex = (type) => sectionOrder.indexOf(type);
@@ -1614,7 +1707,9 @@ export const useEditorStore = defineStore("editor", () => {
 
     for (const section of sectionDefs) {
       if (!nextProps?.[section.prop] && existingSectionMap.has(section.type)) {
-        executeCommand(new RemoveNodeCommand(existingSectionMap.get(section.type)));
+        executeCommand(
+          new RemoveNodeCommand(existingSectionMap.get(section.type)),
+        );
       }
     }
 
@@ -1642,7 +1737,7 @@ export const useEditorStore = defineStore("editor", () => {
       executeCommand(
         new UpdateNodeCommand(sectionNode.id, {
           props: { ...(sectionNode.props || {}), [config.prop]: nextValue },
-        })
+        }),
       );
     };
 
@@ -1664,7 +1759,7 @@ export const useEditorStore = defineStore("editor", () => {
     };
 
     const buildUniqueLabel = (baseLabel) => {
-      let label = baseLabel || "容器";
+      const label = baseLabel || "容器";
       if (isLabelUnique(label)) return label;
       let index = 1;
       while (!isLabelUnique(`${label}${index}`)) {
@@ -1694,7 +1789,9 @@ export const useEditorStore = defineStore("editor", () => {
       });
 
       const insertIndex = resolveInsertIndex(section.type);
-      executeCommand(new InsertNodeCommand(containerId, insertIndex, childNode));
+      executeCommand(
+        new InsertNodeCommand(containerId, insertIndex, childNode),
+      );
     }
 
     Object.keys(sectionSizeMap).forEach((sectionType) => {
@@ -1747,12 +1844,11 @@ export const useEditorStore = defineStore("editor", () => {
 
     const columns = Math.max(
       1,
-      Math.min(24, Number(nextProps?.columns || rowNode.props?.columns || 3))
+      Math.min(24, Number(nextProps?.columns || rowNode.props?.columns || 3)),
     );
     const baseSpan = Math.max(1, Math.floor(24 / columns));
     const remainder = 24 - baseSpan * columns;
-    const getSpanByIndex = (index) =>
-      baseSpan + (index < remainder ? 1 : 0);
+    const getSpanByIndex = (index) => baseSpan + (index < remainder ? 1 : 0);
 
     const executeCommand = (command) => {
       if (history.value.isInTransaction?.()) {
@@ -1828,7 +1924,7 @@ export const useEditorStore = defineStore("editor", () => {
       if (rightCount === 0) return;
       const remainingUnits = Math.max(
         rightCount,
-        24 - totalOffset - fixedSpanTotal
+        24 - totalOffset - fixedSpanTotal,
       );
       const base = Math.floor(remainingUnits / rightCount);
       const rem = remainingUnits - base * rightCount;
@@ -1841,7 +1937,7 @@ export const useEditorStore = defineStore("editor", () => {
           executeCommand(
             new UpdateNodeCommand(colNode.id, {
               props: { ...(colNode.props || {}), span: nextSpan },
-            })
+            }),
           );
         }
       }
@@ -1866,7 +1962,7 @@ export const useEditorStore = defineStore("editor", () => {
         executeCommand(
           new UpdateNodeCommand(colNode.id, {
             props: { ...(colNode.props || {}), span: nextSpan },
-          })
+          }),
         );
       }
     }
@@ -1944,13 +2040,13 @@ export const useEditorStore = defineStore("editor", () => {
       }).length;
       const nextColumns = Math.max(
         1,
-        Math.min(24, Number(rowNode.props?.columns || colCount || 3))
+        Math.min(24, Number(rowNode.props?.columns || colCount || 3)),
       );
       if (rowNode.props?.columns !== nextColumns) {
         executeCommand(
           new UpdateNodeCommand(rowNode.id, {
             props: { ...(rowNode.props || {}), columns: nextColumns },
-          })
+          }),
         );
       }
       if (colCount !== nextColumns) {
@@ -2077,7 +2173,6 @@ export const useEditorStore = defineStore("editor", () => {
     };
   };
 
-
   /**
    * 限制容器最小尺寸，避免小于内部区域
    * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
@@ -2148,7 +2243,8 @@ export const useEditorStore = defineStore("editor", () => {
    */
   const clampElColSpanPatch = (node, patch) => {
     if (!node || node.type !== "ElCol" || !patch?.props) return patch;
-    if (!Object.prototype.hasOwnProperty.call(patch.props, "span")) return patch;
+    if (!Object.prototype.hasOwnProperty.call(patch.props, "span"))
+      return patch;
     const parentNode = doc.value?.getParent?.(node.id);
     if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
 
@@ -2183,7 +2279,8 @@ export const useEditorStore = defineStore("editor", () => {
    */
   const clampElColOffsetPatch = (node, patch) => {
     if (!node || node.type !== "ElCol" || !patch?.props) return patch;
-    if (!Object.prototype.hasOwnProperty.call(patch.props, "offset")) return patch;
+    if (!Object.prototype.hasOwnProperty.call(patch.props, "offset"))
+      return patch;
     const parentNode = doc.value?.getParent?.(node.id);
     if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
     const colIds = (parentNode.children || []).filter((childId) => {
@@ -2208,7 +2305,10 @@ export const useEditorStore = defineStore("editor", () => {
       const offset = Number(colNode?.props?.offset) || 0;
       return Math.max(0, Math.min(24, offset));
     });
-    const nextOffset = Math.max(0, Math.min(24, Number(patch.props.offset) || 0));
+    const nextOffset = Math.max(
+      0,
+      Math.min(24, Number(patch.props.offset) || 0),
+    );
     offsets[anchorIndex] = nextOffset;
 
     const fixedSpanTotal = spans
@@ -2216,12 +2316,12 @@ export const useEditorStore = defineStore("editor", () => {
       .reduce((sum, value) => sum + value, 0);
     const offsetOthers = offsets.reduce(
       (sum, value, index) => (index === anchorIndex ? sum : sum + value),
-      0
+      0,
     );
     const rightCount = Math.max(0, colIds.length - anchorIndex - 1);
     const maxOffset = Math.max(
       0,
-      24 - fixedSpanTotal - offsetOthers - rightCount
+      24 - fixedSpanTotal - offsetOthers - rightCount,
     );
     const clampedOffset = Math.min(nextOffset, maxOffset);
     if (clampedOffset === nextOffset) return patch;
@@ -2312,7 +2412,8 @@ export const useEditorStore = defineStore("editor", () => {
    */
   const clampElLayoutRowColumnsPatch = (node, patch) => {
     if (!node || node.type !== "ElLayoutRow" || !patch?.props) return patch;
-    if (!Object.prototype.hasOwnProperty.call(patch.props, "columns")) return patch;
+    if (!Object.prototype.hasOwnProperty.call(patch.props, "columns"))
+      return patch;
     const raw = Number(patch.props.columns);
     if (!Number.isFinite(raw)) return patch;
     const clamped = Math.max(1, Math.min(24, raw));
@@ -2337,14 +2438,13 @@ export const useEditorStore = defineStore("editor", () => {
     const limitedPatch = clampElContainerSizePatch(node, patch);
     const clampedColumnsPatch = clampElLayoutRowColumnsPatch(
       node,
-      limitedPatch
+      limitedPatch,
     );
     const clampedSpanPatch = clampElColSpanPatch(node, clampedColumnsPatch);
     const clampedOffsetPatch = clampElColOffsetPatch(node, clampedSpanPatch);
     const clampedShiftPatch = clampElColShiftPatch(node, clampedOffsetPatch);
     const nextPatch = syncAbsoluteSizePatch(node, clampedShiftPatch);
-    const hasPropPatch =
-      nextPatch?.props && typeof nextPatch === "object";
+    const hasPropPatch = nextPatch?.props && typeof nextPatch === "object";
     const mergedProps = hasPropPatch
       ? { ...(node.props || {}), ...(nextPatch.props || {}) }
       : { ...(node.props || {}) };
@@ -2354,13 +2454,9 @@ export const useEditorStore = defineStore("editor", () => {
     const layoutAdjustedPatch = hasPropPatch
       ? syncElLayoutMinHeightPatch(node, mergedPatch, mergedProps || {})
       : mergedPatch;
-    const shouldSyncContainer =
-      node?.type === "ElContainer" && hasPropPatch;
-    const shouldSyncLayout =
-      node?.type === "ElLayout" && hasPropPatch;
-    const shouldSyncLayoutRow =
-      node?.type === "ElLayoutRow" &&
-      hasPropPatch;
+    const shouldSyncContainer = node?.type === "ElContainer" && hasPropPatch;
+    const shouldSyncLayout = node?.type === "ElLayout" && hasPropPatch;
+    const shouldSyncLayoutRow = node?.type === "ElLayoutRow" && hasPropPatch;
     const shouldSyncLayoutRowFromCol =
       node?.type === "ElCol" &&
       hasPropPatch &&
@@ -2383,7 +2479,9 @@ export const useEditorStore = defineStore("editor", () => {
       history.value.beginTransaction();
     }
 
-    history.value.executeInTransaction(new UpdateNodeCommand(nodeId, finalPatch));
+    history.value.executeInTransaction(
+      new UpdateNodeCommand(nodeId, finalPatch),
+    );
     if (shouldSyncContainer) {
       syncElContainerSections(nodeId, mergedProps || {});
     }
@@ -2394,7 +2492,9 @@ export const useEditorStore = defineStore("editor", () => {
       shouldSyncLayoutRow &&
       Object.prototype.hasOwnProperty.call(nextPatch.props || {}, "columns")
     ) {
-      syncElLayoutRowColumns(nodeId, mergedProps || {}, { forceSpanUpdate: true });
+      syncElLayoutRowColumns(nodeId, mergedProps || {}, {
+        forceSpanUpdate: true,
+      });
     }
     if (shouldSyncLayoutRowFromCol) {
       const parentNode = doc.value.getParent(nodeId);
@@ -2412,7 +2512,7 @@ export const useEditorStore = defineStore("editor", () => {
     const executeParentUpdate = (parentId, patch) => {
       if (history.value.isInTransaction?.()) {
         history.value.executeInTransaction(
-          new UpdateNodeCommand(parentId, patch)
+          new UpdateNodeCommand(parentId, patch),
         );
         return;
       }
@@ -2717,7 +2817,7 @@ export const useEditorStore = defineStore("editor", () => {
     const defaultSize = resolveDefaultSize(type, manifest);
     const insertIndex = Number.isInteger(index)
       ? index
-      : parentNode.children?.length ?? 0;
+      : (parentNode.children?.length ?? 0);
 
     const dropPosition = options.dropPosition || { x: 0, y: 0 };
     const dropInfo = {
@@ -2872,39 +2972,42 @@ export const useEditorStore = defineStore("editor", () => {
 
     if (type === "ElContainer") {
       history.value.executeInTransaction(
-        new InsertNodeCommand(parentId, insertIndex, node)
+        new InsertNodeCommand(parentId, insertIndex, node),
       );
       syncElContainerSections(node.id, node.props || {});
     } else if (type === "ElLayout") {
       history.value.executeInTransaction(
-        new InsertNodeCommand(parentId, insertIndex, node)
+        new InsertNodeCommand(parentId, insertIndex, node),
       );
       syncElLayoutRows(node.id, node.props || {});
     } else if (type === "ElLayoutRow") {
       history.value.executeInTransaction(
-        new InsertNodeCommand(parentId, insertIndex, node)
+        new InsertNodeCommand(parentId, insertIndex, node),
       );
       syncElLayoutRowColumns(node.id, node.props || {}, {
         forceSpanUpdate: true,
       });
     } else {
-    const shouldCommit = shouldReplaceRegionChildren && !history.value.isInTransaction?.();
-    if (shouldCommit) {
-      history.value.beginTransaction();
-    }
-    if (shouldReplaceRegionChildren) {
-      const existingChildren = [...(parentNode.children || [])];
-      for (const childId of existingChildren) {
-        history.value.executeInTransaction?.(new RemoveNodeCommand(childId));
-        if (!history.value.executeInTransaction) {
-          history.value.execute(new RemoveNodeCommand(childId));
+      const shouldCommit =
+        shouldReplaceRegionChildren && !history.value.isInTransaction?.();
+      if (shouldCommit) {
+        history.value.beginTransaction();
+      }
+      if (shouldReplaceRegionChildren) {
+        const existingChildren = [...(parentNode.children || [])];
+        for (const childId of existingChildren) {
+          history.value.executeInTransaction?.(new RemoveNodeCommand(childId));
+          if (!history.value.executeInTransaction) {
+            history.value.execute(new RemoveNodeCommand(childId));
+          }
         }
       }
-    }
-    history.value.execute(new InsertNodeCommand(resolvedParentId, insertIndex, node));
-    if (shouldCommit) {
-      history.value.commitTransaction("更新Main区域");
-    }
+      history.value.execute(
+        new InsertNodeCommand(resolvedParentId, insertIndex, node),
+      );
+      if (shouldCommit) {
+        history.value.commitTransaction("更新Main区域");
+      }
     }
 
     if (shouldWrapTransaction) {
@@ -2952,15 +3055,14 @@ export const useEditorStore = defineStore("editor", () => {
       layoutItem: buildFlexLayoutItem(),
     });
 
-    const insertIndex =
-      direction === "left" ? currentIndex : currentIndex + 1;
+    const insertIndex = direction === "left" ? currentIndex : currentIndex + 1;
     const shouldCommit = !history.value.isInTransaction?.();
     if (shouldCommit) {
       history.value.beginTransaction();
     }
 
     history.value.executeInTransaction(
-      new InsertNodeCommand(rowNode.id, insertIndex, childNode)
+      new InsertNodeCommand(rowNode.id, insertIndex, childNode),
     );
     const nextColumns = Math.max(1, colCount + 1);
     updateNode(rowNode.id, {
@@ -3031,7 +3133,7 @@ export const useEditorStore = defineStore("editor", () => {
     }
 
     history.value.executeInTransaction(
-      new InsertNodeCommand(layoutNode.id, insertIndex, rowNode)
+      new InsertNodeCommand(layoutNode.id, insertIndex, rowNode),
     );
     syncElLayoutRowColumns(rowNode.id, rowNode.props || {}, {
       forceSpanUpdate: true,
@@ -3205,8 +3307,7 @@ export const useEditorStore = defineStore("editor", () => {
     const shouldSyncRow = colParentNode?.type === "ElLayoutRow";
     const shouldSyncLayout = rowParentNode?.type === "ElLayout";
     const shouldWrapTransaction =
-      (shouldSyncRow || shouldSyncLayout) &&
-      !history.value.isInTransaction?.();
+      (shouldSyncRow || shouldSyncLayout) && !history.value.isInTransaction?.();
     if (shouldWrapTransaction) {
       history.value.beginTransaction();
     }
@@ -3354,6 +3455,306 @@ export const useEditorStore = defineStore("editor", () => {
     return true;
   };
 
+  /**
+   * 对齐选中元素
+   * @param {'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom'} alignType
+   * @returns {boolean}
+   */
+  const alignElements = (alignType) => {
+    if (!doc.value || !history.value) return false;
+    if (!ensureEditable()) return false;
+    const elements = selection.value?.getSelectedElements?.() || [];
+    if (elements.length < 2) return false;
+    history.value.execute(new AlignElementsCommand(elements, alignType));
+    return true;
+  };
+
+  /**
+   * 等距分布选中元素
+   * @param {'horizontal' | 'vertical'} direction
+   * @returns {boolean}
+   */
+  const distributeElements = (direction) => {
+    if (!doc.value || !history.value) return false;
+    if (!ensureEditable()) return false;
+    const elements = selection.value?.getSelectedElements?.() || [];
+    if (elements.length < 3) return false;
+    history.value.execute(new DistributeElementsCommand(elements, direction));
+    return true;
+  };
+
+  /**
+   * 统一选中元素尺寸（以主选中元素为基准）
+   * @param {'width' | 'height' | 'both'} mode
+   * @returns {boolean}
+   */
+  const matchElementSize = (mode) => {
+    if (!doc.value || !history.value) return false;
+    if (!ensureEditable()) return false;
+    const elements = selection.value?.getSelectedElements?.() || [];
+    if (elements.length < 2) return false;
+    const primary = selection.value?.getPrimaryElement?.();
+    if (!primary) return false;
+    history.value.execute(new MatchSizeCommand(elements, mode, primary.id));
+    return true;
+  };
+
+  /**
+   * 按偏移量移动选中的节点（支持方向键 + Shift 微调）
+   * @param {number} dx - 水平偏移
+   * @param {number} dy - 垂直偏移
+   * @returns {boolean}
+   */
+  const moveSelectedByDelta = (dx, dy) => {
+    if (!doc.value || !history.value || !selection.value) return false;
+    if (!ensureEditable()) return false;
+
+    const elements = selection.value.getSelectedElements?.() || [];
+    const nodeElements = elements.filter((el) => el.kind === "node");
+    if (!nodeElements.length) return false;
+
+    const commands = [];
+    for (const el of nodeElements) {
+      const node = doc.value.getNode(el.id);
+      if (!node || node.positioning === "flow") continue;
+
+      const p = node.absolutePos;
+      const a = node.layoutItem?.free?.abs;
+      let patch = null;
+
+      if (
+        p &&
+        (node.positioning === "absolute" ||
+          Number.isFinite(p.x) ||
+          Number.isFinite(p.y))
+      ) {
+        const newX = (Number.isFinite(p.x) ? p.x : 0) + dx;
+        const newY = (Number.isFinite(p.y) ? p.y : 0) + dy;
+        patch = { absolutePos: { ...p, x: newX, y: newY } };
+      } else if (a) {
+        const newX = (Number.isFinite(a.x) ? a.x : 0) + dx;
+        const newY = (Number.isFinite(a.y) ? a.y : 0) + dy;
+        const nextLayoutItem = JSON.parse(
+          JSON.stringify(node.layoutItem || {}),
+        );
+        if (!nextLayoutItem.free) nextLayoutItem.free = {};
+        if (!nextLayoutItem.free.abs) nextLayoutItem.free.abs = {};
+        nextLayoutItem.free.abs = {
+          ...nextLayoutItem.free.abs,
+          x: newX,
+          y: newY,
+        };
+        patch = { layoutItem: nextLayoutItem };
+      } else if (node.style) {
+        const left = typeof node.style.left === "number" ? node.style.left : 0;
+        const top = typeof node.style.top === "number" ? node.style.top : 0;
+        patch = { style: { ...node.style, left: left + dx, top: top + dy } };
+      }
+
+      if (patch) {
+        commands.push(new UpdateNodeCommand(el.id, patch));
+      }
+    }
+
+    if (!commands.length) return false;
+    history.value.execute(new BatchCommand(commands, "移动选中节点"));
+    return true;
+  };
+
+  /** @type {import('vue').Ref<Array|null>} 内存剪贴板 */
+  const _clipboard = ref(null);
+
+  /** 剪贴板是否有内容 */
+  const hasClipboard = computed(() => !!_clipboard.value?.length);
+
+  /**
+   * 复制选中元素到内存剪贴板
+   * @returns {boolean}
+   */
+  const copyNodes = () => {
+    if (!doc.value || !selection.value) return false;
+    const elements = selection.value.getSelectedElements?.() || [];
+    if (!elements.length) return false;
+
+    const snapshots = [];
+    for (const el of elements) {
+      if (el.kind === "node") {
+        const node = doc.value.getNode(el.id);
+        if (node)
+          snapshots.push({
+            kind: "node",
+            data: JSON.parse(JSON.stringify(node)),
+          });
+      } else if (el.kind === "graphic") {
+        const graphic = doc.value.getGraphic(el.id);
+        if (graphic)
+          snapshots.push({
+            kind: "graphic",
+            data: JSON.parse(JSON.stringify(graphic)),
+          });
+      }
+    }
+    if (!snapshots.length) return false;
+    _clipboard.value = snapshots;
+    return true;
+  };
+
+  /**
+   * 从节点数据获取包围盒（用于计算粘贴偏移）
+   * @param {Object} node - 节点数据
+   * @returns {{ x: number, y: number, w: number, h: number } | null}
+   */
+  const getNodeBoundsFromData = (node) => {
+    if (!node) return null;
+    const p = node.absolutePos;
+    const a = node.layoutItem?.free?.abs;
+    if (
+      p &&
+      (node.positioning === "absolute" ||
+        Number.isFinite(p.x) ||
+        Number.isFinite(p.y))
+    ) {
+      return {
+        x: Number.isFinite(p.x) ? p.x : 0,
+        y: Number.isFinite(p.y) ? p.y : 0,
+        w: Number.isFinite(p.w) ? p.w : 100,
+        h: Number.isFinite(p.h) ? p.h : 100,
+      };
+    }
+    if (a) {
+      return {
+        x: Number.isFinite(a.x) ? a.x : 0,
+        y: Number.isFinite(a.y) ? a.y : 0,
+        w: Number.isFinite(a.w) ? a.w : 100,
+        h: Number.isFinite(a.h) ? a.h : 100,
+      };
+    }
+    return {
+      x: typeof node.style?.left === "number" ? node.style.left : 0,
+      y: typeof node.style?.top === "number" ? node.style.top : 0,
+      w: node.style?.width ?? 100,
+      h: node.style?.height ?? 100,
+    };
+  };
+
+  /**
+   * 将偏移应用到节点数据的位置
+   * @param {Object} node - 节点数据（会被修改）
+   * @param {number} dx - 水平偏移
+   * @param {number} dy - 垂直偏移
+   */
+  const applyOffsetToNodeData = (node, dx, dy) => {
+    const p = node.absolutePos;
+    const a = node.layoutItem?.free?.abs;
+    if (
+      p &&
+      (node.positioning === "absolute" ||
+        Number.isFinite(p.x) ||
+        Number.isFinite(p.y))
+    ) {
+      node.absolutePos = {
+        ...p,
+        x: (Number.isFinite(p.x) ? p.x : 0) + dx,
+        y: (Number.isFinite(p.y) ? p.y : 0) + dy,
+      };
+    } else if (a) {
+      const next = JSON.parse(JSON.stringify(node.layoutItem || {}));
+      if (!next.free) next.free = {};
+      if (!next.free.abs) next.free.abs = {};
+      next.free.abs = {
+        ...next.free.abs,
+        x: (Number.isFinite(a.x) ? a.x : 0) + dx,
+        y: (Number.isFinite(a.y) ? a.y : 0) + dy,
+      };
+      node.layoutItem = next;
+    } else if (node.style) {
+      node.style = {
+        ...node.style,
+        left: (typeof node.style.left === "number" ? node.style.left : 0) + dx,
+        top: (typeof node.style.top === "number" ? node.style.top : 0) + dy,
+      };
+    }
+  };
+
+  /**
+   * 从剪贴板粘贴元素
+   * @param {{ x: number, y: number } | null} [targetPos=null] - 画布坐标，粘贴到该位置（包围盒中心对齐）；null 时使用默认 20px 偏移
+   * @returns {boolean}
+   */
+  const pasteNodes = (targetPos = null) => {
+    if (!doc.value || !history.value || !_clipboard.value?.length) return false;
+    if (!ensureEditable()) return false;
+
+    const rootId = currentPage.value?.rootNodeId;
+    if (!rootId) return false;
+
+    const nodeItems = _clipboard.value.filter((item) => item.kind === "node");
+    let offset = { x: 20, y: 20 };
+
+    if (targetPos && nodeItems.length > 0) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const item of nodeItems) {
+        const b = getNodeBoundsFromData(item.data);
+        if (b) {
+          minX = Math.min(minX, b.x);
+          minY = Math.min(minY, b.y);
+          maxX = Math.max(maxX, b.x + b.w);
+          maxY = Math.max(maxY, b.y + b.h);
+        }
+      }
+      if (Number.isFinite(minX) && Number.isFinite(minY)) {
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        offset = { x: targetPos.x - centerX, y: targetPos.y - centerY };
+      }
+    }
+
+    for (const item of _clipboard.value) {
+      if (item.kind === "node") {
+        const sourceId = item.data.id;
+        const existsInDoc = !!doc.value.getNode(sourceId);
+        if (existsInDoc) {
+          history.value.execute(
+            new DuplicateNodeCommand(sourceId, undefined, offset),
+          );
+        } else {
+          const cloned = JSON.parse(JSON.stringify(item.data));
+          cloned.id = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
+          applyOffsetToNodeData(cloned, offset.x, offset.y);
+          history.value.execute(new InsertNodeCommand(rootId, -1, cloned));
+        }
+      }
+    }
+    return true;
+  };
+
+  /**
+   * 复制选中元素（复制 + 粘贴一步完成）
+   * @returns {boolean}
+   */
+  const duplicateNodes = () => {
+    if (!doc.value || !history.value || !selection.value) return false;
+    if (!ensureEditable()) return false;
+
+    const elements = selection.value.getSelectedElements?.() || [];
+    const nodeIds = elements
+      .filter((el) => el.kind === "node")
+      .map((el) => el.id);
+    if (!nodeIds.length) return false;
+
+    const rootId = currentPage.value?.rootNodeId;
+    for (const nodeId of nodeIds) {
+      if (nodeId === rootId) continue;
+      history.value.execute(
+        new DuplicateNodeCommand(nodeId, undefined, { x: 20, y: 20 }),
+      );
+    }
+    return true;
+  };
+
   return {
     doc,
     docVersion,
@@ -3426,6 +3827,14 @@ export const useEditorStore = defineStore("editor", () => {
     ensureEditable,
     buildNewPageSchema,
     createPageSchemaPayload,
+    alignElements,
+    distributeElements,
+    matchElementSize,
+    moveSelectedByDelta,
+    hasClipboard,
+    copyNodes,
+    pasteNodes,
+    duplicateNodes,
   };
 });
 

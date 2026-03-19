@@ -573,35 +573,35 @@ registerManifest({
       type: "object",
       label: "XS (<768px)",
       group: "响应式",
-      placeholder: "4 或 {\"span\":4,\"offset\":4}",
+      placeholder: '4 或 {"span":4,"offset":4}',
     },
     {
       name: "sm",
       type: "object",
       label: "SM (≥768px)",
       group: "响应式",
-      placeholder: "4 或 {\"span\":4,\"offset\":4}",
+      placeholder: '4 或 {"span":4,"offset":4}',
     },
     {
       name: "md",
       type: "object",
       label: "MD (≥992px)",
       group: "响应式",
-      placeholder: "4 或 {\"span\":4,\"offset\":4}",
+      placeholder: '4 或 {"span":4,"offset":4}',
     },
     {
       name: "lg",
       type: "object",
       label: "LG (≥1200px)",
       group: "响应式",
-      placeholder: "4 或 {\"span\":4,\"offset\":4}",
+      placeholder: '4 或 {"span":4,"offset":4}',
     },
     {
       name: "xl",
       type: "object",
       label: "XL (≥1920px)",
       group: "响应式",
-      placeholder: "4 或 {\"span\":4,\"offset\":4}",
+      placeholder: '4 或 {"span":4,"offset":4}',
     },
   ],
 });
@@ -1598,10 +1598,7 @@ registerManifest({
       type: "array",
       label: "内容",
       group: "数据",
-      defaultValue: [
-        { label: "内容一" },
-        { label: "内容二" },
-      ],
+      defaultValue: [{ label: "内容一" }, { label: "内容二" }],
     },
   ],
 });
@@ -2022,12 +2019,28 @@ registerManifest({
   events: [
     { name: "click", label: "点击", description: "鼠标点击图表元素触发" },
     { name: "dblclick", label: "双击", description: "鼠标双击图表元素触发" },
-    { name: "mouseover", label: "鼠标移入", description: "鼠标移入图表元素触发" },
-    { name: "mouseout", label: "鼠标移出", description: "鼠标移出图表元素触发" },
-    { name: "mousemove", label: "鼠标移动", description: "鼠标在图表内移动触发" },
+    {
+      name: "mouseover",
+      label: "鼠标移入",
+      description: "鼠标移入图表元素触发",
+    },
+    {
+      name: "mouseout",
+      label: "鼠标移出",
+      description: "鼠标移出图表元素触发",
+    },
+    {
+      name: "mousemove",
+      label: "鼠标移动",
+      description: "鼠标在图表内移动触发",
+    },
     { name: "mousedown", label: "鼠标按下", description: "鼠标按下触发" },
     { name: "mouseup", label: "鼠标抬起", description: "鼠标抬起触发" },
-    { name: "legendselectchanged", label: "图例切换", description: "图例选择变化触发" },
+    {
+      name: "legendselectchanged",
+      label: "图例切换",
+      description: "图例选择变化触发",
+    },
     { name: "datazoom", label: "缩放", description: "数据缩放触发" },
     { name: "brushselected", label: "刷选", description: "刷选触发" },
     { name: "finished", label: "渲染完成", description: "渲染完成触发" },
@@ -2093,64 +2106,64 @@ return option;
 //   yAxis: { type: "value" },
 //   series: [{ type: "line", areaStyle: {}, data: [820, 932, 901, 934, 1290, 1330, 1320] }],
 // };
-// return option;`
-// 雷达图模板
-// const option = {
-//   title: { text: "雷达图" },
-//   tooltip: {},
-//   legend: { data: ["预算分配", "实际开销"] },
-//   radar: {
-//     indicator: [
-//       { name: "销售", max: 6500 },
-//       { name: "管理", max: 16000 },
-//       { name: "技术", max: 30000 },
-//       { name: "客服", max: 38000 },
-//       { name: "研发", max: 52000 },
-//       { name: "市场", max: 25000 },
-//     ],
-//   },
-//   series: [
-//     {
-//       type: "radar",
-//       data: [
-//         { value: [4300, 10000, 28000, 35000, 50000, 19000], name: "预算分配" },
-//         { value: [5000, 14000, 28000, 31000, 42000, 21000], name: "实际开销" },
-//       ],
-//     },
-//   ],
-// };
-// return option;
+// return option;`,
+      // 雷达图模板
+      // const option = {
+      //   title: { text: "雷达图" },
+      //   tooltip: {},
+      //   legend: { data: ["预算分配", "实际开销"] },
+      //   radar: {
+      //     indicator: [
+      //       { name: "销售", max: 6500 },
+      //       { name: "管理", max: 16000 },
+      //       { name: "技术", max: 30000 },
+      //       { name: "客服", max: 38000 },
+      //       { name: "研发", max: 52000 },
+      //       { name: "市场", max: 25000 },
+      //     ],
+      //   },
+      //   series: [
+      //     {
+      //       type: "radar",
+      //       data: [
+      //         { value: [4300, 10000, 28000, 35000, 50000, 19000], name: "预算分配" },
+      //         { value: [5000, 14000, 28000, 31000, 42000, 21000], name: "实际开销" },
+      //       ],
+      //     },
+      //   ],
+      // };
+      // return option;
 
-// 散点图模板
-// const option = {
-//   title: { text: "散点图" },
-//   tooltip: { trigger: "item" },
-//   xAxis: {},
-//   yAxis: {},
-//   series: [
-//     {
-//       type: "scatter",
-//       data: [
-//         [10, 8], [15, 12], [18, 16], [20, 6], [25, 18], [30, 14],
-//       ],
-//     },
-//   ],
-// };
-// return option;
+      // 散点图模板
+      // const option = {
+      //   title: { text: "散点图" },
+      //   tooltip: { trigger: "item" },
+      //   xAxis: {},
+      //   yAxis: {},
+      //   series: [
+      //     {
+      //       type: "scatter",
+      //       data: [
+      //         [10, 8], [15, 12], [18, 16], [20, 6], [25, 18], [30, 14],
+      //       ],
+      //     },
+      //   ],
+      // };
+      // return option;
 
-// 仪表盘模板
-// const option = {
-//   title: { text: "仪表盘" },
-//   series: [
-//     {
-//       type: "gauge",
-//       progress: { show: true },
-//       detail: { valueAnimation: true, formatter: "{value}%" },
-//       data: [{ value: 70, name: "完成率" }],
-//     },
-//   ],
-// };
-// return option;`',
+      // 仪表盘模板
+      // const option = {
+      //   title: { text: "仪表盘" },
+      //   series: [
+      //     {
+      //       type: "gauge",
+      //       progress: { show: true },
+      //       detail: { valueAnimation: true, formatter: "{value}%" },
+      //       data: [{ value: 70, name: "完成率" }],
+      //     },
+      //   ],
+      // };
+      // return option;`',
     },
   ],
 });

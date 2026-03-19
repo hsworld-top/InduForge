@@ -1,4 +1,8 @@
-﻿<template>
+<!--
+  DatapointPanel - 数据点/变量面板
+  管理数据点与变量（树形展示），支持快速添加、导入导出、右键菜单
+-->
+<template>
   <div class="global-vars">
     <div class="toolbar">
       <el-button
@@ -466,16 +470,16 @@ const quickPageSize = ref(200);
 const quickTotal = ref(0);
 
 const isEditorType = computed(() =>
-  ["function", "array", "object", "set", "map"].includes(editType.value)
+  ["function", "array", "object", "set", "map"].includes(editType.value),
 );
 const isStructuredType = computed(() =>
-  ["array", "object", "set", "map"].includes(editType.value)
+  ["array", "object", "set", "map"].includes(editType.value),
 );
 const editorLanguage = computed(() =>
-  isStructuredType.value ? "json" : "javascript"
+  isStructuredType.value ? "json" : "javascript",
 );
 const isTextType = computed(() =>
-  ["string", "regexp"].includes(editType.value)
+  ["string", "regexp"].includes(editType.value),
 );
 
 const groupOptions = computed(() => projectVariableGroups.value || []);
@@ -484,7 +488,7 @@ const groupParentOptions = computed(() => {
   if (!groupEditMode.value) return groupOptions.value;
   return groupOptions.value.filter(
     (group) =>
-      group.id !== groupId.value && !isDescendantGroup(group.id, groupId.value)
+      group.id !== groupId.value && !isDescendantGroup(group.id, groupId.value),
   );
 });
 
@@ -500,7 +504,7 @@ const selectedGroup = computed(() => {
   if (selectedNode.value?.type !== "group") return null;
   return (
     projectVariableGroups.value?.find(
-      (group) => group.id === selectedNode.value.id
+      (group) => group.id === selectedNode.value.id,
     ) || null
   );
 });
@@ -515,7 +519,7 @@ const selectedGroupId = computed(() => {
 });
 
 const variableTree = computed(() =>
-  buildTree(projectVariableGroups.value || [], projectVariables.value || {})
+  buildTree(projectVariableGroups.value || [], projectVariables.value || {}),
 );
 
 const contextMenuStyle = computed(() => ({
@@ -542,12 +546,12 @@ const availableGroups = computed(() => {
   if (!current || current.type !== "group") return groups;
   return groups.filter(
     (group) =>
-      group.id !== current.id && !isDescendantGroup(group.id, current.id)
+      group.id !== current.id && !isDescendantGroup(group.id, current.id),
   );
 });
 
 const canEditSelection = computed(
-  () => selectedNodes.value.length === 0 || selectedNodes.value.length === 1
+  () => selectedNodes.value.length === 0 || selectedNodes.value.length === 1,
 );
 
 const canDeleteSelection = computed(() => {
@@ -615,7 +619,7 @@ function handleNodeClick(data, event) {
   if (isCtrl) {
     if (isNodeSelected(data)) {
       selectedNodes.value = selectedNodes.value.filter(
-        (node) => node.id !== data.id
+        (node) => node.id !== data.id,
       );
     } else {
       selectedNodes.value = [...selectedNodes.value, data];
@@ -729,7 +733,7 @@ function handleMoveTo(groupIdValue) {
         return;
       }
       nextGroups = nextGroups.map((group) =>
-        group.id === item.id ? { ...group, parentId: groupIdValue } : group
+        group.id === item.id ? { ...group, parentId: groupIdValue } : group,
       );
     }
   });
@@ -793,7 +797,7 @@ function handleNodeDrop(draggingNode, dropNode, dropType) {
   if (dragData.type === "group") {
     const groups = projectVariableGroups.value || [];
     projectVariableGroups.value = groups.map((group) =>
-      group.id === dragData.id ? { ...group, parentId: targetGroupId } : group
+      group.id === dragData.id ? { ...group, parentId: targetGroupId } : group,
     );
     persistProjectGlobals();
   }
@@ -1030,7 +1034,7 @@ async function openEdit() {
     const [dsName, ...rest] = String(path).split(".");
     mappedField.value = path;
     mappedSourceLabel.value = getDatapointSourceLabel(
-      selectedVariable.value.detail?.source?.sourceType || ""
+      selectedVariable.value.detail?.source?.sourceType || "",
     );
   } else {
     mappedField.value = "";
@@ -1151,7 +1155,7 @@ async function removeVar() {
       .map((group) =>
         groupsToRemove.includes(group.parentId)
           ? { ...group, parentId: parentMap.get(group.parentId) || null }
-          : group
+          : group,
       );
 
     Object.entries(nextVariables).forEach(([name, detail]) => {
@@ -1276,7 +1280,7 @@ async function saveGroup() {
   const groups = projectVariableGroups.value || [];
   if (groupEditMode.value) {
     projectVariableGroups.value = groups.map((group) =>
-      group.id === groupId.value ? { ...group, name, parentId } : group
+      group.id === groupId.value ? { ...group, name, parentId } : group,
     );
   } else {
     projectVariableGroups.value = [
@@ -1372,8 +1376,8 @@ async function loadDatapoints() {
 
 const filteredFields = computed(() =>
   fields.value.filter((field) =>
-    field.name.toLowerCase().includes(searchKey.value.toLowerCase())
-  )
+    field.name.toLowerCase().includes(searchKey.value.toLowerCase()),
+  ),
 );
 
 const handleQuickPageChange = (page) => {
@@ -1478,7 +1482,8 @@ const ensureGroupPath = (groups, path) => {
   let parentId = null;
   segments.forEach((segment) => {
     let match = groups.find(
-      (group) => group.name === segment && (group.parentId || null) === parentId
+      (group) =>
+        group.name === segment && (group.parentId || null) === parentId,
     );
     if (!match) {
       match = { id: createId(), name: segment, parentId, sortOrder: 0 };
@@ -1587,7 +1592,7 @@ const handleExport = async (format) => {
     downloadBlob(
       JSON.stringify(payload, null, 2),
       "project-variables.json",
-      "application/json"
+      "application/json",
     );
     return;
   }
@@ -1604,7 +1609,7 @@ const handleExport = async (format) => {
   downloadBlob(
     buffer,
     "project-variables.xlsx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
 };
 
@@ -1627,8 +1632,10 @@ const decodeTextBuffer = (raw) => {
       bytes[0] === 0xef &&
       bytes[1] === 0xbb &&
       bytes[2] === 0xbf;
-    const hasUtf16LeBom = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
-    const hasUtf16BeBom = bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff;
+    const hasUtf16LeBom =
+      bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
+    const hasUtf16BeBom =
+      bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff;
     const tryDecode = (encoding) => {
       try {
         return new TextDecoder(encoding, { fatal: false }).decode(raw);
@@ -1679,7 +1686,7 @@ const handleFileChange = async (event) => {
       ) {
         await mergeImportedDefinitions(
           data.definitions || {},
-          data.groups || []
+          data.groups || [],
         );
         return;
       }
@@ -1700,7 +1707,7 @@ const handleFileChange = async (event) => {
         ) {
           await mergeImportedDefinitions(
             data.definitions || {},
-            data.groups || []
+            data.groups || [],
           );
           return;
         }
@@ -1738,7 +1745,7 @@ const handleEditValueMarkers = (markers) => {
     return;
   }
   editValueHasErrors.value = (markers || []).some(
-    (marker) => marker.severity === 8
+    (marker) => marker.severity === 8,
   );
 };
 

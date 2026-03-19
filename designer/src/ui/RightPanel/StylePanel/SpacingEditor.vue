@@ -1,3 +1,7 @@
+<!--
+  SpacingEditor - 间距编辑器
+  编辑 padding 或 margin（上右下左）
+-->
 <template>
   <div class="spacing-editor">
     <div class="editor-group-title">{{ title }}</div>
@@ -77,24 +81,42 @@ const parseValue = (value) => {
 };
 
 const top = computed(() => parseValue(props.modelValue[`${props.prefix}Top`]));
-const right = computed(() => parseValue(props.modelValue[`${props.prefix}Right`]));
-const bottom = computed(() => parseValue(props.modelValue[`${props.prefix}Bottom`]));
-const left = computed(() => parseValue(props.modelValue[`${props.prefix}Left`]));
+const right = computed(() =>
+  parseValue(props.modelValue[`${props.prefix}Right`]),
+);
+const bottom = computed(() =>
+  parseValue(props.modelValue[`${props.prefix}Bottom`]),
+);
+const left = computed(() =>
+  parseValue(props.modelValue[`${props.prefix}Left`]),
+);
 
 const handleTopChange = (value) => {
-  emit("update:modelValue", { ...props.modelValue, [`${props.prefix}Top`]: value });
+  emit("update:modelValue", {
+    ...props.modelValue,
+    [`${props.prefix}Top`]: value,
+  });
 };
 
 const handleRightChange = (value) => {
-  emit("update:modelValue", { ...props.modelValue, [`${props.prefix}Right`]: value });
+  emit("update:modelValue", {
+    ...props.modelValue,
+    [`${props.prefix}Right`]: value,
+  });
 };
 
 const handleBottomChange = (value) => {
-  emit("update:modelValue", { ...props.modelValue, [`${props.prefix}Bottom`]: value });
+  emit("update:modelValue", {
+    ...props.modelValue,
+    [`${props.prefix}Bottom`]: value,
+  });
 };
 
 const handleLeftChange = (value) => {
-  emit("update:modelValue", { ...props.modelValue, [`${props.prefix}Left`]: value });
+  emit("update:modelValue", {
+    ...props.modelValue,
+    [`${props.prefix}Left`]: value,
+  });
 };
 </script>
 

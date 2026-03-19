@@ -1,3 +1,7 @@
+<!--
+  Diagram2D - 2D 流程图组件
+  Canvas 矢量绘图，双击进入编辑模式，支持线、矩形、圆等图元
+-->
 <template>
   <div
     class="diagram-2d-component"
@@ -20,9 +24,7 @@
     </div>
 
     <!-- 图元数量提示 -->
-    <div v-else class="shape-count-badge">
-      {{ shapeCount }} 个图元
-    </div>
+    <div v-else class="shape-count-badge">{{ shapeCount }} 个图元</div>
   </div>
 </template>
 
@@ -70,7 +72,7 @@ const shapeCount = computed(() => {
  */
 const componentStyle = computed(() => {
   const { background, showGrid, gridSize } = props.node.props || {};
-  
+
   const style = {
     background: background || "#ffffff",
   };
@@ -124,7 +126,7 @@ const renderShapes = () => {
   const shapes = diagramData.value.shapes || [];
   for (const shape of shapes) {
     if (shape.hidden) continue;
-    
+
     // TODO: 根据图元类型渲染
     ctx.save();
     ctx.fillStyle = shape.style?.fill || "#cccccc";
@@ -137,13 +139,13 @@ const renderShapes = () => {
           shape.data.x,
           shape.data.y,
           shape.data.width,
-          shape.data.height
+          shape.data.height,
         );
         ctx.strokeRect(
           shape.data.x,
           shape.data.y,
           shape.data.width,
-          shape.data.height
+          shape.data.height,
         );
         break;
       case "circle":
@@ -153,7 +155,7 @@ const renderShapes = () => {
           shape.data.cy,
           shape.data.radius,
           0,
-          2 * Math.PI
+          2 * Math.PI,
         );
         ctx.fill();
         ctx.stroke();

@@ -1,3 +1,7 @@
+<!--
+  BackgroundEditor - 背景样式编辑器
+  编辑背景颜色（含透明度）
+-->
 <template>
   <div class="background-editor">
     <div class="editor-group-title">背景</div>

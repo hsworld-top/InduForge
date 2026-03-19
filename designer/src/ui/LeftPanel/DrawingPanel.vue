@@ -1,3 +1,7 @@
+<!--
+  DrawingPanel - 绘图工具面板
+  提供线、矩形、圆形、多边形、管道、文字等绘图工具选择，含符号库
+-->
 <template>
   <div class="flex flex-col gap-3">
     <div class="flex flex-wrap gap-2">

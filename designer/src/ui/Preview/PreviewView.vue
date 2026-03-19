@@ -1,4 +1,8 @@
-﻿<template>
+<!--
+  PreviewView - 预览视图
+  预览模式主界面：返回编辑、视图预设、刷新、NodeRenderer 只读渲染
+-->
+<template>
   <div class="flex flex-col h-screen bg-gray-100 dark:bg-gray-900">
     <!-- 工具栏 -->
     <header

@@ -1,3 +1,7 @@
+<!--
+  CanvasContainer - 画布容器
+  提供标尺、缩放、平移、画布尺寸、DesignCanvas 挂载
+-->
 <template>
   <main
     class="canvas-container"
@@ -43,7 +47,10 @@
       </div>
     </div>
     <div class="canvas-wrapper" ref="wrapperRef">
-      <div class="canvas-scroll-content" :style="[scrollContentStyle, workbenchStyle]">
+      <div
+        class="canvas-scroll-content"
+        :style="[scrollContentStyle, workbenchStyle]"
+      >
         <div
           class="canvas"
           ref="canvasRef"
@@ -91,7 +98,15 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, provide, ref, toRefs, watch } from "vue";
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  provide,
+  ref,
+  toRefs,
+  watch,
+} from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { useDragState, endDrag } from "./use-drag-state";
@@ -128,8 +143,15 @@ const containerRef = ref(null);
 const wrapperRef = ref(null);
 const canvasRef = ref(null);
 const editorStore = useEditorStore();
-const { doc, history, selection, pages, currentPageId, currentPage, docVersion } =
-  storeToRefs(editorStore);
+const {
+  doc,
+  history,
+  selection,
+  pages,
+  currentPageId,
+  currentPage,
+  docVersion,
+} = storeToRefs(editorStore);
 const dragState = useDragState();
 const minorStep = 10;
 const majorStep = 100;
@@ -162,7 +184,7 @@ watch(
       rowInsertSnapshot.value = null;
       layoutInsertSnapshot.value = null;
     }
-  }
+  },
 );
 
 /**
@@ -200,11 +222,11 @@ const handleNodeTransform = (event) => {
   const y = Number(event.detail.y) || 0;
   pointerX.value = Math.min(
     Math.max(0, x * zoom.value + translateX.value + rulerInset.value),
-    rect.width
+    rect.width,
   );
   pointerY.value = Math.min(
     Math.max(0, y * zoom.value + translateY.value + rulerInset.value),
-    rect.height
+    rect.height,
   );
   isNodeTransforming.value = true;
 };
@@ -266,13 +288,13 @@ const translateX = ref(0);
 const translateY = ref(0);
 const rulerInset = computed(() => (props.showRuler ? rulerSize : 0));
 const showWorkbenchGrid = computed(() =>
-  Boolean(currentPageSnapshot.value?.config?.showGrid)
+  Boolean(currentPageSnapshot.value?.config?.showGrid),
 );
 const pointerXOnRuler = computed(() =>
-  Math.max(0, pointerX.value - rulerInset.value)
+  Math.max(0, pointerX.value - rulerInset.value),
 );
 const pointerYOnRuler = computed(() =>
-  Math.max(0, pointerY.value - rulerInset.value)
+  Math.max(0, pointerY.value - rulerInset.value),
 );
 
 /**
@@ -280,10 +302,13 @@ const pointerYOnRuler = computed(() =>
  * 页面不贴左上，并在可视区有安全边距，首屏视觉更聚焦页面
  */
 const applyDefaultPagePlacement = () => {
-  const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
+  const viewportWidth = Math.max(
+    0,
+    (containerSize.value.width || 0) - rulerInset.value,
+  );
   const viewportHeight = Math.max(
     0,
-    (containerSize.value.height || 0) - rulerInset.value
+    (containerSize.value.height || 0) - rulerInset.value,
   );
   if (!viewportWidth || !viewportHeight) return;
 
@@ -291,11 +316,17 @@ const applyDefaultPagePlacement = () => {
   const scaledHeight = height.value * zoom.value;
   const nextTranslateX =
     scaledWidth + defaultPageMarginX * 2 <= viewportWidth
-      ? Math.round(defaultPageMarginX + (viewportWidth - scaledWidth - defaultPageMarginX * 2) / 2)
+      ? Math.round(
+          defaultPageMarginX +
+            (viewportWidth - scaledWidth - defaultPageMarginX * 2) / 2,
+        )
       : Math.max(0, Math.round((viewportWidth - scaledWidth) / 2));
   const nextTranslateY =
     scaledHeight + defaultPageMarginY * 2 <= viewportHeight
-      ? Math.round(defaultPageMarginY + (viewportHeight - scaledHeight - defaultPageMarginY * 2) / 2)
+      ? Math.round(
+          defaultPageMarginY +
+            (viewportHeight - scaledHeight - defaultPageMarginY * 2) / 2,
+        )
       : Math.max(0, Math.round((viewportHeight - scaledHeight) / 2));
 
   translateX.value = nextTranslateX;
@@ -308,10 +339,13 @@ const applyDefaultPagePlacement = () => {
  * @param {number} nextZoom - 新缩放值
  */
 const keepViewportCenterStableOnZoom = (prevZoom, nextZoom) => {
-  const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
+  const viewportWidth = Math.max(
+    0,
+    (containerSize.value.width || 0) - rulerInset.value,
+  );
   const viewportHeight = Math.max(
     0,
-    (containerSize.value.height || 0) - rulerInset.value
+    (containerSize.value.height || 0) - rulerInset.value,
   );
   if (!viewportWidth || !viewportHeight) return;
   if (!prevZoom || !nextZoom || prevZoom === nextZoom) return;
@@ -322,10 +356,10 @@ const keepViewportCenterStableOnZoom = (prevZoom, nextZoom) => {
   const canvasY = (centerY - rulerInset.value - translateY.value) / prevZoom;
 
   translateX.value = Math.round(
-    centerX - rulerInset.value - canvasX * nextZoom
+    centerX - rulerInset.value - canvasX * nextZoom,
   );
   translateY.value = Math.round(
-    centerY - rulerInset.value - canvasY * nextZoom
+    centerY - rulerInset.value - canvasY * nextZoom,
   );
 };
 
@@ -347,7 +381,7 @@ watch(
   (nextZoom, prevZoom) => {
     if (!Number.isFinite(nextZoom) || !Number.isFinite(prevZoom)) return;
     keepViewportCenterStableOnZoom(prevZoom, nextZoom);
-  }
+  },
 );
 
 watch(
@@ -357,22 +391,27 @@ watch(
     const delta = prevInset - nextInset;
     translateX.value += delta;
     translateY.value += delta;
-  }
+  },
 );
 
 watch(
-  [() => rootNodeId.value, () => width.value, () => height.value, () => props.viewResetToken],
+  [
+    () => rootNodeId.value,
+    () => width.value,
+    () => height.value,
+    () => props.viewResetToken,
+  ],
   () => {
     applyDefaultPagePlacement();
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
   () => [containerSize.value.width, containerSize.value.height],
   () => {
     applyDefaultPagePlacement();
-  }
+  },
 );
 
 const canvasStyle = computed(() => {
@@ -435,19 +474,22 @@ const canvasStyle = computed(() => {
 const scrollContentStyle = computed(() => {
   const scaledWidth = width.value * zoom.value;
   const scaledHeight = height.value * zoom.value;
-  const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
+  const viewportWidth = Math.max(
+    0,
+    (containerSize.value.width || 0) - rulerInset.value,
+  );
   const viewportHeight = Math.max(
     0,
-    (containerSize.value.height || 0) - rulerInset.value
+    (containerSize.value.height || 0) - rulerInset.value,
   );
   // 右/下编辑扩展区保持“可编辑但不过度”，避免滚动后空白区域喧宾夺主
   const workspaceExtraRight = Math.max(
     24,
-    Math.min(68, Math.round(viewportWidth * 0.09))
+    Math.min(68, Math.round(viewportWidth * 0.09)),
   );
   const workspaceExtraBottom = Math.max(
     28,
-    Math.min(76, Math.round(viewportHeight * 0.1))
+    Math.min(76, Math.round(viewportHeight * 0.1)),
   );
   const coverageX = scaledWidth / Math.max(1, viewportWidth);
   const coverageY = scaledHeight / Math.max(1, viewportHeight);
@@ -477,14 +519,8 @@ const scrollContentStyle = computed(() => {
           ? Math.round(workspaceExtraBottom * 0.28)
           : workspaceExtraBottom;
   return {
-    width: `${Math.max(
-      minWidth,
-      baseWidth + effectiveExtraRight
-    )}px`,
-    height: `${Math.max(
-      minHeight,
-      baseHeight + effectiveExtraBottom
-    )}px`,
+    width: `${Math.max(minWidth, baseWidth + effectiveExtraRight)}px`,
+    height: `${Math.max(minHeight, baseHeight + effectiveExtraBottom)}px`,
   };
 });
 
@@ -673,7 +709,7 @@ const resolveLayoutInsertTarget = (event) => {
   for (const hit of hitList) {
     if (!(hit instanceof Element)) continue;
     const layoutElement = hit.closest?.(
-      '[data-node-type="ElLayout"][data-node-id]'
+      '[data-node-type="ElLayout"][data-node-id]',
     );
     if (!layoutElement) continue;
     const layoutId = layoutElement.getAttribute("data-node-id");
@@ -690,7 +726,7 @@ const resolveLayoutInsertTarget = (event) => {
     for (let i = 0; i < rowIds.length; i += 1) {
       const rowId = rowIds[i];
       const rowElement = layoutElement.querySelector(
-        `[data-node-id="${rowId}"]`
+        `[data-node-id="${rowId}"]`,
       );
       if (!rowElement) continue;
       const rect = rowElement.getBoundingClientRect?.();
@@ -746,7 +782,7 @@ const resolveRowInsertTarget = (event) => {
   const primaryHit = document.elementFromPoint(event.clientX, event.clientY);
   if (primaryHit instanceof Element) {
     const rowElement = primaryHit.closest?.(
-      '[data-node-type="ElLayoutRow"][data-node-id]'
+      '[data-node-type="ElLayoutRow"][data-node-id]',
     );
     if (rowElement) {
       const rowId = rowElement.getAttribute("data-node-id");
@@ -754,7 +790,8 @@ const resolveRowInsertTarget = (event) => {
       const rowRect = rowElement.getBoundingClientRect?.();
       if (rowNode?.type === "ElLayoutRow" && rowRect) {
         const nearLeft = event.clientX - rowRect.left <= colInsertEdgeThreshold;
-        const nearRight = rowRect.right - event.clientX <= colInsertEdgeThreshold;
+        const nearRight =
+          rowRect.right - event.clientX <= colInsertEdgeThreshold;
         if (nearLeft || nearRight) {
           const colIds = (rowNode.children || []).filter((childId) => {
             const childNode = doc.value?.getNode?.(childId);
@@ -774,7 +811,7 @@ const resolveRowInsertTarget = (event) => {
               orientation: "vertical",
               offset: Math.max(
                 0,
-                (nearLeft ? rowRect.left : rowRect.right) - rowRect.left
+                (nearLeft ? rowRect.left : rowRect.right) - rowRect.left,
               ),
             },
           };
@@ -785,9 +822,7 @@ const resolveRowInsertTarget = (event) => {
   const hitList = document.elementsFromPoint(event.clientX, event.clientY);
   for (const hit of hitList) {
     if (!(hit instanceof Element)) continue;
-    const colElement = hit.closest?.(
-      '[data-node-type="ElCol"][data-node-id]'
-    );
+    const colElement = hit.closest?.('[data-node-type="ElCol"][data-node-id]');
     if (!colElement) continue;
     const colId = colElement.getAttribute("data-node-id");
     const colNode = colId ? doc.value.getNode?.(colId) : null;
@@ -824,7 +859,7 @@ const resolveRowInsertTarget = (event) => {
             orientation: "vertical",
             offset: Math.max(
               0,
-              (nearRowLeft ? rowRect.left : rowRect.right) - rowRect.left
+              (nearRowLeft ? rowRect.left : rowRect.right) - rowRect.left,
             ),
           },
         };
@@ -856,7 +891,7 @@ const resolveRowInsertTarget = (event) => {
             orientation: "vertical",
             offset: Math.max(
               0,
-              (nearLeft ? colRect.left : colRect.right) - rowRect.left
+              (nearLeft ? colRect.left : colRect.right) - rowRect.left,
             ),
           }
         : null,
@@ -865,7 +900,7 @@ const resolveRowInsertTarget = (event) => {
   for (const hit of hitList) {
     if (!(hit instanceof Element)) continue;
     const rowElement = hit.closest?.(
-      '[data-node-type="ElLayoutRow"][data-node-id]'
+      '[data-node-type="ElLayoutRow"][data-node-id]',
     );
     if (!rowElement) continue;
     const rowId = rowElement.getAttribute("data-node-id");
@@ -894,7 +929,7 @@ const resolveRowInsertTarget = (event) => {
         orientation: "vertical",
         offset: Math.max(
           0,
-          (nearLeft ? rowRect.left : rowRect.right) - rowRect.left
+          (nearLeft ? rowRect.left : rowRect.right) - rowRect.left,
         ),
       },
     };
@@ -954,10 +989,12 @@ const handleDropWithType = (event, componentType) => {
     const rowNode = editorStore.insertNode(
       "ElLayoutRow",
       layoutInsertTarget.layoutNode.id,
-      layoutInsertTarget.index
+      layoutInsertTarget.index,
     );
     if (rowNode) {
-      const latestLayout = doc.value?.getNode?.(layoutInsertTarget.layoutNode.id);
+      const latestLayout = doc.value?.getNode?.(
+        layoutInsertTarget.layoutNode.id,
+      );
       const rowCount = (latestLayout?.children || []).filter((childId) => {
         const childNode = doc.value?.getNode?.(childId);
         return childNode?.type === "ElLayoutRow";
@@ -997,7 +1034,7 @@ const handleDropWithType = (event, componentType) => {
     const colNode = editorStore.insertNode(
       "ElCol",
       rowInsertTarget.rowNode.id,
-      rowInsertTarget.index
+      rowInsertTarget.index,
     );
     if (colNode) {
       const latestRow = doc.value?.getNode?.(rowInsertTarget.rowNode.id);
@@ -1040,7 +1077,11 @@ const handleDropWithType = (event, componentType) => {
         if (rowInsertTarget?.rowNode?.id === rowNode.id) {
           insertIndex = rowInsertTarget.index;
         }
-        const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
+        const colNode = editorStore.insertNode(
+          "ElCol",
+          rowNode.id,
+          insertIndex,
+        );
         if (colNode) {
           const latestRow = doc.value?.getNode?.(rowNode.id);
           const colCount = (latestRow?.children || []).filter((childId) => {
@@ -1062,12 +1103,11 @@ const handleDropWithType = (event, componentType) => {
     const rowNode = doc.value?.getParent?.(targetNode.id);
     if (rowNode?.type === "ElLayoutRow") {
       const rowElement = document.querySelector(
-        `[data-node-id="${rowNode.id}"]`
+        `[data-node-id="${rowNode.id}"]`,
       );
       const rowRect = rowElement?.getBoundingClientRect?.();
       if (rowRect) {
-        const nearLeft =
-          event.clientX - rowRect.left <= colInsertEdgeThreshold;
+        const nearLeft = event.clientX - rowRect.left <= colInsertEdgeThreshold;
         const nearRight =
           rowRect.right - event.clientX <= colInsertEdgeThreshold;
         if (nearLeft || nearRight) {
@@ -1079,7 +1119,7 @@ const handleDropWithType = (event, componentType) => {
           const colNode = editorStore.insertNode(
             "ElCol",
             rowNode.id,
-            insertIndex
+            insertIndex,
           );
           if (colNode) {
             const latestRow = doc.value?.getNode?.(rowNode.id);
@@ -1125,7 +1165,7 @@ const handleDropWithType = (event, componentType) => {
           const colNode = editorStore.insertNode(
             "ElCol",
             rowNode.id,
-            insertIndex
+            insertIndex,
           );
           if (colNode) {
             const latestRow = doc.value?.getNode?.(rowNode.id);
@@ -1153,7 +1193,7 @@ const handleDropWithType = (event, componentType) => {
     const rowTarget = resolveLayoutRowByPoint(
       targetNode,
       target.element,
-      event
+      event,
     );
     if (rowTarget) {
       insertIntoElLayoutRow(rowTarget, componentType);
@@ -1186,7 +1226,7 @@ const handleDropWithType = (event, componentType) => {
         const colNode = editorStore.insertNode(
           "ElCol",
           targetNode.id,
-          insertIndex
+          insertIndex,
         );
         if (colNode) {
           const latestRow = doc.value?.getNode?.(targetNode.id);
@@ -1282,7 +1322,6 @@ const handleContainerClick = (event) => {
   }
   selection.value?.clearSelection();
 };
-
 
 /**
  * 构建布局配置
@@ -1435,7 +1474,11 @@ const resolveDropTarget = (event, componentType) => {
 
   while (current && current !== canvasRef.value) {
     const nodeId = current.dataset?.nodeId;
-    if (nodeId && isContainerNode(nodeId) && canAcceptChild(nodeId, componentType)) {
+    if (
+      nodeId &&
+      isContainerNode(nodeId) &&
+      canAcceptChild(nodeId, componentType)
+    ) {
       return { nodeId, element: current };
     }
     current = current.parentElement;
@@ -1481,9 +1524,7 @@ const resolveLayoutRowByPoint = (layoutNode, layoutElement, event) => {
   let bestRow = null;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const rowId of rowIds) {
-    const rowElement = layoutElement.querySelector(
-      `[data-node-id="${rowId}"]`
-    );
+    const rowElement = layoutElement.querySelector(`[data-node-id="${rowId}"]`);
     if (!rowElement) continue;
     const rect = rowElement.getBoundingClientRect?.();
     if (!rect) continue;
@@ -1492,7 +1533,7 @@ const resolveLayoutRowByPoint = (layoutNode, layoutElement, event) => {
     }
     const distance = Math.min(
       Math.abs(event.clientY - rect.top),
-      Math.abs(event.clientY - rect.bottom)
+      Math.abs(event.clientY - rect.bottom),
     );
     if (distance < bestDistance) {
       bestDistance = distance;
@@ -1579,7 +1620,10 @@ onMounted(() => {
   window.addEventListener("drop", handleGlobalDrop);
   window.addEventListener("mouseup", handleGlobalMouseUp);
   window.addEventListener("designer:node-transform", handleNodeTransform);
-  window.addEventListener("designer:node-transform-end", handleNodeTransformEnd);
+  window.addEventListener(
+    "designer:node-transform-end",
+    handleNodeTransformEnd,
+  );
   if (containerRef.value && typeof ResizeObserver !== "undefined") {
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -1599,7 +1643,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("designer:node-transform", handleNodeTransform);
   window.removeEventListener(
     "designer:node-transform-end",
-    handleNodeTransformEnd
+    handleNodeTransformEnd,
   );
   if (containerRef.value?.__rulerObserver) {
     containerRef.value.__rulerObserver.disconnect();
@@ -1787,5 +1831,4 @@ onBeforeUnmount(() => {
   transform-origin: left top;
   left: 2px;
 }
-
 </style>

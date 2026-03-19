@@ -1,29 +1,84 @@
+<!--
+  DesignerView - 设计器主视图
+  布局：顶部工具栏 + 左侧工具轨 + 左侧面板（可停靠/浮动）+ 画布区 + 右侧面板
+  功能：页面管理、画布编辑、属性面板、预览、保存、导出等
+-->
 <template>
   <div class="designer-layout">
     <!-- 顶部工具栏 -->
-    <TopToolbar :page-name="pageName" :is-locked="isLocked" :is-dirty="isDirty" :view-presets="viewPresets"
-      :active-view-key="activeViewKey" :canvas-width="canvasWidth" :canvas-height="canvasHeight"
-      :is-custom-view="isCustomView" :can-undo="canUndoEnabled" :can-redo="canRedoEnabled"
-      :can-move-layer="canMoveLayer" :zoom="zoom" :show-ruler="showRuler" :show-grid="showGrid"
-      :enable-snap="enableSnap" :saving="saving" :save-settings="saveSettings"
-      @update:activeViewKey="handleViewChange" @undo="handleUndo" @redo="handleRedo" @preview="handlePreview"
-      @previewApp="handlePreviewApp" @save="handleSave" @export="handleExport" @toggleLock="handleToggleLock"
-      @moveUp="handleLayerMoveUp" @moveDown="handleLayerMoveDown" @moveToTop="handleLayerMoveToTop"
-      @moveToBottom="handleLayerMoveToBottom" @openCollaboration="handleOpenCollaboration"
-      @refreshCanvas="handleRefreshCanvas" @toggleLocale="handleToggleLocale" @openAi="handleOpenAi"
-      @toggleTheme="handleToggleTheme" @clearCanvas="handleClearCanvas" @applyCustomSize="handleApplyCustomSize"
-      @saveSettingsChange="handleSaveSettingsChange" @zoomIn="handleZoomIn" @zoomOut="handleZoomOut"
-      @fitCanvas="handleFitCanvas" @fitScreen="handleFitScreen" @toggleRuler="handleToggleRuler"
-      @toggleGrid="handleToggleGrid" @toggleSnap="handleToggleSnap" />
+    <TopToolbar
+      :page-name="pageName"
+      :is-locked="isLocked"
+      :is-dirty="isDirty"
+      :view-presets="viewPresets"
+      :active-view-key="activeViewKey"
+      :canvas-width="canvasWidth"
+      :canvas-height="canvasHeight"
+      :is-custom-view="isCustomView"
+      :can-undo="canUndoEnabled"
+      :can-redo="canRedoEnabled"
+      :can-move-layer="canMoveLayer"
+      :zoom="zoom"
+      :show-ruler="showRuler"
+      :show-grid="showGrid"
+      :enable-snap="enableSnap"
+      :saving="saving"
+      :save-settings="saveSettings"
+      :has-selection="hasSelection"
+      :has-clipboard="hasClipboard"
+      @update:activeViewKey="handleViewChange"
+      @undo="handleUndo"
+      @redo="handleRedo"
+      @preview="handlePreview"
+      @previewApp="handlePreviewApp"
+      @save="handleSave"
+      @export="handleExport"
+      @toggleLock="handleToggleLock"
+      @moveUp="handleLayerMoveUp"
+      @moveDown="handleLayerMoveDown"
+      @moveToTop="handleLayerMoveToTop"
+      @moveToBottom="handleLayerMoveToBottom"
+      @openCollaboration="handleOpenCollaboration"
+      @refreshCanvas="handleRefreshCanvas"
+      @toggleLocale="handleToggleLocale"
+      @openAi="handleOpenAi"
+      @toggleTheme="handleToggleTheme"
+      @clearCanvas="handleClearCanvas"
+      @applyCustomSize="handleApplyCustomSize"
+      @saveSettingsChange="handleSaveSettingsChange"
+      @zoomIn="handleZoomIn"
+      @zoomOut="handleZoomOut"
+      @fitCanvas="handleFitCanvas"
+      @fitScreen="handleFitScreen"
+      @toggleRuler="handleToggleRuler"
+      @toggleGrid="handleToggleGrid"
+      @toggleSnap="handleToggleSnap"
+      @copy="handleCopy"
+      @paste="handlePaste"
+      @deleteSelected="handleDeleteSelected"
+    />
+
+    <SelectionToolbar v-if="hasSelection && hasPages" />
 
     <!-- 主体区域 -->
     <div class="designer-main">
-      <ToolRail side="left" :items="leftRailItems" :active-key="leftActiveKey" @select="handleLeftSelect" />
+      <ToolRail
+        side="left"
+        :items="leftRailItems"
+        :active-key="leftActiveKey"
+        @select="handleLeftSelect"
+      />
 
       <div class="designer-workspace">
         <div class="designer-workspace-main">
-          <DockPanel v-if="leftActiveKey && !leftFloating" side="left" :title="leftPanelTitle" :floating="leftFloating"
-            @close="handleLeftClose" @toggleFloating="toggleLeftFloating">
+          <DockPanel
+            v-if="leftActiveKey && !leftFloating"
+            side="left"
+            :title="leftPanelTitle"
+            :floating="leftFloating"
+            @close="handleLeftClose"
+            @toggleFloating="toggleLeftFloating"
+          >
             <template #actions>
               <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
                 <el-button size="small" text @click="handlePageCreate">
@@ -36,16 +91,26 @@
                 </el-button>
               </el-tooltip>
             </template>
-            <component :is="leftPanelComponent" :key="`left-panel-${leftActiveKey}`" v-bind="leftPanelProps" ref="leftPanelRef"
-              @update:drawingTool="(value) => (drawingTool.value = value)" />
+            <component
+              :is="leftPanelComponent"
+              :key="`left-panel-${leftActiveKey}`"
+              v-bind="leftPanelProps"
+              ref="leftPanelRef"
+              @update:drawingTool="(value) => (drawingTool.value = value)"
+            />
           </DockPanel>
 
           <div ref="canvasHostRef" class="designer-canvas">
             <!-- 画布容器 -->
             <template v-if="hasPages">
-              <CanvasContainer :width="canvasWidth" :height="canvasHeight" :zoom="zoom" :show-ruler="showRuler"
+              <CanvasContainer
+                :width="canvasWidth"
+                :height="canvasHeight"
+                :zoom="zoom"
+                :show-ruler="showRuler"
                 :view-reset-token="viewResetToken"
-                @zoomChange="handleZoomChange" />
+                @zoomChange="handleZoomChange"
+              />
             </template>
 
             <!-- 空页面提示 -->
@@ -61,8 +126,14 @@
               </div>
             </div>
 
-            <DockPanel v-if="leftActiveKey && leftFloating" side="left" :title="leftPanelTitle" :floating="leftFloating"
-              @close="handleLeftClose" @toggleFloating="toggleLeftFloating">
+            <DockPanel
+              v-if="leftActiveKey && leftFloating"
+              side="left"
+              :title="leftPanelTitle"
+              :floating="leftFloating"
+              @close="handleLeftClose"
+              @toggleFloating="toggleLeftFloating"
+            >
               <template #actions>
                 <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
                   <el-button size="small" text @click="handlePageCreate">
@@ -75,39 +146,76 @@
                   </el-button>
                 </el-tooltip>
               </template>
-              <component :is="leftPanelComponent" :key="`left-floating-panel-${leftActiveKey}`" v-bind="leftPanelProps" ref="leftPanelRef"
-                @update:drawingTool="(value) => (drawingTool.value = value)" />
+              <component
+                :is="leftPanelComponent"
+                :key="`left-floating-panel-${leftActiveKey}`"
+                v-bind="leftPanelProps"
+                ref="leftPanelRef"
+                @update:drawingTool="(value) => (drawingTool.value = value)"
+              />
             </DockPanel>
 
-            <DockPanel v-if="rightActiveKey && rightFloating" side="right" :title="rightPanelTitle"
-              :floating="rightFloating" @close="handleRightClose" @toggleFloating="toggleRightFloating">
+            <DockPanel
+              v-if="rightActiveKey && rightFloating"
+              side="right"
+              :title="rightPanelTitle"
+              :floating="rightFloating"
+              @close="handleRightClose"
+              @toggleFloating="toggleRightFloating"
+            >
               <component :is="rightPanelComponent" />
             </DockPanel>
           </div>
 
-          <DockPanel v-if="rightActiveKey && !rightFloating" side="right" :title="rightPanelTitle"
-            :floating="rightFloating" @close="handleRightClose" @toggleFloating="toggleRightFloating">
+          <DockPanel
+            v-if="rightActiveKey && !rightFloating"
+            side="right"
+            :title="rightPanelTitle"
+            :floating="rightFloating"
+            @close="handleRightClose"
+            @toggleFloating="toggleRightFloating"
+          >
             <component :is="rightPanelComponent" />
           </DockPanel>
         </div>
 
         <div class="designer-bottom-toolbar">
           <div class="page-tabs-bar">
-            <el-tabs v-if="pageTabs.length > 0" v-model="activePageTabId" type="card" closable addable
-              @tab-remove="handleClosePageTab" @tab-add="handlePageCreate">
-              <el-tab-pane v-for="tab in pageTabs" :key="tab.id" :name="tab.id" closable>
+            <el-tabs
+              v-if="pageTabs.length > 0"
+              v-model="activePageTabId"
+              type="card"
+              closable
+              addable
+              @tab-remove="handleClosePageTab"
+              @tab-add="handlePageCreate"
+            >
+              <el-tab-pane
+                v-for="tab in pageTabs"
+                :key="tab.id"
+                :name="tab.id"
+                closable
+              >
                 <template #label>
                   <span class="page-tab-label">
                     <IconEpDocument class="tab-icon" />
                     <span class="tab-name">{{ tab.name }}</span>
-                    <IconEpWarning v-if="tab.isDirty" class="tab-dirty-icon" title="未保存" />
+                    <IconEpWarning
+                      v-if="tab.isDirty"
+                      class="tab-dirty-icon"
+                      title="未保存"
+                    />
                   </span>
                 </template>
               </el-tab-pane>
             </el-tabs>
             <div v-else class="page-tabs-empty">
               <span>暂无页面</span>
-              <el-button class="page-tabs-add-btn" text @click="handlePageCreate">
+              <el-button
+                class="page-tabs-add-btn"
+                text
+                @click="handlePageCreate"
+              >
                 <IconEpPlus />
               </el-button>
             </div>
@@ -115,7 +223,12 @@
         </div>
       </div>
 
-      <ToolRail side="right" :items="rightRailItems" :active-key="rightActiveKey" @select="handleRightSelect" />
+      <ToolRail
+        side="right"
+        :items="rightRailItems"
+        :active-key="rightActiveKey"
+        @select="handleRightSelect"
+      />
     </div>
   </div>
 </template>
@@ -135,6 +248,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { CanvasContainer } from "@/ui/Canvas";
+import SelectionToolbar from "@/ui/Canvas/SelectionToolbar.vue";
 import { TopToolbar } from "@/ui/TopToolbar";
 import { ToolRail } from "@/ui/ToolRail";
 import { DockPanel } from "@/ui/DockPanel";
@@ -147,11 +261,7 @@ import {
   ScriptVarsPanel,
   RolePanel,
 } from "@/ui/LeftPanel";
-import {
-  PropertyPanel,
-  AdvancedPanel,
-  VariablesPanel,
-} from "@/ui/RightPanel";
+import { PropertyPanel, AdvancedPanel, VariablesPanel } from "@/ui/RightPanel";
 import { VIEW_PRESETS } from "@/constants";
 import IconEpDocument from "~icons/ep/document";
 import IconEpPlus from "~icons/ep/plus";
@@ -270,7 +380,7 @@ const handleClosePageTab = async (tabId) => {
           confirmButtonText: "保存并关闭",
           cancelButtonText: "不保存",
           type: "warning",
-        }
+        },
       );
 
       if (action === "confirm") {
@@ -342,9 +452,10 @@ const syncPageTabsWithPages = () => {
     pageTabs.value = nextTabs;
   }
   if (activePageTabId.value && !pageIdSet.has(activePageTabId.value)) {
-    activePageTabId.value = currentPageId.value && pageIdSet.has(currentPageId.value)
-      ? currentPageId.value
-      : nextTabs[0]?.id || "";
+    activePageTabId.value =
+      currentPageId.value && pageIdSet.has(currentPageId.value)
+        ? currentPageId.value
+        : nextTabs[0]?.id || "";
   }
 };
 
@@ -358,7 +469,7 @@ watch(
     syncPageTabsWithPages();
     updateTabName();
   },
-  { deep: true }
+  { deep: true },
 );
 
 // 监听标签页切换，同步到 currentPageId
@@ -373,7 +484,7 @@ watch(
       await editorStore.setCurrentPage(newTabId);
     }
   },
-  { flush: "sync" }
+  { flush: "sync" },
 );
 
 watch(
@@ -381,7 +492,7 @@ watch(
   () => {
     editorStore.setPageTabState(pageTabs.value, activePageTabId.value);
   },
-  { deep: true }
+  { deep: true },
 );
 
 // 初始化时打开当前页面
@@ -399,7 +510,7 @@ watch(
       activateMaterialPanel();
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // 提供 openPageTab 方法给子组件
@@ -416,10 +527,10 @@ const hasPages = computed(() => {
 });
 // ==================== 页面标签页系统结束 ====================
 const canUndoEnabled = computed(
-  () => canUndo.value && !readonlyState.value?.readonly
+  () => canUndo.value && !readonlyState.value?.readonly,
 );
 const canRedoEnabled = computed(
-  () => canRedo.value && !readonlyState.value?.readonly
+  () => canRedo.value && !readonlyState.value?.readonly,
 );
 
 /**
@@ -433,6 +544,11 @@ const canMoveLayer = computed(() => {
   const rootNodeId = currentPage.value?.rootNodeId;
   return primary.id !== rootNodeId;
 });
+const hasSelection = computed(() => {
+  void editorStore.selectionVersion;
+  return (selection.value?.getSelectionCount?.() || 0) >= 1;
+});
+const hasClipboard = computed(() => editorStore.hasClipboard);
 const leftActiveKey = ref("pages");
 const rightActiveKey = ref("props");
 const leftFloating = ref(false);
@@ -445,7 +561,7 @@ const pageName = computed(() => {
   if (!hasPages.value) return "";
   // 优先从 pages 列表获取名称（更可靠）
   const pageFromList = editorStore.pages.find(
-    (p) => p.id === currentPageId.value
+    (p) => p.id === currentPageId.value,
   );
   if (pageFromList?.name) return pageFromList.name;
   // 其次从 doc 中获取
@@ -460,39 +576,55 @@ const currentPageSnapshot = computed(() => {
   return page || currentPage.value || null;
 });
 const activeView = computed(() =>
-  viewPresets.find((preset) => preset.key === activeViewKey.value)
+  viewPresets.find((preset) => preset.key === activeViewKey.value),
 );
 const defaultViewPreset = computed(
-  () => viewPresets.find((preset) => preset.key === "pc") || viewPresets[0] || { width: 1366, height: 768 }
+  () =>
+    viewPresets.find((preset) => preset.key === "pc") ||
+    viewPresets[0] || { width: 1366, height: 768 },
 );
 const normalizeCanvasDimension = (value, fallback) => {
   const next = Number(value);
   return Number.isFinite(next) && next > 0 ? Math.round(next) : fallback;
 };
 const resolvedPageWidth = computed(() =>
-  normalizeCanvasDimension(currentPageSnapshot.value?.config?.width, defaultViewPreset.value.width)
+  normalizeCanvasDimension(
+    currentPageSnapshot.value?.config?.width,
+    defaultViewPreset.value.width,
+  ),
 );
 const resolvedPageHeight = computed(() =>
-  normalizeCanvasDimension(currentPageSnapshot.value?.config?.height, defaultViewPreset.value.height)
+  normalizeCanvasDimension(
+    currentPageSnapshot.value?.config?.height,
+    defaultViewPreset.value.height,
+  ),
 );
-const matchedViewPreset = computed(() =>
-  viewPresets.find(
-    (preset) =>
-      preset.width === resolvedPageWidth.value && preset.height === resolvedPageHeight.value
-  ) || null
+const matchedViewPreset = computed(
+  () =>
+    viewPresets.find(
+      (preset) =>
+        preset.width === resolvedPageWidth.value &&
+        preset.height === resolvedPageHeight.value,
+    ) || null,
 );
 const canvasWidth = computed(() =>
-  normalizeCanvasDimension(currentPageSnapshot.value?.config?.width, defaultViewPreset.value.width)
+  normalizeCanvasDimension(
+    currentPageSnapshot.value?.config?.width,
+    defaultViewPreset.value.width,
+  ),
 );
 const canvasHeight = computed(() =>
-  normalizeCanvasDimension(currentPageSnapshot.value?.config?.height, defaultViewPreset.value.height)
+  normalizeCanvasDimension(
+    currentPageSnapshot.value?.config?.height,
+    defaultViewPreset.value.height,
+  ),
 );
 const isCustomView = computed(() => !matchedViewPreset.value);
 const showGrid = computed(() =>
-  Boolean(currentPageSnapshot.value?.config?.showGrid)
+  Boolean(currentPageSnapshot.value?.config?.showGrid),
 );
 const enableSnap = computed(
-  () => currentPageSnapshot.value?.config?.enableSnap ?? true
+  () => currentPageSnapshot.value?.config?.enableSnap ?? true,
 );
 
 const leftRailItems = [
@@ -559,7 +691,7 @@ const rightPanelComponent = computed(() => {
 
 const rightPanelTitle = computed(() => {
   const item = rightRailItems.find(
-    (entry) => entry.key === rightActiveKey.value
+    (entry) => entry.key === rightActiveKey.value,
   );
   return item?.label || "面板";
 });
@@ -689,7 +821,7 @@ const handleExport = () => {
   }
   const payload = editorStore.serializer.exportPage(
     editorStore.doc,
-    currentPageId.value
+    currentPageId.value,
   );
   const json = JSON.stringify(payload, null, 2);
   const blob = new Blob([json], { type: "application/json" });
@@ -798,7 +930,7 @@ const getRecommendedZoom = () => {
   const fitZoom = Math.min(
     1,
     availableWidth / canvasWidth.value,
-    availableHeight / canvasHeight.value
+    availableHeight / canvasHeight.value,
   );
   return clampZoom(fitZoom);
 };
@@ -896,7 +1028,9 @@ const handlePageCreate = async () => {
 
 const getUniquePageName = (name) => {
   const base = (name || "导入页面").trim() || "导入页面";
-  const existingNames = editorStore.pages.map((page) => page.name).filter(Boolean);
+  const existingNames = editorStore.pages
+    .map((page) => page.name)
+    .filter(Boolean);
   if (!existingNames.includes(base)) return base;
   let index = 1;
   let next = `${base}_${index}`;
@@ -992,6 +1126,13 @@ const handleLayerMoveToBottom = () => {
     ElMessage.success("已置底");
   }
 };
+const handleCopy = () => {
+  if (editorStore.copyNodes()) {
+    ElMessage.success("已复制");
+  }
+};
+const handlePaste = () => editorStore.pasteNodes();
+const handleDeleteSelected = () => editorStore.removeSelectedNodes();
 
 /**
  * 自动保存当前页面
@@ -1034,9 +1175,12 @@ const syncAutoSaveTimer = () => {
   clearAutoSaveTimer();
   if (!saveSettings.value.autoSave) return;
   const interval = Number(saveSettings.value.intervalMinutes) || 5;
-  autoSaveTimer.value = setInterval(() => {
-    void handleAutoSave();
-  }, interval * 60 * 1000);
+  autoSaveTimer.value = setInterval(
+    () => {
+      void handleAutoSave();
+    },
+    interval * 60 * 1000,
+  );
 };
 
 /**
@@ -1097,7 +1241,11 @@ const handleClearCanvas = () => {
 };
 
 watch(
-  [currentPageId, () => currentPageSnapshot.value?.config?.width, () => currentPageSnapshot.value?.config?.height],
+  [
+    currentPageId,
+    () => currentPageSnapshot.value?.config?.width,
+    () => currentPageSnapshot.value?.config?.height,
+  ],
   () => {
     activeViewKey.value = matchedViewPreset.value?.key || "custom";
     autoZoomEnabled.value = true;
@@ -1105,7 +1253,7 @@ watch(
       scheduleAutoFit();
     });
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 /**
@@ -1308,7 +1456,6 @@ onBeforeUnmount(() => {
   background: #f3f6fa;
   display: flex;
   align-items: center;
-
 }
 
 .dark .designer-bottom-toolbar {

@@ -1,15 +1,33 @@
+<!--
+  VariablesPanel - 变量面板
+  管理页面/全局变量，支持增删、导入导出
+-->
 <template>
   <div class="variables-panel">
     <div class="vars-toolbar">
-      <el-button class="toolbar-button" size="small" circle @click="openCreateDialog">
+      <el-button
+        class="toolbar-button"
+        size="small"
+        circle
+        @click="openCreateDialog"
+      >
         <IconEpPlus />
       </el-button>
       <el-tooltip content="删除" placement="top">
-        <el-button class="toolbar-button" size="small" circle @click="handleDelete">
+        <el-button
+          class="toolbar-button"
+          size="small"
+          circle
+          @click="handleDelete"
+        >
           <IconEpDelete />
         </el-button>
       </el-tooltip>
-      <el-dropdown class="toolbar-dropdown" trigger="hover" @command="handleExport">
+      <el-dropdown
+        class="toolbar-dropdown"
+        trigger="hover"
+        @command="handleExport"
+      >
         <el-button class="toolbar-button" size="small" circle>
           <IconEpUpload />
         </el-button>
@@ -21,7 +39,11 @@
           </el-dropdown-menu>
         </template>
       </el-dropdown>
-      <el-dropdown class="toolbar-dropdown" trigger="hover" @command="handleImport">
+      <el-dropdown
+        class="toolbar-dropdown"
+        trigger="hover"
+        @command="handleImport"
+      >
         <el-button class="toolbar-button" size="small" circle>
           <IconEpDownload />
         </el-button>
@@ -58,7 +80,12 @@
         <div class="vars-col vars-name">{{ item.name }}</div>
         <div class="vars-col vars-default">
           <span class="default-value">{{ formatDefaultValue(item) }}</span>
-          <el-button class="edit-button" size="small" circle @click.stop="openEditDialog(item)">
+          <el-button
+            class="edit-button"
+            size="small"
+            circle
+            @click.stop="openEditDialog(item)"
+          >
             <IconEpEditPen />
           </el-button>
         </div>
@@ -93,13 +120,21 @@
             @markers="handleEditValueMarkers"
           />
         </div>
-        <el-input v-else-if="isTextType" v-model="formDefaultText" type="textarea" :rows="6" />
+        <el-input
+          v-else-if="isTextType"
+          v-model="formDefaultText"
+          type="textarea"
+          :rows="6"
+        />
         <el-input-number
           v-else-if="formType === 'number'"
           v-model="formDefaultNumber"
           style="width: 100%"
         />
-        <el-switch v-else-if="formType === 'boolean'" v-model="formDefaultBoolean" />
+        <el-switch
+          v-else-if="formType === 'boolean'"
+          v-model="formDefaultBoolean"
+        />
         <el-date-picker
           v-else-if="formType === 'date'"
           v-model="formDefaultDate"
@@ -166,14 +201,16 @@ const typeOptions = [
 ];
 
 const isEditorType = computed(() =>
-  ["function", "array", "object", "set", "map"].includes(formType.value)
+  ["function", "array", "object", "set", "map"].includes(formType.value),
 );
 const isStructuredType = computed(() =>
-  ["array", "object", "set", "map"].includes(formType.value)
+  ["array", "object", "set", "map"].includes(formType.value),
 );
-const isTextType = computed(() => ["string", "regexp"].includes(formType.value));
+const isTextType = computed(() =>
+  ["string", "regexp"].includes(formType.value),
+);
 const editorLanguage = computed(() =>
-  isStructuredType.value ? "json" : "javascript"
+  isStructuredType.value ? "json" : "javascript",
 );
 
 const pageName = computed(() => {
@@ -260,7 +297,9 @@ const openEditDialog = (item) => {
     formDefaultDate.value = item.default || null;
   } else {
     formDefaultText.value =
-      item.default === undefined || item.default === null ? "" : String(item.default);
+      item.default === undefined || item.default === null
+        ? ""
+        : String(item.default);
   }
   editVisible.value = true;
 };
@@ -324,7 +363,9 @@ const handleEditValueMarkers = (markers) => {
     editValueHasErrors.value = false;
     return;
   }
-  editValueHasErrors.value = (markers || []).some((marker) => marker.severity === 8);
+  editValueHasErrors.value = (markers || []).some(
+    (marker) => marker.severity === 8,
+  );
 };
 
 /**
@@ -342,7 +383,12 @@ const saveVar = () => {
     ElMessage.warning("变量名已存在");
     return;
   }
-  if (editMode.value && originalName.value && name !== originalName.value && pageVars.value[name]) {
+  if (
+    editMode.value &&
+    originalName.value &&
+    name !== originalName.value &&
+    pageVars.value[name]
+  ) {
     ElMessage.warning("变量名已存在");
     return;
   }
@@ -390,11 +436,15 @@ const handleDelete = () => {
     ElMessage.info("请选择需要删除的变量");
     return;
   }
-  ElMessageBox.confirm(`确认删除变量 "${selectedVarName.value}" 吗？`, "删除确认", {
-    confirmButtonText: "删除",
-    cancelButtonText: "取消",
-    type: "warning",
-  })
+  ElMessageBox.confirm(
+    `确认删除变量 "${selectedVarName.value}" 吗？`,
+    "删除确认",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
     .then(() => {
       if (!currentPageId.value || !doc.value) return;
       const nextVars = { ...pageVars.value };
@@ -489,7 +539,10 @@ const mergeImportedRows = (rows) => {
       type === "number"
         ? Number(defaultRaw)
         : type === "boolean"
-          ? Boolean(defaultRaw === true || String(defaultRaw).toLowerCase() === "true")
+          ? Boolean(
+              defaultRaw === true ||
+              String(defaultRaw).toLowerCase() === "true",
+            )
           : type === "date"
             ? defaultRaw || null
             : defaultRaw;
@@ -516,7 +569,7 @@ const handleExport = (format) => {
     downloadBlob(
       JSON.stringify(payload, null, 2),
       `${baseName}.json`,
-      "application/json"
+      "application/json",
     );
     return;
   }
@@ -533,7 +586,7 @@ const handleExport = (format) => {
   downloadBlob(
     buffer,
     `${baseName}.xlsx`,
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
 };
 
@@ -559,7 +612,7 @@ const handleFileChange = async (event) => {
             type: detail?.type || "string",
             default: detail?.default,
             description: detail?.description || "",
-          }))
+          })),
         );
         return;
       }
@@ -581,7 +634,9 @@ const handleFileChange = async (event) => {
     ElMessage.error("文件中没有数据表");
     return;
   }
-  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    defval: "",
+  });
   mergeImportedRows(rows);
 };
 

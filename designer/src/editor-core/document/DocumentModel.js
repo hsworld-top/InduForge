@@ -387,7 +387,7 @@ export class DocumentModel extends EventEmitter {
    */
   getGraphicsByType(type) {
     return Object.values(this._schema.graphicsById).filter(
-      (graphic) => graphic.type === type
+      (graphic) => graphic.type === type,
     );
   }
 
@@ -430,7 +430,7 @@ export class DocumentModel extends EventEmitter {
    */
   getSymbolsByCategory(category) {
     return this.getAllSymbols().filter(
-      (symbol) => symbol.category === category
+      (symbol) => symbol.category === category,
     );
   }
 
@@ -718,7 +718,7 @@ export class DocumentModel extends EventEmitter {
       }
       const insertIndex = Math.min(
         Math.max(0, newIndex),
-        newParent.children.length
+        newParent.children.length,
       );
       newParent.children.splice(insertIndex, 0, nodeId);
     }

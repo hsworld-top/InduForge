@@ -137,7 +137,7 @@ const persistRecentColors = () => {
   try {
     localStorage.setItem(
       RECENT_COLORS_STORAGE_KEY,
-      JSON.stringify(recentColors.value)
+      JSON.stringify(recentColors.value),
     );
   } catch (error) {
     // 本地存储不可用时忽略，不影响颜色选择核心能力
@@ -243,7 +243,7 @@ watch(
   (value) => {
     inputDraft.value = value || "";
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onMounted(() => {
@@ -298,7 +298,9 @@ onMounted(() => {
   cursor: pointer;
   padding: 0;
   background: transparent;
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .recent-color:hover {

@@ -4,4 +4,3 @@
  */
 
 export { default as CanvasContainer } from "./CanvasContainer.vue";
-

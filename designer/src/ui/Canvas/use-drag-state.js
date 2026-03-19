@@ -59,7 +59,12 @@ export const endDrag = () => {
 export const updateDropTarget = (payload) => {
   state.targetContainerId = payload.containerId || "";
   state.insertIndex = payload.insertIndex ?? -1;
-  state.indicatorPosition = payload.position || { x: 0, y: 0, width: 0, height: 0 };
+  state.indicatorPosition = payload.position || {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  };
   state.layoutType = payload.layoutType || "flex";
   state.direction = payload.direction || "column";
 };

@@ -283,7 +283,7 @@ export class DatapointRegistry extends EventEmitter {
     return this.getAll().filter(
       (m) =>
         m.path.toLowerCase().includes(lowerKeyword) ||
-        m.description?.toLowerCase().includes(lowerKeyword)
+        m.description?.toLowerCase().includes(lowerKeyword),
     );
   }
 
@@ -317,4 +317,3 @@ export class DatapointRegistry extends EventEmitter {
 export const datapointRegistry = new DatapointRegistry();
 
 export default DatapointRegistry;
-

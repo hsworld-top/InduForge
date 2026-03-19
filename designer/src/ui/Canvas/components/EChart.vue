@@ -1,3 +1,7 @@
+<!--
+  EChart - ECharts 图表封装
+  支持柱状、折线、饼图、雷达、散点、仪表盘等，支持 option 绑定
+-->
 <template>
   <VChart
     ref="chartRef"
@@ -50,13 +54,22 @@ const chartRef = ref(null);
 const pendingOption = ref(null);
 const updateOptions = computed(() => ({ notMerge: true }));
 const getInstance = () => chartRef.value?.getEChartsInstance?.();
-const normalizeSetOptionArgs = (notMergeOrOpts, lazyUpdate, silent, replaceMerge) => {
+
+/** 规范化 setOption 参数（兼容多种调用形式） */
+const normalizeSetOptionArgs = (
+  notMergeOrOpts,
+  lazyUpdate,
+  silent,
+  replaceMerge,
+) => {
   if (notMergeOrOpts && typeof notMergeOrOpts === "object") {
     return { ...notMergeOrOpts };
   }
   const opts = {
     notMerge:
-      typeof notMergeOrOpts === "boolean" ? notMergeOrOpts : notMergeOrOpts === undefined,
+      typeof notMergeOrOpts === "boolean"
+        ? notMergeOrOpts
+        : notMergeOrOpts === undefined,
     lazyUpdate: Boolean(lazyUpdate),
     silent: Boolean(silent),
   };
@@ -74,8 +87,19 @@ const applyPendingOption = () => {
   }
   instance.setOption(payload.option || {}, payload.opts || {});
 };
-const setOption = (option, notMergeOrOpts, lazyUpdate, silent, replaceMerge) => {
-  const opts = normalizeSetOptionArgs(notMergeOrOpts, lazyUpdate, silent, replaceMerge);
+const setOption = (
+  option,
+  notMergeOrOpts,
+  lazyUpdate,
+  silent,
+  replaceMerge,
+) => {
+  const opts = normalizeSetOptionArgs(
+    notMergeOrOpts,
+    lazyUpdate,
+    silent,
+    replaceMerge,
+  );
   if (opts.notMerge) {
     opts.lazyUpdate = false;
   }

@@ -169,9 +169,10 @@ export function registerBuiltinComponents() {
       defaultSize: manifest.defaultSize,
       propsSchema: manifest.props,
       styleSchema: undefined,
-      events: Array.isArray(manifest.events) && manifest.events.length > 0
-        ? manifest.events
-        : getComponentEventDefinitions(manifest.type),
+      events:
+        Array.isArray(manifest.events) && manifest.events.length > 0
+          ? manifest.events
+          : getComponentEventDefinitions(manifest.type),
       isContainer: isContainerType(manifest.type),
       allowedChildren: undefined,
       slots: undefined,

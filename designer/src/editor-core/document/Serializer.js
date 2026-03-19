@@ -124,7 +124,7 @@ export class Serializer {
    */
   importFromSchema(schema) {
     // 自动迁移
-    let finalSchema = schema;
+    const finalSchema = schema;
     // 版本迁移已禁用，直接使用原始 schema
 
     return new DocumentModel(finalSchema);
@@ -169,7 +169,7 @@ export class Serializer {
       // 更新引用
       page.rootNodeId = idMap.get(page.rootNodeId) || page.rootNodeId;
       page.graphicsIds = (page.graphicsIds || []).map(
-        (id) => idMap.get(id) || id
+        (id) => idMap.get(id) || id,
       );
 
       // 更新节点

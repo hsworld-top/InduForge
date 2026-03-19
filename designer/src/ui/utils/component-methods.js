@@ -1,5 +1,9 @@
-﻿/**
+/**
  * 组件方法补全配置
+ *
+ * 用于 Monaco 编辑器中脚本/变量变更时的补全提示，
+ * 根据组件类型提供对应的方法（如 Table.SetData、Button.Click 等）。
+ *
  * @typedef {Object} CompletionItem
  * @property {string} label - 展示文本
  * @property {string} insertText - 插入文本
@@ -8,6 +12,7 @@
  * @property {string|string[]} [prefix] - 触发前缀
  */
 
+/** 通用属性补全项（Name、Location、Size 等） */
 const COMMON_PROPERTIES = [
   { label: "Name", insertText: "Name", detail: "组件名称" },
   { label: "Comment", insertText: "Comment", detail: "组件类型说明" },
@@ -22,13 +27,37 @@ const COMMON_PROPERTIES = [
   { label: "Caption", insertText: "Caption", detail: "显示文本" },
   { label: "Image", insertText: "Image", detail: "图片地址" },
 ];
+
+/** 组件类型到方法列表的映射 */
 const METHOD_MAP = {
   Text: ["SetText", "GetText", "SetType", "SetEllipsis", "SetTooltip"],
   Tag: ["SetText", "SetType", "Close"],
   Button: ["SetLoading", "SetDisabled", "Click", "Focus"],
   Image: ["SetSrc", "GetSrc", "Preview", "Reload"],
-  Input: ["Focus", "Blur", "Select", "SetInputValue", "GetInputValue", "SetValue", "GetValue", "Clear"],
-  Select: ["Focus", "Blur", "Open", "Close", "Toggle", "SetValue", "GetValue", "SetData", "GetData", "Clear", "GetCheckedNodes", "SetCheckedNodes"],
+  Input: [
+    "Focus",
+    "Blur",
+    "Select",
+    "SetInputValue",
+    "GetInputValue",
+    "SetValue",
+    "GetValue",
+    "Clear",
+  ],
+  Select: [
+    "Focus",
+    "Blur",
+    "Open",
+    "Close",
+    "Toggle",
+    "SetValue",
+    "GetValue",
+    "SetData",
+    "GetData",
+    "Clear",
+    "GetCheckedNodes",
+    "SetCheckedNodes",
+  ],
   Switch: ["SetValue", "GetValue", "Toggle", "Disable"],
   Table: [
     "ClearSelection",
@@ -107,7 +136,17 @@ const METHOD_MAP = {
     "Filter",
     "ClearFilter",
   ],
-  Dropdown: ["InsertItem", "GetCommandItem", "GetMenuItem", "DeleteItem", "ClearAll", "Open", "Close", "Toggle", "GetVisible"],
+  Dropdown: [
+    "InsertItem",
+    "GetCommandItem",
+    "GetMenuItem",
+    "DeleteItem",
+    "ClearAll",
+    "Open",
+    "Close",
+    "Toggle",
+    "GetVisible",
+  ],
   Menu: ["Open", "Close", "SetActive", "GetActive", "Collapse"],
   Radio: [
     "GetRadioChecked",
@@ -133,19 +172,68 @@ const METHOD_MAP = {
     "GetValue",
     "Clear",
   ],
-  Cascader: ["Open", "Close", "Toggle", "GetCheckedNodes", "SetData", "GetData", "SetValue", "GetValue", "Clear"],
+  Cascader: [
+    "Open",
+    "Close",
+    "Toggle",
+    "GetCheckedNodes",
+    "SetData",
+    "GetData",
+    "SetValue",
+    "GetValue",
+    "Clear",
+  ],
   Tabs: ["SetActive", "GetActive", "Next", "Prev", "AddTab", "RemoveTab"],
-  Transfer: ["SetData", "GetData", "ClearQuery", "SetValue", "GetValue", "Clear", "MoveToRight", "MoveToLeft"],
-  InputNumber: ["SetValue", "GetValue", "Increase", "Decrease", "Focus", "Blur", "Select"],
+  Transfer: [
+    "SetData",
+    "GetData",
+    "ClearQuery",
+    "SetValue",
+    "GetValue",
+    "Clear",
+    "MoveToRight",
+    "MoveToLeft",
+  ],
+  InputNumber: [
+    "SetValue",
+    "GetValue",
+    "Increase",
+    "Decrease",
+    "Focus",
+    "Blur",
+    "Select",
+  ],
   Timeline: ["SetItems", "AppendItem", "Clear"],
   ImageCarousel: ["SetActiveItem", "Prev", "Next", "Play", "Pause", "SetItems"],
-  CarouselComponent: ["SetActiveItem", "Prev", "Next", "Play", "Pause", "SetItems"],
+  CarouselComponent: [
+    "SetActiveItem",
+    "Prev",
+    "Next",
+    "Play",
+    "Pause",
+    "SetItems",
+  ],
   WebContainer: ["Load", "Reload", "PostMessage", "GetUrl", "Back", "Forward"],
   Steps: ["SetActive", "Next", "Prev", "Reset", "SetItems"],
   Card: ["SetTitle", "SetLoading", "Collapse"],
-  Pagination: ["SetPage", "GetPage", "SetPageSize", "GetPageSize", "Reset", "SetTotal", "GetTotal"],
+  Pagination: [
+    "SetPage",
+    "GetPage",
+    "SetPageSize",
+    "GetPageSize",
+    "Reset",
+    "SetTotal",
+    "GetTotal",
+  ],
   Collapse: ["Open", "Close", "Toggle", "GetActiveNames", "SetActiveNames"],
-  BusinessCard: ["SetData", "GetData", "SetLoading", "Refresh", "OpenDetail", "SetTitle"],
+  BusinessCard: [
+    "SetData",
+    "GetData",
+    "SetLoading",
+    "Refresh",
+    "OpenDetail",
+    "SetTitle",
+  ],
   Barcode: ["SetValue", "GetValue", "Render", "Download"],
   Slider: ["SetValue", "GetValue", "Reset", "Disable"],
   Calendar: ["SetDate", "GetDate", "Today"],
@@ -212,6 +300,3 @@ export function buildComponentMethodCompletions(tree) {
   });
   return items;
 }
-
-
-

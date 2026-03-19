@@ -1,3 +1,7 @@
+<!--
+  BindingPanel - 绑定配置面板
+  配置页面/组件的生命周期、定时器、变量变更等绑定脚本
+-->
 <template>
   <div class="binding-panel">
     <template v-if="!forceShow && panelState !== 'page'">
@@ -17,7 +21,12 @@
           </template>
         </el-dropdown>
         <el-tooltip content="删除" placement="top">
-          <el-button class="toolbar-button" size="small" circle @click="handleDelete">
+          <el-button
+            class="toolbar-button"
+            size="small"
+            circle
+            @click="handleDelete"
+          >
             <IconEpDelete />
           </el-button>
         </el-tooltip>
@@ -25,7 +34,11 @@
       <div class="binding-section">
         <div class="section-header">基本</div>
         <div class="section-body">
-          <div v-for="item in lifecycleItems" :key="item.key" class="binding-row">
+          <div
+            v-for="item in lifecycleItems"
+            :key="item.key"
+            class="binding-row"
+          >
             <div class="binding-name">{{ item.label }}</div>
             <div class="binding-actions">
               <div class="binding-toggle">
@@ -36,7 +49,12 @@
                 />
               </div>
               <el-tooltip content="打开编辑器" placement="top">
-                <el-button class="icon-button" size="small" circle @click="openEditor(item)">
+                <el-button
+                  class="icon-button"
+                  size="small"
+                  circle
+                  @click="openEditor(item)"
+                >
                   <IconEpEditPen />
                 </el-button>
               </el-tooltip>
@@ -66,11 +84,18 @@
                 <span class="binding-toggle-label">启动</span>
                 <el-switch
                   :model-value="item.enabled !== false"
-                  @change="(value) => handleToggleItem('timers', item.id, value)"
+                  @change="
+                    (value) => handleToggleItem('timers', item.id, value)
+                  "
                 />
               </div>
               <el-tooltip content="打开编辑器" placement="top">
-                <el-button class="icon-button" size="small" circle @click.stop="openItemEditor('timers', item)">
+                <el-button
+                  class="icon-button"
+                  size="small"
+                  circle
+                  @click.stop="openItemEditor('timers', item)"
+                >
                   <IconEpEditPen />
                 </el-button>
               </el-tooltip>
@@ -81,7 +106,9 @@
 
       <div class="binding-section">
         <div class="section-header">变量改变</div>
-        <div v-if="variableChangeItems.length === 0" class="empty-block">暂无数据</div>
+        <div v-if="variableChangeItems.length === 0" class="empty-block">
+          暂无数据
+        </div>
         <div v-else class="section-body">
           <div
             v-for="item in variableChangeItems"
@@ -92,7 +119,9 @@
             <el-checkbox
               class="select-check"
               :model-value="isSelectedItem('variableChanges', item.id)"
-              @change="(value) => toggleSelection('variableChanges', item.id, value)"
+              @change="
+                (value) => toggleSelection('variableChanges', item.id, value)
+              "
             />
             <div class="binding-name">{{ item.name }}</div>
             <div class="binding-actions">
@@ -100,7 +129,10 @@
                 <span class="binding-toggle-label">启动</span>
                 <el-switch
                   :model-value="item.enabled !== false"
-                  @change="(value) => handleToggleItem('variableChanges', item.id, value)"
+                  @change="
+                    (value) =>
+                      handleToggleItem('variableChanges', item.id, value)
+                  "
                 />
               </div>
               <el-tooltip content="打开编辑器" placement="top">
@@ -133,7 +165,12 @@
       <div class="meta-desc">{{ editorDescription }}</div>
       <div class="meta-actions">
         <el-tooltip content="枚举变量" placement="top">
-          <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+          <el-button
+            class="icon-button"
+            size="small"
+            circle
+            @click="openVariableEnum"
+          >
             <IconEpList />
           </el-button>
         </el-tooltip>
@@ -174,7 +211,10 @@
                     <IconEpFolder v-if="data.type === 'group'" />
                     <IconEpEditPen v-else />
                   </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                  <span
+                    class="node-label"
+                    :class="{ 'is-group': data.type === 'group' }"
+                  >
                     {{ data.label }}
                   </span>
                 </div>
@@ -206,7 +246,10 @@
                     <IconEpFolder v-if="data.type === 'group'" />
                     <IconEpGrid v-else />
                   </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                  <span
+                    class="node-label"
+                    :class="{ 'is-group': data.type === 'group' }"
+                  >
                     {{ data.label }}
                   </span>
                 </div>
@@ -254,7 +297,12 @@
             </el-tree>
           </div>
           <div class="enum-right">
-            <el-input v-model="projectVarSearch" size="small" placeholder="搜索工程变量" clearable />
+            <el-input
+              v-model="projectVarSearch"
+              size="small"
+              placeholder="搜索工程变量"
+              clearable
+            />
             <el-table
               :data="projectVariableRows"
               size="small"
@@ -266,7 +314,11 @@
             >
               <el-table-column prop="name" label="变量名" min-width="160" />
               <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="description" label="描述" min-width="160" />
+              <el-table-column
+                prop="description"
+                label="描述"
+                min-width="160"
+              />
               <el-table-column prop="mapped" label="映射" width="70">
                 <template #default="{ row }">
                   {{ row.mapped ? "是" : "" }}
@@ -299,7 +351,12 @@
             </el-tree>
           </div>
           <div class="enum-right">
-            <el-input v-model="pageVarSearch" size="small" placeholder="搜索页面变量" clearable />
+            <el-input
+              v-model="pageVarSearch"
+              size="small"
+              placeholder="搜索页面变量"
+              clearable
+            />
             <el-table
               :data="pageVariableRows"
               size="small"
@@ -311,8 +368,16 @@
             >
               <el-table-column prop="name" label="变量名" min-width="160" />
               <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="defaultValue" label="初始值" min-width="160" />
-              <el-table-column prop="description" label="描述" min-width="160" />
+              <el-table-column
+                prop="defaultValue"
+                label="初始值"
+                min-width="160"
+              />
+              <el-table-column
+                prop="description"
+                label="描述"
+                min-width="160"
+              />
             </el-table>
           </div>
         </div>
@@ -330,7 +395,11 @@
     </template>
   </el-dialog>
 
-  <el-dialog v-model="createDialogVisible" :title="createDialogTitle" width="420px">
+  <el-dialog
+    v-model="createDialogVisible"
+    :title="createDialogTitle"
+    width="420px"
+  >
     <el-form label-width="90px">
       <template v-if="createDialogType === 'timer'">
         <el-form-item label="定时器名称">
@@ -404,8 +473,7 @@ const {
   globalScripts,
   doc,
   docVersion,
-} =
-  storeToRefs(editorStore);
+} = storeToRefs(editorStore);
 
 const lifecycleItems = [
   { key: "onMounted", label: "创建时" },
@@ -436,7 +504,12 @@ const activeItemId = ref("");
 const selectedIds = ref({ timers: [], variableChanges: [] });
 const createDialogVisible = ref(false);
 const createDialogType = ref("timer");
-const createForm = ref({ name: "", variable: "", interval: 1000, description: "" });
+const createForm = ref({
+  name: "",
+  variable: "",
+  interval: 1000,
+  description: "",
+});
 
 const pageSnapshot = computed(() => {
   if (currentPageId.value) {
@@ -551,12 +624,17 @@ const openEditor = (item) => {
  */
 const saveScript = () => {
   if (!currentPage.value) return;
-  if (activeItemType.value === "timer" || activeItemType.value === "variableChanges") {
+  if (
+    activeItemType.value === "timer" ||
+    activeItemType.value === "variableChanges"
+  ) {
     const code = scriptCode.value || "";
     const items =
-      activeItemType.value === "timer" ? timerItems.value : variableChangeItems.value;
+      activeItemType.value === "timer"
+        ? timerItems.value
+        : variableChangeItems.value;
     const nextItems = items.map((item) =>
-      item.id === activeItemId.value ? { ...item, code } : item
+      item.id === activeItemId.value ? { ...item, code } : item,
     );
     const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
     if (activeItemType.value === "timer") {
@@ -592,16 +670,22 @@ const editorTitle = computed(() => pageTitle.value);
 
 const editorDescription = computed(() => {
   if (activeItemType.value === "timer") {
-    const item = timerItems.value.find((entry) => entry.id === activeItemId.value);
+    const item = timerItems.value.find(
+      (entry) => entry.id === activeItemId.value,
+    );
     const label = item?.name || "定时器";
     return `${pageTitle.value}${label}脚本`;
   }
   if (activeItemType.value === "variableChanges") {
-    const item = variableChangeItems.value.find((entry) => entry.id === activeItemId.value);
+    const item = variableChangeItems.value.find(
+      (entry) => entry.id === activeItemId.value,
+    );
     const label = item?.name || "变量改变";
     return `${pageTitle.value}${label}脚本`;
   }
-  const item = lifecycleItems.find((entry) => entry.key === activeLifecycleKey.value);
+  const item = lifecycleItems.find(
+    (entry) => entry.key === activeLifecycleKey.value,
+  );
   const label = item?.label || activeLifecycleKey.value || "事件";
   return `${pageTitle.value}${label}脚本`;
 });
@@ -615,18 +699,25 @@ const pageVars = computed(() => {
 });
 
 const projectGroupTree = computed(() => [
-  { id: "all", label: "全部", type: "group", children: buildGroupTree(projectVariableGroups.value || []) },
+  {
+    id: "all",
+    label: "全部",
+    type: "group",
+    children: buildGroupTree(projectVariableGroups.value || []),
+  },
 ]);
 
 const projectVariableRows = computed(() => {
   const keyword = String(projectVarSearch.value || "").toLowerCase();
-  const items = Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
-    name,
-    groupId: detail?.groupId || null,
-    type: detail?.type || "string",
-    description: detail?.description || "",
-    mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
-  }));
+  const items = Object.entries(projectVariables.value || {}).map(
+    ([name, detail]) => ({
+      name,
+      groupId: detail?.groupId || null,
+      type: detail?.type || "string",
+      description: detail?.description || "",
+      mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+    }),
+  );
   return items
     .filter((item) => {
       if (enumSelectedProjectGroupId.value) {
@@ -636,7 +727,9 @@ const projectVariableRows = computed(() => {
     })
     .filter((item) => {
       if (!keyword) return true;
-      return String(item.name || "").toLowerCase().includes(keyword);
+      return String(item.name || "")
+        .toLowerCase()
+        .includes(keyword);
     });
 });
 
@@ -655,7 +748,9 @@ const pageVariableRows = computed(() => {
     }))
     .filter((item) => {
       if (!keyword) return true;
-      return String(item.name || "").toLowerCase().includes(keyword);
+      return String(item.name || "")
+        .toLowerCase()
+        .includes(keyword);
     });
 });
 
@@ -691,7 +786,12 @@ const customScriptTree = computed(() => {
   const roots = [];
 
   groups.forEach((group) => {
-    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+    groupMap.set(group.id, {
+      id: group.id,
+      label: group.name,
+      type: "group",
+      children: [],
+    });
   });
 
   groupMap.forEach((node, id) => {
@@ -723,10 +823,28 @@ const customScriptTree = computed(() => {
 
 const jsCompletions = computed(() => {
   const items = [
-    { label: "console.log", insertText: "console.log()", kind: "Function", detail: "Log output" },
-    { label: "if", insertText: "if () {\\n  \\n}", kind: "Snippet", detail: "if statement" },
-    { label: "for", insertText: "for (let i = 0; i < ; i++) {\\n  \\n}", kind: "Snippet" },
-    { label: "function", insertText: "function name() {\\n  \\n}", kind: "Snippet" },
+    {
+      label: "console.log",
+      insertText: "console.log()",
+      kind: "Function",
+      detail: "Log output",
+    },
+    {
+      label: "if",
+      insertText: "if () {\\n  \\n}",
+      kind: "Snippet",
+      detail: "if statement",
+    },
+    {
+      label: "for",
+      insertText: "for (let i = 0; i < ; i++) {\\n  \\n}",
+      kind: "Snippet",
+    },
+    {
+      label: "function",
+      insertText: "function name() {\\n  \\n}",
+      kind: "Snippet",
+    },
     { label: "const", insertText: "const ", kind: "Keyword" },
     { label: "let", insertText: "let ", kind: "Keyword" },
     { label: "return", insertText: "return ", kind: "Keyword" },
@@ -779,7 +897,12 @@ const buildGroupTree = (groups) => {
   const roots = [];
   const normalized = Array.isArray(groups) ? groups : [];
   normalized.forEach((group) => {
-    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+    groupMap.set(group.id, {
+      id: group.id,
+      label: group.name,
+      type: "group",
+      children: [],
+    });
   });
   groupMap.forEach((node, id) => {
     const group = normalized.find((item) => item.id === id);
@@ -808,7 +931,9 @@ const formatDefaultValue = (value) => {
 
 const filterSidebarNode = (value, data) => {
   if (!value) return true;
-  return String(data?.label || "").toLowerCase().includes(value.toLowerCase());
+  return String(data?.label || "")
+    .toLowerCase()
+    .includes(value.toLowerCase());
 };
 
 watch(scriptSearch, (value) => {
@@ -822,7 +947,9 @@ watch(componentSearch, (value) => {
 const handleCustomScriptInsert = (data) => {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
-  const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
+  const call = params
+    ? `customScripts.${data.label}(${params})`
+    : `customScripts.${data.label}()`;
   editorRef.value?.insertText?.(call);
 };
 
@@ -889,7 +1016,9 @@ const confirmEnumInsert = () => {
     return;
   }
   if (enumSelectedProjectVar.value?.name) {
-    editorRef.value?.insertText?.(`$global.${enumSelectedProjectVar.value.name}`);
+    editorRef.value?.insertText?.(
+      `$global.${enumSelectedProjectVar.value.name}`,
+    );
     variableEnumVisible.value = false;
   }
 };
@@ -996,7 +1125,9 @@ const isSelectedItem = (type, id) => {
  */
 const toggleSelection = (type, id, checked) => {
   const list = selectedIds.value[type] || [];
-  const nextList = checked ? [...new Set([...list, id])] : list.filter((item) => item !== id);
+  const nextList = checked
+    ? [...new Set([...list, id])]
+    : list.filter((item) => item !== id);
   selectedIds.value = { ...selectedIds.value, [type]: nextList };
 };
 
@@ -1008,9 +1139,10 @@ const toggleSelection = (type, id, checked) => {
  */
 const handleToggleItem = (type, id, enabled) => {
   if (!currentPage.value) return;
-  const items = type === "timers" ? timerItems.value : variableChangeItems.value;
+  const items =
+    type === "timers" ? timerItems.value : variableChangeItems.value;
   const nextItems = items.map((item) =>
-    item.id === id ? { ...item, enabled: enabled !== false } : item
+    item.id === id ? { ...item, enabled: enabled !== false } : item,
   );
   const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
   if (type === "timers") {
@@ -1047,23 +1179,21 @@ const handleDelete = () => {
     ElMessage.info("请选择需要删除的条目");
     return;
   }
-  ElMessageBox.confirm(
-    `确认删除已选的${total}条记录吗？`,
-    "删除确认",
-    {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-      type: "warning",
-    }
-  )
+  ElMessageBox.confirm(`确认删除已选的${total}条记录吗？`, "删除确认", {
+    confirmButtonText: "删除",
+    cancelButtonText: "取消",
+    type: "warning",
+  })
     .then(() => {
       const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
       if (timerIds.length > 0) {
-        nextLifecycle.timers = timerItems.value.filter((item) => !timerIds.includes(item.id));
+        nextLifecycle.timers = timerItems.value.filter(
+          (item) => !timerIds.includes(item.id),
+        );
       }
       if (variableIds.length > 0) {
         nextLifecycle.variableChanges = variableChangeItems.value.filter(
-          (item) => !variableIds.includes(item.id)
+          (item) => !variableIds.includes(item.id),
         );
       }
       editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
@@ -1079,7 +1209,7 @@ watch(
     syncLifecycleToggleState();
     selectedIds.value = { timers: [], variableChanges: [] };
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -1090,7 +1220,7 @@ watch(
       scriptCode.value = getLifecycleScript(activeLifecycleKey.value) || "";
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -1098,14 +1228,18 @@ watch(
   () => {
     if (!activeItemId.value) return;
     if (activeItemType.value === "timer") {
-      const item = timerItems.value.find((entry) => entry.id === activeItemId.value);
+      const item = timerItems.value.find(
+        (entry) => entry.id === activeItemId.value,
+      );
       scriptCode.value = item?.code || "";
     } else if (activeItemType.value === "variableChanges") {
-      const item = variableChangeItems.value.find((entry) => entry.id === activeItemId.value);
+      const item = variableChangeItems.value.find(
+        (entry) => entry.id === activeItemId.value,
+      );
       scriptCode.value = item?.code || "";
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 </script>
 
@@ -1374,5 +1508,4 @@ watch(
 .enum-right :deep(.el-table__row.is-selected) {
   background: #eef2ff;
 }
-
 </style>

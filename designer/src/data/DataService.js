@@ -275,7 +275,7 @@ export class DataService extends EventEmitter {
    */
   subscribeMany(paths, callback, options = {}) {
     const unsubscribes = paths.map((path) =>
-      this.subscribe(path, callback, options)
+      this.subscribe(path, callback, options),
     );
 
     return () => {
@@ -425,7 +425,7 @@ export class DataService extends EventEmitter {
    */
   async fetchValue(path) {
     const response = await fetch(
-      `${this._baseUrl}/api/v1/datapoints/${encodeURIComponent(path)}/value`
+      `${this._baseUrl}/api/v1/datapoints/${encodeURIComponent(path)}/value`,
     );
 
     if (!response.ok) {
@@ -488,7 +488,7 @@ export class DataService extends EventEmitter {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ value }),
-      }
+      },
     );
 
     if (!response.ok) {
@@ -592,4 +592,3 @@ export function createDataService(options) {
 }
 
 export default DataService;
-

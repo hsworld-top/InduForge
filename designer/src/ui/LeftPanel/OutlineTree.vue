@@ -1,3 +1,7 @@
+<!--
+  OutlineTree - 大纲树
+  展示当前页面的组件层级结构，支持选中、显隐、锁定、上下移动、删除
+-->
 <template>
   <div class="flex flex-col gap-2 outline-tree-root">
     <el-tree
@@ -42,7 +46,12 @@
             <el-button size="small" text @click.stop="moveDown(data.id)">
               <IconEpArrowDown />
             </el-button>
-            <el-button size="small" text @click.stop="deleteNode(data.id)" class="delete-btn">
+            <el-button
+              size="small"
+              text
+              @click.stop="deleteNode(data.id)"
+              class="delete-btn"
+            >
               <IconEpDelete />
             </el-button>
           </div>
@@ -76,7 +85,9 @@
       <el-button size="small" text @click="handleMoveToTop">置顶</el-button>
       <el-button size="small" text @click="handleMoveToBottom">置底</el-button>
       <el-divider style="margin: 4px 0" />
-      <el-button size="small" text @click="handleDelete" class="delete-btn">删除</el-button>
+      <el-button size="small" text @click="handleDelete" class="delete-btn"
+        >删除</el-button
+      >
     </div>
   </el-popover>
 </template>
@@ -199,7 +210,7 @@ watch(
       subscribeSelection(model);
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onBeforeUnmount(() => {
@@ -346,10 +357,10 @@ const handleMoveToBottom = () => {
  */
 const deleteNode = (nodeId) => {
   if (!nodeId) return;
-  
+
   const node = doc.value?.getNode(nodeId);
   const nodeName = node?.label || node?.type || "节点";
-  
+
   ElMessageBox.confirm(
     `确定要删除"${nodeName}"吗？此操作不可撤销。`,
     "删除确认",
@@ -357,7 +368,7 @@ const deleteNode = (nodeId) => {
       confirmButtonText: "确定",
       cancelButtonText: "取消",
       type: "warning",
-    }
+    },
   )
     .then(() => {
       if (editorStore.removeNode(nodeId)) {

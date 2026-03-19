@@ -334,8 +334,7 @@ export class MockDataProvider extends EventEmitter {
 
     const timer = setInterval(() => {
       // 生成随机值
-      const value =
-        animateMin + Math.random() * (animateMax - animateMin);
+      const value = animateMin + Math.random() * (animateMax - animateMin);
       const roundedValue = Math.round(value * 100) / 100;
 
       this._values.set(path, roundedValue);
@@ -457,4 +456,3 @@ export function createMockDataProvider() {
 }
 
 export default MockDataProvider;
-

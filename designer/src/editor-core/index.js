@@ -63,6 +63,11 @@ export {
   SetGraphicBindingCommand,
 } from "./commands/graphicCommands.js";
 export {
+  AlignElementsCommand,
+  DistributeElementsCommand,
+  MatchSizeCommand,
+} from "./commands/alignCommands.js";
+export {
   SetBindingCommand,
   SetMultipleBindingsCommand,
   ClearAllBindingsCommand,

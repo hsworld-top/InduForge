@@ -126,7 +126,7 @@ export class VarsStore extends EventEmitter {
       const targetPageId = pageId || this._currentPageId;
       if (!targetPageId) {
         console.warn(
-          `VarsStore.get: No pageId specified for page var "${name}"`
+          `VarsStore.get: No pageId specified for page var "${name}"`,
         );
         return undefined;
       }
@@ -201,7 +201,7 @@ export class VarsStore extends EventEmitter {
       const targetPageId = pageId || this._currentPageId;
       if (!targetPageId) {
         console.warn(
-          `VarsStore.set: No pageId specified for page var "${name}"`
+          `VarsStore.set: No pageId specified for page var "${name}"`,
         );
         return;
       }

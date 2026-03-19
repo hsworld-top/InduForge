@@ -1,4 +1,8 @@
-﻿<template>
+<!--
+  ResourcePanel - 资源面板
+  管理工程资源（图片、字体等），支持文件夹、上传、预览、拖拽到画布
+-->
+<template>
   <div class="resource-panel" @contextmenu.prevent>
     <div class="resource-search">
       <el-input

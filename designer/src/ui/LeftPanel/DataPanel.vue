@@ -1,3 +1,7 @@
+<!--
+  DataPanel - 数据面板容器
+  包装 DatapointPanel，提供数据点/变量管理的入口
+-->
 <template>
   <div class="data-panel">
     <DatapointPanel class="data-panel__content" />
@@ -5,6 +9,7 @@
 </template>
 
 <script setup>
+/** 数据面板：包装 DatapointPanel */
 import DatapointPanel from "./DatapointPanel.vue";
 </script>
 

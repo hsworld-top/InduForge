@@ -1,19 +1,36 @@
-﻿
+<!--
+  ScriptVarsPanel - 脚本与变量面板
+  管理系统脚本（启动/关闭）、定时器、变量变更、自定义脚本
+-->
 <template>
   <div class="global-scripts">
-    <el-collapse v-model="activeSections" class="scripts-collapse" :accordion="true">
+    <el-collapse
+      v-model="activeSections"
+      class="scripts-collapse"
+      :accordion="true"
+    >
       <el-collapse-item name="system">
-        <template #title>
-          系统脚本
-        </template>
+        <template #title> 系统脚本 </template>
         <div class="scripts-layout">
           <div class="scripts-list is-full">
-            <el-menu :default-active="selectedSystemKey" class="list-menu" @select="selectSystem">
-              <el-menu-item index="startup" @dblclick="openSystemEditor('startup')">
-                <el-icon class="node-icon icon-system"><IconEpPointer /></el-icon>
+            <el-menu
+              :default-active="selectedSystemKey"
+              class="list-menu"
+              @select="selectSystem"
+            >
+              <el-menu-item
+                index="startup"
+                @dblclick="openSystemEditor('startup')"
+              >
+                <el-icon class="node-icon icon-system"
+                  ><IconEpPointer
+                /></el-icon>
                 系统启动
               </el-menu-item>
-              <el-menu-item index="shutdown" @dblclick="openSystemEditor('shutdown')">
+              <el-menu-item
+                index="shutdown"
+                @dblclick="openSystemEditor('shutdown')"
+              >
                 <el-icon class="node-icon icon-system"><IconEpClose /></el-icon>
                 系统关闭
               </el-menu-item>
@@ -23,11 +40,12 @@
       </el-collapse-item>
 
       <el-collapse-item name="timers">
-        <template #title>
-          定时器
-        </template>
+        <template #title> 定时器 </template>
         <div class="scripts-layout">
-          <div class="scripts-list is-full" @contextmenu="(event) => handleBlankContextMenu('timers', event)">
+          <div
+            class="scripts-list is-full"
+            @contextmenu="(event) => handleBlankContextMenu('timers', event)"
+          >
             <el-tree
               :data="timerTree"
               node-key="id"
@@ -35,25 +53,42 @@
               highlight-current
               :expand-on-click-node="false"
               draggable
-              :allow-drop="(draggingNode, dropNode, dropType) => allowScriptDrop('timers', draggingNode, dropNode, dropType)"
+              :allow-drop="
+                (draggingNode, dropNode, dropType) =>
+                  allowScriptDrop('timers', draggingNode, dropNode, dropType)
+              "
               :allow-drag="allowScriptDrag"
               @node-click="() => {}"
               @node-dblclick="(data) => openScriptEditor('timers', data)"
-              @node-contextmenu="(event, data) => handleTreeContextMenu('timers', event, data)"
-              @node-drop="(draggingNode, dropNode, dropType) => handleScriptDrop('timers', draggingNode, dropNode, dropType)"
+              @node-contextmenu="
+                (event, data) => handleTreeContextMenu('timers', event, data)
+              "
+              @node-drop="
+                (draggingNode, dropNode, dropType) =>
+                  handleScriptDrop('timers', draggingNode, dropNode, dropType)
+              "
             >
               <template #default="{ data }">
                 <div
                   class="tree-node"
-                  :class="[{ 'is-selected': isScriptSelected('timers', data) }, `node-${data.type}`]"
-                  @click.stop="(event) => handleScriptNodeClick('timers', data, event)"
+                  :class="[
+                    { 'is-selected': isScriptSelected('timers', data) },
+                    `node-${data.type}`,
+                  ]"
+                  @click.stop="
+                    (event) => handleScriptNodeClick('timers', data, event)
+                  "
                   @dblclick.stop="openScriptEditor('timers', data)"
                 >
                   <el-icon class="node-icon icon-timer">
                     <IconEpFolder v-if="data.type === 'group'" />
                     <IconEpTimer v-else />
                   </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
+                  <span
+                    class="node-label"
+                    :class="{ 'is-group': data.type === 'group' }"
+                    >{{ data.label }}</span
+                  >
                 </div>
               </template>
             </el-tree>
@@ -61,11 +96,14 @@
         </div>
       </el-collapse-item>
       <el-collapse-item name="variableChanges">
-        <template #title>
-          变量改变
-        </template>
+        <template #title> 变量改变 </template>
         <div class="scripts-layout">
-          <div class="scripts-list is-full" @contextmenu="(event) => handleBlankContextMenu('variableChanges', event)">
+          <div
+            class="scripts-list is-full"
+            @contextmenu="
+              (event) => handleBlankContextMenu('variableChanges', event)
+            "
+          >
             <el-tree
               :data="variableChangeTree"
               node-key="id"
@@ -73,25 +111,58 @@
               highlight-current
               :expand-on-click-node="false"
               draggable
-              :allow-drop="(draggingNode, dropNode, dropType) => allowScriptDrop('variableChanges', draggingNode, dropNode, dropType)"
+              :allow-drop="
+                (draggingNode, dropNode, dropType) =>
+                  allowScriptDrop(
+                    'variableChanges',
+                    draggingNode,
+                    dropNode,
+                    dropType,
+                  )
+              "
               :allow-drag="allowScriptDrag"
               @node-click="() => {}"
-              @node-dblclick="(data) => openScriptEditor('variableChanges', data)"
-              @node-contextmenu="(event, data) => handleTreeContextMenu('variableChanges', event, data)"
-              @node-drop="(draggingNode, dropNode, dropType) => handleScriptDrop('variableChanges', draggingNode, dropNode, dropType)"
+              @node-dblclick="
+                (data) => openScriptEditor('variableChanges', data)
+              "
+              @node-contextmenu="
+                (event, data) =>
+                  handleTreeContextMenu('variableChanges', event, data)
+              "
+              @node-drop="
+                (draggingNode, dropNode, dropType) =>
+                  handleScriptDrop(
+                    'variableChanges',
+                    draggingNode,
+                    dropNode,
+                    dropType,
+                  )
+              "
             >
               <template #default="{ data }">
                 <div
                   class="tree-node"
-                  :class="[{ 'is-selected': isScriptSelected('variableChanges', data) }, `node-${data.type}`]"
-                  @click.stop="(event) => handleScriptNodeClick('variableChanges', data, event)"
+                  :class="[
+                    {
+                      'is-selected': isScriptSelected('variableChanges', data),
+                    },
+                    `node-${data.type}`,
+                  ]"
+                  @click.stop="
+                    (event) =>
+                      handleScriptNodeClick('variableChanges', data, event)
+                  "
                   @dblclick.stop="openScriptEditor('variableChanges', data)"
                 >
                   <el-icon class="node-icon icon-change">
                     <IconEpFolder v-if="data.type === 'group'" />
                     <IconEpRefresh v-else />
                   </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
+                  <span
+                    class="node-label"
+                    :class="{ 'is-group': data.type === 'group' }"
+                    >{{ data.label }}</span
+                  >
                 </div>
               </template>
             </el-tree>
@@ -100,11 +171,12 @@
       </el-collapse-item>
 
       <el-collapse-item name="custom">
-        <template #title>
-          自定义脚本
-        </template>
+        <template #title> 自定义脚本 </template>
         <div class="scripts-layout">
-          <div class="scripts-list is-full" @contextmenu="(event) => handleBlankContextMenu('custom', event)">
+          <div
+            class="scripts-list is-full"
+            @contextmenu="(event) => handleBlankContextMenu('custom', event)"
+          >
             <el-tree
               :data="customTree"
               node-key="id"
@@ -112,25 +184,42 @@
               highlight-current
               :expand-on-click-node="false"
               draggable
-              :allow-drop="(draggingNode, dropNode, dropType) => allowScriptDrop('custom', draggingNode, dropNode, dropType)"
+              :allow-drop="
+                (draggingNode, dropNode, dropType) =>
+                  allowScriptDrop('custom', draggingNode, dropNode, dropType)
+              "
               :allow-drag="allowScriptDrag"
               @node-click="() => {}"
               @node-dblclick="(data) => openScriptEditor('custom', data)"
-              @node-contextmenu="(event, data) => handleTreeContextMenu('custom', event, data)"
-              @node-drop="(draggingNode, dropNode, dropType) => handleScriptDrop('custom', draggingNode, dropNode, dropType)"
+              @node-contextmenu="
+                (event, data) => handleTreeContextMenu('custom', event, data)
+              "
+              @node-drop="
+                (draggingNode, dropNode, dropType) =>
+                  handleScriptDrop('custom', draggingNode, dropNode, dropType)
+              "
             >
               <template #default="{ data }">
                 <div
                   class="tree-node"
-                  :class="[{ 'is-selected': isScriptSelected('custom', data) }, `node-${data.type}`]"
-                  @click.stop="(event) => handleScriptNodeClick('custom', data, event)"
+                  :class="[
+                    { 'is-selected': isScriptSelected('custom', data) },
+                    `node-${data.type}`,
+                  ]"
+                  @click.stop="
+                    (event) => handleScriptNodeClick('custom', data, event)
+                  "
                   @dblclick.stop="openScriptEditor('custom', data)"
                 >
                   <el-icon class="node-icon icon-custom">
                     <IconEpFolder v-if="data.type === 'group'" />
                     <IconEpEditPen v-else />
                   </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
+                  <span
+                    class="node-label"
+                    :class="{ 'is-group': data.type === 'group' }"
+                    >{{ data.label }}</span
+                  >
                 </div>
               </template>
             </el-tree>
@@ -152,7 +241,12 @@
         <el-form-item label="父级">
           <el-select v-model="groupParentId" placeholder="根目录">
             <el-option label="根目录" :value="null" />
-            <el-option v-for="group in groupParentOptions" :key="group.id" :label="group.name" :value="group.id" />
+            <el-option
+              v-for="group in groupParentOptions"
+              :key="group.id"
+              :label="group.name"
+              :value="group.id"
+            />
           </el-select>
         </el-form-item>
       </el-form>
@@ -175,7 +269,12 @@
             <el-input v-model="metaForm.name" />
           </el-form-item>
           <el-form-item label="时间(ms)">
-            <el-input-number v-model="metaForm.interval" :min="100" :step="100" style="width: 100%" />
+            <el-input-number
+              v-model="metaForm.interval"
+              :min="100"
+              :step="100"
+              style="width: 100%"
+            />
           </el-form-item>
           <el-form-item label="描述">
             <el-input v-model="metaForm.description" />
@@ -184,7 +283,12 @@
         <template v-else-if="metaDialogModule === 'variableChanges'">
           <el-form-item label="变量">
             <el-select v-model="metaForm.variable" placeholder="请选择变量">
-              <el-option v-for="name in projectVariableNames" :key="name" :label="name" :value="name" />
+              <el-option
+                v-for="name in projectVariableNames"
+                :key="name"
+                :label="name"
+                :value="name"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="描述">
@@ -223,7 +327,12 @@
         <div class="meta-desc">系统脚本</div>
         <div class="meta-actions">
           <el-tooltip content="枚举工程变量" placement="top">
-            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+            <el-button
+              class="icon-button"
+              size="small"
+              circle
+              @click="openVariableEnum"
+            >
               <IconEpList />
             </el-button>
           </el-tooltip>
@@ -242,7 +351,12 @@
         <div class="editor-sidebar">
           <div class="sidebar-section">
             <div class="sidebar-title">自定义脚本</div>
-            <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
+            <el-input
+              v-model="scriptSearch"
+              size="small"
+              placeholder="搜索脚本/分组"
+              clearable
+            />
             <div class="sidebar-scroll">
               <el-tree
                 ref="customScriptTreeRef"
@@ -259,7 +373,14 @@
                       <IconEpFolder v-if="data.type === 'group'" />
                       <IconEpEditPen v-else />
                     </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' || data.type === 'folder' }">{{ data.label }}</span>
+                    <span
+                      class="node-label"
+                      :class="{
+                        'is-group':
+                          data.type === 'group' || data.type === 'folder',
+                      }"
+                      >{{ data.label }}</span
+                    >
                   </div>
                 </template>
               </el-tree>
@@ -267,7 +388,12 @@
           </div>
           <div class="sidebar-section">
             <div class="sidebar-title">页面</div>
-            <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
+            <el-input
+              v-model="pageSearch"
+              size="small"
+              placeholder="搜索页面/分组"
+              clearable
+            />
             <div class="sidebar-scroll">
               <el-tree
                 ref="pageTreeRef"
@@ -284,7 +410,14 @@
                       <IconEpFolder v-if="data.type === 'folder'" />
                       <IconEpDocument v-else />
                     </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' || data.type === 'folder' }">{{ data.label }}</span>
+                    <span
+                      class="node-label"
+                      :class="{
+                        'is-group':
+                          data.type === 'group' || data.type === 'folder',
+                      }"
+                      >{{ data.label }}</span
+                    >
                   </div>
                 </template>
               </el-tree>
@@ -294,7 +427,9 @@
       </div>
       <template #footer>
         <el-button @click="systemEditorVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveSystemScript">保存 (Ctrl+S)</el-button>
+        <el-button type="primary" @click="saveSystemScript"
+          >保存 (Ctrl+S)</el-button
+        >
       </template>
     </el-dialog>
     <el-dialog
@@ -311,15 +446,25 @@
         <div class="meta-desc">{{ editorMetaDescription }}</div>
         <div v-if="scriptEditorModule === 'timers'" class="meta-inline">
           <span class="meta-label">时间(ms)</span>
-          <el-input-number v-model="editorInterval" :min="100" :step="100" size="small" />
+          <el-input-number
+            v-model="editorInterval"
+            :min="100"
+            :step="100"
+            size="small"
+          />
         </div>
         <div v-if="scriptEditorModule === 'custom'" class="meta-inline">
           <span class="meta-label">入参</span>
-          <span class="meta-value">{{ editorParams || '无' }}</span>
+          <span class="meta-value">{{ editorParams || "无" }}</span>
         </div>
         <div class="meta-actions">
           <el-tooltip content="枚举工程变量" placement="top">
-            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+            <el-button
+              class="icon-button"
+              size="small"
+              circle
+              @click="openVariableEnum"
+            >
               <IconEpList />
             </el-button>
           </el-tooltip>
@@ -338,7 +483,12 @@
         <div class="editor-sidebar">
           <div class="sidebar-section">
             <div class="sidebar-title">自定义脚本</div>
-            <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
+            <el-input
+              v-model="scriptSearch"
+              size="small"
+              placeholder="搜索脚本/分组"
+              clearable
+            />
             <div class="sidebar-scroll">
               <el-tree
                 ref="customScriptTreeRef"
@@ -355,7 +505,11 @@
                       <IconEpFolder v-if="data.type === 'group'" />
                       <IconEpEditPen v-else />
                     </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
+                    <span
+                      class="node-label"
+                      :class="{ 'is-group': data.type === 'group' }"
+                      >{{ data.label }}</span
+                    >
                   </div>
                 </template>
               </el-tree>
@@ -363,7 +517,12 @@
           </div>
           <div class="sidebar-section">
             <div class="sidebar-title">页面</div>
-            <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
+            <el-input
+              v-model="pageSearch"
+              size="small"
+              placeholder="搜索页面/分组"
+              clearable
+            />
             <div class="sidebar-scroll">
               <el-tree
                 ref="pageTreeRef"
@@ -380,7 +539,11 @@
                       <IconEpFolder v-if="data.type === 'folder'" />
                       <IconEpDocument v-else />
                     </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{ data.label }}</span>
+                    <span
+                      class="node-label"
+                      :class="{ 'is-group': data.type === 'group' }"
+                      >{{ data.label }}</span
+                    >
                   </div>
                 </template>
               </el-tree>
@@ -390,7 +553,9 @@
       </div>
       <template #footer>
         <el-button @click="scriptEditorVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveActiveScript">保存 (Ctrl+S)</el-button>
+        <el-button type="primary" @click="saveActiveScript"
+          >保存 (Ctrl+S)</el-button
+        >
       </template>
     </el-dialog>
 
@@ -424,7 +589,12 @@
           </el-tree>
         </div>
         <div class="enum-right">
-          <el-input v-model="enumVariableSearch" size="small" placeholder="搜索工程变量" clearable />
+          <el-input
+            v-model="enumVariableSearch"
+            size="small"
+            placeholder="搜索工程变量"
+            clearable
+          />
           <el-table
             :data="enumVariableRows"
             size="small"
@@ -447,15 +617,39 @@
       </div>
       <template #footer>
         <el-button @click="variableEnumVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!enumSelectedVar" @click="confirmEnumInsert">插入</el-button>
+        <el-button
+          type="primary"
+          :disabled="!enumSelectedVar"
+          @click="confirmEnumInsert"
+          >插入</el-button
+        >
       </template>
     </el-dialog>
 
-    <div v-if="contextMenuVisible" class="context-menu" :style="contextMenuStyle" @click.stop @mousedown.stop>
+    <div
+      v-if="contextMenuVisible"
+      class="context-menu"
+      :style="contextMenuStyle"
+      @click.stop
+      @mousedown.stop
+    >
       <template v-if="contextMenuNode?.type === 'blank'">
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建分组</div>
-        <div class="context-menu-item" @click="openMetaDialog(contextMenuModule, 'create')">新建脚本</div>
-        <div class="context-menu-item" :class="{ 'is-disabled': !scriptClipboard }" @click="pasteScript(contextMenuModule)">粘贴</div>
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">
+          新建分组
+        </div>
+        <div
+          class="context-menu-item"
+          @click="openMetaDialog(contextMenuModule, 'create')"
+        >
+          新建脚本
+        </div>
+        <div
+          class="context-menu-item"
+          :class="{ 'is-disabled': !scriptClipboard }"
+          @click="pasteScript(contextMenuModule)"
+        >
+          粘贴
+        </div>
       </template>
       <template v-else-if="contextMenuNode?.type === 'item'">
         <div
@@ -472,8 +666,15 @@
         >
           编辑
         </div>
-        <div class="context-menu-item" @click="copyScript(contextMenuModule)">复制</div>
-        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
+        <div class="context-menu-item" @click="copyScript(contextMenuModule)">
+          复制
+        </div>
+        <div
+          class="context-menu-item"
+          @click="showMoveToMenu = !showMoveToMenu"
+        >
+          移动到
+        </div>
         <div
           class="context-menu-item context-menu-item--danger"
           :class="{ 'is-disabled': !canDeleteSelection }"
@@ -490,8 +691,15 @@
         >
           编辑分组
         </div>
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建子分组</div>
-        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">
+          新建子分组
+        </div>
+        <div
+          class="context-menu-item"
+          @click="showMoveToMenu = !showMoveToMenu"
+        >
+          移动到
+        </div>
         <div
           class="context-menu-item context-menu-item--danger"
           :class="{ 'is-disabled': !canDeleteSelection }"
@@ -502,9 +710,20 @@
       </template>
     </div>
 
-    <div v-if="contextMenuVisible && showMoveToMenu" class="context-menu context-submenu" :style="submenuStyle" @click.stop @mousedown.stop>
+    <div
+      v-if="contextMenuVisible && showMoveToMenu"
+      class="context-menu context-submenu"
+      :style="submenuStyle"
+      @click.stop
+      @mousedown.stop
+    >
       <div class="context-menu-item" @click="handleMoveTo(null)">根目录</div>
-      <div v-for="group in availableGroups" :key="group.id" class="context-menu-item" @click="handleMoveTo(group.id)">
+      <div
+        v-for="group in availableGroups"
+        :key="group.id"
+        class="context-menu-item"
+        @click="handleMoveTo(group.id)"
+      >
         {{ group.name }}
       </div>
     </div>
@@ -528,8 +747,16 @@ import IconEpList from "~icons/ep/list";
 import IconEpDocument from "~icons/ep/document";
 
 const editorStore = useEditorStore();
-const { projectId, globalScripts, projectVariables, projectVariableGroups, pages, doc, docVersion, currentPage } =
-  storeToRefs(editorStore);
+const {
+  projectId,
+  globalScripts,
+  projectVariables,
+  projectVariableGroups,
+  pages,
+  doc,
+  docVersion,
+  currentPage,
+} = storeToRefs(editorStore);
 const maxGroupDepth = 5;
 
 const activeSections = ref("system");
@@ -587,7 +814,9 @@ const contextMenuNode = ref(null);
 const contextMenuModule = ref("");
 const showMoveToMenu = ref(false);
 
-const projectVariableNames = computed(() => Object.keys(projectVariables.value || {}).sort());
+const projectVariableNames = computed(() =>
+  Object.keys(projectVariables.value || {}).sort(),
+);
 const projectVariablesList = computed(() =>
   Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
     name,
@@ -596,10 +825,12 @@ const projectVariablesList = computed(() =>
       ...detail,
       mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
     },
-  }))
+  })),
 );
 const customScripts = computed(() => globalScripts.value?.custom?.items || []);
-const customScriptGroups = computed(() => globalScripts.value?.custom?.groups || []);
+const customScriptGroups = computed(
+  () => globalScripts.value?.custom?.groups || [],
+);
 const variableGroups = computed(() => projectVariableGroups.value || []);
 
 const scriptSearch = ref("");
@@ -613,18 +844,29 @@ const enumSelectedGroupId = ref(null);
 const enumSelectedVar = ref(null);
 
 const selectedSystemLabel = computed(() =>
-  selectedSystemKey.value === "startup" ? "系统启动" : "系统关闭"
+  selectedSystemKey.value === "startup" ? "系统启动" : "系统关闭",
 );
-const editorMetaTitle = computed(() => getSelectedItem(scriptEditorModule.value)?.name || "未命名脚本");
+const editorMetaTitle = computed(
+  () => getSelectedItem(scriptEditorModule.value)?.name || "未命名脚本",
+);
 const editorMetaDescription = computed(
-  () => getSelectedItem(scriptEditorModule.value)?.description || "无描述"
+  () => getSelectedItem(scriptEditorModule.value)?.description || "无描述",
 );
 
-const variableSidebarTree = computed(() => buildVariableTree(variableGroups.value, projectVariablesList.value));
-const customScriptSidebarTree = computed(() => buildScriptTree(customScriptGroups.value, customScripts.value));
+const variableSidebarTree = computed(() =>
+  buildVariableTree(variableGroups.value, projectVariablesList.value),
+);
+const customScriptSidebarTree = computed(() =>
+  buildScriptTree(customScriptGroups.value, customScripts.value),
+);
 const pageSidebarTree = computed(() => buildPageTree(pages.value || []));
 const enumGroupTree = computed(() => [
-  { id: "all", label: "全部", type: "group", children: buildGroupTree(variableGroups.value) },
+  {
+    id: "all",
+    label: "全部",
+    type: "group",
+    children: buildGroupTree(variableGroups.value),
+  },
 ]);
 const enumVariableRows = computed(() => {
   const keyword = String(enumVariableSearch.value || "").toLowerCase();
@@ -637,7 +879,9 @@ const enumVariableRows = computed(() => {
     })
     .filter((item) => {
       if (!keyword) return true;
-      return String(item.name || "").toLowerCase().includes(keyword);
+      return String(item.name || "")
+        .toLowerCase()
+        .includes(keyword);
     })
     .map((item) => ({
       name: item.name,
@@ -674,10 +918,30 @@ const pageComponentTree = computed(() => {
 
 const jsCompletions = computed(() => {
   const items = [
-    { label: "console.log", insertText: "console.log()", kind: "Function", detail: "Log output" },
-    { label: "if", insertText: "if () {\n  \n}", kind: "Snippet", detail: "if statement" },
-    { label: "for", insertText: "for (let i = 0; i < ; i++) {\n  \n}", kind: "Snippet", detail: "for loop" },
-    { label: "function", insertText: "function name() {\n  \n}", kind: "Snippet", detail: "function declaration" },
+    {
+      label: "console.log",
+      insertText: "console.log()",
+      kind: "Function",
+      detail: "Log output",
+    },
+    {
+      label: "if",
+      insertText: "if () {\n  \n}",
+      kind: "Snippet",
+      detail: "if statement",
+    },
+    {
+      label: "for",
+      insertText: "for (let i = 0; i < ; i++) {\n  \n}",
+      kind: "Snippet",
+      detail: "for loop",
+    },
+    {
+      label: "function",
+      insertText: "function name() {\n  \n}",
+      kind: "Snippet",
+      detail: "function declaration",
+    },
     { label: "const", insertText: "const ", kind: "Keyword" },
     { label: "let", insertText: "let ", kind: "Keyword" },
     { label: "return", insertText: "return ", kind: "Keyword" },
@@ -695,8 +959,12 @@ const jsCompletions = computed(() => {
 
   customScripts.value.forEach((script) => {
     if (!script?.name) return;
-    const params = typeof script.params === "string" && script.params.trim() ? script.params.trim() :
-      typeof script.args === "string" ? script.args.trim() : "";
+    const params =
+      typeof script.params === "string" && script.params.trim()
+        ? script.params.trim()
+        : typeof script.args === "string"
+          ? script.args.trim()
+          : "";
     const call = params ? `${script.name}(${params})` : `${script.name}()`;
     items.push({
       label: script.name,
@@ -713,30 +981,50 @@ const jsCompletions = computed(() => {
 });
 
 const timerGroups = computed(() => globalScripts.value?.timers?.groups || []);
-const variableChangeGroups = computed(() => globalScripts.value?.variableChanges?.groups || []);
+const variableChangeGroups = computed(
+  () => globalScripts.value?.variableChanges?.groups || [],
+);
 const customGroups = computed(() => globalScripts.value?.custom?.groups || []);
 
 const timerItems = computed(() => globalScripts.value?.timers?.items || []);
-const variableChangeItems = computed(() => globalScripts.value?.variableChanges?.items || []);
+const variableChangeItems = computed(
+  () => globalScripts.value?.variableChanges?.items || [],
+);
 const customItems = computed(() => globalScripts.value?.custom?.items || []);
 
-const selectedTimer = computed(() => timerItems.value.find((item) => item.id === selectedTimerId.value));
+const selectedTimer = computed(() =>
+  timerItems.value.find((item) => item.id === selectedTimerId.value),
+);
 const selectedVariableChange = computed(() =>
-  variableChangeItems.value.find((item) => item.id === selectedVariableId.value)
+  variableChangeItems.value.find(
+    (item) => item.id === selectedVariableId.value,
+  ),
 );
-const selectedCustom = computed(() => customItems.value.find((item) => item.id === selectedCustomId.value));
+const selectedCustom = computed(() =>
+  customItems.value.find((item) => item.id === selectedCustomId.value),
+);
 
-const selectedTimerGroup = computed(() => timerGroups.value.find((group) => group.id === selectedTimerId.value));
+const selectedTimerGroup = computed(() =>
+  timerGroups.value.find((group) => group.id === selectedTimerId.value),
+);
 const selectedVariableGroup = computed(() =>
-  variableChangeGroups.value.find((group) => group.id === selectedVariableId.value)
+  variableChangeGroups.value.find(
+    (group) => group.id === selectedVariableId.value,
+  ),
 );
-const selectedCustomGroup = computed(() => customGroups.value.find((group) => group.id === selectedCustomId.value));
+const selectedCustomGroup = computed(() =>
+  customGroups.value.find((group) => group.id === selectedCustomId.value),
+);
 
-const timerTree = computed(() => buildScriptTree(timerGroups.value, timerItems.value));
-const variableChangeTree = computed(() =>
-  buildScriptTree(variableChangeGroups.value, variableChangeItems.value)
+const timerTree = computed(() =>
+  buildScriptTree(timerGroups.value, timerItems.value),
 );
-const customTree = computed(() => buildScriptTree(customGroups.value, customItems.value));
+const variableChangeTree = computed(() =>
+  buildScriptTree(variableChangeGroups.value, variableChangeItems.value),
+);
+const customTree = computed(() =>
+  buildScriptTree(customGroups.value, customItems.value),
+);
 
 const contextMenuStyle = computed(() => ({
   left: `${contextMenuPosition.value.x}px`,
@@ -761,17 +1049,26 @@ const availableGroups = computed(() => {
   const current = contextMenuNode.value;
   const groups = getGroupsByModule(module);
   if (!current || current.type !== "group") return groups;
-  return groups.filter((group) => group.id !== current.id && !isDescendantGroup(group.id, current.id, module));
+  return groups.filter(
+    (group) =>
+      group.id !== current.id &&
+      !isDescendantGroup(group.id, current.id, module),
+  );
 });
 
 const groupParentOptions = computed(() => {
   const groups = getGroupsByModule(groupDialogModule.value);
   if (!groupEditMode.value) return groups;
-  return groups.filter((group) => group.id !== groupId.value && !isDescendantGroup(group.id, groupId.value, groupDialogModule.value));
+  return groups.filter(
+    (group) =>
+      group.id !== groupId.value &&
+      !isDescendantGroup(group.id, groupId.value, groupDialogModule.value),
+  );
 });
 
 const scriptEditorTitle = computed(() => {
-  const module = scriptEditorModule.value || contextMenuModule.value || "system";
+  const module =
+    scriptEditorModule.value || contextMenuModule.value || "system";
   const selected = getSelectedItem(module);
   if (selected?.name) return `${selected.name}脚本`;
   if (module === "timers") return "定时器脚本";
@@ -790,7 +1087,10 @@ const metaDialogTitle = computed(() => {
 
 const syncSystemCode = () => {
   const system = globalScripts.value?.system || {};
-  systemCode.value = selectedSystemKey.value === "startup" ? system.startup?.code || "" : system.shutdown?.code || "";
+  systemCode.value =
+    selectedSystemKey.value === "startup"
+      ? system.startup?.code || ""
+      : system.shutdown?.code || "";
 };
 
 watch(selectedSystemKey, syncSystemCode, { immediate: true });
@@ -820,13 +1120,17 @@ watch(pageSearch, (value) => {
   pageTreeRef.value?.filter?.(value);
 });
 
-
 function buildScriptTree(groups, items) {
   const groupMap = new Map();
   const roots = [];
 
   groups.forEach((group) => {
-    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+    groupMap.set(group.id, {
+      id: group.id,
+      label: group.name,
+      type: "group",
+      children: [],
+    });
   });
 
   groupMap.forEach((node, id) => {
@@ -856,7 +1160,12 @@ function buildVariableTree(groups, variables) {
   const roots = [];
 
   groups.forEach((group) => {
-    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+    groupMap.set(group.id, {
+      id: group.id,
+      label: group.name,
+      type: "group",
+      children: [],
+    });
   });
 
   groupMap.forEach((node, id) => {
@@ -891,7 +1200,12 @@ function buildGroupTree(groups) {
   const roots = [];
   const normalized = Array.isArray(groups) ? groups : [];
   normalized.forEach((group) => {
-    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+    groupMap.set(group.id, {
+      id: group.id,
+      label: group.name,
+      type: "group",
+      children: [],
+    });
   });
   groupMap.forEach((node, id) => {
     const group = normalized.find((item) => item.id === id);
@@ -1007,11 +1321,12 @@ function handleCustomScriptInsert(data) {
   if (data?.type !== "item") return;
   const script = customScripts.value.find((item) => item.id === data.itemId);
   if (!script?.name) return;
-  const params = typeof script.params === "string" && script.params.trim()
-    ? script.params.trim()
-    : typeof script.args === "string"
-      ? script.args.trim()
-      : "";
+  const params =
+    typeof script.params === "string" && script.params.trim()
+      ? script.params.trim()
+      : typeof script.args === "string"
+        ? script.args.trim()
+        : "";
   const call = params ? `${script.name}(${params})` : `${script.name}()`;
   insertText(`customScripts.${call}`);
 }
@@ -1048,7 +1363,9 @@ const enumRowClass = ({ row }) => {
 function filterSidebarNode(value, data) {
   if (!value) return true;
   const keyword = String(value).toLowerCase();
-  return String(data?.label || "").toLowerCase().includes(keyword);
+  return String(data?.label || "")
+    .toLowerCase()
+    .includes(keyword);
 }
 
 const openVariableEnum = () => {
@@ -1089,7 +1406,9 @@ function openScriptEditor(module, data) {
   if (!selected) return;
   editorOriginalCode.value = selected.code || "";
   editorCode.value = selected.code || "";
-  const interval = Number(selected.interval ?? selected.time ?? selected.schedule ?? 1000);
+  const interval = Number(
+    selected.interval ?? selected.time ?? selected.schedule ?? 1000,
+  );
   editorInterval.value = Number.isFinite(interval) ? interval : 1000;
   editorOriginalInterval.value = editorInterval.value;
   editorParams.value = selected.params || selected.args || "";
@@ -1110,7 +1429,10 @@ async function persistGlobals() {
 
 async function saveSystemScript() {
   const scripts = globalScripts.value || {};
-  const system = scripts.system || { startup: { code: "" }, shutdown: { code: "" } };
+  const system = scripts.system || {
+    startup: { code: "" },
+    shutdown: { code: "" },
+  };
   const next = {
     ...system,
     [selectedSystemKey.value]: {
@@ -1131,7 +1453,7 @@ function handleScriptNodeClick(module, data, event) {
     if (current.some((node) => node.id === data.id)) {
       setSelectedNodes(
         module,
-        current.filter((node) => node.id !== data.id)
+        current.filter((node) => node.id !== data.id),
       );
     } else {
       setSelectedNodes(module, [...current, data]);
@@ -1200,7 +1522,8 @@ function openGroupEditFromMenu() {
 
 function openGroupCreateFromMenu() {
   const module = contextMenuModule.value;
-  const groupIdValue = contextMenuNode.value?.type === "group" ? contextMenuNode.value?.id : null;
+  const groupIdValue =
+    contextMenuNode.value?.type === "group" ? contextMenuNode.value?.id : null;
   closeContextMenu();
   groupDialogModule.value = module;
   groupEditMode.value = false;
@@ -1215,7 +1538,9 @@ function handleMoveTo(groupIdValue) {
   const node = contextMenuNode.value;
   closeContextMenu();
   if (!module || !node) return;
-  const nodesToMove = getSelectedNodes(module).length ? getSelectedNodes(module) : [node];
+  const nodesToMove = getSelectedNodes(module).length
+    ? getSelectedNodes(module)
+    : [node];
   let nextItems = getItemsByModule(module);
   let nextGroups = getGroupsByModule(module);
   let blocked = false;
@@ -1223,7 +1548,7 @@ function handleMoveTo(groupIdValue) {
   nodesToMove.forEach((item) => {
     if (item.type === "item") {
       nextItems = nextItems.map((row) =>
-        row.id === item.itemId ? { ...row, groupId: groupIdValue } : row
+        row.id === item.itemId ? { ...row, groupId: groupIdValue } : row,
       );
     } else if (item.type === "group") {
       if (groupIdValue && isDescendantGroup(groupIdValue, item.id, module)) {
@@ -1231,7 +1556,7 @@ function handleMoveTo(groupIdValue) {
         return;
       }
       nextGroups = nextGroups.map((row) =>
-        row.id === item.id ? { ...row, parentId: groupIdValue } : row
+        row.id === item.id ? { ...row, parentId: groupIdValue } : row,
       );
     }
   });
@@ -1259,9 +1584,15 @@ function allowScriptDrop(module, draggingNode, dropNode, type) {
 
   if (dragData.type === "group") {
     if (type === "inner" && dropData.type !== "group") return false;
-    if (dropData.type === "group" && isDescendantGroup(dropData.id, dragData.id, module)) return false;
+    if (
+      dropData.type === "group" &&
+      isDescendantGroup(dropData.id, dragData.id, module)
+    )
+      return false;
     if (type === "inner" && dropData.type === "group") {
-      const depth = getGroupDepth(dropData.id, module) + getGroupSubtreeDepth(dragData.id, module);
+      const depth =
+        getGroupDepth(dropData.id, module) +
+        getGroupSubtreeDepth(dragData.id, module);
       if (depth > maxGroupDepth) return false;
     }
     return true;
@@ -1276,7 +1607,7 @@ function handleScriptDrop(module, draggingNode, dropNode, dropType) {
 
   if (dragData.type === "item") {
     const items = getItemsByModule(module).map((item) =>
-      item.id === dragData.itemId ? { ...item, groupId: targetGroupId } : item
+      item.id === dragData.itemId ? { ...item, groupId: targetGroupId } : item,
     );
     updateModuleItems(module, items);
     return;
@@ -1284,7 +1615,7 @@ function handleScriptDrop(module, draggingNode, dropNode, dropType) {
 
   if (dragData.type === "group") {
     const groups = getGroupsByModule(module).map((group) =>
-      group.id === dragData.id ? { ...group, parentId: targetGroupId } : group
+      group.id === dragData.id ? { ...group, parentId: targetGroupId } : group,
     );
     updateModuleGroups(module, groups);
   }
@@ -1307,8 +1638,12 @@ async function removeScript(module) {
   }
   const selected = getSelectedItem(module);
   const nodes = getSelectedNodes(module);
-  const itemsToRemove = nodes.filter((node) => node.type === "item").map((node) => node.itemId);
-  const groupsToRemove = nodes.filter((node) => node.type === "group").map((node) => node.id);
+  const itemsToRemove = nodes
+    .filter((node) => node.type === "item")
+    .map((node) => node.itemId);
+  const groupsToRemove = nodes
+    .filter((node) => node.type === "group")
+    .map((node) => node.id);
   if (!itemsToRemove.length && !groupsToRemove.length && !selected) return;
   try {
     const count = itemsToRemove.length + groupsToRemove.length || 1;
@@ -1316,7 +1651,9 @@ async function removeScript(module) {
     if (count > 1) {
       message = `确定删除选中的 ${count} 项吗？`;
     } else if (groupsToRemove.length === 1 && itemsToRemove.length === 0) {
-      const name = getSelectedNodes(module).find((node) => node.type === "group")?.label || "";
+      const name =
+        getSelectedNodes(module).find((node) => node.type === "group")?.label ||
+        "";
       message = `确定删除分组 "${name}" 吗？组内成员会移动到父级。`;
     }
     await ElMessageBox.confirm(message, "确认删除", {
@@ -1328,9 +1665,7 @@ async function removeScript(module) {
   }
   const items = getItemsByModule(module);
   const groups = getGroupsByModule(module);
-  const nextItems = items.filter(
-    (item) => !itemsToRemove.includes(item.id)
-  );
+  const nextItems = items.filter((item) => !itemsToRemove.includes(item.id));
 
   if (groupsToRemove.length) {
     const parentMap = new Map();
@@ -1345,13 +1680,13 @@ async function removeScript(module) {
       .map((group) =>
         groupsToRemove.includes(group.parentId)
           ? { ...group, parentId: parentMap.get(group.parentId) || null }
-          : group
+          : group,
       );
 
     const reboundItems = nextItems.map((item) =>
       groupsToRemove.includes(item.groupId)
         ? { ...item, groupId: parentMap.get(item.groupId) || null }
-        : item
+        : item,
     );
 
     updateModuleGroups(module, nextGroups);
@@ -1366,7 +1701,9 @@ function copyScript(module) {
   const nodes = getSelectedNodes(module);
   const items = nodes
     .filter((node) => node.type === "item")
-    .map((node) => getItemsByModule(module).find((item) => item.id === node.itemId))
+    .map((node) =>
+      getItemsByModule(module).find((item) => item.id === node.itemId),
+    )
     .filter(Boolean);
   if (!items.length) {
     const selected = getSelectedItem(module);
@@ -1434,7 +1771,8 @@ function getSelectedGroupId(module) {
   }
   if (module === "variableChanges") {
     if (selectedVariableGroup.value) return selectedVariableGroup.value.id;
-    if (selectedVariableChange.value?.groupId) return selectedVariableChange.value.groupId;
+    if (selectedVariableChange.value?.groupId)
+      return selectedVariableChange.value.groupId;
   }
   if (module === "custom") {
     if (selectedCustomGroup.value) return selectedCustomGroup.value.id;
@@ -1504,7 +1842,9 @@ async function saveGroup() {
   if (!name) return ElMessage.warning("分组名不能为空");
 
   const parentId = groupParentId.value || null;
-  const depth = parentId ? getGroupDepth(parentId, groupDialogModule.value) + 1 : 1;
+  const depth = parentId
+    ? getGroupDepth(parentId, groupDialogModule.value) + 1
+    : 1;
   if (depth > maxGroupDepth) {
     return ElMessage.warning(`分组最多支持 ${maxGroupDepth} 层`);
   }
@@ -1513,7 +1853,9 @@ async function saveGroup() {
   if (groupEditMode.value) {
     updateModuleGroups(
       groupDialogModule.value,
-      groups.map((group) => (group.id === groupId.value ? { ...group, name, parentId } : group))
+      groups.map((group) =>
+        group.id === groupId.value ? { ...group, name, parentId } : group,
+      ),
     );
   } else {
     updateModuleGroups(groupDialogModule.value, [
@@ -1540,10 +1882,14 @@ async function removeGroup(module) {
   if (!group) return;
 
   try {
-    await ElMessageBox.confirm(`确定删除分组 "${group.name}" 吗？组内成员会移动到父级。`, "确认删除", {
-      type: "warning",
-      lockScroll: false,
-    });
+    await ElMessageBox.confirm(
+      `确定删除分组 "${group.name}" 吗？组内成员会移动到父级。`,
+      "确认删除",
+      {
+        type: "warning",
+        lockScroll: false,
+      },
+    );
   } catch (error) {
     return;
   }
@@ -1554,7 +1900,7 @@ async function removeGroup(module) {
     .map((item) => (item.parentId === group.id ? { ...item, parentId } : item));
 
   const items = getItemsByModule(module).map((item) =>
-    item.groupId === group.id ? { ...item, groupId: parentId } : item
+    item.groupId === group.id ? { ...item, groupId: parentId } : item,
   );
 
   updateModuleGroups(module, nextGroups);
@@ -1578,7 +1924,9 @@ function getGroupSubtreeDepth(groupIdValue, module) {
   const groups = getGroupsByModule(module);
   const children = groups.filter((group) => group.parentId === groupIdValue);
   if (!children.length) return 1;
-  const depths = children.map((child) => getGroupSubtreeDepth(child.id, module));
+  const depths = children.map((child) =>
+    getGroupSubtreeDepth(child.id, module),
+  );
   return 1 + Math.max(...depths);
 }
 
@@ -1598,11 +1946,14 @@ function saveScriptCode(module) {
   const items = getItemsByModule(module).map((item) =>
     item.id === selected.id
       ? {
-        ...item,
-        code: editorCode.value || "",
-        interval: module === "timers" ? Number(editorInterval.value) || 1000 : item.interval,
-      }
-      : item
+          ...item,
+          code: editorCode.value || "",
+          interval:
+            module === "timers"
+              ? Number(editorInterval.value) || 1000
+              : item.interval,
+        }
+      : item,
   );
   updateModuleItems(module, items);
   editorOriginalCode.value = editorCode.value || "";
@@ -1640,9 +1991,11 @@ async function handleSystemBeforeClose(done) {
 }
 
 async function handleScriptBeforeClose(done) {
-  const codeDirty = (editorCode.value || "") !== (editorOriginalCode.value || "");
+  const codeDirty =
+    (editorCode.value || "") !== (editorOriginalCode.value || "");
   const intervalDirty =
-    scriptEditorModule.value === "timers" && editorInterval.value !== editorOriginalInterval.value;
+    scriptEditorModule.value === "timers" &&
+    editorInterval.value !== editorOriginalInterval.value;
   const isDirty = codeDirty || intervalDirty;
   if (!isDirty) {
     done();
@@ -1691,7 +2044,9 @@ function openMetaDialog(module, mode) {
     metaForm.value = {
       id: selected.id,
       name: selected.name || selected.variable || "",
-      interval: Number(selected.interval ?? selected.time ?? selected.schedule ?? 1000),
+      interval: Number(
+        selected.interval ?? selected.time ?? selected.schedule ?? 1000,
+      ),
       description: selected.description || "",
       variable: selected.variable || "",
       params: selected.params || selected.args || "",
@@ -1699,7 +2054,9 @@ function openMetaDialog(module, mode) {
     };
   } else {
     const groupIdValue =
-      contextMenuNode.value?.type === "group" ? contextMenuNode.value?.id : getSelectedGroupId(module);
+      contextMenuNode.value?.type === "group"
+        ? contextMenuNode.value?.id
+        : getSelectedGroupId(module);
     metaForm.value = {
       id: "",
       name: "",
@@ -1721,7 +2078,9 @@ function saveMetaDialog() {
   if (module === "timers") {
     const name = metaForm.value.name.trim();
     if (!name) return ElMessage.warning("请输入定时器名称");
-    const exists = items.some((item) => item.name === name && item.id !== metaForm.value.id);
+    const exists = items.some(
+      (item) => item.name === name && item.id !== metaForm.value.id,
+    );
     if (exists) return ElMessage.warning("定时器名称已存在");
     if (!Number.isFinite(Number(metaForm.value.interval))) {
       return ElMessage.warning("请输入正确的时间");
@@ -1735,7 +2094,9 @@ function saveMetaDialog() {
   if (module === "custom") {
     const name = metaForm.value.name.trim();
     if (!name) return ElMessage.warning("请输入函数名称");
-    const exists = items.some((item) => item.name === name && item.id !== metaForm.value.id);
+    const exists = items.some(
+      (item) => item.name === name && item.id !== metaForm.value.id,
+    );
     if (exists) return ElMessage.warning("函数名称已存在");
   }
 
@@ -1743,7 +2104,10 @@ function saveMetaDialog() {
     const groupIdValue = metaForm.value.groupId || null;
     const newItem = {
       id: createId(),
-      name: module === "variableChanges" ? metaForm.value.variable : metaForm.value.name.trim(),
+      name:
+        module === "variableChanges"
+          ? metaForm.value.variable
+          : metaForm.value.name.trim(),
       description: metaForm.value.description || "",
       variable: metaForm.value.variable || "",
       params: metaForm.value.params || "",
@@ -1757,7 +2121,10 @@ function saveMetaDialog() {
       if (item.id !== metaForm.value.id) return item;
       return {
         ...item,
-        name: module === "variableChanges" ? metaForm.value.variable : metaForm.value.name.trim(),
+        name:
+          module === "variableChanges"
+            ? metaForm.value.variable
+            : metaForm.value.name.trim(),
         description: metaForm.value.description || "",
         variable: metaForm.value.variable || item.variable || "",
         params: metaForm.value.params || "",

@@ -7,4 +7,3 @@ export {
   ComponentCategory,
   componentRegistry,
 } from "./componentRegistry.js";
-

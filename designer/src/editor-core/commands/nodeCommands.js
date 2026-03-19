@@ -363,13 +363,30 @@ export class DuplicateNodeCommand extends Command {
     // 深拷贝节点
     this._createdNode = this._deepCloneWithNewIds(sourceNode, doc);
 
-    // 应用位置偏移
-    if (this._createdNode.style) {
+    // 应用位置偏移 - 适配新架构 absolutePos / layoutItem.free.abs / style
+    const dx = this._offset.x || 0;
+    const dy = this._offset.y || 0;
+    if (this._createdNode.absolutePos) {
+      this._createdNode.absolutePos.x =
+        (this._createdNode.absolutePos.x ?? 0) + dx;
+      this._createdNode.absolutePos.y =
+        (this._createdNode.absolutePos.y ?? 0) + dy;
+    } else if (this._createdNode.layoutItem?.free?.abs) {
+      this._createdNode.layoutItem.free.abs.x =
+        (this._createdNode.layoutItem.free.abs.x ?? 0) + dx;
+      this._createdNode.layoutItem.free.abs.y =
+        (this._createdNode.layoutItem.free.abs.y ?? 0) + dy;
+    }
+    if (
+      this._createdNode.style &&
+      !this._createdNode.absolutePos &&
+      !this._createdNode.layoutItem?.free?.abs
+    ) {
       if (typeof this._createdNode.style.left === "number") {
-        this._createdNode.style.left += this._offset.x || 0;
+        this._createdNode.style.left += dx;
       }
       if (typeof this._createdNode.style.top === "number") {
-        this._createdNode.style.top += this._offset.y || 0;
+        this._createdNode.style.top += dy;
       }
     }
 

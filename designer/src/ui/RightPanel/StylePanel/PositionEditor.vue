@@ -1,3 +1,7 @@
+<!--
+  PositionEditor - 定位编辑器
+  编辑 position、left/top/right/bottom
+-->
 <template>
   <div class="position-editor">
     <div class="editor-group-title">定位</div>
@@ -15,7 +19,7 @@
           <el-option label="sticky" value="sticky" />
         </el-select>
       </div>
-      
+
       <template v-if="showCoordinates">
         <div class="form-item">
           <label>Left</label>
@@ -106,7 +110,9 @@ const parseValue = (value) => {
 };
 
 const position = computed(() => props.modelValue.position || "relative");
-const showCoordinates = computed(() => ["absolute", "fixed"].includes(position.value));
+const showCoordinates = computed(() =>
+  ["absolute", "fixed"].includes(position.value),
+);
 const left = computed(() => parseValue(props.modelValue.left));
 const top = computed(() => parseValue(props.modelValue.top));
 const right = computed(() => parseValue(props.modelValue.right));

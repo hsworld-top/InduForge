@@ -517,4 +517,3 @@ export function createDiagnosticsStore(options) {
 }
 
 export default DiagnosticsStore;
-

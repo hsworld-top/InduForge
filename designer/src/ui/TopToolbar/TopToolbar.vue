@@ -6,7 +6,10 @@
         <span class="page-chip__name">{{ pageName || "未命名" }}</span>
         <span v-if="isDirty" class="page-chip__dirty">●</span>
       </div>
-      <el-tooltip :content="isLocked ? '释放页面锁' : '获取页面锁'" placement="bottom">
+      <el-tooltip
+        :content="isLocked ? '释放页面锁' : '获取页面锁'"
+        placement="bottom"
+      >
         <el-button class="icon-btn" @click="handleToggleLock">
           <IconLucideLock v-if="isLocked" />
           <IconLucideLockOpen v-else />
@@ -16,6 +19,35 @@
 
     <div class="toolbar-section toolbar-center">
       <div class="toolbar-center-shell">
+        <div class="toolbar-group toolbar-group--clipboard">
+          <el-tooltip content="复制 (Ctrl+C)" placement="bottom">
+            <el-button
+              class="icon-btn"
+              :disabled="!hasSelection"
+              @click="handleCopy"
+            >
+              <IconLucideCopy />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="粘贴 (Ctrl+V)" placement="bottom">
+            <el-button
+              class="icon-btn"
+              :disabled="!hasClipboard"
+              @click="handlePaste"
+            >
+              <IconLucideClipboardPaste />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="删除 (Del)" placement="bottom">
+            <el-button
+              class="icon-btn"
+              :disabled="!hasSelection"
+              @click="handleDeleteSelected"
+            >
+              <IconLucideTrash />
+            </el-button>
+          </el-tooltip>
+        </div>
         <div class="toolbar-group toolbar-group--canvas toolbar-center-left">
           <el-popover
             trigger="click"
@@ -25,7 +57,9 @@
           >
             <template #reference>
               <el-button class="view-btn view-btn--selector">
-                <span class="view-selector__size">{{ currentCanvasSizeText }}</span>
+                <span class="view-selector__size">{{
+                  currentCanvasSizeText
+                }}</span>
               </el-button>
             </template>
             <div class="size-panel">
@@ -37,11 +71,17 @@
                     :key="item.key"
                     type="button"
                     class="size-preset-item"
-                    :class="{ 'is-active': item.key === activeViewKey && !isCustomView }"
+                    :class="{
+                      'is-active': item.key === activeViewKey && !isCustomView,
+                    }"
                     @click="handleViewChange(item.key)"
                   >
-                    <span class="size-preset-item__label">{{ item.label }}</span>
-                    <span class="size-preset-item__meta">{{ item.width }} x {{ item.height }}</span>
+                    <span class="size-preset-item__label">{{
+                      item.label
+                    }}</span>
+                    <span class="size-preset-item__meta"
+                      >{{ item.width }} x {{ item.height }}</span
+                    >
                   </button>
                 </div>
               </div>
@@ -69,7 +109,11 @@
                     />
                   </label>
                 </div>
-                <el-button class="size-panel__submit" type="primary" @click="handleApplyCustomSize">
+                <el-button
+                  class="size-panel__submit"
+                  type="primary"
+                  @click="handleApplyCustomSize"
+                >
                   应用自定义尺寸
                 </el-button>
               </div>
@@ -77,18 +121,28 @@
           </el-popover>
           <div class="zoom-group">
             <el-tooltip content="缩小" placement="bottom">
-              <el-button class="icon-btn icon-btn--subtle" @click="handleZoomOut">
+              <el-button
+                class="icon-btn icon-btn--subtle"
+                @click="handleZoomOut"
+              >
                 <IconLucideZoomOut />
               </el-button>
             </el-tooltip>
             <span class="zoom-pill">{{ Math.round(zoom * 100) }}%</span>
             <el-tooltip content="放大" placement="bottom">
-              <el-button class="icon-btn icon-btn--subtle" @click="handleZoomIn">
-              <IconLucideZoomIn />
-            </el-button>
-          </el-tooltip>
-        </div>
-          <el-dropdown trigger="click" placement="bottom" @command="handleViewMenuCommand">
+              <el-button
+                class="icon-btn icon-btn--subtle"
+                @click="handleZoomIn"
+              >
+                <IconLucideZoomIn />
+              </el-button>
+            </el-tooltip>
+          </div>
+          <el-dropdown
+            trigger="click"
+            placement="bottom"
+            @command="handleViewMenuCommand"
+          >
             <el-button class="view-btn">
               <IconLucideSettings2 />
               <span class="view-btn__text">视图</span>
@@ -115,12 +169,20 @@
 
         <div class="toolbar-group toolbar-group--edit toolbar-center-right">
           <el-tooltip content="撤销" placement="bottom">
-            <el-button class="icon-btn" :disabled="!canUndo" @click="handleUndo">
+            <el-button
+              class="icon-btn"
+              :disabled="!canUndo"
+              @click="handleUndo"
+            >
               <IconLucideUndo2 />
             </el-button>
           </el-tooltip>
           <el-tooltip content="恢复" placement="bottom">
-            <el-button class="icon-btn" :disabled="!canRedo" @click="handleRedo">
+            <el-button
+              class="icon-btn"
+              :disabled="!canRedo"
+              @click="handleRedo"
+            >
               <IconLucideRedo2 />
             </el-button>
           </el-tooltip>
@@ -130,7 +192,9 @@
 
     <div class="toolbar-section toolbar-right">
       <div class="toolbar-group toolbar-group--primary">
-        <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
+        <span class="save-status" :class="saveStatusClass">{{
+          saveStatusText
+        }}</span>
         <el-dropdown
           class="preview-action"
           trigger="click"
@@ -146,7 +210,9 @@
           </span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="pagePreview">页面预览</el-dropdown-item>
+              <el-dropdown-item command="pagePreview"
+                >页面预览</el-dropdown-item
+              >
               <el-dropdown-item command="appPreview">应用预览</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -167,7 +233,9 @@
           <template #dropdown>
             <div class="save-settings-panel" @click.stop>
               <div class="save-settings-panel__title">保存设置</div>
-              <div class="save-settings-panel__row save-settings-panel__row--check">
+              <div
+                class="save-settings-panel__row save-settings-panel__row--check"
+              >
                 <el-checkbox v-model="localSaveSettings.autoSave" />
                 <span class="save-settings-panel__label">自动保存</span>
               </div>
@@ -186,13 +254,20 @@
                   />
                 </el-select>
               </div>
-              <el-button class="save-settings-panel__submit" @click="handleSaveSettingsSubmit">
+              <el-button
+                class="save-settings-panel__submit"
+                @click="handleSaveSettingsSubmit"
+              >
                 设置并保存
               </el-button>
             </div>
           </template>
         </el-dropdown>
-        <el-dropdown trigger="click" placement="bottom-end" @command="handleMoreCommand">
+        <el-dropdown
+          trigger="click"
+          placement="bottom-end"
+          @command="handleMoreCommand"
+        >
           <el-button class="icon-btn">
             <IconLucideEllipsis />
           </el-button>
@@ -214,7 +289,9 @@
                 <IconLucideTrash2 class="menu-icon" />
                 清除当前界面
               </el-dropdown-item>
-              <el-dropdown-item command="collaboration">多人协作</el-dropdown-item>
+              <el-dropdown-item command="collaboration"
+                >多人协作</el-dropdown-item
+              >
               <el-dropdown-item command="refresh">刷新画布</el-dropdown-item>
               <el-dropdown-item command="locale">中英文切换</el-dropdown-item>
             </el-dropdown-menu>
@@ -242,6 +319,9 @@ import IconLucideTrash2 from "~icons/lucide/trash-2";
 import IconLucideUndo2 from "~icons/lucide/undo-2";
 import IconLucideZoomIn from "~icons/lucide/zoom-in";
 import IconLucideZoomOut from "~icons/lucide/zoom-out";
+import IconLucideCopy from "~icons/lucide/copy";
+import IconLucideClipboardPaste from "~icons/lucide/clipboard-paste";
+import IconLucideTrash from "~icons/lucide/trash";
 
 const props = defineProps({
   pageName: { type: String, default: "未命名页面" },
@@ -264,6 +344,8 @@ const props = defineProps({
     type: Object,
     default: () => ({ autoSave: false, intervalMinutes: 5 }),
   },
+  hasSelection: { type: Boolean, default: false },
+  hasClipboard: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -294,6 +376,9 @@ const emit = defineEmits([
   "toggleRuler",
   "toggleGrid",
   "toggleSnap",
+  "copy",
+  "paste",
+  "deleteSelected",
 ]);
 
 const MIN_CANVAS_WIDTH = 120;
@@ -307,16 +392,20 @@ const viewItems = computed(() =>
     label: item.label || item.key,
     width: item.width,
     height: item.height,
-  }))
+  })),
 );
 
 const currentViewLabel = computed(() => {
   if (props.isCustomView) return "自定义";
-  const preset = props.viewPresets.find((item) => item.key === props.activeViewKey);
+  const preset = props.viewPresets.find(
+    (item) => item.key === props.activeViewKey,
+  );
   return preset?.label || "尺寸";
 });
 
-const currentCanvasSizeText = computed(() => `${Math.round(props.canvasWidth)}px`);
+const currentCanvasSizeText = computed(
+  () => `${Math.round(props.canvasWidth)}px`,
+);
 
 const saveStatusText = computed(() => {
   if (props.saving) return "保存中...";
@@ -356,7 +445,7 @@ watch(
       intervalMinutes: Number(value?.intervalMinutes) || 5,
     };
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 
 watch(
@@ -367,7 +456,7 @@ watch(
       height: Math.round(height),
     };
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const handleViewChange = (key) => emit("update:activeViewKey", key);
@@ -378,6 +467,9 @@ const handlePreview = () => emit("preview");
 const handleSave = () => emit("save");
 const handleZoomIn = () => emit("zoomIn");
 const handleZoomOut = () => emit("zoomOut");
+const handleCopy = () => emit("copy");
+const handlePaste = () => emit("paste");
+const handleDeleteSelected = () => emit("deleteSelected");
 
 const handlePreviewCommand = (command) => {
   if (command === "pagePreview") {
@@ -410,12 +502,24 @@ const handleViewMenuCommand = (command) => {
 const handleApplyCustomSize = () => {
   const width = Math.round(Number(localCustomSize.value.width));
   const height = Math.round(Number(localCustomSize.value.height));
-  if (!Number.isFinite(width) || width < MIN_CANVAS_WIDTH || width > MAX_CANVAS_WIDTH) {
-    ElMessage.warning(`宽度需在 ${MIN_CANVAS_WIDTH}-${MAX_CANVAS_WIDTH}px 之间`);
+  if (
+    !Number.isFinite(width) ||
+    width < MIN_CANVAS_WIDTH ||
+    width > MAX_CANVAS_WIDTH
+  ) {
+    ElMessage.warning(
+      `宽度需在 ${MIN_CANVAS_WIDTH}-${MAX_CANVAS_WIDTH}px 之间`,
+    );
     return;
   }
-  if (!Number.isFinite(height) || height < MIN_CANVAS_HEIGHT || height > MAX_CANVAS_HEIGHT) {
-    ElMessage.warning(`高度需在 ${MIN_CANVAS_HEIGHT}-${MAX_CANVAS_HEIGHT}px 之间`);
+  if (
+    !Number.isFinite(height) ||
+    height < MIN_CANVAS_HEIGHT ||
+    height > MAX_CANVAS_HEIGHT
+  ) {
+    ElMessage.warning(
+      `高度需在 ${MIN_CANVAS_HEIGHT}-${MAX_CANVAS_HEIGHT}px 之间`,
+    );
     return;
   }
   emit("applyCustomSize", { width, height });
@@ -499,7 +603,7 @@ const handleMoreCommand = (command) => {
 
 .toolbar-center-shell {
   display: grid;
-  grid-template-columns: max-content minmax(56px, 1fr) max-content;
+  grid-template-columns: max-content max-content minmax(56px, 1fr) max-content;
   align-items: center;
   width: 100%;
   min-width: 0;
@@ -515,8 +619,15 @@ const handleMoreCommand = (command) => {
 
 .toolbar-group--canvas,
 .toolbar-group--edit,
-.toolbar-group--primary {
+.toolbar-group--primary,
+.toolbar-group--clipboard {
   gap: var(--designer-gap-xs);
+}
+
+.toolbar-group--clipboard {
+  padding-right: 6px;
+  border-right: 1px solid var(--designer-border-color);
+  margin-right: 2px;
 }
 
 .toolbar-center-left {
@@ -804,7 +915,9 @@ const handleMoreCommand = (command) => {
   border-bottom-left-radius: var(--designer-radius-lg);
 }
 
-:deep(.preview-action .el-button-group > .el-dropdown__caret-button:last-child) {
+:deep(
+  .preview-action .el-button-group > .el-dropdown__caret-button:last-child
+) {
   width: 28px;
   padding: 0;
   border-top-right-radius: var(--designer-radius-lg);
@@ -941,7 +1054,9 @@ const handleMoreCommand = (command) => {
   color: var(--designer-text-regular);
 }
 
-:global(.save-settings-popper .save-settings-panel__row--check .el-checkbox__inner) {
+:global(
+  .save-settings-popper .save-settings-panel__row--check .el-checkbox__inner
+) {
   width: 16px;
   height: 16px;
   border-radius: 4px;

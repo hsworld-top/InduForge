@@ -1,3 +1,7 @@
+<!--
+  BorderEditor - 边框样式编辑器
+  编辑边框宽度、样式、颜色、圆角
+-->
 <template>
   <div class="border-editor">
     <div class="editor-group-title">边框</div>
@@ -70,7 +74,9 @@ const parseValue = (value, defaultValue = 0) => {
 const borderWidth = computed(() => parseValue(props.modelValue.borderWidth, 0));
 const borderStyle = computed(() => props.modelValue.borderStyle || "none");
 const borderColor = computed(() => props.modelValue.borderColor || "#000000");
-const borderRadius = computed(() => parseValue(props.modelValue.borderRadius, 0));
+const borderRadius = computed(() =>
+  parseValue(props.modelValue.borderRadius, 0),
+);
 
 const handleWidthChange = (value) => {
   emit("update:modelValue", { ...props.modelValue, borderWidth: value });

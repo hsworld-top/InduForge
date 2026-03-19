@@ -113,7 +113,13 @@ export class BindingValidator {
 
     switch (binding.kind) {
       case "datapoint":
-        this._validateDatapointBinding(binding, nodeId, propPath, errors, warnings);
+        this._validateDatapointBinding(
+          binding,
+          nodeId,
+          propPath,
+          errors,
+          warnings,
+        );
         break;
       case "var":
         this._validateVarBinding(binding, nodeId, propPath, errors, warnings);
@@ -286,4 +292,3 @@ export class BindingValidator {
 }
 
 export default BindingValidator;
-

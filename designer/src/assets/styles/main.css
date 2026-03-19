@@ -13,6 +13,8 @@
     --designer-toolbar-height: 40px;
     --designer-rail-width: 40px;
     --designer-panel-width: 272px;
+    --designer-shell-min-width: 1366px;
+    --designer-shell-min-height: 768px;
     --designer-shell-padding: 8px;
     --designer-control-height: 28px;
     --designer-control-height-lg: 30px;
@@ -166,6 +168,10 @@
   /* 设计器布局 */
   .designer-layout {
     @apply flex flex-col h-screen overflow-hidden;
+    width: max(100vw, var(--designer-shell-min-width));
+    height: max(100vh, var(--designer-shell-min-height));
+    min-width: var(--designer-shell-min-width);
+    min-height: var(--designer-shell-min-height);
     background: var(--designer-shell-bg);
   }
 
@@ -443,4 +449,98 @@
   .canvas-statusbar {
     @apply flex items-center h-7 px-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0;
   }
+}
+
+/* ========== 浮动选区工具条 ========== */
+.selection-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  pointer-events: auto;
+  user-select: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .selection-toolbar {
+    background: rgba(40, 40, 40, 0.95);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+}
+
+.sel-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.sel-toolbar__group + .sel-toolbar__group {
+  margin-left: 2px;
+  padding-left: 4px;
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .sel-toolbar__group + .sel-toolbar__group {
+    border-left-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.sel-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sel-toolbar__btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.sel-toolbar__btn:active {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.sel-toolbar__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.sel-toolbar__btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sel-toolbar__btn {
+    color: #d1d5db;
+  }
+  .sel-toolbar__btn:hover {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+  }
+}
+
+.sel-toolbar-fade-enter-active,
+.sel-toolbar-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.sel-toolbar-fade-enter-from,
+.sel-toolbar-fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }

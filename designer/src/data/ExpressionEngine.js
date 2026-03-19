@@ -59,7 +59,8 @@ const builtinFunctions = {
   // 字符串函数
   concat: (...args) => args.join(""),
   substring: (str, start, end) => String(str).substring(start, end),
-  replace: (str, search, replacement) => String(str).replace(search, replacement),
+  replace: (str, search, replacement) =>
+    String(str).replace(search, replacement),
   toLowerCase: (str) => String(str).toLowerCase(),
   toUpperCase: (str) => String(str).toUpperCase(),
   trim: (str) => String(str).trim(),
@@ -92,8 +93,7 @@ const builtinFunctions = {
   // 对象函数
   keys: (obj) => (obj && typeof obj === "object" ? Object.keys(obj) : []),
   values: (obj) => (obj && typeof obj === "object" ? Object.values(obj) : []),
-  hasKey: (obj, key) =>
-    obj && typeof obj === "object" ? key in obj : false,
+  hasKey: (obj, key) => (obj && typeof obj === "object" ? key in obj : false),
   get: (obj, path, defaultValue) => {
     if (!obj || typeof obj !== "object") return defaultValue;
     const keys = String(path).split(".");
@@ -347,13 +347,14 @@ export class ExpressionEngine {
       const fns = funcs;
       
       // 注入函数到作用域
-      ${Object.keys(this._functions).map((name) => `const ${name} = fns.${name};`).join("\n")}
+      ${Object.keys(this._functions)
+        .map((name) => `const ${name} = fns.${name};`)
+        .join("\n")}
       
       return (${expr});
     `;
 
     try {
-      // eslint-disable-next-line no-new-func
       const fn = new Function("ctx", "funcs", funcBody);
 
       // 缓存编译结果

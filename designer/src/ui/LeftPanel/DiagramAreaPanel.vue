@@ -1,8 +1,10 @@
+<!--
+  DiagramAreaPanel - 绘图区面板
+  2D 流程图等可拖拽到画布的图表组件入口
+-->
 <template>
   <div class="flex flex-col gap-3 diagram-area-panel">
-    <div class="text-xs text-gray-500 px-2">
-      拖拽到画布，双击进入编辑模式
-    </div>
+    <div class="text-xs text-gray-500 px-2">拖拽到画布，双击进入编辑模式</div>
 
     <!-- 2D 流程图 -->
     <div class="diagram-category">

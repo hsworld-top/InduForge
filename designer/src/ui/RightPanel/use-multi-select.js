@@ -113,14 +113,16 @@ export function useMultiSelect(props) {
     }
 
     // 从 doc 中获取完整的元素数据
-    const fullElements = elementsRef.value.map((el) => {
-      if (el.kind === "node") {
-        return doc.value.getNode?.(el.id);
-      } else if (el.kind === "graphic") {
-        return doc.value.getGraphic?.(el.id);
-      }
-      return el;
-    }).filter(Boolean);
+    const fullElements = elementsRef.value
+      .map((el) => {
+        if (el.kind === "node") {
+          return doc.value.getNode?.(el.id);
+        } else if (el.kind === "graphic") {
+          return doc.value.getGraphic?.(el.id);
+        }
+        return el;
+      })
+      .filter(Boolean);
 
     return getMultiSelectValueFromElements(fullElements, path);
   };
@@ -143,7 +145,8 @@ export function useMultiSelect(props) {
           if (node) {
             const patch = buildPatch(path, value);
             // 使用 UpdateNodeCommand 更新节点
-            const UpdateNodeCommand = editorStore.doc?.constructor?.UpdateNodeCommand;
+            const UpdateNodeCommand =
+              editorStore.doc?.constructor?.UpdateNodeCommand;
             if (UpdateNodeCommand) {
               history.value.execute(new UpdateNodeCommand(el.id, patch));
             }
@@ -153,7 +156,8 @@ export function useMultiSelect(props) {
           if (graphic) {
             const patch = buildPatch(path, value);
             // 使用 UpdateGraphicCommand 更新图形
-            const UpdateGraphicCommand = editorStore.doc?.constructor?.UpdateGraphicCommand;
+            const UpdateGraphicCommand =
+              editorStore.doc?.constructor?.UpdateGraphicCommand;
             if (UpdateGraphicCommand) {
               history.value.execute(new UpdateGraphicCommand(el.id, patch));
             }

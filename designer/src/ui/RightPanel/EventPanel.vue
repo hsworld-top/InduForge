@@ -1,3 +1,7 @@
+<!--
+  EventPanel - 事件配置面板
+  配置组件的点击、输入等事件及对应脚本
+-->
 <template>
   <div class="event-panel">
     <template v-if="isPageContext">
@@ -8,7 +12,11 @@
     </template>
     <template v-else>
       <div class="event-list">
-        <div v-for="eventItem in eventDefinitions" :key="eventItem.name" class="event-item">
+        <div
+          v-for="eventItem in eventDefinitions"
+          :key="eventItem.name"
+          class="event-item"
+        >
           <div class="event-row">
             <div class="section-title">{{ getEventTitle(eventItem) }}</div>
             <div class="event-controls">
@@ -20,7 +28,12 @@
                 />
               </div>
               <el-tooltip content="打开编辑器" placement="top">
-                <el-button class="icon-button" size="small" circle @click="openEditor(eventItem)">
+                <el-button
+                  class="icon-button"
+                  size="small"
+                  circle
+                  @click="openEditor(eventItem)"
+                >
                   <IconEpEditPen />
                 </el-button>
               </el-tooltip>
@@ -44,7 +57,12 @@
       <div class="meta-desc">{{ editorDescription }}</div>
       <div class="meta-actions">
         <el-tooltip content="枚举变量" placement="top">
-          <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+          <el-button
+            class="icon-button"
+            size="small"
+            circle
+            @click="openVariableEnum"
+          >
             <IconEpList />
           </el-button>
         </el-tooltip>
@@ -85,7 +103,10 @@
                     <IconEpFolder v-if="data.type === 'group'" />
                     <IconEpEditPen v-else />
                   </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                  <span
+                    class="node-label"
+                    :class="{ 'is-group': data.type === 'group' }"
+                  >
                     {{ data.label }}
                   </span>
                 </div>
@@ -117,7 +138,10 @@
                     <IconEpFolder v-if="data.type === 'group'" />
                     <IconEpGrid v-else />
                   </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                  <span
+                    class="node-label"
+                    :class="{ 'is-group': data.type === 'group' }"
+                  >
                     {{ data.label }}
                   </span>
                 </div>
@@ -165,7 +189,12 @@
             </el-tree>
           </div>
           <div class="enum-right">
-            <el-input v-model="projectVarSearch" size="small" placeholder="搜索工程变量" clearable />
+            <el-input
+              v-model="projectVarSearch"
+              size="small"
+              placeholder="搜索工程变量"
+              clearable
+            />
             <el-table
               :data="projectVariableRows"
               size="small"
@@ -177,7 +206,11 @@
             >
               <el-table-column prop="name" label="变量名" min-width="160" />
               <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="description" label="描述" min-width="160" />
+              <el-table-column
+                prop="description"
+                label="描述"
+                min-width="160"
+              />
               <el-table-column prop="mapped" label="映射" width="70">
                 <template #default="{ row }">
                   {{ row.mapped ? "是" : "" }}
@@ -210,7 +243,12 @@
             </el-tree>
           </div>
           <div class="enum-right">
-            <el-input v-model="pageVarSearch" size="small" placeholder="搜索页面变量" clearable />
+            <el-input
+              v-model="pageVarSearch"
+              size="small"
+              placeholder="搜索页面变量"
+              clearable
+            />
             <el-table
               :data="pageVariableRows"
               size="small"
@@ -222,7 +260,11 @@
             >
               <el-table-column prop="name" label="变量名" min-width="160" />
               <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="description" label="描述" min-width="200" />
+              <el-table-column
+                prop="description"
+                label="描述"
+                min-width="200"
+              />
             </el-table>
           </div>
         </div>
@@ -429,7 +471,7 @@ watch(
   () => {
     syncEventToggleState();
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -438,21 +480,26 @@ watch(
     if (!activeEventName.value) return;
     scriptCode.value = getEventScript(activeEventName.value) || "";
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const editorTitle = computed(() => componentLabel.value);
 
 const editorDescription = computed(() => {
   const eventItem = eventDefinitions.value.find(
-    (item) => item.name === activeEventName.value
+    (item) => item.name === activeEventName.value,
   );
   const label = eventItem?.label || activeEventName.value || "事件";
   return `${componentLabel.value}${label}脚本`;
 });
 
 const projectGroupTree = computed(() => [
-  { id: "all", label: "全部", type: "group", children: buildGroupTree(projectVariableGroups.value || []) },
+  {
+    id: "all",
+    label: "全部",
+    type: "group",
+    children: buildGroupTree(projectVariableGroups.value || []),
+  },
 ]);
 
 const customScriptTree = computed(() => {
@@ -462,7 +509,12 @@ const customScriptTree = computed(() => {
   const roots = [];
 
   groups.forEach((group) => {
-    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+    groupMap.set(group.id, {
+      id: group.id,
+      label: group.name,
+      type: "group",
+      children: [],
+    });
   });
 
   groupMap.forEach((node, id) => {
@@ -502,13 +554,15 @@ const pageVars = computed(() => {
 
 const projectVariableRows = computed(() => {
   const keyword = String(projectVarSearch.value || "").toLowerCase();
-  const items = Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
-    name,
-    groupId: detail?.groupId || null,
-    type: detail?.type || "string",
-    description: detail?.description || "",
-    mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
-  }));
+  const items = Object.entries(projectVariables.value || {}).map(
+    ([name, detail]) => ({
+      name,
+      groupId: detail?.groupId || null,
+      type: detail?.type || "string",
+      description: detail?.description || "",
+      mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+    }),
+  );
   return items
     .filter((item) => {
       if (enumSelectedProjectGroupId.value) {
@@ -518,7 +572,9 @@ const projectVariableRows = computed(() => {
     })
     .filter((item) => {
       if (!keyword) return true;
-      return String(item.name || "").toLowerCase().includes(keyword);
+      return String(item.name || "")
+        .toLowerCase()
+        .includes(keyword);
     });
 });
 
@@ -540,7 +596,9 @@ const pageVariableRows = computed(() => {
     })
     .filter((item) => {
       if (!keyword) return true;
-      return String(item.name || "").toLowerCase().includes(keyword);
+      return String(item.name || "")
+        .toLowerCase()
+        .includes(keyword);
     });
 });
 
@@ -571,10 +629,28 @@ const pageComponentTree = computed(() => {
 
 const jsCompletions = computed(() => {
   const items = [
-    { label: "console.log", insertText: "console.log()", kind: "Function", detail: "Log output" },
-    { label: "if", insertText: "if () {\\n  \\n}", kind: "Snippet", detail: "if statement" },
-    { label: "for", insertText: "for (let i = 0; i < ; i++) {\\n  \\n}", kind: "Snippet" },
-    { label: "function", insertText: "function name() {\\n  \\n}", kind: "Snippet" },
+    {
+      label: "console.log",
+      insertText: "console.log()",
+      kind: "Function",
+      detail: "Log output",
+    },
+    {
+      label: "if",
+      insertText: "if () {\\n  \\n}",
+      kind: "Snippet",
+      detail: "if statement",
+    },
+    {
+      label: "for",
+      insertText: "for (let i = 0; i < ; i++) {\\n  \\n}",
+      kind: "Snippet",
+    },
+    {
+      label: "function",
+      insertText: "function name() {\\n  \\n}",
+      kind: "Snippet",
+    },
     { label: "const", insertText: "const ", kind: "Keyword" },
     { label: "let", insertText: "let ", kind: "Keyword" },
     { label: "return", insertText: "return ", kind: "Keyword" },
@@ -624,7 +700,9 @@ const jsCompletions = computed(() => {
 
 const filterSidebarNode = (value, data) => {
   if (!value) return true;
-  return String(data?.label || "").toLowerCase().includes(value.toLowerCase());
+  return String(data?.label || "")
+    .toLowerCase()
+    .includes(value.toLowerCase());
 };
 
 const buildGroupTree = (groups) => {
@@ -632,7 +710,12 @@ const buildGroupTree = (groups) => {
   const roots = [];
   const normalized = Array.isArray(groups) ? groups : [];
   normalized.forEach((group) => {
-    groupMap.set(group.id, { id: group.id, label: group.name, type: "group", children: [] });
+    groupMap.set(group.id, {
+      id: group.id,
+      label: group.name,
+      type: "group",
+      children: [],
+    });
   });
   groupMap.forEach((node, id) => {
     const group = normalized.find((item) => item.id === id);
@@ -656,7 +739,9 @@ watch(componentSearch, (value) => {
 const handleCustomScriptInsert = (data) => {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
-  const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
+  const call = params
+    ? `customScripts.${data.label}(${params})`
+    : `customScripts.${data.label}()`;
   editorRef.value?.insertText?.(call);
 };
 
@@ -723,7 +808,9 @@ const confirmEnumInsert = () => {
     return;
   }
   if (enumSelectedProjectVar.value?.name) {
-    editorRef.value?.insertText?.(`$global.${enumSelectedProjectVar.value.name}`);
+    editorRef.value?.insertText?.(
+      `$global.${enumSelectedProjectVar.value.name}`,
+    );
     variableEnumVisible.value = false;
   }
 };

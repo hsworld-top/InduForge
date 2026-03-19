@@ -1,3 +1,7 @@
+<!--
+  DockPanel - 停靠面板
+  左右侧可停靠/浮动的面板，含标题、操作槽、固定/关闭按钮
+-->
 <template>
   <aside
     class="dock-panel"

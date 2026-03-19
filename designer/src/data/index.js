@@ -1,6 +1,11 @@
 /**
- * 数据绑定系统
- * 统一导出
+ * 数据绑定系统 - 统一导出
+ *
+ * 包含：
+ * - 类型与工厂：createVarDefinition、createDatapointBinding 等
+ * - Transform：数值、字符串、日期、映射等转换
+ * - VarsStore、ExpressionEngine、MockDataProvider、DataService、BindingResolver
+ * - createDataBindingSystem：一键创建完整数据绑定系统
  */
 
 // 类型定义与工厂函数
@@ -65,10 +70,16 @@ export {
 } from "./ExpressionEngine.js";
 
 // Mock 数据提供者
-export { MockDataProvider, createMockDataProvider } from "./MockDataProvider.js";
+export {
+  MockDataProvider,
+  createMockDataProvider,
+} from "./MockDataProvider.js";
 
 // 诊断存储
-export { DiagnosticsStore, createDiagnosticsStore } from "./DiagnosticsStore.js";
+export {
+  DiagnosticsStore,
+  createDiagnosticsStore,
+} from "./DiagnosticsStore.js";
 
 // 数据服务
 export { DataService, createDataService } from "./DataService.js";
@@ -87,8 +98,14 @@ export {
 
 import { VarsStore } from "./VarsStore.js";
 import { ExpressionEngine } from "./ExpressionEngine.js";
-import { MockDataProvider, createMockDataProvider } from "./MockDataProvider.js";
-import { DiagnosticsStore, createDiagnosticsStore } from "./DiagnosticsStore.js";
+import {
+  MockDataProvider,
+  createMockDataProvider,
+} from "./MockDataProvider.js";
+import {
+  DiagnosticsStore,
+  createDiagnosticsStore,
+} from "./DiagnosticsStore.js";
 import { DataService, createDataService } from "./DataService.js";
 import { BindingResolver, createBindingResolver } from "./BindingResolver.js";
 
@@ -143,7 +160,7 @@ export function createDataBindingSystem(options = {}) {
       diagnosticsStore,
       dataService,
     },
-    { mode, pageId }
+    { mode, pageId },
   );
 
   // 设置当前页面

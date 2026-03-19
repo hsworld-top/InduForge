@@ -21,7 +21,7 @@ export function createComponentNode(type, options = {}) {
 
   // 自动推断定位模式
   const positioning = inferPositioning(type, parentNode);
-  
+
   const node = {
     id: generateId("node_"),
     type,
@@ -30,8 +30,10 @@ export function createComponentNode(type, options = {}) {
     style: style || {},
     layoutItem: layoutItem || null, // 兼容旧版
     positioning, // 新架构：定位模式
-    absolutePos: positioning === "absolute" ? createDefaultAbsolutePos() : undefined,
-    flowLayout: positioning === "flow" ? createDefaultFlowLayout(parentNode) : undefined,
+    absolutePos:
+      positioning === "absolute" ? createDefaultAbsolutePos() : undefined,
+    flowLayout:
+      positioning === "flow" ? createDefaultFlowLayout(parentNode) : undefined,
     bindings: {},
     permissions: {},
     events: {},
@@ -61,7 +63,7 @@ export function inferPositioning(type, parentNode) {
     case "FreeContainer":
       // 自由容器：子节点使用绝对定位
       return "absolute";
-      
+
     case "FlexContainer":
     case "ResponsiveLayout":
     case "ElContainer":
@@ -74,14 +76,14 @@ export function inferPositioning(type, parentNode) {
     case "ElCol":
       // Flex 容器：子节点使用流式布局
       return "flow";
-      
+
     case "GridContainer":
     case "ColumnLayout1":
     case "ColumnLayout2":
     case "ColumnLayout4":
       // Grid 容器：子节点使用流式布局
       return "flow";
-      
+
     default:
       // 默认使用流式布局（更安全）
       return "flow";
@@ -123,7 +125,7 @@ function createDefaultFlowLayout(parentNode) {
     const childIndex = parentNode.children?.length || 0;
     const row = Math.floor(childIndex / columns) + 1;
     const col = (childIndex % columns) + 1;
-    
+
     return {
       row,
       col,
@@ -159,7 +161,7 @@ function resolveGridColumns(columns) {
         return Math.max(1, Math.floor(count));
       }
     }
-    
+
     // 尝试解析空格分隔的列模板
     const tokens = columns.trim().split(/\s+/).filter(Boolean);
     if (tokens.length > 0) {

@@ -279,7 +279,9 @@ export class BindingResolver extends EventEmitter {
       const dataService = this._dataService;
       Object.assign(
         $dp,
-        Object.fromEntries(dataService.getValues(Array.from(dataService._valueCache.keys())))
+        Object.fromEntries(
+          dataService.getValues(Array.from(dataService._valueCache.keys())),
+        ),
       );
     }
 
@@ -440,14 +442,14 @@ export class BindingResolver extends EventEmitter {
           this._mockProvider.subscribe(path, () => {
             const resolved = this._resolveExpr(binding, context);
             callback(resolved);
-          })
+          }),
         );
       } else if (this._dataService) {
         unsubscribes.push(
           this._dataService.subscribe(path, () => {
             const resolved = this._resolveExpr(binding, context);
             callback(resolved);
-          })
+          }),
         );
       }
     }
@@ -465,7 +467,10 @@ export class BindingResolver extends EventEmitter {
       }
     };
 
-    if (this._varsStore && (varDeps.page.length > 0 || varDeps.global.length > 0)) {
+    if (
+      this._varsStore &&
+      (varDeps.page.length > 0 || varDeps.global.length > 0)
+    ) {
       this._varsStore.on("change", varChangeHandler);
       unsubscribes.push(() => {
         this._varsStore.off("change", varChangeHandler);
@@ -618,8 +623,12 @@ export class BindingResolver extends EventEmitter {
 
       case "expr":
         if (this._expressionEngine) {
-          const dpDeps = this._expressionEngine.extractDependencies(binding.expr);
-          const varDeps = this._expressionEngine.extractVarDependencies(binding.expr);
+          const dpDeps = this._expressionEngine.extractDependencies(
+            binding.expr,
+          );
+          const varDeps = this._expressionEngine.extractVarDependencies(
+            binding.expr,
+          );
           return [
             ...dpDeps,
             ...varDeps.page.map((n) => `page:${n}`),
@@ -666,4 +675,3 @@ export function createBindingResolver(dependencies, options) {
 }
 
 export default BindingResolver;
-

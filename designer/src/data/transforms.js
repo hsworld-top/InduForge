@@ -241,7 +241,7 @@ export function map(value, mapping, defaultValue) {
  * @returns {*}
  */
 export function boolMap(value, trueValue, falseValue) {
-  return Boolean(value) ? trueValue : falseValue;
+  return value ? trueValue : falseValue;
 }
 
 /**
@@ -450,4 +450,3 @@ export default {
   executeTransform,
   applyTransforms,
 };
-

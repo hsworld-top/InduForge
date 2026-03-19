@@ -84,7 +84,8 @@ export function usePanelState() {
         const normalizeType = (type) => {
           if (!type) return type;
           if (type === "Elayout" || type === "EILayout") return "ElLayout";
-          if (type === "ElayoutRow" || type === "EILayoutRow") return "ElLayoutRow";
+          if (type === "ElayoutRow" || type === "EILayoutRow")
+            return "ElLayoutRow";
           if (type === "Elcol" || type === "EICol") return "ElCol";
           if (type.startsWith("EI")) return `El${type.slice(2)}`;
           return type;
@@ -155,14 +156,14 @@ export function usePanelState() {
         syncSelection();
       }
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   watch(
     () => docVersion.value,
     () => {
       syncSelection();
-    }
+    },
   );
 
   // 组件卸载时取消订阅

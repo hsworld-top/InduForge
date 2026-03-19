@@ -42,9 +42,7 @@ export class UpdatePageCommand extends Command {
 
     this._oldValues = {};
     for (const key of Object.keys(this._patch)) {
-      this._oldValues[key] = JSON.parse(
-        JSON.stringify(page[key] ?? null)
-      );
+      this._oldValues[key] = JSON.parse(JSON.stringify(page[key] ?? null));
     }
 
     doc._updatePage(this._pageId, this._patch);

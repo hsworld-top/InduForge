@@ -1,12 +1,6 @@
 <template>
-  <div
-    class="design-canvas"
-    tabindex="0"
-    @pointerdown.capture="handleCanvasPointerDown"
-    @keydown="handleKeyDown"
-    @dragover.prevent
-    @drop.prevent="handleCanvasDrop"
-  >
+  <div class="design-canvas" tabindex="0" @pointerdown.capture="handleCanvasPointerDown"
+    @pointermove="handleCanvasPointerMove" @keydown="handleKeyDown" @dragover.prevent @drop.prevent="handleCanvasDrop">
     <NodeRenderer v-if="rootNodeId" :node-id="rootNodeId" :is-root="true" />
     <div v-if="!hasContent" class="empty-placeholder">
       <IconEpPlus class="text-5xl mb-4" />
@@ -15,12 +9,8 @@
 
     <!-- 右键菜单 -->
     <teleport to="body">
-      <div
-        v-if="contextMenuVisible"
-        class="context-menu"
-        :style="{ left: contextMenuX + 'px', top: contextMenuY + 'px' }"
-        @click="handleContextMenuClick"
-      >
+      <div v-if="contextMenuVisible" class="context-menu"
+        :style="{ left: contextMenuX + 'px', top: contextMenuY + 'px' }" @click="handleContextMenuClick">
         <div v-if="hasSelection" class="menu-item" @click="handleDelete">
           <IconEpDelete />
           <span>删除</span>
@@ -47,65 +37,62 @@
           <span class="shortcut">Ctrl+Shift+[</span>
         </div>
         <div v-if="hasSelection" class="menu-divider"></div>
-        <div
-          v-if="isElColSelected"
-          class="menu-item"
-          @click="handleInsertColLeft"
-        >
+        <div v-if="isElColSelected" class="menu-item" @click="handleInsertColLeft">
           <IconEpPlus />
           <span>左侧新加一列</span>
         </div>
-        <div
-          v-if="isElColSelected"
-          class="menu-item"
-          @click="handleInsertColRight"
-        >
+        <div v-if="isElColSelected" class="menu-item" @click="handleInsertColRight">
           <IconEpPlus />
           <span>右侧新加一列</span>
         </div>
         <div v-if="isElColSelected" class="menu-divider"></div>
-        <div
-          v-if="isElLayoutRowSelected"
-          class="menu-item"
-          @click="handleInsertRowUp"
-        >
+        <div v-if="isElLayoutRowSelected" class="menu-item" @click="handleInsertRowUp">
           <IconEpPlus />
           <span>上方新加一行</span>
         </div>
-        <div
-          v-if="isElLayoutRowSelected"
-          class="menu-item"
-          @click="handleInsertRowDown"
-        >
+        <div v-if="isElLayoutRowSelected" class="menu-item" @click="handleInsertRowDown">
           <IconEpPlus />
           <span>下方新加一行</span>
         </div>
         <div v-if="isElLayoutRowSelected" class="menu-divider"></div>
-        <div
-          class="menu-item"
-          @click="handleUndo"
-          :class="{ disabled: !canUndo }"
-        >
+        <div class="menu-item" @click="handleUndo" :class="{ disabled: !canUndo }">
           <IconEpRefreshLeft />
           <span>撤销</span>
           <span class="shortcut">Ctrl+Z</span>
         </div>
-        <div
-          class="menu-item"
-          @click="handleRedo"
-          :class="{ disabled: !canRedo }"
-        >
+        <div class="menu-item" @click="handleRedo" :class="{ disabled: !canRedo }">
           <IconEpRefreshRight />
           <span>重做</span>
           <span class="shortcut">Ctrl+Y</span>
         </div>
       </div>
     </teleport>
+
+    <teleport to="body">
+      <div v-if="marquee.active" class="marquee-selection" :style="marqueeStyle" />
+    </teleport>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount, provide, inject } from "vue";
+/**
+ * DesignCanvas - 设计画布组件
+ *
+ * 职责：
+ * - 渲染当前页面的组件树（NodeRenderer）
+ * - 框选（marquee）多选、右键菜单、快捷键
+ * - 拖拽放置组件、画布内拖拽排序
+ * - 粘贴到鼠标位置、撤销/重做
+ * - 空画布占位提示
+ */
+import {
+  computed,
+  ref,
+  onMounted,
+  onBeforeUnmount,
+  provide,
+  inject,
+} from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { createSelectableElement } from "@/editor-core";
@@ -120,12 +107,44 @@ import IconEpRefreshRight from "~icons/ep/refresh-right";
 import { useDragState, endDrag } from "./use-drag-state";
 
 const editorStore = useEditorStore();
-const { doc, currentPage, selection, history, docVersion, selectionVersion, error } =
-  storeToRefs(editorStore);
+const {
+  doc,
+  currentPage,
+  selection,
+  history,
+  docVersion,
+  selectionVersion,
+  error,
+} = storeToRefs(editorStore);
 const canvasZoom = inject("canvasZoom", ref(1));
 const dragState = useDragState();
 
+/** 当前页面根节点 ID */
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
+/** 鼠标在画布上的坐标（用于粘贴到鼠标位置） */
+const lastMouseCanvasPos = ref(null);
+/** 框选状态：是否激活、是否移动、起止坐标、修饰键 */
+const marquee = ref({
+  active: false,
+  moved: false,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+  modifiers: { ctrl: false, meta: false, shift: false },
+});
+const marqueeStyle = computed(() => {
+  const left = Math.min(marquee.value.startX, marquee.value.currentX);
+  const top = Math.min(marquee.value.startY, marquee.value.currentY);
+  const width = Math.abs(marquee.value.currentX - marquee.value.startX);
+  const height = Math.abs(marquee.value.currentY - marquee.value.startY);
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${height}px`,
+  };
+});
 
 const hasContent = computed(() => {
   docVersion.value;
@@ -134,8 +153,160 @@ const hasContent = computed(() => {
   return (root?.children || []).length > 0;
 });
 
+/** 强制刷新画布（触发 docVersion 变更） */
 const handleForceRefresh = () => {
   docVersion.value += 1;
+};
+
+/** 重置框选状态 */
+const resetMarquee = () => {
+  marquee.value.active = false;
+  marquee.value.moved = false;
+};
+
+/** 获取框选矩形的 left/top/right/bottom/width/height */
+const getMarqueeRect = () => {
+  const left = Math.min(marquee.value.startX, marquee.value.currentX);
+  const top = Math.min(marquee.value.startY, marquee.value.currentY);
+  const right = Math.max(marquee.value.startX, marquee.value.currentX);
+  const bottom = Math.max(marquee.value.startY, marquee.value.currentY);
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: right - left,
+    height: bottom - top,
+  };
+};
+
+/** 收集框选区域内相交的节点（支持单容器穿透） */
+const collectIntersectedElements = () => {
+  const rect = getMarqueeRect();
+  if (rect.width < 2 && rect.height < 2) return [];
+  const rootId = rootNodeId.value;
+  if (!rootId || !doc.value) return [];
+  /**
+   * 判断组件是否容器类型
+   * @param {string | undefined} type - 组件类型
+   * @returns {boolean}
+   */
+  const isContainerType = (type) =>
+    [
+      "ElLayout",
+      "ElLayoutRow",
+      "ElCol",
+      "ElContainer",
+      "ElHeader",
+      "ElAside",
+      "ElMain",
+      "ElFooter",
+      "FlexContainer",
+      "FreeContainer",
+      "Tabs",
+    ].includes(type || "");
+
+  /**
+   * 判断两个矩形是否相交
+   * @param {DOMRect | { left: number, top: number, right: number, bottom: number }} a - 节点矩形
+   * @param {{ left: number, top: number, right: number, bottom: number }} b - 框选矩形
+   * @returns {boolean}
+   */
+  const rectsIntersect = (a, b) =>
+    !(
+      a.right < b.left ||
+      a.left > b.right ||
+      a.bottom < b.top ||
+      a.top > b.bottom
+    );
+
+  /**
+   * 从指定父节点下收集相交子节点，支持单容器命中时递归穿透
+   * @param {string} parentId - 父节点 ID
+   * @returns {Array<{ kind: 'node', id: string }>}
+   */
+  const collectFromChildren = (parentId) => {
+    const parentNode = doc.value.getNode(parentId);
+    const childIds = parentNode?.children || [];
+    const hits = [];
+    for (const childId of childIds) {
+      const el = document.querySelector(`[data-node-id="${childId}"]`);
+      if (!el) continue;
+      const childRect = el.getBoundingClientRect();
+      if (rectsIntersect(childRect, rect)) {
+        hits.push(childId);
+      }
+    }
+
+    if (hits.length === 1) {
+      const onlyNode = doc.value.getNode(hits[0]);
+      if (isContainerType(onlyNode?.type) && (onlyNode?.children || []).length) {
+        const nested = collectFromChildren(hits[0]);
+        if (nested.length) return nested;
+      }
+    }
+
+    return hits.map((id) => createSelectableElement("node", id));
+  };
+
+  return collectFromChildren(rootId);
+};
+
+/** 框选过程中更新当前坐标 */
+const handleMarqueeMove = (event) => {
+  if (!marquee.value.active) return;
+  marquee.value.currentX = event.clientX;
+  marquee.value.currentY = event.clientY;
+  if (
+    Math.abs(marquee.value.currentX - marquee.value.startX) > 3 ||
+    Math.abs(marquee.value.currentY - marquee.value.startY) > 3
+  ) {
+    marquee.value.moved = true;
+  }
+};
+
+/** 框选结束：应用选中结果或点击选中根节点 */
+const handleMarqueeUp = () => {
+  if (!marquee.value.active) return;
+  const moved = marquee.value.moved;
+  const modifiers = marquee.value.modifiers;
+  const rootId = rootNodeId.value;
+  resetMarquee();
+  document.removeEventListener("pointermove", handleMarqueeMove);
+  document.removeEventListener("pointerup", handleMarqueeUp);
+
+  if (!selection.value) return;
+
+  if (moved) {
+    const elements = collectIntersectedElements();
+    if (elements.length) {
+      if (modifiers.ctrl || modifiers.meta || modifiers.shift) {
+        elements.forEach((el) => selection.value.addToSelection(el));
+      } else {
+        selection.value.selectMultiple(elements);
+      }
+      return;
+    }
+    if (!(modifiers.ctrl || modifiers.meta || modifiers.shift)) {
+      selection.value.clearSelection();
+    }
+    return;
+  }
+
+  if (!rootId) {
+    selection.value.clearSelection();
+    return;
+  }
+  const element = createSelectableElement("node", rootId);
+  if (modifiers.shift) {
+    selection.value.selectRange(element);
+    return;
+  }
+  if (modifiers.meta || modifiers.ctrl) {
+    selection.value.toggleSelect(element);
+    return;
+  }
+  selection.value.select(element);
 };
 
 /**
@@ -158,25 +329,37 @@ const handleCanvasPointerDown = (event) => {
     return;
   }
 
-  const rootId = rootNodeId.value;
-  if (rootId) {
-    const element = createSelectableElement("node", rootId);
-    if (event.shiftKey) {
-      selection.value.selectRange(element);
-      return;
-    }
-    if (event.metaKey || event.ctrlKey) {
-      selection.value.toggleSelect(element);
-      return;
-    }
-    selection.value.select(element);
-    return;
-  }
-
-  selection.value?.clearSelection();
+  marquee.value.active = true;
+  marquee.value.moved = false;
+  marquee.value.startX = event.clientX;
+  marquee.value.startY = event.clientY;
+  marquee.value.currentX = event.clientX;
+  marquee.value.currentY = event.clientY;
+  marquee.value.modifiers = {
+    ctrl: Boolean(event.ctrlKey),
+    meta: Boolean(event.metaKey),
+    shift: Boolean(event.shiftKey),
+  };
+  document.addEventListener("pointermove", handleMarqueeMove);
+  document.addEventListener("pointerup", handleMarqueeUp, { once: false });
 };
 
-// ✅ 右键菜单状态
+/**
+ * 更新画布上的鼠标坐标（用于粘贴到鼠标位置）
+ * @param {PointerEvent} event - 指针事件
+ */
+const handleCanvasPointerMove = (event) => {
+  const el = event.currentTarget;
+  if (!el || !(el instanceof Element)) return;
+  const rect = el.getBoundingClientRect();
+  const zoomValue = Number(canvasZoom?.value) || 1;
+  lastMouseCanvasPos.value = {
+    x: (event.clientX - rect.left) / zoomValue,
+    y: (event.clientY - rect.top) / zoomValue,
+  };
+};
+
+/** 右键菜单显示状态与坐标 */
 const contextMenuVisible = ref(false);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
@@ -250,7 +433,10 @@ const handleCanvasDrop = (event) => {
     const nextRows = Math.max(1, rowCount + 1);
     if ((latestLayout?.props?.rows || 0) !== nextRows) {
       editorStore.updateNode(layoutId, {
-        props: { ...(latestLayout?.props || layoutNode.props || {}), rows: nextRows },
+        props: {
+          ...(latestLayout?.props || layoutNode.props || {}),
+          rows: nextRows,
+        },
       });
     }
 
@@ -274,7 +460,7 @@ const handleCanvasDrop = (event) => {
 
   const resolveLayoutFromPoint = () => {
     const layoutElements = Array.from(
-      document.querySelectorAll('[data-node-type="ElLayout"][data-node-id]')
+      document.querySelectorAll('[data-node-type="ElLayout"][data-node-id]'),
     );
     if (!layoutElements.length) return null;
     const pointX = event.clientX;
@@ -305,7 +491,7 @@ const handleCanvasDrop = (event) => {
         x: Math.max(0, Math.round(offsetX)),
         y: Math.max(0, Math.round(offsetY)),
       },
-    }
+    },
   );
   if (!inserted) {
     const layoutId = resolveLayoutFromPoint();
@@ -469,6 +655,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
   window.removeEventListener("designer:force-refresh", handleForceRefresh);
+  document.removeEventListener("pointermove", handleMarqueeMove);
+  document.removeEventListener("pointerup", handleMarqueeUp);
 });
 
 /**
@@ -476,6 +664,18 @@ onBeforeUnmount(() => {
  * @param {KeyboardEvent} event - 键盘事件
  */
 const handleKeyDown = (event) => {
+  // 方向键移动选中节点，Shift 微调 1px
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+    event.preventDefault();
+    const step = event.shiftKey ? 1 : 10;
+    const dx =
+      event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+    const dy =
+      event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+    editorStore.moveSelectedByDelta(dx, dy);
+    return;
+  }
+
   // Delete / Backspace 删除选中节点
   if (event.key === "Delete" || event.key === "Backspace") {
     event.preventDefault();
@@ -561,6 +761,35 @@ const handleKeyDown = (event) => {
     if (primary && primary.kind === "node") {
       editorStore.toggleNodeLock(primary.id);
     }
+    return;
+  }
+
+  // Ctrl+C 复制
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    event.key === "c" &&
+    !event.shiftKey
+  ) {
+    event.preventDefault();
+    editorStore.copyNodes();
+    return;
+  }
+
+  // Ctrl+V 粘贴（粘贴到鼠标位置）
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    event.key === "v" &&
+    !event.shiftKey
+  ) {
+    event.preventDefault();
+    editorStore.pasteNodes(lastMouseCanvasPos.value ?? undefined);
+    return;
+  }
+
+  // Ctrl+D 复制元素
+  if ((event.ctrlKey || event.metaKey) && event.key === "d") {
+    event.preventDefault();
+    editorStore.duplicateNodes();
     return;
   }
 
@@ -678,5 +907,13 @@ const handleKeyDown = (event) => {
 
 .dark .menu-divider {
   background-color: #3a3a3a;
+}
+
+.marquee-selection {
+  position: fixed;
+  border: 1px solid rgba(59, 130, 246, 0.9);
+  background: rgba(59, 130, 246, 0.16);
+  pointer-events: none;
+  z-index: 9998;
 }
 </style>

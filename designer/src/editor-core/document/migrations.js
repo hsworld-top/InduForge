@@ -58,7 +58,7 @@ const migrations = {
     ) {
       Object.assign(
         v2Schema.vars.global,
-        migrateVariables(schema.projectVariables)
+        migrateVariables(schema.projectVariables),
       );
     }
 
@@ -117,7 +117,7 @@ const migrations = {
       for (const component of schema.components) {
         migrateComponent(component, rootNodeId, v2Schema.nodesById);
         v2Schema.nodesById[rootNodeId].children.push(
-          component.id || generateId("node_")
+          component.id || generateId("node_"),
         );
       }
     }

@@ -37,7 +37,7 @@ export const datacenterApi = {
    */
   getDatapoints(projectId, connectionId) {
     return request.get(
-      `/data/projects/${projectId}/connections/${connectionId}/datapoints`
+      `/data/projects/${projectId}/connections/${connectionId}/datapoints`,
     );
   },
 
@@ -85,7 +85,7 @@ export const datacenterApi = {
   writeDatapointValue(projectId, datapointId, value) {
     return request.post(
       `/data/projects/${projectId}/datapoints/${datapointId}/write`,
-      { value }
+      { value },
     );
   },
 
