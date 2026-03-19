@@ -220,6 +220,28 @@
               </el-button>
             </div>
           </div>
+          <!-- 底部右侧状态信息区 -->
+          <div class="status-info-bar">
+            <template v-if="canvasMousePos">
+              <span class="status-item status-mouse">
+                X:&nbsp;{{ Math.round(canvasMousePos.x) }}&nbsp;&nbsp;Y:&nbsp;{{ Math.round(canvasMousePos.y) }}
+              </span>
+              <span class="status-sep">|</span>
+            </template>
+            <template v-if="selectedNodePos">
+              <span class="status-item">
+                @&nbsp;{{ selectedNodePos.x }},&nbsp;{{ selectedNodePos.y }}
+              </span>
+              <span class="status-sep">|</span>
+            </template>
+            <span class="status-item">选中:&nbsp;{{ selectionCount }}</span>
+            <span class="status-sep">|</span>
+            <span class="status-item">共&nbsp;{{ totalNodeCount }}&nbsp;个</span>
+            <template v-if="hoveredNodeType">
+              <span class="status-sep">|</span>
+              <span class="status-item status-hover">{{ hoveredNodeType }}</span>
+            </template>
+          </div>
         </div>
       </div>
 
@@ -242,6 +264,7 @@ import {
   ref,
   watch,
   provide,
+  inject,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -288,6 +311,7 @@ const {
   canRedo,
   saving,
   selection,
+  doc,
   pages,
   currentPageId,
   currentPage,
@@ -515,6 +539,67 @@ watch(
 
 // 提供 openPageTab 方法给子组件
 provide("openPageTab", openPageTab);
+
+// ==================== 底部状态栏数据 ====================
+/** 从 DesignCanvas 注入画布鼠标坐标（provide in DesignCanvas.vue） */
+const canvasMousePos = inject("canvasMousePos", ref(null));
+/** 从 DesignCanvas 注入悬停节点类型（provide in DesignCanvas.vue） */
+const hoveredNodeType = inject("hoveredNodeType", ref(""));
+
+/**
+ * 当前选中节点数量
+ */
+const selectionCount = computed(() => {
+  void editorStore.selectionVersion;
+  return selection.value?.getSelectionCount?.() ?? 0;
+});
+
+/**
+ * 当前页面内的总节点数（排除根节点）
+ */
+const totalNodeCount = computed(() => {
+  void editorStore.docVersion;
+  if (!doc.value) return 0;
+  const root = currentPage.value?.rootNodeId;
+  const allIds = Object.keys(doc.value?.nodesById || {});
+  // 减去根节点本身
+  return root ? Math.max(0, allIds.length - 1) : allIds.length;
+});
+
+/**
+ * 主选中节点的位置（absolutePos 或 DOM 坐标）
+ */
+const selectedNodePos = computed(() => {
+  void editorStore.selectionVersion;
+  void editorStore.docVersion;
+  const primary = selection.value?.getPrimaryElement?.();
+  if (!primary || primary.kind !== "node") return null;
+  const node = doc.value?.getNode?.(primary.id);
+  if (!node) return null;
+  if (node.absolutePos && Number.isFinite(node.absolutePos.x)) {
+    return {
+      x: Math.round(node.absolutePos.x),
+      y: Math.round(node.absolutePos.y),
+    };
+  }
+  // flow 定位：从 DOM 读取相对于根节点的坐标
+  const rootId = currentPage.value?.rootNodeId;
+  const rootEl = rootId
+    ? document.querySelector(`[data-node-id="${rootId}"]`)
+    : null;
+  const nodeEl = document.querySelector(`[data-node-id="${primary.id}"]`);
+  if (rootEl && nodeEl) {
+    const rootRect = rootEl.getBoundingClientRect();
+    const nodeRect = nodeEl.getBoundingClientRect();
+    const zoomValue = zoom.value || 1;
+    return {
+      x: Math.round((nodeRect.left - rootRect.left) / zoomValue),
+      y: Math.round((nodeRect.top - rootRect.top) / zoomValue),
+    };
+  }
+  return null;
+});
+// ==================== 底部状态栏数据结束 ====================
 
 /**
  * 是否有页面
@@ -1456,6 +1541,7 @@ onBeforeUnmount(() => {
   background: #f3f6fa;
   display: flex;
   align-items: center;
+  overflow: hidden;
 }
 
 .dark .designer-bottom-toolbar {
@@ -1464,8 +1550,57 @@ onBeforeUnmount(() => {
 }
 
 .designer-bottom-toolbar .page-tabs-bar {
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+}
+
+/* 底部状态信息区 */
+.status-info-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 10px;
+  border-left: 1px solid #dfe6ef;
+  height: 100%;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.dark .status-info-bar {
+  border-left-color: #374151;
+  color: #9ca3af;
+}
+
+.status-info-bar .status-item {
+  padding: 0 6px;
+}
+
+.status-info-bar .status-mouse {
+  font-family: monospace;
+  letter-spacing: 0.02em;
+}
+
+.status-info-bar .status-hover {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.dark .status-info-bar .status-hover {
+  color: #60a5fa;
+}
+
+.status-info-bar .status-sep {
+  color: #d1d5db;
+  padding: 0 2px;
+}
+
+.dark .status-info-bar .status-sep {
+  color: #374151;
 }
 
 .page-tabs-add-btn {

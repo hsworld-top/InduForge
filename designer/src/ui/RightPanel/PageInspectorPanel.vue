@@ -6,12 +6,7 @@
         <div class="page-prop-item">
           <div class="page-prop-label">名称</div>
           <div class="page-prop-editor">
-            <el-input
-              v-model="form.name"
-              size="small"
-              :disabled="isSystemPage"
-              @blur="handleNameUpdate"
-            />
+            <el-input v-model="form.name" size="small" :disabled="isSystemPage" @blur="handleNameUpdate" />
           </div>
         </div>
         <div class="page-prop-item">
@@ -23,12 +18,7 @@
         <div class="page-prop-item">
           <div class="page-prop-label">页面类型</div>
           <div class="page-prop-editor">
-            <el-select
-              v-model="form.pageType"
-              size="small"
-              :disabled="isHomePage"
-              @change="handlePageTypeChange"
-            >
+            <el-select v-model="form.pageType" size="small" :disabled="isHomePage" @change="handlePageTypeChange">
               <el-option label="业务页面" value="business" />
               <el-option label="登录页" value="login" />
               <el-option label="登出页" value="logout" />
@@ -47,19 +37,11 @@
             <div class="axis-inline-group">
               <div class="axis-inline-item">
                 <span class="axis-inline-tag">X</span>
-                <el-input
-                  v-model="form.x"
-                  size="small"
-                  disabled
-                />
+                <el-input v-model="form.x" size="small" disabled />
               </div>
               <div class="axis-inline-item">
                 <span class="axis-inline-tag">Y</span>
-                <el-input
-                  v-model="form.y"
-                  size="small"
-                  disabled
-                />
+                <el-input v-model="form.y" size="small" disabled />
               </div>
             </div>
           </div>
@@ -71,11 +53,7 @@
         <div class="page-prop-item">
           <div class="page-prop-label">背景类型</div>
           <div class="page-prop-editor">
-            <el-select
-              v-model="form.backgroundKind"
-              size="small"
-              @change="handleBackgroundUpdate"
-            >
+            <el-select v-model="form.backgroundKind" size="small" @change="handleBackgroundUpdate">
               <el-option label="纯色" value="color" />
               <el-option label="图片" value="image" />
               <el-option label="渐变" value="gradient" />
@@ -85,17 +63,9 @@
         <div class="page-prop-item page-prop-item--stacked">
           <div class="page-prop-label">背景值</div>
           <div class="page-prop-editor page-prop-editor-stacked">
-            <FriendlyColorPicker
-              v-if="form.backgroundKind === 'color'"
-              v-model="form.backgroundValue"
-              @change="handleBackgroundUpdate"
-            />
-            <el-input
-              v-else
-              v-model="form.backgroundValue"
-              size="small"
-              @blur="handleBackgroundUpdate"
-            />
+            <FriendlyColorPicker v-if="form.backgroundKind === 'color'" v-model="form.backgroundValue"
+              @change="handleBackgroundUpdate" />
+            <el-input v-else v-model="form.backgroundValue" size="small" @blur="handleBackgroundUpdate" />
           </div>
         </div>
       </div>
@@ -105,29 +75,17 @@
         <div class="page-prop-item">
           <div class="page-prop-label">宽度</div>
           <div class="page-prop-editor">
-            <el-input
-              v-model="form.windowWidth"
-              size="small"
-              readonly
-              class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')"
-              @blur="handleNumericBlur('windowWidth', $event)"
-              @keydown="filterNumericInput"
-            />
+            <el-input v-model="form.windowWidth" size="small" readonly class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')" @blur="handleNumericBlur('windowWidth', $event)"
+              @keydown="filterNumericInput" />
           </div>
         </div>
         <div class="page-prop-item">
           <div class="page-prop-label">高度</div>
           <div class="page-prop-editor">
-            <el-input
-              v-model="form.windowHeight"
-              size="small"
-              readonly
-              class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')"
-              @blur="handleNumericBlur('windowHeight', $event)"
-              @keydown="filterNumericInput"
-            />
+            <el-input v-model="form.windowHeight" size="small" readonly class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')" @blur="handleNumericBlur('windowHeight', $event)"
+              @keydown="filterNumericInput" />
           </div>
         </div>
       </div>
@@ -137,29 +95,17 @@
         <div class="page-prop-item">
           <div class="page-prop-label">宽度</div>
           <div class="page-prop-editor">
-            <el-input
-              v-model="form.width"
-              size="small"
-              readonly
-              class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')"
-              @blur="handleNumericBlur('width', $event)"
-              @keydown="filterNumericInput"
-            />
+            <el-input v-model="form.width" size="small" readonly class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')" @blur="handleNumericBlur('width', $event)"
+              @keydown="filterNumericInput" />
           </div>
         </div>
         <div class="page-prop-item">
           <div class="page-prop-label">高度</div>
           <div class="page-prop-editor">
-            <el-input
-              v-model="form.height"
-              size="small"
-              readonly
-              class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')"
-              @blur="handleNumericBlur('height', $event)"
-              @keydown="filterNumericInput"
-            />
+            <el-input v-model="form.height" size="small" readonly class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')" @blur="handleNumericBlur('height', $event)"
+              @keydown="filterNumericInput" />
           </div>
         </div>
       </div>
@@ -215,41 +161,19 @@
     </div>
   </div>
 
-  <el-dialog
-    v-model="canvasStyleDialogVisible"
-    title="样式配置"
-    width="980px"
-    top="4vh"
-    :close-on-click-modal="false"
-    :lock-scroll="false"
-  >
+  <el-dialog v-model="canvasStyleDialogVisible" title="样式配置" width="980px" top="4vh" :close-on-click-modal="false"
+    :lock-scroll="false">
     <div class="config-toolbar">
       <div class="config-toolbar-item">
         <span class="config-label">样式模板：</span>
-        <el-select
-          v-model="selectedCanvasPresetId"
-          size="small"
-          class="config-select preset-select"
-          placeholder="请选择"
-          @change="handleCanvasPresetChange"
-        >
-          <el-option
-            v-for="item in filteredCanvasPresetOptions"
-            :key="item.id"
-            :label="item.label"
-            :value="item.id"
-          />
+        <el-select v-model="selectedCanvasPresetId" size="small" class="config-select preset-select" placeholder="请选择"
+          @change="handleCanvasPresetChange">
+          <el-option v-for="item in filteredCanvasPresetOptions" :key="item.id" :label="item.label" :value="item.id" />
         </el-select>
       </div>
       <div class="config-toolbar-item">
         <span class="config-label">筛选：</span>
-        <el-input
-          v-model="canvasPresetSearch"
-          size="small"
-          class="config-select"
-          placeholder="搜索模板"
-          clearable
-        />
+        <el-input v-model="canvasPresetSearch" size="small" class="config-select" placeholder="搜索模板" clearable />
       </div>
     </div>
     <div class="config-editor">
@@ -876,8 +800,7 @@ const handleBackgroundUpdate = () => {
   display: flex;
   align-items: center;
   min-height: 34px;
-  margin: calc(var(--designer-gap-sm) * -1) calc(var(--designer-gap-sm) * -1)
-    0;
+  margin: calc(var(--designer-gap-sm) * -1) calc(var(--designer-gap-sm) * -1) 0;
   padding: 0 10px;
   background: var(--designer-group-surface);
   border-bottom: 1px solid var(--designer-border-soft);

@@ -1,45 +1,22 @@
 <template>
   <div class="friendly-color-picker" :class="{ 'is-disabled': disabled }">
     <div class="color-main-row">
-      <el-color-picker
-        :model-value="modelValue"
-        :show-alpha="showAlpha"
-        :disabled="disabled"
-        :predefine="predefineColors"
-        color-format="hex"
-        @change="handlePickerChange"
-      />
-      <el-input
-        v-model="inputDraft"
-        :disabled="disabled"
-        :placeholder="placeholder"
-        size="small"
-        class="color-input"
-        @blur="commitInputDraft"
-        @keyup.enter="commitInputDraft"
-      />
-      <el-button
-        v-if="clearable"
-        size="small"
-        :disabled="disabled"
-        class="clear-button"
-        @click="clearColor"
-      >
-        清空
-      </el-button>
+      <el-color-picker :model-value="modelValue" :show-alpha="showAlpha" :disabled="disabled"
+        :predefine="predefineColors" color-format="hex" @change="handlePickerChange" />
+      <el-input v-model="inputDraft" :disabled="disabled" :placeholder="placeholder" size="small" class="color-input"
+        @blur="commitInputDraft" @keyup.enter="commitInputDraft">
+        <template v-if="clearable" #suffix>
+          <el-icon class="clear-icon" :class="{ 'is-disabled': disabled }" @click.stop="clearColor">
+            <IconCircleClose />
+          </el-icon>
+        </template>
+      </el-input>
     </div>
 
     <div v-if="recentColors.length" class="recent-row">
       <span class="recent-label">最近</span>
-      <button
-        v-for="color in recentColors"
-        :key="color"
-        type="button"
-        class="recent-color"
-        :style="{ backgroundColor: color }"
-        :title="color"
-        @click="selectRecentColor(color)"
-      />
+      <button v-for="color in displayRecentColors" :key="color" type="button" class="recent-color"
+        :style="{ backgroundColor: color }" :title="color" @click="selectRecentColor(color)" />
     </div>
   </div>
 </template>
@@ -52,9 +29,10 @@
 
 import { computed, onMounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
+import IconCircleClose from "~icons/ep/circle-close";
 
 const RECENT_COLORS_STORAGE_KEY = "designer:recent-colors";
-const MAX_RECENT_COLORS = 8;
+const MAX_RECENT_COLORS = 5;
 const DEFAULT_PREDEFINE_COLORS = [
   "#ffffff",
   "#f5f7fa",
@@ -110,6 +88,9 @@ const predefineColors = computed(() => {
   if (props.predefine.length) return props.predefine;
   return DEFAULT_PREDEFINE_COLORS;
 });
+
+/** 展示用最近颜色，最多 5 个 */
+const displayRecentColors = computed(() => recentColors.value.slice(0, MAX_RECENT_COLORS));
 
 /**
  * 读取最近颜色列表
@@ -256,7 +237,7 @@ onMounted(() => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .friendly-color-picker.is-disabled {
@@ -266,35 +247,49 @@ onMounted(() => {
 .color-main-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .color-input {
   flex: 1;
-  min-width: 96px;
+  min-width: 0;
 }
 
-.clear-button {
-  flex: 0 0 auto;
+.clear-icon {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--el-text-color-placeholder);
+  transition: color 0.2s;
+}
+
+.clear-icon:hover {
+  color: var(--el-color-danger);
+}
+
+.clear-icon.is-disabled {
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .recent-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  padding-left: 2px;
 }
 
 .recent-label {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--el-text-color-secondary);
+  user-select: none;
 }
 
 .recent-color {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border: 1px solid var(--el-border-color);
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
   padding: 0;
   background: transparent;
@@ -304,7 +299,7 @@ onMounted(() => {
 }
 
 .recent-color:hover {
-  transform: translateY(-1px);
+  transform: scale(1.15);
   border-color: var(--el-color-primary);
 }
 </style>

@@ -121,8 +121,10 @@ const dragState = useDragState();
 
 /** 当前页面根节点 ID */
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
-/** 鼠标在画布上的坐标（用于粘贴到鼠标位置） */
+/** 鼠标在画布上的坐标（用于粘贴到鼠标位置，同时 provide 给父层状态栏） */
 const lastMouseCanvasPos = ref(null);
+/** 鼠标当前悬停的节点类型（provide 给父层状态栏） */
+const hoveredNodeType = ref("");
 /** 框选状态：是否激活、是否移动、起止坐标、修饰键 */
 const marquee = ref({
   active: false,
@@ -375,7 +377,7 @@ const handleCanvasPointerDown = (event) => {
 };
 
 /**
- * 更新画布上的鼠标坐标（用于粘贴到鼠标位置）
+ * 更新画布上的鼠标坐标，以及悬停节点类型
  * @param {PointerEvent} event - 指针事件
  */
 const handleCanvasPointerMove = (event) => {
@@ -387,6 +389,10 @@ const handleCanvasPointerMove = (event) => {
     x: (event.clientX - rect.left) / zoomValue,
     y: (event.clientY - rect.top) / zoomValue,
   };
+  // 检测悬停节点类型（供底部状态栏展示）
+  const hitEl = document.elementFromPoint(event.clientX, event.clientY);
+  const nodeEl = hitEl?.closest?.("[data-node-type]");
+  hoveredNodeType.value = nodeEl?.getAttribute?.("data-node-type") || "";
 };
 
 /** 右键菜单显示状态与坐标 */
@@ -570,6 +576,9 @@ const closeContextMenu = () => {
 
 // ✅ 提供右键菜单显示函数给子组件
 provide("showContextMenu", showContextMenu);
+// 向父层（DesignerView）暴露画布鼠标坐标与悬停节点类型，用于底部状态栏
+provide("canvasMousePos", lastMouseCanvasPos);
+provide("hoveredNodeType", hoveredNodeType);
 
 /**
  * 处理菜单项点击

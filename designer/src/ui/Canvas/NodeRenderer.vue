@@ -1795,6 +1795,20 @@ const contentStyle = computed(() => {
     if (!style.width) style.width = "100%";
     if (!style.height) style.height = "100%";
   }
+  if (parentNode && node.value.positioning === "flow") {
+    const parentDescriptor = getDescriptor(parentNode.type);
+    if (parentDescriptor?.childStyle) {
+      const childStyle = parentDescriptor.childStyle(parentNode.type) || {};
+      if (childStyle.width && !style.width) style.width = childStyle.width;
+      if (childStyle.height && !style.height) style.height = childStyle.height;
+      if (childStyle.minWidth && !style.minWidth) {
+        style.minWidth = childStyle.minWidth;
+      }
+      if (childStyle.minHeight && !style.minHeight) {
+        style.minHeight = childStyle.minHeight;
+      }
+    }
+  }
   return style;
 });
 
@@ -8280,6 +8294,9 @@ const handlePointerDown = (event) => {
   if (targetNodeId && targetNodeId !== node.value.id) {
     if (event.altKey) return;
     if (!isContainer.value) return;
+    // descriptor 架构流式容器：让子节点自行处理选中和拖拽
+    const desc = getDescriptor(node.value.type);
+    if (desc?.childPositioning === "flow") return;
   }
 
   event.preventDefault();
@@ -8433,6 +8450,34 @@ const handlePointerDown = (event) => {
   const startClientY = event.clientY;
   let hasMoved = false;
   let startedDragFromMove = false;
+
+  // 判断当前节点是否为 descriptor 架构流式容器的直接子项
+  const isFlowChildInDescContainer = (() => {
+    if (!node.value || node.value.positioning !== "flow") return false;
+    if (!originParent) return false;
+    const parentDesc = getDescriptor(originParent.type);
+    return parentDesc?.childPositioning === "flow";
+  })();
+  // 流式子项拖拽阈值：超过自身宽/高一半才真正移出容器
+  let flowDragThresholdW = 0;
+  let flowDragThresholdH = 0;
+  let flowDragExceeded = false;
+  if (isFlowChildInDescContainer) {
+    // nodeRef 可能在 pointerdown 时尚未就绪，降级通过 data-node-id 查询 DOM
+    const rect =
+      nodeRef.value?.getBoundingClientRect?.() ??
+      document
+        .querySelector(`[data-node-id="${node.value?.id}"]`)
+        ?.getBoundingClientRect?.();
+    if (rect && rect.width > 0 && rect.height > 0) {
+      flowDragThresholdW = rect.width / 2;
+      flowDragThresholdH = rect.height / 2;
+    } else {
+      // 最终降级：默认 20px
+      flowDragThresholdW = 20;
+      flowDragThresholdH = 20;
+    }
+  }
 
   const resolveDropRegion = (upEvent) => {
     if (!upEvent) return null;
@@ -8688,6 +8733,16 @@ const handlePointerDown = (event) => {
     if (!node.value) return;
     const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
     const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
+    // 流式容器子项：未超过自身宽/高一半时保持不动
+    if (isFlowChildInDescContainer && !flowDragExceeded) {
+      if (
+        Math.abs(deltaX) <= flowDragThresholdW &&
+        Math.abs(deltaY) <= flowDragThresholdH
+      ) {
+        return;
+      }
+      flowDragExceeded = true;
+    }
     if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
       hasMoved = true;
       if (!startedDragFromMove) {
@@ -8817,6 +8872,17 @@ const handlePointerDown = (event) => {
   };
 
   const up = (upEvent) => {
+    // 流式容器子项：未超出阈值时回滚事务，保持原位
+    if (isFlowChildInDescContainer && !flowDragExceeded) {
+      cleanupDragHandlers();
+      if (history.value?.isInTransaction?.()) {
+        history.value.rollbackTransaction();
+      }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("designer:node-transform-end"));
+      }
+      return;
+    }
     if (startedDragFromMove) {
       endDrag();
       clearDropTarget();
@@ -8828,6 +8894,124 @@ const handlePointerDown = (event) => {
     rowInsertInfo.value = null;
     layoutInsertInfo.value = null;
     if (hasMoved && !isRegionNode && upEvent && !isMultiDrag) {
+      // 流式容器子项超出阈值：移出原容器，放入新容器或画布根
+      if (isFlowChildInDescContainer && flowDragExceeded && originParent) {
+        if (startedDragFromMove) {
+          endDrag();
+          clearDropTarget();
+        }
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+
+        const dropRegion = resolveDropRegion(upEvent);
+        const hasValidDrop =
+          dropRegion &&
+          dropRegion.id !== originParent.id &&
+          canAcceptChild(dropRegion, node.value.type) &&
+          !isSelfOrDescendant(dropRegion.id);
+
+        if (hasValidDrop) {
+          // 拖入其他容器
+          const targetId = dropRegion.id;
+          const insertIdx = (dropRegion.children || []).length;
+          const moveCmd = new MoveNodeCommand(node.value.id, targetId, insertIdx);
+          const parentDesc = getDescriptor(dropRegion.type);
+          const isFlowTarget = parentDesc?.childPositioning === "flow";
+          const updatePatch = isFlowTarget
+            ? {
+                positioning: "flow",
+                absolutePos: undefined,
+                flowLayout: parentDesc.childFlowLayout
+                  ? { ...parentDesc.childFlowLayout }
+                  : undefined,
+                layoutItem: undefined,
+                style: {
+                  ...(buildFlowResetStyle(node.value.style) || {}),
+                  ...(parentDesc.childStyle
+                    ? parentDesc.childStyle(dropRegion.type)
+                    : {}),
+                },
+              }
+            : {
+                positioning: "absolute",
+                absolutePos: { ...baseLayout },
+                flowLayout: undefined,
+                layoutItem: {
+                  ...(node.value.layoutItem || {}),
+                  free: { mode: "abs", abs: { ...baseLayout } },
+                },
+              };
+          const updateCmd = new UpdateNodeCommand(node.value.id, updatePatch);
+          if (history.value?.isInTransaction?.()) {
+            history.value.executeInTransaction(moveCmd);
+            history.value.executeInTransaction(updateCmd);
+          } else if (history.value?.execute) {
+            history.value.execute(moveCmd);
+            history.value.execute(updateCmd);
+          }
+        } else {
+          // 无合适容器：移到画布根，绝对定位，节点中心对准鼠标释放位置
+          const rootEl = document.querySelector(
+            `[data-node-id="${rootNodeId}"]`,
+          );
+          const rootRect = rootEl?.getBoundingClientRect?.();
+          const nextX = rootRect
+            ? (upEvent.clientX - rootRect.left) / zoomValue
+            : 0;
+          const nextY = rootRect
+            ? (upEvent.clientY - rootRect.top) / zoomValue
+            : 0;
+          // 从 DOM 读取节点实际宽高，使节点中心对准鼠标释放点
+          const nodeElRect = document
+            .querySelector(`[data-node-id="${node.value.id}"]`)
+            ?.getBoundingClientRect?.();
+          const nodeW = nodeElRect
+            ? nodeElRect.width / zoomValue
+            : (baseLayout.w ?? 100);
+          const nodeH = nodeElRect
+            ? nodeElRect.height / zoomValue
+            : (baseLayout.h ?? 40);
+          const nextAbs = {
+            x: Math.round(nextX - nodeW / 2),
+            y: Math.round(nextY - nodeH / 2),
+            w: Math.round(nodeW),
+            h: Math.round(nodeH),
+            z: baseLayout.z ?? 1,
+          };
+          const rootNode = doc.value?.getNode?.(rootNodeId);
+          const insertIdx = rootNode?.children?.length ?? 0;
+          const moveCmd = new MoveNodeCommand(
+            node.value.id,
+            rootNodeId,
+            insertIdx,
+          );
+          const updateCmd = new UpdateNodeCommand(node.value.id, {
+            positioning: "absolute",
+            absolutePos: nextAbs,
+            flowLayout: undefined,
+            layoutItem: {
+              ...(node.value.layoutItem || {}),
+              free: { mode: "abs", abs: { ...nextAbs } },
+            },
+            style: buildFlowResetStyle(node.value.style),
+          });
+          if (history.value?.isInTransaction?.()) {
+            history.value.executeInTransaction(moveCmd);
+            history.value.executeInTransaction(updateCmd);
+          } else if (history.value?.execute) {
+            history.value.execute(moveCmd);
+            history.value.execute(updateCmd);
+          }
+        }
+        cleanupDragHandlers();
+        if (history.value?.isInTransaction?.()) {
+          history.value.commitTransaction("移出布局容器");
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("designer:node-transform-end"));
+        }
+        return;
+      }
       if (
         layoutInsertSnapshot?.layoutId &&
         !isSelfOrDescendant(layoutInsertSnapshot.layoutId) &&
