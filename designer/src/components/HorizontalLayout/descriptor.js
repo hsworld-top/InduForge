@@ -65,6 +65,12 @@ export const descriptor = {
 
   /** 可自由拖拽移动 */
   isMovable: true,
+
+  /** 子项布局类型：Flex 布局 */
+  childLayout: "flex",
+
+  /** Flex 布局方向：水平 */
+  flexDirection: "row",
 };
 
 export default descriptor;

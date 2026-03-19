@@ -22,6 +22,18 @@ export const descriptor = {
 
   /** 子项 resize 策略：不涉及（非容器） */
   childResizable: true,
+
+  /** 显示内容生成函数 */
+  displayContent: (node, resolvedProps) => resolvedProps?.text ?? node?.label ?? "按钮",
+
+  /** 过滤/转换传给 renderTag 的 props */
+  propsFilter: (resolvedProps) => {
+    const { text, safetyControl, safetyDesc, ...elProps } = resolvedProps ?? {};
+    return elProps;
+  },
+
+  /** 默认尺寸 */
+  defaultSize: { width: 120, height: 36 },
 };
 
 export default descriptor;

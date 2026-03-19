@@ -96,6 +96,8 @@ import {
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { createSelectableElement } from "@/editor-core";
+import { isContainerType } from "@/components/registry.js";
+import { eventToCanvasPosition } from "@/editor-core/utils/placementUtils.js";
 import { ElMessage } from "element-plus";
 import NodeRenderer from "./NodeRenderer.vue";
 import IconEpPlus from "~icons/ep/plus";
@@ -188,26 +190,6 @@ const collectIntersectedElements = () => {
   if (rect.width < 2 && rect.height < 2) return [];
   const rootId = rootNodeId.value;
   if (!rootId || !doc.value) return [];
-  /**
-   * 判断组件是否容器类型
-   * @param {string | undefined} type - 组件类型
-   * @returns {boolean}
-   */
-  const isContainerType = (type) =>
-    [
-      "ElLayout",
-      "ElLayoutRow",
-      "ElCol",
-      "ElContainer",
-      "ElHeader",
-      "ElAside",
-      "ElMain",
-      "ElFooter",
-      "FlexContainer",
-      "FreeContainer",
-      "Tabs",
-    ].includes(type || "");
-
   /**
    * 判断两个矩形是否相交
    * @param {DOMRect | { left: number, top: number, right: number, bottom: number }} a - 节点矩形
@@ -332,27 +314,7 @@ const handleCanvasPointerDown = (event) => {
     const targetNodeId = nodeElement.getAttribute("data-node-id");
     const targetNode = targetNodeId ? doc.value?.getNode?.(targetNodeId) : null;
     const isContainerNode =
-      Boolean(targetNode?.children?.length) ||
-      [
-        "FlexContainer",
-        "ResponsiveLayout",
-        "GridContainer",
-        "FreeContainer",
-        "ColumnLayout1",
-        "ColumnLayout2",
-        "ColumnLayout4",
-        "ElContainer",
-        "ElHeader",
-        "ElAside",
-        "ElMain",
-        "ElFooter",
-        "ElLayout",
-        "ElLayoutRow",
-        "ElCol",
-        "Tabs",
-        "HorizontalLayout",
-        "VerticalLayout",
-      ].includes(targetNode?.type || "");
+      Boolean(targetNode?.children?.length) || isContainerType(targetNode?.type || "");
     const hitContainerBlankArea =
       isContainerNode && event.target === nodeElement;
 
@@ -458,10 +420,10 @@ const handleCanvasDrop = (event) => {
   }
   if (!componentType) return;
 
-  const rect = event.currentTarget.getBoundingClientRect();
   const zoomValue = Number(canvasZoom?.value) || 1;
-  const offsetX = (event.clientX - rect.left) / zoomValue;
-  const offsetY = (event.clientY - rect.top) / zoomValue;
+  const dropPos = eventToCanvasPosition(event, event.currentTarget, zoomValue);
+  const offsetX = dropPos.x;
+  const offsetY = dropPos.y;
 
   const insertIntoElLayout = (layoutId) => {
     const layoutNode = doc.value?.getNode?.(layoutId);

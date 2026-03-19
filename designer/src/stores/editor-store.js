@@ -39,7 +39,7 @@ import {
 } from "@/editor-core";
 import { projectApi } from "@/services";
 import request from "@/utils/request";
-import { getDescriptor } from "@/components/registry.js";
+import { getDescriptor, isLayoutContainerType, isRegionType } from "@/components/registry.js";
 import { Storage } from "@/utils/storage";
 
 /**
@@ -2641,22 +2641,10 @@ export const useEditorStore = defineStore("editor", () => {
    * @param {string} type - 组件类型
    * @returns {boolean}
    */
-  const isLayoutContainerType = (type) => {
-    return [
-      "FlexContainer",
-      "GridContainer",
-      "FreeContainer",
-      "ResponsiveLayout",
-      "ColumnLayout1",
-      "ColumnLayout2",
-      "ColumnLayout4",
-      "HorizontalLayout",
-      "VerticalLayout",
-      "ElContainer",
-      "ElLayout",
-      "ElLayoutRow",
-    ].includes(type);
-  };
+  /**
+   * isLayoutContainerType 已迁移至 registry
+   * 使用从 @/components/registry 导入的 isLayoutContainerType() 替代
+   */
 
   /**
    * 解析 Grid 列数
@@ -2796,13 +2784,10 @@ export const useEditorStore = defineStore("editor", () => {
     let parentNode = doc.value.getNode(parentId);
     if (!parentNode) return null;
     let resolvedParentId = parentId;
-    const isElContainerRegionType = (nodeType) =>
-      nodeType === "ElHeader" ||
-      nodeType === "ElAside" ||
-      nodeType === "ElMain" ||
-      nodeType === "ElFooter";
+    // isElContainerRegionType 已迁移：使用 isRegionType 但排除 ElCol（ElContainer 内区域不包含 ElCol）
+    const isElContainerRegion = isRegionType(type) && type !== "ElCol";
     let shouldReplaceRegionChildren = false;
-    if (parentNode.type === "ElContainer" && !isElContainerRegionType(type)) {
+    if (parentNode.type === "ElContainer" && !isElContainerRegion) {
       const mainChildId = (parentNode.children || []).find((childId) => {
         const childNode = doc.value?.getNode?.(childId);
         return childNode?.type === "ElMain";
@@ -2849,13 +2834,7 @@ export const useEditorStore = defineStore("editor", () => {
       layoutItem = buildLayoutItem(parentNode, dropInfo);
     }
 
-    const isRegionContainer = [
-      "ElHeader",
-      "ElAside",
-      "ElMain",
-      "ElFooter",
-      "ElCol",
-    ].includes(parentNode.type);
+    const isRegionContainer = isRegionType(parentNode.type);
     const isTabsContainer = parentNode.type === "Tabs";
     if (isRegionContainer) {
       // 区域容器内默认填满

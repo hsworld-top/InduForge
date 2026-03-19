@@ -21,6 +21,16 @@
  * @property {boolean} [childResizable=true] - 子项是否允许通过 resize 手柄调整尺寸
  * @property {boolean} [isMovable=true] - 组件自身是否可自由拖拽移动
  * @property {boolean|string[]} [acceptChildren=false] - 允许的子组件类型；true=任意，false=不接受，string[]=限定类型列表
+ * @property {number|null} [maxChildren=null] - 最大子项数量；null=无限，1=单子项容器（如 ElCol、ElHeader）
+ * @property {boolean} [isRegion=false] - 是否为 El 容器布局区域（ElHeader/ElAside/ElMain/ElFooter）
+ * @property {'row'|'column'|null} [flexDirection=null] - Flex 布局方向；row=水平，column=垂直，null=未指定（从 CSS 读取）
+ * @property {function(node: Object, resolvedProps: Object): string|null} [displayContent] - 文本/占位内容生成；返回 null 表示无文本内容
+ * @property {Object|null} [slots=null] - 复杂插槽定义（Select/Table/Tabs 等），暂未使用时可省略
+ * @property {function(node: Object): string} [renderKey] - 渲染 key 生成函数，默认 node.id
+ * @property {function(resolvedProps: Object): Object} [propsFilter] - 过滤/转换后传给 renderTag 的 props
+ * @property {import('vue').Component|null} [customRenderer=null] - 复杂组件自定义渲染器（Vue 组件）
+ * @property {'flex'|'grid'|'free'|'none'|null} [childLayout=null] - 子项布局类型；flex=Flex布局，grid=Grid布局，free=自由定位，none=非容器，null=未指定
+ * @property {{ width: number, height: number }|null} [defaultSize=null] - 组件默认尺寸（插入时使用）
  */
 
 /** @type {Map<string, ComponentDescriptor>} */
@@ -60,10 +70,19 @@ export function hasDescriptor(type) {
 /**
  * 获取组件的渲染标签，未注册时降级为 "div"
  * @param {string} type - 组件类型
- * @returns {string}
+ * @param {Object} [node] - 节点对象（当 renderTag 为函数时使用）
+ * @param {Object} [resolvedProps] - 解析后的 props（当 renderTag 为函数时使用）
+ * @returns {string|import('vue').Component}
  */
-export function getRenderTag(type) {
-  return _descriptors.get(type)?.renderTag ?? "div";
+export function getRenderTag(type, node, resolvedProps) {
+  const descriptor = _descriptors.get(type);
+  const renderTag = descriptor?.renderTag;
+  if (!renderTag) return "div";
+  // 支持函数类型的 renderTag（如 Text 组件）
+  if (typeof renderTag === "function") {
+    return renderTag(node, resolvedProps) ?? "div";
+  }
+  return renderTag;
 }
 
 /**
@@ -127,6 +146,173 @@ export function resolveDescriptorContainerStyle(type, node) {
   return descriptor.containerStyle(node);
 }
 
+/**
+ * 获取组件显示内容（文本/占位），由 descriptor.displayContent 驱动
+ * @param {string} type - 组件类型
+ * @param {Object} node - 当前节点
+ * @param {Object} resolvedProps - 已解析的 props
+ * @returns {string|null} 显示文本或 null
+ */
+export function getDisplayContent(type, node, resolvedProps) {
+  const descriptor = _descriptors.get(type);
+  if (!descriptor?.displayContent) return null;
+  return descriptor.displayContent(node, resolvedProps ?? {});
+}
+
+/**
+ * 获取组件渲染 key
+ * @param {string} type - 组件类型
+ * @param {Object} node - 当前节点
+ * @returns {string}
+ */
+export function getRenderKey(type, node) {
+  const descriptor = _descriptors.get(type);
+  if (!descriptor?.renderKey) return node?.id ?? "";
+  return descriptor.renderKey(node);
+}
+
+/**
+ * 过滤/转换传给 renderTag 的 props
+ * @param {string} type - 组件类型
+ * @param {Object} resolvedProps - 已解析的 props
+ * @returns {Object}
+ */
+export function getPropsFilter(type, resolvedProps) {
+  const descriptor = _descriptors.get(type);
+  if (!descriptor?.propsFilter) return resolvedProps ?? {};
+  return descriptor.propsFilter(resolvedProps ?? {});
+}
+
+/**
+ * 获取组件自定义渲染器（复杂组件用）
+ * @param {string} type - 组件类型
+ * @returns {import('vue').Component|null}
+ */
+export function getCustomRenderer(type) {
+  return _descriptors.get(type)?.customRenderer ?? null;
+}
+
+/**
+ * 获取组件默认尺寸
+ * @param {string} type - 组件类型
+ * @param {Object} [componentRegistry] - 组件注册表实例（可选，用于 manifest fallback）
+ * @returns {{ width: number, height: number }|null}
+ */
+export function getDefaultSize(type, componentRegistry = null) {
+  // 优先从 descriptor 读取（新架构组件）
+  const descriptorSize = _descriptors.get(type)?.defaultSize;
+  if (descriptorSize) {
+    return descriptorSize;
+  }
+  // 向后兼容：未注册 descriptor 的组件，从 manifest 读取
+  if (componentRegistry) {
+    const manifest = componentRegistry.get(type);
+    const defaultSize = manifest?.defaultSize;
+    if (defaultSize && typeof defaultSize === "object") {
+      return {
+        width: defaultSize.width || 120,
+        height: defaultSize.height || 40,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * 获取子项布局类型
+ * @param {string} type - 组件类型
+ * @returns {'flex'|'grid'|'free'|'none'|null}
+ */
+export function getChildLayout(type) {
+  return _descriptors.get(type)?.childLayout ?? null;
+}
+
+/**
+ * 判断是否为 Flex 容器（子项使用 Flex 布局）
+ * @param {string} type - 组件类型
+ * @returns {boolean}
+ */
+export function isFlexContainer(type) {
+  return getChildLayout(type) === "flex";
+}
+
+/**
+ * 判断是否为布局容器类型（用于 isLayoutContainerType 查询）
+ * 包括 Flex、Grid、Free 容器，但不包括普通容器（如 Tabs）
+ * @param {string} type - 组件类型
+ * @returns {boolean}
+ */
+export function isLayoutContainerType(type) {
+  const layout = getChildLayout(type);
+  return layout === "flex" || layout === "grid" || layout === "free";
+}
+
+/**
+ * 判断是否为布局节点类型（ElLayout/ElLayoutRow/ElCol 等）
+ * @param {string} type - 组件类型
+ * @returns {boolean}
+ */
+export function isLayoutType(type) {
+  return (
+    type === "ElLayout" ||
+    type === "ElLayoutRow" ||
+    type === "ElCol" ||
+    isLayoutContainerType(type)
+  );
+}
+
+/**
+ * 根据 descriptor 判断容器是否允许接受指定类型的子组件
+ * @param {string} parentType - 父组件类型
+ * @param {string} childType - 子组件类型
+ * @param {number} currentChildCount - 当前子项数量（用于 maxChildren 检查）
+ * @returns {boolean}
+ */
+export function canAcceptChildByDescriptor(parentType, childType, currentChildCount = 0) {
+  const descriptor = _descriptors.get(parentType);
+  if (!descriptor) return true; // 未注册 descriptor 的组件默认允许
+
+  // 检查 maxChildren（单子项容器限制）
+  if (typeof descriptor.maxChildren === "number") {
+    if (currentChildCount >= descriptor.maxChildren) {
+      return false;
+    }
+  }
+
+  // 检查 acceptChildren
+  const acceptChildren = descriptor.acceptChildren;
+  if (acceptChildren === false) {
+    return false; // 明确不接受子组件
+  }
+  if (acceptChildren === true) {
+    return true; // 接受任意子组件
+  }
+  if (Array.isArray(acceptChildren)) {
+    return acceptChildren.includes(childType); // 限定类型列表
+  }
+
+  // 未定义 acceptChildren，默认允许
+  return true;
+}
+
+/**
+ * 判断是否为 El 容器布局区域类型（ElHeader/ElAside/ElMain/ElFooter）
+ * @param {string} type - 组件类型
+ * @returns {boolean}
+ */
+export function isRegionType(type) {
+  return _descriptors.get(type)?.isRegion === true;
+}
+
+/**
+ * 获取 Flex 布局方向
+ * @param {string} type - 组件类型
+ * @returns {'row'|'column'|null}
+ */
+export function getFlexDirection(type) {
+  return _descriptors.get(type)?.flexDirection ?? null;
+}
+
 export default {
   registerDescriptor,
   getDescriptor,
@@ -138,4 +324,16 @@ export default {
   getChildStyle,
   isChildResizable,
   resolveDescriptorContainerStyle,
+  getDisplayContent,
+  getRenderKey,
+  getPropsFilter,
+  getCustomRenderer,
+  getDefaultSize,
+  getChildLayout,
+  isFlexContainer,
+  isLayoutContainerType,
+  isLayoutType,
+  canAcceptChildByDescriptor,
+  isRegionType,
+  getFlexDirection,
 };

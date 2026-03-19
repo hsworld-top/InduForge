@@ -109,6 +109,8 @@ import {
 } from "vue";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
+import { componentRegistry } from "@/editor-core";
+import { isContainerType, isLayoutContainerType, getDescriptor, canAcceptChildByDescriptor } from "@/components/registry.js";
 import { useDragState, endDrag } from "./use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 
@@ -1264,20 +1266,10 @@ const handleDropWithType = (event, componentType) => {
  * @param {string} type - 组件类型
  * @returns {boolean}
  */
-const isLayoutContainerType = (type) => {
-  return [
-    "FlexContainer",
-    "GridContainer",
-    "FreeContainer",
-    "ResponsiveLayout",
-    "ColumnLayout1",
-    "ColumnLayout2",
-    "ColumnLayout4",
-    "ElContainer",
-    "ElLayout",
-    "ElLayoutRow",
-  ].includes(type);
-};
+/**
+ * isLayoutContainerType 已迁移至 registry
+ * 使用从 @/components/registry 导入的 isLayoutContainerType() 替代
+ */
 
 /**
  * 插入组件节点
@@ -1550,8 +1542,7 @@ const resolveLayoutRowByPoint = (layoutNode, layoutElement, event) => {
 const isContainerNode = (nodeId) => {
   const node = doc.value?.getNode(nodeId);
   if (!node) return false;
-  const manifest = componentRegistry.get(node.type);
-  return Boolean(manifest?.isContainer);
+  return isContainerType(node.type);
 };
 
 /**
@@ -1561,12 +1552,14 @@ const isContainerNode = (nodeId) => {
 const canAcceptChild = (parentId, childType) => {
   const node = doc.value?.getNode(parentId);
   if (!node) return false;
-  if (node.type === "ElLayout") {
-    return childType === "ElLayoutRow";
+  // 优先从 descriptor 读取（新架构组件）
+  const currentChildCount = (node.children || []).length;
+  const descriptor = getDescriptor(node.type);
+  if (descriptor) {
+    // 如果已注册 descriptor，使用 descriptor 的判断结果
+    return canAcceptChildByDescriptor(node.type, childType, currentChildCount);
   }
-  if (node.type === "ElLayoutRow") {
-    return childType === "ElCol";
-  }
+  // 向后兼容：未注册 descriptor 的组件，从 manifest 读取 allowedChildren
   const manifest = componentRegistry.get(node.type);
   const allowed = manifest?.allowedChildren;
   if (!Array.isArray(allowed) || allowed.length === 0) return true;

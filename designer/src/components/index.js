@@ -9,6 +9,7 @@
  */
 
 import { registerDescriptor } from "./registry.js";
+import { registerSimpleDescriptors } from "./simple-descriptors.js";
 
 import { descriptor as ButtonDescriptor } from "./Button/index.js";
 import { descriptor as HorizontalLayoutDescriptor } from "./HorizontalLayout/index.js";
@@ -17,11 +18,36 @@ import { descriptor as VerticalLayoutDescriptor } from "./VerticalLayout/index.j
 /**
  * 注册所有组件描述符
  * 应在应用启动时（main.js 或 App.vue setup 阶段）调用一次
+ * 顺序：先注册标杆组件（Button、HorizontalLayout、VerticalLayout），再批量注册简单组件
  */
 export function registerAllDescriptors() {
   registerDescriptor("Button", ButtonDescriptor);
   registerDescriptor("HorizontalLayout", HorizontalLayoutDescriptor);
   registerDescriptor("VerticalLayout", VerticalLayoutDescriptor);
+  registerSimpleDescriptors();
 }
 
-export { registerDescriptor, getDescriptor, hasDescriptor, getRenderTag, isContainerType, getChildPositioning, getChildFlowLayout, getChildStyle, isChildResizable, resolveDescriptorContainerStyle } from "./registry.js";
+export {
+  registerDescriptor,
+  getDescriptor,
+  hasDescriptor,
+  getRenderTag,
+  isContainerType,
+  getChildPositioning,
+  getChildFlowLayout,
+  getChildStyle,
+  isChildResizable,
+  resolveDescriptorContainerStyle,
+  getDisplayContent,
+  getRenderKey,
+  getPropsFilter,
+  getCustomRenderer,
+  getDefaultSize,
+  getChildLayout,
+  isFlexContainer,
+  isLayoutContainerType,
+  isLayoutType,
+  canAcceptChildByDescriptor,
+  isRegionType,
+  getFlexDirection,
+} from "./registry.js";

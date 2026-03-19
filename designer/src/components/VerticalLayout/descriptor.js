@@ -59,6 +59,12 @@ export const descriptor = {
   childResizable: false,
 
   isMovable: true,
+
+  /** 子项布局类型：Flex 布局 */
+  childLayout: "flex",
+
+  /** Flex 布局方向：垂直 */
+  flexDirection: "column",
 };
 
 export default descriptor;

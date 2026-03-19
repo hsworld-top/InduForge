@@ -9,6 +9,9 @@
  * 用于：组件从物料面板拖入画布、画布内组件拖拽排序
  */
 
+import { isContainerType as getIsContainerType, getChildPositioning } from "@/components/registry.js";
+import { eventToCanvasPosition, clampPositionInContainer } from "@/editor-core/utils/placementUtils.js";
+
 export class DragDropManager {
   constructor() {
     /** @type {HTMLElement | null} */
@@ -17,6 +20,124 @@ export class DragDropManager {
     this.insertIndex = -1;
     /** @type {'before' | 'after' | 'inside'} */
     this.insertPosition = "inside";
+  }
+
+  /**
+   * 统一放置解析：根据鼠标位置确定放置目标、插入索引、落点坐标
+   * @param {MouseEvent | DragEvent} event - 拖拽事件
+   * @param {HTMLElement} canvasRoot - 画布根元素
+   * @param {import('@/editor-core').DocumentModel} doc - 文档模型
+   * @param {import('@/editor-core').PageNode} currentPage - 当前页面
+   * @param {number} [zoom=1] - 画布缩放比例
+   * @returns {{ parentId: string | null, index: number, dropPosition: {x: number, y: number} | null, containerType: 'flex' | 'grid' | 'free' | null }}
+   */
+  resolveDropTarget(event, canvasRoot, doc, currentPage, zoom = 1) {
+    if (!event || !canvasRoot || !doc || !currentPage) {
+      return { parentId: null, index: -1, dropPosition: null, containerType: null };
+    }
+
+    const point = { x: event.clientX, y: event.clientY };
+    const element = document.elementFromPoint(point.x, point.y);
+    if (!element) {
+      // 未命中任何元素，放置到页面根
+      const rootId = currentPage.rootNodeId;
+      if (rootId) {
+        const rootNode = doc.getNode(rootId);
+        if (rootNode) {
+          const dropPos = eventToCanvasPosition(event, canvasRoot, zoom);
+          return {
+            parentId: rootId,
+            index: (rootNode.children || []).length,
+            dropPosition: dropPos,
+            containerType: "free",
+          };
+        }
+      }
+      return { parentId: null, index: -1, dropPosition: null, containerType: null };
+    }
+
+    // 向上查找最近的节点元素
+    let nodeElement = element.closest("[data-node-id]");
+    if (!nodeElement || !canvasRoot.contains(nodeElement)) {
+      // 未命中节点，放置到页面根
+      const rootId = currentPage.rootNodeId;
+      if (rootId) {
+        const rootNode = doc.getNode(rootId);
+        if (rootNode) {
+          const dropPos = eventToCanvasPosition(event, canvasRoot, zoom);
+          return {
+            parentId: rootId,
+            index: (rootNode.children || []).length,
+            dropPosition: dropPos,
+            containerType: "free",
+          };
+        }
+      }
+      return { parentId: null, index: -1, dropPosition: null, containerType: null };
+    }
+
+    // 向上遍历直到找到可接受的容器
+    let currentNodeId = nodeElement.getAttribute("data-node-id");
+    let currentNode = doc.getNode(currentNodeId);
+    let parentNode = currentNode ? doc.getParent(currentNodeId) : null;
+
+    while (currentNode) {
+      const nodeType = currentNode.type;
+      const isContainer = getIsContainerType(nodeType);
+      const childPositioning = getChildPositioning(nodeType);
+
+      if (isContainer) {
+        // 找到容器，根据容器类型决定 flow/absolute
+        if (childPositioning === "flow") {
+          // 流式布局：计算插入索引
+          const direction = this.getContainerDirection(nodeElement);
+          const insertInfo = this.calculateFlexInsertPosition(nodeElement, event, direction);
+          return {
+            parentId: currentNode.id,
+            index: insertInfo.index,
+            dropPosition: null,
+            containerType: direction === "row" || direction === "row-reverse" ? "flex" : "flex",
+          };
+        } else {
+          // 绝对定位：计算落点坐标
+          const dropPos = eventToCanvasPosition(event, nodeElement, zoom);
+          const clampedPos = clampPositionInContainer(dropPos, nodeElement, { width: 0, height: 0 }, zoom);
+          return {
+            parentId: currentNode.id,
+            index: (currentNode.children || []).length,
+            dropPosition: clampedPos,
+            containerType: "free",
+          };
+        }
+      }
+
+      // 继续向上查找
+      if (parentNode) {
+        currentNodeId = parentNode.id;
+        currentNode = parentNode;
+        nodeElement = document.querySelector(`[data-node-id="${currentNodeId}"]`);
+        parentNode = doc.getParent(currentNodeId);
+      } else {
+        break;
+      }
+    }
+
+    // 未找到容器，放置到页面根
+    const rootId = currentPage.rootNodeId;
+    if (rootId) {
+      const rootNode = doc.getNode(rootId);
+      if (rootNode) {
+        const dropPos = eventToCanvasPosition(event, canvasRoot, zoom);
+        return {
+          parentId: rootId,
+          index: (rootNode.children || []).length,
+          dropPosition: dropPos,
+          containerType: "free",
+        };
+      }
+    }
+
+    return { parentId: null, index: -1, dropPosition: null, containerType: null };
   }
 
   /**
@@ -42,7 +163,7 @@ export class DragDropManager {
 
     const nodeId = nodeElement.getAttribute("data-node-id");
     const nodeType = nodeElement.getAttribute("data-node-type");
-    const isContainer = this._isContainerType(nodeType);
+    const isContainer = getIsContainerType(nodeType);
 
     return {
       element: nodeElement,
@@ -137,36 +258,6 @@ export class DragDropManager {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
     };
-  }
-
-  /**
-   * 判断是否为容器类型
-   * @param {string | null} nodeType - 节点类型
-   * @returns {boolean}
-   * @private
-   */
-  _isContainerType(nodeType) {
-    if (!nodeType) return false;
-    const containerTypes = [
-      "FlexContainer",
-      "HorizontalLayout",
-      "VerticalLayout",
-      "FreeContainer",
-      "GridContainer",
-      "ResponsiveLayout",
-      "ColumnLayout1",
-      "ColumnLayout2",
-      "ColumnLayout4",
-      "ElContainer",
-      "ElLayout",
-      "ElLayoutRow",
-      "ElHeader",
-      "ElAside",
-      "ElMain",
-      "ElFooter",
-      "ElCol",
-    ];
-    return containerTypes.includes(nodeType);
   }
 
   /**
