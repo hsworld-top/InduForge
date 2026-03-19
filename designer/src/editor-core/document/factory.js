@@ -6,6 +6,30 @@
 import { generateId } from "./types.js";
 
 /**
+ * 延迟获取 descriptor 注册中心（避免模块循环依赖）
+ * @returns {import('../../components/registry.js') | null}
+ */
+let _descriptorRegistry = null;
+const getDescriptorRegistry = () => {
+  if (!_descriptorRegistry) {
+    try {
+      _descriptorRegistry = require("../../components/registry.js");
+    } catch {
+      // 在不支持 require 的环境（ESM）下降级为 null，等待 initDescriptorRegistry 注入
+    }
+  }
+  return _descriptorRegistry;
+};
+
+/**
+ * 注入 descriptor 注册中心（供 ESM 环境在启动时调用）
+ * @param {Object} registry - 来自 components/registry.js 的模块
+ */
+export function initDescriptorRegistry(registry) {
+  _descriptorRegistry = registry;
+}
+
+/**
  * 创建组件节点
  * @param {string} type - 组件类型
  * @param {Object} [options] - 节点选项
@@ -65,6 +89,8 @@ export function inferPositioning(type, parentNode) {
       return "absolute";
 
     case "FlexContainer":
+    case "HorizontalLayout":
+    case "VerticalLayout":
     case "ResponsiveLayout":
     case "ElContainer":
     case "ElLayout":
@@ -84,9 +110,16 @@ export function inferPositioning(type, parentNode) {
       // Grid 容器：子节点使用流式布局
       return "flow";
 
-    default:
+    default: {
+      // 优先从 descriptor 读取父容器的子项定位策略
+      const registry = getDescriptorRegistry();
+      if (registry?.getChildPositioning) {
+        const fromDescriptor = registry.getChildPositioning(parentNode.type);
+        if (fromDescriptor) return fromDescriptor;
+      }
       // 默认使用流式布局（更安全）
       return "flow";
+    }
   }
 }
 

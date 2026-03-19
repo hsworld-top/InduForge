@@ -30,6 +30,8 @@ function extractDefaultProps(props) {
 function getDefaultStyle(type) {
   const containerTypes = [
     "FlexContainer",
+    "HorizontalLayout",
+    "VerticalLayout",
     "FreeContainer",
     "GridContainer",
     "ResponsiveLayout",
@@ -114,6 +116,8 @@ function getDefaultStyle(type) {
 function isContainerType(type) {
   const containerTypes = [
     "FlexContainer",
+    "HorizontalLayout",
+    "VerticalLayout",
     "FreeContainer",
     "GridContainer",
     "ResponsiveLayout",
@@ -173,7 +177,8 @@ export function registerBuiltinComponents() {
         Array.isArray(manifest.events) && manifest.events.length > 0
           ? manifest.events
           : getComponentEventDefinitions(manifest.type),
-      isContainer: isContainerType(manifest.type),
+      // 优先读 manifest 自身的 isContainer 字段，再回退到硬编码列表
+      isContainer: manifest.isContainer === true ? true : isContainerType(manifest.type),
       allowedChildren: undefined,
       slots: undefined,
     };

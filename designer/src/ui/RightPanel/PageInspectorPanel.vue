@@ -1,86 +1,218 @@
 <template>
   <div class="page-inspector-panel">
-    <el-form label-width="72px" size="small">
-      <!-- 基础信息 -->
-      <div class="section-title">基础信息</div>
-
-      <el-form-item label="页面名称">
-        <el-input
-          v-model="form.name"
-          :disabled="isSystemPage"
-          @blur="handleNameUpdate"
-        />
-      </el-form-item>
-
-      <el-form-item label="路由路径">
-        <el-input v-model="form.path" disabled />
-      </el-form-item>
-
-      <el-divider />
-
-      <!-- 样式设置 -->
-      <div class="section-title">样式设置</div>
-      <el-form-item label="自适应">
-        <el-switch v-model="form.autoFit" @change="handleConfigUpdate" />
-      </el-form-item>
-      <el-form-item label="样式配置">
-        <el-button
-          size="small"
-          :disabled="!rootNode"
-          :class="{ 'is-active': hasCanvasStyleConfig }"
-          @click="openCanvasStyleDialog"
-        >
-          配置
-        </el-button>
-      </el-form-item>
-
-      <el-divider />
-
-      <!-- 背景设置 -->
-      <div class="section-title">背景设置</div>
-
-      <el-form-item label="背景类型">
-        <el-select
-          v-model="form.backgroundKind"
-          @change="handleBackgroundUpdate"
-        >
-          <el-option label="颜色" value="color" />
-          <el-option label="图片" value="image" />
-          <el-option label="渐变" value="gradient" />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item v-if="form.backgroundKind === 'color'" label="背景色">
-        <FriendlyColorPicker
-          v-model="form.backgroundValue"
-          @change="handleBackgroundUpdate"
-        />
-      </el-form-item>
-
-      <el-form-item v-else label="背景值">
-        <el-input
-          v-model="form.backgroundValue"
-          @blur="handleBackgroundUpdate"
-        />
-      </el-form-item>
-
-      <el-divider />
-
-      <!-- 数据点状态 -->
-      <div class="section-title">数据点状态</div>
-
-      <el-form-item label="数据点">
-        <div class="diagnostic-info">
-          <el-tag type="success" size="small">
-            正常 {{ diagnostic.active }}
-          </el-tag>
-          <el-tag v-if="diagnostic.invalid > 0" type="danger" size="small">
-            失效 {{ diagnostic.invalid }}
-          </el-tag>
-          <el-tag type="info" size="small"> 共 {{ diagnostic.total }} </el-tag>
+    <div class="page-prop-list">
+      <div class="page-group">
+        <div class="section-title">基本</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">名称</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.name"
+              size="small"
+              :disabled="isSystemPage"
+              @blur="handleNameUpdate"
+            />
+          </div>
         </div>
-      </el-form-item>
-    </el-form>
+        <div class="page-prop-item">
+          <div class="page-prop-label">描述</div>
+          <div class="page-prop-editor">
+            <el-input v-model="form.description" size="small" @blur="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">页面类型</div>
+          <div class="page-prop-editor">
+            <el-select
+              v-model="form.pageType"
+              size="small"
+              :disabled="isHomePage"
+              @change="handlePageTypeChange"
+            >
+              <el-option label="业务页面" value="business" />
+              <el-option label="登录页" value="login" />
+              <el-option label="登出页" value="logout" />
+            </el-select>
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">路由</div>
+          <div class="page-prop-editor">
+            <el-input v-model="form.path" size="small" disabled />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">位置</div>
+          <div class="page-prop-editor">
+            <div class="axis-inline-group">
+              <div class="axis-inline-item">
+                <span class="axis-inline-tag">X</span>
+                <el-input
+                  v-model="form.x"
+                  size="small"
+                  disabled
+                />
+              </div>
+              <div class="axis-inline-item">
+                <span class="axis-inline-tag">Y</span>
+                <el-input
+                  v-model="form.y"
+                  size="small"
+                  disabled
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">样式</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">背景类型</div>
+          <div class="page-prop-editor">
+            <el-select
+              v-model="form.backgroundKind"
+              size="small"
+              @change="handleBackgroundUpdate"
+            >
+              <el-option label="纯色" value="color" />
+              <el-option label="图片" value="image" />
+              <el-option label="渐变" value="gradient" />
+            </el-select>
+          </div>
+        </div>
+        <div class="page-prop-item page-prop-item--stacked">
+          <div class="page-prop-label">背景值</div>
+          <div class="page-prop-editor page-prop-editor-stacked">
+            <FriendlyColorPicker
+              v-if="form.backgroundKind === 'color'"
+              v-model="form.backgroundValue"
+              @change="handleBackgroundUpdate"
+            />
+            <el-input
+              v-else
+              v-model="form.backgroundValue"
+              size="small"
+              @blur="handleBackgroundUpdate"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">窗口大小</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">宽度</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.windowWidth"
+              size="small"
+              readonly
+              class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')"
+              @blur="handleNumericBlur('windowWidth', $event)"
+              @keydown="filterNumericInput"
+            />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">高度</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.windowHeight"
+              size="small"
+              readonly
+              class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')"
+              @blur="handleNumericBlur('windowHeight', $event)"
+              @keydown="filterNumericInput"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">画面大小</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">宽度</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.width"
+              size="small"
+              readonly
+              class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')"
+              @blur="handleNumericBlur('width', $event)"
+              @keydown="filterNumericInput"
+            />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">高度</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.height"
+              size="small"
+              readonly
+              class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')"
+              @blur="handleNumericBlur('height', $event)"
+              @keydown="filterNumericInput"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">窗口</div>
+        <div class="page-prop-item page-prop-item--switch">
+          <div class="page-prop-label">自适应</div>
+          <div class="page-prop-editor page-prop-editor-switch">
+            <el-switch v-model="form.autoFit" @change="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item page-prop-item--switch">
+          <div class="page-prop-label">启用锁定宽高比</div>
+          <div class="page-prop-editor page-prop-editor-switch">
+            <el-switch v-model="form.lockAspectRatio" @change="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item page-prop-item--switch">
+          <div class="page-prop-label">启用最小尺寸</div>
+          <div class="page-prop-editor page-prop-editor-switch">
+            <el-switch v-model="form.enableMinSize" @change="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item page-prop-item--switch">
+          <div class="page-prop-label">字体自适应</div>
+          <div class="page-prop-editor page-prop-editor-switch">
+            <el-switch v-model="form.fontAutoFit" @change="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">窗口样式</div>
+          <div class="page-prop-editor">
+            <el-select v-model="form.windowStyle" size="small" @change="handleConfigUpdate">
+              <el-option label="覆盖式" value="cover" />
+              <el-option label="标准式" value="normal" />
+            </el-select>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">权限描述管理</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">配置</div>
+          <div class="page-prop-editor">
+            <el-button size="small" @click="handlePermissionConfig">
+              {{ form.permissionDesc || "0item" }}
+            </el-button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <el-dialog
@@ -151,12 +283,22 @@ const { currentPage, currentPageId, pages, doc } = storeToRefs(editorStore);
 const form = reactive({
   name: "",
   path: "",
+  description: "",
   pageType: "business",
+  x: 0,
+  y: 0,
+  windowWidth: 1990,
+  windowHeight: 1100,
   width: 1920,
   height: 1080,
   showGrid: false,
   enableSnap: true,
   autoFit: true,
+  lockAspectRatio: false,
+  enableMinSize: false,
+  fontAutoFit: false,
+  windowStyle: "cover",
+  permissionDesc: "0item",
   backgroundKind: "color",
   backgroundValue: "#ffffff",
 });
@@ -388,11 +530,21 @@ const syncForm = (page) => {
   form.path = formatPathForDisplay(path);
 
   form.pageType = getPageType(page || pageFromList);
+  form.description = page?.config?.description ?? "";
+  form.x = page?.config?.x ?? 0;
+  form.y = page?.config?.y ?? 0;
+  form.windowWidth = page?.config?.windowWidth ?? 1990;
+  form.windowHeight = page?.config?.windowHeight ?? 1100;
   form.width = page?.config?.width ?? 1920;
   form.height = page?.config?.height ?? 1080;
   form.showGrid = page?.config?.showGrid ?? false;
   form.enableSnap = page?.config?.enableSnap ?? true;
   form.autoFit = page?.config?.autoFit ?? true;
+  form.lockAspectRatio = page?.config?.lockAspectRatio ?? false;
+  form.enableMinSize = page?.config?.enableMinSize ?? false;
+  form.fontAutoFit = page?.config?.fontAutoFit ?? false;
+  form.windowStyle = page?.config?.windowStyle ?? "cover";
+  form.permissionDesc = page?.config?.permissionDesc ?? "0item";
   form.backgroundKind = page?.config?.background?.kind || "color";
   form.backgroundValue = page?.config?.background?.value || "#ffffff";
 
@@ -577,13 +729,63 @@ const handleConfigUpdate = () => {
   if (!currentPage.value) return;
   const nextConfig = {
     ...currentPage.value.config,
+    description: form.description,
+    x: Number(form.x) || 0,
+    y: Number(form.y) || 0,
+    windowWidth: Number(form.windowWidth) || 1990,
+    windowHeight: Number(form.windowHeight) || 1100,
     width: Number(form.width) || currentPage.value.config?.width || 1920,
     height: Number(form.height) || currentPage.value.config?.height || 1080,
     showGrid: form.showGrid,
     enableSnap: form.enableSnap,
     autoFit: form.autoFit,
+    lockAspectRatio: form.lockAspectRatio,
+    enableMinSize: form.enableMinSize,
+    fontAutoFit: form.fontAutoFit,
+    windowStyle: form.windowStyle,
+    permissionDesc: form.permissionDesc,
   };
   editorStore.updateCurrentPage({ config: nextConfig });
+};
+
+/**
+ * 过滤非数字输入（只允许数字、负号、小数点、退格、方向键等）
+ * @param {KeyboardEvent} event - 键盘事件
+ */
+const filterNumericInput = (event) => {
+  const allowed = [
+    "Backspace", "Delete", "Tab", "Escape", "Enter",
+    "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+    "Home", "End",
+  ];
+  if (allowed.includes(event.key)) return;
+  if ((event.ctrlKey || event.metaKey) && ["a", "c", "v", "x", "z"].includes(event.key)) return;
+  if (/^[0-9.\-]$/.test(event.key)) return;
+  event.preventDefault();
+};
+
+/**
+ * 数字字段失焦时校验并回写
+ * @param {string} field - 表单字段名
+ * @param {FocusEvent} event - 失焦事件
+ */
+const handleNumericBlur = (field, event) => {
+  const raw = String(form[field] ?? "").trim();
+  const num = Number(raw);
+  if (raw === "" || !Number.isFinite(num)) {
+    form[field] = 0;
+  } else {
+    form[field] = num;
+  }
+  event.target.setAttribute("readonly", "");
+  handleConfigUpdate();
+};
+
+/**
+ * 打开权限描述配置（当前先提供占位入口）
+ */
+const handlePermissionConfig = () => {
+  ElMessage.info("权限描述配置能力待接入");
 };
 
 /**
@@ -636,26 +838,141 @@ const handleBackgroundUpdate = () => {
 
 <style scoped>
 .page-inspector-panel {
-  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--designer-gap-md);
+}
+
+.page-prop-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--designer-gap-md);
+}
+
+.page-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--designer-gap-sm);
+  overflow: hidden;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
+  background: var(--designer-shell-surface);
+  padding: var(--designer-gap-sm);
 }
 
 .panel-title {
   display: flex;
-  gap: 8px;
-  font-size: 14px;
+  gap: var(--designer-gap-sm);
+  font-size: var(--designer-font-lg);
   font-weight: 500;
 }
 
 .page-name {
-  color: var(--el-color-primary);
+  color: var(--designer-primary-text);
   font-weight: 600;
 }
 
 .section-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--el-text-color-secondary);
-  margin: 12px 0 8px;
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  margin: calc(var(--designer-gap-sm) * -1) calc(var(--designer-gap-sm) * -1)
+    0;
+  padding: 0 10px;
+  background: var(--designer-group-surface);
+  border-bottom: 1px solid var(--designer-border-soft);
+  font-size: var(--designer-font-sm);
+  font-weight: 600;
+  color: var(--designer-text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.page-prop-item {
+  display: flex;
+  align-items: center;
+  gap: var(--designer-gap-sm);
+  min-height: 32px;
+  padding: 4px 6px;
+  border-radius: var(--designer-radius-sm);
+  transition: background-color 0.15s ease;
+}
+
+.page-prop-item:hover {
+  background: var(--designer-hover-surface);
+}
+
+.page-prop-item--stacked {
+  align-items: flex-start;
+}
+
+.page-prop-label {
+  width: 88px;
+  min-width: 72px;
+  max-width: 88px;
+  flex-shrink: 0;
+  font-size: var(--designer-font-sm);
+  color: var(--designer-text-regular);
+}
+
+.page-prop-editor {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-prop-editor-switch {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.page-prop-editor-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--designer-gap-sm);
+}
+
+.page-prop-editor-stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--designer-gap-xs);
+}
+
+.axis-inline-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--designer-gap-xs);
+}
+
+.axis-inline-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.axis-inline-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--designer-group-surface);
+  color: var(--designer-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.page-prop-editor :deep(.el-input),
+.page-prop-editor :deep(.el-input-number),
+.page-prop-editor :deep(.el-select) {
+  width: 100%;
+}
+
+.page-prop-item--switch {
+  justify-content: space-between;
 }
 
 .diagnostic-info {
@@ -670,9 +987,9 @@ const handleBackgroundUpdate = () => {
   gap: 12px 16px;
   margin-bottom: 12px;
   padding: 8px 10px;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  background: #fafafa;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
+  background: var(--designer-group-surface);
 }
 
 .config-toolbar-item {
@@ -681,8 +998,8 @@ const handleBackgroundUpdate = () => {
 }
 
 .config-label {
-  font-size: 12px;
-  color: #606266;
+  font-size: var(--designer-font-sm);
+  color: var(--designer-text-secondary);
 }
 
 .config-select {
@@ -690,13 +1007,13 @@ const handleBackgroundUpdate = () => {
 }
 
 .config-editor {
-  border: 1px solid var(--el-border-color);
-  border-radius: 6px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
   overflow: hidden;
 }
 
 .is-active {
-  border-color: var(--el-color-primary);
-  color: var(--el-color-primary);
+  border-color: var(--designer-primary-border);
+  color: var(--designer-primary-text);
 }
 </style>

@@ -139,25 +139,8 @@ const activeUiSections = ref(["pc"]);
  * 组件筛选范围
  */
 const allowedTypesByCategory = {
-  layout: ["ElContainer", "ElLayout", "FlexContainer", "GridContainer", "Tabs"],
-  uiPc: [
-    "Text",
-    "Button",
-    "Input",
-    "Select",
-    "Switch",
-    "Radio",
-    "Checkbox",
-    "InputNumber",
-    "Tag",
-    "Table",
-    "Card",
-    "Pagination",
-    "Menu",
-    "Dropdown",
-    "Collapse",
-    "Image",
-  ],
+  layout: ["HorizontalLayout", "VerticalLayout"],
+  uiPc: ["Button"],
   chart: ["EChart"],
 };
 
@@ -209,6 +192,33 @@ const getPreviewComponent = (type) => {
           h("div", { class: "preview-flex-item" }),
           h("div", { class: "preview-flex-item" }),
         ]),
+    },
+    HorizontalLayout: {
+      render: () =>
+        h("div", { class: "preview-flex-container" }, [
+          h("div", { class: "preview-flex-item" }),
+          h("div", { class: "preview-flex-item" }),
+          h("div", { class: "preview-flex-item" }),
+        ]),
+    },
+    VerticalLayout: {
+      render: () =>
+        h(
+          "div",
+          {
+            class: "preview-flex-container",
+            style: {
+              flexDirection: "column",
+              alignItems: "stretch",
+              justifyContent: "space-between",
+            },
+          },
+          [
+            h("div", { class: "preview-flex-item" }),
+            h("div", { class: "preview-flex-item" }),
+            h("div", { class: "preview-flex-item" }),
+          ],
+        ),
     },
     GridContainer: {
       render: () =>

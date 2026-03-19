@@ -149,6 +149,8 @@ export class DragDropManager {
     if (!nodeType) return false;
     const containerTypes = [
       "FlexContainer",
+      "HorizontalLayout",
+      "VerticalLayout",
       "FreeContainer",
       "GridContainer",
       "ResponsiveLayout",
@@ -206,6 +208,8 @@ export class DragDropManager {
 
     switch (nodeType) {
       case "FlexContainer":
+      case "HorizontalLayout":
+      case "VerticalLayout":
       case "ResponsiveLayout": {
         // Flex 容器：子节点使用流式布局
         const direction = this.getContainerDirection(targetElement);

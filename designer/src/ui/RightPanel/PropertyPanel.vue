@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-3">
+  <div class="property-panel-root">
     <!-- 页面属性面板：未选中任何元素 -->
     <PageInspectorPanel v-if="panelState === 'page'" />
 
@@ -11,72 +11,99 @@
 
     <!-- 单选面板：选中单个元素 -->
     <div v-else class="element-inspector">
-      <!-- 基础信息 -->
-      <el-descriptions :column="1" size="small" border>
-        <el-descriptions-item label="ID">
-          {{ elementId }}
-        </el-descriptions-item>
-        <el-descriptions-item label="类型">
-          {{ elementType }}
-        </el-descriptions-item>
-        <el-descriptions-item label="名称">
-          <el-input
-            v-model="elementLabel"
-            size="small"
-            placeholder="未命名"
-            @change="handleLabelChange"
-          />
-        </el-descriptions-item>
-      </el-descriptions>
-
-      <el-divider />
+      <div class="prop-section">
+        <div class="prop-section-header is-static">
+          <span class="prop-section-title">基本</span>
+        </div>
+        <div class="prop-section-body">
+          <div class="prop-item">
+            <div class="prop-label">名称</div>
+            <el-input
+              v-model="elementLabel"
+              size="small"
+              placeholder="未命名"
+              @change="handleLabelChange"
+            />
+          </div>
+          <div class="prop-item">
+            <div class="prop-label">描述</div>
+            <el-input
+              v-model="elementDescription"
+              size="small"
+              placeholder="请输入描述"
+              @change="handleDescriptionChange"
+            />
+          </div>
+          <div class="prop-item">
+            <div class="prop-label">类型</div>
+            <el-input :model-value="elementType" size="small" disabled />
+          </div>
+          <div class="prop-item">
+            <div class="prop-label">ID</div>
+            <el-input :model-value="elementId" size="small" disabled />
+          </div>
+          <div class="prop-item">
+            <div class="prop-label">位置</div>
+            <div class="axis-inline-group">
+              <div class="axis-inline-item">
+                <span class="axis-inline-tag">X</span>
+                <el-input :model-value="formatStyleValue(currentStyle.left)" size="small" disabled />
+              </div>
+              <div class="axis-inline-item">
+                <span class="axis-inline-tag">Y</span>
+                <el-input :model-value="formatStyleValue(currentStyle.top)" size="small" disabled />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <template v-if="hasStyleSelection">
-        <template v-if="showSizeEditor">
+        <div v-if="showSizeEditor" class="panel-section">
           <SizeEditor
             :model-value="currentStyle"
             :min-width="containerMinSize?.width"
             :min-height="containerMinSize?.height"
             @update:modelValue="handleStyleChange"
           />
-          <el-divider style="margin: 12px 0" />
-        </template>
-        <div class="style-config-list">
-          <div class="style-config-row">
-            <div class="style-config-label">详细配置</div>
-            <el-button
-              size="small"
-              class="config-btn"
-              :class="{ 'is-active': hasDetailConfig }"
+        </div>
+        <div class="panel-section">
+          <div class="config-entry-header">
+            <span class="panel-section-title">配置</span>
+          </div>
+          <div class="config-entry-bar">
+            <button
+              class="config-entry"
+              :class="{ 'has-config': hasDetailConfig }"
               @click="openConfigDialog('detail')"
             >
-              配置
-            </el-button>
-          </div>
-          <div class="style-config-row">
-            <div class="style-config-label">样式配置</div>
-            <el-button
-              size="small"
-              class="config-btn"
-              :class="{ 'is-active': hasStyleConfig }"
+              <IconEpDocument class="config-entry-icon" />
+              <span>详细</span>
+            </button>
+            <button
+              class="config-entry"
+              :class="{ 'has-config': hasStyleConfig }"
               @click="openConfigDialog('style')"
             >
-              配置
-            </el-button>
+              <IconEpEditPen class="config-entry-icon" />
+              <span>样式</span>
+            </button>
           </div>
         </div>
-        <el-divider />
       </template>
 
       <!-- 属性表单：根据 Manifest 生成 -->
       <template v-if="layoutForceProps.length > 0">
-        <div class="prop-list">
-          <div
-            v-for="(propDef, propIndex) in layoutForceProps"
-            :key="propDef?.name || propIndex"
-            class="prop-item"
-          >
-            <template v-if="!shouldHideProp(propDef)">
+        <div class="prop-section prop-section--static">
+          <div class="prop-section-header is-static">
+            <span class="prop-section-title">布局</span>
+          </div>
+          <div class="prop-section-body">
+            <div
+              v-for="(propDef, propIndex) in visibleLayoutForceProps"
+              :key="propDef?.name || propIndex"
+              class="prop-item"
+            >
               <div class="prop-label">
                 <span>{{ propDef.label }}</span>
                 <el-tooltip
@@ -84,15 +111,13 @@
                   content="绑定数据"
                   placement="top"
                 >
-                  <el-button
-                    size="small"
-                    text
+                  <button
                     class="bind-btn"
                     :class="{ 'is-active': hasPropBinding(propDef.name) }"
                     @click="handleBindClick(propDef)"
                   >
-                    <IconEpLink />
-                  </el-button>
+                    <IconEpLink class="bind-icon" />
+                  </button>
                 </el-tooltip>
               </div>
               <PropEditor
@@ -102,96 +127,107 @@
                   (val) => handlePropChange(propDef.name, val)
                 "
               />
-            </template>
+            </div>
           </div>
         </div>
       </template>
       <template
         v-else-if="effectiveManifest && effectiveManifest.props.length > 0"
       >
-        <div class="prop-list">
+        <div class="prop-sections">
           <template v-for="group in displayPropGroups" :key="group.name">
-            <template v-if="isElContainer && isRegionGroup(group)">
+            <div
+              class="prop-section"
+              :class="{ 'is-collapsed': !isSectionExpanded(getGroupSectionKey(group)) }"
+            >
+              <button
+                class="prop-section-header"
+                type="button"
+                @click="toggleSection(getGroupSectionKey(group))"
+              >
+                <span class="prop-section-heading">
+                  <IconEpArrowRight class="section-chevron" />
+                  <span class="prop-section-title">{{ resolveGroupTitle(group) }}</span>
+                </span>
+              </button>
               <div
-                v-for="item in regionPropRows"
-                :key="item.key"
-                class="prop-item region-prop-row"
+                v-show="isSectionExpanded(getGroupSectionKey(group))"
+                class="prop-section-body"
               >
-                <div class="prop-label">
-                  <div class="region-label">
-                    <span>{{ item.label }}</span>
-                    <span
-                      v-if="getRegionSizeText(item)"
-                      class="region-size-text"
-                    >
-                      {{ getRegionSizeText(item) }}
-                    </span>
-                    <span
-                      v-if="getRegionMaxLabel(item.sizeProp)"
-                      class="region-size-limit"
-                    >
-                      {{ getRegionMaxLabel(item.sizeProp) }}
-                    </span>
-                  </div>
-                  <el-switch
-                    v-if="!item.sizeProp"
-                    class="region-toggle"
-                    :model-value="Boolean(getPropValue(item.toggleProp))"
-                    size="small"
-                    @update:modelValue="
-                      (val) => handlePropChange(item.toggleProp, Boolean(val))
-                    "
-                  />
-                </div>
-                <div v-if="item.sizeProp" class="region-prop-controls">
-                  <el-input
-                    class="region-size-input"
-                    :model-value="getSizeValue(item.sizeProp)"
-                    size="small"
-                    placeholder="auto"
-                    :disabled="!isRegionEnabled(item)"
-                    @update:modelValue="
-                      (val) => handleSizeValueChange(item.sizeProp, val)
-                    "
-                  />
-                  <el-select
-                    :model-value="getSizeUnit(item.sizeProp)"
-                    size="small"
-                    class="region-unit-select"
-                    :disabled="!isRegionEnabled(item)"
-                    @update:modelValue="
-                      (val) => handleSizeUnitChange(item.sizeProp, val)
-                    "
-                    @change="(val) => handleSizeUnitChange(item.sizeProp, val)"
+                <template v-if="isElContainer && isRegionGroup(group)">
+                  <div
+                    v-for="item in regionPropRows"
+                    :key="item.key"
+                    class="prop-item region-prop-row"
                   >
-                    <el-option label="px" value="px" />
-                    <el-option label="%" value="%" />
-                    <el-option label="auto" value="auto" />
-                  </el-select>
-                  <el-switch
-                    class="region-toggle"
-                    :model-value="Boolean(getPropValue(item.toggleProp))"
-                    size="small"
-                    @update:modelValue="
-                      (val) => handlePropChange(item.toggleProp, Boolean(val))
-                    "
-                  />
-                </div>
-              </div>
-            </template>
-            <template v-else>
-              <template
-                v-for="(propDef, propIndex) in group.props"
-                :key="propDef?.name || propIndex"
-              >
-                <div
-                  v-if="
-                    propDef &&
-                    (!isEChart || propDef.name !== 'option') &&
-                    !shouldHideProp(propDef)
-                  "
-                  class="prop-item"
-                >
+                    <div class="prop-label">
+                      <div class="region-label">
+                        <span>{{ item.label }}</span>
+                        <span
+                          v-if="getRegionSizeText(item)"
+                          class="region-size-text"
+                        >
+                          {{ getRegionSizeText(item) }}
+                        </span>
+                        <span
+                          v-if="getRegionMaxLabel(item.sizeProp)"
+                          class="region-size-limit"
+                        >
+                          {{ getRegionMaxLabel(item.sizeProp) }}
+                        </span>
+                      </div>
+                      <el-switch
+                        v-if="!item.sizeProp"
+                        class="region-toggle"
+                        :model-value="Boolean(getPropValue(item.toggleProp))"
+                        size="small"
+                        @update:modelValue="
+                          (val) => handlePropChange(item.toggleProp, Boolean(val))
+                        "
+                      />
+                    </div>
+                    <div v-if="item.sizeProp" class="region-prop-controls">
+                      <el-input
+                        class="region-size-input"
+                        :model-value="getSizeValue(item.sizeProp)"
+                        size="small"
+                        placeholder="auto"
+                        :disabled="!isRegionEnabled(item)"
+                        @update:modelValue="
+                          (val) => handleSizeValueChange(item.sizeProp, val)
+                        "
+                      />
+                      <el-select
+                        :model-value="getSizeUnit(item.sizeProp)"
+                        size="small"
+                        class="region-unit-select"
+                        :disabled="!isRegionEnabled(item)"
+                        @update:modelValue="
+                          (val) => handleSizeUnitChange(item.sizeProp, val)
+                        "
+                        @change="(val) => handleSizeUnitChange(item.sizeProp, val)"
+                      >
+                        <el-option label="px" value="px" />
+                        <el-option label="%" value="%" />
+                        <el-option label="auto" value="auto" />
+                      </el-select>
+                      <el-switch
+                        class="region-toggle"
+                        :model-value="Boolean(getPropValue(item.toggleProp))"
+                        size="small"
+                        @update:modelValue="
+                          (val) => handlePropChange(item.toggleProp, Boolean(val))
+                        "
+                      />
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <div
+                    v-for="(propDef, propIndex) in getVisibleGroupProps(group)"
+                    :key="propDef?.name || propIndex"
+                    class="prop-item"
+                  >
                   <div class="prop-label">
                     <span>{{ propDef.label }}</span>
                     <el-tooltip
@@ -199,15 +235,13 @@
                       content="绑定数据"
                       placement="top"
                     >
-                      <el-button
-                        size="small"
-                        text
+                      <button
                         class="bind-btn"
                         :class="{ 'is-active': hasPropBinding(propDef.name) }"
                         @click="handleBindClick(propDef)"
                       >
-                        <IconEpLink />
-                      </el-button>
+                        <IconEpLink class="bind-icon" />
+                      </button>
                     </el-tooltip>
                   </div>
                   <PropEditor
@@ -217,9 +251,10 @@
                       (val) => handlePropChange(propDef.name, val)
                     "
                   />
-                </div>
-              </template>
-            </template>
+                  </div>
+                </template>
+              </div>
+            </div>
           </template>
         </div>
       </template>
@@ -722,6 +757,8 @@ import {
   ElTransfer,
 } from "element-plus";
 import IconEpLink from "~icons/ep/link";
+import IconEpArrowRight from "~icons/ep/arrow-right";
+import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpList from "~icons/ep/list";
@@ -766,8 +803,19 @@ const elementType = computed(
   () => normalizeElementType(currentElement.value?.type) || "-",
 );
 
+/**
+ * 格式化样式值用于只读展示
+ * @param {any} value - 样式值
+ * @returns {string}
+ */
+const formatStyleValue = (value) => {
+  if (value === undefined || value === null || value === "") return "-";
+  return String(value);
+};
+
 /** 属性 */
 const elementLabel = ref("");
+const elementDescription = ref("");
 const regionSizeState = ref({});
 
 watch(
@@ -982,6 +1030,9 @@ const applyLocalNodePatch = (node, patch) => {
   }
   if (patch.label !== undefined) {
     node.label = patch.label;
+  }
+  if (patch.description !== undefined) {
+    node.description = patch.description;
   }
   docVersion.value += 1;
 };
@@ -2699,7 +2750,7 @@ const buildElementPlusPropDefs = (type) => {
  */
 const shouldShowBindButton = (propDef) => {
   if (!propDef) return false;
-  return propDef.group !== "数据";
+  return propDef.bindable === true;
 };
 
 /**
@@ -5764,6 +5815,7 @@ watch(
   currentElement,
   (el) => {
     elementLabel.value = el?.label || "";
+    elementDescription.value = el?.description || "";
   },
   { immediate: true },
 );
@@ -6112,6 +6164,52 @@ const displayPropGroups = computed(() => {
   }
   return [];
 });
+
+const visibleLayoutForceProps = computed(() =>
+  layoutForceProps.value.filter((propDef) => !shouldHideProp(propDef)),
+);
+
+const sectionExpanded = ref({});
+
+const getGroupSectionKey = (group) =>
+  `group:${String(group?.name || "属性")}`;
+
+const resolveGroupTitle = (group) => {
+  const name = String(group?.name || "").trim();
+  return !name || name === "?" ? "属性" : name;
+};
+
+const getVisibleGroupProps = (group) =>
+  (group?.props || []).filter(
+    (propDef) =>
+      propDef &&
+      (!isEChart.value || propDef.name !== "option") &&
+      !shouldHideProp(propDef),
+  );
+
+const isSectionExpanded = (key) => sectionExpanded.value[key] !== false;
+
+const toggleSection = (key) => {
+  sectionExpanded.value = {
+    ...sectionExpanded.value,
+    [key]: !isSectionExpanded(key),
+  };
+};
+
+watch(
+  displayPropGroups,
+  (groups) => {
+    const nextState = { ...sectionExpanded.value };
+    groups.forEach((group) => {
+      const key = getGroupSectionKey(group);
+      if (!(key in nextState)) {
+        nextState[key] = true;
+      }
+    });
+    sectionExpanded.value = nextState;
+  },
+  { immediate: true },
+);
 
 const pageVars = computed(() => {
   docVersion.value;
@@ -6775,6 +6873,18 @@ const shouldHideProp = (propDef) => {
   const nodeType = normalizeElementType(selectedNode.value?.type);
   if (nodeType === "Tabs" && propDef.name === "tabs") return true;
   if (nodeType === "Menu" && propDef.name === "items") return true;
+
+  // 尺寸策略：固定才显示固定尺寸输入
+  const node = selectedNode.value;
+  if (node && propDef.name === "fixedWidth") {
+    const hPolicy = node.props?.horizontalPolicy ?? "expanding";
+    if (hPolicy !== "fixed") return true;
+  }
+  if (node && propDef.name === "fixedHeight") {
+    const vPolicy = node.props?.verticalPolicy ?? "expanding";
+    if (vPolicy !== "fixed") return true;
+  }
+
   return false;
 };
 
@@ -7302,6 +7412,23 @@ const handleLabelChange = () => {
 };
 
 /**
+ * 处理组件描述修改
+ */
+const handleDescriptionChange = () => {
+  const el = currentElement.value;
+  if (!el) return;
+
+  const nextDescription = String(elementDescription.value || "").trim();
+  if (selectedNode.value) {
+    editorStore.updateNode(el.id, { description: nextDescription });
+    applyLocalNodePatch(el, { description: nextDescription });
+  } else if (selectedGraphic.value) {
+    editorStore.updateGraphic(el.id, { description: nextDescription });
+    applyLocalNodePatch(el, { description: nextDescription });
+  }
+};
+
+/**
  * 更新按钮 DOM ID
  * @param {string} value - DOM ID
  */
@@ -7414,67 +7541,267 @@ const handlePropChange = (propName, value) => {
 .element-inspector {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--designer-gap-md);
 }
 
-.element-inspector :deep(.el-collapse) {
-  border: none;
-}
-
-.element-inspector :deep(.el-collapse-item__header) {
-  font-size: 13px;
-  font-weight: 500;
-  background: var(--el-fill-color-lighter);
-  padding: 0 12px;
-  border-radius: 4px;
-}
-
-.element-inspector :deep(.el-collapse-item__wrap) {
-  border: none;
-}
-
-.element-inspector :deep(.el-collapse-item__content) {
-  padding: 12px 8px;
-}
-
-.prop-list {
+.property-panel-root {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--designer-gap-md);
+}
+
+.panel-section,
+.prop-section {
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
+  background: var(--designer-shell-surface);
+}
+
+.axis-inline-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--designer-gap-xs);
+  flex: 1;
+  min-width: 0;
+}
+
+.axis-inline-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.axis-inline-item :deep(.el-input) {
+  width: 100%;
+}
+
+.axis-inline-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--designer-group-surface);
+  color: var(--designer-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.panel-section {
+  padding: 8px 10px;
+}
+
+.panel-section-title {
+  font-size: var(--designer-font-sm);
+  font-weight: 600;
+  color: var(--designer-text-secondary);
+}
+
+.config-entry-header {
+  margin-bottom: var(--designer-gap-xs);
+}
+
+.config-entry-bar,
+.prop-sections,
+.prop-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--designer-gap-xs);
+}
+
+.config-entry-bar {
+  gap: var(--designer-gap-xs);
+}
+
+.config-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--designer-gap-xs);
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
+  background: var(--designer-group-surface);
+  color: var(--designer-text-secondary);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.config-entry:hover {
+  border-color: var(--designer-primary-border);
+  color: var(--designer-primary-text);
+  background: var(--designer-primary-soft);
+}
+
+.config-entry.has-config {
+  border-color: var(--designer-primary-border);
+  color: var(--designer-primary-text);
+  background: var(--designer-primary-soft);
+}
+
+.config-entry-icon {
+  width: var(--designer-panel-icon);
+  height: var(--designer-panel-icon);
+}
+
+.prop-section {
+  overflow: hidden;
+}
+
+.prop-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 1px solid var(--designer-border-soft);
+  background: var(--designer-group-surface);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.prop-section-header:hover {
+  background: var(--designer-hover-surface);
+}
+
+.prop-section-header.is-static {
+  cursor: default;
+}
+
+.prop-section-header.is-static:hover {
+  background: var(--designer-group-surface);
+}
+
+.prop-section-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--designer-gap-xs);
+}
+
+.prop-section-title {
+  font-size: var(--designer-font-sm);
+  font-weight: 600;
+  color: var(--designer-text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.section-chevron {
+  color: var(--designer-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.prop-section.is-collapsed .section-chevron {
+  transform: rotate(-90deg);
+}
+
+.prop-section-body {
+  padding: 4px 6px;
 }
 
 .prop-item {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 4px;
+  border-radius: var(--designer-radius-sm);
+  transition: background-color 0.15s ease;
+}
+
+.prop-item:hover {
+  background: var(--designer-hover-surface);
+}
+
+.prop-item > :last-child:not(.prop-label) {
+  flex: 1;
+  min-width: 0;
+}
+
+.prop-item .prop-editor {
+  flex: 1;
+  min-width: 0;
+}
+
+.prop-item :deep(.el-input),
+.prop-item :deep(.el-input-number),
+.prop-item :deep(.el-select),
+.prop-item :deep(.el-input-number),
+.prop-item :deep(.el-color-picker) {
+  width: 100%;
+}
+
+.prop-item :deep(.el-switch) {
+  margin-left: auto;
 }
 
 .prop-label {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  color: var(--el-text-color-regular);
+  flex-shrink: 0;
+  width: 88px;
+  min-width: 72px;
+  max-width: 88px;
+  gap: 4px;
+  font-size: var(--designer-font-sm);
+  color: var(--designer-text-regular);
 }
 
 .bind-btn {
-  padding: 2px;
-  height: auto;
-  opacity: 0.5;
-  transition: opacity 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--designer-primary-border);
+  border-radius: var(--designer-radius-sm);
+  background: var(--designer-primary-soft);
+  cursor: pointer;
+  opacity: 1;
+  color: var(--designer-primary-text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+  flex-shrink: 0;
 }
 
 .bind-btn:hover {
-  opacity: 1;
+  border-color: var(--designer-primary-border);
+  color: var(--designer-primary-text);
+  background: var(--designer-active-surface);
 }
 
 .bind-btn.is-active {
   opacity: 1;
-  color: #409eff;
+  border-color: var(--designer-primary-border);
+  color: var(--designer-shell-surface);
+  background: var(--designer-primary);
+  box-shadow: none;
+}
+
+.bind-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .region-prop-row .prop-label {
   margin-bottom: 4px;
+  max-width: none;
+  width: 100%;
 }
 
 .region-label {
@@ -7484,19 +7811,19 @@ const handlePropChange = (propName, value) => {
 }
 
 .region-size-text {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--designer-font-sm);
+  color: var(--designer-text-secondary);
 }
 
 .region-size-limit {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--designer-font-sm);
+  color: var(--designer-text-secondary);
 }
 
 .region-prop-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .region-size-input {
@@ -7515,26 +7842,6 @@ const handlePropChange = (propName, value) => {
   margin-left: auto;
 }
 
-.style-config-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.style-config-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-}
-
-.config-btn.is-active {
-  color: #409eff;
-  border-color: #b3d8ff;
-  background: #ecf5ff;
-}
-
 .config-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -7542,9 +7849,9 @@ const handlePropChange = (propName, value) => {
   align-items: center;
   margin-bottom: 12px;
   padding: 8px 10px;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  background: #fafafa;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
+  background: var(--designer-group-surface);
 }
 
 .config-toolbar-item {
@@ -7558,8 +7865,8 @@ const handlePropChange = (propName, value) => {
 }
 
 .config-label {
-  font-size: 12px;
-  color: #606266;
+  font-size: var(--designer-font-sm);
+  color: var(--designer-text-secondary);
 }
 
 .config-select {
@@ -7579,7 +7886,7 @@ const handlePropChange = (propName, value) => {
 
 .config-assets {
   width: 240px;
-  border-left: 1px solid #e4e7ed;
+  border-left: 1px solid var(--designer-border-color);
   padding-left: 12px;
   display: flex;
   flex-direction: column;
@@ -7588,7 +7895,7 @@ const handlePropChange = (propName, value) => {
 
 .config-sidebar {
   width: 240px;
-  border-left: 1px solid #e4e7ed;
+  border-left: 1px solid var(--designer-border-color);
   padding-left: 12px;
   display: flex;
   flex-direction: column;
@@ -7597,18 +7904,18 @@ const handlePropChange = (propName, value) => {
 }
 
 .config-assets-header {
-  font-size: 12px;
+  font-size: var(--designer-font-sm);
   font-weight: 600;
-  color: #606266;
+  color: var(--designer-text-secondary);
 }
 
 .config-assets-body {
   flex: 1;
   min-height: 0;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
   padding: 6px;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .editor-meta {
@@ -7616,22 +7923,22 @@ const handlePropChange = (propName, value) => {
   flex-wrap: wrap;
   gap: 10px 16px;
   padding: 10px 12px;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  background: #fafafa;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
+  background: var(--designer-group-surface);
   margin-bottom: 10px;
   align-items: center;
 }
 
 .meta-title {
-  font-size: 14px;
+  font-size: var(--designer-font-lg);
   font-weight: 600;
-  color: #303133;
+  color: var(--designer-text-primary);
 }
 
 .meta-desc {
-  font-size: 12px;
-  color: #606266;
+  font-size: var(--designer-font-sm);
+  color: var(--designer-text-secondary);
 }
 
 .meta-actions {
@@ -7641,13 +7948,13 @@ const handlePropChange = (propName, value) => {
 }
 
 .icon-button {
-  background: #eef2ff;
+  background: var(--designer-primary-soft);
   border: none;
-  color: #4f46e5;
+  color: var(--designer-primary-text);
 }
 
 .icon-button:hover {
-  background: #e0e7ff;
+  background: var(--designer-hover-surface);
 }
 
 .editor-body {
@@ -7666,7 +7973,7 @@ const handlePropChange = (propName, value) => {
 .editor-sidebar {
   width: 220px;
   height: 520px;
-  border-left: 1px solid #e4e7ed;
+  border-left: 1px solid var(--designer-border-color);
   padding-left: 12px;
   display: flex;
   flex-direction: column;
@@ -7682,9 +7989,9 @@ const handlePropChange = (propName, value) => {
 }
 
 .sidebar-title {
-  font-size: 12px;
+  font-size: var(--designer-font-sm);
   font-weight: 600;
-  color: #606266;
+  color: var(--designer-text-secondary);
 }
 
 .sidebar-scroll {
@@ -7701,16 +8008,16 @@ const handlePropChange = (propName, value) => {
   min-width: 0;
   width: 100%;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--designer-radius-md);
   transition: background-color 0.2s;
 }
 
 .tree-node:hover {
-  background: #f5f7fa;
+  background: var(--designer-hover-surface);
 }
 
 .node-icon {
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   flex-shrink: 0;
 }
 
@@ -7723,8 +8030,8 @@ const handlePropChange = (propName, value) => {
 }
 
 .node-label {
-  font-size: 13px;
-  color: #303133;
+  font-size: var(--designer-font-md);
+  color: var(--designer-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7746,7 +8053,7 @@ const handlePropChange = (propName, value) => {
 
 .enum-left {
   width: 200px;
-  border-right: 1px solid #e4e7ed;
+  border-right: 1px solid var(--designer-border-color);
   padding-right: 8px;
   max-height: 360px;
   overflow: auto;
@@ -7761,6 +8068,6 @@ const handlePropChange = (propName, value) => {
 }
 
 .enum-right :deep(.el-table__row.is-selected) {
-  background: #eef2ff;
+  background: var(--designer-primary-soft);
 }
 </style>

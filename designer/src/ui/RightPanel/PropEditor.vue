@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="prop-editor">
     <MonacoEditor
       v-if="isCodeEditor"
@@ -215,8 +215,8 @@ const commitJsonDraft = () => {
 }
 
 .prop-editor :deep(.monaco-editor-container) {
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
   overflow: hidden;
 }
 </style>

@@ -5,9 +5,9 @@
 <template>
   <div class="size-editor">
     <div class="editor-group-title">尺寸</div>
-    <div class="form-grid">
-      <div class="form-item">
-        <label>宽度</label>
+    <div class="size-row">
+      <div class="size-label">宽度</div>
+      <div class="size-control">
         <el-input
           :model-value="widthInput"
           size="small"
@@ -20,7 +20,7 @@
             <el-select
               :model-value="widthUnit"
               size="small"
-              style="width: 60px"
+              class="size-unit-select"
               @update:modelValue="handleWidthUnitChange"
             >
               <el-option label="px" value="px" />
@@ -30,8 +30,10 @@
           </template>
         </el-input>
       </div>
-      <div class="form-item">
-        <label>高度</label>
+    </div>
+    <div class="size-row">
+      <div class="size-label">高度</div>
+      <div class="size-control">
         <el-input
           :model-value="heightInput"
           size="small"
@@ -44,7 +46,7 @@
             <el-select
               :model-value="heightUnit"
               size="small"
-              style="width: 60px"
+              class="size-unit-select"
               @update:modelValue="handleHeightUnitChange"
             >
               <el-option label="px" value="px" />
@@ -228,31 +230,56 @@ const handleHeightUnitChange = (unit) => {
 .size-editor {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--designer-gap-xs);
 }
 
 .editor-group-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--el-text-color-secondary);
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.form-item {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  margin: calc(var(--designer-gap-md) * -1) calc(var(--designer-gap-md) * -1)
+    0;
+  background: var(--designer-group-surface);
+  border-bottom: 1px solid var(--designer-border-soft);
+  color: var(--designer-text-secondary);
+  font-size: var(--designer-font-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
-.form-item label {
-  font-size: 12px;
-  color: var(--el-text-color-regular);
+.size-row {
+  display: flex;
+  align-items: center;
+  gap: var(--designer-gap-sm);
+  min-height: 30px;
+  padding: 2px 6px;
+  border-radius: var(--designer-radius-sm);
+  transition: background-color 0.15s ease;
+}
+
+.size-row:hover {
+  background: var(--designer-hover-surface);
+}
+
+.size-label {
+  width: 88px;
+  min-width: 72px;
+  max-width: 88px;
+  font-size: var(--designer-font-sm);
+  color: var(--designer-text-regular);
+}
+
+.size-control {
+  flex: 1;
+  min-width: 0;
+}
+
+.size-control :deep(.el-input) {
+  width: 100%;
+}
+
+.size-unit-select {
+  width: 56px;
 }
 </style>

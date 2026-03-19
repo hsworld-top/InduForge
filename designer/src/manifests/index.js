@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 组件 Manifest 注册表
  * 定义组件的属性、样式和事件配置
  */
@@ -145,6 +145,104 @@ registerManifest({
       label: "间距",
       group: "布局",
       defaultValue: 0,
+      min: 0,
+      max: 100,
+    },
+  ],
+});
+
+// HorizontalLayout 水平布局
+registerManifest({
+  type: "HorizontalLayout",
+  name: "水平布局",
+  category: "布局",
+  isContainer: true,
+  defaultSize: { width: 400, height: 160 },
+  props: [
+    {
+      name: "justify",
+      type: "enum",
+      label: "水平排列",
+      group: "布局",
+      defaultValue: "flex-start",
+      options: [
+        { label: "起始", value: "flex-start" },
+        { label: "居中", value: "center" },
+        { label: "末尾", value: "flex-end" },
+        { label: "两端", value: "space-between" },
+        { label: "环绕", value: "space-around" },
+        { label: "均匀", value: "space-evenly" },
+      ],
+    },
+    {
+      name: "align",
+      type: "enum",
+      label: "垂直对齐",
+      group: "布局",
+      defaultValue: "stretch",
+      options: [
+        { label: "拉伸", value: "stretch" },
+        { label: "顶部", value: "flex-start" },
+        { label: "居中", value: "center" },
+        { label: "底部", value: "flex-end" },
+        { label: "基线", value: "baseline" },
+      ],
+    },
+    {
+      name: "gap",
+      type: "number",
+      label: "间距",
+      group: "布局",
+      defaultValue: 10,
+      min: 0,
+      max: 100,
+    },
+  ],
+});
+
+// VerticalLayout 垂直布局
+registerManifest({
+  type: "VerticalLayout",
+  name: "垂直布局",
+  category: "布局",
+  isContainer: true,
+  defaultSize: { width: 240, height: 240 },
+  props: [
+    {
+      name: "justify",
+      type: "enum",
+      label: "垂直排列",
+      group: "布局",
+      defaultValue: "flex-start",
+      options: [
+        { label: "起始", value: "flex-start" },
+        { label: "居中", value: "center" },
+        { label: "末尾", value: "flex-end" },
+        { label: "两端", value: "space-between" },
+        { label: "环绕", value: "space-around" },
+        { label: "均匀", value: "space-evenly" },
+      ],
+    },
+    {
+      name: "align",
+      type: "enum",
+      label: "水平对齐",
+      group: "布局",
+      defaultValue: "stretch",
+      options: [
+        { label: "拉伸", value: "stretch" },
+        { label: "左侧", value: "flex-start" },
+        { label: "居中", value: "center" },
+        { label: "右侧", value: "flex-end" },
+        { label: "基线", value: "baseline" },
+      ],
+    },
+    {
+      name: "gap",
+      type: "number",
+      label: "间距",
+      group: "布局",
+      defaultValue: 10,
       min: 0,
       max: 100,
     },
@@ -843,24 +941,54 @@ registerManifest({
 });
 
 // Button 按钮组件（ElementPlus）
+// 注意：此处定义与 components/Button/manifest.js 保持一致，新架构组件优先以 components/ 下为准
 registerManifest({
   type: "Button",
   name: "按钮",
   category: "PC端组件",
   props: [
+    // ── 属性分组 ──────────────────────────────────────────────
     {
-      name: "text",
-      type: "string",
-      label: "文本",
-      group: "基础",
-      defaultValue: "按钮",
+      name: "disabled",
+      type: "boolean",
+      label: "disabled",
+      group: "属性",
+      defaultValue: false,
+    },
+    {
+      name: "plain",
+      type: "boolean",
+      label: "plain",
+      group: "属性",
+      defaultValue: false,
+    },
+    {
+      name: "round",
+      type: "boolean",
+      label: "round",
+      group: "属性",
+      defaultValue: false,
+    },
+    {
+      name: "circle",
+      type: "boolean",
+      label: "circle",
+      group: "属性",
+      defaultValue: false,
+    },
+    {
+      name: "loading",
+      type: "boolean",
+      label: "loading",
+      group: "属性",
+      defaultValue: false,
     },
     {
       name: "type",
       type: "enum",
-      label: "类型",
-      group: "基础",
-      defaultValue: "default",
+      label: "type",
+      group: "属性",
+      defaultValue: "primary",
       options: [
         { label: "默认", value: "default" },
         { label: "主要", value: "primary" },
@@ -872,77 +1000,77 @@ registerManifest({
       ],
     },
     {
-      name: "size",
-      type: "enum",
-      label: "尺寸",
-      group: "基础",
-      defaultValue: "default",
-      options: [
-        { label: "大", value: "large" },
-        { label: "默认", value: "default" },
-        { label: "小", value: "small" },
-      ],
-    },
-    {
-      name: "plain",
-      type: "boolean",
-      label: "朴素按钮",
-      group: "样式",
-      defaultValue: false,
-    },
-    {
-      name: "round",
-      type: "boolean",
-      label: "圆角按钮",
-      group: "样式",
-      defaultValue: false,
-    },
-    {
-      name: "circle",
-      type: "boolean",
-      label: "圆形按钮",
-      group: "样式",
-      defaultValue: false,
-    },
-    {
-      name: "link",
-      type: "boolean",
-      label: "链接按钮",
-      group: "样式",
-      defaultValue: false,
-    },
-    {
-      name: "disabled",
-      type: "boolean",
-      label: "禁用",
-      group: "状态",
-      defaultValue: false,
-    },
-    {
-      name: "loading",
-      type: "boolean",
-      label: "加载中",
-      group: "状态",
-      defaultValue: false,
+      name: "text",
+      type: "string",
+      label: "text",
+      group: "属性",
+      defaultValue: "button",
+      bindable: true,
     },
     {
       name: "icon",
       type: "string",
-      label: "图标",
-      group: "图标",
+      label: "icon",
+      group: "属性",
       defaultValue: "",
       placeholder: "如: el-icon-search",
     },
+    // ── 尺寸策略分组 ──────────────────────────────────────────
     {
-      name: "iconPlacement",
+      name: "horizontalPolicy",
       type: "enum",
-      label: "图标位置",
-      group: "图标",
-      defaultValue: "left",
+      label: "水平策略",
+      group: "尺寸策略",
+      defaultValue: "expanding",
       options: [
-        { label: "左侧", value: "left" },
-        { label: "右侧", value: "right" },
+        { label: "固定", value: "fixed" },
+        { label: "可延展", value: "expanding" },
       ],
+    },
+    {
+      name: "fixedWidth",
+      type: "number",
+      label: "宽度",
+      group: "尺寸策略",
+      defaultValue: 90,
+      min: 10,
+      max: 2000,
+    },
+    {
+      name: "verticalPolicy",
+      type: "enum",
+      label: "垂直策略",
+      group: "尺寸策略",
+      defaultValue: "expanding",
+      options: [
+        { label: "固定", value: "fixed" },
+        { label: "可延展", value: "expanding" },
+      ],
+    },
+    {
+      name: "fixedHeight",
+      type: "number",
+      label: "高度",
+      group: "尺寸策略",
+      defaultValue: 106,
+      min: 10,
+      max: 2000,
+    },
+    // ── 安全策略分组 ──────────────────────────────────────────
+    {
+      name: "safetyControl",
+      type: "boolean",
+      label: "是否添加权限控制",
+      group: "安全策略",
+      defaultValue: false,
+    },
+    {
+      name: "safetyDesc",
+      type: "string",
+      label: "权限描述",
+      group: "安全策略",
+      defaultValue: "",
+      placeholder: "请输入权限描述",
     },
   ],
 });

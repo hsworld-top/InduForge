@@ -19,12 +19,19 @@ import { Storage } from "./utils/storage";
 import { STORAGE_KEYS } from "./constants";
 import App from "./App.vue";
 import { registerBuiltinComponents } from "./editor-core/registry/builtinManifests.js";
+import { registerAllDescriptors } from "./components/index.js";
+import * as descriptorRegistry from "./components/registry.js";
+import { initDescriptorRegistry } from "./editor-core/document/factory.js";
 import "./assets/styles/main.css";
 
 const app = createApp(App);
 
 /** 注册设计器内置组件（按钮、输入框、布局等） */
 registerBuiltinComponents();
+/** 注册组件描述符（渲染标签、子项策略等元数据） */
+registerAllDescriptors();
+/** 将 descriptor 注册中心注入 factory，使 inferPositioning 可读取 descriptor */
+initDescriptorRegistry(descriptorRegistry);
 
 app.use(createPinia());
 app.use(router);

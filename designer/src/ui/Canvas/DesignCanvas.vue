@@ -325,8 +325,38 @@ const handleCanvasPointerDown = (event) => {
   closeContextMenu();
 
   const nodeElement = event.target.closest(".designer-node");
-  if (nodeElement && !nodeElement.classList.contains("is-root")) {
-    return;
+  if (nodeElement) {
+    const isRootNode = nodeElement.classList.contains("is-root");
+    const targetNodeId = nodeElement.getAttribute("data-node-id");
+    const targetNode = targetNodeId ? doc.value?.getNode?.(targetNodeId) : null;
+    const isContainerNode =
+      Boolean(targetNode?.children?.length) ||
+      [
+        "FlexContainer",
+        "ResponsiveLayout",
+        "GridContainer",
+        "FreeContainer",
+        "ColumnLayout1",
+        "ColumnLayout2",
+        "ColumnLayout4",
+        "ElContainer",
+        "ElHeader",
+        "ElAside",
+        "ElMain",
+        "ElFooter",
+        "ElLayout",
+        "ElLayoutRow",
+        "ElCol",
+        "Tabs",
+        "HorizontalLayout",
+        "VerticalLayout",
+      ].includes(targetNode?.type || "");
+    const hitContainerBlankArea =
+      isContainerNode && event.target === nodeElement;
+
+    if (!isRootNode && !hitContainerBlankArea) {
+      return;
+    }
   }
 
   marquee.value.active = true;

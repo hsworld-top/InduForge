@@ -369,6 +369,7 @@ import {
   MoveNodeCommand,
 } from "@/editor-core";
 import { normalizeEventDefinitions } from "@/editor-core/registry/componentEvents.js";
+import { getDescriptor, resolveDescriptorContainerStyle, isChildResizable as isChildResizableByDescriptor } from "@/components/registry.js";
 import { createDragDropManager } from "./DragDropManager";
 import EChart from "./components/EChart.vue";
 import {
@@ -1055,6 +1056,8 @@ const isNodeVisible = computed(() => {
 const isFlexDropContainer = (type) => {
   return [
     "FlexContainer",
+    "HorizontalLayout",
+    "VerticalLayout",
     "ResponsiveLayout",
     "ElContainer",
     "ElLayout",
@@ -1078,6 +1081,8 @@ const isLayoutNodeType = (type) => {
     "ElLayoutRow",
     "ElCol",
     "FlexContainer",
+    "HorizontalLayout",
+    "VerticalLayout",
     "GridContainer",
     "FreeContainer",
     "ResponsiveLayout",
@@ -1110,7 +1115,14 @@ const resolveAncestorLayoutRow = (currentNode) => {
  * @returns {string}
  */
 const resolveFlexDirection = (type, element) => {
-  if (type === "FlexContainer" || type === "ResponsiveLayout") {
+  if (
+    type === "FlexContainer" ||
+    type === "ResponsiveLayout" ||
+    type === "HorizontalLayout" ||
+    type === "VerticalLayout"
+  ) {
+    if (type === "HorizontalLayout") return "row";
+    if (type === "VerticalLayout") return "column";
     return node.value?.props?.direction || "column";
   }
   return dragDropManager.getContainerDirection(element);
@@ -1261,6 +1273,12 @@ const canAcceptChild = (parentNode, childType) => {
   }
   if (parentNode.type === "ElCol") {
     return (parentNode.children || []).length === 0;
+  }
+  if (
+    parentNode.type === "HorizontalLayout" ||
+    parentNode.type === "VerticalLayout"
+  ) {
+    return true;
   }
   if (!Array.isArray(allowed) || allowed.length === 0) return true;
   return allowed.includes(childType);
@@ -1438,6 +1456,12 @@ const nodeClass = computed(() => {
   if (node.value.type === "ElLayoutRow") {
     classes.push("el-layout-row");
   }
+  if (
+    node.value.type === "HorizontalLayout" ||
+    node.value.type === "VerticalLayout"
+  ) {
+    classes.push("layout-container-visible");
+  }
   if (node.value.type === "Tabs") {
     classes.push("tabs-container");
     const position =
@@ -1480,92 +1504,59 @@ const regionHintText = computed(() => {
   return hintMap[node.value.type] || "区域";
 });
 
+/** 组件类型 → 渲染标签映射表（向后兼容，未注册 descriptor 的组件仍走此处） */
+const _builtinRenderTagMap = {
+  Input: "el-input",
+  Select: "el-select",
+  InputNumber: "el-input-number",
+  Switch: "el-switch",
+  Table: "el-table",
+  BigDataTable: "el-table",
+  Tree: "el-tree",
+  Transfer: "el-transfer",
+  Tag: "el-tag",
+  Dropdown: "el-dropdown",
+  Menu: "el-menu",
+  Radio: "el-radio-group",
+  Checkbox: "el-checkbox-group",
+  Cascader: "el-cascader",
+  Image: "el-image",
+  Tabs: "el-tabs",
+  Timeline: "el-timeline",
+  ImageCarousel: "el-carousel",
+  CarouselComponent: "el-carousel",
+  WebContainer: "el-card",
+  Steps: "el-steps",
+  Card: "el-card",
+  Pagination: "el-pagination",
+  Collapse: "el-collapse",
+  BusinessCard: "el-card",
+  Barcode: "el-card",
+  Slider: "el-slider",
+  Calendar: "el-calendar",
+  Signature: "el-input",
+  ElContainer: "el-container",
+  ElHeader: "el-header",
+  ElAside: "el-aside",
+  ElMain: "el-main",
+  ElFooter: "el-footer",
+  ElLayout: "div",
+  ElLayoutRow: "el-row",
+  ElCol: "el-col",
+};
+
 const renderTag = computed(() => {
   if (!node.value) return "div";
-  switch (node.value.type) {
-    case "Button":
-      return "el-button";
-    case "Input":
-      return "el-input";
-    case "Select":
-      return "el-select";
-    case "InputNumber":
-      return "el-input-number";
-    case "Switch":
-      return "el-switch";
-    case "Table":
-      return "el-table";
-    case "BigDataTable":
-      return "el-table";
-    case "Tree":
-      return "el-tree";
-    case "Transfer":
-      return "el-transfer";
-    case "Tag":
-      return "el-tag";
-    case "Dropdown":
-      return "el-dropdown";
-    case "Menu":
-      return "el-menu";
-    case "Radio":
-      return "el-radio-group";
-    case "Checkbox":
-      return "el-checkbox-group";
-    case "Cascader":
-      return "el-cascader";
-    case "Image":
-      return "el-image";
-    case "Tabs":
-      return "el-tabs";
-    case "Timeline":
-      return "el-timeline";
-    case "ImageCarousel":
-      return "el-carousel";
-    case "CarouselComponent":
-      return "el-carousel";
-    case "WebContainer":
-      return "el-card";
-    case "Steps":
-      return "el-steps";
-    case "Card":
-      return "el-card";
-    case "Pagination":
-      return "el-pagination";
-    case "Collapse":
-      return "el-collapse";
-    case "BusinessCard":
-      return "el-card";
-    case "Barcode":
-      return "el-card";
-    case "Slider":
-      return "el-slider";
-    case "Calendar":
-      return "el-calendar";
-    case "Signature":
-      return "el-input";
-    case "ElContainer":
-      return "el-container";
-    case "ElHeader":
-      return "el-header";
-    case "ElAside":
-      return "el-aside";
-    case "ElMain":
-      return "el-main";
-    case "ElFooter":
-      return "el-footer";
-    case "ElLayout":
-      return "div";
-    case "ElLayoutRow":
-      return "el-row";
-    case "ElCol":
-      return "el-col";
-    case "EChart":
-      return EChart;
-    case "Text":
-      return resolvedNodeProps.value?.tag || "div";
-    default:
-      return "div";
-  }
+  const type = node.value.type;
+  // 优先从 descriptor 读取（已注册的新架构组件）
+  const descriptor = getDescriptor(type);
+  if (descriptor?.renderTag) return descriptor.renderTag;
+  // EChart 特殊处理（需要返回 Vue 组件实例，无法在描述符中直接表示）
+  if (type === "EChart") return EChart;
+  // Text 特殊处理（渲染标签由 props.tag 决定）
+  if (type === "Text") return resolvedNodeProps.value?.tag || "div";
+  // 向后兼容：内置映射表
+  return _builtinRenderTagMap[type] || "div";
 });
 
 const useComponentWrapper = computed(() => {
@@ -5648,10 +5639,13 @@ const handleDragOver = (event) => {
   if (node.value?.type && isFlexDropContainer(node.value.type)) {
     rowInsertInfo.value = null;
     layoutInsertInfo.value = null;
-    const currentElement = event.currentTarget;
-    const direction = resolveFlexDirection(node.value.type, currentElement);
+    const outerElement = event.currentTarget;
+    const contentElement =
+      outerElement?.querySelector?.("[data-node-id]")?.parentElement ||
+      outerElement;
+    const direction = resolveFlexDirection(node.value.type, contentElement);
     const insertInfo = dragDropManager.calculateFlexInsertPosition(
-      currentElement,
+      contentElement,
       event,
       direction,
     );
@@ -6160,10 +6154,12 @@ const handleDrop = (event) => {
       isFlexDropContainer(targetNode.type) &&
       !skipFlexInsertForLayout
     ) {
-      const currentElement = targetElement;
-      const direction = resolveFlexDirection(targetNode.type, currentElement);
+      const outerEl = targetElement;
+      const contentEl =
+        outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
+      const direction = resolveFlexDirection(targetNode.type, contentEl);
       const insertInfo = dragDropManager.calculateFlexInsertPosition(
-        currentElement,
+        contentEl,
         event,
         direction,
       );
@@ -6522,10 +6518,12 @@ const handleDrop = (event) => {
       isFlexDropContainer(targetNode.type) &&
       !skipFlexInsertForLayout
     ) {
-      const currentElement = targetElement;
-      const direction = resolveFlexDirection(targetNode.type, currentElement);
+      const outerEl = targetElement;
+      const contentEl =
+        outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
+      const direction = resolveFlexDirection(targetNode.type, contentEl);
       const insertInfo = dragDropManager.calculateFlexInsertPosition(
-        currentElement,
+        contentEl,
         event,
         direction,
       );
@@ -6730,6 +6728,19 @@ const resolveLayoutStyle = (currentNode, isRoot) => {
         style.gridColumn = `${flow.col} / span ${colSpan}`;
       }
     }
+    // 优先从父容器 descriptor 读取子项 flex 策略
+    if (parentNode && getDescriptor(parentNode.type)?.childFlowLayout) {
+      const parentDescriptor = getDescriptor(parentNode.type);
+      const fl = parentDescriptor.childFlowLayout;
+      style.position = "relative";
+      style.flexGrow = currentNode.flowLayout?.grow ?? fl.grow ?? 1;
+      style.flexShrink = currentNode.flowLayout?.shrink ?? fl.shrink ?? 1;
+      style.flexBasis = currentNode.flowLayout?.basis ?? fl.basis ?? "0%";
+      style.alignSelf = style.alignSelf ?? "stretch";
+      style.minWidth = style.minWidth ?? "0";
+      style.minHeight = style.minHeight ?? "0";
+      return style;
+    }
     // 流式布局默认占据整行
     style.position = "relative";
     style.display = "block";
@@ -6827,6 +6838,12 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
   const manifest = componentRegistry.get(currentNode.type);
   const isContainer = manifest?.isContainer || false;
 
+  // 优先从 descriptor 读取容器样式（新架构组件）
+  const descriptorContainerStyle = resolveDescriptorContainerStyle(currentNode.type, currentNode);
+  if (descriptorContainerStyle) {
+    return { ...descriptorContainerStyle };
+  }
+
   if (
     currentNode.type === "FlexContainer" ||
     currentNode.type === "ResponsiveLayout"
@@ -6838,7 +6855,7 @@ const resolveContainerStyle = (currentNode, baseStyle) => {
     style.alignItems = currentNode.props?.align || "stretch";
     style.position = "relative";
     if (currentNode.props?.gap !== undefined) {
-      style.gap = currentNode.props.gap;
+      style.gap = `${currentNode.props.gap}px`;
     }
   } else if (
     currentNode.type === "GridContainer" ||
@@ -7218,8 +7235,8 @@ const resolveAbsoluteLayout = (currentNode) => {
   }
 
   return {
-    x: Math.max(0, Math.round(x)),
-    y: Math.max(0, Math.round(y)),
+    x: Math.round(x),
+    y: Math.round(y),
     w: Math.max(1, Math.round(width)),
     h: Math.max(1, Math.round(height)),
     z: Number.isFinite(absolutePos.z) ? absolutePos.z : 1,
@@ -7522,6 +7539,10 @@ const handleResizePointerDown = (event, handle) => {
   )
     return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
+  const resizeParent = doc.value?.getParent?.(node.value.id);
+  if (resizeParent && !isChildResizableByDescriptor(resizeParent.type)) {
+    return;
+  }
 
   event.preventDefault();
   event.stopPropagation();
@@ -8098,8 +8119,8 @@ const handleResizePointerDown = (event, handle) => {
 
     nextWidth = Math.round(nextWidth);
     nextHeight = Math.round(nextHeight);
-    nextX = Math.max(0, Math.round(nextX));
-    nextY = Math.max(0, Math.round(nextY));
+    nextX = Math.round(nextX);
+    nextY = Math.round(nextY);
 
     const sectionPatch =
       node.value.type === "ElContainer"
@@ -8733,8 +8754,8 @@ const handlePointerDown = (event) => {
 
     const primaryBase = baseLayoutsById.get(node.value.id) || baseLayout;
     const primaryNextAbs = {
-      x: Math.max(0, Math.round(primaryBase.x + deltaX)),
-      y: Math.max(0, Math.round(primaryBase.y + deltaY)),
+      x: Math.round(primaryBase.x + deltaX),
+      y: Math.round(primaryBase.y + deltaY),
       w: primaryBase.w,
       h: primaryBase.h,
       z: primaryBase.z,
@@ -8758,8 +8779,8 @@ const handlePointerDown = (event) => {
       const dragNode = doc.value?.getNode?.(dragNodeId);
       if (!dragNode) continue;
       const nextAbs = {
-        x: Math.max(0, Math.round(dragBase.x + deltaX)),
-        y: Math.max(0, Math.round(dragBase.y + deltaY)),
+        x: Math.round(dragBase.x + deltaX),
+        y: Math.round(dragBase.y + deltaY),
         w: dragBase.w,
         h: dragBase.h,
         z: dragBase.z,
@@ -8996,8 +9017,8 @@ const handlePointerDown = (event) => {
             : 0;
           const defaultSize = resolveDefaultSize(node.value.type);
           const nextAbs = {
-            x: Math.max(0, Math.round(nextX)),
-            y: Math.max(0, Math.round(nextY)),
+            x: Math.round(nextX),
+            y: Math.round(nextY),
             w: defaultSize.width,
             h: defaultSize.height,
             z: baseLayout.z,
@@ -9105,8 +9126,8 @@ const handlePointerDown = (event) => {
             ? (upEvent.clientY - rootRect.top) / zoomValue
             : 0;
           const nextAbs = {
-            x: Math.max(0, Math.round(nextX)),
-            y: Math.max(0, Math.round(nextY)),
+            x: Math.round(nextX),
+            y: Math.round(nextY),
             w: baseLayout.w,
             h: baseLayout.h,
             z: baseLayout.z,
@@ -9187,8 +9208,8 @@ const handlePointerDown = (event) => {
           ? (upEvent.clientY - rootRect.top) / zoomValue
           : 0;
         const nextAbs = {
-          x: Math.max(0, Math.round(nextX)),
-          y: Math.max(0, Math.round(nextY)),
+          x: Math.round(nextX),
+          y: Math.round(nextY),
           w: baseLayout.w,
           h: baseLayout.h,
           z: baseLayout.z,
@@ -9511,12 +9532,13 @@ const handlePointerDown = (event) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
+  min-height: 60px;  min-height: 40px;
   color: #9ca3af;
   font-size: 12px;
   pointer-events: none;
-  border: 1px dashed #d1d5db;
+  border: 1px dashed #bcc3ce;
   border-radius: 4px;
+  background-color: rgba(148, 163, 184, 0.06);
   transition: all 0.2s ease;
 }
 
@@ -9550,6 +9572,20 @@ const handlePointerDown = (event) => {
   border-color: #3b82f6;
   color: #3b82f6;
   background-color: rgba(59, 130, 246, 0.05);
+}
+
+.designer-node.layout-container-visible:not(.is-preview) > div {
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  min-height: 60px;
+}
+
+.designer-node.layout-container-visible:not(.is-preview):hover > div {
+  border-color: #a0a8b4;
+}
+
+.designer-node.layout-container-visible.is-selected > div {
+  border-color: #409eff;
 }
 
 .insert-line {

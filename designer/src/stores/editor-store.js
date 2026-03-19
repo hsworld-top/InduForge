@@ -39,6 +39,7 @@ import {
 } from "@/editor-core";
 import { projectApi } from "@/services";
 import request from "@/utils/request";
+import { getDescriptor } from "@/components/registry.js";
 import { Storage } from "@/utils/storage";
 
 /**
@@ -2622,6 +2623,8 @@ export const useEditorStore = defineStore("editor", () => {
 
     const sizeMap = {
       FlexContainer: { width: 360, height: 200 },
+      HorizontalLayout: { width: 400, height: 160 },
+      VerticalLayout: { width: 240, height: 240 },
       FreeContainer: { width: 360, height: 200 },
       GridContainer: { width: 360, height: 200 },
       ElContainer: { width: 360, height: 240 },
@@ -2647,6 +2650,8 @@ export const useEditorStore = defineStore("editor", () => {
       "ColumnLayout1",
       "ColumnLayout2",
       "ColumnLayout4",
+      "HorizontalLayout",
+      "VerticalLayout",
       "ElContainer",
       "ElLayout",
       "ElLayoutRow",
@@ -2698,6 +2703,8 @@ export const useEditorStore = defineStore("editor", () => {
 
     if (
       parentNode.type === "FlexContainer" ||
+      parentNode.type === "HorizontalLayout" ||
+      parentNode.type === "VerticalLayout" ||
       parentNode.type === "ResponsiveLayout" ||
       parentNode.type === "ElContainer" ||
       parentNode.type === "ElLayout" ||
@@ -2924,17 +2931,20 @@ export const useEditorStore = defineStore("editor", () => {
           : 3;
       node.props = { ...(node.props || {}), columns: normalizedColumns };
     }
-    if (parentNode.type === "FreeContainer") {
+    const isRootCanvas = parentNode.id === currentPage.value?.rootNodeId;
+    if (parentNode.type === "FreeContainer" || isRootCanvas) {
       node.positioning = "absolute";
       node.absolutePos = {
-        x: Math.max(0, Math.round(dropInfo.x)),
-        y: Math.max(0, Math.round(dropInfo.y)),
+        x: Math.round(dropInfo.x),
+        y: Math.round(dropInfo.y),
         w: dropInfo.width,
         h: dropInfo.height,
         z: 1,
       };
     } else if (
       parentNode.type === "FlexContainer" ||
+      parentNode.type === "HorizontalLayout" ||
+      parentNode.type === "VerticalLayout" ||
       parentNode.type === "ResponsiveLayout" ||
       parentNode.type === "ElContainer" ||
       parentNode.type === "ElLayout" ||
@@ -2946,8 +2956,15 @@ export const useEditorStore = defineStore("editor", () => {
       parentNode.type === "ElCol"
     ) {
       node.positioning = "flow";
-      if (layoutItem?.flex) {
+      // 优先从 descriptor 读取子项策略
+      const parentDescriptor = getDescriptor(parentNode.type);
+      if (parentDescriptor?.childFlowLayout) {
+        node.flowLayout = { ...parentDescriptor.childFlowLayout };
+      } else if (layoutItem?.flex) {
         node.flowLayout = { ...layoutItem.flex };
+      }
+      if (parentDescriptor?.childStyle) {
+        node.style = { ...(node.style || {}), ...parentDescriptor.childStyle(parentNode.type) };
       }
     } else if (
       parentNode.type === "GridContainer" ||
