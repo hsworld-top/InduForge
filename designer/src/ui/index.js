@@ -5,9 +5,9 @@
 export { default as DesignerView } from "./shell/DesignerView.vue";
 export { default as PreviewView } from "./editors/page/preview/PreviewView.vue";
 
-export * from "./shell/TopToolbar/index.js";
-export * from "./shell/ToolRail/index.js";
-export * from "./shell/DockPanel/index.js";
+export * from "./shell/TopToolbar";
+export * from "./shell/ToolRail";
+export * from "./shell/DockPanel";
 
 export * from "./editors/page/canvas/index.js";
 export * from "./editors/page/panels/left/index.js";

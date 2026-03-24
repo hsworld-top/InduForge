@@ -302,9 +302,9 @@
   </header>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage } from "../el-message-compat";
 import IconLucideBot from "~icons/lucide/bot";
 import IconLucideDownload from "~icons/lucide/download";
 import IconLucideEllipsis from "~icons/lucide/ellipsis";
@@ -322,64 +322,98 @@ import IconLucideZoomOut from "~icons/lucide/zoom-out";
 import IconLucideCopy from "~icons/lucide/copy";
 import IconLucideClipboardPaste from "~icons/lucide/clipboard-paste";
 import IconLucideTrash from "~icons/lucide/trash";
+import IconEpArrowDownBold from "~icons/ep/arrow-down-bold";
 
-const props = defineProps({
-  pageName: { type: String, default: "未命名页面" },
-  isLocked: { type: Boolean, default: false },
-  isDirty: { type: Boolean, default: false },
-  viewPresets: { type: Array, default: () => [] },
-  activeViewKey: { type: String, default: "pc" },
-  canvasWidth: { type: Number, default: 1366 },
-  canvasHeight: { type: Number, default: 768 },
-  isCustomView: { type: Boolean, default: false },
-  canUndo: { type: Boolean, default: false },
-  canRedo: { type: Boolean, default: false },
-  canMoveLayer: { type: Boolean, default: false },
-  zoom: { type: Number, default: 1 },
-  showRuler: { type: Boolean, default: true },
-  showGrid: { type: Boolean, default: false },
-  enableSnap: { type: Boolean, default: true },
-  isSaving: { type: Boolean, default: false },
-  saveSettings: {
-    type: Object,
-    default: () => ({ autoSave: false, intervalMinutes: 5 }),
+interface ToolbarSaveSettings {
+  autoSave: boolean;
+  intervalMinutes: number;
+}
+
+/** 与 constants 中 ViewPreset 结构一致；单独声明避免 props 默认 [] 与 readonly 字面量联合退化为 never */
+interface ViewPresetProp {
+  key: string;
+  label?: string;
+  width: number;
+  height: number;
+}
+
+const props = withDefaults(
+  defineProps<{
+    pageName?: string;
+    isLocked?: boolean;
+    isDirty?: boolean;
+    viewPresets?: readonly ViewPresetProp[];
+    activeViewKey?: string;
+    canvasWidth?: number;
+    canvasHeight?: number;
+    isCustomView?: boolean;
+    canUndo?: boolean;
+    canRedo?: boolean;
+    canMoveLayer?: boolean;
+    zoom?: number;
+    showRuler?: boolean;
+    showGrid?: boolean;
+    enableSnap?: boolean;
+    isSaving?: boolean;
+    saveSettings?: ToolbarSaveSettings;
+    hasSelection?: boolean;
+    hasClipboard?: boolean;
+  }>(),
+  {
+    pageName: "未命名页面",
+    isLocked: false,
+    isDirty: false,
+    viewPresets: () => [],
+    activeViewKey: "pc",
+    canvasWidth: 1366,
+    canvasHeight: 768,
+    isCustomView: false,
+    canUndo: false,
+    canRedo: false,
+    canMoveLayer: false,
+    zoom: 1,
+    showRuler: true,
+    showGrid: false,
+    enableSnap: true,
+    isSaving: false,
+    saveSettings: () => ({ autoSave: false, intervalMinutes: 5 }),
+    hasSelection: false,
+    hasClipboard: false,
   },
-  hasSelection: { type: Boolean, default: false },
-  hasClipboard: { type: Boolean, default: false },
-});
+);
 
-const emit = defineEmits([
-  "update:activeViewKey",
-  "applyCustomSize",
-  "toggleLock",
-  "export",
-  "undo",
-  "redo",
-  "preview",
-  "previewApp",
-  "save",
-  "openAi",
-  "toggleTheme",
-  "moveUp",
-  "moveDown",
-  "moveToTop",
-  "moveToBottom",
-  "openCollaboration",
-  "refreshCanvas",
-  "toggleLocale",
-  "clearCanvas",
-  "saveSettingsChange",
-  "zoomIn",
-  "zoomOut",
-  "fitCanvas",
-  "fitScreen",
-  "toggleRuler",
-  "toggleGrid",
-  "toggleSnap",
-  "copy",
-  "paste",
-  "deleteSelected",
-]);
+const emit = defineEmits<{
+  "update:activeViewKey": [key: string];
+  applyCustomSize: [size: { width: number; height: number }];
+  toggleLock: [];
+  export: [];
+  undo: [];
+  redo: [];
+  preview: [];
+  previewApp: [];
+  save: [];
+  openAi: [];
+  toggleTheme: [];
+  moveUp: [];
+  moveDown: [];
+  moveToTop: [];
+  moveToBottom: [];
+  openCollaboration: [];
+  refreshCanvas: [];
+  toggleLocale: [];
+  clearCanvas: [];
+  saveSettingsChange: [settings: ToolbarSaveSettings];
+  zoomIn: [];
+  zoomOut: [];
+  fitCanvas: [];
+  fitScreen: [];
+  toggleRuler: [];
+  toggleGrid: [];
+  toggleSnap: [];
+  copy: [];
+  paste: [];
+  deleteSelected: [];
+}>();
 
 const MIN_CANVAS_WIDTH = 120;
 const MAX_CANVAS_WIDTH = 7680;
@@ -435,11 +469,11 @@ const localCustomSize = ref({
   width: props.canvasWidth,
   height: props.canvasHeight,
 });
-const saveDropdownRef = ref(null);
+const saveDropdownRef = ref<{ handleClose?: () => void } | null>(null);
 
 watch(
   () => props.saveSettings,
-  (value) => {
+  (value: ToolbarSaveSettings | undefined) => {
     localSaveSettings.value = {
       autoSave: Boolean(value?.autoSave),
       intervalMinutes: Number(value?.intervalMinutes) || 5,
@@ -449,7 +483,7 @@ watch(
 );
 
 watch(
-  () => [props.canvasWidth, props.canvasHeight],
+  () => [props.canvasWidth, props.canvasHeight] as const,
   ([width, height]) => {
     localCustomSize.value = {
       width: Math.round(width),
@@ -459,7 +493,7 @@ watch(
   { immediate: true },
 );
 
-const handleViewChange = (key) => emit("update:activeViewKey", key);
+const handleViewChange = (key: string) => emit("update:activeViewKey", key);
 const handleToggleLock = () => emit("toggleLock");
 const handleUndo = () => emit("undo");
 const handleRedo = () => emit("redo");
@@ -471,7 +505,7 @@ const handleCopy = () => emit("copy");
 const handlePaste = () => emit("paste");
 const handleDeleteSelected = () => emit("deleteSelected");
 
-const handlePreviewCommand = (command) => {
+const handlePreviewCommand = (command: string) => {
   if (command === "pagePreview") {
     emit("preview");
     return;
@@ -481,7 +515,7 @@ const handlePreviewCommand = (command) => {
   }
 };
 
-const handleViewMenuCommand = (command) => {
+const handleViewMenuCommand = (command: string) => {
   if (command === "resetZoom") {
     emit("fitScreen");
     return;
@@ -531,7 +565,7 @@ const handleSaveSettingsSubmit = () => {
   saveDropdownRef.value?.handleClose?.();
 };
 
-const handleMoreCommand = (command) => {
+const handleMoreCommand = (command: string) => {
   if (command === "openAi") {
     emit("openAi");
     return;

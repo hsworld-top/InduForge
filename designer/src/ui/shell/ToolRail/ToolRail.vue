@@ -43,25 +43,26 @@
   </nav>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
+import type { ToolRailItem } from "../tool-rail-types";
 
-const props = defineProps({
-  side: {
-    type: String,
-    default: "left",
+const props = withDefaults(
+  defineProps<{
+    side?: "left" | "right";
+    items?: ToolRailItem[];
+    activeKey?: string;
+  }>(),
+  {
+    side: "left",
+    items: () => [],
+    activeKey: "",
   },
-  items: {
-    type: Array,
-    default: () => [],
-  },
-  activeKey: {
-    type: String,
-    default: "",
-  },
-});
+);
 
-const emit = defineEmits(["select"]);
+const emit = defineEmits<{
+  select: [key: string];
+}>();
 
 const topItems = computed(() =>
   props.items.filter((item) => item.placement !== "bottom"),
@@ -71,11 +72,7 @@ const bottomItems = computed(() =>
   props.items.filter((item) => item.placement === "bottom"),
 );
 
-/**
- * 选择工具栏入口
- * @param {string} key - 工具键值
- */
-const handleSelect = (key) => {
+const handleSelect = (key: string) => {
   emit("select", key);
 };
 </script>

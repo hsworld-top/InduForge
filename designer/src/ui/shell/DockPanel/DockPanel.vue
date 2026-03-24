@@ -30,38 +30,33 @@
   </aside>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import IconLucidePin from "~icons/lucide/pin";
 import IconLucidePinOff from "~icons/lucide/pin-off";
 import IconLucideX from "~icons/lucide/x";
 
-const props = defineProps({
-  side: {
-    type: String,
-    default: "left",
+withDefaults(
+  defineProps<{
+    side?: "left" | "right";
+    title?: string;
+    floating?: boolean;
+  }>(),
+  {
+    side: "left",
+    title: "",
+    floating: false,
   },
-  title: {
-    type: String,
-    default: "",
-  },
-  floating: {
-    type: Boolean,
-    default: false,
-  },
-});
+);
 
-const emit = defineEmits(["close", "toggleFloating"]);
+const emit = defineEmits<{
+  close: [];
+  toggleFloating: [];
+}>();
 
-/**
- * 关闭面板
- */
 const handleClose = () => {
   emit("close");
 };
 
-/**
- * 切换固定/悬浮
- */
 const handleToggle = () => {
   emit("toggleFloating");
 };

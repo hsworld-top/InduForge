@@ -46,7 +46,7 @@
               </el-tooltip>
             </template>
             <component :is="leftPanelComponent" :key="`left-panel-${leftActiveKey}`" v-bind="leftPanelProps"
-              ref="leftPanelRef" @update:drawingTool="(value) => (drawingTool.value = value)" />
+              ref="leftPanelRef" @update:drawingTool="setDrawingTool" />
           </DockPanel>
 
           <div ref="canvasHostRef" class="designer-canvas">
@@ -84,7 +84,7 @@
                 </el-tooltip>
               </template>
               <component :is="leftPanelComponent" :key="`left-floating-panel-${leftActiveKey}`" v-bind="leftPanelProps"
-                ref="leftPanelRef" @update:drawingTool="(value) => (drawingTool.value = value)" />
+                ref="leftPanelRef" @update:drawingTool="setDrawingTool" />
             </DockPanel>
 
             <DockPanel v-if="rightActiveKey && rightFloating" side="right" :title="rightPanelTitle"
@@ -160,7 +160,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {
   computed,
   nextTick,
@@ -170,9 +170,11 @@ import {
   watch,
   provide,
   inject,
+  type Ref,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessageBox } from "element-plus";
+import { ElMessage } from "./el-message-compat";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { CanvasContainer } from "@/ui/editors/page/canvas";
@@ -189,7 +191,8 @@ import {
   VariablesPanel,
 } from "@/ui/shared/panels";
 import { PropertyPanel, AdvancedPanel } from "@/ui/editors/page/panels/right";
-import { VIEW_PRESETS } from "@/constants";
+import { VIEW_PRESETS, type ViewPreset } from "@/constants";
+import type { ToolRailItem } from "./tool-rail-types";
 import IconEpDocument from "~icons/ep/document";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpWarning from "~icons/ep/warning";
@@ -209,6 +212,65 @@ import { Storage } from "@/utils/storage";
 const route = useRoute();
 const router = useRouter();
 
+/** 路由 meta 中的工程信息（由路由守卫注入） */
+interface RouteProjectMeta {
+  project?: { id: string };
+}
+
+/** store 中页面列表项（editor-store 尚未 TS 化时的最小形状） */
+interface StorePageRow {
+  id: string;
+  name?: string;
+  type?: string;
+  parentId?: string | null;
+  config?: {
+    width?: number;
+    height?: number;
+    showGrid?: boolean;
+    enableSnap?: boolean;
+  };
+  rootNodeId?: string;
+}
+
+interface PageTab {
+  id: string;
+  name: string;
+  isDirty: boolean;
+}
+
+/** storeToRefs(StoreGeneric) 会把 ref 标成可能 undefined，此处收窄为壳层实际用到的形状 */
+interface EditorShellStoreRefs {
+  canUndo: Ref<boolean>;
+  canRedo: Ref<boolean>;
+  isSaving: Ref<boolean>;
+  selection: Ref<
+    | {
+        getSelectionCount?: () => number;
+        getPrimaryElement: () => { kind: string; id: string } | null;
+      }
+    | undefined
+  >;
+  doc: Ref<
+    | {
+        nodesById?: Record<string, unknown>;
+        getNode?: (id: string) => {
+          absolutePos?: { x: number; y: number };
+          label?: string;
+          type?: string;
+          props?: { width?: number; height?: number };
+          style?: { width?: number; height?: number };
+        } | null;
+      }
+    | undefined
+  >;
+  pages: Ref<StorePageRow[]>;
+  currentPageId: Ref<string>;
+  currentPage: Ref<StorePageRow | null | undefined>;
+  isLocked: Ref<boolean>;
+  readonlyState: Ref<{ readonly?: boolean } | undefined>;
+  pageTabState: Ref<{ tabs?: PageTab[]; activeId?: string } | undefined>;
+}
+
 const editorStore = useEditorStore();
 const {
   canUndo,
@@ -222,50 +284,47 @@ const {
   isLocked,
   readonlyState,
   pageTabState,
-} = storeToRefs(editorStore);
+} = storeToRefs(editorStore) as unknown as EditorShellStoreRefs;
 
 const zoom = ref(1);
 const showRuler = ref(true);
 const viewResetToken = ref(0);
 const activeViewKey = ref("pc");
-const viewPresets = VIEW_PRESETS;
+const viewPresets: readonly ViewPreset[] = VIEW_PRESETS;
 const SAVE_SETTINGS_STORAGE_KEY = "designer_save_settings";
 const AUTO_FIT_PADDING = 48;
 const saveSettings = ref({
   autoSave: false,
   intervalMinutes: 5,
 });
-const autoSaveTimer = ref(null);
+const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null);
 const autoSaving = ref(false);
 const autoZoomEnabled = ref(true);
 const autoFitFrame = ref(0);
-const canvasHostResizeObserver = ref(null);
+const canvasHostResizeObserver = ref<ResizeObserver | null>(null);
 
 const drawingTool = ref("");
 
-// ==================== 页面标签页系统 ====================
-/**
- * @typedef {Object} PageTab
- * @property {string} id - 页面ID
- * @property {string} name - 页面名称
- * @property {boolean} isDirty - 是否有未保存的修改
- */
+const setDrawingTool = (value: string) => {
+  drawingTool.value = value;
+};
 
-/** @type {import('vue').Ref<PageTab[]>} */
-const pageTabs = ref([]);
+// ==================== 页面标签页系统 ====================
+const pageTabs = ref<PageTab[]>([]);
 const activePageTabId = ref("");
 
-if (pageTabState.value?.tabs?.length) {
-  pageTabs.value = pageTabState.value.tabs.map((item) => ({ ...item }));
-  activePageTabId.value = pageTabState.value.activeId || "";
+{
+  const initialTabState = pageTabState.value;
+  if (initialTabState?.tabs?.length) {
+    pageTabs.value = initialTabState.tabs.map((item: PageTab) => ({
+      ...item,
+    }));
+    activePageTabId.value = initialTabState.activeId || "";
+  }
 }
 
-/**
- * 打开页面标签页
- * @param {string} pageId - 页面ID
- */
-const openPageTab = (pageId) => {
-  const page = editorStore.pages.find((p) => p.id === pageId);
+const openPageTab = (pageId: string) => {
+  const page = editorStore.pages.find((p: StorePageRow) => p.id === pageId);
   if (!page) return;
 
   // 检查是否已打开
@@ -287,15 +346,12 @@ const openPageTab = (pageId) => {
   activePageTabId.value = pageId;
 };
 
-/**
- * 关闭页面标签页
- * @param {string} tabId - 标签页ID
- */
-const handleClosePageTab = async (tabId) => {
+const handleClosePageTab = async (tabId: string) => {
   const index = pageTabs.value.findIndex((t) => t.id === tabId);
   if (index === -1) return;
 
   const tab = pageTabs.value[index];
+  if (!tab) return;
 
   // 如果有未保存的修改，弹窗确认
   if (tab.isDirty) {
@@ -338,6 +394,10 @@ const handleClosePageTab = async (tabId) => {
       // 切换到其他标签页
       const newActiveTab =
         pageTabs.value[Math.min(index, pageTabs.value.length - 1)];
+      if (!newActiveTab) {
+        activePageTabId.value = "";
+        return;
+      }
       activePageTabId.value = newActiveTab.id;
       editorStore.setCurrentPage(newActiveTab.id);
     } else {
@@ -364,7 +424,9 @@ const updateTabName = () => {
   const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
   if (tab) {
     // 从 pages 列表获取最新的页面名称
-    const page = editorStore.pages.find((p) => p.id === currentPageId.value);
+    const page = editorStore.pages.find(
+      (p: StorePageRow) => p.id === currentPageId.value,
+    );
     tab.name = page?.name || "未命名页面";
   }
 };
@@ -374,7 +436,9 @@ const updateTabName = () => {
  * @returns {void}
  */
 const syncPageTabsWithPages = () => {
-  const pageIdSet = new Set(editorStore.pages.map((page) => page.id));
+  const pageIdSet = new Set(
+    editorStore.pages.map((page: StorePageRow) => page.id),
+  );
   const nextTabs = pageTabs.value.filter((tab) => pageIdSet.has(tab.id));
   if (nextTabs.length !== pageTabs.value.length) {
     pageTabs.value = nextTabs;
@@ -429,7 +493,9 @@ watch(
   (newPageId, oldPageId) => {
     if (newPageId && !pageTabs.value.find((t) => t.id === newPageId)) {
       // 验证页面是否真的存在
-      const pageExists = editorStore.pages.some((p) => p.id === newPageId);
+      const pageExists = editorStore.pages.some(
+        (p: StorePageRow) => p.id === newPageId,
+      );
       if (pageExists) {
         openPageTab(newPageId);
       }
@@ -446,9 +512,12 @@ provide("openPageTab", openPageTab);
 
 // ==================== 底部状态栏数据 ====================
 /** 从 DesignCanvas 注入画布鼠标坐标（provide in DesignCanvas.vue） */
-const canvasMousePos = inject("canvasMousePos", ref(null));
+const canvasMousePos = inject<Ref<{ x: number; y: number } | null>>(
+  "canvasMousePos",
+  ref(null),
+);
 /** 从 DesignCanvas 注入悬停节点类型（provide in DesignCanvas.vue） */
-const hoveredNodeType = inject("hoveredNodeType", ref(""));
+const hoveredNodeType = inject<Ref<string>>("hoveredNodeType", ref(""));
 
 /**
  * 当前选中节点数量
@@ -476,7 +545,7 @@ const totalNodeCount = computed(() => {
 const selectedNodePos = computed(() => {
   void editorStore.selectionVersion;
   void editorStore.docVersion;
-  const primary = selection.value?.getPrimaryElement?.();
+  const primary = selection.value?.getPrimaryElement();
   if (!primary || primary.kind !== "node") return null;
   const node = doc.value?.getNode?.(primary.id);
   if (!node) return null;
@@ -510,7 +579,7 @@ const selectedNodePos = computed(() => {
 const selectedNodeName = computed(() => {
   void editorStore.selectionVersion;
   void editorStore.docVersion;
-  const primary = selection.value?.getPrimaryElement?.();
+  const primary = selection.value?.getPrimaryElement();
   if (!primary || primary.kind !== "node") return "";
   const node = doc.value?.getNode?.(primary.id);
   if (!node) return "";
@@ -523,7 +592,7 @@ const selectedNodeName = computed(() => {
 const selectedNodeSize = computed(() => {
   void editorStore.selectionVersion;
   void editorStore.docVersion;
-  const primary = selection.value?.getPrimaryElement?.();
+  const primary = selection.value?.getPrimaryElement();
   if (!primary || primary.kind !== "node") return null;
   const node = doc.value?.getNode?.(primary.id);
   if (!node) return null;
@@ -533,7 +602,7 @@ const selectedNodeSize = computed(() => {
     return { w: pw, h: ph };
   }
   const nodeEl = document.querySelector(`[data-node-id="${primary.id}"]`);
-  if (nodeEl) {
+  if (nodeEl instanceof HTMLElement) {
     const zoomValue = zoom.value || 1;
     return {
       w: Math.round(nodeEl.offsetWidth / zoomValue),
@@ -551,7 +620,9 @@ const hasPages = computed(() => {
   // 确保页面列表不为空且当前页面确实存在
   if (editorStore.pages.length === 0) return false;
   if (!currentPageId.value) return false;
-  return editorStore.pages.some((p) => p.id === currentPageId.value);
+  return editorStore.pages.some(
+    (p: StorePageRow) => p.id === currentPageId.value,
+  );
 });
 // ==================== 页面标签页系统结束 ====================
 const canUndoEnabled = computed(
@@ -581,15 +652,15 @@ const leftActiveKey = ref("pages");
 const rightActiveKey = ref("props");
 const leftFloating = ref(false);
 const rightFloating = ref(false);
-const leftPanelRef = ref(null);
-const canvasHostRef = ref(null);
+const leftPanelRef = ref<{ openCreateDialog?: () => void } | null>(null);
+const canvasHostRef = ref<HTMLElement | null>(null);
 
 const pageName = computed(() => {
   // 如果没有页面，返回空
   if (!hasPages.value) return "";
   // 优先从 pages 列表获取名称（更可靠）
   const pageFromList = editorStore.pages.find(
-    (p) => p.id === currentPageId.value,
+    (p: StorePageRow) => p.id === currentPageId.value,
   );
   if (pageFromList?.name) return pageFromList.name;
   // 其次从 doc 中获取
@@ -600,7 +671,9 @@ const pageName = computed(() => {
 const isDirty = computed(() => canUndo.value);
 
 const currentPageSnapshot = computed(() => {
-  const page = pages.value.find((item) => item.id === currentPageId.value);
+  const page = pages.value.find(
+    (item: StorePageRow) => item.id === currentPageId.value,
+  );
   return page || currentPage.value || null;
 });
 const activeView = computed(() =>
@@ -611,7 +684,7 @@ const defaultViewPreset = computed(
     viewPresets.find((preset) => preset.key === "pc") ||
     viewPresets[0] || { width: 1366, height: 768 },
 );
-const normalizeCanvasDimension = (value, fallback) => {
+const normalizeCanvasDimension = (value: unknown, fallback: number): number => {
   const next = Number(value);
   return Number.isFinite(next) && next > 0 ? Math.round(next) : fallback;
 };
@@ -655,7 +728,7 @@ const enableSnap = computed(
   () => currentPageSnapshot.value?.config?.enableSnap ?? true,
 );
 
-const leftRailItems = [
+const leftRailItems: ToolRailItem[] = [
   { key: "pages", label: "页面", icon: IconLucideFileText },
   { key: "outline", label: "大纲", icon: IconLucideList },
   { key: "material", label: "物料", icon: IconLucideBox },
@@ -665,7 +738,7 @@ const leftRailItems = [
   { key: "role", label: "角色", icon: IconLucideUsers, placement: "bottom" },
 ];
 
-const rightRailItems = [
+const rightRailItems: ToolRailItem[] = [
   { key: "props", label: "属性", icon: IconLucideSlidersHorizontal },
   { key: "advanced", label: "高级", icon: IconLucideSettings },
   { key: "variables", label: "变量", icon: IconLucideBraces },
@@ -746,7 +819,7 @@ const handleRedo = () => {
  * 预览
  */
 const handlePreview = () => {
-  const projectId = route.meta.project?.id;
+  const projectId = (route.meta as RouteProjectMeta).project?.id;
   router.push({
     path: "/preview",
     query: { pid: projectId, pageId: currentPageId.value || "" },
@@ -780,11 +853,7 @@ const handleSave = async () => {
   }
 };
 
-/**
- * 切换视图
- * @param {string} key - 视图键值
- */
-const handleViewChange = (key) => {
+const handleViewChange = (key: string) => {
   if (key === "custom") {
     activeViewKey.value = "custom";
     return;
@@ -800,12 +869,13 @@ const handleViewChange = (key) => {
   editorStore.updateCurrentPage({ config: nextConfig });
 };
 
-/**
- * 应用自定义画布尺寸
- * @param {{width:number,height:number}} size - 自定义尺寸
- * @returns {void}
- */
-const handleApplyCustomSize = ({ width, height }) => {
+const handleApplyCustomSize = ({
+  width,
+  height,
+}: {
+  width: number;
+  height: number;
+}) => {
   const page = currentPageSnapshot.value;
   if (!page) return;
   const nextConfig = {
@@ -863,11 +933,11 @@ const handleExport = () => {
   ElMessage.success("已导出页面");
 };
 
-const handleLeftSelect = (key) => {
+const handleLeftSelect = (key: string) => {
   leftActiveKey.value = leftActiveKey.value === key ? "" : key;
 };
 
-const handleRightSelect = (key) => {
+const handleRightSelect = (key: string) => {
   rightActiveKey.value = rightActiveKey.value === key ? "" : key;
 };
 
@@ -895,21 +965,12 @@ const toggleRightFloating = () => {
   rightFloating.value = !rightFloating.value;
 };
 
-/**
- * 更新缩放比例
- * @param {number} value - 缩放比例
- */
-const handleZoomChange = (value) => {
+const handleZoomChange = (value: number) => {
   autoZoomEnabled.value = false;
   zoom.value = value;
 };
 
-/**
- * 限制缩放范围
- * @param {number} value - 缩放值
- * @returns {number}
- */
-const clampZoom = (value) => {
+const clampZoom = (value: number): number => {
   const next = Number.isFinite(value) ? value : 1;
   return Math.min(5, Math.max(0.1, Number(next.toFixed(2))));
 };
@@ -1054,11 +1115,11 @@ const handlePageCreate = async () => {
   leftPanelRef.value?.openCreateDialog?.();
 };
 
-const getUniquePageName = (name) => {
+const getUniquePageName = (name: string | undefined) => {
   const base = (name || "导入页面").trim() || "导入页面";
   const existingNames = editorStore.pages
-    .map((page) => page.name)
-    .filter(Boolean);
+    .map((page: StorePageRow) => page.name)
+    .filter(Boolean) as string[];
   if (!existingNames.includes(base)) return base;
   let index = 1;
   let next = `${base}_${index}`;
@@ -1077,8 +1138,9 @@ const handlePageImport = () => {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = ".json,application/json";
-  input.onchange = async (event) => {
-    const file = event.target.files?.[0];
+  input.onchange = async (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
     if (!file) return;
     try {
       const text = await file.text();
@@ -1110,7 +1172,7 @@ const handlePageImport = () => {
       imported.page.id = pageId;
       await editorStore.updatePageSchema(pageId, imported);
       await editorStore.loadPage(pageId);
-      openPageTab?.(pageId);
+      openPageTab(pageId);
       ElMessage.success("页面已导入");
     } catch (error) {
       ElMessage.error("导入页面失败");
@@ -1195,10 +1257,6 @@ const clearAutoSaveTimer = () => {
   }
 };
 
-/**
- * 根据当前设置更新自动保存定时器
- * @returns {void}
- */
 const syncAutoSaveTimer = () => {
   clearAutoSaveTimer();
   if (!saveSettings.value.autoSave) return;
@@ -1211,12 +1269,10 @@ const syncAutoSaveTimer = () => {
   );
 };
 
-/**
- * 应用并持久化保存设置
- * @param {{autoSave?: boolean, intervalMinutes?: number}} settings - 保存设置
- * @returns {void}
- */
-const handleSaveSettingsChange = (settings) => {
+const handleSaveSettingsChange = (settings: {
+  autoSave?: boolean;
+  intervalMinutes?: number;
+}) => {
   const nextSettings = {
     autoSave: Boolean(settings?.autoSave),
     intervalMinutes: Number(settings?.intervalMinutes) || 5,
@@ -1288,7 +1344,7 @@ watch(
  * 加载工程数据
  */
 const loadProject = async () => {
-  const project = route.meta.project;
+  const project = (route.meta as RouteProjectMeta).project;
   if (!project?.id) return;
   if (editorStore.projectId === project.id && editorStore.doc) {
     return;
@@ -1305,7 +1361,10 @@ const loadProject = async () => {
 };
 
 onMounted(() => {
-  const cached = Storage.get(SAVE_SETTINGS_STORAGE_KEY, null);
+  const cached = Storage.get(SAVE_SETTINGS_STORAGE_KEY, null) as {
+    autoSave?: boolean;
+    intervalMinutes?: number;
+  } | null;
   if (cached && typeof cached === "object") {
     saveSettings.value = {
       autoSave: Boolean(cached.autoSave),

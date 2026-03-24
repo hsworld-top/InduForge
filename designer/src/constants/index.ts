@@ -30,6 +30,9 @@ export const VIEW_PRESETS = [
   { key: "phonePortrait", label: "手机竖屏", width: 480, height: 800 },
 ] as const;
 
+/** 画布视图预设（与 VIEW_PRESETS 单项结构一致） */
+export type ViewPreset = (typeof VIEW_PRESETS)[number];
+
 export const GRID_CONFIG = {
   size: 10,
   enabled: true,
