@@ -92,7 +92,7 @@ export {
   DatapointRegistry,
   DatapointRegistryEvents,
   datapointRegistry,
-} from "./datapointRegistry.js";
+} from "./datapoint-registry";
 
 // ==================== 工厂函数 ====================
 

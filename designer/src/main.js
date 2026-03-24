@@ -4,7 +4,7 @@
  * 职责：
  * - 创建 Vue 应用并挂载
  * - 注册 Pinia、Vue Router、Element Plus
- * - 注册内置组件（builtinManifests）
+ * - 注册内置组件（builtin-manifests）
  * - 移除 HTML 中的初始加载占位
  * - 监听父窗口主题更新消息（iframe 嵌入场景）
  */
@@ -13,14 +13,13 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import ElementPlus from "element-plus";
 import "element-plus/dist/index.css";
-// import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import router from "./router";
 import { Storage } from "./utils/storage";
 import { STORAGE_KEYS } from "./constants";
 import App from "./App.vue";
-import { registerBuiltinComponents } from "./editor-core/registry/builtinManifests.js";
+import { registerBuiltinComponents } from "./editor-core/registry/builtin-manifests";
 import { registerAllDescriptors } from "./components/index.js";
-import * as descriptorRegistry from "./components/registry.js";
+import * as descriptorRegistry from "./components/descriptors/registry.js";
 import { initDescriptorRegistry } from "./editor-core/document/factory.js";
 import "./assets/styles/main.css";
 
@@ -36,12 +35,6 @@ initDescriptorRegistry(descriptorRegistry);
 app.use(createPinia());
 app.use(router);
 app.use(ElementPlus);
-
-// 注册所有 Element Plus 图标组件
-// 已迁移到 unplugin-icons，不再需要全局注册
-// for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-//     app.component(key, component);
-// }
 
 app.mount("#app");
 

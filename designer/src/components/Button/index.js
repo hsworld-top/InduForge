@@ -4,4 +4,4 @@
  */
 
 export { manifest } from "./manifest.js";
-export { descriptor } from "./descriptor.js";
+export { descriptor } from "../descriptors/button.js";

@@ -3,4 +3,4 @@
  */
 
 export { Validator } from "./validator.js";
-export { BindingValidator } from "./bindingValidator.js";
+export { BindingValidator } from "./binding-validator";

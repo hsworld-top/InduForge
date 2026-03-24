@@ -2,16 +2,14 @@
  * UI 层统一导出
  */
 
-// 页面视图
-export { default as DesignerView } from "./Designer/DesignerView.vue";
-export { default as PreviewView } from "./Preview/PreviewView.vue";
+export { default as DesignerView } from "./shell/DesignerView.vue";
+export { default as PreviewView } from "./editors/page/preview/PreviewView.vue";
 
-// 面板模块（骨架）
-export * from "./LeftPanel/index.js";
-export * from "./RightPanel/index.js";
-export * from "./Canvas/index.js";
-export * from "./TopToolbar/index.js";
-export * from "./DatapointPicker/index.js";
-export * from "./DiagnosticsPanel/index.js";
-export * from "./ToolRail/index.js";
-export * from "./DockPanel/index.js";
+export * from "./shell/TopToolbar/index.js";
+export * from "./shell/ToolRail/index.js";
+export * from "./shell/DockPanel/index.js";
+
+export * from "./editors/page/canvas/index.js";
+export * from "./editors/page/panels/left/index.js";
+export * from "./editors/page/panels/right/index.js";
+export * from "./shared/panels/index.js";

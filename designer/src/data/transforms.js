@@ -192,9 +192,9 @@ export function trim(value) {
  */
 export function dateFormat(value, formatStr = "YYYY-MM-DD HH:mm:ss") {
   if (!value) return "";
-  const d = dayjs(value);
-  if (!d.isValid()) return String(value);
-  return d.format(formatStr);
+  const parsed = dayjs(value);
+  if (!parsed.isValid()) return String(value);
+  return parsed.format(formatStr);
 }
 
 /**
@@ -204,18 +204,18 @@ export function dateFormat(value, formatStr = "YYYY-MM-DD HH:mm:ss") {
  */
 export function fromNow(value) {
   if (!value) return "";
-  const d = dayjs(value);
-  if (!d.isValid()) return String(value);
+  const parsed = dayjs(value);
+  if (!parsed.isValid()) return String(value);
 
   const now = dayjs();
-  const diffSeconds = now.diff(d, "second");
+  const diffSeconds = now.diff(parsed, "second");
 
   if (diffSeconds < 60) return "刚刚";
   if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} 分钟前`;
   if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} 小时前`;
   if (diffSeconds < 604800) return `${Math.floor(diffSeconds / 86400)} 天前`;
 
-  return d.format("YYYY-MM-DD");
+  return parsed.format("YYYY-MM-DD");
 }
 
 // ==================== 值映射 ====================

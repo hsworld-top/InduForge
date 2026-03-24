@@ -8,8 +8,8 @@
  * 2. 在此处 import 并调用 registerDescriptor
  */
 
-import { registerDescriptor } from "./registry.js";
-import { registerSimpleDescriptors } from "./simple-descriptors.js";
+import { registerDescriptor } from "./descriptors/registry.js";
+import { registerSimpleDescriptors } from "./descriptors/simple-descriptors.js";
 
 import { descriptor as ButtonDescriptor } from "./Button/index.js";
 import { descriptor as HorizontalLayoutDescriptor } from "./HorizontalLayout/index.js";
@@ -50,4 +50,4 @@ export {
   canAcceptChildByDescriptor,
   isRegionType,
   getFlexDirection,
-} from "./registry.js";
+} from "./descriptors/registry.js";

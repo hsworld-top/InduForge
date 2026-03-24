@@ -887,14 +887,14 @@ export class DocumentModel extends EventEmitter {
    * @private
    */
   _ensureSchemaStructure() {
-    const s = this._schema;
-    if (!s.pagesById) s.pagesById = {};
-    if (!s.nodesById) s.nodesById = {};
-    if (!s.graphicsById) s.graphicsById = {};
-    if (!s.symbolsById) s.symbolsById = {};
-    if (!s.assetsById) s.assetsById = {};
-    if (!s.dataProviders) s.dataProviders = {};
-    if (!s.vars) s.vars = { global: {}, pages: {} };
+    const schema = this._schema;
+    if (!schema.pagesById) schema.pagesById = {};
+    if (!schema.nodesById) schema.nodesById = {};
+    if (!schema.graphicsById) schema.graphicsById = {};
+    if (!schema.symbolsById) schema.symbolsById = {};
+    if (!schema.assetsById) schema.assetsById = {};
+    if (!schema.dataProviders) schema.dataProviders = {};
+    if (!schema.vars) schema.vars = { global: {}, pages: {} };
   }
 
   /**

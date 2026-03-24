@@ -39,7 +39,7 @@ import {
 } from "@/editor-core";
 import { projectApi } from "@/services";
 import request from "@/utils/request";
-import { getDescriptor, isLayoutContainerType, isRegionType } from "@/components/registry.js";
+import { getDescriptor, isLayoutContainerType, isRegionType } from "@/components/descriptors/registry.js";
 import { Storage } from "@/utils/storage";
 
 import {
@@ -68,6 +68,15 @@ import {
   createPageSchemaPayload,
   buildNewPageSchema,
 } from "./editor/normalize-schema.js";
+import {
+  syncAbsoluteSizePatch,
+  syncElLayoutMinHeightPatch,
+  clampElContainerSizePatch,
+  clampElColSpanPatch,
+  clampElColOffsetPatch,
+  clampElColShiftPatch,
+  clampElLayoutRowColumnsPatch,
+} from "./editor/node-update-layout-patches.js";
 
 /**
  * 编辑器状态管理 Store
@@ -103,8 +112,8 @@ export const useEditorStore = defineStore("editor", () => {
   const pages = ref([]);
   /** @type {import('vue').Ref<{ homePageId?: string, loginPageId?: string, logoutPageId?: string }>} */
   const entryConfig = ref({});
-  const loading = ref(false);
-  const saving = ref(false);
+  const isLoading = ref(false);
+  const isSaving = ref(false);
   const canUndo = ref(false);
   const canRedo = ref(false);
   const error = ref("");
@@ -380,7 +389,7 @@ export const useEditorStore = defineStore("editor", () => {
         results[0].status === "fulfilled" ? results[0].value : null;
       const data =
         unwrapApiData(settingsResult) || settingsResult?.data || settingsResult;
-      const rejected = results.find((res) => res.status === "rejected");
+      const rejected = results.find((entry) => entry.status === "rejected");
       if (rejected) {
         return {
           ok: false,
@@ -406,17 +415,17 @@ export const useEditorStore = defineStore("editor", () => {
       }
 
       return { ok: true };
-    } catch (err) {
+    } catch (error) {
       return {
         ok: false,
-        error: err instanceof Error ? err : new Error("保存失败"),
+        error: error instanceof Error ? error : new Error("保存失败"),
       };
     }
   };
   const loadProject = async (id) => {
     projectId.value = id || "";
     await loadProjectSettings();
-    loading.value = true;
+    isLoading.value = true;
     error.value = "";
 
     try {
@@ -464,13 +473,13 @@ export const useEditorStore = defineStore("editor", () => {
 
       currentPageId.value = targetPageId;
       return { ok: true };
-    } catch (err) {
-      const nextError = err instanceof Error ? err : new Error("加载工程失败");
+    } catch (cause) {
+      const nextError = cause instanceof Error ? cause : new Error("加载工程失败");
       error.value = nextError.message;
       initEditor(createBaseSchema(id));
       return { ok: false, error: nextError };
     } finally {
-      loading.value = false;
+      isLoading.value = false;
     }
   };
 
@@ -487,7 +496,7 @@ export const useEditorStore = defineStore("editor", () => {
       return { ok: false, error: new Error("缺少页面信息") };
     }
 
-    loading.value = true;
+    isLoading.value = true;
     error.value = "";
 
     try {
@@ -522,12 +531,12 @@ export const useEditorStore = defineStore("editor", () => {
       initEditor(nextSchema);
       currentPageId.value = pageId;
       return { ok: true };
-    } catch (err) {
-      const nextError = err instanceof Error ? err : new Error("加载页面失败");
+    } catch (cause) {
+      const nextError = cause instanceof Error ? cause : new Error("加载页面失败");
       error.value = nextError.message;
       return { ok: false, error: nextError };
     } finally {
-      loading.value = false;
+      isLoading.value = false;
     }
   };
 
@@ -608,11 +617,11 @@ export const useEditorStore = defineStore("editor", () => {
 
       await refreshPages();
       return { ok: true, pageId };
-    } catch (err) {
-      console.error("创建首页失败:", err);
+    } catch (error) {
+      console.error("创建首页失败:", error);
       return {
         ok: false,
-        error: err instanceof Error ? err : new Error("创建首页失败"),
+        error: error instanceof Error ? error : new Error("创建首页失败"),
       };
     }
   };
@@ -798,7 +807,7 @@ export const useEditorStore = defineStore("editor", () => {
       throw new Error(error.value || "当前为只读模式");
     }
 
-    saving.value = true;
+    isSaving.value = true;
     try {
       const payload = serializer.value.exportPage(
         doc.value,
@@ -831,7 +840,7 @@ export const useEditorStore = defineStore("editor", () => {
         pageDrafts.value = nextDrafts;
       }
     } finally {
-      saving.value = false;
+      isSaving.value = false;
     }
   };
 
@@ -1304,373 +1313,6 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
-   * 解析尺寸为像素值
-   * @param {string | number | undefined | null} value - 尺寸值
-   * @returns {number | undefined}
-   */
-  const parseSizeToNumber = (value) => {
-    if (value === null || value === undefined) return undefined;
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    const text = String(value).trim();
-    if (!text || text === "auto") return undefined;
-    if (text.endsWith("px")) {
-      const num = Number.parseFloat(text.slice(0, -2));
-      return Number.isFinite(num) ? num : undefined;
-    }
-    if (/^[\d.]+$/.test(text)) {
-      const num = Number.parseFloat(text);
-      return Number.isFinite(num) ? num : undefined;
-    }
-    return undefined;
-  };
-
-  /**
-   * 计算 Layout 布局最小高度（当前不强制最小高度）
-   * @param {Record<string, any> | undefined} layoutProps - 布局属性
-   * @returns {number}
-   */
-  const resolveElLayoutMinHeight = (layoutProps) => {
-    const props = layoutProps || {};
-    if (!props) return 0;
-    return 0;
-  };
-
-  /**
-   * 同步绝对定位节点的尺寸数据
-   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
-   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
-   * @returns {Partial<import('@/editor-core').ComponentNode>}
-   */
-  const syncAbsoluteSizePatch = (node, patch) => {
-    if (!node || !patch?.style) return patch;
-    if (node.positioning !== "absolute" || !node.absolutePos) return patch;
-
-    const widthValue = parseSizeToNumber(patch.style.width);
-    const heightValue = parseSizeToNumber(patch.style.height);
-    if (widthValue === undefined && heightValue === undefined) return patch;
-
-    const nextAbs = { ...(node.absolutePos || {}) };
-    if (widthValue !== undefined) {
-      nextAbs.w = Math.max(1, Math.round(widthValue));
-    }
-    if (heightValue !== undefined) {
-      nextAbs.h = Math.max(1, Math.round(heightValue));
-    }
-
-    const baseLayoutItem = patch.layoutItem || node.layoutItem;
-    let nextLayoutItem = baseLayoutItem;
-    if (baseLayoutItem?.free?.abs) {
-      nextLayoutItem = {
-        ...(baseLayoutItem || {}),
-        free: {
-          ...(baseLayoutItem.free || {}),
-          abs: {
-            ...(baseLayoutItem.free.abs || {}),
-            ...(widthValue !== undefined ? { w: nextAbs.w } : {}),
-            ...(heightValue !== undefined ? { h: nextAbs.h } : {}),
-          },
-        },
-      };
-    }
-
-    return {
-      ...patch,
-      absolutePos: nextAbs,
-      ...(nextLayoutItem ? { layoutItem: nextLayoutItem } : {}),
-    };
-  };
-
-  /**
-   * 同步 ElLayout 的最小高度到绝对定位尺寸
-   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
-   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
-   * @param {Record<string, any>} nextProps - 合并后的属性
-   * @returns {Partial<import('@/editor-core').ComponentNode>}
-   */
-  const syncElLayoutMinHeightPatch = (node, patch, nextProps) => {
-    if (!node || node.type !== "ElLayout") return patch;
-    const nextPositioning = patch.positioning ?? node.positioning;
-    const baseAbs =
-      patch.absolutePos || node.absolutePos || node.layoutItem?.free?.abs;
-    if (nextPositioning !== "absolute" || !baseAbs) return patch;
-    const minHeight = resolveElLayoutMinHeight(nextProps);
-    if (!minHeight) return patch;
-    const currentHeight = Number(baseAbs.h) || 0;
-    if (currentHeight >= minHeight) return patch;
-    const nextAbs = { ...baseAbs, h: Math.max(1, minHeight) };
-    const baseLayoutItem = patch.layoutItem || node.layoutItem;
-    let nextLayoutItem = baseLayoutItem;
-    if (baseLayoutItem?.free?.abs) {
-      nextLayoutItem = {
-        ...(baseLayoutItem || {}),
-        free: {
-          ...(baseLayoutItem.free || {}),
-          abs: {
-            ...(baseLayoutItem.free.abs || {}),
-            h: nextAbs.h,
-          },
-        },
-      };
-    }
-    return {
-      ...patch,
-      absolutePos: nextAbs,
-      ...(nextLayoutItem ? { layoutItem: nextLayoutItem } : {}),
-    };
-  };
-
-  /**
-   * 限制容器最小尺寸，避免小于内部区域
-   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
-   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
-   * @returns {Partial<import('@/editor-core').ComponentNode>}
-   */
-  const clampElContainerSizePatch = (node, patch) => {
-    if (!node || node.type !== "ElContainer" || !patch?.style) return patch;
-
-    const children = node.children || [];
-    let hasHeader = false;
-    let hasFooter = false;
-    let hasAside = false;
-    let hasMain = false;
-    for (const childId of children) {
-      const childNode = doc.value?.getNode?.(childId);
-      if (!childNode) continue;
-      if (childNode.type === "ElHeader") hasHeader = true;
-      if (childNode.type === "ElFooter") hasFooter = true;
-      if (childNode.type === "ElAside") hasAside = true;
-      if (childNode.type === "ElMain") hasMain = true;
-    }
-
-    const props = node.props || {};
-    if (typeof props.showHeader === "boolean") hasHeader = props.showHeader;
-    if (typeof props.showFooter === "boolean") hasFooter = props.showFooter;
-    if (typeof props.showAside === "boolean") hasAside = props.showAside;
-    if (typeof props.showMain === "boolean") hasMain = props.showMain;
-
-    const headerHeight = parseSizeToNumber(props.headerHeight) ?? 60;
-    const footerHeight = parseSizeToNumber(props.footerHeight) ?? 60;
-    const asideWidth = parseSizeToNumber(props.asideWidth) ?? 200;
-    const minBodySize = 40;
-
-    const hasBody = hasAside || hasMain;
-    let minWidth = 0;
-    if (hasAside && hasMain) {
-      minWidth = asideWidth + minBodySize;
-    } else if (hasAside) {
-      minWidth = asideWidth;
-    } else if (hasMain) {
-      minWidth = minBodySize;
-    }
-
-    let minHeight = 0;
-    if (hasHeader) minHeight += headerHeight;
-    if (hasFooter) minHeight += footerHeight;
-    if (hasBody) minHeight += minBodySize;
-
-    const nextStyle = { ...(patch.style || {}) };
-    const widthValue = parseSizeToNumber(nextStyle.width);
-    const heightValue = parseSizeToNumber(nextStyle.height);
-    if (widthValue !== undefined && minWidth > 0) {
-      nextStyle.width = `${Math.max(widthValue, minWidth)}px`;
-    }
-    if (heightValue !== undefined && minHeight > 0) {
-      nextStyle.height = `${Math.max(heightValue, minHeight)}px`;
-    }
-
-    return { ...patch, style: nextStyle };
-  };
-
-  /**
-   * 限制 ElCol 的栅格总和不超过 24
-   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
-   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
-   * @returns {Partial<import('@/editor-core').ComponentNode>}
-   */
-  const clampElColSpanPatch = (node, patch) => {
-    if (!node || node.type !== "ElCol" || !patch?.props) return patch;
-    if (!Object.prototype.hasOwnProperty.call(patch.props, "span"))
-      return patch;
-    const parentNode = doc.value?.getParent?.(node.id);
-    if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
-
-    const colIds = (parentNode.children || []).filter((childId) => {
-      const childNode = doc.value?.getNode?.(childId);
-      return childNode?.type === "ElCol";
-    });
-    const anchorIndex = colIds.indexOf(node.id);
-    const leftIds = anchorIndex >= 0 ? colIds.slice(0, anchorIndex) : [];
-    const rightCount =
-      anchorIndex >= 0 ? Math.max(0, colIds.length - anchorIndex - 1) : 0;
-    const leftTotal = leftIds.reduce((sum, colId) => {
-      const colNode = doc.value?.getNode?.(colId);
-      const span = Number(colNode?.props?.span) || 0;
-      return sum + Math.max(1, Math.min(24, span));
-    }, 0);
-    const maxSpan = Math.max(1, 24 - leftTotal - rightCount);
-    const nextSpan = Number(patch.props.span) || 1;
-    const clamped = Math.max(1, Math.min(maxSpan, nextSpan));
-    if (clamped === nextSpan) return patch;
-    return {
-      ...patch,
-      props: { ...(patch.props || {}), span: clamped },
-    };
-  };
-
-  /**
-   * 限制 ElCol 的偏移不挤出右侧最小栅格
-   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
-   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
-   * @returns {Partial<import('@/editor-core').ComponentNode>}
-   */
-  const clampElColOffsetPatch = (node, patch) => {
-    if (!node || node.type !== "ElCol" || !patch?.props) return patch;
-    if (!Object.prototype.hasOwnProperty.call(patch.props, "offset"))
-      return patch;
-    const parentNode = doc.value?.getParent?.(node.id);
-    if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
-    const colIds = (parentNode.children || []).filter((childId) => {
-      const childNode = doc.value?.getNode?.(childId);
-      return childNode?.type === "ElCol";
-    });
-    const anchorIndex = colIds.indexOf(node.id);
-    if (anchorIndex < 0) return patch;
-
-    const spans = colIds.map((colId) => {
-      const colNode = doc.value?.getNode?.(colId);
-      const span = Number(colNode?.props?.span) || 1;
-      return Math.max(1, Math.min(24, span));
-    });
-    if (Object.prototype.hasOwnProperty.call(patch.props, "span")) {
-      const nextSpan = Number(patch.props.span) || 1;
-      spans[anchorIndex] = Math.max(1, Math.min(24, nextSpan));
-    }
-
-    const offsets = colIds.map((colId) => {
-      const colNode = doc.value?.getNode?.(colId);
-      const offset = Number(colNode?.props?.offset) || 0;
-      return Math.max(0, Math.min(24, offset));
-    });
-    const nextOffset = Math.max(
-      0,
-      Math.min(24, Number(patch.props.offset) || 0),
-    );
-    offsets[anchorIndex] = nextOffset;
-
-    const fixedSpanTotal = spans
-      .slice(0, anchorIndex + 1)
-      .reduce((sum, value) => sum + value, 0);
-    const offsetOthers = offsets.reduce(
-      (sum, value, index) => (index === anchorIndex ? sum : sum + value),
-      0,
-    );
-    const rightCount = Math.max(0, colIds.length - anchorIndex - 1);
-    const maxOffset = Math.max(
-      0,
-      24 - fixedSpanTotal - offsetOthers - rightCount,
-    );
-    const clampedOffset = Math.min(nextOffset, maxOffset);
-    if (clampedOffset === nextOffset) return patch;
-    return {
-      ...patch,
-      props: { ...(patch.props || {}), offset: clampedOffset },
-    };
-  };
-
-  /**
-   * 限制 ElCol 的 push/pull 不超出当前行宽度
-   * @param {import('@/editor-core').ComponentNode | null} node - 当前节点
-   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
-   * @returns {Partial<import('@/editor-core').ComponentNode>}
-   */
-  const clampElColShiftPatch = (node, patch) => {
-    if (!node || node.type !== "ElCol" || !patch?.props) return patch;
-    const hasPush = Object.prototype.hasOwnProperty.call(patch.props, "push");
-    const hasPull = Object.prototype.hasOwnProperty.call(patch.props, "pull");
-    if (!hasPush && !hasPull) return patch;
-    const parentNode = doc.value?.getParent?.(node.id);
-    if (!parentNode || parentNode.type !== "ElLayoutRow") return patch;
-
-    const mergedProps = {
-      ...(node.props || {}),
-      ...(patch.props || {}),
-    };
-    const span = Math.max(1, Math.min(24, Number(mergedProps.span) || 1));
-    const offset = Math.max(0, Math.min(24, Number(mergedProps.offset) || 0));
-    const prevPush = Math.max(0, Math.min(24, Number(node.props?.push) || 0));
-    const prevPull = Math.max(0, Math.min(24, Number(node.props?.pull) || 0));
-    const push = Math.max(0, Math.min(24, Number(mergedProps.push) || 0));
-    const pull = Math.max(0, Math.min(24, Number(mergedProps.pull) || 0));
-    const colIds = (parentNode.children || []).filter((childId) => {
-      const childNode = doc.value?.getNode?.(childId);
-      return childNode?.type === "ElCol";
-    });
-    const colIndex = colIds.indexOf(node.id);
-    let leftEdge = offset;
-    if (colIndex > 0) {
-      leftEdge = colIds.slice(0, colIndex).reduce((sum, colId) => {
-        const colNode = doc.value?.getNode?.(colId);
-        if (!colNode) return sum;
-        const colSpan = Number(colNode.props?.span) || 1;
-        const colOffset = Number(colNode.props?.offset) || 0;
-        return (
-          sum +
-          Math.max(1, Math.min(24, colSpan)) +
-          Math.max(0, Math.min(24, colOffset))
-        );
-      }, 0);
-      leftEdge += offset;
-    }
-    const minShift = -leftEdge;
-    const maxShift = 24 - leftEdge - span;
-    const desiredShift = push - pull;
-    const clampedShift = Math.min(maxShift, Math.max(minShift, desiredShift));
-
-    const changedPush = hasPush && push !== prevPush;
-    const changedPull = hasPull && pull !== prevPull;
-    let nextPush = push;
-    let nextPull = pull;
-    if (changedPush && !changedPull) {
-      nextPush = Math.max(0, clampedShift + pull);
-      nextPull = pull;
-    } else if (changedPull && !changedPush) {
-      nextPull = Math.max(0, push - clampedShift);
-      nextPush = push;
-    } else if (changedPush && changedPull) {
-      nextPush = Math.max(0, clampedShift + pull);
-      nextPull = pull;
-    } else {
-      return patch;
-    }
-
-    if (nextPush === push && nextPull === pull) return patch;
-    return {
-      ...patch,
-      props: { ...(patch.props || {}), push: nextPush, pull: nextPull },
-    };
-  };
-
-  /**
-   * 限制 Layout 行列数范围
-   * @param {import('@/editor-core').ComponentNode} node - 当前节点
-   * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
-   * @returns {Partial<import('@/editor-core').ComponentNode>}
-   */
-  const clampElLayoutRowColumnsPatch = (node, patch) => {
-    if (!node || node.type !== "ElLayoutRow" || !patch?.props) return patch;
-    if (!Object.prototype.hasOwnProperty.call(patch.props, "columns"))
-      return patch;
-    const raw = Number(patch.props.columns);
-    if (!Number.isFinite(raw)) return patch;
-    const clamped = Math.max(1, Math.min(24, raw));
-    if (clamped === raw) return patch;
-    return {
-      ...patch,
-      props: { ...(patch.props || {}), columns: clamped },
-    };
-  };
-
-  /**
    * 更新组件节点
    * @param {string} nodeId - 节点 ID
    * @param {Partial<import('@/editor-core').ComponentNode>} patch - 更新内容
@@ -1681,14 +1323,26 @@ export const useEditorStore = defineStore("editor", () => {
     if (!ensureEditable()) return false;
 
     const node = doc.value.getNode(nodeId);
-    const limitedPatch = clampElContainerSizePatch(node, patch);
+    const limitedPatch = clampElContainerSizePatch(doc.value, node, patch);
     const clampedColumnsPatch = clampElLayoutRowColumnsPatch(
       node,
       limitedPatch,
     );
-    const clampedSpanPatch = clampElColSpanPatch(node, clampedColumnsPatch);
-    const clampedOffsetPatch = clampElColOffsetPatch(node, clampedSpanPatch);
-    const clampedShiftPatch = clampElColShiftPatch(node, clampedOffsetPatch);
+    const clampedSpanPatch = clampElColSpanPatch(
+      doc.value,
+      node,
+      clampedColumnsPatch,
+    );
+    const clampedOffsetPatch = clampElColOffsetPatch(
+      doc.value,
+      node,
+      clampedSpanPatch,
+    );
+    const clampedShiftPatch = clampElColShiftPatch(
+      doc.value,
+      node,
+      clampedOffsetPatch,
+    );
     const nextPatch = syncAbsoluteSizePatch(node, clampedShiftPatch);
     const hasPropPatch = nextPatch?.props && typeof nextPatch === "object";
     const mergedProps = hasPropPatch
@@ -1882,16 +1536,6 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
-   * 判断是否为布局容器
-   * @param {string} type - 组件类型
-   * @returns {boolean}
-   */
-  /**
-   * isLayoutContainerType 已迁移至 registry
-   * 使用从 @/components/registry 导入的 isLayoutContainerType() 替代
-   */
-
-  /**
    * 解析 Grid 列数
    * @param {string | number | undefined} value - 列配置
    * @returns {number}
@@ -2029,7 +1673,7 @@ export const useEditorStore = defineStore("editor", () => {
     let parentNode = doc.value.getNode(parentId);
     if (!parentNode) return null;
     let resolvedParentId = parentId;
-    // isElContainerRegionType 已迁移：使用 isRegionType 但排除 ElCol（ElContainer 内区域不包含 ElCol）
+    // isRegionType 且排除 ElCol：ElContainer 内可落点区域不含 ElCol
     const isElContainerRegion = isRegionType(type) && type !== "ElCol";
     let shouldReplaceRegionChildren = false;
     if (parentNode.type === "ElContainer" && !isElContainerRegion) {
@@ -2759,22 +2403,22 @@ export const useEditorStore = defineStore("editor", () => {
       const node = doc.value.getNode(el.id);
       if (!node || node.positioning === "flow") continue;
 
-      const p = node.absolutePos;
-      const a = node.layoutItem?.free?.abs;
+      const absolutePos = node.absolutePos;
+      const freeAbsLayout = node.layoutItem?.free?.abs;
       let patch = null;
 
       if (
-        p &&
+        absolutePos &&
         (node.positioning === "absolute" ||
-          Number.isFinite(p.x) ||
-          Number.isFinite(p.y))
+          Number.isFinite(absolutePos.x) ||
+          Number.isFinite(absolutePos.y))
       ) {
-        const newX = (Number.isFinite(p.x) ? p.x : 0) + dx;
-        const newY = (Number.isFinite(p.y) ? p.y : 0) + dy;
-        patch = { absolutePos: { ...p, x: newX, y: newY } };
-      } else if (a) {
-        const newX = (Number.isFinite(a.x) ? a.x : 0) + dx;
-        const newY = (Number.isFinite(a.y) ? a.y : 0) + dy;
+        const newX = (Number.isFinite(absolutePos.x) ? absolutePos.x : 0) + dx;
+        const newY = (Number.isFinite(absolutePos.y) ? absolutePos.y : 0) + dy;
+        patch = { absolutePos: { ...absolutePos, x: newX, y: newY } };
+      } else if (freeAbsLayout) {
+        const newX = (Number.isFinite(freeAbsLayout.x) ? freeAbsLayout.x : 0) + dx;
+        const newY = (Number.isFinite(freeAbsLayout.y) ? freeAbsLayout.y : 0) + dy;
         const nextLayoutItem = JSON.parse(
           JSON.stringify(node.layoutItem || {}),
         );
@@ -2847,27 +2491,27 @@ export const useEditorStore = defineStore("editor", () => {
    */
   const getNodeBoundsFromData = (node) => {
     if (!node) return null;
-    const p = node.absolutePos;
-    const a = node.layoutItem?.free?.abs;
+    const absolutePos = node.absolutePos;
+    const freeAbsLayout = node.layoutItem?.free?.abs;
     if (
-      p &&
+      absolutePos &&
       (node.positioning === "absolute" ||
-        Number.isFinite(p.x) ||
-        Number.isFinite(p.y))
+        Number.isFinite(absolutePos.x) ||
+        Number.isFinite(absolutePos.y))
     ) {
       return {
-        x: Number.isFinite(p.x) ? p.x : 0,
-        y: Number.isFinite(p.y) ? p.y : 0,
-        w: Number.isFinite(p.w) ? p.w : 100,
-        h: Number.isFinite(p.h) ? p.h : 100,
+        x: Number.isFinite(absolutePos.x) ? absolutePos.x : 0,
+        y: Number.isFinite(absolutePos.y) ? absolutePos.y : 0,
+        w: Number.isFinite(absolutePos.w) ? absolutePos.w : 100,
+        h: Number.isFinite(absolutePos.h) ? absolutePos.h : 100,
       };
     }
-    if (a) {
+    if (freeAbsLayout) {
       return {
-        x: Number.isFinite(a.x) ? a.x : 0,
-        y: Number.isFinite(a.y) ? a.y : 0,
-        w: Number.isFinite(a.w) ? a.w : 100,
-        h: Number.isFinite(a.h) ? a.h : 100,
+        x: Number.isFinite(freeAbsLayout.x) ? freeAbsLayout.x : 0,
+        y: Number.isFinite(freeAbsLayout.y) ? freeAbsLayout.y : 0,
+        w: Number.isFinite(freeAbsLayout.w) ? freeAbsLayout.w : 100,
+        h: Number.isFinite(freeAbsLayout.h) ? freeAbsLayout.h : 100,
       };
     }
     return {
@@ -2885,27 +2529,27 @@ export const useEditorStore = defineStore("editor", () => {
    * @param {number} dy - 垂直偏移
    */
   const applyOffsetToNodeData = (node, dx, dy) => {
-    const p = node.absolutePos;
-    const a = node.layoutItem?.free?.abs;
+    const absolutePos = node.absolutePos;
+    const freeAbsLayout = node.layoutItem?.free?.abs;
     if (
-      p &&
+      absolutePos &&
       (node.positioning === "absolute" ||
-        Number.isFinite(p.x) ||
-        Number.isFinite(p.y))
+        Number.isFinite(absolutePos.x) ||
+        Number.isFinite(absolutePos.y))
     ) {
       node.absolutePos = {
-        ...p,
-        x: (Number.isFinite(p.x) ? p.x : 0) + dx,
-        y: (Number.isFinite(p.y) ? p.y : 0) + dy,
+        ...absolutePos,
+        x: (Number.isFinite(absolutePos.x) ? absolutePos.x : 0) + dx,
+        y: (Number.isFinite(absolutePos.y) ? absolutePos.y : 0) + dy,
       };
-    } else if (a) {
+    } else if (freeAbsLayout) {
       const next = JSON.parse(JSON.stringify(node.layoutItem || {}));
       if (!next.free) next.free = {};
       if (!next.free.abs) next.free.abs = {};
       next.free.abs = {
         ...next.free.abs,
-        x: (Number.isFinite(a.x) ? a.x : 0) + dx,
-        y: (Number.isFinite(a.y) ? a.y : 0) + dy,
+        x: (Number.isFinite(freeAbsLayout.x) ? freeAbsLayout.x : 0) + dx,
+        y: (Number.isFinite(freeAbsLayout.y) ? freeAbsLayout.y : 0) + dy,
       };
       node.layoutItem = next;
     } else if (node.style) {
@@ -2938,12 +2582,12 @@ export const useEditorStore = defineStore("editor", () => {
       let maxX = -Infinity;
       let maxY = -Infinity;
       for (const item of nodeItems) {
-        const b = getNodeBoundsFromData(item.data);
-        if (b) {
-          minX = Math.min(minX, b.x);
-          minY = Math.min(minY, b.y);
-          maxX = Math.max(maxX, b.x + b.w);
-          maxY = Math.max(maxY, b.y + b.h);
+        const bounds = getNodeBoundsFromData(item.data);
+        if (bounds) {
+          minX = Math.min(minX, bounds.x);
+          minY = Math.min(minY, bounds.y);
+          maxX = Math.max(maxX, bounds.x + bounds.w);
+          maxY = Math.max(maxY, bounds.y + bounds.h);
         }
       }
       if (Number.isFinite(minX) && Number.isFinite(minY)) {
@@ -3012,8 +2656,8 @@ export const useEditorStore = defineStore("editor", () => {
     currentPage,
     pages,
     entryConfig,
-    loading,
-    saving,
+    isLoading,
+    isSaving,
     canUndo,
     canRedo,
     error,

@@ -50,8 +50,8 @@ const builtinFunctions = {
   // 日期函数
   dateFormat: (value, formatStr = "YYYY-MM-DD HH:mm:ss") => {
     if (!value) return "";
-    const d = dayjs(value);
-    return d.isValid() ? d.format(formatStr) : String(value);
+    const parsed = dayjs(value);
+    return parsed.isValid() ? parsed.format(formatStr) : String(value);
   },
 
   now: () => Date.now(),

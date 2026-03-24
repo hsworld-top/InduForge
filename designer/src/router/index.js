@@ -17,7 +17,7 @@ const routes = [
   {
     path: "/",
     name: "Designer",
-    component: () => import("@/ui/Designer/DesignerView.vue"),
+    component: () => import("@/ui/shell/DesignerView.vue"),
     meta: {
       title: "设计器",
       requiresAuth: true,
@@ -26,7 +26,7 @@ const routes = [
   {
     path: "/preview",
     name: "Preview",
-    component: () => import("@/ui/Preview/PreviewView.vue"),
+    component: () => import("@/ui/editors/page/preview/PreviewView.vue"),
     meta: {
       title: "预览",
       requiresAuth: true,

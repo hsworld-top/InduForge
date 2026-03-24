@@ -7,13 +7,13 @@ import { generateId } from "./types.js";
 
 /**
  * 延迟获取 descriptor 注册中心（避免模块循环依赖）
- * @returns {import('../../components/registry.js') | null}
+ * @returns {import('../../components/descriptors/registry.js') | null}
  */
 let _descriptorRegistry = null;
 const getDescriptorRegistry = () => {
   if (!_descriptorRegistry) {
     try {
-      _descriptorRegistry = require("../../components/registry.js");
+      _descriptorRegistry = require("../../components/descriptors/registry.js");
     } catch {
       // 在不支持 require 的环境（ESM）下降级为 null，等待 initDescriptorRegistry 注入
     }
@@ -23,7 +23,7 @@ const getDescriptorRegistry = () => {
 
 /**
  * 注入 descriptor 注册中心（供 ESM 环境在启动时调用）
- * @param {Object} registry - 来自 components/registry.js 的模块
+ * @param {Object} registry - 来自 components/descriptors/registry.js 的模块
  */
 export function initDescriptorRegistry(registry) {
   _descriptorRegistry = registry;

@@ -84,14 +84,14 @@ export { SelectionModel } from "./selection/SelectionModel.js";
 
 // 校验器
 export { Validator } from "./validate/validator.js";
-export { BindingValidator } from "./validate/bindingValidator.js";
+export { BindingValidator } from "./validate/binding-validator";
 
 // 组件注册表
 export {
   ComponentRegistry,
   ComponentCategory,
   componentRegistry,
-} from "./registry/componentRegistry.js";
+} from "./registry/component-registry";
 
 // 页面锁
 export {

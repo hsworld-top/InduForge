@@ -6,4 +6,4 @@ export {
   ComponentRegistry,
   ComponentCategory,
   componentRegistry,
-} from "./componentRegistry.js";
+} from "./component-registry";

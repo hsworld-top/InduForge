@@ -26,27 +26,27 @@ function getElementBounds(doc, element) {
     // 流式布局节点不支持自由对齐
     if (node.positioning === "flow") return null;
 
-    const p = node.absolutePos;
-    const a = node.layoutItem?.free?.abs;
+    const absolutePos = node.absolutePos;
+    const freeAbsLayout = node.layoutItem?.free?.abs;
     if (
-      p &&
+      absolutePos &&
       (node.positioning === "absolute" ||
-        Number.isFinite(p.x) ||
-        Number.isFinite(p.y))
+        Number.isFinite(absolutePos.x) ||
+        Number.isFinite(absolutePos.y))
     ) {
       return {
-        x: Number.isFinite(p.x) ? p.x : 0,
-        y: Number.isFinite(p.y) ? p.y : 0,
-        width: Number.isFinite(p.w) ? p.w : 100,
-        height: Number.isFinite(p.h) ? p.h : 100,
+        x: Number.isFinite(absolutePos.x) ? absolutePos.x : 0,
+        y: Number.isFinite(absolutePos.y) ? absolutePos.y : 0,
+        width: Number.isFinite(absolutePos.w) ? absolutePos.w : 100,
+        height: Number.isFinite(absolutePos.h) ? absolutePos.h : 100,
       };
     }
-    if (a) {
+    if (freeAbsLayout) {
       return {
-        x: Number.isFinite(a.x) ? a.x : 0,
-        y: Number.isFinite(a.y) ? a.y : 0,
-        width: Number.isFinite(a.w) ? a.w : 100,
-        height: Number.isFinite(a.h) ? a.h : 100,
+        x: Number.isFinite(freeAbsLayout.x) ? freeAbsLayout.x : 0,
+        y: Number.isFinite(freeAbsLayout.y) ? freeAbsLayout.y : 0,
+        width: Number.isFinite(freeAbsLayout.w) ? freeAbsLayout.w : 100,
+        height: Number.isFinite(freeAbsLayout.h) ? freeAbsLayout.h : 100,
       };
     }
     // 回退到 style
@@ -70,30 +70,30 @@ function getElementBounds(doc, element) {
  * @returns {Bounds | null}
  */
 function getGraphicBounds(graphic) {
-  const p = graphic.props;
+  const props = graphic.props;
   switch (graphic.type) {
     case "Canvas.Rect":
       return {
-        x: p.x || 0,
-        y: p.y || 0,
-        width: p.width || 0,
-        height: p.height || 0,
+        x: props.x || 0,
+        y: props.y || 0,
+        width: props.width || 0,
+        height: props.height || 0,
       };
     case "Canvas.Circle": {
-      const r = p.radius || 0;
+      const radius = props.radius || 0;
       return {
-        x: (p.cx || 0) - r,
-        y: (p.cy || 0) - r,
-        width: r * 2,
-        height: r * 2,
+        x: (props.cx || 0) - radius,
+        y: (props.cy || 0) - radius,
+        width: radius * 2,
+        height: radius * 2,
       };
     }
     case "Canvas.Ellipse": {
-      const rx = p.rx || 0;
-      const ry = p.ry || 0;
+      const rx = props.rx || 0;
+      const ry = props.ry || 0;
       return {
-        x: (p.cx || 0) - rx,
-        y: (p.cy || 0) - ry,
+        x: (props.cx || 0) - rx,
+        y: (props.cy || 0) - ry,
         width: rx * 2,
         height: ry * 2,
       };
@@ -101,9 +101,9 @@ function getGraphicBounds(graphic) {
     case "Canvas.Line":
     case "Canvas.Polygon":
     case "Canvas.Pipe":
-      if (p.points?.length > 0) {
-        const xs = p.points.map(([x]) => x);
-        const ys = p.points.map(([, y]) => y);
+      if (props.points?.length > 0) {
+        const xs = props.points.map(([x]) => x);
+        const ys = props.points.map(([, y]) => y);
         return {
           x: Math.min(...xs),
           y: Math.min(...ys),
@@ -114,17 +114,17 @@ function getGraphicBounds(graphic) {
       return null;
     case "Canvas.Text":
       return {
-        x: p.x || 0,
-        y: p.y || 0,
+        x: props.x || 0,
+        y: props.y || 0,
         width: 100,
-        height: (p.fontSize || 14) * 1.5,
+        height: (props.fontSize || 14) * 1.5,
       };
     case "Canvas.Symbol":
       return {
-        x: p.x || 0,
-        y: p.y || 0,
-        width: 50 * (p.scale || 1),
-        height: 50 * (p.scale || 1),
+        x: props.x || 0,
+        y: props.y || 0,
+        width: 50 * (props.scale || 1),
+        height: 50 * (props.scale || 1),
       };
     default:
       return null;
@@ -145,20 +145,20 @@ function applyPosition(doc, element, newX, newY) {
     if (!node) return;
     if (node.positioning === "flow") return;
 
-    const p = node.absolutePos;
-    const a = node.layoutItem?.free?.abs;
+    const absolutePos = node.absolutePos;
+    const freeAbsLayout = node.layoutItem?.free?.abs;
     if (
-      p &&
+      absolutePos &&
       (node.positioning === "absolute" ||
-        Number.isFinite(p.x) ||
-        Number.isFinite(p.y))
+        Number.isFinite(absolutePos.x) ||
+        Number.isFinite(absolutePos.y))
     ) {
       doc._updateNode(element.id, {
-        absolutePos: { ...p, x: newX, y: newY },
+        absolutePos: { ...absolutePos, x: newX, y: newY },
       });
       return;
     }
-    if (a) {
+    if (freeAbsLayout) {
       const nextLayoutItem = JSON.parse(JSON.stringify(node.layoutItem || {}));
       if (!nextLayoutItem.free) nextLayoutItem.free = {};
       if (!nextLayoutItem.free.abs) nextLayoutItem.free.abs = {};
@@ -205,21 +205,21 @@ function applySize(doc, element, newWidth, newHeight) {
     if (!node) return;
     if (node.positioning === "flow") return;
 
-    const p = node.absolutePos;
-    const a = node.layoutItem?.free?.abs;
+    const absolutePos = node.absolutePos;
+    const freeAbsLayout = node.layoutItem?.free?.abs;
     if (
-      p &&
+      absolutePos &&
       (node.positioning === "absolute" ||
-        Number.isFinite(p.w) ||
-        Number.isFinite(p.h))
+        Number.isFinite(absolutePos.w) ||
+        Number.isFinite(absolutePos.h))
     ) {
-      const next = { ...p };
+      const next = { ...absolutePos };
       if (newWidth !== null) next.w = newWidth;
       if (newHeight !== null) next.h = newHeight;
       doc._updateNode(element.id, { absolutePos: next });
       return;
     }
-    if (a) {
+    if (freeAbsLayout) {
       const nextLayoutItem = JSON.parse(JSON.stringify(node.layoutItem || {}));
       if (!nextLayoutItem.free) nextLayoutItem.free = {};
       if (!nextLayoutItem.free.abs) nextLayoutItem.free.abs = {};
@@ -275,10 +275,10 @@ export class AlignElementsCommand extends Command {
   execute(doc) {
     const boundsMap = new Map();
     for (const el of this._elements) {
-      const b = getElementBounds(doc, el);
-      if (b) {
-        boundsMap.set(el.id, b);
-        this._oldBounds.set(el.id, { ...b });
+      const bounds = getElementBounds(doc, el);
+      if (bounds) {
+        boundsMap.set(el.id, bounds);
+        this._oldBounds.set(el.id, { ...bounds });
       }
     }
     if (boundsMap.size < 2) return;
@@ -383,10 +383,10 @@ export class DistributeElementsCommand extends Command {
   execute(doc) {
     const items = [];
     for (const el of this._elements) {
-      const b = getElementBounds(doc, el);
-      if (b) {
-        this._oldBounds.set(el.id, { ...b });
-        items.push({ el, bounds: b });
+      const bounds = getElementBounds(doc, el);
+      if (bounds) {
+        this._oldBounds.set(el.id, { ...bounds });
+        items.push({ el, bounds });
       }
     }
     if (items.length < 3) return;
@@ -456,10 +456,10 @@ export class MatchSizeCommand extends Command {
   execute(doc) {
     let refBounds = null;
     for (const el of this._elements) {
-      const b = getElementBounds(doc, el);
-      if (b) {
-        this._oldBounds.set(el.id, { ...b });
-        if (el.id === this._referenceId) refBounds = b;
+      const bounds = getElementBounds(doc, el);
+      if (bounds) {
+        this._oldBounds.set(el.id, { ...bounds });
+        if (el.id === this._referenceId) refBounds = bounds;
       }
     }
     if (!refBounds) return;

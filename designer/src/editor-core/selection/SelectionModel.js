@@ -580,14 +580,15 @@ export class SelectionModel extends EventEmitter {
           height: props.height || 0,
         };
 
-      case "Canvas.Circle":
-        const r = props.radius || 0;
+      case "Canvas.Circle": {
+        const radius = props.radius || 0;
         return {
-          x: (props.cx || 0) - r,
-          y: (props.cy || 0) - r,
-          width: r * 2,
-          height: r * 2,
+          x: (props.cx || 0) - radius,
+          y: (props.cy || 0) - radius,
+          width: radius * 2,
+          height: radius * 2,
         };
+      }
 
       case "Canvas.Ellipse":
         const rx = props.rx || 0;
