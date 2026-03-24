@@ -10,6 +10,7 @@ import {
   createPageNode,
   buildPagePathFromName,
   componentRegistry,
+  Serializer,
 } from "@/editor-core";
 
 /**
@@ -203,8 +204,18 @@ const resolveProjectSchema = (payload, projectId, fallbackPageId) => {
 
 /**
  * 确保页面根节点存在并修复异常标签
+ * 注意：只修复缺失、非法或历史脏数据，不静默重写合法页面结构
  * @param {Object} schema - 工程 Schema
  */
+const KNOWN_LAYOUT_TYPES = new Set([
+  "FreeContainer",
+  "ElLayout",
+  "ElLayoutRow",
+  "ElCol",
+  "VerticalLayout",
+  "HorizontalLayout",
+]);
+
 const ensurePageRootNodes = (schema) => {
   if (!schema || typeof schema !== "object") return;
   if (!schema.pagesById || !schema.nodesById) return;
@@ -214,6 +225,7 @@ const ensurePageRootNodes = (schema) => {
     const rootId = page.rootNodeId;
     let rootNode = rootId ? schema.nodesById[rootId] : null;
 
+    // 只在根节点完全缺失时才创建新的 FreeContainer
     if (!rootNode) {
       rootNode = createComponentNode("FreeContainer", {
         label: "画布",
@@ -222,11 +234,18 @@ const ensurePageRootNodes = (schema) => {
       });
       schema.nodesById[rootNode.id] = rootNode;
       page.rootNodeId = rootNode.id;
+      continue;
     }
 
-    if (rootNode.type !== "FreeContainer") {
+    // 只在根节点类型未知或非法时才修复，不强制改写为 FreeContainer
+    if (typeof rootNode.type !== "string" || !rootNode.type) {
+      rootNode.type = "FreeContainer";
+    } else if (!KNOWN_LAYOUT_TYPES.has(rootNode.type)) {
+      // 未知类型（非布局容器类型）改为 FreeContainer，合法布局容器保持不变
       rootNode.type = "FreeContainer";
     }
+
+    // 补齐缺失的属性
     if (!rootNode.props || typeof rootNode.props !== "object") {
       rootNode.props = {};
     }
@@ -236,6 +255,7 @@ const ensurePageRootNodes = (schema) => {
       height: "100%",
     };
 
+    // 修复乱码标签
     if (!rootNode.label || rootNode.label.includes("\uFFFD")) {
       rootNode.label = "画布";
     }

@@ -165,20 +165,22 @@ export function useNodeProps(deps) {
 
   /**
    * 过滤后的 props（应用 descriptor.propsFilter）
+   * 注意：必须基于 resolvedProps 计算，以包含布局派生值（ElCol span、ElLayoutRow gutter 等）
    */
   const filteredProps = computed(() => {
     if (!node.value) return {};
     // 优先从 descriptor 读取 propsFilter（新架构组件）
+    // 基于 resolvedProps 而非 resolvedNodeProps，确保布局派生值被包含
     const descriptorFiltered = getPropsFilter(
       node.value.type,
-      resolvedNodeProps.value || {},
+      resolvedProps.value || {},
     );
     // 如果 descriptor 返回了过滤后的对象，使用它
     if (descriptorFiltered) {
       return descriptorFiltered;
     }
-    // fallback: 未注册 propsFilter 的组件直接返回 resolvedNodeProps
-    return resolvedNodeProps.value || {};
+    // fallback: 未注册 propsFilter 的组件直接返回 resolvedProps（包含布局派生值）
+    return resolvedProps.value || {};
   });
 
   return {

@@ -296,6 +296,13 @@ const detailConfigText = computed(() => {
 
 let applyMenuDslConfig = () => {};
 
+// nodeRef 和 contentRef 需要先声明，因为会被 useNodeInteraction 等 composable 使用
+const nodeRef = ref(null);
+const contentRef = ref(null);
+const setNodeRef = (el) => {
+  nodeRef.value = el?.$el || el;
+};
+
 /**
  * 处理节点选中（Shift/Meta/Ctrl 多选）
  * @param {MouseEvent} event - 鼠标事件
@@ -369,11 +376,6 @@ const {
 } = nodeInteraction;
 const canvasZoom = inject("canvasZoom", ref(1));
 const dragState = useDragState();
-const nodeRef = ref(null);
-const setNodeRef = (el) => {
-  nodeRef.value = el?.$el || el;
-};
-const contentRef = ref(null);
 const previewPageId = computed(
   () => currentPage.value?.name || currentPage.value?.id || "",
 );
