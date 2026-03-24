@@ -9,7 +9,7 @@
  * 用于：组件从物料面板拖入画布、画布内组件拖拽排序
  */
 
-import { isContainerType, getChildPositioning } from "@/components/descriptors/registry";
+import { isContainerType, getChildPositioning } from "@/components/descriptors/registry.ts";
 import { eventToCanvasPosition, clampPositionInContainer } from "@/editor-core/utils/placement-utils";
 
 export class DragDropManager {

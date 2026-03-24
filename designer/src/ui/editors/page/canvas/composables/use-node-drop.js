@@ -8,7 +8,7 @@
  */
 
 import { ref, computed, watch } from "vue";
-import { getDescriptor, isContainerType, isFlexContainer, isRegionType, canAcceptChildByDescriptor, getDefaultSize } from "@/components/descriptors/registry.js";
+import { getDescriptor, isContainerType, isFlexContainer, isRegionType, canAcceptChildByDescriptor, getDefaultSize } from "@/components/descriptors/registry.ts";
 import { resolveElContainerMain } from "@/editor-core/utils/layout-utils";
 import { eventToCanvasPosition, clampPositionInContainer } from "@/editor-core/utils/placement-utils";
 

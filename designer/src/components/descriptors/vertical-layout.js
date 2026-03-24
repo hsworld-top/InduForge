@@ -1,7 +1,7 @@
 /**
  * VerticalLayout 垂直布局组件 Descriptor
  *
- * @type {import('./registry.js').ComponentDescriptor}
+ * @type {import('./registry').ComponentDescriptor}
  */
 export const descriptor = {
   /** 渲染为 div，通过 CSS flex column 实现垂直布局 */

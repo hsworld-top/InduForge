@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * SelectionModel - 选中状态管理
  * 支持混合选择（DOM 节点 + Canvas 图形）
@@ -10,44 +9,44 @@
  * - 提供事件通知
  */
 
-import { EventEmitter } from "../utils/EventEmitter.ts";
-
-/**
- * @typedef {import('../document/types.js').SelectableElement} SelectableElement
- * @typedef {import('../document/types.js').SelectionState} SelectionState
- * @typedef {import('../document/types.js').DrawingTool} DrawingTool
- * @typedef {import('../document/types.js').ComponentNode} ComponentNode
- * @typedef {import('../document/types.js').GraphicNode} GraphicNode
- * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel
- */
+import { EventEmitter } from "../utils/EventEmitter";
+import { DocumentModel } from "../document/DocumentModel";
+import type {
+  SelectableElement,
+  SelectionState,
+  DrawingTool,
+  ComponentNode,
+  GraphicNode,
+} from "../document/types.js";
 
 /**
  * 选中状态管理类
  */
 export class SelectionModel extends EventEmitter {
+  _doc: DocumentModel | null;
+  _selectedElements: SelectableElement[];
+  _hoveredElement: SelectableElement | null;
+  _dropTargetId: string | null;
+  _anchorElement: SelectableElement | null;
+  _activeTool: DrawingTool | null;
+
   /**
    * 创建选中状态管理器
    * @param {DocumentModel} [doc] - 文档模型（可选，用于范围选择等操作）
    */
-  constructor(doc) {
+  constructor(doc?: DocumentModel | null) {
     super();
 
-    /** @type {DocumentModel | null} */
-    this._doc = doc || null;
+    this._doc = doc ?? null;
 
-    /** @type {SelectableElement[]} */
     this._selectedElements = [];
 
-    /** @type {SelectableElement | null} */
     this._hoveredElement = null;
 
-    /** @type {string | null} */
     this._dropTargetId = null;
 
-    /** @type {SelectableElement | null} */
     this._anchorElement = null;
 
-    /** @type {DrawingTool | null} */
     this._activeTool = "select";
   }
 
@@ -66,10 +65,11 @@ export class SelectionModel extends EventEmitter {
    * @returns {ComponentNode[]}
    */
   getSelectedNodes() {
-    if (!this._doc) return [];
+    const doc = this._doc;
+    if (!doc) return [];
     return this._selectedElements
       .filter((e) => e.kind === "node")
-      .map((e) => this._doc.getNode(e.id))
+      .map((e) => doc.getNode(e.id))
       .filter((n) => n !== null);
   }
 
@@ -78,10 +78,11 @@ export class SelectionModel extends EventEmitter {
    * @returns {GraphicNode[]}
    */
   getSelectedGraphics() {
-    if (!this._doc) return [];
+    const doc = this._doc;
+    if (!doc) return [];
     return this._selectedElements
       .filter((e) => e.kind === "graphic")
-      .map((e) => this._doc.getGraphic(e.id))
+      .map((e) => doc.getGraphic(e.id))
       .filter((g) => g !== null);
   }
 
@@ -109,17 +110,16 @@ export class SelectionModel extends EventEmitter {
    * 获取主选中元素（最后选中的）
    * @returns {ComponentNode | GraphicNode | null}
    */
-  getPrimarySelection() {
+  getPrimarySelection(): ComponentNode | GraphicNode | null {
     if (this._selectedElements.length === 0) return null;
-    const primary = this._selectedElements[this._selectedElements.length - 1];
-
-    if (!this._doc) return null;
+    const primary = this._selectedElements[this._selectedElements.length - 1]!;
+    const doc = this._doc;
+    if (!doc) return null;
 
     if (primary.kind === "node") {
-      return this._doc.getNode(primary.id);
-    } else {
-      return this._doc.getGraphic(primary.id);
+      return doc.getNode(primary.id);
     }
+    return doc.getGraphic(primary.id);
   }
 
   /**
@@ -162,7 +162,7 @@ export class SelectionModel extends EventEmitter {
    * @param {string} id - 元素 ID
    * @returns {boolean}
    */
-  isSelected(id) {
+  isSelected(id: string) {
     return this._selectedElements.some((e) => e.id === id);
   }
 
@@ -204,7 +204,7 @@ export class SelectionModel extends EventEmitter {
    * 选择元素（清除其他选中）
    * @param {SelectableElement} element - 元素
    */
-  select(element) {
+  select(element: SelectableElement) {
     this._selectedElements = [element];
     this._anchorElement = element;
     this._emitChange();
@@ -214,13 +214,10 @@ export class SelectionModel extends EventEmitter {
    * 通过 ID 选择元素（自动判断类型）
    * @param {string} id - 元素 ID
    */
-  selectById(id) {
-    // 尝试判断是节点还是图形
-    let kind = "node";
-    if (this._doc) {
-      if (this._doc.getGraphic(id)) {
-        kind = "graphic";
-      }
+  selectById(id: string) {
+    let kind: SelectableElement["kind"] = "node";
+    if (this._doc?.getGraphic(id)) {
+      kind = "graphic";
     }
     this.select({ kind, id });
   }
@@ -229,7 +226,7 @@ export class SelectionModel extends EventEmitter {
    * 切换元素选中状态（Ctrl+单击）
    * @param {SelectableElement} element - 元素
    */
-  toggleSelect(element) {
+  toggleSelect(element: SelectableElement) {
     const index = this._selectedElements.findIndex(
       (e) => e.kind === element.kind && e.id === element.id,
     );
@@ -250,7 +247,7 @@ export class SelectionModel extends EventEmitter {
    * 添加到选中（不清除已选）
    * @param {SelectableElement} element - 元素
    */
-  addToSelection(element) {
+  addToSelection(element: SelectableElement) {
     if (!this.isSelected(element.id)) {
       this._selectedElements.push(element);
       this._anchorElement = element;
@@ -262,7 +259,7 @@ export class SelectionModel extends EventEmitter {
    * 从选中中移除
    * @param {string} id - 元素 ID
    */
-  removeFromSelection(id) {
+  removeFromSelection(id: string) {
     const index = this._selectedElements.findIndex((e) => e.id === id);
     if (index !== -1) {
       this._selectedElements.splice(index, 1);
@@ -274,7 +271,7 @@ export class SelectionModel extends EventEmitter {
    * 范围选择（Shift+单击）
    * @param {SelectableElement} element - 目标元素
    */
-  selectRange(element) {
+  selectRange(element: SelectableElement) {
     // 简化实现：如果没有锚点，直接选择目标
     if (!this._anchorElement) {
       this.select(element);
@@ -300,12 +297,10 @@ export class SelectionModel extends EventEmitter {
    * 选择多个节点
    * @param {string[]} nodeIds - 节点 ID 列表
    */
-  selectNodes(nodeIds) {
-    this._selectedElements = nodeIds.map((id) => ({ kind: "node", id }));
-    if (this._selectedElements.length > 0) {
-      this._anchorElement =
-        this._selectedElements[this._selectedElements.length - 1];
-    }
+  selectNodes(nodeIds: string[]) {
+    this._selectedElements = nodeIds.map((id) => ({ kind: "node" as const, id }));
+    this._anchorElement =
+      this._selectedElements[this._selectedElements.length - 1] ?? null;
     this._emitChange();
   }
 
@@ -313,12 +308,13 @@ export class SelectionModel extends EventEmitter {
    * 选择多个图形
    * @param {string[]} graphicIds - 图形 ID 列表
    */
-  selectGraphics(graphicIds) {
-    this._selectedElements = graphicIds.map((id) => ({ kind: "graphic", id }));
-    if (this._selectedElements.length > 0) {
-      this._anchorElement =
-        this._selectedElements[this._selectedElements.length - 1];
-    }
+  selectGraphics(graphicIds: string[]) {
+    this._selectedElements = graphicIds.map((id) => ({
+      kind: "graphic" as const,
+      id,
+    }));
+    this._anchorElement =
+      this._selectedElements[this._selectedElements.length - 1] ?? null;
     this._emitChange();
   }
 
@@ -326,12 +322,10 @@ export class SelectionModel extends EventEmitter {
    * 选择多个元素
    * @param {SelectableElement[]} elements - 元素列表
    */
-  selectMultiple(elements) {
+  selectMultiple(elements: SelectableElement[]) {
     this._selectedElements = [...elements];
-    if (this._selectedElements.length > 0) {
-      this._anchorElement =
-        this._selectedElements[this._selectedElements.length - 1];
-    }
+    this._anchorElement =
+      this._selectedElements[this._selectedElements.length - 1] ?? null;
     this._emitChange();
   }
 
@@ -339,13 +333,13 @@ export class SelectionModel extends EventEmitter {
    * 全选当前页面所有元素
    * @param {string} pageId - 页面 ID
    */
-  selectAll(pageId) {
+  selectAll(pageId: string) {
     if (!this._doc) return;
 
     const page = this._doc.getPage(pageId);
     if (!page) return;
 
-    const elements = [];
+    const elements: SelectableElement[] = [];
 
     // 获取页面根节点下的所有节点
     const rootNode = this._doc.getNode(page.rootNodeId);
@@ -403,7 +397,7 @@ export class SelectionModel extends EventEmitter {
    * 设置 hover 元素
    * @param {SelectableElement | null} element - 元素
    */
-  setHover(element) {
+  setHover(element: SelectableElement | null) {
     if (
       this._hoveredElement?.kind === element?.kind &&
       this._hoveredElement?.id === element?.id
@@ -419,14 +413,14 @@ export class SelectionModel extends EventEmitter {
    * 通过 ID 设置 hover
    * @param {string | null} id - 元素 ID
    */
-  setHoverById(id) {
+  setHoverById(id: string) {
     if (!id) {
       this.setHover(null);
       return;
     }
 
-    let kind = "node";
-    if (this._doc && this._doc.getGraphic(id)) {
+    let kind: SelectableElement["kind"] = "node";
+    if (this._doc?.getGraphic(id)) {
       kind = "graphic";
     }
     this.setHover({ kind, id });
@@ -445,7 +439,7 @@ export class SelectionModel extends EventEmitter {
    * 设置拖拽目标
    * @param {string | null} nodeId - 目标节点 ID
    */
-  setDropTarget(nodeId) {
+  setDropTarget(nodeId: string | null) {
     if (this._dropTargetId === nodeId) return;
 
     this._dropTargetId = nodeId;
@@ -465,7 +459,7 @@ export class SelectionModel extends EventEmitter {
    * 设置当前绘图工具
    * @param {DrawingTool | null} tool - 工具类型
    */
-  setActiveTool(tool) {
+  setActiveTool(tool: DrawingTool | null) {
     if (this._activeTool === tool) return;
 
     const oldTool = this._activeTool;
@@ -508,7 +502,9 @@ export class SelectionModel extends EventEmitter {
       "pipe",
       "text",
     ];
-    return drawingTools.includes(this._activeTool);
+    return (
+      this._activeTool !== null && drawingTools.includes(this._activeTool)
+    );
   }
 
   // ==================== 便捷方法 ====================
@@ -526,16 +522,22 @@ export class SelectionModel extends EventEmitter {
     let maxY = -Infinity;
 
     for (const element of this._selectedElements) {
-      let bounds = null;
+      let bounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      } | null = null;
 
       if (element.kind === "node") {
         const node = this._doc.getNode(element.id);
         if (node && node.style) {
+          const st = node.style;
           bounds = {
-            x: node.style.left || 0,
-            y: node.style.top || 0,
-            width: node.style.width || 100,
-            height: node.style.height || 100,
+            x: Number(st.left) || 0,
+            y: Number(st.top) || 0,
+            width: Number(st.width) || 100,
+            height: Number(st.height) || 100,
           };
         }
       } else {
@@ -569,44 +571,54 @@ export class SelectionModel extends EventEmitter {
    * @returns {{x: number, y: number, width: number, height: number} | null}
    * @private
    */
-  _getGraphicBounds(graphic) {
-    const props = graphic.props;
+  _getGraphicBounds(graphic: GraphicNode): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null {
+    const props = graphic.props as Record<string, unknown>;
 
     switch (graphic.type) {
       case "Canvas.Rect":
         return {
-          x: props.x || 0,
-          y: props.y || 0,
-          width: props.width || 0,
-          height: props.height || 0,
+          x: (props.x as number) || 0,
+          y: (props.y as number) || 0,
+          width: (props.width as number) || 0,
+          height: (props.height as number) || 0,
         };
 
       case "Canvas.Circle": {
-        const radius = props.radius || 0;
+        const radius = (props.radius as number) || 0;
         return {
-          x: (props.cx || 0) - radius,
-          y: (props.cy || 0) - radius,
+          x: ((props.cx as number) || 0) - radius,
+          y: ((props.cy as number) || 0) - radius,
           width: radius * 2,
           height: radius * 2,
         };
       }
 
-      case "Canvas.Ellipse":
-        const rx = props.rx || 0;
-        const ry = props.ry || 0;
+      case "Canvas.Ellipse": {
+        const rx = (props.rx as number) || 0;
+        const ry = (props.ry as number) || 0;
         return {
-          x: (props.cx || 0) - rx,
-          y: (props.cy || 0) - ry,
+          x: ((props.cx as number) || 0) - rx,
+          y: ((props.cy as number) || 0) - ry,
           width: rx * 2,
           height: ry * 2,
         };
+      }
 
       case "Canvas.Line":
       case "Canvas.Polygon":
       case "Canvas.Pipe":
-        if (props.points && props.points.length > 0) {
-          const xs = props.points.map(([x]) => x);
-          const ys = props.points.map(([, y]) => y);
+        if (
+          Array.isArray(props.points) &&
+          (props.points as [number, number][]).length > 0
+        ) {
+          const pts = props.points as [number, number][];
+          const xs = pts.map(([x]) => x);
+          const ys = pts.map(([, y]) => y);
           const minX = Math.min(...xs);
           const minY = Math.min(...ys);
           const maxX = Math.max(...xs);
@@ -622,18 +634,18 @@ export class SelectionModel extends EventEmitter {
 
       case "Canvas.Text":
         return {
-          x: props.x || 0,
-          y: props.y || 0,
+          x: (props.x as number) || 0,
+          y: (props.y as number) || 0,
           width: 100, // 估算值
-          height: (props.fontSize || 14) * 1.5,
+          height: ((props.fontSize as number) || 14) * 1.5,
         };
 
       case "Canvas.Symbol":
         return {
-          x: props.x || 0,
-          y: props.y || 0,
-          width: 50 * (props.scale || 1),
-          height: 50 * (props.scale || 1),
+          x: (props.x as number) || 0,
+          y: (props.y as number) || 0,
+          width: 50 * ((props.scale as number) || 1),
+          height: 50 * ((props.scale as number) || 1),
         };
     }
 
@@ -659,7 +671,7 @@ export class SelectionModel extends EventEmitter {
    * 设置文档模型
    * @param {DocumentModel} doc - 文档模型
    */
-  setDocument(doc) {
+  setDocument(doc: DocumentModel | null) {
     this._doc = doc;
   }
 
@@ -681,7 +693,7 @@ export class SelectionModel extends EventEmitter {
    * 恢复状态
    * @param {SelectionState} state - 状态快照
    */
-  restoreState(state) {
+  restoreState(state: SelectionState) {
     this._selectedElements = [...state.selectedElements];
     this._hoveredElement = state.hoveredElement;
     this._dropTargetId = state.dropTargetId;

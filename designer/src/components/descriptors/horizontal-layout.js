@@ -2,7 +2,7 @@
  * HorizontalLayout 水平布局组件 Descriptor
  * 渲染标签、容器样式、子项策略等元数据
  *
- * @type {import('./registry.js').ComponentDescriptor}
+ * @type {import('./registry').ComponentDescriptor}
  */
 export const descriptor = {
   /** 渲染为 div，通过 CSS flex 实现水平布局 */

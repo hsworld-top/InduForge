@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 工程设置加载/保存（从 editor-store 拆出，供壳层委托）
  */
@@ -8,7 +7,7 @@ import { unwrapApiData } from "@/types/api";
 import {
   normalizeGlobalVariables,
   normalizeGlobalScripts,
-} from "./normalize-settings.js";
+} from "./normalize-settings";
 
 export type ProjectSettingsApi = {
   getProjectSettings: (projectId: string) => Promise<unknown>;
@@ -36,22 +35,18 @@ export async function loadProjectSettingsForStore(
   }
   const sr = settingsResult as Record<string, unknown>;
   const gv = sr.globalVariables;
-  if (
-    !gv ||
-    typeof gv !== "object" ||
-    (gv as { definitions?: unknown }).definitions == null ||
-    typeof (gv as { definitions: unknown }).definitions !== "object"
-  ) {
-    throw new Error("工程设置缺少 globalVariables.definitions");
-  }
-  const normalizedVariables = normalizeGlobalVariables(gv as Record<string, unknown>);
+  const normalizedVariables = normalizeGlobalVariables(
+    gv && typeof gv === "object"
+      ? (gv as Record<string, unknown>)
+      : { definitions: {}, groups: [] },
+  );
   out.projectVariables.value = normalizedVariables.definitions as Record<
     string,
     unknown
   >;
   out.projectVariableGroups.value = normalizedVariables.groups;
   out.globalScripts.value = normalizeGlobalScripts(
-    (sr.globalScripts as object) || {},
+    (sr.globalScripts as Record<string, unknown>) || {},
   );
 }
 

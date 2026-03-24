@@ -19,7 +19,7 @@ import {
   getRegionDesignerHint,
   getRenderKey,
   usesComponentWrapper,
-} from "@/components/descriptors/registry.js";
+} from "@/components/descriptors/registry.ts";
 
 const fallbackMenuItems = [
   { index: "1", label: "菜单一" },

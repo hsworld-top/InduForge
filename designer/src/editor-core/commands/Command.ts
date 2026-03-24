@@ -3,8 +3,10 @@
  * 所有编辑操作必须通过命令执行，支持撤销重做
  */
 
+import type { DocumentModel } from "../document/DocumentModel";
+
 /** 文档模型：由 DocumentModel 实现 */
-export type CommandDocument = object;
+export type CommandDocument = DocumentModel;
 
 /**
  * 命令基类
@@ -52,13 +54,13 @@ export class BatchCommand extends Command {
     this._description = description;
   }
 
-  execute(doc: CommandDocument): void {
+  execute(doc: DocumentModel): void {
     for (const cmd of this._commands) {
       cmd.execute(doc);
     }
   }
 
-  undo(doc: CommandDocument): void {
+  undo(doc: DocumentModel): void {
     for (let i = this._commands.length - 1; i >= 0; i--) {
       const cmd = this._commands[i];
       if (cmd) cmd.undo(doc);

@@ -1,64 +1,78 @@
-// @ts-nocheck
 /**
  * 组件节点工厂函数
  * 用于创建各种类型的组件节点
  */
 
 import { generateId } from "./types.js";
+import type {
+  ComponentNode,
+  LayoutItem,
+  AbsolutePosition,
+  FlexLayoutItem,
+  GridLayoutItem,
+  DiagramData,
+} from "./types.js";
 
-/**
- * 延迟获取 descriptor 注册中心（避免模块循环依赖）
- * @returns {import('../../components/descriptors/registry.js') | null}
- */
-let _descriptorRegistry = null;
-const getDescriptorRegistry = () => {
+export interface DescriptorRegistryModule {
+  getChildPositioning?: (
+    containerType: string,
+  ) => "absolute" | "flow" | undefined;
+}
+
+let _descriptorRegistry: DescriptorRegistryModule | null = null;
+
+const getDescriptorRegistry = (): DescriptorRegistryModule | null => {
   if (!_descriptorRegistry) {
-    try {
-      _descriptorRegistry = require("../../components/descriptors/registry.js");
-    } catch {
-      // 在不支持 require 的环境（ESM）下降级为 null，等待 initDescriptorRegistry 注入
+    const g = globalThis as typeof globalThis & {
+      require?: (id: string) => DescriptorRegistryModule;
+    };
+    if (typeof g.require === "function") {
+      try {
+        _descriptorRegistry = g.require(
+          "../../components/descriptors/registry.ts",
+        );
+      } catch {
+        // ESM 环境无 require，等待 initDescriptorRegistry 注入
+      }
     }
   }
   return _descriptorRegistry;
 };
 
-/**
- * 注入 descriptor 注册中心（供 ESM 环境在启动时调用）
- * @param {Object} registry - 来自 components/descriptors/registry.js 的模块
- */
-export function initDescriptorRegistry(registry) {
+export function initDescriptorRegistry(
+  registry: DescriptorRegistryModule | null,
+) {
   _descriptorRegistry = registry;
+}
+
+export interface CreateComponentNodeOptions {
+  parentNode?: Pick<ComponentNode, "type" | "children" | "props"> | null;
+  label?: string;
+  props?: Record<string, unknown>;
+  style?: Record<string, unknown>;
+  layoutItem?: LayoutItem | null;
 }
 
 /**
  * 创建组件节点
- * @param {string} type - 组件类型
- * @param {Object} [options] - 节点选项
- * @param {Object} [options.parentNode] - 父节点（用于推断定位模式）
- * @param {string} [options.label] - 显示标签
- * @param {Record<string, any>} [options.props] - 组件属性
- * @param {Record<string, any>} [options.style] - 样式定义
- * @param {import('./types.js').LayoutItem} [options.layoutItem] - 布局配置（兼容旧版）
- * @returns {import('./types.js').ComponentNode} 组件节点
  */
-export function createComponentNode(type, options = {}) {
+export function createComponentNode(
+  type: string,
+  options: CreateComponentNodeOptions = {},
+): ComponentNode {
   const { parentNode, label, props, style, layoutItem } = options;
 
   // 自动推断定位模式
   const positioning = inferPositioning(type, parentNode);
 
-  const node = {
+  const node: ComponentNode = {
     id: generateId("node_"),
     type,
     label: label || type,
-    props: props || {},
-    style: style || {},
-    layoutItem: layoutItem || null, // 兼容旧版
-    positioning, // 新架构：定位模式
-    absolutePos:
-      positioning === "absolute" ? createDefaultAbsolutePos() : undefined,
-    flowLayout:
-      positioning === "flow" ? createDefaultFlowLayout(parentNode) : undefined,
+    props: (props || {}) as ComponentNode["props"],
+    style: (style || {}) as ComponentNode["style"],
+    layoutItem: layoutItem || null,
+    positioning,
     bindings: {},
     permissions: {},
     events: {},
@@ -66,6 +80,14 @@ export function createComponentNode(type, options = {}) {
     hidden: false,
     locked: false,
   };
+  if (positioning === "absolute") {
+    node.absolutePos = createDefaultAbsolutePos();
+  }
+  if (positioning === "flow") {
+    node.flowLayout = createDefaultFlowLayout(
+      parentNode ?? undefined,
+    ) as FlexLayoutItem | GridLayoutItem;
+  }
 
   return node;
 }
@@ -77,7 +99,10 @@ export function createComponentNode(type, options = {}) {
  * @param {Object} [parentNode] - 父节点
  * @returns {'absolute' | 'flow'} 定位模式
  */
-export function inferPositioning(type, parentNode) {
+export function inferPositioning(
+  type: string,
+  parentNode?: Pick<ComponentNode, "type"> | null,
+): "absolute" | "flow" {
   // 页面根节点（没有父节点）：使用绝对定位
   if (!parentNode) {
     return "absolute";
@@ -128,7 +153,7 @@ export function inferPositioning(type, parentNode) {
  * 创建默认绝对定位配置
  * @returns {import('./types.js').AbsolutePosition}
  */
-function createDefaultAbsolutePos() {
+function createDefaultAbsolutePos(): AbsolutePosition {
   return {
     x: 0,
     y: 0,
@@ -143,7 +168,9 @@ function createDefaultAbsolutePos() {
  * @param {Object} [parentNode] - 父节点
  * @returns {import('./types.js').FlexLayoutItem | import('./types.js').GridLayoutItem}
  */
-function createDefaultFlowLayout(parentNode) {
+function createDefaultFlowLayout(
+  parentNode?: Pick<ComponentNode, "type" | "children" | "props"> | null,
+): FlexLayoutItem | GridLayoutItem | Record<string, never> {
   if (!parentNode) {
     return {}; // 空配置
   }
@@ -155,7 +182,9 @@ function createDefaultFlowLayout(parentNode) {
     parentNode.type === "ColumnLayout2" ||
     parentNode.type === "ColumnLayout4"
   ) {
-    const columns = resolveGridColumns(parentNode.props?.columns);
+    const columns = resolveGridColumns(
+      parentNode.props?.columns as string | number | undefined,
+    );
     const childIndex = parentNode.children?.length || 0;
     const row = Math.floor(childIndex / columns) + 1;
     const col = (childIndex % columns) + 1;
@@ -181,7 +210,7 @@ function createDefaultFlowLayout(parentNode) {
  * @param {string | number | undefined} columns - 列配置
  * @returns {number} 列数
  */
-function resolveGridColumns(columns) {
+function resolveGridColumns(columns: string | number | undefined): number {
   if (typeof columns === "number" && Number.isFinite(columns)) {
     return Math.max(1, Math.floor(columns));
   }
@@ -213,7 +242,10 @@ function resolveGridColumns(columns) {
  * @param {Object} [overrides] - 覆盖属性
  * @returns {import('./types.js').ComponentNode} 新节点
  */
-export function cloneComponentNode(node, overrides = {}) {
+export function cloneComponentNode(
+  node: ComponentNode,
+  overrides: Partial<ComponentNode> = {},
+): ComponentNode {
   return {
     ...node,
     id: generateId("node_"),
@@ -235,12 +267,17 @@ export function cloneComponentNode(node, overrides = {}) {
  * @param {import('./types.js').DiagramProps} [options.props] - 组件属性
  * @returns {{node: import('./types.js').ComponentNode, diagramId: string}} 组件节点和绘图 ID
  */
-export function createDiagramNode(options = {}) {
+export interface CreateDiagramNodeOptions {
+  parentNode?: CreateComponentNodeOptions["parentNode"];
+  label?: string;
+  props?: Record<string, unknown>;
+}
+
+export function createDiagramNode(options: CreateDiagramNodeOptions = {}) {
   const { parentNode, label, props } = options;
   const diagramId = generateId("diagram_");
 
-  const node = createComponentNode("Diagram", {
-    parentNode,
+  const diagramOpts: CreateComponentNodeOptions = {
     label: label || "绘图",
     props: {
       diagramId,
@@ -250,7 +287,11 @@ export function createDiagramNode(options = {}) {
       snapToGrid: true,
       ...props,
     },
-  });
+  };
+  if (parentNode !== undefined) {
+    diagramOpts.parentNode = parentNode;
+  }
+  const node = createComponentNode("Diagram", diagramOpts);
 
   // 绘图组件必须使用绝对定位
   node.positioning = "absolute";
@@ -261,7 +302,7 @@ export function createDiagramNode(options = {}) {
     h: 300,
     z: 0,
   };
-  node.flowLayout = undefined;
+  delete node.flowLayout;
 
   return { node, diagramId };
 }
@@ -271,7 +312,7 @@ export function createDiagramNode(options = {}) {
  * @param {string} diagramId - 绘图 ID
  * @returns {import('./types.js').DiagramData} 绘图数据
  */
-export function createDiagramData(diagramId) {
+export function createDiagramData(diagramId: string): DiagramData {
   return {
     diagramId,
     shapes: [],
@@ -287,71 +328,81 @@ export function createDiagramData(diagramId) {
  * @param {Object} data - 图元数据
  * @returns {import('./types.js').Shape} 图元
  */
-export function createShape(type, data = {}) {
-  const shape = {
+export function createShape(
+  type: string,
+  data: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const style: Record<string, unknown> = {
+    fill: "#ffffff",
+    stroke: "#000000",
+    strokeWidth: 1,
+    opacity: 1,
+    ...(typeof data.style === "object" && data.style !== null
+      ? (data.style as Record<string, unknown>)
+      : {}),
+  };
+
+  const shape: Record<string, unknown> = {
     id: generateId("shape_"),
     type,
-    x: data.x || 0,
-    y: data.y || 0,
-    style: {
-      fill: "#ffffff",
-      stroke: "#000000",
-      strokeWidth: 1,
-      opacity: 1,
-      ...data.style,
-    },
+    x: (data.x as number) ?? 0,
+    y: (data.y as number) ?? 0,
+    style,
     data: {},
     zIndex: 0,
     locked: false,
     hidden: false,
   };
 
-  // 根据类型设置特定数据
+  const num = (v: unknown, d: number) =>
+    typeof v === "number" && Number.isFinite(v) ? v : d;
+  const str = (v: unknown, d: string) => (typeof v === "string" ? v : d);
+
   switch (type) {
     case "line":
       shape.data = {
-        x1: data.x1 || 0,
-        y1: data.y1 || 0,
-        x2: data.x2 || 100,
-        y2: data.y2 || 100,
+        x1: num(data.x1, 0),
+        y1: num(data.y1, 0),
+        x2: num(data.x2, 100),
+        y2: num(data.y2, 100),
       };
       break;
     case "rect":
       shape.data = {
-        x: data.x || 0,
-        y: data.y || 0,
-        width: data.width || 100,
-        height: data.height || 100,
+        x: num(data.x, 0),
+        y: num(data.y, 0),
+        width: num(data.width, 100),
+        height: num(data.height, 100),
       };
       break;
     case "circle":
       shape.data = {
-        cx: data.cx || 50,
-        cy: data.cy || 50,
-        radius: data.radius || 50,
+        cx: num(data.cx, 50),
+        cy: num(data.cy, 50),
+        radius: num(data.radius, 50),
       };
       break;
     case "text":
       shape.data = {
-        x: data.x || 0,
-        y: data.y || 0,
-        text: data.text || "Text",
+        x: num(data.x, 0),
+        y: num(data.y, 0),
+        text: str(data.text, "Text"),
       };
-      shape.style.fontSize = data.fontSize || 14;
-      shape.style.fontFamily = data.fontFamily || "Arial";
+      style.fontSize = num(data.fontSize, 14);
+      style.fontFamily = str(data.fontFamily, "Arial");
       break;
     case "image":
       shape.data = {
-        x: data.x || 0,
-        y: data.y || 0,
-        width: data.width || 100,
-        height: data.height || 100,
-        src: data.src || "",
+        x: num(data.x, 0),
+        y: num(data.y, 0),
+        width: num(data.width, 100),
+        height: num(data.height, 100),
+        src: str(data.src, ""),
       };
       break;
     case "path":
       shape.data = {
-        d: data.d || "",
+        d: str(data.d, ""),
       };
       break;
   }

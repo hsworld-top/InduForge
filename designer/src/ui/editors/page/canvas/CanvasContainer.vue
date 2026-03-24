@@ -110,7 +110,7 @@ import {
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { componentRegistry } from "@/editor-core";
-import { isContainerType, isLayoutContainerType, getDescriptor, canAcceptChildByDescriptor } from "@/components/descriptors/registry.js";
+import { isContainerType, isLayoutContainerType, getDescriptor, canAcceptChildByDescriptor } from "@/components/descriptors/registry.ts";
 import { useDragState, endDrag } from "./composables/use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 

@@ -1,32 +1,42 @@
-// @ts-nocheck
 /**
  * Serializer - 序列化器
  * 负责 Schema 的导入导出、版本迁移和差量补丁
  */
 
-import { DocumentModel } from "./DocumentModel.ts";
+import { DocumentModel } from "./DocumentModel";
+import type {
+  ProjectSchema,
+  Patch,
+  PatchOp,
+  PageNode,
+  ComponentNode,
+  GraphicNode,
+} from "./types.js";
 
-/**
- * @typedef {import('./types.js').ProjectSchema} ProjectSchema
- * @typedef {import('./types.js').Patch} Patch
- * @typedef {import('./types.js').PatchOp} PatchOp
- */
+export interface SerializerOptions {
+  prettyPrint?: boolean;
+  autoMigrate?: boolean;
+}
+
+export interface ExportedPagePayload {
+  page: PageNode;
+  nodesById: Record<string, ComponentNode>;
+  graphicsById: Record<string, GraphicNode>;
+}
+
+export interface ImportPageOptions {
+  generateNewIds?: boolean;
+}
 
 /**
  * 序列化器类
  */
 export class Serializer {
-  /**
-   * 创建序列化器
-   * @param {Object} [options] - 配置选项
-   * @param {boolean} [options.prettyPrint=true] - 是否美化输出
-   * @param {boolean} [options.autoMigrate=true] - 是否自动迁移
-   */
-  constructor(options = {}) {
-    /** @type {boolean} */
-    this._prettyPrint = options.prettyPrint !== false;
+  _prettyPrint: boolean;
+  _autoMigrate: boolean;
 
-    /** @type {boolean} */
+  constructor(options: SerializerOptions = {}) {
+    this._prettyPrint = options.prettyPrint !== false;
     this._autoMigrate = options.autoMigrate !== false;
   }
 
@@ -37,7 +47,7 @@ export class Serializer {
    * @param {DocumentModel} doc - 文档模型
    * @returns {string}
    */
-  export(doc) {
+  export(doc: DocumentModel): string {
     const schema = this.exportToSchema(doc);
     return this._stringify(schema);
   }
@@ -47,7 +57,7 @@ export class Serializer {
    * @param {DocumentModel} doc - 文档模型
    * @returns {ProjectSchema}
    */
-  exportToSchema(doc) {
+  exportToSchema(doc: DocumentModel): ProjectSchema {
     // 更新时间戳
     const schema = JSON.parse(JSON.stringify(doc.schema));
     schema.project.updatedAt = Date.now();
@@ -60,15 +70,15 @@ export class Serializer {
    * @param {string} pageId - 页面 ID
    * @returns {Object} 页面数据（包含页面节点和相关组件/图形）
    */
-  exportPage(doc, pageId) {
+  exportPage(doc: DocumentModel, pageId: string): ExportedPagePayload {
     const page = doc.getPage(pageId);
     if (!page) {
       throw new Error(`页面不存在: ${pageId}`);
     }
 
     // 收集页面相关的所有节点
-    const nodeIds = new Set();
-    const collectNodes = (nodeId) => {
+    const nodeIds = new Set<string>();
+    const collectNodes = (nodeId: string) => {
       nodeIds.add(nodeId);
       const node = doc.getNode(nodeId);
       if (node && node.children) {
@@ -80,21 +90,21 @@ export class Serializer {
     collectNodes(page.rootNodeId);
 
     // 构建导出数据
-    const nodesById = {};
+    const nodesById: Record<string, ComponentNode> = {};
     for (const nodeId of nodeIds) {
       const node = doc.getNode(nodeId);
       if (node) {
-        nodesById[nodeId] = JSON.parse(JSON.stringify(node));
+        nodesById[nodeId] = JSON.parse(JSON.stringify(node)) as ComponentNode;
       }
     }
 
     // 收集图形
-    const graphicsById = {};
+    const graphicsById: Record<string, GraphicNode> = {};
     if (page.graphicsIds) {
       for (const graphicId of page.graphicsIds) {
         const graphic = doc.getGraphic(graphicId);
         if (graphic) {
-          graphicsById[graphicId] = JSON.parse(JSON.stringify(graphic));
+          graphicsById[graphicId] = JSON.parse(JSON.stringify(graphic)) as GraphicNode;
         }
       }
     }
@@ -113,8 +123,8 @@ export class Serializer {
    * @param {string} json - JSON 字符串
    * @returns {DocumentModel}
    */
-  import(json) {
-    const schema = this._parse(json);
+  import(json: string): DocumentModel {
+    const schema = this._parse(json) as ProjectSchema;
     return this.importFromSchema(schema);
   }
 
@@ -123,7 +133,7 @@ export class Serializer {
    * @param {Object} schema - Schema 对象
    * @returns {DocumentModel}
    */
-  importFromSchema(schema) {
+  importFromSchema(schema: ProjectSchema): DocumentModel {
     // 自动迁移
     const finalSchema = schema;
     // 版本迁移已禁用，直接使用原始 schema
@@ -139,11 +149,15 @@ export class Serializer {
    * @param {boolean} [options.generateNewIds=true] - 是否生成新 ID
    * @returns {string} 导入后的页面 ID
    */
-  importPage(doc, pageData, options = {}) {
+  importPage(
+    doc: DocumentModel,
+    pageData: ExportedPagePayload,
+    options: ImportPageOptions = {},
+  ): string {
     const generateNewIds = options.generateNewIds !== false;
 
     const { page, nodesById, graphicsById } = pageData;
-    const idMap = new Map();
+    const idMap = new Map<string, string>();
 
     // 生成新 ID 映射
     if (generateNewIds) {
@@ -174,9 +188,10 @@ export class Serializer {
       );
 
       // 更新节点
-      const newNodesById = {};
+      const newNodesById: Record<string, ComponentNode> = {};
       for (const [oldId, node] of Object.entries(nodesById)) {
         const newId = idMap.get(oldId);
+        if (!newId) continue;
         node.id = newId;
         node.children = (node.children || []).map((id) => idMap.get(id) || id);
         newNodesById[newId] = node;
@@ -188,9 +203,10 @@ export class Serializer {
       }
 
       // 更新图形
-      const newGraphicsById = {};
+      const newGraphicsById: Record<string, GraphicNode> = {};
       for (const [oldId, graphic] of Object.entries(graphicsById)) {
         const newId = idMap.get(oldId);
+        if (!newId) continue;
         graphic.id = newId;
         newGraphicsById[newId] = graphic;
       }
@@ -228,8 +244,8 @@ export class Serializer {
    * @param {ProjectSchema} newSchema - 新 Schema
    * @returns {Patch}
    */
-  generatePatch(oldSchema, newSchema) {
-    const ops = [];
+  generatePatch(oldSchema: ProjectSchema, newSchema: ProjectSchema): Patch {
+    const ops: PatchOp[] = [];
     this._diffObject(oldSchema, newSchema, "", ops);
 
     return {
@@ -244,8 +260,8 @@ export class Serializer {
    * @param {Patch} patch - 差量补丁
    * @returns {ProjectSchema} 应用补丁后的 Schema
    */
-  applyPatch(schema, patch) {
-    const result = JSON.parse(JSON.stringify(schema));
+  applyPatch(schema: ProjectSchema, patch: Patch): ProjectSchema {
+    const result = JSON.parse(JSON.stringify(schema)) as ProjectSchema;
 
     for (const op of patch.ops) {
       this._applyOp(result, op);
@@ -259,8 +275,8 @@ export class Serializer {
    * @param {Patch[]} patches - 补丁列表
    * @returns {Patch}
    */
-  mergePatches(patches) {
-    const allOps = [];
+  mergePatches(patches: Patch[]): Patch {
+    const allOps: PatchOp[] = [];
     for (const patch of patches) {
       allOps.push(...patch.ops);
     }
@@ -281,7 +297,7 @@ export class Serializer {
    * @returns {string}
    * @private
    */
-  _stringify(obj) {
+  _stringify(obj: unknown): string {
     return JSON.stringify(obj, null, this._prettyPrint ? 2 : 0);
   }
 
@@ -291,11 +307,12 @@ export class Serializer {
    * @returns {Object}
    * @private
    */
-  _parse(json) {
+  _parse(json: string): unknown {
     try {
       return JSON.parse(json);
     } catch (error) {
-      throw new Error(`JSON 解析失败: ${error.message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`JSON 解析失败: ${msg}`);
     }
   }
 
@@ -307,7 +324,7 @@ export class Serializer {
    * @param {PatchOp[]} ops
    * @private
    */
-  _diffObject(oldVal, newVal, path, ops) {
+  _diffObject(oldVal: unknown, newVal: unknown, path: string, ops: PatchOp[]) {
     // 类型不同或值不同
     if (typeof oldVal !== typeof newVal) {
       if (oldVal === undefined) {
@@ -343,10 +360,12 @@ export class Serializer {
     }
 
     // 对象
-    const allKeys = new Set([...Object.keys(oldVal), ...Object.keys(newVal)]);
+    const oldObj = oldVal as Record<string, unknown>;
+    const newObj = newVal as Record<string, unknown>;
+    const allKeys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
     for (const key of allKeys) {
       const childPath = path ? `${path}.${key}` : key;
-      this._diffObject(oldVal[key], newVal[key], childPath, ops);
+      this._diffObject(oldObj[key], newObj[key], childPath, ops);
     }
   }
 
@@ -356,28 +375,28 @@ export class Serializer {
    * @param {PatchOp} op
    * @private
    */
-  _applyOp(obj, op) {
+  _applyOp(obj: ProjectSchema, op: PatchOp) {
     const pathParts = op.path.split(".").filter(Boolean);
     const lastKey = pathParts.pop();
 
     if (!lastKey) {
-      // 根路径操作
-      if (op.op === "replace") {
-        Object.assign(obj, op.value);
+      if (op.op === "replace" && op.value && typeof op.value === "object") {
+        Object.assign(obj, op.value as object);
       }
       return;
     }
 
-    // 定位到父对象
-    let target = obj;
+    let target: Record<string, unknown> = obj as unknown as Record<
+      string,
+      unknown
+    >;
     for (const part of pathParts) {
-      if (target[part] === undefined) {
+      if (target[part] === undefined || typeof target[part] !== "object") {
         target[part] = {};
       }
-      target = target[part];
+      target = target[part] as Record<string, unknown>;
     }
 
-    // 执行操作
     switch (op.op) {
       case "add":
       case "replace":

@@ -1,70 +1,53 @@
-// @ts-nocheck
 /**
  * 入口配置命令
  * 用于更新工程入口信息（首页/登录页）
  */
 
-import { Command } from "./Command.ts";
-
-/**
- * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel
- * @typedef {import('../document/types.js').EntryConfig} EntryConfig
- */
+import { Command, type CommandDocument } from "./Command";
+import type { EntryConfig } from "../document/types.js";
 
 /**
  * 更新入口配置命令
  */
 export class UpdateEntryCommand extends Command {
+  _patch!: Partial<EntryConfig>;
+  _oldValues!: Partial<EntryConfig> | null;
+
   get type() {
     return "UpdateEntry";
   }
 
-  /**
-   * @param {Partial<EntryConfig>} patch - 更新内容
-   */
-  constructor(patch) {
+  constructor(patch: Partial<EntryConfig>) {
     super();
-    /** @type {Partial<EntryConfig>} */
     this._patch = patch;
-    /** @type {Partial<EntryConfig> | null} */
     this._oldValues = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: CommandDocument) {
     const entry = doc.entry;
     if (!entry) return;
-    this._oldValues = {};
+    const oldValues: Partial<EntryConfig> = {};
+    const entryRec = entry as unknown as Record<string, unknown>;
     for (const key of Object.keys(this._patch)) {
-      this._oldValues[key] = JSON.parse(JSON.stringify(entry[key] ?? null));
+      oldValues[key as keyof EntryConfig] = JSON.parse(
+        JSON.stringify(entryRec[key] ?? null),
+      ) as never;
     }
+    this._oldValues = oldValues;
     doc._updateEntry(this._patch);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: CommandDocument) {
     if (this._oldValues) {
       doc._updateEntry(this._oldValues);
     }
   }
 
-  /**
-   * @param {Command} other
-   * @returns {boolean}
-   */
-  canMerge(other) {
+  canMerge(other: Command) {
     return other instanceof UpdateEntryCommand;
   }
 
-  /**
-   * @param {UpdateEntryCommand} other
-   * @returns {UpdateEntryCommand}
-   */
-  merge(other) {
+  merge(other: UpdateEntryCommand) {
     const mergedPatch = { ...this._patch, ...other._patch };
     const cmd = new UpdateEntryCommand(mergedPatch);
     cmd._oldValues = this._oldValues;

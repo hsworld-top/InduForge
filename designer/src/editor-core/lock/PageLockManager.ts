@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * PageLockManager - 页面编辑锁管理
  * 实现简化版多人开发：同一页面同时只能有一人编辑
@@ -10,54 +9,84 @@
  * - 只读模式
  */
 
-import { EventEmitter } from "../utils/EventEmitter.ts";
+import { EventEmitter } from "../utils/EventEmitter";
+import type {
+  PageLockState,
+  LockResult,
+  EditorReadonlyState,
+} from "../document/types.js";
 
-/**
- * @typedef {import('../document/types.js').PageLockState} PageLockState
- * @typedef {import('../document/types.js').LockResult} LockResult
- * @typedef {import('../document/types.js').EditorReadonlyState} EditorReadonlyState
- */
+export interface PageLockApi {
+  get(path: string): Promise<{ data?: unknown; success?: boolean }>;
+  post(path: string, body?: unknown): Promise<LockAcquireResponse>;
+  delete(path: string): Promise<unknown>;
+}
+
+interface LockAcquireResponse {
+  success: boolean;
+  data?: {
+    locked?: boolean;
+    lockedBy?: string;
+    lockedByName?: string;
+    lockedAt?: number;
+  };
+}
+
+export interface PageLockSocket {
+  on(event: string, handler: (data: unknown) => void): void;
+  off(event: string, handler: (data: unknown) => void): void;
+}
+
+export interface PageLockManagerOptions {
+  api: PageLockApi;
+  socket?: PageLockSocket | null;
+  currentUserId?: string;
+  heartbeatInterval?: number;
+}
+
+interface LockEventPayload {
+  pageId?: string;
+  locked?: boolean;
+  lockedBy?: string;
+  pageName?: string;
+  reason?: string;
+}
 
 /**
  * 页面锁管理器
  */
 export class PageLockManager extends EventEmitter {
+  _api: PageLockApi | undefined;
+  _socket: PageLockSocket | null;
+  _currentUserId: string;
+  _heartbeatInterval: number;
+  _currentPageId: string | null;
+  _lockState: PageLockState | null;
+  _heartbeatTimer: ReturnType<typeof setInterval> | null;
+  _isInitialized: boolean;
+
   /**
    * 创建页面锁管理器
-   * @param {Object} options - 配置选项
-   * @param {Object} options.api - API 客户端
-   * @param {Object} [options.socket] - Socket.IO 实例
-   * @param {string} [options.currentUserId] - 当前用户 ID
-   * @param {number} [options.heartbeatInterval=300000] - 心跳间隔（毫秒，默认 5 分钟）
    */
-  constructor(options = {}) {
+  constructor(options: PageLockManagerOptions) {
     super();
 
-    /** @type {Object} */
     this._api = options.api;
 
-    /** @type {Object | null} */
-    this._socket = options.socket || null;
+    this._socket = options.socket ?? null;
 
-    /** @type {string} */
-    this._currentUserId = options.currentUserId || "";
+    this._currentUserId = options.currentUserId ?? "";
 
-    /** @type {number} */
-    this._heartbeatInterval = options.heartbeatInterval || 5 * 60 * 1000;
+    this._heartbeatInterval = options.heartbeatInterval ?? 5 * 60 * 1000;
 
-    /** @type {string | null} */
     this._currentPageId = null;
 
-    /** @type {PageLockState | null} */
     this._lockState = null;
 
-    /** @type {number | null} */
     this._heartbeatTimer = null;
 
-    /** @type {boolean} */
     this._isInitialized = false;
 
-    // 设置 Socket 监听
     if (this._socket) {
       this._setupSocketListeners();
     }
@@ -104,7 +133,7 @@ export class PageLockManager extends EventEmitter {
    * 设置当前用户 ID
    * @param {string} userId - 用户 ID
    */
-  setCurrentUserId(userId) {
+  setCurrentUserId(userId: string) {
     this._currentUserId = userId;
   }
 
@@ -112,7 +141,7 @@ export class PageLockManager extends EventEmitter {
    * 设置 Socket 实例
    * @param {Object} socket - Socket.IO 实例
    */
-  setSocket(socket) {
+  setSocket(socket: PageLockSocket | null) {
     if (this._socket) {
       this._removeSocketListeners();
     }
@@ -129,7 +158,7 @@ export class PageLockManager extends EventEmitter {
    * @param {string} pageId - 页面 ID
    * @returns {Promise<LockResult>}
    */
-  async acquireLock(pageId) {
+  async acquireLock(pageId: string): Promise<LockResult> {
     if (!this._api) {
       return {
         success: false,
@@ -139,16 +168,19 @@ export class PageLockManager extends EventEmitter {
     }
 
     try {
-      const response = await this._api.post(`/pages/${pageId}/lock`);
+      const response: LockAcquireResponse = await this._api.post(
+        `/pages/${pageId}/lock`,
+      );
 
       if (response.success) {
+        const d = response.data ?? {};
         this._currentPageId = pageId;
         this._lockState = {
           pageId,
           locked: true,
-          lockedBy: response.data.lockedBy,
-          lockedByName: response.data.lockedByName,
-          lockedAt: response.data.lockedAt,
+          lockedBy: d.lockedBy,
+          lockedByName: d.lockedByName,
+          lockedAt: d.lockedAt,
           isOwner: true,
         };
         this.startHeartbeat();
@@ -210,21 +242,21 @@ export class PageLockManager extends EventEmitter {
    * @param {string} pageId - 页面 ID
    * @returns {Promise<PageLockState>}
    */
-  async queryLockStatus(pageId) {
+  async queryLockStatus(pageId: string): Promise<PageLockState> {
     if (!this._api) {
       throw new Error("API 未初始化");
     }
 
     try {
       const response = await this._api.get(`/pages/${pageId}/lock`);
-      const data = response.data || response;
+      const data = (response.data ?? response) as Record<string, unknown>;
 
       return {
         pageId,
-        locked: data.locked,
-        lockedBy: data.lockedBy,
-        lockedByName: data.lockedByName,
-        lockedAt: data.lockedAt,
+        locked: Boolean(data.locked),
+        lockedBy: data.lockedBy as string | undefined,
+        lockedByName: data.lockedByName as string | undefined,
+        lockedAt: data.lockedAt as number | undefined,
         isOwner: data.lockedBy === this._currentUserId,
       };
     } catch (error) {
@@ -238,7 +270,7 @@ export class PageLockManager extends EventEmitter {
    * @param {string} pageId - 页面 ID
    * @returns {Promise<void>}
    */
-  async forceReleaseLock(pageId) {
+  async forceReleaseLock(pageId: string): Promise<void> {
     if (!this._api) {
       throw new Error("API 未初始化");
     }
@@ -257,7 +289,7 @@ export class PageLockManager extends EventEmitter {
     this.stopHeartbeat();
 
     this._heartbeatTimer = setInterval(async () => {
-      if (this._currentPageId && this._lockState?.isOwner) {
+      if (this._currentPageId && this._lockState?.isOwner && this._api) {
         try {
           await this._api.post(`/pages/${this._currentPageId}/lock/heartbeat`);
         } catch (error) {
@@ -316,13 +348,14 @@ export class PageLockManager extends EventEmitter {
    * @param {Object} data - 事件数据
    * @private
    */
-  _handleLockChanged(data) {
+  _handleLockChanged(data: unknown) {
+    const payload = data as LockEventPayload;
     // 通知 UI 更新锁状态
-    this.emit("lockStatusChanged", data);
+    this.emit("lockStatusChanged", payload);
 
     // 检查是否影响当前页面
-    if (data.pageId === this._currentPageId) {
-      if (data.locked && data.lockedBy !== this._currentUserId) {
+    if (payload.pageId === this._currentPageId) {
+      if (payload.locked && payload.lockedBy !== this._currentUserId) {
         // 其他人获取了锁
         this._handleLockLost();
       }
@@ -334,16 +367,17 @@ export class PageLockManager extends EventEmitter {
    * @param {Object} data - 事件数据
    * @private
    */
-  _handleForceRelease(data) {
-    if (data.pageId === this._currentPageId && this._lockState?.isOwner) {
+  _handleForceRelease(data: unknown) {
+    const payload = data as LockEventPayload;
+    if (payload.pageId === this._currentPageId && this._lockState?.isOwner) {
       this.stopHeartbeat();
       this._lockState = null;
       this._currentPageId = null;
 
       this.emit("lockForceReleased", {
-        pageId: data.pageId,
-        pageName: data.pageName,
-        reason: data.reason,
+        pageId: payload.pageId,
+        pageName: payload.pageName,
+        reason: payload.reason,
       });
     }
   }
@@ -368,7 +402,7 @@ export class PageLockManager extends EventEmitter {
    * @param {Event} event
    * @private
    */
-  _handleBeforeUnload(event) {
+  _handleBeforeUnload(event: BeforeUnloadEvent) {
     // 如果有未释放的锁，提示用户
     if (this._currentPageId && this._lockState?.isOwner) {
       event.preventDefault();
@@ -473,14 +507,14 @@ export class PageLockManager extends EventEmitter {
  * 创建 Mock API 客户端（用于测试）
  * @returns {Object}
  */
-export function createMockApiClient() {
-  const locks = new Map();
+export function createMockApiClient(): PageLockApi {
+  const locks = new Map<string, Record<string, unknown>>();
 
   return {
-    async get(url) {
+    async get(url: string) {
       const match = url.match(/\/pages\/(.+)\/lock/);
-      if (match) {
-        const pageId = match[1];
+      const pageId = match?.[1];
+      if (pageId) {
         const lock = locks.get(pageId);
         return {
           success: true,
@@ -490,20 +524,20 @@ export function createMockApiClient() {
       throw new Error("Unknown endpoint");
     },
 
-    async post(url) {
+    async post(url: string): Promise<LockAcquireResponse> {
       const match = url.match(/\/pages\/(.+)\/lock/);
-      if (match) {
-        const pageId = match[1];
+      const pageId = match?.[1];
+      if (pageId) {
         const existingLock = locks.get(pageId);
 
         if (existingLock && existingLock.locked) {
           return {
             success: false,
-            data: existingLock,
+            data: existingLock as NonNullable<LockAcquireResponse["data"]>,
           };
         }
 
-        const lock = {
+        const lock: NonNullable<LockAcquireResponse["data"]> = {
           locked: true,
           lockedBy: "test-user",
           lockedByName: "测试用户",
@@ -519,10 +553,10 @@ export function createMockApiClient() {
       throw new Error("Unknown endpoint");
     },
 
-    async delete(url) {
+    async delete(url: string) {
       const match = url.match(/\/pages\/(.+)\/lock/);
-      if (match) {
-        const pageId = match[1];
+      const pageId = match?.[1];
+      if (pageId) {
         locks.delete(pageId);
         return { success: true };
       }

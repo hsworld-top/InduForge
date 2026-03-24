@@ -1,219 +1,156 @@
-// @ts-nocheck
 /**
  * 图形操作命令
  * 包含 Canvas 图形的插入、删除、更新、移动命令
  */
 
-import { Command } from "./Command.ts";
+import { Command } from "./Command";
+import type { DocumentModel } from "../document/DocumentModel";
+import type { Binding, GraphicNode, GraphicProps } from "../document/types";
 
-/**
- * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel
- * @typedef {import('../document/types.js').GraphicNode} GraphicNode
- * @typedef {import('../document/types.js').GraphicProps} GraphicProps
- */
-
-/**
- * 插入图形命令
- */
+/** 插入图形命令 */
 export class InsertGraphicCommand extends Command {
-  get type() {
+  private _pageId!: string;
+  private _graphic!: GraphicNode;
+
+  get type(): string {
     return "InsertGraphic";
   }
 
-  /**
-   * 创建插入图形命令
-   * @param {string} pageId - 页面 ID
-   * @param {GraphicNode} graphic - 图形节点
-   */
-  constructor(pageId, graphic) {
+  constructor(pageId: string, graphic: GraphicNode) {
     super();
-    /** @type {string} */
     this._pageId = pageId;
-    /** @type {GraphicNode} */
     this._graphic = graphic;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     doc._insertGraphic(this._pageId, this._graphic);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     doc._removeGraphic(this._graphic.id);
   }
 
-  getDescription() {
+  getDescription(): string {
     return `插入图形: ${this._graphic.type}`;
   }
 }
 
-/**
- * 删除图形命令
- */
+/** 删除图形命令 */
 export class RemoveGraphicCommand extends Command {
-  get type() {
+  private _graphicId!: string;
+  private _removedGraphic: GraphicNode | null = null;
+  private _pageId: string | null = null;
+
+  get type(): string {
     return "RemoveGraphic";
   }
 
-  /**
-   * 创建删除图形命令
-   * @param {string} graphicId - 图形 ID
-   */
-  constructor(graphicId) {
+  constructor(graphicId: string) {
     super();
-    /** @type {string} */
     this._graphicId = graphicId;
-    /** @type {GraphicNode | null} */
-    this._removedGraphic = null;
-    /** @type {string | null} */
-    this._pageId = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
-    // 保存删除前的状态
+  execute(doc: DocumentModel): void {
     this._pageId = doc.getGraphicPageId(this._graphicId);
     const graphic = doc.getGraphic(this._graphicId);
     if (graphic) {
-      this._removedGraphic = JSON.parse(JSON.stringify(graphic));
+      this._removedGraphic = JSON.parse(JSON.stringify(graphic)) as GraphicNode;
     }
-
-    // 执行删除
     doc._removeGraphic(this._graphicId);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._removedGraphic && this._pageId) {
       doc._insertGraphic(this._pageId, this._removedGraphic);
     }
   }
 
-  getDescription() {
+  getDescription(): string {
     return `删除图形`;
   }
 }
 
-/**
- * 更新图形命令
- */
+/** 更新图形命令 */
 export class UpdateGraphicCommand extends Command {
-  get type() {
+  private _graphicId!: string;
+  private _patch!: Partial<GraphicNode>;
+  private _oldValues: Partial<GraphicNode> | null = null;
+
+  get type(): string {
     return "UpdateGraphic";
   }
 
-  /**
-   * 创建更新图形命令
-   * @param {string} graphicId - 图形 ID
-   * @param {Partial<GraphicNode>} patch - 更新内容
-   */
-  constructor(graphicId, patch) {
+  constructor(graphicId: string, patch: Partial<GraphicNode>) {
     super();
-    /** @type {string} */
     this._graphicId = graphicId;
-    /** @type {Partial<GraphicNode>} */
     this._patch = patch;
-    /** @type {Partial<GraphicNode> | null} */
-    this._oldValues = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const graphic = doc.getGraphic(this._graphicId);
     if (graphic) {
-      // 保存旧值
       this._oldValues = {};
+      const gRec = graphic as unknown as Record<string, unknown>;
       for (const key of Object.keys(this._patch)) {
-        this._oldValues[key] = JSON.parse(JSON.stringify(graphic[key] ?? null));
+        (this._oldValues as Record<string, unknown>)[key] = JSON.parse(
+          JSON.stringify(gRec[key] ?? null),
+        );
       }
-
-      // 执行更新
       doc._updateGraphic(this._graphicId, this._patch);
     }
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._oldValues) {
       doc._updateGraphic(this._graphicId, this._oldValues);
     }
   }
 
-  /**
-   * @param {Command} other
-   * @returns {boolean}
-   */
-  canMerge(other) {
+  canMerge(other: Command): boolean {
     return (
       other instanceof UpdateGraphicCommand &&
       other._graphicId === this._graphicId
     );
   }
 
-  /**
-   * @param {UpdateGraphicCommand} other
-   * @returns {UpdateGraphicCommand}
-   */
-  merge(other) {
+  merge(other: UpdateGraphicCommand): UpdateGraphicCommand {
     const mergedPatch = { ...this._patch, ...other._patch };
     const cmd = new UpdateGraphicCommand(this._graphicId, mergedPatch);
     cmd._oldValues = this._oldValues;
     return cmd;
   }
 
-  getDescription() {
+  getDescription(): string {
     return `更新图形属性`;
   }
 }
 
-/**
- * 移动图形命令（位置偏移）
- */
+/** 移动图形命令（位置偏移） */
 export class MoveGraphicCommand extends Command {
-  get type() {
+  private _graphicId!: string;
+  private _deltaX!: number;
+  private _deltaY!: number;
+  private _oldProps: GraphicProps | null = null;
+
+  get type(): string {
     return "MoveGraphic";
   }
 
-  /**
-   * 创建移动图形命令
-   * @param {string} graphicId - 图形 ID
-   * @param {number} deltaX - X 方向偏移
-   * @param {number} deltaY - Y 方向偏移
-   */
-  constructor(graphicId, deltaX, deltaY) {
+  constructor(graphicId: string, deltaX: number, deltaY: number) {
     super();
-    /** @type {string} */
     this._graphicId = graphicId;
-    /** @type {number} */
     this._deltaX = deltaX;
-    /** @type {number} */
     this._deltaY = deltaY;
-    /** @type {GraphicProps | null} */
-    this._oldProps = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const graphic = doc.getGraphic(this._graphicId);
     if (graphic) {
-      this._oldProps = JSON.parse(JSON.stringify(graphic.props));
+      this._oldProps = JSON.parse(
+        JSON.stringify(graphic.props),
+      ) as GraphicProps;
       const newProps = this._applyDelta(
-        graphic.props,
+        graphic.props as GraphicProps,
         this._deltaX,
         this._deltaY,
       );
@@ -221,31 +158,20 @@ export class MoveGraphicCommand extends Command {
     }
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._oldProps) {
       doc._updateGraphic(this._graphicId, { props: this._oldProps });
     }
   }
 
-  /**
-   * @param {Command} other
-   * @returns {boolean}
-   */
-  canMerge(other) {
+  canMerge(other: Command): boolean {
     return (
       other instanceof MoveGraphicCommand &&
       other._graphicId === this._graphicId
     );
   }
 
-  /**
-   * @param {MoveGraphicCommand} other
-   * @returns {MoveGraphicCommand}
-   */
-  merge(other) {
+  merge(other: MoveGraphicCommand): MoveGraphicCommand {
     const cmd = new MoveGraphicCommand(
       this._graphicId,
       this._deltaX + other._deltaX,
@@ -255,63 +181,44 @@ export class MoveGraphicCommand extends Command {
     return cmd;
   }
 
-  /**
-   * 应用位置偏移
-   * @param {GraphicProps} props
-   * @param {number} dx
-   * @param {number} dy
-   * @returns {GraphicProps}
-   * @private
-   */
-  _applyDelta(props, dx, dy) {
-    const newProps = JSON.parse(JSON.stringify(props));
-
-    // 处理不同图形类型的位置属性
+  private _applyDelta(
+    props: GraphicProps,
+    dx: number,
+    dy: number,
+  ): GraphicProps {
+    const newProps = JSON.parse(JSON.stringify(props)) as GraphicProps;
     if (typeof newProps.x === "number") newProps.x += dx;
     if (typeof newProps.y === "number") newProps.y += dy;
     if (typeof newProps.cx === "number") newProps.cx += dx;
     if (typeof newProps.cy === "number") newProps.cy += dy;
-
-    // 处理 points 数组（线段、多边形、管道）
     if (Array.isArray(newProps.points)) {
       newProps.points = newProps.points.map(([x, y]) => [x + dx, y + dy]);
     }
-
     return newProps;
   }
 
-  getDescription() {
+  getDescription(): string {
     return `移动图形`;
   }
 }
 
-/**
- * 调整图形层级命令
- */
+/** 调整图形层级命令 */
 export class ReorderGraphicCommand extends Command {
-  get type() {
+  private _graphicId!: string;
+  private _newZ!: number;
+  private _oldZ = 0;
+
+  get type(): string {
     return "ReorderGraphic";
   }
 
-  /**
-   * 创建调整图形层级命令
-   * @param {string} graphicId - 图形 ID
-   * @param {number} newZ - 新层级
-   */
-  constructor(graphicId, newZ) {
+  constructor(graphicId: string, newZ: number) {
     super();
-    /** @type {string} */
     this._graphicId = graphicId;
-    /** @type {number} */
     this._newZ = newZ;
-    /** @type {number} */
-    this._oldZ = 0;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const graphic = doc.getGraphic(this._graphicId);
     if (graphic) {
       this._oldZ = graphic.z;
@@ -319,54 +226,38 @@ export class ReorderGraphicCommand extends Command {
     }
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     doc._updateGraphic(this._graphicId, { z: this._oldZ });
   }
 
-  getDescription() {
+  getDescription(): string {
     return `调整图形层级`;
   }
 }
 
-/**
- * 图形编组命令
- */
+/** 图形编组命令 */
 export class GroupGraphicsCommand extends Command {
-  get type() {
+  private _pageId!: string;
+  private _graphicIds!: string[];
+  private _groupId: string;
+
+  get type(): string {
     return "GroupGraphics";
   }
 
-  /**
-   * 创建图形编组命令
-   * @param {string} pageId - 页面 ID
-   * @param {string[]} graphicIds - 要编组的图形 ID 列表
-   */
-  constructor(pageId, graphicIds) {
+  constructor(pageId: string, graphicIds: string[]) {
     super();
-    /** @type {string} */
     this._pageId = pageId;
-    /** @type {string[]} */
     this._graphicIds = graphicIds;
-    /** @type {string} */
     this._groupId =
       "gfx_group_" + crypto.randomUUID().replace(/-/g, "").substring(0, 8);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
-    // 获取最大 z 值
+  execute(doc: DocumentModel): void {
     const maxZ = Math.max(
       ...this._graphicIds.map((id) => doc.getGraphic(id)?.z ?? 0),
     );
-
-    // 创建编组图形
-    /** @type {GraphicNode} */
-    const group = {
+    const group: GraphicNode = {
       id: this._groupId,
       type: "Canvas.Group",
       props: { children: [...this._graphicIds] },
@@ -375,130 +266,89 @@ export class GroupGraphicsCommand extends Command {
       animations: [],
       z: maxZ,
     };
-
     doc._insertGraphic(this._pageId, group);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     doc._removeGraphic(this._groupId);
   }
 
-  /**
-   * 获取创建的编组 ID
-   * @returns {string}
-   */
-  getGroupId() {
+  getGroupId(): string {
     return this._groupId;
   }
 
-  getDescription() {
+  getDescription(): string {
     return `编组图形 (${this._graphicIds.length} 个)`;
   }
 }
 
-/**
- * 取消图形编组命令
- */
+/** 取消图形编组命令 */
 export class UngroupGraphicsCommand extends Command {
-  get type() {
+  private _groupId!: string;
+  private _removedGroup: GraphicNode | null = null;
+  private _pageId: string | null = null;
+
+  get type(): string {
     return "UngroupGraphics";
   }
 
-  /**
-   * 创建取消编组命令
-   * @param {string} groupId - 编组图形 ID
-   */
-  constructor(groupId) {
+  constructor(groupId: string) {
     super();
-    /** @type {string} */
     this._groupId = groupId;
-    /** @type {GraphicNode | null} */
-    this._removedGroup = null;
-    /** @type {string | null} */
-    this._pageId = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const group = doc.getGraphic(this._groupId);
     if (!group || group.type !== "Canvas.Group") return;
-
-    // 保存编组信息
-    this._removedGroup = JSON.parse(JSON.stringify(group));
+    this._removedGroup = JSON.parse(JSON.stringify(group)) as GraphicNode;
     this._pageId = doc.getGraphicPageId(this._groupId);
-
-    // 删除编组
     doc._removeGraphic(this._groupId);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._removedGroup && this._pageId) {
       doc._insertGraphic(this._pageId, this._removedGroup);
     }
   }
 
-  getDescription() {
+  getDescription(): string {
     return `取消编组`;
   }
 }
 
-/**
- * 设置图形绑定命令
- */
+/** 设置图形绑定命令 */
 export class SetGraphicBindingCommand extends Command {
-  get type() {
+  private _graphicId!: string;
+  private _propKey!: string;
+  private _binding: Binding | null;
+  private _oldBinding: Binding | null = null;
+
+  get type(): string {
     return "SetGraphicBinding";
   }
 
-  /**
-   * 创建设置图形绑定命令
-   * @param {string} graphicId - 图形 ID
-   * @param {string} propKey - 属性键
-   * @param {import('../document/types.js').Binding | null} binding - 绑定配置
-   */
-  constructor(graphicId, propKey, binding) {
+  constructor(graphicId: string, propKey: string, binding: Binding | null) {
     super();
-    /** @type {string} */
     this._graphicId = graphicId;
-    /** @type {string} */
     this._propKey = propKey;
-    /** @type {import('../document/types.js').Binding | null} */
     this._binding = binding;
-    /** @type {import('../document/types.js').Binding | null} */
-    this._oldBinding = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const graphic = doc.getGraphic(this._graphicId);
     if (graphic) {
       this._oldBinding = graphic.bindings?.[this._propKey] ?? null;
-
       const newBindings = { ...graphic.bindings };
       if (this._binding) {
         newBindings[this._propKey] = this._binding;
       } else {
         delete newBindings[this._propKey];
       }
-
       doc._updateGraphic(this._graphicId, { bindings: newBindings });
     }
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     const graphic = doc.getGraphic(this._graphicId);
     if (graphic) {
       const newBindings = { ...graphic.bindings };
@@ -507,12 +357,11 @@ export class SetGraphicBindingCommand extends Command {
       } else {
         delete newBindings[this._propKey];
       }
-
       doc._updateGraphic(this._graphicId, { bindings: newBindings });
     }
   }
 
-  getDescription() {
+  getDescription(): string {
     return this._binding
       ? `设置图形绑定: ${this._propKey}`
       : `移除图形绑定: ${this._propKey}`;

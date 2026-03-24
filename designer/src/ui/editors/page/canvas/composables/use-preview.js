@@ -17,6 +17,15 @@ import {
   requireQueriesPayload,
 } from "@/utils/datapoint-payload";
 
+/**
+ * 仅接受 { items }；顶层数组等旧格式返回空（与 previewRuntime 一致）。
+ */
+function itemsFromScriptSection(section) {
+  if (!section || typeof section !== "object" || Array.isArray(section)) return [];
+  const items = section.items;
+  return Array.isArray(items) ? items : [];
+}
+
 export { extractDatapointValue };
 
 /**
@@ -237,8 +246,7 @@ export function usePreview(deps) {
    * @returns {Record<string, Function>}
    */
   const buildPreviewCustomScripts = (globals) => {
-    const rawItems = globalScripts.value?.custom?.items;
-    const items = Array.isArray(rawItems) ? rawItems : [];
+    const items = itemsFromScriptSection(globalScripts.value?.custom);
     const handlers = {};
     items.forEach((item) => {
       if (!item?.name) return;

@@ -2,7 +2,7 @@
  * Button 按钮组件 Descriptor
  * 渲染标签、样式策略、子项策略等元数据
  *
- * @type {import('./registry.js').ComponentDescriptor}
+ * @type {import('./registry').ComponentDescriptor}
  */
 export const descriptor = {
   /** 渲染为 Element Plus el-button */

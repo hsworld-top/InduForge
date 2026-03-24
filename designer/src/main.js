@@ -19,7 +19,7 @@ import { STORAGE_KEYS } from "./constants";
 import App from "./App.vue";
 import { registerBuiltinComponents } from "./editor-core/registry/builtin-manifests";
 import { registerAllDescriptors } from "./components/index.js";
-import * as descriptorRegistry from "./components/descriptors/registry.js";
+import * as descriptorRegistry from "./components/descriptors/registry.ts";
 import { initDescriptorRegistry } from "./editor-core/document/factory.ts";
 import "./assets/styles/main.css";
 

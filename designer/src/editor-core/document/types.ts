@@ -761,6 +761,29 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {string} [userId] - 用户 ID
  */
 
+export type ChangeType = "insert" | "remove" | "update" | "move";
+export type ChangeTarget = "node" | "graphic" | "page" | "symbol" | "entry";
+export interface Change {
+  type: ChangeType;
+  target: ChangeTarget;
+  id?: string | undefined;
+  parentId?: string | undefined;
+  index?: number | undefined;
+  oldValue?: unknown;
+  newValue?: unknown;
+}
+
+export type PatchOp =
+  | { op: "add"; path: string; value: unknown }
+  | { op: "remove"; path: string }
+  | { op: "replace"; path: string; value: unknown };
+
+export interface Patch {
+  ops: PatchOp[];
+  timestamp: number;
+  userId?: string;
+}
+
 // ==================== TypeScript 类型（与上文 JSDoc 对齐） ====================
 
 export type UITarget = "pc" | "bigscreen" | "mobile";
@@ -1085,6 +1108,50 @@ export interface ProjectSchema {
 export type SelectableElement =
   | { kind: "node"; id: string }
   | { kind: "graphic"; id: string };
+
+export type DrawingTool =
+  | "select"
+  | "marquee"
+  | "pan"
+  | "line"
+  | "rect"
+  | "circle"
+  | "ellipse"
+  | "polygon"
+  | "pipe"
+  | "text";
+
+export interface SelectionState {
+  selectedElements: SelectableElement[];
+  hoveredElement: SelectableElement | null;
+  dropTargetId: string | null;
+  anchorElement: SelectableElement | null;
+  activeTool: DrawingTool | null;
+}
+
+export interface PageLockState {
+  pageId: string;
+  locked: boolean;
+  lockedBy?: string | undefined;
+  lockedByName?: string | undefined;
+  lockedAt?: number | undefined;
+  isOwner: boolean;
+}
+
+export interface EditorReadonlyState {
+  readonly: boolean;
+  reason?: "no_permission" | "page_locked" | "viewer_role" | undefined;
+  lockedByName?: string | undefined;
+}
+
+export type LockResult =
+  | { success: true }
+  | {
+      success: false;
+      reason: "locked" | "error";
+      lockedByName?: string | undefined;
+      error?: unknown;
+    };
 
 // ==================== 工厂函数 ====================
 

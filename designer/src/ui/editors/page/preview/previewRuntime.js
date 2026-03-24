@@ -21,6 +21,16 @@ import {
   requireDatapointsPagePayload,
 } from "@/utils/datapoint-payload";
 
+/**
+ * 仅接受规范形态 { items: T[] }（与 normalizeGlobalScripts / 页面生命周期约定一致）。
+ * 顶层数组等旧格式视为非法，返回空列表。
+ */
+function itemsFromScriptSection(section) {
+  if (!section || typeof section !== "object" || Array.isArray(section)) return [];
+  const items = section.items;
+  return Array.isArray(items) ? items : [];
+}
+
 /** 当前预览运行时实例（单例） */
 let runtimeInstance = null;
 const componentRefsByPage = new Map();
@@ -1095,8 +1105,7 @@ export const initPreviewRuntime = (options) => {
   };
 
   const triggerPageVariableChange = async (name, value, previous) => {
-    const itemsRaw = lifecycleConfig?.variableChanges;
-    const items = Array.isArray(itemsRaw) ? itemsRaw : [];
+    const items = itemsFromScriptSection(lifecycleConfig?.variableChanges);
     const hits = items.filter(
       (item) => (item.variable || item.name) === name && item?.code,
     );
@@ -1139,8 +1148,7 @@ export const initPreviewRuntime = (options) => {
   );
 
   const buildCustomScripts = () => {
-    const rawCustom = globalScripts?.custom?.items;
-    const items = Array.isArray(rawCustom) ? rawCustom : [];
+    const items = itemsFromScriptSection(globalScripts?.custom);
     const handlers = {};
     items.forEach((item) => {
       if (!item?.name) return;
@@ -1248,8 +1256,7 @@ export const initPreviewRuntime = (options) => {
   };
 
   const triggerVariableChange = async (name, value, previous) => {
-    const rawVc = globalScripts?.variableChanges?.items;
-    const items = Array.isArray(rawVc) ? rawVc : [];
+    const items = itemsFromScriptSection(globalScripts?.variableChanges);
     const hits = items.filter(
       (item) => (item.variable || item.name) === name && item?.code,
     );
@@ -1263,8 +1270,7 @@ export const initPreviewRuntime = (options) => {
    * @returns {void}
    */
   const startPageTimers = () => {
-    const rawTimers = lifecycleConfig?.timers;
-    const timers = Array.isArray(rawTimers) ? rawTimers : [];
+    const timers = itemsFromScriptSection(lifecycleConfig?.timers);
     timers.forEach((item) => {
       if (!item?.code || item?.enabled === false) return;
       const interval = Number(item.interval || item.time || 1000);
@@ -1310,8 +1316,7 @@ export const initPreviewRuntime = (options) => {
     const systemCode = globalScripts?.system?.startup?.code;
     await runCode(systemCode, { type: "startup" });
     await runPageLifecycleHandlers("onMounted");
-    const rawGlobalTimers = globalScripts?.timers?.items;
-    const globalTimers = Array.isArray(rawGlobalTimers) ? rawGlobalTimers : [];
+    const globalTimers = itemsFromScriptSection(globalScripts?.timers);
     globalTimers.forEach((item) => {
       const interval = Number(item.interval || item.time || 1000);
       if (!item?.code) return;

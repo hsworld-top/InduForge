@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * DocumentModel - 规范化文档模型
  * 管理工程 Schema 的规范化存储、CRUD 操作和索引维护
@@ -10,58 +9,47 @@
  * - 变更事件：支持订阅变更
  */
 
-import { EventEmitter } from "../utils/EventEmitter.ts";
-import {
-  CURRENT_SCHEMA_VERSION,
-  generateId,
-  createEmptySchema,
-  createPageNode,
-  createComponentNode,
+import { EventEmitter } from "../utils/EventEmitter";
+import { createEmptySchema } from "./types.js";
+import type {
+  ProjectSchema,
+  PageNode,
+  ComponentNode,
+  GraphicNode,
+  SymbolDef,
+  EntryConfig,
+  UITarget,
+  GraphicType,
+  Change,
 } from "./types.js";
-
-/**
- * @typedef {import('./types.js').ProjectSchema} ProjectSchema
- * @typedef {import('./types.js').PageNode} PageNode
- * @typedef {import('./types.js').ComponentNode} ComponentNode
- * @typedef {import('./types.js').GraphicNode} GraphicNode
- * @typedef {import('./types.js').SymbolDef} SymbolDef
- * @typedef {import('./types.js').Change} Change
- * @typedef {import('./types.js').GraphicType} GraphicType
- */
 
 /**
  * 文档模型类
  * 管理工程 Schema 的规范化存储
  */
 export class DocumentModel extends EventEmitter {
+  _schema: ProjectSchema;
+  _parentIndex: Map<string, string>;
+  _typeIndex: Map<string, Set<string>>;
+  _bindingIndex: Map<string, Set<string>>;
+  _graphicPageIndex: Map<string, string>;
+
   /**
    * 创建文档模型
    * @param {ProjectSchema} [schema] - 初始 Schema
    */
-  constructor(schema) {
+  constructor(schema?: ProjectSchema) {
     super();
 
-    // 初始化或使用提供的 Schema
-    /** @type {ProjectSchema} */
-    this._schema = schema || createEmptySchema();
+    this._schema = schema ?? createEmptySchema();
 
-    // 确保 Schema 结构完整
     this._ensureSchemaStructure();
 
-    // 初始化索引
-    /** @type {Map<string, string>} nodeId → parentId */
     this._parentIndex = new Map();
-
-    /** @type {Map<string, Set<string>>} type → nodeIds */
     this._typeIndex = new Map();
-
-    /** @type {Map<string, Set<string>>} datapointPath → nodeIds/graphicIds */
     this._bindingIndex = new Map();
-
-    /** @type {Map<string, string>} graphicId → pageId */
     this._graphicPageIndex = new Map();
 
-    // 构建索引
     this._rebuildIndexes();
   }
 
@@ -159,7 +147,7 @@ export class DocumentModel extends EventEmitter {
    * 更新入口配置（内部方法）
    * @param {Partial<import('./types.js').EntryConfig>} patch - 更新内容
    */
-  _updateEntry(patch) {
+  _updateEntry(patch: Partial<EntryConfig>) {
     const oldValue = { ...this._schema.entry };
     this._schema.entry = { ...this._schema.entry, ...patch };
     this._emitChange({
@@ -177,7 +165,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} id - 页面 ID
    * @returns {PageNode | null}
    */
-  getPage(id) {
+  getPage(id: string): PageNode | null {
     return this._schema.pagesById[id] || null;
   }
 
@@ -185,7 +173,7 @@ export class DocumentModel extends EventEmitter {
    * 获取所有页面
    * @returns {PageNode[]}
    */
-  getAllPages() {
+  getAllPages(): PageNode[] {
     return Object.values(this._schema.pagesById);
   }
 
@@ -194,7 +182,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} path - 路由路径
    * @returns {PageNode[]}
    */
-  getPagesByPath(path) {
+  getPagesByPath(path: string): PageNode[] {
     return this.getAllPages().filter((page) => page.path === path);
   }
 
@@ -203,7 +191,7 @@ export class DocumentModel extends EventEmitter {
    * @param {import('./types.js').UITarget} target - 目标端
    * @returns {PageNode[]}
    */
-  getPagesByTarget(target) {
+  getPagesByTarget(target: UITarget): PageNode[] {
     return this.getAllPages().filter((page) => page.target === target);
   }
 
@@ -214,7 +202,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} id - 节点 ID
    * @returns {ComponentNode | null}
    */
-  getNode(id) {
+  getNode(id: string): ComponentNode | null {
     return this._schema.nodesById[id] || null;
   }
 
@@ -223,7 +211,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} nodeId - 节点 ID
    * @returns {ComponentNode | null}
    */
-  getParent(nodeId) {
+  getParent(nodeId: string): ComponentNode | null {
     const parentId = this._parentIndex.get(nodeId);
     if (!parentId) return null;
     return this.getNode(parentId);
@@ -234,7 +222,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} nodeId - 节点 ID
    * @returns {string | null}
    */
-  getNodePageId(nodeId) {
+  getNodePageId(nodeId: string): string | null {
     // 向上查找根节点
     let currentId = nodeId;
     const visited = new Set();
@@ -261,7 +249,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} nodeId - 节点 ID
    * @returns {ComponentNode[]}
    */
-  getChildren(nodeId) {
+  getChildren(nodeId: string): ComponentNode[] {
     const node = this.getNode(nodeId);
     if (!node || !node.children) return [];
     return node.children
@@ -274,8 +262,8 @@ export class DocumentModel extends EventEmitter {
    * @param {string} nodeId - 节点 ID
    * @returns {ComponentNode[]}
    */
-  getAncestors(nodeId) {
-    const ancestors = [];
+  getAncestors(nodeId: string): ComponentNode[] {
+    const ancestors: ComponentNode[] = [];
     let currentId = this._parentIndex.get(nodeId);
     const visited = new Set();
 
@@ -296,8 +284,8 @@ export class DocumentModel extends EventEmitter {
    * @param {string} nodeId - 节点 ID
    * @returns {ComponentNode[]}
    */
-  getDescendants(nodeId) {
-    const descendants = [];
+  getDescendants(nodeId: string): ComponentNode[] {
+    const descendants: ComponentNode[] = [];
     const node = this.getNode(nodeId);
     if (!node) return descendants;
 
@@ -306,6 +294,7 @@ export class DocumentModel extends EventEmitter {
 
     while (stack.length > 0) {
       const childId = stack.pop();
+      if (childId === undefined) continue;
       if (visited.has(childId)) continue;
       visited.add(childId);
 
@@ -326,7 +315,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} type - 组件类型
    * @returns {ComponentNode[]}
    */
-  findNodesByType(type) {
+  findNodesByType(type: string): ComponentNode[] {
     const nodeIds = this._typeIndex.get(type);
     if (!nodeIds) return [];
     return Array.from(nodeIds)
@@ -339,7 +328,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} datapointPath - 数据点路径
    * @returns {ComponentNode[]}
    */
-  findNodesByBinding(datapointPath) {
+  findNodesByBinding(datapointPath: string): ComponentNode[] {
     const elementIds = this._bindingIndex.get(datapointPath);
     if (!elementIds) return [];
     return Array.from(elementIds)
@@ -354,7 +343,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} id - 图形 ID
    * @returns {GraphicNode | null}
    */
-  getGraphic(id) {
+  getGraphic(id: string): GraphicNode | null {
     return this._schema.graphicsById[id] || null;
   }
 
@@ -363,7 +352,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} graphicId - 图形 ID
    * @returns {string | null}
    */
-  getGraphicPageId(graphicId) {
+  getGraphicPageId(graphicId: string): string | null {
     return this._graphicPageIndex.get(graphicId) || null;
   }
 
@@ -372,7 +361,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} pageId - 页面 ID
    * @returns {GraphicNode[]}
    */
-  getGraphicsByPage(pageId) {
+  getGraphicsByPage(pageId: string): GraphicNode[] {
     const page = this.getPage(pageId);
     if (!page || !page.graphicsIds) return [];
     return page.graphicsIds
@@ -386,7 +375,7 @@ export class DocumentModel extends EventEmitter {
    * @param {GraphicType} type - 图形类型
    * @returns {GraphicNode[]}
    */
-  getGraphicsByType(type) {
+  getGraphicsByType(type: GraphicType): GraphicNode[] {
     return Object.values(this._schema.graphicsById).filter(
       (graphic) => graphic.type === type,
     );
@@ -397,7 +386,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} datapointPath - 数据点路径
    * @returns {GraphicNode[]}
    */
-  findGraphicsByBinding(datapointPath) {
+  findGraphicsByBinding(datapointPath: string): GraphicNode[] {
     const elementIds = this._bindingIndex.get(datapointPath);
     if (!elementIds) return [];
     return Array.from(elementIds)
@@ -412,7 +401,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} id - 符号 ID
    * @returns {SymbolDef | null}
    */
-  getSymbol(id) {
+  getSymbol(id: string): SymbolDef | null {
     return this._schema.symbolsById[id] || null;
   }
 
@@ -420,7 +409,7 @@ export class DocumentModel extends EventEmitter {
    * 获取所有符号
    * @returns {SymbolDef[]}
    */
-  getAllSymbols() {
+  getAllSymbols(): SymbolDef[] {
     return Object.values(this._schema.symbolsById);
   }
 
@@ -429,7 +418,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} category - 符号分类
    * @returns {SymbolDef[]}
    */
-  getSymbolsByCategory(category) {
+  getSymbolsByCategory(category: string): SymbolDef[] {
     return this.getAllSymbols().filter(
       (symbol) => symbol.category === category,
     );
@@ -442,7 +431,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} id - 元素 ID
    * @returns {ComponentNode | GraphicNode | null}
    */
-  getElement(id) {
+  getElement(id: string): ComponentNode | GraphicNode | null {
     return this.getNode(id) || this.getGraphic(id);
   }
 
@@ -451,7 +440,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} datapointPath - 数据点路径
    * @returns {(ComponentNode | GraphicNode)[]}
    */
-  findElementsByBinding(datapointPath) {
+  findElementsByBinding(datapointPath: string): (ComponentNode | GraphicNode)[] {
     const elementIds = this._bindingIndex.get(datapointPath);
     if (!elementIds) return [];
     return Array.from(elementIds)
@@ -465,7 +454,7 @@ export class DocumentModel extends EventEmitter {
    * 插入页面（内部方法）
    * @param {PageNode} page - 页面节点
    */
-  _insertPage(page) {
+  _insertPage(page: PageNode) {
     this._schema.pagesById[page.id] = page;
 
     // 如果页面有图形，更新索引
@@ -489,7 +478,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} pageId - 页面 ID
    * @returns {PageNode | null} 被删除的页面
    */
-  _removePage(pageId) {
+  _removePage(pageId: string): PageNode | null {
     const page = this._schema.pagesById[pageId];
     if (!page) return null;
 
@@ -518,7 +507,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} pageId - 页面 ID
    * @param {Partial<PageNode>} patch - 更新内容
    */
-  _updatePage(pageId, patch) {
+  _updatePage(pageId: string, patch: Partial<PageNode>) {
     const page = this._schema.pagesById[pageId];
     if (!page) return;
 
@@ -556,7 +545,7 @@ export class DocumentModel extends EventEmitter {
    * @param {number} index - 插入位置
    * @param {ComponentNode} node - 节点
    */
-  _insertNode(parentId, index, node) {
+  _insertNode(parentId: string, index: number, node: ComponentNode) {
     // 添加到 nodesById
     this._schema.nodesById[node.id] = node;
 
@@ -603,7 +592,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} nodeId - 节点 ID
    * @returns {ComponentNode | null} 被删除的节点
    */
-  _removeNode(nodeId) {
+  _removeNode(nodeId: string): ComponentNode | null {
     const node = this._schema.nodesById[nodeId];
     if (!node) return null;
 
@@ -651,7 +640,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} nodeId - 节点 ID
    * @param {Partial<ComponentNode>} patch - 更新内容
    */
-  _updateNode(nodeId, patch) {
+  _updateNode(nodeId: string, patch: Partial<ComponentNode>) {
     const node = this._schema.nodesById[nodeId];
     if (!node) return;
 
@@ -694,7 +683,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} newParentId - 新父节点 ID
    * @param {number} newIndex - 新位置索引
    */
-  _moveNode(nodeId, newParentId, newIndex) {
+  _moveNode(nodeId: string, newParentId: string, newIndex: number) {
     const node = this.getNode(nodeId);
     if (!node) return;
 
@@ -742,7 +731,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} pageId - 页面 ID
    * @param {GraphicNode} graphic - 图形节点
    */
-  _insertGraphic(pageId, graphic) {
+  _insertGraphic(pageId: string, graphic: GraphicNode) {
     // 添加到 graphicsById
     this._schema.graphicsById[graphic.id] = graphic;
 
@@ -774,7 +763,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} graphicId - 图形 ID
    * @returns {GraphicNode | null} 被删除的图形
    */
-  _removeGraphic(graphicId) {
+  _removeGraphic(graphicId: string): GraphicNode | null {
     const graphic = this._schema.graphicsById[graphicId];
     if (!graphic) return null;
 
@@ -814,7 +803,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} graphicId - 图形 ID
    * @param {Partial<GraphicNode>} patch - 更新内容
    */
-  _updateGraphic(graphicId, patch) {
+  _updateGraphic(graphicId: string, patch: Partial<GraphicNode>) {
     const graphic = this._schema.graphicsById[graphicId];
     if (!graphic) return;
 
@@ -847,7 +836,7 @@ export class DocumentModel extends EventEmitter {
    * 插入符号（内部方法）
    * @param {SymbolDef} symbol - 符号定义
    */
-  _insertSymbol(symbol) {
+  _insertSymbol(symbol: SymbolDef) {
     this._schema.symbolsById[symbol.id] = symbol;
 
     // 触发变更事件
@@ -864,7 +853,7 @@ export class DocumentModel extends EventEmitter {
    * @param {string} symbolId - 符号 ID
    * @returns {SymbolDef | null} 被删除的符号
    */
-  _removeSymbol(symbolId) {
+  _removeSymbol(symbolId: string): SymbolDef | null {
     const symbol = this._schema.symbolsById[symbolId];
     if (!symbol) return null;
 
@@ -887,7 +876,7 @@ export class DocumentModel extends EventEmitter {
    * 确保 Schema 结构完整
    * @private
    */
-  _ensureSchemaStructure() {
+  _ensureSchemaStructure(): void {
     const schema = this._schema;
     if (!schema.pagesById) schema.pagesById = {};
     if (!schema.nodesById) schema.nodesById = {};
@@ -902,7 +891,7 @@ export class DocumentModel extends EventEmitter {
    * 重建所有索引
    * @private
    */
-  _rebuildIndexes() {
+  _rebuildIndexes(): void {
     this._parentIndex.clear();
     this._typeIndex.clear();
     this._bindingIndex.clear();
@@ -941,11 +930,11 @@ export class DocumentModel extends EventEmitter {
    * @param {ComponentNode} node - 节点
    * @private
    */
-  _addToTypeIndex(node) {
+  _addToTypeIndex(node: ComponentNode): void {
     if (!this._typeIndex.has(node.type)) {
       this._typeIndex.set(node.type, new Set());
     }
-    this._typeIndex.get(node.type).add(node.id);
+    this._typeIndex.get(node.type)!.add(node.id);
   }
 
   /**
@@ -953,7 +942,7 @@ export class DocumentModel extends EventEmitter {
    * @param {ComponentNode} node - 节点
    * @private
    */
-  _removeFromTypeIndex(node) {
+  _removeFromTypeIndex(node: ComponentNode): void {
     const typeSet = this._typeIndex.get(node.type);
     if (typeSet) {
       typeSet.delete(node.id);
@@ -968,7 +957,7 @@ export class DocumentModel extends EventEmitter {
    * @param {ComponentNode | GraphicNode} element - 元素
    * @private
    */
-  _addToBindingIndex(element) {
+  _addToBindingIndex(element: ComponentNode | GraphicNode): void {
     if (!element.bindings) return;
 
     for (const binding of Object.values(element.bindings)) {
@@ -976,7 +965,7 @@ export class DocumentModel extends EventEmitter {
         if (!this._bindingIndex.has(binding.path)) {
           this._bindingIndex.set(binding.path, new Set());
         }
-        this._bindingIndex.get(binding.path).add(element.id);
+        this._bindingIndex.get(binding.path)!.add(element.id);
       }
     }
   }
@@ -986,7 +975,7 @@ export class DocumentModel extends EventEmitter {
    * @param {ComponentNode | GraphicNode} element - 元素
    * @private
    */
-  _removeFromBindingIndex(element) {
+  _removeFromBindingIndex(element: ComponentNode | GraphicNode): void {
     if (!element.bindings) return;
 
     for (const binding of Object.values(element.bindings)) {
@@ -1007,7 +996,7 @@ export class DocumentModel extends EventEmitter {
    * @param {Change} change - 变更记录
    * @private
    */
-  _emitChange(change) {
+  _emitChange(change: Change) {
     this.emit("change", [change]);
   }
 
@@ -1017,7 +1006,7 @@ export class DocumentModel extends EventEmitter {
    * 导出为 JSON 字符串
    * @returns {string}
    */
-  toJSON() {
+  toJSON(): string {
     return JSON.stringify(this._schema, null, 2);
   }
 
@@ -1026,8 +1015,8 @@ export class DocumentModel extends EventEmitter {
    * @param {string} json - JSON 字符串
    * @returns {DocumentModel}
    */
-  static fromJSON(json) {
-    const schema = JSON.parse(json);
+  static fromJSON(json: string): DocumentModel {
+    const schema = JSON.parse(json) as ProjectSchema;
     return new DocumentModel(schema);
   }
 
@@ -1035,7 +1024,7 @@ export class DocumentModel extends EventEmitter {
    * 克隆文档模型
    * @returns {DocumentModel}
    */
-  clone() {
+  clone(): DocumentModel {
     const schemaClone = JSON.parse(JSON.stringify(this._schema));
     return new DocumentModel(schemaClone);
   }

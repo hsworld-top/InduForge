@@ -6,7 +6,7 @@
  * - 当前工程、页面、数据绑定系统
  * - 工程/页面 CRUD、Schema 加载与保存
  * - 命令执行（插入、删除、更新、对齐等）
- * - 规范化工具：见 ./editor/normalize-settings.js、./editor/normalize-schema.js
+ * - 规范化工具：见 ./editor/normalize-settings.ts、./editor/normalize-schema.ts
  */
 
 import { defineStore } from "pinia";
@@ -39,7 +39,7 @@ import {
 } from "@/editor-core";
 import { projectApi } from "@/services";
 import request from "@/utils/request";
-import { getDescriptor, isLayoutContainerType, isRegionType } from "@/components/descriptors/registry.js";
+import { getDescriptor, isLayoutContainerType, isRegionType } from "@/components/descriptors/registry.ts";
 import { Storage } from "@/utils/storage";
 import { unwrapApiData } from "@/types/api";
 
@@ -50,17 +50,27 @@ import {
   normalizeGlobalScripts,
   getMenuDefaultDetailConfig,
   getMenuDefaultProps,
-} from "./editor/normalize-settings.js";
+} from "./editor/normalize-settings";
 import {
   loadProjectSettingsForStore,
   saveProjectSettingsForStore,
 } from "./editor/project-settings-actions";
-import { fetchNormalizedPageList } from "./editor/project-page-actions";
 import {
-  fetchResolvedProjectSchemaForPage,
-  mergePageVariablesIntoPayload,
-} from "./editor/page-load-save-actions";
-import { mapPagesAfterRename } from "./editor/page-crud-actions";
+  persistEntryConfigForStore,
+  saveCurrentPageForStore,
+  savePageDraftForStore,
+} from "./editor/page-persist-actions";
+import { resolvePageSchemaOnLoad } from "./editor/page-navigation-actions";
+import { refreshPagesForStore } from "./editor/page-list-sync-actions";
+import { createHomePageForStore } from "./editor/home-page-actions";
+import { loadProjectForStore } from "./editor/project-load-actions";
+import {
+  deletePageForStore,
+  movePageToGroupForStore,
+  renamePageForStore,
+} from "./editor/page-mutation-actions";
+import { createPageForStore } from "./editor/page-create-actions";
+import { updatePageSchemaForStore } from "./editor/page-schema-remote-actions";
 import { resolveLandingPageId } from "./editor/page-navigation-helpers";
 import {
   normalizePageList,
@@ -77,7 +87,7 @@ import {
   buildSchemaFromPagePayload,
   createPageSchemaPayload,
   buildNewPageSchema,
-} from "./editor/normalize-schema.js";
+} from "./editor/normalize-schema";
 import {
   syncAbsoluteSizePatch,
   syncElLayoutMinHeightPatch,
@@ -354,61 +364,61 @@ export const useEditorStore = defineStore("editor", () => {
       globalScripts,
     });
   };
-  const loadProject = async (id) => {
-    projectId.value = id || "";
-    await loadProjectSettings();
-    isLoading.value = true;
-    error.value = "";
 
-    try {
-      await releasePageLock();
-      const { pages: pageList, entryConfig: entryConfigResp } =
-        await refreshPages();
+  /**
+   * 刷新页面列表
+   * @returns {Promise<{ pages: Array, entryConfig: Object }>}
+   */
+  const refreshPages = async () => {
+    return refreshPagesForStore({
+      projectId: projectId.value,
+      pages,
+      entryConfig,
+      doc,
+      projectApi,
+    });
+  };
 
-      if (!pageList.length) {
-        const homePageResult = await createHomePage(id);
-        if (!homePageResult.ok) {
-          initEditor(createBaseSchema(id));
-        }
-        return { ok: homePageResult.ok };
-      }
-
-      const targetPageId = resolveLandingPageId(pageList, entryConfigResp);
-
-      if (!targetPageId) {
-        const homePageResult = await createHomePage(id);
-        if (!homePageResult.ok) {
-          initEditor(createBaseSchema(id));
-        }
-        return { ok: homePageResult.ok };
-      }
-
-      const nextSchema = await fetchResolvedProjectSchemaForPage(
+  /**
+   * 创建首页
+   * @param {string} pid - 工程 ID
+   * @returns {Promise<{ok: boolean, pageId?: string, error?: Error}>}
+   */
+  const createHomePage = async (pid) => {
+    const result = await createHomePageForStore(
+      {
+        entryConfig,
+        currentPageId,
+        initEditor,
+        createBaseSchema,
         projectApi,
-        id,
-        targetPageId,
-        resolveProjectSchema,
-      );
-      initEditor(nextSchema);
-
-      if (
-        entryConfigResp &&
-        doc.value &&
-        Object.keys(entryConfigResp).length > 0
-      ) {
-        doc.value._updateEntry(entryConfigResp);
-      }
-
-      currentPageId.value = targetPageId;
-      return { ok: true };
-    } catch (cause) {
-      const nextError = cause instanceof Error ? cause : new Error("加载工程失败");
-      error.value = nextError.message;
-      initEditor(createBaseSchema(id));
-      return { ok: false, error: nextError };
-    } finally {
-      isLoading.value = false;
+      },
+      pid,
+      refreshPages,
+    );
+    if (result.ok) {
+      return { ok: true, pageId: result.pageId };
     }
+    return { ok: false, error: result.error };
+  };
+
+  const loadProject = async (id) => {
+    return loadProjectForStore(id, {
+      projectId,
+      isLoading,
+      error,
+      doc,
+      currentPageId,
+      loadProjectSettings,
+      releasePageLock,
+      refreshPages,
+      createHomePage,
+      initEditor,
+      createBaseSchema,
+      resolveLandingPageId,
+      projectApi,
+      resolveProjectSchema,
+    });
   };
 
   /**
@@ -429,29 +439,14 @@ export const useEditorStore = defineStore("editor", () => {
 
     try {
       await releasePageLock();
-      const draft = pageDrafts.value?.[pageId];
-      if (draft) {
-        const nextSchema = resolveProjectSchema(draft, projectId.value, pageId);
-        const existingEntry = doc.value?.entry;
-        if (existingEntry) {
-          nextSchema.entry = { ...nextSchema.entry, ...existingEntry };
-        }
-        initEditor(nextSchema);
-        currentPageId.value = pageId;
-        return { ok: true };
-      }
-      const nextSchema = await fetchResolvedProjectSchemaForPage(
-        projectApi,
-        projectId.value,
+      const nextSchema = await resolvePageSchemaOnLoad({
+        projectId: projectId.value,
         pageId,
+        pageDrafts: pageDrafts.value || {},
+        doc: doc.value,
+        projectApi,
         resolveProjectSchema,
-      );
-      const existingEntry = doc.value?.entry;
-
-      if (existingEntry) {
-        nextSchema.entry = { ...nextSchema.entry, ...existingEntry };
-      }
-
+      });
       initEditor(nextSchema);
       currentPageId.value = pageId;
       return { ok: true };
@@ -465,113 +460,15 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
-   * 刷新页面列表
-   * @returns {Promise<{ pages: Array, entryConfig: Object }>}
-   */
-  const refreshPages = async () => {
-    if (!projectId.value) return { pages: [], entryConfig: {} };
-    const { pageList, entryConfig: newEntryConfig } =
-      await fetchNormalizedPageList(projectId.value, projectApi);
-    pages.value = pageList;
-    entryConfig.value = newEntryConfig;
-
-    if (doc.value && newEntryConfig && Object.keys(newEntryConfig).length > 0) {
-      doc.value._updateEntry(newEntryConfig);
-    }
-
-    return { pages: pageList, entryConfig: newEntryConfig };
-  };
-
-  /**
-   * 创建首页
-   * @param {string} pid - 工程 ID
-   * @returns {Promise<{ok: boolean, pageId?: string, error?: Error}>}
-   */
-  const createHomePage = async (pid) => {
-    try {
-      const result = await projectApi.createPage(pid, {
-        name: "首页",
-        type: "page",
-        parentId: null,
-      });
-
-      const created = unwrapApiData(result);
-      if (!created || typeof created !== "object") {
-        throw new Error("创建首页失败：API 返回异常");
-      }
-
-      const pageId = created.id ?? created.page?.id;
-      if (!pageId) {
-        throw new Error("创建首页失败：未获取到页面ID");
-      }
-
-      const schema = createBaseSchema(pid);
-      const pageNode = Object.values(schema.pagesById)[0];
-      if (!pageNode) {
-        throw new Error("创建首页失败：无法获取页面节点");
-      }
-
-      const rootNode = schema.nodesById[pageNode.rootNodeId];
-
-      delete schema.pagesById[pageNode.id];
-      pageNode.id = pageId;
-      schema.pagesById[pageId] = pageNode;
-      schema.entry.homePageId = pageId;
-
-      if (rootNode) {
-        pageNode.rootNodeId = rootNode.id;
-      }
-
-      const pagePayload = {
-        page: pageNode,
-        nodesById: rootNode ? { [rootNode.id]: rootNode } : {},
-        graphicsById: {},
-      };
-      await projectApi.updatePage(pid, pageId, pagePayload);
-
-      const newEntryConfig = { homePageId: pageId };
-      await projectApi.updateEntryConfig(pid, newEntryConfig);
-      entryConfig.value = newEntryConfig;
-
-      schema.pagesById = { [pageId]: pageNode };
-      initEditor(schema);
-      currentPageId.value = pageId;
-
-      await refreshPages();
-      return { ok: true, pageId };
-    } catch (error) {
-      console.error("创建首页失败:", error);
-      return {
-        ok: false,
-        error: error instanceof Error ? error : new Error("创建首页失败"),
-      };
-    }
-  };
-
-  /**
    * 创建页面/分组
    * @param {{ name: string, type: string, parentId?: string | null, schemaContent?: Object }} payload - 创建参数
    * @returns {Promise<Object>}
    */
   const createPage = async (payload) => {
-    if (!projectId.value) {
-      throw new Error("缺少工程信息");
-    }
-
-    const result = await projectApi.createPage(projectId.value, payload);
-    const data = unwrapApiData(result);
-    const pageId = data?.id || data?.page?.id;
-
-    if (payload?.schemaContent && pageId) {
-      await projectApi.updatePage(
-        projectId.value,
-        pageId,
-        payload.schemaContent,
-      );
-    }
-
-    await refreshPages();
-    return data;
+    return createPageForStore(
+      { projectId, projectApi, refreshPages },
+      payload,
+    );
   };
 
   /**
@@ -581,36 +478,19 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {Promise<void>}
    */
   const deletePage = async (pageId, mode) => {
-    if (!projectId.value) {
-      throw new Error("缺少工程信息");
-    }
-    if (!pageId) {
-      throw new Error("缺少页面信息");
-    }
-
-    await projectApi.deletePage(projectId.value, pageId, mode);
-    const { pages: pageList, entryConfig: entryConfigResp } =
-      await refreshPages();
-
-    if (
-      currentPageId.value &&
-      pageList.some((page) => page.id === currentPageId.value)
-    )
-      return;
-
-    const homeId = entryConfigResp?.homePageId;
-    const nextId =
-      homeId && pageList.some((page) => page.id === homeId)
-        ? homeId
-        : pageList.find((page) => page.type === "page")?.id;
-
-    if (nextId) {
-      await loadPage(nextId);
-      return;
-    }
-
-    initEditor(createBaseSchema(projectId.value));
-    currentPageId.value = "";
+    const mutationCtx = {
+      projectId,
+      currentPageId,
+      pages,
+      doc,
+      history,
+      projectApi,
+      refreshPages,
+      loadPage,
+      initEditor,
+      createBaseSchema,
+    };
+    return deletePageForStore(mutationCtx, pageId, mode);
   };
 
   /**
@@ -620,15 +500,11 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {Promise<void>}
    */
   const updatePageSchema = async (pageId, schema) => {
-    if (!projectId.value) {
-      throw new Error("缺少工程信息");
-    }
-    if (!pageId) {
-      throw new Error("缺少页面信息");
-    }
-
-    const payload = schema || serializer.value.exportPage(doc.value, pageId);
-    await projectApi.updatePage(projectId.value, pageId, payload);
+    return updatePageSchemaForStore(
+      { projectId, doc, serializer, projectApi },
+      pageId,
+      schema,
+    );
   };
 
   /**
@@ -639,20 +515,12 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {Promise<void>}
    */
   const movePageToGroup = async (pageId, targetGroupId, path) => {
-    if (!projectId.value) {
-      throw new Error("缺少工程信息");
-    }
-    if (!pageId) {
-      throw new Error("缺少页面信息");
-    }
-
-    await projectApi.movePageToGroup(
-      projectId.value,
+    return movePageToGroupForStore(
+      { projectId, projectApi, refreshPages },
       pageId,
       targetGroupId,
       path,
     );
-    await refreshPages();
   };
 
   /**
@@ -663,24 +531,19 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {Promise<void>}
    */
   const renamePage = async (pageId, name, path) => {
-    if (!projectId.value) {
-      throw new Error("缺少工程信息");
-    }
-    if (!pageId) {
-      throw new Error("缺少页面信息");
-    }
-
-    await projectApi.renamePage(projectId.value, pageId, name, path);
-
-    pages.value = mapPagesAfterRename(pages.value, pageId, name, path);
-
-    if (doc.value && currentPageId.value === pageId && history.value) {
-      const patch = { name };
-      if (path !== undefined) {
-        patch.path = path;
-      }
-      history.value.execute(new UpdatePageCommand(pageId, patch));
-    }
+    const mutationCtx = {
+      projectId,
+      currentPageId,
+      pages,
+      doc,
+      history,
+      projectApi,
+      refreshPages,
+      loadPage,
+      initEditor,
+      createBaseSchema,
+    };
+    return renamePageForStore(mutationCtx, pageId, name, path);
   };
 
   /**
@@ -700,10 +563,12 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {Promise<void>}
    */
   const persistEntry = async () => {
-    if (!projectId.value) return;
-    const payload = doc.value?.entry || entryConfig.value || {};
-    await projectApi.updateEntryConfig(projectId.value, payload);
-    entryConfig.value = { ...payload };
+    await persistEntryConfigForStore({
+      projectId,
+      doc,
+      entryConfig,
+      projectApi,
+    });
   };
 
   /**
@@ -723,25 +588,14 @@ export const useEditorStore = defineStore("editor", () => {
 
     isSaving.value = true;
     try {
-      const payload = serializer.value.exportPage(
-        doc.value,
-        currentPageId.value,
-      );
-      mergePageVariablesIntoPayload(
-        payload,
-        currentPageId.value,
-        doc.value?.schema?.vars?.pages?.[currentPageId.value],
-      );
-      await projectApi.updatePage(
-        projectId.value,
-        currentPageId.value,
-        payload,
-      );
-      if (pageDrafts.value[currentPageId.value]) {
-        const nextDrafts = { ...(pageDrafts.value || {}) };
-        delete nextDrafts[currentPageId.value];
-        pageDrafts.value = nextDrafts;
-      }
+      await saveCurrentPageForStore({
+        projectId,
+        currentPageId,
+        doc,
+        serializer,
+        pageDrafts,
+        projectApi,
+      });
     } finally {
       isSaving.value = false;
     }
@@ -753,13 +607,7 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {void}
    */
   const savePageDraft = (pageId) => {
-    if (!doc.value || !pageId) return;
-    try {
-      const payload = serializer.value.exportPage(doc.value, pageId);
-      pageDrafts.value = { ...(pageDrafts.value || {}), [pageId]: payload };
-    } catch (error) {
-      // ignore
-    }
+    savePageDraftForStore({ doc, serializer, pageDrafts }, pageId);
   };
 
   /**

@@ -51,3 +51,4 @@ dev_core/artifacts/
 # designer 内计划与 docs 仅本地保留，不提交
 designer/docs/
 designer/designer-next-iteration.plan.md
+.cursor/rules/git-commit-convention.mdc

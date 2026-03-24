@@ -225,7 +225,7 @@ import {
   isNodeDesignerMovable,
   isTableLikeType,
   usesLegacyFlexDirectionProps,
-} from "@/components/descriptors/registry.js";
+} from "@/components/descriptors/registry.ts";
 import { createDragDropManager } from "./services/DragDropManager";
 import { createNodeStyleHelpers } from "./composables/use-node-style.js";
 import { useNodeContent } from "./composables/use-node-content.js";

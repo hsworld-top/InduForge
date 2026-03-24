@@ -1,154 +1,107 @@
-// @ts-nocheck
 /**
  * 节点操作命令
  * 包含插入、删除、更新、移动节点的命令实现
  */
 
-import { Command } from "./Command.ts";
+import { Command } from "./Command";
+import type { DocumentModel } from "../document/DocumentModel";
+import type { Change, ComponentNode } from "../document/types";
 
-/**
- * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel
- * @typedef {import('../document/types.js').ComponentNode} ComponentNode
- */
+/** 深拷贝删除命令在内存中挂的子树 */
+type NodeCloneWithChildren = ComponentNode & {
+  _childNodes?: ComponentNode[];
+};
 
-/**
- * 插入节点命令
- */
 export class InsertNodeCommand extends Command {
-  get type() {
+  private _parentId!: string;
+  private _index!: number;
+  private _node!: ComponentNode;
+
+  get type(): string {
     return "InsertNode";
   }
 
-  /**
-   * 创建插入节点命令
-   * @param {string} parentId - 父节点 ID
-   * @param {number} index - 插入位置
-   * @param {ComponentNode} node - 要插入的节点
-   */
-  constructor(parentId, index, node) {
+  constructor(parentId: string, index: number, node: ComponentNode) {
     super();
-    /** @type {string} */
     this._parentId = parentId;
-    /** @type {number} */
     this._index = index;
-    /** @type {ComponentNode} */
     this._node = node;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     doc._insertNode(this._parentId, this._index, this._node);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     doc._removeNode(this._node.id);
   }
 
-  getDescription() {
+  getDescription(): string {
     return `插入组件: ${this._node.type}`;
   }
 }
 
-/**
- * 删除节点命令
- */
 export class RemoveNodeCommand extends Command {
-  get type() {
+  private _nodeId!: string;
+  private _removedNode: NodeCloneWithChildren | null = null;
+  private _parentId: string | null = null;
+  private _index = -1;
+
+  get type(): string {
     return "RemoveNode";
   }
 
-  /**
-   * 创建删除节点命令
-   * @param {string} nodeId - 要删除的节点 ID
-   */
-  constructor(nodeId) {
+  constructor(nodeId: string) {
     super();
-    /** @type {string} */
     this._nodeId = nodeId;
-    /** @type {ComponentNode | null} */
-    this._removedNode = null;
-    /** @type {string | null} */
-    this._parentId = null;
-    /** @type {number} */
-    this._index = -1;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
-    // 保存删除前的状态
+  execute(doc: DocumentModel): void {
     const parent = doc.getParent(this._nodeId);
     this._parentId = parent?.id ?? null;
-    if (parent && parent.children) {
+    if (parent?.children) {
       this._index = parent.children.indexOf(this._nodeId);
     }
-
-    // 深拷贝节点及其所有后代（用于撤销）
     const node = doc.getNode(this._nodeId);
     if (node) {
       this._removedNode = this._deepCloneNode(node, doc);
     }
-
-    // 执行删除
     doc._removeNode(this._nodeId);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._removedNode && this._parentId !== null) {
-      // 恢复节点及其所有后代
       this._restoreNode(doc, this._parentId, this._index, this._removedNode);
     }
   }
 
-  /**
-   * 深拷贝节点及其所有后代
-   * @param {ComponentNode} node
-   * @param {DocumentModel} doc
-   * @returns {ComponentNode}
-   * @private
-   */
-  _deepCloneNode(node, doc) {
-    const clone = JSON.parse(JSON.stringify(node));
-
-    // 递归获取所有后代节点
-    if (clone.children && clone.children.length > 0) {
+  private _deepCloneNode(
+    node: ComponentNode,
+    doc: DocumentModel,
+  ): NodeCloneWithChildren {
+    const clone = JSON.parse(JSON.stringify(node)) as NodeCloneWithChildren;
+    if (clone.children?.length) {
       clone._childNodes = clone.children
         .map((childId) => {
           const child = doc.getNode(childId);
           return child ? this._deepCloneNode(child, doc) : null;
         })
-        .filter(Boolean);
+        .filter((c): c is NodeCloneWithChildren => c != null);
     }
-
     return clone;
   }
 
-  /**
-   * 恢复节点及其所有后代
-   * @param {DocumentModel} doc
-   * @param {string} parentId
-   * @param {number} index
-   * @param {ComponentNode} node
-   * @private
-   */
-  _restoreNode(doc, parentId, index, node) {
-    // 分离子节点数据
-    const childNodes = node._childNodes || [];
+  private _restoreNode(
+    doc: DocumentModel,
+    parentId: string,
+    index: number,
+    node: NodeCloneWithChildren,
+  ): void {
+    const childNodes = node._childNodes ?? [];
     delete node._childNodes;
 
-    // 先将节点添加到 nodesById
     doc._schema.nodesById[node.id] = node;
 
-    // 添加到父节点
     const parent = doc.getNode(parentId);
     if (parent) {
       if (!parent.children) {
@@ -158,17 +111,17 @@ export class RemoveNodeCommand extends Command {
       parent.children.splice(insertIndex, 0, node.id);
     }
 
-    // 更新索引
     doc._parentIndex.set(node.id, parentId);
     doc._addToTypeIndex(node);
     doc._addToBindingIndex(node);
 
-    // 递归恢复子节点
     for (let i = 0; i < childNodes.length; i++) {
-      this._restoreNode(doc, node.id, i, childNodes[i]);
+      const child = childNodes[i];
+      if (child) {
+        this._restoreNode(doc, node.id, i, child);
+      }
     }
 
-    // 触发变更事件
     doc._emitChange({
       type: "insert",
       target: "node",
@@ -179,192 +132,137 @@ export class RemoveNodeCommand extends Command {
     });
   }
 
-  getDescription() {
+  getDescription(): string {
     return `删除组件`;
   }
 }
 
-/**
- * 更新节点命令
- */
 export class UpdateNodeCommand extends Command {
-  get type() {
+  private _nodeId!: string;
+  private _patch!: Partial<ComponentNode>;
+  private _oldValues: Partial<ComponentNode> | null = null;
+
+  get type(): string {
     return "UpdateNode";
   }
 
-  /**
-   * 创建更新节点命令
-   * @param {string} nodeId - 节点 ID
-   * @param {Partial<ComponentNode>} patch - 更新内容
-   */
-  constructor(nodeId, patch) {
+  constructor(nodeId: string, patch: Partial<ComponentNode>) {
     super();
-    /** @type {string} */
     this._nodeId = nodeId;
-    /** @type {Partial<ComponentNode>} */
     this._patch = patch;
-    /** @type {Partial<ComponentNode> | null} */
-    this._oldValues = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const node = doc.getNode(this._nodeId);
     if (node) {
-      // 保存旧值
       this._oldValues = {};
+      const nRec = node as unknown as Record<string, unknown>;
       for (const key of Object.keys(this._patch)) {
-        this._oldValues[key] = JSON.parse(JSON.stringify(node[key] ?? null));
+        (this._oldValues as Record<string, unknown>)[key] = JSON.parse(
+          JSON.stringify(nRec[key] ?? null),
+        );
       }
-
-      // 执行更新
       doc._updateNode(this._nodeId, this._patch);
     }
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._oldValues) {
       doc._updateNode(this._nodeId, this._oldValues);
     }
   }
 
-  /**
-   * @param {Command} other
-   * @returns {boolean}
-   */
-  canMerge(other) {
-    // 连续更新同一节点可以合并
+  canMerge(other: Command): boolean {
     return other instanceof UpdateNodeCommand && other._nodeId === this._nodeId;
   }
 
-  /**
-   * @param {UpdateNodeCommand} other
-   * @returns {UpdateNodeCommand}
-   */
-  merge(other) {
+  merge(other: UpdateNodeCommand): UpdateNodeCommand {
     const mergedPatch = { ...this._patch, ...other._patch };
     const cmd = new UpdateNodeCommand(this._nodeId, mergedPatch);
     cmd._oldValues = this._oldValues;
     return cmd;
   }
 
-  getDescription() {
+  getDescription(): string {
     const keys = Object.keys(this._patch);
     return `更新组件属性: ${keys.join(", ")}`;
   }
 }
 
-/**
- * 移动节点命令
- */
 export class MoveNodeCommand extends Command {
-  get type() {
+  private _nodeId!: string;
+  private _newParentId!: string;
+  private _newIndex!: number;
+  private _oldParentId: string | null = null;
+  private _oldIndex = -1;
+
+  get type(): string {
     return "MoveNode";
   }
 
-  /**
-   * 创建移动节点命令
-   * @param {string} nodeId - 节点 ID
-   * @param {string} newParentId - 新父节点 ID
-   * @param {number} newIndex - 新位置索引
-   */
-  constructor(nodeId, newParentId, newIndex) {
+  constructor(nodeId: string, newParentId: string, newIndex: number) {
     super();
-    /** @type {string} */
     this._nodeId = nodeId;
-    /** @type {string} */
     this._newParentId = newParentId;
-    /** @type {number} */
     this._newIndex = newIndex;
-    /** @type {string | null} */
-    this._oldParentId = null;
-    /** @type {number} */
-    this._oldIndex = -1;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
-    // 保存旧位置
+  execute(doc: DocumentModel): void {
     const oldParent = doc.getParent(this._nodeId);
     this._oldParentId = oldParent?.id ?? null;
-    if (oldParent && oldParent.children) {
+    if (oldParent?.children) {
       this._oldIndex = oldParent.children.indexOf(this._nodeId);
     }
-
-    // 执行移动
     doc._moveNode(this._nodeId, this._newParentId, this._newIndex);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._oldParentId !== null) {
       doc._moveNode(this._nodeId, this._oldParentId, this._oldIndex);
     }
   }
 
-  getDescription() {
+  getDescription(): string {
     return `移动组件`;
   }
 }
 
-/**
- * 复制节点命令
- */
 export class DuplicateNodeCommand extends Command {
-  get type() {
+  private _sourceNodeId!: string;
+  private _newId: string;
+  private _offset: { x?: number; y?: number };
+  private _createdNode: ComponentNode | null = null;
+  private _parentId: string | null = null;
+  private _index = -1;
+
+  get type(): string {
     return "DuplicateNode";
   }
 
-  /**
-   * 创建复制节点命令
-   * @param {string} sourceNodeId - 源节点 ID
-   * @param {string} [newId] - 新节点 ID（可选）
-   * @param {{x?: number, y?: number}} [offset] - 位置偏移
-   */
-  constructor(sourceNodeId, newId, offset = { x: 20, y: 20 }) {
+  constructor(
+    sourceNodeId: string,
+    newId?: string,
+    offset: { x?: number; y?: number } = { x: 20, y: 20 },
+  ) {
     super();
-    /** @type {string} */
     this._sourceNodeId = sourceNodeId;
-    /** @type {string} */
     this._newId =
       newId || crypto.randomUUID().replace(/-/g, "").substring(0, 12);
-    /** @type {{x?: number, y?: number}} */
     this._offset = offset;
-    /** @type {ComponentNode | null} */
-    this._createdNode = null;
-    /** @type {string | null} */
-    this._parentId = null;
-    /** @type {number} */
-    this._index = -1;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const sourceNode = doc.getNode(this._sourceNodeId);
     if (!sourceNode) return;
 
-    // 获取父节点信息
     const parent = doc.getParent(this._sourceNodeId);
     this._parentId = parent?.id ?? null;
-    if (parent && parent.children) {
+    if (parent?.children) {
       this._index = parent.children.indexOf(this._sourceNodeId) + 1;
     }
 
-    // 深拷贝节点
     this._createdNode = this._deepCloneWithNewIds(sourceNode, doc);
 
-    // 应用位置偏移 - 适配新架构 absolutePos / layoutItem.free.abs / style
     const dx = this._offset.x || 0;
     const dy = this._offset.y || 0;
     if (this._createdNode.absolutePos) {
@@ -373,10 +271,9 @@ export class DuplicateNodeCommand extends Command {
       this._createdNode.absolutePos.y =
         (this._createdNode.absolutePos.y ?? 0) + dy;
     } else if (this._createdNode.layoutItem?.free?.abs) {
-      this._createdNode.layoutItem.free.abs.x =
-        (this._createdNode.layoutItem.free.abs.x ?? 0) + dx;
-      this._createdNode.layoutItem.free.abs.y =
-        (this._createdNode.layoutItem.free.abs.y ?? 0) + dy;
+      const abs = this._createdNode.layoutItem.free.abs;
+      abs.x = (abs.x ?? 0) + dx;
+      abs.y = (abs.y ?? 0) + dy;
     }
     if (
       this._createdNode.style &&
@@ -391,48 +288,35 @@ export class DuplicateNodeCommand extends Command {
       }
     }
 
-    // 插入复制的节点
     if (this._parentId) {
       doc._insertNode(this._parentId, this._index, this._createdNode);
     }
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._createdNode) {
       doc._removeNode(this._createdNode.id);
     }
   }
 
-  /**
-   * 深拷贝并生成新 ID
-   * @param {ComponentNode} node
-   * @param {DocumentModel} doc
-   * @returns {ComponentNode}
-   * @private
-   */
-  _deepCloneWithNewIds(node, doc) {
-    const clone = JSON.parse(JSON.stringify(node));
-    const idMap = new Map();
+  private _deepCloneWithNewIds(
+    node: ComponentNode,
+    doc: DocumentModel,
+  ): ComponentNode {
+    const clone = JSON.parse(JSON.stringify(node)) as ComponentNode;
 
-    // 递归替换 ID
-    const replaceIds = (n) => {
-      const oldId = n.id;
+    const replaceIds = (n: ComponentNode): void => {
       const newId = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
-      idMap.set(oldId, newId);
       n.id = newId;
-
-      if (n.children && n.children.length > 0) {
-        // 获取子节点数据并递归处理
-        const newChildren = [];
+      if (n.children?.length) {
+        const newChildren: string[] = [];
         for (const childId of n.children) {
           const child = doc.getNode(childId);
           if (child) {
-            const childClone = JSON.parse(JSON.stringify(child));
+            const childClone = JSON.parse(
+              JSON.stringify(child),
+            ) as ComponentNode;
             replaceIds(childClone);
-            // 将子节点添加到 nodesById
             doc._schema.nodesById[childClone.id] = childClone;
             newChildren.push(childClone.id);
           }
@@ -441,14 +325,15 @@ export class DuplicateNodeCommand extends Command {
       }
     };
 
-    // 主节点使用指定的 ID
     clone.id = this._newId;
-    if (clone.children && clone.children.length > 0) {
-      const newChildren = [];
+    if (clone.children?.length) {
+      const newChildren: string[] = [];
       for (const childId of clone.children) {
         const child = doc.getNode(childId);
         if (child) {
-          const childClone = JSON.parse(JSON.stringify(child));
+          const childClone = JSON.parse(
+            JSON.stringify(child),
+          ) as ComponentNode;
           replaceIds(childClone);
           newChildren.push(childClone.id);
         }
@@ -459,64 +344,43 @@ export class DuplicateNodeCommand extends Command {
     return clone;
   }
 
-  /**
-   * 获取创建的节点 ID
-   * @returns {string | null}
-   */
-  getCreatedNodeId() {
+  getCreatedNodeId(): string | null {
     return this._createdNode?.id ?? null;
   }
 
-  getDescription() {
+  getDescription(): string {
     return `复制组件`;
   }
 }
 
-/**
- * 设置节点属性命令
- */
 export class SetNodePropsCommand extends Command {
-  get type() {
+  private _nodeId!: string;
+  private _props!: Record<string, unknown>;
+  private _oldProps: Record<string, unknown> | null = null;
+
+  get type(): string {
     return "SetNodeProps";
   }
 
-  /**
-   * 创建设置节点属性命令
-   * @param {string} nodeId - 节点 ID
-   * @param {Record<string, *>} props - 要设置的属性
-   */
-  constructor(nodeId, props) {
+  constructor(nodeId: string, props: Record<string, unknown>) {
     super();
-    /** @type {string} */
     this._nodeId = nodeId;
-    /** @type {Record<string, *>} */
     this._props = props;
-    /** @type {Record<string, *> | null} */
-    this._oldProps = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const node = doc.getNode(this._nodeId);
     if (node) {
-      // 保存旧属性
       this._oldProps = {};
       for (const key of Object.keys(this._props)) {
         this._oldProps[key] = node.props?.[key];
       }
-
-      // 合并新属性
       const newProps = { ...node.props, ...this._props };
       doc._updateNode(this._nodeId, { props: newProps });
     }
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     const node = doc.getNode(this._nodeId);
     if (node && this._oldProps) {
       const restoredProps = { ...node.props };
@@ -531,77 +395,52 @@ export class SetNodePropsCommand extends Command {
     }
   }
 
-  /**
-   * @param {Command} other
-   * @returns {boolean}
-   */
-  canMerge(other) {
+  canMerge(other: Command): boolean {
     return (
       other instanceof SetNodePropsCommand && other._nodeId === this._nodeId
     );
   }
 
-  /**
-   * @param {SetNodePropsCommand} other
-   * @returns {SetNodePropsCommand}
-   */
-  merge(other) {
+  merge(other: SetNodePropsCommand): SetNodePropsCommand {
     const mergedProps = { ...this._props, ...other._props };
     const cmd = new SetNodePropsCommand(this._nodeId, mergedProps);
     cmd._oldProps = this._oldProps;
     return cmd;
   }
 
-  getDescription() {
+  getDescription(): string {
     return `设置组件属性`;
   }
 }
 
-/**
- * 设置节点样式命令
- */
 export class SetNodeStyleCommand extends Command {
-  get type() {
+  private _nodeId!: string;
+  private _style!: Record<string, unknown>;
+  private _oldStyle: Record<string, unknown> | null = null;
+
+  get type(): string {
     return "SetNodeStyle";
   }
 
-  /**
-   * 创建设置节点样式命令
-   * @param {string} nodeId - 节点 ID
-   * @param {Record<string, *>} style - 要设置的样式
-   */
-  constructor(nodeId, style) {
+  constructor(nodeId: string, style: Record<string, unknown>) {
     super();
-    /** @type {string} */
     this._nodeId = nodeId;
-    /** @type {Record<string, *>} */
     this._style = style;
-    /** @type {Record<string, *> | null} */
-    this._oldStyle = null;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const node = doc.getNode(this._nodeId);
     if (node) {
-      // 保存旧样式
       this._oldStyle = {};
       for (const key of Object.keys(this._style)) {
         this._oldStyle[key] = node.style?.[key];
       }
-
-      // 合并新样式
       const newStyle = { ...node.style, ...this._style };
       doc._updateNode(this._nodeId, { style: newStyle });
     }
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     const node = doc.getNode(this._nodeId);
     if (node && this._oldStyle) {
       const restoredStyle = { ...node.style };
@@ -616,65 +455,44 @@ export class SetNodeStyleCommand extends Command {
     }
   }
 
-  /**
-   * @param {Command} other
-   * @returns {boolean}
-   */
-  canMerge(other) {
+  canMerge(other: Command): boolean {
     return (
       other instanceof SetNodeStyleCommand && other._nodeId === this._nodeId
     );
   }
 
-  /**
-   * @param {SetNodeStyleCommand} other
-   * @returns {SetNodeStyleCommand}
-   */
-  merge(other) {
+  merge(other: SetNodeStyleCommand): SetNodeStyleCommand {
     const mergedStyle = { ...this._style, ...other._style };
     const cmd = new SetNodeStyleCommand(this._nodeId, mergedStyle);
     cmd._oldStyle = this._oldStyle;
     return cmd;
   }
 
-  getDescription() {
+  getDescription(): string {
     return `设置组件样式`;
   }
 }
 
-/**
- * 图层顺序调整命令
- */
 export class ReorderNodeCommand extends Command {
-  get type() {
+  private _nodeId!: string;
+  private _direction!: "up" | "down" | "top" | "bottom";
+  private _parentId: string | null = null;
+  private _oldIndex = -1;
+  private _newIndex = -1;
+
+  get type(): string {
     return "ReorderNode";
   }
 
-  /**
-   * 创建图层顺序调整命令
-   * @param {string} nodeId - 节点 ID
-   * @param {'up' | 'down' | 'top' | 'bottom'} direction - 调整方向
-   */
-  constructor(nodeId, direction) {
+  constructor(nodeId: string, direction: "up" | "down" | "top" | "bottom") {
     super();
-    /** @type {string} */
     this._nodeId = nodeId;
-    /** @type {'up' | 'down' | 'top' | 'bottom'} */
     this._direction = direction;
-    /** @type {string | null} */
-    this._parentId = null;
-    /** @type {number} */
-    this._oldIndex = -1;
-    /** @type {number} */
-    this._newIndex = -1;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const parent = doc.getParent(this._nodeId);
-    if (!parent || !parent.children) return;
+    if (!parent?.children) return;
 
     this._parentId = parent.id;
     this._oldIndex = parent.children.indexOf(this._nodeId);
@@ -682,62 +500,51 @@ export class ReorderNodeCommand extends Command {
 
     const childrenCount = parent.children.length;
 
-    // 计算新位置（同父下 DOM 顺序：索引越大越靠前显示，故置顶=末位，置底=首位）
     switch (this._direction) {
       case "up":
-        // 上移一层：在叠放顺序中更靠前 → 在 children 中后移
         this._newIndex = Math.min(childrenCount - 1, this._oldIndex + 1);
         break;
       case "down":
-        // 下移一层：在叠放顺序中更靠后 → 在 children 中前移
         this._newIndex = Math.max(0, this._oldIndex - 1);
         break;
       case "top":
-        // 置顶：置于最前 → 移到 children 末尾
         this._newIndex = childrenCount - 1;
         break;
       case "bottom":
-        // 置底：置于最后 → 移到 children 首位
         this._newIndex = 0;
         break;
     }
 
-    // 如果位置没变化,直接返回
     if (this._newIndex === this._oldIndex) return;
 
-    // 调整顺序
     const children = [...parent.children];
-    const [node] = children.splice(this._oldIndex, 1);
-    children.splice(this._newIndex, 0, node);
+    const [moved] = children.splice(this._oldIndex, 1);
+    if (moved === undefined) return;
+    children.splice(this._newIndex, 0, moved);
     parent.children = children;
 
-    // 触发变更事件
     doc._emitChange({
       type: "reorder",
       target: "node",
       id: this._nodeId,
-      parentId: this._parentId,
+      parentId: this._parentId ?? undefined,
       oldIndex: this._oldIndex,
       newIndex: this._newIndex,
-    });
+    } as unknown as Change);
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     if (this._parentId === null) return;
 
     const parent = doc.getNode(this._parentId);
-    if (!parent || !parent.children) return;
+    if (!parent?.children) return;
 
-    // 恢复原位置
     const children = [...parent.children];
-    const [node] = children.splice(this._newIndex, 1);
-    children.splice(this._oldIndex, 0, node);
+    const [moved] = children.splice(this._newIndex, 1);
+    if (moved === undefined) return;
+    children.splice(this._oldIndex, 0, moved);
     parent.children = children;
 
-    // 触发变更事件
     doc._emitChange({
       type: "reorder",
       target: "node",
@@ -745,11 +552,11 @@ export class ReorderNodeCommand extends Command {
       parentId: this._parentId,
       oldIndex: this._newIndex,
       newIndex: this._oldIndex,
-    });
+    } as unknown as Change);
   }
 
-  getDescription() {
-    const directionText = {
+  getDescription(): string {
+    const directionText: Record<string, string> = {
       up: "上移图层",
       down: "下移图层",
       top: "置顶",
@@ -759,108 +566,72 @@ export class ReorderNodeCommand extends Command {
   }
 }
 
-/**
- * 切换节点显示/隐藏命令
- */
 export class ToggleNodeVisibilityCommand extends Command {
-  get type() {
+  private _nodeId!: string;
+  private _targetHidden: boolean | undefined;
+  private _oldHidden = false;
+
+  get type(): string {
     return "ToggleNodeVisibility";
   }
 
-  /**
-   * 创建切换节点显示/隐藏命令
-   * @param {string} nodeId - 节点 ID
-   * @param {boolean} [hidden] - 目标状态,不传则自动切换
-   */
-  constructor(nodeId, hidden) {
+  constructor(nodeId: string, hidden?: boolean) {
     super();
-    /** @type {string} */
     this._nodeId = nodeId;
-    /** @type {boolean | undefined} */
     this._targetHidden = hidden;
-    /** @type {boolean} */
-    this._oldHidden = false;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const node = doc.getNode(this._nodeId);
     if (!node) return;
 
-    // 保存旧状态
     this._oldHidden = node.hidden ?? false;
-
-    // 确定新状态
     const newHidden =
       this._targetHidden !== undefined ? this._targetHidden : !this._oldHidden;
 
-    // 更新节点
     doc._updateNode(this._nodeId, { hidden: newHidden });
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     doc._updateNode(this._nodeId, { hidden: this._oldHidden });
   }
 
-  getDescription() {
+  getDescription(): string {
     return this._oldHidden ? "显示组件" : "隐藏组件";
   }
 }
 
-/**
- * 切换节点锁定/解锁命令
- */
 export class ToggleNodeLockCommand extends Command {
-  get type() {
+  private _nodeId!: string;
+  private _targetLocked: boolean | undefined;
+  private _oldLocked = false;
+
+  get type(): string {
     return "ToggleNodeLock";
   }
 
-  /**
-   * 创建切换节点锁定/解锁命令
-   * @param {string} nodeId - 节点 ID
-   * @param {boolean} [locked] - 目标状态,不传则自动切换
-   */
-  constructor(nodeId, locked) {
+  constructor(nodeId: string, locked?: boolean) {
     super();
-    /** @type {string} */
     this._nodeId = nodeId;
-    /** @type {boolean | undefined} */
     this._targetLocked = locked;
-    /** @type {boolean} */
-    this._oldLocked = false;
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  execute(doc) {
+  execute(doc: DocumentModel): void {
     const node = doc.getNode(this._nodeId);
     if (!node) return;
 
-    // 保存旧状态
     this._oldLocked = node.locked ?? false;
-
-    // 确定新状态
     const newLocked =
       this._targetLocked !== undefined ? this._targetLocked : !this._oldLocked;
 
-    // 更新节点
     doc._updateNode(this._nodeId, { locked: newLocked });
   }
 
-  /**
-   * @param {DocumentModel} doc
-   */
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     doc._updateNode(this._nodeId, { locked: this._oldLocked });
   }
 
-  getDescription() {
+  getDescription(): string {
     return this._oldLocked ? "解锁组件" : "锁定组件";
   }
 }

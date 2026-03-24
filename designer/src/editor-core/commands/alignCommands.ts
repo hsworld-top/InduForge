@@ -1,30 +1,45 @@
-// @ts-nocheck
 /**
  * 对齐、分布、等大小命令
  * 支持节点（node）和图形（graphic）两种元素类型
  */
 
-import { Command } from "./Command.ts";
+import { Command } from "./Command";
+import type { DocumentModel } from "../document/DocumentModel";
+import type {
+  AbsolutePosition,
+  GraphicNode,
+  GraphicProps,
+  LayoutItem,
+  SelectableElement,
+} from "../document/types";
 
-/**
- * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel
- * @typedef {{ kind: 'node' | 'graphic', id: string }} SelectableElement
- * @typedef {{ x: number, y: number, width: number, height: number }} Bounds
- */
+export interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type AlignType =
+  | "left"
+  | "centerH"
+  | "right"
+  | "top"
+  | "centerV"
+  | "bottom";
 
 /**
  * 从文档中读取元素的位置和尺寸
  * 按优先级：absolutePos → layoutItem.free.abs → style.left/top/width/height
  * 跳过 positioning === "flow" 的节点（流式布局不支持自由对齐）
- * @param {DocumentModel} doc
- * @param {SelectableElement} element
- * @returns {Bounds | null}
  */
-function getElementBounds(doc, element) {
+function getElementBounds(
+  doc: DocumentModel,
+  element: SelectableElement,
+): Bounds | null {
   if (element.kind === "node") {
     const node = doc.getNode(element.id);
     if (!node) return null;
-    // 流式布局节点不支持自由对齐
     if (node.positioning === "flow") return null;
 
     const absolutePos = node.absolutePos;
@@ -50,13 +65,12 @@ function getElementBounds(doc, element) {
         height: Number.isFinite(freeAbsLayout.h) ? freeAbsLayout.h : 100,
       };
     }
-    // 回退到 style
     if (!node.style) return null;
     return {
-      x: node.style.left || 0,
-      y: node.style.top || 0,
-      width: node.style.width || 100,
-      height: node.style.height || 100,
+      x: Number(node.style.left) || 0,
+      y: Number(node.style.top) || 0,
+      width: Number(node.style.width) || 100,
+      height: Number(node.style.height) || 100,
     };
   }
 
@@ -65,13 +79,9 @@ function getElementBounds(doc, element) {
   return getGraphicBounds(graphic);
 }
 
-/**
- * 获取图形的包围盒
- * @param {Object} graphic
- * @returns {Bounds | null}
- */
-function getGraphicBounds(graphic) {
-  const props = graphic.props;
+/** 获取图形的包围盒 */
+function getGraphicBounds(graphic: GraphicNode): Bounds | null {
+  const props = graphic.props as GraphicProps;
   switch (graphic.type) {
     case "Canvas.Rect":
       return {
@@ -102,7 +112,7 @@ function getGraphicBounds(graphic) {
     case "Canvas.Line":
     case "Canvas.Polygon":
     case "Canvas.Pipe":
-      if (props.points?.length > 0) {
+      if (props.points && props.points.length > 0) {
         const xs = props.points.map(([x]) => x);
         const ys = props.points.map(([, y]) => y);
         return {
@@ -132,15 +142,12 @@ function getGraphicBounds(graphic) {
   }
 }
 
-/**
- * 将位置变更应用到元素
- * 按优先级写入：absolutePos → layoutItem.free.abs → style.left/top
- * @param {DocumentModel} doc
- * @param {SelectableElement} element
- * @param {number} newX
- * @param {number} newY
- */
-function applyPosition(doc, element, newX, newY) {
+function applyPosition(
+  doc: DocumentModel,
+  element: SelectableElement,
+  newX: number,
+  newY: number,
+): void {
   if (element.kind === "node") {
     const node = doc.getNode(element.id);
     if (!node) return;
@@ -160,13 +167,26 @@ function applyPosition(doc, element, newX, newY) {
       return;
     }
     if (freeAbsLayout) {
-      const nextLayoutItem = JSON.parse(JSON.stringify(node.layoutItem || {}));
-      if (!nextLayoutItem.free) nextLayoutItem.free = {};
-      if (!nextLayoutItem.free.abs) nextLayoutItem.free.abs = {};
-      nextLayoutItem.free.abs = {
-        ...nextLayoutItem.free.abs,
+      const nextLayoutItem = (
+        node.layoutItem
+          ? JSON.parse(JSON.stringify(node.layoutItem))
+          : {}
+      ) as LayoutItem;
+      const prevFree = nextLayoutItem.free;
+      const abs: AbsolutePosition = {
         x: newX,
         y: newY,
+        w: Number.isFinite(freeAbsLayout.w) ? freeAbsLayout.w : 100,
+        h: Number.isFinite(freeAbsLayout.h) ? freeAbsLayout.h : 100,
+      };
+      if (freeAbsLayout.z !== undefined) abs.z = freeAbsLayout.z;
+      nextLayoutItem.free = {
+        mode: prevFree?.mode ?? "abs",
+        abs,
+        ...(prevFree?.constraints
+          ? { constraints: prevFree.constraints }
+          : {}),
+        ...(prevFree?.z !== undefined ? { z: prevFree.z } : {}),
       };
       doc._updateNode(element.id, { layoutItem: nextLayoutItem });
       return;
@@ -180,7 +200,7 @@ function applyPosition(doc, element, newX, newY) {
     if (!oldBounds) return;
     const dx = newX - oldBounds.x;
     const dy = newY - oldBounds.y;
-    const newProps = JSON.parse(JSON.stringify(graphic.props));
+    const newProps = JSON.parse(JSON.stringify(graphic.props)) as GraphicProps;
     if (typeof newProps.x === "number") newProps.x += dx;
     if (typeof newProps.y === "number") newProps.y += dy;
     if (typeof newProps.cx === "number") newProps.cx += dx;
@@ -192,15 +212,12 @@ function applyPosition(doc, element, newX, newY) {
   }
 }
 
-/**
- * 将尺寸变更应用到元素
- * 按优先级写入：absolutePos.w/h → layoutItem.free.abs.w/h → style.width/height
- * @param {DocumentModel} doc
- * @param {SelectableElement} element
- * @param {number | null} newWidth
- * @param {number | null} newHeight
- */
-function applySize(doc, element, newWidth, newHeight) {
+function applySize(
+  doc: DocumentModel,
+  element: SelectableElement,
+  newWidth: number | null,
+  newHeight: number | null,
+): void {
   if (element.kind === "node") {
     const node = doc.getNode(element.id);
     if (!node) return;
@@ -221,13 +238,38 @@ function applySize(doc, element, newWidth, newHeight) {
       return;
     }
     if (freeAbsLayout) {
-      const nextLayoutItem = JSON.parse(JSON.stringify(node.layoutItem || {}));
-      if (!nextLayoutItem.free) nextLayoutItem.free = {};
-      if (!nextLayoutItem.free.abs) nextLayoutItem.free.abs = {};
-      const nextAbs = { ...nextLayoutItem.free.abs };
-      if (newWidth !== null) nextAbs.w = newWidth;
-      if (newHeight !== null) nextAbs.h = newHeight;
-      nextLayoutItem.free.abs = nextAbs;
+      const nextLayoutItem = (
+        node.layoutItem
+          ? JSON.parse(JSON.stringify(node.layoutItem))
+          : {}
+      ) as LayoutItem;
+      const prevFree = nextLayoutItem.free;
+      const base = prevFree?.abs ?? freeAbsLayout;
+      const abs: AbsolutePosition = {
+        x: Number.isFinite(base.x) ? base.x : 0,
+        y: Number.isFinite(base.y) ? base.y : 0,
+        w:
+          newWidth !== null
+            ? newWidth
+            : Number.isFinite(base.w)
+              ? base.w
+              : 100,
+        h:
+          newHeight !== null
+            ? newHeight
+            : Number.isFinite(base.h)
+              ? base.h
+              : 100,
+      };
+      if (base.z !== undefined) abs.z = base.z;
+      nextLayoutItem.free = {
+        mode: prevFree?.mode ?? "abs",
+        abs,
+        ...(prevFree?.constraints
+          ? { constraints: prevFree.constraints }
+          : {}),
+        ...(prevFree?.z !== undefined ? { z: prevFree.z } : {}),
+      };
       doc._updateNode(element.id, { layoutItem: nextLayoutItem });
       return;
     }
@@ -238,7 +280,7 @@ function applySize(doc, element, newWidth, newHeight) {
   } else {
     const graphic = doc.getGraphic(element.id);
     if (!graphic) return;
-    const newProps = JSON.parse(JSON.stringify(graphic.props));
+    const newProps = JSON.parse(JSON.stringify(graphic.props)) as GraphicProps;
     if (graphic.type === "Canvas.Rect") {
       if (newWidth !== null) newProps.width = newWidth;
       if (newHeight !== null) newProps.height = newHeight;
@@ -253,28 +295,25 @@ function applySize(doc, element, newWidth, newHeight) {
   }
 }
 
-/**
- * 对齐元素命令
- */
+/** 对齐元素命令 */
 export class AlignElementsCommand extends Command {
-  get type() {
+  private _elements!: SelectableElement[];
+  private _alignType!: AlignType;
+  private _oldBounds!: Map<string, Bounds>;
+
+  get type(): string {
     return "AlignElements";
   }
 
-  /**
-   * @param {SelectableElement[]} elements - 选中元素列表
-   * @param {'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom'} alignType
-   */
-  constructor(elements, alignType) {
+  constructor(elements: SelectableElement[], alignType: AlignType) {
     super();
     this._elements = elements;
     this._alignType = alignType;
-    /** @type {Map<string, Bounds>} */
     this._oldBounds = new Map();
   }
 
-  execute(doc) {
-    const boundsMap = new Map();
+  execute(doc: DocumentModel): void {
+    const boundsMap = new Map<string, Bounds>();
     for (const el of this._elements) {
       const bounds = getElementBounds(doc, el);
       if (bounds) {
@@ -285,7 +324,7 @@ export class AlignElementsCommand extends Command {
     if (boundsMap.size < 2) return;
 
     const allBounds = [...boundsMap.values()];
-    let target;
+    let target: number;
 
     switch (this._alignType) {
       case "left":
@@ -341,15 +380,15 @@ export class AlignElementsCommand extends Command {
     }
   }
 
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     for (const el of this._elements) {
       const old = this._oldBounds.get(el.id);
       if (old) applyPosition(doc, el, old.x, old.y);
     }
   }
 
-  getDescription() {
-    const labels = {
+  getDescription(): string {
+    const labels: Record<AlignType, string> = {
       left: "左对齐",
       right: "右对齐",
       centerH: "水平居中",
@@ -361,28 +400,28 @@ export class AlignElementsCommand extends Command {
   }
 }
 
-/**
- * 分布元素命令
- */
+/** 分布元素命令 */
 export class DistributeElementsCommand extends Command {
-  get type() {
+  private _elements!: SelectableElement[];
+  private _direction!: "horizontal" | "vertical";
+  private _oldBounds!: Map<string, Bounds>;
+
+  get type(): string {
     return "DistributeElements";
   }
 
-  /**
-   * @param {SelectableElement[]} elements - 至少 3 个元素
-   * @param {'horizontal' | 'vertical'} direction
-   */
-  constructor(elements, direction) {
+  constructor(
+    elements: SelectableElement[],
+    direction: "horizontal" | "vertical",
+  ) {
     super();
     this._elements = elements;
     this._direction = direction;
-    /** @type {Map<string, Bounds>} */
     this._oldBounds = new Map();
   }
 
-  execute(doc) {
-    const items = [];
+  execute(doc: DocumentModel): void {
+    const items: { el: SelectableElement; bounds: Bounds }[] = [];
     for (const el of this._elements) {
       const bounds = getElementBounds(doc, el);
       if (bounds) {
@@ -394,10 +433,12 @@ export class DistributeElementsCommand extends Command {
 
     if (this._direction === "horizontal") {
       items.sort((a, b) => a.bounds.x - b.bounds.x);
+      const firstH = items[0];
+      const lastH = items[items.length - 1];
+      if (!firstH || !lastH) return;
       const totalWidth = items.reduce((s, it) => s + it.bounds.width, 0);
-      const rangeStart = items[0].bounds.x;
-      const rangeEnd =
-        items[items.length - 1].bounds.x + items[items.length - 1].bounds.width;
+      const rangeStart = firstH.bounds.x;
+      const rangeEnd = lastH.bounds.x + lastH.bounds.width;
       const gap = (rangeEnd - rangeStart - totalWidth) / (items.length - 1);
       let currentX = rangeStart;
       for (const it of items) {
@@ -406,11 +447,12 @@ export class DistributeElementsCommand extends Command {
       }
     } else {
       items.sort((a, b) => a.bounds.y - b.bounds.y);
+      const firstV = items[0];
+      const lastV = items[items.length - 1];
+      if (!firstV || !lastV) return;
       const totalHeight = items.reduce((s, it) => s + it.bounds.height, 0);
-      const rangeStart = items[0].bounds.y;
-      const rangeEnd =
-        items[items.length - 1].bounds.y +
-        items[items.length - 1].bounds.height;
+      const rangeStart = firstV.bounds.y;
+      const rangeEnd = lastV.bounds.y + lastV.bounds.height;
       const gap = (rangeEnd - rangeStart - totalHeight) / (items.length - 1);
       let currentY = rangeStart;
       for (const it of items) {
@@ -420,42 +462,43 @@ export class DistributeElementsCommand extends Command {
     }
   }
 
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     for (const el of this._elements) {
       const old = this._oldBounds.get(el.id);
       if (old) applyPosition(doc, el, old.x, old.y);
     }
   }
 
-  getDescription() {
+  getDescription(): string {
     return this._direction === "horizontal" ? "水平等距分布" : "垂直等距分布";
   }
 }
 
-/**
- * 统一尺寸命令
- */
+/** 统一尺寸命令 */
 export class MatchSizeCommand extends Command {
-  get type() {
+  private _elements!: SelectableElement[];
+  private _mode!: "width" | "height" | "both";
+  private _referenceId!: string;
+  private _oldBounds!: Map<string, Bounds>;
+
+  get type(): string {
     return "MatchSize";
   }
 
-  /**
-   * @param {SelectableElement[]} elements
-   * @param {'width' | 'height' | 'both'} mode
-   * @param {string} referenceId - 基准元素 ID（主选中元素）
-   */
-  constructor(elements, mode, referenceId) {
+  constructor(
+    elements: SelectableElement[],
+    mode: "width" | "height" | "both",
+    referenceId: string,
+  ) {
     super();
     this._elements = elements;
     this._mode = mode;
     this._referenceId = referenceId;
-    /** @type {Map<string, Bounds>} */
     this._oldBounds = new Map();
   }
 
-  execute(doc) {
-    let refBounds = null;
+  execute(doc: DocumentModel): void {
+    let refBounds: Bounds | null = null;
     for (const el of this._elements) {
       const bounds = getElementBounds(doc, el);
       if (bounds) {
@@ -482,7 +525,7 @@ export class MatchSizeCommand extends Command {
     }
   }
 
-  undo(doc) {
+  undo(doc: DocumentModel): void {
     for (const el of this._elements) {
       if (el.id === this._referenceId) continue;
       const old = this._oldBounds.get(el.id);
@@ -491,8 +534,12 @@ export class MatchSizeCommand extends Command {
     }
   }
 
-  getDescription() {
-    const labels = { width: "等宽", height: "等高", both: "等大小" };
+  getDescription(): string {
+    const labels: Record<"width" | "height" | "both", string> = {
+      width: "等宽",
+      height: "等高",
+      both: "等大小",
+    };
     return labels[this._mode] || "统一尺寸";
   }
 }

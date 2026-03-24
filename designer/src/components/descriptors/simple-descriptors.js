@@ -8,7 +8,7 @@
  * @module components/descriptors/simple-descriptors
  */
 
-import { registerDescriptor } from "./registry.js";
+import { registerDescriptor } from "./registry.ts";
 
 /**
  * 规范化选项列表（用于 propsFilter）

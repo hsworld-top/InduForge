@@ -8,8 +8,8 @@
  */
 
 import { computed, ref, watch, watchEffect, onMounted, onBeforeUnmount } from "vue";
-import { getDescriptor, isContainerType } from "@/components/descriptors/registry.js";
-import { resolveDescriptorContainerStyle } from "@/components/descriptors/registry.js";
+import { getDescriptor, isContainerType } from "@/components/descriptors/registry.ts";
+import { resolveDescriptorContainerStyle } from "@/components/descriptors/registry.ts";
 import { componentRegistry } from "@/editor-core";
 import {
   normalizeStyleObject,
