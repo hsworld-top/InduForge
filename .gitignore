@@ -47,3 +47,7 @@ dev_ide/dist/
 designer/dist/
 dev_core/artifacts/
 *.task.md
+
+# designer 内计划与 docs 仅本地保留，不提交
+designer/docs/
+designer/designer-next-iteration.plan.md
