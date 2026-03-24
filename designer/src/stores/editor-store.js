@@ -61,6 +61,7 @@ import {
   mergePageVariablesIntoPayload,
 } from "./editor/page-load-save-actions";
 import { mapPagesAfterRename } from "./editor/page-crud-actions";
+import { resolveLandingPageId } from "./editor/page-navigation-helpers";
 import {
   normalizePageList,
   normalizePageSchema,
@@ -372,11 +373,7 @@ export const useEditorStore = defineStore("editor", () => {
         return { ok: homePageResult.ok };
       }
 
-      const homePageId = entryConfigResp?.homePageId;
-      const targetPageId =
-        homePageId && pageList.some((p) => p.id === homePageId)
-          ? homePageId
-          : pageList[0]?.id;
+      const targetPageId = resolveLandingPageId(pageList, entryConfigResp);
 
       if (!targetPageId) {
         const homePageResult = await createHomePage(id);

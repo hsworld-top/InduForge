@@ -6208,8 +6208,10 @@ const bindingPageComponentTree = computed(() => {
 });
 
 const bindingCustomScriptTree = computed(() => {
-  const groups = globalScripts.value?.custom?.groups || [];
-  const items = globalScripts.value?.custom?.items || [];
+  const rawGroups = globalScripts.value?.custom?.groups;
+  const groups = Array.isArray(rawGroups) ? rawGroups : [];
+  const rawItems = globalScripts.value?.custom?.items;
+  const items = Array.isArray(rawItems) ? rawItems : [];
   const groupMap = new Map();
   const roots = [];
 
@@ -6288,7 +6290,10 @@ const bindingCompletions = computed(() => {
     });
   });
 
-  (globalScripts.value?.custom?.items || []).forEach((script) => {
+  (Array.isArray(globalScripts.value?.custom?.items)
+    ? globalScripts.value.custom.items
+    : []
+  ).forEach((script) => {
     if (!script?.name) return;
     const params =
       typeof script.params === "string" && script.params.trim()
@@ -6360,7 +6365,10 @@ const detailCompletions = computed(() => {
     });
   });
 
-  (globalScripts.value?.custom?.items || []).forEach((scriptItem) => {
+  (Array.isArray(globalScripts.value?.custom?.items)
+    ? globalScripts.value.custom.items
+    : []
+  ).forEach((scriptItem) => {
     if (!scriptItem?.name) return;
     const params =
       typeof scriptItem.params === "string" && scriptItem.params.trim()

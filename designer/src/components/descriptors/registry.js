@@ -299,27 +299,18 @@ export function getCustomRenderer(type) {
 }
 
 /**
- * 获取组件默认尺寸
+ * 获取组件默认尺寸（仅 descriptor.defaultSize，不再从 manifest / componentRegistry 兜底）
  * @param {string} type - 组件类型
- * @param {Object} [componentRegistry] - 组件注册表实例（可选，用于 manifest fallback）
  * @returns {{ width: number, height: number }|null}
  */
-export function getDefaultSize(type, componentRegistry = null) {
-  // 优先从 descriptor 读取（新架构组件）
+export function getDefaultSize(type) {
   const descriptorSize = _descriptors.get(type)?.defaultSize;
-  if (descriptorSize) {
+  if (
+    descriptorSize &&
+    typeof descriptorSize.width === "number" &&
+    typeof descriptorSize.height === "number"
+  ) {
     return descriptorSize;
-  }
-  // 向后兼容：未注册 descriptor 的组件，从 manifest 读取
-  if (componentRegistry) {
-    const manifest = componentRegistry.get(type);
-    const defaultSize = manifest?.defaultSize;
-    if (defaultSize && typeof defaultSize === "object") {
-      return {
-        width: defaultSize.width || 120,
-        height: defaultSize.height || 40,
-      };
-    }
   }
   return null;
 }

@@ -1,13 +1,19 @@
-// @ts-nocheck
 /**
  * 页面加载 / 保存与 API 交互（从 editor-store 拆出）
  */
 
+import type { ProjectSchema } from "@/editor-core/document/types";
 import { unwrapApiData } from "@/types/api";
 
 export type PageContentApi = {
   getPage: (projectId: string, pageId: string) => Promise<unknown>;
 };
+
+export type ResolveProjectSchemaFn = (
+  payload: unknown,
+  projectId: string,
+  fallbackPageId: string,
+) => ProjectSchema;
 
 /**
  * 拉取单页并解析为工程级 Schema（unwrap + resolveProjectSchema）
@@ -16,12 +22,8 @@ export async function fetchResolvedProjectSchemaForPage(
   api: PageContentApi,
   projectId: string,
   pageId: string,
-  resolveProjectSchema: (
-    payload: unknown,
-    projectId: string,
-    fallbackPageId: string,
-  ) => unknown,
-): Promise<unknown> {
+  resolveProjectSchema: ResolveProjectSchemaFn,
+): Promise<ProjectSchema> {
   const pageResponse = await api.getPage(projectId, pageId);
   const pagePayload = unwrapApiData(pageResponse);
   if (pagePayload == null || typeof pagePayload !== "object") {

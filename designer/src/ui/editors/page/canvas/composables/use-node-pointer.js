@@ -8,7 +8,6 @@
 
 import { onBeforeUnmount } from "vue";
 import {
-  componentRegistry,
   createSelectableElement,
   UpdateNodeCommand,
   MoveNodeCommand,
@@ -17,6 +16,7 @@ import {
   getDescriptor,
   getDefaultSize,
   isRegionType,
+  isContainerType,
 } from "@/components/descriptors/registry.js";
 import {
   resolveAbsoluteLayout,
@@ -355,8 +355,7 @@ export function useNodePointer(deps) {
           }
           continue;
         }
-        const manifest = componentRegistry.get(targetNode.type);
-        if (manifest?.isContainer) {
+        if (isContainerType(targetNode.type)) {
           if (childType && !canAcceptChild(targetNode, childType)) continue;
           return targetNode;
         }
@@ -644,12 +643,9 @@ export function useNodePointer(deps) {
         z: primaryBase.z,
       };
       if (node.value.type === "ElLayout") {
-        const defaultSize = getDefaultSize("ElLayout", componentRegistry) || {
-          width: 120,
-          height: 40,
-        };
-        if (defaultSize?.width) {
-          primaryNextAbs.w = Math.max(primaryNextAbs.w, defaultSize.width);
+        const layoutMin = getDefaultSize("ElLayout");
+        if (layoutMin?.width) {
+          primaryNextAbs.w = Math.max(primaryNextAbs.w, layoutMin.width);
         }
       }
       if (nodeRef.value) {
@@ -1072,15 +1068,11 @@ export function useNodePointer(deps) {
             const nextY = containerRect
               ? (upEvent.clientY - containerRect.top) / zoomValue
               : 0;
-            const defaultSize = getDefaultSize(
-              node.value.type,
-              componentRegistry,
-            ) || { width: 120, height: 40 };
             const nextAbs = {
               x: Math.round(nextX),
               y: Math.round(nextY),
-              w: defaultSize.width,
-              h: defaultSize.height,
+              w: baseLayout.w,
+              h: baseLayout.h,
               z: baseLayout.z,
             };
             const nextLayoutItem = {
@@ -1196,12 +1188,9 @@ export function useNodePointer(deps) {
               z: baseLayout.z,
             };
             if (node.value.type === "ElLayout") {
-              const defaultSize = getDefaultSize(
-                "ElLayout",
-                componentRegistry,
-              ) || { width: 120, height: 40 };
-              if (defaultSize?.width) {
-                nextAbs.w = Math.max(nextAbs.w, defaultSize.width);
+              const layoutMin = getDefaultSize("ElLayout");
+              if (layoutMin?.width) {
+                nextAbs.w = Math.max(nextAbs.w, layoutMin.width);
               }
             }
             const nextLayoutItem = {
@@ -1283,12 +1272,9 @@ export function useNodePointer(deps) {
             z: baseLayout.z,
           };
           if (node.value.type === "ElLayout") {
-            const defaultSize = getDefaultSize(
-              "ElLayout",
-              componentRegistry,
-            ) || { width: 120, height: 40 };
-            if (defaultSize?.width) {
-              nextAbs.w = Math.max(nextAbs.w, defaultSize.width);
+            const layoutMin = getDefaultSize("ElLayout");
+            if (layoutMin?.width) {
+              nextAbs.w = Math.max(nextAbs.w, layoutMin.width);
             }
           }
           if (node.value.type === "ElContainer") {

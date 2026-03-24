@@ -9,7 +9,6 @@
 
 import { ref, computed, watch } from "vue";
 import { getDescriptor, isContainerType, isFlexContainer, isRegionType, canAcceptChildByDescriptor, getDefaultSize } from "@/components/descriptors/registry.js";
-import { componentRegistry } from "@/editor-core";
 import { resolveElContainerMain } from "@/editor-core/utils/layout-utils";
 import { eventToCanvasPosition, clampPositionInContainer } from "@/editor-core/utils/placement-utils";
 
@@ -20,18 +19,10 @@ import { eventToCanvasPosition, clampPositionInContainer } from "@/editor-core/u
  * @returns {boolean}
  */
 function canAcceptChild(parentNode, childType) {
-  // 优先从 descriptor 读取（新架构组件）
   const currentChildCount = (parentNode.children || []).length;
   const descriptor = getDescriptor(parentNode.type);
-  if (descriptor) {
-    // 如果已注册 descriptor，使用 descriptor 的判断结果
-    return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount);
-  }
-
-  const manifest = componentRegistry.get(parentNode.type);
-  const allowed = manifest?.allowedChildren;
-  if (!Array.isArray(allowed) || allowed.length === 0) return false;
-  return allowed.includes(childType);
+  if (!descriptor) return false;
+  return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount);
 }
 
 /**
@@ -945,7 +936,8 @@ export function useNodeDrop(deps) {
       if (targetNode?.type === "FreeContainer" && targetElement) {
         const zoomValue = Number(canvasZoom?.value) || 1;
         const rawPosition = eventToCanvasPosition(event, targetElement, zoomValue);
-        const defaultSize = getDefaultSize(resolvedType, componentRegistry) || { width: 120, height: 40 };
+        const defaultSize =
+          getDefaultSize(resolvedType) ?? { width: 120, height: 40 };
         dropPosition = clampPositionInContainer(rawPosition, targetElement, defaultSize, zoomValue);
       }
 
@@ -1311,7 +1303,7 @@ export function useNodeDrop(deps) {
       if (targetNode?.type === "FreeContainer" && targetElement) {
         const zoomValue = Number(canvasZoom?.value) || 1;
         const rawPosition = eventToCanvasPosition(event, targetElement, zoomValue);
-        const defaultSize = getDefaultSize(type, componentRegistry) || { width: 120, height: 40 };
+        const defaultSize = getDefaultSize(type) ?? { width: 120, height: 40 };
         dropPosition = clampPositionInContainer(rawPosition, targetElement, defaultSize, zoomValue);
       }
 

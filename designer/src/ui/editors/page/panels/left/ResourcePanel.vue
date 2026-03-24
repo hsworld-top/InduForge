@@ -448,7 +448,8 @@ const isPdfAsset = (asset) => {
 };
 
 const buildFolderTree = (items) => {
-  const nodes = (items || []).map((item) => ({
+  const list = Array.isArray(items) ? items : [];
+  const nodes = list.map((item) => ({
     ...item,
     label: decodeAssetName(item.name || "未命名文件夹"),
     type: "folder",
