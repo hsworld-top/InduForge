@@ -8,30 +8,38 @@ import {
   createComponentNode,
   createEmptySchema,
   createPageNode,
-  buildPagePathFromName,
   Serializer,
 } from "@/editor-core";
 
 /**
- * 规范化页面列表
- * @param {*} payload - 原始响应
+ * 规范化页面列表（仅接受数组，与 PagesListPayload.pages 一致）
+ * @param {*} payload - pages 字段原始值
  * @returns {Array}
  */
 const normalizePageList = (payload) => {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.items)) return payload.items;
-  if (Array.isArray(payload?.list)) return payload.list;
-  return [];
+  if (payload == null) {
+    throw new Error("页面列表缺失：期望 pages 为数组");
+  }
+  if (!Array.isArray(payload)) {
+    throw new Error(
+      "页面列表格式无效：期望数组（不再兼容 items/list 等历史字段）",
+    );
+  }
+  return payload;
 };
 
 /**
- * 规范化页面 Schema
+ * 规范化页面 Schema：仅支持 envelope `{ schema }` 或裸 schema，二者互斥由调用方数据决定
  * @param {*} payload - 原始响应
  * @returns {Object}
  */
 const normalizePageSchema = (payload) => {
-  if (!payload || typeof payload !== "object") return payload;
-  if (payload.schema) return payload.schema;
+  if (payload == null || typeof payload !== "object") return payload;
+  if (Object.prototype.hasOwnProperty.call(payload, "schema")) {
+    const inner = payload.schema;
+    if (inner != null && typeof inner === "object") return inner;
+    throw new Error("页面详情 envelope 中 schema 无效或缺失");
+  }
   return payload;
 };
 
@@ -50,68 +58,59 @@ const isProjectSchemaPayload = (payload) => {
 };
 
 /**
- * 规范化页面节点映射，并修复键值不一致问题
+ * 规范化页面节点映射；禁止键名与 node.id 不一致，不再改写 children
  * @param {Object | Array} nodesById - 节点映射或数组
  * @returns {{ nodesById: Object, idMap: Map<string, string> }}
  */
 const normalizeNodesById = (nodesById) => {
-  const rawMap = Array.isArray(nodesById)
-    ? nodesById.reduce((map, node) => {
-        if (node && node.id) {
-          map[node.id] = node;
-        }
-        return map;
-      }, {})
-    : nodesById && typeof nodesById === "object"
-      ? nodesById
-      : {};
-
-  const normalized = {};
   const idMap = new Map();
 
-  for (const [key, node] of Object.entries(rawMap)) {
-    if (!node || !node.id) continue;
-    normalized[node.id] = node;
+  if (Array.isArray(nodesById)) {
+    const normalized = {};
+    for (const node of nodesById) {
+      if (!node || typeof node !== "object" || !node.id) {
+        throw new Error("nodesById 数组项必须为带 id 的对象");
+      }
+      if (Object.prototype.hasOwnProperty.call(normalized, node.id)) {
+        throw new Error(`nodesById 重复 id: ${node.id}`);
+      }
+      normalized[node.id] = node;
+    }
+    return { nodesById: normalized, idMap };
+  }
+
+  if (nodesById == null || typeof nodesById !== "object") {
+    throw new Error("nodesById 必须为对象或数组");
+  }
+
+  const normalized = {};
+  for (const [key, node] of Object.entries(nodesById)) {
+    if (!node || typeof node !== "object" || !node.id) {
+      throw new Error(`nodesById 项无效: ${key}`);
+    }
     if (key !== node.id) {
-      idMap.set(key, node.id);
+      throw new Error(`nodesById 键与 node.id 不一致: ${key} !== ${node.id}`);
     }
+    normalized[node.id] = node;
   }
-
-  if (idMap.size > 0) {
-    for (const node of Object.values(normalized)) {
-      if (!Array.isArray(node.children)) continue;
-      node.children = node.children
-        .map((childId) => idMap.get(childId) || childId)
-        .filter(Boolean);
-    }
-  }
-
   return { nodesById: normalized, idMap };
 };
 
 /**
- * 解析根节点 ID
+ * 解析根节点 ID（必须显式有效，禁止由图推断兜底）
  * @param {Object} page - 页面数据
  * @param {Object} nodesById - 节点映射
  * @returns {string}
  */
 const resolveRootNodeId = (page, nodesById) => {
-  if (page?.rootNodeId && nodesById?.[page.rootNodeId]) {
-    return page.rootNodeId;
+  const rid = page?.rootNodeId;
+  if (!rid || typeof rid !== "string") {
+    throw new Error("页面缺少有效的 rootNodeId");
   }
-
-  const nodeIds = Object.keys(nodesById || {});
-  if (nodeIds.length === 0) return "";
-
-  const childSet = new Set();
-  for (const node of Object.values(nodesById)) {
-    if (Array.isArray(node?.children)) {
-      node.children.forEach((id) => childSet.add(id));
-    }
+  if (!nodesById?.[rid]) {
+    throw new Error(`rootNodeId 在 nodesById 中不存在: ${rid}`);
   }
-
-  const candidates = nodeIds.filter((id) => !childSet.has(id));
-  return candidates[0] || nodeIds[0];
+  return rid;
 };
 
 /**
@@ -123,25 +122,22 @@ const ensureProjectSchemaStructure = (schema) => {
   if (!schema || typeof schema !== "object") return schema;
   if (!schema.pagesById || typeof schema.pagesById !== "object") return schema;
 
-  const { nodesById, idMap } = normalizeNodesById(schema.nodesById);
-  schema.nodesById = nodesById;
+  if (schema.nodesById == null || typeof schema.nodesById !== "object") {
+    throw new Error("工程 Schema 缺少 nodesById");
+  }
+  if (schema.graphicsById == null || typeof schema.graphicsById !== "object") {
+    throw new Error("工程 Schema 缺少 graphicsById");
+  }
+  if (schema.entry == null || typeof schema.entry !== "object") {
+    throw new Error("工程 Schema 缺少 entry");
+  }
 
-  if (!schema.graphicsById || typeof schema.graphicsById !== "object") {
-    schema.graphicsById = {};
-  }
-  if (!schema.entry || typeof schema.entry !== "object") {
-    schema.entry = {};
-  }
+  const { nodesById } = normalizeNodesById(schema.nodesById);
+  schema.nodesById = nodesById;
 
   for (const page of Object.values(schema.pagesById)) {
     if (!page) continue;
-    if (page.rootNodeId && idMap.has(page.rootNodeId)) {
-      page.rootNodeId = idMap.get(page.rootNodeId);
-    }
-    const resolvedRootId = resolveRootNodeId(page, nodesById);
-    if (resolvedRootId) {
-      page.rootNodeId = resolvedRootId;
-    }
+    page.rootNodeId = resolveRootNodeId(page, nodesById);
   }
 
   return schema;
@@ -161,15 +157,8 @@ const ensurePagePayloadId = (payload, fallbackPageId) => {
     payload.page && typeof payload.page === "object" ? payload.page : {};
   page.id = fallbackPageId;
 
-  const { nodesById, idMap } = normalizeNodesById(payload.nodesById);
-  if (page.rootNodeId && idMap.has(page.rootNodeId)) {
-    page.rootNodeId = idMap.get(page.rootNodeId);
-  }
-
-  const resolvedRootId = resolveRootNodeId(page, nodesById);
-  if (resolvedRootId) {
-    page.rootNodeId = resolvedRootId;
-  }
+  const { nodesById } = normalizeNodesById(payload.nodesById);
+  page.rootNodeId = resolveRootNodeId(page, nodesById);
 
   payload.page = page;
   payload.nodesById = nodesById;
@@ -403,26 +392,13 @@ const buildSchemaFromPagePayload = (payload, projectId) => {
   if (payload?.entry && typeof payload.entry === "object") {
     schema.entry = { ...schema.entry, ...payload.entry };
   }
-  const derivedPath = buildPagePathFromName(page.name || "");
-  if (!page.path || page.path === `/${page.id}`) {
-    page.path = derivedPath;
+  const { nodesById } = normalizeNodesById(payload.nodesById);
+  if (payload.graphicsById == null || typeof payload.graphicsById !== "object") {
+    throw new Error("页面载荷缺少 graphicsById 对象");
   }
-  const { nodesById, idMap } = normalizeNodesById(payload.nodesById);
-  const graphicsById = payload.graphicsById || {};
+  const graphicsById = payload.graphicsById;
 
-  if (page.rootNodeId && idMap.has(page.rootNodeId)) {
-    page.rootNodeId = idMap.get(page.rootNodeId);
-  }
-
-  const rootId = resolveRootNodeId(page, nodesById);
-  if (!rootId) {
-    throw new Error("页面载荷缺少可解析的根节点");
-  }
-  if (!nodesById[rootId]) {
-    throw new Error(`根节点 ${rootId} 在 nodesById 中不存在`);
-  }
-
-  page.rootNodeId = rootId;
+  page.rootNodeId = resolveRootNodeId(page, nodesById);
 
   schema.pagesById[page.id] = page;
   schema.nodesById = nodesById;

@@ -96,11 +96,20 @@ export function hasDescriptor(type) {
  * @param {Object} [resolvedProps] - 解析后的 props（当 renderTag 为函数时使用）
  * @returns {string|import('vue').Component}
  */
+/** 由 NodeRenderer 单独解析为 Vue 组件，描述符层返回占位 */
+const DEFERRED_RENDER_TAG_TYPES = new Set(["EChart"]);
+
 export function getRenderTag(type, node, resolvedProps) {
+  if (!type) return "div";
+  if (DEFERRED_RENDER_TAG_TYPES.has(type)) return "div";
   const descriptor = _descriptors.get(type);
-  const renderTag = descriptor?.renderTag;
-  if (!renderTag) return "div";
-  // 支持函数类型的 renderTag（如 Text 组件）
+  if (!descriptor) {
+    throw new Error(`[descriptors] 未注册组件类型: ${type}`);
+  }
+  const renderTag = descriptor.renderTag;
+  if (!renderTag) {
+    throw new Error(`[descriptors] 描述符缺少 renderTag: ${type}`);
+  }
   if (typeof renderTag === "function") {
     return renderTag(node, resolvedProps) ?? "div";
   }

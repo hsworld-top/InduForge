@@ -94,14 +94,23 @@ export function hasDescriptor(type: string): boolean {
   return _descriptors.has(type);
 }
 
+const DEFERRED_RENDER_TAG_TYPES = new Set<string>(["EChart"]);
+
 export function getRenderTag(
   type: string,
   node?: DescriptorNode,
   resolvedProps?: Record<string, unknown>,
 ): string | Component {
+  if (!type) return "div";
+  if (DEFERRED_RENDER_TAG_TYPES.has(type)) return "div";
   const descriptor = _descriptors.get(type);
-  const renderTag = descriptor?.renderTag;
-  if (!renderTag) return "div";
+  if (!descriptor) {
+    throw new Error(`[descriptors] 未注册组件类型: ${type}`);
+  }
+  const renderTag = descriptor.renderTag;
+  if (!renderTag) {
+    throw new Error(`[descriptors] 描述符缺少 renderTag: ${type}`);
+  }
   if (typeof renderTag === "function") {
     const resolved = renderTag(node, resolvedProps);
     return resolved ?? "div";

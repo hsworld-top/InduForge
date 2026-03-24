@@ -3,7 +3,7 @@
  * 管理页面变量和全局变量
  */
 
-import { EventEmitter } from "../editor-core/utils/EventEmitter.js";
+import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
 
 /**
  * @typedef {import('./types.js').VarDefinition} VarDefinition

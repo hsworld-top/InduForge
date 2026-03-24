@@ -237,7 +237,8 @@ export function usePreview(deps) {
    * @returns {Record<string, Function>}
    */
   const buildPreviewCustomScripts = (globals) => {
-    const items = globalScripts.value?.custom?.items || [];
+    const rawItems = globalScripts.value?.custom?.items;
+    const items = Array.isArray(rawItems) ? rawItems : [];
     const handlers = {};
     items.forEach((item) => {
       if (!item?.name) return;

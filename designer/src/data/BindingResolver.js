@@ -3,7 +3,7 @@
  * 解析和执行数据绑定，支持三种模式：设计态、预览态、运行态
  */
 
-import { EventEmitter } from "../editor-core/utils/EventEmitter.js";
+import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
 import { applyTransforms } from "./transforms.js";
 import { getBindingKind, isValidValue } from "./types.js";
 

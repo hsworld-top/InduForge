@@ -10,7 +10,7 @@
  * - 只读模式
  */
 
-import { EventEmitter } from "../utils/EventEmitter.js";
+import { EventEmitter } from "../utils/EventEmitter.ts";
 
 /**
  * @typedef {import('../document/types.js').PageLockState} PageLockState

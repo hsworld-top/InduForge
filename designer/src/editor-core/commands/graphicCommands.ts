@@ -4,7 +4,7 @@
  * 包含 Canvas 图形的插入、删除、更新、移动命令
  */
 
-import { Command } from "./Command.js";
+import { Command } from "./Command.ts";
 
 /**
  * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel

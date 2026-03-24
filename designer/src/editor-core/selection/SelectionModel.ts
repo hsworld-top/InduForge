@@ -10,7 +10,7 @@
  * - 提供事件通知
  */
 
-import { EventEmitter } from "../utils/EventEmitter.js";
+import { EventEmitter } from "../utils/EventEmitter.ts";
 
 /**
  * @typedef {import('../document/types.js').SelectableElement} SelectableElement

@@ -57,6 +57,11 @@ import {
 } from "./editor/project-settings-actions";
 import { fetchNormalizedPageList } from "./editor/project-page-actions";
 import {
+  fetchResolvedProjectSchemaForPage,
+  mergePageVariablesIntoPayload,
+} from "./editor/page-load-save-actions";
+import { mapPagesAfterRename } from "./editor/page-crud-actions";
+import {
   normalizePageList,
   normalizePageSchema,
   isProjectSchemaPayload,
@@ -381,13 +386,12 @@ export const useEditorStore = defineStore("editor", () => {
         return { ok: homePageResult.ok };
       }
 
-      const pageResponse = await projectApi.getPage(id, targetPageId);
-      const pagePayload = unwrapApiData(pageResponse);
-      if (pagePayload == null || typeof pagePayload !== "object") {
-        throw new Error("页面数据无效");
-      }
-
-      const nextSchema = resolveProjectSchema(pagePayload, id, targetPageId);
+      const nextSchema = await fetchResolvedProjectSchemaForPage(
+        projectApi,
+        id,
+        targetPageId,
+        resolveProjectSchema,
+      );
       initEditor(nextSchema);
 
       if (
@@ -439,16 +443,11 @@ export const useEditorStore = defineStore("editor", () => {
         currentPageId.value = pageId;
         return { ok: true };
       }
-      const pageResponse = await projectApi.getPage(projectId.value, pageId);
-      const pagePayload = unwrapApiData(pageResponse);
-      if (pagePayload == null || typeof pagePayload !== "object") {
-        throw new Error("页面数据无效");
-      }
-
-      const nextSchema = resolveProjectSchema(
-        pagePayload,
+      const nextSchema = await fetchResolvedProjectSchemaForPage(
+        projectApi,
         projectId.value,
         pageId,
+        resolveProjectSchema,
       );
       const existingEntry = doc.value?.entry;
 
@@ -676,15 +675,7 @@ export const useEditorStore = defineStore("editor", () => {
 
     await projectApi.renamePage(projectId.value, pageId, name, path);
 
-    pages.value = pages.value.map((page) =>
-      page.id === pageId
-        ? {
-            ...page,
-            name,
-            path: path ?? page.path,
-          }
-        : page,
-    );
+    pages.value = mapPagesAfterRename(pages.value, pageId, name, path);
 
     if (doc.value && currentPageId.value === pageId && history.value) {
       const patch = { name };
@@ -739,22 +730,11 @@ export const useEditorStore = defineStore("editor", () => {
         doc.value,
         currentPageId.value,
       );
-      const pageVars = doc.value?.schema?.vars?.pages?.[currentPageId.value];
-      if (pageVars && typeof pageVars === "object") {
-        const existingVars =
-          payload.vars && typeof payload.vars === "object" ? payload.vars : {};
-        const existingPages =
-          existingVars.pages && typeof existingVars.pages === "object"
-            ? existingVars.pages
-            : {};
-        payload.vars = {
-          ...existingVars,
-          pages: {
-            ...existingPages,
-            [currentPageId.value]: pageVars,
-          },
-        };
-      }
+      mergePageVariablesIntoPayload(
+        payload,
+        currentPageId.value,
+        doc.value?.schema?.vars?.pages?.[currentPageId.value],
+      );
       await projectApi.updatePage(
         projectId.value,
         currentPageId.value,

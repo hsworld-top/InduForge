@@ -10,7 +10,7 @@
  * - 变更事件：支持订阅变更
  */
 
-import { EventEmitter } from "../utils/EventEmitter.js";
+import { EventEmitter } from "../utils/EventEmitter.ts";
 import {
   CURRENT_SCHEMA_VERSION,
   generateId,

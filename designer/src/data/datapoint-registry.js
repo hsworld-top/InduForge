@@ -3,7 +3,7 @@
  * 管理数据点的注册、查询和状态追踪
  */
 
-import { EventEmitter } from "../editor-core/utils/EventEmitter.js";
+import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
 
 /**
  * @typedef {import('./types.js').DatapointStatus} DatapointStatus

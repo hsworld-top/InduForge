@@ -724,7 +724,6 @@ import SpacingEditor from "./StylePanel/SpacingEditor.vue";
 import PositionEditor from "./StylePanel/PositionEditor.vue";
 import { usePanelState } from "../composables/use-panel-state";
 import { getManifest } from "@/manifests";
-import { componentRegistry } from "@/editor-core";
 import { useEditorStore } from "@/stores/editor-store";
 import {
   ElMessage,
@@ -800,7 +799,7 @@ const elementId = computed(() => currentElement.value?.id || "-");
 
 /** 组件类型 */
 const elementType = computed(
-  () => normalizeElementType(currentElement.value?.type) || "-",
+  () => elementTypeName(currentElement.value?.type) || "-",
 );
 
 /**
@@ -822,7 +821,7 @@ watch(
   () => selectedNode.value?.type,
   (type) => {
     if (!selectedNode.value || !type) return;
-    const normalized = normalizeElementType(type);
+    const normalized = elementTypeName(type);
     if (!normalized || normalized === type) return;
     editorStore.updateNode(selectedNode.value.id, { type: normalized });
   },
@@ -833,7 +832,7 @@ watch(
   () => selectedNode.value?.id,
   () => {
     if (!selectedNode.value) return;
-    const type = normalizeElementType(selectedNode.value.type);
+    const type = elementTypeName(selectedNode.value.type);
     const manifest = type ? getManifest(type) : null;
     const defaults = manifest?.defaultProps || {};
     if (!defaults || Object.keys(defaults).length === 0) return;
@@ -962,16 +961,16 @@ const loadConfigAssetFolders = async () => {
   if (!projectId.value) return;
   const response = await assetApi.getFolders(projectId.value);
   const data = unwrapApiData(response);
-  const list = data?.folders || data?.items || data || [];
-  configAssetFolders.value = Array.isArray(list) ? list : [];
+  const rawFolders = data?.folders;
+  configAssetFolders.value = Array.isArray(rawFolders) ? rawFolders : [];
 };
 
 const loadConfigAssets = async () => {
   if (!projectId.value) return;
   const response = await assetApi.getAssets(projectId.value);
   const data = unwrapApiData(response);
-  const list = data?.assets || data?.items || data || [];
-  configAssets.value = Array.isArray(list) ? list : [];
+  const rawAssets = data?.assets;
+  configAssets.value = Array.isArray(rawAssets) ? rawAssets : [];
 };
 
 watch(configAssetSearch, () => {
@@ -1164,7 +1163,7 @@ const captureMenuDslConfig = (content) => {
  * @param {Record<string, any>} config - 配置
  */
 const applyMenuDetailConfig = (node, config) => {
-  const normalizedType = normalizeElementType(node?.type);
+  const normalizedType = elementTypeName(node?.type);
   if (
     !node ||
     normalizedType !== "Menu" ||
@@ -1255,7 +1254,7 @@ const resolveMenuConfigFromContent = (content) => {
 
 const runDetailConfigLocal = (node, content) => {
   if (!node || !content || !content.trim()) return;
-  const normalizedType = normalizeElementType(node?.type);
+  const normalizedType = elementTypeName(node?.type);
   const methodName = getDslMethodName(normalizedType || "");
   const safeContent =
     normalizedType === "Menu"
@@ -2459,19 +2458,12 @@ const elementPlusTypes = new Set([
 ]);
 
 /**
- * 兼容历史组件类型拼写
+ * 组件类型标识（与 manifest / 画布节点 type 一致，仅 trim，不做历史别名映射）
  * @param {string | undefined} type - 组件类型
  * @returns {string}
  */
-function normalizeElementType(type) {
-  if (!type) return "";
-  if (type === "Elayout" || type === "EILayout") return "ElLayout";
-  if (type === "ElayoutRow" || type === "EILayoutRow") return "ElLayoutRow";
-  if (type === "Elcol" || type === "EICol") return "ElCol";
-  if (type.startsWith("EI")) {
-    return `El${type.slice(2)}`;
-  }
-  return type;
+function elementTypeName(type) {
+  return typeof type === "string" ? type.trim() : "";
 }
 
 /**
@@ -2480,7 +2472,7 @@ function normalizeElementType(type) {
  * @returns {boolean}
  */
 const isElementPlusType = (type) => {
-  const normalized = normalizeElementType(type);
+  const normalized = elementTypeName(type);
   if (!normalized) return false;
   if (normalized.startsWith("El")) return true;
   return elementPlusTypes.has(normalized);
@@ -2492,7 +2484,7 @@ const isElementPlusType = (type) => {
  * @returns {any}
  */
 const resolveElementPlusComponent = (type) => {
-  const normalized = normalizeElementType(type);
+  const normalized = elementTypeName(type);
   if (!normalized) return null;
   const map = {
     Input: ElInput,
@@ -2707,7 +2699,7 @@ const buildElementPlusPropDefs = (type) => {
   const comp = resolveElementPlusComponent(type);
   const rawProps = comp?.props || comp?.__props || null;
   if (!rawProps || typeof rawProps !== "object") return [];
-  const labelMap = elementPlusPropLabelMap[normalizeElementType(type)] || null;
+  const labelMap = elementPlusPropLabelMap[elementTypeName(type)] || null;
   if (!labelMap) return [];
   const entries = Array.isArray(rawProps)
     ? rawProps.map((key) => [key, {}])
@@ -5863,28 +5855,20 @@ const applyNodePatch = (nodeId, patch) => {
  * 获取组件 Manifest
  */
 const manifest = computed(() => {
-  const type = normalizeElementType(currentElement.value?.type);
+  const type = elementTypeName(currentElement.value?.type);
   if (!type) return null;
-  const resolved = getManifest(type);
-  if (resolved) return resolved;
-  if (type.startsWith("El")) {
-    const fallback = getManifest(`El${type.slice(2)}`);
-    if (fallback) return fallback;
-  }
-  return componentRegistry.get(type) || null;
+  return getManifest(type) ?? null;
 });
 
 const effectiveManifest = computed(() => {
-  const type = normalizeElementType(currentElement.value?.type);
+  const type = elementTypeName(currentElement.value?.type);
   const elementPlusProps = isElementPlusType(type)
     ? buildElementPlusPropDefs(type)
     : [];
   if (manifest.value) {
     const baseProps = Array.isArray(manifest.value.props)
       ? manifest.value.props
-      : Array.isArray(manifest.value.propsSchema)
-        ? manifest.value.propsSchema
-        : [];
+      : [];
     if (elementPlusProps.length === 0) {
       return { ...manifest.value, props: baseProps };
     }
@@ -6636,7 +6620,7 @@ const getPropValue = (propName) => {
   const propValue = el.props ? el.props[propName] : undefined;
   if (propValue !== undefined) return propValue;
   if (
-    normalizeElementType(el.type) === "Text" &&
+    elementTypeName(el.type) === "Text" &&
     textStylePropNames.has(propName)
   ) {
     return resolveTextStyleValue(propName, el.style?.[propName]);
@@ -6770,7 +6754,7 @@ const hasStyleConfig = computed(() => {
  */
 const shouldHideProp = (propDef) => {
   if (!propDef || !propDef.name) return false;
-  const nodeType = normalizeElementType(selectedNode.value?.type);
+  const nodeType = elementTypeName(selectedNode.value?.type);
   if (nodeType === "Tabs" && propDef.name === "tabs") return true;
   if (nodeType === "Menu" && propDef.name === "items") return true;
 
@@ -6909,7 +6893,7 @@ const saveConfigDialog = () => {
         applyLocalNodePatch(node, { detailConfig: content });
       }
       emitDetailConfig(node.id, content);
-      if (normalizeElementType(node.type) === "Menu") {
+      if (elementTypeName(node.type) === "Menu") {
         const config = resolveMenuConfigFromContent(content);
         if (!config) {
           ElMessage.error("Menu 详细配置无法解析为有效 DSL，请修正后再保存");
@@ -7304,7 +7288,7 @@ const handlePropChange = (propName, value) => {
   if (!el) return;
 
   const newProps = { ...el.props, [propName]: value };
-  const isTextComponent = normalizeElementType(el.type) === "Text";
+  const isTextComponent = elementTypeName(el.type) === "Text";
   let nextStyle = null;
   if (isTextComponent) {
     nextStyle = { ...(el.style || {}) };

@@ -1096,7 +1096,7 @@ export const initPreviewRuntime = (options) => {
 
   const triggerPageVariableChange = async (name, value, previous) => {
     const itemsRaw = lifecycleConfig?.variableChanges;
-    const items = Array.isArray(itemsRaw) ? itemsRaw : itemsRaw?.items || [];
+    const items = Array.isArray(itemsRaw) ? itemsRaw : [];
     const hits = items.filter(
       (item) => (item.variable || item.name) === name && item?.code,
     );
@@ -1139,7 +1139,8 @@ export const initPreviewRuntime = (options) => {
   );
 
   const buildCustomScripts = () => {
-    const items = globalScripts?.custom?.items || [];
+    const rawCustom = globalScripts?.custom?.items;
+    const items = Array.isArray(rawCustom) ? rawCustom : [];
     const handlers = {};
     items.forEach((item) => {
       if (!item?.name) return;
@@ -1247,7 +1248,8 @@ export const initPreviewRuntime = (options) => {
   };
 
   const triggerVariableChange = async (name, value, previous) => {
-    const items = globalScripts?.variableChanges?.items || [];
+    const rawVc = globalScripts?.variableChanges?.items;
+    const items = Array.isArray(rawVc) ? rawVc : [];
     const hits = items.filter(
       (item) => (item.variable || item.name) === name && item?.code,
     );
@@ -1261,9 +1263,8 @@ export const initPreviewRuntime = (options) => {
    * @returns {void}
    */
   const startPageTimers = () => {
-    const timers = Array.isArray(lifecycleConfig?.timers)
-      ? lifecycleConfig.timers
-      : lifecycleConfig?.timers?.items || [];
+    const rawTimers = lifecycleConfig?.timers;
+    const timers = Array.isArray(rawTimers) ? rawTimers : [];
     timers.forEach((item) => {
       if (!item?.code || item?.enabled === false) return;
       const interval = Number(item.interval || item.time || 1000);
@@ -1290,9 +1291,7 @@ export const initPreviewRuntime = (options) => {
   const runPageLifecycleHandlers = async (key) => {
     if (!key) return;
     const handlersRaw = lifecycleConfig?.[key];
-    const handlers = Array.isArray(handlersRaw)
-      ? handlersRaw
-      : handlersRaw?.items || [];
+    const handlers = Array.isArray(handlersRaw) ? handlersRaw : [];
     for (const handler of handlers) {
       if (!handler) continue;
       if (handler?.enabled === false) continue;
@@ -1311,8 +1310,9 @@ export const initPreviewRuntime = (options) => {
     const systemCode = globalScripts?.system?.startup?.code;
     await runCode(systemCode, { type: "startup" });
     await runPageLifecycleHandlers("onMounted");
-    const timers = globalScripts?.timers?.items || [];
-    timers.forEach((item) => {
+    const rawGlobalTimers = globalScripts?.timers?.items;
+    const globalTimers = Array.isArray(rawGlobalTimers) ? rawGlobalTimers : [];
+    globalTimers.forEach((item) => {
       const interval = Number(item.interval || item.time || 1000);
       if (!item?.code) return;
       const id = setInterval(

@@ -4,7 +4,7 @@
  * 包含插入、删除、更新、移动节点的命令实现
  */
 
-import { Command } from "./Command.js";
+import { Command } from "./Command.ts";
 
 /**
  * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel

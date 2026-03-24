@@ -4,7 +4,7 @@
  */
 
 import { DocumentModel as DocumentModelClass } from "./document/DocumentModel.ts";
-import { History as HistoryClass } from "./commands/History.js";
+import { History as HistoryClass } from "./commands/History.ts";
 import { SelectionModel as SelectionModelClass } from "./selection/SelectionModel.ts";
 import { Serializer as SerializerClass } from "./document/Serializer.ts";
 import { PageLockManager as PageLockManagerClass } from "./lock/PageLockManager.ts";
@@ -14,7 +14,7 @@ export * from "./document/types.js";
 export { default as types } from "./document/types.js";
 
 // 工具类
-export { EventEmitter } from "./utils/EventEmitter.js";
+export { EventEmitter } from "./utils/EventEmitter.ts";
 
 // 文档模型
 export { DocumentModel } from "./document/DocumentModel.ts";
@@ -39,7 +39,7 @@ export {
 } from "./document/migrations.js";
 
 // 命令系统
-export { Command, BatchCommand } from "./commands/Command.js";
+export { Command, BatchCommand } from "./commands/Command.ts";
 export {
   InsertNodeCommand,
   RemoveNodeCommand,
@@ -61,7 +61,7 @@ export {
   GroupGraphicsCommand,
   UngroupGraphicsCommand,
   SetGraphicBindingCommand,
-} from "./commands/graphicCommands.js";
+} from "./commands/graphicCommands.ts";
 export {
   AlignElementsCommand,
   DistributeElementsCommand,
@@ -77,7 +77,7 @@ export {
 } from "./commands/bindingCommands.ts";
 export { UpdatePageCommand } from "./commands/pageCommands.ts";
 export { UpdateEntryCommand } from "./commands/entryCommands.ts";
-export { History } from "./commands/History.js";
+export { History } from "./commands/History.ts";
 
 // 选中管理
 export { SelectionModel } from "./selection/SelectionModel.ts";

@@ -3,7 +3,7 @@
  * 在设计态为组件提供模拟数据
  */
 
-import { EventEmitter } from "../editor-core/utils/EventEmitter.js";
+import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
 
 /**
  * @typedef {import('./types.js').DatapointStatusInfo} DatapointStatusInfo

@@ -4,7 +4,7 @@
  * 包含页面更新命令实现
  */
 
-import { Command } from "./Command.js";
+import { Command } from "./Command.ts";
 
 /**
  * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel

@@ -4,7 +4,7 @@
  * 用于更新工程入口信息（首页/登录页）
  */
 
-import { Command } from "./Command.js";
+import { Command } from "./Command.ts";
 
 /**
  * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel

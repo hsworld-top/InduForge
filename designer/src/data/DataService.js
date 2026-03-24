@@ -4,7 +4,7 @@
  */
 
 import { io } from "socket.io-client";
-import { EventEmitter } from "../editor-core/utils/EventEmitter.js";
+import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
 
 /**
  * @typedef {import('./types.js').DataServiceOptions} DataServiceOptions

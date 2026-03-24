@@ -780,16 +780,16 @@ const loadFolders = async () => {
   if (!projectId.value) return;
   const response = await assetApi.getFolders(projectId.value);
   const data = unwrapApiData(response);
-  const list = data?.folders || data?.items || data || [];
-  folders.value = Array.isArray(list) ? list : [];
+  const rawFolders = data?.folders;
+  folders.value = Array.isArray(rawFolders) ? rawFolders : [];
 };
 
 const loadAssets = async () => {
   if (!projectId.value) return;
   const response = await assetApi.getAssets(projectId.value);
   const data = unwrapApiData(response);
-  const list = data?.assets || data?.items || data || [];
-  assets.value = Array.isArray(list) ? list : [];
+  const rawAssets = data?.assets;
+  assets.value = Array.isArray(rawAssets) ? rawAssets : [];
 };
 
 const handleGlobalClick = (event) => {

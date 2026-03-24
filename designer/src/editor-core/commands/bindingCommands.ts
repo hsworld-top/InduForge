@@ -4,7 +4,7 @@
  * 包含数据绑定的设置、更新、删除命令
  */
 
-import { Command } from "./Command.js";
+import { Command } from "./Command.ts";
 
 /**
  * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel

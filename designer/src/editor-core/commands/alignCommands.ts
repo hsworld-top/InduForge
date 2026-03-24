@@ -4,7 +4,7 @@
  * 支持节点（node）和图形（graphic）两种元素类型
  */
 
-import { Command } from "./Command.js";
+import { Command } from "./Command.ts";
 
 /**
  * @typedef {import('../document/DocumentModel.js').DocumentModel} DocumentModel
