@@ -9,7 +9,6 @@ import {
   createEmptySchema,
   createPageNode,
   buildPagePathFromName,
-  componentRegistry,
   Serializer,
 } from "@/editor-core";
 
@@ -196,15 +195,11 @@ const resolveProjectSchema = (payload, projectId, fallbackPageId) => {
     const ensured = ensurePagePayloadId(normalized, fallbackPageId);
     return buildSchemaFromPagePayload(ensured, projectId);
   }
-  return buildSchemaFromPagePayload(
-    { page: { id: fallbackPageId } },
-    projectId,
-  );
+  throw new Error("无效的页面载荷：无法解析为工程 Schema");
 };
 
 /**
- * 确保页面根节点存在并修复异常标签
- * 注意：只修复缺失、非法或历史脏数据，不静默重写合法页面结构
+ * 允许的页面根容器类型（非法即失败，不再静默创建/改写根节点）
  * @param {Object} schema - 工程 Schema
  */
 const KNOWN_LAYOUT_TYPES = new Set([
@@ -216,6 +211,18 @@ const KNOWN_LAYOUT_TYPES = new Set([
   "HorizontalLayout",
 ]);
 
+const LEGACY_LAYOUT_TYPES = new Set([
+  "Container",
+  "Row",
+  "Col",
+  "Elayout",
+  "EILayout",
+  "ElayoutRow",
+  "EILayoutRow",
+  "Elcol",
+  "EICol",
+]);
+
 const ensurePageRootNodes = (schema) => {
   if (!schema || typeof schema !== "object") return;
   if (!schema.pagesById || !schema.nodesById) return;
@@ -223,47 +230,68 @@ const ensurePageRootNodes = (schema) => {
   for (const page of Object.values(schema.pagesById)) {
     if (!page) continue;
     const rootId = page.rootNodeId;
-    let rootNode = rootId ? schema.nodesById[rootId] : null;
-
-    // 只在根节点完全缺失时才创建新的 FreeContainer
+    if (!rootId) {
+      throw new Error("页面缺少 rootNodeId");
+    }
+    const rootNode = schema.nodesById[rootId];
     if (!rootNode) {
-      rootNode = createComponentNode("FreeContainer", {
-        label: "画布",
-        props: {},
-        style: { width: "100%", height: "100%" },
-      });
-      schema.nodesById[rootNode.id] = rootNode;
-      page.rootNodeId = rootNode.id;
-      continue;
+      throw new Error(`页面根节点不存在: ${rootId}`);
     }
-
-    // 只在根节点类型未知或非法时才修复，不强制改写为 FreeContainer
     if (typeof rootNode.type !== "string" || !rootNode.type) {
-      rootNode.type = "FreeContainer";
-    } else if (!KNOWN_LAYOUT_TYPES.has(rootNode.type)) {
-      // 未知类型（非布局容器类型）改为 FreeContainer，合法布局容器保持不变
-      rootNode.type = "FreeContainer";
+      throw new Error("页面根节点类型非法");
     }
-
-    // 补齐缺失的属性
-    if (!rootNode.props || typeof rootNode.props !== "object") {
-      rootNode.props = {};
-    }
-    rootNode.style = {
-      ...(rootNode.style || {}),
-      width: "100%",
-      height: "100%",
-    };
-
-    // 修复乱码标签
-    if (!rootNode.label || rootNode.label.includes("\uFFFD")) {
-      rootNode.label = "画布";
+    if (!KNOWN_LAYOUT_TYPES.has(rootNode.type)) {
+      throw new Error(`页面根类型不在允许列表: ${rootNode.type}`);
     }
   }
 };
 
 /**
- * 规范化布局容器类型
+ * 校验 ElLayout / ElLayoutRow 结构；禁止遗留类型与静默补节点
+ * @param {import('@/editor-core').ProjectSchema} schema
+ */
+const assertLayoutStructureStrict = (schema) => {
+  const nodesById = schema.nodesById;
+  if (!nodesById) return;
+
+  for (const node of Object.values(nodesById)) {
+    if (!node?.type) continue;
+    if (LEGACY_LAYOUT_TYPES.has(node.type)) {
+      throw new Error(`不支持的遗留布局类型: ${node.type}`);
+    }
+    if (node.type === "ElLayout") {
+      const children = Array.isArray(node.children) ? node.children : [];
+      for (const cid of children) {
+        const child = nodesById[cid];
+        if (!child || child.type !== "ElLayoutRow") {
+          throw new Error(`ElLayout ${node.id} 只能包含 ElLayoutRow 子节点`);
+        }
+      }
+      const rows = node.props?.rows;
+      if (rows != null && Number(rows) !== children.length) {
+        throw new Error(`ElLayout ${node.id} 的 props.rows 与子行数量不一致`);
+      }
+    }
+    if (node.type === "ElLayoutRow") {
+      const children = Array.isArray(node.children) ? node.children : [];
+      for (const cid of children) {
+        const child = nodesById[cid];
+        if (!child || child.type !== "ElCol") {
+          throw new Error(`ElLayoutRow ${node.id} 只能包含 ElCol 子节点`);
+        }
+      }
+      const columns = node.props?.columns;
+      if (columns != null && Number(columns) !== children.length) {
+        throw new Error(
+          `ElLayoutRow ${node.id} 的 props.columns 与 ElCol 子节点数量不一致`,
+        );
+      }
+    }
+  }
+};
+
+/**
+ * 布局校验（不再自动修补 ElCol/行/列或改写遗留类型）
  * @param {import('@/editor-core').ProjectSchema} schema - 工程 Schema
  * @returns {import('@/editor-core').ProjectSchema}
  */
@@ -272,185 +300,7 @@ const normalizeLayoutSchema = (schema) => {
   if (!schema.nodesById) return schema;
 
   ensurePageRootNodes(schema);
-  const resolveLayoutCount = (value, fallback, max = 24) => {
-    const num = Number(value);
-    if (Number.isFinite(num) && num > 0) {
-      return Math.min(max, Math.floor(num));
-    }
-    return fallback;
-  };
-  const buildColumnSpans = (columns) => {
-    const count = resolveLayoutCount(columns, 1, 24);
-    const base = Math.max(1, Math.floor(24 / count));
-    const remainder = 24 - base * (count - 1);
-    return Array.from({ length: count }, (_, index) =>
-      index === count - 1 ? Math.max(1, remainder) : base,
-    );
-  };
-  const ensureRowColumns = (rowNode) => {
-    if (!rowNode) return;
-    if (!rowNode.props || typeof rowNode.props !== "object") {
-      rowNode.props = {};
-    }
-    const children = Array.isArray(rowNode.children) ? rowNode.children : [];
-    const colIds = children.filter((childId) => {
-      const childNode = schema.nodesById?.[childId];
-      return childNode?.type === "ElCol";
-    });
-    const resolvedColumns = resolveLayoutCount(
-      rowNode.props.columns,
-      colIds.length || 1,
-      24,
-    );
-    rowNode.props.columns = resolvedColumns;
-    if (colIds.length >= resolvedColumns) return;
-    const colManifest = componentRegistry.get("ElCol");
-    const spans = buildColumnSpans(resolvedColumns);
-    const nextChildren = [...children];
-    for (let index = colIds.length; index < resolvedColumns; index += 1) {
-      const span = spans[index];
-      const colNode = createComponentNode("ElCol", {
-        parentNode: rowNode,
-        label: colManifest?.name || "Col",
-        props: { ...(colManifest?.defaultProps || {}), span },
-        style: { ...(colManifest?.defaultStyle || {}) },
-      });
-      schema.nodesById[colNode.id] = colNode;
-      nextChildren.push(colNode.id);
-    }
-    rowNode.children = nextChildren;
-  };
-
-  for (const node of Object.values(schema.nodesById)) {
-    if (!node || !node.type) continue;
-
-    // 兼容历史拼写错误的布局类型
-    if (node.type === "Elayout" || node.type === "EILayout") {
-      node.type = "ElLayout";
-    } else if (node.type === "ElayoutRow" || node.type === "EILayoutRow") {
-      node.type = "ElLayoutRow";
-    } else if (node.type === "Elcol" || node.type === "EICol") {
-      node.type = "ElCol";
-    }
-
-    // 补齐布局组件默认属性
-    if (
-      node.type === "ElLayout" ||
-      node.type === "ElLayoutRow" ||
-      node.type === "ElCol"
-    ) {
-      const manifest = componentRegistry.get(node.type);
-      if (manifest?.defaultProps) {
-        if (!node.props || typeof node.props !== "object") {
-          node.props = {};
-        }
-        Object.entries(manifest.defaultProps).forEach(([key, value]) => {
-          if (node.props[key] === undefined) {
-            node.props[key] = value;
-          }
-        });
-      }
-    }
-
-    if (node.type === "Container") {
-      node.type = "FlexContainer";
-      node.props = {
-        direction: node.props?.direction || "column",
-        wrap: node.props?.wrap || "nowrap",
-        justify: node.props?.justify || "flex-start",
-        align: node.props?.align || "stretch",
-        gap: node.props?.gap ?? 0,
-      };
-    } else if (node.type === "Row") {
-      node.type = "FlexContainer";
-      node.props = {
-        direction: "row",
-        wrap: node.props?.wrap || "wrap",
-        justify: node.props?.justify || "flex-start",
-        align: node.props?.align || "stretch",
-        gap: node.props?.gap ?? 0,
-      };
-    } else if (node.type === "Col") {
-      node.type = "FlexContainer";
-      node.props = {
-        direction: "column",
-        wrap: node.props?.wrap || "nowrap",
-        justify: node.props?.justify || "flex-start",
-        align: node.props?.align || "stretch",
-        gap: node.props?.gap ?? 0,
-      };
-      if (!node.layoutItem) {
-        node.layoutItem = {
-          flex: {
-            grow: 1,
-            shrink: 1,
-            basis: "0%",
-          },
-        };
-      }
-    } else if (node.type === "ElLayout") {
-      if (!node.props || typeof node.props !== "object") {
-        node.props = {};
-      }
-      if (node.props.columns !== undefined) {
-        delete node.props.columns;
-      }
-      const desiredRows = resolveLayoutCount(node.props.rows, 1, 24);
-      const children = Array.isArray(node.children) ? node.children : [];
-      const rowIds = [];
-      const orphanIds = [];
-      for (const childId of children) {
-        const childNode = schema.nodesById?.[childId];
-        if (!childNode) continue;
-        if (childNode.type === "ElLayoutRow") {
-          rowIds.push(childId);
-        } else {
-          orphanIds.push(childId);
-        }
-      }
-
-      let normalizedRowIds = [...rowIds];
-      if (normalizedRowIds.length === 0 && orphanIds.length > 0) {
-        const rowManifest = componentRegistry.get("ElLayoutRow");
-        const rowNode = createComponentNode("ElLayoutRow", {
-          parentNode: node,
-          label: rowManifest?.name || "行",
-          props: {
-            ...(rowManifest?.defaultProps || {}),
-            columns: orphanIds.length,
-          },
-          style: { ...(rowManifest?.defaultStyle || {}) },
-        });
-        rowNode.children = orphanIds;
-        schema.nodesById[rowNode.id] = rowNode;
-        normalizedRowIds = [rowNode.id];
-      } else if (normalizedRowIds.length > 0 && orphanIds.length > 0) {
-        const firstRow = schema.nodesById?.[normalizedRowIds[0]];
-        if (firstRow) {
-          firstRow.children = [...orphanIds, ...(firstRow.children || [])];
-        }
-      }
-
-      const rowManifest = componentRegistry.get("ElLayoutRow");
-      while (normalizedRowIds.length < desiredRows) {
-        const rowNode = createComponentNode("ElLayoutRow", {
-          parentNode: node,
-          label: rowManifest?.name || "行",
-          props: { ...(rowManifest?.defaultProps || {}), columns: 1 },
-          style: { ...(rowManifest?.defaultStyle || {}) },
-        });
-        schema.nodesById[rowNode.id] = rowNode;
-        normalizedRowIds.push(rowNode.id);
-      }
-
-      node.children = normalizedRowIds;
-      node.props.rows = Math.max(1, normalizedRowIds.length);
-      normalizedRowIds.forEach((rowId) => {
-        ensureRowColumns(schema.nodesById?.[rowId]);
-      });
-    }
-  }
-
+  assertLayoutStructureStrict(schema);
   return schema;
 };
 
@@ -564,30 +414,12 @@ const buildSchemaFromPagePayload = (payload, projectId) => {
     page.rootNodeId = idMap.get(page.rootNodeId);
   }
 
-  let rootId = resolveRootNodeId(page, nodesById);
+  const rootId = resolveRootNodeId(page, nodesById);
   if (!rootId) {
-    const rootNode = createComponentNode("FreeContainer", {
-      label: "画布",
-      props: {},
-      style: {
-        width: "100%",
-        height: "100%",
-      },
-    });
-    nodesById[rootNode.id] = rootNode;
-    rootId = rootNode.id;
+    throw new Error("页面载荷缺少可解析的根节点");
   }
-
   if (!nodesById[rootId]) {
-    nodesById[rootId] = createComponentNode("FreeContainer", {
-      id: rootId,
-      label: "画布",
-      props: {},
-      style: {
-        width: "100%",
-        height: "100%",
-      },
-    });
+    throw new Error(`根节点 ${rootId} 在 nodesById 中不存在`);
   }
 
   page.rootNodeId = rootId;

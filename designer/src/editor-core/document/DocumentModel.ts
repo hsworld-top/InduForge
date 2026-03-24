@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * DocumentModel - 规范化文档模型
  * 管理工程 Schema 的规范化存储、CRUD 操作和索引维护

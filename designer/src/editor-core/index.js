@@ -3,11 +3,11 @@
  * 统一导出所有模块
  */
 
-import { DocumentModel as DocumentModelClass } from "./document/DocumentModel.js";
+import { DocumentModel as DocumentModelClass } from "./document/DocumentModel.ts";
 import { History as HistoryClass } from "./commands/History.js";
-import { SelectionModel as SelectionModelClass } from "./selection/SelectionModel.js";
-import { Serializer as SerializerClass } from "./document/Serializer.js";
-import { PageLockManager as PageLockManagerClass } from "./lock/PageLockManager.js";
+import { SelectionModel as SelectionModelClass } from "./selection/SelectionModel.ts";
+import { Serializer as SerializerClass } from "./document/Serializer.ts";
+import { PageLockManager as PageLockManagerClass } from "./lock/PageLockManager.ts";
 
 // 类型定义（从 document/ 目录导出）
 export * from "./document/types.js";
@@ -17,7 +17,7 @@ export { default as types } from "./document/types.js";
 export { EventEmitter } from "./utils/EventEmitter.js";
 
 // 文档模型
-export { DocumentModel } from "./document/DocumentModel.js";
+export { DocumentModel } from "./document/DocumentModel.ts";
 export * from "./document/indexes.js";
 
 // 工厂函数
@@ -28,10 +28,10 @@ export {
   createDiagramNode,
   createDiagramData,
   createShape,
-} from "./document/factory.js";
+} from "./document/factory.ts";
 
 // 序列化（从 document/ 目录导出）
-export { Serializer } from "./document/Serializer.js";
+export { Serializer } from "./document/Serializer.ts";
 export {
   migrate,
   needsMigration,
@@ -51,7 +51,7 @@ export {
   ReorderNodeCommand,
   ToggleNodeVisibilityCommand,
   ToggleNodeLockCommand,
-} from "./commands/nodeCommands.js";
+} from "./commands/nodeCommands.ts";
 export {
   InsertGraphicCommand,
   RemoveGraphicCommand,
@@ -66,7 +66,7 @@ export {
   AlignElementsCommand,
   DistributeElementsCommand,
   MatchSizeCommand,
-} from "./commands/alignCommands.js";
+} from "./commands/alignCommands.ts";
 export {
   SetBindingCommand,
   SetMultipleBindingsCommand,
@@ -74,13 +74,13 @@ export {
   UpdateBindingTransformCommand,
   SetBindingFallbackCommand,
   CopyBindingsCommand,
-} from "./commands/bindingCommands.js";
-export { UpdatePageCommand } from "./commands/pageCommands.js";
-export { UpdateEntryCommand } from "./commands/entryCommands.js";
+} from "./commands/bindingCommands.ts";
+export { UpdatePageCommand } from "./commands/pageCommands.ts";
+export { UpdateEntryCommand } from "./commands/entryCommands.ts";
 export { History } from "./commands/History.js";
 
 // 选中管理
-export { SelectionModel } from "./selection/SelectionModel.js";
+export { SelectionModel } from "./selection/SelectionModel.ts";
 
 // 校验器
 export { Validator } from "./validate/validator.js";
@@ -97,7 +97,7 @@ export {
 export {
   PageLockManager,
   createMockApiClient,
-} from "./lock/PageLockManager.js";
+} from "./lock/PageLockManager.ts";
 
 /**
  * 创建编辑器实例

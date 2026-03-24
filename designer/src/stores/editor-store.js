@@ -41,9 +41,9 @@ import { projectApi } from "@/services";
 import request from "@/utils/request";
 import { getDescriptor, isLayoutContainerType, isRegionType } from "@/components/descriptors/registry.js";
 import { Storage } from "@/utils/storage";
+import { unwrapApiData } from "@/types/api";
 
 import {
-  unwrapApiData,
   getDefaultGlobalScripts,
   normalizeVariableDef,
   normalizeGlobalVariables,
@@ -51,6 +51,11 @@ import {
   getMenuDefaultDetailConfig,
   getMenuDefaultProps,
 } from "./editor/normalize-settings.js";
+import {
+  loadProjectSettingsForStore,
+  saveProjectSettingsForStore,
+} from "./editor/project-settings-actions";
+import { fetchNormalizedPageList } from "./editor/project-page-actions";
 import {
   normalizePageList,
   normalizePageSchema,
@@ -60,7 +65,6 @@ import {
   ensureProjectSchemaStructure,
   ensurePagePayloadId,
   resolveProjectSchema,
-  ensurePageRootNodes,
   normalizeLayoutSchema,
   applyPageNamePath,
   createBaseSchema,
@@ -323,41 +327,11 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {Promise<void>}
    */
   const loadProjectSettings = async () => {
-    if (!projectId.value) return;
-
-    const results = await Promise.allSettled([
-      projectApi.getProjectVariables(projectId.value),
-      projectApi.getProjectSettings(projectId.value),
-    ]);
-
-    const varsResult =
-      results[0].status === "fulfilled"
-        ? unwrapApiData(results[0].value)
-        : null;
-    const settingsResult =
-      results[1].status === "fulfilled"
-        ? unwrapApiData(results[1].value)
-        : null;
-
-    const fallbackDefinitions =
-      varsResult && typeof varsResult === "object" ? varsResult : {};
-
-    if (settingsResult && typeof settingsResult === "object") {
-      const normalizedVariables = normalizeGlobalVariables(
-        settingsResult.globalVariables,
-        fallbackDefinitions,
-      );
-      projectVariables.value = normalizedVariables.definitions;
-      projectVariableGroups.value = normalizedVariables.groups;
-      globalScripts.value = normalizeGlobalScripts(
-        settingsResult.globalScripts || {},
-      );
-      return;
-    }
-
-    projectVariables.value = fallbackDefinitions;
-    projectVariableGroups.value = [];
-    globalScripts.value = getDefaultGlobalScripts();
+    await loadProjectSettingsForStore(projectId.value, projectApi, {
+      projectVariables,
+      projectVariableGroups,
+      globalScripts,
+    });
   };
 
   /**
@@ -368,59 +342,11 @@ export const useEditorStore = defineStore("editor", () => {
     if (!projectId.value) {
       return { ok: false, error: new Error("缺少工程信息") };
     }
-
-    const payload = {
-      globalVariables: {
-        definitions: projectVariables.value,
-        groups: projectVariableGroups.value,
-      },
-      globalScripts: globalScripts.value,
-    };
-
-    try {
-      const results = await Promise.allSettled([
-        projectApi.updateProjectSettings(projectId.value, payload),
-        projectApi.updateProjectVariables(
-          projectId.value,
-          projectVariables.value,
-        ),
-      ]);
-      const settingsResult =
-        results[0].status === "fulfilled" ? results[0].value : null;
-      const data =
-        unwrapApiData(settingsResult) || settingsResult?.data || settingsResult;
-      const rejected = results.find((entry) => entry.status === "rejected");
-      if (rejected) {
-        return {
-          ok: false,
-          error:
-            rejected.reason instanceof Error
-              ? rejected.reason
-              : new Error("保存失败"),
-        };
-      }
-
-      if (data && typeof data === "object") {
-        if (data.globalVariables) {
-          const normalized = normalizeGlobalVariables(
-            data.globalVariables,
-            projectVariables.value,
-          );
-          projectVariables.value = normalized.definitions;
-          projectVariableGroups.value = normalized.groups;
-        }
-        if (data.globalScripts) {
-          globalScripts.value = normalizeGlobalScripts(data.globalScripts);
-        }
-      }
-
-      return { ok: true };
-    } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error : new Error("保存失败"),
-      };
-    }
+    return saveProjectSettingsForStore(projectId.value, projectApi, {
+      projectVariables,
+      projectVariableGroups,
+      globalScripts,
+    });
   };
   const loadProject = async (id) => {
     projectId.value = id || "";
@@ -456,9 +382,10 @@ export const useEditorStore = defineStore("editor", () => {
       }
 
       const pageResponse = await projectApi.getPage(id, targetPageId);
-      const pagePayload = unwrapApiData(pageResponse) || {
-        page: { id: targetPageId },
-      };
+      const pagePayload = unwrapApiData(pageResponse);
+      if (pagePayload == null || typeof pagePayload !== "object") {
+        throw new Error("页面数据无效");
+      }
 
       const nextSchema = resolveProjectSchema(pagePayload, id, targetPageId);
       initEditor(nextSchema);
@@ -513,9 +440,10 @@ export const useEditorStore = defineStore("editor", () => {
         return { ok: true };
       }
       const pageResponse = await projectApi.getPage(projectId.value, pageId);
-      const pagePayload = unwrapApiData(pageResponse) || {
-        page: { id: pageId },
-      };
+      const pagePayload = unwrapApiData(pageResponse);
+      if (pagePayload == null || typeof pagePayload !== "object") {
+        throw new Error("页面数据无效");
+      }
 
       const nextSchema = resolveProjectSchema(
         pagePayload,
@@ -546,12 +474,9 @@ export const useEditorStore = defineStore("editor", () => {
    */
   const refreshPages = async () => {
     if (!projectId.value) return { pages: [], entryConfig: {} };
-    const pagesResponse = await projectApi.getPages(projectId.value);
-    const responseData = unwrapApiData(pagesResponse);
-
-    const pageList = normalizePageList(responseData.pages);
+    const { pageList, entryConfig: newEntryConfig } =
+      await fetchNormalizedPageList(projectId.value, projectApi);
     pages.value = pageList;
-    const newEntryConfig = responseData.entryConfig || {};
     entryConfig.value = newEntryConfig;
 
     if (doc.value && newEntryConfig && Object.keys(newEntryConfig).length > 0) {
@@ -574,11 +499,12 @@ export const useEditorStore = defineStore("editor", () => {
         parentId: null,
       });
 
-      if (!result || !result.data) {
+      const created = unwrapApiData(result);
+      if (!created || typeof created !== "object") {
         throw new Error("创建首页失败：API 返回异常");
       }
 
-      const pageId = result.data.id;
+      const pageId = created.id ?? created.page?.id;
       if (!pageId) {
         throw new Error("创建首页失败：未获取到页面ID");
       }
@@ -637,7 +563,7 @@ export const useEditorStore = defineStore("editor", () => {
     }
 
     const result = await projectApi.createPage(projectId.value, payload);
-    const data = unwrapApiData(result) || result?.data || result;
+    const data = unwrapApiData(result);
     const pageId = data?.id || data?.page?.id;
 
     if (payload?.schemaContent && pageId) {

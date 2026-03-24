@@ -9,56 +9,15 @@
 import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { normalizeGlobalValue } from "@/editor-core/utils/variable-utils";
 import { getPreviewRuntime } from "@/ui/editors/page/preview/previewRuntime";
+import { unwrapApiData } from "@/types/api";
+import {
+  extractDatapointValue,
+  getQueryExecuteData,
+  requireConnectionsPayload,
+  requireQueriesPayload,
+} from "@/utils/datapoint-payload";
 
-/**
- * 提取数据点值
- * @param {any} payload - 数据负载
- * @param {string} datapointId - 数据点 ID
- * @returns {any}
- */
-export function extractDatapointValue(payload, datapointId) {
-  if (!payload || !datapointId) return null;
-  if (payload.values && typeof payload.values === "object") {
-    if (datapointId in payload.values) return payload.values[datapointId];
-  }
-  if (Array.isArray(payload.values)) {
-    const hit = payload.values.find((item) => item?.id === datapointId);
-    if (hit)
-      return (
-        hit.value ??
-        hit.currentValue ??
-        hit.dataValue ??
-        hit.lastValue ??
-        hit.rawValue
-      );
-  }
-  if (Array.isArray(payload.datapoints)) {
-    const hit = payload.datapoints.find((item) => item?.id === datapointId);
-    if (hit)
-      return (
-        hit.value ??
-        hit.currentValue ??
-        hit.dataValue ??
-        hit.lastValue ??
-        hit.rawValue
-      );
-  }
-  if (Array.isArray(payload)) {
-    const hit = payload.find((item) => item?.id === datapointId);
-    if (hit)
-      return (
-        hit.value ??
-        hit.currentValue ??
-        hit.dataValue ??
-        hit.lastValue ??
-        hit.rawValue
-      );
-  }
-  if (payload && typeof payload === "object" && datapointId in payload) {
-    return payload[datapointId];
-  }
-  return null;
-}
+export { extractDatapointValue };
 
 /**
  * 创建预览运行时 composable
@@ -100,13 +59,6 @@ export function usePreview(deps) {
   const mappedValueCache = new Map();
   const previewOverrides = new Map();
 
-  const unwrapApiData = (payload) => {
-    if (payload && typeof payload === "object" && "data" in payload) {
-      return payload.data;
-    }
-    return payload;
-  };
-
   /**
    * 解析连接
    * @param {string} name - 连接名称
@@ -115,17 +67,21 @@ export function usePreview(deps) {
   const resolveConnection = async (name) => {
     if (connectionCache.has(name)) return connectionCache.get(name);
     if (!projectId.value) return null;
-    const result = await datacenterApi.getConnections(projectId.value, {
-      page: 1,
-      limit: 200,
-    });
-    const data = unwrapApiData(result) || {};
-    const connections = data.connections || data.items || data.list || [];
-    const found = connections.find((item) => item.name === name);
-    if (found) {
-      connectionCache.set(name, found);
+    try {
+      const result = await datacenterApi.getConnections(projectId.value, {
+        page: 1,
+        limit: 200,
+      });
+      const body = unwrapApiData(result);
+      const connections = requireConnectionsPayload(body);
+      const found = connections.find((item) => item.name === name);
+      if (found) {
+        connectionCache.set(name, found);
+      }
+      return found || null;
+    } catch {
+      return null;
     }
-    return found || null;
   };
 
   /**
@@ -139,14 +95,19 @@ export function usePreview(deps) {
     const cacheKey = `${connectionId}`;
     let queries = queryCache.get(cacheKey);
     if (!queries) {
-      const result = await datacenterApi.getQueries(projectId.value, {
-        connectionId,
-        page: 1,
-        limit: 200,
-      });
-      const data = unwrapApiData(result) || {};
-      queries = data.queries || data.items || data.list || [];
-      queryCache.set(cacheKey, queries);
+      try {
+        const result = await datacenterApi.getQueries(projectId.value, {
+          connectionId,
+          page: 1,
+          limit: 200,
+        });
+        const body = unwrapApiData(result);
+        queries = requireQueriesPayload(body);
+        queryCache.set(cacheKey, queries);
+      } catch {
+        queries = [];
+        queryCache.set(cacheKey, queries);
+      }
     }
     return (
       queries.find((item) => item.name === queryName || item.id === queryName) ||
@@ -168,8 +129,7 @@ export function usePreview(deps) {
     const query = await resolveQuery(connection.id, field);
     if (!query) return undefined;
     const result = await datacenterApi.executeQuery(query.id);
-    const payload = unwrapApiData(result) || result;
-    return payload?.data ?? payload;
+    return getQueryExecuteData(unwrapApiData(result));
   };
 
   /**
@@ -190,15 +150,8 @@ export function usePreview(deps) {
       if (sourceType.includes("query") && source.sourceId) {
         try {
           const result = await datacenterApi.executeQuery(source.sourceId);
-          const payload = unwrapApiData(result) || result;
-          return payload?.data ?? payload;
+          return getQueryExecuteData(unwrapApiData(result));
         } catch (error) {
-          try {
-            const fallbackResult = await executeQueryByPath(source.path);
-            if (fallbackResult !== undefined) return fallbackResult;
-          } catch (fallbackError) {
-            // ignore
-          }
           return normalizeGlobalValue(detail);
         }
       }
@@ -206,9 +159,9 @@ export function usePreview(deps) {
         const result = await datacenterApi.getDatapointValues(projectId.value, [
           source.datapointId,
         ]);
-        const payload = unwrapApiData(result) || result;
+        const payload = unwrapApiData(result);
         const picked = extractDatapointValue(payload, source.datapointId);
-        return picked ?? payload?.data ?? payload;
+        return picked ?? normalizeGlobalValue(detail);
       }
     }
 
@@ -223,8 +176,7 @@ export function usePreview(deps) {
       const query = await resolveQuery(connection.id, field);
       if (!query) return normalizeGlobalValue(detail);
       const result = await datacenterApi.executeQuery(query.id);
-      const payload = unwrapApiData(result) || result;
-      return payload?.data ?? payload;
+      return getQueryExecuteData(unwrapApiData(result));
     }
 
     return normalizeGlobalValue(detail);

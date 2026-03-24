@@ -1,9 +1,10 @@
+// @ts-nocheck
 /**
  * Serializer - 序列化器
  * 负责 Schema 的导入导出、版本迁移和差量补丁
  */
 
-import { DocumentModel } from "./DocumentModel.js";
+import { DocumentModel } from "./DocumentModel.ts";
 
 /**
  * @typedef {import('./types.js').ProjectSchema} ProjectSchema

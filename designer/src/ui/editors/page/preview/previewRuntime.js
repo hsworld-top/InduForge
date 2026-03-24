@@ -12,6 +12,14 @@ import { datacenterApi } from "@/services";
 import { DataService } from "@/data";
 import { Storage } from "@/utils/storage";
 import { io } from "socket.io-client";
+import { unwrapApiData } from "@/types/api";
+import {
+  extractDatapointValue,
+  getQueryExecuteData,
+  requireConnectionsPayload,
+  requireQueriesPayload,
+  requireDatapointsPagePayload,
+} from "@/utils/datapoint-payload";
 
 /** 当前预览运行时实例（单例） */
 let runtimeInstance = null;
@@ -49,18 +57,6 @@ const mappedValuePending = new Map();
 const mappedDetails = new Map();
 const datapointMetaCache = new Map();
 const datapointMetaPending = new Map();
-
-/**
- * 解包 API 响应中的 data 字段
- * @param {*} payload - 原始响应
- * @returns {*} 解包后的数据
- */
-const unwrapApiData = (payload) => {
-  if (payload && typeof payload === "object" && "data" in payload) {
-    return payload.data;
-  }
-  return payload;
-};
 
 /**
  * 规范化全局变量默认值
@@ -447,17 +443,21 @@ const buildSocketQuery = (projectId) => {
 const resolveConnection = async (projectId, name) => {
   if (connectionCache.has(name)) return connectionCache.get(name);
   if (!projectId) return null;
-  const result = await datacenterApi.getConnections(projectId, {
-    page: 1,
-    limit: 200,
-  });
-  const data = unwrapApiData(result) || {};
-  const connections = data.connections || data.items || data.list || [];
-  const found = connections.find((item) => item.name === name);
-  if (found) {
-    connectionCache.set(name, found);
+  try {
+    const result = await datacenterApi.getConnections(projectId, {
+      page: 1,
+      limit: 200,
+    });
+    const body = unwrapApiData(result);
+    const connections = requireConnectionsPayload(body);
+    const found = connections.find((item) => item.name === name);
+    if (found) {
+      connectionCache.set(name, found);
+    }
+    return found || null;
+  } catch {
+    return null;
   }
-  return found || null;
 };
 
 const resolveQuery = async (projectId, connectionId, queryName) => {
@@ -465,14 +465,19 @@ const resolveQuery = async (projectId, connectionId, queryName) => {
   const cacheKey = `${projectId}:${connectionId || "all"}`;
   let queries = queryCache.get(cacheKey);
   if (!queries) {
-    const result = await datacenterApi.getQueries(projectId, {
-      connectionId,
-      page: 1,
-      limit: 200,
-    });
-    const data = unwrapApiData(result) || {};
-    queries = data.queries || data.items || data.list || [];
-    queryCache.set(cacheKey, queries);
+    try {
+      const result = await datacenterApi.getQueries(projectId, {
+        connectionId,
+        page: 1,
+        limit: 200,
+      });
+      const body = unwrapApiData(result);
+      queries = requireQueriesPayload(body);
+      queryCache.set(cacheKey, queries);
+    } catch {
+      queries = [];
+      queryCache.set(cacheKey, queries);
+    }
   }
   return (
     queries.find((item) => item.name === queryName || item.id === queryName) ||
@@ -489,8 +494,7 @@ const executeQueryByPath = async (projectId, path) => {
   const query = await resolveQuery(projectId, connection.id, field);
   if (!query) return undefined;
   const result = await datacenterApi.executeQuery(query.id);
-  const payload = unwrapApiData(result) || result;
-  return payload?.data ?? payload;
+  return getQueryExecuteData(unwrapApiData(result));
 };
 
 const ensurePreviewMqttSocket = async (projectId) => {
@@ -623,8 +627,13 @@ const resolveDatapointMeta = async (projectId, path) => {
         page,
         pageSize,
       });
-      const data = unwrapApiData(result) || {};
-      const items = data.datapoints || data.items || data.list || [];
+      let data;
+      try {
+        data = requireDatapointsPagePayload(unwrapApiData(result));
+      } catch {
+        break;
+      }
+      const items = data.datapoints;
       cacheDatapointMetaList(projectId, items);
       const hit = items.find((item) => item?.path === path);
       if (hit) {
@@ -638,7 +647,7 @@ const resolveDatapointMeta = async (projectId, path) => {
         datapointMetaCache.set(key, meta);
         return meta;
       }
-      const pagination = data.pagination || {};
+      const pagination = data.pagination;
       if (pagination.totalPages) {
         totalPages = Number(pagination.totalPages) || 1;
       } else if (items.length < pageSize) {
@@ -777,8 +786,7 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
         const result = await datacenterApi.executeQuery(
           resolved.sourceId || source.sourceId,
         );
-        const payload = unwrapApiData(result) || result;
-        const value = payload?.data ?? payload;
+        const value = getQueryExecuteData(unwrapApiData(result));
         return value ?? fallbackValue;
       } catch (error) {
         try {
@@ -818,12 +826,12 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
         const result = await datacenterApi.getDatapointValues(projectId, [
           resolved.datapointId || source.datapointId,
         ]);
-        const payload = unwrapApiData(result) || result;
+        const payload = unwrapApiData(result);
         const picked = extractDatapointValue(
           payload,
           resolved.datapointId || source.datapointId,
         );
-        return picked ?? payload?.data ?? payload ?? fallbackValue;
+        return picked ?? fallbackValue;
       } catch (error) {
         return fallbackValue;
       }
@@ -848,8 +856,7 @@ const resolveMappedGlobalValue = async (projectId, detail) => {
     if (!query) return normalizeGlobalValue(detail);
     try {
       const result = await datacenterApi.executeQuery(query.id);
-      const payload = unwrapApiData(result) || result;
-      return payload?.data ?? payload ?? fallbackValue;
+      return getQueryExecuteData(unwrapApiData(result)) ?? fallbackValue;
     } catch (error) {
       return fallbackValue;
     }
@@ -916,50 +923,6 @@ const getSubscriptionValue = async (projectId, path) => {
   });
   previewDataServiceState.pending.set(path, { promise, resolve: resolver });
   return promise;
-};
-
-const extractDatapointValue = (payload, datapointId) => {
-  if (!payload || !datapointId) return null;
-  if (payload.values && typeof payload.values === "object") {
-    if (datapointId in payload.values) return payload.values[datapointId];
-  }
-  if (Array.isArray(payload.values)) {
-    const hit = payload.values.find((item) => item?.id === datapointId);
-    if (hit)
-      return (
-        hit.value ??
-        hit.currentValue ??
-        hit.dataValue ??
-        hit.lastValue ??
-        hit.rawValue
-      );
-  }
-  if (Array.isArray(payload.datapoints)) {
-    const hit = payload.datapoints.find((item) => item?.id === datapointId);
-    if (hit)
-      return (
-        hit.value ??
-        hit.currentValue ??
-        hit.dataValue ??
-        hit.lastValue ??
-        hit.rawValue
-      );
-  }
-  if (Array.isArray(payload)) {
-    const hit = payload.find((item) => item?.id === datapointId);
-    if (hit)
-      return (
-        hit.value ??
-        hit.currentValue ??
-        hit.dataValue ??
-        hit.lastValue ??
-        hit.rawValue
-      );
-  }
-  if (payload && typeof payload === "object" && datapointId in payload) {
-    return payload[datapointId];
-  }
-  return null;
 };
 
 const parseParamNames = (value) => {

@@ -1549,10 +1549,9 @@ const canAcceptChild = (parentId, childType) => {
     // 如果已注册 descriptor，使用 descriptor 的判断结果
     return canAcceptChildByDescriptor(node.type, childType, currentChildCount);
   }
-  // 向后兼容：未注册 descriptor 的组件，从 manifest 读取 allowedChildren
   const manifest = componentRegistry.get(node.type);
   const allowed = manifest?.allowedChildren;
-  if (!Array.isArray(allowed) || allowed.length === 0) return true;
+  if (!Array.isArray(allowed) || allowed.length === 0) return false;
   return allowed.includes(childType);
 };
 

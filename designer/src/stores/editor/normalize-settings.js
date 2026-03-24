@@ -59,20 +59,19 @@ const normalizeVariableDef = (detail) => {
 
 /**
  * 规范化全局变量配置
- * 支持 definitions + groups 或扁平对象两种结构
+ * 支持 definitions + groups 或扁平对象两种结构（不再与 variables 接口合并兜底）
  * @param {*} raw - 原始配置
- * @param {Object} fallbackDefinitions - 兜底定义
  * @returns {{ definitions: Object, groups: Array }}
  */
-const normalizeGlobalVariables = (raw, fallbackDefinitions = {}) => {
+const normalizeGlobalVariables = (raw) => {
   if (!raw || typeof raw !== "object") {
-    return { definitions: fallbackDefinitions, groups: [] };
+    throw new Error("globalVariables 无效");
   }
   if (raw.definitions || raw.groups) {
     const definitions =
       raw.definitions && typeof raw.definitions === "object"
         ? raw.definitions
-        : fallbackDefinitions;
+        : {};
     const normalizedDefinitions = {};
     Object.entries(definitions).forEach(([name, detail]) => {
       normalizedDefinitions[name] = normalizeVariableDef(detail);

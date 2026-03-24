@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * SelectionModel - 选中状态管理
  * 支持混合选择（DOM 节点 + Canvas 图形）

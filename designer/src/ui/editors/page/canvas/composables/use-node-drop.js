@@ -28,10 +28,9 @@ function canAcceptChild(parentNode, childType) {
     return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount);
   }
 
-  // 向后兼容：未注册 descriptor 的组件，从 manifest 读取 allowedChildren
   const manifest = componentRegistry.get(parentNode.type);
   const allowed = manifest?.allowedChildren;
-  if (!Array.isArray(allowed) || allowed.length === 0) return true;
+  if (!Array.isArray(allowed) || allowed.length === 0) return false;
   return allowed.includes(childType);
 }
 

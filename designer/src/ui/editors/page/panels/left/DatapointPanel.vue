@@ -388,6 +388,11 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { datacenterApi } from "@/services";
+import { unwrapApiData } from "@/types/api";
+import {
+  requireConnectionsPayload,
+  requireDatapointsPagePayload,
+} from "@/utils/datapoint-payload";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";
@@ -415,13 +420,6 @@ const types = [
   "regexp",
   "function",
 ];
-
-const unwrapApiData = (payload) => {
-  if (payload && typeof payload === "object" && "data" in payload) {
-    return payload.data;
-  }
-  return payload;
-};
 
 const treeRef = ref(null);
 const selectedNode = ref(null);
@@ -977,12 +975,17 @@ const formatValue = (value) => {
 
 async function loadDataSourcesForMapping() {
   if (!projectId.value) return;
-  const result = await datacenterApi.getConnections(projectId.value, {
-    page: 1,
-    limit: 200,
-  });
-  const data = unwrapApiData(result) || {};
-  dataSources.value = data.connections || data.items || data.list || [];
+  try {
+    const result = await datacenterApi.getConnections(projectId.value, {
+      page: 1,
+      limit: 200,
+    });
+    const body = unwrapApiData(result);
+    dataSources.value = requireConnectionsPayload(body);
+  } catch {
+    dataSources.value = [];
+    ElMessage.error("连接列表格式无效或加载失败");
+  }
 }
 
 async function persistProjectGlobals() {
@@ -1351,9 +1354,9 @@ async function loadDatapoints() {
       page: quickPage.value,
       pageSize: quickPageSize.value,
     });
-    const data = unwrapApiData(result) || {};
-    const datapoints = data.datapoints || data.items || data.list || [];
-    const pagination = data.pagination || {};
+    const { datapoints, pagination } = requireDatapointsPagePayload(
+      unwrapApiData(result),
+    );
     quickTotal.value = Number(pagination.total || datapoints.length || 0);
     if (!Array.isArray(datapoints) || datapoints.length === 0) {
       ElMessage.warning("未获取到数据点，请检查数据源或权限");
@@ -1369,6 +1372,12 @@ async function loadDatapoints() {
       typeLabel: item.dataType || item.type || "string",
       updatedAtLabel: formatDatapointTime(item.updated_at || item.updatedAt),
     }));
+  } catch (err) {
+    fields.value = [];
+    quickTotal.value = 0;
+    ElMessage.error(
+      err instanceof Error ? err.message : "数据点列表响应格式无效",
+    );
   } finally {
     quickLoading.value = false;
   }

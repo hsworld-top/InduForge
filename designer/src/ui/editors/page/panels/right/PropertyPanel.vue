@@ -452,7 +452,7 @@
     <template #footer>
       <el-button @click="clearConfigDialog">清除</el-button>
       <el-button @click="configDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveConfigDialog(true)">保存</el-button>
+      <el-button type="primary" @click="saveConfigDialog()">保存</el-button>
     </template>
   </el-dialog>
 
@@ -5874,96 +5874,6 @@ const manifest = computed(() => {
   return componentRegistry.get(type) || null;
 });
 
-const layoutFallbackProps = {
-  ElLayout: [
-    {
-      name: "rows",
-      type: "number",
-      label: "行数",
-      group: "布局",
-      defaultValue: 1,
-      min: 1,
-      max: 24,
-    },
-    {
-      name: "gutter",
-      type: "number",
-      label: "行间距",
-      group: "布局",
-      defaultValue: 12,
-      min: 0,
-      max: 100,
-    },
-    {
-      name: "padding",
-      type: "number",
-      label: "内边距",
-      group: "布局",
-      defaultValue: 8,
-      min: 0,
-      max: 200,
-    },
-  ],
-  ElLayoutRow: [
-    {
-      name: "columns",
-      type: "number",
-      label: "列数",
-      group: "布局",
-      defaultValue: 3,
-      min: 1,
-      max: 24,
-    },
-    {
-      name: "gutter",
-      type: "number",
-      label: "列间距",
-      group: "布局",
-      defaultValue: 12,
-      min: 0,
-      max: 100,
-    },
-  ],
-  ElCol: [
-    {
-      name: "span",
-      type: "number",
-      label: "栅格",
-      group: "布局",
-      defaultValue: 24,
-      min: 1,
-      max: 24,
-    },
-    {
-      name: "offset",
-      type: "number",
-      label: "偏移",
-      group: "布局",
-      defaultValue: 0,
-      min: 0,
-      max: 24,
-    },
-    {
-      name: "push",
-      type: "number",
-      label: "向右移动",
-      group: "布局",
-      defaultValue: 0,
-      min: 0,
-      max: 24,
-    },
-    {
-      name: "pull",
-      type: "number",
-      label: "向左移动",
-      group: "布局",
-      defaultValue: 0,
-      min: 0,
-      max: 24,
-    },
-  ],
-};
-
 const effectiveManifest = computed(() => {
   const type = normalizeElementType(currentElement.value?.type);
   const elementPlusProps = isElementPlusType(type)
@@ -5993,20 +5903,10 @@ const effectiveManifest = computed(() => {
       props: elementPlusProps,
     };
   }
-  const fallback = layoutFallbackProps[type];
-  if (!fallback) return null;
-  return {
-    type,
-    name: type,
-    category: "布局",
-    props: fallback,
-  };
+  return null;
 });
 
-const layoutForceProps = computed(() => {
-  const type = normalizeElementType(currentElement.value?.type);
-  return layoutFallbackProps[type] || [];
-});
+const layoutForceProps = computed(() => []);
 
 const configDialogTitle = computed(() =>
   configDialogType.value === "detail" ? "详细配置" : "样式配置",
@@ -6978,11 +6878,10 @@ const openConfigDialog = (type) => {
 /**
  * 保存配置弹窗内容
  */
-const saveConfigDialog = (forceApply = false) => {
+const saveConfigDialog = () => {
   const node = selectedNode.value;
   if (!node) return;
-  const rawContent = String(configDraft.value || "");
-  let content = rawContent;
+  let content = String(configDraft.value || "");
   if (configDialogType.value === "style") {
     const normalized = formatStyleConfigOutput(content);
     content = prefixStyleConfigScope(normalized);
@@ -7011,55 +6910,34 @@ const saveConfigDialog = (forceApply = false) => {
       }
       emitDetailConfig(node.id, content);
       if (normalizeElementType(node.type) === "Menu") {
-        const config =
-          resolveMenuConfigFromContent(rawContent) ||
-          resolveMenuConfigFromContent(content);
-        if (config) {
-          applyMenuDetailConfig(node, config);
-          const propsPatch = {
-            ...(node.props || {}),
-            ...(config.props && typeof config.props === "object"
-              ? { ...config.props }
-              : {}),
-          };
-          if (Array.isArray(config.items)) {
-            propsPatch.items = config.items;
-          }
-          if (Array.isArray(propsPatch.items)) {
-            propsPatch.items = normalizeMenuItems(propsPatch.items);
-          }
-          const nextPatch = { detailConfig: content, props: propsPatch };
-          if (config.style && typeof config.style === "object") {
-            nextPatch.style = { ...(node.style || {}), ...config.style };
-          }
-          forceUpdateNode(node.id, nextPatch);
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("designer:force-refresh"));
-          }
+        const config = resolveMenuConfigFromContent(content);
+        if (!config) {
+          ElMessage.error("Menu 详细配置无法解析为有效 DSL，请修正后再保存");
+          return;
+        }
+        applyMenuDetailConfig(node, config);
+        const propsPatch = {
+          ...(node.props || {}),
+          ...(config.props && typeof config.props === "object"
+            ? { ...config.props }
+            : {}),
+        };
+        if (Array.isArray(config.items)) {
+          propsPatch.items = config.items;
+        }
+        if (Array.isArray(propsPatch.items)) {
+          propsPatch.items = normalizeMenuItems(propsPatch.items);
+        }
+        const nextPatch = { detailConfig: content, props: propsPatch };
+        if (config.style && typeof config.style === "object") {
+          nextPatch.style = { ...(node.style || {}), ...config.style };
+        }
+        forceUpdateNode(node.id, nextPatch);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("designer:force-refresh"));
         }
       }
       runDetailConfigLocal(node, content);
-      if (forceApply && normalizeElementType(node.type) === "Menu") {
-        const fallbackConfig = resolveMenuConfigFromContent(rawContent);
-        if (fallbackConfig) {
-          const propsPatch = {
-            ...(node.props || {}),
-            ...(fallbackConfig.props && typeof fallbackConfig.props === "object"
-              ? { ...fallbackConfig.props }
-              : {}),
-          };
-          if (Array.isArray(fallbackConfig.items)) {
-            propsPatch.items = fallbackConfig.items;
-          }
-          if (Array.isArray(propsPatch.items)) {
-            propsPatch.items = normalizeMenuItems(propsPatch.items);
-          }
-          forceUpdateNode(node.id, { props: propsPatch });
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("designer:force-refresh"));
-          }
-        }
-      }
     }
   } else {
     editorStore.updateNode(node.id, { styleConfig: content });

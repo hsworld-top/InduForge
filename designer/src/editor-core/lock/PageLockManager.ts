@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * PageLockManager - 页面编辑锁管理
  * 实现简化版多人开发：同一页面同时只能有一人编辑

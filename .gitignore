@@ -36,6 +36,8 @@ pnpm-lock.yaml
 pnpm-workspace.yaml
 
 miniio/data*
+# MinIO 可执行文件体积大，请本地放置或从官方下载，勿提交
+miniio/bin/
 
 .npm-cache
 runtime/logs/
