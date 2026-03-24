@@ -1,3 +1,4 @@
+// @ts-nocheck — 由 JS 迁入；与 use-node-content.js 等并存期间先跳过校验。
 /**
  * NodeRenderer 中与组件类型相关的派生数据（computed）与菜单 DSL 解析。
  * 将 setup 内大量 .type === 分支收敛到 registry + 本 composable。
@@ -13,13 +14,13 @@ import IconEpSetting from "~icons/ep/setting";
 import {
   captureMenuDslConfig,
   normalizeMenuItems,
-} from "./use-node-content.js";
+} from "./use-node-content";
 import {
   getDesignerNodeLayoutClasses,
   getRegionDesignerHint,
   getRenderKey,
   usesComponentWrapper,
-} from "@/components/descriptors/registry.ts";
+} from "@/components/descriptors/registry";
 
 const fallbackMenuItems = [
   { index: "1", label: "菜单一" },

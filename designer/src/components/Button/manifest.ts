@@ -3,15 +3,17 @@
  * 属性定义、事件定义、默认值
  */
 
-/** @type {import('../../manifests/index.js').ComponentManifest} */
-export const manifest = {
+import {
+  registerManifest,
+  type ComponentManifest,
+} from "@/manifests/manifest-registry";
+
+export const manifest: ComponentManifest = {
   type: "Button",
   name: "按钮",
   category: "PC端组件",
-  /** 按钮等 UI 元素默认尺寸为 auto，在布局内自适应；直接放页面时由 absolutePos 等提供默认占位尺寸 */
   defaultStyle: { width: "auto", height: "auto" },
   props: [
-    // ── 属性分组（对应旧版"属性"区块） ──────────────────────
     {
       name: "disabled",
       type: "boolean",
@@ -79,7 +81,6 @@ export const manifest = {
       defaultValue: "",
       placeholder: "如: el-icon-search",
     },
-    // ── 安全策略分组 ──────────────────────────────────────────
     {
       name: "safetyControl",
       type: "boolean",
@@ -97,5 +98,7 @@ export const manifest = {
     },
   ],
 };
+
+registerManifest(manifest);
 
 export default manifest;

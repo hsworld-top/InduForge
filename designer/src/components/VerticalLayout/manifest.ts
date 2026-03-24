@@ -2,8 +2,12 @@
  * VerticalLayout 垂直布局组件 Manifest
  */
 
-/** @type {import('../../manifests/index.js').ComponentManifest} */
-export const manifest = {
+import {
+  registerManifest,
+  type ComponentManifest,
+} from "@/manifests/manifest-registry";
+
+export const manifest: ComponentManifest = {
   type: "VerticalLayout",
   name: "垂直布局",
   category: "布局",
@@ -50,5 +54,7 @@ export const manifest = {
     },
   ],
 };
+
+registerManifest(manifest);
 
 export default manifest;

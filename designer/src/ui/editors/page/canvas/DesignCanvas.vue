@@ -96,7 +96,7 @@ import {
 import { storeToRefs } from "pinia";
 import { useEditorStore } from "@/stores/editor-store";
 import { createSelectableElement } from "@/editor-core";
-import { isContainerType } from "@/components/descriptors/registry.ts";
+import { isContainerType } from "@/components/descriptors/registry";
 import { eventToCanvasPosition } from "@/editor-core/utils/placement-utils";
 import { ElMessage } from "element-plus";
 import NodeRenderer from "./NodeRenderer.vue";

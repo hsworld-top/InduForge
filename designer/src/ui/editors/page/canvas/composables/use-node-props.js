@@ -8,7 +8,7 @@
  */
 
 import { computed } from "vue";
-import { getPropsFilter } from "@/components/descriptors/registry.ts";
+import { getPropsFilter } from "@/components/descriptors/registry";
 import { evaluate, evaluateTemplate } from "@/data";
 import { getPreviewRuntime } from "@/ui/editors/page/preview/previewRuntime";
 import { buildVarValuesFromDefinitions } from "@/editor-core/utils/variable-utils";

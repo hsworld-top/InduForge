@@ -39,7 +39,7 @@ import {
 } from "@/editor-core";
 import { projectApi } from "@/services";
 import request from "@/utils/request";
-import { getDescriptor, isLayoutContainerType, isRegionType } from "@/components/descriptors/registry.ts";
+import { getDescriptor, isLayoutContainerType, isRegionType } from "@/components/descriptors/registry";
 import { Storage } from "@/utils/storage";
 import { unwrapApiData } from "@/types/api";
 

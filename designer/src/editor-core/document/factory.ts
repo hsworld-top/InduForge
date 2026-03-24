@@ -16,28 +16,13 @@ import type {
 export interface DescriptorRegistryModule {
   getChildPositioning?: (
     containerType: string,
-  ) => "absolute" | "flow" | undefined;
+  ) => "absolute" | "flow" | null | undefined;
 }
 
 let _descriptorRegistry: DescriptorRegistryModule | null = null;
 
-const getDescriptorRegistry = (): DescriptorRegistryModule | null => {
-  if (!_descriptorRegistry) {
-    const g = globalThis as typeof globalThis & {
-      require?: (id: string) => DescriptorRegistryModule;
-    };
-    if (typeof g.require === "function") {
-      try {
-        _descriptorRegistry = g.require(
-          "../../components/descriptors/registry.ts",
-        );
-      } catch {
-        // ESM 环境无 require，等待 initDescriptorRegistry 注入
-      }
-    }
-  }
-  return _descriptorRegistry;
-};
+const getDescriptorRegistry = (): DescriptorRegistryModule | null =>
+  _descriptorRegistry;
 
 export function initDescriptorRegistry(
   registry: DescriptorRegistryModule | null,

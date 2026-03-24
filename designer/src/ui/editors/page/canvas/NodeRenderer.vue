@@ -225,13 +225,13 @@ import {
   isNodeDesignerMovable,
   isTableLikeType,
   usesLegacyFlexDirectionProps,
-} from "@/components/descriptors/registry.ts";
+} from "@/components/descriptors/registry";
 import { createDragDropManager } from "./services/DragDropManager";
-import { createNodeStyleHelpers } from "./composables/use-node-style.js";
+import { createNodeStyleHelpers } from "./composables/use-node-style";
 import { useNodeContent } from "./composables/use-node-content.js";
 import { useNodeProps, buildExpressionContext, resolveExpressionValue } from "./composables/use-node-props.js";
 import { useNodeInteraction } from "./composables/use-node-interaction.js";
-import { useNodeDrop } from "./composables/use-node-drop.js";
+import { useNodeDrop } from "./composables/use-node-drop";
 import { usePreview } from "./composables/use-preview.js";
 import { useNodeResize } from "./composables/use-node-resize.js";
 import { useNodePointer } from "./composables/use-node-pointer.js";
@@ -240,7 +240,7 @@ import {
   useNodeRendererDerivations,
   createApplyMenuDslConfig,
   resolveMenuConfigFromContent,
-} from "./composables/use-node-renderer-derivations.js";
+} from "./composables/use-node-renderer-derivations";
 import { useNodeRendererTypeFlags } from "./composables/use-node-renderer-type-flags.js";
 import EChart from "./components/EChart.vue";
 import {

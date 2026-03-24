@@ -1,3 +1,4 @@
+// @ts-nocheck — 由 JS 迁入；依赖仍为 .js 的 utils，后续再补类型。
 /**
  * 节点拖放 Composable
  *
@@ -8,7 +9,7 @@
  */
 
 import { ref, computed, watch } from "vue";
-import { getDescriptor, isContainerType, isFlexContainer, isRegionType, canAcceptChildByDescriptor, getDefaultSize } from "@/components/descriptors/registry.ts";
+import { getDescriptor, isContainerType, isFlexContainer, isRegionType, canAcceptChildByDescriptor, getDefaultSize } from "@/components/descriptors/registry";
 import { resolveElContainerMain } from "@/editor-core/utils/layout-utils";
 import { eventToCanvasPosition, clampPositionInContainer } from "@/editor-core/utils/placement-utils";
 

@@ -17,7 +17,7 @@ import {
   getDefaultSize,
   isRegionType,
   isContainerType,
-} from "@/components/descriptors/registry.ts";
+} from "@/components/descriptors/registry";
 import {
   resolveAbsoluteLayout,
   buildFlowResetStyle,

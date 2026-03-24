@@ -1,3 +1,4 @@
+// @ts-nocheck — 由 JS 迁入；editor-core 等仍为 JS 出口，后续再补类型。
 /**
  * 节点样式计算 Composable
  *
@@ -8,8 +9,8 @@
  */
 
 import { computed, ref, watch, watchEffect, onMounted, onBeforeUnmount } from "vue";
-import { getDescriptor, isContainerType } from "@/components/descriptors/registry.ts";
-import { resolveDescriptorContainerStyle } from "@/components/descriptors/registry.ts";
+import { getDescriptor, isContainerType } from "@/components/descriptors/registry";
+import { resolveDescriptorContainerStyle } from "@/components/descriptors/registry";
 import { componentRegistry } from "@/editor-core";
 import {
   normalizeStyleObject,

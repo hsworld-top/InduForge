@@ -13,7 +13,7 @@ import {
   isLayoutType,
   isContainerType,
   isRegionType,
-} from "@/components/descriptors/registry.ts";
+} from "@/components/descriptors/registry";
 
 /**
  * 获取区域 resize 配置

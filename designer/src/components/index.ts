@@ -1,23 +1,23 @@
 /**
  * 组件包入口
  * 注册所有已拆分组件的 descriptor 到组件注册中心
- * manifest 仍由 manifests/index.js 统一注册到 componentRegistry
+ * 各组件 manifest 在对应 manifest.ts 内自注册；manifests/index.ts 通过分片 import 保证加载顺序
  *
  * 新增组件时：
- * 1. 创建 components/<ComponentName>/manifest.js + descriptor.js + index.js
+ * 1. 创建 components/<ComponentName>/manifest.ts + descriptors/<name>.ts + index.ts
  * 2. 在此处 import 并调用 registerDescriptor
  */
 
-import { registerDescriptor } from "./descriptors/registry.ts";
-import { registerSimpleDescriptors } from "./descriptors/simple-descriptors.js";
+import { registerDescriptor } from "./descriptors/registry";
+import { registerSimpleDescriptors } from "./descriptors/simple-descriptors";
 
-import { descriptor as ButtonDescriptor } from "./Button/index.js";
-import { descriptor as HorizontalLayoutDescriptor } from "./HorizontalLayout/index.js";
-import { descriptor as VerticalLayoutDescriptor } from "./VerticalLayout/index.js";
+import { descriptor as ButtonDescriptor } from "./Button";
+import { descriptor as HorizontalLayoutDescriptor } from "./HorizontalLayout";
+import { descriptor as VerticalLayoutDescriptor } from "./VerticalLayout";
 
 /**
  * 注册所有组件描述符
- * 应在应用启动时（main.js 或 App.vue setup 阶段）调用一次
+ * 应在应用启动时（main.ts 或 App.vue setup 阶段）调用一次
  * 顺序：先注册标杆组件（Button、HorizontalLayout、VerticalLayout），再批量注册简单组件
  */
 export function registerAllDescriptors() {
@@ -50,4 +50,4 @@ export {
   canAcceptChildByDescriptor,
   isRegionType,
   getFlexDirection,
-} from "./descriptors/registry.ts";
+} from "./descriptors/registry";
