@@ -1,22 +1,36 @@
 <!--
   属性面板：尺寸编辑 + 详细/样式配置入口
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import SizeEditor from "./StylePanel/SizeEditor.vue";
 
-defineProps({
-  showSizeEditor: { type: Boolean, default: false },
-  currentStyle: { type: Object, required: true },
-  containerMinSize: { type: Object, default: null },
-  hasDetailConfig: { type: Boolean, default: false },
-  hasStyleConfig: { type: Boolean, default: false },
-});
+interface ConfigStripStyleLike {
+  width?: string;
+  height?: string;
+  [key: string]: unknown;
+}
 
-const emit = defineEmits(["update:currentStyle", "openConfig"]);
+interface ConfigStripContainerMinSize {
+  width?: number;
+  height?: number;
+}
 
-function onStyleUpdate(val) {
+defineProps<{
+  showSizeEditor?: boolean;
+  currentStyle: ConfigStripStyleLike;
+  containerMinSize?: ConfigStripContainerMinSize | null;
+  hasDetailConfig?: boolean;
+  hasStyleConfig?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (event: "update:currentStyle", value: ConfigStripStyleLike): void;
+  (event: "openConfig", tab: "detail" | "style"): void;
+}>();
+
+function onStyleUpdate(val: ConfigStripStyleLike) {
   emit("update:currentStyle", val);
 }
 </script>

@@ -1,18 +1,30 @@
 <!--
   属性面板：布局强制属性区块（静态 prop-section）
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpLink from "~icons/ep/link";
 import PropEditor from "./PropEditor.vue";
 
-defineProps({
-  visibleProps: { type: Array, required: true },
-  shouldShowBindButton: { type: Function, required: true },
-  hasPropBinding: { type: Function, required: true },
-  getPropValue: { type: Function, required: true },
-});
+interface LayoutPropDefLike {
+  name: string;
+  label: string;
+}
 
-const emit = defineEmits(["bindClick", "propChange"]);
+defineProps<{
+  visibleProps: LayoutPropDefLike[];
+  shouldShowBindButton: (propDef: LayoutPropDefLike) => boolean;
+  hasPropBinding: (name: string) => boolean;
+  getPropValue: (name: string) => unknown;
+}>();
+
+const emit = defineEmits<{
+  (event: "bindClick", propDef: LayoutPropDefLike): void;
+  (event: "propChange", name: string, value: unknown): void;
+}>();
+
+function handlePropChange(name: string, value: unknown) {
+  emit("propChange", name, value);
+}
 </script>
 
 <template>
@@ -43,7 +55,7 @@ const emit = defineEmits(["bindClick", "propChange"]);
           class="prop-editor"
           :prop="propDef"
           :model-value="getPropValue(propDef.name)"
-          @update:model-value="(val) => emit('propChange', propDef.name, val)"
+          @update:model-value="(val: unknown) => handlePropChange(propDef.name, val)"
         />
       </div>
     </div>

@@ -1,25 +1,34 @@
 <!--
   属性面板「基本」区块：名称、描述、类型、ID、只读位置
 -->
-<script setup>
-import { ElInput } from "element-plus";
+<script setup lang="ts">
 import { unref } from "vue";
 import { formatStyleValue } from "./property-panel-utils";
 
-defineProps({
-  elementType: { type: String, required: true },
-  elementId: { type: String, required: true },
-  currentStyle: { type: Object, required: true },
-});
-const emit = defineEmits(["labelCommit", "descriptionCommit"]);
-const label = defineModel("label", { default: "" });
-const description = defineModel("description", { default: "" });
+interface BasicSectionStyleLike {
+  left?: string | number | null;
+  top?: string | number | null;
+}
 
-function onLabelUpdate(v) {
+defineProps<{
+  elementType: string;
+  elementId: string;
+  currentStyle: BasicSectionStyleLike;
+}>();
+
+const emit = defineEmits<{
+  (event: "labelCommit"): void;
+  (event: "descriptionCommit"): void;
+}>();
+
+const label = defineModel<string>("label", { default: "" });
+const description = defineModel<string>("description", { default: "" });
+
+function onLabelUpdate(v: string | null | undefined) {
   label.value = v ?? "";
 }
 
-function onDescriptionUpdate(v) {
+function onDescriptionUpdate(v: string | null | undefined) {
   description.value = v ?? "";
 }
 </script>
@@ -32,7 +41,7 @@ function onDescriptionUpdate(v) {
     <div class="prop-section-body">
       <div class="prop-item">
         <div class="prop-label">名称</div>
-        <ElInput
+        <el-input
           :model-value="unref(label)"
           size="small"
           placeholder="未命名"
@@ -42,7 +51,7 @@ function onDescriptionUpdate(v) {
       </div>
       <div class="prop-item">
         <div class="prop-label">描述</div>
-        <ElInput
+        <el-input
           :model-value="unref(description)"
           size="small"
           placeholder="请输入描述"
@@ -52,22 +61,22 @@ function onDescriptionUpdate(v) {
       </div>
       <div class="prop-item">
         <div class="prop-label">类型</div>
-        <ElInput :model-value="elementType" size="small" disabled />
+        <el-input :model-value="elementType" size="small" disabled />
       </div>
       <div class="prop-item">
         <div class="prop-label">ID</div>
-        <ElInput :model-value="elementId" size="small" disabled />
+        <el-input :model-value="elementId" size="small" disabled />
       </div>
       <div class="prop-item">
         <div class="prop-label">位置</div>
         <div class="axis-inline-group">
           <div class="axis-inline-item">
             <span class="axis-inline-tag">X</span>
-            <ElInput :model-value="formatStyleValue(currentStyle.left)" size="small" disabled />
+            <el-input :model-value="formatStyleValue(currentStyle.left)" size="small" disabled />
           </div>
           <div class="axis-inline-item">
             <span class="axis-inline-tag">Y</span>
-            <ElInput :model-value="formatStyleValue(currentStyle.top)" size="small" disabled />
+            <el-input :model-value="formatStyleValue(currentStyle.top)" size="small" disabled />
           </div>
         </div>
       </div>

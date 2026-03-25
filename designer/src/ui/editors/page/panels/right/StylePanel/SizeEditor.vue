@@ -6,6 +6,7 @@
 import { computed, ref, watch } from "vue";
 
 interface SizeStyleModel {
+  [key: string]: unknown;
   width?: string;
   height?: string;
 }
@@ -13,8 +14,8 @@ interface SizeStyleModel {
 const props = withDefaults(
   defineProps<{
     modelValue?: SizeStyleModel;
-    minWidth?: number;
-    minHeight?: number;
+    minWidth?: number | undefined;
+    minHeight?: number | undefined;
   }>(),
   {
     modelValue: () => ({}),
