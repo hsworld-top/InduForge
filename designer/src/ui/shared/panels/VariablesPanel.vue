@@ -2,7 +2,8 @@
   VariablesPanel - 变量面板
   管理页面/全局变量，支持增删、导入导出
 -->
-<script setup>
+<script setup lang="ts">
+import type { ChangeTarget, VarsConfig } from "@/editor-core/document/types";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
@@ -14,11 +15,57 @@ import IconEpPlus from "~icons/ep/plus";
 import IconEpUpload from "~icons/ep/upload";
 import MonacoEditor from "@/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
-import { usePanelState } from "@/ui/editors/page/panels/composables/use-panel-state";
 
 const editorStore = useEditorStore();
-const { panelState } = usePanelState();
 const { doc, docVersion, currentPageId, pages } = storeToRefs(editorStore);
+
+interface PageVarSourceLike {
+  type?: string;
+}
+
+interface PageVarDefinitionLike {
+  type?: string;
+  default?: unknown;
+  description?: string;
+  access?: string;
+  source?: PageVarSourceLike;
+  mapped?: boolean;
+  groupId?: string | null;
+}
+
+interface PageVarListItemLike {
+  name: string;
+  type: string;
+  default: unknown;
+  description: string;
+}
+
+interface PageVarEditorItemLike {
+  name: string;
+  type?: string;
+  default?: unknown;
+  description?: string;
+  access?: string;
+}
+
+interface StructuredParseSuccess {
+  ok: true;
+  parsed: unknown;
+}
+
+interface StructuredParseFailure {
+  ok: false;
+  error: string;
+}
+
+type StructuredParseResult = StructuredParseSuccess | StructuredParseFailure;
+interface ImportRowLike {
+  [key: string]: unknown;
+}
+
+interface MonacoEditorExposeLike {
+  format?: () => Promise<boolean> | boolean;
+}
 
 const editVisible = ref(false);
 const editMode = ref(false);
@@ -29,11 +76,11 @@ const formType = ref("string");
 const formDefaultText = ref("");
 const formDefaultNumber = ref(0);
 const formDefaultBoolean = ref(false);
-const formDefaultDate = ref(null);
+const formDefaultDate = ref<string | Date | null>(null);
 const formDescription = ref("");
-const editValueEditorRef = ref(null);
+const editValueEditorRef = ref<MonacoEditorExposeLike | null>(null);
 const editValueHasErrors = ref(false);
-const importInputRef = ref(null);
+const importInputRef = ref<HTMLInputElement | null>(null);
 const importType = ref("json");
 
 const typeOptions = [
@@ -63,15 +110,15 @@ const pageName = computed(() => {
   return page?.name || "page";
 });
 
-const pageVars = computed(() => {
+const pageVars = computed<Record<string, PageVarDefinitionLike>>(() => {
   docVersion.value;
   const pageId = currentPageId.value;
   if (!pageId || !doc.value) return {};
-  const vars = doc.value.vars?.pages?.[pageId];
+  const vars = doc.value.vars?.pages?.[pageId] as Record<string, PageVarDefinitionLike> | undefined;
   return vars && typeof vars === "object" ? vars : {};
 });
 
-const varList = computed(() => {
+const varList = computed<PageVarListItemLike[]>(() => {
   return Object.entries(pageVars.value).map(([name, def]) => ({
     name,
     type: def?.type || "string",
@@ -85,7 +132,7 @@ const varList = computed(() => {
  * @param {{ default: any }} item - 变量定义
  * @returns {string} 格式化后的文本
  */
-function formatDefaultValue(item) {
+function formatDefaultValue(item: { default?: unknown }): string {
   if (item.default === null || item.default === undefined) return "";
   if (typeof item.default === "object") {
     try {
@@ -101,14 +148,14 @@ function formatDefaultValue(item) {
  * 选择表格行
  * @param {string} name - 变量名
  */
-function selectRow(name) {
+function selectRow(name: string): void {
   selectedVarName.value = name || "";
 }
 
 /**
  * 打开新增弹窗
  */
-function openCreateDialog() {
+function openCreateDialog(): void {
   editMode.value = false;
   formName.value = "";
   originalName.value = "";
@@ -125,7 +172,7 @@ function openCreateDialog() {
  * 打开编辑弹窗
  * @param {{ name: string, type: string, default: any, description: string, access: string }} item - 变量信息
  */
-function openEditDialog(item) {
+function openEditDialog(item: PageVarEditorItemLike): void {
   if (!item) return;
   editMode.value = true;
   formName.value = item.name || "";
@@ -137,7 +184,7 @@ function openEditDialog(item) {
   } else if (formType.value === "boolean") {
     formDefaultBoolean.value = Boolean(item.default);
   } else if (formType.value === "date") {
-    formDefaultDate.value = item.default || null;
+    formDefaultDate.value = (item.default as string | Date | null | undefined) ?? null;
   } else {
     formDefaultText.value =
       item.default === undefined || item.default === null ? "" : String(item.default);
@@ -148,7 +195,7 @@ function openEditDialog(item) {
 /**
  * 重置初始值输入
  */
-function resetDefaultValue() {
+function resetDefaultValue(): void {
   formDefaultText.value = "";
   formDefaultNumber.value = 0;
   formDefaultBoolean.value = false;
@@ -156,7 +203,7 @@ function resetDefaultValue() {
   editValueHasErrors.value = false;
 }
 
-function parseStructuredJson(value, type) {
+function parseStructuredJson(value: unknown, type: string): StructuredParseResult {
   if (!isStructuredType.value) return { ok: true, parsed: value };
   if (typeof value !== "string") return { ok: true, parsed: value };
   try {
@@ -189,45 +236,47 @@ function parseStructuredJson(value, type) {
   }
 }
 
-function validateStructuredValue() {
+function validateStructuredValue(): boolean {
   if (!isStructuredType.value) return true;
   const result = parseStructuredJson(formDefaultText.value, formType.value);
   if (!result.ok) {
-    ElMessage.error(result.error || "校验失败");
+    ElMessage.error((result.error || "校验失败") as never);
     return false;
   }
   return true;
 }
 
-function handleEditValueMarkers(markers) {
+function handleEditValueMarkers(markers: unknown[]): void {
   if (!isEditorType.value) {
     editValueHasErrors.value = false;
     return;
   }
-  editValueHasErrors.value = (markers || []).some((marker) => marker.severity === 8);
+  editValueHasErrors.value = (markers || []).some(
+    (marker) => (marker as { severity?: number }).severity === 8,
+  );
 }
 
 /**
  * 保存变量
  */
-function saveVar() {
+function saveVar(): void {
   const name = formName.value.trim();
   if (!name) {
-    ElMessage.warning("名称不能为空");
+    ElMessage.warning("名称不能为空" as never);
     return;
   }
   if (!currentPageId.value || !doc.value) return;
 
   if (!editMode.value && pageVars.value[name]) {
-    ElMessage.warning("变量名已存在");
+    ElMessage.warning("变量名已存在" as never);
     return;
   }
   if (editMode.value && originalName.value && name !== originalName.value && pageVars.value[name]) {
-    ElMessage.warning("变量名已存在");
+    ElMessage.warning("变量名已存在" as never);
     return;
   }
   if (editValueHasErrors.value) {
-    ElMessage.error("初始值存在语法错误，请先修正");
+    ElMessage.error("初始值存在语法错误，请先修正" as never);
     return;
   }
   if (isStructuredType.value && !validateStructuredValue()) {
@@ -265,9 +314,9 @@ function saveVar() {
 /**
  * 删除变量
  */
-function handleDelete() {
+function handleDelete(): void {
   if (!selectedVarName.value) {
-    ElMessage.info("请选择需要删除的变量");
+    ElMessage.info("请选择需要删除的变量" as never);
     return;
   }
   ElMessageBox.confirm(`确认删除变量 "${selectedVarName.value}" 吗？`, "删除确认", {
@@ -289,23 +338,23 @@ function handleDelete() {
  * 提交页面变量
  * @param {Record<string, any>} vars - 变量定义
  */
-function commitPageVars(vars) {
+function commitPageVars(vars: Record<string, PageVarDefinitionLike>): void {
   if (!doc.value || !currentPageId.value) return;
-  const oldValue = doc.value.schema.vars;
+  const oldValue = doc.value.schema.vars as VarsConfig;
   const nextVars = {
     ...oldValue,
     pages: {
       ...(oldValue?.pages || {}),
-      [currentPageId.value]: vars,
+      [currentPageId.value]: vars as Record<string, unknown>,
     },
-  };
+  } as VarsConfig;
   doc.value.schema.vars = nextVars;
   doc.value._emitChange?.({
     type: "update",
-    target: "vars",
+    target: "page" as ChangeTarget,
     oldValue,
     newValue: nextVars,
-  });
+  } as never);
 }
 
 const importAccept = computed(() => {
@@ -314,7 +363,7 @@ const importAccept = computed(() => {
   return ".json";
 });
 
-function downloadBlob(content, name, type) {
+function downloadBlob(content: BlobPart, name: string, type: string): void {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -324,18 +373,18 @@ function downloadBlob(content, name, type) {
   URL.revokeObjectURL(url);
 }
 
-function sanitizeFileName(name) {
+function sanitizeFileName(name: unknown): string {
   return String(name || "page")
     .trim()
     .replace(/[\\/:*?"<>|]+/g, "-")
     .replace(/\s+/g, "-");
 }
 
-function getExportBaseName() {
+function getExportBaseName(): string {
   return `${sanitizeFileName(pageName.value)}-variable`;
 }
 
-function buildExportRows() {
+function buildExportRows(): PageVarListItemLike[] {
   return Object.entries(pageVars.value).map(([name, detail]) => ({
     name,
     type: detail?.type || "string",
@@ -344,13 +393,13 @@ function buildExportRows() {
   }));
 }
 
-function normalizeRowKey(row, key) {
+function normalizeRowKey(row: ImportRowLike, key: string): unknown {
   const lowerKey = key.toLowerCase();
   const hit = Object.keys(row).find((k) => k.toLowerCase() === lowerKey);
   return hit ? row[hit] : "";
 }
 
-function mergeImportedRows(rows) {
+function mergeImportedRows(rows: ImportRowLike[]): void {
   const nextVars = { ...pageVars.value };
   let added = 0;
   let skipped = 0;
@@ -382,10 +431,10 @@ function mergeImportedRows(rows) {
   });
 
   commitPageVars(nextVars);
-  ElMessage.success(`导入完成，新增 ${added} 项，跳过 ${skipped} 项`);
+  ElMessage.success(`导入完成，新增 ${added} 项，跳过 ${skipped} 项` as never);
 }
 
-function handleExport(format) {
+function handleExport(format: string): void {
   const rows = buildExportRows();
   const baseName = getExportBaseName();
   if (format === "json") {
@@ -413,7 +462,7 @@ function handleExport(format) {
   );
 }
 
-function handleImport(format) {
+function handleImport(format: string): void {
   importType.value = format;
   if (importInputRef.value) {
     importInputRef.value.value = "";
@@ -421,16 +470,17 @@ function handleImport(format) {
   }
 }
 
-async function handleFileChange(event) {
-  const file = event.target.files?.[0];
+async function handleFileChange(event: Event): Promise<void> {
+  const file = (event.target as HTMLInputElement | null)?.files?.[0];
   if (!file) return;
   if (importType.value === "json") {
     const text = await file.text();
     try {
       const data = JSON.parse(text);
       if (data && typeof data === "object" && data.vars) {
+        const vars = data.vars as Record<string, PageVarDefinitionLike>;
         mergeImportedRows(
-          Object.entries(data.vars).map(([name, detail]) => ({
+          Object.entries(vars).map(([name, detail]) => ({
             name,
             type: detail?.type || "string",
             default: detail?.default,
@@ -440,12 +490,12 @@ async function handleFileChange(event) {
         return;
       }
       if (Array.isArray(data)) {
-        mergeImportedRows(data);
+        mergeImportedRows(data as ImportRowLike[]);
         return;
       }
-      ElMessage.error("JSON 格式不支持");
+      ElMessage.error("JSON 格式不支持" as never);
     } catch (error) {
-      ElMessage.error("JSON 解析失败");
+      ElMessage.error("JSON 解析失败" as never);
     }
     return;
   }
@@ -454,12 +504,17 @@ async function handleFileChange(event) {
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
-    ElMessage.error("文件中没有数据表");
+    ElMessage.error("文件中没有数据表" as never);
     return;
   }
-  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) {
+    ElMessage.error("文件中没有数据表" as never);
+    return;
+  }
+  const rows = XLSX.utils.sheet_to_json(sheet, {
     defval: "",
-  });
+  }) as ImportRowLike[];
   mergeImportedRows(rows);
 }
 
