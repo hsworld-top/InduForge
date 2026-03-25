@@ -7,20 +7,17 @@
  */
 
 import { computed } from "vue";
-import IconEpLocation from "~icons/ep/location";
 import IconEpDocument from "~icons/ep/document";
+import IconEpLocation from "~icons/ep/location";
 import IconEpMenu from "~icons/ep/menu";
 import IconEpSetting from "~icons/ep/setting";
-import {
-  captureMenuDslConfig,
-  normalizeMenuItems,
-} from "./use-node-content";
 import {
   getDesignerNodeLayoutClasses,
   getRegionDesignerHint,
   getRenderKey,
   usesComponentWrapper,
 } from "@/components/descriptors/registry";
+import { captureMenuDslConfig } from "./use-node-content";
 
 const fallbackMenuItems = [
   { index: "1", label: "菜单一" },
@@ -41,21 +38,17 @@ const fallbackTimelineItems = [
   { label: "步骤二", timestamp: "2024-01-02" },
   { label: "步骤三", timestamp: "2024-01-03" },
 ];
-const fallbackStepsItems = [
-  { title: "步骤一" },
-  { title: "步骤二" },
-  { title: "步骤三" },
-];
+const fallbackStepsItems = [{ title: "步骤一" }, { title: "步骤二" }, { title: "步骤三" }];
 const fallbackCollapseItems = [
   { name: "1", title: "面板一", content: "内容一" },
   { name: "2", title: "面板二", content: "内容二" },
 ];
 const fallbackCarouselItems = [{ label: "轮播一" }, { label: "轮播二" }];
 
-const normalizeOptions = (source, fallback) => {
+function normalizeOptions(source, fallback) {
   if (Array.isArray(source)) return source;
   return fallback;
-};
+}
 
 /**
  * @param {string} content
@@ -63,14 +56,14 @@ const normalizeOptions = (source, fallback) => {
  */
 export function sanitizeDslContent(content) {
   return String(content || "")
-    .replace(/[，]/g, ",")
-    .replace(/[；]/g, ";")
-    .replace(/[：]/g, ":");
+    .replace(/，/g, ",")
+    .replace(/；/g, ";")
+    .replace(/：/g, ":");
 }
 
 /**
  * @param {string} content
- * @returns {Object|null}
+ * @returns {object | null}
  */
 export function resolveMenuConfigFromContent(content) {
   const text = sanitizeDslContent(content).trim();
@@ -91,7 +84,7 @@ export function resolveMenuConfigFromContent(content) {
   }
 }
 
-const resolveMenuIconComponent = (icon) => {
+function resolveMenuIconComponent(icon) {
   if (!icon) return null;
   if (typeof icon === "object" || typeof icon === "function") return icon;
   const key = String(icon).trim().toLowerCase();
@@ -103,15 +96,15 @@ const resolveMenuIconComponent = (icon) => {
     setting: IconEpSetting,
   };
   return map[key] || null;
-};
+}
 
 /**
- * @param {Object} deps
- * @param {import('vue').ComputedRef<Object|null>} deps.node
+ * @param {object} deps
+ * @param {import('vue').ComputedRef<object | null>} deps.node
  * @param {import('vue').ComputedRef<string>} deps.detailConfigText
  * @param {import('vue').Ref<number>} deps.docVersion
  * @param {import('vue').Ref<number>} deps.tableRenderVersion
- * @param {import('vue').ComputedRef<Object>} deps.resolvedNodeProps
+ * @param {import('vue').ComputedRef<object>} deps.resolvedNodeProps
  * @param {import('vue').Ref<number>} deps.selectionVersion
  * @param {import('vue').ShallowRef} deps.selection
  * @param {import('vue').ShallowRef} deps.doc
@@ -120,8 +113,8 @@ const resolveMenuIconComponent = (icon) => {
  * @param {import('vue').ComputedRef<boolean>} deps.isDropActive
  * @param {import('vue').Ref<string>} deps.activeTabName
  * @param {import('vue').ComputedRef<Array>} deps.tabsList
- * @param {Object} deps.props - defineProps 结果（isRoot, readonly）
- * @returns {Object}
+ * @param {object} deps.props - defineProps 结果（isRoot, readonly）
+ * @returns {object}
  */
 export function useNodeRendererDerivations({
   node,
@@ -158,11 +151,7 @@ export function useNodeRendererDerivations({
         }
         if (typeof item !== "object") return null;
         const label = item.label ?? item.title ?? item.name ?? "";
-        const index =
-          item.index ??
-          item.command ??
-          item.key ??
-          (label ? String(label) : undefined);
+        const index = item.index ?? item.command ?? item.key ?? (label ? String(label) : undefined);
         const iconComponent = resolveMenuIconComponent(item.icon);
         return { ...item, label, index, iconComponent };
       })
@@ -176,10 +165,7 @@ export function useNodeRendererDerivations({
 
   const bigTableColumns = computed(() => {
     tableRenderVersion.value;
-    return normalizeOptions(
-      node.value?.props?.columns,
-      fallbackBigTableColumns,
-    );
+    return normalizeOptions(node.value?.props?.columns, fallbackBigTableColumns);
   });
 
   const timelineItems = computed(() => {
@@ -247,9 +233,7 @@ export function useNodeRendererDerivations({
     if (node.value.locked) classes.push("is-locked");
 
     const tabPosition =
-      resolvedNodeProps.value?.tabPosition ||
-      node.value.props?.tabPosition ||
-      "top";
+      resolvedNodeProps.value?.tabPosition || node.value.props?.tabPosition || "top";
     const parentNode = doc.value?.getParent?.(node.value.id);
     const gutter = Number(parentNode?.props?.gutter) || 0;
 
@@ -285,23 +269,21 @@ export function useNodeRendererDerivations({
 }
 
 /**
- * @param {Object} ctx
- * @param {import('vue').ComputedRef<Object|null>} ctx.node
+ * @param {object} ctx
+ * @param {import('vue').ComputedRef<object | null>} ctx.node
  * @param {import('vue').Ref<boolean>} ctx.readonly
  * @param {Function} ctx.applyPreviewPatch
- * @param {Object} ctx.editorStore
+ * @param {object} ctx.editorStore
  * @param {Function} ctx.normalizeMenuItems - 与 useNodeContent 一致
  * @returns {Function}
  */
 export function createApplyMenuDslConfig(ctx) {
-  const { node, readonly, applyPreviewPatch, editorStore, normalizeMenuItems: normMenu } =
-    ctx;
+  const { node, readonly, applyPreviewPatch, editorStore, normalizeMenuItems: normMenu } = ctx;
   return (config) => {
     if (!config || typeof config !== "object") return;
     if (node.value?.type !== "Menu") return;
     const propsPatch = { ...(node.value?.props || {}) };
-    const rawProps =
-      config.props && typeof config.props === "object" ? { ...config.props } : {};
+    const rawProps = config.props && typeof config.props === "object" ? { ...config.props } : {};
     if (Array.isArray(config.items)) {
       rawProps.items = config.items;
     }

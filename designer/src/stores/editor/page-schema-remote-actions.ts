@@ -4,25 +4,18 @@
 
 import type { Ref, ShallowRef } from "vue";
 import type { DocumentModel } from "@/editor-core/document/DocumentModel";
-import type {
-  ExportedPagePayload,
-  Serializer,
-} from "@/editor-core/document/Serializer";
+import type { ExportedPagePayload, Serializer } from "@/editor-core/document/Serializer";
 
-export type PageSchemaRemoteProjectApi = {
-  updatePage: (
-    pid: string,
-    pageId: string,
-    payload: unknown,
-  ) => Promise<unknown>;
-};
+export interface PageSchemaRemoteProjectApi {
+  updatePage: (pid: string, pageId: string, payload: unknown) => Promise<unknown>;
+}
 
-export type PageSchemaRemoteStoreContext = {
+export interface PageSchemaRemoteStoreContext {
   projectId: Ref<string>;
   doc: ShallowRef<DocumentModel | null>;
   serializer: ShallowRef<Serializer>;
   projectApi: PageSchemaRemoteProjectApi;
-};
+}
 
 export async function updatePageSchemaForStore(
   ctx: PageSchemaRemoteStoreContext,

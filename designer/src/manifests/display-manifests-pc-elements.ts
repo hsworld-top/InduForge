@@ -300,11 +300,7 @@ registerManifest({
       type: "array",
       label: "步骤",
       group: "数据",
-      defaultValue: [
-        { title: "步骤一" },
-        { title: "步骤二" },
-        { title: "步骤三" },
-      ],
+      defaultValue: [{ title: "步骤一" }, { title: "步骤二" }, { title: "步骤三" }],
     },
   ],
 });

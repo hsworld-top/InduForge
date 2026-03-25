@@ -2,458 +2,20 @@
   BindingPanel - 绑定配置面板
   配置页面/组件的生命周期、定时器、变量变更等绑定脚本
 -->
-<template>
-  <div class="binding-panel">
-    <template v-if="!forceShow && panelState !== 'page'">
-      <div class="empty-hint">请选择页面以配置绑定</div>
-    </template>
-    <template v-else>
-      <div class="binding-toolbar">
-        <el-dropdown trigger="click" @command="handleCreateCommand">
-          <el-button class="toolbar-button" size="small" circle>
-            <IconEpPlus />
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="timer">创建定时器</el-dropdown-item>
-              <el-dropdown-item command="variable">变量改变</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-tooltip content="删除" placement="top">
-          <el-button
-            class="toolbar-button"
-            size="small"
-            circle
-            @click="handleDelete"
-          >
-            <IconEpDelete />
-          </el-button>
-        </el-tooltip>
-      </div>
-      <div class="binding-section">
-        <div class="section-header">基本</div>
-        <div class="section-body">
-          <div
-            v-for="item in lifecycleItems"
-            :key="item.key"
-            class="binding-row"
-          >
-            <div class="binding-name">{{ item.label }}</div>
-            <div class="binding-actions">
-              <div class="binding-toggle">
-                <span class="binding-toggle-label">启动</span>
-                <el-switch
-                  :model-value="getLifecycleEnabled(item.key)"
-                  @change="(value) => handleToggleLifecycle(item.key, value)"
-                />
-              </div>
-              <el-tooltip content="打开编辑器" placement="top">
-                <el-button
-                  class="icon-button"
-                  size="small"
-                  circle
-                  @click="openEditor(item)"
-                >
-                  <IconEpEditPen />
-                </el-button>
-              </el-tooltip>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="binding-section">
-        <div class="section-header">定时器</div>
-        <div v-if="timerItems.length === 0" class="empty-block">暂无数据</div>
-        <div v-else class="section-body">
-          <div
-            v-for="item in timerItems"
-            :key="item.id"
-            class="binding-row is-shifted"
-            :class="{ 'is-active': isSelectedItem('timers', item.id) }"
-          >
-            <el-checkbox
-              class="select-check"
-              :model-value="isSelectedItem('timers', item.id)"
-              @change="(value) => toggleSelection('timers', item.id, value)"
-            />
-            <div class="binding-name">{{ item.name }}</div>
-            <div class="binding-actions">
-              <div class="binding-toggle">
-                <span class="binding-toggle-label">启动</span>
-                <el-switch
-                  :model-value="item.enabled !== false"
-                  @change="
-                    (value) => handleToggleItem('timers', item.id, value)
-                  "
-                />
-              </div>
-              <el-tooltip content="打开编辑器" placement="top">
-                <el-button
-                  class="icon-button"
-                  size="small"
-                  circle
-                  @click.stop="openItemEditor('timers', item)"
-                >
-                  <IconEpEditPen />
-                </el-button>
-              </el-tooltip>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="binding-section">
-        <div class="section-header">变量改变</div>
-        <div v-if="variableChangeItems.length === 0" class="empty-block">
-          暂无数据
-        </div>
-        <div v-else class="section-body">
-          <div
-            v-for="item in variableChangeItems"
-            :key="item.id"
-            class="binding-row is-shifted"
-            :class="{ 'is-active': isSelectedItem('variableChanges', item.id) }"
-          >
-            <el-checkbox
-              class="select-check"
-              :model-value="isSelectedItem('variableChanges', item.id)"
-              @change="
-                (value) => toggleSelection('variableChanges', item.id, value)
-              "
-            />
-            <div class="binding-name">{{ item.name }}</div>
-            <div class="binding-actions">
-              <div class="binding-toggle">
-                <span class="binding-toggle-label">启动</span>
-                <el-switch
-                  :model-value="item.enabled !== false"
-                  @change="
-                    (value) =>
-                      handleToggleItem('variableChanges', item.id, value)
-                  "
-                />
-              </div>
-              <el-tooltip content="打开编辑器" placement="top">
-                <el-button
-                  class="icon-button"
-                  size="small"
-                  circle
-                  @click.stop="openItemEditor('variableChanges', item)"
-                >
-                  <IconEpEditPen />
-                </el-button>
-              </el-tooltip>
-            </div>
-          </div>
-        </div>
-      </div>
-    </template>
-  </div>
-
-  <el-dialog
-    v-model="editorVisible"
-    :title="editorTitle"
-    width="980px"
-    top="3vh"
-    :close-on-click-modal="false"
-    :lock-scroll="false"
-  >
-    <div class="editor-meta">
-      <div class="meta-title">{{ editorTitle }}</div>
-      <div class="meta-desc">{{ editorDescription }}</div>
-      <div class="meta-actions">
-        <el-tooltip content="枚举变量" placement="top">
-          <el-button
-            class="icon-button"
-            size="small"
-            circle
-            @click="openVariableEnum"
-          >
-            <IconEpList />
-          </el-button>
-        </el-tooltip>
-      </div>
-    </div>
-    <div class="editor-body">
-      <div class="editor-main">
-        <MonacoEditor
-          ref="editorRef"
-          v-model="scriptCode"
-          language="javascript"
-          height="520px"
-          :completions="jsCompletions"
-        />
-      </div>
-      <div class="editor-sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-title">自定义脚本</div>
-          <el-input
-            v-model="scriptSearch"
-            size="small"
-            placeholder="搜索脚本/分组"
-            clearable
-          />
-          <div class="sidebar-scroll">
-            <el-tree
-              ref="customTreeRef"
-              :data="customScriptTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterSidebarNode"
-              @node-click="handleCustomScriptInsert"
-            >
-              <template #default="{ data }">
-                <div class="tree-node" :class="`node-${data.type}`">
-                  <el-icon class="node-icon icon-custom">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpEditPen v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                  >
-                    {{ data.label }}
-                  </span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-        <div class="sidebar-section">
-          <div class="sidebar-title">页面组件</div>
-          <el-input
-            v-model="componentSearch"
-            size="small"
-            placeholder="搜索组件/分组"
-            clearable
-          />
-          <div class="sidebar-scroll">
-            <el-tree
-              ref="componentTreeRef"
-              :data="pageComponentTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterSidebarNode"
-              @node-click="handleComponentInsert"
-            >
-              <template #default="{ data }">
-                <div class="tree-node" :class="`node-${data.type}`">
-                  <el-icon class="node-icon icon-component">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpGrid v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                  >
-                    {{ data.label }}
-                  </span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </div>
-    </div>
-    <template #footer>
-      <el-button @click="editorVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveScript">保存</el-button>
-    </template>
-  </el-dialog>
-
-  <el-dialog
-    v-model="variableEnumVisible"
-    title="变量枚举"
-    width="760px"
-    :close-on-click-modal="false"
-    :lock-scroll="false"
-  >
-    <el-tabs v-model="enumTab">
-      <el-tab-pane label="工程变量" name="project">
-        <div class="enum-layout">
-          <div class="enum-left">
-            <div class="sidebar-title">分组</div>
-            <el-tree
-              ref="enumProjectTreeRef"
-              :data="projectGroupTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterSidebarNode"
-              @node-click="handleProjectGroupSelect"
-            >
-              <template #default="{ data }">
-                <div class="tree-node node-group">
-                  <el-icon class="node-icon icon-variable">
-                    <IconEpFolder />
-                  </el-icon>
-                  <span class="node-label is-group">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-          <div class="enum-right">
-            <el-input
-              v-model="projectVarSearch"
-              size="small"
-              placeholder="搜索工程变量"
-              clearable
-            />
-            <el-table
-              :data="projectVariableRows"
-              size="small"
-              height="320"
-              highlight-current-row
-              @row-click="handleProjectRowClick"
-              @row-dblclick="handleProjectRowDblClick"
-              :row-class-name="enumProjectRowClass"
-            >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column
-                prop="description"
-                label="描述"
-                min-width="160"
-              />
-              <el-table-column prop="mapped" label="映射" width="70">
-                <template #default="{ row }">
-                  {{ row.mapped ? "是" : "" }}
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </div>
-      </el-tab-pane>
-      <el-tab-pane label="页面变量" name="page">
-        <div class="enum-layout">
-          <div class="enum-left">
-            <div class="sidebar-title">分组</div>
-            <el-tree
-              ref="enumPageTreeRef"
-              :data="pageGroupTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              @node-click="handlePageGroupSelect"
-            >
-              <template #default="{ data }">
-                <div class="tree-node node-group">
-                  <el-icon class="node-icon icon-variable">
-                    <IconEpFolder />
-                  </el-icon>
-                  <span class="node-label is-group">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-          <div class="enum-right">
-            <el-input
-              v-model="pageVarSearch"
-              size="small"
-              placeholder="搜索页面变量"
-              clearable
-            />
-            <el-table
-              :data="pageVariableRows"
-              size="small"
-              height="320"
-              highlight-current-row
-              @row-click="handlePageRowClick"
-              @row-dblclick="handlePageRowDblClick"
-              :row-class-name="enumPageRowClass"
-            >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column
-                prop="defaultValue"
-                label="初始值"
-                min-width="160"
-              />
-              <el-table-column
-                prop="description"
-                label="描述"
-                min-width="160"
-              />
-            </el-table>
-          </div>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
-    <template #footer>
-      <el-button @click="variableEnumVisible = false">取消</el-button>
-      <el-button
-        type="primary"
-        :disabled="!enumSelectedProjectVar && !enumSelectedPageVar"
-        @click="confirmEnumInsert"
-      >
-        插入
-      </el-button>
-    </template>
-  </el-dialog>
-
-  <el-dialog
-    v-model="createDialogVisible"
-    :title="createDialogTitle"
-    width="420px"
-  >
-    <el-form label-width="90px">
-      <template v-if="createDialogType === 'timer'">
-        <el-form-item label="定时器名称">
-          <el-input v-model="createForm.name" placeholder="请输入定时器名称" />
-        </el-form-item>
-        <el-form-item label="时间(ms)">
-          <el-input-number
-            v-model="createForm.interval"
-            :min="100"
-            :step="100"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="createForm.description" placeholder="请输入描述" />
-        </el-form-item>
-      </template>
-      <template v-else>
-        <el-form-item label="变量">
-          <el-select v-model="createForm.variable" placeholder="请选择变量">
-            <el-option
-              v-for="option in pageVariableOptions"
-              :key="option"
-              :label="option"
-              :value="option"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="createForm.description" placeholder="请输入描述" />
-        </el-form-item>
-      </template>
-    </el-form>
-    <template #footer>
-      <el-button @click="createDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="handleCreateConfirm">确定</el-button>
-    </template>
-  </el-dialog>
-</template>
-
 <script setup>
-import { computed, ref, watch } from "vue";
-import { storeToRefs } from "pinia";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { storeToRefs } from "pinia";
+import { computed, ref, watch } from "vue";
+import IconEpDelete from "~icons/ep/delete";
+import IconEpEditPen from "~icons/ep/edit-pen";
+import IconEpFolder from "~icons/ep/folder";
+import IconEpGrid from "~icons/ep/grid";
+import IconEpList from "~icons/ep/list";
+import IconEpPlus from "~icons/ep/plus";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/utils/component-methods";
 import { usePanelState } from "../composables/use-panel-state";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpDelete from "~icons/ep/delete";
-import IconEpList from "~icons/ep/list";
-import IconEpGrid from "~icons/ep/grid";
 
 const { forceShow } = defineProps({
   forceShow: {
@@ -544,53 +106,53 @@ const pageVariableOptions = computed(() => {
  * @param {string} key - 生命周期 key
  * @returns {Object | string | null} 处理器
  */
-const getLifecycleHandler = (key) => {
+function getLifecycleHandler(key) {
   if (!pageSnapshot.value || !key) return null;
   const handlers = pageSnapshot.value.lifecycle?.[key];
   if (!Array.isArray(handlers) || handlers.length === 0) return null;
   return handlers[0] || null;
-};
+}
 
 /**
  * 获取脚本内容
  * @param {string} key - 生命周期 key
  * @returns {string} 脚本内容
  */
-const getLifecycleScript = (key) => {
+function getLifecycleScript(key) {
   const handler = getLifecycleHandler(key);
   if (!handler) return "";
   if (typeof handler === "string") return handler;
   return handler?.code || "";
-};
+}
 
 /**
  * 同步生命周期开关状态
  */
-const syncLifecycleToggleState = () => {
+function syncLifecycleToggleState() {
   const nextState = {};
   lifecycleItems.forEach((item) => {
     const handler = getLifecycleHandler(item.key);
     nextState[item.key] = handler?.enabled !== false;
   });
   lifecycleToggleState.value = nextState;
-};
+}
 
 /**
  * 获取生命周期是否启用
  * @param {string} key - 生命周期 key
  * @returns {boolean} 是否启用
  */
-const getLifecycleEnabled = (key) => {
+function getLifecycleEnabled(key) {
   if (!key) return true;
   return lifecycleToggleState.value[key] !== false;
-};
+}
 
 /**
  * 切换生命周期启用状态
  * @param {string} key - 生命周期 key
  * @param {boolean} enabled - 是否启用
  */
-const handleToggleLifecycle = (key, enabled) => {
+function handleToggleLifecycle(key, enabled) {
   if (!currentPage.value || !key) return;
   lifecycleToggleState.value = {
     ...lifecycleToggleState.value,
@@ -605,34 +167,28 @@ const handleToggleLifecycle = (key, enabled) => {
   const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
   nextLifecycle[key] = [nextHandler];
   editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
-};
+}
 
 /**
  * 打开脚本编辑器
  * @param {{ key: string }} item - 生命周期项
  */
-const openEditor = (item) => {
+function openEditor(item) {
   activeLifecycleKey.value = item?.key || "";
   activeItemType.value = "lifecycle";
   activeItemId.value = "";
   scriptCode.value = getLifecycleScript(activeLifecycleKey.value) || "";
   editorVisible.value = true;
-};
+}
 
 /**
  * 保存脚本
  */
-const saveScript = () => {
+function saveScript() {
   if (!currentPage.value) return;
-  if (
-    activeItemType.value === "timer" ||
-    activeItemType.value === "variableChanges"
-  ) {
+  if (activeItemType.value === "timer" || activeItemType.value === "variableChanges") {
     const code = scriptCode.value || "";
-    const items =
-      activeItemType.value === "timer"
-        ? timerItems.value
-        : variableChangeItems.value;
+    const items = activeItemType.value === "timer" ? timerItems.value : variableChangeItems.value;
     const nextItems = items.map((item) =>
       item.id === activeItemId.value ? { ...item, code } : item,
     );
@@ -664,28 +220,22 @@ const saveScript = () => {
   editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
   void editorStore.saveCurrentPage?.();
   editorVisible.value = false;
-};
+}
 
 const editorTitle = computed(() => pageTitle.value);
 
 const editorDescription = computed(() => {
   if (activeItemType.value === "timer") {
-    const item = timerItems.value.find(
-      (entry) => entry.id === activeItemId.value,
-    );
+    const item = timerItems.value.find((entry) => entry.id === activeItemId.value);
     const label = item?.name || "定时器";
     return `${pageTitle.value}${label}脚本`;
   }
   if (activeItemType.value === "variableChanges") {
-    const item = variableChangeItems.value.find(
-      (entry) => entry.id === activeItemId.value,
-    );
+    const item = variableChangeItems.value.find((entry) => entry.id === activeItemId.value);
     const label = item?.name || "变量改变";
     return `${pageTitle.value}${label}脚本`;
   }
-  const item = lifecycleItems.find(
-    (entry) => entry.key === activeLifecycleKey.value,
-  );
+  const item = lifecycleItems.find((entry) => entry.key === activeLifecycleKey.value);
   const label = item?.label || activeLifecycleKey.value || "事件";
   return `${pageTitle.value}${label}脚本`;
 });
@@ -709,15 +259,13 @@ const projectGroupTree = computed(() => [
 
 const projectVariableRows = computed(() => {
   const keyword = String(projectVarSearch.value || "").toLowerCase();
-  const items = Object.entries(projectVariables.value || {}).map(
-    ([name, detail]) => ({
-      name,
-      groupId: detail?.groupId || null,
-      type: detail?.type || "string",
-      description: detail?.description || "",
-      mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
-    }),
-  );
+  const items = Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
+    name,
+    groupId: detail?.groupId || null,
+    type: detail?.type || "string",
+    description: detail?.description || "",
+    mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+  }));
   return items
     .filter((item) => {
       if (enumSelectedProjectGroupId.value) {
@@ -761,9 +309,7 @@ const pageComponentTree = computed(() => {
   const buildNode = (nodeId) => {
     const node = doc.value.getNode(nodeId);
     if (!node) return null;
-    const children = (node.children || [])
-      .map((childId) => buildNode(childId))
-      .filter(Boolean);
+    const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean);
     const label = node.label || node.type || "组件";
     return {
       id: node.id,
@@ -892,7 +438,7 @@ const jsCompletions = computed(() => {
   return items;
 });
 
-const buildGroupTree = (groups) => {
+function buildGroupTree(groups) {
   const groupMap = new Map();
   const roots = [];
   const normalized = Array.isArray(groups) ? groups : [];
@@ -913,9 +459,9 @@ const buildGroupTree = (groups) => {
     }
   });
   return roots;
-};
+}
 
-const formatDefaultValue = (value) => {
+function formatDefaultValue(value) {
   if (value === null || value === undefined) return "";
   if (value instanceof Set) return JSON.stringify(Array.from(value));
   if (value instanceof Map) return JSON.stringify(Array.from(value.entries()));
@@ -927,14 +473,14 @@ const formatDefaultValue = (value) => {
     }
   }
   return String(value);
-};
+}
 
-const filterSidebarNode = (value, data) => {
+function filterSidebarNode(value, data) {
   if (!value) return true;
   return String(data?.label || "")
     .toLowerCase()
     .includes(value.toLowerCase());
-};
+}
 
 watch(scriptSearch, (value) => {
   customTreeRef.value?.filter?.(value);
@@ -944,21 +490,19 @@ watch(componentSearch, (value) => {
   componentTreeRef.value?.filter?.(value);
 });
 
-const handleCustomScriptInsert = (data) => {
+function handleCustomScriptInsert(data) {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
-  const call = params
-    ? `customScripts.${data.label}(${params})`
-    : `customScripts.${data.label}()`;
+  const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
   editorRef.value?.insertText?.(call);
-};
+}
 
-const handleComponentInsert = (data) => {
+function handleComponentInsert(data) {
   if (!data?.componentName) return;
   editorRef.value?.insertText?.(`components.${data.componentName}`);
-};
+}
 
-const openVariableEnum = () => {
+function openVariableEnum() {
   projectVarSearch.value = "";
   pageVarSearch.value = "";
   enumTab.value = "project";
@@ -967,67 +511,65 @@ const openVariableEnum = () => {
   enumSelectedProjectVar.value = null;
   enumSelectedPageVar.value = null;
   variableEnumVisible.value = true;
-};
+}
 
-const handleProjectGroupSelect = (data) => {
+function handleProjectGroupSelect(data) {
   if (!data) {
     enumSelectedProjectGroupId.value = null;
     return;
   }
   enumSelectedProjectGroupId.value = data.id === "all" ? null : data.id;
-};
+}
 
-const handlePageGroupSelect = (data) => {
+function handlePageGroupSelect(data) {
   enumSelectedPageGroupId.value = data?.id || "page-root";
-};
+}
 
-const handleProjectRowClick = (row) => {
+function handleProjectRowClick(row) {
   enumSelectedProjectVar.value = row || null;
-};
+}
 
-const handlePageRowClick = (row) => {
+function handlePageRowClick(row) {
   enumSelectedPageVar.value = row || null;
-};
+}
 
-const handleProjectRowDblClick = (row) => {
+function handleProjectRowDblClick(row) {
   enumSelectedProjectVar.value = row || null;
   confirmEnumInsert();
-};
+}
 
-const handlePageRowDblClick = (row) => {
+function handlePageRowDblClick(row) {
   enumSelectedPageVar.value = row || null;
   confirmEnumInsert();
-};
+}
 
-const enumProjectRowClass = ({ row }) => {
+function enumProjectRowClass({ row }) {
   if (enumSelectedProjectVar.value?.name === row.name) return "is-selected";
   return "";
-};
+}
 
-const enumPageRowClass = ({ row }) => {
+function enumPageRowClass({ row }) {
   if (enumSelectedPageVar.value?.name === row.name) return "is-selected";
   return "";
-};
+}
 
-const confirmEnumInsert = () => {
+function confirmEnumInsert() {
   if (enumTab.value === "page" && enumSelectedPageVar.value?.name) {
     editorRef.value?.insertText?.(`$vars.${enumSelectedPageVar.value.name}`);
     variableEnumVisible.value = false;
     return;
   }
   if (enumSelectedProjectVar.value?.name) {
-    editorRef.value?.insertText?.(
-      `$global.${enumSelectedProjectVar.value.name}`,
-    );
+    editorRef.value?.insertText?.(`$global.${enumSelectedProjectVar.value.name}`);
     variableEnumVisible.value = false;
   }
-};
+}
 
 /**
  * 处理创建命令
  * @param {string} command - 创建类型
  */
-const handleCreateCommand = (command) => {
+function handleCreateCommand(command) {
   createDialogType.value = command === "variable" ? "variable" : "timer";
   createForm.value = {
     name: "",
@@ -1036,12 +578,12 @@ const handleCreateCommand = (command) => {
     description: "",
   };
   createDialogVisible.value = true;
-};
+}
 
 /**
  * 处理创建确认
  */
-const handleCreateConfirm = () => {
+function handleCreateConfirm() {
   if (!currentPage.value) return;
   const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
   if (createDialogType.value === "timer") {
@@ -1065,7 +607,7 @@ const handleCreateConfirm = () => {
     nextLifecycle.timers = nextItems;
     selectedIds.value = {
       ...selectedIds.value,
-      timers: [nextItems[nextItems.length - 1].id],
+      timers: [nextItems.at(-1).id],
     };
   } else {
     const variable = createForm.value.variable.trim();
@@ -1086,26 +628,26 @@ const handleCreateConfirm = () => {
     nextLifecycle.variableChanges = nextItems;
     selectedIds.value = {
       ...selectedIds.value,
-      variableChanges: [nextItems[nextItems.length - 1].id],
+      variableChanges: [nextItems.at(-1).id],
     };
   }
   editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
   void editorStore.saveCurrentPage?.();
   createDialogVisible.value = false;
-};
+}
 
 /**
  * 生成 ID
  * @param {string} prefix - 前缀
  * @returns {string} ID
  */
-const createId = (prefix) => {
+function createId(prefix) {
   const random =
     typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID().replace(/-/g, "").slice(0, 8)
       : Math.random().toString(16).slice(2, 10);
   return `${prefix}_${Date.now().toString(16)}_${random}`;
-};
+}
 
 /**
  * 判断是否选中条目
@@ -1113,9 +655,9 @@ const createId = (prefix) => {
  * @param {string} id - 条目 ID
  * @returns {boolean} 是否选中
  */
-const isSelectedItem = (type, id) => {
+function isSelectedItem(type, id) {
   return selectedIds.value[type].includes(id);
-};
+}
 
 /**
  * 切换条目选中状态
@@ -1123,13 +665,11 @@ const isSelectedItem = (type, id) => {
  * @param {string} id - 条目 ID
  * @param {boolean} checked - 是否选中
  */
-const toggleSelection = (type, id, checked) => {
+function toggleSelection(type, id, checked) {
   const list = selectedIds.value[type] || [];
-  const nextList = checked
-    ? [...new Set([...list, id])]
-    : list.filter((item) => item !== id);
+  const nextList = checked ? [...new Set([...list, id])] : list.filter((item) => item !== id);
   selectedIds.value = { ...selectedIds.value, [type]: nextList };
-};
+}
 
 /**
  * 切换条目启用状态
@@ -1137,10 +677,9 @@ const toggleSelection = (type, id, checked) => {
  * @param {string} id - 条目 ID
  * @param {boolean} enabled - 是否启用
  */
-const handleToggleItem = (type, id, enabled) => {
+function handleToggleItem(type, id, enabled) {
   if (!currentPage.value) return;
-  const items =
-    type === "timers" ? timerItems.value : variableChangeItems.value;
+  const items = type === "timers" ? timerItems.value : variableChangeItems.value;
   const nextItems = items.map((item) =>
     item.id === id ? { ...item, enabled: enabled !== false } : item,
   );
@@ -1151,26 +690,26 @@ const handleToggleItem = (type, id, enabled) => {
     nextLifecycle.variableChanges = nextItems;
   }
   editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
-};
+}
 
 /**
  * 打开条目脚本编辑器
  * @param {'timers' | 'variableChanges'} type - 类型
  * @param {{ id: string, code?: string, name?: string }} item - 条目
  */
-const openItemEditor = (type, item) => {
+function openItemEditor(type, item) {
   if (!item?.id) return;
   activeLifecycleKey.value = "";
   activeItemType.value = type === "timers" ? "timer" : "variableChanges";
   activeItemId.value = item.id;
   scriptCode.value = item.code || "";
   editorVisible.value = true;
-};
+}
 
 /**
  * 删除条目
  */
-const handleDelete = () => {
+function handleDelete() {
   if (!currentPage.value) return;
   const timerIds = selectedIds.value.timers || [];
   const variableIds = selectedIds.value.variableChanges || [];
@@ -1187,9 +726,7 @@ const handleDelete = () => {
     .then(() => {
       const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
       if (timerIds.length > 0) {
-        nextLifecycle.timers = timerItems.value.filter(
-          (item) => !timerIds.includes(item.id),
-        );
+        nextLifecycle.timers = timerItems.value.filter((item) => !timerIds.includes(item.id));
       }
       if (variableIds.length > 0) {
         nextLifecycle.variableChanges = variableChangeItems.value.filter(
@@ -1201,7 +738,7 @@ const handleDelete = () => {
       selectedIds.value = { timers: [], variableChanges: [] };
     })
     .catch(() => {});
-};
+}
 
 watch(
   () => [currentPage.value?.id],
@@ -1228,20 +765,389 @@ watch(
   () => {
     if (!activeItemId.value) return;
     if (activeItemType.value === "timer") {
-      const item = timerItems.value.find(
-        (entry) => entry.id === activeItemId.value,
-      );
+      const item = timerItems.value.find((entry) => entry.id === activeItemId.value);
       scriptCode.value = item?.code || "";
     } else if (activeItemType.value === "variableChanges") {
-      const item = variableChangeItems.value.find(
-        (entry) => entry.id === activeItemId.value,
-      );
+      const item = variableChangeItems.value.find((entry) => entry.id === activeItemId.value);
       scriptCode.value = item?.code || "";
     }
   },
   { immediate: true },
 );
 </script>
+
+<template>
+  <div class="binding-panel">
+    <template v-if="!forceShow && panelState !== 'page'">
+      <div class="empty-hint">请选择页面以配置绑定</div>
+    </template>
+    <template v-else>
+      <div class="binding-toolbar">
+        <el-dropdown trigger="click" @command="handleCreateCommand">
+          <el-button class="toolbar-button" size="small" circle>
+            <IconEpPlus />
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="timer">创建定时器</el-dropdown-item>
+              <el-dropdown-item command="variable">变量改变</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-tooltip content="删除" placement="top">
+          <el-button class="toolbar-button" size="small" circle @click="handleDelete">
+            <IconEpDelete />
+          </el-button>
+        </el-tooltip>
+      </div>
+      <div class="binding-section">
+        <div class="section-header">基本</div>
+        <div class="section-body">
+          <div v-for="item in lifecycleItems" :key="item.key" class="binding-row">
+            <div class="binding-name">{{ item.label }}</div>
+            <div class="binding-actions">
+              <div class="binding-toggle">
+                <span class="binding-toggle-label">启动</span>
+                <el-switch
+                  :model-value="getLifecycleEnabled(item.key)"
+                  @change="(value) => handleToggleLifecycle(item.key, value)"
+                />
+              </div>
+              <el-tooltip content="打开编辑器" placement="top">
+                <el-button class="icon-button" size="small" circle @click="openEditor(item)">
+                  <IconEpEditPen />
+                </el-button>
+              </el-tooltip>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="binding-section">
+        <div class="section-header">定时器</div>
+        <div v-if="timerItems.length === 0" class="empty-block">暂无数据</div>
+        <div v-else class="section-body">
+          <div
+            v-for="item in timerItems"
+            :key="item.id"
+            class="binding-row is-shifted"
+            :class="{ 'is-active': isSelectedItem('timers', item.id) }"
+          >
+            <el-checkbox
+              class="select-check"
+              :model-value="isSelectedItem('timers', item.id)"
+              @change="(value) => toggleSelection('timers', item.id, value)"
+            />
+            <div class="binding-name">{{ item.name }}</div>
+            <div class="binding-actions">
+              <div class="binding-toggle">
+                <span class="binding-toggle-label">启动</span>
+                <el-switch
+                  :model-value="item.enabled !== false"
+                  @change="(value) => handleToggleItem('timers', item.id, value)"
+                />
+              </div>
+              <el-tooltip content="打开编辑器" placement="top">
+                <el-button
+                  class="icon-button"
+                  size="small"
+                  circle
+                  @click.stop="openItemEditor('timers', item)"
+                >
+                  <IconEpEditPen />
+                </el-button>
+              </el-tooltip>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="binding-section">
+        <div class="section-header">变量改变</div>
+        <div v-if="variableChangeItems.length === 0" class="empty-block">暂无数据</div>
+        <div v-else class="section-body">
+          <div
+            v-for="item in variableChangeItems"
+            :key="item.id"
+            class="binding-row is-shifted"
+            :class="{ 'is-active': isSelectedItem('variableChanges', item.id) }"
+          >
+            <el-checkbox
+              class="select-check"
+              :model-value="isSelectedItem('variableChanges', item.id)"
+              @change="(value) => toggleSelection('variableChanges', item.id, value)"
+            />
+            <div class="binding-name">{{ item.name }}</div>
+            <div class="binding-actions">
+              <div class="binding-toggle">
+                <span class="binding-toggle-label">启动</span>
+                <el-switch
+                  :model-value="item.enabled !== false"
+                  @change="(value) => handleToggleItem('variableChanges', item.id, value)"
+                />
+              </div>
+              <el-tooltip content="打开编辑器" placement="top">
+                <el-button
+                  class="icon-button"
+                  size="small"
+                  circle
+                  @click.stop="openItemEditor('variableChanges', item)"
+                >
+                  <IconEpEditPen />
+                </el-button>
+              </el-tooltip>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <el-dialog
+    v-model="editorVisible"
+    :title="editorTitle"
+    width="980px"
+    top="3vh"
+    :close-on-click-modal="false"
+    :lock-scroll="false"
+  >
+    <div class="editor-meta">
+      <div class="meta-title">{{ editorTitle }}</div>
+      <div class="meta-desc">{{ editorDescription }}</div>
+      <div class="meta-actions">
+        <el-tooltip content="枚举变量" placement="top">
+          <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+            <IconEpList />
+          </el-button>
+        </el-tooltip>
+      </div>
+    </div>
+    <div class="editor-body">
+      <div class="editor-main">
+        <MonacoEditor
+          ref="editorRef"
+          v-model="scriptCode"
+          language="javascript"
+          height="520px"
+          :completions="jsCompletions"
+        />
+      </div>
+      <div class="editor-sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-title">自定义脚本</div>
+          <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
+          <div class="sidebar-scroll">
+            <el-tree
+              ref="customTreeRef"
+              :data="customScriptTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterSidebarNode"
+              @node-click="handleCustomScriptInsert"
+            >
+              <template #default="{ data }">
+                <div class="tree-node" :class="`node-${data.type}`">
+                  <el-icon class="node-icon icon-custom">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpEditPen v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                    {{ data.label }}
+                  </span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-title">页面组件</div>
+          <el-input v-model="componentSearch" size="small" placeholder="搜索组件/分组" clearable />
+          <div class="sidebar-scroll">
+            <el-tree
+              ref="componentTreeRef"
+              :data="pageComponentTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterSidebarNode"
+              @node-click="handleComponentInsert"
+            >
+              <template #default="{ data }">
+                <div class="tree-node" :class="`node-${data.type}`">
+                  <el-icon class="node-icon icon-component">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpGrid v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                    {{ data.label }}
+                  </span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="editorVisible = false">取消</el-button>
+      <el-button type="primary" @click="saveScript">保存</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog
+    v-model="variableEnumVisible"
+    title="变量枚举"
+    width="760px"
+    :close-on-click-modal="false"
+    :lock-scroll="false"
+  >
+    <el-tabs v-model="enumTab">
+      <el-tab-pane label="工程变量" name="project">
+        <div class="enum-layout">
+          <div class="enum-left">
+            <div class="sidebar-title">分组</div>
+            <el-tree
+              ref="enumProjectTreeRef"
+              :data="projectGroupTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterSidebarNode"
+              @node-click="handleProjectGroupSelect"
+            >
+              <template #default="{ data }">
+                <div class="tree-node node-group">
+                  <el-icon class="node-icon icon-variable">
+                    <IconEpFolder />
+                  </el-icon>
+                  <span class="node-label is-group">{{ data.label }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+          <div class="enum-right">
+            <el-input
+              v-model="projectVarSearch"
+              size="small"
+              placeholder="搜索工程变量"
+              clearable
+            />
+            <el-table
+              :data="projectVariableRows"
+              size="small"
+              height="320"
+              highlight-current-row
+              :row-class-name="enumProjectRowClass"
+              @row-click="handleProjectRowClick"
+              @row-dblclick="handleProjectRowDblClick"
+            >
+              <el-table-column prop="name" label="变量名" min-width="160" />
+              <el-table-column prop="type" label="类型" width="90" />
+              <el-table-column prop="description" label="描述" min-width="160" />
+              <el-table-column prop="mapped" label="映射" width="70">
+                <template #default="{ row }">
+                  {{ row.mapped ? "是" : "" }}
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+      </el-tab-pane>
+      <el-tab-pane label="页面变量" name="page">
+        <div class="enum-layout">
+          <div class="enum-left">
+            <div class="sidebar-title">分组</div>
+            <el-tree
+              ref="enumPageTreeRef"
+              :data="pageGroupTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              @node-click="handlePageGroupSelect"
+            >
+              <template #default="{ data }">
+                <div class="tree-node node-group">
+                  <el-icon class="node-icon icon-variable">
+                    <IconEpFolder />
+                  </el-icon>
+                  <span class="node-label is-group">{{ data.label }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+          <div class="enum-right">
+            <el-input v-model="pageVarSearch" size="small" placeholder="搜索页面变量" clearable />
+            <el-table
+              :data="pageVariableRows"
+              size="small"
+              height="320"
+              highlight-current-row
+              :row-class-name="enumPageRowClass"
+              @row-click="handlePageRowClick"
+              @row-dblclick="handlePageRowDblClick"
+            >
+              <el-table-column prop="name" label="变量名" min-width="160" />
+              <el-table-column prop="type" label="类型" width="90" />
+              <el-table-column prop="defaultValue" label="初始值" min-width="160" />
+              <el-table-column prop="description" label="描述" min-width="160" />
+            </el-table>
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+    <template #footer>
+      <el-button @click="variableEnumVisible = false">取消</el-button>
+      <el-button
+        type="primary"
+        :disabled="!enumSelectedProjectVar && !enumSelectedPageVar"
+        @click="confirmEnumInsert"
+      >
+        插入
+      </el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="createDialogVisible" :title="createDialogTitle" width="420px">
+    <el-form label-width="90px">
+      <template v-if="createDialogType === 'timer'">
+        <el-form-item label="定时器名称">
+          <el-input v-model="createForm.name" placeholder="请输入定时器名称" />
+        </el-form-item>
+        <el-form-item label="时间(ms)">
+          <el-input-number
+            v-model="createForm.interval"
+            :min="100"
+            :step="100"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="createForm.description" placeholder="请输入描述" />
+        </el-form-item>
+      </template>
+      <template v-else>
+        <el-form-item label="变量">
+          <el-select v-model="createForm.variable" placeholder="请选择变量">
+            <el-option
+              v-for="option in pageVariableOptions"
+              :key="option"
+              :label="option"
+              :value="option"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="createForm.description" placeholder="请输入描述" />
+        </el-form-item>
+      </template>
+    </el-form>
+    <template #footer>
+      <el-button @click="createDialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="handleCreateConfirm">确定</el-button>
+    </template>
+  </el-dialog>
+</template>
 
 <style scoped>
 .binding-panel {

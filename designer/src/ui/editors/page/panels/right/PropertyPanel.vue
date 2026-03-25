@@ -1,709 +1,3 @@
-<template>
-  <div class="property-panel-root">
-    <!-- 页面属性面板：未选中任何元素 -->
-    <PageInspectorPanel v-if="panelState === 'page'" />
-
-    <!-- 多选面板：选中多个元素 -->
-    <MultiInspectorPanel
-      v-else-if="panelState === 'multi'"
-      :elements="selectedElements"
-    />
-
-    <!-- 单选面板：选中单个元素 -->
-    <div v-else class="element-inspector">
-      <div class="prop-section">
-        <div class="prop-section-header is-static">
-          <span class="prop-section-title">基本</span>
-        </div>
-        <div class="prop-section-body">
-          <div class="prop-item">
-            <div class="prop-label">名称</div>
-            <el-input
-              v-model="elementLabel"
-              size="small"
-              placeholder="未命名"
-              @change="handleLabelChange"
-            />
-          </div>
-          <div class="prop-item">
-            <div class="prop-label">描述</div>
-            <el-input
-              v-model="elementDescription"
-              size="small"
-              placeholder="请输入描述"
-              @change="handleDescriptionChange"
-            />
-          </div>
-          <div class="prop-item">
-            <div class="prop-label">类型</div>
-            <el-input :model-value="elementType" size="small" disabled />
-          </div>
-          <div class="prop-item">
-            <div class="prop-label">ID</div>
-            <el-input :model-value="elementId" size="small" disabled />
-          </div>
-          <div class="prop-item">
-            <div class="prop-label">位置</div>
-            <div class="axis-inline-group">
-              <div class="axis-inline-item">
-                <span class="axis-inline-tag">X</span>
-                <el-input :model-value="formatStyleValue(currentStyle.left)" size="small" disabled />
-              </div>
-              <div class="axis-inline-item">
-                <span class="axis-inline-tag">Y</span>
-                <el-input :model-value="formatStyleValue(currentStyle.top)" size="small" disabled />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <template v-if="hasStyleSelection">
-        <div v-if="showSizeEditor" class="panel-section">
-          <SizeEditor
-            :model-value="currentStyle"
-            :min-width="containerMinSize?.width"
-            :min-height="containerMinSize?.height"
-            @update:modelValue="handleStyleChange"
-          />
-        </div>
-        <div class="panel-section">
-          <div class="config-entry-header">
-            <span class="panel-section-title">配置</span>
-          </div>
-          <div class="config-entry-bar">
-            <button
-              class="config-entry"
-              :class="{ 'has-config': hasDetailConfig }"
-              @click="openConfigDialog('detail')"
-            >
-              <IconEpDocument class="config-entry-icon" />
-              <span>详细</span>
-            </button>
-            <button
-              class="config-entry"
-              :class="{ 'has-config': hasStyleConfig }"
-              @click="openConfigDialog('style')"
-            >
-              <IconEpEditPen class="config-entry-icon" />
-              <span>样式</span>
-            </button>
-          </div>
-        </div>
-      </template>
-
-      <!-- 属性表单：根据 Manifest 生成 -->
-      <template v-if="layoutForceProps.length > 0">
-        <div class="prop-section prop-section--static">
-          <div class="prop-section-header is-static">
-            <span class="prop-section-title">布局</span>
-          </div>
-          <div class="prop-section-body">
-            <div
-              v-for="(propDef, propIndex) in visibleLayoutForceProps"
-              :key="propDef?.name || propIndex"
-              class="prop-item"
-            >
-              <div class="prop-label">
-                <span>{{ propDef.label }}</span>
-                <el-tooltip
-                  v-if="shouldShowBindButton(propDef)"
-                  content="绑定数据"
-                  placement="top"
-                >
-                  <button
-                    class="bind-btn"
-                    :class="{ 'is-active': hasPropBinding(propDef.name) }"
-                    @click="handleBindClick(propDef)"
-                  >
-                    <IconEpLink class="bind-icon" />
-                  </button>
-                </el-tooltip>
-              </div>
-              <PropEditor
-                :prop="propDef"
-                :model-value="getPropValue(propDef.name)"
-                @update:modelValue="
-                  (val) => handlePropChange(propDef.name, val)
-                "
-              />
-            </div>
-          </div>
-        </div>
-      </template>
-      <template
-        v-else-if="effectiveManifest && effectiveManifest.props.length > 0"
-      >
-        <div class="prop-sections">
-          <template v-for="group in displayPropGroups" :key="group.name">
-            <div
-              class="prop-section"
-              :class="{ 'is-collapsed': !isSectionExpanded(getGroupSectionKey(group)) }"
-            >
-              <button
-                class="prop-section-header"
-                type="button"
-                @click="toggleSection(getGroupSectionKey(group))"
-              >
-                <span class="prop-section-heading">
-                  <IconEpArrowRight class="section-chevron" />
-                  <span class="prop-section-title">{{ resolveGroupTitle(group) }}</span>
-                </span>
-              </button>
-              <div
-                v-show="isSectionExpanded(getGroupSectionKey(group))"
-                class="prop-section-body"
-              >
-                <template v-if="isElContainer && isRegionGroup(group)">
-                  <div
-                    v-for="item in regionPropRows"
-                    :key="item.key"
-                    class="prop-item region-prop-row"
-                  >
-                    <div class="prop-label">
-                      <div class="region-label">
-                        <span>{{ item.label }}</span>
-                        <span
-                          v-if="getRegionSizeText(item)"
-                          class="region-size-text"
-                        >
-                          {{ getRegionSizeText(item) }}
-                        </span>
-                        <span
-                          v-if="getRegionMaxLabel(item.sizeProp)"
-                          class="region-size-limit"
-                        >
-                          {{ getRegionMaxLabel(item.sizeProp) }}
-                        </span>
-                      </div>
-                      <el-switch
-                        v-if="!item.sizeProp"
-                        class="region-toggle"
-                        :model-value="Boolean(getPropValue(item.toggleProp))"
-                        size="small"
-                        @update:modelValue="
-                          (val) => handlePropChange(item.toggleProp, Boolean(val))
-                        "
-                      />
-                    </div>
-                    <div v-if="item.sizeProp" class="region-prop-controls">
-                      <el-input
-                        class="region-size-input"
-                        :model-value="getSizeValue(item.sizeProp)"
-                        size="small"
-                        placeholder="auto"
-                        :disabled="!isRegionEnabled(item)"
-                        @update:modelValue="
-                          (val) => handleSizeValueChange(item.sizeProp, val)
-                        "
-                      />
-                      <el-select
-                        :model-value="getSizeUnit(item.sizeProp)"
-                        size="small"
-                        class="region-unit-select"
-                        :disabled="!isRegionEnabled(item)"
-                        @update:modelValue="
-                          (val) => handleSizeUnitChange(item.sizeProp, val)
-                        "
-                        @change="(val) => handleSizeUnitChange(item.sizeProp, val)"
-                      >
-                        <el-option label="px" value="px" />
-                        <el-option label="%" value="%" />
-                        <el-option label="auto" value="auto" />
-                      </el-select>
-                      <el-switch
-                        class="region-toggle"
-                        :model-value="Boolean(getPropValue(item.toggleProp))"
-                        size="small"
-                        @update:modelValue="
-                          (val) => handlePropChange(item.toggleProp, Boolean(val))
-                        "
-                      />
-                    </div>
-                  </div>
-                </template>
-                <template v-else>
-                  <div
-                    v-for="(propDef, propIndex) in getVisibleGroupProps(group)"
-                    :key="propDef?.name || propIndex"
-                    class="prop-item"
-                  >
-                  <div class="prop-label">
-                    <span>{{ propDef.label }}</span>
-                    <el-tooltip
-                      v-if="shouldShowBindButton(propDef)"
-                      content="绑定数据"
-                      placement="top"
-                    >
-                      <button
-                        class="bind-btn"
-                        :class="{ 'is-active': hasPropBinding(propDef.name) }"
-                        @click="handleBindClick(propDef)"
-                      >
-                        <IconEpLink class="bind-icon" />
-                      </button>
-                    </el-tooltip>
-                  </div>
-                  <PropEditor
-                    :prop="propDef"
-                    :model-value="getPropValue(propDef.name)"
-                    @update:modelValue="
-                      (val) => handlePropChange(propDef.name, val)
-                    "
-                  />
-                  </div>
-                </template>
-              </div>
-            </div>
-          </template>
-        </div>
-      </template>
-
-      <!-- 无 Manifest 时显示原始 Props -->
-      <template v-else>
-        <div class="text-xs text-gray-500 mb-2">Props</div>
-        <pre
-          class="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded overflow-auto max-h-60"
-          >{{ formattedProps }}</pre
-        >
-      </template>
-
-      <div
-        v-if="!hasStyleSelection"
-        class="text-sm text-gray-400 text-center py-6"
-      >
-        请选择组件
-      </div>
-    </div>
-  </div>
-
-  <el-dialog
-    v-model="configDialogVisible"
-    :title="configDialogTitle"
-    width="980px"
-    top="4vh"
-    :close-on-click-modal="false"
-    :lock-scroll="false"
-  >
-    <div class="config-toolbar">
-      <div class="config-toolbar-item">
-        <span class="config-label">{{ presetLabel }}</span>
-        <el-select
-          v-model="selectedPresetId"
-          size="small"
-          class="config-select preset-select"
-          placeholder="请选择"
-          @change="handlePresetChange"
-        >
-          <el-option
-            v-for="item in filteredPresetOptions"
-            :key="item.id"
-            :label="item.label"
-            :value="item.id"
-          />
-        </el-select>
-      </div>
-      <div class="config-toolbar-item">
-        <span class="config-label">筛选：</span>
-        <el-input
-          v-model="presetSearch"
-          size="small"
-          class="config-select"
-          placeholder="搜索模板"
-          clearable
-        />
-      </div>
-      <div
-        v-if="configDialogType === 'detail'"
-        class="config-toolbar-item config-toolbar-actions"
-      >
-        <el-tooltip content="变量枚举" placement="top">
-          <el-button
-            class="icon-button"
-            size="small"
-            circle
-            @click.stop="openConfigVariableEnum"
-          >
-            <IconEpList />
-          </el-button>
-        </el-tooltip>
-      </div>
-    </div>
-    <div class="config-body">
-      <div class="config-editor">
-        <MonacoEditor
-          ref="configEditorRef"
-          v-model="configDraft"
-          :language="configEditorLanguage"
-          height="520px"
-          :completions="configEditorCompletions"
-        />
-      </div>
-      <div v-if="configDialogType === 'detail'" class="config-sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-title">自定义脚本</div>
-          <el-input
-            v-model="configScriptSearch"
-            size="small"
-            placeholder="搜索脚本/分组"
-            clearable
-          />
-          <div class="sidebar-scroll">
-            <el-tree
-              ref="configCustomTreeRef"
-              :data="bindingCustomScriptTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterBindingSidebarNode"
-              @node-click="handleConfigCustomScriptInsert"
-            >
-              <template #default="{ data }">
-                <div class="tree-node" :class="`node-${data.type}`">
-                  <el-icon class="node-icon icon-custom">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpEditPen v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                  >
-                    {{ data.label }}
-                  </span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-        <div class="sidebar-section">
-          <div class="sidebar-title">页面组件</div>
-          <el-input
-            v-model="configComponentSearch"
-            size="small"
-            placeholder="搜索组件/分组"
-            clearable
-          />
-          <div class="sidebar-scroll">
-            <el-tree
-              ref="configComponentTreeRef"
-              :data="bindingPageComponentTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterBindingSidebarNode"
-              @node-click="handleConfigComponentInsert"
-            >
-              <template #default="{ data }">
-                <div class="tree-node" :class="`node-${data.type}`">
-                  <el-icon class="node-icon icon-component">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpGrid v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                  >
-                    {{ data.label }}
-                  </span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </div>
-      <div v-if="configDialogType === 'style'" class="config-assets">
-        <div class="config-assets-header">
-          <span>资源库</span>
-        </div>
-        <el-input
-          v-model="configAssetSearch"
-          size="small"
-          placeholder="搜索资源"
-          clearable
-        />
-        <div class="config-assets-body">
-          <el-scrollbar>
-            <el-tree
-              ref="configAssetTreeRef"
-              :data="configAssetTree"
-              node-key="id"
-              default-expand-all
-              :expand-on-click-node="false"
-              :filter-node-method="filterConfigAssetNode"
-            >
-              <template #default="{ data }">
-                <div
-                  class="tree-node"
-                  :class="`node-${data.type}`"
-                  @dblclick.stop="handleConfigAssetNodeDblClick(data)"
-                >
-                  <el-icon class="node-icon">
-                    <IconEpFolder v-if="data.type === 'folder'" />
-                    <IconEpPictureFilled v-else />
-                  </el-icon>
-                  <span class="node-label">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </el-scrollbar>
-        </div>
-      </div>
-    </div>
-    <template #footer>
-      <el-button @click="clearConfigDialog">清除</el-button>
-      <el-button @click="configDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveConfigDialog()">保存</el-button>
-    </template>
-  </el-dialog>
-
-  <el-dialog
-    v-model="bindingDialogVisible"
-    :title="bindingDialogTitle"
-    width="980px"
-    top="3vh"
-    :z-index="3000"
-    append-to-body
-    :modal-append-to-body="true"
-    :close-on-click-modal="false"
-    :lock-scroll="false"
-  >
-    <div class="editor-meta">
-      <div class="meta-title">{{ bindingDialogTitle }}</div>
-      <div class="meta-desc">{{ bindingDialogDescription }}</div>
-      <div class="meta-actions">
-        <el-tooltip content="变量枚举" placement="top">
-          <el-button
-            class="icon-button"
-            size="small"
-            circle
-            @click.stop="openBindingVariableEnum"
-          >
-            <IconEpList />
-          </el-button>
-        </el-tooltip>
-      </div>
-    </div>
-    <div class="editor-body">
-      <div class="editor-main">
-        <MonacoEditor
-          ref="bindingEditorRef"
-          v-model="bindingEditorCode"
-          language="javascript"
-          height="520px"
-          :completions="bindingCompletions"
-        />
-      </div>
-      <div class="editor-sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-title">自定义脚本</div>
-          <el-input
-            v-model="bindingScriptSearch"
-            size="small"
-            placeholder="搜索脚本/分组"
-            clearable
-          />
-          <div class="sidebar-scroll">
-            <el-tree
-              ref="bindingCustomTreeRef"
-              :data="bindingCustomScriptTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterBindingSidebarNode"
-              @node-click="handleBindingCustomScriptInsert"
-            >
-              <template #default="{ data }">
-                <div class="tree-node" :class="`node-${data.type}`">
-                  <el-icon class="node-icon icon-custom">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpEditPen v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                  >
-                    {{ data.label }}
-                  </span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-        <div class="sidebar-section">
-          <div class="sidebar-title">页面组件</div>
-          <el-input
-            v-model="bindingComponentSearch"
-            size="small"
-            placeholder="搜索组件/分组"
-            clearable
-          />
-          <div class="sidebar-scroll">
-            <el-tree
-              ref="bindingComponentTreeRef"
-              :data="bindingPageComponentTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterBindingSidebarNode"
-              @node-click="handleBindingComponentInsert"
-            >
-              <template #default="{ data }">
-                <div class="tree-node" :class="`node-${data.type}`">
-                  <el-icon class="node-icon icon-component">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpGrid v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                  >
-                    {{ data.label }}
-                  </span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </div>
-    </div>
-    <template #footer>
-      <el-button @click="bindingDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveBinding">保存</el-button>
-    </template>
-  </el-dialog>
-
-  <el-dialog
-    v-model="bindingVariableEnumVisible"
-    title="变量枚举"
-    width="760px"
-    :z-index="3100"
-    append-to-body
-    :modal-append-to-body="true"
-    :close-on-click-modal="false"
-    :lock-scroll="false"
-  >
-    <el-tabs v-model="bindingEnumTab">
-      <el-tab-pane label="工程变量" name="project">
-        <div class="enum-layout">
-          <div class="enum-left">
-            <div class="sidebar-title">分组</div>
-            <el-tree
-              ref="bindingEnumProjectTreeRef"
-              :data="bindingProjectGroupTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterBindingSidebarNode"
-              @node-click="handleBindingProjectGroupSelect"
-            >
-              <template #default="{ data }">
-                <div class="tree-node node-group">
-                  <el-icon class="node-icon icon-variable">
-                    <IconEpFolder />
-                  </el-icon>
-                  <span class="node-label is-group">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-          <div class="enum-right">
-            <el-input
-              v-model="bindingProjectVarSearch"
-              size="small"
-              placeholder="搜索工程变量"
-              clearable
-            />
-            <el-table
-              :data="bindingProjectVariableRows"
-              size="small"
-              height="320"
-              highlight-current-row
-              @row-click="handleBindingProjectRowClick"
-              @row-dblclick="handleBindingProjectRowDblClick"
-              :row-class-name="bindingEnumProjectRowClass"
-            >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column
-                prop="description"
-                label="描述"
-                min-width="160"
-              />
-              <el-table-column prop="mapped" label="映射" width="70">
-                <template #default="{ row }">
-                  {{ row.mapped ? "是" : "" }}
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </div>
-      </el-tab-pane>
-      <el-tab-pane label="页面变量" name="page">
-        <div class="enum-layout">
-          <div class="enum-left">
-            <div class="sidebar-title">分组</div>
-            <el-tree
-              ref="bindingEnumPageTreeRef"
-              :data="bindingPageGroupTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterBindingSidebarNode"
-              @node-click="handleBindingPageGroupSelect"
-            >
-              <template #default="{ data }">
-                <div class="tree-node node-group">
-                  <el-icon class="node-icon icon-variable">
-                    <IconEpFolder />
-                  </el-icon>
-                  <span class="node-label is-group">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-          <div class="enum-right">
-            <el-input
-              v-model="bindingPageVarSearch"
-              size="small"
-              placeholder="搜索页面变量"
-              clearable
-            />
-            <el-table
-              :data="bindingPageVariableRows"
-              size="small"
-              height="320"
-              highlight-current-row
-              @row-click="handleBindingPageRowClick"
-              @row-dblclick="handleBindingPageRowDblClick"
-              :row-class-name="bindingEnumPageRowClass"
-            >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column
-                prop="description"
-                label="描述"
-                min-width="200"
-              />
-            </el-table>
-          </div>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
-    <template #footer>
-      <el-button @click="bindingVariableEnumVisible = false">取消</el-button>
-      <el-button
-        type="primary"
-        :disabled="
-          !bindingEnumSelectedProjectVar && !bindingEnumSelectedPageVar
-        "
-        @click="confirmBindingEnumInsert"
-      >
-        插入
-      </el-button>
-    </template>
-  </el-dialog>
-</template>
-
 <script setup>
 /**
  * 属性面板
@@ -713,57 +7,64 @@
  * - 绑定配置
  */
 
-import { computed, ref, watch, nextTick } from "vue";
-import { storeToRefs } from "pinia";
-import PageInspectorPanel from "./PageInspectorPanel.vue";
-import MultiInspectorPanel from "./MultiInspectorPanel.vue";
-import PropEditor from "./PropEditor.vue";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
-import SizeEditor from "./StylePanel/SizeEditor.vue";
-import SpacingEditor from "./StylePanel/SpacingEditor.vue";
-import PositionEditor from "./StylePanel/PositionEditor.vue";
-import { usePanelState } from "../composables/use-panel-state";
-import { getManifest } from "@/manifests";
-import { useEditorStore } from "@/stores/editor-store";
 import {
-  ElMessage,
-  ElSelect,
+  ElAside,
+  ElCalendar,
+  ElCard,
+  ElCarousel,
+  ElCascader,
+  ElCheckboxGroup,
+  ElCol,
+  ElCollapse,
+  ElContainer,
+  ElDropdown,
+  ElFooter,
+  ElHeader,
+  ElImage,
   ElInput,
   ElInputNumber,
+  ElMain,
+  ElMessage,
+  ElPagination,
+  ElRadioGroup,
+  ElRow,
+  ElSelect,
+  ElSlider,
+  ElSteps,
   ElSwitch,
   ElTable,
-  ElDropdown,
-  ElRadioGroup,
-  ElCheckboxGroup,
-  ElCascader,
-  ElImage,
   ElTabs,
   ElTimeline,
-  ElCarousel,
-  ElCard,
-  ElSteps,
-  ElPagination,
-  ElCollapse,
-  ElSlider,
-  ElCalendar,
-  ElContainer,
-  ElHeader,
-  ElAside,
-  ElMain,
-  ElFooter,
-  ElRow,
-  ElCol,
   ElTransfer,
 } from "element-plus";
-import IconEpLink from "~icons/ep/link";
+import { storeToRefs } from "pinia";
+import { computed, nextTick, ref, watch } from "vue";
 import IconEpArrowRight from "~icons/ep/arrow-right";
 import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
-import IconEpList from "~icons/ep/list";
 import IconEpGrid from "~icons/ep/grid";
+import IconEpLink from "~icons/ep/link";
+import IconEpList from "~icons/ep/list";
 import IconEpPictureFilled from "~icons/ep/picture-filled";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import { getManifest } from "@/manifests";
 import assetApi from "@/services/assetApi";
+import { useEditorStore } from "@/stores/editor-store";
+import { usePanelState } from "../composables/use-panel-state";
+import MultiInspectorPanel from "./MultiInspectorPanel.vue";
+import PageInspectorPanel from "./PageInspectorPanel.vue";
+import PropEditor from "./PropEditor.vue";
+import {
+  buildConfigAssetTree,
+  filterConfigAssetNode,
+  resolveConfigAssetUrl,
+  unwrapApiData,
+} from "./property-panel-config-assets";
+import { elementTypeName } from "./property-panel-utils";
+import PropertyPanelBasicSection from "./PropertyPanelBasicSection.vue";
+import SizeEditor from "./StylePanel/SizeEditor.vue";
+import { usePropertyPanelNormalizeNodeType } from "./use-property-panel-normalize-node-type";
 
 const editorStore = useEditorStore();
 const {
@@ -777,56 +78,28 @@ const {
 } = storeToRefs(editorStore);
 
 const projectId = computed(
-  () =>
-    editorStore.projectId ||
-    editorStore.project?.id ||
-    currentPage.value?.projectId ||
-    "",
+  () => editorStore.projectId || editorStore.project?.id || currentPage.value?.projectId || "",
 );
 
 /** 属性 */
 
-const { panelState, selectedElements, selectedNode, selectedGraphic } =
-  usePanelState();
+const { panelState, selectedElements, selectedNode, selectedGraphic } = usePanelState();
 
 /** 属性 */
-const currentElement = computed(
-  () => selectedNode.value || selectedGraphic.value,
-);
+const currentElement = computed(() => selectedNode.value || selectedGraphic.value);
 
 /** 组件 ID */
 const elementId = computed(() => currentElement.value?.id || "-");
 
 /** 组件类型 */
-const elementType = computed(
-  () => elementTypeName(currentElement.value?.type) || "-",
-);
-
-/**
- * 格式化样式值用于只读展示
- * @param {any} value - 样式值
- * @returns {string}
- */
-const formatStyleValue = (value) => {
-  if (value === undefined || value === null || value === "") return "-";
-  return String(value);
-};
+const elementType = computed(() => elementTypeName(currentElement.value?.type) || "-");
 
 /** 属性 */
 const elementLabel = ref("");
 const elementDescription = ref("");
 const regionSizeState = ref({});
 
-watch(
-  () => selectedNode.value?.type,
-  (type) => {
-    if (!selectedNode.value || !type) return;
-    const normalized = elementTypeName(type);
-    if (!normalized || normalized === type) return;
-    editorStore.updateNode(selectedNode.value.id, { type: normalized });
-  },
-  { immediate: true },
-);
+usePropertyPanelNormalizeNodeType(selectedNode, editorStore.updateNode);
 
 watch(
   () => selectedNode.value?.id,
@@ -869,109 +142,42 @@ const configAssets = ref([]);
 const configAssetSearch = ref("");
 const configAssetTreeRef = ref(null);
 let detailDraftTimer = null;
-const emitDetailConfig = (nodeId, code) => {
+function emitDetailConfig(nodeId, code) {
   if (!nodeId || !code) return;
   window.dispatchEvent(
     new CustomEvent("designer:detail-config", {
       detail: { nodeId, code },
     }),
   );
-};
-
-const unwrapApiData = (response) =>
-  response?.data?.data ?? response?.data ?? response;
-
-const decodeAssetName = (value) => {
-  if (!value) return "";
-  try {
-    return decodeURIComponent(value);
-  } catch (error) {
-    return value;
-  }
-};
-
-const resolveConfigAssetUrl = (asset) => {
-  if (!asset) return "";
-  return asset.url || asset.src || asset.path || "";
-};
-
-const buildConfigAssetTree = (folders, assets) => {
-  const folderNodes = (folders || []).map((folder) => ({
-    id: folder.id,
-    label: decodeAssetName(folder.name || "未命名文件夹"),
-    type: "folder",
-    raw: folder,
-    children: [],
-  }));
-  const folderMap = new Map(folderNodes.map((node) => [node.id, node]));
-  const root = {
-    id: "all",
-    label: "全部资源",
-    type: "folder",
-    raw: null,
-    children: [],
-  };
-  folderNodes.forEach((node) => {
-    const parentId = node.raw?.parentId;
-    if (parentId && folderMap.has(parentId)) {
-      folderMap.get(parentId).children.push(node);
-    } else {
-      root.children.push(node);
-    }
-  });
-
-  (assets || []).forEach((asset) => {
-    const node = {
-      id: asset.id,
-      label: decodeAssetName(asset.name || asset.originalName || "未命名资源"),
-      type: "asset",
-      raw: asset,
-    };
-    const folderId = asset.folderId;
-    if (folderId && folderMap.has(folderId)) {
-      folderMap.get(folderId).children.push(node);
-    } else {
-      root.children.push(node);
-    }
-  });
-
-  return [root];
-};
+}
 
 const configAssetTree = computed(() =>
   buildConfigAssetTree(configAssetFolders.value, configAssets.value),
 );
 
-const filterConfigAssetNode = (value, data) => {
-  if (!value) return true;
-  return String(data?.label || "")
-    .toLowerCase()
-    .includes(String(value).toLowerCase());
-};
-
-const handleConfigAssetNodeDblClick = (data) => {
+function handleConfigAssetNodeDblClick(data) {
   if (!data || data.type !== "asset") return;
   const url = resolveConfigAssetUrl(data.raw);
   if (!url) return;
   const snippet = `url(\"${url}\")`;
   configEditorRef.value?.insertText?.(snippet);
-};
+}
 
-const loadConfigAssetFolders = async () => {
+async function loadConfigAssetFolders() {
   if (!projectId.value) return;
   const response = await assetApi.getFolders(projectId.value);
   const data = unwrapApiData(response);
   const rawFolders = data?.folders;
   configAssetFolders.value = Array.isArray(rawFolders) ? rawFolders : [];
-};
+}
 
-const loadConfigAssets = async () => {
+async function loadConfigAssets() {
   if (!projectId.value) return;
   const response = await assetApi.getAssets(projectId.value);
   const data = unwrapApiData(response);
   const rawAssets = data?.assets;
   configAssets.value = Array.isArray(rawAssets) ? rawAssets : [];
-};
+}
 
 watch(configAssetSearch, () => {
   configAssetTreeRef.value?.filter?.(configAssetSearch.value);
@@ -1005,7 +211,7 @@ const bindingEnumSelectedPageVar = ref(null);
  * @param {import('@/editor-core').ComponentNode} node - ?
  * @param {Partial<import('@/editor-core').ComponentNode>} patch - 补丁
  */
-const applyLocalNodePatch = (node, patch) => {
+function applyLocalNodePatch(node, patch) {
   if (!node || !patch || typeof patch !== "object") return;
   if (doc.value?._updateNode && node.id) {
     doc.value._updateNode(node.id, patch);
@@ -1034,14 +240,14 @@ const applyLocalNodePatch = (node, patch) => {
     node.description = patch.description;
   }
   docVersion.value += 1;
-};
+}
 
 /**
  * 强制更新节点（绕过只读限制）
  * @param {string} nodeId - 节点 ID
  * @param {Partial<import('@/editor-core').ComponentNode>} patch - 补丁
  */
-const forceUpdateNode = (nodeId, patch) => {
+function forceUpdateNode(nodeId, patch) {
   if (!nodeId || !patch || typeof patch !== "object") return;
   const target = doc.value?.getNode?.(nodeId);
   if (doc.value?._updateNode) {
@@ -1053,14 +259,14 @@ const forceUpdateNode = (nodeId, patch) => {
   if (target && target !== selectedNode.value) {
     applyLocalNodePatch(target, patch);
   }
-};
+}
 
 /**
  * 规范化菜单项
  * @param {Array} items - 菜单项
  * @returns {Array}
  */
-const normalizeMenuItems = (items) => {
+function normalizeMenuItems(items) {
   if (!Array.isArray(items)) return [];
   return items
     .map((item) => {
@@ -1070,22 +276,18 @@ const normalizeMenuItems = (items) => {
       }
       if (typeof item !== "object") return null;
       const label = item.label ?? item.title ?? item.name ?? "";
-      const index =
-        item.index ??
-        item.command ??
-        item.key ??
-        (label ? String(label) : undefined);
+      const index = item.index ?? item.command ?? item.key ?? (label ? String(label) : undefined);
       return { ...item, label, index };
     })
     .filter(Boolean);
-};
+}
 
 /**
  * 提取 Menu DSL 配置对象
  * @param {string} content - DSL 内容
  * @returns {Record<string, any> | null}
  */
-const extractMenuDslConfig = (content) => {
+function extractMenuDslConfig(content) {
   const text = String(content || "");
   if (!text.trim()) return null;
   const marker = /this\s*\.\s*menu\s*\(/;
@@ -1131,13 +333,13 @@ const extractMenuDslConfig = (content) => {
     }
   }
   return null;
-};
+}
 
 /**
  * 执行 Menu DSL 并捕获配置
  * @returns {Record<string, any> | null}
  */
-const captureMenuDslConfig = (content) => {
+function captureMenuDslConfig(content) {
   const text = String(content || "");
   if (!text.trim()) return null;
   let captured = null;
@@ -1155,26 +357,20 @@ const captureMenuDslConfig = (content) => {
     return null;
   }
   return captured;
-};
+}
 
 /**
  * 设计态本地执行 Menu 详细配置
  * @param {import('@/editor-core').ComponentNode} node - 节点
  * @param {Record<string, any>} config - 配置
  */
-const applyMenuDetailConfig = (node, config) => {
+function applyMenuDetailConfig(node, config) {
   const normalizedType = elementTypeName(node?.type);
-  if (
-    !node ||
-    normalizedType !== "Menu" ||
-    !config ||
-    typeof config !== "object"
-  ) {
+  if (!node || normalizedType !== "Menu" || !config || typeof config !== "object") {
     return;
   }
   const propsPatch = { ...(node.props || {}) };
-  const rawProps =
-    config.props && typeof config.props === "object" ? { ...config.props } : {};
+  const rawProps = config.props && typeof config.props === "object" ? { ...config.props } : {};
   if (Array.isArray(config.items)) {
     rawProps.items = config.items;
   }
@@ -1193,7 +389,7 @@ const applyMenuDetailConfig = (node, config) => {
   if (!ok) {
     applyLocalNodePatch(node, nextPatch);
   }
-};
+}
 
 /**
  * 设计态执行详细配置脚本
@@ -1206,7 +402,7 @@ const applyMenuDetailConfig = (node, config) => {
  * @param {string} methodName - DSL 方法名
  * @returns {string}
  */
-const buildMenuDslContent = (content, methodName) => {
+function buildMenuDslContent(content, methodName) {
   const text = String(content || "").trim();
   if (!text) return "";
   if (/this\s*\.\s*menu\s*\(/.test(text)) return text;
@@ -1214,7 +410,7 @@ const buildMenuDslContent = (content, methodName) => {
     return `this.${methodName}(${text});`;
   }
   return `this.${methodName}({\n${content}\n});`;
-};
+}
 
 /**
  * 尝试解析 Menu 配置对象
@@ -1226,14 +422,14 @@ const buildMenuDslContent = (content, methodName) => {
  * @param {string} content - DSL 内容
  * @returns {string}
  */
-const sanitizeDslContent = (content) => {
+function sanitizeDslContent(content) {
   return String(content || "")
     .replace(/[，﹐､]/g, ",")
     .replace(/[；﹔]/g, ";")
     .replace(/[：﹕]/g, ":");
-};
+}
 
-const resolveMenuConfigFromContent = (content) => {
+function resolveMenuConfigFromContent(content) {
   const text = sanitizeDslContent(content).trim();
   if (!text) return null;
   const direct = extractMenuDslConfig(text) || captureMenuDslConfig(text);
@@ -1250,16 +446,14 @@ const resolveMenuConfigFromContent = (content) => {
   } catch (error) {
     return null;
   }
-};
+}
 
-const runDetailConfigLocal = (node, content) => {
+function runDetailConfigLocal(node, content) {
   if (!node || !content || !content.trim()) return;
   const normalizedType = elementTypeName(node?.type);
   const methodName = getDslMethodName(normalizedType || "");
   const safeContent =
-    normalizedType === "Menu"
-      ? buildMenuDslContent(content, methodName)
-      : content;
+    normalizedType === "Menu" ? buildMenuDslContent(content, methodName) : content;
   let lastMenuConfig = null;
   const runner = new Function(
     `"use strict";\nreturn (function() {\n${safeContent}\n}).call(this);`,
@@ -1278,7 +472,7 @@ const runDetailConfigLocal = (node, content) => {
   } catch (error) {
     console.error("[Designer] Detail config error:", error);
   }
-};
+}
 
 const stylePresets = [
   { id: "empty", label: "空模板", content: "" },
@@ -1298,14 +492,12 @@ const buttonStylePresets = [
   {
     id: "btn-type-primary",
     label: "primary 单独控制",
-    content:
-      "#domId .el-button--primary {\n  color: #fff;\n  font-size: 18px;\n}",
+    content: "#domId .el-button--primary {\n  color: #fff;\n  font-size: 18px;\n}",
   },
   {
     id: "btn-type-text",
     label: "text 单独控制",
-    content:
-      "#domId .el-button--text {\n  color: #409EFF;\n  font-size: 14px;\n}",
+    content: "#domId .el-button--text {\n  color: #409EFF;\n  font-size: 14px;\n}",
   },
   {
     id: "btn-hover",
@@ -1322,8 +514,7 @@ const buttonStylePresets = [
   {
     id: "btn-focus",
     label: "Focus 去边框",
-    content:
-      "#domId .el-button:focus {\n  outline: none;\n  box-shadow: none;\n}",
+    content: "#domId .el-button:focus {\n  outline: none;\n  box-shadow: none;\n}",
   },
   {
     id: "btn-radius-none",
@@ -1367,8 +558,7 @@ const buttonStylePresets = [
   {
     id: "btn-size-fixed",
     label: "固定尺寸按钮",
-    content:
-      "#domId .el-button {\n  width: 200px;\n  height: 56px;\n  padding: 0;\n}",
+    content: "#domId .el-button {\n  width: 200px;\n  height: 56px;\n  padding: 0;\n}",
   },
   {
     id: "btn-size-lineheight",
@@ -1393,8 +583,7 @@ const buttonStylePresets = [
   {
     id: "btn-icon-only",
     label: "纯图标按閽",
-    content:
-      "#domId .el-button.is-circle {\n  width: 48px;\n  height: 48px;\n  padding: 0;\n}",
+    content: "#domId .el-button.is-circle {\n  width: 48px;\n  height: 48px;\n  padding: 0;\n}",
   },
   {
     id: "btn-disabled",
@@ -1411,8 +600,7 @@ const buttonStylePresets = [
   {
     id: "btn-text-hover",
     label: "text 按钮 hover 无背鏅",
-    content:
-      "#domId .el-button--text:hover {\n  background: transparent;\n  color: #66b1ff;\n}",
+    content: "#domId .el-button--text:hover {\n  background: transparent;\n  color: #66b1ff;\n}",
   },
   {
     id: "btn-text-underline",
@@ -1427,8 +615,7 @@ const buttonStylePresets = [
   {
     id: "btn-group-divider",
     label: "按钮组分割线",
-    content:
-      "#domId .el-button-group .el-button + .el-button {\n  border-left: 1px solid #ddd;\n}",
+    content: "#domId .el-button-group .el-button + .el-button {\n  border-left: 1px solid #ddd;\n}",
   },
   {
     id: "btn-hover-scale",
@@ -1462,8 +649,7 @@ const textStylePresets = [
   {
     id: "text-hover",
     label: "Hover",
-    content:
-      "#domId:hover {\n  background-color: red;\n  border-color: red;\n  color: white;\n}",
+    content: "#domId:hover {\n  background-color: red;\n  border-color: red;\n  color: white;\n}",
   },
   {
     id: "text-active",
@@ -1494,8 +680,7 @@ const textStylePresets = [
   {
     id: "text-bg-solid",
     label: "纯色背景",
-    content:
-      "#domId {\n  background-color: #ff4d4f;\n  border-color: #ff4d4f;\n}",
+    content: "#domId {\n  background-color: #ff4d4f;\n  border-color: #ff4d4f;\n}",
   },
   {
     id: "text-bg-gradient",
@@ -1543,8 +728,7 @@ const textStylePresets = [
   {
     id: "text-icon-only",
     label: "纯图标",
-    content:
-      "#domId.is-circle {\n  width: 48px;\n  height: 48px;\n  padding: 0;\n}",
+    content: "#domId.is-circle {\n  width: 48px;\n  height: 48px;\n  padding: 0;\n}",
   },
   {
     id: "text-disabled",
@@ -1590,11 +774,13 @@ const textStylePresets = [
     content: "#domId:active {\n  transform: scale(0.97);\n}",
   },
 ];
-const buildStylePreset = (type, id, label, content) => ({
-  id: `${type}-${id}`,
-  label,
-  content,
-});
+function buildStylePreset(type, id, label, content) {
+  return {
+    id: `${type}-${id}`,
+    label,
+    content,
+  };
+}
 const customStylePresetMap = {
   Image: [
     buildStylePreset(
@@ -1937,12 +1123,7 @@ const customStylePresetMap = {
       "状态（hover/active/disabled）",
       "#domId .el-tabs__item:hover{ color:#66b1ff; }\n#domId .el-tabs__item.is-active{ color:#409EFF; font-weight:600; }\n#domId .el-tabs__item.is-disabled{ opacity:.5; cursor:not-allowed; }",
     ),
-    buildStylePreset(
-      "Tabs",
-      "bar",
-      "指示条",
-      "#domId .el-tabs__active-bar{ background:#409EFF; }",
-    ),
+    buildStylePreset("Tabs", "bar", "指示条", "#domId .el-tabs__active-bar{ background:#409EFF; }"),
     buildStylePreset(
       "Tabs",
       "card",
@@ -2333,14 +1514,12 @@ const buttonDetailPresets = [
   {
     id: "btn-basic",
     label: "按钮",
-    content:
-      "this.button({\n  text: '保存',\n  type: 'primary',\n  click: 'onSave',\n});",
+    content: "this.button({\n  text: '保存',\n  type: 'primary',\n  click: 'onSave',\n});",
   },
   {
     id: "btn-text",
     label: "文字按钮",
-    content:
-      "this.button({\n  text: '查看详情',\n  type: 'text',\n  click: 'onView',\n});",
+    content: "this.button({\n  text: '查看详情',\n  type: 'text',\n  click: 'onView',\n});",
   },
   {
     id: "btn-types",
@@ -2381,8 +1560,7 @@ const buttonDetailPresets = [
   {
     id: "btn-native",
     label: "表单提交按钮",
-    content:
-      "this.button({\n  text: '提交表单',\n  type: 'primary',\n  nativeType: 'submit',\n})",
+    content: "this.button({\n  text: '提交表单',\n  type: 'primary',\n  nativeType: 'submit',\n})",
   },
   {
     id: "btn-block",
@@ -2458,32 +1636,23 @@ const elementPlusTypes = new Set([
 ]);
 
 /**
- * 组件类型标识（与 manifest / 画布节点 type 一致，仅 trim，不做历史别名映射）
- * @param {string | undefined} type - 组件类型
- * @returns {string}
- */
-function elementTypeName(type) {
-  return typeof type === "string" ? type.trim() : "";
-}
-
-/**
  * 是否为 Element Plus 组件
  * @param {string | undefined} type - 组件类型
  * @returns {boolean}
  */
-const isElementPlusType = (type) => {
+function isElementPlusType(type) {
   const normalized = elementTypeName(type);
   if (!normalized) return false;
   if (normalized.startsWith("El")) return true;
   return elementPlusTypes.has(normalized);
-};
+}
 
 /**
  * 获取 Element Plus 组件定义
  * @param {string | undefined} type - 组件类型
  * @returns {any}
  */
-const resolveElementPlusComponent = (type) => {
+function resolveElementPlusComponent(type) {
   const normalized = elementTypeName(type);
   if (!normalized) return null;
   const map = {
@@ -2511,17 +1680,17 @@ const resolveElementPlusComponent = (type) => {
     Slider: ElSlider,
     Calendar: ElCalendar,
     Signature: ElInput,
-    ElContainer: ElContainer,
-    ElHeader: ElHeader,
-    ElAside: ElAside,
-    ElMain: ElMain,
-    ElFooter: ElFooter,
+    ElContainer,
+    ElHeader,
+    ElAside,
+    ElMain,
+    ElFooter,
     ElLayoutRow: ElRow,
-    ElCol: ElCol,
+    ElCol,
     Transfer: ElTransfer,
   };
   return map[normalized] || null;
-};
+}
 
 /**
  * 构建 Element Plus 组件的属性定义
@@ -2695,7 +1864,7 @@ const elementPlusPropLabelMap = {
   },
 };
 
-const buildElementPlusPropDefs = (type) => {
+function buildElementPlusPropDefs(type) {
   const comp = resolveElementPlusComponent(type);
   const rawProps = comp?.props || comp?.__props || null;
   if (!rawProps || typeof rawProps !== "object") return [];
@@ -2716,11 +1885,10 @@ const buildElementPlusPropDefs = (type) => {
   };
 
   return entries
-    .filter(([name]) => Object.prototype.hasOwnProperty.call(labelMap, name))
+    .filter(([name]) => Object.hasOwn(labelMap, name))
     .map(([name, prop]) => {
       const typeValue = resolvePropType(prop);
-      const def =
-        typeof prop?.default === "function" ? prop.default() : prop?.default;
+      const def = typeof prop?.default === "function" ? prop.default() : prop?.default;
       const options = Array.isArray(prop?.values)
         ? prop.values.map((value) => ({ label: String(value), value }))
         : undefined;
@@ -2733,28 +1901,28 @@ const buildElementPlusPropDefs = (type) => {
         options,
       };
     });
-};
+}
 
 /**
  * 是否显示属性绑定入口
  * @param {{ group?: string }} propDef - 属性定义
  * @returns {boolean}
  */
-const shouldShowBindButton = (propDef) => {
+function shouldShowBindButton(propDef) {
   if (!propDef) return false;
   return propDef.bindable === true;
-};
+}
 
 /**
  * 获取 DSL 方法名
  * @param {string} type - 组件类型
  * @returns {string}
  */
-const getDslMethodName = (type) => {
+function getDslMethodName(type) {
   if (!type) return "component";
   const normalized = type.replace(/^El/, "el");
   return normalized.charAt(0).toLowerCase() + normalized.slice(1);
-};
+}
 
 /**
  * 生成预设 ID
@@ -2762,9 +1930,9 @@ const getDslMethodName = (type) => {
  * @param {string} key - 预设标识
  * @returns {string}
  */
-const buildPresetId = (type, key) => {
+function buildPresetId(type, key) {
   return `${String(type || "component").toLowerCase()}-${key}`;
-};
+}
 
 /**
  * 生成 DSL 模板
@@ -2772,9 +1940,9 @@ const buildPresetId = (type, key) => {
  * @param {string} body - 模板主体
  * @returns {string}
  */
-const buildDslTemplate = (methodName, body) => {
+function buildDslTemplate(methodName, body) {
   return `this.${methodName}({\n${body}\n});`;
-};
+}
 
 const textDetailPresets = [
   {
@@ -2803,18 +1971,12 @@ const textDetailPresets = [
   {
     id: "text-wrap",
     label: "多行文本",
-    content: buildDslTemplate(
-      "text",
-      "  text: 'description',\n  lineHeight: 1.6,\n  wrap: true,",
-    ),
+    content: buildDslTemplate("text", "  text: 'description',\n  lineHeight: 1.6,\n  wrap: true,"),
   },
   {
     id: "text-ellipsis",
     label: "超出省略",
-    content: buildDslTemplate(
-      "text",
-      "  text: 'content',\n  ellipsis: true,\n  maxWidth: 200,",
-    ),
+    content: buildDslTemplate("text", "  text: 'content',\n  ellipsis: true,\n  maxWidth: 200,"),
   },
   {
     id: "text-ellipsis-tooltip",
@@ -2859,10 +2021,7 @@ const textDetailPresets = [
   {
     id: "text-tooltip",
     label: "Tooltip 文本",
-    content: buildDslTemplate(
-      "text",
-      "  value: '鼠标移上来',\n  tooltip: '这是提示',",
-    ),
+    content: buildDslTemplate("text", "  value: '鼠标移上来',\n  tooltip: '这是提示',"),
   },
   {
     id: "text-copy",
@@ -2888,10 +2047,7 @@ const textDetailPresets = [
   {
     id: "text-action-edit",
     label: "表格操作-编辑",
-    content: buildDslTemplate(
-      "text",
-      "  value: '编辑',\n  type: 'primary',\n  click: 'onEdit',",
-    ),
+    content: buildDslTemplate("text", "  value: '编辑',\n  type: 'primary',\n  click: 'onEdit',"),
   },
   {
     id: "text-action-delete",
@@ -2909,10 +2065,7 @@ const textDetailPresets = [
   {
     id: "text-multi-price",
     label: "多文本组鍚金额",
-    content: buildDslTemplate(
-      "text",
-      "  text: 'price',\n  color: '#f56c6c',\n  weight: 'bold',",
-    ),
+    content: buildDslTemplate("text", "  text: 'price',\n  color: '#f56c6c',\n  weight: 'bold',"),
   },
   {
     id: "text-full-dsl",
@@ -2930,17 +2083,15 @@ const textDetailPresets = [
  * @param {number} indentSize - 缩进空格数
  * @returns {string}
  */
-const formatDslValue = (value, indentSize = 2) => {
+function formatDslValue(value, indentSize = 2) {
   if (value === undefined) return "undefined";
   const json = JSON.stringify(value, null, 2);
   if (!json) return "null";
   const lines = json.split("\n");
   if (lines.length === 1) return json;
   const pad = " ".repeat(indentSize);
-  return [lines[0], ...lines.slice(1).map((line) => `${pad}${line}`)].join(
-    "\n",
-  );
-};
+  return [lines[0], ...lines.slice(1).map((line) => `${pad}${line}`)].join("\n");
+}
 
 /**
  * 获取 Manifest 默认值
@@ -2948,25 +2099,25 @@ const formatDslValue = (value, indentSize = 2) => {
  * @param {string} propName - 属性名
  * @returns {*}
  */
-const getManifestDefaultValue = (type, propName) => {
+function getManifestDefaultValue(type, propName) {
   if (!type || !propName) return undefined;
   const manifest = getManifest(type);
   if (!manifest?.props?.length) return undefined;
   return manifest.props.find((prop) => prop.name === propName)?.defaultValue;
-};
+}
 
 /**
  * 提取 DSL 模板主体
  * @param {string} content - 模板内容
  * @returns {string}
  */
-const extractDslBody = (content) => {
+function extractDslBody(content) {
   const text = String(content || "");
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) return text.trim();
   return text.slice(start + 1, end).trim();
-};
+}
 
 const dslEventKeyMap = {
   onClick: "click",
@@ -2983,7 +2134,7 @@ const dslEventKeyMap = {
  * @param {string} body - 模板主体
  * @returns {string[]}
  */
-const splitTopLevelEntries = (body) => {
+function splitTopLevelEntries(body) {
   const entries = [];
   let buffer = "";
   let depth = 0;
@@ -3018,7 +2169,7 @@ const splitTopLevelEntries = (body) => {
 
   if (buffer.trim()) entries.push(buffer.trim());
   return entries;
-};
+}
 
 /**
  * 生成标准 DSL 模板
@@ -3026,7 +2177,7 @@ const splitTopLevelEntries = (body) => {
  * @param {{ id: string, label: string, content: string }} preset - 预设项
  * @returns {{ id: string, label: string, content: string }}
  */
-const normalizeDslPreset = (type, preset) => {
+function normalizeDslPreset(type, preset) {
   const rawContent = preset?.content || "";
   if (rawContent.includes("props:") || rawContent.includes("events:")) {
     return preset;
@@ -3113,11 +2264,10 @@ const normalizeDslPreset = (type, preset) => {
   return {
     ...preset,
     tags: preset?.tags || [type, "detail"],
-    keywords:
-      preset?.keywords || [preset?.label, type].filter(Boolean).join(" "),
+    keywords: preset?.keywords || [preset?.label, type].filter(Boolean).join(" "),
     content: `this.${methodName}({\n${blocks}\n});`,
   };
-};
+}
 
 const elementPlusPresetGroups = [
   {
@@ -3178,7 +2328,7 @@ const elementPlusPresetGroups = [
               label: "带边框 + 禁用项",
               content: buildDslTemplate(
                 methodName,
-                "  text:'payType',\n  border:true,\n  options:[{label:'微信',value:'wx'},{label:'\u652f\u4ed8\u5b9d',value:'ali',disabled:true}],",
+                "  text:'payType',\n  border:true,\n  options:[{label:'微信',value:'wx'},{label:'\u652F\u4ED8\u5B9D',value:'ali',disabled:true}],",
               ),
             },
           ];
@@ -3417,7 +2567,7 @@ const elementPlusPresetGroups = [
               label: "状态映灏",
               content: buildDslTemplate(
                 methodName,
-                "  text:'status',\n  dict:{ 0:{label:'\u7981\u7528',type:'info'}, 1:{label:'\u542f\u7528',type:'success'}, 2:{label:'\u8b66\u544a',type:'warning'} },",
+                "  text:'status',\n  dict:{ 0:{label:'\u7981\u7528',type:'info'}, 1:{label:'\u542F\u7528',type:'success'}, 2:{label:'\u8B66\u544A',type:'warning'} },",
               ),
             },
             {
@@ -3425,7 +2575,7 @@ const elementPlusPresetGroups = [
               label: "自定义颜色",
               content: buildDslTemplate(
                 methodName,
-                "  value:'\u793a\u4f8b',\n  color:'#409EFF',\n  effect:'dark',",
+                "  value:'\u793A\u4F8B',\n  color:'#409EFF',\n  effect:'dark',",
               ),
             },
           ];
@@ -3458,10 +2608,7 @@ const elementPlusPresetGroups = [
             {
               id: buildPresetId(type, "disabled"),
               label: "禁用/动态禁用",
-              content: buildDslTemplate(
-                "counter",
-                "  text:'amount',\n  disabled:true,",
-              ),
+              content: buildDslTemplate("counter", "  text:'amount',\n  disabled:true,"),
             },
             {
               id: buildPresetId(type, "exceed"),
@@ -3493,10 +2640,7 @@ const elementPlusPresetGroups = [
             {
               id: buildPresetId(type, "reverse"),
               label: "反向",
-              content: buildDslTemplate(
-                methodName,
-                "  reverse:true,\n  items:'timeItems',",
-              ),
+              content: buildDslTemplate(methodName, "  reverse:true,\n  items:'timeItems',"),
             },
             {
               id: buildPresetId(type, "icon"),
@@ -3710,7 +2854,7 @@ const elementPlusPresetGroups = [
               label: "Header",
               content: buildDslTemplate(
                 methodName,
-                "  shadow:'never',\n  body:[ this.text({value:'\u793a\u4f8b'}) ],",
+                "  shadow:'never',\n  body:[ this.text({value:'\u793A\u4F8B'}) ],",
               ),
             },
             {
@@ -3990,10 +3134,7 @@ const elementPlusPresetGroups = [
             {
               id: buildPresetId(type, "range"),
               label: "范围",
-              content: buildDslTemplate(
-                methodName,
-                "  range:['2026-02-01','2026-02-29'],",
-              ),
+              content: buildDslTemplate(methodName, "  range:['2026-02-01','2026-02-29'],"),
             },
             {
               id: buildPresetId(type, "cell"),
@@ -4121,7 +3262,7 @@ const elementPlusPresetGroups = [
               label: "输入框",
               content: buildDslTemplate(
                 methodName,
-                "  text: 'readonlyField',\n  placeholder: '\u8bf7\u8f93\u5165',\n  readonly: true,",
+                "  text: 'readonlyField',\n  placeholder: '\u8BF7\u8F93\u5165',\n  readonly: true,",
               ),
             },
             {
@@ -4509,8 +3650,7 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "disabled"),
         label: "禁用",
-        content:
-          "#domId .el-select .el-input.is-disabled .el-input__inner{ background:#f5f7fa; }",
+        content: "#domId .el-select .el-input.is-disabled .el-input__inner{ background:#f5f7fa; }",
       },
     ],
   },
@@ -4529,10 +3669,7 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "status"),
         label: "选择状态配缃",
-        content: buildDslTemplate(
-          methodName,
-          '  disabled: false,\n  size: "small",',
-        ),
+        content: buildDslTemplate(methodName, '  disabled: false,\n  size: "small",'),
       },
       {
         id: buildPresetId(type, "full-dsl"),
@@ -4552,14 +3689,12 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "border"),
         label: "颜色",
-        content:
-          "#domId .el-radio, #domId .el-checkbox { border-color: #dcdfe6; }",
+        content: "#domId .el-radio, #domId .el-checkbox { border-color: #dcdfe6; }",
       },
       {
         id: buildPresetId(type, "size"),
         label: "组件间距",
-        content:
-          "#domId .el-radio, #domId .el-checkbox { margin-right: 12px; }",
+        content: "#domId .el-radio, #domId .el-checkbox { margin-right: 12px; }",
       },
     ],
   },
@@ -4687,10 +3822,7 @@ const elementPlusPresetGroups = [
         {
           id: buildPresetId(type, "layout"),
           label: "表格布局配置",
-          content: buildDslTemplate(
-            methodName,
-            "  stripe: true,\n  border: true,\n  height: 360,",
-          ),
+          content: buildDslTemplate(methodName, "  stripe: true,\n  border: true,\n  height: 360,"),
         },
         {
           id: buildPresetId(type, "full-dsl"),
@@ -4880,7 +4012,7 @@ const elementPlusPresetGroups = [
               label: "侧边栏（多级）",
               content: buildDslTemplate(
                 methodName,
-                "  active:'dashboard',\n  items:[\n    { index:'dashboard', title:'\u4eea\u8868\u76d8', icon:'el-icon-data-analysis' },\n    { index:'sys', title:'系统', icon:'el-icon-setting', children:[\n      { index:'user', title:'用户管理' },\n      { index:'role', title:'角色管理' },\n    ] }\n  ],\n  select:'onMenuSelect',",
+                "  active:'dashboard',\n  items:[\n    { index:'dashboard', title:'\u4EEA\u8868\u76D8', icon:'el-icon-data-analysis' },\n    { index:'sys', title:'系统', icon:'el-icon-setting', children:[\n      { index:'user', title:'用户管理' },\n      { index:'role', title:'角色管理' },\n    ] }\n  ],\n  select:'onMenuSelect',",
               ),
             },
             {
@@ -4922,10 +4054,7 @@ const elementPlusPresetGroups = [
             {
               id: buildPresetId(type, "trigger"),
               label: "菜单触发配置",
-              content: buildDslTemplate(
-                methodName,
-                '  trigger: "click",\n  splitButton: false,',
-              ),
+              content: buildDslTemplate(methodName, '  trigger: "click",\n  splitButton: false,'),
             },
             {
               id: buildPresetId(type, "full-dsl"),
@@ -4965,23 +4094,20 @@ const elementPlusPresetGroups = [
         label: "Tabs/折叠配置",
         content: buildDslTemplate(
           methodName,
-          '  /* Tabs/\u6298\u53e0\u914d\u7f6e */\n  id: "tabsPanel",\n  label: "Tabs/\u6298\u53e0\u914d\u7f6e",\n  type: "Tabs",\n  props: {\n    activeName: "tab1",\n    items: [\n      { name: "tab1", label: "\u6807\u7b7e\u4e00" },\n      { name: "tab2", label: "\u6807\u7b7e\u4e8c" },\n      { name: "tab3", label: "\u6807\u7b7e\u4e09" },\n    ],\n  },',
+          '  /* Tabs/\u6298\u53E0\u914D\u7F6E */\n  id: "tabsPanel",\n  label: "Tabs/\u6298\u53E0\u914D\u7F6E",\n  type: "Tabs",\n  props: {\n    activeName: "tab1",\n    items: [\n      { name: "tab1", label: "\u6807\u7B7E\u4E00" },\n      { name: "tab2", label: "\u6807\u7B7E\u4E8C" },\n      { name: "tab3", label: "\u6807\u7B7E\u4E09" },\n    ],\n  },',
         ),
       },
       {
         id: buildPresetId(type, "type"),
         label: "样式类型配置",
-        content: buildDslTemplate(
-          methodName,
-          '  type: "card",\n  stretch: true,',
-        ),
+        content: buildDslTemplate(methodName, '  type: "card",\n  stretch: true,'),
       },
       {
         id: buildPresetId(type, "full-dsl"),
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** \u57fa\u7840 */\n  id: "tabsPanel",\n  activeName: "tab1",\n  items: [\n    { name: "tab1", label: "\u6807\u7b7e\u4e00" },\n    { name: "tab2", label: "\u6807\u7b7e\u4e8c" },\n  ],\n\n  /** \u5c5e\u6027 */\n  type: "card",\n  stretch: true,\n\n  /** \u6837\u5f0f */\n  className: "custom-tabs",\n\n  /** \u4e8b\u4ef6 */\n  onTabClick: {\n    action: "setVar",\n    target: "$vars.activeTab",\n  },',
+          '  /** \u57FA\u7840 */\n  id: "tabsPanel",\n  activeName: "tab1",\n  items: [\n    { name: "tab1", label: "\u6807\u7B7E\u4E00" },\n    { name: "tab2", label: "\u6807\u7B7E\u4E8C" },\n  ],\n\n  /** \u5C5E\u6027 */\n  type: "card",\n  stretch: true,\n\n  /** \u6837\u5F0F */\n  className: "custom-tabs",\n\n  /** \u4E8B\u4EF6 */\n  onTabClick: {\n    action: "setVar",\n    target: "$vars.activeTab",\n  },',
         ),
       },
     ],
@@ -5023,7 +4149,7 @@ const elementPlusPresetGroups = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** \u57fa\u7840 */\n  id: "pagination",\n  total: 200,\n  pageSize: 20,\n  currentPage: 1,\n\n  /** \u5e03\u5c40 */\n  layout: "total, sizes, prev, pager, next, jumper",\n  pageSizes: [10, 20, 50, 100],\n\n  /** \u6837\u5f0f */\n  className: "custom-pagination",\n\n  /** \u4e8b\u4ef6 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.pageIndex",\n  },',
+          '  /** \u57FA\u7840 */\n  id: "pagination",\n  total: 200,\n  pageSize: 20,\n  currentPage: 1,\n\n  /** \u5E03\u5C40 */\n  layout: "total, sizes, prev, pager, next, jumper",\n  pageSizes: [10, 20, 50, 100],\n\n  /** \u6837\u5F0F */\n  className: "custom-pagination",\n\n  /** \u4E8B\u4EF6 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.pageIndex",\n  },',
         ),
       },
     ],
@@ -5060,10 +4186,7 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "closable"),
         label: "可关闭",
-        content: buildDslTemplate(
-          methodName,
-          '  closable: true,\n  effect: "dark",',
-        ),
+        content: buildDslTemplate(methodName, '  closable: true,\n  effect: "dark",'),
       },
       {
         id: buildPresetId(type, "full-dsl"),
@@ -5107,10 +4230,7 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "range"),
         label: "范围滑块配置",
-        content: buildDslTemplate(
-          methodName,
-          "  range: true,\n  showStops: true,\n  step: 10,",
-        ),
+        content: buildDslTemplate(methodName, "  range: true,\n  showStops: true,\n  step: 10,"),
       },
       {
         id: buildPresetId(type, "full-dsl"),
@@ -5154,10 +4274,7 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "simple"),
         label: "简洁卡鐗",
-        content: buildDslTemplate(
-          methodName,
-          '  header: "概览",\n  shadow: "never",',
-        ),
+        content: buildDslTemplate(methodName, '  header: "概览",\n  shadow: "never",'),
       },
       {
         id: buildPresetId(type, "full-dsl"),
@@ -5248,10 +4365,7 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "align"),
         label: "时间线布局",
-        content: buildDslTemplate(
-          methodName,
-          '  placement: "top",\n  reverse: false,',
-        ),
+        content: buildDslTemplate(methodName, '  placement: "top",\n  reverse: false,'),
       },
       {
         id: buildPresetId(type, "full-dsl"),
@@ -5360,8 +4474,7 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "dot"),
         label: "指示点颜色",
-        content:
-          "#domId .el-carousel__indicator.is-active button { background: #409eff; }",
+        content: "#domId .el-carousel__indicator.is-active button { background: #409eff; }",
       },
       {
         id: buildPresetId(type, "arrow"),
@@ -5382,18 +4495,12 @@ const elementPlusPresetGroups = [
       {
         id: buildPresetId(type, "basic"),
         label: "日历配置",
-        content: buildDslTemplate(
-          methodName,
-          '  id: "calendar",\n  value: new Date(),',
-        ),
+        content: buildDslTemplate(methodName, '  id: "calendar",\n  value: new Date(),'),
       },
       {
         id: buildPresetId(type, "range"),
         label: "日历范围",
-        content: buildDslTemplate(
-          methodName,
-          "  range: [new Date(), new Date()],",
-        ),
+        content: buildDslTemplate(methodName, "  range: [new Date(), new Date()],"),
       },
       {
         id: buildPresetId(type, "full-dsl"),
@@ -5485,10 +4592,8 @@ const elementPlusPresetGroups = [
  * @param {string} type - 组件类型
  * @returns {Array<{ id: string, label: string, content: string }>}
  */
-const resolveElementPlusDetailPresets = (type) => {
-  const group = elementPlusPresetGroups.find((item) =>
-    item.types.includes(type),
-  );
+function resolveElementPlusDetailPresets(type) {
+  const group = elementPlusPresetGroups.find((item) => item.types.includes(type));
   const methodName = getDslMethodName(type);
   if (group?.detail) {
     return group
@@ -5497,9 +4602,7 @@ const resolveElementPlusDetailPresets = (type) => {
       .map((preset) => ({
         ...preset,
         tags: preset.tags || [type, "detail", group.name],
-        keywords:
-          preset.keywords ||
-          [preset.label, type, group.name].filter(Boolean).join(" "),
+        keywords: preset.keywords || [preset.label, type, group.name].filter(Boolean).join(" "),
       }));
   }
   return [
@@ -5509,38 +4612,32 @@ const resolveElementPlusDetailPresets = (type) => {
       content: buildDslTemplate(methodName, '  id: "component",\n  props: {},'),
     }),
   ];
-};
+}
 
 /**
  * 获取 Element Plus 样式配置预设
  * @param {string} type - 组件类型
  * @returns {Array<{ id: string, label: string, content: string }>}
  */
-const resolveElementPlusStylePresets = (type) => {
+function resolveElementPlusStylePresets(type) {
   const customPresets = customStylePresetMap[type];
   if (customPresets) {
     return customPresets.map((preset) => ({
       ...preset,
       tags: preset.tags || [type, "style", "custom"],
-      keywords:
-        preset.keywords ||
-        [preset.label, type, "custom"].filter(Boolean).join(" "),
+      keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
     }));
   }
-  const group = elementPlusPresetGroups.find((item) =>
-    item.types.includes(type),
-  );
+  const group = elementPlusPresetGroups.find((item) => item.types.includes(type));
   if (group?.style) {
     return group.style(type).map((preset) => ({
       ...preset,
       tags: preset.tags || [type, "style", group.name],
-      keywords:
-        preset.keywords ||
-        [preset.label, type, group.name].filter(Boolean).join(" "),
+      keywords: preset.keywords || [preset.label, type, group.name].filter(Boolean).join(" "),
     }));
   }
   return stylePresets;
-};
+}
 
 /**
  * 获取区域默认尺寸
@@ -5554,7 +4651,7 @@ const getRegionDefaultValue = (propName) => regionSizeDefaults[propName];
  * @param {string | number | undefined} value - 原始值
  * @returns {{ value: string, unit: string }}
  */
-const parseSize = (value) => {
+function parseSize(value) {
   if (!value || value === "auto") {
     return { value: "", unit: "auto" };
   }
@@ -5564,47 +4661,47 @@ const parseSize = (value) => {
     return { value: match[1], unit: match[2] || "px" };
   }
   return { value: "", unit: "auto" };
-};
+}
 
 /**
  * 将尺寸转换为数字
  * @param {string | number | undefined} value - 原始值
  * @returns {number | undefined}
  */
-const parseSizeToNumber = (value) => {
+function parseSizeToNumber(value) {
   const parsed = parseSize(value);
   if (!parsed.value || parsed.unit !== "px") return undefined;
   const num = Number.parseFloat(parsed.value);
   return Number.isFinite(num) ? num : undefined;
-};
+}
 
 /**
  * 获取区域尺寸文案
  * @param {{ key: string }} item - 区域项
  * @returns {string}
  */
-const getRegionSizeText = (item) => {
+function getRegionSizeText(item) {
   if (!item) return "";
   if (item.key === "aside") return "宽度";
   if (item.key === "header" || item.key === "footer") return "高度";
   return "";
-};
+}
 
 /**
  * 判断区域是否启用
  * @param {{ toggleProp: string }} item - 区域配置项
  * @returns {boolean}
  */
-const isRegionEnabled = (item) => {
+function isRegionEnabled(item) {
   if (!item?.toggleProp) return true;
   return Boolean(getPropValue(item.toggleProp));
-};
+}
 
 /**
  * 解析容器最大尺寸
  * @returns {{ width?: number, height?: number }}
  */
-const resolveContainerMaxSize = () => {
+function resolveContainerMaxSize() {
   const el = currentElement.value;
   if (!el || el.type !== "ElContainer") return {};
   const liveNode = doc.value?.getNode?.(el.id) || el;
@@ -5632,14 +4729,14 @@ const resolveContainerMaxSize = () => {
     width: styleWidth ?? absWidth,
     height: styleHeight ?? absHeight,
   };
-};
+}
 
 /**
  * 解析区域尺寸上限
  * @param {string} propName - 属性名
  * @returns {number | undefined}
  */
-const resolveRegionMaxValue = (propName) => {
+function resolveRegionMaxValue(propName) {
   const maxSize = resolveContainerMaxSize();
   const containerProps = currentElement.value?.props || {};
   const hasHeader = containerProps.showHeader !== false;
@@ -5676,19 +4773,19 @@ const resolveRegionMaxValue = (propName) => {
     return Math.max(0, maxSize.height - header - body);
   }
   return undefined;
-};
+}
 
 /**
  * 获取区域尺寸上限文案
  * @param {string | null} propName - 属性名
  * @returns {string}
  */
-const getRegionMaxLabel = (propName) => {
+function getRegionMaxLabel(propName) {
   if (!propName) return "";
   const maxValue = resolveRegionMaxValue(propName);
   if (!maxValue) return "";
   return `<= ${Math.round(maxValue)}px`;
-};
+}
 
 /**
  * 限制区域尺寸输入值
@@ -5697,7 +4794,7 @@ const getRegionMaxLabel = (propName) => {
  * @param {string} unit - 单位
  * @returns {{ value: string, unit: string }}
  */
-const clampRegionSize = (propName, value, unit) => {
+function clampRegionSize(propName, value, unit) {
   const maxSize = resolveContainerMaxSize();
   const maxValue = resolveRegionMaxValue(propName);
   if (unit === "%") {
@@ -5722,14 +4819,14 @@ const clampRegionSize = (propName, value, unit) => {
     return { value: String(Math.min(num, maxValue)), unit };
   }
   return { value, unit };
-};
+}
 
 /**
  * 计算 ElContainer 最小尺寸
  * @param {import('@/editor-core').ComponentNode | null} containerNode - 容器节点
  * @returns {{ width: number, height: number } | null}
  */
-const resolveElContainerMinSize = (containerNode) => {
+function resolveElContainerMinSize(containerNode) {
   if (!containerNode || containerNode.type !== "ElContainer") return null;
   const children = containerNode.children || [];
   let hasHeader = false;
@@ -5760,9 +4857,7 @@ const resolveElContainerMinSize = (containerNode) => {
     parseSizeToNumber(regionSizeDefaults.footerHeight) ??
     60;
   const asideWidth =
-    parseSizeToNumber(props.asideWidth) ??
-    parseSizeToNumber(regionSizeDefaults.asideWidth) ??
-    200;
+    parseSizeToNumber(props.asideWidth) ?? parseSizeToNumber(regionSizeDefaults.asideWidth) ?? 200;
   const minBodySize = 40;
 
   const hasBody = hasAside || hasMain;
@@ -5782,26 +4877,20 @@ const resolveElContainerMinSize = (containerNode) => {
 
   if (minWidth <= 0 && minHeight <= 0) return null;
   return { width: minWidth, height: minHeight };
-};
+}
 
 /**
  * ??
  * @param {Record<string, any> | undefined} props - ?
  */
-const syncRegionSizeState = (props) => {
+function syncRegionSizeState(props) {
   const safeProps = props || {};
   regionSizeState.value = {
-    headerHeight: parseSize(
-      safeProps.headerHeight ?? getRegionDefaultValue("headerHeight"),
-    ),
-    asideWidth: parseSize(
-      safeProps.asideWidth ?? getRegionDefaultValue("asideWidth"),
-    ),
-    footerHeight: parseSize(
-      safeProps.footerHeight ?? getRegionDefaultValue("footerHeight"),
-    ),
+    headerHeight: parseSize(safeProps.headerHeight ?? getRegionDefaultValue("headerHeight")),
+    asideWidth: parseSize(safeProps.asideWidth ?? getRegionDefaultValue("asideWidth")),
+    footerHeight: parseSize(safeProps.footerHeight ?? getRegionDefaultValue("footerHeight")),
   };
-};
+}
 
 watch(
   currentElement,
@@ -5843,13 +4932,13 @@ watch(
  * @param {Record<string, any>} patch - 更新补丁
  * @returns {boolean}
  */
-const applyNodePatch = (nodeId, patch) => {
+function applyNodePatch(nodeId, patch) {
   if (!doc.value || !nodeId || !patch) return false;
   if (typeof doc.value._updateNode !== "function") return false;
   doc.value._updateNode(nodeId, patch);
   docVersion.value += 1;
   return true;
-};
+}
 
 /**
  * 获取组件 Manifest
@@ -5862,13 +4951,9 @@ const manifest = computed(() => {
 
 const effectiveManifest = computed(() => {
   const type = elementTypeName(currentElement.value?.type);
-  const elementPlusProps = isElementPlusType(type)
-    ? buildElementPlusPropDefs(type)
-    : [];
+  const elementPlusProps = isElementPlusType(type) ? buildElementPlusPropDefs(type) : [];
   if (manifest.value) {
-    const baseProps = Array.isArray(manifest.value.props)
-      ? manifest.value.props
-      : [];
+    const baseProps = Array.isArray(manifest.value.props) ? manifest.value.props : [];
     if (elementPlusProps.length === 0) {
       return { ...manifest.value, props: baseProps };
     }
@@ -5911,9 +4996,7 @@ const currentPresetOptions = computed(() => {
         .map((preset) => ({
           ...preset,
           tags: preset.tags || [type, "detail", "button"],
-          keywords:
-            preset.keywords ||
-            [preset.label, type, "button"].filter(Boolean).join(" "),
+          keywords: preset.keywords || [preset.label, type, "button"].filter(Boolean).join(" "),
         }));
     }
     if (type === "Text") {
@@ -5922,9 +5005,7 @@ const currentPresetOptions = computed(() => {
         .map((preset) => ({
           ...preset,
           tags: preset.tags || [type, "detail", "text"],
-          keywords:
-            preset.keywords ||
-            [preset.label, type, "text"].filter(Boolean).join(" "),
+          keywords: preset.keywords || [preset.label, type, "text"].filter(Boolean).join(" "),
         }));
     }
     if (isElementPlusType(type)) return resolveElementPlusDetailPresets(type);
@@ -5934,27 +5015,21 @@ const currentPresetOptions = computed(() => {
     return buttonStylePresets.map((preset) => ({
       ...preset,
       tags: preset.tags || [type, "style", "button"],
-      keywords:
-        preset.keywords ||
-        [preset.label, type, "button"].filter(Boolean).join(" "),
+      keywords: preset.keywords || [preset.label, type, "button"].filter(Boolean).join(" "),
     }));
   }
   if (type === "Text") {
     return textStylePresets.map((preset) => ({
       ...preset,
       tags: preset.tags || [type, "style", "text"],
-      keywords:
-        preset.keywords ||
-        [preset.label, type, "text"].filter(Boolean).join(" "),
+      keywords: preset.keywords || [preset.label, type, "text"].filter(Boolean).join(" "),
     }));
   }
   if (customStylePresetMap[type]) {
     return customStylePresetMap[type].map((preset) => ({
       ...preset,
       tags: preset.tags || [type, "style", "custom"],
-      keywords:
-        preset.keywords ||
-        [preset.label, type, "custom"].filter(Boolean).join(" "),
+      keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
     }));
   }
   if (isElementPlusType(type)) return resolveElementPlusStylePresets(type);
@@ -5980,9 +5055,7 @@ const bindingDialogTitle = computed(() => {
 const bindingDialogDescription = computed(() => {
   const elementName = elementLabel.value || elementType.value || "组件";
   const propLabel = bindingProp.value?.label || bindingProp.value?.name || "";
-  return propLabel
-    ? `${elementName} ${propLabel} 绑定脚本`
-    : `${elementName} 绑定脚本`;
+  return propLabel ? `${elementName} ${propLabel} 绑定脚本` : `${elementName} 绑定脚本`;
 });
 
 const isElContainer = computed(() => elementType.value === "ElContainer");
@@ -6019,9 +5092,9 @@ const regionPropRows = computed(() => [
  * @param {{ props?: Array<{ name: string }> }} group - 分组
  * @returns {boolean}
  */
-const isRegionGroup = (group) => {
+function isRegionGroup(group) {
   return Boolean(group?.props?.some((prop) => prop.name === "showHeader"));
-};
+}
 
 /**
  * 按 group 对属性分组
@@ -6055,30 +5128,28 @@ const visibleLayoutForceProps = computed(() =>
 
 const sectionExpanded = ref({});
 
-const getGroupSectionKey = (group) =>
-  `group:${String(group?.name || "属性")}`;
+const getGroupSectionKey = (group) => `group:${String(group?.name || "属性")}`;
 
-const resolveGroupTitle = (group) => {
+function resolveGroupTitle(group) {
   const name = String(group?.name || "").trim();
   return !name || name === "?" ? "属性" : name;
-};
+}
 
-const getVisibleGroupProps = (group) =>
-  (group?.props || []).filter(
+function getVisibleGroupProps(group) {
+  return (group?.props || []).filter(
     (propDef) =>
-      propDef &&
-      (!isEChart.value || propDef.name !== "option") &&
-      !shouldHideProp(propDef),
+      propDef && (!isEChart.value || propDef.name !== "option") && !shouldHideProp(propDef),
   );
+}
 
 const isSectionExpanded = (key) => sectionExpanded.value[key] !== false;
 
-const toggleSection = (key) => {
+function toggleSection(key) {
   sectionExpanded.value = {
     ...sectionExpanded.value,
     [key]: !isSectionExpanded(key),
   };
-};
+}
 
 watch(
   displayPropGroups,
@@ -6108,16 +5179,14 @@ const pageVars = computed(() => {
  * @param {string} nodeId - 节点 ID
  * @param {Set<string>} nameSet - 名称集合
  */
-const collectComponentNames = (nodeId, nameSet) => {
+function collectComponentNames(nodeId, nameSet) {
   if (!doc.value || !nodeId) return;
   const node = doc.value.getNode?.(nodeId);
   if (!node) return;
   const label = node.label || node.type;
   if (label) nameSet.add(label);
-  (node.children || []).forEach((childId) =>
-    collectComponentNames(childId, nameSet),
-  );
-};
+  (node.children || []).forEach((childId) => collectComponentNames(childId, nameSet));
+}
 
 const pageComponentNames = computed(() => {
   docVersion.value;
@@ -6139,15 +5208,13 @@ const bindingProjectGroupTree = computed(() => [
 
 const bindingProjectVariableRows = computed(() => {
   const keyword = String(bindingProjectVarSearch.value || "").toLowerCase();
-  const items = Object.entries(projectVariables.value || {}).map(
-    ([name, detail]) => ({
-      name,
-      groupId: detail?.groupId || null,
-      type: detail?.type || "string",
-      description: detail?.description || "",
-      mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
-    }),
-  );
+  const items = Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
+    name,
+    groupId: detail?.groupId || null,
+    type: detail?.type || "string",
+    description: detail?.description || "",
+    mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+  }));
   return items
     .filter((item) => {
       if (bindingEnumSelectedProjectGroupId.value) {
@@ -6190,9 +5257,7 @@ const bindingPageComponentTree = computed(() => {
   const buildNode = (nodeId) => {
     const node = doc.value.getNode(nodeId);
     if (!node) return null;
-    const children = (node.children || [])
-      .map((childId) => buildNode(childId))
-      .filter(Boolean);
+    const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean);
     const label = node.label || node.type || "组件";
     return {
       id: node.id,
@@ -6376,9 +5441,7 @@ const detailCompletions = computed(() => {
         : typeof scriptItem.args === "string"
           ? scriptItem.args.trim()
           : "";
-    const call = params
-      ? `${scriptItem.name}(${params})`
-      : `${scriptItem.name}()`;
+    const call = params ? `${scriptItem.name}(${params})` : `${scriptItem.name}()`;
     items.push({
       label: scriptItem.name,
       insertText: call,
@@ -6444,7 +5507,7 @@ const configEditorCompletions = computed(() => {
  * @param {Array<{ id: string, name: string, parentId?: string }>} groups - 分组数据
  * @returns {Array<{ id: string, label: string, type: string, children: Array }>}
  */
-const buildBindingGroupTree = (groups) => {
+function buildBindingGroupTree(groups) {
   const groupMap = new Map();
   const roots = [];
   const normalized = Array.isArray(groups) ? groups : [];
@@ -6465,7 +5528,7 @@ const buildBindingGroupTree = (groups) => {
     }
   });
   return roots;
-};
+}
 
 /**
  * 过滤绑定侧边栏节点
@@ -6473,12 +5536,12 @@ const buildBindingGroupTree = (groups) => {
  * @param {{ label?: string }} data - 节点数据
  * @returns {boolean}
  */
-const filterBindingSidebarNode = (value, data) => {
+function filterBindingSidebarNode(value, data) {
   if (!value) return true;
   return String(data?.label || "")
     .toLowerCase()
     .includes(value.toLowerCase());
-};
+}
 
 watch(bindingScriptSearch, (value) => {
   bindingCustomTreeRef.value?.filter?.(value);
@@ -6501,7 +5564,7 @@ watch(configComponentSearch, (value) => {
  * @param {string} content - 样式内容
  * @returns {string}
  */
-const formatStyleConfigOutput = (content) => {
+function formatStyleConfigOutput(content) {
   const text = String(content || "");
   if (configDialogType.value !== "style") return text;
   if (text.includes("{")) return text;
@@ -6510,14 +5573,14 @@ const formatStyleConfigOutput = (content) => {
   return `#domId {
 ${trimmed}
 }`;
-};
+}
 
 /**
  * 自动为选择器补全 `#domId` 作用域
  * @param {string} content - 样式内容
  * @returns {string}
  */
-const prefixStyleConfigScope = (content) => {
+function prefixStyleConfigScope(content) {
   const text = String(content || "").trim();
   if (!text || !text.includes("{")) return text;
   const blocks = text.split("}");
@@ -6542,14 +5605,14 @@ const prefixStyleConfigScope = (content) => {
     .filter(Boolean)
     .join("}\n");
   return rebuilt ? `${rebuilt}}` : text;
-};
+}
 
 /**
  * 轻量校验 DSL 脚本
  * @param {string} content - DSL 内容
  * @returns {{ valid: boolean, message?: string }}
  */
-const validateDetailConfig = (content) => {
+function validateDetailConfig(content) {
   const text = String(content || "").trim();
   if (!text) return { valid: true };
   try {
@@ -6559,27 +5622,21 @@ const validateDetailConfig = (content) => {
   } catch (error) {
     return { valid: false, message: error?.message || "DSL 语法错误" };
   }
-};
+}
 
 /**
  * 变量引用结构化
  * @param {string} content - DSL 内容
  * @returns {string}
  */
-const normalizeDetailConfigBindings = (content) => {
+function normalizeDetailConfigBindings(content) {
   let text = String(content || "");
-  text = text.replace(/:\s*(\$vars\.[A-Za-z0-9_]+)/g, ': { $var: "$1" }');
-  text = text.replace(/:\s*(\$global\.[A-Za-z0-9_]+)/g, ': { $var: "$1" }');
-  text = text.replace(
-    /:\s*["'](\$vars\.[A-Za-z0-9_]+)["']/g,
-    ': { $var: "$1" }',
-  );
-  text = text.replace(
-    /:\s*["'](\$global\.[A-Za-z0-9_]+)["']/g,
-    ': { $var: "$1" }',
-  );
+  text = text.replace(/:\s*(\$vars\.\w+)/g, ': { $var: "$1" }');
+  text = text.replace(/:\s*(\$global\.\w+)/g, ': { $var: "$1" }');
+  text = text.replace(/:\s*["'](\$vars\.\w+)["']/g, ': { $var: "$1" }');
+  text = text.replace(/:\s*["'](\$global\.\w+)["']/g, ': { $var: "$1" }');
   return text;
-};
+}
 
 const textStylePropNames = new Set([
   "fontSize",
@@ -6591,11 +5648,7 @@ const textStylePropNames = new Set([
   "letterSpacing",
   "wordBreak",
 ]);
-const textStyleNumberProps = new Set([
-  "fontSize",
-  "lineHeight",
-  "letterSpacing",
-]);
+const textStyleNumberProps = new Set(["fontSize", "lineHeight", "letterSpacing"]);
 
 /**
  * 读取文本样式值（去掉 px 转成数字）
@@ -6603,7 +5656,7 @@ const textStyleNumberProps = new Set([
  * @param {any} value - 原始值
  * @returns {any}
  */
-const resolveTextStyleValue = (propName, value) => {
+function resolveTextStyleValue(propName, value) {
   if (value === null || value === undefined) return value;
   if (textStyleNumberProps.has(propName)) {
     if (typeof value === "number") return value;
@@ -6616,25 +5669,22 @@ const resolveTextStyleValue = (propName, value) => {
     }
   }
   return value;
-};
+}
 
 /**
  * 读取属性值
  * @param {string} propName - 属性名
  */
-const getPropValue = (propName) => {
+function getPropValue(propName) {
   const el = currentElement.value;
   if (!el) return undefined;
   const propValue = el.props ? el.props[propName] : undefined;
   if (propValue !== undefined) return propValue;
-  if (
-    elementTypeName(el.type) === "Text" &&
-    textStylePropNames.has(propName)
-  ) {
+  if (elementTypeName(el.type) === "Text" && textStylePropNames.has(propName)) {
     return resolveTextStyleValue(propName, el.style?.[propName]);
   }
   return propValue;
-};
+}
 
 /**
  * 获取区域尺寸状态
@@ -6649,44 +5699,44 @@ const getRegionSizeState = (propName) => regionSizeState.value[propName];
  * @param {string} value - 值
  * @param {string} unit - 单位
  */
-const setRegionSizeState = (propName, value, unit) => {
+function setRegionSizeState(propName, value, unit) {
   if (!propName) return;
   regionSizeState.value = {
     ...regionSizeState.value,
     [propName]: { value, unit },
   };
-};
+}
 
 /**
  * 获取尺寸输入值
  * @param {string} propName - 属性名
  * @returns {string}
  */
-const getSizeValue = (propName) => {
+function getSizeValue(propName) {
   if (!propName) return "";
   const cached = getRegionSizeState(propName);
   if (cached) return cached.value;
   return "";
-};
+}
 
 /**
  * 获取尺寸单位
  * @param {string} propName - 属性名
  * @returns {string}
  */
-const getSizeUnit = (propName) => {
+function getSizeUnit(propName) {
   if (!propName) return "auto";
   const cached = getRegionSizeState(propName);
   if (cached) return cached.unit;
   return "auto";
-};
+}
 
 /**
  * 处理尺寸值变更
  * @param {string} propName - 属性名
  * @param {string} value - 输入值
  */
-const handleSizeValueChange = (propName, value) => {
+function handleSizeValueChange(propName, value) {
   if (!propName) return;
   const unit = getSizeUnit(propName);
   const nextUnit = unit === "auto" ? "px" : unit;
@@ -6698,14 +5748,14 @@ const handleSizeValueChange = (propName, value) => {
   const clamped = clampRegionSize(propName, value, nextUnit);
   setRegionSizeState(propName, clamped.value || "", clamped.unit);
   handlePropChange(propName, `${clamped.value}${clamped.unit}`);
-};
+}
 
 /**
  * 处理尺寸单位变更
  * @param {string} propName - 属性名
  * @param {string} unit - 单位
  */
-const handleSizeUnitChange = (propName, unit) => {
+function handleSizeUnitChange(propName, unit) {
   if (!propName) return;
   if (unit === "auto") {
     setRegionSizeState(propName, "", "auto");
@@ -6716,7 +5766,7 @@ const handleSizeUnitChange = (propName, unit) => {
   const clamped = clampRegionSize(propName, value, unit);
   setRegionSizeState(propName, clamped.value, clamped.unit);
   handlePropChange(propName, `${clamped.value}${clamped.unit}`);
-};
+}
 
 /**
  * 将 Props 格式化为 JSON 字符串
@@ -6732,9 +5782,9 @@ const formattedProps = computed(() => {
  * @param {string} propName - 属性名
  * @returns {boolean}
  */
-const hasPropBinding = (propName) => {
+function hasPropBinding(propName) {
   return Boolean(currentElement.value?.bindings?.[propName]);
-};
+}
 
 /**
  * 当前是否有样式选择目标
@@ -6760,14 +5810,14 @@ const hasStyleConfig = computed(() => {
  * @param {any} propDef - 属性定义
  * @returns {boolean}
  */
-const shouldHideProp = (propDef) => {
+function shouldHideProp(propDef) {
   if (!propDef || !propDef.name) return false;
   const nodeType = elementTypeName(selectedNode.value?.type);
   if (nodeType === "Tabs" && propDef.name === "tabs") return true;
   if (nodeType === "Menu" && propDef.name === "items") return true;
 
   return false;
-};
+}
 
 /**
  * 是否显示尺寸编辑器
@@ -6784,9 +5834,7 @@ const showSizeEditor = computed(() => {
 /**
  * 当前样式对象
  */
-const containerMinSize = computed(() =>
-  resolveElContainerMinSize(selectedNode.value),
-);
+const containerMinSize = computed(() => resolveElContainerMinSize(selectedNode.value));
 
 /**
  * ?
@@ -6800,26 +5848,24 @@ const currentStyle = computed(() => {
  * 处理样式变更
  * @param {Object} newStyle - 新样式
  */
-const handleStyleChange = (newStyle) => {
+function handleStyleChange(newStyle) {
   if (!selectedNode.value) return;
   const nodeId = selectedNode.value.id;
   const ok = editorStore.updateNode(nodeId, { style: newStyle });
   const latest = doc.value?.getNode?.(nodeId);
   const shouldPatch =
-    !ok ||
-    (latest &&
-      JSON.stringify(latest.style || {}) !== JSON.stringify(newStyle || {}));
+    !ok || (latest && JSON.stringify(latest.style || {}) !== JSON.stringify(newStyle || {}));
   if (shouldPatch) {
     applyNodePatch(nodeId, { style: newStyle });
   }
   docVersion.value += 1;
-};
+}
 
 /**
  * 打开配置弹窗
  * @param {"style" | "detail"} type - 配置类型
  */
-const openConfigDialog = (type) => {
+function openConfigDialog(type) {
   if (!selectedNode.value) return;
   configDialogType.value = type === "detail" ? "detail" : "style";
   if (configDialogType.value === "detail") {
@@ -6843,8 +5889,7 @@ const openConfigDialog = (type) => {
       if (!rawDetail && isElementPlusType(node.type)) {
         const presets = resolveElementPlusDetailPresets(node.type);
         const basicId = buildPresetId(node.type, "basic");
-        const preset =
-          presets.find((item) => item.id === basicId) || presets[0];
+        const preset = presets.find((item) => item.id === basicId) || presets[0];
         const nextContent = preset?.content || "";
         configDraft.value = nextContent;
         if (nextContent) {
@@ -6865,12 +5910,12 @@ const openConfigDialog = (type) => {
     loadConfigAssets();
   }
   configDialogVisible.value = true;
-};
+}
 
 /**
  * 保存配置弹窗内容
  */
-const saveConfigDialog = () => {
+function saveConfigDialog() {
   const node = selectedNode.value;
   if (!node) return;
   let content = String(configDraft.value || "");
@@ -6910,9 +5955,7 @@ const saveConfigDialog = () => {
         applyMenuDetailConfig(node, config);
         const propsPatch = {
           ...(node.props || {}),
-          ...(config.props && typeof config.props === "object"
-            ? { ...config.props }
-            : {}),
+          ...(config.props && typeof config.props === "object" ? { ...config.props } : {}),
         };
         if (Array.isArray(config.items)) {
           propsPatch.items = config.items;
@@ -6935,45 +5978,37 @@ const saveConfigDialog = () => {
     editorStore.updateNode(node.id, { styleConfig: content });
   }
   configDialogVisible.value = false;
-};
+}
 
 /**
  * 详细配置编辑时实时应用到组件（草稿态）
  */
-watch(
-  [
-    configDraft,
-    configDialogVisible,
-    configDialogType,
-    () => selectedNode.value?.id,
-  ],
-  () => {
-    if (!configDialogVisible.value) return;
-    if (configDialogType.value !== "detail") return;
-    const node = selectedNode.value;
-    if (!node) return;
-    if (detailDraftTimer) clearTimeout(detailDraftTimer);
-    detailDraftTimer = setTimeout(() => {
-      const raw = String(configDraft.value || "");
-      if (isEChart.value) {
-        editorStore.updateNode(node.id, {
-          props: { ...(node.props || {}), option: raw },
-        });
-        return;
-      }
-      const content = normalizeDetailConfigBindings(raw);
-      const validation = validateDetailConfig(content);
-      if (!validation.valid) return;
-      editorStore.updateNode(node.id, { detailConfig: content });
-      emitDetailConfig(node.id, content);
-    }, 200);
-  },
-);
+watch([configDraft, configDialogVisible, configDialogType, () => selectedNode.value?.id], () => {
+  if (!configDialogVisible.value) return;
+  if (configDialogType.value !== "detail") return;
+  const node = selectedNode.value;
+  if (!node) return;
+  if (detailDraftTimer) clearTimeout(detailDraftTimer);
+  detailDraftTimer = setTimeout(() => {
+    const raw = String(configDraft.value || "");
+    if (isEChart.value) {
+      editorStore.updateNode(node.id, {
+        props: { ...(node.props || {}), option: raw },
+      });
+      return;
+    }
+    const content = normalizeDetailConfigBindings(raw);
+    const validation = validateDetailConfig(content);
+    if (!validation.valid) return;
+    editorStore.updateNode(node.id, { detailConfig: content });
+    emitDetailConfig(node.id, content);
+  }, 200);
+});
 
 /**
  * 清除配置
  */
-const clearConfigDialog = () => {
+function clearConfigDialog() {
   const node = selectedNode.value;
   if (!node) return;
   configDraft.value = "";
@@ -6988,13 +6023,13 @@ const clearConfigDialog = () => {
   } else {
     editorStore.updateNode(node.id, { styleConfig: "" });
   }
-};
+}
 
 /**
  * 应用预设模板
  * @param {string} id - 预设 ID
  */
-const handlePresetChange = (id) => {
+function handlePresetChange(id) {
   const target = currentPresetOptions.value.find((item) => item.id === id);
   if (!target) return;
   const nextContent = formatStyleConfigOutput(target.content || "");
@@ -7007,49 +6042,46 @@ const handlePresetChange = (id) => {
   nextTick(() => {
     configDraft.value = configDraft.value;
   });
-};
+}
 
 /**
  * 获取绑定表达式
  * @param {string} propName - 属性名
  * @returns {string}
  */
-const resolveBindingExpr = (propName) => {
+function resolveBindingExpr(propName) {
   if (!propName) return "";
   const target = currentElement.value;
   const binding = target?.bindings?.[propName];
   if (!binding || typeof binding !== "object") return "";
   if (binding.kind === "expr") return binding.expr || "";
   if (binding.kind === "var" && binding.name) {
-    return binding.scope === "global"
-      ? `$global.${binding.name}`
-      : `$vars.${binding.name}`;
+    return binding.scope === "global" ? `$global.${binding.name}` : `$vars.${binding.name}`;
   }
   return "";
-};
+}
 
 /**
  * 结构化表达式/变量引用
  * @param {string} raw - 输入值
  * @returns {string}
  */
-const normalizeBindingReference = (raw) => {
+function normalizeBindingReference(raw) {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return "";
-  if (trimmed.startsWith("{ $var:") || trimmed.startsWith("{ $expr:"))
-    return trimmed;
+  if (trimmed.startsWith("{ $var:") || trimmed.startsWith("{ $expr:")) return trimmed;
   if (trimmed.startsWith("$vars.") || trimmed.startsWith("$global.")) {
     return `{ $var: "${trimmed}" }`;
   }
   return `{ $expr: "${trimmed.replace(/"/g, '\\"')}" }`;
-};
+}
 
 /**
  * 解析绑定输入
  * @param {string} raw - 输入值
  * @returns {{ kind: "expr" | "var", expr?: string, scope?: "page" | "global", name?: string } | null}
  */
-const parseBindingInput = (raw) => {
+function parseBindingInput(raw) {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return null;
   if (trimmed.startsWith("$global.")) {
@@ -7063,13 +6095,13 @@ const parseBindingInput = (raw) => {
     return { kind: "var", scope: "page", name };
   }
   return { kind: "expr", expr: trimmed };
-};
+}
 
 /**
  * 打开绑定编辑器
  * @param {{ name: string, label?: string }} propDef - 属性定义
  */
-const handleBindClick = (propDef) => {
+function handleBindClick(propDef) {
   if (!propDef?.name || !currentElement.value) return;
   bindingProp.value = {
     name: propDef.name,
@@ -7077,56 +6109,52 @@ const handleBindClick = (propDef) => {
   };
   bindingEditorCode.value = resolveBindingExpr(propDef.name);
   bindingDialogVisible.value = true;
-};
+}
 
 /**
  * 插入脚本
  * @param {{ type?: string, label?: string, params?: string }} data - 节点数据
  */
-const handleBindingCustomScriptInsert = (data) => {
+function handleBindingCustomScriptInsert(data) {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
-  const call = params
-    ? `customScripts.${data.label}(${params})`
-    : `customScripts.${data.label}()`;
+  const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
   bindingEditorRef.value?.insertText?.(call);
-};
+}
 
 /**
  * 插入页面组件引用
  * @param {{ componentName?: string }} data - 节点数据
  */
-const handleBindingComponentInsert = (data) => {
+function handleBindingComponentInsert(data) {
   if (!data?.componentName) return;
   bindingEditorRef.value?.insertText?.(`components.${data.componentName}`);
-};
+}
 
 /**
  * 插入自定义脚本到详细配置
  * @param {{ type?: string, label?: string, params?: string }} data - 节点数据
  */
-const handleConfigCustomScriptInsert = (data) => {
+function handleConfigCustomScriptInsert(data) {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
-  const call = params
-    ? `customScripts.${data.label}(${params})`
-    : `customScripts.${data.label}()`;
+  const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
   configEditorRef.value?.insertText?.(call);
-};
+}
 
 /**
  * @param {{ componentName?: string }} data - 节点数据
  * @param {{ componentName?: string }} data - 节点数据
  */
-const handleConfigComponentInsert = (data) => {
+function handleConfigComponentInsert(data) {
   if (!data?.componentName) return;
   configEditorRef.value?.insertText?.(`components.${data.componentName}`);
-};
+}
 
 /**
  * 打开变量枚举
  */
-const openBindingVariableEnum = (target = "binding") => {
+function openBindingVariableEnum(target = "binding") {
   enumInsertTarget.value = target;
   bindingProjectVarSearch.value = "";
   bindingPageVarSearch.value = "";
@@ -7136,57 +6164,56 @@ const openBindingVariableEnum = (target = "binding") => {
   bindingEnumSelectedProjectVar.value = null;
   bindingEnumSelectedPageVar.value = null;
   bindingVariableEnumVisible.value = true;
-};
+}
 
 /**
  * 打开变量枚举（详细配置）
  */
-const openConfigVariableEnum = () => {
+function openConfigVariableEnum() {
   openBindingVariableEnum("config");
-};
+}
 
-const handleBindingProjectGroupSelect = (data) => {
+function handleBindingProjectGroupSelect(data) {
   if (!data) {
     bindingEnumSelectedProjectGroupId.value = null;
     return;
   }
   bindingEnumSelectedProjectGroupId.value = data.id === "all" ? null : data.id;
-};
+}
 
-const handleBindingPageGroupSelect = (data) => {
+function handleBindingPageGroupSelect(data) {
   bindingEnumSelectedPageGroupId.value = data?.id || "page-root";
-};
+}
 
-const handleBindingProjectRowClick = (row) => {
+function handleBindingProjectRowClick(row) {
   bindingEnumSelectedProjectVar.value = row || null;
-};
+}
 
-const handleBindingPageRowClick = (row) => {
+function handleBindingPageRowClick(row) {
   bindingEnumSelectedPageVar.value = row || null;
-};
+}
 
-const handleBindingProjectRowDblClick = (row) => {
+function handleBindingProjectRowDblClick(row) {
   bindingEnumSelectedProjectVar.value = row || null;
   confirmBindingEnumInsert();
-};
+}
 
-const handleBindingPageRowDblClick = (row) => {
+function handleBindingPageRowDblClick(row) {
   bindingEnumSelectedPageVar.value = row || null;
   confirmBindingEnumInsert();
-};
+}
 
-const bindingEnumProjectRowClass = ({ row }) => {
-  if (bindingEnumSelectedProjectVar.value?.name === row.name)
-    return "is-selected";
+function bindingEnumProjectRowClass({ row }) {
+  if (bindingEnumSelectedProjectVar.value?.name === row.name) return "is-selected";
   return "";
-};
+}
 
-const bindingEnumPageRowClass = ({ row }) => {
+function bindingEnumPageRowClass({ row }) {
   if (bindingEnumSelectedPageVar.value?.name === row.name) return "is-selected";
   return "";
-};
+}
 
-const confirmBindingEnumInsert = () => {
+function confirmBindingEnumInsert() {
   const insertText = (text) => {
     if (enumInsertTarget.value === "config") {
       configEditorRef.value?.insertText?.(text);
@@ -7194,10 +6221,7 @@ const confirmBindingEnumInsert = () => {
     }
     bindingEditorRef.value?.insertText?.(text);
   };
-  if (
-    bindingEnumTab.value === "page" &&
-    bindingEnumSelectedPageVar.value?.name
-  ) {
+  if (bindingEnumTab.value === "page" && bindingEnumSelectedPageVar.value?.name) {
     insertText(`$vars.${bindingEnumSelectedPageVar.value.name}`);
     bindingVariableEnumVisible.value = false;
     return;
@@ -7206,12 +6230,12 @@ const confirmBindingEnumInsert = () => {
     insertText(`$global.${bindingEnumSelectedProjectVar.value.name}`);
     bindingVariableEnumVisible.value = false;
   }
-};
+}
 
 /**
  * 保存绑定配置
  */
-const saveBinding = () => {
+function saveBinding() {
   const target = currentElement.value;
   const propName = bindingProp.value?.name;
   if (!target || !propName) return;
@@ -7243,12 +6267,12 @@ const saveBinding = () => {
   }
   bindingEditorCode.value = normalizeBindingReference(code);
   bindingDialogVisible.value = false;
-};
+}
 
 /**
  * 处理组件标签修改
  */
-const handleLabelChange = () => {
+function handleLabelChange() {
   const el = currentElement.value;
   if (!el) return;
 
@@ -7268,12 +6292,12 @@ const handleLabelChange = () => {
   } else if (selectedGraphic.value) {
     editorStore.updateGraphic(el.id, { label: nextLabel });
   }
-};
+}
 
 /**
  * 处理组件描述修改
  */
-const handleDescriptionChange = () => {
+function handleDescriptionChange() {
   const el = currentElement.value;
   if (!el) return;
 
@@ -7285,13 +6309,13 @@ const handleDescriptionChange = () => {
     editorStore.updateGraphic(el.id, { description: nextDescription });
     applyLocalNodePatch(el, { description: nextDescription });
   }
-};
+}
 
 /**
  * 更新按钮 DOM ID
  * @param {string} value - DOM ID
  */
-const handlePropChange = (propName, value) => {
+function handlePropChange(propName, value) {
   const el = currentElement.value;
   if (!el) return;
 
@@ -7325,10 +6349,8 @@ const handlePropChange = (propName, value) => {
     if (propName === "letterSpacing") stylePatch.letterSpacing = value;
     if (propName === "wordBreak") stylePatch.wordBreak = value;
 
-    const lineClampValue =
-      propName === "lineClamp" ? Number(value) : Number(newProps.lineClamp);
-    const truncateValue =
-      propName === "truncate" ? Boolean(value) : Boolean(newProps.truncate);
+    const lineClampValue = propName === "lineClamp" ? Number(value) : Number(newProps.lineClamp);
+    const truncateValue = propName === "truncate" ? Boolean(value) : Boolean(newProps.truncate);
     if (Number.isFinite(lineClampValue) && lineClampValue > 0) {
       nextStyle.display = "-webkit-box";
       nextStyle.overflow = "hidden";
@@ -7360,14 +6382,9 @@ const handlePropChange = (propName, value) => {
     }
   }
   const currentBindings = el.bindings || {};
-  const hasBinding = Object.prototype.hasOwnProperty.call(
-    currentBindings,
-    propName,
-  );
+  const hasBinding = Object.hasOwn(currentBindings, propName);
   const nextBindings = hasBinding
-    ? Object.fromEntries(
-        Object.entries(currentBindings).filter(([key]) => key !== propName),
-      )
+    ? Object.fromEntries(Object.entries(currentBindings).filter(([key]) => key !== propName))
     : currentBindings;
   if (regionSizeDefaults[propName]) {
     const parsed = parseSize(value);
@@ -7394,8 +6411,608 @@ const handlePropChange = (propName, value) => {
   } else if (selectedGraphic.value) {
     editorStore.updateGraphic(el.id, { props: newProps });
   }
-};
+}
 </script>
+
+<template>
+  <div class="property-panel-root">
+    <!-- 页面属性面板：未选中任何元素 -->
+    <PageInspectorPanel v-if="panelState === 'page'" />
+
+    <!-- 多选面板：选中多个元素 -->
+    <MultiInspectorPanel v-else-if="panelState === 'multi'" :elements="selectedElements" />
+
+    <!-- 单选面板：选中单个元素 -->
+    <div v-else class="element-inspector">
+      <PropertyPanelBasicSection
+        v-model:label="elementLabel"
+        v-model:description="elementDescription"
+        :element-type="elementType"
+        :element-id="elementId"
+        :current-style="currentStyle"
+        @label-commit="handleLabelChange"
+        @description-commit="handleDescriptionChange"
+      />
+
+      <template v-if="hasStyleSelection">
+        <div v-if="showSizeEditor" class="panel-section">
+          <SizeEditor
+            :model-value="currentStyle"
+            :min-width="containerMinSize?.width"
+            :min-height="containerMinSize?.height"
+            @update:model-value="handleStyleChange"
+          />
+        </div>
+        <div class="panel-section">
+          <div class="config-entry-header">
+            <span class="panel-section-title">配置</span>
+          </div>
+          <div class="config-entry-bar">
+            <button
+              class="config-entry"
+              :class="{ 'has-config': hasDetailConfig }"
+              @click="openConfigDialog('detail')"
+            >
+              <IconEpDocument class="config-entry-icon" />
+              <span>详细</span>
+            </button>
+            <button
+              class="config-entry"
+              :class="{ 'has-config': hasStyleConfig }"
+              @click="openConfigDialog('style')"
+            >
+              <IconEpEditPen class="config-entry-icon" />
+              <span>样式</span>
+            </button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 属性表单：根据 Manifest 生成 -->
+      <template v-if="layoutForceProps.length > 0">
+        <div class="prop-section prop-section--static">
+          <div class="prop-section-header is-static">
+            <span class="prop-section-title">布局</span>
+          </div>
+          <div class="prop-section-body">
+            <div
+              v-for="(propDef, propIndex) in visibleLayoutForceProps"
+              :key="propDef?.name || propIndex"
+              class="prop-item"
+            >
+              <div class="prop-label">
+                <span>{{ propDef.label }}</span>
+                <el-tooltip v-if="shouldShowBindButton(propDef)" content="绑定数据" placement="top">
+                  <button
+                    class="bind-btn"
+                    :class="{ 'is-active': hasPropBinding(propDef.name) }"
+                    @click="handleBindClick(propDef)"
+                  >
+                    <IconEpLink class="bind-icon" />
+                  </button>
+                </el-tooltip>
+              </div>
+              <PropEditor
+                :prop="propDef"
+                :model-value="getPropValue(propDef.name)"
+                @update:model-value="(val) => handlePropChange(propDef.name, val)"
+              />
+            </div>
+          </div>
+        </div>
+      </template>
+      <template v-else-if="effectiveManifest && effectiveManifest.props.length > 0">
+        <div class="prop-sections">
+          <template v-for="group in displayPropGroups" :key="group.name">
+            <div
+              class="prop-section"
+              :class="{
+                'is-collapsed': !isSectionExpanded(getGroupSectionKey(group)),
+              }"
+            >
+              <button
+                class="prop-section-header"
+                type="button"
+                @click="toggleSection(getGroupSectionKey(group))"
+              >
+                <span class="prop-section-heading">
+                  <IconEpArrowRight class="section-chevron" />
+                  <span class="prop-section-title">{{ resolveGroupTitle(group) }}</span>
+                </span>
+              </button>
+              <div v-show="isSectionExpanded(getGroupSectionKey(group))" class="prop-section-body">
+                <template v-if="isElContainer && isRegionGroup(group)">
+                  <div
+                    v-for="item in regionPropRows"
+                    :key="item.key"
+                    class="prop-item region-prop-row"
+                  >
+                    <div class="prop-label">
+                      <div class="region-label">
+                        <span>{{ item.label }}</span>
+                        <span v-if="getRegionSizeText(item)" class="region-size-text">
+                          {{ getRegionSizeText(item) }}
+                        </span>
+                        <span v-if="getRegionMaxLabel(item.sizeProp)" class="region-size-limit">
+                          {{ getRegionMaxLabel(item.sizeProp) }}
+                        </span>
+                      </div>
+                      <ElSwitch
+                        v-if="!item.sizeProp"
+                        class="region-toggle"
+                        :model-value="Boolean(getPropValue(item.toggleProp))"
+                        size="small"
+                        @update:model-value="
+                          (val) => handlePropChange(item.toggleProp, Boolean(val))
+                        "
+                      />
+                    </div>
+                    <div v-if="item.sizeProp" class="region-prop-controls">
+                      <ElInput
+                        class="region-size-input"
+                        :model-value="getSizeValue(item.sizeProp)"
+                        size="small"
+                        placeholder="auto"
+                        :disabled="!isRegionEnabled(item)"
+                        @update:model-value="(val) => handleSizeValueChange(item.sizeProp, val)"
+                      />
+                      <ElSelect
+                        :model-value="getSizeUnit(item.sizeProp)"
+                        size="small"
+                        class="region-unit-select"
+                        :disabled="!isRegionEnabled(item)"
+                        @update:model-value="(val) => handleSizeUnitChange(item.sizeProp, val)"
+                        @change="(val) => handleSizeUnitChange(item.sizeProp, val)"
+                      >
+                        <el-option label="px" value="px" />
+                        <el-option label="%" value="%" />
+                        <el-option label="auto" value="auto" />
+                      </ElSelect>
+                      <ElSwitch
+                        class="region-toggle"
+                        :model-value="Boolean(getPropValue(item.toggleProp))"
+                        size="small"
+                        @update:model-value="
+                          (val) => handlePropChange(item.toggleProp, Boolean(val))
+                        "
+                      />
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <div
+                    v-for="(propDef, propIndex) in getVisibleGroupProps(group)"
+                    :key="propDef?.name || propIndex"
+                    class="prop-item"
+                  >
+                    <div class="prop-label">
+                      <span>{{ propDef.label }}</span>
+                      <el-tooltip
+                        v-if="shouldShowBindButton(propDef)"
+                        content="绑定数据"
+                        placement="top"
+                      >
+                        <button
+                          class="bind-btn"
+                          :class="{ 'is-active': hasPropBinding(propDef.name) }"
+                          @click="handleBindClick(propDef)"
+                        >
+                          <IconEpLink class="bind-icon" />
+                        </button>
+                      </el-tooltip>
+                    </div>
+                    <PropEditor
+                      :prop="propDef"
+                      :model-value="getPropValue(propDef.name)"
+                      @update:model-value="(val) => handlePropChange(propDef.name, val)"
+                    />
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- 无 Manifest 时显示原始 Props -->
+      <template v-else>
+        <div class="text-xs text-gray-500 mb-2">Props</div>
+        <pre class="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded overflow-auto max-h-60">{{
+          formattedProps
+        }}</pre>
+      </template>
+
+      <div v-if="!hasStyleSelection" class="text-sm text-gray-400 text-center py-6">请选择组件</div>
+    </div>
+  </div>
+
+  <el-dialog
+    v-model="configDialogVisible"
+    :title="configDialogTitle"
+    width="980px"
+    top="4vh"
+    :close-on-click-modal="false"
+    :lock-scroll="false"
+  >
+    <div class="config-toolbar">
+      <div class="config-toolbar-item">
+        <span class="config-label">{{ presetLabel }}</span>
+        <ElSelect
+          v-model="selectedPresetId"
+          size="small"
+          class="config-select preset-select"
+          placeholder="请选择"
+          @change="handlePresetChange"
+        >
+          <el-option
+            v-for="item in filteredPresetOptions"
+            :key="item.id"
+            :label="item.label"
+            :value="item.id"
+          />
+        </ElSelect>
+      </div>
+      <div class="config-toolbar-item">
+        <span class="config-label">筛选：</span>
+        <ElInput
+          v-model="presetSearch"
+          size="small"
+          class="config-select"
+          placeholder="搜索模板"
+          clearable
+        />
+      </div>
+      <div v-if="configDialogType === 'detail'" class="config-toolbar-item config-toolbar-actions">
+        <el-tooltip content="变量枚举" placement="top">
+          <el-button class="icon-button" size="small" circle @click.stop="openConfigVariableEnum">
+            <IconEpList />
+          </el-button>
+        </el-tooltip>
+      </div>
+    </div>
+    <div class="config-body">
+      <div class="config-editor">
+        <MonacoEditor
+          ref="configEditorRef"
+          v-model="configDraft"
+          :language="configEditorLanguage"
+          height="520px"
+          :completions="configEditorCompletions"
+        />
+      </div>
+      <div v-if="configDialogType === 'detail'" class="config-sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-title">自定义脚本</div>
+          <ElInput
+            v-model="configScriptSearch"
+            size="small"
+            placeholder="搜索脚本/分组"
+            clearable
+          />
+          <div class="sidebar-scroll">
+            <el-tree
+              ref="configCustomTreeRef"
+              :data="bindingCustomScriptTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterBindingSidebarNode"
+              @node-click="handleConfigCustomScriptInsert"
+            >
+              <template #default="{ data }">
+                <div class="tree-node" :class="`node-${data.type}`">
+                  <el-icon class="node-icon icon-custom">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpEditPen v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                    {{ data.label }}
+                  </span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-title">页面组件</div>
+          <ElInput
+            v-model="configComponentSearch"
+            size="small"
+            placeholder="搜索组件/分组"
+            clearable
+          />
+          <div class="sidebar-scroll">
+            <el-tree
+              ref="configComponentTreeRef"
+              :data="bindingPageComponentTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterBindingSidebarNode"
+              @node-click="handleConfigComponentInsert"
+            >
+              <template #default="{ data }">
+                <div class="tree-node" :class="`node-${data.type}`">
+                  <el-icon class="node-icon icon-component">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpGrid v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                    {{ data.label }}
+                  </span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+      </div>
+      <div v-if="configDialogType === 'style'" class="config-assets">
+        <div class="config-assets-header">
+          <span>资源库</span>
+        </div>
+        <ElInput v-model="configAssetSearch" size="small" placeholder="搜索资源" clearable />
+        <div class="config-assets-body">
+          <el-scrollbar>
+            <el-tree
+              ref="configAssetTreeRef"
+              :data="configAssetTree"
+              node-key="id"
+              default-expand-all
+              :expand-on-click-node="false"
+              :filter-node-method="filterConfigAssetNode"
+            >
+              <template #default="{ data }">
+                <div
+                  class="tree-node"
+                  :class="`node-${data.type}`"
+                  @dblclick.stop="handleConfigAssetNodeDblClick(data)"
+                >
+                  <el-icon class="node-icon">
+                    <IconEpFolder v-if="data.type === 'folder'" />
+                    <IconEpPictureFilled v-else />
+                  </el-icon>
+                  <span class="node-label">{{ data.label }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </el-scrollbar>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="clearConfigDialog">清除</el-button>
+      <el-button @click="configDialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="saveConfigDialog()">保存</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog
+    v-model="bindingDialogVisible"
+    :title="bindingDialogTitle"
+    width="980px"
+    top="3vh"
+    :z-index="3000"
+    append-to-body
+    :modal-append-to-body="true"
+    :close-on-click-modal="false"
+    :lock-scroll="false"
+  >
+    <div class="editor-meta">
+      <div class="meta-title">{{ bindingDialogTitle }}</div>
+      <div class="meta-desc">{{ bindingDialogDescription }}</div>
+      <div class="meta-actions">
+        <el-tooltip content="变量枚举" placement="top">
+          <el-button class="icon-button" size="small" circle @click.stop="openBindingVariableEnum">
+            <IconEpList />
+          </el-button>
+        </el-tooltip>
+      </div>
+    </div>
+    <div class="editor-body">
+      <div class="editor-main">
+        <MonacoEditor
+          ref="bindingEditorRef"
+          v-model="bindingEditorCode"
+          language="javascript"
+          height="520px"
+          :completions="bindingCompletions"
+        />
+      </div>
+      <div class="editor-sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-title">自定义脚本</div>
+          <ElInput
+            v-model="bindingScriptSearch"
+            size="small"
+            placeholder="搜索脚本/分组"
+            clearable
+          />
+          <div class="sidebar-scroll">
+            <el-tree
+              ref="bindingCustomTreeRef"
+              :data="bindingCustomScriptTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterBindingSidebarNode"
+              @node-click="handleBindingCustomScriptInsert"
+            >
+              <template #default="{ data }">
+                <div class="tree-node" :class="`node-${data.type}`">
+                  <el-icon class="node-icon icon-custom">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpEditPen v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                    {{ data.label }}
+                  </span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-title">页面组件</div>
+          <ElInput
+            v-model="bindingComponentSearch"
+            size="small"
+            placeholder="搜索组件/分组"
+            clearable
+          />
+          <div class="sidebar-scroll">
+            <el-tree
+              ref="bindingComponentTreeRef"
+              :data="bindingPageComponentTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterBindingSidebarNode"
+              @node-click="handleBindingComponentInsert"
+            >
+              <template #default="{ data }">
+                <div class="tree-node" :class="`node-${data.type}`">
+                  <el-icon class="node-icon icon-component">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpGrid v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                    {{ data.label }}
+                  </span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="bindingDialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="saveBinding">保存</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog
+    v-model="bindingVariableEnumVisible"
+    title="变量枚举"
+    width="760px"
+    :z-index="3100"
+    append-to-body
+    :modal-append-to-body="true"
+    :close-on-click-modal="false"
+    :lock-scroll="false"
+  >
+    <ElTabs v-model="bindingEnumTab">
+      <el-tab-pane label="工程变量" name="project">
+        <div class="enum-layout">
+          <div class="enum-left">
+            <div class="sidebar-title">分组</div>
+            <el-tree
+              ref="bindingEnumProjectTreeRef"
+              :data="bindingProjectGroupTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterBindingSidebarNode"
+              @node-click="handleBindingProjectGroupSelect"
+            >
+              <template #default="{ data }">
+                <div class="tree-node node-group">
+                  <el-icon class="node-icon icon-variable">
+                    <IconEpFolder />
+                  </el-icon>
+                  <span class="node-label is-group">{{ data.label }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+          <div class="enum-right">
+            <ElInput
+              v-model="bindingProjectVarSearch"
+              size="small"
+              placeholder="搜索工程变量"
+              clearable
+            />
+            <ElTable
+              :data="bindingProjectVariableRows"
+              size="small"
+              height="320"
+              highlight-current-row
+              :row-class-name="bindingEnumProjectRowClass"
+              @row-click="handleBindingProjectRowClick"
+              @row-dblclick="handleBindingProjectRowDblClick"
+            >
+              <el-table-column prop="name" label="变量名" min-width="160" />
+              <el-table-column prop="type" label="类型" width="90" />
+              <el-table-column prop="description" label="描述" min-width="160" />
+              <el-table-column prop="mapped" label="映射" width="70">
+                <template #default="{ row }">
+                  {{ row.mapped ? "是" : "" }}
+                </template>
+              </el-table-column>
+            </ElTable>
+          </div>
+        </div>
+      </el-tab-pane>
+      <el-tab-pane label="页面变量" name="page">
+        <div class="enum-layout">
+          <div class="enum-left">
+            <div class="sidebar-title">分组</div>
+            <el-tree
+              ref="bindingEnumPageTreeRef"
+              :data="bindingPageGroupTree"
+              node-key="id"
+              :default-expand-all="true"
+              :expand-on-click-node="false"
+              :filter-node-method="filterBindingSidebarNode"
+              @node-click="handleBindingPageGroupSelect"
+            >
+              <template #default="{ data }">
+                <div class="tree-node node-group">
+                  <el-icon class="node-icon icon-variable">
+                    <IconEpFolder />
+                  </el-icon>
+                  <span class="node-label is-group">{{ data.label }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+          <div class="enum-right">
+            <ElInput
+              v-model="bindingPageVarSearch"
+              size="small"
+              placeholder="搜索页面变量"
+              clearable
+            />
+            <ElTable
+              :data="bindingPageVariableRows"
+              size="small"
+              height="320"
+              highlight-current-row
+              :row-class-name="bindingEnumPageRowClass"
+              @row-click="handleBindingPageRowClick"
+              @row-dblclick="handleBindingPageRowDblClick"
+            >
+              <el-table-column prop="name" label="变量名" min-width="160" />
+              <el-table-column prop="type" label="类型" width="90" />
+              <el-table-column prop="description" label="描述" min-width="200" />
+            </ElTable>
+          </div>
+        </div>
+      </el-tab-pane>
+    </ElTabs>
+    <template #footer>
+      <el-button @click="bindingVariableEnumVisible = false">取消</el-button>
+      <el-button
+        type="primary"
+        :disabled="!bindingEnumSelectedProjectVar && !bindingEnumSelectedPageVar"
+        @click="confirmBindingEnumInsert"
+      >
+        插入
+      </el-button>
+    </template>
+  </el-dialog>
+</template>
+
 <style scoped>
 .element-inspector {
   display: flex;

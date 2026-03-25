@@ -3,9 +3,9 @@
  * 包含数据绑定的设置、更新、删除命令
  */
 
-import { Command } from "./Command";
 import type { DocumentModel } from "../document/DocumentModel";
 import type { Binding, TransformOp } from "../document/types";
+import { Command } from "./Command";
 
 /** 设置节点绑定命令 */
 export class SetBindingCommand extends Command {
@@ -53,9 +53,7 @@ export class SetBindingCommand extends Command {
   }
 
   getDescription(): string {
-    return this._binding
-      ? `设置绑定: ${this._propKey}`
-      : `移除绑定: ${this._propKey}`;
+    return this._binding ? `设置绑定: ${this._propKey}` : `移除绑定: ${this._propKey}`;
   }
 }
 
@@ -131,9 +129,7 @@ export class ClearAllBindingsCommand extends Command {
   execute(doc: DocumentModel): void {
     const node = doc.getNode(this._nodeId);
     if (node && node.bindings) {
-      this._oldBindings = JSON.parse(
-        JSON.stringify(node.bindings),
-      ) as Record<string, Binding>;
+      this._oldBindings = JSON.parse(JSON.stringify(node.bindings)) as Record<string, Binding>;
       doc._updateNode(this._nodeId, { bindings: {} });
     }
   }
@@ -172,9 +168,7 @@ export class UpdateBindingTransformCommand extends Command {
     const binding = node?.bindings?.[this._propKey];
     if (!node || !binding) return;
     if (binding.kind !== "datapoint" && binding.kind !== "var") return;
-    this._oldTransform = binding.transform
-      ? [...binding.transform]
-      : undefined;
+    this._oldTransform = binding.transform ? [...binding.transform] : undefined;
     const newBindings = {
       ...node.bindings,
       [this._propKey]: { ...binding, transform: this._transform },
@@ -265,11 +259,7 @@ export class CopyBindingsCommand extends Command {
     return "CopyBindings";
   }
 
-  constructor(
-    sourceNodeId: string,
-    targetNodeId: string,
-    propKeys?: string[],
-  ) {
+  constructor(sourceNodeId: string, targetNodeId: string, propKeys?: string[]) {
     super();
     this._sourceNodeId = sourceNodeId;
     this._targetNodeId = targetNodeId;

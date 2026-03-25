@@ -6,8 +6,8 @@
  * 复杂组件（Button、HorizontalLayout、VerticalLayout 等）在各自目录单独定义。
  */
 
-import { registerDescriptor } from "./registry";
 import type { ComponentDescriptor, DescriptorNode } from "./registry";
+import { registerDescriptor } from "./registry";
 
 function normalizeOptions<T>(source: unknown, fallback: T[]): T[] {
   if (Array.isArray(source)) return source as T[];
@@ -41,16 +41,14 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
     renderTag: (
       _node: DescriptorNode | undefined,
       resolvedProps: Record<string, unknown> | undefined,
-    ) => String(resolvedProps?.["tag"] ?? "div"),
-    displayContent: (node, resolvedProps) =>
-      String(resolvedProps?.["text"] ?? node?.label ?? ""),
+    ) => String(resolvedProps?.tag ?? "div"),
+    displayContent: (node, resolvedProps) => String(resolvedProps?.text ?? node?.label ?? ""),
     propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["text"]),
   },
   Input: { renderTag: "el-input" },
   Select: {
     renderTag: "el-select",
-    propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["options"]),
+    propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["options"]),
   },
   InputNumber: { renderTag: "el-input-number" },
   Switch: { renderTag: "el-switch" },
@@ -58,12 +56,8 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
     renderTag: "el-table",
     renderKey: (node, ctx) => {
       const renderVersion = ctx?.tableRenderVersion ?? 0;
-      const columnsSize = Array.isArray(node?.props?.columns)
-        ? node.props.columns.length
-        : 0;
-      const dataSize = Array.isArray(node?.props?.data)
-        ? node.props.data.length
-        : 0;
+      const columnsSize = Array.isArray(node?.props?.columns) ? node.props.columns.length : 0;
+      const dataSize = Array.isArray(node?.props?.data) ? node.props.data.length : 0;
       return `${node?.id ?? ""}-${columnsSize}-${dataSize}-${renderVersion}`;
     },
     propsFilter: (resolvedProps) => {
@@ -76,12 +70,8 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
     renderTag: "el-table",
     renderKey: (node, ctx) => {
       const renderVersion = ctx?.tableRenderVersion ?? 0;
-      const columnsSize = Array.isArray(node?.props?.columns)
-        ? node.props.columns.length
-        : 0;
-      const dataSize = Array.isArray(node?.props?.data)
-        ? node.props.data.length
-        : 0;
+      const columnsSize = Array.isArray(node?.props?.columns) ? node.props.columns.length : 0;
+      const dataSize = Array.isArray(node?.props?.data) ? node.props.data.length : 0;
       return `${node?.id ?? ""}-${columnsSize}-${dataSize}-${renderVersion}`;
     },
     propsFilter: (resolvedProps) => {
@@ -94,14 +84,12 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   Transfer: { renderTag: "el-transfer" },
   Tag: {
     renderTag: "el-tag",
-    displayContent: (node, resolvedProps) =>
-      String(resolvedProps?.["text"] ?? node?.label ?? "标签"),
+    displayContent: (node, resolvedProps) => String(resolvedProps?.text ?? node?.label ?? "标签"),
     propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["text"]),
   },
   Dropdown: {
     renderTag: "el-dropdown",
-    propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["label", "items"]),
+    propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["label", "items"]),
   },
   Menu: {
     renderTag: "el-menu",
@@ -109,13 +97,11 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   },
   Radio: {
     renderTag: "el-radio-group",
-    propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["options"]),
+    propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["options"]),
   },
   Checkbox: {
     renderTag: "el-checkbox-group",
-    propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["options"]),
+    propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["options"]),
   },
   Cascader: { renderTag: "el-cascader" },
   Image: { renderTag: "el-image" },
@@ -124,16 +110,10 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
     isContainer: true,
     childLayout: "none",
     renderKey: (node, ctx) => {
-      const resolved = (ctx?.["resolvedProps"] ?? {}) as Record<
-        string,
-        unknown
-      >;
+      const resolved = (ctx?.resolvedProps ?? {}) as Record<string, unknown>;
       const tabs = Array.isArray(node?.props?.tabs) ? node.props.tabs : [];
-      const tabKey = tabs
-        .map((item) => item?.name ?? item?.label ?? "")
-        .join("|");
-      const activeName =
-        node?.props?.["activeName"] ?? resolved["activeName"] ?? "";
+      const tabKey = tabs.map((item) => item?.name ?? item?.label ?? "").join("|");
+      const activeName = node?.props?.activeName ?? resolved.activeName ?? "";
       return `${node?.id ?? ""}-${tabKey}-${String(activeName)}`;
     },
     propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["tabs"]),
@@ -165,9 +145,7 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   WebContainer: {
     renderTag: "el-card",
     displayContent: (_node, resolvedProps) =>
-      resolvedProps?.["url"]
-        ? `网页容器: ${String(resolvedProps["url"])}`
-        : "网页容器",
+      resolvedProps?.url ? `网页容器: ${String(resolvedProps.url)}` : "网页容器",
   },
   Steps: {
     renderTag: "el-steps",
@@ -176,9 +154,8 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   Card: {
     renderTag: "el-card",
     displayContent: (node, resolvedProps) =>
-      String(resolvedProps?.["content"] ?? node?.label ?? "卡片"),
-    propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["title", "content"]),
+      String(resolvedProps?.content ?? node?.label ?? "卡片"),
+    propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["title", "content"]),
   },
   Pagination: { renderTag: "el-pagination" },
   Collapse: {
@@ -188,14 +165,12 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   BusinessCard: {
     renderTag: "el-card",
     displayContent: (node, resolvedProps) =>
-      String(resolvedProps?.["content"] ?? node?.label ?? "业务卡片"),
-    propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["title", "content"]),
+      String(resolvedProps?.content ?? node?.label ?? "业务卡片"),
+    propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["title", "content"]),
   },
   Barcode: {
     renderTag: "el-card",
-    displayContent: (_node, resolvedProps) =>
-      String(resolvedProps?.["value"] ?? "1234567890"),
+    displayContent: (_node, resolvedProps) => String(resolvedProps?.value ?? "1234567890"),
   },
   Slider: { renderTag: "el-slider" },
   Calendar: { renderTag: "el-calendar" },
@@ -217,12 +192,7 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
     childLayout: "flex",
     defaultSize: { width: 360, height: 240 },
     propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, [
-        "showHeader",
-        "showAside",
-        "showMain",
-        "showFooter",
-      ]),
+      omitResolvedKeys(resolvedProps, ["showHeader", "showAside", "showMain", "showFooter"]),
   },
   ElHeader: {
     renderTag: "el-header",
@@ -262,8 +232,7 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
     childLayout: "flex",
     defaultSize: { width: 360, height: 200 },
     acceptChildren: ["ElLayoutRow"],
-    propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["columns", "rows"]),
+    propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["columns", "rows"]),
   },
   ElLayoutRow: {
     renderTag: "el-row",
@@ -271,8 +240,7 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
     childLayout: "flex",
     acceptChildren: ["ElCol"],
     isMovable: false,
-    propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["columns"]),
+    propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["columns"]),
   },
   ElCol: {
     renderTag: "el-col",

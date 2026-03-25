@@ -1,69 +1,16 @@
-<template>
-  <div class="flex flex-col gap-3 style-panel">
-    <template v-if="hasSelection">
-      <el-collapse v-model="activeNames">
-        <!-- 基础样式 -->
-        <el-collapse-item title="基础样式" name="basic">
-          <template v-if="showSizeEditor">
-            <SizeEditor
-              :model-value="currentStyle"
-              :min-width="containerMinSize?.width"
-              :min-height="containerMinSize?.height"
-              @update:modelValue="handleStyleChange"
-            />
-            <el-divider style="margin: 12px 0" />
-          </template>
-          <BackgroundEditor
-            :model-value="currentStyle"
-            @update:modelValue="handleStyleChange"
-          />
-          <el-divider style="margin: 12px 0" />
-          <BorderEditor
-            :model-value="currentStyle"
-            @update:modelValue="handleStyleChange"
-          />
-        </el-collapse-item>
-
-        <!-- 布局样式 -->
-        <el-collapse-item title="布局样式" name="layout">
-          <PositionEditor
-            :model-value="currentStyle"
-            @update:modelValue="handleStyleChange"
-          />
-          <el-divider style="margin: 12px 0" />
-          <SpacingEditor
-            title="内边距"
-            prefix="padding"
-            :model-value="currentStyle"
-            @update:modelValue="handleStyleChange"
-          />
-          <el-divider style="margin: 12px 0" />
-          <SpacingEditor
-            title="外边距"
-            prefix="margin"
-            :model-value="currentStyle"
-            @update:modelValue="handleStyleChange"
-          />
-        </el-collapse-item>
-      </el-collapse>
-    </template>
-    <div v-else class="text-sm text-gray-400 text-center py-6">请选择组件</div>
-  </div>
-</template>
-
 <script setup>
+import { storeToRefs } from "pinia";
 /**
  * 样式面板
  * 提供基础样式和布局样式的编辑功能
  */
-import { computed, ref, watch } from "vue";
-import { storeToRefs } from "pinia";
+import { computed, ref } from "vue";
 import { useEditorStore } from "@/stores/editor-store";
-import SizeEditor from "./StylePanel/SizeEditor.vue";
-import SpacingEditor from "./StylePanel/SpacingEditor.vue";
 import BackgroundEditor from "./StylePanel/BackgroundEditor.vue";
 import BorderEditor from "./StylePanel/BorderEditor.vue";
 import PositionEditor from "./StylePanel/PositionEditor.vue";
+import SizeEditor from "./StylePanel/SizeEditor.vue";
+import SpacingEditor from "./StylePanel/SpacingEditor.vue";
 
 const editorStore = useEditorStore();
 const { doc, selection } = storeToRefs(editorStore);
@@ -89,21 +36,21 @@ const hasSelection = computed(() => selectedNode.value !== null);
  * @param {string | number | undefined} value - 尺寸值
  * @returns {number | undefined}
  */
-const parseSizeToNumber = (value) => {
+function parseSizeToNumber(value) {
   if (value === undefined || value === null) return undefined;
   const text = String(value).trim();
   if (!text || text === "auto") return undefined;
   if (!text.endsWith("px")) return undefined;
   const num = Number.parseFloat(text.slice(0, -2));
   return Number.isFinite(num) ? num : undefined;
-};
+}
 
 /**
  * 计算容器最小尺寸，避免小于内部区域
  * @param {import('@/editor-core').ComponentNode | null} containerNode - 容器节点
  * @returns {{ width: number, height: number } | null}
  */
-const resolveElContainerMinSize = (containerNode) => {
+function resolveElContainerMinSize(containerNode) {
   if (!containerNode || containerNode.type !== "ElContainer") return null;
   const children = containerNode.children || [];
   let hasHeader = false;
@@ -147,14 +94,12 @@ const resolveElContainerMinSize = (containerNode) => {
 
   if (minWidth <= 0 && minHeight <= 0) return null;
   return { width: minWidth, height: minHeight };
-};
+}
 
 /**
  * 容器最小尺寸
  */
-const containerMinSize = computed(() =>
-  resolveElContainerMinSize(selectedNode.value),
-);
+const containerMinSize = computed(() => resolveElContainerMinSize(selectedNode.value));
 
 /**
  * 是否展示尺寸编辑器
@@ -180,11 +125,55 @@ const currentStyle = computed(() => {
  * 处理样式变更
  * @param {Object} newStyle - 新样式对象
  */
-const handleStyleChange = (newStyle) => {
+function handleStyleChange(newStyle) {
   if (!selectedNode.value) return;
   editorStore.updateNode(selectedNode.value.id, { style: newStyle });
-};
+}
 </script>
+
+<template>
+  <div class="flex flex-col gap-3 style-panel">
+    <template v-if="hasSelection">
+      <el-collapse v-model="activeNames">
+        <!-- 基础样式 -->
+        <el-collapse-item title="基础样式" name="basic">
+          <template v-if="showSizeEditor">
+            <SizeEditor
+              :model-value="currentStyle"
+              :min-width="containerMinSize?.width"
+              :min-height="containerMinSize?.height"
+              @update:model-value="handleStyleChange"
+            />
+            <el-divider style="margin: 12px 0" />
+          </template>
+          <BackgroundEditor :model-value="currentStyle" @update:model-value="handleStyleChange" />
+          <el-divider style="margin: 12px 0" />
+          <BorderEditor :model-value="currentStyle" @update:model-value="handleStyleChange" />
+        </el-collapse-item>
+
+        <!-- 布局样式 -->
+        <el-collapse-item title="布局样式" name="layout">
+          <PositionEditor :model-value="currentStyle" @update:model-value="handleStyleChange" />
+          <el-divider style="margin: 12px 0" />
+          <SpacingEditor
+            title="内边距"
+            prefix="padding"
+            :model-value="currentStyle"
+            @update:model-value="handleStyleChange"
+          />
+          <el-divider style="margin: 12px 0" />
+          <SpacingEditor
+            title="外边距"
+            prefix="margin"
+            :model-value="currentStyle"
+            @update:model-value="handleStyleChange"
+          />
+        </el-collapse-item>
+      </el-collapse>
+    </template>
+    <div v-else class="text-sm text-gray-400 text-center py-6">请选择组件</div>
+  </div>
+</template>
 
 <style scoped>
 .style-panel {

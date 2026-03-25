@@ -2,23 +2,6 @@
   DrawingPanel - 绘图工具面板
   提供线、矩形、圆形、多边形、管道、文字等绘图工具选择，含符号库
 -->
-<template>
-  <div class="flex flex-col gap-3">
-    <div class="flex flex-wrap gap-2">
-      <el-button
-        v-for="tool in drawingTools"
-        :key="tool.key"
-        size="small"
-        :type="modelValue === tool.key ? 'primary' : ''"
-        @click="handleSelect(tool.key)"
-      >
-        {{ tool.label }}
-      </el-button>
-    </div>
-    <SymbolLibraryPanel />
-  </div>
-</template>
-
 <script setup>
 import SymbolLibraryPanel from "./SymbolLibraryPanel.vue";
 
@@ -44,7 +27,24 @@ const drawingTools = [
  * 切换绘图工具
  * @param {string} tool - 工具类型
  */
-const handleSelect = (tool) => {
+function handleSelect(tool) {
   emit("update:modelValue", tool);
-};
+}
 </script>
+
+<template>
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-wrap gap-2">
+      <el-button
+        v-for="tool in drawingTools"
+        :key="tool.key"
+        size="small"
+        :type="modelValue === tool.key ? 'primary' : ''"
+        @click="handleSelect(tool.key)"
+      >
+        {{ tool.label }}
+      </el-button>
+    </div>
+    <SymbolLibraryPanel />
+  </div>
+</template>

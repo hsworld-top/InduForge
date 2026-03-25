@@ -3,26 +3,18 @@
   支持：CSS/HTML/JS/JSON/TS、主题、补全、格式化、错误标记
   用于：脚本编辑、样式编辑、表达式编辑等
 -->
-<template>
-  <div
-    ref="editorContainerRef"
-    class="monaco-editor-container"
-    :style="{ height }"
-  ></div>
-</template>
-
 <script setup>
-/**
- * Monaco 编辑器组件
- * 封装 monaco-editor，支持 v-model、主题切换、自定义补全、错误标记
- */
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
 import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+/**
+ * Monaco 编辑器组件
+ * 封装 monaco-editor，支持 v-model、主题切换、自定义补全、错误标记
+ */
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import "monaco-editor/min/vs/editor/editor.main.css";
 import "monaco-editor/esm/vs/basic-languages/css/css.contribution";
 import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution";
@@ -55,7 +47,7 @@ let extraLibDisposable = null;
 let prettierReady = null;
 
 /** 执行编辑器内置动作（如格式化、格式化文档） */
-const runEditorAction = async (id) => {
+async function runEditorAction(id) {
   const action = editorInstance?.getAction(id);
   if (!action) return false;
   try {
@@ -64,7 +56,7 @@ const runEditorAction = async (id) => {
   } catch (error) {
     return false;
   }
-};
+}
 
 const mediaQuery =
   typeof window !== "undefined" && window.matchMedia
@@ -73,30 +65,26 @@ const mediaQuery =
 const cleanupFns = [];
 
 /** 将主题名映射为 Monaco 主题 */
-const normalizeTheme = (theme) => {
+function normalizeTheme(theme) {
   if (theme === "dark") return "vs-dark";
   if (theme === "light") return "vs";
   return theme || "vs";
-};
+}
 
 /** 根据 document.documentElement 或系统偏好检测明暗主题 */
-const detectTheme = () => {
+function detectTheme() {
   if (typeof document !== "undefined") {
     const html = document.documentElement;
     const body = document.body;
-    const isDark = (el) =>
-      el && (el.classList?.contains("dark") || el.dataset?.theme === "dark");
+    const isDark = (el) => el && (el.classList?.contains("dark") || el.dataset?.theme === "dark");
     if (isDark(html) || isDark(body)) return "vs-dark";
   }
   if (mediaQuery) return mediaQuery.matches ? "vs-dark" : "vs";
   return "vs";
-};
+}
 
 function registerMonacoEnvironment() {
-  if (
-    typeof self === "undefined" ||
-    (self.MonacoEnvironment && self.MonacoEnvironment.getWorker)
-  ) {
+  if (typeof self === "undefined" || (self.MonacoEnvironment && self.MonacoEnvironment.getWorker)) {
     return;
   }
 
@@ -121,44 +109,46 @@ function registerMonacoEnvironment() {
 
 registerMonacoEnvironment();
 
-const baseOptions = () => ({
-  value: props.modelValue,
-  language: props.language,
-  theme: normalizeTheme(props.theme || detectTheme()),
-  automaticLayout: true,
-  fontSize: 14,
-  minimap: { enabled: false },
-  scrollBeyondLastLine: false,
-  wordWrap: "on",
-  formatOnPaste: true,
-  formatOnType: true,
-  folding: true,
-  glyphMargin: true,
-  lineNumbers: "on",
-  tabSize: 2,
-  suggestOnTriggerCharacters: true,
-  quickSuggestions: { other: true, comments: true, strings: true },
-  quickSuggestionsDelay: 50,
-  wordBasedSuggestions: "allDocuments",
-  inlineSuggest: { enabled: true },
-  acceptSuggestionOnEnter: "on",
-  acceptSuggestionOnCommitCharacter: true,
-  tabCompletion: "on",
-  snippetSuggestions: "inline",
-  suggestSelection: "first",
-  parameterHints: { enabled: true },
-  lightbulb: { enabled: true },
-  autoClosingBrackets: "always",
-  autoClosingQuotes: "always",
-  hover: { enabled: true, delay: 300 },
-  ...props.options,
-});
+function baseOptions() {
+  return {
+    value: props.modelValue,
+    language: props.language,
+    theme: normalizeTheme(props.theme || detectTheme()),
+    automaticLayout: true,
+    fontSize: 14,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    wordWrap: "on",
+    formatOnPaste: true,
+    formatOnType: true,
+    folding: true,
+    glyphMargin: true,
+    lineNumbers: "on",
+    tabSize: 2,
+    suggestOnTriggerCharacters: true,
+    quickSuggestions: { other: true, comments: true, strings: true },
+    quickSuggestionsDelay: 50,
+    wordBasedSuggestions: "allDocuments",
+    inlineSuggest: { enabled: true },
+    acceptSuggestionOnEnter: "on",
+    acceptSuggestionOnCommitCharacter: true,
+    tabCompletion: "on",
+    snippetSuggestions: "inline",
+    suggestSelection: "first",
+    parameterHints: { enabled: true },
+    lightbulb: { enabled: true },
+    autoClosingBrackets: "always",
+    autoClosingQuotes: "always",
+    hover: { enabled: true, delay: 300 },
+    ...props.options,
+  };
+}
 
 function applyTheme(theme) {
   monaco.editor.setTheme(normalizeTheme(theme || detectTheme()));
 }
 
-const ensureMarkerTooltip = () => {
+function ensureMarkerTooltip() {
   if (markerTooltipEl || !editorContainerRef.value) return;
   const el = document.createElement("div");
   el.style.position = "absolute";
@@ -177,45 +167,37 @@ const ensureMarkerTooltip = () => {
   el.style.whiteSpace = "pre-wrap";
   editorContainerRef.value.appendChild(el);
   markerTooltipEl = el;
-};
+}
 
-const hideMarkerTooltip = () => {
+function hideMarkerTooltip() {
   if (markerTooltipEl) {
     markerTooltipEl.style.display = "none";
     markerTooltipEl.textContent = "";
   }
-};
+}
 
-const markerContainsPosition = (marker, position) => {
+function markerContainsPosition(marker, position) {
   if (!marker || !position) return false;
   if (position.lineNumber < marker.startLineNumber) return false;
   if (position.lineNumber > marker.endLineNumber) return false;
-  if (
-    position.lineNumber === marker.startLineNumber &&
-    position.column < marker.startColumn
-  ) {
+  if (position.lineNumber === marker.startLineNumber && position.column < marker.startColumn) {
     return false;
   }
-  if (
-    position.lineNumber === marker.endLineNumber &&
-    position.column > marker.endColumn
-  ) {
+  if (position.lineNumber === marker.endLineNumber && position.column > marker.endColumn) {
     return false;
   }
   return true;
-};
+}
 
-const pickMarkerAtPosition = (position) => {
+function pickMarkerAtPosition(position) {
   if (!position) return null;
   const markers = latestMarkers || [];
-  const matches = markers.filter((marker) =>
-    markerContainsPosition(marker, position),
-  );
+  const matches = markers.filter((marker) => markerContainsPosition(marker, position));
   if (!matches.length) return null;
   return matches.sort((a, b) => b.severity - a.severity)[0];
-};
+}
 
-const showMarkerTooltip = (position) => {
+function showMarkerTooltip(position) {
   if (!editorInstance || !position) {
     hideMarkerTooltip();
     return;
@@ -236,17 +218,17 @@ const showMarkerTooltip = (position) => {
   markerTooltipEl.style.left = `${coords.left + 8}px`;
   markerTooltipEl.style.top = `${coords.top + coords.height + 6}px`;
   markerTooltipEl.style.display = "block";
-};
+}
 
-const resolveCompletionKind = (kind) => {
+function resolveCompletionKind(kind) {
   if (typeof kind === "number") return kind;
   if (typeof kind === "string" && monaco.languages.CompletionItemKind[kind]) {
     return monaco.languages.CompletionItemKind[kind];
   }
   return monaco.languages.CompletionItemKind.Text;
-};
+}
 
-const resolveCompletionItems = (model, position) => {
+function resolveCompletionItems(model, position) {
   const word = model.getWordUntilPosition(position);
   const range = new monaco.Range(
     position.lineNumber,
@@ -272,26 +254,23 @@ const resolveCompletionItems = (model, position) => {
       range,
     }))
     .filter((item) => item.label && item.insertText);
-};
+}
 
-const registerCompletionProvider = () => {
+function registerCompletionProvider() {
   if (completionProvider) {
     completionProvider.dispose();
     completionProvider = null;
   }
   if (!completionItems.value || completionItems.value.length === 0) return;
-  completionProvider = monaco.languages.registerCompletionItemProvider(
-    props.language,
-    {
-      triggerCharacters: [".", "$"],
-      provideCompletionItems(model, position) {
-        return { suggestions: resolveCompletionItems(model, position) };
-      },
+  completionProvider = monaco.languages.registerCompletionItemProvider(props.language, {
+    triggerCharacters: [".", "$"],
+    provideCompletionItems(model, position) {
+      return { suggestions: resolveCompletionItems(model, position) };
     },
-  );
-};
+  });
+}
 
-const buildSemicolonEdits = (model) => {
+function buildSemicolonEdits(model) {
   const edits = [];
   const lineCount = model.getLineCount();
   for (let lineNumber = 1; lineNumber <= lineCount; lineNumber += 1) {
@@ -302,7 +281,7 @@ const buildSemicolonEdits = (model) => {
     if (/^\s*\/[/*]/.test(trimmed)) continue;
     if (/[;,{[(]$/.test(trimmed)) continue;
     if (/=>\s*$/.test(trimmed)) continue;
-    if (/:$/.test(trimmed)) continue;
+    if (trimmed.endsWith(":")) continue;
     if (
       /^(if|for|while|switch|catch|function|class|else|try)\b/.test(trimmed) &&
       /\)\s*$/.test(trimmed)
@@ -313,22 +292,16 @@ const buildSemicolonEdits = (model) => {
     if (!/[\w)\]"'`]+$/.test(trimmed)) continue;
 
     const commentIndex = trimmed.indexOf("//");
-    const insertColumn =
-      commentIndex >= 0 ? commentIndex + 1 : trimmed.length + 1;
+    const insertColumn = commentIndex >= 0 ? commentIndex + 1 : trimmed.length + 1;
     edits.push({
-      range: new monaco.Range(
-        lineNumber,
-        insertColumn,
-        lineNumber,
-        insertColumn,
-      ),
+      range: new monaco.Range(lineNumber, insertColumn, lineNumber, insertColumn),
       text: ";",
     });
   }
   return edits;
-};
+}
 
-const loadPrettier = async () => {
+async function loadPrettier() {
   if (prettierReady) return prettierReady;
   prettierReady = Promise.all([
     import("prettier/standalone"),
@@ -341,9 +314,9 @@ const loadPrettier = async () => {
     }))
     .catch(() => null);
   return prettierReady;
-};
+}
 
-const formatWithPrettier = async (code, language) => {
+async function formatWithPrettier(code, language) {
   const prettier = await loadPrettier();
   if (!prettier) return null;
   const parser = language === "typescript" ? "babel-ts" : "babel";
@@ -351,9 +324,7 @@ const formatWithPrettier = async (code, language) => {
   const isAnonFunction = /^\s*function\s*\(/.test(trimmed);
   const wrapPrefix = "const __fn = ";
   const wrapSuffix = ";";
-  const formatTarget = isAnonFunction
-    ? `${wrapPrefix}${trimmed}${wrapSuffix}`
-    : trimmed;
+  const formatTarget = isAnonFunction ? `${wrapPrefix}${trimmed}${wrapSuffix}` : trimmed;
   try {
     const formatted = await prettier.format(formatTarget, {
       parser,
@@ -366,18 +337,16 @@ const formatWithPrettier = async (code, language) => {
     });
     if (!formatted) return null;
     if (isAnonFunction) {
-      const stripped = formatted
-        .replace(/^const __fn\s*=\s*/, "")
-        .replace(/;\s*$/, "");
+      const stripped = formatted.replace(/^const __fn\s*=\s*/, "").replace(/;\s*$/, "");
       return stripped;
     }
     return formatted;
   } catch (error) {
     return null;
   }
-};
+}
 
-const ensureJsFormatter = () => {
+function ensureJsFormatter() {
   if (jsFormatterRegistered) return;
   jsFormatterRegistered = true;
   const provider = {
@@ -396,17 +365,11 @@ const ensureJsFormatter = () => {
       return buildSemicolonEdits(model);
     },
   };
-  monaco.languages.registerDocumentFormattingEditProvider(
-    "javascript",
-    provider,
-  );
-  monaco.languages.registerDocumentFormattingEditProvider(
-    "typescript",
-    provider,
-  );
-};
+  monaco.languages.registerDocumentFormattingEditProvider("javascript", provider);
+  monaco.languages.registerDocumentFormattingEditProvider("typescript", provider);
+}
 
-const applyFormatEdits = async () => {
+async function applyFormatEdits() {
   if (!editorInstance) return false;
   const model = editorInstance.getModel();
   if (!model) return false;
@@ -416,9 +379,7 @@ const applyFormatEdits = async () => {
   const formatted = await formatWithPrettier(code, languageId);
   if (formatted && formatted !== code) {
     editorInstance.pushUndoStop();
-    editorInstance.executeEdits("format", [
-      { range: model.getFullModelRange(), text: formatted },
-    ]);
+    editorInstance.executeEdits("format", [{ range: model.getFullModelRange(), text: formatted }]);
     editorInstance.pushUndoStop();
     return true;
   }
@@ -428,7 +389,7 @@ const applyFormatEdits = async () => {
   editorInstance.executeEdits("format", edits);
   editorInstance.pushUndoStop();
   return true;
-};
+}
 
 function initEditor() {
   if (!editorContainerRef.value) return;
@@ -446,9 +407,7 @@ function initEditor() {
     });
   }
   if (props.language === "javascript" || props.language === "typescript") {
-    const ignoreDiagnostics = [
-      1003, 1108, 1308, 1375, 1378, 1379, 2391, 80007, 80008,
-    ];
+    const ignoreDiagnostics = [1003, 1108, 1308, 1375, 1378, 1379, 2391, 80007, 80008];
     const compilerOptions = {
       allowJs: true,
       allowNonTsExtensions: true,
@@ -463,15 +422,11 @@ function initEditor() {
     };
     if (
       monaco.languages.typescript.ModuleDetectionKind &&
-      typeof monaco.languages.typescript.ModuleDetectionKind.Force !==
-        "undefined"
+      typeof monaco.languages.typescript.ModuleDetectionKind.Force !== "undefined"
     ) {
-      compilerOptions.moduleDetection =
-        monaco.languages.typescript.ModuleDetectionKind.Force;
+      compilerOptions.moduleDetection = monaco.languages.typescript.ModuleDetectionKind.Force;
     }
-    monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
-      compilerOptions,
-    );
+    monaco.languages.typescript.javascriptDefaults.setCompilerOptions(compilerOptions);
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: false,
       noSyntaxValidation: false,
@@ -483,22 +438,18 @@ function initEditor() {
       extraLibDisposable.dispose();
       extraLibDisposable = null;
     }
-    extraLibDisposable =
-      monaco.languages.typescript.javascriptDefaults.addExtraLib(
-        "declare const $global: Record<string, any>;\n" +
-          "declare const $vars: Record<string, any>;\n" +
-          "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
-          "declare const components: Record<string, any>;\n" +
-          "declare const $event: any;\n",
-        "ts:global-scripts.d.ts",
-      );
+    extraLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
+      "declare const $global: Record<string, any>;\n" +
+        "declare const $vars: Record<string, any>;\n" +
+        "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
+        "declare const components: Record<string, any>;\n" +
+        "declare const $event: any;\n",
+      "ts:global-scripts.d.ts",
+    );
     ensureJsFormatter();
   }
 
-  editorInstance = monaco.editor.create(
-    editorContainerRef.value,
-    baseOptions(),
-  );
+  editorInstance = monaco.editor.create(editorContainerRef.value, baseOptions());
   applyTheme(props.theme);
   registerCompletionProvider();
   const runFormatCommand = () => {
@@ -509,17 +460,11 @@ function initEditor() {
   editorInstance.addAction({
     id: "format-document",
     label: "��ʽ���ĵ�",
-    keybindings: [
-      monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
-    ],
+    keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
     run: () => runFormatCommand(),
   });
   editorInstance.onKeyDown((event) => {
-    if (
-      event.shiftKey &&
-      event.altKey &&
-      event.keyCode === monaco.KeyCode.KeyF
-    ) {
+    if (event.shiftKey && event.altKey && event.keyCode === monaco.KeyCode.KeyF) {
       event.preventDefault();
       event.stopPropagation();
       runFormatCommand();
@@ -559,12 +504,8 @@ function initEditor() {
     }
     showMarkerTooltip(event.target.position);
   });
-  const mouseLeaveListener = editorInstance.onMouseLeave(() =>
-    hideMarkerTooltip(),
-  );
-  const scrollListener = editorInstance.onDidScrollChange(() =>
-    hideMarkerTooltip(),
-  );
+  const mouseLeaveListener = editorInstance.onMouseLeave(() => hideMarkerTooltip());
+  const scrollListener = editorInstance.onDidScrollChange(() => hideMarkerTooltip());
   cleanupFns.push(() => mouseMoveListener.dispose());
   cleanupFns.push(() => mouseLeaveListener.dispose());
   cleanupFns.push(() => scrollListener.dispose());
@@ -681,21 +622,18 @@ defineExpose({
     const position = editorInstance.getPosition();
     const range =
       selection ||
-      new monaco.Range(
-        position.lineNumber,
-        position.column,
-        position.lineNumber,
-        position.column,
-      );
+      new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column);
     editorInstance.pushUndoStop();
-    editorInstance.executeEdits("insert", [
-      { range, text, forceMoveMarkers: true },
-    ]);
+    editorInstance.executeEdits("insert", [{ range, text, forceMoveMarkers: true }]);
     editorInstance.pushUndoStop();
     editorInstance.focus();
   },
 });
 </script>
+
+<template>
+  <div ref="editorContainerRef" class="monaco-editor-container" :style="{ height }"></div>
+</template>
 
 <style scoped>
 .monaco-editor-container {

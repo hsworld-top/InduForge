@@ -2,7 +2,7 @@
  * 工程设置与 API 负载规范化（变量、全局脚本、菜单默认值等）
  */
 
-export type GlobalScriptsNormalized = {
+export interface GlobalScriptsNormalized {
   system: {
     startup: { code: string };
     shutdown: { code: string };
@@ -10,12 +10,12 @@ export type GlobalScriptsNormalized = {
   timers: { groups: unknown[]; items: unknown[] };
   variableChanges: { groups: unknown[]; items: unknown[] };
   custom: { groups: unknown[]; items: unknown[] };
-};
+}
 
-export type GlobalVariablesNormalized = {
+export interface GlobalVariablesNormalized {
   definitions: Record<string, unknown>;
   groups: unknown[];
-};
+}
 
 export function getDefaultGlobalScripts(): GlobalScriptsNormalized {
   return {
@@ -53,9 +53,7 @@ export function normalizeVariableDef(detail: unknown): unknown {
   return next;
 }
 
-export function normalizeGlobalVariables(
-  raw: Record<string, unknown>,
-): GlobalVariablesNormalized {
+export function normalizeGlobalVariables(raw: Record<string, unknown>): GlobalVariablesNormalized {
   if (!raw || typeof raw !== "object") {
     throw new Error("globalVariables 无效");
   }
@@ -119,9 +117,7 @@ export function normalizeGlobalScripts(
       items: Array.isArray(timers.items) ? timers.items : [],
     },
     variableChanges: {
-      groups: Array.isArray(variableChanges.groups)
-        ? variableChanges.groups
-        : [],
+      groups: Array.isArray(variableChanges.groups) ? variableChanges.groups : [],
       items: Array.isArray(variableChanges.items) ? variableChanges.items : [],
     },
     custom: {

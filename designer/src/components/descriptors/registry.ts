@@ -5,12 +5,12 @@
 import type { Component } from "vue";
 
 /** 画布节点在描述符 API 中的最小型状 */
-export type DescriptorNode = {
+export interface DescriptorNode {
   id?: string;
   label?: string;
   props?: Record<string, unknown>;
   [key: string]: unknown;
-};
+}
 
 export type DescriptorRenderTagFn = (
   node: DescriptorNode | undefined,
@@ -34,18 +34,10 @@ export interface ComponentDescriptor {
   maxChildren?: number | null;
   isRegion?: boolean;
   flexDirection?: "row" | "column" | null;
-  displayContent?: (
-    node: DescriptorNode,
-    resolvedProps: Record<string, unknown>,
-  ) => string | null;
+  displayContent?: (node: DescriptorNode, resolvedProps: Record<string, unknown>) => string | null;
   slots?: Record<string, unknown> | null;
-  renderKey?: (
-    node: DescriptorNode,
-    context: Record<string, unknown>,
-  ) => string;
-  propsFilter?: (
-    resolvedProps: Record<string, unknown>,
-  ) => Record<string, unknown>;
+  renderKey?: (node: DescriptorNode, context: Record<string, unknown>) => string;
+  propsFilter?: (resolvedProps: Record<string, unknown>) => Record<string, unknown>;
   customRenderer?: Component | null;
   childLayout?: "flex" | "grid" | "free" | "none" | null;
   defaultSize?: { width: number; height: number } | null;
@@ -60,10 +52,7 @@ const FIXED_LAYOUT_SHELL_SLOT_TYPES = new Set([
   "ElLayoutRow",
 ]);
 
-const LEGACY_FLEX_DIRECTION_TYPES = new Set([
-  "FlexContainer",
-  "ResponsiveLayout",
-]);
+const LEGACY_FLEX_DIRECTION_TYPES = new Set(["FlexContainer", "ResponsiveLayout"]);
 
 const REGION_DESIGNER_HINTS: Record<string, string> = {
   ElHeader: "Header区域",
@@ -76,10 +65,7 @@ const COMPONENT_WRAPPER_RENDER_TYPES = new Set(["ElLayoutRow", "ElCol"]);
 
 const _descriptors = new Map<string, ComponentDescriptor>();
 
-export function registerDescriptor(
-  type: string,
-  descriptor: ComponentDescriptor,
-): void {
+export function registerDescriptor(type: string, descriptor: ComponentDescriptor): void {
   if (!type) {
     throw new Error("[ComponentRegistry] registerDescriptor: type 不能为空");
   }
@@ -122,21 +108,15 @@ export function isContainerType(type: string): boolean {
   return _descriptors.get(type)?.isContainer ?? false;
 }
 
-export function getChildPositioning(
-  parentType: string,
-): "absolute" | "flow" | null {
+export function getChildPositioning(parentType: string): "absolute" | "flow" | null {
   return _descriptors.get(parentType)?.childPositioning ?? null;
 }
 
-export function getChildFlowLayout(
-  parentType: string,
-): Record<string, unknown> | null {
+export function getChildFlowLayout(parentType: string): Record<string, unknown> | null {
   return _descriptors.get(parentType)?.childFlowLayout ?? null;
 }
 
-export function getChildStyle(
-  parentType: string,
-): Record<string, string | number> {
+export function getChildStyle(parentType: string): Record<string, string | number> {
   const descriptor = _descriptors.get(parentType);
   if (!descriptor?.childStyle) return {};
   return descriptor.childStyle(parentType);
@@ -236,9 +216,7 @@ export function getCustomRenderer(type: string): Component | null {
   return _descriptors.get(type)?.customRenderer ?? null;
 }
 
-export function getDefaultSize(
-  type: string,
-): { width: number; height: number } | null {
+export function getDefaultSize(type: string): { width: number; height: number } | null {
   const descriptorSize = _descriptors.get(type)?.defaultSize;
   if (
     descriptorSize &&
@@ -250,9 +228,7 @@ export function getDefaultSize(
   return null;
 }
 
-export function getChildLayout(
-  type: string,
-): "flex" | "grid" | "free" | "none" | null {
+export function getChildLayout(type: string): "flex" | "grid" | "free" | "none" | null {
   return _descriptors.get(type)?.childLayout ?? null;
 }
 
@@ -267,10 +243,7 @@ export function isLayoutContainerType(type: string): boolean {
 
 export function isLayoutType(type: string): boolean {
   return (
-    type === "ElLayout" ||
-    type === "ElLayoutRow" ||
-    type === "ElCol" ||
-    isLayoutContainerType(type)
+    type === "ElLayout" || type === "ElLayoutRow" || type === "ElCol" || isLayoutContainerType(type)
   );
 }
 

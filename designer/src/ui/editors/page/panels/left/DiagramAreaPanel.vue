@@ -2,6 +2,43 @@
   DiagramAreaPanel - 绘图区面板
   2D 流程图等可拖拽到画布的图表组件入口
 -->
+<script setup>
+import IconEpBox from "~icons/ep/box";
+import IconEpGrid from "~icons/ep/grid";
+import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
+
+/**
+ * 处理拖拽开始
+ * @param {string} type - 组件类型
+ * @param {DragEvent} event - 拖拽事件
+ */
+function handleDragStart(type, event) {
+  startDrag(type);
+  if (!event.dataTransfer) return;
+  const payload = JSON.stringify({ type });
+  event.dataTransfer.effectAllowed = "copy";
+  event.dataTransfer.setData("application/x-designer-component", payload);
+  event.dataTransfer.setData("text/plain", type);
+}
+
+/**
+ * 处理鼠标拖拽开始（HTML5 drag 失效时兜底）
+ * @param {string} type - 组件类型
+ * @param {MouseEvent} event - 鼠标事件
+ */
+function handlePointerStart(type, event) {
+  if (event.button !== 0) return;
+  startDrag(type);
+}
+
+/**
+ * 处理拖拽结束
+ */
+function handleDragEnd() {
+  endDrag();
+}
+</script>
+
 <template>
   <div class="flex flex-col gap-3 diagram-area-panel">
     <div class="text-xs text-gray-500 px-2">拖拽到画布，双击进入编辑模式</div>
@@ -46,43 +83,6 @@
     </div>
   </div>
 </template>
-
-<script setup>
-import IconEpGrid from "~icons/ep/grid";
-import IconEpBox from "~icons/ep/box";
-import { startDrag, endDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
-
-/**
- * 处理拖拽开始
- * @param {string} type - 组件类型
- * @param {DragEvent} event - 拖拽事件
- */
-const handleDragStart = (type, event) => {
-  startDrag(type);
-  if (!event.dataTransfer) return;
-  const payload = JSON.stringify({ type });
-  event.dataTransfer.effectAllowed = "copy";
-  event.dataTransfer.setData("application/x-designer-component", payload);
-  event.dataTransfer.setData("text/plain", type);
-};
-
-/**
- * 处理鼠标拖拽开始（HTML5 drag 失效时兜底）
- * @param {string} type - 组件类型
- * @param {MouseEvent} event - 鼠标事件
- */
-const handlePointerStart = (type, event) => {
-  if (event.button !== 0) return;
-  startDrag(type);
-};
-
-/**
- * 处理拖拽结束
- */
-const handleDragEnd = () => {
-  endDrag();
-};
-</script>
 
 <style scoped>
 .diagram-area-panel {

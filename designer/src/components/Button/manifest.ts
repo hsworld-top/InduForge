@@ -3,10 +3,8 @@
  * 属性定义、事件定义、默认值
  */
 
-import {
-  registerManifest,
-  type ComponentManifest,
-} from "@/manifests/manifest-registry";
+import type { ComponentManifest } from "@/manifests/manifest-registry";
+import { registerManifest } from "@/manifests/manifest-registry";
 
 export const manifest: ComponentManifest = {
   type: "Button",

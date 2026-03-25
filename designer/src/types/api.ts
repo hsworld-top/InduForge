@@ -85,14 +85,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  */
 export function unwrapApiData<T = unknown>(payload: unknown): T {
   if (isRecord(payload) && "success" in payload && "data" in payload) {
-    if (payload["success"] === false) {
-      const msg =
-        typeof payload["message"] === "string"
-          ? payload["message"]
-          : "请求失败";
+    if (payload.success === false) {
+      const msg = typeof payload.message === "string" ? payload.message : "请求失败";
       throw new Error(msg);
     }
-    return payload["data"] as T;
+    return payload.data as T;
   }
   return payload as T;
 }

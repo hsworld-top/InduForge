@@ -1,56 +1,12 @@
-<template>
-  <div class="friendly-color-picker" :class="{ 'is-disabled': disabled }">
-    <div class="color-main-row">
-      <el-color-picker :model-value="modelValue" :show-alpha="showAlpha" :disabled="disabled"
-        :predefine="predefineColors" color-format="hex" @change="handlePickerChange" />
-      <el-input v-model="inputDraft" :disabled="disabled" :placeholder="placeholder" size="small" class="color-input"
-        @blur="commitInputDraft" @keyup.enter="commitInputDraft">
-        <template v-if="clearable" #suffix>
-          <el-icon class="clear-icon" :class="{ 'is-disabled': disabled }" @click.stop="clearColor">
-            <IconCircleClose />
-          </el-icon>
-        </template>
-      </el-input>
-    </div>
-
-    <div v-if="recentColors.length" class="recent-row">
-      <span class="recent-label">最近</span>
-      <button v-for="color in displayRecentColors" :key="color" type="button" class="recent-color"
-        :style="{ backgroundColor: color }" :title="color" @click="selectRecentColor(color)" />
-    </div>
-  </div>
-</template>
-
 <script setup>
 /**
  * 友好颜色选择器
  * 提供颜色面板、手动输入、预设色与最近使用能力
  */
 
-import { computed, onMounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
+import { computed, onMounted, ref, watch } from "vue";
 import IconCircleClose from "~icons/ep/circle-close";
-
-const RECENT_COLORS_STORAGE_KEY = "designer:recent-colors";
-const MAX_RECENT_COLORS = 5;
-const DEFAULT_PREDEFINE_COLORS = [
-  "#ffffff",
-  "#f5f7fa",
-  "#e4e7ed",
-  "#dcdfe6",
-  "#c0c4cc",
-  "#909399",
-  "#606266",
-  "#303133",
-  "#000000",
-  "#409eff",
-  "#67c23a",
-  "#e6a23c",
-  "#f56c6c",
-  "#909399",
-  "rgba(64, 158, 255, 0.2)",
-  "rgba(0, 0, 0, 0.35)",
-];
 
 const props = defineProps({
   modelValue: {
@@ -78,8 +34,27 @@ const props = defineProps({
     default: () => [],
   },
 });
-
 const emit = defineEmits(["update:modelValue", "change"]);
+const RECENT_COLORS_STORAGE_KEY = "designer:recent-colors";
+const MAX_RECENT_COLORS = 5;
+const DEFAULT_PREDEFINE_COLORS = [
+  "#ffffff",
+  "#f5f7fa",
+  "#e4e7ed",
+  "#dcdfe6",
+  "#c0c4cc",
+  "#909399",
+  "#606266",
+  "#303133",
+  "#000000",
+  "#409eff",
+  "#67c23a",
+  "#e6a23c",
+  "#f56c6c",
+  "#909399",
+  "rgba(64, 158, 255, 0.2)",
+  "rgba(0, 0, 0, 0.35)",
+];
 
 const inputDraft = ref("");
 const recentColors = ref([]);
@@ -95,7 +70,7 @@ const displayRecentColors = computed(() => recentColors.value.slice(0, MAX_RECEN
 /**
  * 读取最近颜色列表
  */
-const loadRecentColors = () => {
+function loadRecentColors() {
   try {
     const raw = localStorage.getItem(RECENT_COLORS_STORAGE_KEY);
     if (!raw) {
@@ -109,47 +84,44 @@ const loadRecentColors = () => {
   } catch (error) {
     recentColors.value = [];
   }
-};
+}
 
 /**
  * 保存最近颜色列表
  */
-const persistRecentColors = () => {
+function persistRecentColors() {
   try {
-    localStorage.setItem(
-      RECENT_COLORS_STORAGE_KEY,
-      JSON.stringify(recentColors.value),
-    );
+    localStorage.setItem(RECENT_COLORS_STORAGE_KEY, JSON.stringify(recentColors.value));
   } catch (error) {
     // 本地存储不可用时忽略，不影响颜色选择核心能力
   }
-};
+}
 
 /**
  * 规范化输入颜色值
  * @param {string} value - 原始颜色值
  * @returns {string}
  */
-const normalizeColorValue = (value) => {
+function normalizeColorValue(value) {
   const text = String(value || "").trim();
   if (!text) return "";
-  if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(text)) {
+  if (/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) {
     return text;
   }
-  if (/^([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(text)) {
+  if (/^([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) {
     return `#${text}`;
   }
   if (/^(rgb|rgba|hsl|hsla|var)\(/i.test(text)) {
     return text;
   }
   return "";
-};
+}
 
 /**
  * 记录最近颜色
  * @param {string} color - 颜色值
  */
-const pushRecentColor = (color) => {
+function pushRecentColor(color) {
   const normalized = normalizeColorValue(color);
   if (!normalized) return;
   recentColors.value = [
@@ -157,32 +129,32 @@ const pushRecentColor = (color) => {
     ...recentColors.value.filter((item) => item !== normalized),
   ].slice(0, MAX_RECENT_COLORS);
   persistRecentColors();
-};
+}
 
 /**
  * 同步并派发颜色值
  * @param {string} color - 颜色值
  */
-const emitColor = (color) => {
+function emitColor(color) {
   emit("update:modelValue", color);
   emit("change", color);
-};
+}
 
 /**
  * 处理面板选择
  * @param {string} color - 颜色值
  */
-const handlePickerChange = (color) => {
+function handlePickerChange(color) {
   const normalized = normalizeColorValue(color);
   emitColor(normalized);
   inputDraft.value = normalized;
   pushRecentColor(normalized);
-};
+}
 
 /**
  * 手动输入提交
  */
-const commitInputDraft = () => {
+function commitInputDraft() {
   const normalized = normalizeColorValue(inputDraft.value);
   if (!inputDraft.value) {
     emitColor("");
@@ -196,28 +168,28 @@ const commitInputDraft = () => {
   emitColor(normalized);
   inputDraft.value = normalized;
   pushRecentColor(normalized);
-};
+}
 
 /**
  * 清空颜色
  */
-const clearColor = () => {
+function clearColor() {
   inputDraft.value = "";
   emitColor("");
-};
+}
 
 /**
  * 选择最近颜色
  * @param {string} color - 颜色值
  */
-const selectRecentColor = (color) => {
+function selectRecentColor(color) {
   if (props.disabled) return;
   const normalized = normalizeColorValue(color);
   if (!normalized) return;
   inputDraft.value = normalized;
   emitColor(normalized);
   pushRecentColor(normalized);
-};
+}
 
 watch(
   () => props.modelValue,
@@ -231,6 +203,49 @@ onMounted(() => {
   loadRecentColors();
 });
 </script>
+
+<template>
+  <div class="friendly-color-picker" :class="{ 'is-disabled': disabled }">
+    <div class="color-main-row">
+      <el-color-picker
+        :model-value="modelValue"
+        :show-alpha="showAlpha"
+        :disabled="disabled"
+        :predefine="predefineColors"
+        color-format="hex"
+        @change="handlePickerChange"
+      />
+      <el-input
+        v-model="inputDraft"
+        :disabled="disabled"
+        :placeholder="placeholder"
+        size="small"
+        class="color-input"
+        @blur="commitInputDraft"
+        @keyup.enter="commitInputDraft"
+      >
+        <template v-if="clearable" #suffix>
+          <el-icon class="clear-icon" :class="{ 'is-disabled': disabled }" @click.stop="clearColor">
+            <IconCircleClose />
+          </el-icon>
+        </template>
+      </el-input>
+    </div>
+
+    <div v-if="recentColors.length" class="recent-row">
+      <span class="recent-label">最近</span>
+      <button
+        v-for="color in displayRecentColors"
+        :key="color"
+        type="button"
+        class="recent-color"
+        :style="{ backgroundColor: color }"
+        :title="color"
+        @click="selectRecentColor(color)"
+      />
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .friendly-color-picker {

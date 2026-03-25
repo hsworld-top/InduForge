@@ -2,10 +2,8 @@
  * VerticalLayout 垂直布局组件 Manifest
  */
 
-import {
-  registerManifest,
-  type ComponentManifest,
-} from "@/manifests/manifest-registry";
+import type { ComponentManifest } from "@/manifests/manifest-registry";
+import { registerManifest } from "@/manifests/manifest-registry";
 
 export const manifest: ComponentManifest = {
   type: "VerticalLayout",

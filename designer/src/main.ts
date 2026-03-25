@@ -9,18 +9,18 @@
  * - 监听父窗口主题更新消息（iframe 嵌入场景）
  */
 
-import { createApp } from "vue";
-import { createPinia } from "pinia";
 import ElementPlus from "element-plus";
-import "element-plus/dist/index.css";
-import router from "./router";
-import { Storage } from "./utils/storage";
-import { STORAGE_KEYS } from "./constants";
+import { createPinia } from "pinia";
+import { createApp } from "vue";
 import App from "./App.vue";
-import { registerBuiltinComponents } from "./editor-core/registry/builtin-manifests";
 import { registerAllDescriptors } from "./components";
 import * as descriptorRegistry from "./components/descriptors/registry";
+import { STORAGE_KEYS } from "./constants";
 import { initDescriptorRegistry } from "./editor-core/document/factory";
+import { registerBuiltinComponents } from "./editor-core/registry/builtin-manifests";
+import router from "./router";
+import { Storage } from "./utils/storage";
+import "element-plus/dist/index.css";
 import "./assets/styles/main.css";
 
 const app = createApp(App);
@@ -57,11 +57,11 @@ function isThemeUpdatePayload(data: unknown): data is {
   return theme === "light" || theme === "dark";
 }
 
-const handleThemeMessage = (event: MessageEvent) => {
+function handleThemeMessage(event: MessageEvent) {
   const data = event.data;
   if (!isThemeUpdatePayload(data)) return;
   Storage.set(STORAGE_KEYS.THEME, data.theme);
   document.documentElement.classList.toggle("dark", data.theme === "dark");
-};
+}
 
 window.addEventListener("message", handleThemeMessage);

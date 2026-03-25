@@ -2,8 +2,9 @@
  * History - 撤销重做栈
  */
 
+import type { Command, CommandDocument } from "./Command";
 import { EventEmitter } from "../utils/EventEmitter";
-import { BatchCommand, Command, type CommandDocument } from "./Command";
+import { BatchCommand } from "./Command";
 
 export interface HistoryEntry {
   command: Command;
@@ -59,10 +60,7 @@ export class History extends EventEmitter {
     return this._redoStack.map((entry) => entry.command.getDescription());
   }
 
-  execute(
-    command: Command,
-    options: { skipMerge?: boolean; userId?: string } = {},
-  ): void {
+  execute(command: Command, options: { skipMerge?: boolean; userId?: string } = {}): void {
     if (this._isExecuting) {
       console.warn("History: 正在执行命令，忽略重入");
       return;
@@ -75,7 +73,7 @@ export class History extends EventEmitter {
 
       command.execute(this._doc);
 
-      const lastEntry = this._undoStack[this._undoStack.length - 1];
+      const lastEntry = this._undoStack.at(-1);
       const shouldMerge =
         !options.skipMerge &&
         lastEntry !== undefined &&
@@ -266,10 +264,7 @@ export class History extends EventEmitter {
       return;
     }
 
-    const batchCommand = new BatchCommand(
-      this._transactionCommands,
-      description,
-    );
+    const batchCommand = new BatchCommand(this._transactionCommands, description);
 
     this._undoStack.push({
       command: batchCommand,

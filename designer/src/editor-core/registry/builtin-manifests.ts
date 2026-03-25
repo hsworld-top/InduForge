@@ -2,15 +2,13 @@
  * 内置组件清单注册：将 manifests 层数据注册到 ComponentRegistry
  */
 
-import type { ComponentManifest } from "@/manifests/manifest-registry";
-import { componentRegistry } from "./component-registry";
 import type { EditorComponentManifest } from "./component-registry";
-import { getComponentEventDefinitions } from "./component-events";
+import type { ComponentManifest } from "@/manifests/manifest-registry";
 import { getAllManifests } from "../../manifests";
+import { getComponentEventDefinitions } from "./component-events";
+import { componentRegistry } from "./component-registry";
 
-function extractDefaultProps(
-  props: ComponentManifest["props"],
-): Record<string, unknown> {
+function extractDefaultProps(props: ComponentManifest["props"]): Record<string, unknown> {
   const defaultProps: Record<string, unknown> = {};
   for (const prop of props) {
     if (prop.defaultValue !== undefined) {
@@ -125,9 +123,7 @@ export function registerBuiltinComponents(): void {
 
     const rawEvents = getComponentEventDefinitions(manifest.type);
     const events: EditorComponentManifest["events"] =
-      Array.isArray(manifest.events) && manifest.events.length > 0
-        ? manifest.events
-        : rawEvents;
+      Array.isArray(manifest.events) && manifest.events.length > 0 ? manifest.events : rawEvents;
 
     const componentManifest: EditorComponentManifest = {
       type: manifest.type,

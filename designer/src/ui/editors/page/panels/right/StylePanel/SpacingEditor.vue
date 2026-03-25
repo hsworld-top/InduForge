@@ -2,58 +2,6 @@
   SpacingEditor - 间距编辑器
   编辑 padding 或 margin（上右下左）
 -->
-<template>
-  <div class="spacing-editor">
-    <div class="editor-group-title">{{ title }}</div>
-    <div class="spacing-grid">
-      <div class="form-item">
-        <label>上</label>
-        <el-input-number
-          :model-value="top"
-          size="small"
-          :min="0"
-          :step="1"
-          controls-position="right"
-          @update:modelValue="handleTopChange"
-        />
-      </div>
-      <div class="form-item">
-        <label>右</label>
-        <el-input-number
-          :model-value="right"
-          size="small"
-          :min="0"
-          :step="1"
-          controls-position="right"
-          @update:modelValue="handleRightChange"
-        />
-      </div>
-      <div class="form-item">
-        <label>下</label>
-        <el-input-number
-          :model-value="bottom"
-          size="small"
-          :min="0"
-          :step="1"
-          controls-position="right"
-          @update:modelValue="handleBottomChange"
-        />
-      </div>
-      <div class="form-item">
-        <label>左</label>
-        <el-input-number
-          :model-value="left"
-          size="small"
-          :min="0"
-          :step="1"
-          controls-position="right"
-          @update:modelValue="handleLeftChange"
-        />
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { computed } from "vue";
 
@@ -74,51 +22,97 @@ const props = defineProps({
 
 const emit = defineEmits(["update:modelValue"]);
 
-const parseValue = (value) => {
+function parseValue(value) {
   if (!value) return 0;
-  const num = parseInt(String(value), 10);
+  const num = Number.parseInt(String(value), 10);
   return isNaN(num) ? 0 : num;
-};
+}
 
 const top = computed(() => parseValue(props.modelValue[`${props.prefix}Top`]));
-const right = computed(() =>
-  parseValue(props.modelValue[`${props.prefix}Right`]),
-);
-const bottom = computed(() =>
-  parseValue(props.modelValue[`${props.prefix}Bottom`]),
-);
-const left = computed(() =>
-  parseValue(props.modelValue[`${props.prefix}Left`]),
-);
+const right = computed(() => parseValue(props.modelValue[`${props.prefix}Right`]));
+const bottom = computed(() => parseValue(props.modelValue[`${props.prefix}Bottom`]));
+const left = computed(() => parseValue(props.modelValue[`${props.prefix}Left`]));
 
-const handleTopChange = (value) => {
+function handleTopChange(value) {
   emit("update:modelValue", {
     ...props.modelValue,
     [`${props.prefix}Top`]: value,
   });
-};
+}
 
-const handleRightChange = (value) => {
+function handleRightChange(value) {
   emit("update:modelValue", {
     ...props.modelValue,
     [`${props.prefix}Right`]: value,
   });
-};
+}
 
-const handleBottomChange = (value) => {
+function handleBottomChange(value) {
   emit("update:modelValue", {
     ...props.modelValue,
     [`${props.prefix}Bottom`]: value,
   });
-};
+}
 
-const handleLeftChange = (value) => {
+function handleLeftChange(value) {
   emit("update:modelValue", {
     ...props.modelValue,
     [`${props.prefix}Left`]: value,
   });
-};
+}
 </script>
+
+<template>
+  <div class="spacing-editor">
+    <div class="editor-group-title">{{ title }}</div>
+    <div class="spacing-grid">
+      <div class="form-item">
+        <label>上</label>
+        <el-input-number
+          :model-value="top"
+          size="small"
+          :min="0"
+          :step="1"
+          controls-position="right"
+          @update:model-value="handleTopChange"
+        />
+      </div>
+      <div class="form-item">
+        <label>右</label>
+        <el-input-number
+          :model-value="right"
+          size="small"
+          :min="0"
+          :step="1"
+          controls-position="right"
+          @update:model-value="handleRightChange"
+        />
+      </div>
+      <div class="form-item">
+        <label>下</label>
+        <el-input-number
+          :model-value="bottom"
+          size="small"
+          :min="0"
+          :step="1"
+          controls-position="right"
+          @update:model-value="handleBottomChange"
+        />
+      </div>
+      <div class="form-item">
+        <label>左</label>
+        <el-input-number
+          :model-value="left"
+          size="small"
+          :min="0"
+          :step="1"
+          controls-position="right"
+          @update:model-value="handleLeftChange"
+        />
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .spacing-editor {

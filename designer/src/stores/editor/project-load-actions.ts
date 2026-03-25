@@ -3,18 +3,15 @@
  */
 
 import type { Ref, ShallowRef } from "vue";
+import type { PageListEntry } from "./page-crud-actions";
+import type { PageContentApi, ResolveProjectSchemaFn } from "./page-load-save-actions";
+import type { PagesRefreshResult } from "./pages-sync-types";
 import type { DocumentModel } from "@/editor-core/document/DocumentModel.ts";
 import type { ProjectSchema } from "@/editor-core/document/types";
-import { fetchResolvedProjectSchemaForPage } from "./page-load-save-actions";
-import type {
-  PageContentApi,
-  ResolveProjectSchemaFn,
-} from "./page-load-save-actions";
 import { applyEntryPatchIfPresent } from "./entry-config-helpers";
-import type { PageListEntry } from "./page-crud-actions";
-import type { PagesRefreshResult } from "./pages-sync-types";
+import { fetchResolvedProjectSchemaForPage } from "./page-load-save-actions";
 
-export type LoadProjectStoreContext = {
+export interface LoadProjectStoreContext {
   projectId: Ref<string>;
   isLoading: Ref<boolean>;
   error: Ref<string>;
@@ -23,9 +20,7 @@ export type LoadProjectStoreContext = {
   loadProjectSettings: () => Promise<void>;
   releasePageLock: () => Promise<void>;
   refreshPages: () => Promise<PagesRefreshResult>;
-  createHomePage: (
-    pid: string,
-  ) => Promise<{ ok: boolean; pageId?: string; error?: Error }>;
+  createHomePage: (pid: string) => Promise<{ ok: boolean; pageId?: string; error?: Error }>;
   initEditor: (schema: ProjectSchema) => void;
   createBaseSchema: (projectId: string) => ProjectSchema;
   resolveLandingPageId: (
@@ -34,7 +29,7 @@ export type LoadProjectStoreContext = {
   ) => string | null;
   projectApi: PageContentApi;
   resolveProjectSchema: ResolveProjectSchemaFn;
-};
+}
 
 export async function loadProjectForStore(
   id: string,
@@ -47,8 +42,7 @@ export async function loadProjectForStore(
   try {
     await ctx.loadProjectSettings();
     await ctx.releasePageLock();
-    const { pages: pageList, entryConfig: entryConfigResp } =
-      await ctx.refreshPages();
+    const { pages: pageList, entryConfig: entryConfigResp } = await ctx.refreshPages();
 
     if (!pageList.length) {
       const homePageResult = await ctx.createHomePage(id);
@@ -58,10 +52,7 @@ export async function loadProjectForStore(
       return { ok: homePageResult.ok };
     }
 
-    const targetPageId = ctx.resolveLandingPageId(
-      pageList,
-      entryConfigResp,
-    );
+    const targetPageId = ctx.resolveLandingPageId(pageList, entryConfigResp);
 
     if (!targetPageId) {
       const homePageResult = await ctx.createHomePage(id);
@@ -84,8 +75,7 @@ export async function loadProjectForStore(
     ctx.currentPageId.value = targetPageId;
     return { ok: true };
   } catch (cause) {
-    const nextError =
-      cause instanceof Error ? cause : new Error("加载工程失败");
+    const nextError = cause instanceof Error ? cause : new Error("加载工程失败");
     ctx.error.value = nextError.message;
     ctx.initEditor(ctx.createBaseSchema(id));
     return { ok: false, error: nextError };
@@ -93,3 +83,5 @@ export async function loadProjectForStore(
     ctx.isLoading.value = false;
   }
 }
+
+export type LoadProjectForStoreResult = Awaited<ReturnType<typeof loadProjectForStore>>;

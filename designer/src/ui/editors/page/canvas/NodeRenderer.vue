@@ -2,254 +2,55 @@
   NodeRenderer - 节点渲染器
   递归渲染组件树，支持 DOM 组件与 Canvas 图形，处理绑定、事件、拖拽
 -->
-<template>
-  <component v-if="node && isNodeVisible" :is="outerTag" :class="nodeClass" :style="outerStyle" :data-node-id="node.id"
-    :data-node-type="node.type" :id="useComponentWrapper ? nodeDomId : null" :ref="setNodeRef"
-    v-bind="useComponentWrapper ? filteredProps : {}" v-on="useComponentWrapper ? mergedEventListeners : {}"
-    @click.stop="handleClick" @dblclick.stop="handleDoubleClick" @pointerdown.capture="handlePointerDown"
-    @dragover.prevent="handleDragOver" @dragstart.prevent @dragleave="handleDragLeave" @drop.prevent="handleDrop"
-    @contextmenu.prevent="handleContextMenu">
-    <component v-if="!useComponentWrapper" :is="renderTag" :key="renderKey"
-      :id="!useComponentWrapper ? nodeDomId : null" :style="contentStyleWithConfig" v-bind="filteredProps"
-      v-on="mergedEventListeners" ref="contentRef">
-      <template v-if="displayContent !== null">{{ displayContent }}</template>
-      <component v-else-if="customRendererComponent" :is="customRendererComponent" :node="node"
-        :resolved-props="resolvedNodeProps" />
-      <template v-if="isSelectType">
-        <el-option v-for="option in selectOptions" :key="option.value ?? option.label" :label="option.label"
-          :value="option.value" />
-      </template>
-      <template v-if="isRadioType">
-        <el-radio v-for="option in radioOptions" :key="option.value ?? option.label" :label="option.value"
-          :disabled="Boolean(option.disabled)" v-show="option.visible !== false">
-          {{ option.label }}
-        </el-radio>
-      </template>
-      <template v-if="isCheckboxType">
-        <el-checkbox v-for="option in checkboxOptions" :key="option.value ?? option.label" :label="option.value"
-          :disabled="Boolean(option.disabled)" v-show="option.visible !== false">
-          {{ option.label }}
-        </el-checkbox>
-      </template>
-      <template v-if="isTableType">
-        <el-table-column v-for="column in tableColumns" :key="column.prop ?? column.label" v-bind="column" />
-      </template>
-      <template v-if="isBigDataTableType">
-        <el-table-column v-for="column in bigTableColumns" :key="column.prop ?? column.label" v-bind="column" />
-      </template>
-      <template v-if="isMenuType">
-        <el-menu-item v-for="item in menuItems" :key="item.index ?? item.label" :index="item.index ?? item.label"
-          :disabled="Boolean(item.disabled)">
-          <el-icon v-if="item.iconComponent" class="menu-item-icon">
-            <component :is="item.iconComponent" />
-          </el-icon>
-          {{ item.label }}
-        </el-menu-item>
-      </template>
-      <template v-if="isTimelineType">
-        <el-timeline-item v-for="item in timelineItems" :key="item.timestamp ?? item.label" :timestamp="item.timestamp">
-          {{ item.label }}
-        </el-timeline-item>
-      </template>
-      <template v-if="isTabsType">
-        <el-tab-pane v-for="tab in tabsList" :key="tab.name ?? tab.label" :label="tab.label" :name="tab.name">
-          <div class="tabs-pane-body" :class="{ 'is-drop-active': isDropActive }" :data-node-id="node.id"
-            :data-node-type="node.type" @dragover.prevent="handleDragOver" @dragleave="handleDragLeave"
-            @drop.prevent="handleDrop">
-            <template v-if="isActiveTab(tab)">
-              <template v-if="
-                isContainer && activeTabChildIds.length === 0 && !props.isRoot
-              ">
-                <div class="empty-container-hint">
-                  <span v-if="isDropActive">释放以添加组件</span>
-                  <span v-else>拖拽组件到此处</span>
-                </div>
-              </template>
-              <span v-if="activeTabChildIds.length === 0 && tab.content" class="tabs-pane-placeholder">
-                {{ tab.content }}
-              </span>
-              <NodeRenderer v-for="childId in activeTabChildIds" :key="childId" :node-id="childId"
-                :readonly="props.readonly" />
-            </template>
-            <template v-else>
-              <span class="tabs-pane-placeholder">
-                {{ tab.content }}
-              </span>
-            </template>
-          </div>
-        </el-tab-pane>
-      </template>
-      <template v-if="isCollapseType">
-        <el-collapse-item v-for="item in collapseItems" :key="item.name ?? item.title" :name="item.name"
-          :title="item.title">
-          {{ item.content }}
-        </el-collapse-item>
-      </template>
-      <template v-if="isStepsType">
-        <el-step v-for="item in stepsItems" :key="item.title" :title="item.title" :description="item.description" />
-      </template>
-      <template v-if="isCarouselSlotType">
-        <el-carousel-item v-for="item in carouselItems" :key="item.label">
-          <div class="carousel-item-placeholder">{{ item.label }}</div>
-        </el-carousel-item>
-      </template>
-      <template v-if="isDropdownType" #default>
-        <el-button size="small" type="primary">{{ dropdownLabel }}</el-button>
-      </template>
-      <template v-if="isDropdownType" #dropdown>
-        <el-dropdown-menu>
-          <el-dropdown-item v-for="item in dropdownItems" :key="item.value ?? item.label" :command="item.value"
-            :disabled="Boolean(item.disabled)" :divided="Boolean(item.divided ?? item.diveded)" :icon="item.icon">
-            {{ item.label }}
-          </el-dropdown-item>
-        </el-dropdown-menu>
-      </template>
-      <template v-if="
-        isContainer &&
-        !hasChildren &&
-        !props.isRoot &&
-        !isTabsType &&
-        !suppressReadonlyEmptyHint
-      ">
-        <div class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
-          <span v-if="isDropActive">释放以添加组件</span>
-          <span v-else>{{
-            isRegionContainer ? regionHintText : "拖拽组件到此处"
-          }}</span>
-        </div>
-      </template>
-      <!-- 插入线指示器 -->
-      <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
-        <div class="insert-line" :class="insertLineStyle.orientation" :style="{
-          left:
-            insertLineStyle.orientation === 'vertical'
-              ? insertLineBox?.left + insertLineStyle.offset + 'px'
-              : insertLineBox?.left + 'px',
-          top:
-            insertLineStyle.orientation === 'horizontal'
-              ? insertLineBox?.top + insertLineStyle.offset + 'px'
-              : insertLineBox?.top + 'px',
-          width:
-            insertLineStyle.orientation === 'vertical'
-              ? '2px'
-              : insertLineBox?.width + 'px',
-          height:
-            insertLineStyle.orientation === 'horizontal'
-              ? '2px'
-              : insertLineBox?.height + 'px',
-        }" />
-      </teleport>
-      <div v-else-if="showInsertLine && insertLineStyle" class="insert-line" :class="insertLineStyle.orientation"
-        :style="{
-          [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
-            insertLineStyle.offset + 'px',
-        }" />
-      <NodeRenderer v-for="childId in node.children || []" v-if="!isTabsType" :key="childId"
-        :node-id="childId" :readonly="props.readonly" />
-    </component>
-    <template v-if="useComponentWrapper">
-      <div v-if="
-        isContainer &&
-        !hasChildren &&
-        !props.isRoot &&
-        !suppressReadonlyEmptyHint
-      " class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
-        <span v-if="isDropActive">释放以添加组件</span>
-        <span v-else>{{
-          isRegionContainer ? regionHintText : "拖拽组件到此处"
-        }}</span>
-      </div>
-      <!-- 插入线指示器 -->
-      <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
-        <div class="insert-line" :class="insertLineStyle.orientation" :style="{
-          left:
-            insertLineStyle.orientation === 'vertical'
-              ? insertLineBox?.left + insertLineStyle.offset + 'px'
-              : insertLineBox?.left + 'px',
-          top:
-            insertLineStyle.orientation === 'horizontal'
-              ? insertLineBox?.top + insertLineStyle.offset + 'px'
-              : insertLineBox?.top + 'px',
-          width:
-            insertLineStyle.orientation === 'vertical'
-              ? '2px'
-              : insertLineBox?.width + 'px',
-          height:
-            insertLineStyle.orientation === 'horizontal'
-              ? '2px'
-              : insertLineBox?.height + 'px',
-        }" />
-      </teleport>
-      <div v-else-if="showInsertLine && insertLineStyle" class="insert-line" :class="insertLineStyle.orientation"
-        :style="{
-          [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
-            insertLineStyle.offset + 'px',
-        }" />
-      <NodeRenderer v-for="childId in node.children || []" :key="childId" :node-id="childId"
-        :readonly="props.readonly" />
-    </template>
-    <div v-if="showResizeHandles" class="resize-handles">
-      <span v-for="handle in visibleResizeHandles" :key="handle.key" class="resize-handle" :class="handle.key"
-        :style="{ cursor: handle.cursor }" @pointerdown.stop="(event) => handleResizePointerDown(event, handle)" />
-    </div>
-  </component>
-</template>
-
 <script setup>
-import {
-  computed,
-  ref,
-  inject,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  watch,
-} from "vue";
-import { storeToRefs } from "pinia";
 import { ElMessage } from "element-plus";
-import { useEditorStore } from "@/stores/editor-store";
-import { datacenterApi } from "@/services";
-import { getPreviewRuntime } from "@/ui/editors/page/preview/previewRuntime";
-import {
-  componentRegistry,
-  createSelectableElement,
-} from "@/editor-core";
-import { normalizeEventDefinitions } from "@/editor-core/registry/component-events";
+import { storeToRefs } from "pinia";
+import { computed, inject, nextTick, ref, watch } from "vue";
 import {
   getCustomRenderer,
   getDisplayContent,
-  isFlexContainer,
-  isChildResizable as isChildResizableByDescriptor,
   getFlexDirection,
   getRenderTag,
+  isChildResizable as isChildResizableByDescriptor,
+  isFlexContainer,
   isNodeDesignerMovable,
   isTableLikeType,
   usesLegacyFlexDirectionProps,
 } from "@/components/descriptors/registry";
-import { createDragDropManager } from "./services/DragDropManager";
-import { createNodeStyleHelpers } from "./composables/use-node-style";
-import { useNodeContent } from "./composables/use-node-content.js";
-import { useNodeProps, buildExpressionContext, resolveExpressionValue } from "./composables/use-node-props.js";
-import { useNodeInteraction } from "./composables/use-node-interaction.js";
-import { useNodeDrop } from "./composables/use-node-drop";
-import { usePreview } from "./composables/use-preview.js";
-import { useNodeResize } from "./composables/use-node-resize.js";
-import { useNodePointer } from "./composables/use-node-pointer.js";
-import { useBuildRefInfo } from "./composables/use-build-ref-info.js";
+import { componentRegistry, createSelectableElement } from "@/editor-core";
+import { normalizeEventDefinitions } from "@/editor-core/registry/component-events";
+import { datacenterApi } from "@/services";
+import { useEditorStore } from "@/stores/editor-store";
+import EChart from "./components/EChart.vue";
+import { useBuildRefInfo } from "./composables/use-build-ref-info";
 import {
-  useNodeRendererDerivations,
+  clearDropTarget,
+  endDrag,
+  startDrag,
+  updateDropTarget,
+  useDragState,
+} from "./composables/use-drag-state";
+import { useNodeContent } from "./composables/use-node-content";
+import { useNodeDrop } from "./composables/use-node-drop";
+import { useNodeInteraction } from "./composables/use-node-interaction";
+import { useNodePointer } from "./composables/use-node-pointer";
+import {
+  buildExpressionContext,
+  resolveExpressionValue,
+  useNodeProps,
+} from "./composables/use-node-props";
+import {
   createApplyMenuDslConfig,
   resolveMenuConfigFromContent,
+  useNodeRendererDerivations,
 } from "./composables/use-node-renderer-derivations";
-import { useNodeRendererTypeFlags } from "./composables/use-node-renderer-type-flags.js";
-import EChart from "./components/EChart.vue";
-import {
-  useDragState,
-  startDrag,
-  endDrag,
-  updateDropTarget,
-  clearDropTarget,
-} from "./composables/use-drag-state";
+import { useNodeRendererPreviewRef } from "./composables/use-node-renderer-preview-ref";
+import { useNodeRendererTypeFlags } from "./composables/use-node-renderer-type-flags";
+import { useNodeResize } from "./composables/use-node-resize";
+import { createNodeStyleHelpers } from "./composables/use-node-style";
+import { usePreview } from "./composables/use-preview";
+import { canvasZoomKey } from "./injection-keys";
+import { createDragDropManager } from "./services/DragDropManager";
 
 const props = defineProps({
   nodeId: {
@@ -299,9 +100,9 @@ let applyMenuDslConfig = () => {};
 // nodeRef 和 contentRef 需要先声明，因为会被 useNodeInteraction 等 composable 使用
 const nodeRef = ref(null);
 const contentRef = ref(null);
-const setNodeRef = (el) => {
+function setNodeRef(el) {
   nodeRef.value = el?.$el || el;
-};
+}
 
 /**
  * 处理节点选中（Shift/Meta/Ctrl 多选）
@@ -340,10 +141,7 @@ const previewRuntime = usePreview({
   resolveMenuConfigFromContent,
   applyMenuDslConfig: (config) => applyMenuDslConfig(config),
 });
-const {
-  runPreviewScript,
-  isRunningDetailConfig: isRunningDetailConfigFn,
-} = previewRuntime;
+const { runPreviewScript, isRunningDetailConfig: isRunningDetailConfigFn } = previewRuntime;
 
 // 使用 useNodeInteraction composable
 const nodeInteraction = useNodeInteraction({
@@ -374,18 +172,12 @@ const {
   isContainer: isContainerFromComposable,
   isRegionContainer: isRegionContainerFromComposable,
 } = nodeInteraction;
-const canvasZoom = inject("canvasZoom", ref(1));
+const canvasZoom = inject(canvasZoomKey, ref(1));
 const dragState = useDragState();
-const previewPageId = computed(
-  () => currentPage.value?.name || currentPage.value?.id || "",
-);
-let registerTimer = null;
-let registerAttempts = 0;
-const maxRegisterAttempts = 10;
-const notifyInsertFailure = (fallbackMessage) => {
+function notifyInsertFailure(fallbackMessage) {
   const message = error.value || fallbackMessage || "插入失败：当前不可编辑";
   ElMessage.warning(message);
-};
+}
 
 // 使用 useNodeProps composable（不传 activeTabName，避免循环依赖）
 const nodeProps = useNodeProps({
@@ -396,7 +188,11 @@ const nodeProps = useNodeProps({
   docVersion,
   readonly: computed(() => props.readonly),
 });
-const { resolvedNodeProps, resolvedProps: resolvedPropsBase, filteredProps: filteredPropsFromComposable } = nodeProps;
+const {
+  resolvedNodeProps,
+  resolvedProps: resolvedPropsBase,
+  filteredProps: filteredPropsFromComposable,
+} = nodeProps;
 
 // 使用 useNodeContent composable（传入 resolvedNodeProps）
 const nodeContent = useNodeContent({ node, resolvedNodeProps, docVersion });
@@ -424,6 +220,13 @@ const { buildRefInfo: buildRefInfoImpl, applyPreviewPatch } = useBuildRefInfo({
   isRunningDetailConfigFn,
 });
 buildRefInfo = buildRefInfoImpl;
+
+useNodeRendererPreviewRef({
+  readonly: computed(() => props.readonly),
+  node,
+  currentPage,
+  buildRefInfo: () => buildRefInfo?.(),
+});
 
 applyMenuDslConfig = createApplyMenuDslConfig({
   node,
@@ -549,12 +352,10 @@ const tabHeaderWidth = ref(0);
 /**
  * 同步 Tabs 头部宽度（用于左右布局）
  */
-const syncTabsHeaderWidth = () => {
+function syncTabsHeaderWidth() {
   if (!node.value || !isTabsType.value) return;
   const tabPosition =
-    resolvedNodeProps.value?.tabPosition ||
-    node.value?.props?.tabPosition ||
-    "top";
+    resolvedNodeProps.value?.tabPosition || node.value?.props?.tabPosition || "top";
   if (tabPosition !== "left" && tabPosition !== "right") return;
   const rootEl = nodeRef.value;
   if (!rootEl) return;
@@ -574,14 +375,10 @@ const syncTabsHeaderWidth = () => {
     tabHeaderWidth.value = nextWidth;
   }
   rootEl.style.setProperty("--tabs-vertical-width", `${nextWidth}px`);
-};
+}
 
 watch(
-  () => [
-    node.value?.type,
-    resolvedNodeProps.value?.tabPosition,
-    tabsList.value?.length,
-  ],
+  () => [node.value?.type, resolvedNodeProps.value?.tabPosition, tabsList.value?.length],
   async () => {
     await nextTick();
     syncTabsHeaderWidth();
@@ -593,44 +390,39 @@ watch(
  * 处理 Tabs 点击事件
  * @param {Object} pane - Tab 面板
  */
-const handleTabsClick = (pane) => {
+function handleTabsClick(pane) {
   if (!pane) return;
-  const name =
-    pane?.props?.name ?? pane?.name ?? pane?.paneName ?? pane?.label ?? "";
+  const name = pane?.props?.name ?? pane?.name ?? pane?.paneName ?? pane?.label ?? "";
   if (name) {
     activeTabName.value = String(name);
   }
-};
+}
 
 /**
  * 处理 Tabs 切换事件
  * @param {string} name - 激活名称
  */
-const handleTabsChange = (name) => {
+function handleTabsChange(name) {
   if (!name) return;
   activeTabName.value = String(name);
-};
+}
 
 /**
  * 处理 Tabs 删除事件
  * @param {string} name - Tab 名称
  */
-const resolveTabNameValue = (input) => {
+function resolveTabNameValue(input) {
   if (input && typeof input === "object") {
-    return (
-      input?.props?.name ?? input?.name ?? input?.paneName ?? input?.label ?? ""
-    );
+    return input?.props?.name ?? input?.name ?? input?.paneName ?? input?.label ?? "";
   }
   return input ?? "";
-};
+}
 
-const handleTabsRemove = (name) => {
+function handleTabsRemove(name) {
   if (!isTabsType.value) return;
   const resolvedName = resolveTabNameValue(name);
   if (!resolvedName) return;
-  const tabs = Array.isArray(node.value?.props?.tabs)
-    ? [...node.value.props.tabs]
-    : [];
+  const tabs = Array.isArray(node.value?.props?.tabs) ? [...node.value.props.tabs] : [];
   if (!tabs.length) return;
   const normalizedName = String(resolvedName);
   const updateTabsProps = (patch) => {
@@ -657,9 +449,7 @@ const handleTabsRemove = (name) => {
   tabs.splice(targetIndex, 1);
   updateTabsProps({ tabs });
 
-  const childIds = Array.isArray(node.value?.children)
-    ? [...node.value.children]
-    : [];
+  const childIds = Array.isArray(node.value?.children) ? [...node.value.children] : [];
   childIds.forEach((childId) => {
     const childNode = doc.value?.getNode?.(childId);
     if (!childNode) return;
@@ -672,22 +462,22 @@ const handleTabsRemove = (name) => {
   const nextTab = tabs[targetIndex] || tabs[targetIndex - 1] || tabs[0] || null;
   const nextName = nextTab?.name ?? nextTab?.label ?? "";
   updateTabsProps({ activeName: nextName ? String(nextName) : "" });
-};
+}
 
 /**
  * 处理 Tabs 编辑事件
  * @param {string} name - Tab 名称
  * @param {string} action - edit 动作
  */
-const handleTabsEdit = (name, action) => {
+function handleTabsEdit(name, action) {
   if (action !== "remove") return;
   handleTabsRemove(name);
-};
-const isActiveTab = (tab) => {
+}
+function isActiveTab(tab) {
   if (!tab) return false;
   const name = tab.name ?? tab.label ?? "";
   return String(name) === activeTabName.value;
-};
+}
 
 const isContainer = isContainerFromComposable;
 
@@ -698,7 +488,11 @@ const isNodeVisible = computed(() => {
   const visibleConfig = node.value.conditions?.visible;
   if (typeof visibleConfig === "boolean") return visibleConfig;
   if (typeof visibleConfig !== "string" || !visibleConfig.trim()) return true;
-  const context = buildExpressionContext(resolvedNodeProps.value || {}, { doc, currentPage, projectVariables });
+  const context = buildExpressionContext(resolvedNodeProps.value || {}, {
+    doc,
+    currentPage,
+    projectVariables,
+  });
   const value = resolveExpressionValue(visibleConfig, context, true);
   return Boolean(value);
 });
@@ -754,7 +548,6 @@ const showResizeHandles = computed(() => {
   return Boolean(selection.value?.isSelected?.(node.value?.id));
 });
 
-
 const isRegionContainer = isRegionContainerFromComposable;
 
 const {
@@ -802,13 +595,13 @@ const displayContent = computed(() => {
   docVersion.value;
   if (!node.value) return null;
   const resolvedPropsValue = resolvedNodeProps.value || {};
-  
+
   // 优先从 descriptor 读取（新架构组件）
   const descriptorContent = getDisplayContent(node.value.type, node.value, resolvedPropsValue);
   if (descriptorContent !== null) {
     return descriptorContent;
   }
-  
+
   // 向后兼容：未注册 displayContent 的组件返回 null（不再有 fallback 硬编码）
   return null;
 });
@@ -855,16 +648,11 @@ const styleConfigText = computed(() => {
   docVersion.value;
   return String(node.value?.styleConfig || "").trim();
 });
-const hasStyleConfigSelector = computed(() =>
-  styleConfigText.value.includes("{"),
-);
-const hasDomIdSelector = computed(() =>
-  styleConfigText.value.includes("#domId"),
-);
+const hasStyleConfigSelector = computed(() => styleConfigText.value.includes("{"));
+const hasDomIdSelector = computed(() => styleConfigText.value.includes("#domId"));
 const nodeDomId = computed(() => {
   if (!node.value) return "";
-  const customId =
-    typeof node.value.props?.id === "string" ? node.value.props.id.trim() : "";
+  const customId = typeof node.value.props?.id === "string" ? node.value.props.id.trim() : "";
   if (customId) return customId;
   if (!node.value.id) return "";
   return `dom-${node.value.id}`;
@@ -941,14 +729,14 @@ const resolvedInlineStyleConfigObject = computed(() => {
  * @param {string} scope - 作用域选择器
  * @returns {string}
  */
-const prefixSelectors = (selectorText, scope) => {
+function prefixSelectors(selectorText, scope) {
   return selectorText
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean)
     .map((item) => (item.startsWith(scope) ? item : `${scope} ${item}`))
     .join(", ");
-};
+}
 
 /**
  * 查找匹配的右花括号
@@ -956,7 +744,7 @@ const prefixSelectors = (selectorText, scope) => {
  * @param {number} startIndex - 起始索引
  * @returns {number}
  */
-const findMatchingBrace = (text, startIndex) => {
+function findMatchingBrace(text, startIndex) {
   let depth = 0;
   for (let i = startIndex; i < text.length; i += 1) {
     const ch = text[i];
@@ -967,7 +755,7 @@ const findMatchingBrace = (text, startIndex) => {
     }
   }
   return -1;
-};
+}
 
 /**
  * 构建带作用域的样式规则
@@ -975,7 +763,7 @@ const findMatchingBrace = (text, startIndex) => {
  * @param {string} scope - 作用域选择器
  * @returns {string}
  */
-const buildScopedCss = (cssText, scope) => {
+function buildScopedCss(cssText, scope) {
   if (!cssText) return "";
   if (!cssText.includes("{")) {
     return `${scope} { ${cssText} }`;
@@ -1004,7 +792,7 @@ const buildScopedCss = (cssText, scope) => {
   }
 
   return result;
-};
+}
 
 const styleConfigCss = computed(() => {
   if (!node.value?.id || !hasStyleConfigSelector.value) return "";
@@ -1016,10 +804,7 @@ const styleConfigCss = computed(() => {
 });
 
 // 使用 use-node-style composable 创建样式注入生命周期
-const { styleElementRef } = nodeStyleHelpers.createStyleElementSync(
-  node,
-  styleConfigCss,
-);
+const { styleElementRef } = nodeStyleHelpers.createStyleElementSync(node, styleConfigCss);
 
 /**
  * 外层样式（处理组件包装模式）
@@ -1060,15 +845,13 @@ const modelValueTypes = new Set([
   "Rate",
   "ColorPicker",
 ]);
-const supportsModelValue = computed(() =>
-  modelValueTypes.has(node.value?.type),
-);
+const supportsModelValue = computed(() => modelValueTypes.has(node.value?.type));
 
 /**
  * 更新组件的 modelValue
  * @param {any} value - 新值
  */
-const handleModelValueUpdate = (value) => {
+function handleModelValueUpdate(value) {
   if (!node.value) return;
   if (props.readonly) {
     applyPreviewPatch({ props: { modelValue: value } });
@@ -1077,7 +860,7 @@ const handleModelValueUpdate = (value) => {
   editorStore.updateNode(node.value.id, {
     props: { ...(node.value.props || {}), modelValue: value },
   });
-};
+}
 
 const componentEventListeners = computed(() => {
   if (!node.value) return {};
@@ -1120,107 +903,311 @@ const mergedEventListeners = computed(() => {
   return { ...componentEventListeners.value, ...designEventListeners.value };
 });
 
-const tryRegisterPreviewRef = (pageIdValue) => {
-  if (!props.readonly || !node.value?.label) return false;
-  const runtime = getPreviewRuntime();
-  if (!runtime?.registerComponentRef) return false;
-  if (!pageIdValue) return false;
-  const refInfo = buildRefInfo();
-  if (!refInfo) return false;
-  runtime.registerComponentRef(pageIdValue, node.value.label, refInfo);
-  const pageId = currentPage.value?.id;
-  const pageName = currentPage.value?.name;
-  if (pageId && pageId !== pageIdValue) {
-    runtime.registerComponentRef(pageId, node.value.label, refInfo);
-  }
-  if (pageName && pageName !== pageIdValue) {
-    runtime.registerComponentRef(pageName, node.value.label, refInfo);
-  }
-  return true;
-};
-
-const scheduleRegisterPreviewRef = (pageIdValue) => {
-  if (tryRegisterPreviewRef(pageIdValue)) return;
-  if (registerAttempts >= maxRegisterAttempts) return;
-  registerAttempts += 1;
-  if (registerTimer) clearTimeout(registerTimer);
-  registerTimer = setTimeout(() => {
-    scheduleRegisterPreviewRef(pageIdValue);
-  }, 120);
-};
-
-const unregisterPreviewRef = (label, pageIdValue = previewPageId.value) => {
-  if (!props.readonly || !label) return;
-  const runtime = getPreviewRuntime();
-  if (!runtime?.unregisterComponentRef) return;
-  if (!pageIdValue) return;
-  const refInfo = buildRefInfo();
-  runtime.unregisterComponentRef(pageIdValue, label, refInfo);
-  const pageId = currentPage.value?.id;
-  const pageName = currentPage.value?.name;
-  if (pageId && pageId !== pageIdValue) {
-    runtime.unregisterComponentRef(pageId, label, refInfo);
-  }
-  if (pageName && pageName !== pageIdValue) {
-    runtime.unregisterComponentRef(pageName, label, refInfo);
-  }
-};
-
-watch(
-  () => node.value?.label,
-  (next, prev) => {
-    if (!props.readonly) return;
-    if (prev && prev !== next) {
-      unregisterPreviewRef(prev);
-    }
-    if (next) {
-      registerAttempts = 0;
-      scheduleRegisterPreviewRef(previewPageId.value);
-    }
-  },
-);
-
-watch(
-  () => previewPageId.value,
-  (next, prev) => {
-    if (!props.readonly) return;
-    if (prev && node.value?.label) {
-      unregisterPreviewRef(node.value.label, prev);
-    }
-    if (next && node.value?.label) {
-      registerAttempts = 0;
-      scheduleRegisterPreviewRef(next);
-    }
-  },
-);
-
-onMounted(() => {
-  registerAttempts = 0;
-  scheduleRegisterPreviewRef(previewPageId.value);
-});
-
-onBeforeUnmount(() => {
-  if (registerTimer) {
-    clearTimeout(registerTimer);
-    registerTimer = null;
-  }
-  if (node.value?.label) unregisterPreviewRef(node.value.label);
-});
-
-
 /**
  * 处理拖拽离开
  */
-const handleDragLeave = () => {
+function handleDragLeave() {
   if (props.readonly) return;
   isDragOver.value = false;
   showInsertLine.value = false;
   insertLineStyle.value = null;
   rowInsertInfo.value = null;
   layoutInsertInfo.value = null;
-};
-
+}
 </script>
+
+<template>
+  <component
+    :is="outerTag"
+    v-if="node && isNodeVisible"
+    :id="useComponentWrapper ? nodeDomId : null"
+    :ref="setNodeRef"
+    :class="nodeClass"
+    :style="outerStyle"
+    :data-node-id="node.id"
+    :data-node-type="node.type"
+    v-bind="useComponentWrapper ? filteredProps : {}"
+    v-on="useComponentWrapper ? mergedEventListeners : {}"
+    @click.stop="handleClick"
+    @dblclick.stop="handleDoubleClick"
+    @pointerdown.capture="handlePointerDown"
+    @dragover.prevent="handleDragOver"
+    @dragstart.prevent
+    @dragleave="handleDragLeave"
+    @drop.prevent="handleDrop"
+    @contextmenu.prevent="handleContextMenu"
+  >
+    <component
+      :is="renderTag"
+      v-if="!useComponentWrapper"
+      :id="!useComponentWrapper ? nodeDomId : null"
+      :key="renderKey"
+      v-bind="filteredProps"
+      ref="contentRef"
+      :style="contentStyleWithConfig"
+      v-on="mergedEventListeners"
+    >
+      <template v-if="displayContent !== null">{{ displayContent }}</template>
+      <component
+        :is="customRendererComponent"
+        v-else-if="customRendererComponent"
+        :node="node"
+        :resolved-props="resolvedNodeProps"
+      />
+      <template v-if="isSelectType">
+        <el-option
+          v-for="option in selectOptions"
+          :key="option.value ?? option.label"
+          :label="option.label"
+          :value="option.value"
+        />
+      </template>
+      <template v-if="isRadioType">
+        <el-radio
+          v-for="option in radioOptions"
+          v-show="option.visible !== false"
+          :key="option.value ?? option.label"
+          :label="option.value"
+          :disabled="Boolean(option.disabled)"
+        >
+          {{ option.label }}
+        </el-radio>
+      </template>
+      <template v-if="isCheckboxType">
+        <el-checkbox
+          v-for="option in checkboxOptions"
+          v-show="option.visible !== false"
+          :key="option.value ?? option.label"
+          :label="option.value"
+          :disabled="Boolean(option.disabled)"
+        >
+          {{ option.label }}
+        </el-checkbox>
+      </template>
+      <template v-if="isTableType">
+        <el-table-column
+          v-for="column in tableColumns"
+          :key="column.prop ?? column.label"
+          v-bind="column"
+        />
+      </template>
+      <template v-if="isBigDataTableType">
+        <el-table-column
+          v-for="column in bigTableColumns"
+          :key="column.prop ?? column.label"
+          v-bind="column"
+        />
+      </template>
+      <template v-if="isMenuType">
+        <el-menu-item
+          v-for="item in menuItems"
+          :key="item.index ?? item.label"
+          :index="item.index ?? item.label"
+          :disabled="Boolean(item.disabled)"
+        >
+          <el-icon v-if="item.iconComponent" class="menu-item-icon">
+            <component :is="item.iconComponent" />
+          </el-icon>
+          {{ item.label }}
+        </el-menu-item>
+      </template>
+      <template v-if="isTimelineType">
+        <el-timeline-item
+          v-for="item in timelineItems"
+          :key="item.timestamp ?? item.label"
+          :timestamp="item.timestamp"
+        >
+          {{ item.label }}
+        </el-timeline-item>
+      </template>
+      <template v-if="isTabsType">
+        <el-tab-pane
+          v-for="tab in tabsList"
+          :key="tab.name ?? tab.label"
+          :label="tab.label"
+          :name="tab.name"
+        >
+          <div
+            class="tabs-pane-body"
+            :class="{ 'is-drop-active': isDropActive }"
+            :data-node-id="node.id"
+            :data-node-type="node.type"
+            @dragover.prevent="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop.prevent="handleDrop"
+          >
+            <template v-if="isActiveTab(tab)">
+              <template v-if="isContainer && activeTabChildIds.length === 0 && !props.isRoot">
+                <div class="empty-container-hint">
+                  <span v-if="isDropActive">释放以添加组件</span>
+                  <span v-else>拖拽组件到此处</span>
+                </div>
+              </template>
+              <span
+                v-if="activeTabChildIds.length === 0 && tab.content"
+                class="tabs-pane-placeholder"
+              >
+                {{ tab.content }}
+              </span>
+              <NodeRenderer
+                v-for="childId in activeTabChildIds"
+                :key="childId"
+                :node-id="childId"
+                :readonly="props.readonly"
+              />
+            </template>
+            <template v-else>
+              <span class="tabs-pane-placeholder">
+                {{ tab.content }}
+              </span>
+            </template>
+          </div>
+        </el-tab-pane>
+      </template>
+      <template v-if="isCollapseType">
+        <el-collapse-item
+          v-for="item in collapseItems"
+          :key="item.name ?? item.title"
+          :name="item.name"
+          :title="item.title"
+        >
+          {{ item.content }}
+        </el-collapse-item>
+      </template>
+      <template v-if="isStepsType">
+        <el-step
+          v-for="item in stepsItems"
+          :key="item.title"
+          :title="item.title"
+          :description="item.description"
+        />
+      </template>
+      <template v-if="isCarouselSlotType">
+        <el-carousel-item v-for="item in carouselItems" :key="item.label">
+          <div class="carousel-item-placeholder">{{ item.label }}</div>
+        </el-carousel-item>
+      </template>
+      <template v-if="isDropdownType" #default>
+        <el-button size="small" type="primary">{{ dropdownLabel }}</el-button>
+      </template>
+      <template v-if="isDropdownType" #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item
+            v-for="item in dropdownItems"
+            :key="item.value ?? item.label"
+            :command="item.value"
+            :disabled="Boolean(item.disabled)"
+            :divided="Boolean(item.divided ?? item.diveded)"
+            :icon="item.icon"
+          >
+            {{ item.label }}
+          </el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+      <template
+        v-if="
+          isContainer && !hasChildren && !props.isRoot && !isTabsType && !suppressReadonlyEmptyHint
+        "
+      >
+        <div class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
+          <span v-if="isDropActive">释放以添加组件</span>
+          <span v-else>{{ isRegionContainer ? regionHintText : "拖拽组件到此处" }}</span>
+        </div>
+      </template>
+      <!-- 插入线指示器 -->
+      <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
+        <div
+          class="insert-line"
+          :class="insertLineStyle.orientation"
+          :style="{
+            left:
+              insertLineStyle.orientation === 'vertical'
+                ? `${insertLineBox?.left + insertLineStyle.offset}px`
+                : `${insertLineBox?.left}px`,
+            top:
+              insertLineStyle.orientation === 'horizontal'
+                ? `${insertLineBox?.top + insertLineStyle.offset}px`
+                : `${insertLineBox?.top}px`,
+            width: insertLineStyle.orientation === 'vertical' ? '2px' : `${insertLineBox?.width}px`,
+            height:
+              insertLineStyle.orientation === 'horizontal' ? '2px' : `${insertLineBox?.height}px`,
+          }"
+        />
+      </teleport>
+      <div
+        v-else-if="showInsertLine && insertLineStyle"
+        class="insert-line"
+        :class="insertLineStyle.orientation"
+        :style="{
+          [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
+            `${insertLineStyle.offset}px`,
+        }"
+      />
+      <NodeRenderer
+        v-for="childId in node.children || []"
+        v-if="!isTabsType"
+        :key="childId"
+        :node-id="childId"
+        :readonly="props.readonly"
+      />
+    </component>
+    <template v-if="useComponentWrapper">
+      <div
+        v-if="isContainer && !hasChildren && !props.isRoot && !suppressReadonlyEmptyHint"
+        class="empty-container-hint"
+        :class="{ 'is-region-hint': isRegionContainer }"
+      >
+        <span v-if="isDropActive">释放以添加组件</span>
+        <span v-else>{{ isRegionContainer ? regionHintText : "拖拽组件到此处" }}</span>
+      </div>
+      <!-- 插入线指示器 -->
+      <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
+        <div
+          class="insert-line"
+          :class="insertLineStyle.orientation"
+          :style="{
+            left:
+              insertLineStyle.orientation === 'vertical'
+                ? `${insertLineBox?.left + insertLineStyle.offset}px`
+                : `${insertLineBox?.left}px`,
+            top:
+              insertLineStyle.orientation === 'horizontal'
+                ? `${insertLineBox?.top + insertLineStyle.offset}px`
+                : `${insertLineBox?.top}px`,
+            width: insertLineStyle.orientation === 'vertical' ? '2px' : `${insertLineBox?.width}px`,
+            height:
+              insertLineStyle.orientation === 'horizontal' ? '2px' : `${insertLineBox?.height}px`,
+          }"
+        />
+      </teleport>
+      <div
+        v-else-if="showInsertLine && insertLineStyle"
+        class="insert-line"
+        :class="insertLineStyle.orientation"
+        :style="{
+          [insertLineStyle.orientation === 'horizontal' ? 'top' : 'left']:
+            `${insertLineStyle.offset}px`,
+        }"
+      />
+      <NodeRenderer
+        v-for="childId in node.children || []"
+        :key="childId"
+        :node-id="childId"
+        :readonly="props.readonly"
+      />
+    </template>
+    <div v-if="showResizeHandles" class="resize-handles">
+      <span
+        v-for="handle in visibleResizeHandles"
+        :key="handle.key"
+        class="resize-handle"
+        :class="handle.key"
+        :style="{ cursor: handle.cursor }"
+        @pointerdown.stop="(event) => handleResizePointerDown(event, handle)"
+      />
+    </div>
+  </component>
+</template>
 
 <style scoped>
 .designer-node {
@@ -1502,17 +1489,17 @@ const handleDragLeave = () => {
   background-color: rgba(59, 130, 246, 0.05);
 }
 
-.designer-node.layout-container-visible:not(.is-preview)>div {
+.designer-node.layout-container-visible:not(.is-preview) > div {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   min-height: 60px;
 }
 
-.designer-node.layout-container-visible:not(.is-preview):hover>div {
+.designer-node.layout-container-visible:not(.is-preview):hover > div {
   border-color: #a0a8b4;
 }
 
-.designer-node.layout-container-visible.is-selected>div {
+.designer-node.layout-container-visible.is-selected > div {
   border-color: #409eff;
 }
 

@@ -2,20 +2,6 @@
   BackgroundEditor - 背景样式编辑器
   编辑背景颜色（含透明度）
 -->
-<template>
-  <div class="background-editor">
-    <div class="editor-group-title">背景</div>
-    <div class="form-item">
-      <label>背景颜色</label>
-      <FriendlyColorPicker
-        :model-value="backgroundColor"
-        :show-alpha="true"
-        @update:modelValue="handleColorChange"
-      />
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { computed } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
@@ -31,10 +17,24 @@ const emit = defineEmits(["update:modelValue"]);
 
 const backgroundColor = computed(() => props.modelValue.background || "");
 
-const handleColorChange = (value) => {
+function handleColorChange(value) {
   emit("update:modelValue", { ...props.modelValue, background: value });
-};
+}
 </script>
+
+<template>
+  <div class="background-editor">
+    <div class="editor-group-title">背景</div>
+    <div class="form-item">
+      <label>背景颜色</label>
+      <FriendlyColorPicker
+        :model-value="backgroundColor"
+        :show-alpha="true"
+        @update:model-value="handleColorChange"
+      />
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .background-editor {

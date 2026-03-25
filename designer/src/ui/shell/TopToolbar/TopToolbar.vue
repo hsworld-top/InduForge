@@ -1,311 +1,9 @@
-<template>
-  <header class="designer-toolbar toolbar-v2">
-    <div class="toolbar-section toolbar-left">
-      <div class="page-chip">
-        <span class="page-chip__label">页面：</span>
-        <span class="page-chip__name">{{ pageName || "未命名" }}</span>
-        <span v-if="isDirty" class="page-chip__dirty">●</span>
-      </div>
-      <el-tooltip
-        :content="isLocked ? '释放页面锁' : '获取页面锁'"
-        placement="bottom"
-      >
-        <el-button class="icon-btn" @click="handleToggleLock">
-          <IconLucideLock v-if="isLocked" />
-          <IconLucideLockOpen v-else />
-        </el-button>
-      </el-tooltip>
-    </div>
-
-    <div class="toolbar-section toolbar-center">
-      <div class="toolbar-center-shell">
-        <div class="toolbar-group toolbar-group--clipboard">
-          <el-tooltip content="复制 (Ctrl+C)" placement="bottom">
-            <el-button
-              class="icon-btn"
-              :disabled="!hasSelection"
-              @click="handleCopy"
-            >
-              <IconLucideCopy />
-            </el-button>
-          </el-tooltip>
-          <el-tooltip content="粘贴 (Ctrl+V)" placement="bottom">
-            <el-button
-              class="icon-btn"
-              :disabled="!hasClipboard"
-              @click="handlePaste"
-            >
-              <IconLucideClipboardPaste />
-            </el-button>
-          </el-tooltip>
-          <el-tooltip content="删除 (Del)" placement="bottom">
-            <el-button
-              class="icon-btn"
-              :disabled="!hasSelection"
-              @click="handleDeleteSelected"
-            >
-              <IconLucideTrash />
-            </el-button>
-          </el-tooltip>
-        </div>
-        <div class="toolbar-group toolbar-group--canvas toolbar-center-left">
-          <el-popover
-            trigger="click"
-            placement="bottom"
-            popper-class="designer-size-popper"
-            :width="272"
-          >
-            <template #reference>
-              <el-button class="view-btn view-btn--selector">
-                <span class="view-selector__size">{{
-                  currentCanvasSizeText
-                }}</span>
-              </el-button>
-            </template>
-            <div class="size-panel">
-              <div class="size-panel__section">
-                <div class="size-panel__title">预设尺寸</div>
-                <div class="size-preset-list">
-                  <button
-                    v-for="item in viewItems"
-                    :key="item.key"
-                    type="button"
-                    class="size-preset-item"
-                    :class="{
-                      'is-active': item.key === activeViewKey && !isCustomView,
-                    }"
-                    @click="handleViewChange(item.key)"
-                  >
-                    <span class="size-preset-item__label">{{
-                      item.label
-                    }}</span>
-                    <span class="size-preset-item__meta"
-                      >{{ item.width }} x {{ item.height }}</span
-                    >
-                  </button>
-                </div>
-              </div>
-              <div class="size-panel__section size-panel__section--custom">
-                <div class="size-panel__title">自定义尺寸</div>
-                <div class="custom-size-grid">
-                  <label class="custom-size-field">
-                    <span class="custom-size-field__label">宽度</span>
-                    <el-input-number
-                      v-model="localCustomSize.width"
-                      :min="120"
-                      :max="7680"
-                      :step="10"
-                      controls-position="right"
-                    />
-                  </label>
-                  <label class="custom-size-field">
-                    <span class="custom-size-field__label">高度</span>
-                    <el-input-number
-                      v-model="localCustomSize.height"
-                      :min="120"
-                      :max="4320"
-                      :step="10"
-                      controls-position="right"
-                    />
-                  </label>
-                </div>
-                <el-button
-                  class="size-panel__submit"
-                  type="primary"
-                  @click="handleApplyCustomSize"
-                >
-                  应用自定义尺寸
-                </el-button>
-              </div>
-            </div>
-          </el-popover>
-          <div class="zoom-group">
-            <el-tooltip content="缩小" placement="bottom">
-              <el-button
-                class="icon-btn icon-btn--subtle"
-                @click="handleZoomOut"
-              >
-                <IconLucideZoomOut />
-              </el-button>
-            </el-tooltip>
-            <span class="zoom-pill">{{ Math.round(zoom * 100) }}%</span>
-            <el-tooltip content="放大" placement="bottom">
-              <el-button
-                class="icon-btn icon-btn--subtle"
-                @click="handleZoomIn"
-              >
-                <IconLucideZoomIn />
-              </el-button>
-            </el-tooltip>
-          </div>
-          <el-dropdown
-            trigger="click"
-            placement="bottom"
-            @command="handleViewMenuCommand"
-          >
-            <el-button class="view-btn">
-              <IconLucideSettings2 />
-              <span class="view-btn__text">视图</span>
-              <IconEpArrowDownBold class="caret-icon" />
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="resetZoom">
-                  重置缩放
-                </el-dropdown-item>
-                <el-dropdown-item command="toggleRuler">
-                  {{ showRuler ? "隐藏标尺" : "显示标尺" }}
-                </el-dropdown-item>
-                <el-dropdown-item command="toggleGrid">
-                  {{ showGrid ? "隐藏网格" : "显示网格" }}
-                </el-dropdown-item>
-                <el-dropdown-item command="toggleSnap">
-                  {{ enableSnap ? "关闭吸附" : "启用吸附" }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-
-        <div class="toolbar-group toolbar-group--edit toolbar-center-right">
-          <el-tooltip content="撤销" placement="bottom">
-            <el-button
-              class="icon-btn"
-              :disabled="!canUndo"
-              @click="handleUndo"
-            >
-              <IconLucideUndo2 />
-            </el-button>
-          </el-tooltip>
-          <el-tooltip content="恢复" placement="bottom">
-            <el-button
-              class="icon-btn"
-              :disabled="!canRedo"
-              @click="handleRedo"
-            >
-              <IconLucideRedo2 />
-            </el-button>
-          </el-tooltip>
-        </div>
-      </div>
-    </div>
-
-    <div class="toolbar-section toolbar-right">
-      <div class="toolbar-group toolbar-group--primary">
-        <span class="save-status" :class="saveStatusClass">{{
-          saveStatusText
-        }}</span>
-        <el-dropdown
-          class="preview-action"
-          trigger="click"
-          placement="bottom-end"
-          popper-class="preview-menu-popper"
-          split-button
-          @click="handlePreview"
-          @command="handlePreviewCommand"
-        >
-          <span class="split-action__text">
-            <IconLucidePlay />
-            <span>预览</span>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="pagePreview"
-                >页面预览</el-dropdown-item
-              >
-              <el-dropdown-item command="appPreview">应用预览</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-dropdown
-          ref="saveDropdownRef"
-          class="save-action"
-          trigger="click"
-          placement="bottom-end"
-          popper-class="save-settings-popper"
-          split-button
-          @click="handleSave"
-        >
-          <span class="split-action__text">
-            <IconLucideSave />
-            <span>保存</span>
-          </span>
-          <template #dropdown>
-            <div class="save-settings-panel" @click.stop>
-              <div class="save-settings-panel__title">保存设置</div>
-              <div
-                class="save-settings-panel__row save-settings-panel__row--check"
-              >
-                <el-checkbox v-model="localSaveSettings.autoSave" />
-                <span class="save-settings-panel__label">自动保存</span>
-              </div>
-              <div class="save-settings-panel__row">
-                <span class="save-settings-panel__label">保存间隔</span>
-                <el-select
-                  v-model="localSaveSettings.intervalMinutes"
-                  class="save-settings-panel__select"
-                  :disabled="!localSaveSettings.autoSave"
-                >
-                  <el-option
-                    v-for="item in saveIntervalOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </el-select>
-              </div>
-              <el-button
-                class="save-settings-panel__submit"
-                @click="handleSaveSettingsSubmit"
-              >
-                设置并保存
-              </el-button>
-            </div>
-          </template>
-        </el-dropdown>
-        <el-dropdown
-          trigger="click"
-          placement="bottom-end"
-          @command="handleMoreCommand"
-        >
-          <el-button class="icon-btn">
-            <IconLucideEllipsis />
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="openAi">
-                <IconLucideBot class="menu-icon" />
-                AI 助手
-              </el-dropdown-item>
-              <el-dropdown-item command="toggleTheme">
-                <IconLucideSun class="menu-icon" />
-                主题设置
-              </el-dropdown-item>
-              <el-dropdown-item command="export" divided>
-                <IconLucideDownload class="menu-icon" />
-                导出页面
-              </el-dropdown-item>
-              <el-dropdown-item command="clearCanvas">
-                <IconLucideTrash2 class="menu-icon" />
-                清除当前界面
-              </el-dropdown-item>
-              <el-dropdown-item command="collaboration"
-                >多人协作</el-dropdown-item
-              >
-              <el-dropdown-item command="refresh">刷新画布</el-dropdown-item>
-              <el-dropdown-item command="locale">中英文切换</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
-    </div>
-  </header>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { ElMessage } from "../el-message-compat";
+import IconEpArrowDownBold from "~icons/ep/arrow-down-bold";
 import IconLucideBot from "~icons/lucide/bot";
+import IconLucideClipboardPaste from "~icons/lucide/clipboard-paste";
+import IconLucideCopy from "~icons/lucide/copy";
 import IconLucideDownload from "~icons/lucide/download";
 import IconLucideEllipsis from "~icons/lucide/ellipsis";
 import IconLucideLock from "~icons/lucide/lock";
@@ -315,14 +13,12 @@ import IconLucideRedo2 from "~icons/lucide/redo-2";
 import IconLucideSave from "~icons/lucide/save";
 import IconLucideSettings2 from "~icons/lucide/settings-2";
 import IconLucideSun from "~icons/lucide/sun";
+import IconLucideTrash from "~icons/lucide/trash";
 import IconLucideTrash2 from "~icons/lucide/trash-2";
 import IconLucideUndo2 from "~icons/lucide/undo-2";
 import IconLucideZoomIn from "~icons/lucide/zoom-in";
 import IconLucideZoomOut from "~icons/lucide/zoom-out";
-import IconLucideCopy from "~icons/lucide/copy";
-import IconLucideClipboardPaste from "~icons/lucide/clipboard-paste";
-import IconLucideTrash from "~icons/lucide/trash";
-import IconEpArrowDownBold from "~icons/ep/arrow-down-bold";
+import { ElMessage } from "../el-message-compat";
 
 interface ToolbarSaveSettings {
   autoSave: boolean;
@@ -431,15 +127,11 @@ const viewItems = computed(() =>
 
 const currentViewLabel = computed(() => {
   if (props.isCustomView) return "自定义";
-  const preset = props.viewPresets.find(
-    (item) => item.key === props.activeViewKey,
-  );
+  const preset = props.viewPresets.find((item) => item.key === props.activeViewKey);
   return preset?.label || "尺寸";
 });
 
-const currentCanvasSizeText = computed(
-  () => `${Math.round(props.canvasWidth)}px`,
-);
+const currentCanvasSizeText = computed(() => `${Math.round(props.canvasWidth)}px`);
 
 const saveStatusText = computed(() => {
   if (props.isSaving) return "保存中...";
@@ -505,7 +197,7 @@ const handleCopy = () => emit("copy");
 const handlePaste = () => emit("paste");
 const handleDeleteSelected = () => emit("deleteSelected");
 
-const handlePreviewCommand = (command: string) => {
+function handlePreviewCommand(command: string) {
   if (command === "pagePreview") {
     emit("preview");
     return;
@@ -513,9 +205,9 @@ const handlePreviewCommand = (command: string) => {
   if (command === "appPreview") {
     emit("previewApp");
   }
-};
+}
 
-const handleViewMenuCommand = (command: string) => {
+function handleViewMenuCommand(command: string) {
   if (command === "resetZoom") {
     emit("fitScreen");
     return;
@@ -531,41 +223,29 @@ const handleViewMenuCommand = (command: string) => {
   if (command === "toggleSnap") {
     emit("toggleSnap");
   }
-};
+}
 
-const handleApplyCustomSize = () => {
+function handleApplyCustomSize() {
   const width = Math.round(Number(localCustomSize.value.width));
   const height = Math.round(Number(localCustomSize.value.height));
-  if (
-    !Number.isFinite(width) ||
-    width < MIN_CANVAS_WIDTH ||
-    width > MAX_CANVAS_WIDTH
-  ) {
-    ElMessage.warning(
-      `宽度需在 ${MIN_CANVAS_WIDTH}-${MAX_CANVAS_WIDTH}px 之间`,
-    );
+  if (!Number.isFinite(width) || width < MIN_CANVAS_WIDTH || width > MAX_CANVAS_WIDTH) {
+    ElMessage.warning(`宽度需在 ${MIN_CANVAS_WIDTH}-${MAX_CANVAS_WIDTH}px 之间`);
     return;
   }
-  if (
-    !Number.isFinite(height) ||
-    height < MIN_CANVAS_HEIGHT ||
-    height > MAX_CANVAS_HEIGHT
-  ) {
-    ElMessage.warning(
-      `高度需在 ${MIN_CANVAS_HEIGHT}-${MAX_CANVAS_HEIGHT}px 之间`,
-    );
+  if (!Number.isFinite(height) || height < MIN_CANVAS_HEIGHT || height > MAX_CANVAS_HEIGHT) {
+    ElMessage.warning(`高度需在 ${MIN_CANVAS_HEIGHT}-${MAX_CANVAS_HEIGHT}px 之间`);
     return;
   }
   emit("applyCustomSize", { width, height });
-};
+}
 
-const handleSaveSettingsSubmit = () => {
+function handleSaveSettingsSubmit() {
   emit("saveSettingsChange", { ...localSaveSettings.value });
   emit("save");
   saveDropdownRef.value?.handleClose?.();
-};
+}
 
-const handleMoreCommand = (command: string) => {
+function handleMoreCommand(command: string) {
   if (command === "openAi") {
     emit("openAi");
     return;
@@ -593,8 +273,252 @@ const handleMoreCommand = (command: string) => {
   if (command === "locale") {
     emit("toggleLocale");
   }
-};
+}
 </script>
+
+<template>
+  <header class="designer-toolbar toolbar-v2">
+    <div class="toolbar-section toolbar-left">
+      <div class="page-chip">
+        <span class="page-chip__label">页面：</span>
+        <span class="page-chip__name">{{ pageName || "未命名" }}</span>
+        <span v-if="isDirty" class="page-chip__dirty">●</span>
+      </div>
+      <el-tooltip :content="isLocked ? '释放页面锁' : '获取页面锁'" placement="bottom">
+        <el-button class="icon-btn" @click="handleToggleLock">
+          <IconLucideLock v-if="isLocked" />
+          <IconLucideLockOpen v-else />
+        </el-button>
+      </el-tooltip>
+    </div>
+
+    <div class="toolbar-section toolbar-center">
+      <div class="toolbar-center-shell">
+        <div class="toolbar-group toolbar-group--clipboard">
+          <el-tooltip content="复制 (Ctrl+C)" placement="bottom">
+            <el-button class="icon-btn" :disabled="!hasSelection" @click="handleCopy">
+              <IconLucideCopy />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="粘贴 (Ctrl+V)" placement="bottom">
+            <el-button class="icon-btn" :disabled="!hasClipboard" @click="handlePaste">
+              <IconLucideClipboardPaste />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="删除 (Del)" placement="bottom">
+            <el-button class="icon-btn" :disabled="!hasSelection" @click="handleDeleteSelected">
+              <IconLucideTrash />
+            </el-button>
+          </el-tooltip>
+        </div>
+        <div class="toolbar-group toolbar-group--canvas toolbar-center-left">
+          <el-popover
+            trigger="click"
+            placement="bottom"
+            popper-class="designer-size-popper"
+            :width="272"
+          >
+            <template #reference>
+              <el-button class="view-btn view-btn--selector">
+                <span class="view-selector__size">{{ currentCanvasSizeText }}</span>
+              </el-button>
+            </template>
+            <div class="size-panel">
+              <div class="size-panel__section">
+                <div class="size-panel__title">预设尺寸</div>
+                <div class="size-preset-list">
+                  <button
+                    v-for="item in viewItems"
+                    :key="item.key"
+                    type="button"
+                    class="size-preset-item"
+                    :class="{
+                      'is-active': item.key === activeViewKey && !isCustomView,
+                    }"
+                    @click="handleViewChange(item.key)"
+                  >
+                    <span class="size-preset-item__label">{{ item.label }}</span>
+                    <span class="size-preset-item__meta">{{ item.width }} x {{ item.height }}</span>
+                  </button>
+                </div>
+              </div>
+              <div class="size-panel__section size-panel__section--custom">
+                <div class="size-panel__title">自定义尺寸</div>
+                <div class="custom-size-grid">
+                  <label class="custom-size-field">
+                    <span class="custom-size-field__label">宽度</span>
+                    <el-input-number
+                      v-model="localCustomSize.width"
+                      :min="120"
+                      :max="7680"
+                      :step="10"
+                      controls-position="right"
+                    />
+                  </label>
+                  <label class="custom-size-field">
+                    <span class="custom-size-field__label">高度</span>
+                    <el-input-number
+                      v-model="localCustomSize.height"
+                      :min="120"
+                      :max="4320"
+                      :step="10"
+                      controls-position="right"
+                    />
+                  </label>
+                </div>
+                <el-button class="size-panel__submit" type="primary" @click="handleApplyCustomSize">
+                  应用自定义尺寸
+                </el-button>
+              </div>
+            </div>
+          </el-popover>
+          <div class="zoom-group">
+            <el-tooltip content="缩小" placement="bottom">
+              <el-button class="icon-btn icon-btn--subtle" @click="handleZoomOut">
+                <IconLucideZoomOut />
+              </el-button>
+            </el-tooltip>
+            <span class="zoom-pill">{{ Math.round(zoom * 100) }}%</span>
+            <el-tooltip content="放大" placement="bottom">
+              <el-button class="icon-btn icon-btn--subtle" @click="handleZoomIn">
+                <IconLucideZoomIn />
+              </el-button>
+            </el-tooltip>
+          </div>
+          <el-dropdown trigger="click" placement="bottom" @command="handleViewMenuCommand">
+            <el-button class="view-btn">
+              <IconLucideSettings2 />
+              <span class="view-btn__text">视图</span>
+              <IconEpArrowDownBold class="caret-icon" />
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="resetZoom"> 重置缩放 </el-dropdown-item>
+                <el-dropdown-item command="toggleRuler">
+                  {{ showRuler ? "隐藏标尺" : "显示标尺" }}
+                </el-dropdown-item>
+                <el-dropdown-item command="toggleGrid">
+                  {{ showGrid ? "隐藏网格" : "显示网格" }}
+                </el-dropdown-item>
+                <el-dropdown-item command="toggleSnap">
+                  {{ enableSnap ? "关闭吸附" : "启用吸附" }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+
+        <div class="toolbar-group toolbar-group--edit toolbar-center-right">
+          <el-tooltip content="撤销" placement="bottom">
+            <el-button class="icon-btn" :disabled="!canUndo" @click="handleUndo">
+              <IconLucideUndo2 />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="恢复" placement="bottom">
+            <el-button class="icon-btn" :disabled="!canRedo" @click="handleRedo">
+              <IconLucideRedo2 />
+            </el-button>
+          </el-tooltip>
+        </div>
+      </div>
+    </div>
+
+    <div class="toolbar-section toolbar-right">
+      <div class="toolbar-group toolbar-group--primary">
+        <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
+        <el-dropdown
+          class="preview-action"
+          trigger="click"
+          placement="bottom-end"
+          popper-class="preview-menu-popper"
+          split-button
+          @click="handlePreview"
+          @command="handlePreviewCommand"
+        >
+          <span class="split-action__text">
+            <IconLucidePlay />
+            <span>预览</span>
+          </span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="pagePreview">页面预览</el-dropdown-item>
+              <el-dropdown-item command="appPreview">应用预览</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-dropdown
+          ref="saveDropdownRef"
+          class="save-action"
+          trigger="click"
+          placement="bottom-end"
+          popper-class="save-settings-popper"
+          split-button
+          @click="handleSave"
+        >
+          <span class="split-action__text">
+            <IconLucideSave />
+            <span>保存</span>
+          </span>
+          <template #dropdown>
+            <div class="save-settings-panel" @click.stop>
+              <div class="save-settings-panel__title">保存设置</div>
+              <div class="save-settings-panel__row save-settings-panel__row--check">
+                <el-checkbox v-model="localSaveSettings.autoSave" />
+                <span class="save-settings-panel__label">自动保存</span>
+              </div>
+              <div class="save-settings-panel__row">
+                <span class="save-settings-panel__label">保存间隔</span>
+                <el-select
+                  v-model="localSaveSettings.intervalMinutes"
+                  class="save-settings-panel__select"
+                  :disabled="!localSaveSettings.autoSave"
+                >
+                  <el-option
+                    v-for="item in saveIntervalOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </div>
+              <el-button class="save-settings-panel__submit" @click="handleSaveSettingsSubmit">
+                设置并保存
+              </el-button>
+            </div>
+          </template>
+        </el-dropdown>
+        <el-dropdown trigger="click" placement="bottom-end" @command="handleMoreCommand">
+          <el-button class="icon-btn">
+            <IconLucideEllipsis />
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="openAi">
+                <IconLucideBot class="menu-icon" />
+                AI 助手
+              </el-dropdown-item>
+              <el-dropdown-item command="toggleTheme">
+                <IconLucideSun class="menu-icon" />
+                主题设置
+              </el-dropdown-item>
+              <el-dropdown-item command="export" divided>
+                <IconLucideDownload class="menu-icon" />
+                导出页面
+              </el-dropdown-item>
+              <el-dropdown-item command="clearCanvas">
+                <IconLucideTrash2 class="menu-icon" />
+                清除当前界面
+              </el-dropdown-item>
+              <el-dropdown-item command="collaboration">多人协作</el-dropdown-item>
+              <el-dropdown-item command="refresh">刷新画布</el-dropdown-item>
+              <el-dropdown-item command="locale">中英文切换</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+    </div>
+  </header>
+</template>
 
 <style scoped>
 .toolbar-v2 {
@@ -949,9 +873,7 @@ const handleMoreCommand = (command: string) => {
   border-bottom-left-radius: var(--designer-radius-lg);
 }
 
-:deep(
-  .preview-action .el-button-group > .el-dropdown__caret-button:last-child
-) {
+:deep(.preview-action .el-button-group > .el-dropdown__caret-button:last-child) {
   width: 28px;
   padding: 0;
   border-top-right-radius: var(--designer-radius-lg);
@@ -1088,9 +1010,7 @@ const handleMoreCommand = (command: string) => {
   color: var(--designer-text-regular);
 }
 
-:global(
-  .save-settings-popper .save-settings-panel__row--check .el-checkbox__inner
-) {
+:global(.save-settings-popper .save-settings-panel__row--check .el-checkbox__inner) {
   width: 16px;
   height: 16px;
   border-radius: 4px;

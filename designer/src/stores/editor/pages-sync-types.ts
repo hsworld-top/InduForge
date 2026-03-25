@@ -2,18 +2,18 @@
  * 工程页面列表与入口配置刷新 — 与 Pinia / API 对齐的共享类型
  */
 
-import type { EntryConfig } from "@/editor-core/document/types";
 import type { PageListEntry } from "./page-crud-actions";
+import type { EntryConfig } from "@/editor-core/document/types";
 
 /**
  * 列表接口返回的 entry 片段（Partial 内核字段 + 允许 API 扩展键）
  */
 export type EntryConfigFromApi = Partial<EntryConfig> & Record<string, unknown>;
 
-export type PagesRefreshResult = {
+export interface PagesRefreshResult {
   pages: PageListEntry[];
   entryConfig: EntryConfigFromApi;
-};
+}
 
 /**
  * 在 normalizePageList 之后做一次列表项形状校验，避免在各 consumer 重复断言

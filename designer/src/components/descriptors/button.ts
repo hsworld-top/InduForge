@@ -24,13 +24,11 @@ export const descriptor: ComponentDescriptor = {
   childResizable: true,
 
   /** 显示内容生成函数 */
-  displayContent: (node, resolvedProps) =>
-    String(resolvedProps?.["text"] ?? node?.label ?? "按钮"),
+  displayContent: (node, resolvedProps) => String(resolvedProps?.text ?? node?.label ?? "按钮"),
 
   /** 过滤/转换传给 renderTag 的 props */
   propsFilter: (resolvedProps) => {
-    const { text: _t, safetyControl: _sc, safetyDesc: _sd, ...elProps } =
-      resolvedProps ?? {};
+    const { text: _t, safetyControl: _sc, safetyDesc: _sd, ...elProps } = resolvedProps ?? {};
     return elProps;
   },
 

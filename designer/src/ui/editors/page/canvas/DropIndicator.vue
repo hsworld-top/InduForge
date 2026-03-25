@@ -2,34 +2,6 @@
   DropIndicator - 拖拽放置指示器
   根据 hint 显示：Flex 插入线、Grid 单元格高亮、Free 十字线
 -->
-<template>
-  <!-- Flex 容器：插入线 -->
-  <div
-    v-if="hint?.insertRule === 'before_after' && hint.visualHint"
-    class="insert-line"
-    :class="hint.visualHint.orientation"
-    :style="insertLineStyle"
-  />
-
-  <!-- Grid 容器：单元格高亮 -->
-  <div
-    v-if="hint?.insertRule === 'grid_cell' && hint.visualHint?.highlightRect"
-    class="grid-cell-highlight"
-    :style="gridCellStyle"
-  />
-
-  <!-- Free 容器：十字线 -->
-  <div
-    v-if="hint?.insertRule === 'absolute_position' && hint.visualHint"
-    class="crosshair"
-    :style="crosshairStyle"
-  >
-    <div class="crosshair-h" />
-    <div class="crosshair-v" />
-    <div class="crosshair-center" />
-  </div>
-</template>
-
 <script setup>
 import { computed } from "vue";
 
@@ -93,6 +65,34 @@ const crosshairStyle = computed(() => {
   };
 });
 </script>
+
+<template>
+  <!-- Flex 容器：插入线 -->
+  <div
+    v-if="hint?.insertRule === 'before_after' && hint.visualHint"
+    class="insert-line"
+    :class="hint.visualHint.orientation"
+    :style="insertLineStyle"
+  />
+
+  <!-- Grid 容器：单元格高亮 -->
+  <div
+    v-if="hint?.insertRule === 'grid_cell' && hint.visualHint?.highlightRect"
+    class="grid-cell-highlight"
+    :style="gridCellStyle"
+  />
+
+  <!-- Free 容器：十字线 -->
+  <div
+    v-if="hint?.insertRule === 'absolute_position' && hint.visualHint"
+    class="crosshair"
+    :style="crosshairStyle"
+  >
+    <div class="crosshair-h" />
+    <div class="crosshair-v" />
+    <div class="crosshair-center" />
+  </div>
+</template>
 
 <style scoped>
 /* Flex 容器：插入线 */

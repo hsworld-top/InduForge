@@ -102,12 +102,7 @@ const componentEventMap: Record<string, ComponentEventEntry[]> = {
     "node-drag-enter",
     "node-drag-over",
   ],
-  Transfer: [
-    "update:modelValue",
-    "change",
-    "left-check-change",
-    "right-check-change",
-  ],
+  Transfer: ["update:modelValue", "change", "left-check-change", "right-check-change"],
   Tag: ["close", "click"],
   Dropdown: ["visible-change", "click", "command"],
   Menu: ["select", "open", "close"],
@@ -123,14 +118,7 @@ const componentEventMap: Record<string, ComponentEventEntry[]> = {
     "expand-change",
     "remove-tag",
   ],
-  Tabs: [
-    "update:modelValue",
-    "tab-click",
-    "tab-change",
-    "tab-remove",
-    "tab-add",
-    "edit",
-  ],
+  Tabs: ["update:modelValue", "tab-click", "tab-change", "tab-remove", "tab-add", "edit"],
   Timeline: [],
   Image: ["load", "error", "switch", "close", "show"],
   ImageCarousel: ["change"],
@@ -187,11 +175,9 @@ function buildEventLabelMap(): Map<string, EventDefinition> {
 
 const eventLabelMap = buildEventLabelMap();
 
-export function getComponentEventDefinitions(
-  type: string | undefined,
-): ComponentEventEntry[] {
+export function getComponentEventDefinitions(type: string | undefined): ComponentEventEntry[] {
   if (!type) return defaultEventDefinitions;
-  if (Object.prototype.hasOwnProperty.call(componentEventMap, type)) {
+  if (Object.hasOwn(componentEventMap, type)) {
     return componentEventMap[type] ?? [];
   }
   return defaultEventDefinitions;

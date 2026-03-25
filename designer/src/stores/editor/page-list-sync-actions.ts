@@ -3,11 +3,12 @@
  */
 
 import type { Ref, ShallowRef } from "vue";
-import type { DocumentModel } from "@/editor-core/document/DocumentModel.ts";
-import { fetchNormalizedPageList, type PagesListApi } from "./project-page-actions";
-import { applyEntryPatchIfPresent } from "./entry-config-helpers";
-import type { EntryConfigFromApi, PagesRefreshResult } from "./pages-sync-types";
 import type { PageListEntry } from "./page-crud-actions";
+import type { EntryConfigFromApi, PagesRefreshResult } from "./pages-sync-types";
+import type { PagesListApi } from "./project-page-actions";
+import type { DocumentModel } from "@/editor-core/document/DocumentModel.ts";
+import { applyEntryPatchIfPresent } from "./entry-config-helpers";
+import { fetchNormalizedPageList } from "./project-page-actions";
 
 export async function refreshPagesForStore(input: {
   projectId: string;
@@ -21,8 +22,10 @@ export async function refreshPagesForStore(input: {
     input.entryConfig.value = {} as EntryConfigFromApi;
     return { pages: [], entryConfig: {} as EntryConfigFromApi };
   }
-  const { pages: pageList, entryConfig: newEntryConfig } =
-    await fetchNormalizedPageList(input.projectId, input.projectApi);
+  const { pages: pageList, entryConfig: newEntryConfig } = await fetchNormalizedPageList(
+    input.projectId,
+    input.projectApi,
+  );
   input.pages.value = pageList;
   input.entryConfig.value = newEntryConfig;
   applyEntryPatchIfPresent(input.doc.value, newEntryConfig);

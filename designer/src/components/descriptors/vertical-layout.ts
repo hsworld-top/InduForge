@@ -17,8 +17,8 @@ export const descriptor: ComponentDescriptor = {
 
   /**
    * 容器布局样式
-   * @param {Object} node - 当前节点
-   * @returns {Object}
+   * @param {object} node - 当前节点
+   * @returns {object}
    */
   containerStyle: (node: DescriptorNode) => {
     const props = node.props ?? {};
@@ -26,15 +26,15 @@ export const descriptor: ComponentDescriptor = {
       display: "flex",
       flexDirection: "column",
       flexWrap: "nowrap",
-      justifyContent: String(props["justify"] ?? "flex-start"),
-      alignItems: String(props["align"] ?? "stretch"),
+      justifyContent: String(props.justify ?? "flex-start"),
+      alignItems: String(props.align ?? "stretch"),
       position: "relative",
       boxSizing: "border-box",
       width: "100%",
       minHeight: "80px",
     };
-    if (props["gap"] !== undefined) {
-      style.gap = `${props["gap"]}px`;
+    if (props.gap !== undefined) {
+      style.gap = `${props.gap}px`;
     }
     return style;
   },
@@ -48,7 +48,7 @@ export const descriptor: ComponentDescriptor = {
 
   /**
    * 子项默认样式
-   * @returns {Object}
+   * @returns {object}
    */
   childStyle: () => ({
     width: "100%",

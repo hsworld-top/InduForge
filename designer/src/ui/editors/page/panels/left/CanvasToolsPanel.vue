@@ -2,116 +2,14 @@
   CanvasToolsPanel - Canvas 绘图工具面板
   选择、直线、矩形、圆形、椭圆、多边形、管道、文字等工具
 -->
-<template>
-  <div class="canvas-tools-panel">
-    <div class="tool-list">
-      <!-- 选择工具 -->
-      <div
-        class="tool-item"
-        :class="{ active: modelValue === 'select' }"
-        @click="selectTool('select')"
-      >
-        <IconEpPointer class="tool-icon" />
-        <span class="tool-name">选择</span>
-      </div>
-
-      <el-divider />
-
-      <!-- 基础图形 -->
-      <div class="tool-group-title">基础图形</div>
-
-      <div
-        class="tool-item"
-        :class="{ active: modelValue === 'line' }"
-        @click="selectTool('line')"
-      >
-        <IconEpMinus class="tool-icon" />
-        <span class="tool-name">直线</span>
-      </div>
-
-      <div
-        class="tool-item"
-        :class="{ active: modelValue === 'rect' }"
-        @click="selectTool('rect')"
-      >
-        <IconEpCropSquare class="tool-icon" />
-        <span class="tool-name">矩形</span>
-      </div>
-
-      <div
-        class="tool-item"
-        :class="{ active: modelValue === 'circle' }"
-        @click="selectTool('circle')"
-      >
-        <IconEpCircle class="tool-icon" />
-        <span class="tool-name">圆形</span>
-      </div>
-
-      <el-divider />
-
-      <!-- 文本和图片 -->
-      <div class="tool-group-title">文本与媒体</div>
-
-      <div
-        class="tool-item"
-        :class="{ active: modelValue === 'text' }"
-        @click="selectTool('text')"
-      >
-        <IconEpEditPen class="tool-icon" />
-        <span class="tool-name">文本</span>
-      </div>
-
-      <div
-        class="tool-item"
-        :class="{ active: modelValue === 'image' }"
-        @click="selectTool('image')"
-      >
-        <IconEpPicture class="tool-icon" />
-        <span class="tool-name">图片</span>
-      </div>
-
-      <el-divider />
-
-      <!-- 管道工具 -->
-      <div class="tool-group-title">流程工具</div>
-
-      <div
-        class="tool-item"
-        :class="{ active: modelValue === 'pipe' }"
-        @click="selectTool('pipe')"
-      >
-        <IconEpConnection class="tool-icon" />
-        <span class="tool-name">管道</span>
-      </div>
-
-      <div
-        class="tool-item"
-        :class="{ active: modelValue === 'path' }"
-        @click="selectTool('path')"
-      >
-        <IconEpEditPen class="tool-icon" />
-        <span class="tool-name">路径</span>
-      </div>
-    </div>
-
-    <!-- 工具提示 -->
-    <div v-if="modelValue" class="tool-hint">
-      <div class="text-xs text-gray-500">
-        {{ toolHints[modelValue] }}
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { computed } from "vue";
-import IconEpPointer from "~icons/ep/pointer";
-import IconEpMinus from "~icons/ep/minus";
-import IconEpCropSquare from "~icons/ep/crop";
 import IconEpCircle from "~icons/ep/circle-check";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpPicture from "~icons/ep/picture";
 import IconEpConnection from "~icons/ep/connection";
+import IconEpCropSquare from "~icons/ep/crop";
+import IconEpEditPen from "~icons/ep/edit-pen";
+import IconEpMinus from "~icons/ep/minus";
+import IconEpPicture from "~icons/ep/picture";
+import IconEpPointer from "~icons/ep/pointer";
 
 const props = defineProps({
   modelValue: {
@@ -139,10 +37,91 @@ const toolHints = {
 /**
  * 选择工具
  */
-const selectTool = (tool) => {
+function selectTool(tool) {
   emit("update:modelValue", tool);
-};
+}
 </script>
+
+<template>
+  <div class="canvas-tools-panel">
+    <div class="tool-list">
+      <!-- 选择工具 -->
+      <div
+        class="tool-item"
+        :class="{ active: modelValue === 'select' }"
+        @click="selectTool('select')"
+      >
+        <IconEpPointer class="tool-icon" />
+        <span class="tool-name">选择</span>
+      </div>
+
+      <el-divider />
+
+      <!-- 基础图形 -->
+      <div class="tool-group-title">基础图形</div>
+
+      <div class="tool-item" :class="{ active: modelValue === 'line' }" @click="selectTool('line')">
+        <IconEpMinus class="tool-icon" />
+        <span class="tool-name">直线</span>
+      </div>
+
+      <div class="tool-item" :class="{ active: modelValue === 'rect' }" @click="selectTool('rect')">
+        <IconEpCropSquare class="tool-icon" />
+        <span class="tool-name">矩形</span>
+      </div>
+
+      <div
+        class="tool-item"
+        :class="{ active: modelValue === 'circle' }"
+        @click="selectTool('circle')"
+      >
+        <IconEpCircle class="tool-icon" />
+        <span class="tool-name">圆形</span>
+      </div>
+
+      <el-divider />
+
+      <!-- 文本和图片 -->
+      <div class="tool-group-title">文本与媒体</div>
+
+      <div class="tool-item" :class="{ active: modelValue === 'text' }" @click="selectTool('text')">
+        <IconEpEditPen class="tool-icon" />
+        <span class="tool-name">文本</span>
+      </div>
+
+      <div
+        class="tool-item"
+        :class="{ active: modelValue === 'image' }"
+        @click="selectTool('image')"
+      >
+        <IconEpPicture class="tool-icon" />
+        <span class="tool-name">图片</span>
+      </div>
+
+      <el-divider />
+
+      <!-- 管道工具 -->
+      <div class="tool-group-title">流程工具</div>
+
+      <div class="tool-item" :class="{ active: modelValue === 'pipe' }" @click="selectTool('pipe')">
+        <IconEpConnection class="tool-icon" />
+        <span class="tool-name">管道</span>
+      </div>
+
+      <div class="tool-item" :class="{ active: modelValue === 'path' }" @click="selectTool('path')">
+        <IconEpEditPen class="tool-icon" />
+        <span class="tool-name">路径</span>
+      </div>
+    </div>
+
+    <!-- 工具提示 -->
+    <div v-if="modelValue" class="tool-hint">
+      <div class="text-xs text-gray-500">
+        {{ toolHints[modelValue] }}
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .canvas-tools-panel {

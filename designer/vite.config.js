@@ -1,8 +1,8 @@
-import { defineConfig, loadEnv } from "vite";
+import path from "node:path";
+import { fileURLToPath, URL } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import Icons from "unplugin-icons/vite";
-import { fileURLToPath, URL } from "node:url";
-import path from "path";
+import { defineConfig, loadEnv } from "vite";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {

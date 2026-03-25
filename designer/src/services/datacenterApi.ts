@@ -18,9 +18,7 @@ export const datacenterApi = {
   },
 
   getDatapoints(projectId: string, connectionId: string) {
-    return request.get(
-      `/data/projects/${projectId}/connections/${connectionId}/datapoints`,
-    );
+    return request.get(`/data/projects/${projectId}/connections/${connectionId}/datapoints`);
   },
 
   getDataPoints(projectId: string, params: Record<string, unknown> = {}) {
@@ -42,10 +40,7 @@ export const datacenterApi = {
   },
 
   writeDatapointValue(projectId: string, datapointId: string, value: unknown) {
-    return request.post(
-      `/data/projects/${projectId}/datapoints/${datapointId}/write`,
-      { value },
-    );
+    return request.post(`/data/projects/${projectId}/datapoints/${datapointId}/write`, { value });
   },
 
   executeQuery(queryId: string, parameters: Record<string, unknown> = {}) {

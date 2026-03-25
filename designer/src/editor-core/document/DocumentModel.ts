@@ -9,19 +9,19 @@
  * - 变更事件：支持订阅变更
  */
 
-import { EventEmitter } from "../utils/EventEmitter";
-import { createEmptySchema } from "./types.js";
 import type {
-  ProjectSchema,
-  PageNode,
-  ComponentNode,
-  GraphicNode,
-  SymbolDef,
-  EntryConfig,
-  UITarget,
-  GraphicType,
   Change,
-} from "./types.js";
+  ComponentNode,
+  EntryConfig,
+  GraphicNode,
+  GraphicType,
+  PageNode,
+  ProjectSchema,
+  SymbolDef,
+  UITarget,
+} from "./types.ts";
+import { EventEmitter } from "../utils/EventEmitter";
+import { createEmptySchema } from "./types.ts";
 
 /**
  * 文档模型类
@@ -57,7 +57,7 @@ export class DocumentModel extends EventEmitter {
 
   /**
    * 获取工程元信息
-   * @returns {import('./types.js').ProjectMeta}
+   * @returns {import('./types.ts').ProjectMeta}
    */
   get project() {
     return this._schema.project;
@@ -65,7 +65,7 @@ export class DocumentModel extends EventEmitter {
 
   /**
    * 获取安全声明
-   * @returns {import('./types.js').SecurityDecl}
+   * @returns {import('./types.ts').SecurityDecl}
    */
   get securityDecl() {
     return this._schema.securityDecl;
@@ -73,7 +73,7 @@ export class DocumentModel extends EventEmitter {
 
   /**
    * 获取入口配置
-   * @returns {import('./types.js').EntryConfig}
+   * @returns {import('./types.ts').EntryConfig}
    */
   get entry() {
     return this._schema.entry;
@@ -81,7 +81,7 @@ export class DocumentModel extends EventEmitter {
 
   /**
    * 获取数据提供者配置
-   * @returns {Record<string, import('./types.js').DataProvider>}
+   * @returns {Record<string, import('./types.ts').DataProvider>}
    */
   get dataProviders() {
     return this._schema.dataProviders;
@@ -89,7 +89,7 @@ export class DocumentModel extends EventEmitter {
 
   /**
    * 获取变量配置
-   * @returns {import('./types.js').VarsConfig}
+   * @returns {import('./types.ts').VarsConfig}
    */
   get vars() {
     return this._schema.vars;
@@ -97,7 +97,7 @@ export class DocumentModel extends EventEmitter {
 
   /**
    * 获取资源引用
-   * @returns {Record<string, import('./types.js').AssetRef>}
+   * @returns {Record<string, import('./types.ts').AssetRef>}
    */
   get assetsById() {
     return this._schema.assetsById;
@@ -145,7 +145,7 @@ export class DocumentModel extends EventEmitter {
 
   /**
    * 更新入口配置（内部方法）
-   * @param {Partial<import('./types.js').EntryConfig>} patch - 更新内容
+   * @param {Partial<import('./types.ts').EntryConfig>} patch - 更新内容
    */
   _updateEntry(patch: Partial<EntryConfig>) {
     const oldValue = { ...this._schema.entry };
@@ -188,7 +188,7 @@ export class DocumentModel extends EventEmitter {
 
   /**
    * 获取指定目标端的页面
-   * @param {import('./types.js').UITarget} target - 目标端
+   * @param {import('./types.ts').UITarget} target - 目标端
    * @returns {PageNode[]}
    */
   getPagesByTarget(target: UITarget): PageNode[] {
@@ -252,9 +252,7 @@ export class DocumentModel extends EventEmitter {
   getChildren(nodeId: string): ComponentNode[] {
     const node = this.getNode(nodeId);
     if (!node || !node.children) return [];
-    return node.children
-      .map((childId) => this.getNode(childId))
-      .filter((child) => child !== null);
+    return node.children.map((childId) => this.getNode(childId)).filter((child) => child !== null);
   }
 
   /**
@@ -376,9 +374,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {GraphicNode[]}
    */
   getGraphicsByType(type: GraphicType): GraphicNode[] {
-    return Object.values(this._schema.graphicsById).filter(
-      (graphic) => graphic.type === type,
-    );
+    return Object.values(this._schema.graphicsById).filter((graphic) => graphic.type === type);
   }
 
   /**
@@ -419,9 +415,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {SymbolDef[]}
    */
   getSymbolsByCategory(category: string): SymbolDef[] {
-    return this.getAllSymbols().filter(
-      (symbol) => symbol.category === category,
-    );
+    return this.getAllSymbols().filter((symbol) => symbol.category === category);
   }
 
   // ==================== 混合查询 ====================
@@ -706,10 +700,7 @@ export class DocumentModel extends EventEmitter {
       if (!newParent.children) {
         newParent.children = [];
       }
-      const insertIndex = Math.min(
-        Math.max(0, newIndex),
-        newParent.children.length,
-      );
+      const insertIndex = Math.min(Math.max(0, newIndex), newParent.children.length);
       newParent.children.splice(insertIndex, 0, nodeId);
     }
 

@@ -4,22 +4,19 @@
 
 import type { Ref } from "vue";
 import { unwrapApiData } from "@/types/api";
-import {
-  normalizeGlobalVariables,
-  normalizeGlobalScripts,
-} from "./normalize-settings";
+import { normalizeGlobalScripts, normalizeGlobalVariables } from "./normalize-settings";
 
-export type ProjectSettingsApi = {
+export interface ProjectSettingsApi {
   getProjectSettings: (projectId: string) => Promise<unknown>;
   updateProjectSettings: (projectId: string, payload: unknown) => Promise<unknown>;
   updateProjectVariables: (projectId: string, variables: unknown) => Promise<unknown>;
-};
+}
 
-export type ProjectSettingsStateRefs = {
+export interface ProjectSettingsStateRefs {
   projectVariables: Ref<Record<string, unknown>>;
   projectVariableGroups: Ref<unknown[]>;
   globalScripts: Ref<unknown>;
-};
+}
 
 export async function loadProjectSettingsForStore(
   projectId: string,
@@ -40,10 +37,7 @@ export async function loadProjectSettingsForStore(
       ? (gv as Record<string, unknown>)
       : { definitions: {}, groups: [] },
   );
-  out.projectVariables.value = normalizedVariables.definitions as Record<
-    string,
-    unknown
-  >;
+  out.projectVariables.value = normalizedVariables.definitions as Record<string, unknown>;
   out.projectVariableGroups.value = normalizedVariables.groups;
   out.globalScripts.value = normalizeGlobalScripts(
     (sr.globalScripts as Record<string, unknown>) || {},
@@ -72,18 +66,13 @@ export async function saveProjectSettingsForStore(
       api.updateProjectSettings(projectId, payload),
       api.updateProjectVariables(projectId, state.projectVariables.value),
     ]);
-    const settingsResult =
-      results[0].status === "fulfilled" ? results[0].value : null;
-    const data =
-      settingsResult != null ? unwrapApiData(settingsResult) : null;
+    const settingsResult = results[0].status === "fulfilled" ? results[0].value : null;
+    const data = settingsResult != null ? unwrapApiData(settingsResult) : null;
     const rejected = results.find((entry) => entry.status === "rejected");
     if (rejected) {
       return {
         ok: false,
-        error:
-          rejected.reason instanceof Error
-            ? rejected.reason
-            : new Error("保存失败"),
+        error: rejected.reason instanceof Error ? rejected.reason : new Error("保存失败"),
       };
     }
 
@@ -93,10 +82,7 @@ export async function saveProjectSettingsForStore(
         const normalized = normalizeGlobalVariables(
           body.globalVariables as Record<string, unknown>,
         );
-        state.projectVariables.value = normalized.definitions as Record<
-          string,
-          unknown
-        >;
+        state.projectVariables.value = normalized.definitions as Record<string, unknown>;
         state.projectVariableGroups.value = normalized.groups;
       }
       if (body.globalScripts) {

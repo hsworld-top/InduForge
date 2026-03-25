@@ -3,35 +3,30 @@
  */
 
 import type { Ref } from "vue";
-import { unwrapApiData } from "@/types/api";
-import type { ProjectSchema } from "@/editor-core/document/types";
 import type { EntryConfigFromApi, PagesRefreshResult } from "./pages-sync-types";
+import type { ProjectSchema } from "@/editor-core/document/types";
+import { unwrapApiData } from "@/types/api";
 
-export type HomePageProjectApi = {
-  createPage: (pid: string, payload: Record<string, unknown>) => Promise<unknown>;
-  updatePage: (
-    pid: string,
-    pageId: string,
-    payload: unknown,
-  ) => Promise<unknown>;
+export interface HomePageProjectApi {
+  /** 与 services projectApi 对齐；body 形状由调用方保证 */
+  createPage: (pid: string, payload: any) => Promise<unknown>;
+  updatePage: (pid: string, pageId: string, payload: unknown) => Promise<unknown>;
   updateEntryConfig: (pid: string, payload: unknown) => Promise<unknown>;
-};
+}
 
-export type CreateHomePageContext = {
+export interface CreateHomePageContext {
   entryConfig: Ref<EntryConfigFromApi>;
   currentPageId: Ref<string>;
   initEditor: (schema: ProjectSchema) => void;
   createBaseSchema: (projectId: string) => ProjectSchema;
   projectApi: HomePageProjectApi;
-};
+}
 
 export async function createHomePageForStore(
   ctx: CreateHomePageContext,
   pid: string,
   refreshPages: () => Promise<PagesRefreshResult>,
-): Promise<
-  { ok: true; pageId: string } | { ok: false; error: Error }
-> {
+): Promise<{ ok: true; pageId: string } | { ok: false; error: Error }> {
   try {
     const result = await ctx.projectApi.createPage(pid, {
       name: "首页",

@@ -1,14 +1,18 @@
 /**
  * 本地存储工具类
+ *
+ * 封装 localStorage，支持 JSON 序列化/反序列化，
+ * 提供 Token、用户信息、租户、工程等常用键的便捷方法。
+ * 异常时静默降级，不抛出错误。
  */
 
 import { STORAGE_KEYS } from "@/constants";
 
 export class Storage {
-  static get(key: string, defaultValue: unknown = null): unknown {
+  static get<T = unknown>(key: string, defaultValue: T | null = null): T | null {
     try {
       const item = localStorage.getItem(key);
-      return item ? (JSON.parse(item) as unknown) : defaultValue;
+      return item ? (JSON.parse(item) as T) : defaultValue;
     } catch (error) {
       console.warn(`Storage get error for key "${key}":`, error);
       return defaultValue;
@@ -43,8 +47,7 @@ export class Storage {
     return localStorage.getItem(STORAGE_KEYS.TOKEN);
   }
 
-  static setToken(token: string | undefined): void {
-    if (token === undefined) return;
+  static setToken(token: string): void {
     localStorage.setItem(STORAGE_KEYS.TOKEN, token);
   }
 
@@ -64,16 +67,16 @@ export class Storage {
     this.set(STORAGE_KEYS.USER_INFO, userInfo);
   }
 
-  static getTenantId(): unknown {
-    return this.get(STORAGE_KEYS.TENANT_ID);
+  static getTenantId(): string | null {
+    return this.get(STORAGE_KEYS.TENANT_ID) as string | null;
   }
 
   static setTenantId(tenantId: string): void {
     this.set(STORAGE_KEYS.TENANT_ID, tenantId);
   }
 
-  static getProjectId(): unknown {
-    return this.get(STORAGE_KEYS.PROJECT_ID);
+  static getProjectId(): string | null {
+    return this.get(STORAGE_KEYS.PROJECT_ID) as string | null;
   }
 
   static setProjectId(projectId: string): void {

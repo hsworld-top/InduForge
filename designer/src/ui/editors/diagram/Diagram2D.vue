@@ -2,37 +2,10 @@
   Diagram2D - 2D 流程图组件
   Canvas 矢量绘图，双击进入编辑模式，支持线、矩形、圆等图元
 -->
-<template>
-  <div
-    class="diagram-2d-component"
-    :style="componentStyle"
-    @dblclick.stop="handleDoubleClick"
-  >
-    <!-- 预览渲染区域 -->
-    <canvas
-      ref="canvasRef"
-      class="diagram-canvas"
-      :width="canvasWidth"
-      :height="canvasHeight"
-    />
-
-    <!-- 空状态提示 -->
-    <div v-if="isEmpty" class="empty-hint">
-      <IconEpGrid class="empty-icon" />
-      <div class="empty-text">双击进入Canvas编辑模式</div>
-      <div class="empty-subtext">在此绘制流程图、图表等</div>
-    </div>
-
-    <!-- 图元数量提示 -->
-    <div v-else class="shape-count-badge">{{ shapeCount }} 个图元</div>
-  </div>
-</template>
-
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { storeToRefs } from "pinia";
-import { useEditorStore } from "@/stores/editor-store";
 import IconEpGrid from "~icons/ep/grid";
+import { useEditorStore } from "@/stores/editor-store";
 
 const props = defineProps({
   /**
@@ -103,17 +76,17 @@ const canvasHeight = computed(() => {
 /**
  * 双击进入Canvas编辑模式
  */
-const handleDoubleClick = () => {
+function handleDoubleClick() {
   emit("enterCanvasMode", {
     nodeId: props.node.id,
     diagramId: diagramId.value,
   });
-};
+}
 
 /**
  * 渲染图元到 Canvas（预览）
  */
-const renderShapes = () => {
+function renderShapes() {
   if (!canvasRef.value || !diagramData.value) return;
 
   const ctx = canvasRef.value.getContext("2d");
@@ -135,28 +108,12 @@ const renderShapes = () => {
 
     switch (shape.type) {
       case "rect":
-        ctx.fillRect(
-          shape.data.x,
-          shape.data.y,
-          shape.data.width,
-          shape.data.height,
-        );
-        ctx.strokeRect(
-          shape.data.x,
-          shape.data.y,
-          shape.data.width,
-          shape.data.height,
-        );
+        ctx.fillRect(shape.data.x, shape.data.y, shape.data.width, shape.data.height);
+        ctx.strokeRect(shape.data.x, shape.data.y, shape.data.width, shape.data.height);
         break;
       case "circle":
         ctx.beginPath();
-        ctx.arc(
-          shape.data.cx,
-          shape.data.cy,
-          shape.data.radius,
-          0,
-          2 * Math.PI,
-        );
+        ctx.arc(shape.data.cx, shape.data.cy, shape.data.radius, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
         break;
@@ -165,7 +122,7 @@ const renderShapes = () => {
 
     ctx.restore();
   }
-};
+}
 
 watch(diagramData, renderShapes, { deep: true });
 
@@ -173,6 +130,23 @@ onMounted(() => {
   renderShapes();
 });
 </script>
+
+<template>
+  <div class="diagram-2d-component" :style="componentStyle" @dblclick.stop="handleDoubleClick">
+    <!-- 预览渲染区域 -->
+    <canvas ref="canvasRef" class="diagram-canvas" :width="canvasWidth" :height="canvasHeight" />
+
+    <!-- 空状态提示 -->
+    <div v-if="isEmpty" class="empty-hint">
+      <IconEpGrid class="empty-icon" />
+      <div class="empty-text">双击进入Canvas编辑模式</div>
+      <div class="empty-subtext">在此绘制流程图、图表等</div>
+    </div>
+
+    <!-- 图元数量提示 -->
+    <div v-else class="shape-count-badge">{{ shapeCount }} 个图元</div>
+  </div>
+</template>
 
 <style scoped>
 .diagram-2d-component {

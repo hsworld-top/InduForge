@@ -9,17 +9,13 @@
  * - 只读模式
  */
 
+import type { EditorReadonlyState, LockResult, PageLockState } from "../document/types.ts";
 import { EventEmitter } from "../utils/EventEmitter";
-import type {
-  PageLockState,
-  LockResult,
-  EditorReadonlyState,
-} from "../document/types.js";
 
 export interface PageLockApi {
-  get(path: string): Promise<{ data?: unknown; success?: boolean }>;
-  post(path: string, body?: unknown): Promise<LockAcquireResponse>;
-  delete(path: string): Promise<unknown>;
+  get: (path: string) => Promise<{ data?: unknown; success?: boolean }>;
+  post: (path: string, body?: unknown) => Promise<LockAcquireResponse>;
+  delete: (path: string) => Promise<unknown>;
 }
 
 interface LockAcquireResponse {
@@ -33,8 +29,8 @@ interface LockAcquireResponse {
 }
 
 export interface PageLockSocket {
-  on(event: string, handler: (data: unknown) => void): void;
-  off(event: string, handler: (data: unknown) => void): void;
+  on: (event: string, handler: (data: unknown) => void) => void;
+  off: (event: string, handler: (data: unknown) => void) => void;
 }
 
 export interface PageLockManagerOptions {
@@ -102,10 +98,7 @@ export class PageLockManager extends EventEmitter {
 
     // 页面卸载时释放锁
     if (typeof window !== "undefined") {
-      window.addEventListener(
-        "beforeunload",
-        this._handleBeforeUnload.bind(this),
-      );
+      window.addEventListener("beforeunload", this._handleBeforeUnload.bind(this));
       window.addEventListener("unload", this._handleUnload.bind(this));
     }
 
@@ -119,10 +112,7 @@ export class PageLockManager extends EventEmitter {
     this.stopHeartbeat();
 
     if (typeof window !== "undefined") {
-      window.removeEventListener(
-        "beforeunload",
-        this._handleBeforeUnload.bind(this),
-      );
+      window.removeEventListener("beforeunload", this._handleBeforeUnload.bind(this));
       window.removeEventListener("unload", this._handleUnload.bind(this));
     }
 
@@ -139,7 +129,7 @@ export class PageLockManager extends EventEmitter {
 
   /**
    * 设置 Socket 实例
-   * @param {Object} socket - Socket.IO 实例
+   * @param {object} socket - Socket.IO 实例
    */
   setSocket(socket: PageLockSocket | null) {
     if (this._socket) {
@@ -168,9 +158,7 @@ export class PageLockManager extends EventEmitter {
     }
 
     try {
-      const response: LockAcquireResponse = await this._api.post(
-        `/pages/${pageId}/lock`,
-      );
+      const response: LockAcquireResponse = await this._api.post(`/pages/${pageId}/lock`);
 
       if (response.success) {
         const d = response.data ?? {};
@@ -323,10 +311,7 @@ export class PageLockManager extends EventEmitter {
     this._socket.on("page:lock:changed", this._handleLockChanged.bind(this));
 
     // 监听强制释放通知
-    this._socket.on(
-      "page:lock:force_release",
-      this._handleForceRelease.bind(this),
-    );
+    this._socket.on("page:lock:force_release", this._handleForceRelease.bind(this));
   }
 
   /**
@@ -337,15 +322,12 @@ export class PageLockManager extends EventEmitter {
     if (!this._socket) return;
 
     this._socket.off("page:lock:changed", this._handleLockChanged.bind(this));
-    this._socket.off(
-      "page:lock:force_release",
-      this._handleForceRelease.bind(this),
-    );
+    this._socket.off("page:lock:force_release", this._handleForceRelease.bind(this));
   }
 
   /**
    * 处理锁状态变化
-   * @param {Object} data - 事件数据
+   * @param {object} data - 事件数据
    * @private
    */
   _handleLockChanged(data: unknown) {
@@ -364,7 +346,7 @@ export class PageLockManager extends EventEmitter {
 
   /**
    * 处理强制释放
-   * @param {Object} data - 事件数据
+   * @param {object} data - 事件数据
    * @private
    */
   _handleForceRelease(data: unknown) {
@@ -505,7 +487,7 @@ export class PageLockManager extends EventEmitter {
 
 /**
  * 创建 Mock API 客户端（用于测试）
- * @returns {Object}
+ * @returns {object}
  */
 export function createMockApiClient(): PageLockApi {
   const locks = new Map<string, Record<string, unknown>>();

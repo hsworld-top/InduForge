@@ -2,56 +2,6 @@
   BorderEditor - 边框样式编辑器
   编辑边框宽度、样式、颜色、圆角
 -->
-<template>
-  <div class="border-editor">
-    <div class="editor-group-title">边框</div>
-    <div class="form-grid">
-      <div class="form-item">
-        <label>宽度</label>
-        <el-input-number
-          :model-value="borderWidth"
-          size="small"
-          :min="0"
-          :step="1"
-          controls-position="right"
-          @update:modelValue="handleWidthChange"
-        />
-      </div>
-      <div class="form-item">
-        <label>样式</label>
-        <el-select
-          :model-value="borderStyle"
-          size="small"
-          @update:modelValue="handleStyleChange"
-        >
-          <el-option label="无" value="none" />
-          <el-option label="实线" value="solid" />
-          <el-option label="虚线" value="dashed" />
-          <el-option label="点线" value="dotted" />
-        </el-select>
-      </div>
-      <div class="form-item">
-        <label>颜色</label>
-        <FriendlyColorPicker
-          :model-value="borderColor"
-          @update:modelValue="handleColorChange"
-        />
-      </div>
-      <div class="form-item">
-        <label>圆角</label>
-        <el-input-number
-          :model-value="borderRadius"
-          size="small"
-          :min="0"
-          :step="1"
-          controls-position="right"
-          @update:modelValue="handleRadiusChange"
-        />
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { computed } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
@@ -65,35 +15,76 @@ const props = defineProps({
 
 const emit = defineEmits(["update:modelValue"]);
 
-const parseValue = (value, defaultValue = 0) => {
+function parseValue(value, defaultValue = 0) {
   if (!value) return defaultValue;
-  const num = parseInt(String(value), 10);
+  const num = Number.parseInt(String(value), 10);
   return isNaN(num) ? defaultValue : num;
-};
+}
 
 const borderWidth = computed(() => parseValue(props.modelValue.borderWidth, 0));
 const borderStyle = computed(() => props.modelValue.borderStyle || "none");
 const borderColor = computed(() => props.modelValue.borderColor || "#000000");
-const borderRadius = computed(() =>
-  parseValue(props.modelValue.borderRadius, 0),
-);
+const borderRadius = computed(() => parseValue(props.modelValue.borderRadius, 0));
 
-const handleWidthChange = (value) => {
+function handleWidthChange(value) {
   emit("update:modelValue", { ...props.modelValue, borderWidth: value });
-};
+}
 
-const handleStyleChange = (value) => {
+function handleStyleChange(value) {
   emit("update:modelValue", { ...props.modelValue, borderStyle: value });
-};
+}
 
-const handleColorChange = (value) => {
+function handleColorChange(value) {
   emit("update:modelValue", { ...props.modelValue, borderColor: value });
-};
+}
 
-const handleRadiusChange = (value) => {
+function handleRadiusChange(value) {
   emit("update:modelValue", { ...props.modelValue, borderRadius: value });
-};
+}
 </script>
+
+<template>
+  <div class="border-editor">
+    <div class="editor-group-title">边框</div>
+    <div class="form-grid">
+      <div class="form-item">
+        <label>宽度</label>
+        <el-input-number
+          :model-value="borderWidth"
+          size="small"
+          :min="0"
+          :step="1"
+          controls-position="right"
+          @update:model-value="handleWidthChange"
+        />
+      </div>
+      <div class="form-item">
+        <label>样式</label>
+        <el-select :model-value="borderStyle" size="small" @update:model-value="handleStyleChange">
+          <el-option label="无" value="none" />
+          <el-option label="实线" value="solid" />
+          <el-option label="虚线" value="dashed" />
+          <el-option label="点线" value="dotted" />
+        </el-select>
+      </div>
+      <div class="form-item">
+        <label>颜色</label>
+        <FriendlyColorPicker :model-value="borderColor" @update:model-value="handleColorChange" />
+      </div>
+      <div class="form-item">
+        <label>圆角</label>
+        <el-input-number
+          :model-value="borderRadius"
+          size="small"
+          :min="0"
+          :step="1"
+          controls-position="right"
+          @update:model-value="handleRadiusChange"
+        />
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .border-editor {

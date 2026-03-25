@@ -2,70 +2,6 @@
   SizeEditor - 尺寸编辑器
   编辑 width/height，支持 px/%/auto 单位
 -->
-<template>
-  <div class="size-editor">
-    <div class="editor-group-title">尺寸</div>
-    <div class="size-row">
-      <div class="size-label">宽度</div>
-      <div class="size-control">
-        <el-input
-          :model-value="widthInput"
-          size="small"
-          placeholder="auto"
-          class="size-input-with-unit"
-          @update:modelValue="handleWidthInput"
-          @change="handleWidthChange"
-          @blur="handleWidthChange"
-        >
-          <template #append>
-            <el-select
-              :model-value="widthUnit"
-              size="small"
-              class="size-unit-select"
-              teleported
-              popper-class="size-editor-unit-popper"
-              @update:modelValue="handleWidthUnitChange"
-            >
-              <el-option label="px" value="px" />
-              <el-option label="%" value="%" />
-              <el-option label="auto" value="auto" />
-            </el-select>
-          </template>
-        </el-input>
-      </div>
-    </div>
-    <div class="size-row">
-      <div class="size-label">高度</div>
-      <div class="size-control">
-        <el-input
-          :model-value="heightInput"
-          size="small"
-          placeholder="auto"
-          class="size-input-with-unit"
-          @update:modelValue="handleHeightInput"
-          @change="handleHeightChange"
-          @blur="handleHeightChange"
-        >
-          <template #append>
-            <el-select
-              :model-value="heightUnit"
-              size="small"
-              class="size-unit-select"
-              teleported
-              popper-class="size-editor-unit-popper"
-              @update:modelValue="handleHeightUnitChange"
-            >
-              <el-option label="px" value="px" />
-              <el-option label="%" value="%" />
-              <el-option label="auto" value="auto" />
-            </el-select>
-          </template>
-        </el-input>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { computed, ref, watch } from "vue";
 
@@ -91,7 +27,7 @@ const emit = defineEmits(["update:modelValue"]);
  * @param {string | number | undefined} value - 尺寸值
  * @returns {{ value: string, unit: string }}
  */
-const parseSize = (value) => {
+function parseSize(value) {
   if (!value || value === "auto") {
     return { value: "", unit: "auto" };
   }
@@ -101,7 +37,7 @@ const parseSize = (value) => {
     return { value: match[1], unit: match[2] || "px" };
   }
   return { value: "", unit: "auto" };
-};
+}
 
 /**
  * 限制尺寸最小值
@@ -109,23 +45,23 @@ const parseSize = (value) => {
  * @param {number | undefined} minValue - 最小值
  * @returns {string}
  */
-const clampSizeValue = (value, minValue) => {
+function clampSizeValue(value, minValue) {
   if (minValue === undefined || minValue === null) return value;
   if (value === "" || value === undefined || value === null) return value;
   const num = Number.parseFloat(value);
   if (!Number.isFinite(num)) return value;
   return String(Math.max(num, minValue));
-};
+}
 
 /**
  * 获取默认尺寸值
  * @param {number | undefined} minValue - 最小值
  * @returns {string}
  */
-const resolveDefaultValue = (minValue) => {
+function resolveDefaultValue(minValue) {
   if (Number.isFinite(minValue)) return String(minValue);
   return "100";
-};
+}
 
 /**
  * 生成尺寸字符串
@@ -135,13 +71,12 @@ const resolveDefaultValue = (minValue) => {
  * @param {boolean} useDefault - 是否使用默认值
  * @returns {string}
  */
-const buildSizeValue = (rawValue, unit, minValue, useDefault) => {
+function buildSizeValue(rawValue, unit, minValue, useDefault) {
   const text = String(rawValue ?? "").trim();
   if (!text) {
     if (!useDefault) return "auto";
     const defaultValue = resolveDefaultValue(minValue);
-    const nextValue =
-      unit === "px" ? clampSizeValue(defaultValue, minValue) : defaultValue;
+    const nextValue = unit === "px" ? clampSizeValue(defaultValue, minValue) : defaultValue;
     return `${nextValue}${unit}`;
   }
   let nextValue = text;
@@ -149,7 +84,7 @@ const buildSizeValue = (rawValue, unit, minValue, useDefault) => {
     nextValue = clampSizeValue(text, minValue);
   }
   return `${nextValue}${unit}`;
-};
+}
 
 const widthUnit = computed(() => parseSize(props.modelValue.width).unit);
 const heightUnit = computed(() => parseSize(props.modelValue.height).unit);
@@ -173,64 +108,108 @@ watch(
   { immediate: true },
 );
 
-const handleWidthInput = (value) => {
+function handleWidthInput(value) {
   widthInput.value = value;
-};
+}
 
-const handleHeightInput = (value) => {
+function handleHeightInput(value) {
   heightInput.value = value;
-};
+}
 
-const handleWidthChange = () => {
+function handleWidthChange() {
   const unit = widthUnit.value === "auto" ? "px" : widthUnit.value;
-  const newWidth = buildSizeValue(
-    widthInput.value,
-    unit,
-    props.minWidth,
-    false,
-  );
+  const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, false);
   emit("update:modelValue", { ...props.modelValue, width: newWidth });
-};
+}
 
-const handleWidthUnitChange = (unit) => {
+function handleWidthUnitChange(unit) {
   if (unit === "auto") {
     emit("update:modelValue", { ...props.modelValue, width: "auto" });
   } else {
-    const newWidth = buildSizeValue(
-      widthInput.value,
-      unit,
-      props.minWidth,
-      true,
-    );
+    const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, true);
     emit("update:modelValue", { ...props.modelValue, width: newWidth });
   }
-};
+}
 
-const handleHeightChange = () => {
+function handleHeightChange() {
   const unit = heightUnit.value === "auto" ? "px" : heightUnit.value;
-  const newHeight = buildSizeValue(
-    heightInput.value,
-    unit,
-    props.minHeight,
-    false,
-  );
+  const newHeight = buildSizeValue(heightInput.value, unit, props.minHeight, false);
   emit("update:modelValue", { ...props.modelValue, height: newHeight });
-};
+}
 
-const handleHeightUnitChange = (unit) => {
+function handleHeightUnitChange(unit) {
   if (unit === "auto") {
     emit("update:modelValue", { ...props.modelValue, height: "auto" });
   } else {
-    const newHeight = buildSizeValue(
-      heightInput.value,
-      unit,
-      props.minHeight,
-      true,
-    );
+    const newHeight = buildSizeValue(heightInput.value, unit, props.minHeight, true);
     emit("update:modelValue", { ...props.modelValue, height: newHeight });
   }
-};
+}
 </script>
+
+<template>
+  <div class="size-editor">
+    <div class="editor-group-title">尺寸</div>
+    <div class="size-row">
+      <div class="size-label">宽度</div>
+      <div class="size-control">
+        <el-input
+          :model-value="widthInput"
+          size="small"
+          placeholder="auto"
+          class="size-input-with-unit"
+          @update:model-value="handleWidthInput"
+          @change="handleWidthChange"
+          @blur="handleWidthChange"
+        >
+          <template #append>
+            <el-select
+              :model-value="widthUnit"
+              size="small"
+              class="size-unit-select"
+              teleported
+              popper-class="size-editor-unit-popper"
+              @update:model-value="handleWidthUnitChange"
+            >
+              <el-option label="px" value="px" />
+              <el-option label="%" value="%" />
+              <el-option label="auto" value="auto" />
+            </el-select>
+          </template>
+        </el-input>
+      </div>
+    </div>
+    <div class="size-row">
+      <div class="size-label">高度</div>
+      <div class="size-control">
+        <el-input
+          :model-value="heightInput"
+          size="small"
+          placeholder="auto"
+          class="size-input-with-unit"
+          @update:model-value="handleHeightInput"
+          @change="handleHeightChange"
+          @blur="handleHeightChange"
+        >
+          <template #append>
+            <el-select
+              :model-value="heightUnit"
+              size="small"
+              class="size-unit-select"
+              teleported
+              popper-class="size-editor-unit-popper"
+              @update:model-value="handleHeightUnitChange"
+            >
+              <el-option label="px" value="px" />
+              <el-option label="%" value="%" />
+              <el-option label="auto" value="auto" />
+            </el-select>
+          </template>
+        </el-input>
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .size-editor {
@@ -244,8 +223,7 @@ const handleHeightUnitChange = (unit) => {
   align-items: center;
   min-height: 34px;
   padding: 0 10px;
-  margin: calc(var(--designer-gap-md) * -1) calc(var(--designer-gap-md) * -1)
-    0;
+  margin: calc(var(--designer-gap-md) * -1) calc(var(--designer-gap-md) * -1) 0;
   background: var(--designer-group-surface);
   border-bottom: 1px solid var(--designer-border-soft);
   color: var(--designer-text-secondary);

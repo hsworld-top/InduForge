@@ -2,410 +2,26 @@
   DatapointPanel - 数据点/变量面板
   管理数据点与变量（树形展示），支持快速添加、导入导出、右键菜单
 -->
-<template>
-  <div class="global-vars">
-    <div class="toolbar">
-      <el-button
-        class="toolbar-button toolbar-button--ghost"
-        size="small"
-        @click="openQuickAdd"
-      >
-        <IconEpLink class="toolbar-icon" />
-        快速添加数据点
-      </el-button>
-      <el-dropdown @command="handleExport">
-        <el-button class="toolbar-button" size="small">
-          <IconEpUpload class="toolbar-icon" />
-          导出变量
-        </el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
-            <el-dropdown-item command="xlsx">导出 XLSX</el-dropdown-item>
-            <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-      <el-dropdown @command="handleImport">
-        <el-button class="toolbar-button" size="small">
-          <IconEpDownload class="toolbar-icon" />
-          导入变量
-        </el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="csv">导入 CSV</el-dropdown-item>
-            <el-dropdown-item command="xlsx">导入 XLSX</el-dropdown-item>
-            <el-dropdown-item command="json">导入 JSON</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-      <input
-        ref="importInputRef"
-        class="hidden-file-input"
-        type="file"
-        :accept="importAccept"
-        @change="handleFileChange"
-      />
-    </div>
-    <div class="tree-wrap" @contextmenu="handleBlankContextMenu">
-      <el-tree
-        ref="treeRef"
-        :data="variableTree"
-        node-key="id"
-        :default-expand-all="true"
-        highlight-current
-        :expand-on-click-node="false"
-        draggable
-        :allow-drop="allowDrop"
-        :allow-drag="allowDrag"
-        @node-contextmenu="handleContextMenu"
-        @node-dblclick="() => contextMenuVisible && closeContextMenu()"
-        @node-drop="handleNodeDrop"
-      >
-        <template #default="{ data }">
-          <div
-            class="tree-node"
-            :class="[
-              { 'is-selected': isNodeSelected(data) },
-              `node-${data.type}`,
-            ]"
-            @click.stop="(event) => handleNodeClick(data, event)"
-          >
-            <el-icon
-              class="node-icon"
-              :class="{
-                'is-mapped': data.type === 'variable' && data.meta?.mapped,
-                'is-unmapped': data.type === 'variable' && !data.meta?.mapped,
-              }"
-            >
-              <IconEpFolder v-if="data.type === 'group'" />
-              <IconEpLink v-else-if="data.meta?.mapped" />
-              <IconEpEditPen v-else />
-            </el-icon>
-            <span
-              class="node-label"
-              :class="{ 'is-group': data.type === 'group' }"
-            >
-              {{ data.label }}
-            </span>
-            <span v-if="data.type === 'variable'" class="node-meta">
-              {{ data.meta?.type || "string" }}
-            </span>
-          </div>
-        </template>
-      </el-tree>
-      <div v-if="!variableTree.length" class="tree-empty">
-        <el-empty description="暂无工程变量" :image-size="60" />
-      </div>
-    </div>
-    <div
-      v-if="contextMenuVisible"
-      class="context-menu"
-      :style="contextMenuStyle"
-      @click.stop
-      @mousedown.stop
-    >
-      <template v-if="contextMenuNode?.type === 'blank'">
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">
-          新建分组
-        </div>
-        <div class="context-menu-item" @click="openCreateFromMenu">
-          新增变量
-        </div>
-        <div class="context-menu-item" @click="openQuickAddFromMenu">
-          快速添加
-        </div>
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !varClipboard }"
-          @click="pasteVarFromMenu"
-        >
-          粘贴
-        </div>
-      </template>
-      <template v-if="contextMenuNode?.type === 'variable'">
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !canEditSelection }"
-          @click="openEditFromMenu"
-        >
-          编辑变量
-        </div>
-        <div class="context-menu-item" @click="copyVar">复制</div>
-        <div
-          class="context-menu-item"
-          @click="showMoveToMenu = !showMoveToMenu"
-        >
-          移动到
-        </div>
-        <div
-          class="context-menu-item context-menu-item--danger"
-          :class="{ 'is-disabled': !canDeleteSelection }"
-          @click="removeVar"
-        >
-          删除
-        </div>
-      </template>
-      <template v-else-if="contextMenuNode?.type === 'group'">
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !canEditSelection }"
-          @click="openGroupEditFromMenu"
-        >
-          编辑分组
-        </div>
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">
-          新建子分组
-        </div>
-        <div
-          class="context-menu-item"
-          @click="showMoveToMenu = !showMoveToMenu"
-        >
-          移动到
-        </div>
-        <div
-          class="context-menu-item context-menu-item--danger"
-          :class="{ 'is-disabled': !canDeleteSelection }"
-          @click="removeGroup"
-        >
-          删除分组
-        </div>
-      </template>
-    </div>
-
-    <div
-      v-if="contextMenuVisible && showMoveToMenu"
-      class="context-menu context-submenu"
-      :style="submenuStyle"
-      @click.stop
-      @mousedown.stop
-    >
-      <div class="context-menu-item" @click="handleMoveTo(null)">根目录</div>
-      <div
-        v-for="group in availableGroups"
-        :key="group.id"
-        class="context-menu-item"
-        @click="handleMoveTo(group.id)"
-      >
-        {{ group.name }}
-      </div>
-    </div>
-
-    <el-dialog
-      v-model="editVisible"
-      :title="editMode ? '编辑变量' : '新增变量'"
-      width="520px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form label-width="80px">
-        <el-form-item label="变量名">
-          <el-input v-model="editName" />
-        </el-form-item>
-        <el-form-item label="分组">
-          <el-select v-model="editGroupId" placeholder="请选择分组">
-            <el-option label="根目录" :value="ROOT_GROUP_ID" />
-            <el-option
-              v-for="group in groupOptions"
-              :key="group.id"
-              :label="group.name"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select
-            v-model="editType"
-            :disabled="mapped"
-            @change="resetEditValue"
-          >
-            <el-option v-for="t in types" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="初始值">
-          <div v-if="isEditorType" class="edit-value-block">
-            <MonacoEditor
-              ref="editValueEditorRef"
-              v-model="editValue"
-              :language="editorLanguage"
-              height="136px"
-              @markers="handleEditValueMarkers"
-            />
-          </div>
-          <el-input
-            v-else-if="isTextType"
-            v-model="editValue"
-            type="textarea"
-            :rows="6"
-          />
-          <el-input-number
-            v-else-if="editType === 'number'"
-            v-model="editValue"
-            style="width: 100%"
-          />
-          <el-switch v-else-if="editType === 'boolean'" v-model="editValue" />
-          <el-date-picker
-            v-else-if="editType === 'date'"
-            v-model="editValue"
-            type="datetime"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="editDescription" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="映射">
-          <el-switch v-model="mapped" />
-        </el-form-item>
-        <template v-if="mapped">
-          <el-form-item label="路径">
-            <el-input v-model="mappedField" disabled />
-          </el-form-item>
-          <el-form-item label="来源">
-            <el-input v-model="mappedSourceLabel" disabled />
-          </el-form-item>
-        </template>
-      </el-form>
-      <template #footer>
-        <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveEdit">确定</el-button>
-      </template>
-    </el-dialog>
-    <el-dialog
-      v-model="groupVisible"
-      :title="groupEditMode ? '编辑分组' : '新建分组'"
-      width="420px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form label-width="70px">
-        <el-form-item label="名称">
-          <el-input v-model="groupName" />
-        </el-form-item>
-        <el-form-item label="父级">
-          <el-select v-model="groupParentId" placeholder="根目录">
-            <el-option label="根目录" :value="null" />
-            <el-option
-              v-for="group in groupParentOptions"
-              :key="group.id"
-              :label="group.name"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="groupVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveGroup">确定</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog
-      v-model="quickVisible"
-      title="快速添加数据点"
-      width="1100px"
-      top="3vh"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form
-        :inline="true"
-        class="quick-form"
-        label-width="60px"
-        size="small"
-      >
-        <el-row :gutter="12" class="quick-form-row">
-          <el-col :span="8">
-            <el-form-item label="搜索">
-              <el-input v-model="searchKey" placeholder="字段名搜索" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="4">
-            <el-form-item label="前缀">
-              <el-input v-model="prefix" placeholder="前缀" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="4">
-            <el-form-item label="后缀">
-              <el-input v-model="suffix" placeholder="后缀" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="替换" class="quick-replace">
-              <el-input v-model="replaceFrom" placeholder="替换" />
-              <span class="quick-arrow">→</span>
-              <el-input v-model="replaceTo" placeholder="为" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </el-form>
-
-      <el-table
-        :data="filteredFields"
-        border
-        stripe
-        size="small"
-        height="520"
-        v-loading="quickLoading"
-        @selection-change="onSelectFields"
-      >
-        <el-table-column type="selection" width="50" />
-        <el-table-column label="变量名" min-width="160">
-          <template #default="{ row }">
-            {{ buildVarName(row.name) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="name" label="数据点名称" sortable width="150" />
-        <el-table-column prop="path" label="路径" min-width="220" />
-        <el-table-column prop="typeLabel" label="类型" width="110" sortable />
-        <el-table-column prop="sourceLabel" label="来源" width="120" sortable />
-        <el-table-column prop="updatedAtLabel" label="更新时间" width="160" />
-      </el-table>
-      <div class="quick-pagination">
-        <el-pagination
-          background
-          layout="prev, pager, next, sizes, total"
-          :page-size="quickPageSize"
-          :page-sizes="[50, 100, 200, 500]"
-          :total="quickTotal"
-          :current-page="quickPage"
-          @current-change="handleQuickPageChange"
-          @size-change="handleQuickSizeChange"
-        />
-      </div>
-
-      <template #footer>
-        <el-button @click="quickVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmQuickAdd">添加</el-button>
-      </template>
-    </el-dialog>
-  </div>
-</template>
-
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from "vue";
+import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
-import { useEditorStore } from "@/stores/editor-store";
-import { datacenterApi } from "@/services";
-import { unwrapApiData } from "@/types/api";
-import {
-  requireConnectionsPayload,
-  requireDatapointsPagePayload,
-} from "@/utils/datapoint-payload";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
-import dayjs from "dayjs";
-import { TIME_FORMAT } from "@/constants";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import * as XLSX from "xlsx";
+import IconEpDownload from "~icons/ep/download";
+import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
-import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpUpload from "~icons/ep/upload";
-import IconEpDownload from "~icons/ep/download";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import { TIME_FORMAT } from "@/constants";
+import { datacenterApi } from "@/services";
+import { useEditorStore } from "@/stores/editor-store";
+import { unwrapApiData } from "@/types/api";
+import { requireConnectionsPayload, requireDatapointsPagePayload } from "@/utils/datapoint-payload";
 
 const editorStore = useEditorStore();
-const { projectId, projectVariables, projectVariableGroups } =
-  storeToRefs(editorStore);
+const { projectId, projectVariables, projectVariableGroups } = storeToRefs(editorStore);
 const maxGroupDepth = 5;
 
 const types = [
@@ -470,23 +86,16 @@ const quickTotal = ref(0);
 const isEditorType = computed(() =>
   ["function", "array", "object", "set", "map"].includes(editType.value),
 );
-const isStructuredType = computed(() =>
-  ["array", "object", "set", "map"].includes(editType.value),
-);
-const editorLanguage = computed(() =>
-  isStructuredType.value ? "json" : "javascript",
-);
-const isTextType = computed(() =>
-  ["string", "regexp"].includes(editType.value),
-);
+const isStructuredType = computed(() => ["array", "object", "set", "map"].includes(editType.value));
+const editorLanguage = computed(() => (isStructuredType.value ? "json" : "javascript"));
+const isTextType = computed(() => ["string", "regexp"].includes(editType.value));
 
 const groupOptions = computed(() => projectVariableGroups.value || []);
 
 const groupParentOptions = computed(() => {
   if (!groupEditMode.value) return groupOptions.value;
   return groupOptions.value.filter(
-    (group) =>
-      group.id !== groupId.value && !isDescendantGroup(group.id, groupId.value),
+    (group) => group.id !== groupId.value && !isDescendantGroup(group.id, groupId.value),
   );
 });
 
@@ -500,19 +109,14 @@ const selectedVariable = computed(() => {
 
 const selectedGroup = computed(() => {
   if (selectedNode.value?.type !== "group") return null;
-  return (
-    projectVariableGroups.value?.find(
-      (group) => group.id === selectedNode.value.id,
-    ) || null
-  );
+  return projectVariableGroups.value?.find((group) => group.id === selectedNode.value.id) || null;
 });
 
 const selectedGroupId = computed(() => {
   const groupNode = selectedNodes.value.find((node) => node.type === "group");
   if (groupNode?.id) return groupNode.id;
   if (selectedGroup.value?.id) return selectedGroup.value.id;
-  if (selectedVariable.value?.detail?.groupId)
-    return selectedVariable.value.detail.groupId;
+  if (selectedVariable.value?.detail?.groupId) return selectedVariable.value.detail.groupId;
   return null;
 });
 
@@ -543,8 +147,7 @@ const availableGroups = computed(() => {
   const groups = projectVariableGroups.value || [];
   if (!current || current.type !== "group") return groups;
   return groups.filter(
-    (group) =>
-      group.id !== current.id && !isDescendantGroup(group.id, current.id),
+    (group) => group.id !== current.id && !isDescendantGroup(group.id, current.id),
   );
 });
 
@@ -594,8 +197,7 @@ function buildTree(groups, variables) {
       name,
       meta: {
         ...detail,
-        mapped:
-          detail?.source?.type === "dataCenter" || detail?.mapped === true,
+        mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
       },
     };
     const groupIdValue = detail?.groupId;
@@ -609,16 +211,15 @@ function buildTree(groups, variables) {
   return roots;
 }
 
-const isNodeSelected = (data) =>
-  selectedNodes.value.some((node) => node.id === data.id);
+function isNodeSelected(data) {
+  return selectedNodes.value.some((node) => node.id === data.id);
+}
 
 function handleNodeClick(data, event) {
   const isCtrl = Boolean(event?.ctrlKey || event?.metaKey);
   if (isCtrl) {
     if (isNodeSelected(data)) {
-      selectedNodes.value = selectedNodes.value.filter(
-        (node) => node.id !== data.id,
-      );
+      selectedNodes.value = selectedNodes.value.filter((node) => node.id !== data.id);
     } else {
       selectedNodes.value = [...selectedNodes.value, data];
     }
@@ -760,14 +361,11 @@ function allowDrop(draggingNode, dropNode, type) {
 
   if (dragData.type === "group") {
     if (type === "inner" && dropData.type !== "group") return false;
-    if (
-      dropData.type === "group" &&
-      isDescendantGroup(dropData.id, dragData.id)
-    )
+    if (dropData.type === "group" && isDescendantGroup(dropData.id, dragData.id)) {
       return false;
+    }
     if (type === "inner") {
-      const depth =
-        getGroupDepth(dropData.id) + getGroupSubtreeDepth(dragData.id);
+      const depth = getGroupDepth(dropData.id) + getGroupSubtreeDepth(dragData.id);
       return depth <= maxGroupDepth;
     }
     return true;
@@ -894,14 +492,12 @@ function parseEditValue(type, value) {
         if (type === "array") return Array.isArray(parsed) ? parsed : [];
         if (type === "set") {
           if (Array.isArray(parsed)) return parsed;
-          if (parsed && typeof parsed === "object")
-            return Object.values(parsed);
+          if (parsed && typeof parsed === "object") return Object.values(parsed);
           return [];
         }
         if (type === "map") {
           if (Array.isArray(parsed)) return parsed;
-          if (parsed && typeof parsed === "object")
-            return Object.entries(parsed);
+          if (parsed && typeof parsed === "object") return Object.entries(parsed);
           return [];
         }
         if (parsed && typeof parsed === "object") return parsed;
@@ -921,7 +517,7 @@ function resetEditValue() {
   editValueHasErrors.value = false;
 }
 
-const parseStructuredJson = (value, type) => {
+function parseStructuredJson(value, type) {
   if (!isStructuredType.value) return { ok: true, parsed: value };
   if (typeof value !== "string") return { ok: true, parsed: value };
   try {
@@ -943,9 +539,9 @@ const parseStructuredJson = (value, type) => {
   } catch (error) {
     return { ok: false, error: "JSON 格式不正确" };
   }
-};
+}
 
-const validateStructuredValue = () => {
+function validateStructuredValue() {
   if (!isStructuredType.value) return true;
   const result = parseStructuredJson(editValue.value, editType.value);
   if (!result.ok) {
@@ -953,9 +549,9 @@ const validateStructuredValue = () => {
     return false;
   }
   return true;
-};
+}
 
-const formatValue = (value) => {
+function formatValue(value) {
   if (value === null || value === undefined) return "";
   if (value instanceof Set) {
     return JSON.stringify(Array.from(value));
@@ -971,7 +567,7 @@ const formatValue = (value) => {
     }
   }
   return String(value);
-};
+}
 
 async function loadDataSourcesForMapping() {
   if (!projectId.value) return;
@@ -1077,8 +673,7 @@ async function saveEdit() {
   }
 
   const value = parseEditValue(editType.value, editValue.value);
-  const groupIdValue =
-    editGroupId.value === ROOT_GROUP_ID ? null : editGroupId.value;
+  const groupIdValue = editGroupId.value === ROOT_GROUP_ID ? null : editGroupId.value;
   const next = {
     type: editType.value,
     default: value,
@@ -1129,8 +724,7 @@ async function removeVar() {
     if (count > 1) {
       message = `确定删除选中的 ${count} 项吗？`;
     } else if (groupsToRemove.length === 1 && variablesToRemove.length === 0) {
-      const name =
-        selectedNodes.value.find((node) => node.type === "group")?.label || "";
+      const name = selectedNodes.value.find((node) => node.type === "group")?.label || "";
       message = `确定删除分组 "${name}" 吗？分组内成员会移动到父级。`;
     }
     await ElMessageBox.confirm(message, "确认删除", {
@@ -1240,10 +834,7 @@ function openGroupCreate() {
   groupId.value = "";
   groupName.value = "";
   groupParentId.value = selectedGroup.value?.id || null;
-  if (
-    groupParentId.value &&
-    getGroupDepth(groupParentId.value) >= maxGroupDepth
-  ) {
+  if (groupParentId.value && getGroupDepth(groupParentId.value) >= maxGroupDepth) {
     ElMessage.warning(`分组最多支持 ${maxGroupDepth} 层`);
     groupParentId.value = null;
   }
@@ -1286,10 +877,7 @@ async function saveGroup() {
       group.id === groupId.value ? { ...group, name, parentId } : group,
     );
   } else {
-    projectVariableGroups.value = [
-      ...groups,
-      { id: createId(), name, parentId, sortOrder: 0 },
-    ];
+    projectVariableGroups.value = [...groups, { id: createId(), name, parentId, sortOrder: 0 }];
   }
   groupVisible.value = false;
   await persistProjectGlobals();
@@ -1307,15 +895,15 @@ async function openQuickAdd() {
   await loadDatapoints();
 }
 
-const getDatapointSourceLabel = (sourceType) => {
+function getDatapointSourceLabel(sourceType) {
   if (!sourceType) return "未知";
   if (sourceType.includes("query")) return "查询";
   if (sourceType.includes("subscription")) return "订阅";
   if (sourceType.includes("tag")) return "订阅";
   return "数据点";
-};
+}
 
-const normalizeDatapointType = (type) => {
+function normalizeDatapointType(type) {
   const normalized = String(type || "").toLowerCase();
   if (
     normalized.includes("int") ||
@@ -1331,17 +919,16 @@ const normalizeDatapointType = (type) => {
   if (normalized.includes("map")) return "map";
   if (normalized.includes("set")) return "set";
   if (normalized.includes("date") || normalized.includes("time")) return "date";
-  if (normalized.includes("object") || normalized.includes("json"))
-    return "object";
+  if (normalized.includes("object") || normalized.includes("json")) return "object";
   return "string";
-};
+}
 
-const formatDatapointTime = (value) => {
+function formatDatapointTime(value) {
   if (!value) return "";
   const date = dayjs(value);
   if (!date.isValid()) return String(value);
   return date.format(TIME_FORMAT);
-};
+}
 
 async function loadDatapoints() {
   if (!projectId.value) {
@@ -1354,9 +941,7 @@ async function loadDatapoints() {
       page: quickPage.value,
       pageSize: quickPageSize.value,
     });
-    const { datapoints, pagination } = requireDatapointsPagePayload(
-      unwrapApiData(result),
-    );
+    const { datapoints, pagination } = requireDatapointsPagePayload(unwrapApiData(result));
     quickTotal.value = Number(pagination.total || datapoints.length || 0);
     if (!Array.isArray(datapoints) || datapoints.length === 0) {
       ElMessage.warning("未获取到数据点，请检查数据源或权限");
@@ -1375,30 +960,26 @@ async function loadDatapoints() {
   } catch (err) {
     fields.value = [];
     quickTotal.value = 0;
-    ElMessage.error(
-      err instanceof Error ? err.message : "数据点列表响应格式无效",
-    );
+    ElMessage.error(err instanceof Error ? err.message : "数据点列表响应格式无效");
   } finally {
     quickLoading.value = false;
   }
 }
 
 const filteredFields = computed(() =>
-  fields.value.filter((field) =>
-    field.name.toLowerCase().includes(searchKey.value.toLowerCase()),
-  ),
+  fields.value.filter((field) => field.name.toLowerCase().includes(searchKey.value.toLowerCase())),
 );
 
-const handleQuickPageChange = (page) => {
+function handleQuickPageChange(page) {
   quickPage.value = page;
   loadDatapoints();
-};
+}
 
-const handleQuickSizeChange = (size) => {
+function handleQuickSizeChange(size) {
   quickPageSize.value = size;
   quickPage.value = 1;
   loadDatapoints();
-};
+}
 
 function onSelectFields(rows) {
   selectedFields.value = rows;
@@ -1406,8 +987,7 @@ function onSelectFields(rows) {
 
 function buildVarName(field) {
   let name = field;
-  if (replaceFrom.value)
-    name = name.replace(replaceFrom.value, replaceTo.value);
+  if (replaceFrom.value) name = name.replace(replaceFrom.value, replaceTo.value);
   return `${prefix.value}${name}${suffix.value}`;
 }
 
@@ -1453,7 +1033,7 @@ function handleClickOutside() {
   if (contextMenuVisible.value) closeContextMenu();
 }
 
-const downloadBlob = (content, name, type) => {
+function downloadBlob(content, name, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1461,9 +1041,9 @@ const downloadBlob = (content, name, type) => {
   link.download = name;
   link.click();
   URL.revokeObjectURL(url);
-};
+}
 
-const buildGroupPathMap = (groups) => {
+function buildGroupPathMap(groups) {
   const map = new Map();
   const groupMap = new Map((groups || []).map((group) => [group.id, group]));
 
@@ -1479,9 +1059,9 @@ const buildGroupPathMap = (groups) => {
 
   (groups || []).forEach((group) => buildPath(group.id));
   return map;
-};
+}
 
-const ensureGroupPath = (groups, path) => {
+function ensureGroupPath(groups, path) {
   if (!path) return null;
   const segments = String(path)
     .split("/")
@@ -1491,8 +1071,7 @@ const ensureGroupPath = (groups, path) => {
   let parentId = null;
   segments.forEach((segment) => {
     let match = groups.find(
-      (group) =>
-        group.name === segment && (group.parentId || null) === parentId,
+      (group) => group.name === segment && (group.parentId || null) === parentId,
     );
     if (!match) {
       match = { id: createId(), name: segment, parentId, sortOrder: 0 };
@@ -1501,9 +1080,9 @@ const ensureGroupPath = (groups, path) => {
     parentId = match.id;
   });
   return parentId;
-};
+}
 
-const buildExportRows = () => {
+function buildExportRows() {
   const groupPathMap = buildGroupPathMap(projectVariableGroups.value || []);
   return Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
     name,
@@ -1513,15 +1092,15 @@ const buildExportRows = () => {
     groupPath: detail?.groupId ? groupPathMap.get(detail.groupId) || "" : "",
     mappedPath: detail?.source?.path || "",
   }));
-};
+}
 
-const normalizeRowKey = (row, key) => {
+function normalizeRowKey(row, key) {
   const lowerKey = key.toLowerCase();
   const hit = Object.keys(row).find((k) => k.toLowerCase() === lowerKey);
   return hit ? row[hit] : "";
-};
+}
 
-const mergeImportedRows = async (rows) => {
+async function mergeImportedRows(rows) {
   const nextGroups = [...(projectVariableGroups.value || [])];
   const nextVariables = { ...(projectVariables.value || {}) };
   let added = 0;
@@ -1558,9 +1137,9 @@ const mergeImportedRows = async (rows) => {
   projectVariables.value = nextVariables;
   await persistProjectGlobals();
   ElMessage.success(`导入完成，新增 ${added} 项，跳过 ${skipped} 项`);
-};
+}
 
-const mergeImportedDefinitions = async (definitions, groups) => {
+async function mergeImportedDefinitions(definitions, groups) {
   const nextGroups = [...(projectVariableGroups.value || [])];
   const nextVariables = { ...(projectVariables.value || {}) };
   const importedGroups = Array.isArray(groups) ? groups : [];
@@ -1575,9 +1154,7 @@ const mergeImportedDefinitions = async (definitions, groups) => {
 
   Object.entries(definitions || {}).forEach(([name, detail]) => {
     if (nextVariables[name]) return;
-    const groupPath = detail?.groupId
-      ? importedPathMap.get(detail.groupId) || ""
-      : "";
+    const groupPath = detail?.groupId ? importedPathMap.get(detail.groupId) || "" : "";
     const groupIdValue = ensureGroupPath(nextGroups, groupPath);
     nextVariables[name] = {
       ...detail,
@@ -1589,20 +1166,16 @@ const mergeImportedDefinitions = async (definitions, groups) => {
   projectVariables.value = nextVariables;
   await persistProjectGlobals();
   ElMessage.success("导入完成");
-};
+}
 
-const handleExport = async (format) => {
+async function handleExport(format) {
   const rows = buildExportRows();
   if (format === "json") {
     const payload = {
       definitions: projectVariables.value || {},
       groups: projectVariableGroups.value || [],
     };
-    downloadBlob(
-      JSON.stringify(payload, null, 2),
-      "project-variables.json",
-      "application/json",
-    );
+    downloadBlob(JSON.stringify(payload, null, 2), "project-variables.json", "application/json");
     return;
   }
 
@@ -1620,9 +1193,9 @@ const handleExport = async (format) => {
     "project-variables.xlsx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
-};
+}
 
-const handleImport = (format) => {
+function handleImport(format) {
   importType.value = format;
   nextTick(() => {
     if (importInputRef.value) {
@@ -1630,21 +1203,15 @@ const handleImport = (format) => {
       importInputRef.value.click();
     }
   });
-};
+}
 
-const decodeTextBuffer = (raw) => {
+function decodeTextBuffer(raw) {
   try {
-    const bytes =
-      raw instanceof ArrayBuffer ? new Uint8Array(raw) : new Uint8Array(raw);
+    const bytes = raw instanceof ArrayBuffer ? new Uint8Array(raw) : new Uint8Array(raw);
     const hasUtf8Bom =
-      bytes.length >= 3 &&
-      bytes[0] === 0xef &&
-      bytes[1] === 0xbb &&
-      bytes[2] === 0xbf;
-    const hasUtf16LeBom =
-      bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
-    const hasUtf16BeBom =
-      bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff;
+      bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+    const hasUtf16LeBom = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
+    const hasUtf16BeBom = bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff;
     const tryDecode = (encoding) => {
       try {
         return new TextDecoder(encoding, { fatal: false }).decode(raw);
@@ -1679,24 +1246,17 @@ const decodeTextBuffer = (raw) => {
   } catch (error) {
     return "";
   }
-};
+}
 
-const handleFileChange = async (event) => {
+async function handleFileChange(event) {
   const file = event.target.files?.[0];
   if (!file) return;
   if (importType.value === "json") {
     const text = await file.text();
     try {
       const data = JSON.parse(text);
-      if (
-        data &&
-        typeof data === "object" &&
-        (data.definitions || data.groups)
-      ) {
-        await mergeImportedDefinitions(
-          data.definitions || {},
-          data.groups || [],
-        );
+      if (data && typeof data === "object" && (data.definitions || data.groups)) {
+        await mergeImportedDefinitions(data.definitions || {}, data.groups || []);
         return;
       }
       if (Array.isArray(data)) {
@@ -1709,15 +1269,8 @@ const handleFileChange = async (event) => {
         const buffer = await file.arrayBuffer();
         const fallbackText = decodeTextBuffer(buffer);
         const data = JSON.parse(fallbackText);
-        if (
-          data &&
-          typeof data === "object" &&
-          (data.definitions || data.groups)
-        ) {
-          await mergeImportedDefinitions(
-            data.definitions || {},
-            data.groups || [],
-          );
+        if (data && typeof data === "object" && (data.definitions || data.groups)) {
+          await mergeImportedDefinitions(data.definitions || {}, data.groups || []);
           return;
         }
         if (Array.isArray(data)) {
@@ -1746,17 +1299,15 @@ const handleFileChange = async (event) => {
     defval: "",
   });
   await mergeImportedRows(rows);
-};
+}
 
-const handleEditValueMarkers = (markers) => {
+function handleEditValueMarkers(markers) {
   if (!isEditorType.value) {
     editValueHasErrors.value = false;
     return;
   }
-  editValueHasErrors.value = (markers || []).some(
-    (marker) => marker.severity === 8,
-  );
-};
+  editValueHasErrors.value = (markers || []).some((marker) => marker.severity === 8);
+}
 
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
@@ -1766,6 +1317,344 @@ onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
 });
 </script>
+
+<template>
+  <div class="global-vars">
+    <div class="toolbar">
+      <el-button class="toolbar-button toolbar-button--ghost" size="small" @click="openQuickAdd">
+        <IconEpLink class="toolbar-icon" />
+        快速添加数据点
+      </el-button>
+      <el-dropdown @command="handleExport">
+        <el-button class="toolbar-button" size="small">
+          <IconEpUpload class="toolbar-icon" />
+          导出变量
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
+            <el-dropdown-item command="xlsx">导出 XLSX</el-dropdown-item>
+            <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <el-dropdown @command="handleImport">
+        <el-button class="toolbar-button" size="small">
+          <IconEpDownload class="toolbar-icon" />
+          导入变量
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="csv">导入 CSV</el-dropdown-item>
+            <el-dropdown-item command="xlsx">导入 XLSX</el-dropdown-item>
+            <el-dropdown-item command="json">导入 JSON</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <input
+        ref="importInputRef"
+        class="hidden-file-input"
+        type="file"
+        :accept="importAccept"
+        @change="handleFileChange"
+      />
+    </div>
+    <div class="tree-wrap" @contextmenu="handleBlankContextMenu">
+      <el-tree
+        ref="treeRef"
+        :data="variableTree"
+        node-key="id"
+        :default-expand-all="true"
+        highlight-current
+        :expand-on-click-node="false"
+        draggable
+        :allow-drop="allowDrop"
+        :allow-drag="allowDrag"
+        @node-contextmenu="handleContextMenu"
+        @node-dblclick="() => contextMenuVisible && closeContextMenu()"
+        @node-drop="handleNodeDrop"
+      >
+        <template #default="{ data }">
+          <div
+            class="tree-node"
+            :class="[{ 'is-selected': isNodeSelected(data) }, `node-${data.type}`]"
+            @click.stop="(event) => handleNodeClick(data, event)"
+          >
+            <el-icon
+              class="node-icon"
+              :class="{
+                'is-mapped': data.type === 'variable' && data.meta?.mapped,
+                'is-unmapped': data.type === 'variable' && !data.meta?.mapped,
+              }"
+            >
+              <IconEpFolder v-if="data.type === 'group'" />
+              <IconEpLink v-else-if="data.meta?.mapped" />
+              <IconEpEditPen v-else />
+            </el-icon>
+            <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+              {{ data.label }}
+            </span>
+            <span v-if="data.type === 'variable'" class="node-meta">
+              {{ data.meta?.type || "string" }}
+            </span>
+          </div>
+        </template>
+      </el-tree>
+      <div v-if="!variableTree.length" class="tree-empty">
+        <el-empty description="暂无工程变量" :image-size="60" />
+      </div>
+    </div>
+    <div
+      v-if="contextMenuVisible"
+      class="context-menu"
+      :style="contextMenuStyle"
+      @click.stop
+      @mousedown.stop
+    >
+      <template v-if="contextMenuNode?.type === 'blank'">
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建分组</div>
+        <div class="context-menu-item" @click="openCreateFromMenu">新增变量</div>
+        <div class="context-menu-item" @click="openQuickAddFromMenu">快速添加</div>
+        <div
+          class="context-menu-item"
+          :class="{ 'is-disabled': !varClipboard }"
+          @click="pasteVarFromMenu"
+        >
+          粘贴
+        </div>
+      </template>
+      <template v-if="contextMenuNode?.type === 'variable'">
+        <div
+          class="context-menu-item"
+          :class="{ 'is-disabled': !canEditSelection }"
+          @click="openEditFromMenu"
+        >
+          编辑变量
+        </div>
+        <div class="context-menu-item" @click="copyVar">复制</div>
+        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
+        <div
+          class="context-menu-item context-menu-item--danger"
+          :class="{ 'is-disabled': !canDeleteSelection }"
+          @click="removeVar"
+        >
+          删除
+        </div>
+      </template>
+      <template v-else-if="contextMenuNode?.type === 'group'">
+        <div
+          class="context-menu-item"
+          :class="{ 'is-disabled': !canEditSelection }"
+          @click="openGroupEditFromMenu"
+        >
+          编辑分组
+        </div>
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建子分组</div>
+        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
+        <div
+          class="context-menu-item context-menu-item--danger"
+          :class="{ 'is-disabled': !canDeleteSelection }"
+          @click="removeGroup"
+        >
+          删除分组
+        </div>
+      </template>
+    </div>
+
+    <div
+      v-if="contextMenuVisible && showMoveToMenu"
+      class="context-menu context-submenu"
+      :style="submenuStyle"
+      @click.stop
+      @mousedown.stop
+    >
+      <div class="context-menu-item" @click="handleMoveTo(null)">根目录</div>
+      <div
+        v-for="group in availableGroups"
+        :key="group.id"
+        class="context-menu-item"
+        @click="handleMoveTo(group.id)"
+      >
+        {{ group.name }}
+      </div>
+    </div>
+
+    <el-dialog
+      v-model="editVisible"
+      :title="editMode ? '编辑变量' : '新增变量'"
+      width="520px"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+    >
+      <el-form label-width="80px">
+        <el-form-item label="变量名">
+          <el-input v-model="editName" />
+        </el-form-item>
+        <el-form-item label="分组">
+          <el-select v-model="editGroupId" placeholder="请选择分组">
+            <el-option label="根目录" :value="ROOT_GROUP_ID" />
+            <el-option
+              v-for="group in groupOptions"
+              :key="group.id"
+              :label="group.name"
+              :value="group.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="editType" :disabled="mapped" @change="resetEditValue">
+            <el-option v-for="t in types" :key="t" :label="t" :value="t" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="初始值">
+          <div v-if="isEditorType" class="edit-value-block">
+            <MonacoEditor
+              ref="editValueEditorRef"
+              v-model="editValue"
+              :language="editorLanguage"
+              height="136px"
+              @markers="handleEditValueMarkers"
+            />
+          </div>
+          <el-input v-else-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
+          <el-input-number
+            v-else-if="editType === 'number'"
+            v-model="editValue"
+            style="width: 100%"
+          />
+          <el-switch v-else-if="editType === 'boolean'" v-model="editValue" />
+          <el-date-picker
+            v-else-if="editType === 'date'"
+            v-model="editValue"
+            type="datetime"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="editDescription" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="映射">
+          <el-switch v-model="mapped" />
+        </el-form-item>
+        <template v-if="mapped">
+          <el-form-item label="路径">
+            <el-input v-model="mappedField" disabled />
+          </el-form-item>
+          <el-form-item label="来源">
+            <el-input v-model="mappedSourceLabel" disabled />
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveEdit">确定</el-button>
+      </template>
+    </el-dialog>
+    <el-dialog
+      v-model="groupVisible"
+      :title="groupEditMode ? '编辑分组' : '新建分组'"
+      width="420px"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+    >
+      <el-form label-width="70px">
+        <el-form-item label="名称">
+          <el-input v-model="groupName" />
+        </el-form-item>
+        <el-form-item label="父级">
+          <el-select v-model="groupParentId" placeholder="根目录">
+            <el-option label="根目录" :value="null" />
+            <el-option
+              v-for="group in groupParentOptions"
+              :key="group.id"
+              :label="group.name"
+              :value="group.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="groupVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveGroup">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="quickVisible"
+      title="快速添加数据点"
+      width="1100px"
+      top="3vh"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+    >
+      <el-form :inline="true" class="quick-form" label-width="60px" size="small">
+        <el-row :gutter="12" class="quick-form-row">
+          <el-col :span="8">
+            <el-form-item label="搜索">
+              <el-input v-model="searchKey" placeholder="字段名搜索" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="4">
+            <el-form-item label="前缀">
+              <el-input v-model="prefix" placeholder="前缀" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="4">
+            <el-form-item label="后缀">
+              <el-input v-model="suffix" placeholder="后缀" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="替换" class="quick-replace">
+              <el-input v-model="replaceFrom" placeholder="替换" />
+              <span class="quick-arrow">→</span>
+              <el-input v-model="replaceTo" placeholder="为" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <el-table
+        v-loading="quickLoading"
+        :data="filteredFields"
+        border
+        stripe
+        size="small"
+        height="520"
+        @selection-change="onSelectFields"
+      >
+        <el-table-column type="selection" width="50" />
+        <el-table-column label="变量名" min-width="160">
+          <template #default="{ row }">
+            {{ buildVarName(row.name) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="数据点名称" sortable width="150" />
+        <el-table-column prop="path" label="路径" min-width="220" />
+        <el-table-column prop="typeLabel" label="类型" width="110" sortable />
+        <el-table-column prop="sourceLabel" label="来源" width="120" sortable />
+        <el-table-column prop="updatedAtLabel" label="更新时间" width="160" />
+      </el-table>
+      <div class="quick-pagination">
+        <el-pagination
+          background
+          layout="prev, pager, next, sizes, total"
+          :page-size="quickPageSize"
+          :page-sizes="[50, 100, 200, 500]"
+          :total="quickTotal"
+          :current-page="quickPage"
+          @current-change="handleQuickPageChange"
+          @size-change="handleQuickSizeChange"
+        />
+      </div>
+
+      <template #footer>
+        <el-button @click="quickVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmQuickAdd">添加</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
 
 <style scoped>
 .global-vars {
@@ -1882,11 +1771,7 @@ onUnmounted(() => {
 }
 
 .tree-node.is-selected {
-  background: linear-gradient(
-    90deg,
-    rgba(59, 130, 246, 0.14),
-    rgba(59, 130, 246, 0.06)
-  );
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.14), rgba(59, 130, 246, 0.06));
   color: #1d4ed8;
   border: 1px solid rgba(59, 130, 246, 0.18);
   box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);

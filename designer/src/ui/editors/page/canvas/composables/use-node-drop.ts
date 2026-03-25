@@ -8,10 +8,19 @@
  * @module ui/Canvas/composables/use-node-drop
  */
 
-import { ref, computed, watch } from "vue";
-import { getDescriptor, isContainerType, isFlexContainer, isRegionType, canAcceptChildByDescriptor, getDefaultSize } from "@/components/descriptors/registry";
+import { computed, ref, watch } from "vue";
+import {
+  canAcceptChildByDescriptor,
+  getDefaultSize,
+  getDescriptor,
+  isContainerType,
+  isRegionType,
+} from "@/components/descriptors/registry";
 import { resolveElContainerMain } from "@/editor-core/utils/layout-utils";
-import { eventToCanvasPosition, clampPositionInContainer } from "@/editor-core/utils/placement-utils";
+import {
+  clampPositionInContainer,
+  eventToCanvasPosition,
+} from "@/editor-core/utils/placement-utils";
 
 /**
  * 判断容器是否允许子组件
@@ -86,13 +95,8 @@ function resolveDropContainer(event, childType, doc) {
       return { node: targetNode, element: nodeElement };
     }
   }
-  if (
-    containerNode &&
-    (!childType || canAcceptChild(containerNode, childType))
-  ) {
-    const containerElement = document.querySelector(
-      `[data-node-id="${containerNode.id}"]`,
-    );
+  if (containerNode && (!childType || canAcceptChild(containerNode, childType))) {
+    const containerElement = document.querySelector(`[data-node-id="${containerNode.id}"]`);
     return { node: containerNode, element: containerElement };
   }
   return null;
@@ -100,22 +104,22 @@ function resolveDropContainer(event, childType, doc) {
 
 /**
  * 创建节点拖放逻辑
- * @param {Object} deps - 依赖
- * @param {import('vue').ComputedRef<Object>} deps.node - 节点 computed
- * @param {import('vue').ComputedRef<Object>} deps.doc - 文档 computed
- * @param {import('vue').ComputedRef<Object>} deps.dragState - 拖拽状态 computed
- * @param {Object} deps.dragDropManager - 拖拽管理器实例
+ * @param {object} deps - 依赖
+ * @param {import('vue').ComputedRef<object>} deps.node - 节点 computed
+ * @param {import('vue').ComputedRef<object>} deps.doc - 文档 computed
+ * @param {import('vue').ComputedRef<object>} deps.dragState - 拖拽状态 computed
+ * @param {object} deps.dragDropManager - 拖拽管理器实例
  * @param {import('vue').ComputedRef<boolean>} deps.isContainer - 是否为容器 computed
  * @param {Function} deps.resolveFlexDirection - 解析 Flex 方向函数
  * @param {Function} deps.isFlexContainer - 判断是否为 Flex 容器函数
  * @param {import('vue').ComputedRef<boolean>} deps.readonly - 只读模式 computed
- * @param {Object} deps.editorStore - 编辑器 store 实例
+ * @param {object} deps.editorStore - 编辑器 store 实例
  * @param {import('vue').Ref} deps.canvasZoom - 画布缩放 ref
  * @param {Function} deps.endDrag - 结束拖拽函数
  * @param {Function} deps.notifyInsertFailure - 通知插入失败函数
  * @param {import('vue').Ref} deps.activeTabName - 当前激活的 tab 名称 ref
  * @param {import('vue').ComputedRef} deps.tabsList - tabs 列表 computed
- * @returns {Object} 返回 handleDragOver、handleDrop、showInsertLine 等
+ * @returns {object} 返回 handleDragOver、handleDrop、showInsertLine 等
  */
 export function useNodeDrop(deps) {
   const {
@@ -170,9 +174,7 @@ export function useNodeDrop(deps) {
     const resolveLayoutInsertFromPoint = () => {
       const hitList = document.elementsFromPoint(event.clientX, event.clientY);
       for (const hit of hitList) {
-        const layoutElement = hit?.closest?.(
-          '[data-node-type="ElLayout"][data-node-id]',
-        );
+        const layoutElement = hit?.closest?.('[data-node-type="ElLayout"][data-node-id]');
         if (!layoutElement) continue;
         const layoutId = layoutElement.getAttribute("data-node-id");
         const layoutNode = layoutId ? doc.value?.getNode?.(layoutId) : null;
@@ -188,9 +190,7 @@ export function useNodeDrop(deps) {
         const threshold = rowInsertEdgeThreshold;
         for (let i = 0; i < rowIds.length; i += 1) {
           const rowId = rowIds[i];
-          const rowElement = layoutElement.querySelector(
-            `[data-node-id="${rowId}"]`,
-          );
+          const rowElement = layoutElement.querySelector(`[data-node-id="${rowId}"]`);
           if (!rowElement) continue;
           const rect = rowElement.getBoundingClientRect?.();
           if (!rect) continue;
@@ -225,14 +225,13 @@ export function useNodeDrop(deps) {
         if (parentNode?.type !== "ElLayoutRow") continue;
         const rowSelector = `[data-node-id="${parentNode.id}"]`;
         const rowElement =
-          document.querySelector(rowSelector) ||
-          nodeElement.closest?.(rowSelector);
+          document.querySelector(rowSelector) || nodeElement.closest?.(rowSelector);
         if (!rowElement) continue;
         const colRect = nodeElement.getBoundingClientRect?.();
         const edgeThreshold = colInsertEdgeThreshold;
         const nearEdge = colRect
           ? event.clientX - colRect.left <= edgeThreshold ||
-          colRect.right - event.clientX <= edgeThreshold
+            colRect.right - event.clientX <= edgeThreshold
           : false;
         return { rowElement, parentNode, nearEdge, colRect };
       }
@@ -253,14 +252,13 @@ export function useNodeDrop(deps) {
         if (parentNode?.type !== "ElLayout") continue;
         const layoutSelector = `[data-node-id="${parentNode.id}"]`;
         const layoutElement =
-          document.querySelector(layoutSelector) ||
-          nodeElement.closest?.(layoutSelector);
+          document.querySelector(layoutSelector) || nodeElement.closest?.(layoutSelector);
         if (!layoutElement) continue;
         const rowRect = nodeElement.getBoundingClientRect?.();
         const edgeThreshold = rowInsertEdgeThreshold;
         const nearEdge = rowRect
           ? event.clientY - rowRect.top <= edgeThreshold ||
-          rowRect.bottom - event.clientY <= edgeThreshold
+            rowRect.bottom - event.clientY <= edgeThreshold
           : false;
         return { layoutElement, parentNode, rowElement: nodeElement, nearEdge };
       }
@@ -401,9 +399,7 @@ export function useNodeDrop(deps) {
           const hostRect = rowElement.getBoundingClientRect?.();
           if (hostRect && insertLine) {
             const rawOffset =
-              insertLine.orientation === "vertical"
-                ? insertLine.offset
-                : insertLine.offset;
+              insertLine.orientation === "vertical" ? insertLine.offset : insertLine.offset;
             const adjustedLine = {
               ...insertLine,
               offset: Math.max(0, rawOffset),
@@ -435,8 +431,7 @@ export function useNodeDrop(deps) {
       layoutInsertInfo.value = null;
       const outerElement = event.currentTarget;
       const contentElement =
-        outerElement?.querySelector?.("[data-node-id]")?.parentElement ||
-        outerElement;
+        outerElement?.querySelector?.("[data-node-id]")?.parentElement || outerElement;
       const direction = resolveFlexDirection(node.value.type, contentElement);
       const insertInfo = dragDropManager.calculateFlexInsertPosition(
         contentElement,
@@ -470,9 +465,7 @@ export function useNodeDrop(deps) {
 
     const resolveLayoutInsertFromPoint = () => {
       const hit = event.target instanceof Element ? event.target : null;
-      const layoutElement = hit?.closest?.(
-        '[data-node-type="ElLayout"][data-node-id]',
-      );
+      const layoutElement = hit?.closest?.('[data-node-type="ElLayout"][data-node-id]');
       if (!layoutElement) return null;
       const layoutId = layoutElement.getAttribute("data-node-id");
       const layoutNode = layoutId ? doc.value?.getNode?.(layoutId) : null;
@@ -488,9 +481,7 @@ export function useNodeDrop(deps) {
       const threshold = rowInsertEdgeThreshold;
       for (let i = 0; i < rowIds.length; i += 1) {
         const rowId = rowIds[i];
-        const rowElement = layoutElement.querySelector(
-          `[data-node-id="${rowId}"]`,
-        );
+        const rowElement = layoutElement.querySelector(`[data-node-id="${rowId}"]`);
         if (!rowElement) continue;
         const rect = rowElement.getBoundingClientRect?.();
         if (!rect) continue;
@@ -511,11 +502,7 @@ export function useNodeDrop(deps) {
      */
     const insertIntoLayoutByRow = (layoutNode, insertIndex, componentType) => {
       if (!layoutNode || layoutNode.type !== "ElLayout") return false;
-      const rowNode = editorStore.insertNode(
-        "ElLayoutRow",
-        layoutNode.id,
-        insertIndex,
-      );
+      const rowNode = editorStore.insertNode("ElLayoutRow", layoutNode.id, insertIndex);
       if (!rowNode) return false;
       const latestLayout = doc.value?.getNode?.(layoutNode.id);
       const rowCount = (latestLayout?.children || []).filter((childId) => {
@@ -560,13 +547,12 @@ export function useNodeDrop(deps) {
         if (parentNode?.type !== "ElLayoutRow") continue;
         const rowSelector = `[data-node-id="${parentNode.id}"]`;
         const rowElement =
-          document.querySelector(rowSelector) ||
-          nodeElement.closest?.(rowSelector);
+          document.querySelector(rowSelector) || nodeElement.closest?.(rowSelector);
         const colRect = nodeElement.getBoundingClientRect?.();
         const edgeThreshold = colInsertEdgeThreshold;
         const nearEdge = colRect
           ? event.clientX - colRect.left <= edgeThreshold ||
-          colRect.right - event.clientX <= edgeThreshold
+            colRect.right - event.clientX <= edgeThreshold
           : false;
         let index = null;
         if (colRect && nearEdge) {
@@ -597,13 +583,12 @@ export function useNodeDrop(deps) {
         if (parentNode?.type !== "ElLayout") continue;
         const layoutSelector = `[data-node-id="${parentNode.id}"]`;
         const layoutElement =
-          document.querySelector(layoutSelector) ||
-          nodeElement.closest?.(layoutSelector);
+          document.querySelector(layoutSelector) || nodeElement.closest?.(layoutSelector);
         const rowRect = nodeElement.getBoundingClientRect?.();
         const edgeThreshold = rowInsertEdgeThreshold;
         const nearEdge = rowRect
           ? event.clientY - rowRect.top <= edgeThreshold ||
-          rowRect.bottom - event.clientY <= edgeThreshold
+            rowRect.bottom - event.clientY <= edgeThreshold
           : false;
         return { layoutNode: parentNode, layoutElement, nearEdge };
       }
@@ -720,8 +705,7 @@ export function useNodeDrop(deps) {
       }
       const resolvedTarget = resolveElContainerTarget();
       let targetNode = (resolvedTarget && resolvedTarget.node) || node.value;
-      let targetElement =
-        (resolvedTarget && resolvedTarget.element) || event.currentTarget;
+      let targetElement = (resolvedTarget && resolvedTarget.element) || event.currentTarget;
       if (!isDroppableContainer(targetNode)) {
         const resolvedContainer = resolveDropContainer(event, resolvedType);
         if (resolvedContainer) {
@@ -799,11 +783,7 @@ export function useNodeDrop(deps) {
             });
             let colId = colIds[0];
             if (!colId) {
-              const colNode = editorStore.insertNode(
-                "ElCol",
-                rowNodeInserted.id,
-                0,
-              );
+              const colNode = editorStore.insertNode("ElCol", rowNodeInserted.id, 0);
               if (!colNode) {
                 notifyInsertFailure();
                 endDrag();
@@ -835,11 +815,7 @@ export function useNodeDrop(deps) {
           } else if (Number.isInteger(rowResolved?.index)) {
             insertIndex = rowResolved.index;
           }
-          const colNode = editorStore.insertNode(
-            "ElCol",
-            rowNode.id,
-            insertIndex,
-          );
+          const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
           if (colNode) {
             const latestRow = doc.value?.getNode?.(rowNode.id);
             const colCount = (latestRow?.children || []).filter((childId) => {
@@ -872,24 +848,20 @@ export function useNodeDrop(deps) {
         targetNode = layoutResolved.layoutNode;
         targetElement = layoutResolved.layoutElement || targetElement;
       }
-      if (
-        layoutResolvedByPoint &&
-        resolvedType !== "ElLayoutRow" &&
-        !layoutInsertSnapshot
-      ) {
+      if (layoutResolvedByPoint && resolvedType !== "ElLayoutRow" && !layoutInsertSnapshot) {
         targetNode = layoutResolvedByPoint.layoutNode;
         targetElement = layoutResolvedByPoint.layoutElement || targetElement;
       }
-      const allowRowAutoInsert =
-        targetNode?.type === "ElLayoutRow" && resolvedType !== "ElCol";
+      const allowRowAutoInsert = targetNode?.type === "ElLayoutRow" && resolvedType !== "ElCol";
       const allowLayoutAutoInsert =
         targetNode?.type === "ElLayout" && resolvedType !== "ElLayoutRow";
       if (
         !allowRowAutoInsert &&
         !allowLayoutAutoInsert &&
         !canAcceptChild(targetNode, resolvedType)
-      )
+      ) {
         return;
+      }
       let insertIndex = (targetNode?.children || []).length;
       if (
         rowInsertSnapshot &&
@@ -915,40 +887,28 @@ export function useNodeDrop(deps) {
       }
 
       const skipFlexInsertForLayout =
-        targetNode?.type === "ElLayout" &&
-        (layoutInsertSnapshot || layoutResolvedByPoint);
-      if (
-        targetNode?.type &&
-        isFlexContainer(targetNode.type) &&
-        !skipFlexInsertForLayout
-      ) {
+        targetNode?.type === "ElLayout" && (layoutInsertSnapshot || layoutResolvedByPoint);
+      if (targetNode?.type && isFlexContainer(targetNode.type) && !skipFlexInsertForLayout) {
         const outerEl = targetElement;
-        const contentEl =
-          outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
+        const contentEl = outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
         const direction = resolveFlexDirection(targetNode.type, contentEl);
-        const insertInfo = dragDropManager.calculateFlexInsertPosition(
-          contentEl,
-          event,
-          direction,
-        );
+        const insertInfo = dragDropManager.calculateFlexInsertPosition(contentEl, event, direction);
         insertIndex = insertInfo.index;
       }
       let dropPosition = null;
       if (targetNode?.type === "FreeContainer" && targetElement) {
         const zoomValue = Number(canvasZoom?.value) || 1;
         const rawPosition = eventToCanvasPosition(event, targetElement, zoomValue);
-        const defaultSize =
-          getDefaultSize(resolvedType) ?? { width: 120, height: 40 };
+        const defaultSize = getDefaultSize(resolvedType) ?? {
+          width: 120,
+          height: 40,
+        };
         dropPosition = clampPositionInContainer(rawPosition, targetElement, defaultSize, zoomValue);
       }
 
       // ElLayout 内拖入组件：自动新增一行并将组件放入该行的列
       if (allowLayoutAutoInsert) {
-        const rowNode = editorStore.insertNode(
-          "ElLayoutRow",
-          targetNode.id,
-          insertIndex,
-        );
+        const rowNode = editorStore.insertNode("ElLayoutRow", targetNode.id, insertIndex);
         if (rowNode) {
           const latestLayout = doc.value?.getNode?.(targetNode.id);
           const rowCount = (latestLayout?.children || []).filter((childId) => {
@@ -995,11 +955,7 @@ export function useNodeDrop(deps) {
 
       // ElLayoutRow 内拖入组件：自动新增一列并将组件放入该列
       if (allowRowAutoInsert) {
-        const colNode = editorStore.insertNode(
-          "ElCol",
-          targetNode.id,
-          insertIndex,
-        );
+        const colNode = editorStore.insertNode("ElCol", targetNode.id, insertIndex);
         if (colNode) {
           const latestRow = doc.value?.getNode?.(targetNode.id);
           const colCount = (latestRow?.children || []).filter((childId) => {
@@ -1025,23 +981,15 @@ export function useNodeDrop(deps) {
       }
 
       // 插入新节点
-      const inserted = editorStore.insertNode(
-        resolvedType,
-        targetNode?.id,
-        insertIndex,
-        {
-          dropPosition: dropPosition || undefined,
-        },
-      );
+      const inserted = editorStore.insertNode(resolvedType, targetNode?.id, insertIndex, {
+        dropPosition: dropPosition || undefined,
+      });
       if (!inserted) {
         notifyInsertFailure();
       }
       if (inserted && targetNode?.type === "Tabs") {
         const tabKey =
-          activeTabName.value ||
-          tabsList.value?.[0]?.name ||
-          tabsList.value?.[0]?.label ||
-          "";
+          activeTabName.value || tabsList.value?.[0]?.name || tabsList.value?.[0]?.label || "";
         if (tabKey) {
           editorStore.updateNode(inserted.id, {
             props: { ...(inserted.props || {}), tabKey: String(tabKey) },
@@ -1074,11 +1022,7 @@ export function useNodeDrop(deps) {
         doc.value?.getNode?.(layoutInsertSnapshot.layoutId)?.type === "ElLayout"
       ) {
         const layoutNode = doc.value.getNode(layoutInsertSnapshot.layoutId);
-        const inserted = insertIntoLayoutByRow(
-          layoutNode,
-          layoutInsertSnapshot.index,
-          type,
-        );
+        const inserted = insertIntoLayoutByRow(layoutNode, layoutInsertSnapshot.index, type);
         if (!inserted) notifyInsertFailure();
         endDrag();
         return;
@@ -1163,11 +1107,7 @@ export function useNodeDrop(deps) {
             });
             let colId = colIds[0];
             if (!colId) {
-              const colNode = editorStore.insertNode(
-                "ElCol",
-                rowNodeInserted.id,
-                0,
-              );
+              const colNode = editorStore.insertNode("ElCol", rowNodeInserted.id, 0);
               if (!colNode) {
                 notifyInsertFailure();
                 endDrag();
@@ -1199,11 +1139,7 @@ export function useNodeDrop(deps) {
           } else if (Number.isInteger(rowResolved?.index)) {
             insertIndex = rowResolved.index;
           }
-          const colNode = editorStore.insertNode(
-            "ElCol",
-            rowNode.id,
-            insertIndex,
-          );
+          const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
           if (colNode) {
             const latestRow = doc.value?.getNode?.(rowNode.id);
             const colCount = (latestRow?.children || []).filter((childId) => {
@@ -1236,24 +1172,15 @@ export function useNodeDrop(deps) {
         targetNode = layoutResolved.layoutNode;
         targetElement = layoutResolved.layoutElement || targetElement;
       }
-      if (
-        layoutResolvedByPoint &&
-        type !== "ElLayoutRow" &&
-        !layoutInsertSnapshot
-      ) {
+      if (layoutResolvedByPoint && type !== "ElLayoutRow" && !layoutInsertSnapshot) {
         targetNode = layoutResolvedByPoint.layoutNode;
         targetElement = layoutResolvedByPoint.layoutElement || targetElement;
       }
-      const allowRowAutoInsert =
-        targetNode?.type === "ElLayoutRow" && type !== "ElCol";
-      const allowLayoutAutoInsert =
-        targetNode?.type === "ElLayout" && type !== "ElLayoutRow";
-      if (
-        !allowRowAutoInsert &&
-        !allowLayoutAutoInsert &&
-        !canAcceptChild(targetNode, type)
-      )
+      const allowRowAutoInsert = targetNode?.type === "ElLayoutRow" && type !== "ElCol";
+      const allowLayoutAutoInsert = targetNode?.type === "ElLayout" && type !== "ElLayoutRow";
+      if (!allowRowAutoInsert && !allowLayoutAutoInsert && !canAcceptChild(targetNode, type)) {
         return;
+      }
 
       // 计算插入位置
       let insertIndex = (targetNode?.children || []).length;
@@ -1281,22 +1208,12 @@ export function useNodeDrop(deps) {
       }
 
       const skipFlexInsertForLayout =
-        targetNode?.type === "ElLayout" &&
-        (layoutInsertSnapshot || layoutResolvedByPoint);
-      if (
-        targetNode?.type &&
-        isFlexContainer(targetNode.type) &&
-        !skipFlexInsertForLayout
-      ) {
+        targetNode?.type === "ElLayout" && (layoutInsertSnapshot || layoutResolvedByPoint);
+      if (targetNode?.type && isFlexContainer(targetNode.type) && !skipFlexInsertForLayout) {
         const outerEl = targetElement;
-        const contentEl =
-          outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
+        const contentEl = outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
         const direction = resolveFlexDirection(targetNode.type, contentEl);
-        const insertInfo = dragDropManager.calculateFlexInsertPosition(
-          contentEl,
-          event,
-          direction,
-        );
+        const insertInfo = dragDropManager.calculateFlexInsertPosition(contentEl, event, direction);
         insertIndex = insertInfo.index;
       }
 
@@ -1310,11 +1227,7 @@ export function useNodeDrop(deps) {
 
       // ElLayout 内拖入组件：自动新增一行并将组件放入该行的列
       if (allowLayoutAutoInsert) {
-        const rowNode = editorStore.insertNode(
-          "ElLayoutRow",
-          targetNode.id,
-          insertIndex,
-        );
+        const rowNode = editorStore.insertNode("ElLayoutRow", targetNode.id, insertIndex);
         if (rowNode) {
           const latestLayout = doc.value?.getNode?.(targetNode.id);
           const rowCount = (latestLayout?.children || []).filter((childId) => {
@@ -1361,11 +1274,7 @@ export function useNodeDrop(deps) {
 
       // ElLayoutRow 内拖入组件：自动新增一列并将组件放入该列
       if (allowRowAutoInsert) {
-        const colNode = editorStore.insertNode(
-          "ElCol",
-          targetNode.id,
-          insertIndex,
-        );
+        const colNode = editorStore.insertNode("ElCol", targetNode.id, insertIndex);
         if (colNode) {
           const latestRow = doc.value?.getNode?.(targetNode.id);
           const colCount = (latestRow?.children || []).filter((childId) => {
@@ -1399,10 +1308,7 @@ export function useNodeDrop(deps) {
       }
       if (inserted && targetNode?.type === "Tabs") {
         const tabKey =
-          activeTabName.value ||
-          tabsList.value?.[0]?.name ||
-          tabsList.value?.[0]?.label ||
-          "";
+          activeTabName.value || tabsList.value?.[0]?.name || tabsList.value?.[0]?.label || "";
         if (tabKey) {
           editorStore.updateNode(inserted.id, {
             props: { ...(inserted.props || {}), tabKey: String(tabKey) },

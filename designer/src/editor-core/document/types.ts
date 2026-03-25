@@ -12,7 +12,7 @@
 
 /**
  * 生成唯一 ID
- * @param {string} [prefix=''] - ID 前缀
+ * @param {string} [prefix] - ID 前缀
  * @returns {string} 唯一 ID
  */
 export function generateId(prefix = ""): string {
@@ -33,7 +33,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} ProjectMeta
+ * @typedef {object} ProjectMeta
  * 工程元信息
  * @property {string} projectId - 工程唯一 ID
  * @property {string} name - 工程名称
@@ -50,7 +50,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} SecurityDecl
+ * @typedef {object} SecurityDecl
  * 安全声明
  * @property {string[]} roles - 角色列表
  * @property {SecurityMode} mode - 安全模式
@@ -59,7 +59,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 入口配置 ====================
 
 /**
- * @typedef {Object} EntryConfig
+ * @typedef {object} EntryConfig
  * 入口配置
  * @property {string} [loginPageId] - 登录页面 ID
  * @property {string} homePageId - 首页 ID
@@ -78,7 +78,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} DataProvider
+ * @typedef {object} DataProvider
  * 数据提供者配置
  * @property {DataProviderType} type - 类型
  * @property {string} [description] - 描述
@@ -93,7 +93,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} VarDef
+ * @typedef {object} VarDef
  * 变量定义
  * @property {VarType} type - 变量类型
  * @property {*} default - 默认值
@@ -101,7 +101,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} VarsConfig
+ * @typedef {object} VarsConfig
  * 变量配置
  * @property {Record<string, VarDef>} global - 全局变量
  * @property {Record<string, Record<string, VarDef>>} pages - 页面变量（pageId -> varName -> VarDef）
@@ -120,7 +120,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} AssetRef
+ * @typedef {object} AssetRef
  * 资源引用
  * @property {AssetType} type - 资源类型
  * @property {string} uri - 资源 URI
@@ -136,14 +136,14 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} BackgroundConfig
+ * @typedef {object} BackgroundConfig
  * 背景配置
  * @property {'color' | 'image' | 'gradient'} kind - 背景类型
  * @property {string} value - 背景值
  */
 
 /**
- * @typedef {Object} PageConfig
+ * @typedef {object} PageConfig
  * 页面配置
  * @property {number} width - 页面宽度
  * @property {number} height - 页面高度
@@ -155,7 +155,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} LifecycleConfig
+ * @typedef {object} LifecycleConfig
  * 生命周期配置
  * @property {Action[]} [onMounted] - 挂载时
  * @property {Action[]} [onUnmounted] - 卸载时
@@ -164,7 +164,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} PageNode
+ * @typedef {object} PageNode
  * 页面节点
  * @property {string} id - 页面唯一 ID
  * @property {string} name - 页面名称
@@ -181,7 +181,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 布局配置 ====================
 
 /**
- * @typedef {Object} FlexLayoutItem
+ * @typedef {object} FlexLayoutItem
  * Flex 布局项
  * @property {number} [grow] - flex-grow
  * @property {number} [shrink] - flex-shrink
@@ -190,7 +190,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} AbsolutePosition
+ * @typedef {object} AbsolutePosition
  * 绝对定位
  * @property {number} x - X 坐标
  * @property {number} y - Y 坐标
@@ -200,7 +200,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} ConstraintsPosition
+ * @typedef {object} ConstraintsPosition
  * 约束定位
  * @property {number} [top] - 上边距
  * @property {number} [right] - 右边距
@@ -212,7 +212,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} FreeLayoutItem
+ * @typedef {object} FreeLayoutItem
  * 自由布局项
  * @property {'abs' | 'constraints'} mode - 定位模式
  * @property {AbsolutePosition} [abs] - 绝对定位
@@ -221,7 +221,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} GridLayoutItem
+ * @typedef {object} GridLayoutItem
  * Grid 布局项
  * @property {number} row - 行
  * @property {number} col - 列
@@ -230,7 +230,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} LayoutItem
+ * @typedef {object} LayoutItem
  * 布局项（联合类型）
  * @property {FlexLayoutItem} [flex] - Flex 布局
  * @property {FreeLayoutItem} [free] - 自由布局
@@ -240,14 +240,14 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 数据绑定 ====================
 
 /**
- * @typedef {Object} TransformOp
+ * @typedef {object} TransformOp
  * 转换操作
  * @property {string} op - 操作名称
  * @property {*[]} [args] - 参数
  */
 
 /**
- * @typedef {Object} DatapointBinding
+ * @typedef {object} DatapointBinding
  * 数据点绑定
  * @property {'datapoint'} kind - 绑定类型
  * @property {string} provider - 数据提供者 ID
@@ -259,7 +259,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} VarBinding
+ * @typedef {object} VarBinding
  * 变量绑定
  * @property {'var'} kind - 绑定类型
  * @property {'page' | 'global'} scope - 变量作用域
@@ -269,7 +269,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} ExprBinding
+ * @typedef {object} ExprBinding
  * 表达式绑定
  * @property {'expr'} kind - 绑定类型
  * @property {string} expr - 表达式
@@ -284,14 +284,14 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 权限配置 ====================
 
 /**
- * @typedef {Object} RolePermission
+ * @typedef {object} RolePermission
  * 角色权限
  * @property {string[]} [allowRoles] - 允许的角色
  * @property {string[]} [denyRoles] - 拒绝的角色
  */
 
 /**
- * @typedef {Object} PermissionConfig
+ * @typedef {object} PermissionConfig
  * 权限配置
  * @property {RolePermission} [visible] - 可见性权限
  * @property {RolePermission} [enable] - 可用性权限
@@ -306,10 +306,10 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} Action
+ * @typedef {object} Action
  * 动作定义
  * @property {ActionType} type - 动作类型
- * @property {Object} config - 动作配置
+ * @property {object} config - 动作配置
  * @property {RolePermission} [permissions] - 动作权限
  */
 
@@ -321,19 +321,19 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} Animation
+ * @typedef {object} Animation
  * 动画定义
  * @property {string} id - 动画 ID
  * @property {AnimationTrigger} trigger - 触发类型
  * @property {string} [condition] - 触发条件表达式
  * @property {string} type - 动画类型
- * @property {Object} config - 动画配置
+ * @property {object} config - 动画配置
  */
 
 // ==================== 条件渲染 ====================
 
 /**
- * @typedef {Object} ConditionsConfig
+ * @typedef {object} ConditionsConfig
  * 条件渲染配置
  * @property {string | boolean} [visible] - 是否渲染
  * @property {string | boolean} [enabled] - 是否可用
@@ -342,7 +342,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 循环渲染 ====================
 
 /**
- * @typedef {Object} LoopConfig
+ * @typedef {object} LoopConfig
  * 循环渲染配置
  * @property {string} source - 数据源表达式
  * @property {string} [itemVar] - 当前项变量名
@@ -353,7 +353,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 组件节点 ====================
 
 /**
- * @typedef {Object} ComponentNode
+ * @typedef {object} ComponentNode
  * 组件节点
  * @property {string} id - 节点唯一 ID
  * @property {string} type - 组件类型
@@ -374,7 +374,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {LoopConfig} [loop] - 循环渲染
  * @property {Record<string, string[]>} [slots] - 插槽内容
  * @property {string} [refId] - 自定义组件引用 ID
- * @property {Record<string, Object>} [overrides] - 自定义组件属性覆盖
+ * @property {Record<string, object>} [overrides] - 自定义组件属性覆盖
  * @property {string[]} children - 子节点 ID 数组
  * @property {boolean} [locked] - 锁定状态
  * @property {boolean} [hidden] - 隐藏状态（新增）
@@ -388,7 +388,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} ShapeStyle
+ * @typedef {object} ShapeStyle
  * 图元样式
  * @property {string} [fill] - 填充颜色
  * @property {string} [stroke] - 边框颜色
@@ -401,7 +401,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} LineData
+ * @typedef {object} LineData
  * 线段数据
  * @property {number} x1 - 起点 X
  * @property {number} y1 - 起点 Y
@@ -410,7 +410,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} RectData
+ * @typedef {object} RectData
  * 矩形数据
  * @property {number} x - X 坐标
  * @property {number} y - Y 坐标
@@ -421,7 +421,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} CircleData
+ * @typedef {object} CircleData
  * 圆形数据
  * @property {number} cx - 圆心 X
  * @property {number} cy - 圆心 Y
@@ -429,7 +429,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} TextData
+ * @typedef {object} TextData
  * 文本数据
  * @property {number} x - X 坐标
  * @property {number} y - Y 坐标
@@ -437,7 +437,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} ImageData
+ * @typedef {object} ImageData
  * 图片数据
  * @property {number} x - X 坐标
  * @property {number} y - Y 坐标
@@ -447,13 +447,13 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} PathData
+ * @typedef {object} PathData
  * 路径数据
  * @property {string} d - SVG 路径数据
  */
 
 /**
- * @typedef {Object} Shape
+ * @typedef {object} Shape
  * 图元定义
  * @property {string} id - 图元唯一 ID
  * @property {ShapeType} type - 图元类型
@@ -468,7 +468,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} DiagramData
+ * @typedef {object} DiagramData
  * 绘图数据（独立存储）
  * @property {string} diagramId - 绘图唯一 ID
  * @property {Shape[]} shapes - 图元列表
@@ -478,7 +478,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} DiagramProps
+ * @typedef {object} DiagramProps
  * 绘图组件属性
  * @property {boolean} [showGrid] - 显示网格
  * @property {number} [gridSize] - 网格大小
@@ -494,7 +494,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} GraphicProps
+ * @typedef {object} GraphicProps
  * 图形属性（基础）
  * @property {number} [x] - X 坐标
  * @property {number} [y] - Y 坐标
@@ -520,7 +520,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} PipeProps
+ * @typedef {object} PipeProps
  * 管道属性
  * @property {Array<[number, number]>} points - 路径点
  * @property {number} width - 管道宽度
@@ -536,7 +536,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} GraphicNode
+ * @typedef {object} GraphicNode
  * 图形节点
  * @property {string} id - 图形唯一 ID
  * @property {GraphicType} type - 图形类型
@@ -552,7 +552,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 符号库 ====================
 
 /**
- * @typedef {Object} GraphicPrimitive
+ * @typedef {object} GraphicPrimitive
  * 基础图形（符号组成部分）
  * @property {'rect' | 'circle' | 'line' | 'polygon' | 'path' | 'text'} type - 图形类型
  * @property {number} [x] - X 坐标
@@ -571,7 +571,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} Anchor
+ * @typedef {object} Anchor
  * 锚点定义
  * @property {string} name - 锚点名称
  * @property {number} x - X 偏移
@@ -580,7 +580,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} SymbolDef
+ * @typedef {object} SymbolDef
  * 符号定义
  * @property {string} id - 符号 ID
  * @property {string} name - 符号名称
@@ -594,7 +594,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 工程 Schema ====================
 
 /**
- * @typedef {Object} ProjectSchema
+ * @typedef {object} ProjectSchema
  * 工程 Schema
  * @property {number} schemaVersion - Schema 版本号
  * @property {ProjectMeta} project - 工程元信息
@@ -613,14 +613,14 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 选中元素 ====================
 
 /**
- * @typedef {Object} SelectableNodeElement
+ * @typedef {object} SelectableNodeElement
  * 可选中的节点元素
  * @property {'node'} kind - 元素类型
  * @property {string} id - 节点 ID
  */
 
 /**
- * @typedef {Object} SelectableGraphicElement
+ * @typedef {object} SelectableGraphicElement
  * 可选中的图形元素
  * @property {'graphic'} kind - 元素类型
  * @property {string} id - 图形 ID
@@ -637,7 +637,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} SelectionState
+ * @typedef {object} SelectionState
  * 选中状态
  * @property {SelectableElement[]} selectedElements - 选中的元素列表
  * @property {SelectableElement | null} hoveredElement - 当前 hover 的元素
@@ -654,21 +654,21 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} Change
+ * @typedef {object} Change
  * 变更记录
  * @property {ChangeType} type - 变更类型
  * @property {'node' | 'graphic' | 'page' | 'symbol'} target - 变更目标类型
  * @property {string} id - 目标 ID
  * @property {string} [parentId] - 父节点 ID
  * @property {number} [index] - 索引位置
- * @property {Object} [oldValue] - 旧值
- * @property {Object} [newValue] - 新值
+ * @property {object} [oldValue] - 旧值
+ * @property {object} [newValue] - 新值
  */
 
 // ==================== 校验结果 ====================
 
 /**
- * @typedef {Object} ValidationError
+ * @typedef {object} ValidationError
  * 校验错误
  * @property {string} code - 错误代码
  * @property {string} message - 错误信息
@@ -677,7 +677,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} ValidationWarning
+ * @typedef {object} ValidationWarning
  * 校验警告
  * @property {string} code - 警告代码
  * @property {string} message - 警告信息
@@ -686,7 +686,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} ValidationResult
+ * @typedef {object} ValidationResult
  * 校验结果
  * @property {boolean} valid - 是否有效
  * @property {ValidationError[]} errors - 错误列表
@@ -696,7 +696,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== 页面锁 ====================
 
 /**
- * @typedef {Object} PageLockState
+ * @typedef {object} PageLockState
  * 页面锁状态
  * @property {string} pageId - 页面 ID
  * @property {boolean} locked - 是否锁定
@@ -707,7 +707,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} EditorReadonlyState
+ * @typedef {object} EditorReadonlyState
  * 编辑器只读状态
  * @property {boolean} readonly - 是否只读
  * @property {'no_permission' | 'page_locked' | 'viewer_role'} [reason] - 只读原因
@@ -715,7 +715,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} LockResult
+ * @typedef {object} LockResult
  * 锁获取结果
  * @property {boolean} success - 是否成功
  * @property {'locked' | 'error'} [reason] - 失败原因
@@ -726,7 +726,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 // ==================== Patch ====================
 
 /**
- * @typedef {Object} PatchAddOp
+ * @typedef {object} PatchAddOp
  * 添加操作
  * @property {'add'} op - 操作类型
  * @property {string} path - 路径
@@ -734,14 +734,14 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} PatchRemoveOp
+ * @typedef {object} PatchRemoveOp
  * 删除操作
  * @property {'remove'} op - 操作类型
  * @property {string} path - 路径
  */
 
 /**
- * @typedef {Object} PatchReplaceOp
+ * @typedef {object} PatchReplaceOp
  * 替换操作
  * @property {'replace'} op - 操作类型
  * @property {string} path - 路径
@@ -754,7 +754,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  */
 
 /**
- * @typedef {Object} Patch
+ * @typedef {object} Patch
  * 差量补丁
  * @property {PatchOp[]} ops - 操作列表
  * @property {number} timestamp - 时间戳
@@ -1105,9 +1105,7 @@ export interface ProjectSchema {
   diagramsById?: Record<string, DiagramData>;
 }
 
-export type SelectableElement =
-  | { kind: "node"; id: string }
-  | { kind: "graphic"; id: string };
+export type SelectableElement = { kind: "node"; id: string } | { kind: "graphic"; id: string };
 
 export type DrawingTool =
   | "select"
@@ -1159,9 +1157,7 @@ export type LockResult =
  * 创建空工程 Schema
  * @param meta - 工程元信息
  */
-export function createEmptySchema(
-  meta: Partial<ProjectMeta> = {},
-): ProjectSchema {
+export function createEmptySchema(meta: Partial<ProjectMeta> = {}): ProjectSchema {
   const now = Date.now();
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -1284,10 +1280,7 @@ export function createGraphicNode(
 /**
  * 创建可选中元素
  */
-export function createSelectableElement(
-  kind: "node" | "graphic",
-  id: string,
-): SelectableElement {
+export function createSelectableElement(kind: "node" | "graphic", id: string): SelectableElement {
   return { kind, id };
 }
 

@@ -8,14 +8,14 @@
  * @module ui/Canvas/composables/use-node-style
  */
 
-import { computed, ref, watch, watchEffect, onMounted, onBeforeUnmount } from "vue";
-import { getDescriptor, isContainerType } from "@/components/descriptors/registry";
-import { resolveDescriptorContainerStyle } from "@/components/descriptors/registry";
-import { componentRegistry } from "@/editor-core";
+import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import {
-  normalizeStyleObject,
-  resolveTextPropStyle,
-} from "@/editor-core/utils/style-utils";
+  getDescriptor,
+  isContainerType,
+  resolveDescriptorContainerStyle,
+} from "@/components/descriptors/registry";
+import { componentRegistry } from "@/editor-core";
+import { normalizeStyleObject, resolveTextPropStyle } from "@/editor-core/utils/style-utils";
 
 /**
  * 格式化 Grid 模板
@@ -92,8 +92,7 @@ export function createNodeStyleHelpers(deps) {
     }
 
     if (isRootCanvasContainer(currentNode)) {
-      const zIndex =
-        currentNode.absolutePos?.z ?? currentNode.layoutItem?.free?.abs?.z;
+      const zIndex = currentNode.absolutePos?.z ?? currentNode.layoutItem?.free?.abs?.z;
       return {
         position: "absolute",
         left: 0,
@@ -119,11 +118,7 @@ export function createNodeStyleHelpers(deps) {
     if (currentNode.positioning === "flow") {
       if (currentNode.flowLayout) {
         const flow = currentNode.flowLayout;
-        if (
-          flow.grow !== undefined ||
-          flow.shrink !== undefined ||
-          flow.basis !== undefined
-        ) {
+        if (flow.grow !== undefined || flow.shrink !== undefined || flow.basis !== undefined) {
           style.flexGrow = flow.grow ?? 0;
           style.flexShrink = flow.shrink ?? 1;
           style.flexBasis = flow.basis ?? "auto";
@@ -229,18 +224,12 @@ export function createNodeStyleHelpers(deps) {
   function resolveContainerStyle(currentNode, baseStyle) {
     const style = {};
     const manifest = componentRegistry.get(currentNode.type);
-    const descriptorContainerStyle = resolveDescriptorContainerStyle(
-      currentNode.type,
-      currentNode,
-    );
+    const descriptorContainerStyle = resolveDescriptorContainerStyle(currentNode.type, currentNode);
     if (descriptorContainerStyle) {
       return { ...descriptorContainerStyle };
     }
 
-    if (
-      currentNode.type === "FlexContainer" ||
-      currentNode.type === "ResponsiveLayout"
-    ) {
+    if (currentNode.type === "FlexContainer" || currentNode.type === "ResponsiveLayout") {
       style.display = "flex";
       style.flexDirection = currentNode.props?.direction || "row";
       style.flexWrap = currentNode.props?.wrap || "nowrap";
@@ -297,12 +286,9 @@ export function createNodeStyleHelpers(deps) {
       const hasBody = hasAside || hasMain;
       const hasTwoCols = hasAside && hasMain;
       const containerProps = currentNode.props || {};
-      const headerHeight =
-        containerProps.headerHeight || headerNode?.props?.height || "60px";
-      const footerHeight =
-        containerProps.footerHeight || footerNode?.props?.height || "60px";
-      const asideWidth =
-        containerProps.asideWidth || asideNode?.props?.width || "200px";
+      const headerHeight = containerProps.headerHeight || headerNode?.props?.height || "60px";
+      const footerHeight = containerProps.footerHeight || footerNode?.props?.height || "60px";
+      const asideWidth = containerProps.asideWidth || asideNode?.props?.width || "200px";
 
       style.display = "grid";
       style.position = "relative";
@@ -391,11 +377,8 @@ export function createNodeStyleHelpers(deps) {
       const parentNode = getDoc()?.getParent?.(currentNode.id);
       const rawHeight = currentNode.style?.height;
       const normalizedHeight =
-        rawHeight === undefined || rawHeight === null
-          ? ""
-          : String(rawHeight).trim();
-      const hasFixedHeight =
-        normalizedHeight !== "" && normalizedHeight !== "auto";
+        rawHeight === undefined || rawHeight === null ? "" : String(rawHeight).trim();
+      const hasFixedHeight = normalizedHeight !== "" && normalizedHeight !== "auto";
       style.display = "flex";
       style.flexWrap = "wrap";
       style.alignItems = "stretch";
@@ -431,9 +414,7 @@ export function createNodeStyleHelpers(deps) {
       style.position = "relative";
       style.boxSizing = "border-box";
     } else if (currentNode.type === "ElLayout") {
-      const rowGap = props.readonly
-        ? 0
-        : Math.max(0, Number(currentNode.props?.gutter) || 0);
+      const rowGap = props.readonly ? 0 : Math.max(0, Number(currentNode.props?.gutter) || 0);
       const rawPadding = currentNode.props?.padding;
       const layoutPadding = props.readonly
         ? "0px"
@@ -492,9 +473,7 @@ export function createNodeStyleHelpers(deps) {
       const customStyle = normalizeStyleObject(nodeRef.value.style || {});
       const textStyle =
         nodeRef.value.type === "Text"
-          ? normalizeStyleObject(
-              resolveTextPropStyle(resolvedNodePropsRef.value || {}),
-            )
+          ? normalizeStyleObject(resolveTextPropStyle(resolvedNodePropsRef.value || {}))
           : {};
       const parentNode = docRef.value?.getParent?.(nodeRef.value.id);
       const style = {
@@ -511,10 +490,7 @@ export function createNodeStyleHelpers(deps) {
       if (!props.readonly) {
         if (nodeRef.value.type === "ElLayout") {
           style.overflow = "hidden";
-        } else if (
-          nodeRef.value.type === "ElLayoutRow" ||
-          nodeRef.value.type === "ElCol"
-        ) {
+        } else if (nodeRef.value.type === "ElLayoutRow" || nodeRef.value.type === "ElCol") {
           style.overflow = "visible";
         }
       }
@@ -574,28 +550,20 @@ export function createNodeStyleHelpers(deps) {
           style.height = "auto";
         }
         const rowParent = docRef.value?.getParent?.(parentNode.id);
-        const rowHeight =
-          rowParent?.type === "ElLayoutRow" ? rowParent.style?.height : undefined;
+        const rowHeight = rowParent?.type === "ElLayoutRow" ? rowParent.style?.height : undefined;
         const normalizedRowHeight =
-          rowHeight === undefined || rowHeight === null
-            ? ""
-            : String(rowHeight).trim();
-        const hasFixedRowHeight =
-          normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
+          rowHeight === undefined || rowHeight === null ? "" : String(rowHeight).trim();
+        const hasFixedRowHeight = normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
         if (hasFixedRowHeight && (!style.height || style.height === "auto")) {
           style.height = "100%";
         }
       }
       if (parentNode?.type === "ElCol") {
         const rowParent = docRef.value?.getParent?.(parentNode.id);
-        const rowHeight =
-          rowParent?.type === "ElLayoutRow" ? rowParent.style?.height : undefined;
+        const rowHeight = rowParent?.type === "ElLayoutRow" ? rowParent.style?.height : undefined;
         const normalizedRowHeight =
-          rowHeight === undefined || rowHeight === null
-            ? ""
-            : String(rowHeight).trim();
-        const hasFixedRowHeight =
-          normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
+          rowHeight === undefined || rowHeight === null ? "" : String(rowHeight).trim();
+        const hasFixedRowHeight = normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
         if (hasFixedRowHeight) {
           style.height = "100%";
         }
@@ -728,10 +696,7 @@ export function createNodeStyleHelpers(deps) {
       }
       if (type === "ElLayoutRow") {
         const gutter = props.readonly ? 0 : Number(nodeRef.value?.props?.gutter) || 0;
-        const columns = Math.max(
-          1,
-          Math.min(24, Number(nodeRef.value?.props?.columns) || 1),
-        );
+        const columns = Math.max(1, Math.min(24, Number(nodeRef.value?.props?.columns) || 1));
         style["--row-gutter"] = `${Math.max(0, gutter)}px`;
         style["--row-columns"] = String(columns);
         style.paddingLeft = "0";
@@ -761,11 +726,7 @@ export function createNodeStyleHelpers(deps) {
           style.paddingRight = `${rowGuidePaddingX}px`;
         }
       }
-      if (
-        type === "ElLayoutRow" &&
-        parentNode?.type === "ElLayout" &&
-        isEditingMode
-      ) {
+      if (type === "ElLayoutRow" && parentNode?.type === "ElLayout" && isEditingMode) {
         style.marginTop = "6px";
         style.marginBottom = "6px";
       }
@@ -781,15 +742,10 @@ export function createNodeStyleHelpers(deps) {
         style.padding = "0";
         style.height = "100%";
         const rowHeight =
-          parentNode?.style?.height !== undefined
-            ? parentNode.style.height
-            : undefined;
+          parentNode?.style?.height !== undefined ? parentNode.style.height : undefined;
         const normalizedRowHeight =
-          rowHeight === undefined || rowHeight === null
-            ? ""
-            : String(rowHeight).trim();
-        const hasFixedRowHeight =
-          normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
+          rowHeight === undefined || rowHeight === null ? "" : String(rowHeight).trim();
+        const hasFixedRowHeight = normalizedRowHeight !== "" && normalizedRowHeight !== "auto";
         if (hasFixedRowHeight) {
           style.height = "100%";
         }
@@ -809,13 +765,9 @@ export function createNodeStyleHelpers(deps) {
           const halfCol = "calc(100% / var(--row-columns) / 2)";
           const clampedHalf = `min(${halfGutter}, ${halfCol})`;
           style.paddingLeft =
-            colContentInsetX > 0
-              ? `calc(${clampedHalf} + ${colContentInsetX}px)`
-              : clampedHalf;
+            colContentInsetX > 0 ? `calc(${clampedHalf} + ${colContentInsetX}px)` : clampedHalf;
           style.paddingRight =
-            colContentInsetX > 0
-              ? `calc(${clampedHalf} + ${colContentInsetX}px)`
-              : clampedHalf;
+            colContentInsetX > 0 ? `calc(${clampedHalf} + ${colContentInsetX}px)` : clampedHalf;
           style["--col-gutter-x"] = clampedHalf;
           style.paddingTop = `${colContentInsetY}px`;
           style.paddingBottom = `${colContentInsetY}px`;
@@ -935,13 +887,7 @@ export function createNodeStyleHelpers(deps) {
    * @param {import('vue').Ref} isContainerRef - 是否为容器 ref
    * @returns {import('vue').ComputedRef<Record<string, any>>}
    */
-  function createWrapperStyle(
-    nodeRef,
-    docRef,
-    layoutStyleRef,
-    isMovableRef,
-    isContainerRef,
-  ) {
+  function createWrapperStyle(nodeRef, docRef, layoutStyleRef, isMovableRef, isContainerRef) {
     return computed(() => {
       if (!nodeRef.value) return {};
       const style = { ...layoutStyleRef.value };
@@ -955,11 +901,7 @@ export function createNodeStyleHelpers(deps) {
       const parentNode = docRef.value?.getParent?.(nodeRef.value.id);
       const hasCustomWidth = Boolean(customStyle.width);
       const hasCustomHeight = Boolean(customStyle.height);
-      if (
-        nodeRef.value.type === "ElCol" &&
-        parentNode?.type === "ElLayoutRow" &&
-        !style.height
-      ) {
+      if (nodeRef.value.type === "ElCol" && parentNode?.type === "ElLayoutRow" && !style.height) {
         style.height = "auto";
       }
       if (parentNode?.type === "ElCol" && isMovableRef.value) {

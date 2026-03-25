@@ -2,46 +2,13 @@
   MaterialPanel - 物料面板
   根据编辑模式切换：页面模式（组件/绘图区/资源 Tab）、Canvas 模式（绘图工具）
 -->
-<template>
-  <div class="flex flex-col gap-3 material-panel">
-    <!-- 页面编辑模式：组件 + 绘图区 + 资源 -->
-    <template v-if="editMode === 'page'">
-      <el-tabs v-model="activeTab">
-        <el-tab-pane label="组件" name="components">
-          <ComponentPanel />
-        </el-tab-pane>
-        <el-tab-pane label="绘图区(暂缓)" name="diagram" disabled>
-          <DiagramAreaPanel />
-        </el-tab-pane>
-        <el-tab-pane label="资源" name="resources">
-          <ResourcePanel />
-        </el-tab-pane>
-      </el-tabs>
-    </template>
-
-    <!-- Canvas 绘图模式：绘图工具 -->
-    <template v-else-if="editMode === 'canvas'">
-      <div class="canvas-tools-panel">
-        <div class="panel-header">
-          <h3 class="text-sm font-medium">Canvas 绘图工具</h3>
-          <el-button size="small" text @click="exitCanvasMode">
-            <IconEpBack />
-            返回页面编辑
-          </el-button>
-        </div>
-        <CanvasToolsPanel v-model="activeToolModel" />
-      </div>
-    </template>
-  </div>
-</template>
-
 <script setup>
 import { computed, ref } from "vue";
+import IconEpBack from "~icons/ep/back";
+import CanvasToolsPanel from "./CanvasToolsPanel.vue";
 import ComponentPanel from "./ComponentPanel.vue";
 import DiagramAreaPanel from "./DiagramAreaPanel.vue";
-import CanvasToolsPanel from "./CanvasToolsPanel.vue";
 import ResourcePanel from "./ResourcePanel.vue";
-import IconEpBack from "~icons/ep/back";
 
 const props = defineProps({
   /**
@@ -76,10 +43,43 @@ const activeToolModel = computed({
 /**
  * 退出 Canvas 模式
  */
-const exitCanvasMode = () => {
+function exitCanvasMode() {
   emit("update:editMode", "page");
-};
+}
 </script>
+
+<template>
+  <div class="flex flex-col gap-3 material-panel">
+    <!-- 页面编辑模式：组件 + 绘图区 + 资源 -->
+    <template v-if="editMode === 'page'">
+      <el-tabs v-model="activeTab">
+        <el-tab-pane label="组件" name="components">
+          <ComponentPanel />
+        </el-tab-pane>
+        <el-tab-pane label="绘图区(暂缓)" name="diagram" disabled>
+          <DiagramAreaPanel />
+        </el-tab-pane>
+        <el-tab-pane label="资源" name="resources">
+          <ResourcePanel />
+        </el-tab-pane>
+      </el-tabs>
+    </template>
+
+    <!-- Canvas 绘图模式：绘图工具 -->
+    <template v-else-if="editMode === 'canvas'">
+      <div class="canvas-tools-panel">
+        <div class="panel-header">
+          <h3 class="text-sm font-medium">Canvas 绘图工具</h3>
+          <el-button size="small" text @click="exitCanvasMode">
+            <IconEpBack />
+            返回页面编辑
+          </el-button>
+        </div>
+        <CanvasToolsPanel v-model="activeToolModel" />
+      </div>
+    </template>
+  </div>
+</template>
 
 <style scoped>
 .material-panel {

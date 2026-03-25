@@ -3,8 +3,9 @@
  * 包含页面更新命令实现
  */
 
-import { Command, type CommandDocument } from "./Command";
-import type { PageNode } from "../document/types.js";
+import type { PageNode } from "../document/types.ts";
+import type { CommandDocument } from "./Command";
+import { Command } from "./Command";
 
 /**
  * 更新页面命令
@@ -32,9 +33,7 @@ export class UpdatePageCommand extends Command {
     const oldValues: Partial<PageNode> = {};
     const pageRec = page as unknown as Record<string, unknown>;
     for (const key of Object.keys(this._patch)) {
-      oldValues[key as keyof PageNode] = JSON.parse(
-        JSON.stringify(pageRec[key] ?? null),
-      ) as never;
+      oldValues[key as keyof PageNode] = JSON.parse(JSON.stringify(pageRec[key] ?? null)) as never;
     }
     this._oldValues = oldValues;
 

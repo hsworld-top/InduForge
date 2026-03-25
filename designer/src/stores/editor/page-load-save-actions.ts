@@ -5,9 +5,9 @@
 import type { ProjectSchema } from "@/editor-core/document/types";
 import { unwrapApiData } from "@/types/api";
 
-export type PageContentApi = {
+export interface PageContentApi {
   getPage: (projectId: string, pageId: string) => Promise<unknown>;
-};
+}
 
 export type ResolveProjectSchemaFn = (
   payload: unknown,

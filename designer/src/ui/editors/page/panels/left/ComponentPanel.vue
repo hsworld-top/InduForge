@@ -2,126 +2,10 @@
   ComponentPanel - 组件物料面板
   展示可拖拽组件列表（布局、UI、图表等），支持搜索、常用/全部切换
 -->
-<template>
-  <div class="flex flex-col gap-3 component-panel">
-    <el-input v-model="keyword" size="small" placeholder="搜索组件" clearable />
-    <el-switch
-      v-model="showAllComponents"
-      size="small"
-      inline-prompt
-      active-text="全部"
-      inactive-text="常用"
-    />
-    <div class="component-list">
-      <el-collapse v-model="activeSections" class="component-collapse">
-        <el-collapse-item name="layout">
-          <template #title>
-            <div class="component-section-title">布局</div>
-          </template>
-          <div v-if="layoutItems.length" class="grid grid-cols-2 gap-2">
-            <div
-              v-for="item in layoutItems"
-              :key="item.type"
-              class="component-card"
-              draggable="true"
-              @mousedown="handlePointerStart(item, $event)"
-              @dragstart="handleDragStart(item, $event)"
-              @dragend="handleDragEnd"
-            >
-              <div class="card-preview">
-                <component :is="getPreviewComponent(item.type)" />
-              </div>
-              <div class="card-info">
-                <div
-                  class="text-xs font-medium text-gray-800 dark:text-gray-200"
-                >
-                  {{ item.name }}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-sm text-gray-400 text-center py-6">
-            暂无可用组件
-          </div>
-        </el-collapse-item>
-
-        <el-collapse-item name="ui">
-          <template #title>
-            <div class="component-section-title">UI组件</div>
-          </template>
-          <el-collapse v-model="activeUiSections" class="component-subcollapse">
-            <el-collapse-item name="pc">
-              <template #title>
-                <div class="component-subsection-title">PC端组件</div>
-              </template>
-              <div v-if="pcItems.length" class="grid grid-cols-2 gap-2">
-                <div
-                  v-for="item in pcItems"
-                  :key="item.type"
-                  class="component-card"
-                  draggable="true"
-                  @mousedown="handlePointerStart(item, $event)"
-                  @dragstart="handleDragStart(item, $event)"
-                  @dragend="handleDragEnd"
-                >
-                  <div class="card-preview">
-                    <component :is="getPreviewComponent(item.type)" />
-                  </div>
-                  <div class="card-info">
-                    <div
-                      class="text-xs font-medium text-gray-800 dark:text-gray-200"
-                    >
-                      {{ item.name }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="text-sm text-gray-400 text-center py-6">
-                暂无可用组件
-              </div>
-            </el-collapse-item>
-          </el-collapse>
-        </el-collapse-item>
-
-        <el-collapse-item name="chart">
-          <template #title>
-            <div class="component-section-title">图表</div>
-          </template>
-          <div v-if="chartItems.length" class="grid grid-cols-2 gap-2">
-            <div
-              v-for="item in chartItems"
-              :key="item.type"
-              class="component-card"
-              draggable="true"
-              @mousedown="handlePointerStart(item, $event)"
-              @dragstart="handleDragStart(item, $event)"
-              @dragend="handleDragEnd"
-            >
-              <div class="card-preview">
-                <component :is="getPreviewComponent(item.type)" />
-              </div>
-              <div class="card-info">
-                <div
-                  class="text-xs font-medium text-gray-800 dark:text-gray-200"
-                >
-                  {{ item.name }}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-sm text-gray-400 text-center py-6">
-            暂无可用组件
-          </div>
-        </el-collapse-item>
-      </el-collapse>
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { computed, ref, h } from "vue";
+import { computed, h, ref } from "vue";
 import { componentRegistry } from "@/editor-core";
-import { startDrag, endDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
+import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
 
 /**
  * 搜索关键字
@@ -149,11 +33,9 @@ const allowedTypesByCategory = {
  * @param {string} category - 组件分类
  * @returns {Array}
  */
-const filterItemsByCategory = (category) => {
+function filterItemsByCategory(category) {
   const keywordValue = keyword.value.trim().toLowerCase();
-  const allowedTypes = showAllComponents.value
-    ? null
-    : allowedTypesByCategory[category];
+  const allowedTypes = showAllComponents.value ? null : allowedTypesByCategory[category];
   return componentRegistry.getByCategory(category).filter((item) => {
     if (Array.isArray(allowedTypes) && !allowedTypes.includes(item.type)) {
       return false;
@@ -164,7 +46,7 @@ const filterItemsByCategory = (category) => {
       item.name.toLowerCase().includes(keywordValue)
     );
   });
-};
+}
 
 const layoutItems = computed(() => filterItemsByCategory("layout"));
 const pcItems = computed(() => filterItemsByCategory("uiPc"));
@@ -175,13 +57,11 @@ const chartItems = computed(() => filterItemsByCategory("chart"));
  * @param {string} type - 组件类型
  * @returns {import('vue').Component}
  */
-const getPreviewComponent = (type) => {
+function getPreviewComponent(type) {
   const previewMap = {
     Button: {
       render: () =>
-        h("div", { class: "preview-button" }, [
-          h("span", { class: "text-xs" }, "按钮"),
-        ]),
+        h("div", { class: "preview-button" }, [h("span", { class: "text-xs" }, "按钮")]),
     },
     Text: {
       render: () => h("div", { class: "preview-text" }, "文本"),
@@ -323,21 +203,15 @@ const getPreviewComponent = (type) => {
     },
     Radio: {
       render: () =>
-        h("div", { class: "preview-radio" }, [
-          h("div", { class: "preview-radio-dot" }),
-        ]),
+        h("div", { class: "preview-radio" }, [h("div", { class: "preview-radio-dot" })]),
     },
     Checkbox: {
       render: () =>
-        h("div", { class: "preview-checkbox" }, [
-          h("div", { class: "preview-checkbox-mark" }),
-        ]),
+        h("div", { class: "preview-checkbox" }, [h("div", { class: "preview-checkbox-mark" })]),
     },
     Input: {
       render: () =>
-        h("div", { class: "preview-input" }, [
-          h("div", { class: "preview-input-line" }),
-        ]),
+        h("div", { class: "preview-input" }, [h("div", { class: "preview-input-line" })]),
     },
     Cascader: {
       render: () =>
@@ -470,14 +344,14 @@ const getPreviewComponent = (type) => {
       render: () => h("div", { class: "preview-default" }, type),
     }
   );
-};
+}
 
 /**
  * 处理拖拽开始
  * @param {{ type: string, name: string }} item - 组件项
  * @param {DragEvent} event - 拖拽事件
  */
-const handleDragStart = (item, event) => {
+function handleDragStart(item, event) {
   startDrag(item.type);
   if (!event.dataTransfer) return;
 
@@ -515,34 +389,33 @@ const handleDragStart = (item, event) => {
   setTimeout(() => {
     document.body.removeChild(dragPreview);
   }, 0);
-};
+}
 
 /**
  * 处理鼠标拖拽开始（HTML5 drag 失效时兜底）
  * @param {{ type: string }} item - 组件项
  * @param {MouseEvent} event - 鼠标事件
  */
-const handlePointerStart = (item, event) => {
+function handlePointerStart(item, event) {
   if (event.button !== 0) return;
   startDrag(item.type);
-};
+}
 
 /**
  * 处理拖拽结束
  */
-const handleDragEnd = () => {
+function handleDragEnd() {
   endDrag();
-};
+}
 
 /**
  * 获取预览图标（简化版）
  * @param {string} type - 组件类型
  * @returns {string} HTML 字符串
  */
-const getPreviewIcon = (type) => {
+function getPreviewIcon(type) {
   const iconMap = {
-    Button:
-      '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
+    Button: '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
     Text: '<div style="width:60px;height:20px;background:#606266;border-radius:2px;"></div>',
     FlexContainer:
       '<div style="width:60px;height:40px;background:#e4e7ed;border-radius:4px;display:flex;gap:4px;padding:4px;"><div style="flex:1;background:#909399;"></div><div style="flex:1;background:#909399;"></div></div>',
@@ -565,15 +438,13 @@ const getPreviewIcon = (type) => {
     Table:
       '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;"><div style="height:10px;background:#e4e7ed;"></div><div style="height:8px;margin:6px 6px 0;background:#c0c4cc;"></div><div style="height:8px;margin:4px 6px 0;background:#c0c4cc;"></div></div>',
     Tree: '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:6px;display:flex;flex-direction:column;gap:4px;"><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div></div>',
-    Dropdown:
-      '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
+    Dropdown: '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
     Menu: '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:6px;display:flex;flex-direction:column;gap:4px;"><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div></div>',
     Radio:
       '<div style="width:60px;height:20px;border:1px solid #dcdfe6;border-radius:10px;"></div>',
     Checkbox:
       '<div style="width:18px;height:18px;border:2px solid #409eff;border-radius:4px;"></div>',
-    Input:
-      '<div style="width:60px;height:24px;border:1px solid #dcdfe6;border-radius:4px;"></div>',
+    Input: '<div style="width:60px;height:24px;border:1px solid #dcdfe6;border-radius:4px;"></div>',
     Cascader:
       '<div style="width:60px;height:24px;border:1px solid #dcdfe6;border-radius:4px;background:#f5f7fa;"></div>',
     Tabs: '<div style="width:60px;height:40px;border:1px solid #dcdfe6;border-radius:4px;"><div style="height:12px;background:#e4e7ed;"></div><div style="height:20px;margin:4px;background:#f5f7fa;"></div></div>',
@@ -618,8 +489,112 @@ const getPreviewIcon = (type) => {
     iconMap[type] ||
     '<div style="width:60px;height:40px;background:#f0f0f0;border-radius:4px;"></div>'
   );
-};
+}
 </script>
+
+<template>
+  <div class="flex flex-col gap-3 component-panel">
+    <el-input v-model="keyword" size="small" placeholder="搜索组件" clearable />
+    <el-switch
+      v-model="showAllComponents"
+      size="small"
+      inline-prompt
+      active-text="全部"
+      inactive-text="常用"
+    />
+    <div class="component-list">
+      <el-collapse v-model="activeSections" class="component-collapse">
+        <el-collapse-item name="layout">
+          <template #title>
+            <div class="component-section-title">布局</div>
+          </template>
+          <div v-if="layoutItems.length" class="grid grid-cols-2 gap-2">
+            <div
+              v-for="item in layoutItems"
+              :key="item.type"
+              class="component-card"
+              draggable="true"
+              @mousedown="handlePointerStart(item, $event)"
+              @dragstart="handleDragStart(item, $event)"
+              @dragend="handleDragEnd"
+            >
+              <div class="card-preview">
+                <component :is="getPreviewComponent(item.type)" />
+              </div>
+              <div class="card-info">
+                <div class="text-xs font-medium text-gray-800 dark:text-gray-200">
+                  {{ item.name }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-sm text-gray-400 text-center py-6">暂无可用组件</div>
+        </el-collapse-item>
+
+        <el-collapse-item name="ui">
+          <template #title>
+            <div class="component-section-title">UI组件</div>
+          </template>
+          <el-collapse v-model="activeUiSections" class="component-subcollapse">
+            <el-collapse-item name="pc">
+              <template #title>
+                <div class="component-subsection-title">PC端组件</div>
+              </template>
+              <div v-if="pcItems.length" class="grid grid-cols-2 gap-2">
+                <div
+                  v-for="item in pcItems"
+                  :key="item.type"
+                  class="component-card"
+                  draggable="true"
+                  @mousedown="handlePointerStart(item, $event)"
+                  @dragstart="handleDragStart(item, $event)"
+                  @dragend="handleDragEnd"
+                >
+                  <div class="card-preview">
+                    <component :is="getPreviewComponent(item.type)" />
+                  </div>
+                  <div class="card-info">
+                    <div class="text-xs font-medium text-gray-800 dark:text-gray-200">
+                      {{ item.name }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-sm text-gray-400 text-center py-6">暂无可用组件</div>
+            </el-collapse-item>
+          </el-collapse>
+        </el-collapse-item>
+
+        <el-collapse-item name="chart">
+          <template #title>
+            <div class="component-section-title">图表</div>
+          </template>
+          <div v-if="chartItems.length" class="grid grid-cols-2 gap-2">
+            <div
+              v-for="item in chartItems"
+              :key="item.type"
+              class="component-card"
+              draggable="true"
+              @mousedown="handlePointerStart(item, $event)"
+              @dragstart="handleDragStart(item, $event)"
+              @dragend="handleDragEnd"
+            >
+              <div class="card-preview">
+                <component :is="getPreviewComponent(item.type)" />
+              </div>
+              <div class="card-info">
+                <div class="text-xs font-medium text-gray-800 dark:text-gray-200">
+                  {{ item.name }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-sm text-gray-400 text-center py-6">暂无可用组件</div>
+        </el-collapse-item>
+      </el-collapse>
+    </div>
+  </div>
+</template>
 
 <style>
 /* 组件卡片 */
@@ -1359,11 +1334,7 @@ const getPreviewIcon = (type) => {
   height: 24px;
   border: 1px solid #3b6cff;
   border-radius: 4px;
-  background: repeating-linear-gradient(
-    90deg,
-    #3b6cff 0 2px,
-    transparent 2px 4px
-  );
+  background: repeating-linear-gradient(90deg, #3b6cff 0 2px, transparent 2px 4px);
 }
 
 .preview-slider {

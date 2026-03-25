@@ -2,12 +2,6 @@
   GridContainer - Grid 布局容器
   根据 node.props 生成 grid-template-columns/rows、gap
 -->
-<template>
-  <div class="grid-container" :style="gridStyle">
-    <slot />
-  </div>
-</template>
-
 <script setup>
 import { computed } from "vue";
 
@@ -26,8 +20,7 @@ const props = defineProps({
  * Grid 容器样式
  */
 const gridStyle = computed(() => {
-  const { columns, rows, gap, columnTemplate, rowTemplate } =
-    props.node.props || {};
+  const { columns, rows, gap, columnTemplate, rowTemplate } = props.node.props || {};
 
   const style = {
     display: "grid",
@@ -61,6 +54,12 @@ const gridStyle = computed(() => {
   return style;
 });
 </script>
+
+<template>
+  <div class="grid-container" :style="gridStyle">
+    <slot />
+  </div>
+</template>
 
 <style scoped>
 .grid-container {

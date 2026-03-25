@@ -2,404 +2,31 @@
   PageTree - 页面树
   展示工程页面层级（基础页面、自定义页面），支持搜索、新建、重命名、删除、拖拽排序
 -->
-<template>
-  <div class="page-tree-container">
-    <!-- 搜索框 -->
-    <div class="page-search">
-      <el-input
-        v-model="searchText"
-        size="small"
-        placeholder="搜索页面..."
-        clearable
-        :prefix-icon="IconEpSearch"
-      />
-    </div>
-
-    <!-- 页面树 -->
-    <div class="page-tree-content">
-      <section class="page-section">
-        <div class="page-section__header">
-          <span class="page-section__title">基础页面</span>
-        </div>
-        <div v-if="filteredBasicSlots.length" class="page-section__body">
-          <div
-            v-for="slot in filteredBasicSlots"
-            :key="slot.type"
-            class="tree-node page-node page-node--basic"
-            :class="{
-              'is-active': slot.page ? isPageActive(slot.page.id) : false,
-              'is-empty': !slot.page,
-            }"
-            @click="handleBasicSlotClick(slot)"
-            @dblclick="handleBasicSlotDoubleClick(slot)"
-          >
-            <div class="node-indent node-indent--basic" />
-            <IconEpDocument class="node-icon page" />
-            <span class="node-label">{{ slot.label }}</span>
-            <el-dropdown
-              trigger="click"
-              placement="bottom-end"
-              @command="(command) => handleBasicRowAction(command, slot)"
-            >
-              <el-button class="node-action-btn" text @click.stop>
-                <IconEpMoreFilled />
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-if="slot.page" command="open"
-                    >打开</el-dropdown-item
-                  >
-                  <el-dropdown-item v-else command="create"
-                    >创建</el-dropdown-item
-                  >
-                  <el-dropdown-item v-if="slot.page" command="export"
-                    >导出页面</el-dropdown-item
-                  >
-                  <el-dropdown-item
-                    v-if="slot.page && slot.type !== 'home'"
-                    command="delete"
-                    divided
-                  >
-                    删除
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-        </div>
-        <div v-else class="page-section__empty">暂无基础页面</div>
-      </section>
-
-      <section
-        class="page-section"
-        @dragover.prevent="handleContainerDragOver($event, null)"
-        @drop.prevent="handleContainerDrop(null)"
-      >
-        <div class="page-section__header">
-          <span class="page-section__title">普通页面</span>
-        </div>
-        <div v-if="filteredBusinessRootItems.length" class="page-section__body">
-          <template v-for="item in filteredBusinessRootItems" :key="item.id">
-            <div
-              v-if="item.type === 'folder'"
-              class="tree-node folder-node"
-              :class="{
-                'is-active': selectedNode?.id === item.id,
-                'is-drop-target':
-                  dragOverTarget?.id === item.id &&
-                  dragOverTarget?.mode === 'append',
-              }"
-              draggable="true"
-              @dragstart="handleDragStart(item, null)"
-              @dragend="handleDragEnd"
-              @dragover.prevent="handleFolderDragOver($event, item)"
-              @dragleave="handleDragLeave(item.id)"
-              @drop.prevent="handleFolderDrop(item)"
-              @click="handleFolderClick(item)"
-            >
-              <div class="node-indent node-indent--folder" />
-              <component
-                :is="folderStates[item.id] ? IconEpArrowDown : IconEpArrowRight"
-                class="node-arrow"
-                @click.stop="toggleFolder(item.id)"
-              />
-              <IconEpFolder class="node-icon folder" />
-              <span class="node-label">{{ item.name }}</span>
-              <span class="node-count">{{ getChildrenCount(item.id) }}</span>
-              <el-dropdown
-                trigger="click"
-                placement="bottom-end"
-                @command="(command) => handleRowAction(command, item)"
-              >
-                <el-button class="node-action-btn" text @click.stop>
-                  <IconEpMoreFilled />
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                    <el-dropdown-item command="createPage"
-                      >新建页面</el-dropdown-item
-                    >
-                    <el-dropdown-item command="delete" divided
-                      >删除分组</el-dropdown-item
-                    >
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-            <div
-              v-else
-              class="tree-node page-node"
-              :class="{
-                'is-active': isPageActive(item.id),
-                'is-drop-target':
-                  dragOverTarget?.id === item.id &&
-                  dragOverTarget?.mode === 'before',
-              }"
-              draggable="true"
-              @dragstart="handleDragStart(item, null)"
-              @dragend="handleDragEnd"
-              @dragover.prevent="handleNodeDragOver($event, item, null)"
-              @dragleave="handleDragLeave(item.id)"
-              @drop.prevent="handleNodeDrop(item, null)"
-              @click="handleNodeClick({ id: item.id, type: 'page' })"
-              @dblclick="
-                handleNodeDoubleClick({
-                  id: item.id,
-                  type: 'page',
-                  label: getPageLabel(item),
-                })
-              "
-            >
-              <div class="node-indent" />
-              <IconEpDocument class="node-icon page" />
-              <span class="node-label">{{ getPageLabel(item) }}</span>
-              <el-dropdown
-                trigger="click"
-                placement="bottom-end"
-                @command="(command) => handleRowAction(command, item)"
-              >
-                <el-button class="node-action-btn" text @click.stop>
-                  <IconEpMoreFilled />
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="open">打开</el-dropdown-item>
-                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                    <el-dropdown-item command="export"
-                      >导出页面</el-dropdown-item
-                    >
-                    <el-dropdown-item
-                      v-if="item.parentId"
-                      command="moveToRoot"
-                      divided
-                    >
-                      移到根目录
-                    </el-dropdown-item>
-                    <el-dropdown-item
-                      v-for="target in getMoveTargets(item)"
-                      :key="`root-${item.id}-${target.id ?? 'root'}`"
-                      :command="buildMoveCommand(target.id)"
-                    >
-                      {{ target.label }}
-                    </el-dropdown-item>
-                    <el-dropdown-item command="delete" divided
-                      >删除</el-dropdown-item
-                    >
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-
-            <div
-              v-if="item.type === 'folder' && folderStates[item.id]"
-              class="tree-children"
-            >
-              <div
-                v-for="page in getBusinessChildren(item.id)"
-                :key="page.id"
-                class="tree-node page-node level-1"
-                :class="{
-                  'is-active': isPageActive(page.id),
-                  'is-drop-target':
-                    dragOverTarget?.id === page.id &&
-                    dragOverTarget?.mode === 'before',
-                }"
-                draggable="true"
-                @dragstart="handleDragStart(page, item.id)"
-                @dragend="handleDragEnd"
-                @dragover.prevent="handleNodeDragOver($event, page, item.id)"
-                @dragleave="handleDragLeave(page.id)"
-                @drop.prevent="handleNodeDrop(page, item.id)"
-                @click="handleNodeClick({ id: page.id, type: 'page' })"
-                @dblclick="
-                  handleNodeDoubleClick({
-                    id: page.id,
-                    type: 'page',
-                    label: getPageLabel(page),
-                  })
-                "
-              >
-                <div class="node-indent">
-                  <span class="tree-line horizontal" />
-                </div>
-                <IconEpDocument class="node-icon page" />
-                <span class="node-label">{{ getPageLabel(page) }}</span>
-                <el-dropdown
-                  trigger="click"
-                  placement="bottom-end"
-                  @command="(command) => handleRowAction(command, page)"
-                >
-                  <el-button class="node-action-btn" text @click.stop>
-                    <IconEpMoreFilled />
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="open">打开</el-dropdown-item>
-                      <el-dropdown-item command="rename"
-                        >重命名</el-dropdown-item
-                      >
-                      <el-dropdown-item command="export"
-                        >导出页面</el-dropdown-item
-                      >
-                      <el-dropdown-item
-                        v-if="page.parentId"
-                        command="moveToRoot"
-                        divided
-                      >
-                        移到根目录
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        v-for="target in getMoveTargets(page)"
-                        :key="`${page.id}-${target.id ?? 'root'}`"
-                        :command="buildMoveCommand(target.id)"
-                      >
-                        {{ target.label }}
-                      </el-dropdown-item>
-                      <el-dropdown-item command="delete" divided
-                        >删除</el-dropdown-item
-                      >
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-              <div
-                v-if="
-                  !getBusinessChildren(item.id).length && !searchText.trim()
-                "
-                class="folder-dropzone"
-                @dragover.prevent="handleFolderDragOver($event, item)"
-                @dragleave="handleDragLeave(item.id)"
-                @drop.prevent="handleFolderDrop(item)"
-              >
-                拖拽页面到此分组
-              </div>
-            </div>
-          </template>
-        </div>
-        <div v-else class="page-section__empty">暂无普通页面</div>
-      </section>
-
-      <div
-        v-if="
-          filteredBasicSlots.length === 0 &&
-          filteredBusinessRootItems.length === 0
-        "
-        class="empty-state"
-      >
-        <IconEpDocument class="empty-icon" />
-        <p class="empty-text">暂无页面</p>
-        <p class="empty-hint">点击上方按钮新建页面</p>
-      </div>
-    </div>
-  </div>
-  <!-- 新建页面/分组弹窗 -->
-  <el-dialog
-    v-model="createDialogVisible"
-    :title="createDialogTitle"
-    width="420px"
-    :close-on-click-modal="false"
-    class="create-page-dialog"
-  >
-    <div class="create-type-selector">
-      <div
-        v-for="option in createTypeOptions"
-        :key="option.value"
-        class="type-option"
-        :class="{ 'is-active': createForm.type === option.value }"
-        @click="createForm.type = option.value"
-      >
-        <component :is="option.icon" class="type-icon" />
-        <div class="type-info">
-          <div class="type-name">{{ option.label }}</div>
-          <div class="type-desc">{{ option.desc }}</div>
-        </div>
-      </div>
-    </div>
-
-    <el-form
-      ref="createFormRef"
-      :model="createForm"
-      :rules="createFormRules"
-      label-position="top"
-      class="create-form"
-    >
-      <el-form-item label="名称" prop="name">
-        <el-input
-          v-model="createForm.name"
-          :disabled="isFixedBasicCreateType(createForm.type)"
-          placeholder="请输入名称"
-          maxlength="50"
-          show-word-limit
-        />
-      </el-form-item>
-
-      <el-form-item v-if="createForm.type === 'page'" label="所属分组">
-        <el-select
-          v-model="createForm.parentId"
-          clearable
-          placeholder="选择分组（可选）"
-        >
-          <el-option label="根目录" :value="null">
-            <div class="flex items-center gap-2">
-              <IconEpFolderOpened class="text-gray-400" />
-              <span>根目录</span>
-            </div>
-          </el-option>
-          <el-option
-            v-for="folder in folderOptions"
-            :key="folder.id"
-            :label="folder.name"
-            :value="folder.id"
-          >
-            <div class="flex items-center gap-2">
-              <IconEpFolder class="text-yellow-500" />
-              <span>{{ folder.name }}</span>
-            </div>
-          </el-option>
-        </el-select>
-      </el-form-item>
-    </el-form>
-
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="creating"
-          @click="handleCreateConfirm"
-        >
-          <IconEpPlus class="mr-1" />
-          创建
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
-</template>
-
 <script setup>
-import { computed, h, inject, ref, watch, watchEffect } from "vue";
-import { storeToRefs } from "pinia";
-import { useEditorStore } from "@/stores/editor-store";
 import { ElMessage, ElMessageBox } from "element-plus";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpFolderOpened from "~icons/ep/folder-opened";
-import IconEpDocument from "~icons/ep/document";
-import IconEpSearch from "~icons/ep/search";
+import { storeToRefs } from "pinia";
+import { computed, h, inject, ref, watch, watchEffect } from "vue";
 import IconEpArrowDown from "~icons/ep/arrow-down";
 import IconEpArrowRight from "~icons/ep/arrow-right";
-import IconEpLock from "~icons/ep/lock";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpEdit from "~icons/ep/edit";
-import IconEpDelete from "~icons/ep/delete";
+import IconEpDocument from "~icons/ep/document";
+import IconEpFolder from "~icons/ep/folder";
+import IconEpFolderOpened from "~icons/ep/folder-opened";
 import IconEpMoreFilled from "~icons/ep/more-filled";
+import IconEpPlus from "~icons/ep/plus";
+import IconEpSearch from "~icons/ep/search";
+import { useEditorStore } from "@/stores/editor-store";
+import {
+  getPageTreeOrderStorageKey,
+  moveIdBefore,
+  ROOT_CONTAINER_KEY,
+  validatePageName,
+} from "./page-tree-utils";
 
 // 注入打开标签页的方法
 const openPageTab = inject("openPageTab", null);
 
 const editorStore = useEditorStore();
-const { pages, currentPageId, entryConfig, canUndo, projectId } =
-  storeToRefs(editorStore);
+const { pages, currentPageId, entryConfig, canUndo, projectId } = storeToRefs(editorStore);
 const selectedNode = ref(null);
 const createDialogVisible = ref(false);
 const createFormRef = ref(null);
@@ -407,8 +34,6 @@ const createForm = ref({ type: "page", name: "", parentId: null });
 const creating = ref(false);
 const skipSwitchPrompt = ref(false);
 const pageSwitchPromptKey = "designer.pageSwitchPrompt.disabled";
-const PAGE_TREE_ORDER_PREFIX = "designer.pageTreeOrder";
-const ROOT_CONTAINER_KEY = "__root__";
 const pageOrderMap = ref({});
 const dragState = ref(null);
 const dragOverTarget = ref(null);
@@ -433,9 +58,7 @@ const createTypeOptions = [
 
 // 新建弹窗标题
 const createDialogTitle = computed(() => {
-  const option = createTypeOptions.find(
-    (o) => o.value === createForm.value.type,
-  );
+  const option = createTypeOptions.find((o) => o.value === createForm.value.type);
   return `新建${option?.label || "页面"}`;
 });
 
@@ -469,62 +92,40 @@ const BASIC_PAGE_META = {
  * @param {"home" | "login" | "logout"} type - 基础页面类型
  * @returns {{ label: string, path: string }}
  */
-const getBasicPageMeta = (type) =>
-  BASIC_PAGE_META[type] || { label: "", path: "/" };
+function getBasicPageMeta(type) {
+  return BASIC_PAGE_META[type] || { label: "", path: "/" };
+}
 
 /**
  * 判断是否为固定基础页创建类型
  * @param {string} type - 创建类型
  * @returns {boolean}
  */
-const isFixedBasicCreateType = (type) =>
-  ["home", "login", "logout"].includes(type);
+function isFixedBasicCreateType(type) {
+  return ["home", "login", "logout"].includes(type);
+}
 
 /**
  * 获取基础页面类型
  * @param {import('@/editor-core').PageNode | undefined | null} page - 页面
  * @returns {"home" | "login" | "logout" | null}
  */
-const getFixedSystemType = (page) => {
+function getFixedSystemType(page) {
   if (!page) return null;
   if (entryConfig.value?.homePageId === page.id) return "home";
-  if (entryConfig.value?.loginPageId === page.id || page.path === "/login")
-    return "login";
-  if (entryConfig.value?.logoutPageId === page.id || page.path === "/logout")
-    return "logout";
+  if (entryConfig.value?.loginPageId === page.id || page.path === "/login") return "login";
+  if (entryConfig.value?.logoutPageId === page.id || page.path === "/logout") return "logout";
   return null;
-};
-
-/**
- * 校验页面名称是否合法
- * @param {string} value - 页面名称
- * @returns {{ valid: boolean, message: string }}
- */
-const validatePageName = (value) => {
-  const name = String(value || "").trim();
-  if (!name) {
-    return { valid: false, message: "名称不能为空" };
-  }
-  if (/^[.]+$/.test(name)) {
-    return { valid: false, message: "页面名称不能仅包含点号" };
-  }
-  if (/[/?#\\%]/.test(name)) {
-    return { valid: false, message: "页面名称不能包含 / ? # % \\" };
-  }
-  if (/[\u0000-\u001f\u007f]/.test(name)) {
-    return { valid: false, message: "页面名称不能包含控制字符" };
-  }
-  return { valid: true, message: "" };
-};
+}
 
 /**
  * 在分组中创建页面
  * @param {string} folderId - 分组ID
  */
-const handleCreateInFolder = (folderId) => {
+function handleCreateInFolder(folderId) {
   createForm.value = { type: "page", name: "", parentId: folderId };
   createDialogVisible.value = true;
-};
+}
 
 // 搜索和展开状态
 const searchText = ref("");
@@ -534,75 +135,68 @@ const folderStates = ref({});
  * 切换分组展开状态
  * @param {string} folderId - 分组ID
  */
-const toggleFolder = (folderId) => {
+function toggleFolder(folderId) {
   folderStates.value[folderId] = !folderStates.value[folderId];
-};
+}
 
 /**
  * 点击分组
  * @param {Object} folder - 分组
  */
-const handleFolderClick = (folder) => {
+function handleFolderClick(folder) {
   selectedNode.value = { id: folder.id, type: "folder", label: folder.name };
   toggleFolder(folder.id);
-};
+}
 
-const getProjectOrderStorageKey = () =>
-  `${PAGE_TREE_ORDER_PREFIX}:${projectId.value || "default"}`;
+function getProjectOrderStorageKey() {
+  return getPageTreeOrderStorageKey(projectId.value || "");
+}
 
-const loadPageOrderMap = () => {
+function loadPageOrderMap() {
   try {
     const raw = localStorage.getItem(getProjectOrderStorageKey());
     pageOrderMap.value = raw ? JSON.parse(raw) || {} : {};
   } catch (error) {
     pageOrderMap.value = {};
   }
-};
+}
 
-const persistPageOrderMap = () => {
+function persistPageOrderMap() {
   try {
-    localStorage.setItem(
-      getProjectOrderStorageKey(),
-      JSON.stringify(pageOrderMap.value || {}),
-    );
+    localStorage.setItem(getProjectOrderStorageKey(), JSON.stringify(pageOrderMap.value || {}));
   } catch (error) {
     // ignore
   }
-};
+}
 
-const getContainerOrderKey = (parentId = null) =>
-  parentId || ROOT_CONTAINER_KEY;
+function getContainerOrderKey(parentId = null) {
+  return parentId || ROOT_CONTAINER_KEY;
+}
 
-const updateContainerOrder = (containerKey, orderedIds) => {
+function updateContainerOrder(containerKey, orderedIds) {
   const nextMap = { ...(pageOrderMap.value || {}) };
-  nextMap[containerKey] = Array.from(
-    new Set((orderedIds || []).filter(Boolean)),
-  );
+  nextMap[containerKey] = Array.from(new Set((orderedIds || []).filter(Boolean)));
   pageOrderMap.value = nextMap;
   persistPageOrderMap();
-};
+}
 
-const sortItemsByStoredOrder = (items, containerKey) => {
+function sortItemsByStoredOrder(items, containerKey) {
   const source = Array.isArray(items) ? [...items] : [];
   const stored = Array.isArray(pageOrderMap.value?.[containerKey])
     ? pageOrderMap.value[containerKey]
     : [];
   const orderIndexMap = new Map(stored.map((id, index) => [id, index]));
   return source.sort((a, b) => {
-    const aIndex = orderIndexMap.has(a.id)
-      ? orderIndexMap.get(a.id)
-      : Number.MAX_SAFE_INTEGER;
-    const bIndex = orderIndexMap.has(b.id)
-      ? orderIndexMap.get(b.id)
-      : Number.MAX_SAFE_INTEGER;
+    const aIndex = orderIndexMap.has(a.id) ? orderIndexMap.get(a.id) : Number.MAX_SAFE_INTEGER;
+    const bIndex = orderIndexMap.has(b.id) ? orderIndexMap.get(b.id) : Number.MAX_SAFE_INTEGER;
     if (aIndex !== bIndex) {
       return aIndex - bIndex;
     }
     return (a.name || "").localeCompare(b.name || "", "zh-CN");
   });
-};
+}
 
-const ensureContainerOrder = (containerKey, items) => {
+function ensureContainerOrder(containerKey, items) {
   const nextIds = (items || []).map((item) => item.id);
   const currentIds = Array.isArray(pageOrderMap.value?.[containerKey])
     ? pageOrderMap.value[containerKey].filter((id) => nextIds.includes(id))
@@ -610,7 +204,7 @@ const ensureContainerOrder = (containerKey, items) => {
   const missingIds = nextIds.filter((id) => !currentIds.includes(id));
   if (missingIds.length === 0 && currentIds.length === nextIds.length) return;
   updateContainerOrder(containerKey, [...currentIds, ...missingIds]);
-};
+}
 
 watch(
   () => createForm.value.type,
@@ -626,18 +220,18 @@ watch(
  * @param {import('@/editor-core').PageNode} page - 页面
  * @returns {string}
  */
-const getPageLabel = (page) => {
+function getPageLabel(page) {
   return page.name || page.title || page.id;
-};
+}
 
-const matchesKeyword = (page) => {
+function matchesKeyword(page) {
   const keyword = searchText.value.trim().toLowerCase();
   if (!keyword) return true;
   return (
     (page.name || "").toLowerCase().includes(keyword) ||
     (page.path || "").toLowerCase().includes(keyword)
   );
-};
+}
 
 /**
  * 创建活跃页面ID映射（computed 确保响应式更新）
@@ -655,9 +249,9 @@ const activePageMap = computed(() => {
  * @param {string} pageId - 页面ID
  * @returns {boolean}
  */
-const isPageActive = (pageId) => {
+function isPageActive(pageId) {
   return activePageMap.value.has(pageId);
-};
+}
 
 /**
  * 同步页面选中状态（使用 watchEffect 确保响应式更新）
@@ -686,21 +280,15 @@ watchEffect(() => {
 /**
  * 所有可见页面（包含登录页、登出页等系统页面）
  */
-const appPages = computed(() =>
-  pages.value.filter((page) => page.type !== "dialog"),
-);
+const appPages = computed(() => pages.value.filter((page) => page.type !== "dialog"));
 const systemPages = computed(() => ({
-  home:
-    appPages.value.find((page) => page.id === entryConfig.value?.homePageId) ||
-    null,
+  home: appPages.value.find((page) => page.id === entryConfig.value?.homePageId) || null,
   login:
     appPages.value.find((page) => page.id === entryConfig.value?.loginPageId) ||
     appPages.value.find((page) => getFixedSystemPath(page) === "/login") ||
     null,
   logout:
-    appPages.value.find(
-      (page) => page.id === entryConfig.value?.logoutPageId,
-    ) ||
+    appPages.value.find((page) => page.id === entryConfig.value?.logoutPageId) ||
     appPages.value.find((page) => getFixedSystemPath(page) === "/logout") ||
     null,
 }));
@@ -771,8 +359,7 @@ const businessFolders = computed(() =>
 const businessRootItems = computed(() =>
   sortItemsByStoredOrder(
     businessPages.value.filter(
-      (page) =>
-        page.type === "folder" || (page.type === "page" && !page.parentId),
+      (page) => page.type === "folder" || (page.type === "page" && !page.parentId),
     ),
     ROOT_CONTAINER_KEY,
   ).sort((a, b) => {
@@ -781,21 +368,19 @@ const businessRootItems = computed(() =>
   }),
 );
 
-const getChildrenCount = (folderId) =>
-  businessPages.value.filter(
-    (page) => page.type === "page" && page.parentId === folderId,
-  ).length;
+function getChildrenCount(folderId) {
+  return businessPages.value.filter((page) => page.type === "page" && page.parentId === folderId)
+    .length;
+}
 
-const getBusinessChildren = (folderId) =>
-  sortItemsByStoredOrder(
+function getBusinessChildren(folderId) {
+  return sortItemsByStoredOrder(
     businessPages.value.filter(
-      (page) =>
-        page.type === "page" &&
-        page.parentId === folderId &&
-        matchesKeyword(page),
+      (page) => page.type === "page" && page.parentId === folderId && matchesKeyword(page),
     ),
     getContainerOrderKey(folderId),
   );
+}
 
 const filteredBusinessRootItems = computed(() =>
   businessRootItems.value.filter((item) => {
@@ -806,30 +391,17 @@ const filteredBusinessRootItems = computed(() =>
   }),
 );
 
-const moveIdBefore = (ids, sourceId, targetId) => {
-  const nextIds = ids.filter((id) => id !== sourceId);
-  const targetIndex = nextIds.indexOf(targetId);
-  if (targetIndex === -1) {
-    nextIds.push(sourceId);
-    return nextIds;
-  }
-  nextIds.splice(targetIndex, 0, sourceId);
-  return nextIds;
-};
-
-const appendIdToContainer = (containerKey, sourceId, visibleItems) => {
-  const nextIds = (visibleItems || [])
-    .map((item) => item.id)
-    .filter((id) => id !== sourceId);
+function appendIdToContainer(containerKey, sourceId, visibleItems) {
+  const nextIds = (visibleItems || []).map((item) => item.id).filter((id) => id !== sourceId);
   nextIds.push(sourceId);
   updateContainerOrder(containerKey, nextIds);
-};
+}
 
 /**
  * 仅在目标发生变化时更新拖拽高亮，避免 dragover 频繁触发整树重渲染
  * @param {{ id: string, mode: string, parentId: string | null }} nextTarget - 新目标
  */
-const setDragOverTarget = (nextTarget) => {
+function setDragOverTarget(nextTarget) {
   pendingDragOverTarget = nextTarget;
   if (dragOverFrameId) return;
   dragOverFrameId = requestAnimationFrame(() => {
@@ -846,17 +418,17 @@ const setDragOverTarget = (nextTarget) => {
     }
     dragOverTarget.value = target;
   });
-};
+}
 
-const handleDragStart = (item, parentId) => {
+function handleDragStart(item, parentId) {
   dragState.value = {
     id: item.id,
     type: item.type,
     parentId: parentId || null,
   };
-};
+}
 
-const handleDragEnd = () => {
+function handleDragEnd() {
   if (dragOverFrameId) {
     cancelAnimationFrame(dragOverFrameId);
     dragOverFrameId = 0;
@@ -864,18 +436,18 @@ const handleDragEnd = () => {
   pendingDragOverTarget = null;
   dragState.value = null;
   dragOverTarget.value = null;
-};
+}
 
-const handleDragLeave = (targetId) => {
+function handleDragLeave(targetId) {
   if (dragOverTarget.value?.id === targetId) {
     dragOverTarget.value = null;
   }
   if (pendingDragOverTarget?.id === targetId) {
     pendingDragOverTarget = null;
   }
-};
+}
 
-const handleNodeDragOver = (event, item, parentId) => {
+function handleNodeDragOver(event, item, parentId) {
   if (!dragState.value || dragState.value.id === item.id) return;
   event.dataTransfer.dropEffect = "move";
   setDragOverTarget({
@@ -883,9 +455,9 @@ const handleNodeDragOver = (event, item, parentId) => {
     mode: "before",
     parentId: parentId || null,
   });
-};
+}
 
-const handleFolderDragOver = (event, folder) => {
+function handleFolderDragOver(event, folder) {
   if (!dragState.value || dragState.value.id === folder.id) return;
   event.dataTransfer.dropEffect = "move";
   setDragOverTarget({
@@ -893,9 +465,9 @@ const handleFolderDragOver = (event, folder) => {
     mode: "append",
     parentId: folder.id,
   });
-};
+}
 
-const handleContainerDragOver = (event, parentId) => {
+function handleContainerDragOver(event, parentId) {
   if (!dragState.value) return;
   event.dataTransfer.dropEffect = "move";
   setDragOverTarget({
@@ -903,9 +475,9 @@ const handleContainerDragOver = (event, parentId) => {
     mode: "append",
     parentId: parentId || null,
   });
-};
+}
 
-const handleNodeDrop = async (targetItem, parentId) => {
+async function handleNodeDrop(targetItem, parentId) {
   if (!dragState.value || dragState.value.id === targetItem.id) return;
   const source = { ...dragState.value };
   const targetParentId = parentId || null;
@@ -934,9 +506,7 @@ const handleNodeDrop = async (targetItem, parentId) => {
         ? businessRootItems.value.filter((item) => item.id !== source.id)
         : businessPages.value.filter(
             (page) =>
-              page.type === "page" &&
-              page.parentId === sourceParentId &&
-              page.id !== source.id,
+              page.type === "page" && page.parentId === sourceParentId && page.id !== source.id,
           );
     updateContainerOrder(
       getContainerOrderKey(sourceParentId),
@@ -944,9 +514,9 @@ const handleNodeDrop = async (targetItem, parentId) => {
     );
   }
   handleDragEnd();
-};
+}
 
-const handleFolderDrop = async (folder) => {
+async function handleFolderDrop(folder) {
   if (!dragState.value || dragState.value.id === folder.id) return;
   const source = { ...dragState.value };
   if (source.type !== "page") {
@@ -959,9 +529,7 @@ const handleFolderDrop = async (folder) => {
   appendIdToContainer(
     getContainerOrderKey(folder.id),
     source.id,
-    businessPages.value.filter(
-      (page) => page.type === "page" && page.parentId === folder.id,
-    ),
+    businessPages.value.filter((page) => page.type === "page" && page.parentId === folder.id),
   );
   if (!folderStates.value[folder.id]) {
     folderStates.value[folder.id] = true;
@@ -972,9 +540,7 @@ const handleFolderDrop = async (folder) => {
         ? businessRootItems.value.filter((item) => item.id !== source.id)
         : businessPages.value.filter(
             (page) =>
-              page.type === "page" &&
-              page.parentId === source.parentId &&
-              page.id !== source.id,
+              page.type === "page" && page.parentId === source.parentId && page.id !== source.id,
           );
     updateContainerOrder(
       getContainerOrderKey(source.parentId),
@@ -982,9 +548,9 @@ const handleFolderDrop = async (folder) => {
     );
   }
   handleDragEnd();
-};
+}
 
-const handleContainerDrop = async (parentId) => {
+async function handleContainerDrop(parentId) {
   if (!dragState.value) return;
   const source = { ...dragState.value };
   const targetParentId = parentId || null;
@@ -998,15 +564,9 @@ const handleContainerDrop = async (parentId) => {
       ? businessRootItems.value.filter((item) => item.id !== source.id)
       : businessPages.value.filter(
           (page) =>
-            page.type === "page" &&
-            page.parentId === targetParentId &&
-            page.id !== source.id,
+            page.type === "page" && page.parentId === targetParentId && page.id !== source.id,
         );
-  appendIdToContainer(
-    getContainerOrderKey(targetParentId),
-    source.id,
-    visibleItems,
-  );
+  appendIdToContainer(getContainerOrderKey(targetParentId), source.id, visibleItems);
 
   if ((source.parentId || null) !== targetParentId) {
     const sourceItems =
@@ -1014,9 +574,7 @@ const handleContainerDrop = async (parentId) => {
         ? businessRootItems.value.filter((item) => item.id !== source.id)
         : businessPages.value.filter(
             (page) =>
-              page.type === "page" &&
-              page.parentId === source.parentId &&
-              page.id !== source.id,
+              page.type === "page" && page.parentId === source.parentId && page.id !== source.id,
           );
     updateContainerOrder(
       getContainerOrderKey(source.parentId),
@@ -1024,7 +582,7 @@ const handleContainerDrop = async (parentId) => {
     );
   }
   handleDragEnd();
-};
+}
 
 watch(
   projectId,
@@ -1041,9 +599,7 @@ watch(
     businessFolders.value.forEach((folder) => {
       ensureContainerOrder(
         getContainerOrderKey(folder.id),
-        businessPages.value.filter(
-          (page) => page.type === "page" && page.parentId === folder.id,
-        ),
+        businessPages.value.filter((page) => page.type === "page" && page.parentId === folder.id),
       );
     });
   },
@@ -1054,20 +610,20 @@ watch(
  * 初始化切换提示配置
  * @returns {void}
  */
-const initSwitchPromptState = () => {
+function initSwitchPromptState() {
   try {
     skipSwitchPrompt.value = localStorage.getItem(pageSwitchPromptKey) === "1";
   } catch (error) {
     skipSwitchPrompt.value = false;
   }
-};
+}
 
 /**
  * 设置切换提示是否禁用
  * @param {boolean} disabled - 是否禁用
  * @returns {void}
  */
-const setSwitchPromptDisabled = (disabled) => {
+function setSwitchPromptDisabled(disabled) {
   skipSwitchPrompt.value = disabled;
   try {
     if (disabled) {
@@ -1078,7 +634,7 @@ const setSwitchPromptDisabled = (disabled) => {
   } catch (error) {
     // 存储异常时保持内存状态
   }
-};
+}
 
 initSwitchPromptState();
 
@@ -1086,45 +642,45 @@ initSwitchPromptState();
  * 选中页面（只选中，不切换页面）
  * @param {{ id: string }} node - 点击的节点
  */
-const handleNodeClick = (node) => {
+function handleNodeClick(node) {
   selectedNode.value = node;
   // 点击只选中节点，不切换页面
   // 页面切换通过双击 handleNodeDoubleClick 实现
-};
+}
 
 /**
  * 处理基础页面槽位点击
  * @param {{ page?: import('@/editor-core').PageNode | null }} slot - 槽位
  * @returns {void}
  */
-const handleBasicSlotClick = (slot) => {
+function handleBasicSlotClick(slot) {
   if (!slot?.page) {
     selectedNode.value = null;
     return;
   }
   handleNodeClick({ id: slot.page.id, type: "page" });
-};
+}
 
 /**
  * 处理基础页面槽位双击
  * @param {{ page?: import('@/editor-core').PageNode | null }} slot - 槽位
  * @returns {void}
  */
-const handleBasicSlotDoubleClick = (slot) => {
+function handleBasicSlotDoubleClick(slot) {
   if (!slot?.page) return;
   void handleNodeDoubleClick({
     id: slot.page.id,
     type: "page",
     label: slot.label,
   });
-};
+}
 
 /**
  * 处理页面双击切换
  * @param {{ id: string, type: string, label?: string }} node - 双击的节点
  * @returns {Promise<void>}
  */
-const handleNodeDoubleClick = async (node) => {
+async function handleNodeDoubleClick(node) {
   if (!node || node.type !== "page") return;
 
   // 使用标签页系统打开页面
@@ -1153,14 +709,14 @@ const handleNodeDoubleClick = async (node) => {
   } catch (error) {
     ElMessage.error("切换页面失败");
   }
-};
+}
 
 /**
  * 确认是否切换页面
  * @param {string} targetName - 目标页面名称
  * @returns {Promise<boolean>}
  */
-const confirmPageSwitch = async (targetName) => {
+async function confirmPageSwitch(targetName) {
   if (skipSwitchPrompt.value) return true;
 
   const skipPrompt = ref(false);
@@ -1195,14 +751,14 @@ const confirmPageSwitch = async (targetName) => {
   } catch (error) {
     return false;
   }
-};
+}
 
 /**
  * 处理未保存切换提示
  * @param {string} targetName - 目标页面名称
  * @returns {Promise<boolean>}
  */
-const ensureUnsavedSwitch = async (targetName) => {
+async function ensureUnsavedSwitch(targetName) {
   if (!canUndo.value) return true;
   try {
     const action = await ElMessageBox.confirm(
@@ -1228,7 +784,7 @@ const ensureUnsavedSwitch = async (targetName) => {
     }
     return false;
   }
-};
+}
 
 const buildMoveCommand = (targetId) => `move:${targetId || "root"}`;
 
@@ -1237,7 +793,7 @@ const buildMoveCommand = (targetId) => `move:${targetId || "root"}`;
  * @param {"home" | "login" | "logout"} basicType - 基础页面类型
  * @returns {Promise<void>}
  */
-const createBasicPage = async (basicType) => {
+async function createBasicPage(basicType) {
   if (basicType === "home") {
     if (entryConfig.value?.homePageId) {
       ElMessage.warning("首页已存在");
@@ -1258,10 +814,7 @@ const createBasicPage = async (basicType) => {
   }
 
   if (basicType === "login") {
-    if (
-      entryConfig.value?.loginPageId ||
-      pages.value.some((page) => page.path === "/login")
-    ) {
+    if (entryConfig.value?.loginPageId || pages.value.some((page) => page.path === "/login")) {
       ElMessage.warning("登录页已存在");
       return;
     }
@@ -1292,10 +845,7 @@ const createBasicPage = async (basicType) => {
   }
 
   if (basicType === "logout") {
-    if (
-      entryConfig.value?.logoutPageId ||
-      pages.value.some((page) => page.path === "/logout")
-    ) {
+    if (entryConfig.value?.logoutPageId || pages.value.some((page) => page.path === "/logout")) {
       ElMessage.warning("登出页已存在");
       return;
     }
@@ -1323,7 +873,7 @@ const createBasicPage = async (basicType) => {
       ElMessage.error(error?.message || "登出页创建失败");
     }
   }
-};
+}
 
 /**
  * 基础页面行尾操作
@@ -1331,7 +881,7 @@ const createBasicPage = async (basicType) => {
  * @param {{ type: "home" | "login" | "logout", page?: import('@/editor-core').PageNode | null }} slot - 槽位
  * @returns {void}
  */
-const handleBasicRowAction = (command, slot) => {
+function handleBasicRowAction(command, slot) {
   if (!slot) return;
   if (command === "create") {
     void createBasicPage(slot.type);
@@ -1345,7 +895,7 @@ const handleBasicRowAction = (command, slot) => {
     parentId: null,
   };
   handleRowAction(command, slot.page);
-};
+}
 
 /**
  * 行尾操作按钮
@@ -1353,7 +903,7 @@ const handleBasicRowAction = (command, slot) => {
  * @param {import('@/editor-core').PageNode} node - 节点
  * @returns {void}
  */
-const handleRowAction = (command, node) => {
+function handleRowAction(command, node) {
   if (!node) return;
   selectedNode.value = {
     id: node.id,
@@ -1398,14 +948,14 @@ const handleRowAction = (command, node) => {
   if (command === "delete") {
     void handleDelete();
   }
-};
+}
 
 /**
  * 导出页面 Schema
  * @param {string} pageId - 页面 ID
  * @param {string} label - 页面名称
  */
-const handleExportPage = (pageId, label) => {
+function handleExportPage(pageId, label) {
   if (!editorStore.doc || !pageId) {
     ElMessage.warning("暂无可导出的页面");
     return;
@@ -1425,20 +975,19 @@ const handleExportPage = (pageId, label) => {
   } catch (error) {
     ElMessage.error("导出页面失败");
   }
-};
+}
 
 /**
  * 打开新建弹窗
  */
-const openCreateDialog = () => {
+function openCreateDialog() {
   createForm.value = {
     type: "page",
     name: "",
-    parentId:
-      selectedNode.value?.type === "folder" ? selectedNode.value.id : null,
+    parentId: selectedNode.value?.type === "folder" ? selectedNode.value.id : null,
   };
   createDialogVisible.value = true;
-};
+}
 
 defineExpose({ openCreateDialog });
 
@@ -1446,7 +995,7 @@ defineExpose({ openCreateDialog });
  * 创建完成后打开对应标签并切换到页面
  * @param {string} pageId - 页面 ID
  */
-const openCreatedPageTab = async (pageId) => {
+async function openCreatedPageTab(pageId) {
   if (!pageId) return;
   selectedNode.value = { id: pageId, type: "page" };
   if (openPageTab) {
@@ -1454,14 +1003,14 @@ const openCreatedPageTab = async (pageId) => {
     return;
   }
   await editorStore.setCurrentPage(pageId);
-};
+}
 
 /**
  * 移动页面到分组
  * @param {string} pageId - 页面 ID
  * @param {string | null} parentId - 分组 ID
  */
-const handleMove = async (pageId, parentId) => {
+async function handleMove(pageId, parentId) {
   try {
     const page = pages.value.find((item) => item.id === pageId);
     const currentParentId = page?.parentId || null;
@@ -1474,8 +1023,7 @@ const handleMove = async (pageId, parentId) => {
     }
     const nextPath =
       page?.type === "page"
-        ? getFixedSystemPath(page) ||
-          buildBusinessPagePath(getPageLabel(page), parentId)
+        ? getFixedSystemPath(page) || buildBusinessPagePath(getPageLabel(page), parentId)
         : undefined;
     await editorStore.movePageToGroup(pageId, parentId, nextPath);
     const nextPage = pages.value.find((item) => item.id === pageId);
@@ -1486,7 +1034,7 @@ const handleMove = async (pageId, parentId) => {
   } catch (error) {
     ElMessage.error("移动失败");
   }
-};
+}
 
 /**
  * 校验名称唯一
@@ -1494,32 +1042,30 @@ const handleMove = async (pageId, parentId) => {
  * @param {string} [excludeId] - 排除的页面 ID
  * @returns {boolean}
  */
-const isNameUnique = (name, excludeId) => {
+function isNameUnique(name, excludeId) {
   const lowerName = name.trim().toLowerCase();
   return !pages.value.some(
-    (page) =>
-      page.id !== excludeId &&
-      (page.name || "").trim().toLowerCase() === lowerName,
+    (page) => page.id !== excludeId && (page.name || "").trim().toLowerCase() === lowerName,
   );
-};
+}
 
 /**
  * 规范化路由片段
  * @param {string} value - 名称
  * @returns {string}
  */
-const toPathSegment = (value) => {
+function toPathSegment(value) {
   const normalized = value.trim().replace(/\s+/g, "-");
   const sanitized = normalized.replace(/[/?#\\]+/g, "-");
   return sanitized || "page";
-};
+}
 
 /**
  * 获取直属分组路由片段
  * @param {string | null | undefined} parentId - 分组 ID
  * @returns {string[]}
  */
-const getFolderPathSegments = (parentId) => {
+function getFolderPathSegments(parentId) {
   const folder = pages.value.find(
     (page) => page.id === (parentId || null) && page.type === "folder",
   );
@@ -1527,7 +1073,7 @@ const getFolderPathSegments = (parentId) => {
     return [];
   }
   return [toPathSegment(folder.name || folder.title || folder.id)];
-};
+}
 
 /**
  * 生成业务页面路径
@@ -1535,32 +1081,29 @@ const getFolderPathSegments = (parentId) => {
  * @param {string | null | undefined} parentId - 分组 ID
  * @returns {string}
  */
-const buildBusinessPagePath = (name, parentId) => {
+function buildBusinessPagePath(name, parentId) {
   const segments = [...getFolderPathSegments(parentId), toPathSegment(name)];
   return `/${segments.filter(Boolean).join("/")}`;
-};
+}
 
 /**
  * 同步分组直接子页面路径
  * @param {string} folderId - 分组 ID
  * @returns {Promise<void>}
  */
-const syncFolderDescendantPaths = async (folderId) => {
+async function syncFolderDescendantPaths(folderId) {
   const descendants = pages.value.filter(
     (page) => page.type === "page" && page.parentId === folderId,
   );
   for (const page of descendants) {
     const fixedPath = getFixedSystemPath(page);
     if (fixedPath) continue;
-    const nextPath = buildBusinessPagePath(
-      getPageLabel(page),
-      page.parentId || null,
-    );
+    const nextPath = buildBusinessPagePath(getPageLabel(page), page.parentId || null);
     if (page.path !== nextPath) {
       await editorStore.renamePage(page.id, getPageLabel(page), nextPath);
     }
   }
-};
+}
 
 /**
  * 获取登录/登出固定路径
@@ -1575,7 +1118,7 @@ function getFixedSystemPath(page) {
 /**
  * 创建页面/分组
  */
-const handleCreateConfirm = async () => {
+async function handleCreateConfirm() {
   const name = createForm.value.name?.trim();
   if (!name) {
     ElMessage.warning("名称不能为空");
@@ -1626,12 +1169,12 @@ const handleCreateConfirm = async () => {
   } finally {
     creating.value = false;
   }
-};
+}
 
 /**
  * 重命名页面/分组
  */
-const handleRename = async () => {
+async function handleRename() {
   const target = selectedNode.value;
   if (!target) {
     ElMessage.warning("请先选择要重命名的页面或分组");
@@ -1674,42 +1217,38 @@ const handleRename = async () => {
       ElMessage.error("重命名失败");
     }
   }
-};
+}
 
 /**
  * 判断是否为首页
  * @param {string} pageId - 页面 ID
  * @returns {boolean}
  */
-const isHomePage = (pageId) => {
+function isHomePage(pageId) {
   return entryConfig.value?.homePageId === pageId;
-};
+}
 
 /**
  * 获取分组下的全部后代节点数量
  * @param {string} folderId - 分组 ID
  * @returns {number}
  */
-const getFolderDescendantCount = (folderId) => {
+function getFolderDescendantCount(folderId) {
   let count = 0;
   const stack = [folderId];
   while (stack.length) {
     const currentFolderId = stack.pop();
-    const children = pages.value.filter(
-      (page) => page.parentId === currentFolderId,
-    );
+    const children = pages.value.filter((page) => page.parentId === currentFolderId);
     count += children.length;
-    children
-      .filter((page) => page.type === "folder")
-      .forEach((folder) => stack.push(folder.id));
+    children.filter((page) => page.type === "folder").forEach((folder) => stack.push(folder.id));
   }
   return count;
-};
+}
 
 /**
  * 删除页面/分组
  */
-const handleDelete = async () => {
+async function handleDelete() {
   const target = selectedNode.value;
   if (!target) {
     ElMessage.warning("请先选择要删除的页面或分组");
@@ -1739,10 +1278,7 @@ const handleDelete = async () => {
             distinguishCancelAndClose: true,
           },
         );
-        await editorStore.deletePage(
-          target.id,
-          childCount > 0 ? "folder-only" : "single",
-        );
+        await editorStore.deletePage(target.id, childCount > 0 ? "folder-only" : "single");
       } catch (error) {
         if (error === "cancel" && childCount > 0) {
           await editorStore.deletePage(target.id, "cascade");
@@ -1760,16 +1296,12 @@ const handleDelete = async () => {
       return;
     }
 
-    await ElMessageBox.confirm(
-      `确定删除 "${target.label}" 吗？此操作不可恢复。`,
-      "删除确认",
-      {
-        confirmButtonText: "删除",
-        cancelButtonText: "取消",
-        type: "warning",
-        confirmButtonClass: "el-button--danger",
-      },
-    );
+    await ElMessageBox.confirm(`确定删除 "${target.label}" 吗？此操作不可恢复。`, "删除确认", {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+      confirmButtonClass: "el-button--danger",
+    });
 
     // 如果删除的是当前页面，先切换到首页
     if (target.type === "page" && target.id === currentPageId.value) {
@@ -1791,7 +1323,7 @@ const handleDelete = async () => {
       ElMessage.error("删除失败");
     }
   }
-};
+}
 
 /**
  * 分组选项
@@ -1805,21 +1337,347 @@ const folderOptions = computed(() =>
  * @param {{ parentId?: string | null, id?: string }} node - 节点
  * @returns {Array<{ id: string | null, label: string }>}
  */
-const getMoveTargets = (node) => {
+function getMoveTargets(node) {
   if (getFixedSystemType(node)) {
     return [];
   }
 
   const targets = [];
-  const groups = folderOptions.value.filter(
-    (group) => group.id !== node.parentId,
-  );
+  const groups = folderOptions.value.filter((group) => group.id !== node.parentId);
   for (const group of groups) {
     targets.push({ id: group.id, label: group.name });
   }
   return targets;
-};
+}
 </script>
+
+<template>
+  <div class="page-tree-container">
+    <!-- 搜索框 -->
+    <div class="page-search">
+      <el-input
+        v-model="searchText"
+        size="small"
+        placeholder="搜索页面..."
+        clearable
+        :prefix-icon="IconEpSearch"
+      />
+    </div>
+
+    <!-- 页面树 -->
+    <div class="page-tree-content">
+      <section class="page-section">
+        <div class="page-section__header">
+          <span class="page-section__title">基础页面</span>
+        </div>
+        <div v-if="filteredBasicSlots.length" class="page-section__body">
+          <div
+            v-for="slot in filteredBasicSlots"
+            :key="slot.type"
+            class="tree-node page-node page-node--basic"
+            :class="{
+              'is-active': slot.page ? isPageActive(slot.page.id) : false,
+              'is-empty': !slot.page,
+            }"
+            @click="handleBasicSlotClick(slot)"
+            @dblclick="handleBasicSlotDoubleClick(slot)"
+          >
+            <div class="node-indent node-indent--basic" />
+            <IconEpDocument class="node-icon page" />
+            <span class="node-label">{{ slot.label }}</span>
+            <el-dropdown
+              trigger="click"
+              placement="bottom-end"
+              @command="(command) => handleBasicRowAction(command, slot)"
+            >
+              <el-button class="node-action-btn" text @click.stop>
+                <IconEpMoreFilled />
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="slot.page" command="open">打开</el-dropdown-item>
+                  <el-dropdown-item v-else command="create">创建</el-dropdown-item>
+                  <el-dropdown-item v-if="slot.page" command="export">导出页面</el-dropdown-item>
+                  <el-dropdown-item
+                    v-if="slot.page && slot.type !== 'home'"
+                    command="delete"
+                    divided
+                  >
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+        <div v-else class="page-section__empty">暂无基础页面</div>
+      </section>
+
+      <section
+        class="page-section"
+        @dragover.prevent="handleContainerDragOver($event, null)"
+        @drop.prevent="handleContainerDrop(null)"
+      >
+        <div class="page-section__header">
+          <span class="page-section__title">普通页面</span>
+        </div>
+        <div v-if="filteredBusinessRootItems.length" class="page-section__body">
+          <template v-for="item in filteredBusinessRootItems" :key="item.id">
+            <div
+              v-if="item.type === 'folder'"
+              class="tree-node folder-node"
+              :class="{
+                'is-active': selectedNode?.id === item.id,
+                'is-drop-target':
+                  dragOverTarget?.id === item.id && dragOverTarget?.mode === 'append',
+              }"
+              draggable="true"
+              @dragstart="handleDragStart(item, null)"
+              @dragend="handleDragEnd"
+              @dragover.prevent="handleFolderDragOver($event, item)"
+              @dragleave="handleDragLeave(item.id)"
+              @drop.prevent="handleFolderDrop(item)"
+              @click="handleFolderClick(item)"
+            >
+              <div class="node-indent node-indent--folder" />
+              <component
+                :is="folderStates[item.id] ? IconEpArrowDown : IconEpArrowRight"
+                class="node-arrow"
+                @click.stop="toggleFolder(item.id)"
+              />
+              <IconEpFolder class="node-icon folder" />
+              <span class="node-label">{{ item.name }}</span>
+              <span class="node-count">{{ getChildrenCount(item.id) }}</span>
+              <el-dropdown
+                trigger="click"
+                placement="bottom-end"
+                @command="(command) => handleRowAction(command, item)"
+              >
+                <el-button class="node-action-btn" text @click.stop>
+                  <IconEpMoreFilled />
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                    <el-dropdown-item command="createPage">新建页面</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除分组</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            <div
+              v-else
+              class="tree-node page-node"
+              :class="{
+                'is-active': isPageActive(item.id),
+                'is-drop-target':
+                  dragOverTarget?.id === item.id && dragOverTarget?.mode === 'before',
+              }"
+              draggable="true"
+              @dragstart="handleDragStart(item, null)"
+              @dragend="handleDragEnd"
+              @dragover.prevent="handleNodeDragOver($event, item, null)"
+              @dragleave="handleDragLeave(item.id)"
+              @drop.prevent="handleNodeDrop(item, null)"
+              @click="handleNodeClick({ id: item.id, type: 'page' })"
+              @dblclick="
+                handleNodeDoubleClick({
+                  id: item.id,
+                  type: 'page',
+                  label: getPageLabel(item),
+                })
+              "
+            >
+              <div class="node-indent" />
+              <IconEpDocument class="node-icon page" />
+              <span class="node-label">{{ getPageLabel(item) }}</span>
+              <el-dropdown
+                trigger="click"
+                placement="bottom-end"
+                @command="(command) => handleRowAction(command, item)"
+              >
+                <el-button class="node-action-btn" text @click.stop>
+                  <IconEpMoreFilled />
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="open">打开</el-dropdown-item>
+                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                    <el-dropdown-item command="export">导出页面</el-dropdown-item>
+                    <el-dropdown-item v-if="item.parentId" command="moveToRoot" divided>
+                      移到根目录
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      v-for="target in getMoveTargets(item)"
+                      :key="`root-${item.id}-${target.id ?? 'root'}`"
+                      :command="buildMoveCommand(target.id)"
+                    >
+                      {{ target.label }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+
+            <div v-if="item.type === 'folder' && folderStates[item.id]" class="tree-children">
+              <div
+                v-for="page in getBusinessChildren(item.id)"
+                :key="page.id"
+                class="tree-node page-node level-1"
+                :class="{
+                  'is-active': isPageActive(page.id),
+                  'is-drop-target':
+                    dragOverTarget?.id === page.id && dragOverTarget?.mode === 'before',
+                }"
+                draggable="true"
+                @dragstart="handleDragStart(page, item.id)"
+                @dragend="handleDragEnd"
+                @dragover.prevent="handleNodeDragOver($event, page, item.id)"
+                @dragleave="handleDragLeave(page.id)"
+                @drop.prevent="handleNodeDrop(page, item.id)"
+                @click="handleNodeClick({ id: page.id, type: 'page' })"
+                @dblclick="
+                  handleNodeDoubleClick({
+                    id: page.id,
+                    type: 'page',
+                    label: getPageLabel(page),
+                  })
+                "
+              >
+                <div class="node-indent">
+                  <span class="tree-line horizontal" />
+                </div>
+                <IconEpDocument class="node-icon page" />
+                <span class="node-label">{{ getPageLabel(page) }}</span>
+                <el-dropdown
+                  trigger="click"
+                  placement="bottom-end"
+                  @command="(command) => handleRowAction(command, page)"
+                >
+                  <el-button class="node-action-btn" text @click.stop>
+                    <IconEpMoreFilled />
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="open">打开</el-dropdown-item>
+                      <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                      <el-dropdown-item command="export">导出页面</el-dropdown-item>
+                      <el-dropdown-item v-if="page.parentId" command="moveToRoot" divided>
+                        移到根目录
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        v-for="target in getMoveTargets(page)"
+                        :key="`${page.id}-${target.id ?? 'root'}`"
+                        :command="buildMoveCommand(target.id)"
+                      >
+                        {{ target.label }}
+                      </el-dropdown-item>
+                      <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+              <div
+                v-if="!getBusinessChildren(item.id).length && !searchText.trim()"
+                class="folder-dropzone"
+                @dragover.prevent="handleFolderDragOver($event, item)"
+                @dragleave="handleDragLeave(item.id)"
+                @drop.prevent="handleFolderDrop(item)"
+              >
+                拖拽页面到此分组
+              </div>
+            </div>
+          </template>
+        </div>
+        <div v-else class="page-section__empty">暂无普通页面</div>
+      </section>
+
+      <div
+        v-if="filteredBasicSlots.length === 0 && filteredBusinessRootItems.length === 0"
+        class="empty-state"
+      >
+        <IconEpDocument class="empty-icon" />
+        <p class="empty-text">暂无页面</p>
+        <p class="empty-hint">点击上方按钮新建页面</p>
+      </div>
+    </div>
+  </div>
+  <!-- 新建页面/分组弹窗 -->
+  <el-dialog
+    v-model="createDialogVisible"
+    :title="createDialogTitle"
+    width="420px"
+    :close-on-click-modal="false"
+    class="create-page-dialog"
+  >
+    <div class="create-type-selector">
+      <div
+        v-for="option in createTypeOptions"
+        :key="option.value"
+        class="type-option"
+        :class="{ 'is-active': createForm.type === option.value }"
+        @click="createForm.type = option.value"
+      >
+        <component :is="option.icon" class="type-icon" />
+        <div class="type-info">
+          <div class="type-name">{{ option.label }}</div>
+          <div class="type-desc">{{ option.desc }}</div>
+        </div>
+      </div>
+    </div>
+
+    <el-form
+      ref="createFormRef"
+      :model="createForm"
+      :rules="createFormRules"
+      label-position="top"
+      class="create-form"
+    >
+      <el-form-item label="名称" prop="name">
+        <el-input
+          v-model="createForm.name"
+          :disabled="isFixedBasicCreateType(createForm.type)"
+          placeholder="请输入名称"
+          maxlength="50"
+          show-word-limit
+        />
+      </el-form-item>
+
+      <el-form-item v-if="createForm.type === 'page'" label="所属分组">
+        <el-select v-model="createForm.parentId" clearable placeholder="选择分组（可选）">
+          <el-option label="根目录" :value="null">
+            <div class="flex items-center gap-2">
+              <IconEpFolderOpened class="text-gray-400" />
+              <span>根目录</span>
+            </div>
+          </el-option>
+          <el-option
+            v-for="folder in folderOptions"
+            :key="folder.id"
+            :label="folder.name"
+            :value="folder.id"
+          >
+            <div class="flex items-center gap-2">
+              <IconEpFolder class="text-yellow-500" />
+              <span>{{ folder.name }}</span>
+            </div>
+          </el-option>
+        </el-select>
+      </el-form-item>
+    </el-form>
+
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="handleCreateConfirm">
+          <IconEpPlus class="mr-1" />
+          创建
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
+</template>
 
 <style scoped>
 /* ==================== 容器 ==================== */

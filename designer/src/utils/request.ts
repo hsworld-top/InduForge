@@ -1,39 +1,44 @@
 /**
  * HTTP 请求封装
+ *
+ * 响应拦截器返回 `response.data`，故方法泛型 `T` 表示解包后的业务数据类型。
  */
 
-import axios, {
-  type AxiosError,
-  type AxiosResponse,
-  type InternalAxiosRequestConfig,
+import type {
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
 } from "axios";
+import axios from "axios";
 import { ElMessage } from "element-plus";
-import { Storage } from "@/utils/storage";
 import { STORAGE_KEYS } from "@/constants";
+import { Storage } from "@/utils/storage";
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return v !== null && typeof v === "object";
+/** Element Plus 的 ElMessage 选项类型在部分 TS 配置下过窄，此处收窄为运行时实际用法 */
+function notifyRequestError(message: string): void {
+  (ElMessage as unknown as (opts: { type: "error"; message: string }) => void)({
+    type: "error",
+    message,
+  });
 }
 
-/** 包络 `{ success, data }`：失败在拦截器层拒绝，成功则只返回 data */
-function unwrapEnvelopeOrPass(body: unknown): unknown {
-  if (!isRecord(body) || !("success" in body) || !("data" in body)) {
-    return body;
-  }
-  if (body["success"] === false) {
-    const msg =
-      typeof body["message"] === "string" ? body["message"] : "请求失败";
-    throw new Error(msg);
-  }
-  return body["data"];
+export interface UnwrappedHttpClient {
+  get: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>;
+  post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>;
+  put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>;
+  patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>;
+  delete: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>;
+  interceptors: AxiosInstance["interceptors"];
+  defaults: AxiosInstance["defaults"];
 }
 
-type QueueProm = {
-  resolve: (token: string) => void;
+interface QueueItem {
+  resolve: (token: string | null) => void;
   reject: (err: unknown) => void;
-};
+}
 
-const request = axios.create({
+const requestCore = axios.create({
   baseURL: "/api/v1",
   timeout: 30000,
   headers: {
@@ -42,27 +47,24 @@ const request = axios.create({
 });
 
 let isRefreshing = false;
-let failedQueue: QueueProm[] = [];
+let failedQueue: QueueItem[] = [];
 
-const processQueue = (error: unknown, token: string | null = null) => {
+function processQueue(error: unknown, token: string | null = null): void {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
-    } else if (token) {
+    } else {
       prom.resolve(token);
     }
   });
   failedQueue = [];
-};
+}
 
-const refreshAccessToken = (refreshToken: string) => {
-  return axios.post<{ data?: { accessToken?: string; refreshToken?: string } }>(
-    "/api/v1/auth/refresh",
-    { refreshToken },
-  );
-};
+function refreshAccessToken(refreshToken: string) {
+  return axios.post("/api/v1/auth/refresh", { refreshToken });
+}
 
-const handleLogout = () => {
+function handleLogout(): void {
   Storage.remove(STORAGE_KEYS.TOKEN);
   Storage.remove(STORAGE_KEYS.REFRESH_TOKEN);
   Storage.remove(STORAGE_KEYS.USER_INFO);
@@ -72,49 +74,34 @@ const handleLogout = () => {
   if (window.parent !== window) {
     window.parent.postMessage({ type: "AUTH_EXPIRED" }, "*");
   }
-};
+}
 
-request.interceptors.request.use(
+requestCore.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = Storage.getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-
     const tenantId = Storage.getTenantId();
     if (tenantId) {
       config.headers["X-Tenant-ID"] = tenantId;
     }
-
     return config;
   },
-  (error: AxiosError) => Promise.reject(error),
+  (error) => Promise.reject(error),
 );
 
-request.interceptors.response.use(
-  (response: AxiosResponse) => {
-    try {
-      // 约定：对外 Promise 直接 resolve 业务体（与历史行为一致），与 Axios 默认类型不同故断言
-      return unwrapEnvelopeOrPass(response.data) as unknown as AxiosResponse;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "请求失败";
-      ElMessage.error(msg as never);
-      return Promise.reject(err instanceof Error ? err : new Error(msg));
-    }
-  },
-  (error: AxiosError) => {
-    const response = error.response;
-    const config = error.config;
+requestCore.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    const { response, config } = error;
 
-    if (response && config) {
-      const { status, data } = response as {
-        status: number;
-        data: { errors?: Record<string, unknown>; message?: string };
-      };
+    if (response) {
+      const { status, data } = response;
 
       switch (status) {
         case 401: {
-          if (config.url?.includes("/auth/refresh")) {
+          if (config?.url?.includes("/auth/refresh")) {
             handleLogout();
             return Promise.reject(error);
           }
@@ -129,30 +116,29 @@ request.interceptors.response.use(
             isRefreshing = true;
 
             return refreshAccessToken(refreshToken)
-              .then((result) => {
-                const payload =
-                  (result?.data as { data?: unknown } | undefined)?.data ??
-                  result?.data ??
-                  {};
-                const typed = payload as {
-                  accessToken?: string;
-                  refreshToken?: string;
-                };
-                const { accessToken, refreshToken: newRefreshToken } = typed;
-                if (!accessToken) {
-                  throw new Error("刷新令牌响应缺少 accessToken");
-                }
+              .then(
+                (
+                  result: AxiosResponse<{ data?: Record<string, string> } & Record<string, string>>,
+                ) => {
+                  const body = result?.data as { data?: Record<string, string> } & Record<
+                    string,
+                    string
+                  >;
+                  const payload = body?.data || body || {};
+                  const accessToken = payload.accessToken as string | undefined;
+                  const newRefreshToken = payload.refreshToken as string | undefined;
 
-                Storage.setToken(accessToken);
-                if (newRefreshToken) {
-                  Storage.setRefreshToken(newRefreshToken);
-                }
+                  if (accessToken) Storage.setToken(accessToken);
+                  if (newRefreshToken) Storage.setRefreshToken(newRefreshToken);
 
-                processQueue(null, accessToken);
+                  processQueue(null, accessToken ?? null);
 
-                config.headers.Authorization = `Bearer ${accessToken}`;
-                return request(config);
-              })
+                  if (config?.headers && accessToken) {
+                    config.headers.Authorization = `Bearer ${accessToken}`;
+                  }
+                  return requestCore(config!);
+                },
+              )
               .catch((refreshError: unknown) => {
                 processQueue(refreshError, null);
                 handleLogout();
@@ -165,39 +151,42 @@ request.interceptors.response.use(
 
           return new Promise((resolve, reject) => {
             failedQueue.push({
-              resolve: (token: string) => {
-                config.headers.Authorization = `Bearer ${token}`;
-                resolve(request(config));
+              resolve: (token) => {
+                if (config?.headers && token) {
+                  config.headers.Authorization = `Bearer ${token}`;
+                }
+                resolve(requestCore(config!));
               },
               reject,
             });
           });
         }
         case 403:
-          ElMessage.error("没有权限访问此资源" as never);
+          notifyRequestError("没有权限访问此资源");
           break;
         case 404:
-          ElMessage.error("请求的资源不存在" as never);
+          notifyRequestError("请求的资源不存在");
           break;
-        case 422:
-          if (data.errors) {
-            const errorMessages = Object.values(data.errors).flat();
-            ElMessage.error(errorMessages.join("; ") as never);
+        case 422: {
+          const body = data as { errors?: Record<string, string[]>; message?: string };
+          if (body?.errors) {
+            const errorMessages = Object.values(body.errors).flat();
+            notifyRequestError(errorMessages.join("; "));
           } else {
-            ElMessage.error((data.message || "请求参数错误") as never);
+            notifyRequestError(body?.message || "请求参数错误");
           }
           break;
-        case 500:
-          break;
+        }
         default:
           break;
       }
     } else {
-      ElMessage.error("网络连接失败，请检查网络设置" as never);
+      notifyRequestError("网络连接失败，请检查网络设置");
     }
 
     return Promise.reject(error);
   },
 );
 
+const request = requestCore as unknown as UnwrappedHttpClient;
 export default request;

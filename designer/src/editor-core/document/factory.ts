@@ -3,30 +3,27 @@
  * 用于创建各种类型的组件节点
  */
 
-import { generateId } from "./types.js";
 import type {
-  ComponentNode,
-  LayoutItem,
   AbsolutePosition,
+  ComponentNode,
+  DiagramData,
   FlexLayoutItem,
   GridLayoutItem,
-  DiagramData,
-} from "./types.js";
+  LayoutItem,
+} from "./types.ts";
+import { generateId } from "./types.ts";
 
 export interface DescriptorRegistryModule {
-  getChildPositioning?: (
-    containerType: string,
-  ) => "absolute" | "flow" | null | undefined;
+  getChildPositioning?: (containerType: string) => "absolute" | "flow" | null | undefined;
 }
 
 let _descriptorRegistry: DescriptorRegistryModule | null = null;
 
-const getDescriptorRegistry = (): DescriptorRegistryModule | null =>
-  _descriptorRegistry;
+function getDescriptorRegistry(): DescriptorRegistryModule | null {
+  return _descriptorRegistry;
+}
 
-export function initDescriptorRegistry(
-  registry: DescriptorRegistryModule | null,
-) {
+export function initDescriptorRegistry(registry: DescriptorRegistryModule | null) {
   _descriptorRegistry = registry;
 }
 
@@ -69,9 +66,9 @@ export function createComponentNode(
     node.absolutePos = createDefaultAbsolutePos();
   }
   if (positioning === "flow") {
-    node.flowLayout = createDefaultFlowLayout(
-      parentNode ?? undefined,
-    ) as FlexLayoutItem | GridLayoutItem;
+    node.flowLayout = createDefaultFlowLayout(parentNode ?? undefined) as
+      | FlexLayoutItem
+      | GridLayoutItem;
   }
 
   return node;
@@ -81,7 +78,7 @@ export function createComponentNode(
  * 推断节点的定位模式
  * 根据父容器类型自动推断子节点应该使用哪种定位模式
  * @param {string} type - 组件类型
- * @param {Object} [parentNode] - 父节点
+ * @param {object} [parentNode] - 父节点
  * @returns {'absolute' | 'flow'} 定位模式
  */
 export function inferPositioning(
@@ -136,7 +133,7 @@ export function inferPositioning(
 
 /**
  * 创建默认绝对定位配置
- * @returns {import('./types.js').AbsolutePosition}
+ * @returns {import('./types.ts').AbsolutePosition}
  */
 function createDefaultAbsolutePos(): AbsolutePosition {
   return {
@@ -150,8 +147,8 @@ function createDefaultAbsolutePos(): AbsolutePosition {
 
 /**
  * 创建默认流式布局配置
- * @param {Object} [parentNode] - 父节点
- * @returns {import('./types.js').FlexLayoutItem | import('./types.js').GridLayoutItem}
+ * @param {object} [parentNode] - 父节点
+ * @returns {import('./types.ts').FlexLayoutItem | import('./types.ts').GridLayoutItem}
  */
 function createDefaultFlowLayout(
   parentNode?: Pick<ComponentNode, "type" | "children" | "props"> | null,
@@ -167,9 +164,7 @@ function createDefaultFlowLayout(
     parentNode.type === "ColumnLayout2" ||
     parentNode.type === "ColumnLayout4"
   ) {
-    const columns = resolveGridColumns(
-      parentNode.props?.columns as string | number | undefined,
-    );
+    const columns = resolveGridColumns(parentNode.props?.columns as string | number | undefined);
     const childIndex = parentNode.children?.length || 0;
     const row = Math.floor(childIndex / columns) + 1;
     const col = (childIndex % columns) + 1;
@@ -223,9 +218,9 @@ function resolveGridColumns(columns: string | number | undefined): number {
 
 /**
  * 克隆组件节点
- * @param {import('./types.js').ComponentNode} node - 源节点
- * @param {Object} [overrides] - 覆盖属性
- * @returns {import('./types.js').ComponentNode} 新节点
+ * @param {import('./types.ts').ComponentNode} node - 源节点
+ * @param {object} [overrides] - 覆盖属性
+ * @returns {import('./types.ts').ComponentNode} 新节点
  */
 export function cloneComponentNode(
   node: ComponentNode,
@@ -246,11 +241,11 @@ export function cloneComponentNode(
 
 /**
  * 创建绘图组件节点
- * @param {Object} [options] - 节点选项
- * @param {Object} [options.parentNode] - 父节点
+ * @param {object} [options] - 节点选项
+ * @param {object} [options.parentNode] - 父节点
  * @param {string} [options.label] - 显示标签
- * @param {import('./types.js').DiagramProps} [options.props] - 组件属性
- * @returns {{node: import('./types.js').ComponentNode, diagramId: string}} 组件节点和绘图 ID
+ * @param {import('./types.ts').DiagramProps} [options.props] - 组件属性
+ * @returns {{node: import('./types.ts').ComponentNode, diagramId: string}} 组件节点和绘图 ID
  */
 export interface CreateDiagramNodeOptions {
   parentNode?: CreateComponentNodeOptions["parentNode"];
@@ -295,7 +290,7 @@ export function createDiagramNode(options: CreateDiagramNodeOptions = {}) {
 /**
  * 创建空白绘图数据
  * @param {string} diagramId - 绘图 ID
- * @returns {import('./types.js').DiagramData} 绘图数据
+ * @returns {import('./types.ts').DiagramData} 绘图数据
  */
 export function createDiagramData(diagramId: string): DiagramData {
   return {
@@ -309,9 +304,9 @@ export function createDiagramData(diagramId: string): DiagramData {
 
 /**
  * 创建图元
- * @param {import('./types.js').ShapeType} type - 图元类型
- * @param {Object} data - 图元数据
- * @returns {import('./types.js').Shape} 图元
+ * @param {import('./types.ts').ShapeType} type - 图元类型
+ * @param {object} data - 图元数据
+ * @returns {import('./types.ts').Shape} 图元
  */
 export function createShape(
   type: string,
@@ -339,8 +334,7 @@ export function createShape(
     hidden: false,
   };
 
-  const num = (v: unknown, d: number) =>
-    typeof v === "number" && Number.isFinite(v) ? v : d;
+  const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
   const str = (v: unknown, d: string) => (typeof v === "string" ? v : d);
 
   switch (type) {

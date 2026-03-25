@@ -2,749 +2,20 @@
   ScriptVarsPanel - 脚本与变量面板
   管理系统脚本（启动/关闭）、定时器、变量变更、自定义脚本
 -->
-<template>
-  <div class="global-scripts">
-    <el-collapse
-      v-model="activeSections"
-      class="scripts-collapse"
-      :accordion="true"
-    >
-      <el-collapse-item name="system">
-        <template #title> 系统脚本 </template>
-        <div class="scripts-layout">
-          <div class="scripts-list is-full">
-            <el-menu
-              :default-active="selectedSystemKey"
-              class="list-menu"
-              @select="selectSystem"
-            >
-              <el-menu-item
-                index="startup"
-                @dblclick="openSystemEditor('startup')"
-              >
-                <el-icon class="node-icon icon-system"
-                  ><IconEpPointer
-                /></el-icon>
-                系统启动
-              </el-menu-item>
-              <el-menu-item
-                index="shutdown"
-                @dblclick="openSystemEditor('shutdown')"
-              >
-                <el-icon class="node-icon icon-system"><IconEpClose /></el-icon>
-                系统关闭
-              </el-menu-item>
-            </el-menu>
-          </div>
-        </div>
-      </el-collapse-item>
-
-      <el-collapse-item name="timers">
-        <template #title> 定时器 </template>
-        <div class="scripts-layout">
-          <div
-            class="scripts-list is-full"
-            @contextmenu="(event) => handleBlankContextMenu('timers', event)"
-          >
-            <el-tree
-              :data="timerTree"
-              node-key="id"
-              :default-expand-all="true"
-              highlight-current
-              :expand-on-click-node="false"
-              draggable
-              :allow-drop="
-                (draggingNode, dropNode, dropType) =>
-                  allowScriptDrop('timers', draggingNode, dropNode, dropType)
-              "
-              :allow-drag="allowScriptDrag"
-              @node-click="() => {}"
-              @node-dblclick="(data) => openScriptEditor('timers', data)"
-              @node-contextmenu="
-                (event, data) => handleTreeContextMenu('timers', event, data)
-              "
-              @node-drop="
-                (draggingNode, dropNode, dropType) =>
-                  handleScriptDrop('timers', draggingNode, dropNode, dropType)
-              "
-            >
-              <template #default="{ data }">
-                <div
-                  class="tree-node"
-                  :class="[
-                    { 'is-selected': isScriptSelected('timers', data) },
-                    `node-${data.type}`,
-                  ]"
-                  @click.stop="
-                    (event) => handleScriptNodeClick('timers', data, event)
-                  "
-                  @dblclick.stop="openScriptEditor('timers', data)"
-                >
-                  <el-icon class="node-icon icon-timer">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpTimer v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                    >{{ data.label }}</span
-                  >
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </el-collapse-item>
-      <el-collapse-item name="variableChanges">
-        <template #title> 变量改变 </template>
-        <div class="scripts-layout">
-          <div
-            class="scripts-list is-full"
-            @contextmenu="
-              (event) => handleBlankContextMenu('variableChanges', event)
-            "
-          >
-            <el-tree
-              :data="variableChangeTree"
-              node-key="id"
-              :default-expand-all="true"
-              highlight-current
-              :expand-on-click-node="false"
-              draggable
-              :allow-drop="
-                (draggingNode, dropNode, dropType) =>
-                  allowScriptDrop(
-                    'variableChanges',
-                    draggingNode,
-                    dropNode,
-                    dropType,
-                  )
-              "
-              :allow-drag="allowScriptDrag"
-              @node-click="() => {}"
-              @node-dblclick="
-                (data) => openScriptEditor('variableChanges', data)
-              "
-              @node-contextmenu="
-                (event, data) =>
-                  handleTreeContextMenu('variableChanges', event, data)
-              "
-              @node-drop="
-                (draggingNode, dropNode, dropType) =>
-                  handleScriptDrop(
-                    'variableChanges',
-                    draggingNode,
-                    dropNode,
-                    dropType,
-                  )
-              "
-            >
-              <template #default="{ data }">
-                <div
-                  class="tree-node"
-                  :class="[
-                    {
-                      'is-selected': isScriptSelected('variableChanges', data),
-                    },
-                    `node-${data.type}`,
-                  ]"
-                  @click.stop="
-                    (event) =>
-                      handleScriptNodeClick('variableChanges', data, event)
-                  "
-                  @dblclick.stop="openScriptEditor('variableChanges', data)"
-                >
-                  <el-icon class="node-icon icon-change">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpRefresh v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                    >{{ data.label }}</span
-                  >
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </el-collapse-item>
-
-      <el-collapse-item name="custom">
-        <template #title> 自定义脚本 </template>
-        <div class="scripts-layout">
-          <div
-            class="scripts-list is-full"
-            @contextmenu="(event) => handleBlankContextMenu('custom', event)"
-          >
-            <el-tree
-              :data="customTree"
-              node-key="id"
-              :default-expand-all="true"
-              highlight-current
-              :expand-on-click-node="false"
-              draggable
-              :allow-drop="
-                (draggingNode, dropNode, dropType) =>
-                  allowScriptDrop('custom', draggingNode, dropNode, dropType)
-              "
-              :allow-drag="allowScriptDrag"
-              @node-click="() => {}"
-              @node-dblclick="(data) => openScriptEditor('custom', data)"
-              @node-contextmenu="
-                (event, data) => handleTreeContextMenu('custom', event, data)
-              "
-              @node-drop="
-                (draggingNode, dropNode, dropType) =>
-                  handleScriptDrop('custom', draggingNode, dropNode, dropType)
-              "
-            >
-              <template #default="{ data }">
-                <div
-                  class="tree-node"
-                  :class="[
-                    { 'is-selected': isScriptSelected('custom', data) },
-                    `node-${data.type}`,
-                  ]"
-                  @click.stop="
-                    (event) => handleScriptNodeClick('custom', data, event)
-                  "
-                  @dblclick.stop="openScriptEditor('custom', data)"
-                >
-                  <el-icon class="node-icon icon-custom">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpEditPen v-else />
-                  </el-icon>
-                  <span
-                    class="node-label"
-                    :class="{ 'is-group': data.type === 'group' }"
-                    >{{ data.label }}</span
-                  >
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </el-collapse-item>
-    </el-collapse>
-    <el-dialog
-      v-model="groupDialogVisible"
-      :title="groupEditMode ? '编辑分组' : '新建分组'"
-      width="420px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form label-width="70px">
-        <el-form-item label="名称">
-          <el-input v-model="groupName" />
-        </el-form-item>
-        <el-form-item label="父级">
-          <el-select v-model="groupParentId" placeholder="根目录">
-            <el-option label="根目录" :value="null" />
-            <el-option
-              v-for="group in groupParentOptions"
-              :key="group.id"
-              :label="group.name"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="groupDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveGroup">确定</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog
-      v-model="metaDialogVisible"
-      :title="metaDialogTitle"
-      width="420px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form label-width="90px">
-        <template v-if="metaDialogModule === 'timers'">
-          <el-form-item label="定时器名称">
-            <el-input v-model="metaForm.name" />
-          </el-form-item>
-          <el-form-item label="时间(ms)">
-            <el-input-number
-              v-model="metaForm.interval"
-              :min="100"
-              :step="100"
-              style="width: 100%"
-            />
-          </el-form-item>
-          <el-form-item label="描述">
-            <el-input v-model="metaForm.description" />
-          </el-form-item>
-        </template>
-        <template v-else-if="metaDialogModule === 'variableChanges'">
-          <el-form-item label="变量">
-            <el-select v-model="metaForm.variable" placeholder="请选择变量">
-              <el-option
-                v-for="name in projectVariableNames"
-                :key="name"
-                :label="name"
-                :value="name"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="描述">
-            <el-input v-model="metaForm.description" />
-          </el-form-item>
-        </template>
-        <template v-else-if="metaDialogModule === 'custom'">
-          <el-form-item label="函数名称">
-            <el-input v-model="metaForm.name" />
-          </el-form-item>
-          <el-form-item label="入参">
-            <el-input v-model="metaForm.params" placeholder="例如: id, value" />
-          </el-form-item>
-          <el-form-item label="描述">
-            <el-input v-model="metaForm.description" />
-          </el-form-item>
-        </template>
-      </el-form>
-      <template #footer>
-        <el-button @click="metaDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveMetaDialog">确定</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog
-      v-model="systemEditorVisible"
-      :title="`${selectedSystemLabel}脚本`"
-      width="980px"
-      top="3vh"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-      :before-close="handleSystemBeforeClose"
-    >
-      <div class="editor-meta">
-        <div class="meta-title">{{ selectedSystemLabel }}</div>
-        <div class="meta-desc">系统脚本</div>
-        <div class="meta-actions">
-          <el-tooltip content="枚举工程变量" placement="top">
-            <el-button
-              class="icon-button"
-              size="small"
-              circle
-              @click="openVariableEnum"
-            >
-              <IconEpList />
-            </el-button>
-          </el-tooltip>
-        </div>
-      </div>
-      <div class="editor-body">
-        <div class="editor-main">
-          <MonacoEditor
-            ref="systemEditorRef"
-            v-model="systemCode"
-            language="javascript"
-            height="520px"
-            :completions="jsCompletions"
-          />
-        </div>
-        <div class="editor-sidebar">
-          <div class="sidebar-section">
-            <div class="sidebar-title">自定义脚本</div>
-            <el-input
-              v-model="scriptSearch"
-              size="small"
-              placeholder="搜索脚本/分组"
-              clearable
-            />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="customScriptTreeRef"
-                :data="customScriptSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handleCustomScriptInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-custom">
-                      <IconEpFolder v-if="data.type === 'group'" />
-                      <IconEpEditPen v-else />
-                    </el-icon>
-                    <span
-                      class="node-label"
-                      :class="{
-                        'is-group':
-                          data.type === 'group' || data.type === 'folder',
-                      }"
-                      >{{ data.label }}</span
-                    >
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-          <div class="sidebar-section">
-            <div class="sidebar-title">页面</div>
-            <el-input
-              v-model="pageSearch"
-              size="small"
-              placeholder="搜索页面/分组"
-              clearable
-            />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="pageTreeRef"
-                :data="pageSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handlePageInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-page">
-                      <IconEpFolder v-if="data.type === 'folder'" />
-                      <IconEpDocument v-else />
-                    </el-icon>
-                    <span
-                      class="node-label"
-                      :class="{
-                        'is-group':
-                          data.type === 'group' || data.type === 'folder',
-                      }"
-                      >{{ data.label }}</span
-                    >
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="systemEditorVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveSystemScript"
-          >保存 (Ctrl+S)</el-button
-        >
-      </template>
-    </el-dialog>
-    <el-dialog
-      v-model="scriptEditorVisible"
-      :title="scriptEditorTitle"
-      width="980px"
-      top="3vh"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-      :before-close="handleScriptBeforeClose"
-    >
-      <div class="editor-meta">
-        <div class="meta-title">{{ editorMetaTitle }}</div>
-        <div class="meta-desc">{{ editorMetaDescription }}</div>
-        <div v-if="scriptEditorModule === 'timers'" class="meta-inline">
-          <span class="meta-label">时间(ms)</span>
-          <el-input-number
-            v-model="editorInterval"
-            :min="100"
-            :step="100"
-            size="small"
-          />
-        </div>
-        <div v-if="scriptEditorModule === 'custom'" class="meta-inline">
-          <span class="meta-label">入参</span>
-          <span class="meta-value">{{ editorParams || "无" }}</span>
-        </div>
-        <div class="meta-actions">
-          <el-tooltip content="枚举工程变量" placement="top">
-            <el-button
-              class="icon-button"
-              size="small"
-              circle
-              @click="openVariableEnum"
-            >
-              <IconEpList />
-            </el-button>
-          </el-tooltip>
-        </div>
-      </div>
-      <div class="editor-body">
-        <div class="editor-main">
-          <MonacoEditor
-            ref="activeEditorRef"
-            v-model="editorCode"
-            language="javascript"
-            height="520px"
-            :completions="jsCompletions"
-          />
-        </div>
-        <div class="editor-sidebar">
-          <div class="sidebar-section">
-            <div class="sidebar-title">自定义脚本</div>
-            <el-input
-              v-model="scriptSearch"
-              size="small"
-              placeholder="搜索脚本/分组"
-              clearable
-            />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="customScriptTreeRef"
-                :data="customScriptSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handleCustomScriptInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-custom">
-                      <IconEpFolder v-if="data.type === 'group'" />
-                      <IconEpEditPen v-else />
-                    </el-icon>
-                    <span
-                      class="node-label"
-                      :class="{ 'is-group': data.type === 'group' }"
-                      >{{ data.label }}</span
-                    >
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-          <div class="sidebar-section">
-            <div class="sidebar-title">页面</div>
-            <el-input
-              v-model="pageSearch"
-              size="small"
-              placeholder="搜索页面/分组"
-              clearable
-            />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="pageTreeRef"
-                :data="pageSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handlePageInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-page">
-                      <IconEpFolder v-if="data.type === 'folder'" />
-                      <IconEpDocument v-else />
-                    </el-icon>
-                    <span
-                      class="node-label"
-                      :class="{ 'is-group': data.type === 'group' }"
-                      >{{ data.label }}</span
-                    >
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="scriptEditorVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveActiveScript"
-          >保存 (Ctrl+S)</el-button
-        >
-      </template>
-    </el-dialog>
-
-    <el-dialog
-      v-model="variableEnumVisible"
-      title="工程变量"
-      width="760px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <div class="enum-layout">
-        <div class="enum-left">
-          <div class="sidebar-title">分组</div>
-          <el-tree
-            ref="enumGroupTreeRef"
-            :data="enumGroupTree"
-            node-key="id"
-            :default-expand-all="true"
-            :expand-on-click-node="false"
-            :filter-node-method="filterSidebarNode"
-            @node-click="handleEnumGroupSelect"
-          >
-            <template #default="{ data }">
-              <div class="tree-node" :class="`node-${data.type}`">
-                <el-icon class="node-icon icon-variable">
-                  <IconEpFolder />
-                </el-icon>
-                <span class="node-label is-group">{{ data.label }}</span>
-              </div>
-            </template>
-          </el-tree>
-        </div>
-        <div class="enum-right">
-          <el-input
-            v-model="enumVariableSearch"
-            size="small"
-            placeholder="搜索工程变量"
-            clearable
-          />
-          <el-table
-            :data="enumVariableRows"
-            size="small"
-            height="360"
-            highlight-current-row
-            @row-click="handleEnumRowClick"
-            @row-dblclick="handleEnumRowDblClick"
-            :row-class-name="enumRowClass"
-          >
-            <el-table-column prop="name" label="变量名" min-width="160" />
-            <el-table-column prop="type" label="类型" width="90" />
-            <el-table-column prop="description" label="描述" min-width="160" />
-            <el-table-column prop="mapped" label="映射" width="70">
-              <template #default="{ row }">
-                {{ row.mapped ? "是" : "" }}
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="variableEnumVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :disabled="!enumSelectedVar"
-          @click="confirmEnumInsert"
-          >插入</el-button
-        >
-      </template>
-    </el-dialog>
-
-    <div
-      v-if="contextMenuVisible"
-      class="context-menu"
-      :style="contextMenuStyle"
-      @click.stop
-      @mousedown.stop
-    >
-      <template v-if="contextMenuNode?.type === 'blank'">
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">
-          新建分组
-        </div>
-        <div
-          class="context-menu-item"
-          @click="openMetaDialog(contextMenuModule, 'create')"
-        >
-          新建脚本
-        </div>
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !scriptClipboard }"
-          @click="pasteScript(contextMenuModule)"
-        >
-          粘贴
-        </div>
-      </template>
-      <template v-else-if="contextMenuNode?.type === 'item'">
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !canOpenEditScript }"
-          @click="openScriptEditor(contextMenuModule)"
-        >
-          打开
-        </div>
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !canOpenEditScript }"
-          @click="openMetaDialog(contextMenuModule, 'edit')"
-        >
-          编辑
-        </div>
-        <div class="context-menu-item" @click="copyScript(contextMenuModule)">
-          复制
-        </div>
-        <div
-          class="context-menu-item"
-          @click="showMoveToMenu = !showMoveToMenu"
-        >
-          移动到
-        </div>
-        <div
-          class="context-menu-item context-menu-item--danger"
-          :class="{ 'is-disabled': !canDeleteSelection }"
-          @click="removeScript(contextMenuModule)"
-        >
-          删除
-        </div>
-      </template>
-      <template v-else-if="contextMenuNode?.type === 'group'">
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !canEditGroup }"
-          @click="openGroupEditFromMenu"
-        >
-          编辑分组
-        </div>
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">
-          新建子分组
-        </div>
-        <div
-          class="context-menu-item"
-          @click="showMoveToMenu = !showMoveToMenu"
-        >
-          移动到
-        </div>
-        <div
-          class="context-menu-item context-menu-item--danger"
-          :class="{ 'is-disabled': !canDeleteSelection }"
-          @click="removeGroup(contextMenuModule)"
-        >
-          删除分组
-        </div>
-      </template>
-    </div>
-
-    <div
-      v-if="contextMenuVisible && showMoveToMenu"
-      class="context-menu context-submenu"
-      :style="submenuStyle"
-      @click.stop
-      @mousedown.stop
-    >
-      <div class="context-menu-item" @click="handleMoveTo(null)">根目录</div>
-      <div
-        v-for="group in availableGroups"
-        :key="group.id"
-        class="context-menu-item"
-        @click="handleMoveTo(group.id)"
-      >
-        {{ group.name }}
-      </div>
-    </div>
-  </div>
-</template>
 <script setup>
-import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import IconEpDocument from "~icons/ep/document";
+import IconEpEditPen from "~icons/ep/edit-pen";
+import IconEpFolder from "~icons/ep/folder";
+import IconEpList from "~icons/ep/list";
+import IconEpRefresh from "~icons/ep/refresh";
+import IconEpTimer from "~icons/ep/timer";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/utils/component-methods";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpTimer from "~icons/ep/timer";
-import IconEpRefresh from "~icons/ep/refresh";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpPointer from "~icons/ep/pointer";
-import IconEpClose from "~icons/ep/close";
-import IconEpLink from "~icons/ep/link";
-import IconEpList from "~icons/ep/list";
-import IconEpDocument from "~icons/ep/document";
+import ScriptVarsSystemSection from "./ScriptVarsSystemSection.vue";
 
 const editorStore = useEditorStore();
 const {
@@ -814,9 +85,7 @@ const contextMenuNode = ref(null);
 const contextMenuModule = ref("");
 const showMoveToMenu = ref(false);
 
-const projectVariableNames = computed(() =>
-  Object.keys(projectVariables.value || {}).sort(),
-);
+const projectVariableNames = computed(() => Object.keys(projectVariables.value || {}).sort());
 const projectVariablesList = computed(() =>
   Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
     name,
@@ -828,9 +97,7 @@ const projectVariablesList = computed(() =>
   })),
 );
 const customScripts = computed(() => globalScripts.value?.custom?.items || []);
-const customScriptGroups = computed(
-  () => globalScripts.value?.custom?.groups || [],
-);
+const customScriptGroups = computed(() => globalScripts.value?.custom?.groups || []);
 const variableGroups = computed(() => projectVariableGroups.value || []);
 
 const scriptSearch = ref("");
@@ -898,9 +165,7 @@ const pageComponentTree = computed(() => {
   const buildNode = (nodeId) => {
     const node = doc.value.getNode(nodeId);
     if (!node) return null;
-    const children = (node.children || [])
-      .map((childId) => buildNode(childId))
-      .filter(Boolean);
+    const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean);
     const label = node.label || node.type || "组件";
     return {
       id: node.id,
@@ -981,24 +246,18 @@ const jsCompletions = computed(() => {
 });
 
 const timerGroups = computed(() => globalScripts.value?.timers?.groups || []);
-const variableChangeGroups = computed(
-  () => globalScripts.value?.variableChanges?.groups || [],
-);
+const variableChangeGroups = computed(() => globalScripts.value?.variableChanges?.groups || []);
 const customGroups = computed(() => globalScripts.value?.custom?.groups || []);
 
 const timerItems = computed(() => globalScripts.value?.timers?.items || []);
-const variableChangeItems = computed(
-  () => globalScripts.value?.variableChanges?.items || [],
-);
+const variableChangeItems = computed(() => globalScripts.value?.variableChanges?.items || []);
 const customItems = computed(() => globalScripts.value?.custom?.items || []);
 
 const selectedTimer = computed(() =>
   timerItems.value.find((item) => item.id === selectedTimerId.value),
 );
 const selectedVariableChange = computed(() =>
-  variableChangeItems.value.find(
-    (item) => item.id === selectedVariableId.value,
-  ),
+  variableChangeItems.value.find((item) => item.id === selectedVariableId.value),
 );
 const selectedCustom = computed(() =>
   customItems.value.find((item) => item.id === selectedCustomId.value),
@@ -1008,23 +267,17 @@ const selectedTimerGroup = computed(() =>
   timerGroups.value.find((group) => group.id === selectedTimerId.value),
 );
 const selectedVariableGroup = computed(() =>
-  variableChangeGroups.value.find(
-    (group) => group.id === selectedVariableId.value,
-  ),
+  variableChangeGroups.value.find((group) => group.id === selectedVariableId.value),
 );
 const selectedCustomGroup = computed(() =>
   customGroups.value.find((group) => group.id === selectedCustomId.value),
 );
 
-const timerTree = computed(() =>
-  buildScriptTree(timerGroups.value, timerItems.value),
-);
+const timerTree = computed(() => buildScriptTree(timerGroups.value, timerItems.value));
 const variableChangeTree = computed(() =>
   buildScriptTree(variableChangeGroups.value, variableChangeItems.value),
 );
-const customTree = computed(() =>
-  buildScriptTree(customGroups.value, customItems.value),
-);
+const customTree = computed(() => buildScriptTree(customGroups.value, customItems.value));
 
 const contextMenuStyle = computed(() => ({
   left: `${contextMenuPosition.value.x}px`,
@@ -1050,9 +303,7 @@ const availableGroups = computed(() => {
   const groups = getGroupsByModule(module);
   if (!current || current.type !== "group") return groups;
   return groups.filter(
-    (group) =>
-      group.id !== current.id &&
-      !isDescendantGroup(group.id, current.id, module),
+    (group) => group.id !== current.id && !isDescendantGroup(group.id, current.id, module),
   );
 });
 
@@ -1067,8 +318,7 @@ const groupParentOptions = computed(() => {
 });
 
 const scriptEditorTitle = computed(() => {
-  const module =
-    scriptEditorModule.value || contextMenuModule.value || "system";
+  const module = scriptEditorModule.value || contextMenuModule.value || "system";
   const selected = getSelectedItem(module);
   if (selected?.name) return `${selected.name}脚本`;
   if (module === "timers") return "定时器脚本";
@@ -1085,13 +335,13 @@ const metaDialogTitle = computed(() => {
   return `${action}脚本`;
 });
 
-const syncSystemCode = () => {
+function syncSystemCode() {
   const system = globalScripts.value?.system || {};
   systemCode.value =
     selectedSystemKey.value === "startup"
       ? system.startup?.code || ""
       : system.shutdown?.code || "";
-};
+}
 
 watch(selectedSystemKey, syncSystemCode, { immediate: true });
 watch(() => globalScripts.value?.system, syncSystemCode, { deep: true });
@@ -1251,24 +501,25 @@ function selectSystem(key) {
 
 const getSelectedNodes = (module) => selectedNodes.value?.[module] || [];
 
-const setSelectedNodes = (module, nodes) => {
+function setSelectedNodes(module, nodes) {
   selectedNodes.value = {
     ...selectedNodes.value,
     [module]: nodes,
   };
-};
+}
 
-const isScriptSelected = (module, data) =>
-  getSelectedNodes(module).some((node) => node.id === data.id);
+function isScriptSelected(module, data) {
+  return getSelectedNodes(module).some((node) => node.id === data.id);
+}
 
-const getMenuItemCount = (nodeType) => {
+function getMenuItemCount(nodeType) {
   if (nodeType === "blank") return 3;
   if (nodeType === "item") return 5;
   if (nodeType === "group") return 4;
   return 4;
-};
+}
 
-const setContextMenuPosition = (event, nodeType) => {
+function setContextMenuPosition(event, nodeType) {
   const width = 180;
   const itemHeight = 38;
   const height = getMenuItemCount(nodeType) * itemHeight + 12;
@@ -1277,7 +528,7 @@ const setContextMenuPosition = (event, nodeType) => {
   const x = Math.max(8, Math.min(event.clientX, maxX));
   const y = Math.max(8, Math.min(event.clientY, maxY));
   contextMenuPosition.value = { x, y };
-};
+}
 
 const isMixedSelection = computed(() => {
   const module = contextMenuModule.value;
@@ -1338,27 +589,27 @@ function handlePageInsert(data) {
   insertText(`components.pages["${name}"]`);
 }
 
-const handleEnumGroupSelect = (data) => {
+function handleEnumGroupSelect(data) {
   if (!data) {
     enumSelectedGroupId.value = null;
     return;
   }
   enumSelectedGroupId.value = data.id === "all" ? null : data.id;
-};
+}
 
-const handleEnumRowClick = (row) => {
+function handleEnumRowClick(row) {
   enumSelectedVar.value = row || null;
-};
+}
 
-const handleEnumRowDblClick = (row) => {
+function handleEnumRowDblClick(row) {
   enumSelectedVar.value = row || null;
   confirmEnumInsert();
-};
+}
 
-const enumRowClass = ({ row }) => {
+function enumRowClass({ row }) {
   if (enumSelectedVar.value?.name === row.name) return "is-selected";
   return "";
-};
+}
 
 function filterSidebarNode(value, data) {
   if (!value) return true;
@@ -1368,18 +619,18 @@ function filterSidebarNode(value, data) {
     .includes(keyword);
 }
 
-const openVariableEnum = () => {
+function openVariableEnum() {
   enumVariableSearch.value = "";
   enumSelectedVar.value = null;
   enumSelectedGroupId.value = null;
   variableEnumVisible.value = true;
-};
+}
 
-const confirmEnumInsert = () => {
+function confirmEnumInsert() {
   if (!enumSelectedVar.value?.name) return;
   insertText(`$global.${enumSelectedVar.value.name}`);
   variableEnumVisible.value = false;
-};
+}
 
 function formatSystemCode() {
   systemEditorRef.value?.format?.();
@@ -1406,9 +657,7 @@ function openScriptEditor(module, data) {
   if (!selected) return;
   editorOriginalCode.value = selected.code || "";
   editorCode.value = selected.code || "";
-  const interval = Number(
-    selected.interval ?? selected.time ?? selected.schedule ?? 1000,
-  );
+  const interval = Number(selected.interval ?? selected.time ?? selected.schedule ?? 1000);
   editorInterval.value = Number.isFinite(interval) ? interval : 1000;
   editorOriginalInterval.value = editorInterval.value;
   editorParams.value = selected.params || selected.args || "";
@@ -1522,8 +771,7 @@ function openGroupEditFromMenu() {
 
 function openGroupCreateFromMenu() {
   const module = contextMenuModule.value;
-  const groupIdValue =
-    contextMenuNode.value?.type === "group" ? contextMenuNode.value?.id : null;
+  const groupIdValue = contextMenuNode.value?.type === "group" ? contextMenuNode.value?.id : null;
   closeContextMenu();
   groupDialogModule.value = module;
   groupEditMode.value = false;
@@ -1538,9 +786,7 @@ function handleMoveTo(groupIdValue) {
   const node = contextMenuNode.value;
   closeContextMenu();
   if (!module || !node) return;
-  const nodesToMove = getSelectedNodes(module).length
-    ? getSelectedNodes(module)
-    : [node];
+  const nodesToMove = getSelectedNodes(module).length ? getSelectedNodes(module) : [node];
   let nextItems = getItemsByModule(module);
   let nextGroups = getGroupsByModule(module);
   let blocked = false;
@@ -1584,15 +830,11 @@ function allowScriptDrop(module, draggingNode, dropNode, type) {
 
   if (dragData.type === "group") {
     if (type === "inner" && dropData.type !== "group") return false;
-    if (
-      dropData.type === "group" &&
-      isDescendantGroup(dropData.id, dragData.id, module)
-    )
+    if (dropData.type === "group" && isDescendantGroup(dropData.id, dragData.id, module)) {
       return false;
+    }
     if (type === "inner" && dropData.type === "group") {
-      const depth =
-        getGroupDepth(dropData.id, module) +
-        getGroupSubtreeDepth(dragData.id, module);
+      const depth = getGroupDepth(dropData.id, module) + getGroupSubtreeDepth(dragData.id, module);
       if (depth > maxGroupDepth) return false;
     }
     return true;
@@ -1638,12 +880,8 @@ async function removeScript(module) {
   }
   const selected = getSelectedItem(module);
   const nodes = getSelectedNodes(module);
-  const itemsToRemove = nodes
-    .filter((node) => node.type === "item")
-    .map((node) => node.itemId);
-  const groupsToRemove = nodes
-    .filter((node) => node.type === "group")
-    .map((node) => node.id);
+  const itemsToRemove = nodes.filter((node) => node.type === "item").map((node) => node.itemId);
+  const groupsToRemove = nodes.filter((node) => node.type === "group").map((node) => node.id);
   if (!itemsToRemove.length && !groupsToRemove.length && !selected) return;
   try {
     const count = itemsToRemove.length + groupsToRemove.length || 1;
@@ -1651,9 +889,7 @@ async function removeScript(module) {
     if (count > 1) {
       message = `确定删除选中的 ${count} 项吗？`;
     } else if (groupsToRemove.length === 1 && itemsToRemove.length === 0) {
-      const name =
-        getSelectedNodes(module).find((node) => node.type === "group")?.label ||
-        "";
+      const name = getSelectedNodes(module).find((node) => node.type === "group")?.label || "";
       message = `确定删除分组 "${name}" 吗？组内成员会移动到父级。`;
     }
     await ElMessageBox.confirm(message, "确认删除", {
@@ -1701,9 +937,7 @@ function copyScript(module) {
   const nodes = getSelectedNodes(module);
   const items = nodes
     .filter((node) => node.type === "item")
-    .map((node) =>
-      getItemsByModule(module).find((item) => item.id === node.itemId),
-    )
+    .map((node) => getItemsByModule(module).find((item) => item.id === node.itemId))
     .filter(Boolean);
   if (!items.length) {
     const selected = getSelectedItem(module);
@@ -1771,8 +1005,7 @@ function getSelectedGroupId(module) {
   }
   if (module === "variableChanges") {
     if (selectedVariableGroup.value) return selectedVariableGroup.value.id;
-    if (selectedVariableChange.value?.groupId)
-      return selectedVariableChange.value.groupId;
+    if (selectedVariableChange.value?.groupId) return selectedVariableChange.value.groupId;
   }
   if (module === "custom") {
     if (selectedCustomGroup.value) return selectedCustomGroup.value.id;
@@ -1842,9 +1075,7 @@ async function saveGroup() {
   if (!name) return ElMessage.warning("分组名不能为空");
 
   const parentId = groupParentId.value || null;
-  const depth = parentId
-    ? getGroupDepth(parentId, groupDialogModule.value) + 1
-    : 1;
+  const depth = parentId ? getGroupDepth(parentId, groupDialogModule.value) + 1 : 1;
   if (depth > maxGroupDepth) {
     return ElMessage.warning(`分组最多支持 ${maxGroupDepth} 层`);
   }
@@ -1853,9 +1084,7 @@ async function saveGroup() {
   if (groupEditMode.value) {
     updateModuleGroups(
       groupDialogModule.value,
-      groups.map((group) =>
-        group.id === groupId.value ? { ...group, name, parentId } : group,
-      ),
+      groups.map((group) => (group.id === groupId.value ? { ...group, name, parentId } : group)),
     );
   } else {
     updateModuleGroups(groupDialogModule.value, [
@@ -1924,9 +1153,7 @@ function getGroupSubtreeDepth(groupIdValue, module) {
   const groups = getGroupsByModule(module);
   const children = groups.filter((group) => group.parentId === groupIdValue);
   if (!children.length) return 1;
-  const depths = children.map((child) =>
-    getGroupSubtreeDepth(child.id, module),
-  );
+  const depths = children.map((child) => getGroupSubtreeDepth(child.id, module));
   return 1 + Math.max(...depths);
 }
 
@@ -1948,10 +1175,7 @@ function saveScriptCode(module) {
       ? {
           ...item,
           code: editorCode.value || "",
-          interval:
-            module === "timers"
-              ? Number(editorInterval.value) || 1000
-              : item.interval,
+          interval: module === "timers" ? Number(editorInterval.value) || 1000 : item.interval,
         }
       : item,
   );
@@ -1991,11 +1215,9 @@ async function handleSystemBeforeClose(done) {
 }
 
 async function handleScriptBeforeClose(done) {
-  const codeDirty =
-    (editorCode.value || "") !== (editorOriginalCode.value || "");
+  const codeDirty = (editorCode.value || "") !== (editorOriginalCode.value || "");
   const intervalDirty =
-    scriptEditorModule.value === "timers" &&
-    editorInterval.value !== editorOriginalInterval.value;
+    scriptEditorModule.value === "timers" && editorInterval.value !== editorOriginalInterval.value;
   const isDirty = codeDirty || intervalDirty;
   if (!isDirty) {
     done();
@@ -2044,9 +1266,7 @@ function openMetaDialog(module, mode) {
     metaForm.value = {
       id: selected.id,
       name: selected.name || selected.variable || "",
-      interval: Number(
-        selected.interval ?? selected.time ?? selected.schedule ?? 1000,
-      ),
+      interval: Number(selected.interval ?? selected.time ?? selected.schedule ?? 1000),
       description: selected.description || "",
       variable: selected.variable || "",
       params: selected.params || selected.args || "",
@@ -2078,9 +1298,7 @@ function saveMetaDialog() {
   if (module === "timers") {
     const name = metaForm.value.name.trim();
     if (!name) return ElMessage.warning("请输入定时器名称");
-    const exists = items.some(
-      (item) => item.name === name && item.id !== metaForm.value.id,
-    );
+    const exists = items.some((item) => item.name === name && item.id !== metaForm.value.id);
     if (exists) return ElMessage.warning("定时器名称已存在");
     if (!Number.isFinite(Number(metaForm.value.interval))) {
       return ElMessage.warning("请输入正确的时间");
@@ -2094,9 +1312,7 @@ function saveMetaDialog() {
   if (module === "custom") {
     const name = metaForm.value.name.trim();
     if (!name) return ElMessage.warning("请输入函数名称");
-    const exists = items.some(
-      (item) => item.name === name && item.id !== metaForm.value.id,
-    );
+    const exists = items.some((item) => item.name === name && item.id !== metaForm.value.id);
     if (exists) return ElMessage.warning("函数名称已存在");
   }
 
@@ -2104,10 +1320,7 @@ function saveMetaDialog() {
     const groupIdValue = metaForm.value.groupId || null;
     const newItem = {
       id: createId(),
-      name:
-        module === "variableChanges"
-          ? metaForm.value.variable
-          : metaForm.value.name.trim(),
+      name: module === "variableChanges" ? metaForm.value.variable : metaForm.value.name.trim(),
       description: metaForm.value.description || "",
       variable: metaForm.value.variable || "",
       params: metaForm.value.params || "",
@@ -2121,10 +1334,7 @@ function saveMetaDialog() {
       if (item.id !== metaForm.value.id) return item;
       return {
         ...item,
-        name:
-          module === "variableChanges"
-            ? metaForm.value.variable
-            : metaForm.value.name.trim(),
+        name: module === "variableChanges" ? metaForm.value.variable : metaForm.value.name.trim(),
         description: metaForm.value.description || "",
         variable: metaForm.value.variable || item.variable || "",
         params: metaForm.value.params || "",
@@ -2151,6 +1361,607 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleEditorShortcut);
 });
 </script>
+
+<template>
+  <div class="global-scripts">
+    <el-collapse v-model="activeSections" class="scripts-collapse" :accordion="true">
+      <ScriptVarsSystemSection
+        :selected-system-key="selectedSystemKey"
+        @select-system="selectSystem"
+        @open-system-editor="openSystemEditor"
+      />
+
+      <el-collapse-item name="timers">
+        <template #title> 定时器 </template>
+        <div class="scripts-layout">
+          <div
+            class="scripts-list is-full"
+            @contextmenu="(event) => handleBlankContextMenu('timers', event)"
+          >
+            <el-tree
+              :data="timerTree"
+              node-key="id"
+              :default-expand-all="true"
+              highlight-current
+              :expand-on-click-node="false"
+              draggable
+              :allow-drop="
+                (draggingNode, dropNode, dropType) =>
+                  allowScriptDrop('timers', draggingNode, dropNode, dropType)
+              "
+              :allow-drag="allowScriptDrag"
+              @node-click="() => {}"
+              @node-dblclick="(data) => openScriptEditor('timers', data)"
+              @node-contextmenu="(event, data) => handleTreeContextMenu('timers', event, data)"
+              @node-drop="
+                (draggingNode, dropNode, dropType) =>
+                  handleScriptDrop('timers', draggingNode, dropNode, dropType)
+              "
+            >
+              <template #default="{ data }">
+                <div
+                  class="tree-node"
+                  :class="[
+                    { 'is-selected': isScriptSelected('timers', data) },
+                    `node-${data.type}`,
+                  ]"
+                  @click.stop="(event) => handleScriptNodeClick('timers', data, event)"
+                  @dblclick.stop="openScriptEditor('timers', data)"
+                >
+                  <el-icon class="node-icon icon-timer">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpTimer v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
+                    data.label
+                  }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+      </el-collapse-item>
+      <el-collapse-item name="variableChanges">
+        <template #title> 变量改变 </template>
+        <div class="scripts-layout">
+          <div
+            class="scripts-list is-full"
+            @contextmenu="(event) => handleBlankContextMenu('variableChanges', event)"
+          >
+            <el-tree
+              :data="variableChangeTree"
+              node-key="id"
+              :default-expand-all="true"
+              highlight-current
+              :expand-on-click-node="false"
+              draggable
+              :allow-drop="
+                (draggingNode, dropNode, dropType) =>
+                  allowScriptDrop('variableChanges', draggingNode, dropNode, dropType)
+              "
+              :allow-drag="allowScriptDrag"
+              @node-click="() => {}"
+              @node-dblclick="(data) => openScriptEditor('variableChanges', data)"
+              @node-contextmenu="
+                (event, data) => handleTreeContextMenu('variableChanges', event, data)
+              "
+              @node-drop="
+                (draggingNode, dropNode, dropType) =>
+                  handleScriptDrop('variableChanges', draggingNode, dropNode, dropType)
+              "
+            >
+              <template #default="{ data }">
+                <div
+                  class="tree-node"
+                  :class="[
+                    {
+                      'is-selected': isScriptSelected('variableChanges', data),
+                    },
+                    `node-${data.type}`,
+                  ]"
+                  @click.stop="(event) => handleScriptNodeClick('variableChanges', data, event)"
+                  @dblclick.stop="openScriptEditor('variableChanges', data)"
+                >
+                  <el-icon class="node-icon icon-change">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpRefresh v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
+                    data.label
+                  }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+      </el-collapse-item>
+
+      <el-collapse-item name="custom">
+        <template #title> 自定义脚本 </template>
+        <div class="scripts-layout">
+          <div
+            class="scripts-list is-full"
+            @contextmenu="(event) => handleBlankContextMenu('custom', event)"
+          >
+            <el-tree
+              :data="customTree"
+              node-key="id"
+              :default-expand-all="true"
+              highlight-current
+              :expand-on-click-node="false"
+              draggable
+              :allow-drop="
+                (draggingNode, dropNode, dropType) =>
+                  allowScriptDrop('custom', draggingNode, dropNode, dropType)
+              "
+              :allow-drag="allowScriptDrag"
+              @node-click="() => {}"
+              @node-dblclick="(data) => openScriptEditor('custom', data)"
+              @node-contextmenu="(event, data) => handleTreeContextMenu('custom', event, data)"
+              @node-drop="
+                (draggingNode, dropNode, dropType) =>
+                  handleScriptDrop('custom', draggingNode, dropNode, dropType)
+              "
+            >
+              <template #default="{ data }">
+                <div
+                  class="tree-node"
+                  :class="[
+                    { 'is-selected': isScriptSelected('custom', data) },
+                    `node-${data.type}`,
+                  ]"
+                  @click.stop="(event) => handleScriptNodeClick('custom', data, event)"
+                  @dblclick.stop="openScriptEditor('custom', data)"
+                >
+                  <el-icon class="node-icon icon-custom">
+                    <IconEpFolder v-if="data.type === 'group'" />
+                    <IconEpEditPen v-else />
+                  </el-icon>
+                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
+                    data.label
+                  }}</span>
+                </div>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+      </el-collapse-item>
+    </el-collapse>
+    <el-dialog
+      v-model="groupDialogVisible"
+      :title="groupEditMode ? '编辑分组' : '新建分组'"
+      width="420px"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+    >
+      <el-form label-width="70px">
+        <el-form-item label="名称">
+          <el-input v-model="groupName" />
+        </el-form-item>
+        <el-form-item label="父级">
+          <el-select v-model="groupParentId" placeholder="根目录">
+            <el-option label="根目录" :value="null" />
+            <el-option
+              v-for="group in groupParentOptions"
+              :key="group.id"
+              :label="group.name"
+              :value="group.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="groupDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveGroup">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="metaDialogVisible"
+      :title="metaDialogTitle"
+      width="420px"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+    >
+      <el-form label-width="90px">
+        <template v-if="metaDialogModule === 'timers'">
+          <el-form-item label="定时器名称">
+            <el-input v-model="metaForm.name" />
+          </el-form-item>
+          <el-form-item label="时间(ms)">
+            <el-input-number
+              v-model="metaForm.interval"
+              :min="100"
+              :step="100"
+              style="width: 100%"
+            />
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input v-model="metaForm.description" />
+          </el-form-item>
+        </template>
+        <template v-else-if="metaDialogModule === 'variableChanges'">
+          <el-form-item label="变量">
+            <el-select v-model="metaForm.variable" placeholder="请选择变量">
+              <el-option
+                v-for="name in projectVariableNames"
+                :key="name"
+                :label="name"
+                :value="name"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input v-model="metaForm.description" />
+          </el-form-item>
+        </template>
+        <template v-else-if="metaDialogModule === 'custom'">
+          <el-form-item label="函数名称">
+            <el-input v-model="metaForm.name" />
+          </el-form-item>
+          <el-form-item label="入参">
+            <el-input v-model="metaForm.params" placeholder="例如: id, value" />
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input v-model="metaForm.description" />
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="metaDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveMetaDialog">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="systemEditorVisible"
+      :title="`${selectedSystemLabel}脚本`"
+      width="980px"
+      top="3vh"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+      :before-close="handleSystemBeforeClose"
+    >
+      <div class="editor-meta">
+        <div class="meta-title">{{ selectedSystemLabel }}</div>
+        <div class="meta-desc">系统脚本</div>
+        <div class="meta-actions">
+          <el-tooltip content="枚举工程变量" placement="top">
+            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+              <IconEpList />
+            </el-button>
+          </el-tooltip>
+        </div>
+      </div>
+      <div class="editor-body">
+        <div class="editor-main">
+          <MonacoEditor
+            ref="systemEditorRef"
+            v-model="systemCode"
+            language="javascript"
+            height="520px"
+            :completions="jsCompletions"
+          />
+        </div>
+        <div class="editor-sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-title">自定义脚本</div>
+            <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
+            <div class="sidebar-scroll">
+              <el-tree
+                ref="customScriptTreeRef"
+                :data="customScriptSidebarTree"
+                node-key="id"
+                :default-expand-all="true"
+                :expand-on-click-node="false"
+                :filter-node-method="filterSidebarNode"
+                @node-click="handleCustomScriptInsert"
+              >
+                <template #default="{ data }">
+                  <div class="tree-node" :class="`node-${data.type}`">
+                    <el-icon class="node-icon icon-custom">
+                      <IconEpFolder v-if="data.type === 'group'" />
+                      <IconEpEditPen v-else />
+                    </el-icon>
+                    <span
+                      class="node-label"
+                      :class="{
+                        'is-group': data.type === 'group' || data.type === 'folder',
+                      }"
+                      >{{ data.label }}</span
+                    >
+                  </div>
+                </template>
+              </el-tree>
+            </div>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-title">页面</div>
+            <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
+            <div class="sidebar-scroll">
+              <el-tree
+                ref="pageTreeRef"
+                :data="pageSidebarTree"
+                node-key="id"
+                :default-expand-all="true"
+                :expand-on-click-node="false"
+                :filter-node-method="filterSidebarNode"
+                @node-click="handlePageInsert"
+              >
+                <template #default="{ data }">
+                  <div class="tree-node" :class="`node-${data.type}`">
+                    <el-icon class="node-icon icon-page">
+                      <IconEpFolder v-if="data.type === 'folder'" />
+                      <IconEpDocument v-else />
+                    </el-icon>
+                    <span
+                      class="node-label"
+                      :class="{
+                        'is-group': data.type === 'group' || data.type === 'folder',
+                      }"
+                      >{{ data.label }}</span
+                    >
+                  </div>
+                </template>
+              </el-tree>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="systemEditorVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveSystemScript">保存 (Ctrl+S)</el-button>
+      </template>
+    </el-dialog>
+    <el-dialog
+      v-model="scriptEditorVisible"
+      :title="scriptEditorTitle"
+      width="980px"
+      top="3vh"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+      :before-close="handleScriptBeforeClose"
+    >
+      <div class="editor-meta">
+        <div class="meta-title">{{ editorMetaTitle }}</div>
+        <div class="meta-desc">{{ editorMetaDescription }}</div>
+        <div v-if="scriptEditorModule === 'timers'" class="meta-inline">
+          <span class="meta-label">时间(ms)</span>
+          <el-input-number v-model="editorInterval" :min="100" :step="100" size="small" />
+        </div>
+        <div v-if="scriptEditorModule === 'custom'" class="meta-inline">
+          <span class="meta-label">入参</span>
+          <span class="meta-value">{{ editorParams || "无" }}</span>
+        </div>
+        <div class="meta-actions">
+          <el-tooltip content="枚举工程变量" placement="top">
+            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+              <IconEpList />
+            </el-button>
+          </el-tooltip>
+        </div>
+      </div>
+      <div class="editor-body">
+        <div class="editor-main">
+          <MonacoEditor
+            ref="activeEditorRef"
+            v-model="editorCode"
+            language="javascript"
+            height="520px"
+            :completions="jsCompletions"
+          />
+        </div>
+        <div class="editor-sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-title">自定义脚本</div>
+            <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
+            <div class="sidebar-scroll">
+              <el-tree
+                ref="customScriptTreeRef"
+                :data="customScriptSidebarTree"
+                node-key="id"
+                :default-expand-all="true"
+                :expand-on-click-node="false"
+                :filter-node-method="filterSidebarNode"
+                @node-click="handleCustomScriptInsert"
+              >
+                <template #default="{ data }">
+                  <div class="tree-node" :class="`node-${data.type}`">
+                    <el-icon class="node-icon icon-custom">
+                      <IconEpFolder v-if="data.type === 'group'" />
+                      <IconEpEditPen v-else />
+                    </el-icon>
+                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
+                      data.label
+                    }}</span>
+                  </div>
+                </template>
+              </el-tree>
+            </div>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-title">页面</div>
+            <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
+            <div class="sidebar-scroll">
+              <el-tree
+                ref="pageTreeRef"
+                :data="pageSidebarTree"
+                node-key="id"
+                :default-expand-all="true"
+                :expand-on-click-node="false"
+                :filter-node-method="filterSidebarNode"
+                @node-click="handlePageInsert"
+              >
+                <template #default="{ data }">
+                  <div class="tree-node" :class="`node-${data.type}`">
+                    <el-icon class="node-icon icon-page">
+                      <IconEpFolder v-if="data.type === 'folder'" />
+                      <IconEpDocument v-else />
+                    </el-icon>
+                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
+                      data.label
+                    }}</span>
+                  </div>
+                </template>
+              </el-tree>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="scriptEditorVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveActiveScript">保存 (Ctrl+S)</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="variableEnumVisible"
+      title="工程变量"
+      width="760px"
+      :close-on-click-modal="false"
+      :lock-scroll="false"
+    >
+      <div class="enum-layout">
+        <div class="enum-left">
+          <div class="sidebar-title">分组</div>
+          <el-tree
+            ref="enumGroupTreeRef"
+            :data="enumGroupTree"
+            node-key="id"
+            :default-expand-all="true"
+            :expand-on-click-node="false"
+            :filter-node-method="filterSidebarNode"
+            @node-click="handleEnumGroupSelect"
+          >
+            <template #default="{ data }">
+              <div class="tree-node" :class="`node-${data.type}`">
+                <el-icon class="node-icon icon-variable">
+                  <IconEpFolder />
+                </el-icon>
+                <span class="node-label is-group">{{ data.label }}</span>
+              </div>
+            </template>
+          </el-tree>
+        </div>
+        <div class="enum-right">
+          <el-input
+            v-model="enumVariableSearch"
+            size="small"
+            placeholder="搜索工程变量"
+            clearable
+          />
+          <el-table
+            :data="enumVariableRows"
+            size="small"
+            height="360"
+            highlight-current-row
+            :row-class-name="enumRowClass"
+            @row-click="handleEnumRowClick"
+            @row-dblclick="handleEnumRowDblClick"
+          >
+            <el-table-column prop="name" label="变量名" min-width="160" />
+            <el-table-column prop="type" label="类型" width="90" />
+            <el-table-column prop="description" label="描述" min-width="160" />
+            <el-table-column prop="mapped" label="映射" width="70">
+              <template #default="{ row }">
+                {{ row.mapped ? "是" : "" }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="variableEnumVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!enumSelectedVar" @click="confirmEnumInsert"
+          >插入</el-button
+        >
+      </template>
+    </el-dialog>
+
+    <div
+      v-if="contextMenuVisible"
+      class="context-menu"
+      :style="contextMenuStyle"
+      @click.stop
+      @mousedown.stop
+    >
+      <template v-if="contextMenuNode?.type === 'blank'">
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建分组</div>
+        <div class="context-menu-item" @click="openMetaDialog(contextMenuModule, 'create')">
+          新建脚本
+        </div>
+        <div
+          class="context-menu-item"
+          :class="{ 'is-disabled': !scriptClipboard }"
+          @click="pasteScript(contextMenuModule)"
+        >
+          粘贴
+        </div>
+      </template>
+      <template v-else-if="contextMenuNode?.type === 'item'">
+        <div
+          class="context-menu-item"
+          :class="{ 'is-disabled': !canOpenEditScript }"
+          @click="openScriptEditor(contextMenuModule)"
+        >
+          打开
+        </div>
+        <div
+          class="context-menu-item"
+          :class="{ 'is-disabled': !canOpenEditScript }"
+          @click="openMetaDialog(contextMenuModule, 'edit')"
+        >
+          编辑
+        </div>
+        <div class="context-menu-item" @click="copyScript(contextMenuModule)">复制</div>
+        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
+        <div
+          class="context-menu-item context-menu-item--danger"
+          :class="{ 'is-disabled': !canDeleteSelection }"
+          @click="removeScript(contextMenuModule)"
+        >
+          删除
+        </div>
+      </template>
+      <template v-else-if="contextMenuNode?.type === 'group'">
+        <div
+          class="context-menu-item"
+          :class="{ 'is-disabled': !canEditGroup }"
+          @click="openGroupEditFromMenu"
+        >
+          编辑分组
+        </div>
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建子分组</div>
+        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
+        <div
+          class="context-menu-item context-menu-item--danger"
+          :class="{ 'is-disabled': !canDeleteSelection }"
+          @click="removeGroup(contextMenuModule)"
+        >
+          删除分组
+        </div>
+      </template>
+    </div>
+
+    <div
+      v-if="contextMenuVisible && showMoveToMenu"
+      class="context-menu context-submenu"
+      :style="submenuStyle"
+      @click.stop
+      @mousedown.stop
+    >
+      <div class="context-menu-item" @click="handleMoveTo(null)">根目录</div>
+      <div
+        v-for="group in availableGroups"
+        :key="group.id"
+        class="context-menu-item"
+        @click="handleMoveTo(group.id)"
+      >
+        {{ group.name }}
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .global-scripts {

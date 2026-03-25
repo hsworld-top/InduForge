@@ -3,9 +3,9 @@
  * 包含 Canvas 图形的插入、删除、更新、移动命令
  */
 
-import { Command } from "./Command";
 import type { DocumentModel } from "../document/DocumentModel";
 import type { Binding, GraphicNode, GraphicProps } from "../document/types";
+import { Command } from "./Command";
 
 /** 插入图形命令 */
 export class InsertGraphicCommand extends Command {
@@ -107,10 +107,7 @@ export class UpdateGraphicCommand extends Command {
   }
 
   canMerge(other: Command): boolean {
-    return (
-      other instanceof UpdateGraphicCommand &&
-      other._graphicId === this._graphicId
-    );
+    return other instanceof UpdateGraphicCommand && other._graphicId === this._graphicId;
   }
 
   merge(other: UpdateGraphicCommand): UpdateGraphicCommand {
@@ -146,14 +143,8 @@ export class MoveGraphicCommand extends Command {
   execute(doc: DocumentModel): void {
     const graphic = doc.getGraphic(this._graphicId);
     if (graphic) {
-      this._oldProps = JSON.parse(
-        JSON.stringify(graphic.props),
-      ) as GraphicProps;
-      const newProps = this._applyDelta(
-        graphic.props as GraphicProps,
-        this._deltaX,
-        this._deltaY,
-      );
+      this._oldProps = JSON.parse(JSON.stringify(graphic.props)) as GraphicProps;
+      const newProps = this._applyDelta(graphic.props as GraphicProps, this._deltaX, this._deltaY);
       doc._updateGraphic(this._graphicId, { props: newProps });
     }
   }
@@ -165,10 +156,7 @@ export class MoveGraphicCommand extends Command {
   }
 
   canMerge(other: Command): boolean {
-    return (
-      other instanceof MoveGraphicCommand &&
-      other._graphicId === this._graphicId
-    );
+    return other instanceof MoveGraphicCommand && other._graphicId === this._graphicId;
   }
 
   merge(other: MoveGraphicCommand): MoveGraphicCommand {
@@ -181,11 +169,7 @@ export class MoveGraphicCommand extends Command {
     return cmd;
   }
 
-  private _applyDelta(
-    props: GraphicProps,
-    dx: number,
-    dy: number,
-  ): GraphicProps {
+  private _applyDelta(props: GraphicProps, dx: number, dy: number): GraphicProps {
     const newProps = JSON.parse(JSON.stringify(props)) as GraphicProps;
     if (typeof newProps.x === "number") newProps.x += dx;
     if (typeof newProps.y === "number") newProps.y += dy;
@@ -249,14 +233,11 @@ export class GroupGraphicsCommand extends Command {
     super();
     this._pageId = pageId;
     this._graphicIds = graphicIds;
-    this._groupId =
-      "gfx_group_" + crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+    this._groupId = `gfx_group_${crypto.randomUUID().replace(/-/g, "").substring(0, 8)}`;
   }
 
   execute(doc: DocumentModel): void {
-    const maxZ = Math.max(
-      ...this._graphicIds.map((id) => doc.getGraphic(id)?.z ?? 0),
-    );
+    const maxZ = Math.max(...this._graphicIds.map((id) => doc.getGraphic(id)?.z ?? 0));
     const group: GraphicNode = {
       id: this._groupId,
       type: "Canvas.Group",
@@ -362,9 +343,7 @@ export class SetGraphicBindingCommand extends Command {
   }
 
   getDescription(): string {
-    return this._binding
-      ? `设置图形绑定: ${this._propKey}`
-      : `移除图形绑定: ${this._propKey}`;
+    return this._binding ? `设置图形绑定: ${this._propKey}` : `移除图形绑定: ${this._propKey}`;
   }
 }
 

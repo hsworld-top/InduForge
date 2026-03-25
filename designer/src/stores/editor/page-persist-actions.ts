@@ -3,61 +3,51 @@
  */
 
 import type { Ref, ShallowRef } from "vue";
+import type { EditorPageDraftsMap } from "../editor-store.contracts";
 import type { DocumentModel } from "@/editor-core/document/DocumentModel.ts";
 import type { Serializer } from "@/editor-core/document/Serializer.ts";
 import { mergePageVariablesIntoPayload } from "./page-load-save-actions";
 
-export type EntryPersistProjectApi = {
+export interface EntryPersistProjectApi {
   updateEntryConfig: (pid: string, payload: unknown) => Promise<unknown>;
-};
+}
 
-export type PagePersistProjectApi = {
-  updatePage: (
-    pid: string,
-    pageId: string,
-    payload: unknown,
-  ) => Promise<unknown>;
-};
+export interface PagePersistProjectApi {
+  updatePage: (pid: string, pageId: string, payload: unknown) => Promise<unknown>;
+}
 
-export type PersistEntryConfigContext = {
+export interface PersistEntryConfigContext {
   projectId: Ref<string>;
   doc: ShallowRef<DocumentModel | null>;
   entryConfig: Ref<Record<string, unknown>>;
   projectApi: EntryPersistProjectApi;
-};
+}
 
-export type SaveCurrentPageContext = {
+export interface SaveCurrentPageContext {
   projectId: Ref<string>;
   currentPageId: Ref<string>;
   doc: ShallowRef<DocumentModel | null>;
   serializer: ShallowRef<Serializer>;
-  pageDrafts: Ref<Record<string, unknown>>;
+  pageDrafts: Ref<EditorPageDraftsMap>;
   projectApi: PagePersistProjectApi;
-};
+}
 
-export type SavePageDraftContext = {
+export interface SavePageDraftContext {
   doc: ShallowRef<DocumentModel | null>;
   serializer: ShallowRef<Serializer>;
-  pageDrafts: Ref<Record<string, unknown>>;
-};
+  pageDrafts: Ref<EditorPageDraftsMap>;
+}
 
-export async function persistEntryConfigForStore(
-  ctx: PersistEntryConfigContext,
-): Promise<void> {
+export async function persistEntryConfigForStore(ctx: PersistEntryConfigContext): Promise<void> {
   const pid = ctx.projectId.value;
   if (!pid) return;
   const raw = ctx.doc.value?.entry || ctx.entryConfig.value || {};
-  const payload =
-    raw && typeof raw === "object"
-      ? ({ ...raw } as Record<string, unknown>)
-      : {};
+  const payload = raw && typeof raw === "object" ? ({ ...raw } as Record<string, unknown>) : {};
   await ctx.projectApi.updateEntryConfig(pid, payload);
   ctx.entryConfig.value = { ...payload };
 }
 
-export async function saveCurrentPageForStore(
-  ctx: SaveCurrentPageContext,
-): Promise<void> {
+export async function saveCurrentPageForStore(ctx: SaveCurrentPageContext): Promise<void> {
   const pid = ctx.projectId.value;
   const pageId = ctx.currentPageId.value;
   const doc = ctx.doc.value;
@@ -79,14 +69,14 @@ export async function saveCurrentPageForStore(
   }
 }
 
-export function savePageDraftForStore(
-  ctx: SavePageDraftContext,
-  pageId: string,
-): void {
+export function savePageDraftForStore(ctx: SavePageDraftContext, pageId: string): void {
   if (!ctx.doc.value || !pageId) return;
   try {
     const payload = ctx.serializer.value.exportPage(ctx.doc.value, pageId);
-    ctx.pageDrafts.value = { ...(ctx.pageDrafts.value || {}), [pageId]: payload };
+    ctx.pageDrafts.value = {
+      ...(ctx.pageDrafts.value || {}),
+      [pageId]: payload,
+    };
   } catch {
     // ignore
   }

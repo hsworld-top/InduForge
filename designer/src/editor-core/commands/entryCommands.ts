@@ -3,8 +3,9 @@
  * 用于更新工程入口信息（首页/登录页）
  */
 
-import { Command, type CommandDocument } from "./Command";
-import type { EntryConfig } from "../document/types.js";
+import type { EntryConfig } from "../document/types.ts";
+import type { CommandDocument } from "./Command";
+import { Command } from "./Command";
 
 /**
  * 更新入口配置命令

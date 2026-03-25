@@ -3,242 +3,71 @@
   布局：顶部工具栏 + 左侧工具轨 + 左侧面板（可停靠/浮动）+ 画布区 + 右侧面板
   功能：页面管理、画布编辑、属性面板、预览、保存、导出等
 -->
-<template>
-  <div class="designer-layout">
-    <!-- 顶部工具栏 -->
-    <TopToolbar :page-name="pageName" :is-locked="isLocked" :is-dirty="isDirty" :view-presets="viewPresets"
-      :active-view-key="activeViewKey" :canvas-width="canvasWidth" :canvas-height="canvasHeight"
-      :is-custom-view="isCustomView" :can-undo="canUndoEnabled" :can-redo="canRedoEnabled"
-      :can-move-layer="canMoveLayer" :zoom="zoom" :show-ruler="showRuler" :show-grid="showGrid"
-      :enable-snap="enableSnap" :is-saving="isSaving" :save-settings="saveSettings" :has-selection="hasSelection"
-      :has-clipboard="hasClipboard" @update:activeViewKey="handleViewChange" @undo="handleUndo" @redo="handleRedo"
-      @preview="handlePreview" @previewApp="handlePreviewApp" @save="handleSave" @export="handleExport"
-      @toggleLock="handleToggleLock" @moveUp="handleLayerMoveUp" @moveDown="handleLayerMoveDown"
-      @moveToTop="handleLayerMoveToTop" @moveToBottom="handleLayerMoveToBottom"
-      @openCollaboration="handleOpenCollaboration" @refreshCanvas="handleRefreshCanvas"
-      @toggleLocale="handleToggleLocale" @openAi="handleOpenAi" @toggleTheme="handleToggleTheme"
-      @clearCanvas="handleClearCanvas" @applyCustomSize="handleApplyCustomSize"
-      @saveSettingsChange="handleSaveSettingsChange" @zoomIn="handleZoomIn" @zoomOut="handleZoomOut"
-      @fitCanvas="handleFitCanvas" @fitScreen="handleFitScreen" @toggleRuler="handleToggleRuler"
-      @toggleGrid="handleToggleGrid" @toggleSnap="handleToggleSnap" @copy="handleCopy" @paste="handlePaste"
-      @deleteSelected="handleDeleteSelected" />
-
-    <SelectionToolbar v-if="hasSelection && hasPages" />
-
-    <!-- 主体区域 -->
-    <div class="designer-main">
-      <ToolRail side="left" :items="leftRailItems" :active-key="leftActiveKey" @select="handleLeftSelect" />
-
-      <div class="designer-workspace">
-        <div class="designer-workspace-main">
-          <DockPanel v-if="leftActiveKey && !leftFloating" side="left" :title="leftPanelTitle" :floating="leftFloating"
-            @close="handleLeftClose" @toggleFloating="toggleLeftFloating">
-            <template #actions>
-              <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
-                <el-button size="small" text @click="handlePageCreate">
-                  <IconEpPlus />
-                </el-button>
-              </el-tooltip>
-              <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
-                <el-button size="small" text @click="handlePageImport">
-                  <IconEpUpload />
-                </el-button>
-              </el-tooltip>
-            </template>
-            <component :is="leftPanelComponent" :key="`left-panel-${leftActiveKey}`" v-bind="leftPanelProps"
-              ref="leftPanelRef" @update:drawingTool="setDrawingTool" />
-          </DockPanel>
-
-          <div ref="canvasHostRef" class="designer-canvas">
-            <!-- 画布容器 -->
-            <template v-if="hasPages">
-              <CanvasContainer :width="canvasWidth" :height="canvasHeight" :zoom="zoom" :show-ruler="showRuler"
-                :view-reset-token="viewResetToken" @zoomChange="handleZoomChange" />
-            </template>
-
-            <!-- 空页面提示 -->
-            <div v-else class="empty-canvas-placeholder">
-              <div class="empty-content">
-                <IconEpDocument class="empty-icon" />
-                <h3 class="empty-title">暂无页面</h3>
-                <p class="empty-desc">创建一个新页面开始设计</p>
-                <el-button type="primary" @click="handlePageCreate">
-                  <IconEpPlus class="mr-1" />
-                  新建页面
-                </el-button>
-              </div>
-            </div>
-
-            <DockPanel v-if="leftActiveKey && leftFloating" side="left" :title="leftPanelTitle" :floating="leftFloating"
-              @close="handleLeftClose" @toggleFloating="toggleLeftFloating">
-              <template #actions>
-                <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
-                  <el-button size="small" text @click="handlePageCreate">
-                    <IconEpPlus />
-                  </el-button>
-                </el-tooltip>
-                <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
-                  <el-button size="small" text @click="handlePageImport">
-                    <IconEpUpload />
-                  </el-button>
-                </el-tooltip>
-              </template>
-              <component :is="leftPanelComponent" :key="`left-floating-panel-${leftActiveKey}`" v-bind="leftPanelProps"
-                ref="leftPanelRef" @update:drawingTool="setDrawingTool" />
-            </DockPanel>
-
-            <DockPanel v-if="rightActiveKey && rightFloating" side="right" :title="rightPanelTitle"
-              :floating="rightFloating" @close="handleRightClose" @toggleFloating="toggleRightFloating">
-              <component :is="rightPanelComponent" />
-            </DockPanel>
-          </div>
-
-          <DockPanel v-if="rightActiveKey && !rightFloating" side="right" :title="rightPanelTitle"
-            :floating="rightFloating" @close="handleRightClose" @toggleFloating="toggleRightFloating">
-            <component :is="rightPanelComponent" />
-          </DockPanel>
-        </div>
-
-        <div class="designer-bottom-toolbar">
-          <div class="page-tabs-bar">
-            <el-tabs v-if="pageTabs.length > 0" v-model="activePageTabId" type="card" closable addable
-              @tab-remove="handleClosePageTab" @tab-add="handlePageCreate">
-              <el-tab-pane v-for="tab in pageTabs" :key="tab.id" :name="tab.id" closable>
-                <template #label>
-                  <span class="page-tab-label">
-                    <IconEpDocument class="tab-icon" />
-                    <span class="tab-name">{{ tab.name }}</span>
-                    <IconEpWarning v-if="tab.isDirty" class="tab-dirty-icon" title="未保存" />
-                  </span>
-                </template>
-              </el-tab-pane>
-            </el-tabs>
-            <div v-else class="page-tabs-empty">
-              <span>暂无页面</span>
-              <el-button class="page-tabs-add-btn" text @click="handlePageCreate">
-                <IconEpPlus />
-              </el-button>
-            </div>
-          </div>
-          <!-- 底部右侧状态信息区 -->
-          <div class="status-info-bar">
-            <span class="status-item status-mouse">
-              {{ canvasMousePos ? `X: ${Math.round(canvasMousePos.x)}  Y: ${Math.round(canvasMousePos.y)}` : 'X: -  Y: -' }}
-            </span>
-            <span class="status-sep">|</span>
-            <template v-if="selectedNodeName">
-              <span class="status-item status-node-name" :title="selectedNodeName">
-                {{ selectedNodeName }}
-              </span>
-              <span class="status-sep">|</span>
-            </template>
-            <template v-if="selectedNodePos">
-              <span class="status-item status-mouse">
-                {{ selectedNodePos.x }}, {{ selectedNodePos.y }}
-              </span>
-              <span class="status-sep">|</span>
-            </template>
-            <template v-if="selectedNodeSize">
-              <span class="status-item status-mouse">
-                {{ selectedNodeSize.w }} × {{ selectedNodeSize.h }}
-              </span>
-              <span class="status-sep">|</span>
-            </template>
-            <span class="status-item">选中: {{ selectionCount }}</span>
-            <span class="status-sep">|</span>
-            <span class="status-item">共 {{ totalNodeCount }} 个</span>
-            <template v-if="hoveredNodeType">
-              <span class="status-sep">|</span>
-              <span class="status-item status-hover">{{ hoveredNodeType }}</span>
-            </template>
-          </div>
-        </div>
-      </div>
-
-      <ToolRail side="right" :items="rightRailItems" :active-key="rightActiveKey" @select="handleRightSelect" />
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-  provide,
-  inject,
-  type Ref,
-} from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { ElMessageBox } from "element-plus";
-import { ElMessage } from "./el-message-compat";
+import type { Ref } from "vue";
+import type {
+  DesignerPageTab,
+  DesignerRouteProjectMeta,
+  DesignerStorePageRow,
+} from "./designer-view-types";
+import type { ToolRailItem } from "./tool-rail-types";
+import type { DesignerPageTabsStore } from "./use-designer-page-tabs";
+import type { ViewPreset } from "@/constants";
+import type { PageConfig } from "@/editor-core/document/types";
+import type { CreatePageForStoreResult } from "@/stores/editor-store.types";
 import { storeToRefs } from "pinia";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import IconEpDocument from "~icons/ep/document";
+import IconEpPlus from "~icons/ep/plus";
+import IconEpUpload from "~icons/ep/upload";
+import IconEpWarning from "~icons/ep/warning";
+import IconLucideBox from "~icons/lucide/box";
+import IconLucideBraces from "~icons/lucide/braces";
+import IconLucideDatabase from "~icons/lucide/database";
+import IconLucideFileCode from "~icons/lucide/file-code";
+import IconLucideFileText from "~icons/lucide/file-text";
+import IconLucideLanguages from "~icons/lucide/languages";
+import IconLucideList from "~icons/lucide/list";
+import IconLucideSettings from "~icons/lucide/settings";
+import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
+import IconLucideUsers from "~icons/lucide/users";
+import { VIEW_PRESETS } from "@/constants";
 import { useEditorStore } from "@/stores/editor-store";
 import { CanvasContainer } from "@/ui/editors/page/canvas";
 import SelectionToolbar from "@/ui/editors/page/canvas/SelectionToolbar.vue";
-import { TopToolbar } from "@/ui/shell/TopToolbar";
-import { ToolRail } from "@/ui/shell/ToolRail";
-import { DockPanel } from "@/ui/shell/DockPanel";
-import { OutlineTree, MaterialPanel, DataPanel } from "@/ui/editors/page/panels/left";
+import { DataPanel, MaterialPanel, OutlineTree } from "@/ui/editors/page/panels/left";
+import { AdvancedPanel, PropertyPanel } from "@/ui/editors/page/panels/right";
 import {
-  PageTree,
   I18nPanel,
-  ScriptVarsPanel,
+  PageTree,
   RolePanel,
+  ScriptVarsPanel,
   VariablesPanel,
 } from "@/ui/shared/panels";
-import { PropertyPanel, AdvancedPanel } from "@/ui/editors/page/panels/right";
-import { VIEW_PRESETS, type ViewPreset } from "@/constants";
-import type { ToolRailItem } from "./tool-rail-types";
-import IconEpDocument from "~icons/ep/document";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpWarning from "~icons/ep/warning";
-import IconEpUpload from "~icons/ep/upload";
-import IconLucideFileText from "~icons/lucide/file-text";
-import IconLucideList from "~icons/lucide/list";
-import IconLucideBox from "~icons/lucide/box";
-import IconLucideDatabase from "~icons/lucide/database";
-import IconLucideLanguages from "~icons/lucide/languages";
-import IconLucideFileCode from "~icons/lucide/file-code";
-import IconLucideUsers from "~icons/lucide/users";
-import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
-import IconLucideSettings from "~icons/lucide/settings";
-import IconLucideBraces from "~icons/lucide/braces";
-import { Storage } from "@/utils/storage";
+import { DockPanel } from "@/ui/shell/DockPanel";
+import { ToolRail } from "@/ui/shell/ToolRail";
+import { TopToolbar } from "@/ui/shell/TopToolbar";
+import { DESIGNER_DEFAULT_PAGE_CONFIG_DIMS } from "./designer-view-types";
+import { ElMessage } from "./el-message-compat";
+import { useDesignerAutoSave } from "./use-designer-auto-save";
+import { useDesignerPageTabs } from "./use-designer-page-tabs";
 
 const route = useRoute();
 const router = useRouter();
 
-/** 路由 meta 中的工程信息（由路由守卫注入） */
-interface RouteProjectMeta {
-  project?: { id: string };
+function mergePageConfig(
+  base: DesignerStorePageRow["config"] | undefined,
+  patch: Partial<PageConfig>,
+): PageConfig {
+  return {
+    ...DESIGNER_DEFAULT_PAGE_CONFIG_DIMS,
+    ...(base ?? {}),
+    ...patch,
+  } as PageConfig;
 }
 
-/** store 中页面列表项（editor-store 尚未 TS 化时的最小形状） */
-interface StorePageRow {
-  id: string;
-  name?: string;
-  type?: string;
-  parentId?: string | null;
-  config?: {
-    width?: number;
-    height?: number;
-    showGrid?: boolean;
-    enableSnap?: boolean;
-  };
-  rootNodeId?: string;
-}
-
-interface PageTab {
-  id: string;
-  name: string;
-  isDirty: boolean;
-}
-
-/** storeToRefs(StoreGeneric) 会把 ref 标成可能 undefined，此处收窄为壳层实际用到的形状 */
+/** storeToRefs 会把部分 ref 标成可能 undefined，此处收窄为壳层实际用到的形状 */
 interface EditorShellStoreRefs {
   canUndo: Ref<boolean>;
   canRedo: Ref<boolean>;
@@ -263,12 +92,12 @@ interface EditorShellStoreRefs {
       }
     | undefined
   >;
-  pages: Ref<StorePageRow[]>;
+  pages: Ref<DesignerStorePageRow[]>;
   currentPageId: Ref<string>;
-  currentPage: Ref<StorePageRow | null | undefined>;
+  currentPage: Ref<DesignerStorePageRow | null | undefined>;
   isLocked: Ref<boolean>;
   readonlyState: Ref<{ readonly?: boolean } | undefined>;
-  pageTabState: Ref<{ tabs?: PageTab[]; activeId?: string } | undefined>;
+  pageTabState: Ref<{ tabs?: DesignerPageTab[]; activeId?: string } | undefined>;
 }
 
 const editorStore = useEditorStore();
@@ -286,236 +115,45 @@ const {
   pageTabState,
 } = storeToRefs(editorStore) as unknown as EditorShellStoreRefs;
 
+const leftActiveKey = ref("pages");
+
 const zoom = ref(1);
 const showRuler = ref(true);
 const viewResetToken = ref(0);
 const activeViewKey = ref("pc");
 const viewPresets: readonly ViewPreset[] = VIEW_PRESETS;
-const SAVE_SETTINGS_STORAGE_KEY = "designer_save_settings";
 const AUTO_FIT_PADDING = 48;
-const saveSettings = ref({
-  autoSave: false,
-  intervalMinutes: 5,
-});
-const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null);
-const autoSaving = ref(false);
 const autoZoomEnabled = ref(true);
 const autoFitFrame = ref(0);
 const canvasHostResizeObserver = ref<ResizeObserver | null>(null);
 
 const drawingTool = ref("");
 
-const setDrawingTool = (value: string) => {
+function setDrawingTool(value: string) {
   drawingTool.value = value;
-};
-
-// ==================== 页面标签页系统 ====================
-const pageTabs = ref<PageTab[]>([]);
-const activePageTabId = ref("");
-
-{
-  const initialTabState = pageTabState.value;
-  if (initialTabState?.tabs?.length) {
-    pageTabs.value = initialTabState.tabs.map((item: PageTab) => ({
-      ...item,
-    }));
-    activePageTabId.value = initialTabState.activeId || "";
-  }
 }
 
-const openPageTab = (pageId: string) => {
-  const page = editorStore.pages.find((p: StorePageRow) => p.id === pageId);
-  if (!page) return;
-
-  // 检查是否已打开
-  const existingTab = pageTabs.value.find((t) => t.id === pageId);
-  if (existingTab) {
-    // 只更新 activePageTabId，watch 会自动调用 setCurrentPage
-    activePageTabId.value = pageId;
-    return;
-  }
-
-  // 添加新标签页
-  pageTabs.value.push({
-    id: pageId,
-    name: page.name || "未命名页面",
-    isDirty: false,
-  });
-
-  // 只更新 activePageTabId，watch 会自动调用 setCurrentPage
-  activePageTabId.value = pageId;
-};
-
-const handleClosePageTab = async (tabId: string) => {
-  const index = pageTabs.value.findIndex((t) => t.id === tabId);
-  if (index === -1) return;
-
-  const tab = pageTabs.value[index];
-  if (!tab) return;
-
-  // 如果有未保存的修改，弹窗确认
-  if (tab.isDirty) {
-    try {
-      const action = await ElMessageBox.confirm(
-        `页面 "${tab.name}" 有未保存的修改，是否保存后关闭？`,
-        "关闭确认",
-        {
-          distinguishCancelAndClose: true,
-          confirmButtonText: "保存并关闭",
-          cancelButtonText: "不保存",
-          type: "warning",
-        },
-      );
-
-      if (action === "confirm") {
-        // 先切换到该页面再保存
-        if (currentPageId.value !== tabId) {
-          editorStore.setCurrentPage(tabId);
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-        await editorStore.saveCurrentPage();
-        ElMessage.success("页面已保存");
-      }
-    } catch (action) {
-      if (action === "close") {
-        // 用户点击关闭按钮，取消操作
-        return;
-      }
-      // action === 'cancel'，不保存直接关闭
-    }
-  }
-
-  // 执行关闭
-  pageTabs.value.splice(index, 1);
-
-  // 如果关闭的是当前标签页
-  if (activePageTabId.value === tabId) {
-    if (pageTabs.value.length > 0) {
-      // 切换到其他标签页
-      const newActiveTab =
-        pageTabs.value[Math.min(index, pageTabs.value.length - 1)];
-      if (!newActiveTab) {
-        activePageTabId.value = "";
-        return;
-      }
-      activePageTabId.value = newActiveTab.id;
-      editorStore.setCurrentPage(newActiveTab.id);
-    } else {
-      // 没有标签页了，清空状态
-      activePageTabId.value = "";
-    }
-  }
-};
-
-/**
- * 更新标签页脏状态
- */
-const updateTabDirtyState = () => {
-  const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
-  if (tab) {
-    tab.isDirty = canUndo.value;
-  }
-};
-
-/**
- * 更新标签页名称
- */
-const updateTabName = () => {
-  const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
-  if (tab) {
-    // 从 pages 列表获取最新的页面名称
-    const page = editorStore.pages.find(
-      (p: StorePageRow) => p.id === currentPageId.value,
-    );
-    tab.name = page?.name || "未命名页面";
-  }
-};
-
-/**
- * 同步底部页面标签，清理已被删除的页面标签
- * @returns {void}
- */
-const syncPageTabsWithPages = () => {
-  const pageIdSet = new Set(
-    editorStore.pages.map((page: StorePageRow) => page.id),
-  );
-  const nextTabs = pageTabs.value.filter((tab) => pageIdSet.has(tab.id));
-  if (nextTabs.length !== pageTabs.value.length) {
-    pageTabs.value = nextTabs;
-  }
-  if (activePageTabId.value && !pageIdSet.has(activePageTabId.value)) {
-    activePageTabId.value =
-      currentPageId.value && pageIdSet.has(currentPageId.value)
-        ? currentPageId.value
-        : nextTabs[0]?.id || "";
-  }
-};
-
-// 监听 canUndo 变化，更新标签页脏状态
-watch(canUndo, updateTabDirtyState);
-
-// 监听页面列表变化，更新标签页名称
-watch(
-  [() => editorStore.pages, currentPageId],
-  () => {
-    syncPageTabsWithPages();
-    updateTabName();
-  },
-  { deep: true },
-);
-
-// 监听标签页切换，同步到 currentPageId
-watch(
-  activePageTabId,
-  async (newTabId, oldTabId) => {
-    // 标签页切换时，直接同步到 store
-    if (newTabId && newTabId !== oldTabId) {
-      if (canUndo.value && currentPageId.value) {
-        editorStore.saveCurrentPageDraft();
-      }
-      await editorStore.setCurrentPage(newTabId);
-    }
-  },
-  { flush: "sync" },
-);
-
-watch(
-  [pageTabs, activePageTabId],
-  () => {
-    editorStore.setPageTabState(pageTabs.value, activePageTabId.value);
-  },
-  { deep: true },
-);
-
-// 初始化时打开当前页面
-watch(
+const { pageTabs, activePageTabId, openPageTab, handleClosePageTab } = useDesignerPageTabs({
+  editorStore: editorStore as unknown as DesignerPageTabsStore,
+  pageTabState,
   currentPageId,
-  (newPageId, oldPageId) => {
-    if (newPageId && !pageTabs.value.find((t) => t.id === newPageId)) {
-      // 验证页面是否真的存在
-      const pageExists = editorStore.pages.some(
-        (p: StorePageRow) => p.id === newPageId,
-      );
-      if (pageExists) {
-        openPageTab(newPageId);
-      }
-    }
-    if (newPageId && oldPageId && newPageId !== oldPageId) {
-      activateMaterialPanel();
-    }
-  },
-  { immediate: true },
-);
+  canUndo,
+  leftActiveKey,
+});
 
-// 提供 openPageTab 方法给子组件
+const { saveSettings, handleSaveSettingsChange } = useDesignerAutoSave({
+  editorStore,
+  pageTabs,
+  currentPageId,
+  readonlyState,
+  isSaving,
+});
+
 provide("openPageTab", openPageTab);
 
 // ==================== 底部状态栏数据 ====================
 /** 从 DesignCanvas 注入画布鼠标坐标（provide in DesignCanvas.vue） */
-const canvasMousePos = inject<Ref<{ x: number; y: number } | null>>(
-  "canvasMousePos",
-  ref(null),
-);
+const canvasMousePos = inject<Ref<{ x: number; y: number } | null>>("canvasMousePos", ref(null));
 /** 从 DesignCanvas 注入悬停节点类型（provide in DesignCanvas.vue） */
 const hoveredNodeType = inject<Ref<string>>("hoveredNodeType", ref(""));
 
@@ -557,9 +195,7 @@ const selectedNodePos = computed(() => {
   }
   // flow 定位：从 DOM 读取相对于根节点的坐标
   const rootId = currentPage.value?.rootNodeId;
-  const rootEl = rootId
-    ? document.querySelector(`[data-node-id="${rootId}"]`)
-    : null;
+  const rootEl = rootId ? document.querySelector(`[data-node-id="${rootId}"]`) : null;
   const nodeEl = document.querySelector(`[data-node-id="${primary.id}"]`);
   if (rootEl && nodeEl) {
     const rootRect = rootEl.getBoundingClientRect();
@@ -620,17 +256,11 @@ const hasPages = computed(() => {
   // 确保页面列表不为空且当前页面确实存在
   if (editorStore.pages.length === 0) return false;
   if (!currentPageId.value) return false;
-  return editorStore.pages.some(
-    (p: StorePageRow) => p.id === currentPageId.value,
-  );
+  return editorStore.pages.some((p: DesignerStorePageRow) => p.id === currentPageId.value);
 });
 // ==================== 页面标签页系统结束 ====================
-const canUndoEnabled = computed(
-  () => canUndo.value && !readonlyState.value?.readonly,
-);
-const canRedoEnabled = computed(
-  () => canRedo.value && !readonlyState.value?.readonly,
-);
+const canUndoEnabled = computed(() => canUndo.value && !readonlyState.value?.readonly);
+const canRedoEnabled = computed(() => canRedo.value && !readonlyState.value?.readonly);
 
 /**
  * 是否可以移动图层
@@ -648,7 +278,6 @@ const hasSelection = computed(() => {
   return (selection.value?.getSelectionCount?.() || 0) >= 1;
 });
 const hasClipboard = computed(() => editorStore.hasClipboard);
-const leftActiveKey = ref("pages");
 const rightActiveKey = ref("props");
 const leftFloating = ref(false);
 const rightFloating = ref(false);
@@ -660,7 +289,7 @@ const pageName = computed(() => {
   if (!hasPages.value) return "";
   // 优先从 pages 列表获取名称（更可靠）
   const pageFromList = editorStore.pages.find(
-    (p: StorePageRow) => p.id === currentPageId.value,
+    (p: DesignerStorePageRow) => p.id === currentPageId.value,
   );
   if (pageFromList?.name) return pageFromList.name;
   // 其次从 doc 中获取
@@ -671,28 +300,21 @@ const pageName = computed(() => {
 const isDirty = computed(() => canUndo.value);
 
 const currentPageSnapshot = computed(() => {
-  const page = pages.value.find(
-    (item: StorePageRow) => item.id === currentPageId.value,
-  );
+  const page = pages.value.find((item: DesignerStorePageRow) => item.id === currentPageId.value);
   return page || currentPage.value || null;
 });
-const activeView = computed(() =>
-  viewPresets.find((preset) => preset.key === activeViewKey.value),
-);
+const activeView = computed(() => viewPresets.find((preset) => preset.key === activeViewKey.value));
 const defaultViewPreset = computed(
   () =>
     viewPresets.find((preset) => preset.key === "pc") ||
     viewPresets[0] || { width: 1366, height: 768 },
 );
-const normalizeCanvasDimension = (value: unknown, fallback: number): number => {
+function normalizeCanvasDimension(value: unknown, fallback: number): number {
   const next = Number(value);
   return Number.isFinite(next) && next > 0 ? Math.round(next) : fallback;
-};
+}
 const resolvedPageWidth = computed(() =>
-  normalizeCanvasDimension(
-    currentPageSnapshot.value?.config?.width,
-    defaultViewPreset.value.width,
-  ),
+  normalizeCanvasDimension(currentPageSnapshot.value?.config?.width, defaultViewPreset.value.width),
 );
 const resolvedPageHeight = computed(() =>
   normalizeCanvasDimension(
@@ -704,15 +326,11 @@ const matchedViewPreset = computed(
   () =>
     viewPresets.find(
       (preset) =>
-        preset.width === resolvedPageWidth.value &&
-        preset.height === resolvedPageHeight.value,
+        preset.width === resolvedPageWidth.value && preset.height === resolvedPageHeight.value,
     ) || null,
 );
 const canvasWidth = computed(() =>
-  normalizeCanvasDimension(
-    currentPageSnapshot.value?.config?.width,
-    defaultViewPreset.value.width,
-  ),
+  normalizeCanvasDimension(currentPageSnapshot.value?.config?.width, defaultViewPreset.value.width),
 );
 const canvasHeight = computed(() =>
   normalizeCanvasDimension(
@@ -721,12 +339,8 @@ const canvasHeight = computed(() =>
   ),
 );
 const isCustomView = computed(() => !matchedViewPreset.value);
-const showGrid = computed(() =>
-  Boolean(currentPageSnapshot.value?.config?.showGrid),
-);
-const enableSnap = computed(
-  () => currentPageSnapshot.value?.config?.enableSnap ?? true,
-);
+const showGrid = computed(() => Boolean(currentPageSnapshot.value?.config?.showGrid));
+const enableSnap = computed(() => currentPageSnapshot.value?.config?.enableSnap ?? true);
 
 const leftRailItems: ToolRailItem[] = [
   { key: "pages", label: "页面", icon: IconLucideFileText },
@@ -791,52 +405,50 @@ const rightPanelComponent = computed(() => {
 });
 
 const rightPanelTitle = computed(() => {
-  const item = rightRailItems.find(
-    (entry) => entry.key === rightActiveKey.value,
-  );
+  const item = rightRailItems.find((entry) => entry.key === rightActiveKey.value);
   return item?.label || "面板";
 });
 
 /**
  * 撤销操作
  */
-const handleUndo = () => {
+function handleUndo() {
   if (!editorStore.undo()) {
     ElMessage.info("没有可撤销的操作");
   }
-};
+}
 
 /**
  * 重做操作
  */
-const handleRedo = () => {
+function handleRedo() {
   if (!editorStore.redo()) {
     ElMessage.info("没有可重做的操作");
   }
-};
+}
 
 /**
  * 预览
  */
-const handlePreview = () => {
-  const projectId = (route.meta as RouteProjectMeta).project?.id;
+function handlePreview() {
+  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id;
   router.push({
     path: "/preview",
     query: { pid: projectId, pageId: currentPageId.value || "" },
   });
-};
+}
 
 /**
  * 应用预览（占位）
  */
-const handlePreviewApp = () => {
+function handlePreviewApp() {
   ElMessage.info("应用预览功能开发中");
-};
+}
 
 /**
  * 保存
  */
-const handleSave = async () => {
+async function handleSave() {
   try {
     await editorStore.saveCurrentPage();
 
@@ -849,11 +461,11 @@ const handleSave = async () => {
     ElMessage.success("保存成功");
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
-    ElMessage.error("保存失败: " + message);
+    ElMessage.error(`保存失败: ${message}`);
   }
-};
+}
 
-const handleViewChange = (key: string) => {
+function handleViewChange(key: string) {
   if (key === "custom") {
     activeViewKey.value = "custom";
     return;
@@ -867,36 +479,28 @@ const handleViewChange = (key: string) => {
     height: targetView.height,
   };
   editorStore.updateCurrentPage({ config: nextConfig });
-};
+}
 
-const handleApplyCustomSize = ({
-  width,
-  height,
-}: {
-  width: number;
-  height: number;
-}) => {
+function handleApplyCustomSize({ width, height }: { width: number; height: number }) {
   const page = currentPageSnapshot.value;
   if (!page) return;
-  const nextConfig = {
-    ...(page.config || {}),
+  const nextConfig = mergePageConfig(page.config, {
     width: Math.round(width),
     height: Math.round(height),
-  };
+  });
   activeViewKey.value = "custom";
   editorStore.updateCurrentPage({ config: nextConfig });
-};
+}
 
 /**
  * 切换锁定状态
  */
-const handleToggleLock = async () => {
+async function handleToggleLock() {
   const result = await editorStore.togglePageLock();
   if (!result) return;
 
   if (result.success) {
-    const message =
-      result.action === "release" ? "已释放页面锁" : "已获取页面锁";
+    const message = result.action === "release" ? "已释放页面锁" : "已获取页面锁";
     ElMessage.success(message);
     return;
   }
@@ -906,21 +510,19 @@ const handleToggleLock = async () => {
     return;
   }
 
-  ElMessage.error(result.error?.message || "页面锁操作失败");
-};
+  const err = result.error;
+  ElMessage.error(err instanceof Error ? err.message : String(err ?? "页面锁操作失败"));
+}
 
 /**
  * 导出页面 Schema
  */
-const handleExport = () => {
+function handleExport() {
   if (!editorStore.doc || !currentPageId.value) {
     ElMessage.warning("暂无可导出的页面");
     return;
   }
-  const payload = editorStore.serializer.exportPage(
-    editorStore.doc,
-    currentPageId.value,
-  );
+  const payload = editorStore.serializer.exportPage(editorStore.doc, currentPageId.value);
   const json = JSON.stringify(payload, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -931,84 +533,76 @@ const handleExport = () => {
   link.click();
   URL.revokeObjectURL(url);
   ElMessage.success("已导出页面");
-};
+}
 
-const handleLeftSelect = (key: string) => {
+function handleLeftSelect(key: string) {
   leftActiveKey.value = leftActiveKey.value === key ? "" : key;
-};
+}
 
-const handleRightSelect = (key: string) => {
+function handleRightSelect(key: string) {
   rightActiveKey.value = rightActiveKey.value === key ? "" : key;
-};
+}
 
-const handleLeftClose = () => {
+function handleLeftClose() {
   leftActiveKey.value = "";
-};
+}
 
-const handleRightClose = () => {
+function handleRightClose() {
   rightActiveKey.value = "";
-};
+}
 
-/**
- * 页面切换后默认回到物料面板，便于继续拖拽组件
- * @returns {void}
- */
-const activateMaterialPanel = () => {
-  leftActiveKey.value = "material";
-};
-
-const toggleLeftFloating = () => {
+function toggleLeftFloating() {
   leftFloating.value = !leftFloating.value;
-};
+}
 
-const toggleRightFloating = () => {
+function toggleRightFloating() {
   rightFloating.value = !rightFloating.value;
-};
+}
 
-const handleZoomChange = (value: number) => {
+function handleZoomChange(value: number) {
   autoZoomEnabled.value = false;
   zoom.value = value;
-};
+}
 
-const clampZoom = (value: number): number => {
+function clampZoom(value: number): number {
   const next = Number.isFinite(value) ? value : 1;
   return Math.min(5, Math.max(0.1, Number(next.toFixed(2))));
-};
+}
 
 /**
  * 工具栏：缩小
  * @returns {void}
  */
-const handleZoomOut = () => {
+function handleZoomOut() {
   autoZoomEnabled.value = false;
   zoom.value = clampZoom(zoom.value - 0.1);
-};
+}
 
 /**
  * 工具栏：放大
  * @returns {void}
  */
-const handleZoomIn = () => {
+function handleZoomIn() {
   autoZoomEnabled.value = false;
   zoom.value = clampZoom(zoom.value + 0.1);
-};
+}
 
 /**
  * 工具栏：适配画布（100%）
  * @returns {void}
  */
-const handleFitCanvas = () => {
+function handleFitCanvas() {
   autoZoomEnabled.value = false;
   zoom.value = 1;
   viewResetToken.value += 1;
-};
+}
 
 /**
  * 计算适配当前工作区的推荐缩放比例
  * 规则与参考页保持一致：能 100% 展示时保持 100%，不足时自动缩放到刚好适配
  * @returns {number}
  */
-const getRecommendedZoom = () => {
+function getRecommendedZoom() {
   const host = canvasHostRef.value;
   if (!host) {
     return 1;
@@ -1022,13 +616,13 @@ const getRecommendedZoom = () => {
     availableHeight / canvasHeight.value,
   );
   return clampZoom(fitZoom);
-};
+}
 
 /**
  * 应用推荐缩放比例
  * @returns {void}
  */
-const applyRecommendedZoom = () => {
+function applyRecommendedZoom() {
   const nextZoom = getRecommendedZoom();
   if (Math.abs(nextZoom - zoom.value) < 0.001) {
     if (viewResetToken.value === 0) {
@@ -1038,13 +632,13 @@ const applyRecommendedZoom = () => {
   }
   zoom.value = nextZoom;
   viewResetToken.value += 1;
-};
+}
 
 /**
  * 在布局稳定后重新计算自动缩放
  * @returns {void}
  */
-const scheduleAutoFit = () => {
+function scheduleAutoFit() {
   if (!autoZoomEnabled.value) return;
   if (typeof window === "undefined") return;
   if (autoFitFrame.value) {
@@ -1055,70 +649,68 @@ const scheduleAutoFit = () => {
     if (!autoZoomEnabled.value) return;
     applyRecommendedZoom();
   });
-};
+}
 
 /**
  * 工具栏：适配屏幕
  * @returns {void}
  */
-const handleFitScreen = () => {
+function handleFitScreen() {
   autoZoomEnabled.value = true;
   applyRecommendedZoom();
-};
+}
 
 /**
  * 切换标尺显示
  * @returns {void}
  */
-const handleToggleRuler = () => {
+function handleToggleRuler() {
   showRuler.value = !showRuler.value;
-};
+}
 
 /**
  * 切换网格显示
  * @returns {void}
  */
-const handleToggleGrid = () => {
+function handleToggleGrid() {
   const page = currentPageSnapshot.value;
   if (!page) return;
-  const nextConfig = {
-    ...(page.config || {}),
+  const nextConfig = mergePageConfig(page.config, {
     showGrid: !showGrid.value,
-  };
+  });
   editorStore.updateCurrentPage({ config: nextConfig });
-};
+}
 
 /**
  * 切换吸附开关
  * @returns {void}
  */
-const handleToggleSnap = () => {
+function handleToggleSnap() {
   const page = currentPageSnapshot.value;
   if (!page) return;
-  const nextConfig = {
-    ...(page.config || {}),
+  const nextConfig = mergePageConfig(page.config, {
     enableSnap: !enableSnap.value,
-  };
+  });
   editorStore.updateCurrentPage({ config: nextConfig });
-};
+}
 
 /**
  * 打开页面新建弹窗
  * @returns {void}
  */
-const handlePageCreate = async () => {
+async function handlePageCreate() {
   if (leftActiveKey.value !== "pages") {
     leftActiveKey.value = "pages";
     leftFloating.value = false;
     await nextTick();
   }
   leftPanelRef.value?.openCreateDialog?.();
-};
+}
 
-const getUniquePageName = (name: string | undefined) => {
+function getUniquePageName(name: string | undefined) {
   const base = (name || "导入页面").trim() || "导入页面";
   const existingNames = editorStore.pages
-    .map((page: StorePageRow) => page.name)
+    .map((page: DesignerStorePageRow) => page.name)
     .filter(Boolean) as string[];
   if (!existingNames.includes(base)) return base;
   let index = 1;
@@ -1128,9 +720,9 @@ const getUniquePageName = (name: string | undefined) => {
     next = `${base}_${index}`;
   }
   return next;
-};
+}
 
-const handlePageImport = () => {
+function handlePageImport() {
   if (!editorStore.doc) {
     ElMessage.warning("暂无可导入的页面");
     return;
@@ -1150,7 +742,12 @@ const handlePageImport = () => {
         return;
       }
       const serializer = editorStore.serializer;
-      const baseSchema = serializer.exportToSchema(editorStore.doc);
+      const docModel = editorStore.doc;
+      if (!docModel) {
+        ElMessage.error("导入页面失败");
+        return;
+      }
+      const baseSchema = serializer.exportToSchema(docModel);
       const tempDoc = serializer.importFromSchema(baseSchema);
       const tempPageId = serializer.importPage(tempDoc, payload, {
         generateNewIds: true,
@@ -1159,9 +756,10 @@ const handlePageImport = () => {
       const uniqueName = getUniquePageName(payload.page?.name);
       imported.page.name = uniqueName;
 
-      const result = await editorStore.createPage({
+      const importedPage = imported.page as { type?: string };
+      const result: CreatePageForStoreResult = await editorStore.createPage({
         name: uniqueName,
-        type: imported.page?.type || "page",
+        type: importedPage.type || "page",
         parentId: null,
       });
       const pageId = result?.id || result?.page?.id;
@@ -1179,150 +777,92 @@ const handlePageImport = () => {
     }
   };
   input.click();
-};
+}
 
 /**
  * 工具栏:上移图层
  */
-const handleLayerMoveUp = () => {
+function handleLayerMoveUp() {
   if (editorStore.moveNodeUp()) {
     ElMessage.success("已上移");
   }
-};
+}
 
 /**
  * 工具栏:下移图层
  */
-const handleLayerMoveDown = () => {
+function handleLayerMoveDown() {
   if (editorStore.moveNodeDown()) {
     ElMessage.success("已下移");
   }
-};
+}
 
 /**
  * 工具栏:置顶
  */
-const handleLayerMoveToTop = () => {
+function handleLayerMoveToTop() {
   if (editorStore.moveNodeToTop()) {
     ElMessage.success("已置顶");
   }
-};
+}
 
 /**
  * 工具栏:置底
  */
-const handleLayerMoveToBottom = () => {
+function handleLayerMoveToBottom() {
   if (editorStore.moveNodeToBottom()) {
     ElMessage.success("已置底");
   }
-};
-const handleCopy = () => {
+}
+function handleCopy() {
   if (editorStore.copyNodes()) {
     ElMessage.success("已复制");
   }
-};
+}
 const handlePaste = () => editorStore.pasteNodes();
 const handleDeleteSelected = () => editorStore.removeSelectedNodes();
 
 /**
- * 自动保存当前页面
- * @returns {Promise<void>}
- */
-const handleAutoSave = async () => {
-  if (!saveSettings.value.autoSave) return;
-  if (readonlyState.value?.readonly) return;
-  if (!currentPageId.value || autoSaving.value || isSaving.value) return;
-  try {
-    autoSaving.value = true;
-    await editorStore.saveCurrentPage();
-    const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
-    if (tab) {
-      tab.isDirty = false;
-    }
-  } catch (error) {
-    console.warn("自动保存失败:", error);
-  } finally {
-    autoSaving.value = false;
-  }
-};
-
-/**
- * 清理自动保存定时器
- * @returns {void}
- */
-const clearAutoSaveTimer = () => {
-  if (autoSaveTimer.value) {
-    clearInterval(autoSaveTimer.value);
-    autoSaveTimer.value = null;
-  }
-};
-
-const syncAutoSaveTimer = () => {
-  clearAutoSaveTimer();
-  if (!saveSettings.value.autoSave) return;
-  const interval = Number(saveSettings.value.intervalMinutes) || 5;
-  autoSaveTimer.value = setInterval(
-    () => {
-      void handleAutoSave();
-    },
-    interval * 60 * 1000,
-  );
-};
-
-const handleSaveSettingsChange = (settings: {
-  autoSave?: boolean;
-  intervalMinutes?: number;
-}) => {
-  const nextSettings = {
-    autoSave: Boolean(settings?.autoSave),
-    intervalMinutes: Number(settings?.intervalMinutes) || 5,
-  };
-  saveSettings.value = nextSettings;
-  Storage.set(SAVE_SETTINGS_STORAGE_KEY, nextSettings);
-  syncAutoSaveTimer();
-};
-
-/**
  * 更多设置：多人协作（占位）
  */
-const handleOpenCollaboration = () => {
+function handleOpenCollaboration() {
   ElMessage.info("多人协作功能开发中");
-};
+}
 
 /**
  * 工具栏：AI 助手（占位）
  */
-const handleOpenAi = () => {
+function handleOpenAi() {
   ElMessage.info("AI 助手功能开发中");
-};
+}
 
 /**
  * 工具栏：主题切换（占位）
  */
-const handleToggleTheme = () => {
+function handleToggleTheme() {
   ElMessage.info("主题设置功能开发中");
-};
+}
 
 /**
  * 更多设置：刷新画布（占位）
  */
-const handleRefreshCanvas = () => {
+function handleRefreshCanvas() {
   ElMessage.info("画布刷新功能开发中");
-};
+}
 
 /**
  * 更多设置：中英文切换（占位）
  */
-const handleToggleLocale = () => {
+function handleToggleLocale() {
   ElMessage.info("中英文切换功能开发中");
-};
+}
 
 /**
  * 工具栏：清除当前界面（占位）
  */
-const handleClearCanvas = () => {
+function handleClearCanvas() {
   ElMessage.info("清除当前界面功能开发中");
-};
+}
 
 watch(
   [
@@ -1343,8 +883,8 @@ watch(
 /**
  * 加载工程数据
  */
-const loadProject = async () => {
-  const project = (route.meta as RouteProjectMeta).project;
+async function loadProject() {
+  const project = (route.meta as DesignerRouteProjectMeta).project;
   if (!project?.id) return;
   if (editorStore.projectId === project.id && editorStore.doc) {
     return;
@@ -1358,20 +898,9 @@ const loadProject = async () => {
   if (targetPageId) {
     await editorStore.setCurrentPage(targetPageId);
   }
-};
+}
 
 onMounted(() => {
-  const cached = Storage.get(SAVE_SETTINGS_STORAGE_KEY, null) as {
-    autoSave?: boolean;
-    intervalMinutes?: number;
-  } | null;
-  if (cached && typeof cached === "object") {
-    saveSettings.value = {
-      autoSave: Boolean(cached.autoSave),
-      intervalMinutes: Number(cached.intervalMinutes) || 5,
-    };
-  }
-  syncAutoSaveTimer();
   void loadProject();
   nextTick(() => {
     scheduleAutoFit();
@@ -1391,10 +920,262 @@ onBeforeUnmount(() => {
   }
   canvasHostResizeObserver.value?.disconnect?.();
   canvasHostResizeObserver.value = null;
-  clearAutoSaveTimer();
   void editorStore.releasePageLock();
 });
 </script>
+
+<template>
+  <div class="designer-layout">
+    <!-- 顶部工具栏 -->
+    <TopToolbar
+      :page-name="pageName"
+      :is-locked="isLocked"
+      :is-dirty="isDirty"
+      :view-presets="viewPresets"
+      :active-view-key="activeViewKey"
+      :canvas-width="canvasWidth"
+      :canvas-height="canvasHeight"
+      :is-custom-view="isCustomView"
+      :can-undo="canUndoEnabled"
+      :can-redo="canRedoEnabled"
+      :can-move-layer="canMoveLayer"
+      :zoom="zoom"
+      :show-ruler="showRuler"
+      :show-grid="showGrid"
+      :enable-snap="enableSnap"
+      :is-saving="isSaving"
+      :save-settings="saveSettings"
+      :has-selection="hasSelection"
+      :has-clipboard="hasClipboard"
+      @update:active-view-key="handleViewChange"
+      @undo="handleUndo"
+      @redo="handleRedo"
+      @preview="handlePreview"
+      @preview-app="handlePreviewApp"
+      @save="handleSave"
+      @export="handleExport"
+      @toggle-lock="handleToggleLock"
+      @move-up="handleLayerMoveUp"
+      @move-down="handleLayerMoveDown"
+      @move-to-top="handleLayerMoveToTop"
+      @move-to-bottom="handleLayerMoveToBottom"
+      @open-collaboration="handleOpenCollaboration"
+      @refresh-canvas="handleRefreshCanvas"
+      @toggle-locale="handleToggleLocale"
+      @open-ai="handleOpenAi"
+      @toggle-theme="handleToggleTheme"
+      @clear-canvas="handleClearCanvas"
+      @apply-custom-size="handleApplyCustomSize"
+      @save-settings-change="handleSaveSettingsChange"
+      @zoom-in="handleZoomIn"
+      @zoom-out="handleZoomOut"
+      @fit-canvas="handleFitCanvas"
+      @fit-screen="handleFitScreen"
+      @toggle-ruler="handleToggleRuler"
+      @toggle-grid="handleToggleGrid"
+      @toggle-snap="handleToggleSnap"
+      @copy="handleCopy"
+      @paste="handlePaste"
+      @delete-selected="handleDeleteSelected"
+    />
+
+    <SelectionToolbar v-if="hasSelection && hasPages" />
+
+    <!-- 主体区域 -->
+    <div class="designer-main">
+      <ToolRail
+        side="left"
+        :items="leftRailItems"
+        :active-key="leftActiveKey"
+        @select="handleLeftSelect"
+      />
+
+      <div class="designer-workspace">
+        <div class="designer-workspace-main">
+          <DockPanel
+            v-if="leftActiveKey && !leftFloating"
+            side="left"
+            :title="leftPanelTitle"
+            :floating="leftFloating"
+            @close="handleLeftClose"
+            @toggle-floating="toggleLeftFloating"
+          >
+            <template #actions>
+              <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+                <el-button size="small" text @click="handlePageCreate">
+                  <IconEpPlus />
+                </el-button>
+              </el-tooltip>
+              <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
+                <el-button size="small" text @click="handlePageImport">
+                  <IconEpUpload />
+                </el-button>
+              </el-tooltip>
+            </template>
+            <component
+              :is="leftPanelComponent"
+              :key="`left-panel-${leftActiveKey}`"
+              v-bind="leftPanelProps"
+              ref="leftPanelRef"
+              @update:drawing-tool="setDrawingTool"
+            />
+          </DockPanel>
+
+          <div ref="canvasHostRef" class="designer-canvas">
+            <!-- 画布容器 -->
+            <template v-if="hasPages">
+              <CanvasContainer
+                :width="canvasWidth"
+                :height="canvasHeight"
+                :zoom="zoom"
+                :show-ruler="showRuler"
+                :view-reset-token="viewResetToken"
+                @zoom-change="handleZoomChange"
+              />
+            </template>
+
+            <!-- 空页面提示 -->
+            <div v-else class="empty-canvas-placeholder">
+              <div class="empty-content">
+                <IconEpDocument class="empty-icon" />
+                <h3 class="empty-title">暂无页面</h3>
+                <p class="empty-desc">创建一个新页面开始设计</p>
+                <el-button type="primary" @click="handlePageCreate">
+                  <IconEpPlus class="mr-1" />
+                  新建页面
+                </el-button>
+              </div>
+            </div>
+
+            <DockPanel
+              v-if="leftActiveKey && leftFloating"
+              side="left"
+              :title="leftPanelTitle"
+              :floating="leftFloating"
+              @close="handleLeftClose"
+              @toggle-floating="toggleLeftFloating"
+            >
+              <template #actions>
+                <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+                  <el-button size="small" text @click="handlePageCreate">
+                    <IconEpPlus />
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
+                  <el-button size="small" text @click="handlePageImport">
+                    <IconEpUpload />
+                  </el-button>
+                </el-tooltip>
+              </template>
+              <component
+                :is="leftPanelComponent"
+                :key="`left-floating-panel-${leftActiveKey}`"
+                v-bind="leftPanelProps"
+                ref="leftPanelRef"
+                @update:drawing-tool="setDrawingTool"
+              />
+            </DockPanel>
+
+            <DockPanel
+              v-if="rightActiveKey && rightFloating"
+              side="right"
+              :title="rightPanelTitle"
+              :floating="rightFloating"
+              @close="handleRightClose"
+              @toggle-floating="toggleRightFloating"
+            >
+              <component :is="rightPanelComponent" />
+            </DockPanel>
+          </div>
+
+          <DockPanel
+            v-if="rightActiveKey && !rightFloating"
+            side="right"
+            :title="rightPanelTitle"
+            :floating="rightFloating"
+            @close="handleRightClose"
+            @toggle-floating="toggleRightFloating"
+          >
+            <component :is="rightPanelComponent" />
+          </DockPanel>
+        </div>
+
+        <div class="designer-bottom-toolbar">
+          <div class="page-tabs-bar">
+            <el-tabs
+              v-if="pageTabs.length > 0"
+              v-model="activePageTabId"
+              type="card"
+              closable
+              addable
+              @tab-remove="handleClosePageTab"
+              @tab-add="handlePageCreate"
+            >
+              <el-tab-pane v-for="tab in pageTabs" :key="tab.id" :name="tab.id" closable>
+                <template #label>
+                  <span class="page-tab-label">
+                    <IconEpDocument class="tab-icon" />
+                    <span class="tab-name">{{ tab.name }}</span>
+                    <IconEpWarning v-if="tab.isDirty" class="tab-dirty-icon" title="未保存" />
+                  </span>
+                </template>
+              </el-tab-pane>
+            </el-tabs>
+            <div v-else class="page-tabs-empty">
+              <span>暂无页面</span>
+              <el-button class="page-tabs-add-btn" text @click="handlePageCreate">
+                <IconEpPlus />
+              </el-button>
+            </div>
+          </div>
+          <!-- 底部右侧状态信息区 -->
+          <div class="status-info-bar">
+            <span class="status-item status-mouse">
+              {{
+                canvasMousePos
+                  ? `X: ${Math.round(canvasMousePos.x)}  Y: ${Math.round(canvasMousePos.y)}`
+                  : "X: -  Y: -"
+              }}
+            </span>
+            <span class="status-sep">|</span>
+            <template v-if="selectedNodeName">
+              <span class="status-item status-node-name" :title="selectedNodeName">
+                {{ selectedNodeName }}
+              </span>
+              <span class="status-sep">|</span>
+            </template>
+            <template v-if="selectedNodePos">
+              <span class="status-item status-mouse">
+                {{ selectedNodePos.x }}, {{ selectedNodePos.y }}
+              </span>
+              <span class="status-sep">|</span>
+            </template>
+            <template v-if="selectedNodeSize">
+              <span class="status-item status-mouse">
+                {{ selectedNodeSize.w }} × {{ selectedNodeSize.h }}
+              </span>
+              <span class="status-sep">|</span>
+            </template>
+            <span class="status-item">选中: {{ selectionCount }}</span>
+            <span class="status-sep">|</span>
+            <span class="status-item">共 {{ totalNodeCount }} 个</span>
+            <template v-if="hoveredNodeType">
+              <span class="status-sep">|</span>
+              <span class="status-item status-hover">{{ hoveredNodeType }}</span>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <ToolRail
+        side="right"
+        :items="rightRailItems"
+        :active-key="rightActiveKey"
+        @select="handleRightSelect"
+      />
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .designer-workspace {

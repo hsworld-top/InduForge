@@ -2,37 +2,40 @@
   EChart - ECharts 图表封装
   支持柱状、折线、饼图、雷达、散点、仪表盘等，支持 option 绑定
 -->
-<template>
-  <VChart
-    ref="chartRef"
-    class="echart-canvas"
-    :option="chartOption"
-    :update-options="updateOptions"
-    autoresize
-  />
-</template>
-
 <script setup>
-import { computed, ref, onMounted, watch } from "vue";
-import { use } from "echarts/core";
-import { CanvasRenderer } from "echarts/renderers";
 import {
   BarChart,
+  GaugeChart,
   LineChart,
   PieChart,
   RadarChart,
   ScatterChart,
-  GaugeChart,
 } from "echarts/charts";
 import {
+  DatasetComponent,
+  GridComponent,
+  LegendComponent,
+  RadarComponent,
   TitleComponent,
   TooltipComponent,
-  LegendComponent,
-  GridComponent,
-  DatasetComponent,
-  RadarComponent,
 } from "echarts/components";
+import { use } from "echarts/core";
+import { CanvasRenderer } from "echarts/renderers";
+import { computed, onMounted, ref, watch } from "vue";
 import VChart from "vue-echarts";
+
+const props = defineProps({
+  option: {
+    type: [Object, String],
+    default: () => ({
+      title: { text: "示例图表" },
+      tooltip: {},
+      xAxis: { type: "category", data: ["A", "B", "C", "D"] },
+      yAxis: { type: "value" },
+      series: [{ type: "bar", data: [12, 20, 15, 8] }],
+    }),
+  },
+});
 
 use([
   CanvasRenderer,
@@ -56,27 +59,25 @@ const updateOptions = computed(() => ({ notMerge: true }));
 const getInstance = () => chartRef.value?.getEChartsInstance?.();
 
 /** 规范化 setOption 参数（兼容多种调用形式） */
-const normalizeSetOptionArgs = (
+function normalizeSetOptionArgs(
   notMergeOrOpts,
   lazyUpdate,
   silent,
+
   replaceMerge,
-) => {
+) {
   if (notMergeOrOpts && typeof notMergeOrOpts === "object") {
     return { ...notMergeOrOpts };
   }
   const opts = {
-    notMerge:
-      typeof notMergeOrOpts === "boolean"
-        ? notMergeOrOpts
-        : notMergeOrOpts === undefined,
+    notMerge: typeof notMergeOrOpts === "boolean" ? notMergeOrOpts : notMergeOrOpts === undefined,
     lazyUpdate: Boolean(lazyUpdate),
     silent: Boolean(silent),
   };
   if (replaceMerge) opts.replaceMerge = replaceMerge;
   return opts;
-};
-const applyPendingOption = () => {
+}
+function applyPendingOption() {
   const payload = pendingOption.value;
   if (!payload) return;
   const instance = getInstance();
@@ -86,20 +87,9 @@ const applyPendingOption = () => {
     instance.clear();
   }
   instance.setOption(payload.option || {}, payload.opts || {});
-};
-const setOption = (
-  option,
-  notMergeOrOpts,
-  lazyUpdate,
-  silent,
-  replaceMerge,
-) => {
-  const opts = normalizeSetOptionArgs(
-    notMergeOrOpts,
-    lazyUpdate,
-    silent,
-    replaceMerge,
-  );
+}
+function setOption(option, notMergeOrOpts, lazyUpdate, silent, replaceMerge) {
+  const opts = normalizeSetOptionArgs(notMergeOrOpts, lazyUpdate, silent, replaceMerge);
   if (opts.notMerge) {
     opts.lazyUpdate = false;
   }
@@ -112,33 +102,20 @@ const setOption = (
     instance.clear();
   }
   instance.setOption(option || {}, opts);
-};
-const callECharts = (method, ...args) => {
+}
+function callECharts(method, ...args) {
   const instance = getInstance();
   if (!instance) return;
   const target = instance[method];
   if (typeof target !== "function") return;
   return target.apply(instance, args);
-};
-const props = defineProps({
-  option: {
-    type: [Object, String],
-    default: () => ({
-      title: { text: "示例图表" },
-      tooltip: {},
-      xAxis: { type: "category", data: ["A", "B", "C", "D"] },
-      yAxis: { type: "value" },
-      series: [{ type: "bar", data: [12, 20, 15, 8] }],
-    }),
-  },
-});
-
-const parseOptionSource = (source) => {
+}
+function parseOptionSource(source) {
   const code = String(source ?? "").trim();
   if (!code) return {};
 
   try {
-    if (/^\s*[\[{]/.test(code)) {
+    if (/^\s*[[{]/.test(code)) {
       return new Function(`"use strict"; return (${code});`)();
     }
     if (/\boption\s*=/.test(code)) {
@@ -156,7 +133,7 @@ const parseOptionSource = (source) => {
   } catch (error) {
     return {};
   }
-};
+}
 
 onMounted(() => {
   applyPendingOption();
@@ -175,6 +152,16 @@ const chartOption = computed(() => {
 
 defineExpose({ setOption, callECharts, getInstance });
 </script>
+
+<template>
+  <VChart
+    ref="chartRef"
+    class="echart-canvas"
+    :option="chartOption"
+    :update-options="updateOptions"
+    autoresize
+  />
+</template>
 
 <style scoped>
 .echart-canvas {

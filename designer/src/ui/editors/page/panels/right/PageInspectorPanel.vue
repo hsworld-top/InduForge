@@ -1,205 +1,15 @@
-<template>
-  <div class="page-inspector-panel">
-    <div class="page-prop-list">
-      <div class="page-group">
-        <div class="section-title">基本</div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">名称</div>
-          <div class="page-prop-editor">
-            <el-input v-model="form.name" size="small" :disabled="isSystemPage" @blur="handleNameUpdate" />
-          </div>
-        </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">描述</div>
-          <div class="page-prop-editor">
-            <el-input v-model="form.description" size="small" @blur="handleConfigUpdate" />
-          </div>
-        </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">页面类型</div>
-          <div class="page-prop-editor">
-            <el-select v-model="form.pageType" size="small" :disabled="isHomePage" @change="handlePageTypeChange">
-              <el-option label="业务页面" value="business" />
-              <el-option label="登录页" value="login" />
-              <el-option label="登出页" value="logout" />
-            </el-select>
-          </div>
-        </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">路由</div>
-          <div class="page-prop-editor">
-            <el-input v-model="form.path" size="small" disabled />
-          </div>
-        </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">位置</div>
-          <div class="page-prop-editor">
-            <div class="axis-inline-group">
-              <div class="axis-inline-item">
-                <span class="axis-inline-tag">X</span>
-                <el-input v-model="form.x" size="small" disabled />
-              </div>
-              <div class="axis-inline-item">
-                <span class="axis-inline-tag">Y</span>
-                <el-input v-model="form.y" size="small" disabled />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="page-group">
-        <div class="section-title">样式</div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">背景类型</div>
-          <div class="page-prop-editor">
-            <el-select v-model="form.backgroundKind" size="small" @change="handleBackgroundUpdate">
-              <el-option label="纯色" value="color" />
-              <el-option label="图片" value="image" />
-              <el-option label="渐变" value="gradient" />
-            </el-select>
-          </div>
-        </div>
-        <div class="page-prop-item page-prop-item--stacked">
-          <div class="page-prop-label">背景值</div>
-          <div class="page-prop-editor page-prop-editor-stacked">
-            <FriendlyColorPicker v-if="form.backgroundKind === 'color'" v-model="form.backgroundValue"
-              @change="handleBackgroundUpdate" />
-            <el-input v-else v-model="form.backgroundValue" size="small" @blur="handleBackgroundUpdate" />
-          </div>
-        </div>
-      </div>
-
-      <div class="page-group">
-        <div class="section-title">窗口大小</div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">宽度</div>
-          <div class="page-prop-editor">
-            <el-input v-model="form.windowWidth" size="small" readonly class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')" @blur="handleNumericBlur('windowWidth', $event)"
-              @keydown="filterNumericInput" />
-          </div>
-        </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">高度</div>
-          <div class="page-prop-editor">
-            <el-input v-model="form.windowHeight" size="small" readonly class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')" @blur="handleNumericBlur('windowHeight', $event)"
-              @keydown="filterNumericInput" />
-          </div>
-        </div>
-      </div>
-
-      <div class="page-group">
-        <div class="section-title">画面大小</div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">宽度</div>
-          <div class="page-prop-editor">
-            <el-input v-model="form.width" size="small" readonly class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')" @blur="handleNumericBlur('width', $event)"
-              @keydown="filterNumericInput" />
-          </div>
-        </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">高度</div>
-          <div class="page-prop-editor">
-            <el-input v-model="form.height" size="small" readonly class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')" @blur="handleNumericBlur('height', $event)"
-              @keydown="filterNumericInput" />
-          </div>
-        </div>
-      </div>
-
-      <div class="page-group">
-        <div class="section-title">窗口</div>
-        <div class="page-prop-item page-prop-item--switch">
-          <div class="page-prop-label">自适应</div>
-          <div class="page-prop-editor page-prop-editor-switch">
-            <el-switch v-model="form.autoFit" @change="handleConfigUpdate" />
-          </div>
-        </div>
-        <div class="page-prop-item page-prop-item--switch">
-          <div class="page-prop-label">启用锁定宽高比</div>
-          <div class="page-prop-editor page-prop-editor-switch">
-            <el-switch v-model="form.lockAspectRatio" @change="handleConfigUpdate" />
-          </div>
-        </div>
-        <div class="page-prop-item page-prop-item--switch">
-          <div class="page-prop-label">启用最小尺寸</div>
-          <div class="page-prop-editor page-prop-editor-switch">
-            <el-switch v-model="form.enableMinSize" @change="handleConfigUpdate" />
-          </div>
-        </div>
-        <div class="page-prop-item page-prop-item--switch">
-          <div class="page-prop-label">字体自适应</div>
-          <div class="page-prop-editor page-prop-editor-switch">
-            <el-switch v-model="form.fontAutoFit" @change="handleConfigUpdate" />
-          </div>
-        </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">窗口样式</div>
-          <div class="page-prop-editor">
-            <el-select v-model="form.windowStyle" size="small" @change="handleConfigUpdate">
-              <el-option label="覆盖式" value="cover" />
-              <el-option label="标准式" value="normal" />
-            </el-select>
-          </div>
-        </div>
-      </div>
-
-      <div class="page-group">
-        <div class="section-title">权限描述管理</div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">配置</div>
-          <div class="page-prop-editor">
-            <el-button size="small" @click="handlePermissionConfig">
-              {{ form.permissionDesc || "0item" }}
-            </el-button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <el-dialog v-model="canvasStyleDialogVisible" title="样式配置" width="980px" top="4vh" :close-on-click-modal="false"
-    :lock-scroll="false">
-    <div class="config-toolbar">
-      <div class="config-toolbar-item">
-        <span class="config-label">样式模板：</span>
-        <el-select v-model="selectedCanvasPresetId" size="small" class="config-select preset-select" placeholder="请选择"
-          @change="handleCanvasPresetChange">
-          <el-option v-for="item in filteredCanvasPresetOptions" :key="item.id" :label="item.label" :value="item.id" />
-        </el-select>
-      </div>
-      <div class="config-toolbar-item">
-        <span class="config-label">筛选：</span>
-        <el-input v-model="canvasPresetSearch" size="small" class="config-select" placeholder="搜索模板" clearable />
-      </div>
-    </div>
-    <div class="config-editor">
-      <MonacoEditor v-model="canvasStyleDraft" language="css" height="520px" />
-    </div>
-    <template #footer>
-      <el-button @click="clearCanvasStyleDialog">清除</el-button>
-      <el-button @click="canvasStyleDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveCanvasStyleDialog">保存</el-button>
-    </template>
-  </el-dialog>
-</template>
-
 <script setup>
 /**
  * 页面属性面板
  * 显示和编辑当前页面的配置信息
  */
 
-import { computed, reactive, ref, watch } from "vue";
-import { storeToRefs } from "pinia";
-import { useEditorStore } from "@/stores/editor-store";
 import { ElMessage } from "element-plus";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import { storeToRefs } from "pinia";
+import { computed, reactive, ref, watch } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
-import IconEpHomeFilled from "~icons/ep/home-filled";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import { useEditorStore } from "@/stores/editor-store";
 
 const editorStore = useEditorStore();
 const { currentPage, currentPageId, pages, doc } = storeToRefs(editorStore);
@@ -286,8 +96,7 @@ const isHomePage = computed(() => {
   return doc.value.entry?.homePageId === currentPageId.value;
 });
 const isSystemPage = computed(
-  () =>
-    isHomePage.value || form.pageType === "login" || form.pageType === "logout",
+  () => isHomePage.value || form.pageType === "login" || form.pageType === "logout",
 );
 const BASIC_PAGE_META = {
   home: { label: "首页", path: "/" },
@@ -300,55 +109,53 @@ const BASIC_PAGE_META = {
  * @param {Object | null | undefined} page - 页面对象
  * @returns {"home" | "login" | "logout" | null}
  */
-const getFixedSystemType = (page) => {
+function getFixedSystemType(page) {
   if (!page) return null;
   if (doc.value?.entry?.homePageId === page.id) return "home";
-  if (doc.value?.entry?.loginPageId === page.id || page.path === "/login")
-    return "login";
-  if (doc.value?.entry?.logoutPageId === page.id || page.path === "/logout")
-    return "logout";
+  if (doc.value?.entry?.loginPageId === page.id || page.path === "/login") return "login";
+  if (doc.value?.entry?.logoutPageId === page.id || page.path === "/logout") return "logout";
   return null;
-};
+}
 
 /**
  * 规范化路由片段
  * @param {string} value - 名称
  * @returns {string}
  */
-const toPathSegment = (value) => {
+function toPathSegment(value) {
   const normalized = value.trim().replace(/\s+/g, "-");
   const sanitized = normalized.replace(/[/?#\\]+/g, "-");
   return sanitized || "page";
-};
+}
 
 /**
  * 校验页面名称是否合法
  * @param {string} value - 页面名称
  * @returns {{ valid: boolean, message: string }}
  */
-const validatePageName = (value) => {
+function validatePageName(value) {
   const name = String(value || "").trim();
   if (!name) {
     return { valid: false, message: "名称不能为空" };
   }
-  if (/^[.]+$/.test(name)) {
+  if (/^\.+$/.test(name)) {
     return { valid: false, message: "页面名称不能仅包含点号" };
   }
   if (/[/?#\\%]/.test(name)) {
     return { valid: false, message: "页面名称不能包含 / ? # % \\" };
   }
-  if (/[\u0000-\u001f\u007f]/.test(name)) {
+  if (/[\u0000-\u001F\u007F]/.test(name)) {
     return { valid: false, message: "页面名称不能包含控制字符" };
   }
   return { valid: true, message: "" };
-};
+}
 
 /**
  * 获取直属分组路径片段
  * @param {string | null | undefined} parentId - 分组 ID
  * @returns {string[]}
  */
-const getFolderPathSegments = (parentId) => {
+function getFolderPathSegments(parentId) {
   const folder = pages.value.find(
     (page) => page.id === (parentId || null) && page.type === "folder",
   );
@@ -356,7 +163,7 @@ const getFolderPathSegments = (parentId) => {
     return [];
   }
   return [toPathSegment(folder.name || folder.title || folder.id)];
-};
+}
 
 /**
  * 生成业务页面路由
@@ -364,38 +171,38 @@ const getFolderPathSegments = (parentId) => {
  * @param {string | null | undefined} parentId - 分组 ID
  * @returns {string}
  */
-const buildBusinessPagePath = (name, parentId) => {
+function buildBusinessPagePath(name, parentId) {
   const segments = [...getFolderPathSegments(parentId), toPathSegment(name)];
   return `/${segments.filter(Boolean).join("/")}`;
-};
+}
 
 /**
  * 格式化路由路径展示
  * @param {string} path - 路由路径
  * @returns {string}
  */
-const formatPathForDisplay = (path) => {
+function formatPathForDisplay(path) {
   if (!path) return "/";
   try {
     return decodeURIComponent(path);
   } catch (error) {
     return path;
   }
-};
+}
 
 /**
  * 获取页面类型
  * @param {Object} page - 页面对象
  * @returns {'business' | 'login' | 'logout'}
  */
-const getPageType = (page) => {
+function getPageType(page) {
   if (!page || !doc.value) return "business";
   if (doc.value.entry?.loginPageId === page.id) return "login";
   if (doc.value.entry?.logoutPageId === page.id) return "logout";
   if (page.path === "/login") return "login";
   if (page.path === "/logout") return "logout";
   return "business";
-};
+}
 
 /**
  * 根据页面信息与名称生成路由
@@ -403,14 +210,14 @@ const getPageType = (page) => {
  * @param {string} name - 页面名称
  * @returns {string}
  */
-const resolvePath = (page, name) => {
+function resolvePath(page, name) {
   if (!page) return "/";
   const systemType = getFixedSystemType(page);
   if (systemType) {
     return BASIC_PAGE_META[systemType].path;
   }
   return buildBusinessPagePath(name, page.parentId || null);
-};
+}
 
 /**
  * 判断页面名称是否唯一
@@ -418,20 +225,18 @@ const resolvePath = (page, name) => {
  * @param {string} excludeId - 排除的页面 ID
  * @returns {boolean}
  */
-const isNameUnique = (name, excludeId) => {
+function isNameUnique(name, excludeId) {
   const lowerName = name.trim().toLowerCase();
   return !pages.value.some(
-    (page) =>
-      page.id !== excludeId &&
-      (page.name || "").trim().toLowerCase() === lowerName,
+    (page) => page.id !== excludeId && (page.name || "").trim().toLowerCase() === lowerName,
   );
-};
+}
 
 /**
  * 同步表单状态
  * @param {Object} page - 页面对象
  */
-const syncForm = (page) => {
+function syncForm(page) {
   // 优先使用列表中的页面数据，避免脏缓存
   const pageFromList = currentPageId.value
     ? pages.value.find((p) => p.id === currentPageId.value)
@@ -474,24 +279,24 @@ const syncForm = (page) => {
 
   // 更新诊断统计
   updateDiagnostic();
-};
+}
 
 /**
  * 更新诊断统计
  */
-const updateDiagnostic = () => {
+function updateDiagnostic() {
   // 当前暂无实时诊断来源，先重置为 0
   diagnostic.total = 0;
   diagnostic.active = 0;
   diagnostic.invalid = 0;
-};
+}
 
 /**
  * 规范化样式输出，保证包含选择器
  * @param {string} content - 样式内容
  * @returns {string}
  */
-const formatCanvasStyleOutput = (content) => {
+function formatCanvasStyleOutput(content) {
   const text = String(content || "");
   if (text.includes("{")) return text;
   const trimmed = text.trim();
@@ -499,14 +304,14 @@ const formatCanvasStyleOutput = (content) => {
   return `#domId {
 ${trimmed}
 }`;
-};
+}
 
 /**
  * 为样式补全 #domId 作用域
  * @param {string} content - 样式内容
  * @returns {string}
  */
-const prefixCanvasStyleScope = (content) => {
+function prefixCanvasStyleScope(content) {
   const text = String(content || "").trim();
   if (!text || !text.includes("{")) return text;
   const blocks = text.split("}");
@@ -531,7 +336,7 @@ const prefixCanvasStyleScope = (content) => {
     .filter(Boolean)
     .join("}\n");
   return rebuilt ? `${rebuilt}}` : text;
-};
+}
 
 // 监听页面切换，同步表单
 watch(
@@ -545,7 +350,7 @@ watch(
 /**
  * 更新页面名称并同步路由路径
  */
-const handleNameUpdate = async () => {
+async function handleNameUpdate() {
   if (!currentPage.value) return;
   if (isSystemPage.value) {
     syncForm(currentPage.value);
@@ -569,8 +374,7 @@ const handleNameUpdate = async () => {
     return;
   }
   const currentPageFromList =
-    pages.value.find((page) => page.id === currentPage.value.id) ||
-    currentPage.value;
+    pages.value.find((page) => page.id === currentPage.value.id) || currentPage.value;
   if (name === (currentPage.value.name || "")) {
     const path = resolvePath(currentPageFromList, name);
     form.path = formatPathForDisplay(path);
@@ -584,13 +388,13 @@ const handleNameUpdate = async () => {
     ElMessage.error("更新页面名称失败");
     syncForm(currentPage.value);
   }
-};
+}
 
 /**
  * 切换页面类型并更新入口配置
  * @param {string} type - 页面类型
  */
-const handlePageTypeChange = (type) => {
+function handlePageTypeChange(type) {
   if (!currentPage.value || !doc.value) return;
 
   const pageId = currentPage.value.id;
@@ -620,23 +424,23 @@ const handlePageTypeChange = (type) => {
 
   form.path = path;
   editorStore.updateCurrentPage({ path });
-};
+}
 
 /**
  * 设置当前页面为首页
  */
-const handleSetAsHome = () => {
+function handleSetAsHome() {
   if (!currentPageId.value) return;
   editorStore.updateEntry({ homePageId: currentPageId.value });
   void editorStore.persistEntry();
   ElMessage.success("已设为首页");
-};
+}
 
 /**
  * 插入画布样式模板
  * @param {any} id - 模板 ID
  */
-const handleCanvasPresetChange = (id) => {
+function handleCanvasPresetChange(id) {
   const target = canvasStylePresets.find((item) => item.id === id);
   if (!target) return;
   const nextContent = formatCanvasStyleOutput(target.content || "");
@@ -644,12 +448,12 @@ const handleCanvasPresetChange = (id) => {
   const current = String(canvasStyleDraft.value || "").trim();
   const separator = current ? "\\n\\n" : "";
   canvasStyleDraft.value = `${current}${separator}${nextContent}`;
-};
+}
 
 /**
  * 更新画布配置
  */
-const handleConfigUpdate = () => {
+function handleConfigUpdate() {
   if (!currentPage.value) return;
   const nextConfig = {
     ...currentPage.value.config,
@@ -670,30 +474,40 @@ const handleConfigUpdate = () => {
     permissionDesc: form.permissionDesc,
   };
   editorStore.updateCurrentPage({ config: nextConfig });
-};
+}
 
 /**
  * 过滤非数字输入（只允许数字、负号、小数点、退格、方向键等）
  * @param {KeyboardEvent} event - 键盘事件
  */
-const filterNumericInput = (event) => {
+function filterNumericInput(event) {
   const allowed = [
-    "Backspace", "Delete", "Tab", "Escape", "Enter",
-    "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
-    "Home", "End",
+    "Backspace",
+    "Delete",
+    "Tab",
+    "Escape",
+    "Enter",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
   ];
   if (allowed.includes(event.key)) return;
-  if ((event.ctrlKey || event.metaKey) && ["a", "c", "v", "x", "z"].includes(event.key)) return;
+  if ((event.ctrlKey || event.metaKey) && ["a", "c", "v", "x", "z"].includes(event.key)) {
+    return;
+  }
   if (/^[0-9.\-]$/.test(event.key)) return;
   event.preventDefault();
-};
+}
 
 /**
  * 数字字段失焦时校验并回写
  * @param {string} field - 表单字段名
  * @param {FocusEvent} event - 失焦事件
  */
-const handleNumericBlur = (field, event) => {
+function handleNumericBlur(field, event) {
   const raw = String(form[field] ?? "").trim();
   const num = Number(raw);
   if (raw === "" || !Number.isFinite(num)) {
@@ -703,28 +517,28 @@ const handleNumericBlur = (field, event) => {
   }
   event.target.setAttribute("readonly", "");
   handleConfigUpdate();
-};
+}
 
 /**
  * 打开权限描述配置（当前先提供占位入口）
  */
-const handlePermissionConfig = () => {
+function handlePermissionConfig() {
   ElMessage.info("权限描述配置能力待接入");
-};
+}
 
 /**
  * 打开样式配置弹窗
  */
-const openCanvasStyleDialog = () => {
+function openCanvasStyleDialog() {
   if (!rootNode.value) return;
   canvasStyleDraft.value = rootNode.value.styleConfig || "";
   canvasStyleDialogVisible.value = true;
-};
+}
 
 /**
  * 保存样式配置
  */
-const saveCanvasStyleDialog = () => {
+function saveCanvasStyleDialog() {
   if (!rootNode.value) return;
   let content = String(canvasStyleDraft.value || "");
   content = formatCanvasStyleOutput(content);
@@ -732,22 +546,22 @@ const saveCanvasStyleDialog = () => {
   editorStore.updateNode(rootNode.value.id, { styleConfig: content });
   void editorStore.saveCurrentPage?.();
   canvasStyleDialogVisible.value = false;
-};
+}
 
 /**
  * 清空样式配置
  */
-const clearCanvasStyleDialog = () => {
+function clearCanvasStyleDialog() {
   if (!rootNode.value) return;
   canvasStyleDraft.value = "";
   editorStore.updateNode(rootNode.value.id, { styleConfig: "" });
   void editorStore.saveCurrentPage?.();
-};
+}
 
 /**
  * 更新背景配置
  */
-const handleBackgroundUpdate = () => {
+function handleBackgroundUpdate() {
   if (!currentPage.value) return;
   const nextConfig = {
     ...currentPage.value.config,
@@ -757,8 +571,261 @@ const handleBackgroundUpdate = () => {
     },
   };
   editorStore.updateCurrentPage({ config: nextConfig });
-};
+}
 </script>
+
+<template>
+  <div class="page-inspector-panel">
+    <div class="page-prop-list">
+      <div class="page-group">
+        <div class="section-title">基本</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">名称</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.name"
+              size="small"
+              :disabled="isSystemPage"
+              @blur="handleNameUpdate"
+            />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">描述</div>
+          <div class="page-prop-editor">
+            <el-input v-model="form.description" size="small" @blur="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">页面类型</div>
+          <div class="page-prop-editor">
+            <el-select
+              v-model="form.pageType"
+              size="small"
+              :disabled="isHomePage"
+              @change="handlePageTypeChange"
+            >
+              <el-option label="业务页面" value="business" />
+              <el-option label="登录页" value="login" />
+              <el-option label="登出页" value="logout" />
+            </el-select>
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">路由</div>
+          <div class="page-prop-editor">
+            <el-input v-model="form.path" size="small" disabled />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">位置</div>
+          <div class="page-prop-editor">
+            <div class="axis-inline-group">
+              <div class="axis-inline-item">
+                <span class="axis-inline-tag">X</span>
+                <el-input v-model="form.x" size="small" disabled />
+              </div>
+              <div class="axis-inline-item">
+                <span class="axis-inline-tag">Y</span>
+                <el-input v-model="form.y" size="small" disabled />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">样式</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">背景类型</div>
+          <div class="page-prop-editor">
+            <el-select v-model="form.backgroundKind" size="small" @change="handleBackgroundUpdate">
+              <el-option label="纯色" value="color" />
+              <el-option label="图片" value="image" />
+              <el-option label="渐变" value="gradient" />
+            </el-select>
+          </div>
+        </div>
+        <div class="page-prop-item page-prop-item--stacked">
+          <div class="page-prop-label">背景值</div>
+          <div class="page-prop-editor page-prop-editor-stacked">
+            <FriendlyColorPicker
+              v-if="form.backgroundKind === 'color'"
+              v-model="form.backgroundValue"
+              @change="handleBackgroundUpdate"
+            />
+            <el-input
+              v-else
+              v-model="form.backgroundValue"
+              size="small"
+              @blur="handleBackgroundUpdate"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">窗口大小</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">宽度</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.windowWidth"
+              size="small"
+              readonly
+              class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')"
+              @blur="handleNumericBlur('windowWidth', $event)"
+              @keydown="filterNumericInput"
+            />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">高度</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.windowHeight"
+              size="small"
+              readonly
+              class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')"
+              @blur="handleNumericBlur('windowHeight', $event)"
+              @keydown="filterNumericInput"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">画面大小</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">宽度</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.width"
+              size="small"
+              readonly
+              class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')"
+              @blur="handleNumericBlur('width', $event)"
+              @keydown="filterNumericInput"
+            />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">高度</div>
+          <div class="page-prop-editor">
+            <el-input
+              v-model="form.height"
+              size="small"
+              readonly
+              class="num-readonly-input"
+              @focus="$event.target.removeAttribute('readonly')"
+              @blur="handleNumericBlur('height', $event)"
+              @keydown="filterNumericInput"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">窗口</div>
+        <div class="page-prop-item page-prop-item--switch">
+          <div class="page-prop-label">自适应</div>
+          <div class="page-prop-editor page-prop-editor-switch">
+            <el-switch v-model="form.autoFit" @change="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item page-prop-item--switch">
+          <div class="page-prop-label">启用锁定宽高比</div>
+          <div class="page-prop-editor page-prop-editor-switch">
+            <el-switch v-model="form.lockAspectRatio" @change="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item page-prop-item--switch">
+          <div class="page-prop-label">启用最小尺寸</div>
+          <div class="page-prop-editor page-prop-editor-switch">
+            <el-switch v-model="form.enableMinSize" @change="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item page-prop-item--switch">
+          <div class="page-prop-label">字体自适应</div>
+          <div class="page-prop-editor page-prop-editor-switch">
+            <el-switch v-model="form.fontAutoFit" @change="handleConfigUpdate" />
+          </div>
+        </div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">窗口样式</div>
+          <div class="page-prop-editor">
+            <el-select v-model="form.windowStyle" size="small" @change="handleConfigUpdate">
+              <el-option label="覆盖式" value="cover" />
+              <el-option label="标准式" value="normal" />
+            </el-select>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-group">
+        <div class="section-title">权限描述管理</div>
+        <div class="page-prop-item">
+          <div class="page-prop-label">配置</div>
+          <div class="page-prop-editor">
+            <el-button size="small" @click="handlePermissionConfig">
+              {{ form.permissionDesc || "0item" }}
+            </el-button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <el-dialog
+    v-model="canvasStyleDialogVisible"
+    title="样式配置"
+    width="980px"
+    top="4vh"
+    :close-on-click-modal="false"
+    :lock-scroll="false"
+  >
+    <div class="config-toolbar">
+      <div class="config-toolbar-item">
+        <span class="config-label">样式模板：</span>
+        <el-select
+          v-model="selectedCanvasPresetId"
+          size="small"
+          class="config-select preset-select"
+          placeholder="请选择"
+          @change="handleCanvasPresetChange"
+        >
+          <el-option
+            v-for="item in filteredCanvasPresetOptions"
+            :key="item.id"
+            :label="item.label"
+            :value="item.id"
+          />
+        </el-select>
+      </div>
+      <div class="config-toolbar-item">
+        <span class="config-label">筛选：</span>
+        <el-input
+          v-model="canvasPresetSearch"
+          size="small"
+          class="config-select"
+          placeholder="搜索模板"
+          clearable
+        />
+      </div>
+    </div>
+    <div class="config-editor">
+      <MonacoEditor v-model="canvasStyleDraft" language="css" height="520px" />
+    </div>
+    <template #footer>
+      <el-button @click="clearCanvasStyleDialog">清除</el-button>
+      <el-button @click="canvasStyleDialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="saveCanvasStyleDialog">保存</el-button>
+    </template>
+  </el-dialog>
+</template>
 
 <style scoped>
 .page-inspector-panel {

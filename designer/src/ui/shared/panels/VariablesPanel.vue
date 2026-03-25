@@ -2,170 +2,19 @@
   VariablesPanel - 变量面板
   管理页面/全局变量，支持增删、导入导出
 -->
-<template>
-  <div class="variables-panel">
-    <div class="vars-toolbar">
-      <el-button
-        class="toolbar-button"
-        size="small"
-        circle
-        @click="openCreateDialog"
-      >
-        <IconEpPlus />
-      </el-button>
-      <el-tooltip content="删除" placement="top">
-        <el-button
-          class="toolbar-button"
-          size="small"
-          circle
-          @click="handleDelete"
-        >
-          <IconEpDelete />
-        </el-button>
-      </el-tooltip>
-      <el-dropdown
-        class="toolbar-dropdown"
-        trigger="hover"
-        @command="handleExport"
-      >
-        <el-button class="toolbar-button" size="small" circle>
-          <IconEpUpload />
-        </el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
-            <el-dropdown-item command="xlsx">导出 XLSX</el-dropdown-item>
-            <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-      <el-dropdown
-        class="toolbar-dropdown"
-        trigger="hover"
-        @command="handleImport"
-      >
-        <el-button class="toolbar-button" size="small" circle>
-          <IconEpDownload />
-        </el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="csv">导入 CSV</el-dropdown-item>
-            <el-dropdown-item command="xlsx">导入 XLSX</el-dropdown-item>
-            <el-dropdown-item command="json">导入 JSON</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-      <input
-        ref="importInputRef"
-        class="hidden-file-input"
-        type="file"
-        :accept="importAccept"
-        @change="handleFileChange"
-      />
-    </div>
-
-    <div class="vars-table">
-      <div class="vars-header">
-        <div class="vars-col vars-name">变量名</div>
-        <div class="vars-col vars-default">默认值</div>
-      </div>
-      <div
-        v-for="item in varList"
-        :key="item.name"
-        class="vars-row"
-        :class="{ 'is-active': selectedVarName === item.name }"
-        @click="selectRow(item.name)"
-        @dblclick="openEditDialog(item)"
-      >
-        <div class="vars-col vars-name">{{ item.name }}</div>
-        <div class="vars-col vars-default">
-          <span class="default-value">{{ formatDefaultValue(item) }}</span>
-          <el-button
-            class="edit-button"
-            size="small"
-            circle
-            @click.stop="openEditDialog(item)"
-          >
-            <IconEpEditPen />
-          </el-button>
-        </div>
-      </div>
-      <div v-if="varList.length === 0" class="empty-block">暂无数据</div>
-    </div>
-  </div>
-
-  <el-dialog
-    v-model="editVisible"
-    :title="editMode ? '编辑变量' : '新增变量'"
-    width="520px"
-    :close-on-click-modal="false"
-    :lock-scroll="false"
-  >
-    <el-form label-width="80px">
-      <el-form-item label="变量名">
-        <el-input v-model="formName" />
-      </el-form-item>
-      <el-form-item label="类型">
-        <el-select v-model="formType" @change="resetDefaultValue">
-          <el-option v-for="t in typeOptions" :key="t" :label="t" :value="t" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="初始值">
-        <div v-if="isEditorType" class="edit-value-block">
-          <MonacoEditor
-            ref="editValueEditorRef"
-            v-model="formDefaultText"
-            :language="editorLanguage"
-            height="220px"
-            @markers="handleEditValueMarkers"
-          />
-        </div>
-        <el-input
-          v-else-if="isTextType"
-          v-model="formDefaultText"
-          type="textarea"
-          :rows="6"
-        />
-        <el-input-number
-          v-else-if="formType === 'number'"
-          v-model="formDefaultNumber"
-          style="width: 100%"
-        />
-        <el-switch
-          v-else-if="formType === 'boolean'"
-          v-model="formDefaultBoolean"
-        />
-        <el-date-picker
-          v-else-if="formType === 'date'"
-          v-model="formDefaultDate"
-          type="datetime"
-          style="width: 100%"
-        />
-      </el-form-item>
-      <el-form-item label="描述">
-        <el-input v-model="formDescription" type="textarea" :rows="2" />
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="editVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveVar">确定</el-button>
-    </template>
-  </el-dialog>
-</template>
-
 <script setup>
-import { computed, ref, watch } from "vue";
-import { storeToRefs } from "pinia";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { storeToRefs } from "pinia";
+import { computed, ref, watch } from "vue";
+import * as XLSX from "xlsx";
+import IconEpDelete from "~icons/ep/delete";
+import IconEpDownload from "~icons/ep/download";
+import IconEpEditPen from "~icons/ep/edit-pen";
+import IconEpPlus from "~icons/ep/plus";
+import IconEpUpload from "~icons/ep/upload";
+import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePanelState } from "@/ui/editors/page/panels/composables/use-panel-state";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpDelete from "~icons/ep/delete";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpUpload from "~icons/ep/upload";
-import IconEpDownload from "~icons/ep/download";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
-import * as XLSX from "xlsx";
 
 const editorStore = useEditorStore();
 const { panelState } = usePanelState();
@@ -203,15 +52,9 @@ const typeOptions = [
 const isEditorType = computed(() =>
   ["function", "array", "object", "set", "map"].includes(formType.value),
 );
-const isStructuredType = computed(() =>
-  ["array", "object", "set", "map"].includes(formType.value),
-);
-const isTextType = computed(() =>
-  ["string", "regexp"].includes(formType.value),
-);
-const editorLanguage = computed(() =>
-  isStructuredType.value ? "json" : "javascript",
-);
+const isStructuredType = computed(() => ["array", "object", "set", "map"].includes(formType.value));
+const isTextType = computed(() => ["string", "regexp"].includes(formType.value));
+const editorLanguage = computed(() => (isStructuredType.value ? "json" : "javascript"));
 
 const pageName = computed(() => {
   const pageId = currentPageId.value;
@@ -242,7 +85,7 @@ const varList = computed(() => {
  * @param {{ default: any }} item - 变量定义
  * @returns {string} 格式化后的文本
  */
-const formatDefaultValue = (item) => {
+function formatDefaultValue(item) {
   if (item.default === null || item.default === undefined) return "";
   if (typeof item.default === "object") {
     try {
@@ -252,20 +95,20 @@ const formatDefaultValue = (item) => {
     }
   }
   return String(item.default);
-};
+}
 
 /**
  * 选择表格行
  * @param {string} name - 变量名
  */
-const selectRow = (name) => {
+function selectRow(name) {
   selectedVarName.value = name || "";
-};
+}
 
 /**
  * 打开新增弹窗
  */
-const openCreateDialog = () => {
+function openCreateDialog() {
   editMode.value = false;
   formName.value = "";
   originalName.value = "";
@@ -276,13 +119,13 @@ const openCreateDialog = () => {
   formDefaultDate.value = null;
   formDescription.value = "";
   editVisible.value = true;
-};
+}
 
 /**
  * 打开编辑弹窗
  * @param {{ name: string, type: string, default: any, description: string, access: string }} item - 变量信息
  */
-const openEditDialog = (item) => {
+function openEditDialog(item) {
   if (!item) return;
   editMode.value = true;
   formName.value = item.name || "";
@@ -297,25 +140,23 @@ const openEditDialog = (item) => {
     formDefaultDate.value = item.default || null;
   } else {
     formDefaultText.value =
-      item.default === undefined || item.default === null
-        ? ""
-        : String(item.default);
+      item.default === undefined || item.default === null ? "" : String(item.default);
   }
   editVisible.value = true;
-};
+}
 
 /**
  * 重置初始值输入
  */
-const resetDefaultValue = () => {
+function resetDefaultValue() {
   formDefaultText.value = "";
   formDefaultNumber.value = 0;
   formDefaultBoolean.value = false;
   formDefaultDate.value = null;
   editValueHasErrors.value = false;
-};
+}
 
-const parseStructuredJson = (value, type) => {
+function parseStructuredJson(value, type) {
   if (!isStructuredType.value) return { ok: true, parsed: value };
   if (typeof value !== "string") return { ok: true, parsed: value };
   try {
@@ -346,9 +187,9 @@ const parseStructuredJson = (value, type) => {
   } catch (error) {
     return { ok: false, error: "JSON 格式不正确" };
   }
-};
+}
 
-const validateStructuredValue = () => {
+function validateStructuredValue() {
   if (!isStructuredType.value) return true;
   const result = parseStructuredJson(formDefaultText.value, formType.value);
   if (!result.ok) {
@@ -356,22 +197,20 @@ const validateStructuredValue = () => {
     return false;
   }
   return true;
-};
+}
 
-const handleEditValueMarkers = (markers) => {
+function handleEditValueMarkers(markers) {
   if (!isEditorType.value) {
     editValueHasErrors.value = false;
     return;
   }
-  editValueHasErrors.value = (markers || []).some(
-    (marker) => marker.severity === 8,
-  );
-};
+  editValueHasErrors.value = (markers || []).some((marker) => marker.severity === 8);
+}
 
 /**
  * 保存变量
  */
-const saveVar = () => {
+function saveVar() {
   const name = formName.value.trim();
   if (!name) {
     ElMessage.warning("名称不能为空");
@@ -383,12 +222,7 @@ const saveVar = () => {
     ElMessage.warning("变量名已存在");
     return;
   }
-  if (
-    editMode.value &&
-    originalName.value &&
-    name !== originalName.value &&
-    pageVars.value[name]
-  ) {
+  if (editMode.value && originalName.value && name !== originalName.value && pageVars.value[name]) {
     ElMessage.warning("变量名已存在");
     return;
   }
@@ -426,25 +260,21 @@ const saveVar = () => {
   commitPageVars(nextVars);
   selectedVarName.value = name;
   editVisible.value = false;
-};
+}
 
 /**
  * 删除变量
  */
-const handleDelete = () => {
+function handleDelete() {
   if (!selectedVarName.value) {
     ElMessage.info("请选择需要删除的变量");
     return;
   }
-  ElMessageBox.confirm(
-    `确认删除变量 "${selectedVarName.value}" 吗？`,
-    "删除确认",
-    {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-      type: "warning",
-    },
-  )
+  ElMessageBox.confirm(`确认删除变量 "${selectedVarName.value}" 吗？`, "删除确认", {
+    confirmButtonText: "删除",
+    cancelButtonText: "取消",
+    type: "warning",
+  })
     .then(() => {
       if (!currentPageId.value || !doc.value) return;
       const nextVars = { ...pageVars.value };
@@ -453,13 +283,13 @@ const handleDelete = () => {
       selectedVarName.value = "";
     })
     .catch(() => {});
-};
+}
 
 /**
  * 提交页面变量
  * @param {Record<string, any>} vars - 变量定义
  */
-const commitPageVars = (vars) => {
+function commitPageVars(vars) {
   if (!doc.value || !currentPageId.value) return;
   const oldValue = doc.value.schema.vars;
   const nextVars = {
@@ -476,7 +306,7 @@ const commitPageVars = (vars) => {
     oldValue,
     newValue: nextVars,
   });
-};
+}
 
 const importAccept = computed(() => {
   if (importType.value === "csv") return ".csv";
@@ -484,7 +314,7 @@ const importAccept = computed(() => {
   return ".json";
 });
 
-const downloadBlob = (content, name, type) => {
+function downloadBlob(content, name, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -492,35 +322,35 @@ const downloadBlob = (content, name, type) => {
   link.download = name;
   link.click();
   URL.revokeObjectURL(url);
-};
+}
 
-const sanitizeFileName = (name) => {
+function sanitizeFileName(name) {
   return String(name || "page")
     .trim()
     .replace(/[\\/:*?"<>|]+/g, "-")
     .replace(/\s+/g, "-");
-};
+}
 
-const getExportBaseName = () => {
+function getExportBaseName() {
   return `${sanitizeFileName(pageName.value)}-variable`;
-};
+}
 
-const buildExportRows = () => {
+function buildExportRows() {
   return Object.entries(pageVars.value).map(([name, detail]) => ({
     name,
     type: detail?.type || "string",
     default: formatDefaultValue({ default: detail?.default }),
     description: detail?.description || "",
   }));
-};
+}
 
-const normalizeRowKey = (row, key) => {
+function normalizeRowKey(row, key) {
   const lowerKey = key.toLowerCase();
   const hit = Object.keys(row).find((k) => k.toLowerCase() === lowerKey);
   return hit ? row[hit] : "";
-};
+}
 
-const mergeImportedRows = (rows) => {
+function mergeImportedRows(rows) {
   const nextVars = { ...pageVars.value };
   let added = 0;
   let skipped = 0;
@@ -539,10 +369,7 @@ const mergeImportedRows = (rows) => {
       type === "number"
         ? Number(defaultRaw)
         : type === "boolean"
-          ? Boolean(
-              defaultRaw === true ||
-              String(defaultRaw).toLowerCase() === "true",
-            )
+          ? Boolean(defaultRaw === true || String(defaultRaw).toLowerCase() === "true")
           : type === "date"
             ? defaultRaw || null
             : defaultRaw;
@@ -556,9 +383,9 @@ const mergeImportedRows = (rows) => {
 
   commitPageVars(nextVars);
   ElMessage.success(`导入完成，新增 ${added} 项，跳过 ${skipped} 项`);
-};
+}
 
-const handleExport = (format) => {
+function handleExport(format) {
   const rows = buildExportRows();
   const baseName = getExportBaseName();
   if (format === "json") {
@@ -566,11 +393,7 @@ const handleExport = (format) => {
       pageId: currentPageId.value || "",
       vars: pageVars.value || {},
     };
-    downloadBlob(
-      JSON.stringify(payload, null, 2),
-      `${baseName}.json`,
-      "application/json",
-    );
+    downloadBlob(JSON.stringify(payload, null, 2), `${baseName}.json`, "application/json");
     return;
   }
 
@@ -588,17 +411,17 @@ const handleExport = (format) => {
     `${baseName}.xlsx`,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
-};
+}
 
-const handleImport = (format) => {
+function handleImport(format) {
   importType.value = format;
   if (importInputRef.value) {
     importInputRef.value.value = "";
     importInputRef.value.click();
   }
-};
+}
 
-const handleFileChange = async (event) => {
+async function handleFileChange(event) {
   const file = event.target.files?.[0];
   if (!file) return;
   if (importType.value === "json") {
@@ -638,12 +461,132 @@ const handleFileChange = async (event) => {
     defval: "",
   });
   mergeImportedRows(rows);
-};
+}
 
 watch(currentPageId, () => {
   selectedVarName.value = "";
 });
 </script>
+
+<template>
+  <div class="variables-panel">
+    <div class="vars-toolbar">
+      <el-button class="toolbar-button" size="small" circle @click="openCreateDialog">
+        <IconEpPlus />
+      </el-button>
+      <el-tooltip content="删除" placement="top">
+        <el-button class="toolbar-button" size="small" circle @click="handleDelete">
+          <IconEpDelete />
+        </el-button>
+      </el-tooltip>
+      <el-dropdown class="toolbar-dropdown" trigger="hover" @command="handleExport">
+        <el-button class="toolbar-button" size="small" circle>
+          <IconEpUpload />
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
+            <el-dropdown-item command="xlsx">导出 XLSX</el-dropdown-item>
+            <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <el-dropdown class="toolbar-dropdown" trigger="hover" @command="handleImport">
+        <el-button class="toolbar-button" size="small" circle>
+          <IconEpDownload />
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="csv">导入 CSV</el-dropdown-item>
+            <el-dropdown-item command="xlsx">导入 XLSX</el-dropdown-item>
+            <el-dropdown-item command="json">导入 JSON</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <input
+        ref="importInputRef"
+        class="hidden-file-input"
+        type="file"
+        :accept="importAccept"
+        @change="handleFileChange"
+      />
+    </div>
+
+    <div class="vars-table">
+      <div class="vars-header">
+        <div class="vars-col vars-name">变量名</div>
+        <div class="vars-col vars-default">默认值</div>
+      </div>
+      <div
+        v-for="item in varList"
+        :key="item.name"
+        class="vars-row"
+        :class="{ 'is-active': selectedVarName === item.name }"
+        @click="selectRow(item.name)"
+        @dblclick="openEditDialog(item)"
+      >
+        <div class="vars-col vars-name">{{ item.name }}</div>
+        <div class="vars-col vars-default">
+          <span class="default-value">{{ formatDefaultValue(item) }}</span>
+          <el-button class="edit-button" size="small" circle @click.stop="openEditDialog(item)">
+            <IconEpEditPen />
+          </el-button>
+        </div>
+      </div>
+      <div v-if="varList.length === 0" class="empty-block">暂无数据</div>
+    </div>
+  </div>
+
+  <el-dialog
+    v-model="editVisible"
+    :title="editMode ? '编辑变量' : '新增变量'"
+    width="520px"
+    :close-on-click-modal="false"
+    :lock-scroll="false"
+  >
+    <el-form label-width="80px">
+      <el-form-item label="变量名">
+        <el-input v-model="formName" />
+      </el-form-item>
+      <el-form-item label="类型">
+        <el-select v-model="formType" @change="resetDefaultValue">
+          <el-option v-for="t in typeOptions" :key="t" :label="t" :value="t" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="初始值">
+        <div v-if="isEditorType" class="edit-value-block">
+          <MonacoEditor
+            ref="editValueEditorRef"
+            v-model="formDefaultText"
+            :language="editorLanguage"
+            height="220px"
+            @markers="handleEditValueMarkers"
+          />
+        </div>
+        <el-input v-else-if="isTextType" v-model="formDefaultText" type="textarea" :rows="6" />
+        <el-input-number
+          v-else-if="formType === 'number'"
+          v-model="formDefaultNumber"
+          style="width: 100%"
+        />
+        <el-switch v-else-if="formType === 'boolean'" v-model="formDefaultBoolean" />
+        <el-date-picker
+          v-else-if="formType === 'date'"
+          v-model="formDefaultDate"
+          type="datetime"
+          style="width: 100%"
+        />
+      </el-form-item>
+      <el-form-item label="描述">
+        <el-input v-model="formDescription" type="textarea" :rows="2" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="editVisible = false">取消</el-button>
+      <el-button type="primary" @click="saveVar">确定</el-button>
+    </template>
+  </el-dialog>
+</template>
 
 <style scoped>
 .variables-panel {

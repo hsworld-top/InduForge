@@ -2,14 +2,7 @@
  * 组件 Manifest 注册表：属性、样式、事件等元数据
  */
 
-export type PropType =
-  | "string"
-  | "number"
-  | "boolean"
-  | "color"
-  | "enum"
-  | "object"
-  | "array";
+export type PropType = "string" | "number" | "boolean" | "color" | "enum" | "object" | "array";
 
 export interface PropOption {
   label: string;

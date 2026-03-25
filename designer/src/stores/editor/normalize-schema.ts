@@ -2,18 +2,11 @@
  * 文档 Schema 规范化：工程/页面结构、节点映射、布局修复
  */
 
+import type { ExportedPagePayload } from "@/editor-core/document/Serializer";
+import type { ComponentNode, PageNode, ProjectSchema } from "@/editor-core/document/types";
 import { createComponentNode } from "@/editor-core/document/factory";
-import {
-  Serializer,
-  type ExportedPagePayload,
-} from "@/editor-core/document/Serializer";
-import {
-  createEmptySchema,
-  createPageNode,
-  type ComponentNode,
-  type PageNode,
-  type ProjectSchema,
-} from "@/editor-core/document/types";
+import { Serializer } from "@/editor-core/document/Serializer";
+import { createEmptySchema, createPageNode } from "@/editor-core/document/types";
 
 /** API / 序列化过程中的节点快照（弱于 ComponentNode，便于承接 JSON） */
 type SchemaNode = Record<string, unknown> & {
@@ -28,9 +21,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** 规范化后的节点表写入 ProjectSchema 时，仅此一处做 ComponentNode 断言 */
-function toComponentNodesMap(
-  nodes: Record<string, SchemaNode>,
-): Record<string, ComponentNode> {
+function toComponentNodesMap(nodes: Record<string, SchemaNode>): Record<string, ComponentNode> {
   return nodes as unknown as Record<string, ComponentNode>;
 }
 
@@ -39,18 +30,15 @@ export type PageSchemaCreatePayload = ExportedPagePayload & {
   entry: ProjectSchema["entry"];
 };
 
-type ProjectSchemaLike = Pick<
-  ProjectSchema,
-  "pagesById" | "nodesById" | "graphicsById" | "entry"
->;
+type ProjectSchemaLike = Pick<ProjectSchema, "pagesById" | "nodesById" | "graphicsById" | "entry">;
 
-type PagePayloadLike = {
+interface PagePayloadLike {
   page?: PageNode | Record<string, unknown>;
   nodesById?: unknown;
   graphicsById?: unknown;
   vars?: unknown;
   entry?: unknown;
-};
+}
 
 function isProjectSchemaLike(payload: unknown): payload is ProjectSchemaLike {
   return (
@@ -75,16 +63,14 @@ export function normalizePageList(payload: unknown): unknown[] {
     throw new Error("页面列表缺失：期望 pages 为数组");
   }
   if (!Array.isArray(payload)) {
-    throw new Error(
-      "页面列表格式无效：期望数组（不再兼容 items/list 等历史字段）",
-    );
+    throw new TypeError("页面列表格式无效：期望数组（不再兼容 items/list 等历史字段）");
   }
   return payload;
 }
 
 export function normalizePageSchema(payload: unknown): unknown {
   if (!isRecord(payload)) return payload;
-  if (Object.prototype.hasOwnProperty.call(payload, "schema")) {
+  if (Object.hasOwn(payload, "schema")) {
     const inner = payload.schema;
     if (inner != null && typeof inner === "object") return inner;
     throw new Error("页面详情 envelope 中 schema 无效或缺失");
@@ -109,7 +95,7 @@ export function normalizeNodesById(nodesById: unknown): {
         throw new Error("nodesById 数组项必须为带 id 的对象");
       }
       const n = node as SchemaNode;
-      if (Object.prototype.hasOwnProperty.call(normalized, n.id)) {
+      if (Object.hasOwn(normalized, n.id)) {
         throw new Error(`nodesById 重复 id: ${n.id}`);
       }
       normalized[n.id] = n;
@@ -184,15 +170,11 @@ export function ensurePagePayloadId(
   if (!isRecord(payload)) return payload;
   if (!fallbackPageId) return payload;
 
-  const page =
-    payload.page && isRecord(payload.page) ? payload.page : {};
+  const page = payload.page && isRecord(payload.page) ? payload.page : {};
   page.id = fallbackPageId;
 
   const { nodesById } = normalizeNodesById(payload.nodesById);
-  page.rootNodeId = resolveRootNodeId(
-    page as { rootNodeId?: string },
-    nodesById,
-  );
+  page.rootNodeId = resolveRootNodeId(page as { rootNodeId?: string }, nodesById);
 
   payload.page = page;
   payload.nodesById = nodesById;
@@ -209,7 +191,7 @@ export function resolveProjectSchema(
     return ensureProjectSchemaStructure(normalized) as ProjectSchema;
   }
   if (isPagePayloadLike(normalized)) {
-    const ensured = ensurePagePayloadId(normalized, fallbackPageId);
+    const ensured = ensurePagePayloadId(normalized as Record<string, unknown>, fallbackPageId);
     if (!ensured) {
       throw new Error("页面载荷为空：无法解析为工程 Schema");
     }
@@ -301,9 +283,7 @@ function assertLayoutStructureStrict(schema: ProjectSchema): void {
       }
       const columns = node.props?.columns;
       if (columns != null && Number(columns) !== children.length) {
-        throw new Error(
-          `ElLayoutRow ${node.id} 的 props.columns 与 ElCol 子节点数量不一致`,
-        );
+        throw new Error(`ElLayoutRow ${node.id} 的 props.columns 与 ElCol 子节点数量不一致`);
       }
     }
   }
@@ -396,8 +376,7 @@ export function buildSchemaFromPagePayload(
   const page = createPageNode(toPageNodeLike(pageSource));
   if (payload.vars && isRecord(payload.vars)) {
     const vars = payload.vars;
-    const nextPages =
-      vars.pages && isRecord(vars.pages) ? vars.pages : {};
+    const nextPages = vars.pages && isRecord(vars.pages) ? vars.pages : {};
     schema.vars = {
       ...schema.vars,
       ...vars,
@@ -465,10 +444,7 @@ export function createPageSchemaPayload(page: {
   return { ...exported, entry: schema.entry };
 }
 
-export function buildNewPageSchema(pageInfo: {
-  name: string;
-  path: string;
-}): {
+export function buildNewPageSchema(pageInfo: { name: string; path: string }): {
   page: PageNode;
   nodesById: Record<string, ComponentNode>;
   graphicsById: Record<string, never>;

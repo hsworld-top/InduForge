@@ -2,6 +2,37 @@
   PositionEditor - 定位编辑器
   编辑 position、left/top/right/bottom
 -->
+<script setup>
+import { computed } from "vue";
+
+const props = defineProps({
+  modelValue: {
+    type: Object,
+    default: () => ({}),
+  },
+});
+
+function parseValue(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const num = Number.parseInt(String(value), 10);
+  return isNaN(num) ? undefined : num;
+}
+
+function formatDisplayValue(value) {
+  if (value === undefined || value === null || value === "") {
+    return "-";
+  }
+  return String(value);
+}
+
+const position = computed(() => props.modelValue.position || "relative");
+const showCoordinates = computed(() => ["absolute", "fixed"].includes(position.value));
+const left = computed(() => parseValue(props.modelValue.left));
+const top = computed(() => parseValue(props.modelValue.top));
+const zIndex = computed(() => parseValue(props.modelValue.zIndex) || 0);
+const overflow = computed(() => props.modelValue.overflow || "visible");
+</script>
+
 <template>
   <div class="position-editor">
     <div class="editor-group-title">定位</div>
@@ -44,39 +75,6 @@
   </div>
 </template>
 
-<script setup>
-import { computed } from "vue";
-
-const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({}),
-  },
-});
-
-const parseValue = (value) => {
-  if (value === undefined || value === null || value === "") return undefined;
-  const num = parseInt(String(value), 10);
-  return isNaN(num) ? undefined : num;
-};
-
-const formatDisplayValue = (value) => {
-  if (value === undefined || value === null || value === "") {
-    return "-";
-  }
-  return String(value);
-};
-
-const position = computed(() => props.modelValue.position || "relative");
-const showCoordinates = computed(() =>
-  ["absolute", "fixed"].includes(position.value),
-);
-const left = computed(() => parseValue(props.modelValue.left));
-const top = computed(() => parseValue(props.modelValue.top));
-const zIndex = computed(() => parseValue(props.modelValue.zIndex) || 0);
-const overflow = computed(() => props.modelValue.overflow || "visible");
-</script>
-
 <style scoped>
 .position-editor {
   display: flex;
@@ -89,8 +87,7 @@ const overflow = computed(() => props.modelValue.overflow || "visible");
   align-items: center;
   min-height: 30px;
   padding: 0 10px;
-  margin: calc(var(--designer-gap-md) * -1) calc(var(--designer-gap-md) * -1)
-    0;
+  margin: calc(var(--designer-gap-md) * -1) calc(var(--designer-gap-md) * -1) 0;
   background: var(--designer-group-surface);
   border-bottom: 1px solid var(--designer-border-soft);
   color: var(--designer-text-secondary);

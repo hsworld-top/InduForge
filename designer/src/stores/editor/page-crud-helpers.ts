@@ -2,17 +2,15 @@
  * 页面列表拉取与创建页 API 辅助（从 editor-store 拆出）
  */
 
-import { unwrapApiData } from "@/types/api";
-import { projectApi } from "@/services";
 import type { CreatePageBody } from "@/services/projectApi";
+import { projectApi } from "@/services";
+import { unwrapApiData } from "@/types/api";
 import { fetchPagesListPayload } from "./project-api-helpers";
 
 function normalizePageListPayload(payload: unknown): unknown[] {
   if (payload == null) return [];
   if (Array.isArray(payload)) return payload;
-  throw new Error(
-    "页面列表格式无效：期望数组（不再兼容 items/list 等历史字段）",
-  );
+  throw new Error("页面列表格式无效：期望数组（不再兼容 items/list 等历史字段）");
 }
 
 export async function loadNormalizedPageList(projectId: string): Promise<{

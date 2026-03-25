@@ -3,9 +3,9 @@
  * 包含插入、删除、更新、移动节点的命令实现
  */
 
-import { Command } from "./Command";
 import type { DocumentModel } from "../document/DocumentModel";
 import type { Change, ComponentNode } from "../document/types";
+import { Command } from "./Command";
 
 /** 深拷贝删除命令在内存中挂的子树 */
 type NodeCloneWithChildren = ComponentNode & {
@@ -75,10 +75,7 @@ export class RemoveNodeCommand extends Command {
     }
   }
 
-  private _deepCloneNode(
-    node: ComponentNode,
-    doc: DocumentModel,
-  ): NodeCloneWithChildren {
+  private _deepCloneNode(node: ComponentNode, doc: DocumentModel): NodeCloneWithChildren {
     const clone = JSON.parse(JSON.stringify(node)) as NodeCloneWithChildren;
     if (clone.children?.length) {
       clone._childNodes = clone.children
@@ -246,8 +243,7 @@ export class DuplicateNodeCommand extends Command {
   ) {
     super();
     this._sourceNodeId = sourceNodeId;
-    this._newId =
-      newId || crypto.randomUUID().replace(/-/g, "").substring(0, 12);
+    this._newId = newId || crypto.randomUUID().replace(/-/g, "").substring(0, 12);
     this._offset = offset;
   }
 
@@ -266,10 +262,8 @@ export class DuplicateNodeCommand extends Command {
     const dx = this._offset.x || 0;
     const dy = this._offset.y || 0;
     if (this._createdNode.absolutePos) {
-      this._createdNode.absolutePos.x =
-        (this._createdNode.absolutePos.x ?? 0) + dx;
-      this._createdNode.absolutePos.y =
-        (this._createdNode.absolutePos.y ?? 0) + dy;
+      this._createdNode.absolutePos.x = (this._createdNode.absolutePos.x ?? 0) + dx;
+      this._createdNode.absolutePos.y = (this._createdNode.absolutePos.y ?? 0) + dy;
     } else if (this._createdNode.layoutItem?.free?.abs) {
       const abs = this._createdNode.layoutItem.free.abs;
       abs.x = (abs.x ?? 0) + dx;
@@ -299,10 +293,7 @@ export class DuplicateNodeCommand extends Command {
     }
   }
 
-  private _deepCloneWithNewIds(
-    node: ComponentNode,
-    doc: DocumentModel,
-  ): ComponentNode {
+  private _deepCloneWithNewIds(node: ComponentNode, doc: DocumentModel): ComponentNode {
     const clone = JSON.parse(JSON.stringify(node)) as ComponentNode;
 
     const replaceIds = (n: ComponentNode): void => {
@@ -313,9 +304,7 @@ export class DuplicateNodeCommand extends Command {
         for (const childId of n.children) {
           const child = doc.getNode(childId);
           if (child) {
-            const childClone = JSON.parse(
-              JSON.stringify(child),
-            ) as ComponentNode;
+            const childClone = JSON.parse(JSON.stringify(child)) as ComponentNode;
             replaceIds(childClone);
             doc._schema.nodesById[childClone.id] = childClone;
             newChildren.push(childClone.id);
@@ -331,9 +320,7 @@ export class DuplicateNodeCommand extends Command {
       for (const childId of clone.children) {
         const child = doc.getNode(childId);
         if (child) {
-          const childClone = JSON.parse(
-            JSON.stringify(child),
-          ) as ComponentNode;
+          const childClone = JSON.parse(JSON.stringify(child)) as ComponentNode;
           replaceIds(childClone);
           newChildren.push(childClone.id);
         }
@@ -396,9 +383,7 @@ export class SetNodePropsCommand extends Command {
   }
 
   canMerge(other: Command): boolean {
-    return (
-      other instanceof SetNodePropsCommand && other._nodeId === this._nodeId
-    );
+    return other instanceof SetNodePropsCommand && other._nodeId === this._nodeId;
   }
 
   merge(other: SetNodePropsCommand): SetNodePropsCommand {
@@ -456,9 +441,7 @@ export class SetNodeStyleCommand extends Command {
   }
 
   canMerge(other: Command): boolean {
-    return (
-      other instanceof SetNodeStyleCommand && other._nodeId === this._nodeId
-    );
+    return other instanceof SetNodeStyleCommand && other._nodeId === this._nodeId;
   }
 
   merge(other: SetNodeStyleCommand): SetNodeStyleCommand {
@@ -586,8 +569,7 @@ export class ToggleNodeVisibilityCommand extends Command {
     if (!node) return;
 
     this._oldHidden = node.hidden ?? false;
-    const newHidden =
-      this._targetHidden !== undefined ? this._targetHidden : !this._oldHidden;
+    const newHidden = this._targetHidden !== undefined ? this._targetHidden : !this._oldHidden;
 
     doc._updateNode(this._nodeId, { hidden: newHidden });
   }
@@ -621,8 +603,7 @@ export class ToggleNodeLockCommand extends Command {
     if (!node) return;
 
     this._oldLocked = node.locked ?? false;
-    const newLocked =
-      this._targetLocked !== undefined ? this._targetLocked : !this._oldLocked;
+    const newLocked = this._targetLocked !== undefined ? this._targetLocked : !this._oldLocked;
 
     doc._updateNode(this._nodeId, { locked: newLocked });
   }

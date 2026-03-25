@@ -3,14 +3,15 @@
  */
 
 import type { Ref, ShallowRef } from "vue";
-import type { DocumentModel } from "@/editor-core/document/DocumentModel";
-import type { History } from "@/editor-core/commands/History";
-import { UpdatePageCommand } from "@/editor-core/commands/pageCommands";
-import type { ProjectSchema } from "@/editor-core/document/types";
-import { mapPagesAfterRename, type PageListEntry } from "./page-crud-actions";
+import type { PageListEntry } from "./page-crud-actions";
 import type { PagesRefreshResult } from "./pages-sync-types";
+import type { History } from "@/editor-core/commands/History";
+import type { DocumentModel } from "@/editor-core/document/DocumentModel";
+import type { ProjectSchema } from "@/editor-core/document/types";
+import { UpdatePageCommand } from "@/editor-core/commands/pageCommands";
+import { mapPagesAfterRename } from "./page-crud-actions";
 
-export type PageMutationProjectApi = {
+export interface PageMutationProjectApi {
   deletePage: (
     pid: string,
     pageId: string,
@@ -22,15 +23,10 @@ export type PageMutationProjectApi = {
     targetGroupId: string | null,
     path?: string,
   ) => Promise<unknown>;
-  renamePage: (
-    pid: string,
-    pageId: string,
-    name: string,
-    path?: string,
-  ) => Promise<unknown>;
-};
+  renamePage: (pid: string, pageId: string, name: string, path?: string) => Promise<unknown>;
+}
 
-export type PageMutationStoreContext = {
+export interface PageMutationStoreContext {
   projectId: Ref<string>;
   currentPageId: Ref<string>;
   pages: Ref<PageListEntry[]>;
@@ -41,7 +37,7 @@ export type PageMutationStoreContext = {
   loadPage: (pageId: string) => Promise<{ ok: boolean; error?: Error }>;
   initEditor: (schema: ProjectSchema) => void;
   createBaseSchema: (projectId: string) => ProjectSchema;
-};
+}
 
 export async function deletePageForStore(
   ctx: PageMutationStoreContext,
@@ -56,13 +52,9 @@ export async function deletePageForStore(
   }
 
   await ctx.projectApi.deletePage(ctx.projectId.value, pageId, mode);
-  const { pages: pageList, entryConfig: entryConfigResp } =
-    await ctx.refreshPages();
+  const { pages: pageList, entryConfig: entryConfigResp } = await ctx.refreshPages();
 
-  if (
-    ctx.currentPageId.value &&
-    pageList.some((p) => p.id === ctx.currentPageId.value)
-  ) {
+  if (ctx.currentPageId.value && pageList.some((p) => p.id === ctx.currentPageId.value)) {
     return;
   }
 
@@ -82,10 +74,7 @@ export async function deletePageForStore(
 }
 
 export async function movePageToGroupForStore(
-  ctx: Pick<
-    PageMutationStoreContext,
-    "projectId" | "projectApi" | "refreshPages"
-  >,
+  ctx: Pick<PageMutationStoreContext, "projectId" | "projectApi" | "refreshPages">,
   pageId: string,
   targetGroupId: string | null,
   path?: string,
@@ -97,12 +86,7 @@ export async function movePageToGroupForStore(
     throw new Error("缺少页面信息");
   }
 
-  await ctx.projectApi.movePageToGroup(
-    ctx.projectId.value,
-    pageId,
-    targetGroupId,
-    path,
-  );
+  await ctx.projectApi.movePageToGroup(ctx.projectId.value, pageId, targetGroupId, path);
   await ctx.refreshPages();
 }
 
@@ -119,12 +103,7 @@ export async function renamePageForStore(
     throw new Error("缺少页面信息");
   }
 
-  await ctx.projectApi.renamePage(
-    ctx.projectId.value,
-    pageId,
-    name,
-    path,
-  );
+  await ctx.projectApi.renamePage(ctx.projectId.value, pageId, name, path);
 
   ctx.pages.value = mapPagesAfterRename(ctx.pages.value, pageId, name, path);
 

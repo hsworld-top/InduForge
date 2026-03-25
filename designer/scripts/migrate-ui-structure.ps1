@@ -35,7 +35,7 @@ if (Test-Path "Canvas\use-drag-state.js") {
   Move-Item -Path "Canvas\use-drag-state.js" -Destination "editors\page\canvas\composables\use-drag-state.js"
 }
 if (Test-Path "Canvas\DragDropManager.js") {
-  Move-Item -Path "Canvas\DragDropManager.js" -Destination "editors\page\canvas\services\DragDropManager.js"
+  Move-Item -Path "Canvas\DragDropManager.js" -Destination "editors\page\canvas\services\DragDropManager.ts"
 }
 if (Test-Path "Canvas\GridSnapping.js") {
   Move-Item -Path "Canvas\GridSnapping.js" -Destination "editors\page\canvas\services\GridSnapping.js"
@@ -98,7 +98,9 @@ if (Test-Path "RightPanel") {
 
 Remove-Item -Path "LeftPanel" -Recurse -Force -ErrorAction SilentlyContinue
 
-if (Test-Path "utils\component-methods.js") {
+if (Test-Path "utils\component-methods.ts") {
+  Move-Item -Path "utils\component-methods.ts" -Destination "shared\utils\component-methods.ts"
+} elseif (Test-Path "utils\component-methods.js") {
   Move-Item -Path "utils\component-methods.js" -Destination "shared\utils\component-methods.js"
 }
 Remove-Item -Path "utils" -Recurse -Force -ErrorAction SilentlyContinue

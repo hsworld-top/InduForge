@@ -8,10 +8,10 @@
  * 2. 在此处 import 并调用 registerDescriptor
  */
 
-import { registerDescriptor } from "./descriptors/registry";
-import { registerSimpleDescriptors } from "./descriptors/simple-descriptors";
-
 import { descriptor as ButtonDescriptor } from "./Button";
+import { registerDescriptor } from "./descriptors/registry";
+
+import { registerSimpleDescriptors } from "./descriptors/simple-descriptors";
 import { descriptor as HorizontalLayoutDescriptor } from "./HorizontalLayout";
 import { descriptor as VerticalLayoutDescriptor } from "./VerticalLayout";
 
@@ -28,26 +28,26 @@ export function registerAllDescriptors() {
 }
 
 export {
-  registerDescriptor,
-  getDescriptor,
-  hasDescriptor,
-  getRenderTag,
-  isContainerType,
-  getChildPositioning,
+  canAcceptChildByDescriptor,
   getChildFlowLayout,
+  getChildLayout,
+  getChildPositioning,
   getChildStyle,
-  isChildResizable,
-  resolveDescriptorContainerStyle,
-  getDisplayContent,
-  getRenderKey,
-  getPropsFilter,
   getCustomRenderer,
   getDefaultSize,
-  getChildLayout,
+  getDescriptor,
+  getDisplayContent,
+  getFlexDirection,
+  getPropsFilter,
+  getRenderKey,
+  getRenderTag,
+  hasDescriptor,
+  isChildResizable,
+  isContainerType,
   isFlexContainer,
   isLayoutContainerType,
   isLayoutType,
-  canAcceptChildByDescriptor,
   isRegionType,
-  getFlexDirection,
+  registerDescriptor,
+  resolveDescriptorContainerStyle,
 } from "./descriptors/registry";

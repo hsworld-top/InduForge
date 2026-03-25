@@ -3,7 +3,6 @@
  * 支持节点（node）和图形（graphic）两种元素类型
  */
 
-import { Command } from "./Command";
 import type { DocumentModel } from "../document/DocumentModel";
 import type {
   AbsolutePosition,
@@ -12,6 +11,7 @@ import type {
   LayoutItem,
   SelectableElement,
 } from "../document/types";
+import { Command } from "./Command";
 
 export interface Bounds {
   x: number;
@@ -20,23 +20,14 @@ export interface Bounds {
   height: number;
 }
 
-type AlignType =
-  | "left"
-  | "centerH"
-  | "right"
-  | "top"
-  | "centerV"
-  | "bottom";
+type AlignType = "left" | "centerH" | "right" | "top" | "centerV" | "bottom";
 
 /**
  * 从文档中读取元素的位置和尺寸
  * 按优先级：absolutePos → layoutItem.free.abs → style.left/top/width/height
  * 跳过 positioning === "flow" 的节点（流式布局不支持自由对齐）
  */
-function getElementBounds(
-  doc: DocumentModel,
-  element: SelectableElement,
-): Bounds | null {
+function getElementBounds(doc: DocumentModel, element: SelectableElement): Bounds | null {
   if (element.kind === "node") {
     const node = doc.getNode(element.id);
     if (!node) return null;
@@ -168,9 +159,7 @@ function applyPosition(
     }
     if (freeAbsLayout) {
       const nextLayoutItem = (
-        node.layoutItem
-          ? JSON.parse(JSON.stringify(node.layoutItem))
-          : {}
+        node.layoutItem ? JSON.parse(JSON.stringify(node.layoutItem)) : {}
       ) as LayoutItem;
       const prevFree = nextLayoutItem.free;
       const abs: AbsolutePosition = {
@@ -183,9 +172,7 @@ function applyPosition(
       nextLayoutItem.free = {
         mode: prevFree?.mode ?? "abs",
         abs,
-        ...(prevFree?.constraints
-          ? { constraints: prevFree.constraints }
-          : {}),
+        ...(prevFree?.constraints ? { constraints: prevFree.constraints } : {}),
         ...(prevFree?.z !== undefined ? { z: prevFree.z } : {}),
       };
       doc._updateNode(element.id, { layoutItem: nextLayoutItem });
@@ -239,35 +226,21 @@ function applySize(
     }
     if (freeAbsLayout) {
       const nextLayoutItem = (
-        node.layoutItem
-          ? JSON.parse(JSON.stringify(node.layoutItem))
-          : {}
+        node.layoutItem ? JSON.parse(JSON.stringify(node.layoutItem)) : {}
       ) as LayoutItem;
       const prevFree = nextLayoutItem.free;
       const base = prevFree?.abs ?? freeAbsLayout;
       const abs: AbsolutePosition = {
         x: Number.isFinite(base.x) ? base.x : 0,
         y: Number.isFinite(base.y) ? base.y : 0,
-        w:
-          newWidth !== null
-            ? newWidth
-            : Number.isFinite(base.w)
-              ? base.w
-              : 100,
-        h:
-          newHeight !== null
-            ? newHeight
-            : Number.isFinite(base.h)
-              ? base.h
-              : 100,
+        w: newWidth !== null ? newWidth : Number.isFinite(base.w) ? base.w : 100,
+        h: newHeight !== null ? newHeight : Number.isFinite(base.h) ? base.h : 100,
       };
       if (base.z !== undefined) abs.z = base.z;
       nextLayoutItem.free = {
         mode: prevFree?.mode ?? "abs",
         abs,
-        ...(prevFree?.constraints
-          ? { constraints: prevFree.constraints }
-          : {}),
+        ...(prevFree?.constraints ? { constraints: prevFree.constraints } : {}),
         ...(prevFree?.z !== undefined ? { z: prevFree.z } : {}),
       };
       doc._updateNode(element.id, { layoutItem: nextLayoutItem });
@@ -410,10 +383,7 @@ export class DistributeElementsCommand extends Command {
     return "DistributeElements";
   }
 
-  constructor(
-    elements: SelectableElement[],
-    direction: "horizontal" | "vertical",
-  ) {
+  constructor(elements: SelectableElement[], direction: "horizontal" | "vertical") {
     super();
     this._elements = elements;
     this._direction = direction;
@@ -434,7 +404,7 @@ export class DistributeElementsCommand extends Command {
     if (this._direction === "horizontal") {
       items.sort((a, b) => a.bounds.x - b.bounds.x);
       const firstH = items[0];
-      const lastH = items[items.length - 1];
+      const lastH = items.at(-1);
       if (!firstH || !lastH) return;
       const totalWidth = items.reduce((s, it) => s + it.bounds.width, 0);
       const rangeStart = firstH.bounds.x;
@@ -448,7 +418,7 @@ export class DistributeElementsCommand extends Command {
     } else {
       items.sort((a, b) => a.bounds.y - b.bounds.y);
       const firstV = items[0];
-      const lastV = items[items.length - 1];
+      const lastV = items.at(-1);
       if (!firstV || !lastV) return;
       const totalHeight = items.reduce((s, it) => s + it.bounds.height, 0);
       const rangeStart = firstV.bounds.y;
@@ -513,14 +483,8 @@ export class MatchSizeCommand extends Command {
       const b = this._oldBounds.get(el.id);
       if (!b) continue;
 
-      const newW =
-        this._mode === "width" || this._mode === "both"
-          ? refBounds.width
-          : null;
-      const newH =
-        this._mode === "height" || this._mode === "both"
-          ? refBounds.height
-          : null;
+      const newW = this._mode === "width" || this._mode === "both" ? refBounds.width : null;
+      const newH = this._mode === "height" || this._mode === "both" ? refBounds.height : null;
       applySize(doc, el, newW, newH);
     }
   }

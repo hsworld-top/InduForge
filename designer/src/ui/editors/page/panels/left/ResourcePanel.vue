@@ -2,24 +2,517 @@
   ResourcePanel - 资源面板
   管理工程资源（图片、字体等），支持文件夹、上传、预览、拖拽到画布
 -->
+<script setup>
+import { ElMessage, ElMessageBox } from "element-plus";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import IconEpGrid from "~icons/ep/grid";
+import IconEpList from "~icons/ep/list";
+import assetApi from "@/services/assetApi";
+import { useEditorStore } from "@/stores/editor-store";
+
+const editorStore = useEditorStore();
+const projectId = computed(() => editorStore.projectId || editorStore.project?.id || "");
+
+const folderSearch = ref("");
+const assetSearch = ref("");
+const folderTreeRef = ref(null);
+const moveTreeRef = ref(null);
+const fileInputRef = ref(null);
+
+const folders = ref([]);
+const assets = ref([]);
+const selectedFolderId = ref("root");
+const selectedFolderLabel = computed(() => {
+  if (selectedFolderId.value === "root") return "全部资源";
+  const found = folders.value.find((item) => item.id === selectedFolderId.value);
+  return found?.name || "全部资源";
+});
+
+const viewMode = ref("grid");
+
+const previewVisible = ref(false);
+const previewAsset = ref(null);
+const detailVisible = ref(false);
+const detailAsset = ref(null);
+
+const moveDialogVisible = ref(false);
+const moveAssetTarget = ref(null);
+const moveTargetFolderId = ref(null);
+
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  type: "asset",
+  asset: null,
+  folder: null,
+});
+
+const clipboardAsset = ref(null);
+const clipboardMode = ref(null);
+
+const contextMenuStyle = computed(() => ({
+  left: `${contextMenu.value.x}px`,
+  top: `${contextMenu.value.y}px`,
+}));
+
+async function adjustContextMenuPosition() {
+  await nextTick();
+  const menuEl = contextMenuRef.value;
+  if (!menuEl) return;
+  const rect = menuEl.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  let nextX = contextMenu.value.x;
+  let nextY = contextMenu.value.y;
+  const padding = 8;
+  if (rect.right > viewportWidth - padding) {
+    nextX = Math.max(padding, viewportWidth - rect.width - padding);
+  }
+  if (rect.bottom > viewportHeight - padding) {
+    nextY = Math.max(padding, viewportHeight - rect.height - padding);
+  }
+  if (nextX !== contextMenu.value.x || nextY !== contextMenu.value.y) {
+    contextMenu.value.x = nextX;
+    contextMenu.value.y = nextY;
+  }
+}
+
+async function handleCopyUrl(value) {
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    ElMessage.success("链接已复制");
+  } catch (error) {
+    ElMessage.error("复制失败");
+  }
+}
+function unwrapApiData(response) {
+  return response?.data?.data ?? response?.data ?? response;
+}
+
+function decodeAssetName(value) {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch (error) {
+    try {
+      return decodeURIComponent(escape(value));
+    } catch (err) {
+      return value;
+    }
+  }
+}
+
+function getAssetExt(asset) {
+  const name = asset?.displayName || asset?.name || asset?.originalName || "";
+  const index = name.lastIndexOf(".");
+  if (index > -1 && index < name.length - 1) {
+    return name.slice(index + 1).toLowerCase();
+  }
+  const mime = String(asset?.mimeType || "").toLowerCase();
+  if (mime.includes("/")) {
+    return mime.split("/").pop();
+  }
+  return asset?.type || "";
+}
+
+function formatSize(size) {
+  if (size === null || size === undefined || size === "") return "-";
+  const value = Number(size);
+  if (Number.isNaN(value)) return "-";
+  if (value === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let idx = 0;
+  let num = value;
+  while (num >= 1024 && idx < units.length - 1) {
+    num /= 1024;
+    idx += 1;
+  }
+  return `${num.toFixed(num >= 10 ? 0 : 1)} ${units[idx]}`;
+}
+
+function isImageAsset(asset) {
+  const type = asset?.type || "";
+  const ext = getAssetExt(asset);
+  if (type === "image" || type === "svg") return true;
+  return ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
+}
+
+function isPdfAsset(asset) {
+  const ext = getAssetExt(asset);
+  if (ext === "pdf") return true;
+  const mime = String(asset?.mimeType || "").toLowerCase();
+  return mime.includes("pdf");
+}
+
+function buildFolderTree(items) {
+  const list = Array.isArray(items) ? items : [];
+  const nodes = list.map((item) => ({
+    ...item,
+    label: decodeAssetName(item.name || "未命名文件夹"),
+    type: "folder",
+    children: [],
+  }));
+  const map = new Map(nodes.map((item) => [item.id, item]));
+  const root = {
+    id: "root",
+    label: "全部资源",
+    type: "root",
+    children: [],
+  };
+  nodes.forEach((node) => {
+    if (node.parentId && map.has(node.parentId)) {
+      map.get(node.parentId).children.push(node);
+    } else {
+      root.children.push(node);
+    }
+  });
+  return [root];
+}
+
+const folderTree = computed(() => buildFolderTree(folders.value));
+
+const filteredFolderTree = computed(() => folderTree.value);
+
+function filterFolderNode(value, data) {
+  if (!value) return true;
+  return String(data?.label || "")
+    .toLowerCase()
+    .includes(String(value).toLowerCase());
+}
+
+watch(folderSearch, () => {
+  folderTreeRef.value?.filter?.(folderSearch.value);
+});
+
+const normalizedAssets = computed(() =>
+  (assets.value || []).map((asset) => {
+    const displayName = decodeAssetName(asset.name || asset.originalName || "");
+    return {
+      ...asset,
+      displayName,
+      ext: getAssetExt({ ...asset, displayName }),
+      size: Number(
+        asset.size ??
+          asset.fileSize ??
+          asset.file_size ??
+          asset.length ??
+          asset.bytes ??
+          asset.metadata?.size ??
+          asset.metadata?.fileSize ??
+          asset.metadata?.length ??
+          0,
+      ),
+    };
+  }),
+);
+
+const filteredAssets = computed(() => {
+  let list = normalizedAssets.value;
+  if (selectedFolderId.value !== "root") {
+    list = list.filter((item) => item.folderId === selectedFolderId.value);
+  }
+  if (assetSearch.value) {
+    const keyword = assetSearch.value.toLowerCase();
+    list = list.filter((item) => item.displayName.toLowerCase().includes(keyword));
+  }
+  return list;
+});
+
+function handleFolderClick(data) {
+  if (!data) return;
+  selectedFolderId.value = data.id;
+}
+
+function handleFolderContextMenu(event, data) {
+  if (!data) return;
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    type: "folder",
+    folder: data,
+    asset: null,
+  };
+}
+
+function openAssetContextMenu(event, asset) {
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    type: "asset",
+    asset,
+    folder: null,
+  };
+}
+
+function closeContextMenu() {
+  contextMenu.value.visible = false;
+}
+
+function handlePreviewContext() {
+  if (contextMenu.value.asset) openPreview(contextMenu.value.asset);
+  closeContextMenu();
+}
+
+function handleDetailContext() {
+  if (contextMenu.value.asset) {
+    detailAsset.value = contextMenu.value.asset;
+    detailVisible.value = true;
+  }
+  closeContextMenu();
+}
+
+async function handleCreateFolder() {
+  closeContextMenu();
+  if (!projectId.value) return;
+  const result = await ElMessageBox.prompt("请输入文件夹名称", "新建文件夹", {
+    confirmButtonText: "确定",
+    cancelButtonText: "取消",
+    inputPlaceholder: "文件夹名称",
+  }).catch(() => null);
+  if (!result?.value) return;
+  await assetApi.createFolder(projectId.value, {
+    name: result.value,
+    parentId:
+      contextMenu.value.folder?.id && contextMenu.value.folder?.id !== "root"
+        ? contextMenu.value.folder.id
+        : null,
+  });
+  await loadFolders();
+}
+
+async function handleRenameFolder() {
+  const folder = contextMenu.value.folder;
+  closeContextMenu();
+  if (!folder || folder.id === "root") return;
+  const result = await ElMessageBox.prompt("请输入新的文件夹名称", "重命名", {
+    confirmButtonText: "确定",
+    cancelButtonText: "取消",
+    inputValue: folder.label,
+  }).catch(() => null);
+  if (!result?.value) return;
+  await assetApi.renameFolder(projectId.value, folder.id, {
+    name: result.value,
+  });
+  await loadFolders();
+}
+
+async function handleDeleteFolder() {
+  const folder = contextMenu.value.folder;
+  closeContextMenu();
+  if (!folder || folder.id === "root") return;
+  await ElMessageBox.confirm("确认删除该文件夹吗？删除后无法恢复。", "删除确认", {
+    type: "warning",
+  }).catch(() => null);
+  await assetApi.deleteFolder(projectId.value, folder.id);
+  await loadFolders();
+  await loadAssets();
+}
+
+async function handleRenameAsset() {
+  const asset = contextMenu.value.asset;
+  closeContextMenu();
+  if (!asset) return;
+  const result = await ElMessageBox.prompt("请输入新的资源名称", "重命名", {
+    confirmButtonText: "确定",
+    cancelButtonText: "取消",
+    inputValue: asset.displayName,
+  }).catch(() => null);
+  if (!result?.value) return;
+  await assetApi.updateAsset(projectId.value, asset.id, { name: result.value });
+  await loadAssets();
+}
+
+async function handleDeleteAsset() {
+  const asset = contextMenu.value.asset;
+  closeContextMenu();
+  if (!asset) return;
+  await ElMessageBox.confirm("确认删除该资源吗？", "删除确认", {
+    type: "warning",
+  }).catch(() => null);
+  await assetApi.deleteAsset(projectId.value, asset.id);
+  await loadAssets();
+}
+
+function handleCopyAsset() {
+  clipboardAsset.value = contextMenu.value.asset;
+  clipboardMode.value = "copy";
+  closeContextMenu();
+}
+
+function handleCutAsset() {
+  clipboardAsset.value = contextMenu.value.asset;
+  clipboardMode.value = "cut";
+  closeContextMenu();
+}
+
+async function handlePasteAsset() {
+  const targetFolderId = contextMenu.value.folder?.id || selectedFolderId.value;
+  if (!clipboardAsset.value || !projectId.value) return;
+  const folderId = targetFolderId === "root" ? null : targetFolderId;
+  if (clipboardMode.value === "copy") {
+    await assetApi.copyAsset(projectId.value, clipboardAsset.value.id, {
+      folderId,
+    });
+  } else if (clipboardMode.value === "cut") {
+    await assetApi.updateAsset(projectId.value, clipboardAsset.value.id, {
+      folderId,
+    });
+    clipboardAsset.value = null;
+    clipboardMode.value = null;
+  }
+  closeContextMenu();
+  await loadAssets();
+}
+
+function handleMoveAsset() {
+  moveTargetFolderId.value = selectedFolderId.value;
+  moveAssetTarget.value = contextMenu.value.asset;
+  moveDialogVisible.value = true;
+  closeContextMenu();
+}
+
+function handleMoveFolderSelect(data) {
+  moveTargetFolderId.value = data?.id;
+}
+
+async function confirmMove() {
+  const asset = moveAssetTarget.value || clipboardAsset.value;
+  if (!asset) return;
+  const folderId = moveTargetFolderId.value === "root" ? null : moveTargetFolderId.value;
+  await assetApi.updateAsset(projectId.value, asset.id, { folderId });
+  moveDialogVisible.value = false;
+  moveAssetTarget.value = null;
+  await loadAssets();
+}
+
+function openPreview(asset) {
+  previewAsset.value = asset;
+  previewVisible.value = true;
+}
+
+function triggerFileSelect() {
+  fileInputRef.value?.click?.();
+}
+
+async function handleFileInputChange(event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = "";
+  if (!files.length) return;
+  await uploadFiles(files, selectedFolderId.value === "root" ? null : selectedFolderId.value);
+}
+
+async function handleUploadDrop(event) {
+  const files = Array.from(event.dataTransfer?.files || []);
+  if (!files.length) return;
+  await uploadFiles(files, selectedFolderId.value === "root" ? null : selectedFolderId.value);
+}
+
+function handleDropToFolder(folder) {
+  return async (event) => {
+    const files = Array.from(event.dataTransfer?.files || []);
+    if (files.length) {
+      await uploadFiles(files, folder.id === "root" ? null : folder.id);
+      return;
+    }
+    const assetId = event.dataTransfer?.getData("asset-id");
+    if (assetId) {
+      await assetApi.updateAsset(projectId.value, assetId, {
+        folderId: folder.id === "root" ? null : folder.id,
+      });
+      await loadAssets();
+    }
+  };
+}
+
+function handleAssetDragStart(asset, event) {
+  if (!asset) return;
+  const dataTransfer = event?.dataTransfer;
+  if (dataTransfer) {
+    dataTransfer.setData("asset-id", asset.id);
+  }
+}
+
+async function uploadFiles(files, folderId) {
+  if (!projectId.value || !files.length) return;
+  const duplicated = files.some((file) =>
+    normalizedAssets.value.some(
+      (asset) => asset.displayName === file.name && (asset.folderId || null) === (folderId || null),
+    ),
+  );
+  let conflictStrategy = "rename";
+  if (duplicated) {
+    const result = await ElMessageBox.confirm("存在同名资源，是否替换？", "上传冲突", {
+      confirmButtonText: "替换",
+      cancelButtonText: "重命名",
+      type: "warning",
+    }).catch(() => null);
+    conflictStrategy = result ? "replace" : "rename";
+  }
+  await assetApi.uploadAssets(projectId.value, files, folderId, {
+    conflictStrategy,
+  });
+  ElMessage.success("上传成功");
+  await loadAssets();
+}
+
+async function loadFolders() {
+  if (!projectId.value) return;
+  const response = await assetApi.getFolders(projectId.value);
+  const data = unwrapApiData(response);
+  const rawFolders = data?.folders;
+  folders.value = Array.isArray(rawFolders) ? rawFolders : [];
+}
+
+async function loadAssets() {
+  if (!projectId.value) return;
+  const response = await assetApi.getAssets(projectId.value);
+  const data = unwrapApiData(response);
+  const rawAssets = data?.assets;
+  assets.value = Array.isArray(rawAssets) ? rawAssets : [];
+}
+
+function handleGlobalClick(event) {
+  const menu = document.querySelector(".context-menu");
+  if (menu && !menu.contains(event.target)) {
+    closeContextMenu();
+  }
+}
+
+onMounted(() => {
+  document.addEventListener("click", handleGlobalClick);
+  if (projectId.value) {
+    loadFolders();
+    loadAssets();
+  }
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("click", handleGlobalClick);
+});
+
+watch(projectId, (value) => {
+  if (value) {
+    loadFolders();
+    loadAssets();
+  }
+});
+</script>
+
 <template>
   <div class="resource-panel" @contextmenu.prevent>
     <div class="resource-search">
-      <el-input
-        v-model="folderSearch"
-        size="small"
-        placeholder="搜索分组"
-        clearable
-      />
+      <el-input v-model="folderSearch" size="small" placeholder="搜索分组" clearable />
     </div>
 
     <div class="resource-layout">
       <div class="resource-folders">
         <div class="pane-title">
           <span>资源分组</span>
-          <el-button size="small" text @click="handleCreateFolder"
-            >新建文件夹</el-button
-          >
+          <el-button size="small" text @click="handleCreateFolder">新建文件夹</el-button>
         </div>
         <el-scrollbar class="folder-scroll">
           <el-tree
@@ -42,9 +535,7 @@
                 @drop.prevent="handleDropToFolder(data)"
               >
                 <span class="folder-icon">📁</span>
-                <span class="folder-label" :title="data.label">{{
-                  data.label
-                }}</span>
+                <span class="folder-label" :title="data.label">{{ data.label }}</span>
               </div>
             </template>
           </el-tree>
@@ -123,9 +614,7 @@
               @dblclick="openPreview(asset)"
               @contextmenu.prevent.stop="openAssetContextMenu($event, asset)"
             >
-              <span class="col-name" :title="asset.displayName">{{
-                asset.displayName
-              }}</span>
+              <span class="col-name" :title="asset.displayName">{{ asset.displayName }}</span>
               <span class="col-type">{{ asset.ext || asset.type || "-" }}</span>
               <span class="col-size">{{ formatSize(asset.size) }}</span>
             </div>
@@ -161,11 +650,7 @@
       @change="handleFileInputChange"
     />
 
-    <div
-      v-if="contextMenu.visible"
-      class="context-menu"
-      :style="contextMenuStyle"
-    >
+    <div v-if="contextMenu.visible" class="context-menu" :style="contextMenuStyle">
       <template v-if="contextMenu.type === 'asset'">
         <div class="context-item" @click="handlePreviewContext">预览</div>
         <div class="context-item" @click="handleDetailContext">查看详情</div>
@@ -173,11 +658,7 @@
         <div class="context-item" @click="handleMoveAsset">移动</div>
         <div class="context-item" @click="handleCopyAsset">复制</div>
         <div class="context-item" @click="handleCutAsset">剪切</div>
-        <div
-          class="context-item"
-          @click="handlePasteAsset"
-          :class="{ disabled: !clipboardAsset }"
-        >
+        <div class="context-item" :class="{ disabled: !clipboardAsset }" @click="handlePasteAsset">
           粘贴
         </div>
         <div class="context-item danger" @click="handleDeleteAsset">删除</div>
@@ -185,11 +666,7 @@
       <template v-else>
         <div class="context-item" @click="handleCreateFolder">新建文件夹</div>
         <div class="context-item" @click="handleRenameFolder">重命名</div>
-        <div
-          class="context-item"
-          @click="handlePasteAsset"
-          :class="{ disabled: !clipboardAsset }"
-        >
+        <div class="context-item" :class="{ disabled: !clipboardAsset }" @click="handlePasteAsset">
           粘贴
         </div>
         <div class="context-item danger" @click="handleDeleteFolder">删除</div>
@@ -227,13 +704,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog
-      v-model="detailVisible"
-      title="资源详情"
-      width="520px"
-      top="30vh"
-      append-to-body
-    >
+    <el-dialog v-model="detailVisible" title="资源详情" width="520px" top="30vh" append-to-body>
       <div v-if="detailAsset" class="detail-body">
         <div class="detail-row">
           <span>名称</span><span>{{ detailAsset.displayName }}</span>
@@ -260,12 +731,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog
-      v-model="moveDialogVisible"
-      title="移动到"
-      width="420px"
-      append-to-body
-    >
+    <el-dialog v-model="moveDialogVisible" title="移动到" width="420px" append-to-body>
       <el-tree
         ref="moveTreeRef"
         class="folder-tree"
@@ -279,9 +745,7 @@
         <template #default="{ data }">
           <div class="folder-node">
             <span class="folder-icon">📁</span>
-            <span class="folder-label" :title="data.label">{{
-              data.label
-            }}</span>
+            <span class="folder-label" :title="data.label">{{ data.label }}</span>
           </div>
         </template>
       </el-tree>
@@ -292,533 +756,6 @@
     </el-dialog>
   </div>
 </template>
-
-<script setup>
-import {
-  ref,
-  computed,
-  onMounted,
-  onBeforeUnmount,
-  watch,
-  nextTick,
-} from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-import IconEpGrid from "~icons/ep/grid";
-import IconEpList from "~icons/ep/list";
-import { useEditorStore } from "@/stores/editor-store";
-import assetApi from "@/services/assetApi";
-
-const editorStore = useEditorStore();
-const projectId = computed(
-  () => editorStore.projectId || editorStore.project?.id || "",
-);
-
-const folderSearch = ref("");
-const assetSearch = ref("");
-const folderTreeRef = ref(null);
-const moveTreeRef = ref(null);
-const fileInputRef = ref(null);
-
-const folders = ref([]);
-const assets = ref([]);
-const selectedFolderId = ref("root");
-const selectedFolderLabel = computed(() => {
-  if (selectedFolderId.value === "root") return "全部资源";
-  const found = folders.value.find(
-    (item) => item.id === selectedFolderId.value,
-  );
-  return found?.name || "全部资源";
-});
-
-const viewMode = ref("grid");
-
-const previewVisible = ref(false);
-const previewAsset = ref(null);
-const detailVisible = ref(false);
-const detailAsset = ref(null);
-
-const moveDialogVisible = ref(false);
-const moveAssetTarget = ref(null);
-const moveTargetFolderId = ref(null);
-
-const contextMenu = ref({
-  visible: false,
-  x: 0,
-  y: 0,
-  type: "asset",
-  asset: null,
-  folder: null,
-});
-
-const clipboardAsset = ref(null);
-const clipboardMode = ref(null);
-
-const contextMenuStyle = computed(() => ({
-  left: `${contextMenu.value.x}px`,
-  top: `${contextMenu.value.y}px`,
-}));
-
-const adjustContextMenuPosition = async () => {
-  await nextTick();
-  const menuEl = contextMenuRef.value;
-  if (!menuEl) return;
-  const rect = menuEl.getBoundingClientRect();
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  let nextX = contextMenu.value.x;
-  let nextY = contextMenu.value.y;
-  const padding = 8;
-  if (rect.right > viewportWidth - padding) {
-    nextX = Math.max(padding, viewportWidth - rect.width - padding);
-  }
-  if (rect.bottom > viewportHeight - padding) {
-    nextY = Math.max(padding, viewportHeight - rect.height - padding);
-  }
-  if (nextX !== contextMenu.value.x || nextY !== contextMenu.value.y) {
-    contextMenu.value.x = nextX;
-    contextMenu.value.y = nextY;
-  }
-};
-
-const handleCopyUrl = async (value) => {
-  if (!value) return;
-  try {
-    await navigator.clipboard.writeText(value);
-    ElMessage.success("链接已复制");
-  } catch (error) {
-    ElMessage.error("复制失败");
-  }
-};
-const unwrapApiData = (response) =>
-  response?.data?.data ?? response?.data ?? response;
-
-const decodeAssetName = (value) => {
-  if (!value) return "";
-  try {
-    return decodeURIComponent(value);
-  } catch (error) {
-    try {
-      return decodeURIComponent(escape(value));
-    } catch (err) {
-      return value;
-    }
-  }
-};
-
-const getAssetExt = (asset) => {
-  const name = asset?.displayName || asset?.name || asset?.originalName || "";
-  const index = name.lastIndexOf(".");
-  if (index > -1 && index < name.length - 1) {
-    return name.slice(index + 1).toLowerCase();
-  }
-  const mime = String(asset?.mimeType || "").toLowerCase();
-  if (mime.includes("/")) {
-    return mime.split("/").pop();
-  }
-  return asset?.type || "";
-};
-
-const formatSize = (size) => {
-  if (size === null || size === undefined || size === "") return "-";
-  const value = Number(size);
-  if (Number.isNaN(value)) return "-";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let idx = 0;
-  let num = value;
-  while (num >= 1024 && idx < units.length - 1) {
-    num /= 1024;
-    idx += 1;
-  }
-  return `${num.toFixed(num >= 10 ? 0 : 1)} ${units[idx]}`;
-};
-
-const isImageAsset = (asset) => {
-  const type = asset?.type || "";
-  const ext = getAssetExt(asset);
-  if (type === "image" || type === "svg") return true;
-  return ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
-};
-
-const isPdfAsset = (asset) => {
-  const ext = getAssetExt(asset);
-  if (ext === "pdf") return true;
-  const mime = String(asset?.mimeType || "").toLowerCase();
-  return mime.includes("pdf");
-};
-
-const buildFolderTree = (items) => {
-  const list = Array.isArray(items) ? items : [];
-  const nodes = list.map((item) => ({
-    ...item,
-    label: decodeAssetName(item.name || "未命名文件夹"),
-    type: "folder",
-    children: [],
-  }));
-  const map = new Map(nodes.map((item) => [item.id, item]));
-  const root = {
-    id: "root",
-    label: "全部资源",
-    type: "root",
-    children: [],
-  };
-  nodes.forEach((node) => {
-    if (node.parentId && map.has(node.parentId)) {
-      map.get(node.parentId).children.push(node);
-    } else {
-      root.children.push(node);
-    }
-  });
-  return [root];
-};
-
-const folderTree = computed(() => buildFolderTree(folders.value));
-
-const filteredFolderTree = computed(() => folderTree.value);
-
-const filterFolderNode = (value, data) => {
-  if (!value) return true;
-  return String(data?.label || "")
-    .toLowerCase()
-    .includes(String(value).toLowerCase());
-};
-
-watch(folderSearch, () => {
-  folderTreeRef.value?.filter?.(folderSearch.value);
-});
-
-const normalizedAssets = computed(() =>
-  (assets.value || []).map((asset) => {
-    const displayName = decodeAssetName(asset.name || asset.originalName || "");
-    return {
-      ...asset,
-      displayName,
-      ext: getAssetExt({ ...asset, displayName }),
-      size: Number(
-        asset.size ??
-          asset.fileSize ??
-          asset.file_size ??
-          asset.length ??
-          asset.bytes ??
-          asset.metadata?.size ??
-          asset.metadata?.fileSize ??
-          asset.metadata?.length ??
-          0,
-      ),
-    };
-  }),
-);
-
-const filteredAssets = computed(() => {
-  let list = normalizedAssets.value;
-  if (selectedFolderId.value !== "root") {
-    list = list.filter((item) => item.folderId === selectedFolderId.value);
-  }
-  if (assetSearch.value) {
-    const keyword = assetSearch.value.toLowerCase();
-    list = list.filter((item) =>
-      item.displayName.toLowerCase().includes(keyword),
-    );
-  }
-  return list;
-});
-
-const handleFolderClick = (data) => {
-  if (!data) return;
-  selectedFolderId.value = data.id;
-};
-
-const handleFolderContextMenu = (event, data) => {
-  if (!data) return;
-  contextMenu.value = {
-    visible: true,
-    x: event.clientX,
-    y: event.clientY,
-    type: "folder",
-    folder: data,
-    asset: null,
-  };
-};
-
-const openAssetContextMenu = (event, asset) => {
-  contextMenu.value = {
-    visible: true,
-    x: event.clientX,
-    y: event.clientY,
-    type: "asset",
-    asset,
-    folder: null,
-  };
-};
-
-const closeContextMenu = () => {
-  contextMenu.value.visible = false;
-};
-
-const handlePreviewContext = () => {
-  if (contextMenu.value.asset) openPreview(contextMenu.value.asset);
-  closeContextMenu();
-};
-
-const handleDetailContext = () => {
-  if (contextMenu.value.asset) {
-    detailAsset.value = contextMenu.value.asset;
-    detailVisible.value = true;
-  }
-  closeContextMenu();
-};
-
-const handleCreateFolder = async () => {
-  closeContextMenu();
-  if (!projectId.value) return;
-  const result = await ElMessageBox.prompt("请输入文件夹名称", "新建文件夹", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputPlaceholder: "文件夹名称",
-  }).catch(() => null);
-  if (!result?.value) return;
-  await assetApi.createFolder(projectId.value, {
-    name: result.value,
-    parentId:
-      contextMenu.value.folder?.id && contextMenu.value.folder?.id !== "root"
-        ? contextMenu.value.folder.id
-        : null,
-  });
-  await loadFolders();
-};
-
-const handleRenameFolder = async () => {
-  const folder = contextMenu.value.folder;
-  closeContextMenu();
-  if (!folder || folder.id === "root") return;
-  const result = await ElMessageBox.prompt("请输入新的文件夹名称", "重命名", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputValue: folder.label,
-  }).catch(() => null);
-  if (!result?.value) return;
-  await assetApi.renameFolder(projectId.value, folder.id, {
-    name: result.value,
-  });
-  await loadFolders();
-};
-
-const handleDeleteFolder = async () => {
-  const folder = contextMenu.value.folder;
-  closeContextMenu();
-  if (!folder || folder.id === "root") return;
-  await ElMessageBox.confirm(
-    "确认删除该文件夹吗？删除后无法恢复。",
-    "删除确认",
-    {
-      type: "warning",
-    },
-  ).catch(() => null);
-  await assetApi.deleteFolder(projectId.value, folder.id);
-  await loadFolders();
-  await loadAssets();
-};
-
-const handleRenameAsset = async () => {
-  const asset = contextMenu.value.asset;
-  closeContextMenu();
-  if (!asset) return;
-  const result = await ElMessageBox.prompt("请输入新的资源名称", "重命名", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputValue: asset.displayName,
-  }).catch(() => null);
-  if (!result?.value) return;
-  await assetApi.updateAsset(projectId.value, asset.id, { name: result.value });
-  await loadAssets();
-};
-
-const handleDeleteAsset = async () => {
-  const asset = contextMenu.value.asset;
-  closeContextMenu();
-  if (!asset) return;
-  await ElMessageBox.confirm("确认删除该资源吗？", "删除确认", {
-    type: "warning",
-  }).catch(() => null);
-  await assetApi.deleteAsset(projectId.value, asset.id);
-  await loadAssets();
-};
-
-const handleCopyAsset = () => {
-  clipboardAsset.value = contextMenu.value.asset;
-  clipboardMode.value = "copy";
-  closeContextMenu();
-};
-
-const handleCutAsset = () => {
-  clipboardAsset.value = contextMenu.value.asset;
-  clipboardMode.value = "cut";
-  closeContextMenu();
-};
-
-const handlePasteAsset = async () => {
-  const targetFolderId = contextMenu.value.folder?.id || selectedFolderId.value;
-  if (!clipboardAsset.value || !projectId.value) return;
-  const folderId = targetFolderId === "root" ? null : targetFolderId;
-  if (clipboardMode.value === "copy") {
-    await assetApi.copyAsset(projectId.value, clipboardAsset.value.id, {
-      folderId,
-    });
-  } else if (clipboardMode.value === "cut") {
-    await assetApi.updateAsset(projectId.value, clipboardAsset.value.id, {
-      folderId,
-    });
-    clipboardAsset.value = null;
-    clipboardMode.value = null;
-  }
-  closeContextMenu();
-  await loadAssets();
-};
-
-const handleMoveAsset = () => {
-  moveTargetFolderId.value = selectedFolderId.value;
-  moveAssetTarget.value = contextMenu.value.asset;
-  moveDialogVisible.value = true;
-  closeContextMenu();
-};
-
-const handleMoveFolderSelect = (data) => {
-  moveTargetFolderId.value = data?.id;
-};
-
-const confirmMove = async () => {
-  const asset = moveAssetTarget.value || clipboardAsset.value;
-  if (!asset) return;
-  const folderId =
-    moveTargetFolderId.value === "root" ? null : moveTargetFolderId.value;
-  await assetApi.updateAsset(projectId.value, asset.id, { folderId });
-  moveDialogVisible.value = false;
-  moveAssetTarget.value = null;
-  await loadAssets();
-};
-
-const openPreview = (asset) => {
-  previewAsset.value = asset;
-  previewVisible.value = true;
-};
-
-const triggerFileSelect = () => {
-  fileInputRef.value?.click?.();
-};
-
-const handleFileInputChange = async (event) => {
-  const files = Array.from(event.target.files || []);
-  event.target.value = "";
-  if (!files.length) return;
-  await uploadFiles(
-    files,
-    selectedFolderId.value === "root" ? null : selectedFolderId.value,
-  );
-};
-
-const handleUploadDrop = async (event) => {
-  const files = Array.from(event.dataTransfer?.files || []);
-  if (!files.length) return;
-  await uploadFiles(
-    files,
-    selectedFolderId.value === "root" ? null : selectedFolderId.value,
-  );
-};
-
-const handleDropToFolder = (folder) => async (event) => {
-  const files = Array.from(event.dataTransfer?.files || []);
-  if (files.length) {
-    await uploadFiles(files, folder.id === "root" ? null : folder.id);
-    return;
-  }
-  const assetId = event.dataTransfer?.getData("asset-id");
-  if (assetId) {
-    await assetApi.updateAsset(projectId.value, assetId, {
-      folderId: folder.id === "root" ? null : folder.id,
-    });
-    await loadAssets();
-  }
-};
-
-const handleAssetDragStart = (asset, event) => {
-  if (!asset) return;
-  const dataTransfer = event?.dataTransfer;
-  if (dataTransfer) {
-    dataTransfer.setData("asset-id", asset.id);
-  }
-};
-
-const uploadFiles = async (files, folderId) => {
-  if (!projectId.value || !files.length) return;
-  const duplicated = files.some((file) =>
-    normalizedAssets.value.some(
-      (asset) =>
-        asset.displayName === file.name &&
-        (asset.folderId || null) === (folderId || null),
-    ),
-  );
-  let conflictStrategy = "rename";
-  if (duplicated) {
-    const result = await ElMessageBox.confirm(
-      "存在同名资源，是否替换？",
-      "上传冲突",
-      {
-        confirmButtonText: "替换",
-        cancelButtonText: "重命名",
-        type: "warning",
-      },
-    ).catch(() => null);
-    conflictStrategy = result ? "replace" : "rename";
-  }
-  await assetApi.uploadAssets(projectId.value, files, folderId, {
-    conflictStrategy,
-  });
-  ElMessage.success("上传成功");
-  await loadAssets();
-};
-
-const loadFolders = async () => {
-  if (!projectId.value) return;
-  const response = await assetApi.getFolders(projectId.value);
-  const data = unwrapApiData(response);
-  const rawFolders = data?.folders;
-  folders.value = Array.isArray(rawFolders) ? rawFolders : [];
-};
-
-const loadAssets = async () => {
-  if (!projectId.value) return;
-  const response = await assetApi.getAssets(projectId.value);
-  const data = unwrapApiData(response);
-  const rawAssets = data?.assets;
-  assets.value = Array.isArray(rawAssets) ? rawAssets : [];
-};
-
-const handleGlobalClick = (event) => {
-  const menu = document.querySelector(".context-menu");
-  if (menu && !menu.contains(event.target)) {
-    closeContextMenu();
-  }
-};
-
-onMounted(() => {
-  document.addEventListener("click", handleGlobalClick);
-  if (projectId.value) {
-    loadFolders();
-    loadAssets();
-  }
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("click", handleGlobalClick);
-});
-
-watch(projectId, (value) => {
-  if (value) {
-    loadFolders();
-    loadAssets();
-  }
-});
-</script>
 
 <style scoped>
 .resource-panel {

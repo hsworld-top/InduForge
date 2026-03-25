@@ -1,6 +1,6 @@
+import type { EntryConfigFromApi } from "./pages-sync-types";
 import type { DocumentModel } from "@/editor-core/document/DocumentModel.ts";
 import type { EntryConfig } from "@/editor-core/document/types";
-import type { EntryConfigFromApi } from "./pages-sync-types";
 
 /**
  * 将入口配置补丁应用到文档（空对象/无文档时跳过）

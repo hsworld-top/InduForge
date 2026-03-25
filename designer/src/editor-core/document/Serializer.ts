@@ -3,15 +3,15 @@
  * 负责 Schema 的导入导出、版本迁移和差量补丁
  */
 
-import { DocumentModel } from "./DocumentModel";
 import type {
-  ProjectSchema,
-  Patch,
-  PatchOp,
-  PageNode,
   ComponentNode,
   GraphicNode,
-} from "./types.js";
+  PageNode,
+  Patch,
+  PatchOp,
+  ProjectSchema,
+} from "./types.ts";
+import { DocumentModel } from "./DocumentModel";
 
 export interface SerializerOptions {
   prettyPrint?: boolean;
@@ -68,7 +68,7 @@ export class Serializer {
    * 导出指定页面
    * @param {DocumentModel} doc - 文档模型
    * @param {string} pageId - 页面 ID
-   * @returns {Object} 页面数据（包含页面节点和相关组件/图形）
+   * @returns {object} 页面数据（包含页面节点和相关组件/图形）
    */
   exportPage(doc: DocumentModel, pageId: string): ExportedPagePayload {
     const page = doc.getPage(pageId);
@@ -130,7 +130,7 @@ export class Serializer {
 
   /**
    * 从 Schema 对象导入
-   * @param {Object} schema - Schema 对象
+   * @param {object} schema - Schema 对象
    * @returns {DocumentModel}
    */
   importFromSchema(schema: ProjectSchema): DocumentModel {
@@ -144,9 +144,9 @@ export class Serializer {
   /**
    * 导入页面到现有文档
    * @param {DocumentModel} doc - 目标文档模型
-   * @param {Object} pageData - 页面数据（来自 exportPage）
-   * @param {Object} [options] - 导入选项
-   * @param {boolean} [options.generateNewIds=true] - 是否生成新 ID
+   * @param {object} pageData - 页面数据（来自 exportPage）
+   * @param {object} [options] - 导入选项
+   * @param {boolean} [options.generateNewIds] - 是否生成新 ID
    * @returns {string} 导入后的页面 ID
    */
   importPage(
@@ -162,30 +162,25 @@ export class Serializer {
     // 生成新 ID 映射
     if (generateNewIds) {
       // 页面 ID
-      const newPageId =
-        "page_" + crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+      const newPageId = `page_${crypto.randomUUID().replace(/-/g, "").substring(0, 8)}`;
       idMap.set(page.id, newPageId);
       page.id = newPageId;
 
       // 节点 ID
       for (const nodeId of Object.keys(nodesById)) {
-        const newNodeId =
-          "node_" + crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+        const newNodeId = `node_${crypto.randomUUID().replace(/-/g, "").substring(0, 8)}`;
         idMap.set(nodeId, newNodeId);
       }
 
       // 图形 ID
       for (const graphicId of Object.keys(graphicsById)) {
-        const newGraphicId =
-          "gfx_" + crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+        const newGraphicId = `gfx_${crypto.randomUUID().replace(/-/g, "").substring(0, 8)}`;
         idMap.set(graphicId, newGraphicId);
       }
 
       // 更新引用
       page.rootNodeId = idMap.get(page.rootNodeId) || page.rootNodeId;
-      page.graphicsIds = (page.graphicsIds || []).map(
-        (id) => idMap.get(id) || id,
-      );
+      page.graphicsIds = (page.graphicsIds || []).map((id) => idMap.get(id) || id);
 
       // 更新节点
       const newNodesById: Record<string, ComponentNode> = {};
@@ -293,7 +288,7 @@ export class Serializer {
 
   /**
    * 序列化为 JSON 字符串
-   * @param {Object} obj
+   * @param {object} obj
    * @returns {string}
    * @private
    */
@@ -304,7 +299,7 @@ export class Serializer {
   /**
    * 解析 JSON 字符串
    * @param {string} json
-   * @returns {Object}
+   * @returns {object}
    * @private
    */
   _parse(json: string): unknown {
@@ -371,7 +366,7 @@ export class Serializer {
 
   /**
    * 应用单个操作
-   * @param {Object} obj
+   * @param {object} obj
    * @param {PatchOp} op
    * @private
    */
@@ -386,10 +381,7 @@ export class Serializer {
       return;
     }
 
-    let target: Record<string, unknown> = obj as unknown as Record<
-      string,
-      unknown
-    >;
+    let target: Record<string, unknown> = obj as unknown as Record<string, unknown>;
     for (const part of pathParts) {
       if (target[part] === undefined || typeof target[part] !== "object") {
         target[part] = {};

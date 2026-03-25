@@ -2,8 +2,8 @@
  * 项目 API：页面与工程设置
  */
 
-import request from "@/utils/request";
 import type { PagesListPayload } from "@/types/api";
+import request from "@/utils/request";
 
 export interface CreatePageBody {
   name: string;
@@ -36,30 +36,16 @@ export const projectApi = {
     });
   },
 
-  deletePage(
-    projectId: string,
-    pageId: string,
-    mode?: "single" | "folder-only" | "cascade",
-  ) {
+  deletePage(projectId: string, pageId: string, mode?: "single" | "folder-only" | "cascade") {
     const query = mode ? `?mode=${encodeURIComponent(mode)}` : "";
-    return request.delete(
-      `/design/projects/${projectId}/pages/${pageId}${query}`,
-    );
+    return request.delete(`/design/projects/${projectId}/pages/${pageId}${query}`);
   },
 
   renamePage(projectId: string, pageId: string, name: string, path?: string) {
-    return request.patch(
-      `/design/projects/${projectId}/pages/${pageId}/rename`,
-      { name, path },
-    );
+    return request.patch(`/design/projects/${projectId}/pages/${pageId}/rename`, { name, path });
   },
 
-  movePageToGroup(
-    projectId: string,
-    pageId: string,
-    targetGroupId: string | null,
-    path?: string,
-  ) {
+  movePageToGroup(projectId: string, pageId: string, targetGroupId: string | null, path?: string) {
     return request.patch(`/design/projects/${projectId}/pages/${pageId}/move`, {
       parentId: targetGroupId,
       path,
@@ -81,9 +67,7 @@ export const projectApi = {
   },
 
   getProjectSettings(projectId: string) {
-    return request.get<ProjectSettingsPayload>(
-      `/design/projects/${projectId}/settings`,
-    );
+    return request.get<ProjectSettingsPayload>(`/design/projects/${projectId}/settings`);
   },
 
   updateProjectSettings(projectId: string, settings: unknown) {

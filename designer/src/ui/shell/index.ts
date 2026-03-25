@@ -3,6 +3,6 @@
  */
 
 export { default as DesignerView } from "./DesignerView.vue";
-export { TopToolbar } from "./TopToolbar";
-export { ToolRail } from "./ToolRail";
 export { DockPanel } from "./DockPanel";
+export { ToolRail } from "./ToolRail";
+export { TopToolbar } from "./TopToolbar";

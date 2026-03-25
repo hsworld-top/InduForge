@@ -3,13 +3,6 @@
  * 侧向 import 触发各类 registerManifest
  */
 
-export {
-  registerManifest,
-  getManifest,
-  getAllManifests,
-  getManifestsByCategory,
-} from "./manifest-registry";
-
 import "./layout-manifests-flexbox";
 import "@/components/HorizontalLayout/manifest";
 import "@/components/VerticalLayout/manifest";
@@ -19,5 +12,12 @@ import "./display-manifests-drawing-text";
 import "@/components/Button/manifest";
 import "./display-manifests-pc-elements";
 import "./chart-manifests";
+
+export {
+  getAllManifests,
+  getManifest,
+  getManifestsByCategory,
+  registerManifest,
+} from "./manifest-registry";
 
 export { default } from "./manifest-registry";
