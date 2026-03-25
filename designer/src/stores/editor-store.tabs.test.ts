@@ -22,4 +22,13 @@ describe("editor-store page tabs", () => {
     store.setPageTabState([], "");
     expect(store.pageTabState.activeId).toBe("");
   });
+
+  it("setPageTabState replaces prior tabs and active id", () => {
+    const store = useEditorStore();
+    store.setPageTabState([{ id: "a", name: "A", isDirty: false }], "a");
+    store.setPageTabState([{ id: "b", name: "B", isDirty: true }], "b");
+    expect(store.pageTabState.tabs).toHaveLength(1);
+    expect(store.pageTabState.tabs[0]?.id).toBe("b");
+    expect(store.pageTabState.activeId).toBe("b");
+  });
 });

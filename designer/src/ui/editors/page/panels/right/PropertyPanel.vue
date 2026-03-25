@@ -40,7 +40,6 @@ import {
 import { storeToRefs } from "pinia";
 import { computed, nextTick, ref, watch } from "vue";
 import IconEpArrowRight from "~icons/ep/arrow-right";
-import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpGrid from "~icons/ep/grid";
@@ -63,7 +62,7 @@ import {
 } from "./property-panel-config-assets";
 import { elementTypeName } from "./property-panel-utils";
 import PropertyPanelBasicSection from "./PropertyPanelBasicSection.vue";
-import SizeEditor from "./StylePanel/SizeEditor.vue";
+import PropertyPanelConfigStrip from "./PropertyPanelConfigStrip.vue";
 import { usePropertyPanelNormalizeNodeType } from "./use-property-panel-normalize-node-type";
 
 const editorStore = useEditorStore();
@@ -6435,37 +6434,15 @@ function handlePropChange(propName, value) {
       />
 
       <template v-if="hasStyleSelection">
-        <div v-if="showSizeEditor" class="panel-section">
-          <SizeEditor
-            :model-value="currentStyle"
-            :min-width="containerMinSize?.width"
-            :min-height="containerMinSize?.height"
-            @update:model-value="handleStyleChange"
-          />
-        </div>
-        <div class="panel-section">
-          <div class="config-entry-header">
-            <span class="panel-section-title">配置</span>
-          </div>
-          <div class="config-entry-bar">
-            <button
-              class="config-entry"
-              :class="{ 'has-config': hasDetailConfig }"
-              @click="openConfigDialog('detail')"
-            >
-              <IconEpDocument class="config-entry-icon" />
-              <span>详细</span>
-            </button>
-            <button
-              class="config-entry"
-              :class="{ 'has-config': hasStyleConfig }"
-              @click="openConfigDialog('style')"
-            >
-              <IconEpEditPen class="config-entry-icon" />
-              <span>样式</span>
-            </button>
-          </div>
-        </div>
+        <PropertyPanelConfigStrip
+          :show-size-editor="showSizeEditor"
+          :current-style="currentStyle"
+          :container-min-size="containerMinSize"
+          :has-detail-config="hasDetailConfig"
+          :has-style-config="hasStyleConfig"
+          @update:current-style="handleStyleChange"
+          @open-config="openConfigDialog"
+        />
       </template>
 
       <!-- 属性表单：根据 Manifest 生成 -->
@@ -7076,55 +7053,11 @@ function handlePropChange(propName, value) {
   color: var(--designer-text-secondary);
 }
 
-.config-entry-header {
-  margin-bottom: var(--designer-gap-xs);
-}
-
-.config-entry-bar,
 .prop-sections,
 .prop-section-body {
   display: flex;
   flex-direction: column;
   gap: var(--designer-gap-xs);
-}
-
-.config-entry-bar {
-  gap: var(--designer-gap-xs);
-}
-
-.config-entry {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--designer-gap-xs);
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--designer-border-color);
-  border-radius: var(--designer-radius-md);
-  background: var(--designer-group-surface);
-  color: var(--designer-text-secondary);
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.config-entry:hover {
-  border-color: var(--designer-primary-border);
-  color: var(--designer-primary-text);
-  background: var(--designer-primary-soft);
-}
-
-.config-entry.has-config {
-  border-color: var(--designer-primary-border);
-  color: var(--designer-primary-text);
-  background: var(--designer-primary-soft);
-}
-
-.config-entry-icon {
-  width: var(--designer-panel-icon);
-  height: var(--designer-panel-icon);
 }
 
 .prop-section {

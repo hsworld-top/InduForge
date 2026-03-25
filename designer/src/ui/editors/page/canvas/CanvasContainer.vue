@@ -1542,23 +1542,4 @@ onBeforeUnmount(() => {
 
 .dark .canvas {
 }
-.canvas-insert-line {
-  position: absolute;
-  background: #ef4444;
-  pointer-events: none;
-  z-index: 9999;
-  transition: all 0.1s ease;
-}
-
-.canvas-insert-line.horizontal {
-  height: 2px;
-  left: 0;
-  right: 0;
-}
-
-.canvas-insert-line.vertical {
-  width: 2px;
-  top: 0;
-  bottom: 0;
-}
 </style>

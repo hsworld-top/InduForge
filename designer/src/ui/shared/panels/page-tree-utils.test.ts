@@ -16,6 +16,14 @@ describe("page-tree-utils", () => {
       expect(validatePageName("a/b").valid).toBe(false);
     });
 
+    it("rejects dot-only names", () => {
+      expect(validatePageName("...").valid).toBe(false);
+    });
+
+    it("rejects control characters", () => {
+      expect(validatePageName("a\u0007b").valid).toBe(false);
+    });
+
     it("accepts normal names", () => {
       expect(validatePageName("页面一").valid).toBe(true);
     });

@@ -52,4 +52,16 @@ describe("previewRuntime", () => {
     expect(typeof rt.start).toBe("function");
     expect(typeof rt.stop).toBe("function");
   });
+
+  it("stop resolves after init (lifecycle teardown)", async () => {
+    clearPreviewRuntime();
+    const rt = initPreviewRuntime({
+      projectId: "stop-test",
+      projectVariables: {},
+      globalScripts: {},
+    });
+    const stop = rt.stop;
+    expect(stop).toBeTypeOf("function");
+    await expect((stop as () => Promise<void>)()).resolves.toBeUndefined();
+  });
 });

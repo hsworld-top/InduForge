@@ -11,11 +11,11 @@ import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpList from "~icons/ep/list";
 import IconEpRefresh from "~icons/ep/refresh";
-import IconEpTimer from "~icons/ep/timer";
 import MonacoEditor from "@/components/common/MonacoEditor.vue";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/utils/component-methods";
 import ScriptVarsSystemSection from "./ScriptVarsSystemSection.vue";
+import ScriptVarsTimersSection from "./ScriptVarsTimersSection.vue";
 
 const editorStore = useEditorStore();
 const {
@@ -1371,56 +1371,23 @@ onUnmounted(() => {
         @open-system-editor="openSystemEditor"
       />
 
-      <el-collapse-item name="timers">
-        <template #title> 定时器 </template>
-        <div class="scripts-layout">
-          <div
-            class="scripts-list is-full"
-            @contextmenu="(event) => handleBlankContextMenu('timers', event)"
-          >
-            <el-tree
-              :data="timerTree"
-              node-key="id"
-              :default-expand-all="true"
-              highlight-current
-              :expand-on-click-node="false"
-              draggable
-              :allow-drop="
-                (draggingNode, dropNode, dropType) =>
-                  allowScriptDrop('timers', draggingNode, dropNode, dropType)
-              "
-              :allow-drag="allowScriptDrag"
-              @node-click="() => {}"
-              @node-dblclick="(data) => openScriptEditor('timers', data)"
-              @node-contextmenu="(event, data) => handleTreeContextMenu('timers', event, data)"
-              @node-drop="
-                (draggingNode, dropNode, dropType) =>
-                  handleScriptDrop('timers', draggingNode, dropNode, dropType)
-              "
-            >
-              <template #default="{ data }">
-                <div
-                  class="tree-node"
-                  :class="[
-                    { 'is-selected': isScriptSelected('timers', data) },
-                    `node-${data.type}`,
-                  ]"
-                  @click.stop="(event) => handleScriptNodeClick('timers', data, event)"
-                  @dblclick.stop="openScriptEditor('timers', data)"
-                >
-                  <el-icon class="node-icon icon-timer">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpTimer v-else />
-                  </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
-                    data.label
-                  }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </el-collapse-item>
+      <ScriptVarsTimersSection
+        :tree="timerTree"
+        :allow-drop="
+          (draggingNode, dropNode, dropType) =>
+            allowScriptDrop('timers', draggingNode, dropNode, dropType)
+        "
+        :allow-drag="allowScriptDrag"
+        :is-selected="(data) => isScriptSelected('timers', data)"
+        @blank-contextmenu="(event) => handleBlankContextMenu('timers', event)"
+        @node-dblclick="(data) => openScriptEditor('timers', data)"
+        @node-contextmenu="(event, data) => handleTreeContextMenu('timers', event, data)"
+        @node-drop="
+          (draggingNode, dropNode, dropType) =>
+            handleScriptDrop('timers', draggingNode, dropNode, dropType)
+        "
+        @node-click="(data, event) => handleScriptNodeClick('timers', data, event)"
+      />
       <el-collapse-item name="variableChanges">
         <template #title> 变量改变 </template>
         <div class="scripts-layout">

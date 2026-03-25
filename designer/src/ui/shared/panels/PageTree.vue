@@ -10,9 +10,7 @@ import IconEpArrowDown from "~icons/ep/arrow-down";
 import IconEpArrowRight from "~icons/ep/arrow-right";
 import IconEpDocument from "~icons/ep/document";
 import IconEpFolder from "~icons/ep/folder";
-import IconEpFolderOpened from "~icons/ep/folder-opened";
 import IconEpMoreFilled from "~icons/ep/more-filled";
-import IconEpPlus from "~icons/ep/plus";
 import IconEpSearch from "~icons/ep/search";
 import { useEditorStore } from "@/stores/editor-store";
 import {
@@ -21,6 +19,7 @@ import {
   ROOT_CONTAINER_KEY,
   validatePageName,
 } from "./page-tree-utils";
+import PageTreeCreateDialog from "./PageTreeCreateDialog.vue";
 
 // 注入打开标签页的方法
 const openPageTab = inject("openPageTab", null);
@@ -29,7 +28,6 @@ const editorStore = useEditorStore();
 const { pages, currentPageId, entryConfig, canUndo, projectId } = storeToRefs(editorStore);
 const selectedNode = ref(null);
 const createDialogVisible = ref(false);
-const createFormRef = ref(null);
 const createForm = ref({ type: "page", name: "", parentId: null });
 const creating = ref(false);
 const skipSwitchPrompt = ref(false);
@@ -1118,6 +1116,10 @@ function getFixedSystemPath(page) {
 /**
  * 创建页面/分组
  */
+function onCreateFormUpdate(next) {
+  createForm.value = next;
+}
+
 async function handleCreateConfirm() {
   const name = createForm.value.name?.trim();
   if (!name) {
@@ -1603,80 +1605,18 @@ function getMoveTargets(node) {
       </div>
     </div>
   </div>
-  <!-- 新建页面/分组弹窗 -->
-  <el-dialog
+  <PageTreeCreateDialog
     v-model="createDialogVisible"
     :title="createDialogTitle"
-    width="420px"
-    :close-on-click-modal="false"
-    class="create-page-dialog"
-  >
-    <div class="create-type-selector">
-      <div
-        v-for="option in createTypeOptions"
-        :key="option.value"
-        class="type-option"
-        :class="{ 'is-active': createForm.type === option.value }"
-        @click="createForm.type = option.value"
-      >
-        <component :is="option.icon" class="type-icon" />
-        <div class="type-info">
-          <div class="type-name">{{ option.label }}</div>
-          <div class="type-desc">{{ option.desc }}</div>
-        </div>
-      </div>
-    </div>
-
-    <el-form
-      ref="createFormRef"
-      :model="createForm"
-      :rules="createFormRules"
-      label-position="top"
-      class="create-form"
-    >
-      <el-form-item label="名称" prop="name">
-        <el-input
-          v-model="createForm.name"
-          :disabled="isFixedBasicCreateType(createForm.type)"
-          placeholder="请输入名称"
-          maxlength="50"
-          show-word-limit
-        />
-      </el-form-item>
-
-      <el-form-item v-if="createForm.type === 'page'" label="所属分组">
-        <el-select v-model="createForm.parentId" clearable placeholder="选择分组（可选）">
-          <el-option label="根目录" :value="null">
-            <div class="flex items-center gap-2">
-              <IconEpFolderOpened class="text-gray-400" />
-              <span>根目录</span>
-            </div>
-          </el-option>
-          <el-option
-            v-for="folder in folderOptions"
-            :key="folder.id"
-            :label="folder.name"
-            :value="folder.id"
-          >
-            <div class="flex items-center gap-2">
-              <IconEpFolder class="text-yellow-500" />
-              <span>{{ folder.name }}</span>
-            </div>
-          </el-option>
-        </el-select>
-      </el-form-item>
-    </el-form>
-
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreateConfirm">
-          <IconEpPlus class="mr-1" />
-          创建
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
+    :create-type-options="createTypeOptions"
+    :form="createForm"
+    :rules="createFormRules"
+    :folder-options="folderOptions"
+    :creating="creating"
+    :is-fixed-basic-type="isFixedBasicCreateType"
+    @update:form="onCreateFormUpdate"
+    @confirm="handleCreateConfirm"
+  />
 </template>
 
 <style scoped>
@@ -2025,91 +1965,5 @@ function getMoveTargets(node) {
   font-size: 11px;
   color: #c0c4cc;
   margin: 0;
-}
-
-/* ==================== 新建弹窗样式 ==================== */
-.create-type-selector {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.type-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
-  border: 2px solid #e4e7ed;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.type-option:hover {
-  border-color: #c0c4cc;
-  background-color: #f5f7fa;
-}
-
-.type-option.is-active {
-  border-color: #409eff;
-  background-color: rgba(64, 158, 255, 0.05);
-}
-
-.dark .type-option {
-  border-color: #3a3a3a;
-}
-
-.dark .type-option:hover {
-  border-color: #4a4a4a;
-  background-color: #2a2a2a;
-}
-
-.dark .type-option.is-active {
-  border-color: #409eff;
-  background-color: rgba(64, 158, 255, 0.1);
-}
-
-.type-icon {
-  width: 24px;
-  height: 24px;
-  color: #909399;
-  flex-shrink: 0;
-}
-
-.type-option.is-active .type-icon {
-  color: #409eff;
-}
-
-.type-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.type-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
-  margin-bottom: 4px;
-}
-
-.dark .type-name {
-  color: #e5e7eb;
-}
-
-.type-desc {
-  font-size: 12px;
-  color: #909399;
-  line-height: 1.4;
-}
-
-.create-form {
-  margin-top: 16px;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
 }
 </style>

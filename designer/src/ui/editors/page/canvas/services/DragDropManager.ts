@@ -465,7 +465,7 @@ export function parseGridTemplateParts(template: string): string[] {
     const value = trimmed.slice(valueStart, i).trim();
     const count = Number.parseInt(countStr, 10);
     if (Number.isFinite(count) && count > 0 && value) {
-      return Array.from({ length: count }).fill(value);
+      return Array.from({ length: count }, () => value);
     }
   }
 

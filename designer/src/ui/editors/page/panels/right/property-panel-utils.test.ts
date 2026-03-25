@@ -13,6 +13,10 @@ describe("property-panel-utils", () => {
       expect(formatStyleValue(12)).toBe("12");
       expect(formatStyleValue(false)).toBe("false");
     });
+
+    it("preserves zero as string", () => {
+      expect(formatStyleValue(0)).toBe("0");
+    });
   });
 
   describe("elementTypeName", () => {

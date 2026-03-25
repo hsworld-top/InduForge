@@ -7,10 +7,18 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    /** Windows 下部分环境对多 worker spawn 报 EPERM，降低并行与换 pool 可缓解 */
+    /**
+     * Windows：杀毒/策略对 node_modules 下 esbuild 等子进程 spawn 可能报 EPERM。
+     * 优先排除 designer/node_modules 实时扫描；仍失败可尝试改 pool 为 "threads" 且 maxWorkers: 1。
+     */
     pool: "forks",
     fileParallelism: false,
     maxWorkers: 1,
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
     include: ["src/**/*.{test,spec}.{js,ts}"],
     coverage: {
       reporter: ["text", "json", "html"],

@@ -6,6 +6,10 @@ describe("property-panel-config-assets", () => {
     expect(decodeAssetName("a%20b")).toBe("a b");
   });
 
+  it("decodeAssetName returns empty for empty input", () => {
+    expect(decodeAssetName("")).toBe("");
+  });
+
   it("buildConfigAssetTree nests folders and assets", () => {
     const tree = buildConfigAssetTree(
       [
