@@ -12,7 +12,7 @@ import IconEpDownload from "~icons/ep/download";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpUpload from "~icons/ep/upload";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import MonacoEditor from "@/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePanelState } from "@/ui/editors/page/panels/composables/use-panel-state";
 

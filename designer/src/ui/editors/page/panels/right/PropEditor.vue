@@ -7,7 +7,7 @@
 import { ElMessage } from "element-plus";
 import { computed, ref, watch } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import MonacoEditor from "@/components/common/monaco-editor-async";
 
 defineOptions({ name: "PropEditor" });
 

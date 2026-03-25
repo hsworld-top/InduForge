@@ -8,7 +8,7 @@ import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, reactive, ref, watch } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import MonacoEditor from "@/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 
 const editorStore = useEditorStore();

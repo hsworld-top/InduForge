@@ -31,8 +31,10 @@ import {
   CANVAS_RULER_MINOR_STEP,
   CANVAS_RULER_SIZE,
 } from "./canvas-container-constants";
+import CanvasInsertLineOverlay from "./CanvasInsertLineOverlay.vue";
 import CanvasRulerLayer from "./CanvasRulerLayer.vue";
 import { useCanvasRulerPointer } from "./composables/use-canvas-ruler-pointer";
+import { useCanvasViewportPlacement } from "./composables/use-canvas-viewport-placement";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 import { canvasZoomKey } from "./injection-keys";
@@ -190,51 +192,19 @@ const showWorkbenchGrid = computed(() => Boolean(currentPageSnapshot.value?.conf
 const pointerXOnRuler = computed(() => Math.max(0, pointerX.value - rulerInset.value));
 const pointerYOnRuler = computed(() => Math.max(0, pointerY.value - rulerInset.value));
 
-/**
- * 应用页面优先的默认落点
- * 页面不贴左上，并在可视区有安全边距，首屏视觉更聚焦页面
- */
-function applyDefaultPagePlacement() {
-  const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
-  const viewportHeight = Math.max(0, (containerSize.value.height || 0) - rulerInset.value);
-  if (!viewportWidth || !viewportHeight) return;
-
-  const scaledWidth = width.value * zoom.value;
-  const scaledHeight = height.value * zoom.value;
-  const nextTranslateX =
-    scaledWidth + defaultPageMarginX * 2 <= viewportWidth
-      ? Math.round(defaultPageMarginX + (viewportWidth - scaledWidth - defaultPageMarginX * 2) / 2)
-      : Math.max(0, Math.round((viewportWidth - scaledWidth) / 2));
-  const nextTranslateY =
-    scaledHeight + defaultPageMarginY * 2 <= viewportHeight
-      ? Math.round(
-          defaultPageMarginY + (viewportHeight - scaledHeight - defaultPageMarginY * 2) / 2,
-        )
-      : Math.max(0, Math.round((viewportHeight - scaledHeight) / 2));
-
-  translateX.value = nextTranslateX;
-  translateY.value = nextTranslateY;
-}
-
-/**
- * 缩放时保持视口中心对应画布点稳定，避免缩放后页面跳角落
- * @param {number} prevZoom - 旧缩放值
- * @param {number} nextZoom - 新缩放值
- */
-function keepViewportCenterStableOnZoom(prevZoom: number, nextZoom: number) {
-  const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
-  const viewportHeight = Math.max(0, (containerSize.value.height || 0) - rulerInset.value);
-  if (!viewportWidth || !viewportHeight) return;
-  if (!prevZoom || !nextZoom || prevZoom === nextZoom) return;
-
-  const centerX = rulerInset.value + viewportWidth / 2;
-  const centerY = rulerInset.value + viewportHeight / 2;
-  const canvasX = (centerX - rulerInset.value - translateX.value) / prevZoom;
-  const canvasY = (centerY - rulerInset.value - translateY.value) / prevZoom;
-
-  translateX.value = Math.round(centerX - rulerInset.value - canvasX * nextZoom);
-  translateY.value = Math.round(centerY - rulerInset.value - canvasY * nextZoom);
-}
+useCanvasViewportPlacement({
+  containerSize,
+  rulerInset,
+  width,
+  height,
+  zoom,
+  translateX,
+  translateY,
+  defaultPageMarginX,
+  defaultPageMarginY,
+  rootNodeId,
+  viewResetToken: toRef(props, "viewResetToken"),
+});
 
 const workbenchStyle = computed((): Record<string, string> => {
   const alpha = props.showRuler ? 0.04 : 0.03;
@@ -248,39 +218,6 @@ const workbenchStyle = computed((): Record<string, string> => {
   style.backgroundPosition = "0 0";
   return style;
 });
-
-watch(
-  () => zoom.value,
-  (nextZoom, prevZoom) => {
-    if (!Number.isFinite(nextZoom) || !Number.isFinite(prevZoom)) return;
-    keepViewportCenterStableOnZoom(prevZoom, nextZoom);
-  },
-);
-
-watch(
-  () => rulerInset.value,
-  (nextInset, prevInset) => {
-    if (!Number.isFinite(nextInset) || !Number.isFinite(prevInset)) return;
-    const delta = prevInset - nextInset;
-    translateX.value += delta;
-    translateY.value += delta;
-  },
-);
-
-watch(
-  [() => rootNodeId.value, () => width.value, () => height.value, () => props.viewResetToken],
-  () => {
-    applyDefaultPagePlacement();
-  },
-  { immediate: true },
-);
-
-watch(
-  () => [containerSize.value.width, containerSize.value.height],
-  () => {
-    applyDefaultPagePlacement();
-  },
-);
 
 const canvasStyle = computed((): Record<string, string> => {
   docVersion.value;
@@ -1477,28 +1414,11 @@ onBeforeUnmount(() => {
           @dragover="handleDragOver"
           @drop="handleDrop"
         >
-          <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
-            <div
-              class="canvas-insert-line"
-              :class="insertLineStyle.orientation"
-              :style="{
-                left:
-                  insertLineStyle.orientation === 'vertical'
-                    ? `${insertLineBox.left + insertLineStyle.offset}px`
-                    : `${insertLineBox.left}px`,
-                top:
-                  insertLineStyle.orientation === 'horizontal'
-                    ? `${insertLineBox.top + insertLineStyle.offset}px`
-                    : `${insertLineBox.top}px`,
-                width:
-                  insertLineStyle.orientation === 'vertical' ? '2px' : `${insertLineBox.width}px`,
-                height:
-                  insertLineStyle.orientation === 'horizontal'
-                    ? '2px'
-                    : `${insertLineBox.height}px`,
-              }"
-            />
-          </teleport>
+          <CanvasInsertLineOverlay
+            :show="showInsertLine"
+            :line-style="insertLineStyle"
+            :line-box="insertLineBox"
+          />
           <div class="absolute inset-0 pointer-events-none">
             <slot name="canvas-layer" />
           </div>

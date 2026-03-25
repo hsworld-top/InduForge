@@ -11,12 +11,14 @@ import * as XLSX from "xlsx";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import MonacoEditor from "@/components/common/monaco-editor-async";
 import { TIME_FORMAT } from "@/constants";
 import { datacenterApi } from "@/services";
 import { useEditorStore } from "@/stores/editor-store";
 import { unwrapApiData } from "@/types/api";
+import VariableGroupFormDialog from "@/ui/shared/panels/VariableGroupFormDialog.vue";
 import { requireConnectionsPayload, requireDatapointsPagePayload } from "@/utils/datapoint-payload";
+import DatapointPanelContextMenu from "./DatapointPanelContextMenu.vue";
 import DatapointPanelToolbar from "./DatapointPanelToolbar.vue";
 
 const editorStore = useEditorStore();
@@ -1376,80 +1378,28 @@ onUnmounted(() => {
         <el-empty description="暂无工程变量" :image-size="60" />
       </div>
     </div>
-    <div
-      v-if="contextMenuVisible"
-      class="context-menu"
-      :style="contextMenuStyle"
-      @click.stop
-      @mousedown.stop
-    >
-      <template v-if="contextMenuNode?.type === 'blank'">
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建分组</div>
-        <div class="context-menu-item" @click="openCreateFromMenu">新增变量</div>
-        <div class="context-menu-item" @click="openQuickAddFromMenu">快速添加</div>
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !varClipboard }"
-          @click="pasteVarFromMenu"
-        >
-          粘贴
-        </div>
-      </template>
-      <template v-if="contextMenuNode?.type === 'variable'">
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !canEditSelection }"
-          @click="openEditFromMenu"
-        >
-          编辑变量
-        </div>
-        <div class="context-menu-item" @click="copyVar">复制</div>
-        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
-        <div
-          class="context-menu-item context-menu-item--danger"
-          :class="{ 'is-disabled': !canDeleteSelection }"
-          @click="removeVar"
-        >
-          删除
-        </div>
-      </template>
-      <template v-else-if="contextMenuNode?.type === 'group'">
-        <div
-          class="context-menu-item"
-          :class="{ 'is-disabled': !canEditSelection }"
-          @click="openGroupEditFromMenu"
-        >
-          编辑分组
-        </div>
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建子分组</div>
-        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
-        <div
-          class="context-menu-item context-menu-item--danger"
-          :class="{ 'is-disabled': !canDeleteSelection }"
-          @click="removeGroup"
-        >
-          删除分组
-        </div>
-      </template>
-    </div>
-
-    <div
-      v-if="contextMenuVisible && showMoveToMenu"
-      class="context-menu context-submenu"
-      :style="submenuStyle"
-      @click.stop
-      @mousedown.stop
-    >
-      <div class="context-menu-item" @click="handleMoveTo(null)">根目录</div>
-      <div
-        v-for="group in availableGroups"
-        :key="group.id"
-        class="context-menu-item"
-        @click="handleMoveTo(group.id)"
-      >
-        {{ group.name }}
-      </div>
-    </div>
+    <DatapointPanelContextMenu
+      :context-menu-visible="contextMenuVisible"
+      :context-menu-style="contextMenuStyle"
+      :context-menu-node="contextMenuNode"
+      :show-move-to-menu="showMoveToMenu"
+      :submenu-style="submenuStyle"
+      :var-clipboard="varClipboard"
+      :can-edit-selection="canEditSelection"
+      :can-delete-selection="canDeleteSelection"
+      :available-groups="availableGroups"
+      @open-group-create="openGroupCreateFromMenu"
+      @open-create-var="openCreateFromMenu"
+      @open-quick-add="openQuickAddFromMenu"
+      @paste="pasteVarFromMenu"
+      @open-edit="openEditFromMenu"
+      @copy="copyVar"
+      @toggle-move-to="showMoveToMenu = !showMoveToMenu"
+      @remove-var="removeVar"
+      @open-group-edit="openGroupEditFromMenu"
+      @remove-group="removeGroup"
+      @move-to="handleMoveTo"
+    />
 
     <el-dialog
       v-model="editVisible"
@@ -1522,34 +1472,14 @@ onUnmounted(() => {
         <el-button type="primary" @click="saveEdit">确定</el-button>
       </template>
     </el-dialog>
-    <el-dialog
+    <VariableGroupFormDialog
       v-model="groupVisible"
-      :title="groupEditMode ? '编辑分组' : '新建分组'"
-      width="420px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form label-width="70px">
-        <el-form-item label="名称">
-          <el-input v-model="groupName" />
-        </el-form-item>
-        <el-form-item label="父级">
-          <el-select v-model="groupParentId" placeholder="根目录">
-            <el-option label="根目录" :value="null" />
-            <el-option
-              v-for="group in groupParentOptions"
-              :key="group.id"
-              :label="group.name"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="groupVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveGroup">确定</el-button>
-      </template>
-    </el-dialog>
+      v-model:name="groupName"
+      v-model:parent-id="groupParentId"
+      :edit-mode="groupEditMode"
+      :parent-options="groupParentOptions"
+      @confirm="saveGroup"
+    />
 
     <el-dialog
       v-model="quickVisible"
@@ -1641,11 +1571,6 @@ onUnmounted(() => {
 
 .hidden-file-input {
   display: none;
-}
-
-.context-menu-item.is-disabled {
-  color: #c0c4cc;
-  pointer-events: none;
 }
 
 .tree-wrap {
@@ -1796,42 +1721,6 @@ onUnmounted(() => {
   margin-top: 12px;
   display: flex;
   justify-content: flex-end;
-}
-
-.context-menu {
-  position: fixed;
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
-  z-index: 4000;
-  min-width: 160px;
-  padding: 6px 0;
-}
-
-.context-menu-item {
-  padding: 10px 18px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #606266;
-  white-space: nowrap;
-}
-
-.context-menu-item:hover {
-  background-color: #f5f7fa;
-}
-
-.context-menu-item--danger {
-  color: #f56c6c;
-}
-
-.context-menu-item--danger:hover {
-  background-color: #fef0f0;
-}
-
-.context-submenu {
-  max-height: 300px;
-  overflow-y: auto;
 }
 
 .edit-value-block {

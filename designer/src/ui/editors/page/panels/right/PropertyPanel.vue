@@ -46,7 +46,7 @@ import IconEpGrid from "~icons/ep/grid";
 import IconEpLink from "~icons/ep/link";
 import IconEpList from "~icons/ep/list";
 import IconEpPictureFilled from "~icons/ep/picture-filled";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import MonacoEditor from "@/components/common/monaco-editor-async";
 import { getManifest } from "@/manifests";
 import assetApi from "@/services/assetApi";
 import { useEditorStore } from "@/stores/editor-store";
@@ -63,6 +63,8 @@ import {
 import { elementTypeName } from "./property-panel-utils";
 import PropertyPanelBasicSection from "./PropertyPanelBasicSection.vue";
 import PropertyPanelConfigStrip from "./PropertyPanelConfigStrip.vue";
+import PropertyPanelLayoutForceSection from "./PropertyPanelLayoutForceSection.vue";
+import PropertyPanelRawPropsFallback from "./PropertyPanelRawPropsFallback.vue";
 import { usePropertyPanelNormalizeNodeType } from "./use-property-panel-normalize-node-type";
 
 const editorStore = useEditorStore();
@@ -6447,36 +6449,14 @@ function handlePropChange(propName, value) {
 
       <!-- 属性表单：根据 Manifest 生成 -->
       <template v-if="layoutForceProps.length > 0">
-        <div class="prop-section prop-section--static">
-          <div class="prop-section-header is-static">
-            <span class="prop-section-title">布局</span>
-          </div>
-          <div class="prop-section-body">
-            <div
-              v-for="(propDef, propIndex) in visibleLayoutForceProps"
-              :key="propDef?.name || propIndex"
-              class="prop-item"
-            >
-              <div class="prop-label">
-                <span>{{ propDef.label }}</span>
-                <el-tooltip v-if="shouldShowBindButton(propDef)" content="绑定数据" placement="top">
-                  <button
-                    class="bind-btn"
-                    :class="{ 'is-active': hasPropBinding(propDef.name) }"
-                    @click="handleBindClick(propDef)"
-                  >
-                    <IconEpLink class="bind-icon" />
-                  </button>
-                </el-tooltip>
-              </div>
-              <PropEditor
-                :prop="propDef"
-                :model-value="getPropValue(propDef.name)"
-                @update:model-value="(val) => handlePropChange(propDef.name, val)"
-              />
-            </div>
-          </div>
-        </div>
+        <PropertyPanelLayoutForceSection
+          :visible-props="visibleLayoutForceProps"
+          :should-show-bind-button="shouldShowBindButton"
+          :has-prop-binding="hasPropBinding"
+          :get-prop-value="getPropValue"
+          @bind-click="handleBindClick"
+          @prop-change="handlePropChange"
+        />
       </template>
       <template v-else-if="effectiveManifest && effectiveManifest.props.length > 0">
         <div class="prop-sections">
@@ -6592,12 +6572,7 @@ function handlePropChange(propName, value) {
       </template>
 
       <!-- 无 Manifest 时显示原始 Props -->
-      <template v-else>
-        <div class="text-xs text-gray-500 mb-2">Props</div>
-        <pre class="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded overflow-auto max-h-60">{{
-          formattedProps
-        }}</pre>
-      </template>
+      <PropertyPanelRawPropsFallback v-else :text="formattedProps" />
 
       <div v-if="!hasStyleSelection" class="text-sm text-gray-400 text-center py-6">请选择组件</div>
     </div>

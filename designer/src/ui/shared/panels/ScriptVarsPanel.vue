@@ -10,12 +10,14 @@ import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpList from "~icons/ep/list";
-import IconEpRefresh from "~icons/ep/refresh";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import MonacoEditor from "@/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/utils/component-methods";
+import ScriptVarsCustomSection from "./ScriptVarsCustomSection.vue";
 import ScriptVarsSystemSection from "./ScriptVarsSystemSection.vue";
 import ScriptVarsTimersSection from "./ScriptVarsTimersSection.vue";
+import ScriptVarsVariableChangesSection from "./ScriptVarsVariableChangesSection.vue";
+import VariableGroupFormDialog from "./VariableGroupFormDialog.vue";
 
 const editorStore = useEditorStore();
 const {
@@ -1388,140 +1390,49 @@ onUnmounted(() => {
         "
         @node-click="(data, event) => handleScriptNodeClick('timers', data, event)"
       />
-      <el-collapse-item name="variableChanges">
-        <template #title> 变量改变 </template>
-        <div class="scripts-layout">
-          <div
-            class="scripts-list is-full"
-            @contextmenu="(event) => handleBlankContextMenu('variableChanges', event)"
-          >
-            <el-tree
-              :data="variableChangeTree"
-              node-key="id"
-              :default-expand-all="true"
-              highlight-current
-              :expand-on-click-node="false"
-              draggable
-              :allow-drop="
-                (draggingNode, dropNode, dropType) =>
-                  allowScriptDrop('variableChanges', draggingNode, dropNode, dropType)
-              "
-              :allow-drag="allowScriptDrag"
-              @node-click="() => {}"
-              @node-dblclick="(data) => openScriptEditor('variableChanges', data)"
-              @node-contextmenu="
-                (event, data) => handleTreeContextMenu('variableChanges', event, data)
-              "
-              @node-drop="
-                (draggingNode, dropNode, dropType) =>
-                  handleScriptDrop('variableChanges', draggingNode, dropNode, dropType)
-              "
-            >
-              <template #default="{ data }">
-                <div
-                  class="tree-node"
-                  :class="[
-                    {
-                      'is-selected': isScriptSelected('variableChanges', data),
-                    },
-                    `node-${data.type}`,
-                  ]"
-                  @click.stop="(event) => handleScriptNodeClick('variableChanges', data, event)"
-                  @dblclick.stop="openScriptEditor('variableChanges', data)"
-                >
-                  <el-icon class="node-icon icon-change">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpRefresh v-else />
-                  </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
-                    data.label
-                  }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </el-collapse-item>
-
-      <el-collapse-item name="custom">
-        <template #title> 自定义脚本 </template>
-        <div class="scripts-layout">
-          <div
-            class="scripts-list is-full"
-            @contextmenu="(event) => handleBlankContextMenu('custom', event)"
-          >
-            <el-tree
-              :data="customTree"
-              node-key="id"
-              :default-expand-all="true"
-              highlight-current
-              :expand-on-click-node="false"
-              draggable
-              :allow-drop="
-                (draggingNode, dropNode, dropType) =>
-                  allowScriptDrop('custom', draggingNode, dropNode, dropType)
-              "
-              :allow-drag="allowScriptDrag"
-              @node-click="() => {}"
-              @node-dblclick="(data) => openScriptEditor('custom', data)"
-              @node-contextmenu="(event, data) => handleTreeContextMenu('custom', event, data)"
-              @node-drop="
-                (draggingNode, dropNode, dropType) =>
-                  handleScriptDrop('custom', draggingNode, dropNode, dropType)
-              "
-            >
-              <template #default="{ data }">
-                <div
-                  class="tree-node"
-                  :class="[
-                    { 'is-selected': isScriptSelected('custom', data) },
-                    `node-${data.type}`,
-                  ]"
-                  @click.stop="(event) => handleScriptNodeClick('custom', data, event)"
-                  @dblclick.stop="openScriptEditor('custom', data)"
-                >
-                  <el-icon class="node-icon icon-custom">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpEditPen v-else />
-                  </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
-                    data.label
-                  }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
-      </el-collapse-item>
+      <ScriptVarsVariableChangesSection
+        :tree="variableChangeTree"
+        :allow-drop="
+          (draggingNode, dropNode, dropType) =>
+            allowScriptDrop('variableChanges', draggingNode, dropNode, dropType)
+        "
+        :allow-drag="allowScriptDrag"
+        :is-selected="(data) => isScriptSelected('variableChanges', data)"
+        @blank-contextmenu="(event) => handleBlankContextMenu('variableChanges', event)"
+        @node-dblclick="(data) => openScriptEditor('variableChanges', data)"
+        @node-contextmenu="(event, data) => handleTreeContextMenu('variableChanges', event, data)"
+        @node-drop="
+          (draggingNode, dropNode, dropType) =>
+            handleScriptDrop('variableChanges', draggingNode, dropNode, dropType)
+        "
+        @node-click="(data, event) => handleScriptNodeClick('variableChanges', data, event)"
+      />
+      <ScriptVarsCustomSection
+        :tree="customTree"
+        :allow-drop="
+          (draggingNode, dropNode, dropType) =>
+            allowScriptDrop('custom', draggingNode, dropNode, dropType)
+        "
+        :allow-drag="allowScriptDrag"
+        :is-selected="(data) => isScriptSelected('custom', data)"
+        @blank-contextmenu="(event) => handleBlankContextMenu('custom', event)"
+        @node-dblclick="(data) => openScriptEditor('custom', data)"
+        @node-contextmenu="(event, data) => handleTreeContextMenu('custom', event, data)"
+        @node-drop="
+          (draggingNode, dropNode, dropType) =>
+            handleScriptDrop('custom', draggingNode, dropNode, dropType)
+        "
+        @node-click="(data, event) => handleScriptNodeClick('custom', data, event)"
+      />
     </el-collapse>
-    <el-dialog
+    <VariableGroupFormDialog
       v-model="groupDialogVisible"
-      :title="groupEditMode ? '编辑分组' : '新建分组'"
-      width="420px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form label-width="70px">
-        <el-form-item label="名称">
-          <el-input v-model="groupName" />
-        </el-form-item>
-        <el-form-item label="父级">
-          <el-select v-model="groupParentId" placeholder="根目录">
-            <el-option label="根目录" :value="null" />
-            <el-option
-              v-for="group in groupParentOptions"
-              :key="group.id"
-              :label="group.name"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="groupDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveGroup">确定</el-button>
-      </template>
-    </el-dialog>
+      v-model:name="groupName"
+      v-model:parent-id="groupParentId"
+      :edit-mode="groupEditMode"
+      :parent-options="groupParentOptions"
+      @confirm="saveGroup"
+    />
 
     <el-dialog
       v-model="metaDialogVisible"

@@ -11,7 +11,6 @@ import IconEpArrowRight from "~icons/ep/arrow-right";
 import IconEpDocument from "~icons/ep/document";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpMoreFilled from "~icons/ep/more-filled";
-import IconEpSearch from "~icons/ep/search";
 import { useEditorStore } from "@/stores/editor-store";
 import {
   getPageTreeOrderStorageKey,
@@ -19,7 +18,9 @@ import {
   ROOT_CONTAINER_KEY,
   validatePageName,
 } from "./page-tree-utils";
+import PageTreeBasicPagesSection from "./PageTreeBasicPagesSection.vue";
 import PageTreeCreateDialog from "./PageTreeCreateDialog.vue";
+import PageTreePageSearch from "./PageTreePageSearch.vue";
 
 // 注入打开标签页的方法
 const openPageTab = inject("openPageTab", null);
@@ -1355,65 +1356,17 @@ function getMoveTargets(node) {
 
 <template>
   <div class="page-tree-container">
-    <!-- 搜索框 -->
-    <div class="page-search">
-      <el-input
-        v-model="searchText"
-        size="small"
-        placeholder="搜索页面..."
-        clearable
-        :prefix-icon="IconEpSearch"
-      />
-    </div>
+    <PageTreePageSearch v-model="searchText" />
 
     <!-- 页面树 -->
     <div class="page-tree-content">
-      <section class="page-section">
-        <div class="page-section__header">
-          <span class="page-section__title">基础页面</span>
-        </div>
-        <div v-if="filteredBasicSlots.length" class="page-section__body">
-          <div
-            v-for="slot in filteredBasicSlots"
-            :key="slot.type"
-            class="tree-node page-node page-node--basic"
-            :class="{
-              'is-active': slot.page ? isPageActive(slot.page.id) : false,
-              'is-empty': !slot.page,
-            }"
-            @click="handleBasicSlotClick(slot)"
-            @dblclick="handleBasicSlotDoubleClick(slot)"
-          >
-            <div class="node-indent node-indent--basic" />
-            <IconEpDocument class="node-icon page" />
-            <span class="node-label">{{ slot.label }}</span>
-            <el-dropdown
-              trigger="click"
-              placement="bottom-end"
-              @command="(command) => handleBasicRowAction(command, slot)"
-            >
-              <el-button class="node-action-btn" text @click.stop>
-                <IconEpMoreFilled />
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-if="slot.page" command="open">打开</el-dropdown-item>
-                  <el-dropdown-item v-else command="create">创建</el-dropdown-item>
-                  <el-dropdown-item v-if="slot.page" command="export">导出页面</el-dropdown-item>
-                  <el-dropdown-item
-                    v-if="slot.page && slot.type !== 'home'"
-                    command="delete"
-                    divided
-                  >
-                    删除
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-        </div>
-        <div v-else class="page-section__empty">暂无基础页面</div>
-      </section>
+      <PageTreeBasicPagesSection
+        :basic-slots="filteredBasicSlots"
+        :is-page-active="isPageActive"
+        @slot-click="handleBasicSlotClick"
+        @slot-dblclick="handleBasicSlotDoubleClick"
+        @row-action="handleBasicRowAction"
+      />
 
       <section
         class="page-section"
@@ -1626,22 +1579,6 @@ function getMoveTargets(node) {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-}
-
-/* 搜索框 */
-.page-search {
-  padding: 6px 10px 8px;
-  flex-shrink: 0;
-}
-
-.page-search :deep(.el-input__wrapper) {
-  min-height: 28px;
-  padding-inline: 8px;
-  box-shadow: 0 0 0 1px var(--designer-border-color, #e6e6e6) inset;
-}
-
-.page-search :deep(.el-input__inner) {
-  font-size: 12px;
 }
 
 /* 树内容区 */

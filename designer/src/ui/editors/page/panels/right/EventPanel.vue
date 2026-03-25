@@ -9,7 +9,7 @@ import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpGrid from "~icons/ep/grid";
 import IconEpList from "~icons/ep/list";
-import MonacoEditor from "@/components/common/MonacoEditor.vue";
+import MonacoEditor from "@/components/common/monaco-editor-async";
 import { componentRegistry } from "@/editor-core";
 import { normalizeEventDefinitions } from "@/editor-core/registry/component-events";
 import { useEditorStore } from "@/stores/editor-store";
