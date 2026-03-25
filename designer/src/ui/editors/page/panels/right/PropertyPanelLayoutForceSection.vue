@@ -8,13 +8,24 @@ import PropEditor from "./PropEditor.vue";
 interface LayoutPropDefLike {
   name: string;
   label: string;
+  type?: string;
+  editor?: string;
+  language?: string;
+  height?: string;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: Array<{ label: string; value: string | number }>;
 }
 
 defineProps<{
   visibleProps: LayoutPropDefLike[];
   shouldShowBindButton: (propDef: LayoutPropDefLike) => boolean;
   hasPropBinding: (name: string) => boolean;
-  getPropValue: (name: string) => unknown;
+  getPropValue: (
+    name: string,
+  ) => string | number | boolean | Record<string, unknown> | unknown[] | null | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -54,7 +65,7 @@ function handlePropChange(name: string, value: unknown) {
         <PropEditor
           class="prop-editor"
           :prop="propDef"
-          :model-value="getPropValue(propDef.name)"
+          :model-value="getPropValue(propDef.name) ?? null"
           @update:model-value="(val: unknown) => handlePropChange(propDef.name, val)"
         />
       </div>

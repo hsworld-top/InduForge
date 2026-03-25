@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 通用属性编辑器
  * 根据属性类型渲染对应的 Element Plus 组件
@@ -11,32 +11,52 @@ import MonacoEditor from "@/components/common/monaco-editor-async";
 
 defineOptions({ name: "PropEditor" });
 
-const props = defineProps({
-  /** 属性定义 */
-  prop: {
-    type: Object,
-    required: true,
-  },
-  /** 当前值 */
-  modelValue: {
-    type: [String, Number, Boolean, Object, Array],
-    default: undefined,
-  },
-});
+interface PropEditorOptionLike {
+  label: string;
+  value: string | number;
+}
 
-const emit = defineEmits(["update:modelValue"]);
+interface PropEditorPropLike {
+  editor?: string;
+  type?: string;
+  language?: string;
+  height?: string;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: PropEditorOptionLike[];
+}
+
+const props = defineProps<{
+  /** 属性定义 */
+  prop: PropEditorPropLike;
+  /** 当前值 */
+  modelValue?: string | number | boolean | Record<string, unknown> | unknown[] | null;
+}>();
+
+const emit = defineEmits<{
+  (event: "update:modelValue", value: unknown): void;
+}>();
 
 const modelProxy = computed({
   get: () => props.modelValue,
-  set: (value) => {
+  set: (value: unknown) => {
+    emit("update:modelValue", value);
+  },
+});
+
+const colorProxy = computed<string>({
+  get: () => (typeof props.modelValue === "string" ? props.modelValue : ""),
+  set: (value: string) => {
     emit("update:modelValue", value);
   },
 });
 
 const isCodeEditor = computed(() => props.prop?.editor === "code");
-const isJsonType = computed(() => ["object", "array"].includes(props.prop?.type));
-const jsonDraft = ref("");
-const codeDraft = ref("");
+const isJsonType = computed(() => ["object", "array"].includes(props.prop?.type ?? ""));
+const jsonDraft = ref<string>("");
+const codeDraft = ref<string>("");
 
 /**
  * 同步 JSON 草稿
@@ -86,7 +106,7 @@ watch([() => props.modelValue, () => props.prop?.editor], syncCodeDraft, {
  * 处理值变更
  * @param {any} value - 新值
  */
-function handleChange(value) {
+function handleChange(value: unknown) {
   emit("update:modelValue", value);
 }
 
@@ -94,7 +114,7 @@ function handleChange(value) {
  * 处理代码输入
  * @param {string} value - 新值
  */
-function handleCodeChange(value) {
+function handleCodeChange(value: string) {
   codeDraft.value = value;
   emit("update:modelValue", value);
 }
@@ -103,7 +123,7 @@ function handleCodeChange(value) {
  * 处理 JSON 输入
  * @param {string} value - 新值
  */
-function handleJsonInput(value) {
+function handleJsonInput(value: string) {
   jsonDraft.value = value;
 }
 
@@ -119,7 +139,7 @@ function commitJsonDraft() {
   try {
     emit("update:modelValue", JSON.parse(trimmed));
   } catch (error) {
-    ElMessage.warning("请输入合法的 JSON");
+    ElMessage.warning("请输入合法的 JSON" as never);
   }
 }
 </script>
@@ -159,7 +179,7 @@ function commitJsonDraft() {
     <!-- 颜色类型 -->
     <FriendlyColorPicker
       v-else-if="prop.type === 'color'"
-      v-model="modelProxy"
+      v-model="colorProxy"
       :show-alpha="true"
     />
 
