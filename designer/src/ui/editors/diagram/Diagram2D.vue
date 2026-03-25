@@ -2,32 +2,72 @@
   Diagram2D - 2D 流程图组件
   Canvas 矢量绘图，双击进入编辑模式，支持线、矩形、圆等图元
 -->
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import IconEpGrid from "~icons/ep/grid";
 import { useEditorStore } from "@/stores/editor-store";
 
-const props = defineProps({
+interface Diagram2DNodeLike {
+  id: string;
+  props?: {
+    diagramId?: string;
+    background?: string;
+    showGrid?: boolean;
+    gridSize?: number;
+  };
+  absolutePos?: {
+    w?: number;
+    h?: number;
+  };
+}
+
+interface Diagram2DEnterCanvasModePayload {
+  nodeId: string;
+  diagramId: string;
+}
+
+interface Diagram2DShapeLike {
+  hidden?: boolean;
+  type?: string;
+  data?: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    cx?: number;
+    cy?: number;
+    radius?: number;
+  };
+  style?: {
+    fill?: string;
+    stroke?: string;
+    strokeWidth?: number;
+  };
+}
+
+interface Diagram2DDataLike {
+  shapes?: Diagram2DShapeLike[];
+}
+
+const props = defineProps<{
   /**
    * 节点数据
-   * @type {import('@/editor-core').ComponentNode}
    */
-  node: {
-    type: Object,
-    required: true,
-  },
-});
+  node: Diagram2DNodeLike;
+}>();
 
-const emit = defineEmits(["enterCanvasMode"]);
+const emit = defineEmits<{
+  (event: "enterCanvasMode", payload: Diagram2DEnterCanvasModePayload): void;
+}>();
 
 const editorStore = useEditorStore();
-const canvasRef = ref(null);
+const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 /**
  * 绘图数据
  */
 const diagramId = computed(() => props.node.props?.diagramId || "");
-const diagramData = computed(() => {
+const diagramData = computed<Diagram2DDataLike | null>(() => {
   // TODO: 从 store 获取绘图数据
   return null;
 });
@@ -43,10 +83,10 @@ const shapeCount = computed(() => {
 /**
  * 组件样式
  */
-const componentStyle = computed(() => {
+const componentStyle = computed<Record<string, string>>(() => {
   const { background, showGrid, gridSize } = props.node.props || {};
 
-  const style = {
+  const style: Record<string, string> = {
     background: background || "#ffffff",
   };
 
@@ -76,7 +116,7 @@ const canvasHeight = computed(() => {
 /**
  * 双击进入Canvas编辑模式
  */
-function handleDoubleClick() {
+function handleDoubleClick(): void {
   emit("enterCanvasMode", {
     nodeId: props.node.id,
     diagramId: diagramId.value,
@@ -86,7 +126,7 @@ function handleDoubleClick() {
 /**
  * 渲染图元到 Canvas（预览）
  */
-function renderShapes() {
+function renderShapes(): void {
   if (!canvasRef.value || !diagramData.value) return;
 
   const ctx = canvasRef.value.getContext("2d");
@@ -99,6 +139,8 @@ function renderShapes() {
   const shapes = diagramData.value.shapes || [];
   for (const shape of shapes) {
     if (shape.hidden) continue;
+    const data = shape.data;
+    if (!data) continue;
 
     // TODO: 根据图元类型渲染
     ctx.save();
@@ -108,12 +150,12 @@ function renderShapes() {
 
     switch (shape.type) {
       case "rect":
-        ctx.fillRect(shape.data.x, shape.data.y, shape.data.width, shape.data.height);
-        ctx.strokeRect(shape.data.x, shape.data.y, shape.data.width, shape.data.height);
+        ctx.fillRect(data.x ?? 0, data.y ?? 0, data.width ?? 0, data.height ?? 0);
+        ctx.strokeRect(data.x ?? 0, data.y ?? 0, data.width ?? 0, data.height ?? 0);
         break;
       case "circle":
         ctx.beginPath();
-        ctx.arc(shape.data.cx, shape.data.cy, shape.data.radius, 0, 2 * Math.PI);
+        ctx.arc(data.cx ?? 0, data.cy ?? 0, data.radius ?? 0, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
         break;
