@@ -1,32 +1,41 @@
 <!--
   数据点面板：变量树右键菜单 +「移动到」子菜单
 -->
-<script setup>
-defineProps({
-  contextMenuVisible: { type: Boolean, default: false },
-  contextMenuStyle: { type: Object, required: true },
-  contextMenuNode: { type: Object, default: null },
-  showMoveToMenu: { type: Boolean, default: false },
-  submenuStyle: { type: Object, required: true },
-  varClipboard: { default: null },
-  canEditSelection: { type: Boolean, default: true },
-  canDeleteSelection: { type: Boolean, default: true },
-  availableGroups: { type: Array, default: () => [] },
-});
+<script setup lang="ts">
+interface ContextMenuGroupLike {
+  id: string;
+  name: string;
+}
 
-const emit = defineEmits([
-  "openGroupCreate",
-  "openCreateVar",
-  "openQuickAdd",
-  "paste",
-  "openEdit",
-  "copy",
-  "toggleMoveTo",
-  "removeVar",
-  "openGroupEdit",
-  "removeGroup",
-  "moveTo",
-]);
+interface ContextMenuNodeLike {
+  type?: "blank" | "variable" | "group";
+}
+
+defineProps<{
+  contextMenuVisible?: boolean;
+  contextMenuStyle: Record<string, string>;
+  contextMenuNode?: ContextMenuNodeLike | null;
+  showMoveToMenu?: boolean;
+  submenuStyle: Record<string, string>;
+  varClipboard?: unknown;
+  canEditSelection?: boolean;
+  canDeleteSelection?: boolean;
+  availableGroups?: ContextMenuGroupLike[];
+}>();
+
+const emit = defineEmits<{
+  (event: "openGroupCreate"): void;
+  (event: "openCreateVar"): void;
+  (event: "openQuickAdd"): void;
+  (event: "paste"): void;
+  (event: "openEdit"): void;
+  (event: "copy"): void;
+  (event: "toggleMoveTo"): void;
+  (event: "removeVar"): void;
+  (event: "openGroupEdit"): void;
+  (event: "removeGroup"): void;
+  (event: "moveTo", groupId: string | null): void;
+}>();
 </script>
 
 <template>

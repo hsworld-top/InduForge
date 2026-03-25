@@ -1,12 +1,26 @@
 <!--
   数据点面板顶部：快速添加、导入、导出
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpDownload from "~icons/ep/download";
 import IconEpLink from "~icons/ep/link";
 import IconEpUpload from "~icons/ep/upload";
 
-const emit = defineEmits(["quickAdd", "exportVars", "importVars"]);
+type VariableExportCommand = "csv" | "xlsx" | "json";
+
+const emit = defineEmits<{
+  (event: "quickAdd"): void;
+  (event: "exportVars", command: VariableExportCommand): void;
+  (event: "importVars", command: VariableExportCommand): void;
+}>();
+
+function handleExport(command: VariableExportCommand) {
+  emit("exportVars", command);
+}
+
+function handleImport(command: VariableExportCommand) {
+  emit("importVars", command);
+}
 </script>
 
 <template>
@@ -15,7 +29,7 @@ const emit = defineEmits(["quickAdd", "exportVars", "importVars"]);
       <IconEpLink class="toolbar-icon" />
       快速添加数据点
     </el-button>
-    <el-dropdown @command="(cmd) => emit('exportVars', cmd)">
+    <el-dropdown @command="handleExport">
       <el-button class="toolbar-button" size="small">
         <IconEpUpload class="toolbar-icon" />
         导出变量
@@ -28,7 +42,7 @@ const emit = defineEmits(["quickAdd", "exportVars", "importVars"]);
         </el-dropdown-menu>
       </template>
     </el-dropdown>
-    <el-dropdown @command="(cmd) => emit('importVars', cmd)">
+    <el-dropdown @command="handleImport">
       <el-button class="toolbar-button" size="small">
         <IconEpDownload class="toolbar-icon" />
         导入变量
