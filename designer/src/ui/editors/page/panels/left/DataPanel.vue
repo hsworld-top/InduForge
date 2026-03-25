@@ -2,7 +2,7 @@
   DataPanel - 数据面板容器
   包装 DatapointPanel，提供数据点/变量管理的入口
 -->
-<script setup>
+<script setup lang="ts">
 /** 数据面板：包装 DatapointPanel */
 import DatapointPanel from "./DatapointPanel.vue";
 </script>

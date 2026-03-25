@@ -2,7 +2,7 @@
   CanvasToolsPanel - Canvas 绘图工具面板
   选择、直线、矩形、圆形、椭圆、多边形、管道、文字等工具
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpCircle from "~icons/ep/circle-check";
 import IconEpConnection from "~icons/ep/connection";
 import IconEpCropSquare from "~icons/ep/crop";
@@ -11,19 +11,20 @@ import IconEpMinus from "~icons/ep/minus";
 import IconEpPicture from "~icons/ep/picture";
 import IconEpPointer from "~icons/ep/pointer";
 
-const props = defineProps({
-  modelValue: {
-    type: String,
-    default: "select",
-  },
+type CanvasToolType = "select" | "line" | "rect" | "circle" | "text" | "image" | "pipe" | "path";
+
+const props = withDefaults(defineProps<{ modelValue?: CanvasToolType }>(), {
+  modelValue: "select",
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits<{
+  (event: "update:modelValue", value: CanvasToolType): void;
+}>();
 
 /**
  * 工具提示信息
  */
-const toolHints = {
+const toolHints: Record<CanvasToolType, string> = {
   select: "选择和移动图元（V）",
   line: "绘制直线（L）",
   rect: "绘制矩形（R）",
@@ -37,7 +38,7 @@ const toolHints = {
 /**
  * 选择工具
  */
-function selectTool(tool) {
+function selectTool(tool: CanvasToolType) {
   emit("update:modelValue", tool);
 }
 </script>
