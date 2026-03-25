@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { storeToRefs } from "pinia";
 /**
  * 样式面板
@@ -17,12 +17,24 @@ const { doc, selection } = storeToRefs(editorStore);
 
 const activeNames = ref(["basic", "layout"]);
 
+interface StylePanelNodeLike {
+  id: string;
+  type: string;
+  props?: Record<string, unknown>;
+  style?: Record<string, unknown>;
+  children?: string[];
+}
+
+interface StylePanelSelectionLike {
+  getPrimaryElement?: () => { kind?: string; id?: string } | null;
+}
+
 /**
  * 获取当前选中的节点
  */
-const selectedNode = computed(() => {
-  const primary = selection.value?.getPrimaryElement();
-  if (!primary || primary.kind !== "node") return null;
+const selectedNode = computed<StylePanelNodeLike | null>(() => {
+  const primary = (selection.value as StylePanelSelectionLike | null)?.getPrimaryElement?.();
+  if (!primary || primary.kind !== "node" || !primary.id) return null;
   return doc.value?.getNode(primary.id) || null;
 });
 
@@ -36,7 +48,7 @@ const hasSelection = computed(() => selectedNode.value !== null);
  * @param {string | number | undefined} value - 尺寸值
  * @returns {number | undefined}
  */
-function parseSizeToNumber(value) {
+function parseSizeToNumber(value: unknown): number | undefined {
   if (value === undefined || value === null) return undefined;
   const text = String(value).trim();
   if (!text || text === "auto") return undefined;
@@ -50,7 +62,7 @@ function parseSizeToNumber(value) {
  * @param {import('@/editor-core').ComponentNode | null} containerNode - 容器节点
  * @returns {{ width: number, height: number } | null}
  */
-function resolveElContainerMinSize(containerNode) {
+function resolveElContainerMinSize(containerNode: StylePanelNodeLike | null) {
   if (!containerNode || containerNode.type !== "ElContainer") return null;
   const children = containerNode.children || [];
   let hasHeader = false;
@@ -66,7 +78,7 @@ function resolveElContainerMinSize(containerNode) {
     if (childNode.type === "ElMain") hasMain = true;
   }
 
-  const props = containerNode.props || {};
+  const props = (containerNode.props || {}) as Record<string, unknown>;
   if (typeof props.showHeader === "boolean") hasHeader = props.showHeader;
   if (typeof props.showFooter === "boolean") hasFooter = props.showFooter;
   if (typeof props.showAside === "boolean") hasAside = props.showAside;
@@ -116,7 +128,7 @@ const showSizeEditor = computed(() => {
 /**
  * 当前样式
  */
-const currentStyle = computed(() => {
+const currentStyle = computed<any>(() => {
   if (!selectedNode.value) return {};
   return selectedNode.value.style || {};
 });
@@ -125,7 +137,7 @@ const currentStyle = computed(() => {
  * 处理样式变更
  * @param {Object} newStyle - 新样式对象
  */
-function handleStyleChange(newStyle) {
+function handleStyleChange(newStyle: any) {
   if (!selectedNode.value) return;
   editorStore.updateNode(selectedNode.value.id, { style: newStyle });
 }
