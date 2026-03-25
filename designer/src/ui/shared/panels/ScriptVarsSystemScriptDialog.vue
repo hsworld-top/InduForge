@@ -1,7 +1,7 @@
 <!--
   脚本面板：系统启动/关闭脚本大编辑器（Monaco + 侧栏树）
 -->
-<script setup>
+<script setup lang="ts">
 import { ref, watch } from "vue";
 import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
@@ -9,40 +9,54 @@ import IconEpFolder from "~icons/ep/folder";
 import IconEpList from "~icons/ep/list";
 import MonacoEditor from "@/components/common/monaco-editor-async";
 
-defineProps({
-  dialogTitle: { type: String, required: true },
-  metaTitle: { type: String, required: true },
-  /** @type {unknown[]} */
-  customScriptSidebarTree: { type: Array, default: () => [] },
-  /** @type {unknown[]} */
-  pageSidebarTree: { type: Array, default: () => [] },
-  /** @type {unknown[]} */
-  jsCompletions: { type: Array, default: () => [] },
-  filterSidebarNode: { type: Function, required: true },
-  beforeClose: { type: Function, default: undefined },
-});
+interface SidebarNodeLike {
+  id: string;
+  label: string;
+  type: string;
+}
+
+defineProps<{
+  dialogTitle: string;
+  metaTitle: string;
+  customScriptSidebarTree?: SidebarNodeLike[];
+  pageSidebarTree?: SidebarNodeLike[];
+  jsCompletions?: unknown[];
+  filterSidebarNode: (value: string, data: SidebarNodeLike) => boolean;
+  beforeClose?: (...args: unknown[]) => void;
+}>();
 const emit = defineEmits(["openVariableEnum", "save", "customInsert", "pageInsert"]);
-const visible = defineModel({ type: Boolean, default: false });
-const systemCode = defineModel("systemCode", { type: String, default: "" });
-const scriptSearch = defineModel("scriptSearch", { type: String, default: "" });
-const pageSearch = defineModel("pageSearch", { type: String, default: "" });
+const visible = defineModel<boolean>({ default: false });
+const systemCode = defineModel<string>("systemCode", { default: "" });
+const scriptSearch = defineModel<string>("scriptSearch", { default: "" });
+const pageSearch = defineModel<string>("pageSearch", { default: "" });
 
-const monacoRef = ref(null);
-const customTreeRef = ref(null);
-const pageTreeInnerRef = ref(null);
+type TreeFilterLike = { filter?: (value: string) => void };
+type MonacoExposeLike = { insertText?: (text: string) => void; format?: () => void };
 
-watch(scriptSearch, (value) => {
+const monacoRef = ref<MonacoExposeLike | null>(null);
+const customTreeRef = ref<TreeFilterLike | null>(null);
+const pageTreeInnerRef = ref<TreeFilterLike | null>(null);
+
+watch(scriptSearch, (value: string) => {
   customTreeRef.value?.filter?.(value);
 });
 
-watch(pageSearch, (value) => {
+watch(pageSearch, (value: string) => {
   pageTreeInnerRef.value?.filter?.(value);
 });
 
 defineExpose({
-  insertText: (text) => monacoRef.value?.insertText?.(text),
+  insertText: (text: string) => monacoRef.value?.insertText?.(text),
   format: () => monacoRef.value?.format?.(),
 });
+
+function handleCustomInsert(data: SidebarNodeLike) {
+  emit("customInsert", data);
+}
+
+function handlePageInsert(data: SidebarNodeLike) {
+  emit("pageInsert", data);
+}
 </script>
 
 <template>
@@ -88,7 +102,7 @@ defineExpose({
               :default-expand-all="true"
               :expand-on-click-node="false"
               :filter-node-method="filterSidebarNode"
-              @node-click="(data) => emit('customInsert', data)"
+              @node-click="handleCustomInsert"
             >
               <template #default="{ data }">
                 <div class="tree-node" :class="`node-${data.type}`">
@@ -119,7 +133,7 @@ defineExpose({
               :default-expand-all="true"
               :expand-on-click-node="false"
               :filter-node-method="filterSidebarNode"
-              @node-click="(data) => emit('pageInsert', data)"
+              @node-click="handlePageInsert"
             >
               <template #default="{ data }">
                 <div class="tree-node" :class="`node-${data.type}`">

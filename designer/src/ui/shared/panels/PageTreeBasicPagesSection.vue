@@ -1,17 +1,28 @@
 <!--
   页面树 — 基础页面固定槽位列表
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpDocument from "~icons/ep/document";
 import IconEpMoreFilled from "~icons/ep/more-filled";
 
-defineProps({
-  /** @type {unknown[]} */
-  basicSlots: { type: Array, default: () => [] },
-  isPageActive: { type: Function, required: true },
-});
+interface BasicSlotLike {
+  type: string;
+  label: string;
+  page?: { id: string } | null;
+}
+
+defineProps<{
+  basicSlots: BasicSlotLike[];
+  isPageActive: (pageId: string) => boolean;
+}>();
 
 const emit = defineEmits(["slotClick", "slotDblClick", "rowAction"]);
+
+function createRowActionHandler(basicSlot: BasicSlotLike) {
+  return (command: string) => {
+    emit("rowAction", command, basicSlot);
+  };
+}
 </script>
 
 <template>
@@ -37,7 +48,8 @@ const emit = defineEmits(["slotClick", "slotDblClick", "rowAction"]);
         <el-dropdown
           trigger="click"
           placement="bottom-end"
-          @command="(command) => emit('rowAction', command, basicSlot)"
+          :command="basicSlot.type"
+          @command="createRowActionHandler(basicSlot)"
         >
           <el-button class="node-action-btn" text @click.stop>
             <IconEpMoreFilled />

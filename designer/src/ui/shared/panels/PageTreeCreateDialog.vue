@@ -1,34 +1,57 @@
 <!--
   页面树：新建页面 / 分组弹窗
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpFolder from "~icons/ep/folder";
 import IconEpFolderOpened from "~icons/ep/folder-opened";
 import IconEpPlus from "~icons/ep/plus";
 
-const props = defineProps({
-  title: { type: String, required: true },
-  createTypeOptions: { type: Array, required: true },
-  form: {
-    type: Object,
-    required: true,
-  },
-  rules: { type: Object, required: true },
-  folderOptions: { type: Array, required: true },
-  creating: { type: Boolean, default: false },
-  isFixedBasicType: { type: Function, required: true },
-});
+interface CreateTypeOptionLike {
+  value: string;
+  icon?: unknown;
+  label: string;
+  desc?: string;
+}
+
+interface PageFolderOptionLike {
+  id: string;
+  name: string;
+}
+
+interface CreatePageFormLike {
+  type: string;
+  name: string;
+  parentId: string | null;
+}
+
+const props = defineProps<{
+  title: string;
+  createTypeOptions: CreateTypeOptionLike[];
+  form: CreatePageFormLike;
+  rules: Record<string, unknown>;
+  folderOptions: PageFolderOptionLike[];
+  creating?: boolean;
+  isFixedBasicType: (type: string) => boolean;
+}>();
 
 const emit = defineEmits(["update:form", "confirm"]);
 
-const open = defineModel({ type: Boolean, default: false });
+const open = defineModel<boolean>({ default: false });
 
-function patchForm(partial) {
+function patchForm(partial: Partial<CreatePageFormLike>) {
   emit("update:form", { ...props.form, ...partial });
 }
 
-function selectType(value) {
+function selectType(value: string) {
   patchForm({ type: value });
+}
+
+function handleNameUpdate(value: string) {
+  patchForm({ name: value });
+}
+
+function handleParentIdUpdate(value: string | null) {
+  patchForm({ parentId: value });
 }
 </script>
 
@@ -64,7 +87,7 @@ function selectType(value) {
           placeholder="请输入名称"
           maxlength="50"
           show-word-limit
-          @update:model-value="(v) => patchForm({ name: v })"
+          @update:model-value="handleNameUpdate"
         />
       </el-form-item>
 
@@ -73,7 +96,7 @@ function selectType(value) {
           :model-value="form.parentId"
           clearable
           placeholder="选择分组（可选）"
-          @update:model-value="(v) => patchForm({ parentId: v })"
+          @update:model-value="handleParentIdUpdate"
         >
           <el-option label="根目录" :value="null">
             <div class="flex items-center gap-2">

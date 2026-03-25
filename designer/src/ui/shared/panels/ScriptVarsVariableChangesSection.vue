@@ -1,16 +1,22 @@
 <!--
   脚本面板：变量改变折叠块（树 + 拖拽）
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpFolder from "~icons/ep/folder";
 import IconEpRefresh from "~icons/ep/refresh";
 
-defineProps({
-  tree: { type: Array, required: true },
-  allowDrop: { type: Function, required: true },
-  allowDrag: { type: Function, required: true },
-  isSelected: { type: Function, required: true },
-});
+interface ScriptTreeNodeLike {
+  id: string;
+  label: string;
+  type: string;
+}
+
+defineProps<{
+  tree: ScriptTreeNodeLike[];
+  allowDrop: (draggingNode: unknown, dropNode: unknown, dropType: unknown) => boolean;
+  allowDrag: (draggingNode: unknown) => boolean;
+  isSelected: (data: ScriptTreeNodeLike) => boolean;
+}>();
 
 const emit = defineEmits([
   "blankContextmenu",
@@ -19,6 +25,22 @@ const emit = defineEmits([
   "nodeDrop",
   "nodeClick",
 ]);
+
+function handleNodeDblclick(data: ScriptTreeNodeLike) {
+  emit("nodeDblclick", data);
+}
+
+function handleNodeContextmenu(event: MouseEvent, data: ScriptTreeNodeLike) {
+  emit("nodeContextmenu", event, data);
+}
+
+function handleNodeDrop(draggingNode: unknown, dropNode: unknown, dropType: unknown) {
+  emit("nodeDrop", draggingNode, dropNode, dropType);
+}
+
+function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
+  emit("nodeClick", data, event);
+}
 </script>
 
 <template>
@@ -36,18 +58,16 @@ const emit = defineEmits([
           :allow-drop="allowDrop"
           :allow-drag="allowDrag"
           @node-click="() => {}"
-          @node-dblclick="(data) => emit('nodeDblclick', data)"
-          @node-contextmenu="(event, data) => emit('nodeContextmenu', event, data)"
-          @node-drop="
-            (draggingNode, dropNode, dropType) => emit('nodeDrop', draggingNode, dropNode, dropType)
-          "
+          @node-dblclick="handleNodeDblclick"
+          @node-contextmenu="handleNodeContextmenu"
+          @node-drop="handleNodeDrop"
         >
           <template #default="{ data }">
             <div
               class="tree-node"
               :class="[{ 'is-selected': isSelected(data) }, `node-${data.type}`]"
-              @click.stop="(event) => emit('nodeClick', data, event)"
-              @dblclick.stop="emit('nodeDblclick', data)"
+              @click.stop="(event) => handleNodeClick(data, event)"
+              @dblclick.stop="handleNodeDblclick(data)"
             >
               <el-icon class="node-icon icon-change">
                 <IconEpFolder v-if="data.type === 'group'" />
