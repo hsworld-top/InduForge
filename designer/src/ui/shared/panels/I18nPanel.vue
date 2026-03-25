@@ -2,7 +2,7 @@
   I18nPanel - 国际化面板（占位）
   预留多语言配置入口，待实现
 -->
-<script setup>
+<script setup lang="ts">
 /** 国际化面板占位 */
 </script>
 

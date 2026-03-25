@@ -2,7 +2,7 @@
   AiPanel - AI 对话入口（占位）
   预留 AI 辅助设计入口，待实现
 -->
-<script setup>
+<script setup lang="ts">
 /** AI 对话入口占位 */
 </script>
 

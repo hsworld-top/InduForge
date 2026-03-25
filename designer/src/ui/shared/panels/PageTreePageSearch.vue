@@ -1,7 +1,7 @@
 <!--
   页面树顶部搜索框
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpSearch from "~icons/ep/search";
 
 const searchText = defineModel({ type: String, default: "" });
