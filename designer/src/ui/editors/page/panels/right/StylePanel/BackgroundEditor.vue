@@ -2,22 +2,25 @@
   BackgroundEditor - 背景样式编辑器
   编辑背景颜色（含透明度）
 -->
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 
-const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({}),
-  },
+interface BackgroundStyleModel {
+  background?: string;
+}
+
+const props = withDefaults(defineProps<{ modelValue?: BackgroundStyleModel }>(), {
+  modelValue: () => ({}),
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits<{
+  (event: "update:modelValue", value: BackgroundStyleModel): void;
+}>();
 
 const backgroundColor = computed(() => props.modelValue.background || "");
 
-function handleColorChange(value) {
+function handleColorChange(value: string) {
   emit("update:modelValue", { ...props.modelValue, background: value });
 }
 </script>

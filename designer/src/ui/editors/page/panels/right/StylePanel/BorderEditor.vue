@@ -2,20 +2,26 @@
   BorderEditor - 边框样式编辑器
   编辑边框宽度、样式、颜色、圆角
 -->
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 
-const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({}),
-  },
+interface BorderStyleModel {
+  borderWidth?: number | string;
+  borderStyle?: string;
+  borderColor?: string;
+  borderRadius?: number | string;
+}
+
+const props = withDefaults(defineProps<{ modelValue?: BorderStyleModel }>(), {
+  modelValue: () => ({}),
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits<{
+  (event: "update:modelValue", value: BorderStyleModel): void;
+}>();
 
-function parseValue(value, defaultValue = 0) {
+function parseValue(value: unknown, defaultValue = 0): number {
   if (!value) return defaultValue;
   const num = Number.parseInt(String(value), 10);
   return isNaN(num) ? defaultValue : num;
@@ -26,19 +32,19 @@ const borderStyle = computed(() => props.modelValue.borderStyle || "none");
 const borderColor = computed(() => props.modelValue.borderColor || "#000000");
 const borderRadius = computed(() => parseValue(props.modelValue.borderRadius, 0));
 
-function handleWidthChange(value) {
+function handleWidthChange(value: number) {
   emit("update:modelValue", { ...props.modelValue, borderWidth: value });
 }
 
-function handleStyleChange(value) {
+function handleStyleChange(value: string) {
   emit("update:modelValue", { ...props.modelValue, borderStyle: value });
 }
 
-function handleColorChange(value) {
+function handleColorChange(value: string) {
   emit("update:modelValue", { ...props.modelValue, borderColor: value });
 }
 
-function handleRadiusChange(value) {
+function handleRadiusChange(value: number) {
   emit("update:modelValue", { ...props.modelValue, borderRadius: value });
 }
 </script>

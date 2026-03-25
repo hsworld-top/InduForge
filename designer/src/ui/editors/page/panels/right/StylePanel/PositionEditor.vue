@@ -2,23 +2,28 @@
   PositionEditor - 定位编辑器
   编辑 position、left/top/right/bottom
 -->
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 
-const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({}),
-  },
+interface PositionStyleModel {
+  position?: string;
+  left?: number | string | null;
+  top?: number | string | null;
+  zIndex?: number | string | null;
+  overflow?: string;
+}
+
+const props = withDefaults(defineProps<{ modelValue?: PositionStyleModel }>(), {
+  modelValue: () => ({}),
 });
 
-function parseValue(value) {
+function parseValue(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const num = Number.parseInt(String(value), 10);
   return isNaN(num) ? undefined : num;
 }
 
-function formatDisplayValue(value) {
+function formatDisplayValue(value: unknown): string {
   if (value === undefined || value === null || value === "") {
     return "-";
   }
