@@ -2,7 +2,7 @@
   DiagramAreaPanel - 绘图区面板
   2D 流程图等可拖拽到画布的图表组件入口
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpBox from "~icons/ep/box";
 import IconEpGrid from "~icons/ep/grid";
 import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
@@ -12,7 +12,7 @@ import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-dra
  * @param {string} type - 组件类型
  * @param {DragEvent} event - 拖拽事件
  */
-function handleDragStart(type, event) {
+function handleDragStart(type: string, event: DragEvent) {
   startDrag(type);
   if (!event.dataTransfer) return;
   const payload = JSON.stringify({ type });
@@ -26,7 +26,7 @@ function handleDragStart(type, event) {
  * @param {string} type - 组件类型
  * @param {MouseEvent} event - 鼠标事件
  */
-function handlePointerStart(type, event) {
+function handlePointerStart(type: string, event: MouseEvent) {
   if (event.button !== 0) return;
   startDrag(type);
 }
@@ -34,7 +34,7 @@ function handlePointerStart(type, event) {
 /**
  * 处理拖拽结束
  */
-function handleDragEnd() {
+function handleDragEnd(): void {
   endDrag();
 }
 </script>

@@ -2,7 +2,7 @@
   MaterialPanel - 物料面板
   根据编辑模式切换：页面模式（组件/绘图区/资源 Tab）、Canvas 模式（绘图工具）
 -->
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from "vue";
 import IconEpBack from "~icons/ep/back";
 import CanvasToolsPanel from "./CanvasToolsPanel.vue";
@@ -10,25 +10,30 @@ import ComponentPanel from "./ComponentPanel.vue";
 import DiagramAreaPanel from "./DiagramAreaPanel.vue";
 import ResourcePanel from "./ResourcePanel.vue";
 
-const props = defineProps({
-  /**
-   * 编辑模式：page - 页面编辑，canvas - Canvas 绘图
-   */
-  editMode: {
-    type: String,
-    default: "page",
-    validator: (v) => ["page", "canvas"].includes(v),
-  },
-  /**
-   * 当前激活的工具
-   */
-  activeTool: {
-    type: String,
-    default: "",
-  },
-});
+type MaterialEditMode = "page" | "canvas";
+type MaterialToolType = "select" | "line" | "rect" | "circle" | "text" | "image" | "pipe" | "path";
 
-const emit = defineEmits(["update:editMode", "update:activeTool"]);
+const props = withDefaults(
+  defineProps<{
+    /**
+     * 编辑模式：page - 页面编辑，canvas - Canvas 绘图
+     */
+    editMode?: MaterialEditMode;
+    /**
+     * 当前激活的工具
+     */
+    activeTool?: MaterialToolType | "";
+  }>(),
+  {
+    editMode: "page",
+    activeTool: "",
+  },
+);
+
+const emit = defineEmits<{
+  (event: "update:editMode", value: MaterialEditMode): void;
+  (event: "update:activeTool", value: MaterialToolType | ""): void;
+}>();
 
 const activeTab = ref("components");
 
@@ -36,8 +41,8 @@ const activeTab = ref("components");
  * Canvas 工具栏 v-model 代理，避免直接修改 props
  */
 const activeToolModel = computed({
-  get: () => props.activeTool,
-  set: (value) => emit("update:activeTool", value),
+  get: () => (props.activeTool || "select") as MaterialToolType,
+  set: (value: MaterialToolType | "") => emit("update:activeTool", value),
 });
 
 /**
