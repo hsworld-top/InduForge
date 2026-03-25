@@ -3,7 +3,7 @@
   支持：CSS/HTML/JS/JSON/TS、主题、补全、格式化、错误标记
   用于：脚本编辑、样式编辑、表达式编辑等
 -->
-<script setup>
+<script setup lang="ts">
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
@@ -24,30 +24,91 @@ import "monaco-editor/esm/vs/language/html/monaco.contribution";
 import "monaco-editor/esm/vs/language/json/monaco.contribution";
 import "monaco-editor/esm/vs/language/typescript/monaco.contribution";
 
-const props = defineProps({
-  modelValue: { type: String, default: "" },
-  language: { type: String, default: "css" },
-  theme: { type: String, default: "vs" },
-  height: { type: String, default: "300px" },
-  options: { type: Object, default: () => ({}) },
-  completions: { type: Array, default: () => [] },
+interface MonacoCompletionItemLike {
+  label?: string;
+  insertText?: string;
+  prefix?: string | string[];
+  kind?: string | number;
+  detail?: string;
+  documentation?: string;
+}
+
+interface MonacoEditorProps {
+  modelValue?: string | undefined;
+  language?: string | undefined;
+  theme?: string | undefined;
+  height?: string | undefined;
+  options?: Record<string, unknown> | undefined;
+  completions?: unknown[] | undefined;
+}
+
+const props = withDefaults(defineProps<MonacoEditorProps>(), {
+  modelValue: "",
+  language: "css",
+  theme: "vs",
+  height: "300px",
+  options: () => ({}),
+  completions: () => [],
 });
 
-const emit = defineEmits(["update:modelValue", "change", "markers"]);
+const emit = defineEmits<{
+  (event: "update:modelValue", value: string): void;
+  (event: "change", value: string): void;
+  (event: "markers", markers: unknown[]): void;
+}>();
 
-const editorContainerRef = ref(null);
-let editorInstance = null;
+const monacoCompatLanguages = monaco.languages as typeof monaco.languages & Record<string, any>;
+
+const editorContainerRef = ref<HTMLElement | null>(null);
+let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 let isInternalUpdate = false;
 let jsFormatterRegistered = false;
-const completionItems = ref(props.completions || []);
-let completionProvider = null;
-let markerTooltipEl = null;
-let latestMarkers = [];
-let extraLibDisposable = null;
-let prettierReady = null;
+function normalizeCompletionItems(items?: unknown[] | null): MonacoCompletionItemLike[] {
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const normalized: MonacoCompletionItemLike = {};
+    if (typeof record.label === "string") normalized.label = record.label;
+    if (typeof record.insertText === "string") normalized.insertText = record.insertText;
+    if (typeof record.prefix === "string" || Array.isArray(record.prefix)) {
+      normalized.prefix = record.prefix as string | string[];
+    }
+    if (typeof record.kind === "string" || typeof record.kind === "number") normalized.kind = record.kind;
+    if (typeof record.detail === "string") normalized.detail = record.detail;
+    if (typeof record.documentation === "string") normalized.documentation = record.documentation;
+    return normalized.label || normalized.insertText ? [normalized] : [];
+  });
+}
+
+const completionItems = ref<MonacoCompletionItemLike[]>(normalizeCompletionItems(props.completions));
+let completionProvider: monaco.IDisposable | null = null;
+let markerTooltipEl: HTMLDivElement | null = null;
+let latestMarkers: Array<{
+  startLineNumber: number;
+  endLineNumber: number;
+  startColumn: number;
+  endColumn: number;
+  severity: number;
+  message: string;
+}> = [];
+let extraLibDisposable: monaco.IDisposable | null = null;
+interface PrettierModuleLike {
+  format: (code: string, options?: unknown) => Promise<string>;
+  plugins: unknown[];
+}
+
+type MonacoMarkerLike = monaco.editor.IMarkerData;
+type MonacoPositionLike = monaco.Position;
+type MonacoTextModelLike = monaco.editor.ITextModel;
+type MonacoLanguageCompletionItemKind = keyof typeof monaco.languages.CompletionItemKind;
+type MonacoCompletionItemKindValue = (typeof monaco.languages.CompletionItemKind)[MonacoLanguageCompletionItemKind];
+type MonacoTextEdit = monaco.languages.TextEdit;
+
+let prettierReady: Promise<PrettierModuleLike | null> | null = null;
 
 /** 执行编辑器内置动作（如格式化、格式化文档） */
-async function runEditorAction(id) {
+async function runEditorAction(id: string) {
   const action = editorInstance?.getAction(id);
   if (!action) return false;
   try {
@@ -62,21 +123,22 @@ const mediaQuery =
   typeof window !== "undefined" && window.matchMedia
     ? window.matchMedia("(prefers-color-scheme: dark)")
     : null;
-const cleanupFns = [];
+const cleanupFns: Array<() => void> = [];
 
 /** 将主题名映射为 Monaco 主题 */
-function normalizeTheme(theme) {
+function normalizeTheme(theme?: string | null): string {
   if (theme === "dark") return "vs-dark";
   if (theme === "light") return "vs";
   return theme || "vs";
 }
 
 /** 根据 document.documentElement 或系统偏好检测明暗主题 */
-function detectTheme() {
+function detectTheme(): string {
   if (typeof document !== "undefined") {
     const html = document.documentElement;
     const body = document.body;
-    const isDark = (el) => el && (el.classList?.contains("dark") || el.dataset?.theme === "dark");
+    const isDark = (el: HTMLElement | null) =>
+      !!el && (el.classList?.contains("dark") || el.dataset?.theme === "dark");
     if (isDark(html) || isDark(body)) return "vs-dark";
   }
   if (mediaQuery) return mediaQuery.matches ? "vs-dark" : "vs";
@@ -89,7 +151,7 @@ function registerMonacoEnvironment() {
   }
 
   self.MonacoEnvironment = {
-    getWorker(_, label) {
+    getWorker(_moduleId: string, label: string) {
       if (label === "css" || label === "scss" || label === "less") {
         return new CssWorker();
       }
@@ -109,7 +171,7 @@ function registerMonacoEnvironment() {
 
 registerMonacoEnvironment();
 
-function baseOptions() {
+function baseOptions(): monaco.editor.IStandaloneEditorConstructionOptions {
   return {
     value: props.modelValue,
     language: props.language,
@@ -136,15 +198,15 @@ function baseOptions() {
     snippetSuggestions: "inline",
     suggestSelection: "first",
     parameterHints: { enabled: true },
-    lightbulb: { enabled: true },
+    lightbulb: { enabled: monaco.editor.ShowLightbulbIconMode.On },
     autoClosingBrackets: "always",
     autoClosingQuotes: "always",
     hover: { enabled: true, delay: 300 },
-    ...props.options,
+    ...(props.options || {}),
   };
 }
 
-function applyTheme(theme) {
+function applyTheme(theme?: string | null) {
   monaco.editor.setTheme(normalizeTheme(theme || detectTheme()));
 }
 
@@ -176,7 +238,7 @@ function hideMarkerTooltip() {
   }
 }
 
-function markerContainsPosition(marker, position) {
+function markerContainsPosition(marker: MonacoMarkerLike, position: MonacoPositionLike | null) {
   if (!marker || !position) return false;
   if (position.lineNumber < marker.startLineNumber) return false;
   if (position.lineNumber > marker.endLineNumber) return false;
@@ -189,7 +251,7 @@ function markerContainsPosition(marker, position) {
   return true;
 }
 
-function pickMarkerAtPosition(position) {
+function pickMarkerAtPosition(position: MonacoPositionLike | null) {
   if (!position) return null;
   const markers = latestMarkers || [];
   const matches = markers.filter((marker) => markerContainsPosition(marker, position));
@@ -197,7 +259,7 @@ function pickMarkerAtPosition(position) {
   return matches.sort((a, b) => b.severity - a.severity)[0];
 }
 
-function showMarkerTooltip(position) {
+function showMarkerTooltip(position: MonacoPositionLike | null) {
   if (!editorInstance || !position) {
     hideMarkerTooltip();
     return;
@@ -220,15 +282,15 @@ function showMarkerTooltip(position) {
   markerTooltipEl.style.display = "block";
 }
 
-function resolveCompletionKind(kind) {
+function resolveCompletionKind(kind?: string | number): MonacoCompletionItemKindValue {
   if (typeof kind === "number") return kind;
-  if (typeof kind === "string" && monaco.languages.CompletionItemKind[kind]) {
-    return monaco.languages.CompletionItemKind[kind];
+  if (typeof kind === "string" && monaco.languages.CompletionItemKind[kind as MonacoLanguageCompletionItemKind]) {
+    return monaco.languages.CompletionItemKind[kind as MonacoLanguageCompletionItemKind];
   }
   return monaco.languages.CompletionItemKind.Text;
 }
 
-function resolveCompletionItems(model, position) {
+function resolveCompletionItems(model: MonacoTextModelLike, position: MonacoPositionLike) {
   const word = model.getWordUntilPosition(position);
   const range = new monaco.Range(
     position.lineNumber,
@@ -248,10 +310,10 @@ function resolveCompletionItems(model, position) {
     .map((item) => ({
       label: item.label ?? item.insertText ?? "",
       kind: resolveCompletionKind(item.kind),
-      detail: item.detail,
-      documentation: item.documentation,
       insertText: item.insertText ?? item.label ?? "",
       range,
+      ...(item.detail ? { detail: item.detail } : {}),
+      ...(item.documentation ? { documentation: item.documentation } : {}),
     }))
     .filter((item) => item.label && item.insertText);
 }
@@ -264,14 +326,14 @@ function registerCompletionProvider() {
   if (!completionItems.value || completionItems.value.length === 0) return;
   completionProvider = monaco.languages.registerCompletionItemProvider(props.language, {
     triggerCharacters: [".", "$"],
-    provideCompletionItems(model, position) {
+    provideCompletionItems(model: MonacoTextModelLike, position: MonacoPositionLike) {
       return { suggestions: resolveCompletionItems(model, position) };
     },
   });
 }
 
-function buildSemicolonEdits(model) {
-  const edits = [];
+function buildSemicolonEdits(model: MonacoTextModelLike): MonacoTextEdit[] {
+  const edits: MonacoTextEdit[] = [];
   const lineCount = model.getLineCount();
   for (let lineNumber = 1; lineNumber <= lineCount; lineNumber += 1) {
     const line = model.getLineContent(lineNumber);
@@ -301,7 +363,7 @@ function buildSemicolonEdits(model) {
   return edits;
 }
 
-async function loadPrettier() {
+async function loadPrettier(): Promise<PrettierModuleLike | null> {
   if (prettierReady) return prettierReady;
   prettierReady = Promise.all([
     import("prettier/standalone"),
@@ -311,12 +373,12 @@ async function loadPrettier() {
     .then(([prettier, parserBabel, estree]) => ({
       format: prettier.format,
       plugins: [parserBabel.default || parserBabel, estree.default || estree],
-    }))
+    }) as PrettierModuleLike)
     .catch(() => null);
   return prettierReady;
 }
 
-async function formatWithPrettier(code, language) {
+async function formatWithPrettier(code: string, language: string): Promise<string | null> {
   const prettier = await loadPrettier();
   if (!prettier) return null;
   const parser = language === "typescript" ? "babel-ts" : "babel";
@@ -349,8 +411,8 @@ async function formatWithPrettier(code, language) {
 function ensureJsFormatter() {
   if (jsFormatterRegistered) return;
   jsFormatterRegistered = true;
-  const provider = {
-    async provideDocumentFormattingEdits(model) {
+  const provider: monaco.languages.DocumentFormattingEditProvider = {
+    async provideDocumentFormattingEdits(model: MonacoTextModelLike): Promise<MonacoTextEdit[]> {
       const languageId = model.getLanguageId?.() || props.language;
       const code = model.getValue();
       const formatted = await formatWithPrettier(code, languageId);
@@ -369,7 +431,7 @@ function ensureJsFormatter() {
   monaco.languages.registerDocumentFormattingEditProvider("typescript", provider);
 }
 
-async function applyFormatEdits() {
+async function applyFormatEdits(): Promise<boolean> {
   if (!editorInstance) return false;
   const model = editorInstance.getModel();
   if (!model) return false;
@@ -396,7 +458,7 @@ function initEditor() {
   if (editorInstance) editorInstance.dispose();
 
   if (props.language === "css") {
-    monaco.languages.css.cssDefaults.setOptions({
+    monacoCompatLanguages.cssDefaults.setOptions({
       validate: true,
       lint: {
         important: "warning",
@@ -411,34 +473,28 @@ function initEditor() {
     const compilerOptions = {
       allowJs: true,
       allowNonTsExtensions: true,
-      target: monaco.languages.typescript.ScriptTarget.ES2022,
-      module: monaco.languages.typescript.ModuleKind.ESNext,
+      target: 99,
+      module: 99,
       lib: ["es2022", "dom"],
-      moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+      moduleResolution: 2,
       allowSyntheticDefaultImports: true,
       esModuleInterop: true,
       noEmit: true,
       checkJs: true,
     };
-    if (
-      monaco.languages.typescript.ModuleDetectionKind &&
-      typeof monaco.languages.typescript.ModuleDetectionKind.Force !== "undefined"
-    ) {
-      compilerOptions.moduleDetection = monaco.languages.typescript.ModuleDetectionKind.Force;
-    }
-    monaco.languages.typescript.javascriptDefaults.setCompilerOptions(compilerOptions);
-    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+    monacoCompatLanguages.javascriptDefaults.setCompilerOptions(compilerOptions);
+    monacoCompatLanguages.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: false,
       noSyntaxValidation: false,
       onlyVisible: false,
       diagnosticCodesToIgnore: ignoreDiagnostics,
     });
-    monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
+    monacoCompatLanguages.javascriptDefaults.setEagerModelSync(true);
     if (extraLibDisposable) {
       extraLibDisposable.dispose();
       extraLibDisposable = null;
     }
-    extraLibDisposable = monaco.languages.typescript.javascriptDefaults.addExtraLib(
+    extraLibDisposable = monacoCompatLanguages.javascriptDefaults.addExtraLib(
       "declare const $global: Record<string, any>;\n" +
         "declare const $vars: Record<string, any>;\n" +
         "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
@@ -475,7 +531,10 @@ function initEditor() {
     if (!model) return;
     const match = uris.some((uri) => uri.toString() === model.uri.toString());
     if (!match) return;
-    const markers = monaco.editor.getModelMarkers({ resource: model.uri });
+    const markers = monaco.editor.getModelMarkers({ resource: model.uri }).map((marker) => ({
+      ...marker,
+      message: marker.message || "",
+    }));
     latestMarkers = markers;
     emit("markers", markers);
   });
@@ -483,14 +542,19 @@ function initEditor() {
   requestAnimationFrame(() => {
     const model = editorInstance?.getModel();
     if (!model) return;
-    const markers = monaco.editor.getModelMarkers({ resource: model.uri });
+    const markers = monaco.editor.getModelMarkers({ resource: model.uri }).map((marker) => ({
+      ...marker,
+      message: marker.message || "",
+    }));
     latestMarkers = markers;
     emit("markers", markers);
   });
 
   editorInstance.onDidChangeModelContent(() => {
     if (isInternalUpdate) return;
-    const val = editorInstance.getValue();
+    const instance = editorInstance;
+    if (!instance) return;
+    const val = instance.getValue();
     isInternalUpdate = true;
     emit("update:modelValue", val);
     emit("change", val);
@@ -524,12 +588,13 @@ watch(
 
 watch(
   () => props.language,
-  (lang) => {
-    if (editorInstance) {
-      monaco.editor.setModelLanguage(editorInstance.getModel(), lang);
-    }
-  },
-);
+    (lang) => {
+      const model = editorInstance?.getModel();
+      if (model) {
+        monaco.editor.setModelLanguage(model, lang || props.language || "css");
+      }
+    },
+  );
 
 watch(
   () => props.theme,
@@ -541,7 +606,7 @@ watch(
 watch(
   () => props.completions,
   (items) => {
-    completionItems.value = items || [];
+    completionItems.value = normalizeCompletionItems(items);
     registerCompletionProvider();
   },
   { deep: true },
@@ -556,7 +621,7 @@ watch(
 
 function setupThemeListeners() {
   if (mediaQuery) {
-    const handler = (event) => applyTheme(event.matches ? "vs-dark" : "vs");
+    const handler = (event: MediaQueryListEvent) => applyTheme(event.matches ? "vs-dark" : "vs");
     mediaQuery.addEventListener("change", handler);
     cleanupFns.push(() => mediaQuery.removeEventListener("change", handler));
   }
@@ -596,30 +661,31 @@ onBeforeUnmount(() => {
   cleanupFns.forEach((fn) => fn());
 });
 
-defineExpose({
-  focus: () => editorInstance?.focus(),
-  format: async () => {
+  defineExpose({
+    focus: () => editorInstance?.focus(),
+    format: async () => {
     if (!editorInstance) return false;
     if (await runEditorAction("editor.action.formatDocument")) return true;
     if (await runEditorAction("editor.action.formatSelection")) return true;
-    try {
-      editorInstance.trigger("format", "editor.action.formatDocument");
-      return true;
-    } catch (error) {
-      return applyFormatEdits();
+      try {
+      editorInstance.trigger("format", "editor.action.formatDocument", undefined);
+        return true;
+      } catch (error) {
+        return applyFormatEdits();
     }
   },
   getValue: () => editorInstance?.getValue() ?? "",
-  setValue: (value) => {
+  setValue: (value: string) => {
     if (!editorInstance) return;
     isInternalUpdate = true;
     editorInstance.setValue(value || "");
     requestAnimationFrame(() => (isInternalUpdate = false));
   },
-  insertText: (text) => {
+  insertText: (text: string) => {
     if (!editorInstance || !text) return;
     const selection = editorInstance.getSelection();
     const position = editorInstance.getPosition();
+    if (!position) return;
     const range =
       selection ||
       new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column);

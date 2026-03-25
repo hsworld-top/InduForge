@@ -3,8 +3,9 @@
   多选时显示：对齐、分布、等大小、图层操作
 -->
 <script setup lang="ts">
+import type { CSSProperties } from "vue";
 import { storeToRefs } from "pinia";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import IconAlignCenterH from "~icons/lucide/align-horizontal-justify-center";
 
 import IconAlignRight from "~icons/lucide/align-horizontal-justify-end";

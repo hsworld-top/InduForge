@@ -9,8 +9,6 @@ import { computed, ref, watch } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 import MonacoEditor from "@/components/common/monaco-editor-async";
 
-defineOptions({ name: "PropEditor" });
-
 interface PropEditorOptionLike {
   label: string;
   value: string | number;
@@ -27,6 +25,8 @@ interface PropEditorPropLike {
   step?: number;
   options?: PropEditorOptionLike[];
 }
+
+defineOptions({ name: "PropEditor" });
 
 const props = defineProps<{
   /** 属性定义 */

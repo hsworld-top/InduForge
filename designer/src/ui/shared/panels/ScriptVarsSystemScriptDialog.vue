@@ -30,8 +30,14 @@ const systemCode = defineModel<string>("systemCode", { default: "" });
 const scriptSearch = defineModel<string>("scriptSearch", { default: "" });
 const pageSearch = defineModel<string>("pageSearch", { default: "" });
 
-type TreeFilterLike = { filter?: (value: string) => void };
-type MonacoExposeLike = { insertText?: (text: string) => void; format?: () => void };
+interface TreeFilterLike {
+  filter?: (value: string) => void;
+}
+
+interface MonacoExposeLike {
+  insertText?: (text: string) => void;
+  format?: () => void;
+}
 
 const monacoRef = ref<MonacoExposeLike | null>(null);
 const customTreeRef = ref<TreeFilterLike | null>(null);

@@ -62,11 +62,11 @@ interface EChartPendingPayload {
   };
 }
 
-type EChartInstanceLike = {
+interface EChartInstanceLike {
   clear?: () => void;
   setOption?: (option: Record<string, unknown>, opts?: Record<string, unknown>) => void;
   [key: string]: unknown;
-};
+}
 
 const chartRef = ref<{ getEChartsInstance?: () => EChartInstanceLike | undefined } | null>(null);
 const pendingOption = ref<EChartPendingPayload | null>(null);
