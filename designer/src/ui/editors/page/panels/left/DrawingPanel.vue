@@ -2,19 +2,20 @@
   DrawingPanel - 绘图工具面板
   提供线、矩形、圆形、多边形、管道、文字等绘图工具选择，含符号库
 -->
-<script setup>
+<script setup lang="ts">
 import SymbolLibraryPanel from "./SymbolLibraryPanel.vue";
 
-const props = defineProps({
-  modelValue: {
-    type: String,
-    default: "",
-  },
+type DrawingToolType = "line" | "rect" | "ellipse" | "polygon" | "pipe" | "text" | "";
+
+const props = withDefaults(defineProps<{ modelValue?: DrawingToolType }>(), {
+  modelValue: "",
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits<{
+  (event: "update:modelValue", value: DrawingToolType): void;
+}>();
 
-const drawingTools = [
+const drawingTools: Array<{ key: Exclude<DrawingToolType, "">; label: string }> = [
   { key: "line", label: "线" },
   { key: "rect", label: "矩形" },
   { key: "ellipse", label: "圆形" },
@@ -27,7 +28,7 @@ const drawingTools = [
  * 切换绘图工具
  * @param {string} tool - 工具类型
  */
-function handleSelect(tool) {
+function handleSelect(tool: Exclude<DrawingToolType, "">) {
   emit("update:modelValue", tool);
 }
 </script>

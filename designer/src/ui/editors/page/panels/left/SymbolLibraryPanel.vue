@@ -2,7 +2,7 @@
   SymbolLibraryPanel - 符号库面板（占位）
   预留符号库入口，待实现
 -->
-<script setup>
+<script setup lang="ts">
 /** 符号库占位组件 */
 </script>
 
