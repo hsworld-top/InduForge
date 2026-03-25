@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 友好颜色选择器
  * 提供颜色面板、手动输入、预设色与最近使用能力
@@ -8,33 +8,27 @@ import { ElMessage } from "element-plus";
 import { computed, onMounted, ref, watch } from "vue";
 import IconCircleClose from "~icons/ep/circle-close";
 
-const props = defineProps({
-  modelValue: {
-    type: String,
-    default: "",
-  },
-  showAlpha: {
-    type: Boolean,
-    default: true,
-  },
-  disabled: {
-    type: Boolean,
-    default: false,
-  },
-  clearable: {
-    type: Boolean,
-    default: true,
-  },
-  placeholder: {
-    type: String,
-    default: "请输入颜色值",
-  },
-  predefine: {
-    type: Array,
-    default: () => [],
-  },
+interface FriendlyColorPickerProps {
+  modelValue?: string;
+  showAlpha?: boolean;
+  disabled?: boolean;
+  clearable?: boolean;
+  placeholder?: string;
+  predefine?: string[];
+}
+
+const props = withDefaults(defineProps<FriendlyColorPickerProps>(), {
+  modelValue: "",
+  showAlpha: true,
+  disabled: false,
+  clearable: true,
+  placeholder: "请输入颜色值",
+  predefine: () => [],
 });
-const emit = defineEmits(["update:modelValue", "change"]);
+const emit = defineEmits<{
+  (event: "update:modelValue", value: string): void;
+  (event: "change", value: string): void;
+}>();
 const RECENT_COLORS_STORAGE_KEY = "designer:recent-colors";
 const MAX_RECENT_COLORS = 5;
 const DEFAULT_PREDEFINE_COLORS = [
@@ -57,7 +51,7 @@ const DEFAULT_PREDEFINE_COLORS = [
 ];
 
 const inputDraft = ref("");
-const recentColors = ref([]);
+const recentColors = ref<string[]>([]);
 
 const predefineColors = computed(() => {
   if (props.predefine.length) return props.predefine;
@@ -79,9 +73,9 @@ function loadRecentColors() {
     }
     const parsed = JSON.parse(raw);
     recentColors.value = Array.isArray(parsed)
-      ? parsed.filter((item) => typeof item === "string")
+      ? parsed.filter((item): item is string => typeof item === "string")
       : [];
-  } catch (error) {
+  } catch {
     recentColors.value = [];
   }
 }
@@ -92,7 +86,7 @@ function loadRecentColors() {
 function persistRecentColors() {
   try {
     localStorage.setItem(RECENT_COLORS_STORAGE_KEY, JSON.stringify(recentColors.value));
-  } catch (error) {
+  } catch {
     // 本地存储不可用时忽略，不影响颜色选择核心能力
   }
 }
@@ -102,7 +96,7 @@ function persistRecentColors() {
  * @param {string} value - 原始颜色值
  * @returns {string}
  */
-function normalizeColorValue(value) {
+function normalizeColorValue(value: string): string {
   const text = String(value || "").trim();
   if (!text) return "";
   if (/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) {
@@ -121,7 +115,7 @@ function normalizeColorValue(value) {
  * 记录最近颜色
  * @param {string} color - 颜色值
  */
-function pushRecentColor(color) {
+function pushRecentColor(color: string) {
   const normalized = normalizeColorValue(color);
   if (!normalized) return;
   recentColors.value = [
@@ -135,7 +129,7 @@ function pushRecentColor(color) {
  * 同步并派发颜色值
  * @param {string} color - 颜色值
  */
-function emitColor(color) {
+function emitColor(color: string) {
   emit("update:modelValue", color);
   emit("change", color);
 }
@@ -144,7 +138,7 @@ function emitColor(color) {
  * 处理面板选择
  * @param {string} color - 颜色值
  */
-function handlePickerChange(color) {
+function handlePickerChange(color: string) {
   const normalized = normalizeColorValue(color);
   emitColor(normalized);
   inputDraft.value = normalized;
@@ -161,7 +155,7 @@ function commitInputDraft() {
     return;
   }
   if (!normalized) {
-    ElMessage.warning("颜色格式无效，请输入 HEX/RGBA/HSL");
+    ElMessage.warning("颜色格式无效，请输入 HEX/RGBA/HSL" as never);
     inputDraft.value = props.modelValue || "";
     return;
   }
@@ -182,7 +176,7 @@ function clearColor() {
  * 选择最近颜色
  * @param {string} color - 颜色值
  */
-function selectRecentColor(color) {
+function selectRecentColor(color: string) {
   if (props.disabled) return;
   const normalized = normalizeColorValue(color);
   if (!normalized) return;
@@ -193,7 +187,7 @@ function selectRecentColor(color) {
 
 watch(
   () => props.modelValue,
-  (value) => {
+  (value: string) => {
     inputDraft.value = value || "";
   },
   { immediate: true },
