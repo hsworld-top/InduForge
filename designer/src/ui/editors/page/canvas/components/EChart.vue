@@ -2,7 +2,7 @@
   EChart - ECharts 图表封装
   支持柱状、折线、饼图、雷达、散点、仪表盘等，支持 option 绑定
 -->
-<script setup>
+<script setup lang="ts">
 import {
   BarChart,
   GaugeChart,
@@ -24,17 +24,16 @@ import { CanvasRenderer } from "echarts/renderers";
 import { computed, onMounted, ref, watch } from "vue";
 import VChart from "vue-echarts";
 
-const props = defineProps({
-  option: {
-    type: [Object, String],
-    default: () => ({
-      title: { text: "示例图表" },
-      tooltip: {},
-      xAxis: { type: "category", data: ["A", "B", "C", "D"] },
-      yAxis: { type: "value" },
-      series: [{ type: "bar", data: [12, 20, 15, 8] }],
-    }),
-  },
+type EChartOptionLike = Record<string, unknown> | string;
+
+const props = withDefaults(defineProps<{ option?: EChartOptionLike }>(), {
+  option: () => ({
+    title: { text: "示例图表" },
+    tooltip: {},
+    xAxis: { type: "category", data: ["A", "B", "C", "D"] },
+    yAxis: { type: "value" },
+    series: [{ type: "bar", data: [12, 20, 15, 8] }],
+  }),
 });
 
 use([
@@ -53,28 +52,53 @@ use([
   RadarComponent,
 ]);
 
-const chartRef = ref(null);
-const pendingOption = ref(null);
+interface EChartPendingPayload {
+  option: Record<string, unknown>;
+  opts: {
+    notMerge?: boolean;
+    lazyUpdate?: boolean;
+    silent?: boolean;
+    replaceMerge?: unknown;
+  };
+}
+
+type EChartInstanceLike = {
+  clear?: () => void;
+  setOption?: (option: Record<string, unknown>, opts?: Record<string, unknown>) => void;
+  [key: string]: unknown;
+};
+
+const chartRef = ref<{ getEChartsInstance?: () => EChartInstanceLike | undefined } | null>(null);
+const pendingOption = ref<EChartPendingPayload | null>(null);
 const updateOptions = computed(() => ({ notMerge: true }));
-const getInstance = () => chartRef.value?.getEChartsInstance?.();
+const getInstance = (): EChartInstanceLike | undefined => chartRef.value?.getEChartsInstance?.();
 
 /** 规范化 setOption 参数（兼容多种调用形式） */
 function normalizeSetOptionArgs(
-  notMergeOrOpts,
-  lazyUpdate,
-  silent,
-
-  replaceMerge,
+  notMergeOrOpts: boolean | Record<string, unknown> | undefined,
+  lazyUpdate?: boolean,
+  silent?: boolean,
+  replaceMerge?: unknown,
 ) {
   if (notMergeOrOpts && typeof notMergeOrOpts === "object") {
-    return { ...notMergeOrOpts };
+    return {
+      notMerge: Boolean((notMergeOrOpts as { notMerge?: boolean }).notMerge),
+      lazyUpdate: Boolean((notMergeOrOpts as { lazyUpdate?: boolean }).lazyUpdate),
+      silent: Boolean((notMergeOrOpts as { silent?: boolean }).silent),
+      replaceMerge,
+    };
   }
-  const opts = {
+  const opts: {
+    notMerge: boolean;
+    lazyUpdate: boolean;
+    silent: boolean;
+    replaceMerge?: unknown;
+  } = {
     notMerge: typeof notMergeOrOpts === "boolean" ? notMergeOrOpts : notMergeOrOpts === undefined,
     lazyUpdate: Boolean(lazyUpdate),
     silent: Boolean(silent),
   };
-  if (replaceMerge) opts.replaceMerge = replaceMerge;
+  if (replaceMerge !== undefined) opts.replaceMerge = replaceMerge;
   return opts;
 }
 function applyPendingOption() {
@@ -84,33 +108,42 @@ function applyPendingOption() {
   if (!instance) return;
   pendingOption.value = null;
   if (payload.opts?.notMerge) {
-    instance.clear();
+    instance.clear?.();
   }
-  instance.setOption(payload.option || {}, payload.opts || {});
+  instance.setOption?.(payload.option || {}, payload.opts || {});
 }
-function setOption(option, notMergeOrOpts, lazyUpdate, silent, replaceMerge) {
+function setOption(
+  option: Record<string, unknown>,
+  notMergeOrOpts?: boolean | Record<string, unknown>,
+  lazyUpdate?: boolean,
+  silent?: boolean,
+  replaceMerge?: unknown,
+) {
   const opts = normalizeSetOptionArgs(notMergeOrOpts, lazyUpdate, silent, replaceMerge);
   if (opts.notMerge) {
     opts.lazyUpdate = false;
   }
   const instance = getInstance();
   if (!instance) {
-    pendingOption.value = { option, opts };
+    pendingOption.value = {
+      option: (option || {}) as Record<string, unknown>,
+      opts,
+    };
     return;
   }
   if (opts.notMerge) {
-    instance.clear();
+    instance.clear?.();
   }
-  instance.setOption(option || {}, opts);
+  instance.setOption?.(option || {}, opts);
 }
-function callECharts(method, ...args) {
+function callECharts(method: string, ...args: unknown[]) {
   const instance = getInstance();
   if (!instance) return;
   const target = instance[method];
   if (typeof target !== "function") return;
-  return target.apply(instance, args);
+  return (target as (...callArgs: unknown[]) => unknown).apply(instance, args);
 }
-function parseOptionSource(source) {
+function parseOptionSource(source: string) {
   const code = String(source ?? "").trim();
   if (!code) return {};
 
@@ -124,13 +157,13 @@ function parseOptionSource(source) {
     if (/\breturn\b/.test(code)) {
       return new Function(`"use strict"; ${code}`)();
     }
-  } catch (error) {
+  } catch {
     // ignore and fallback to JSON
   }
 
   try {
     return JSON.parse(code);
-  } catch (error) {
+  } catch {
     return {};
   }
 }
@@ -143,7 +176,7 @@ watch(chartRef, () => {
   applyPendingOption();
 });
 
-const chartOption = computed(() => {
+const chartOption = computed<Record<string, unknown>>(() => {
   if (typeof props.option === "string") {
     return parseOptionSource(props.option);
   }
