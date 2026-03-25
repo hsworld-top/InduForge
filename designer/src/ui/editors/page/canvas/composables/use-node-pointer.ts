@@ -1,4 +1,3 @@
-// @ts-nocheck — 大文件 composable：事件/deps 与 exactOptional 下 Partial<ComponentNode> 补丁需单独迭代收口。
 /**
  * 节点指针拖拽 Composable
  *
@@ -7,6 +6,8 @@
  * @module ui/Canvas/composables/use-node-pointer
  */
 
+import type { NodePatchLike, PointerDragHandlers, UseNodePointerDeps } from "./types";
+import type { ComponentNode } from "@/editor-core/document/types";
 import { onBeforeUnmount } from "vue";
 import {
   getDefaultSize,
@@ -28,12 +29,22 @@ import {
 const rowInsertEdgeThreshold = 8;
 const colInsertEdgeThreshold = 8;
 
+interface AbsoluteLayoutLike {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
 /**
  * 创建节点指针按下 / 拖拽移动逻辑
- * @param {object} deps - 依赖项
+ * @param {UseNodePointerDeps} deps - 依赖项
  * @returns {{ handlePointerDown: Function }}
  */
-export function useNodePointer(deps) {
+export function useNodePointer(deps: UseNodePointerDeps): {
+  handlePointerDown: (event: PointerEvent) => void;
+} {
   const {
     node,
     doc,
@@ -61,7 +72,9 @@ export function useNodePointer(deps) {
     resolveFlexDirection,
   } = deps;
 
-  let activeDragHandlers = null;
+  let activeDragHandlers: PointerDragHandlers | null = null;
+  const createUpdateCommand = (nodeId: string, patch: NodePatchLike) =>
+    new UpdateNodeCommand(nodeId, patch as Partial<ComponentNode>);
 
   /**
    * 清理拖拽事件监听
@@ -110,13 +123,14 @@ export function useNodePointer(deps) {
    * 处理节点指针按下事件
    * @param {PointerEvent} event - 指针事件
    */
-  const handlePointerDown = (event) => {
+  const handlePointerDown = (event: PointerEvent) => {
     if (readonly.value) return;
     if (activeDragHandlers) return;
     if (!node.value || !isMovable.value) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (event.target?.closest?.(".resize-handle")) return;
-    const targetNodeEl = event.target?.closest?.("[data-node-id]");
+    const targetElement = event.target instanceof Element ? event.target : null;
+    if (targetElement?.closest(".resize-handle")) return;
+    const targetNodeEl = targetElement?.closest("[data-node-id]");
     const targetNodeId = targetNodeEl?.getAttribute?.("data-node-id");
     if (node.value.type === "Tabs" && targetNodeId && targetNodeId !== node.value.id) {
       return;
@@ -185,7 +199,7 @@ export function useNodePointer(deps) {
         : null;
     const allowRegionMoveOut = isRegionNode;
     const rootNodeId = currentPage.value?.rootNodeId || "";
-    const isInsideElContainer = (targetNode) => {
+    const isInsideElContainer = (targetNode: ComponentNode | null | undefined) => {
       if (!targetNode || !doc.value) return false;
       if (targetNode.type === "ElContainer") return true;
       let current = doc.value.getParent?.(targetNode.id);
@@ -200,7 +214,7 @@ export function useNodePointer(deps) {
      * @param {string} nodeId - 节点 ID
      * @returns {import('@/editor-core').ComponentNode | null}
      */
-    const resolveAncestorContainer = (nodeId) => {
+    const resolveAncestorContainer = (nodeId: string) => {
       if (!nodeId || !doc.value) return null;
       let current = doc.value.getParent?.(nodeId);
       while (current) {
@@ -213,7 +227,7 @@ export function useNodePointer(deps) {
     const restrictToContainer = Boolean(dragContainer) && node.value?.type !== "ElContainer";
 
     const zoomValue = Number(canvasZoom?.value) || 1;
-    const baseLayout = resolveAbsoluteLayout(node.value, nodeRef.value);
+    const baseLayout = resolveAbsoluteLayout(node.value, nodeRef.value ?? null);
     const selectedNodeIds =
       selection.value
         ?.getSelectedElements?.()
@@ -229,7 +243,9 @@ export function useNodePointer(deps) {
      * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标节点
      * @returns {{ x: number, y: number, w: number, h: number, z: number } | null}
      */
-    const resolveBaseLayoutFromNode = (targetNode) => {
+    const resolveBaseLayoutFromNode = (
+      targetNode: ComponentNode | null | undefined,
+    ): AbsoluteLayoutLike | null => {
       if (!targetNode) return null;
       if (targetNode.positioning === "flow") return null;
       const abs = targetNode.absolutePos;
@@ -243,7 +259,7 @@ export function useNodePointer(deps) {
           y: Number.isFinite(abs.y) ? abs.y : 0,
           w: Number.isFinite(abs.w) ? abs.w : 100,
           h: Number.isFinite(abs.h) ? abs.h : 100,
-          z: Number.isFinite(abs.z) ? abs.z : 1,
+          z: typeof abs.z === "number" && Number.isFinite(abs.z) ? abs.z : 1,
         };
       }
       if (legacyAbs) {
@@ -252,18 +268,33 @@ export function useNodePointer(deps) {
           y: Number.isFinite(legacyAbs.y) ? legacyAbs.y : 0,
           w: Number.isFinite(legacyAbs.w) ? legacyAbs.w : 100,
           h: Number.isFinite(legacyAbs.h) ? legacyAbs.h : 100,
-          z: Number.isFinite(legacyAbs.z) ? legacyAbs.z : 1,
+          z: typeof legacyAbs.z === "number" && Number.isFinite(legacyAbs.z) ? legacyAbs.z : 1,
         };
       }
       return {
-        x: Number.isFinite(targetNode.style?.left) ? targetNode.style.left : 0,
-        y: Number.isFinite(targetNode.style?.top) ? targetNode.style.top : 0,
-        w: Number.isFinite(targetNode.style?.width) ? targetNode.style.width : 100,
-        h: Number.isFinite(targetNode.style?.height) ? targetNode.style.height : 100,
-        z: Number.isFinite(targetNode.style?.zIndex) ? targetNode.style.zIndex : 1,
+        x:
+          typeof targetNode.style?.left === "number" && Number.isFinite(targetNode.style.left)
+            ? targetNode.style.left
+            : 0,
+        y:
+          typeof targetNode.style?.top === "number" && Number.isFinite(targetNode.style.top)
+            ? targetNode.style.top
+            : 0,
+        w:
+          typeof targetNode.style?.width === "number" && Number.isFinite(targetNode.style.width)
+            ? targetNode.style.width
+            : 100,
+        h:
+          typeof targetNode.style?.height === "number" && Number.isFinite(targetNode.style.height)
+            ? targetNode.style.height
+            : 100,
+        z:
+          typeof targetNode.style?.zIndex === "number" && Number.isFinite(targetNode.style.zIndex)
+            ? targetNode.style.zIndex
+            : 1,
       };
     };
-    const baseLayoutsById = new Map();
+    const baseLayoutsById = new Map<string, AbsoluteLayoutLike>();
     for (const dragNodeId of dragNodeIds) {
       const dragNode = doc.value?.getNode?.(dragNodeId);
       const base = resolveBaseLayoutFromNode(dragNode);
@@ -302,11 +333,11 @@ export function useNodePointer(deps) {
       }
     }
 
-    const resolveDropRegion = (upEvent) => {
+    const resolveDropRegion = (upEvent: MouseEvent | PointerEvent | null | undefined) => {
       if (!upEvent) return null;
       const hitList = document.elementsFromPoint(upEvent.clientX, upEvent.clientY);
       const childType = node.value?.type;
-      let containerNode = null;
+      let containerNode: ComponentNode | null = null;
       /**
        * 判断是否为区域容器类型
        * @param {string} type - 组件类型
@@ -342,7 +373,7 @@ export function useNodePointer(deps) {
       }
       return null;
     };
-    const isSelfOrDescendant = (targetId) => {
+    function isSelfOrDescendant(targetId: string | null | undefined) {
       if (!targetId || !node.value?.id || !doc.value) return false;
       if (targetId === node.value.id) return true;
       let current = doc.value.getParent?.(targetId);
@@ -351,28 +382,27 @@ export function useNodePointer(deps) {
         current = doc.value.getParent?.(current.id);
       }
       return false;
-    };
+    }
 
     cleanupDragHandlers();
     const originalUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
 
     if (history.value && !history.value.isInTransaction?.()) {
-      history.value.beginTransaction();
+      history.value.beginTransaction?.();
     }
 
     const usePointer = event.type === "pointerdown";
-    const pointerTarget =
-      event.target instanceof window.Element ? event.target : nodeRef.value?.$el;
+    const pointerTarget = event.target instanceof window.Element ? event.target : nodeRef.value;
     if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
       try {
-        pointerTarget.setPointerCapture(event.pointerId);
+        pointerTarget.setPointerCapture?.(event.pointerId);
       } catch {
         // 忽略捕获失败
       }
     }
 
-    const resolveRowInsertFromPoint = (pointEvent) => {
+    const resolveRowInsertFromPoint = (pointEvent: MouseEvent | PointerEvent) => {
       const hitList = document.elementsFromPoint(pointEvent.clientX, pointEvent.clientY);
       for (const hit of hitList) {
         const nodeElement = hit.closest?.("[data-node-id][data-node-type]");
@@ -401,7 +431,7 @@ export function useNodePointer(deps) {
       return null;
     };
 
-    const resolveLayoutInsertFromPoint = (pointEvent) => {
+    const resolveLayoutInsertFromPoint = (pointEvent: MouseEvent | PointerEvent) => {
       const hitList = document.elementsFromPoint(pointEvent.clientX, pointEvent.clientY);
       for (const hit of hitList) {
         const layoutElement = hit.closest?.('[data-node-type="ElLayout"][data-node-id]');
@@ -439,7 +469,7 @@ export function useNodePointer(deps) {
       return null;
     };
 
-    const updateRowInsertLineFromPoint = (pointEvent) => {
+    const updateRowInsertLineFromPoint = (pointEvent: MouseEvent | PointerEvent) => {
       if (!node.value || node.value.type === "ElCol") return false;
       const resolvedRow = resolveRowInsertFromPoint(pointEvent);
       if (!resolvedRow || !resolvedRow.nearEdge) {
@@ -480,7 +510,7 @@ export function useNodePointer(deps) {
       return true;
     };
 
-    const updateLayoutInsertLineFromPoint = (pointEvent) => {
+    const updateLayoutInsertLineFromPoint = (pointEvent: MouseEvent | PointerEvent) => {
       if (!node.value || node.value.type === "ElLayoutRow") return false;
       const resolvedLayout = resolveLayoutInsertFromPoint(pointEvent);
       if (!resolvedLayout) {
@@ -511,7 +541,7 @@ export function useNodePointer(deps) {
       return true;
     };
 
-    const move = (moveEvent) => {
+    const move = (moveEvent: MouseEvent | PointerEvent) => {
       if (!node.value) return;
       const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
       const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
@@ -570,13 +600,13 @@ export function useNodePointer(deps) {
           }
         }
       }
-      const executePatch = (nodeId, patch) => {
+      const executePatch = (nodeId: string, patch: NodePatchLike) => {
         if (history.value?.isInTransaction?.()) {
-          history.value.executeInTransaction(new UpdateNodeCommand(nodeId, patch));
+          history.value.executeInTransaction?.(createUpdateCommand(nodeId, patch));
           return;
         }
         if (history.value?.execute) {
-          history.value.execute(new UpdateNodeCommand(nodeId, patch));
+          history.value.execute(createUpdateCommand(nodeId, patch));
           return;
         }
         if (doc.value?._updateNode) {
@@ -584,7 +614,8 @@ export function useNodePointer(deps) {
         }
       };
 
-      const primaryBase = baseLayoutsById.get(node.value.id) || baseLayout;
+      const primaryBase = (baseLayoutsById.get(node.value.id) || baseLayout) as AbsoluteLayoutLike;
+      if (!primaryBase) return;
       const primaryNextAbs = {
         x: Math.round(primaryBase.x + deltaX),
         y: Math.round(primaryBase.y + deltaY),
@@ -610,6 +641,7 @@ export function useNodePointer(deps) {
       for (const [dragNodeId, dragBase] of baseLayoutsById.entries()) {
         const dragNode = doc.value?.getNode?.(dragNodeId);
         if (!dragNode) continue;
+        if (!dragBase) continue;
         const nextAbs = {
           x: Math.round(dragBase.x + deltaX),
           y: Math.round(dragBase.y + deltaY),
@@ -620,7 +652,7 @@ export function useNodePointer(deps) {
         const nextLayoutItem = {
           ...(dragNode.layoutItem || {}),
           free: {
-            mode: "abs",
+            mode: "abs" as const,
             abs: { ...nextAbs },
           },
         };
@@ -628,7 +660,7 @@ export function useNodePointer(deps) {
           dragNode.type === "ElContainer"
             ? clampElContainerPropsBySize(dragNode, nextAbs.w, nextAbs.h)
             : null;
-        const patch = {
+        const patch: NodePatchLike = {
           positioning: "absolute",
           absolutePos: nextAbs,
           layoutItem: nextLayoutItem,
@@ -648,12 +680,17 @@ export function useNodePointer(deps) {
       }
     };
 
-    const up = (upEvent) => {
+    const up = (upEvent: MouseEvent | PointerEvent) => {
+      const currentNode = node.value;
+      if (!currentNode) {
+        cleanupDragHandlers();
+        return;
+      }
       // 流式容器子项：未超出阈值时回滚事务，保持原位
       if (isFlowChildInDescContainer && !flowDragExceeded) {
         cleanupDragHandlers();
         if (history.value?.isInTransaction?.()) {
-          history.value.rollbackTransaction();
+          history.value.rollbackTransaction?.();
         }
         if (typeof window !== "undefined") {
           window.dispatchEvent(new window.CustomEvent("designer:node-transform-end"));
@@ -691,7 +728,7 @@ export function useNodePointer(deps) {
             // 拖入其他容器
             const targetId = dropRegion.id;
             const insertIdx = (dropRegion.children || []).length;
-            const moveCmd = new MoveNodeCommand(node.value.id, targetId, insertIdx);
+            const moveCmd = new MoveNodeCommand(currentNode.id, targetId, insertIdx);
             const parentDesc = getDescriptor(dropRegion.type);
             const isFlowTarget = parentDesc?.childPositioning === "flow";
             // 从流式容器拖出后落入绝对定位容器时，baseLayout 是原父坐标系，不能直接用；用鼠标释放位置相对目标容器计算落点
@@ -714,7 +751,7 @@ export function useNodePointer(deps) {
                 z: baseLayout.z ?? 1,
               };
             }
-            const updatePatch = isFlowTarget
+            const updatePatch: NodePatchLike = isFlowTarget
               ? {
                   positioning: "flow",
                   absolutePos: undefined,
@@ -723,23 +760,22 @@ export function useNodePointer(deps) {
                     : undefined,
                   layoutItem: undefined,
                   style: {
-                    ...(buildFlowResetStyle(node.value.style) || {}),
+                    ...(buildFlowResetStyle(currentNode.style) || {}),
                     ...(parentDesc.childStyle ? parentDesc.childStyle(dropRegion.type) : {}),
                   },
                 }
               : {
                   positioning: "absolute",
                   absolutePos: { ...absPosForTarget },
-                  flowLayout: undefined,
                   layoutItem: {
-                    ...(node.value.layoutItem || {}),
-                    free: { mode: "abs", abs: { ...absPosForTarget } },
+                    ...(currentNode.layoutItem || {}),
+                    free: { mode: "abs" as const, abs: { ...absPosForTarget } },
                   },
                 };
-            const updateCmd = new UpdateNodeCommand(node.value.id, updatePatch);
+            const updateCmd = createUpdateCommand(currentNode.id, updatePatch);
             if (history.value?.isInTransaction?.()) {
-              history.value.executeInTransaction(moveCmd);
-              history.value.executeInTransaction(updateCmd);
+              history.value.executeInTransaction?.(moveCmd);
+              history.value.executeInTransaction?.(updateCmd);
             } else if (history.value?.execute) {
               history.value.execute(moveCmd);
               history.value.execute(updateCmd);
@@ -755,7 +791,7 @@ export function useNodePointer(deps) {
             const nextY = rootRect ? (upEvent.clientY - rootRect.top) / zoomValue : 0;
             // 从 DOM 读取节点实际宽高，使节点中心对准鼠标释放点
             const nodeElRect = document
-              .querySelector(`[data-node-id="${node.value.id}"]`)
+              .querySelector(`[data-node-id="${currentNode.id}"]`)
               ?.getBoundingClientRect?.();
             const nodeW = nodeElRect ? nodeElRect.width / zoomValue : (baseLayout.w ?? 100);
             const nodeH = nodeElRect ? nodeElRect.height / zoomValue : (baseLayout.h ?? 40);
@@ -768,20 +804,19 @@ export function useNodePointer(deps) {
             };
             const rootNode = doc.value?.getNode?.(rootNodeId);
             const insertIdx = rootNode?.children?.length ?? 0;
-            const moveCmd = new MoveNodeCommand(node.value.id, rootNodeId, insertIdx);
-            const updateCmd = new UpdateNodeCommand(node.value.id, {
+            const moveCmd = new MoveNodeCommand(currentNode.id, rootNodeId, insertIdx);
+            const updateCmd = createUpdateCommand(currentNode.id, {
               positioning: "absolute",
               absolutePos: nextAbs,
-              flowLayout: undefined,
               layoutItem: {
-                ...(node.value.layoutItem || {}),
-                free: { mode: "abs", abs: { ...nextAbs } },
+                ...(currentNode.layoutItem || {}),
+                free: { mode: "abs" as const, abs: { ...nextAbs } },
               },
-              style: buildFlowResetStyle(node.value.style),
+              style: buildFlowResetStyle(currentNode.style),
             });
             if (history.value?.isInTransaction?.()) {
-              history.value.executeInTransaction(moveCmd);
-              history.value.executeInTransaction(updateCmd);
+              history.value.executeInTransaction?.(moveCmd);
+              history.value.executeInTransaction?.(updateCmd);
             } else if (history.value?.execute) {
               history.value.execute(moveCmd);
               history.value.execute(updateCmd);
@@ -789,7 +824,7 @@ export function useNodePointer(deps) {
           }
           cleanupDragHandlers();
           if (history.value?.isInTransaction?.()) {
-            history.value.commitTransaction("移出布局容器");
+            history.value.commitTransaction?.("移出布局容器");
           }
           if (typeof window !== "undefined") {
             window.dispatchEvent(new window.CustomEvent("designer:node-transform-end"));
@@ -836,31 +871,31 @@ export function useNodePointer(deps) {
                 colId = colNode.id;
               }
               const moveCommand = new MoveNodeCommand(
-                node.value.id,
+                currentNode.id,
                 colId,
                 (latestRow?.children || []).length,
               );
-              const updatePatch = {
+              const updatePatch: NodePatchLike = {
                 positioning: "flow",
                 absolutePos: undefined,
                 flowLayout: undefined,
                 layoutItem: undefined,
                 style: {
-                  ...(buildFlowResetStyle(node.value.style) || {}),
+                  ...(buildFlowResetStyle(currentNode.style) || {}),
                   width: "100%",
                   height: isContainer.value ? "100%" : "auto",
                 },
               };
-              const updateCommand = new UpdateNodeCommand(node.value.id, updatePatch);
+              const updateCommand = createUpdateCommand(currentNode.id, updatePatch);
               if (history.value?.isInTransaction?.()) {
-                history.value.executeInTransaction(moveCommand);
-                history.value.executeInTransaction(updateCommand);
+                history.value.executeInTransaction?.(moveCommand);
+                history.value.executeInTransaction?.(updateCommand);
               } else if (history.value?.execute) {
                 history.value.execute(moveCommand);
                 history.value.execute(updateCommand);
               } else if (doc.value?._moveNode && doc.value?._updateNode) {
-                doc.value._moveNode(node.value.id, colId, (latestRow?.children || []).length);
-                doc.value._updateNode(node.value.id, updatePatch);
+                doc.value._moveNode(currentNode.id, colId, (latestRow?.children || []).length);
+                doc.value._updateNode(currentNode.id, updatePatch);
               }
             }
           }
@@ -887,13 +922,13 @@ export function useNodePointer(deps) {
                 },
               });
               const moveCommand = new MoveNodeCommand(
-                node.value.id,
+                currentNode.id,
                 colNode.id,
                 (colNode.children || []).length,
               );
               const shouldResetSize =
-                node.value.positioning === "absolute" || node.value.layoutItem?.free;
-              const updatePatch = {
+                currentNode.positioning === "absolute" || currentNode.layoutItem?.free;
+              const updatePatch: NodePatchLike = {
                 positioning: "flow",
                 absolutePos: undefined,
                 flowLayout: undefined,
@@ -901,27 +936,27 @@ export function useNodePointer(deps) {
               };
               // 放入 ElCol 时默认铺满容器
               updatePatch.style = {
-                ...(buildFlowResetStyle(node.value.style) || {}),
+                ...(buildFlowResetStyle(currentNode.style) || {}),
                 width: "100%",
                 height: isContainer.value ? "100%" : "auto",
               };
               if (shouldResetSize) {
                 updatePatch.style = {
-                  ...(buildFlowResetStyle(node.value.style) || {}),
+                  ...(buildFlowResetStyle(currentNode.style) || {}),
                   width: "100%",
                   height: isContainer.value ? "100%" : "auto",
                 };
               }
-              const updateCommand = new UpdateNodeCommand(node.value.id, updatePatch);
+              const updateCommand = createUpdateCommand(currentNode.id, updatePatch);
               if (history.value?.isInTransaction?.()) {
-                history.value.executeInTransaction(moveCommand);
-                history.value.executeInTransaction(updateCommand);
+                history.value.executeInTransaction?.(moveCommand);
+                history.value.executeInTransaction?.(updateCommand);
               } else if (history.value?.execute) {
                 history.value.execute(moveCommand);
                 history.value.execute(updateCommand);
               } else if (doc.value?._moveNode && doc.value?._updateNode) {
-                doc.value._moveNode(node.value.id, colNode.id, (colNode.children || []).length);
-                doc.value._updateNode(node.value.id, updatePatch);
+                doc.value._moveNode(currentNode.id, colNode.id, (colNode.children || []).length);
+                doc.value._updateNode(currentNode.id, updatePatch);
               }
             }
           }
@@ -936,13 +971,13 @@ export function useNodePointer(deps) {
           dropRegion &&
           dropRegion.id &&
           dropRegion.id !== originParent?.id &&
-          canAcceptChild(dropRegion, node.value.type) &&
+          canAcceptChild(dropRegion, currentNode.type) &&
           !isSelfOrDescendant(dropRegion.id)
         ) {
           const insertIndex = (dropRegion.children || []).length;
-          const moveCommand = new MoveNodeCommand(node.value.id, dropRegion.id, insertIndex);
+          const moveCommand = new MoveNodeCommand(currentNode.id, dropRegion.id, insertIndex);
           const shouldResetSize =
-            node.value.positioning === "absolute" || node.value.layoutItem?.free;
+            currentNode.positioning === "absolute" || currentNode.layoutItem?.free;
           if (dropRegion?.type === "FreeContainer") {
             const containerEl = document.querySelector(`[data-node-id="${dropRegion.id}"]`);
             const containerRect = containerEl?.getBoundingClientRect?.();
@@ -956,37 +991,35 @@ export function useNodePointer(deps) {
               z: baseLayout.z,
             };
             const nextLayoutItem = {
-              ...(node.value.layoutItem || {}),
-              free: { mode: "abs", abs: { ...nextAbs } },
+              ...(currentNode.layoutItem || {}),
+              free: { mode: "abs" as const, abs: { ...nextAbs } },
             };
-            const nextProps = { ...(node.value.props || {}) };
+            const nextProps = { ...(currentNode.props || {}) };
             if ("tabKey" in nextProps) delete nextProps.tabKey;
-            const updateCommand = new UpdateNodeCommand(node.value.id, {
+            const updateCommand = createUpdateCommand(currentNode.id, {
               positioning: "absolute",
               absolutePos: nextAbs,
-              flowLayout: undefined,
               layoutItem: nextLayoutItem,
               props: nextProps,
             });
             if (history.value?.isInTransaction?.()) {
-              history.value.executeInTransaction(moveCommand);
-              history.value.executeInTransaction(updateCommand);
+              history.value.executeInTransaction?.(moveCommand);
+              history.value.executeInTransaction?.(updateCommand);
             } else if (history.value?.execute) {
               history.value.execute(moveCommand);
               history.value.execute(updateCommand);
             } else if (doc.value?._moveNode && doc.value?._updateNode) {
-              doc.value._moveNode(node.value.id, dropRegion.id, insertIndex);
-              doc.value._updateNode(node.value.id, {
+              doc.value._moveNode(currentNode.id, dropRegion.id, insertIndex);
+              doc.value._updateNode(currentNode.id, {
                 positioning: "absolute",
                 absolutePos: nextAbs,
-                flowLayout: undefined,
                 layoutItem: nextLayoutItem,
                 props: nextProps,
               });
             }
             return;
           }
-          const updatePatch = {
+          const updatePatch: NodePatchLike = {
             positioning: "flow",
             absolutePos: undefined,
             flowLayout: undefined,
@@ -994,13 +1027,13 @@ export function useNodePointer(deps) {
           };
           if (dropRegion?.type === "ElCol") {
             updatePatch.style = {
-              ...(buildFlowResetStyle(node.value.style) || {}),
+              ...(buildFlowResetStyle(currentNode.style) || {}),
               width: "100%",
               height: isContainer.value ? "100%" : "auto",
             };
           } else if (dropRegion?.type === "Tabs") {
             updatePatch.style = {
-              ...(buildFlowResetStyle(node.value.style) || {}),
+              ...(buildFlowResetStyle(currentNode.style) || {}),
               width: "100%",
               height: "100%",
             };
@@ -1008,27 +1041,24 @@ export function useNodePointer(deps) {
               activeTabName.value || tabsList.value?.[0]?.name || tabsList.value?.[0]?.label || "";
             if (tabKey) {
               updatePatch.props = {
-                ...(node.value.props || {}),
+                ...(currentNode.props || {}),
                 tabKey: String(tabKey),
               };
             }
           } else if (shouldResetSize) {
-            updatePatch.style = buildFlowResetStyle(node.value.style);
+            updatePatch.style = buildFlowResetStyle(currentNode.style);
           }
-          const updateCommand = new UpdateNodeCommand(node.value.id, updatePatch);
+          const updateCommand = createUpdateCommand(currentNode.id, updatePatch);
           if (history.value?.isInTransaction?.()) {
-            history.value.executeInTransaction(moveCommand);
-            history.value.executeInTransaction(updateCommand);
+            history.value.executeInTransaction?.(moveCommand);
+            history.value.executeInTransaction?.(updateCommand);
           } else if (history.value?.execute) {
             history.value.execute(moveCommand);
             history.value.execute(updateCommand);
           } else if (doc.value?._moveNode && doc.value?._updateNode) {
-            doc.value._moveNode(node.value.id, dropRegion.id, insertIndex);
-            doc.value._updateNode(node.value.id, {
+            doc.value._moveNode(currentNode.id, dropRegion.id, insertIndex);
+            doc.value._updateNode(currentNode.id, {
               positioning: "flow",
-              absolutePos: undefined,
-              flowLayout: undefined,
-              layoutItem: undefined,
             });
           }
         }
@@ -1060,29 +1090,29 @@ export function useNodePointer(deps) {
               }
             }
             const nextLayoutItem = {
-              ...(node.value.layoutItem || {}),
+              ...(currentNode.layoutItem || {}),
               free: {
-                mode: "abs",
+                mode: "abs" as const,
                 abs: { ...nextAbs },
               },
             };
             const rootNode = doc.value?.getNode?.(rootNodeId);
             const insertIndex = rootNode?.children?.length ?? 0;
-            const moveCommand = new MoveNodeCommand(node.value.id, rootNodeId, insertIndex);
-            const updateCommand = new UpdateNodeCommand(node.value.id, {
+            const moveCommand = new MoveNodeCommand(currentNode.id, rootNodeId, insertIndex);
+            const updateCommand = createUpdateCommand(currentNode.id, {
               positioning: "absolute",
               absolutePos: nextAbs,
               layoutItem: nextLayoutItem,
             });
             if (history.value?.isInTransaction?.()) {
-              history.value.executeInTransaction(moveCommand);
-              history.value.executeInTransaction(updateCommand);
+              history.value.executeInTransaction?.(moveCommand);
+              history.value.executeInTransaction?.(updateCommand);
             } else if (history.value?.execute) {
               history.value.execute(moveCommand);
               history.value.execute(updateCommand);
             } else if (doc.value?._moveNode && doc.value?._updateNode) {
-              doc.value._moveNode(node.value.id, rootNodeId, insertIndex);
-              doc.value._updateNode(node.value.id, {
+              doc.value._moveNode(currentNode.id, rootNodeId, insertIndex);
+              doc.value._updateNode(currentNode.id, {
                 positioning: "absolute",
                 absolutePos: nextAbs,
                 layoutItem: nextLayoutItem,
@@ -1122,14 +1152,14 @@ export function useNodePointer(deps) {
             h: baseLayout.h,
             z: baseLayout.z,
           };
-          if (node.value.type === "ElLayout") {
+          if (currentNode.type === "ElLayout") {
             const layoutMin = getDefaultSize("ElLayout");
             if (layoutMin?.width) {
               nextAbs.w = Math.max(nextAbs.w, layoutMin.width);
             }
           }
-          if (node.value.type === "ElContainer") {
-            const minSize = resolveElContainerMinSize(node.value, doc.value);
+          if (currentNode.type === "ElContainer") {
+            const minSize = resolveElContainerMinSize(currentNode, doc.value ?? null);
             if (minSize) {
               if (Number.isFinite(minSize.width) && nextAbs.w < minSize.width) {
                 nextAbs.w = minSize.width;
@@ -1140,29 +1170,29 @@ export function useNodePointer(deps) {
             }
           }
           const nextLayoutItem = {
-            ...(node.value.layoutItem || {}),
+            ...(currentNode.layoutItem || {}),
             free: {
-              mode: "abs",
+              mode: "abs" as const,
               abs: { ...nextAbs },
             },
           };
           const rootNode = doc.value?.getNode?.(rootNodeId);
           const insertIndex = rootNode?.children?.length ?? 0;
-          const moveCommand = new MoveNodeCommand(node.value.id, rootNodeId, insertIndex);
-          const updateCommand = new UpdateNodeCommand(node.value.id, {
+          const moveCommand = new MoveNodeCommand(currentNode.id, rootNodeId, insertIndex);
+          const updateCommand = createUpdateCommand(currentNode.id, {
             positioning: "absolute",
             absolutePos: nextAbs,
             layoutItem: nextLayoutItem,
           });
           if (history.value?.isInTransaction?.()) {
-            history.value.executeInTransaction(moveCommand);
-            history.value.executeInTransaction(updateCommand);
+            history.value.executeInTransaction?.(moveCommand);
+            history.value.executeInTransaction?.(updateCommand);
           } else if (history.value?.execute) {
             history.value.execute(moveCommand);
             history.value.execute(updateCommand);
           } else if (doc.value?._moveNode && doc.value?._updateNode) {
-            doc.value._moveNode(node.value.id, rootNodeId, insertIndex);
-            doc.value._updateNode(node.value.id, {
+            doc.value._moveNode(currentNode.id, rootNodeId, insertIndex);
+            doc.value._updateNode(currentNode.id, {
               positioning: "absolute",
               absolutePos: nextAbs,
               layoutItem: nextLayoutItem,
@@ -1172,7 +1202,7 @@ export function useNodePointer(deps) {
       }
       cleanupDragHandlers();
       if (history.value?.isInTransaction?.()) {
-        history.value.commitTransaction("移动组件");
+        history.value.commitTransaction?.("移动组件");
       }
       if (typeof window !== "undefined") {
         window.dispatchEvent(new window.CustomEvent("designer:node-transform-end"));

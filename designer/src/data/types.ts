@@ -3,13 +3,41 @@
  */
 
 import type {
+  Binding,
   DatapointBinding,
   ExprBinding,
+  PageNode,
   TransformOp,
   VarBinding,
 } from "../editor-core/document/types.ts";
 
 export type DatapointStatus = "active" | "invalid" | "unknown";
+
+export interface DatapointStatusInfo {
+  path: string;
+  status: DatapointStatus;
+  dataType: string;
+  statusReason?: string;
+  [key: string]: unknown;
+}
+
+export interface DiagnosticInfo {
+  path: string;
+  status: DatapointStatus;
+  statusReason?: string;
+  dataType?: string;
+  nodeId?: string;
+  bindingCount?: number;
+  [key: string]: unknown;
+}
+
+export interface DiagnosticsSummary {
+  total: number;
+  active: number;
+  invalid: number;
+  unknown: number;
+  [key: string]: unknown;
+}
 
 export type VarType = "string" | "number" | "boolean" | "array" | "object";
 
@@ -28,6 +56,42 @@ export interface VarDefinition {
   storageKey?: string;
   [key: string]: unknown;
 }
+
+export interface VarsDefinitions {
+  global: Record<string, VarDefinition>;
+  pages: Record<string, Record<string, VarDefinition>>;
+}
+
+export interface VarsContext {
+  scope: "global" | "page";
+  name: string;
+  pageId?: string | null;
+}
+
+export type DataMode = "edit" | "preview" | "runtime";
+
+export interface ExpressionContext {
+  $dp?: Record<string, unknown>;
+  $vars?: Record<string, unknown>;
+  $global?: Record<string, unknown>;
+  $page?: PageNode | null;
+  [key: string]: unknown;
+}
+
+export interface ExpressionResult {
+  success: boolean;
+  value?: unknown;
+  error?: string;
+}
+
+export interface ResolvedBinding {
+  value: unknown;
+  isLoading: boolean;
+  status?: DatapointStatus;
+  error?: string;
+}
+
+export type BindingValue = Binding;
 
 export function createVarDefinition(
   type: VarType,

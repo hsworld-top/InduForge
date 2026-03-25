@@ -1,23 +1,27 @@
-// @ts-nocheck — 待 data/types 迁 TS 后补全 ExpressionContext 等类型
 /**
  * ExpressionEngine - 表达式引擎
  * 解析和执行 {{ }} 语法的表达式
  */
 
+import type { ExpressionContext, ExpressionResult } from "./types.ts";
 import dayjs from "dayjs";
 
-/**
- * @typedef {import('./types.js').ExpressionContext} ExpressionContext
- * @typedef {import('./types.js').ExpressionResult} ExpressionResult
- */
+type AnyFn = (...args: any[]) => any;
+type CompiledExpressionFn = (
+  context: ExpressionContext,
+  functions: Record<string, AnyFn>,
+) => unknown;
+interface ExpressionEngineOptions {
+  strict?: boolean;
+}
 
 // ==================== 内置函数 ====================
 
 /**
  * 内置函数注册表
- * @type {Record<string, Function>}
+ * @type {Record<string, (...args: any[]) => any>}
  */
-const builtinFunctions = {
+const builtinFunctions: Record<string, AnyFn> = {
   // 数值函数
   abs: Math.abs,
   ceil: Math.ceil,
@@ -35,7 +39,7 @@ const builtinFunctions = {
   // 格式化函数
   format: (value, template) => {
     if (!template) return String(value);
-    return template.replace(/%(\.\d+)?[sdf]/g, (match) => {
+    return template.replace(/%(\.\d+)?[sdf]/g, (match: string) => {
       if (match === "%s") return String(value);
       if (match === "%d") return String(Math.floor(Number(value)));
       if (match.startsWith("%.") && match.endsWith("f")) {
@@ -71,28 +75,28 @@ const builtinFunctions = {
   },
 
   // 空值处理
-  ifNull: (value, replacement) => value ?? replacement,
+  ifNull: (value: any, replacement: any) => value ?? replacement,
 
-  ifEmpty: (value, replacement) =>
+  ifEmpty: (value: any, replacement: any) =>
     value === null || value === undefined || value === "" ? replacement : value,
 
   // 类型转换
-  toNumber: (value) => Number(value),
-  toString: (value) => String(value),
-  toBoolean: (value) => Boolean(value),
+  toNumber: (value: any) => Number(value),
+  toString: (value: any) => String(value),
+  toBoolean: (value: any) => Boolean(value),
 
   // 数组函数
-  first: (arr) => (Array.isArray(arr) ? arr[0] : arr),
-  last: (arr) => (Array.isArray(arr) ? arr.at(-1) : arr),
-  at: (arr, index) => (Array.isArray(arr) ? arr[index] : undefined),
-  includes: (arr, value) => (Array.isArray(arr) ? arr.includes(value) : false),
-  join: (arr, separator = ", ") => (Array.isArray(arr) ? arr.join(separator) : String(arr)),
+  first: (arr: any) => (Array.isArray(arr) ? arr[0] : arr),
+  last: (arr: any) => (Array.isArray(arr) ? arr.at(-1) : arr),
+  at: (arr: any, index: any) => (Array.isArray(arr) ? arr[index] : undefined),
+  includes: (arr: any, value: any) => (Array.isArray(arr) ? arr.includes(value) : false),
+  join: (arr: any, separator = ", ") => (Array.isArray(arr) ? arr.join(separator) : String(arr)),
 
   // 对象函数
-  keys: (obj) => (obj && typeof obj === "object" ? Object.keys(obj) : []),
-  values: (obj) => (obj && typeof obj === "object" ? Object.values(obj) : []),
-  hasKey: (obj, key) => (obj && typeof obj === "object" ? key in obj : false),
-  get: (obj, path, defaultValue) => {
+  keys: (obj: any) => (obj && typeof obj === "object" ? Object.keys(obj) : []),
+  values: (obj: any) => (obj && typeof obj === "object" ? Object.values(obj) : []),
+  hasKey: (obj: any, key: any) => (obj && typeof obj === "object" ? key in obj : false),
+  get: (obj: any, path: any, defaultValue: any) => {
     if (!obj || typeof obj !== "object") return defaultValue;
     const keys = String(path).split(".");
     let current = obj;
@@ -104,16 +108,16 @@ const builtinFunctions = {
   },
 
   // 条件函数
-  iif: (condition, trueValue, falseValue) => (condition ? trueValue : falseValue),
+  iif: (condition: any, trueValue: any, falseValue: any) => (condition ? trueValue : falseValue),
 
   // 工业计算函数
-  scale: (value, inMin, inMax, outMin, outMax) => {
+  scale: (value: any, inMin: any, inMax: any, outMin: any, outMax: any) => {
     const ratio = (value - inMin) / (inMax - inMin);
     return outMin + ratio * (outMax - outMin);
   },
 
   // 状态映射
-  statusText: (value, mapping) => {
+  statusText: (value: any, mapping: any) => {
     if (!mapping || typeof mapping !== "object") return String(value);
     return mapping[String(value)] ?? String(value);
   },
@@ -125,19 +129,19 @@ const builtinFunctions = {
  * 表达式引擎
  */
 export class ExpressionEngine {
+  private _strict: boolean;
+
+  private _functions: Record<string, AnyFn>;
+
+  private _cache: Map<string, CompiledExpressionFn>;
+
   /**
    * 创建表达式引擎
-   * @param {object} [options] - 配置选项
-   * @param {boolean} [options.strict] - 是否严格模式
+   * @param {ExpressionEngineOptions} [options] - 配置选项
    */
-  constructor(options = {}) {
-    /** @type {boolean} */
+  constructor(options: ExpressionEngineOptions = {}) {
     this._strict = options.strict ?? false;
-
-    /** @type {Record<string, Function>} */
     this._functions = { ...builtinFunctions };
-
-    /** @type {WeakMap<object, Function>} 编译缓存 */
     this._cache = new Map();
   }
 
@@ -148,7 +152,7 @@ export class ExpressionEngine {
    * @param {string} name - 函数名
    * @param {Function} fn - 函数
    */
-  registerFunction(name, fn) {
+  registerFunction(name: string, fn: AnyFn): void {
     if (typeof fn !== "function") {
       throw new TypeError(`Function "${name}" must be a function`);
     }
@@ -159,7 +163,7 @@ export class ExpressionEngine {
    * 批量注册函数
    * @param {Record<string, Function>} functions - 函数映射
    */
-  registerFunctions(functions) {
+  registerFunctions(functions: Record<string, AnyFn>): void {
     for (const [name, fn] of Object.entries(functions)) {
       this.registerFunction(name, fn);
     }
@@ -169,7 +173,7 @@ export class ExpressionEngine {
    * 获取所有已注册的函数名
    * @returns {string[]}
    */
-  getFunctionNames() {
+  getFunctionNames(): string[] {
     return Object.keys(this._functions);
   }
 
@@ -180,7 +184,7 @@ export class ExpressionEngine {
    * @param {string} str - 输入字符串
    * @returns {boolean}
    */
-  hasExpression(str) {
+  hasExpression(str: string): boolean {
     if (typeof str !== "string") return false;
     return /\{\{.+?\}\}/.test(str);
   }
@@ -190,10 +194,10 @@ export class ExpressionEngine {
    * @param {string} expr - 表达式
    * @returns {string[]}
    */
-  extractDependencies(expr) {
+  extractDependencies(expr: string): string[] {
     if (typeof expr !== "string") return [];
 
-    const deps = new Set();
+    const deps = new Set<string>();
 
     // 匹配 $dp['path'] 或 $dp["path"] 或 $dp.path
     const dpPattern = /\$dp\[['"]([^'"]+)['"]\]|\$dp\.(\w+)/g;
@@ -212,11 +216,11 @@ export class ExpressionEngine {
    * @param {string} expr - 表达式
    * @returns {{page: string[], global: string[]}}
    */
-  extractVarDependencies(expr) {
+  extractVarDependencies(expr: string): { page: string[]; global: string[] } {
     if (typeof expr !== "string") return { page: [], global: [] };
 
-    const pageVars = new Set();
-    const globalVars = new Set();
+    const pageVars = new Set<string>();
+    const globalVars = new Set<string>();
 
     // 匹配 $vars.name 或 $vars['name']
     const varsPattern = /\$vars\.(\w+)|\$vars\[['"]([^'"]+)['"]\]/g;
@@ -247,7 +251,10 @@ export class ExpressionEngine {
    * @param {ExpressionContext} context - 上下文
    * @returns {ExpressionResult}
    */
-  evaluate(expr, context = {}) {
+  evaluate(
+    expr: string,
+    context: ExpressionContext = {},
+  ): ExpressionResult & { dependencies?: string[] } {
     try {
       // 去除 {{ }}
       let cleanExpr = String(expr).trim();
@@ -269,7 +276,7 @@ export class ExpressionEngine {
         value,
         dependencies: this.extractDependencies(cleanExpr),
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         value: undefined,
@@ -284,7 +291,10 @@ export class ExpressionEngine {
    * @param {ExpressionContext} context - 上下文
    * @returns {ExpressionResult}
    */
-  evaluateTemplate(template, context = {}) {
+  evaluateTemplate(
+    template: string,
+    context: ExpressionContext = {},
+  ): ExpressionResult & { dependencies?: string[] } {
     if (typeof template !== "string") {
       return { success: true, value: template };
     }
@@ -295,7 +305,7 @@ export class ExpressionEngine {
     }
 
     try {
-      const allDeps = [];
+      const allDeps: string[] = [];
 
       // 替换所有 {{ expr }}
       const result = template.replace(/\{\{(.+?)\}\}/g, (match, expr) => {
@@ -314,7 +324,7 @@ export class ExpressionEngine {
         value: result,
         dependencies: [...new Set(allDeps)],
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         value: template,
@@ -329,10 +339,10 @@ export class ExpressionEngine {
    * @returns {Function}
    * @private
    */
-  _compile(expr) {
+  _compile(expr: string): CompiledExpressionFn {
     // 检查缓存
     if (this._cache.has(expr)) {
-      return this._cache.get(expr);
+      return this._cache.get(expr)!;
     }
 
     // 构建函数体
@@ -353,12 +363,13 @@ export class ExpressionEngine {
 
     try {
       const fn = new Function("ctx", "funcs", funcBody);
+      const compiled = fn as unknown as CompiledExpressionFn;
 
       // 缓存编译结果
-      this._cache.set(expr, fn);
+      this._cache.set(expr, compiled);
 
-      return fn;
-    } catch (error) {
+      return compiled;
+    } catch (error: any) {
       throw new Error(`表达式编译失败: ${error.message}`);
     }
   }
@@ -366,7 +377,7 @@ export class ExpressionEngine {
   /**
    * 清除编译缓存
    */
-  clearCache() {
+  clearCache(): void {
     this._cache.clear();
   }
 
@@ -378,7 +389,7 @@ export class ExpressionEngine {
    * @param {ExpressionContext} context - 上下文
    * @returns {*}
    */
-  eval(expr, context = {}) {
+  eval(expr: string, context: ExpressionContext = {}): unknown {
     const result = this.evaluate(expr, context);
     return result.success ? result.value : undefined;
   }
@@ -389,7 +400,7 @@ export class ExpressionEngine {
    * @param {ExpressionContext} context - 上下文
    * @returns {string}
    */
-  evalTemplate(template, context = {}) {
+  evalTemplate(template: string, context: ExpressionContext = {}): unknown {
     const result = this.evaluateTemplate(template, context);
     return result.success ? result.value : template;
   }
@@ -401,7 +412,7 @@ export class ExpressionEngine {
    * @param {*} fallback - 降级值
    * @returns {*}
    */
-  safeEval(expr, context = {}, fallback = undefined) {
+  safeEval(expr: string, context: ExpressionContext = {}, fallback = undefined): unknown {
     const result = this.evaluate(expr, context);
     return result.success ? result.value : fallback;
   }
@@ -412,8 +423,11 @@ export class ExpressionEngine {
    * @param {ExpressionContext} context - 上下文
    * @returns {Record<string, *>}
    */
-  evaluateMany(expressions, context = {}) {
-    const results = {};
+  evaluateMany(
+    expressions: Record<string, string>,
+    context: ExpressionContext = {},
+  ): Record<string, unknown> {
+    const results: Record<string, unknown> = {};
     for (const [key, expr] of Object.entries(expressions)) {
       results[key] = this.eval(expr, context);
     }
@@ -427,7 +441,7 @@ export class ExpressionEngine {
    * @param {string} expr - 表达式
    * @returns {{valid: boolean, error?: string}}
    */
-  validate(expr) {
+  validate(expr: string): { valid: boolean; error?: string } {
     try {
       let cleanExpr = String(expr).trim();
       if (cleanExpr.startsWith("{{") && cleanExpr.endsWith("}}")) {
@@ -437,7 +451,7 @@ export class ExpressionEngine {
       // 尝试编译
       this._compile(cleanExpr);
       return { valid: true };
-    } catch (error) {
+    } catch (error: any) {
       return { valid: false, error: error.message };
     }
   }
@@ -454,7 +468,7 @@ export const defaultEngine = new ExpressionEngine();
  * @param {ExpressionContext} context - 上下文
  * @returns {*}
  */
-export function evaluate(expr, context = {}) {
+export function evaluate(expr: string, context: ExpressionContext = {}): unknown {
   return defaultEngine.eval(expr, context);
 }
 
@@ -464,7 +478,7 @@ export function evaluate(expr, context = {}) {
  * @param {ExpressionContext} context - 上下文
  * @returns {string}
  */
-export function evaluateTemplate(template, context = {}) {
+export function evaluateTemplate(template: string, context: ExpressionContext = {}): unknown {
   return defaultEngine.evalTemplate(template, context);
 }
 

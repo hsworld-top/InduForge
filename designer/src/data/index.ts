@@ -2,6 +2,7 @@
  * 数据绑定系统 - 统一导出
  */
 
+import type { VarsDefinitions } from "./types.ts";
 import { BindingResolver, createBindingResolver } from "./BindingResolver.ts";
 import { createDataService, DataService } from "./DataService.ts";
 import { createDiagnosticsStore, DiagnosticsStore } from "./DiagnosticsStore.ts";
@@ -63,29 +64,34 @@ export {
   createExprBinding,
   createVarBinding,
   createVarDefinition,
+  type DataMode,
+  type DatapointStatus,
+  type DatapointStatusInfo,
+  type DiagnosticInfo,
+  type DiagnosticsSummary,
+  type ExpressionContext,
+  type ExpressionResult,
   getBindingKind,
   isValidValue,
+  type ResolvedBinding,
+  type VarsContext,
+  type VarsDefinitions,
 } from "./types.ts";
 
 export { VarsStore } from "./VarsStore.ts";
 
 export function createDataBindingSystem(
   options: {
-    mode?: string;
+    mode?: "edit" | "preview" | "runtime";
     pageId?: string | null;
-    varsDefinitions?: {
-      global: Record<string, unknown>;
-      pages: Record<string, Record<string, unknown>>;
-    };
+    varsDefinitions?: VarsDefinitions;
     dataServiceOptions?: Record<string, unknown>;
   } = {},
 ) {
-  const {
-    mode = "edit",
-    pageId = null,
-    varsDefinitions = { global: {}, pages: {} },
-    dataServiceOptions = {},
-  } = options;
+  const mode = options.mode ?? "edit";
+  const pageId = options.pageId ?? null;
+  const varsDefinitions: VarsDefinitions = options.varsDefinitions ?? { global: {}, pages: {} };
+  const dataServiceOptions = options.dataServiceOptions ?? {};
 
   const varsStore = new VarsStore(varsDefinitions);
   const expressionEngine = new ExpressionEngine();

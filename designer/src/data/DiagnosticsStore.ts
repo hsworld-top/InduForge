@@ -1,22 +1,66 @@
-// @ts-nocheck — 待 data/types 迁 TS 后补全 DatapointStatus 等类型
 /**
  * DiagnosticsStore - 数据点状态追踪
  * 管理和追踪所有数据点的状态
  */
 
+import type {
+  DatapointStatus,
+  DatapointStatusInfo,
+  DiagnosticInfo,
+  DiagnosticsSummary,
+} from "./types.ts";
 import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
 
-/**
- * @typedef {import('./types.js').DatapointStatus} DatapointStatus
- * @typedef {import('./types.js').DatapointStatusInfo} DatapointStatusInfo
- * @typedef {import('./types.js').DiagnosticInfo} DiagnosticInfo
- * @typedef {import('./types.js').DiagnosticsSummary} DiagnosticsSummary
- */
+interface DiagnosticsStoreOptions {
+  apiBaseUrl?: string;
+  cacheExpireTime?: number;
+  batchSize?: number;
+}
+
+interface CachedStatus {
+  info: DatapointStatusInfo;
+  timestamp: number;
+}
+
+function buildDiagnosticInfo(
+  path: string,
+  info: DatapointStatusInfo,
+  bindingCount: number,
+): DiagnosticInfo {
+  const diagnostic: DiagnosticInfo = {
+    path,
+    status: info.status,
+    dataType: info.dataType,
+    bindingCount,
+  };
+  if (info.statusReason) {
+    diagnostic.statusReason = info.statusReason;
+  }
+  return diagnostic;
+}
 
 /**
  * 诊断存储类
  */
 export class DiagnosticsStore extends EventEmitter {
+  private _apiBaseUrl: string;
+
+  private _cacheExpireTime: number;
+
+  private _batchSize: number;
+
+  private _cache: Map<string, CachedStatus>;
+
+  private _nodeBindings: Map<string, Set<string>>;
+
+  private _datapointNodes: Map<string, Set<string>>;
+
+  private _pendingPaths: Set<string>;
+
+  private _batchTimer: ReturnType<typeof setTimeout> | null;
+
+  private _batchDelay: number;
+
   /**
    * 创建诊断存储
    * @param {object} [options] - 配置选项
@@ -24,38 +68,19 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {number} [options.cacheExpireTime] - 缓存过期时间（毫秒）
    * @param {number} [options.batchSize] - 批量查询大小
    */
-  constructor(options = {}) {
+  constructor(options: DiagnosticsStoreOptions = {}) {
     super();
 
-    /** @type {string} */
     this._apiBaseUrl = options.apiBaseUrl || "/api/v1";
-
-    /** @type {number} */
     this._cacheExpireTime = options.cacheExpireTime ?? 30000;
-
-    /** @type {number} */
     this._batchSize = options.batchSize ?? 50;
-
-    /** @type {Map<string, {info: DatapointStatusInfo, timestamp: number}>} 状态缓存 */
     this._cache = new Map();
-
-    /** @type {Map<string, Set<string>>} 节点到数据点的映射 */
     this._nodeBindings = new Map();
-
-    /** @type {Map<string, Set<string>>} 数据点到节点的映射 */
     this._datapointNodes = new Map();
-
-    /** @type {Set<string>} 待查询队列 */
     this._pendingPaths = new Set();
-
-    /** @type {number | null} 批量查询定时器 */
     this._batchTimer = null;
-
-    /** @type {number} 批量查询延迟 */
     this._batchDelay = 100;
   }
-
-  // ==================== 状态查询 ====================
 
   /**
    * 获取数据点状态
@@ -63,19 +88,18 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {boolean} [forceRefresh] - 是否强制刷新
    * @returns {Promise<DatapointStatusInfo>}
    */
-  async getStatus(path, forceRefresh = false) {
-    // 检查缓存
+  async getStatus(path: string, forceRefresh = false): Promise<DatapointStatusInfo> {
     if (!forceRefresh) {
       const cached = this._getFromCache(path);
       if (cached) return cached;
     }
 
-    // 添加到待查询队列并触发批量查询
     this._addToPending(path);
 
-    // 等待查询完成
     return new Promise((resolve) => {
-      const handler = (data) => {
+      const handler = (...args: unknown[]) => {
+        const data = args[0] as DatapointStatusInfo | undefined;
+        if (!data) return;
         if (data.path === path) {
           this.off("statusUpdated", handler);
           resolve(data);
@@ -83,7 +107,6 @@ export class DiagnosticsStore extends EventEmitter {
       };
       this.on("statusUpdated", handler);
 
-      // 超时处理
       setTimeout(() => {
         this.off("statusUpdated", handler);
         resolve(this._getFromCache(path) || this._createUnknownStatus(path));
@@ -97,11 +120,13 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {boolean} [forceRefresh] - 是否强制刷新
    * @returns {Promise<Map<string, DatapointStatusInfo>>}
    */
-  async getStatusBatch(paths, forceRefresh = false) {
-    const results = new Map();
-    const needFetch = [];
+  async getStatusBatch(
+    paths: string[],
+    forceRefresh = false,
+  ): Promise<Map<string, DatapointStatusInfo>> {
+    const results = new Map<string, DatapointStatusInfo>();
+    const needFetch: string[] = [];
 
-    // 检查缓存
     for (const path of paths) {
       if (!forceRefresh) {
         const cached = this._getFromCache(path);
@@ -113,11 +138,9 @@ export class DiagnosticsStore extends EventEmitter {
       needFetch.push(path);
     }
 
-    // 如果有需要查询的
     if (needFetch.length > 0) {
       await this._fetchStatusBatch(needFetch);
 
-      // 从缓存获取结果
       for (const path of needFetch) {
         const cached = this._getFromCache(path);
         results.set(path, cached || this._createUnknownStatus(path));
@@ -133,11 +156,10 @@ export class DiagnosticsStore extends EventEmitter {
    * @returns {DatapointStatusInfo | null}
    * @private
    */
-  _getFromCache(path) {
+  private _getFromCache(path: string): DatapointStatusInfo | null {
     const cached = this._cache.get(path);
     if (!cached) return null;
 
-    // 检查是否过期
     if (Date.now() - cached.timestamp > this._cacheExpireTime) {
       this._cache.delete(path);
       return null;
@@ -152,22 +174,21 @@ export class DiagnosticsStore extends EventEmitter {
    * @returns {DatapointStatusInfo}
    * @private
    */
-  _createUnknownStatus(path) {
+  private _createUnknownStatus(path: string): DatapointStatusInfo {
     return {
       path,
       status: "unknown",
       statusReason: "数据点未找到或未配置",
+      dataType: "unknown",
     };
   }
-
-  // ==================== 批量查询 ====================
 
   /**
    * 添加到待查询队列
    * @param {string} path - 数据点路径
    * @private
    */
-  _addToPending(path) {
+  private _addToPending(path: string): void {
     this._pendingPaths.add(path);
     this._scheduleBatchFetch();
   }
@@ -176,7 +197,7 @@ export class DiagnosticsStore extends EventEmitter {
    * 调度批量查询
    * @private
    */
-  _scheduleBatchFetch() {
+  private _scheduleBatchFetch(): void {
     if (this._batchTimer) return;
 
     this._batchTimer = setTimeout(async () => {
@@ -184,11 +205,9 @@ export class DiagnosticsStore extends EventEmitter {
 
       if (this._pendingPaths.size === 0) return;
 
-      // 取出待查询路径
       const paths = Array.from(this._pendingPaths);
       this._pendingPaths.clear();
 
-      // 分批查询
       for (let i = 0; i < paths.length; i += this._batchSize) {
         const batch = paths.slice(i, i + this._batchSize);
         await this._fetchStatusBatch(batch);
@@ -201,7 +220,7 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {string[]} paths - 数据点路径数组
    * @private
    */
-  async _fetchStatusBatch(paths) {
+  private async _fetchStatusBatch(paths: string[]): Promise<void> {
     try {
       const response = await fetch(`${this._apiBaseUrl}/datapoints/status`, {
         method: "POST",
@@ -218,20 +237,19 @@ export class DiagnosticsStore extends EventEmitter {
       const result = await response.json();
 
       if (result.success && result.data) {
-        // 更新缓存
-        for (const info of result.data) {
+        for (const info of result.data as DatapointStatusInfo[]) {
           this._updateCache(info);
         }
       }
     } catch (error) {
       console.error("Failed to fetch datapoint status:", error);
 
-      // 查询失败时，将路径标记为 unknown
       for (const path of paths) {
         this._updateCache({
           path,
           status: "unknown",
-          statusReason: `查询失败: ${error.message}`,
+          statusReason: `查询失败: ${error instanceof Error ? error.message : String(error)}`,
+          dataType: "unknown",
         });
       }
     }
@@ -242,7 +260,7 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {DatapointStatusInfo} info - 状态信息
    * @private
    */
-  _updateCache(info) {
+  private _updateCache(info: DatapointStatusInfo): void {
     const oldInfo = this._cache.get(info.path)?.info;
 
     this._cache.set(info.path, {
@@ -250,7 +268,6 @@ export class DiagnosticsStore extends EventEmitter {
       timestamp: Date.now(),
     });
 
-    // 如果状态变化，触发事件
     if (!oldInfo || oldInfo.status !== info.status) {
       this.emit("statusUpdated", info);
       this.emit("statusChange", {
@@ -262,25 +279,20 @@ export class DiagnosticsStore extends EventEmitter {
     }
   }
 
-  // ==================== 绑定追踪 ====================
-
   /**
    * 注册节点绑定
    * @param {string} nodeId - 节点 ID
    * @param {string[]} datapointPaths - 数据点路径数组
    */
-  registerNodeBindings(nodeId, datapointPaths) {
-    // 清除旧绑定
+  registerNodeBindings(nodeId: string, datapointPaths: string[]): void {
     this.unregisterNodeBindings(nodeId);
-
-    // 注册新绑定
     this._nodeBindings.set(nodeId, new Set(datapointPaths));
 
     for (const path of datapointPaths) {
       if (!this._datapointNodes.has(path)) {
         this._datapointNodes.set(path, new Set());
       }
-      this._datapointNodes.get(path).add(nodeId);
+      this._datapointNodes.get(path)?.add(nodeId);
     }
   }
 
@@ -288,7 +300,7 @@ export class DiagnosticsStore extends EventEmitter {
    * 取消注册节点绑定
    * @param {string} nodeId - 节点 ID
    */
-  unregisterNodeBindings(nodeId) {
+  unregisterNodeBindings(nodeId: string): void {
     const paths = this._nodeBindings.get(nodeId);
     if (!paths) return;
 
@@ -304,7 +316,7 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {string} nodeId - 节点 ID
    * @returns {string[]}
    */
-  getNodeBindings(nodeId) {
+  getNodeBindings(nodeId: string): string[] {
     const paths = this._nodeBindings.get(nodeId);
     return paths ? Array.from(paths) : [];
   }
@@ -314,19 +326,17 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {string} path - 数据点路径
    * @returns {string[]}
    */
-  getDatapointNodes(path) {
+  getDatapointNodes(path: string): string[] {
     const nodes = this._datapointNodes.get(path);
     return nodes ? Array.from(nodes) : [];
   }
-
-  // ==================== 诊断报告 ====================
 
   /**
    * 获取诊断摘要
    * @returns {DiagnosticsSummary}
    */
-  getSummary() {
-    const issues = [];
+  getSummary(): DiagnosticsSummary & { issues: DiagnosticInfo[] } {
+    const issues: DiagnosticInfo[] = [];
     let active = 0;
     let invalid = 0;
     let unknown = 0;
@@ -339,23 +349,11 @@ export class DiagnosticsStore extends EventEmitter {
           break;
         case "invalid":
           invalid++;
-          issues.push({
-            path,
-            status: info.status,
-            reason: info.statusReason,
-            affectedNodeIds: this.getDatapointNodes(path),
-            lastCheckedAt: cached.timestamp,
-          });
+          issues.push(buildDiagnosticInfo(path, info, this.getDatapointNodes(path).length));
           break;
         case "unknown":
           unknown++;
-          issues.push({
-            path,
-            status: info.status,
-            reason: info.statusReason,
-            affectedNodeIds: this.getDatapointNodes(path),
-            lastCheckedAt: cached.timestamp,
-          });
+          issues.push(buildDiagnosticInfo(path, info, this.getDatapointNodes(path).length));
           break;
       }
     }
@@ -373,19 +371,13 @@ export class DiagnosticsStore extends EventEmitter {
    * 获取所有问题数据点
    * @returns {DiagnosticInfo[]}
    */
-  getIssues() {
-    const issues = [];
+  getIssues(): DiagnosticInfo[] {
+    const issues: DiagnosticInfo[] = [];
 
     for (const [path, cached] of this._cache.entries()) {
       const { info } = cached;
       if (info.status !== "active") {
-        issues.push({
-          path,
-          status: info.status,
-          reason: info.statusReason,
-          affectedNodeIds: this.getDatapointNodes(path),
-          lastCheckedAt: cached.timestamp,
-        });
+        issues.push(buildDiagnosticInfo(path, info, this.getDatapointNodes(path).length));
       }
     }
 
@@ -397,8 +389,8 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {DatapointStatus} status - 状态
    * @returns {string[]}
    */
-  getPathsByStatus(status) {
-    const paths = [];
+  getPathsByStatus(status: DatapointStatus): string[] {
+    const paths: string[] = [];
     for (const [path, cached] of this._cache.entries()) {
       if (cached.info.status === status) {
         paths.push(path);
@@ -407,13 +399,11 @@ export class DiagnosticsStore extends EventEmitter {
     return paths;
   }
 
-  // ==================== 手动状态管理 ====================
-
   /**
    * 手动设置状态（用于 WebSocket 推送）
    * @param {DatapointStatusInfo} info - 状态信息
    */
-  setStatus(info) {
+  setStatus(info: DatapointStatusInfo): void {
     this._updateCache(info);
   }
 
@@ -421,7 +411,7 @@ export class DiagnosticsStore extends EventEmitter {
    * 批量设置状态
    * @param {DatapointStatusInfo[]} infos - 状态信息数组
    */
-  setStatusBatch(infos) {
+  setStatusBatch(infos: DatapointStatusInfo[]): void {
     for (const info of infos) {
       this._updateCache(info);
     }
@@ -432,11 +422,12 @@ export class DiagnosticsStore extends EventEmitter {
    * @param {string} path - 数据点路径
    * @param {string} [reason] - 原因
    */
-  markInvalid(path, reason) {
+  markInvalid(path: string, reason?: string): void {
     this._updateCache({
       path,
       status: "invalid",
       statusReason: reason || "手动标记为失效",
+      dataType: "unknown",
     });
   }
 
@@ -444,19 +435,18 @@ export class DiagnosticsStore extends EventEmitter {
    * 标记数据点为活跃
    * @param {string} path - 数据点路径
    */
-  markActive(path) {
+  markActive(path: string): void {
     this._updateCache({
       path,
       status: "active",
+      dataType: "unknown",
     });
   }
-
-  // ==================== 缓存管理 ====================
 
   /**
    * 清除缓存
    */
-  clearCache() {
+  clearCache(): void {
     this._cache.clear();
     this.emit("cacheCleared");
   }
@@ -464,7 +454,7 @@ export class DiagnosticsStore extends EventEmitter {
   /**
    * 清除过期缓存
    */
-  clearExpiredCache() {
+  clearExpiredCache(): void {
     const now = Date.now();
     for (const [path, cached] of this._cache.entries()) {
       if (now - cached.timestamp > this._cacheExpireTime) {
@@ -477,23 +467,20 @@ export class DiagnosticsStore extends EventEmitter {
    * 刷新所有缓存
    * @returns {Promise<void>}
    */
-  async refreshAll() {
+  async refreshAll(): Promise<void> {
     const paths = Array.from(this._cache.keys());
     if (paths.length === 0) return;
 
-    // 分批刷新
     for (let i = 0; i < paths.length; i += this._batchSize) {
       const batch = paths.slice(i, i + this._batchSize);
       await this._fetchStatusBatch(batch);
     }
   }
 
-  // ==================== 销毁 ====================
-
   /**
    * 销毁
    */
-  destroy() {
+  destroy(): void {
     if (this._batchTimer) {
       clearTimeout(this._batchTimer);
       this._batchTimer = null;
@@ -513,7 +500,7 @@ export class DiagnosticsStore extends EventEmitter {
  * @param {object} [options] - 配置选项
  * @returns {DiagnosticsStore}
  */
-export function createDiagnosticsStore(options) {
+export function createDiagnosticsStore(options?: DiagnosticsStoreOptions): DiagnosticsStore {
   return new DiagnosticsStore(options);
 }
 

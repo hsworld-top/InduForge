@@ -1,4 +1,3 @@
-// @ts-nocheck — 大文件；后续拆分并补全类型
 /**
  * 构建预览运行时组件 ref 接口（DSL 方法映射）
  *
@@ -7,8 +6,89 @@
  * @module ui/Canvas/composables/use-build-ref-info
  */
 
+import type { PreviewPatchLike, UseBuildRefInfoDeps } from "./types";
 import { nextTick } from "vue";
 import { componentRegistry } from "@/editor-core";
+
+type AnyValue = any;
+type LooseRecord = Record<string, unknown>;
+type LooseItem = LooseRecord | string | number | boolean | null | undefined;
+interface RuntimeNodeLike {
+  id: string;
+  type: string;
+  label?: string;
+  hidden?: boolean;
+  props: LooseRecord;
+  style: LooseRecord;
+  bindings: LooseRecord;
+  events: LooseRecord;
+  conditions: LooseRecord;
+  permissions: LooseRecord;
+}
+interface ChoiceOptionLike extends LooseRecord {
+  label?: unknown;
+  text?: unknown;
+  value?: unknown;
+  disabled?: unknown;
+  visible?: unknown;
+}
+interface ButtonDslOnClick {
+  action?: unknown;
+  confirm?: unknown;
+}
+interface ButtonDslConfig extends LooseRecord {
+  id?: unknown;
+  text?: unknown;
+  textExpr?: unknown;
+  visible?: unknown;
+  permission?: unknown;
+  type?: unknown;
+  size?: unknown;
+  plain?: unknown;
+  round?: unknown;
+  circle?: unknown;
+  disabled?: unknown;
+  loading?: unknown;
+  icon?: unknown;
+  style?: unknown;
+  className?: unknown;
+  onClick?: unknown;
+  plugin?: unknown;
+}
+interface ButtonDslPatch {
+  propsPatch: LooseRecord;
+  stylePatch: LooseRecord;
+  bindingsPatch: LooseRecord;
+  eventsPatch: LooseRecord;
+  conditionsPatch: LooseRecord;
+  hidden: boolean | undefined;
+}
+interface RuntimeRefInfo extends LooseRecord {
+  setOption?: (
+    option: unknown,
+    notMergeOrOpts?: unknown,
+    lazyUpdate?: boolean,
+    silent?: boolean,
+    replaceMerge?: unknown,
+  ) => void;
+  setTableHeader?: (columns: unknown) => void;
+  setTableData?: (data: unknown, header?: unknown) => void;
+  Close?: (index?: unknown) => void;
+  Open?: (index?: unknown) => void;
+  [key: string]: any;
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as PromiseLike<unknown>).then === "function"
+  );
+}
+
+function isElementWithClick(value: unknown): value is HTMLElement {
+  return value instanceof HTMLElement;
+}
 
 /**
  * 创建 buildRefInfo / applyPreviewPatch
@@ -32,41 +112,42 @@ export function useBuildRefInfo({
   tableRenderVersion,
   docVersion,
   isRunningDetailConfigFn,
-}) {
-  const applyPreviewPatch = (patch) => {
+}: UseBuildRefInfoDeps) {
+  const applyPreviewPatch = (patch: PreviewPatchLike) => {
     if (!node.value || !patch || typeof patch !== "object") return;
+    const currentNode = node.value as unknown as RuntimeNodeLike;
     if (patch.props) {
-      node.value.props = { ...(node.value.props || {}), ...patch.props };
+      currentNode.props = { ...(currentNode.props || {}), ...patch.props };
     }
     if (patch.style) {
-      node.value.style = { ...(node.value.style || {}), ...patch.style };
+      currentNode.style = { ...(currentNode.style || {}), ...patch.style };
     }
     if (patch.bindings) {
-      node.value.bindings = {
-        ...(node.value.bindings || {}),
+      currentNode.bindings = {
+        ...(currentNode.bindings || {}),
         ...patch.bindings,
       };
     }
     if (patch.events) {
-      node.value.events = { ...(node.value.events || {}), ...patch.events };
+      currentNode.events = { ...(currentNode.events || {}), ...patch.events };
     }
     if (patch.conditions) {
-      node.value.conditions = {
-        ...(node.value.conditions || {}),
+      currentNode.conditions = {
+        ...(currentNode.conditions || {}),
         ...patch.conditions,
       };
     }
     if (patch.permissions) {
-      node.value.permissions = {
-        ...(node.value.permissions || {}),
+      currentNode.permissions = {
+        ...(currentNode.permissions || {}),
         ...patch.permissions,
       };
     }
     if (typeof patch.hidden === "boolean") {
-      node.value.hidden = patch.hidden;
+      currentNode.hidden = patch.hidden;
     }
     if (patch.label !== undefined) {
-      node.value.label = patch.label;
+      currentNode.label = patch.label;
     }
     docVersion.value += 1;
   };
@@ -102,13 +183,14 @@ export function useBuildRefInfo({
    * @param {string | ButtonDslOnClick} onClick - 点击配置
    * @returns {string}
    */
-  const buildButtonClickScript = (onClick) => {
+  const buildButtonClickScript = (onClick: string | ButtonDslOnClick | unknown) => {
     if (typeof onClick === "string") return onClick;
     if (!onClick || typeof onClick !== "object") return "";
-    const action = typeof onClick.action === "string" ? onClick.action.trim() : "";
+    const safeOnClick = onClick as ButtonDslOnClick;
+    const action = typeof safeOnClick.action === "string" ? safeOnClick.action.trim() : "";
     if (!action) return "";
-    if (typeof onClick.confirm === "string" && onClick.confirm.trim()) {
-      const confirmText = JSON.stringify(onClick.confirm.trim());
+    if (typeof safeOnClick.confirm === "string" && safeOnClick.confirm.trim()) {
+      const confirmText = JSON.stringify(safeOnClick.confirm.trim());
       return `if (confirm(${confirmText})) {\n  ${action}\n}`;
     }
     return action;
@@ -126,13 +208,13 @@ export function useBuildRefInfo({
    *   hidden: boolean | undefined,
    * }}
    */
-  const buildButtonDslPatch = (config) => {
-    const propsPatch = {};
-    const stylePatch = {};
-    const bindingsPatch = {};
-    const eventsPatch = {};
-    const conditionsPatch = {};
-    let hidden;
+  const buildButtonDslPatch = (config: ButtonDslConfig | unknown): ButtonDslPatch => {
+    const propsPatch: LooseRecord = {};
+    const stylePatch: LooseRecord = {};
+    const bindingsPatch: LooseRecord = {};
+    const eventsPatch: LooseRecord = {};
+    const conditionsPatch: LooseRecord = {};
+    let hidden: boolean | undefined;
 
     if (!config || typeof config !== "object") {
       return {
@@ -144,64 +226,65 @@ export function useBuildRefInfo({
         hidden,
       };
     }
+    const safeConfig = config as ButtonDslConfig;
 
-    if (Object.hasOwn(config, "id")) {
-      const value = String(config.id || "");
+    if (Object.hasOwn(safeConfig, "id")) {
+      const value = String(safeConfig.id || "");
       if (value) propsPatch.id = value;
     }
-    if (Object.hasOwn(config, "text")) {
-      propsPatch.text = String(config.text ?? "");
+    if (Object.hasOwn(safeConfig, "text")) {
+      propsPatch.text = String(safeConfig.text ?? "");
     }
-    if (typeof config.textExpr === "string" && config.textExpr.trim()) {
+    if (typeof safeConfig.textExpr === "string" && safeConfig.textExpr.trim()) {
       bindingsPatch.text = {
         kind: "expr",
-        expr: config.textExpr.trim(),
+        expr: safeConfig.textExpr.trim(),
         fallback:
-          Object.hasOwn(config, "text") && config.text !== undefined
-            ? String(config.text ?? "")
+          Object.hasOwn(safeConfig, "text") && safeConfig.text !== undefined
+            ? String(safeConfig.text ?? "")
             : undefined,
       };
     }
-    if (typeof config.visible === "boolean") {
-      hidden = !config.visible;
-    } else if (typeof config.visible === "string" && config.visible.trim()) {
-      conditionsPatch.visible = config.visible.trim();
+    if (typeof safeConfig.visible === "boolean") {
+      hidden = !safeConfig.visible;
+    } else if (typeof safeConfig.visible === "string" && safeConfig.visible.trim()) {
+      conditionsPatch.visible = safeConfig.visible.trim();
     }
-    if (typeof config.permission === "string" && config.permission.trim()) {
-      propsPatch.permission = config.permission.trim();
+    if (typeof safeConfig.permission === "string" && safeConfig.permission.trim()) {
+      propsPatch.permission = safeConfig.permission.trim();
     }
-    if (typeof config.type === "string" && config.type.trim()) {
-      propsPatch.type = config.type.trim();
+    if (typeof safeConfig.type === "string" && safeConfig.type.trim()) {
+      propsPatch.type = safeConfig.type.trim();
     }
-    if (typeof config.size === "string" && config.size.trim()) {
-      propsPatch.size = config.size.trim();
+    if (typeof safeConfig.size === "string" && safeConfig.size.trim()) {
+      propsPatch.size = safeConfig.size.trim();
     }
-    if (typeof config.plain === "boolean") propsPatch.plain = config.plain;
-    if (typeof config.round === "boolean") propsPatch.round = config.round;
-    if (typeof config.circle === "boolean") propsPatch.circle = config.circle;
-    if (typeof config.disabled === "boolean") propsPatch.disabled = config.disabled;
-    if (typeof config.loading === "boolean") propsPatch.loading = config.loading;
-    if (typeof config.icon === "string" && config.icon.trim()) {
-      propsPatch.icon = config.icon.trim();
+    if (typeof safeConfig.plain === "boolean") propsPatch.plain = safeConfig.plain;
+    if (typeof safeConfig.round === "boolean") propsPatch.round = safeConfig.round;
+    if (typeof safeConfig.circle === "boolean") propsPatch.circle = safeConfig.circle;
+    if (typeof safeConfig.disabled === "boolean") propsPatch.disabled = safeConfig.disabled;
+    if (typeof safeConfig.loading === "boolean") propsPatch.loading = safeConfig.loading;
+    if (typeof safeConfig.icon === "string" && safeConfig.icon.trim()) {
+      propsPatch.icon = safeConfig.icon.trim();
     }
-    if (config.style && typeof config.style === "object") {
-      Object.entries(config.style).forEach(([key, value]) => {
+    if (safeConfig.style && typeof safeConfig.style === "object") {
+      Object.entries(safeConfig.style).forEach(([key, value]) => {
         if (typeof value === "string") {
           stylePatch[key] = value;
         }
       });
     }
-    if (typeof config.className === "string" && config.className.trim()) {
-      propsPatch.class = config.className.trim();
+    if (typeof safeConfig.className === "string" && safeConfig.className.trim()) {
+      propsPatch.class = safeConfig.className.trim();
     }
-    if (config.onClick) {
-      const code = buildButtonClickScript(config.onClick);
+    if (safeConfig.onClick) {
+      const code = buildButtonClickScript(safeConfig.onClick);
       if (code) {
         eventsPatch.click = [{ type: "script", code, enabled: true }];
       }
     }
-    if (Object.hasOwn(config, "plugin")) {
-      propsPatch.plugin = config.plugin;
+    if (Object.hasOwn(safeConfig, "plugin")) {
+      propsPatch.plugin = safeConfig.plugin;
     }
 
     return {
@@ -214,9 +297,10 @@ export function useBuildRefInfo({
     };
   };
 
-  function buildRefInfo() {
+  function buildRefInfo(): RuntimeRefInfo | null {
     if (!node.value) return null;
-    const dslMethodMap = {
+    const currentNode = node.value as unknown as RuntimeNodeLike;
+    const dslMethodMap: Record<string, string> = {
       Input: "input",
       InputNumber: "inputNumber",
       Select: "select",
@@ -249,7 +333,8 @@ export function useBuildRefInfo({
       ElLayoutRow: "elLayoutRow",
       ElCol: "elCol",
     };
-    const applyCommonDslConfig = (config) => {
+    const applyCommonDslConfig = (config: LooseRecord | null | undefined) => {
+      if (!node.value) return;
       if (!config || typeof config !== "object") return;
       const reservedKeys = new Set([
         "id",
@@ -266,26 +351,31 @@ export function useBuildRefInfo({
         "permission",
         "onClick",
       ]);
-      const rawProps = config.props && typeof config.props === "object" ? { ...config.props } : {};
-      Object.entries(config).forEach(([key, value]) => {
+      const rawProps: LooseRecord =
+        config.props && typeof config.props === "object" ? { ...(config.props as LooseRecord) } : {};
+      Object.entries(config).forEach(([key, value]: [string, unknown]) => {
         if (reservedKeys.has(key)) return;
         if (rawProps[key] === undefined) {
           rawProps[key] = value;
         }
       });
-      if (node.value?.type === "Menu" && Array.isArray(rawProps.items)) {
+      if (currentNode.type === "Menu" && Array.isArray(rawProps.items)) {
         // 兼容 command/key 写法，确保 Menu 有可用的 index
         rawProps.items = rawProps.items
-          .map((item) => {
+          .map((item: LooseItem) => {
             if (!item) return null;
             if (typeof item === "string") {
               return { label: item, index: item };
             }
             if (typeof item !== "object") return null;
-            const label = item.label ?? item.title ?? item.name ?? "";
+            const record = item as LooseRecord;
+            const label = record.label ?? record.title ?? record.name ?? "";
             const index =
-              item.index ?? item.command ?? item.key ?? (label ? String(label) : undefined);
-            return { ...item, label, index };
+              record.index ??
+              record.command ??
+              record.key ??
+              (label ? String(label) : undefined);
+            return { ...record, label, index };
           })
           .filter(Boolean);
       }
@@ -293,17 +383,17 @@ export function useBuildRefInfo({
         rawProps.modelValue = rawProps.value;
         delete rawProps.value;
       }
-      const nextPatch = {};
+      const nextPatch: PreviewPatchLike = {};
       if (Object.keys(rawProps).length > 0) {
-        nextPatch.props = { ...(node.value.props || {}), ...rawProps };
+        nextPatch.props = { ...(currentNode.props || {}), ...rawProps };
       }
       if (config.style && typeof config.style === "object") {
-        nextPatch.style = { ...(node.value.style || {}), ...config.style };
+        nextPatch.style = { ...(currentNode.style || {}), ...config.style };
       }
       if (typeof config.className === "string" && config.className.trim()) {
         const className = config.className.trim();
         nextPatch.props = {
-          ...(nextPatch.props || node.value.props || {}),
+          ...(nextPatch.props || currentNode.props || {}),
           class: className,
         };
       }
@@ -315,13 +405,13 @@ export function useBuildRefInfo({
       }
       if (typeof config.disabled === "boolean") {
         nextPatch.props = {
-          ...(nextPatch.props || node.value.props || {}),
+          ...(nextPatch.props || currentNode.props || {}),
           disabled: config.disabled,
         };
       }
       if (typeof config.loading === "boolean") {
         nextPatch.props = {
-          ...(nextPatch.props || node.value.props || {}),
+          ...(nextPatch.props || currentNode.props || {}),
           loading: config.loading,
         };
       }
@@ -330,7 +420,7 @@ export function useBuildRefInfo({
         applyPreviewPatch(nextPatch);
         return;
       }
-      const ok = editorStore.updateNode(node.value.id, nextPatch);
+      const ok = editorStore.updateNode(currentNode.id, nextPatch as LooseRecord);
       if (!ok) {
         applyPreviewPatch(nextPatch);
       }
@@ -340,7 +430,7 @@ export function useBuildRefInfo({
      * @param {Record<string, any>} input - 菜单项数据
      * @returns {Record<string, any> | null} 规范化后的菜单项
      */
-    const normalizeDropdownItem = (input) => {
+    const normalizeDropdownItem = (input: LooseRecord | null | undefined) => {
       if (!input || typeof input !== "object") return null;
       const text = input.text ?? input.label ?? "";
       const command = input.command ?? input.value ?? input.key ?? "";
@@ -359,7 +449,7 @@ export function useBuildRefInfo({
      * 获取当前下拉菜单项列表
      * @returns {Array} 菜单项列表
      */
-    const getDropdownItems = () => {
+    const getDropdownItems = (): LooseRecord[] => {
       const items = node.value?.props?.items;
       return Array.isArray(items) ? [...items] : [];
     };
@@ -368,13 +458,14 @@ export function useBuildRefInfo({
      * @param {Array} nextItems - 新的菜单项列表
      * @returns {void}
      */
-    const updateDropdownItems = (nextItems) => {
+    const updateDropdownItems = (nextItems: LooseRecord[]) => {
+      if (!node.value) return;
       if (readonly.value) {
         applyPreviewPatch({ props: { items: nextItems } });
         return;
       }
-      editorStore.updateNode(node.value.id, {
-        props: { ...(node.value.props || {}), items: nextItems },
+      editorStore.updateNode(currentNode.id, {
+        props: { ...(currentNode.props || {}), items: nextItems },
       });
     };
     /**
@@ -382,14 +473,15 @@ export function useBuildRefInfo({
      * @param {Record<string, any>} patch - 属性补丁
      * @returns {void}
      */
-    const updateNodeProps = (patch) => {
+    const updateNodeProps = (patch: LooseRecord) => {
+      if (!node.value) return;
       if (!patch || typeof patch !== "object") return;
       if (readonly.value) {
         applyPreviewPatch({ props: patch });
         return;
       }
-      editorStore.updateNode(node.value.id, {
-        props: { ...(node.value.props || {}), ...patch },
+      editorStore.updateNode(currentNode.id, {
+        props: { ...(currentNode.props || {}), ...patch },
       });
     };
     /**
@@ -397,14 +489,15 @@ export function useBuildRefInfo({
      * @param {Record<string, any>} patch - 样式补丁
      * @returns {void}
      */
-    const updateNodeStyle = (patch) => {
+    const updateNodeStyle = (patch: LooseRecord) => {
+      if (!node.value) return;
       if (!patch || typeof patch !== "object") return;
       if (readonly.value) {
         applyPreviewPatch({ style: patch });
         return;
       }
-      editorStore.updateNode(node.value.id, {
-        style: { ...(node.value.style || {}), ...patch },
+      editorStore.updateNode(currentNode.id, {
+        style: { ...(currentNode.style || {}), ...patch },
       });
     };
     /**
@@ -412,20 +505,21 @@ export function useBuildRefInfo({
      * @param {boolean} visible - 是否显示
      * @returns {void}
      */
-    const updateNodeVisibility = (visible) => {
+    const updateNodeVisibility = (visible: boolean) => {
+      if (!node.value) return;
       const hidden = !visible;
       if (readonly.value) {
         applyPreviewPatch({ hidden });
         return;
       }
-      editorStore.updateNode(node.value.id, { hidden });
+      editorStore.updateNode(currentNode.id, { hidden });
     };
     /**
      * 获取样式数值
      * @param {string} key - 样式字段
      * @returns {number}
      */
-    const getStyleNumber = (key) => {
+    const getStyleNumber = (key: string) => {
       const raw = node.value?.style?.[key];
       if (typeof raw === "number") return raw;
       if (typeof raw === "string") {
@@ -440,7 +534,10 @@ export function useBuildRefInfo({
      * @param {Record<string, any>} [config] - 布局 DSL 配置
      * @returns {HTMLElement | null}
      */
-    const applyLayoutDslOrGetElement = (expectedType, config) => {
+    const applyLayoutDslOrGetElement = (
+      expectedType: string,
+      config?: LooseRecord | null,
+    ): HTMLElement | null => {
       if (node.value?.type !== expectedType) return nodeRef.value || null;
       if (config && typeof config === "object") {
         applyCommonDslConfig(config);
@@ -452,7 +549,7 @@ export function useBuildRefInfo({
      * @param {any} input - 选项数据
      * @returns {Record<string, any> | null} 规范化后的选项
      */
-    const normalizeChoiceOption = (input) => {
+    const normalizeChoiceOption = (input: LooseItem): ChoiceOptionLike | null => {
       if (input == null) return null;
       if (typeof input === "object") {
         const label = input.label ?? input.text ?? "";
@@ -470,30 +567,33 @@ export function useBuildRefInfo({
      * 获取单选/多选项列表
      * @returns {Array} 选项列表
      */
-    const getChoiceOptions = () => {
+    const getChoiceOptions = (): ChoiceOptionLike[] => {
       const options = node.value?.props?.options;
       if (!Array.isArray(options)) return [];
-      return options.map((item) => normalizeChoiceOption(item)).filter(Boolean);
+      return options
+        .map((item) => normalizeChoiceOption(item))
+        .filter((item): item is ChoiceOptionLike => Boolean(item));
     };
     /**
      * 更新单选/多选项列表
      * @param {Array} nextOptions - 新的选项列表
      * @returns {void}
      */
-    const updateChoiceOptions = (nextOptions) => {
+    const updateChoiceOptions = (nextOptions: ChoiceOptionLike[]) => {
+      if (!node.value) return;
       if (readonly.value) {
         applyPreviewPatch({ props: { options: nextOptions } });
         return;
       }
-      editorStore.updateNode(node.value.id, {
-        props: { ...(node.value.props || {}), options: nextOptions },
+      editorStore.updateNode(currentNode.id, {
+        props: { ...(currentNode.props || {}), options: nextOptions },
       });
     };
     /**
      * 获取表格数据
      * @returns {Array} 表格数据
      */
-    const getTableData = () => {
+    const getTableData = (): LooseRecord[] => {
       const data = node.value?.props?.data;
       return Array.isArray(data) ? [...data] : [];
     };
@@ -502,14 +602,15 @@ export function useBuildRefInfo({
      * @param {Array} nextData - 表格数据
      * @returns {void}
      */
-    const updateTableData = (nextData) => {
+    const updateTableData = (nextData: LooseRecord[]) => {
+      if (!node.value) return;
       if (readonly.value) {
         applyPreviewPatch({ props: { data: nextData } });
         tableRenderVersion.value += 1;
         return;
       }
-      editorStore.updateNode(node.value.id, {
-        props: { ...(node.value.props || {}), data: nextData },
+      editorStore.updateNode(currentNode.id, {
+        props: { ...(currentNode.props || {}), data: nextData },
       });
       tableRenderVersion.value += 1;
     };
@@ -518,7 +619,7 @@ export function useBuildRefInfo({
      * @param {Array} nextData - 树数据
      * @returns {void}
      */
-    const updateTreeData = (nextData) => {
+    const updateTreeData = (nextData: unknown) => {
       updateNodeProps({ data: Array.isArray(nextData) ? nextData : [] });
     };
     /**
@@ -526,7 +627,7 @@ export function useBuildRefInfo({
      * @param {Array} nextOptions - 级联数据
      * @returns {void}
      */
-    const updateCascaderOptions = (nextOptions) => {
+    const updateCascaderOptions = (nextOptions: unknown) => {
       updateNodeProps({
         options: Array.isArray(nextOptions) ? nextOptions : [],
       });
@@ -536,7 +637,7 @@ export function useBuildRefInfo({
      * @param {Array} nextOptions - 选择器选项
      * @returns {void}
      */
-    const updateSelectOptions = (nextOptions) => {
+    const updateSelectOptions = (nextOptions: unknown) => {
       updateNodeProps({
         options: Array.isArray(nextOptions) ? nextOptions : [],
       });
@@ -546,7 +647,7 @@ export function useBuildRefInfo({
      * @param {any} value - 输入值
      * @returns {void}
      */
-    const updateInputValue = (value) => {
+    const updateInputValue = (value: unknown) => {
       updateNodeProps({ modelValue: value });
     };
     /**
@@ -554,7 +655,7 @@ export function useBuildRefInfo({
      * @param {boolean} value - 开关状态
      * @returns {void}
      */
-    const updateSwitchValue = (value) => {
+    const updateSwitchValue = (value: unknown) => {
       updateNodeProps({ modelValue: Boolean(value) });
     };
     /**
@@ -563,7 +664,7 @@ export function useBuildRefInfo({
      * @param {Array} rightData - 右侧数据
      * @returns {void}
      */
-    const updateTransferData = (leftData, rightData) => {
+    const updateTransferData = (leftData: unknown, rightData: unknown) => {
       updateNodeProps({
         data: Array.isArray(leftData) ? leftData : [],
         modelValue: Array.isArray(rightData) ? rightData : [],
@@ -575,14 +676,14 @@ export function useBuildRefInfo({
      */
     const getTableRowKeyProp = () => {
       const propsValue = node.value?.props || {};
-      return propsValue.rowKey || propsValue["row-key"] || propsValue.keyField || "id";
+      return String(propsValue.rowKey || propsValue["row-key"] || propsValue.keyField || "id");
     };
     /**
      * 获取表格行键值
      * @param {Record<string, any>} row - 行数据
      * @returns {string|number|undefined}
      */
-    const getTableRowKeyValue = (row) => {
+    const getTableRowKeyValue = (row: LooseRecord | null | undefined) => {
       if (!row || typeof row !== "object") return undefined;
       const keyProp = getTableRowKeyProp();
       return row[keyProp];
@@ -593,30 +694,34 @@ export function useBuildRefInfo({
      */
     const getTreeNodeKeyProp = () => {
       const propsValue = node.value?.props || {};
-      return propsValue.nodeKey || propsValue["node-key"] || "id";
+      return String(propsValue.nodeKey || propsValue["node-key"] || "id");
     };
     /**
      * 收集树数据中的节点 key
      * @param {Array} list - 树节点列表
      * @returns {Array<string|number>}
      */
-    const collectTreeKeys = (list) => {
-      const keys = [];
+    const collectTreeKeys = (list: unknown): Array<string | number> => {
+      const keys: Array<string | number> = [];
       const keyProp = getTreeNodeKeyProp();
-      const walk = (items) => {
+      const walk = (items: unknown) => {
         if (!Array.isArray(items)) return;
-        items.forEach((item) => {
+        items.forEach((item: LooseItem) => {
           if (!item || typeof item !== "object") return;
-          if (Object.hasOwn(item, keyProp)) {
-            keys.push(item[keyProp]);
+          const record = item as LooseRecord;
+          if (Object.hasOwn(record, keyProp)) {
+            const value = record[keyProp];
+            if (typeof value === "string" || typeof value === "number") {
+              keys.push(value);
+            }
           }
-          walk(item.children);
+          walk(record.children);
         });
       };
       walk(list);
       return keys;
     };
-    const refInfo = {
+    const refInfo: RuntimeRefInfo = {
       get Name() {
         return node.value?.label || "";
       },
@@ -700,43 +805,49 @@ export function useBuildRefInfo({
       id: node.value.id,
       el: nodeRef.value || null,
       component: contentRef.value || null,
-      elContainer: (config) => applyLayoutDslOrGetElement("ElContainer", config),
-      elMain: (config) => applyLayoutDslOrGetElement("ElMain", config),
-      elLayout: (config) => applyLayoutDslOrGetElement("ElLayout", config),
-      elLayoutRow: (config) => applyLayoutDslOrGetElement("ElLayoutRow", config),
-      elCol: (config) => applyLayoutDslOrGetElement("ElCol", config),
+      elContainer: (config: AnyValue) => applyLayoutDslOrGetElement("ElContainer", config),
+      elMain: (config: AnyValue) => applyLayoutDslOrGetElement("ElMain", config),
+      elLayout: (config: AnyValue) => applyLayoutDslOrGetElement("ElLayout", config),
+      elLayoutRow: (config: AnyValue) => applyLayoutDslOrGetElement("ElLayoutRow", config),
+      elCol: (config: AnyValue) => applyLayoutDslOrGetElement("ElCol", config),
       node: node.value,
-      setProps: (patch) => {
+      setProps: (patch: AnyValue) => {
         if (!patch || typeof patch !== "object") return;
         if (readonly.value) {
           applyPreviewPatch({ props: patch });
           return;
         }
-        editorStore.updateNode(node.value.id, {
-          props: { ...(node.value.props || {}), ...patch },
+        editorStore.updateNode(currentNode.id, {
+          props: { ...(currentNode.props || {}), ...patch },
         });
       },
-      echarts: (method, ...args) => {
+      echarts: (method: AnyValue, ...args: AnyValue[]) => {
         if (node.value?.type !== "EChart") return;
         const chartApi = contentRef.value;
         if (chartApi?.callECharts) {
           return chartApi.callECharts(method, ...args);
         }
       },
-      setStyle: (patch) => {
+      setStyle: (patch: AnyValue) => {
         if (!patch || typeof patch !== "object") return;
         if (readonly.value) {
           applyPreviewPatch({ style: patch });
           return;
         }
-        editorStore.updateNode(node.value.id, {
-          style: { ...(node.value.style || {}), ...patch },
+        editorStore.updateNode(currentNode.id, {
+          style: { ...(currentNode.style || {}), ...patch },
         });
       },
-      setOption: (option, notMergeOrOpts, lazyUpdate = false, silent = false, replaceMerge) => {
+      setOption: (
+        option: AnyValue,
+        notMergeOrOpts: AnyValue,
+        lazyUpdate = false,
+        silent = false,
+        replaceMerge: AnyValue,
+      ) => {
         if (node.value?.type !== "EChart") return;
-        if (option && typeof option.then === "function") {
-          option.then((resolved) => {
+        if (isPromiseLike(option)) {
+          option.then((resolved: AnyValue) => {
             refInfo.setOption?.(resolved, notMergeOrOpts, lazyUpdate, silent, replaceMerge);
           });
           return;
@@ -749,25 +860,25 @@ export function useBuildRefInfo({
           applyPreviewPatch({ props: { option } });
           return;
         }
-        editorStore.updateNode(node.value.id, {
-          props: { ...(node.value.props || {}), option },
+        editorStore.updateNode(currentNode.id, {
+          props: { ...(currentNode.props || {}), option },
         });
       },
-      setText: (text) => {
+      setText: (text: AnyValue) => {
         const value = String(text ?? "");
         if (readonly.value) {
-          const propsPatch = { text: value };
+          const propsPatch: LooseRecord = { text: value };
           if (node.value?.type === "Card" || node.value?.type === "BusinessCard") {
             propsPatch.content = value;
           }
           applyPreviewPatch({ props: propsPatch });
           return;
         }
-        editorStore.updateNode(node.value.id, {
-          props: { ...(node.value.props || {}), text: value },
+        editorStore.updateNode(currentNode.id, {
+          props: { ...(currentNode.props || {}), text: value },
         });
       },
-      SetText: (text) => {
+      SetText: (text: AnyValue) => {
         if (
           node.value?.type !== "Text" &&
           node.value?.type !== "Tag" &&
@@ -788,7 +899,7 @@ export function useBuildRefInfo({
         }
         return node.value?.props?.text ?? "";
       },
-      SetType: (type) => {
+      SetType: (type: AnyValue) => {
         if (
           node.value?.type !== "Button" &&
           node.value?.type !== "Tag" &&
@@ -798,15 +909,15 @@ export function useBuildRefInfo({
         }
         updateNodeProps({ type: String(type ?? "") });
       },
-      SetEllipsis: (value) => {
+      SetEllipsis: (value: AnyValue) => {
         if (node.value?.type !== "Text") return;
         updateNodeProps({ truncate: Boolean(value) });
       },
-      SetTooltip: (value) => {
+      SetTooltip: (value: AnyValue) => {
         if (node.value?.type !== "Text") return;
         updateNodeProps({ showTooltip: Boolean(value) });
       },
-      SetLoading: (value) => {
+      SetLoading: (value: AnyValue) => {
         if (
           node.value?.type !== "Button" &&
           node.value?.type !== "Card" &&
@@ -816,20 +927,20 @@ export function useBuildRefInfo({
         }
         updateNodeProps({ loading: Boolean(value) });
       },
-      SetDisabled: (value) => {
+      SetDisabled: (value: AnyValue) => {
         if (node.value?.type !== "Button") return;
         updateNodeProps({ disabled: Boolean(value) });
       },
       Click: () => {
         if (node.value?.type !== "Button") return;
         const el = contentRef.value?.$el || contentRef.value || nodeRef.value;
-        if (el?.click) {
+        if (isElementWithClick(el)) {
           el.click();
           return;
         }
         contentRef.value?.$emit?.("click");
       },
-      SetSrc: (src) => {
+      SetSrc: (src: AnyValue) => {
         if (node.value?.type !== "Image") return;
         updateNodeProps({ src: String(src ?? "") });
       },
@@ -837,7 +948,7 @@ export function useBuildRefInfo({
         if (node.value?.type !== "Image") return undefined;
         return node.value?.props?.src ?? "";
       },
-      Preview: (urls, startIndex = 0) => {
+      Preview: (urls: AnyValue, startIndex = 0) => {
         if (node.value?.type !== "Image") return;
         if (Array.isArray(urls) && urls.length > 0) {
           updateNodeProps({
@@ -864,13 +975,13 @@ export function useBuildRefInfo({
           updateNodeProps({ url: url.toString() });
         }
       },
-      setTableHeader: (columns) => {
+      setTableHeader: (columns: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
-        if (columns && typeof columns.then === "function") {
-          columns.then((resolved) => {
-            refInfo.setTableHeader(resolved);
+        if (isPromiseLike(columns)) {
+          columns.then((resolved: AnyValue) => {
+            refInfo.setTableHeader?.(resolved);
           });
           return;
         }
@@ -895,25 +1006,25 @@ export function useBuildRefInfo({
             }
             return null;
           })
-          .filter(Boolean);
+          .filter((item): item is LooseRecord => Boolean(item));
         if (readonly.value) {
           applyPreviewPatch({ props: { columns: normalized } });
           tableRenderVersion.value += 1;
           return;
         }
-        editorStore.updateNode(node.value.id, {
-          props: { ...(node.value.props || {}), columns: normalized },
+        editorStore.updateNode(currentNode.id, {
+          props: { ...(currentNode.props || {}), columns: normalized },
         });
         tableRenderVersion.value += 1;
       },
-      setTableData: (data, header) => {
+      setTableData: (data: AnyValue, header: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
         if (!data) return;
-        if (data && typeof data.then === "function") {
-          data.then((resolved) => {
-            refInfo.setTableData(resolved, header);
+        if (isPromiseLike(data)) {
+          data.then((resolved: AnyValue) => {
+            refInfo.setTableData?.(resolved, header);
           });
           return;
         }
@@ -925,14 +1036,16 @@ export function useBuildRefInfo({
           } else if (Array.isArray(rows.data)) {
             rows = rows.data;
           }
-          if (Array.isArray(rows.columns)) {
-            columns = rows.columns;
-          } else if (Array.isArray(data.columns)) {
-            columns = data.columns;
+          const rowRecord = rows as LooseRecord;
+          const dataRecord = data as LooseRecord;
+          if (Array.isArray(rowRecord.columns)) {
+            columns = rowRecord.columns;
+          } else if (Array.isArray(dataRecord.columns)) {
+            columns = dataRecord.columns;
           }
         }
         if (!Array.isArray(rows)) return;
-        const normalizeColumns = (input) => {
+        const normalizeColumns = (input: AnyValue) => {
           if (!Array.isArray(input)) return [];
           return input
             .map((item) => {
@@ -946,7 +1059,7 @@ export function useBuildRefInfo({
               }
               return null;
             })
-            .filter(Boolean);
+            .filter((item): item is LooseRecord => Boolean(item));
         };
         const normalizedColumns = normalizeColumns(columns || node.value?.props?.columns || []);
         const normalizedData =
@@ -954,9 +1067,10 @@ export function useBuildRefInfo({
             ? rows.map((row) => {
                 if (!Array.isArray(row)) return row;
                 if (normalizedColumns.length === 0) return row;
-                const next = {};
+                const next: LooseRecord = {};
                 normalizedColumns.forEach((col, index) => {
-                  const key = col.prop ?? col.label ?? `col${index}`;
+                  const record = col as LooseRecord;
+                  const key = String(record.prop ?? record.label ?? `col${index}`);
                   next[key] = row[index];
                 });
                 return next;
@@ -967,8 +1081,8 @@ export function useBuildRefInfo({
           tableRenderVersion.value += 1;
           return;
         }
-        editorStore.updateNode(node.value.id, {
-          props: { ...(node.value.props || {}), data: normalizedData },
+        editorStore.updateNode(currentNode.id, {
+          props: { ...(currentNode.props || {}), data: normalizedData },
         });
         tableRenderVersion.value += 1;
       },
@@ -977,10 +1091,10 @@ export function useBuildRefInfo({
        * @param {ButtonDslConfig} config - 按钮 DSL 配置
        * @returns {void}
        */
-      button: (config) => {
+      button: (config: AnyValue) => {
         if (node.value?.type !== "Button") return;
         const patch = buildButtonDslPatch(config);
-        const nextPatch = {};
+        const nextPatch: LooseRecord = {};
         if (Object.keys(patch.propsPatch).length > 0) {
           nextPatch.props = {
             ...(node.value.props || {}),
@@ -1019,19 +1133,19 @@ export function useBuildRefInfo({
           applyPreviewPatch(nextPatch);
           return;
         }
-        editorStore.updateNode(node.value.id, nextPatch);
+        editorStore.updateNode(currentNode.id, nextPatch);
       },
       /**
        * 应用 Tabs DSL 配置
        * @param {Record<string, any>} config - Tabs DSL 配置
        * @returns {void}
        */
-      tabs: (config) => {
+      tabs: (config: AnyValue) => {
         if (node.value?.type !== "Tabs" || !config || typeof config !== "object") {
           return;
         }
         if (config.type && String(config.type) !== "Tabs") return;
-        const nextPatch = {};
+        const nextPatch: LooseRecord = {};
         if (Object.hasOwn(config, "label") && !isRunningDetailConfigFn?.()) {
           nextPatch.label = String(config.label ?? "");
         }
@@ -1044,7 +1158,7 @@ export function useBuildRefInfo({
           propsPatch.class = String(config.className).trim();
         }
         if (config.props && typeof config.props === "object") {
-          const rawProps = { ...config.props };
+          const rawProps = { ...(config.props as LooseRecord) };
           if (Array.isArray(rawProps.items) && !Array.isArray(rawProps.tabs)) {
             rawProps.tabs = rawProps.items;
             delete rawProps.items;
@@ -1063,9 +1177,9 @@ export function useBuildRefInfo({
           applyPreviewPatch(nextPatch);
           return;
         }
-        editorStore.updateNode(node.value.id, nextPatch);
+        editorStore.updateNode(currentNode.id, nextPatch);
       },
-      InsertItem: (item) => {
+      InsertItem: (item: AnyValue) => {
         if (node.value?.type !== "Dropdown") return;
         const normalized = normalizeDropdownItem(item);
         if (!normalized) return;
@@ -1073,7 +1187,7 @@ export function useBuildRefInfo({
         items.push(normalized);
         updateDropdownItems(items);
       },
-      GetCommandItem: (menuItem) => {
+      GetCommandItem: (menuItem: AnyValue) => {
         if (node.value?.type !== "Dropdown") return undefined;
         const items = getDropdownItems();
         if (menuItem && typeof menuItem === "object") {
@@ -1084,12 +1198,12 @@ export function useBuildRefInfo({
         );
         return found?.value;
       },
-      GetMenuItem: (command) => {
+      GetMenuItem: (command: AnyValue) => {
         if (node.value?.type !== "Dropdown") return undefined;
         const items = getDropdownItems();
         return items.find((item) => item?.value === command);
       },
-      DeleteItem: (menuItem) => {
+      DeleteItem: (menuItem: AnyValue) => {
         if (node.value?.type !== "Dropdown") return;
         const items = getDropdownItems();
         const index = items.findIndex(
@@ -1114,11 +1228,11 @@ export function useBuildRefInfo({
           updateInputValue(multiple ? [] : "");
         }
       },
-      UpdateKeyChildren: (key, data) => {
+      UpdateKeyChildren: (key: AnyValue, data: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.updateKeyChildren?.(key, data);
       },
-      GetCheckedNodes: (leafOnly, includeHalfChecked) => {
+      GetCheckedNodes: (leafOnly: AnyValue, includeHalfChecked: AnyValue) => {
         if (node.value?.type === "Tree") {
           return contentRef.value?.getCheckedNodes?.(leafOnly, includeHalfChecked);
         }
@@ -1136,7 +1250,7 @@ export function useBuildRefInfo({
         }
         return undefined;
       },
-      SetCheckedNodes: (nodes) => {
+      SetCheckedNodes: (nodes: AnyValue) => {
         if (node.value?.type === "Tree") {
           contentRef.value?.setCheckedNodes?.(nodes);
           return;
@@ -1147,15 +1261,15 @@ export function useBuildRefInfo({
           updateNodeProps({ modelValue: target?.value ?? "" });
         }
       },
-      GetCheckedKeys: (leafOnly) => {
+      GetCheckedKeys: (leafOnly: AnyValue) => {
         if (node.value?.type !== "Tree") return undefined;
         return contentRef.value?.getCheckedKeys?.(leafOnly);
       },
-      SetCheckedKeys: (keys, leafOnly) => {
+      SetCheckedKeys: (keys: AnyValue, leafOnly: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.setCheckedKeys?.(keys, leafOnly);
       },
-      SetChecked: (keyOrData, checked, deep) => {
+      SetChecked: (keyOrData: AnyValue, checked: AnyValue, deep: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.setChecked?.(keyOrData, checked, deep);
       },
@@ -1175,31 +1289,31 @@ export function useBuildRefInfo({
         if (node.value?.type !== "Tree") return undefined;
         return contentRef.value?.getCurrentNode?.();
       },
-      SetCurrentKey: (key) => {
+      SetCurrentKey: (key: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.setCurrentKey?.(key);
       },
-      SetCurrentNode: (nodeData) => {
+      SetCurrentNode: (nodeData: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.setCurrentNode?.(nodeData);
       },
-      GetNode: (dataOrKey) => {
+      GetNode: (dataOrKey: AnyValue) => {
         if (node.value?.type !== "Tree") return undefined;
         return contentRef.value?.getNode?.(dataOrKey);
       },
-      Remove: (dataOrNode) => {
+      Remove: (dataOrNode: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.remove?.(dataOrNode);
       },
-      Append: (data, parentNode) => {
+      Append: (data: AnyValue, parentNode: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.append?.(data, parentNode);
       },
-      InsertBefore: (data, refNode) => {
+      InsertBefore: (data: AnyValue, refNode: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.insertBefore?.(data, refNode);
       },
-      InsertAfter: (data, refNode) => {
+      InsertAfter: (data: AnyValue, refNode: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.insertAfter?.(data, refNode);
       },
@@ -1213,7 +1327,7 @@ export function useBuildRefInfo({
         if (node.value?.type !== "Tree") return;
         contentRef.value?.setExpandedKeys?.([]);
       },
-      SetExpandedKeys: (keys) => {
+      SetExpandedKeys: (keys: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.setExpandedKeys?.(Array.isArray(keys) ? keys : []);
       },
@@ -1221,11 +1335,11 @@ export function useBuildRefInfo({
         if (node.value?.type !== "Tree") return [];
         return contentRef.value?.getExpandedKeys?.() || [];
       },
-      Filter: (keyword) => {
+      Filter: (keyword: AnyValue) => {
         if (node.value?.type !== "Tree") return;
         contentRef.value?.filter?.(keyword ?? "");
       },
-      Open: (index) => {
+      Open: (index: AnyValue) => {
         if (node.value?.type === "Menu") {
           contentRef.value?.open?.(index);
           return;
@@ -1246,7 +1360,7 @@ export function useBuildRefInfo({
           updateNodeProps({ modelValue: names });
         }
       },
-      Close: (index) => {
+      Close: (index: AnyValue) => {
         if (node.value?.type === "Menu") {
           contentRef.value?.close?.(index);
           return;
@@ -1280,10 +1394,10 @@ export function useBuildRefInfo({
         if (node.value?.type === "Dropdown") {
           const visible = Boolean(node.value?.props?.visible);
           if (visible) {
-            refInfo.Close();
+            refInfo.Close?.();
             return;
           }
-          refInfo.Open();
+          refInfo.Open?.();
           return;
         }
         if (node.value?.type === "Cascader" || node.value?.type === "Select") {
@@ -1295,9 +1409,12 @@ export function useBuildRefInfo({
           updateSwitchValue(!current);
         }
         if (node.value?.type === "Collapse") {
-          const name = node.value?.props?.modelValue?.[0];
+          const names = Array.isArray(node.value?.props?.modelValue)
+            ? node.value.props.modelValue
+            : [];
+          const name = names[0];
           if (name !== undefined) {
-            refInfo.Close([name]);
+            refInfo.Close?.([name]);
           }
         }
       },
@@ -1345,7 +1462,7 @@ export function useBuildRefInfo({
         }
         return node.value?.props?.modelValue ?? "";
       },
-      SetInputValue: (value) => {
+      SetInputValue: (value: AnyValue) => {
         if (node.value?.type === "Input") {
           updateInputValue(String(value ?? ""));
           return;
@@ -1356,11 +1473,11 @@ export function useBuildRefInfo({
           updateInputValue(next);
         }
       },
-      ClearQuery: (area) => {
+      ClearQuery: (area: AnyValue) => {
         if (node.value?.type !== "Transfer") return;
         contentRef.value?.clearQuery?.(area);
       },
-      SetValue: (value) => {
+      SetValue: (value: AnyValue) => {
         if (node.value?.type === "Switch") {
           updateSwitchValue(value);
           return;
@@ -1455,7 +1572,7 @@ export function useBuildRefInfo({
         }
         contentRef.value?.clearSelection?.();
       },
-      AppendRow: (row) => {
+      AppendRow: (row: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1463,7 +1580,7 @@ export function useBuildRefInfo({
         data.push(row);
         updateTableData(data);
       },
-      ToggleRowSelection: (row, selected) => {
+      ToggleRowSelection: (row: AnyValue, selected: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1477,7 +1594,7 @@ export function useBuildRefInfo({
         }
         contentRef.value?.toggleAllSelection?.();
       },
-      ToggleRowExpansion: (row, expanded) => {
+      ToggleRowExpansion: (row: AnyValue, expanded: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1485,7 +1602,7 @@ export function useBuildRefInfo({
           contentRef.value.toggleRowExpansion(row, expanded);
         }
       },
-      SetCurrentRow: (row) => {
+      SetCurrentRow: (row: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1497,7 +1614,7 @@ export function useBuildRefInfo({
         }
         contentRef.value?.clearSort?.();
       },
-      ClearFilter: (columnKeys) => {
+      ClearFilter: (columnKeys: AnyValue) => {
         if (node.value?.type === "Table" || node.value?.type === "BigDataTable") {
           if (typeof columnKeys === "undefined") {
             contentRef.value?.clearFilter?.();
@@ -1516,7 +1633,7 @@ export function useBuildRefInfo({
         }
         contentRef.value?.doLayout?.();
       },
-      Sort: (prop, order) => {
+      Sort: (prop: AnyValue, order: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1534,10 +1651,10 @@ export function useBuildRefInfo({
         }
         const selected = contentRef.value?.getSelectionRows?.() || [];
         return selected
-          .map((row) => getTableRowKeyValue(row))
+          .map((row) => getTableRowKeyValue(row as LooseRecord | null | undefined))
           .filter((value) => value !== undefined);
       },
-      SetPage: (page) => {
+      SetPage: (page: AnyValue) => {
         const next = Number(page);
         if (!Number.isFinite(next)) return;
         if (node.value?.type === "Pagination") {
@@ -1548,7 +1665,7 @@ export function useBuildRefInfo({
           updateNodeProps({ currentPage: next, page: next });
         }
       },
-      SetPageSize: (size) => {
+      SetPageSize: (size: AnyValue) => {
         const next = Number(size);
         if (!Number.isFinite(next)) return;
         if (node.value?.type === "Pagination") {
@@ -1569,7 +1686,7 @@ export function useBuildRefInfo({
         const start = Math.max(0, (page - 1) * size);
         return data.slice(start, start + size);
       },
-      UpdateRowByKey: (key, patch) => {
+      UpdateRowByKey: (key: AnyValue, patch: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1579,14 +1696,14 @@ export function useBuildRefInfo({
         data[index] = { ...data[index], ...(patch || {}) };
         updateTableData(data);
       },
-      RemoveRowByKey: (key) => {
+      RemoveRowByKey: (key: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
         const data = getTableData().filter((row) => getTableRowKeyValue(row) !== key);
         updateTableData(data);
       },
-      UpsertRowByKey: (key, row) => {
+      UpsertRowByKey: (key: AnyValue, row: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1607,7 +1724,7 @@ export function useBuildRefInfo({
         const wrapper = contentRef.value?.$el?.querySelector?.(".el-scrollbar__wrap");
         if (wrapper) wrapper.scrollTop = 0;
       },
-      ScrollToRow: (keyOrRow) => {
+      ScrollToRow: (keyOrRow: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1632,7 +1749,7 @@ export function useBuildRefInfo({
           contentRef.value?.doLayout?.();
         });
       },
-      SetData: (data, rightData) => {
+      SetData: (data: AnyValue, rightData: AnyValue) => {
         if (node.value?.type === "Table" || node.value?.type === "BigDataTable") {
           updateTableData(Array.isArray(data) ? data : []);
           return;
@@ -1687,17 +1804,17 @@ export function useBuildRefInfo({
         const value = node.value?.props?.modelValue;
         return options.findIndex((item) => item?.value === value);
       },
-      GetRadioValue: (labelIndex) => {
+      GetRadioValue: (labelIndex: AnyValue) => {
         if (node.value?.type !== "Radio") return undefined;
         const options = getChoiceOptions();
         return options?.[Number(labelIndex)]?.value;
       },
-      GetRadioLabel: (radioValue) => {
+      GetRadioLabel: (radioValue: AnyValue) => {
         if (node.value?.type !== "Radio") return undefined;
         const options = getChoiceOptions();
         return options.find((item) => item?.value === radioValue)?.label;
       },
-      SetRadioEnable: (labelIndex, enable) => {
+      SetRadioEnable: (labelIndex: AnyValue, enable: AnyValue) => {
         if (node.value?.type !== "Radio") return;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
@@ -1705,14 +1822,14 @@ export function useBuildRefInfo({
         options[index] = { ...options[index], disabled: !enable };
         updateChoiceOptions(options);
       },
-      GetRadioEnable: (labelIndex) => {
+      GetRadioEnable: (labelIndex: AnyValue) => {
         if (node.value?.type !== "Radio") return undefined;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
         if (!options[index]) return undefined;
         return !options[index].disabled;
       },
-      SetRadioVisible: (labelIndex, visible) => {
+      SetRadioVisible: (labelIndex: AnyValue, visible: AnyValue) => {
         if (node.value?.type !== "Radio") return;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
@@ -1720,14 +1837,14 @@ export function useBuildRefInfo({
         options[index] = { ...options[index], visible: Boolean(visible) };
         updateChoiceOptions(options);
       },
-      GetRadioVisible: (labelIndex) => {
+      GetRadioVisible: (labelIndex: AnyValue) => {
         if (node.value?.type !== "Radio") return undefined;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
         if (!options[index]) return undefined;
         return options[index].visible !== false;
       },
-      GetCheckState: (labelIndex) => {
+      GetCheckState: (labelIndex: AnyValue) => {
         if (node.value?.type !== "Checkbox") return undefined;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
@@ -1738,7 +1855,7 @@ export function useBuildRefInfo({
         if (!option) return undefined;
         return values.includes(option.value);
       },
-      SetCheckState: (labelIndex, state) => {
+      SetCheckState: (labelIndex: AnyValue, state: AnyValue) => {
         if (node.value?.type !== "Checkbox") return;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
@@ -1768,7 +1885,7 @@ export function useBuildRefInfo({
           props: { ...(node.value.props || {}), modelValue: values },
         });
       },
-      SetCheckEnable: (labelIndex, enable) => {
+      SetCheckEnable: (labelIndex: AnyValue, enable: AnyValue) => {
         if (node.value?.type !== "Checkbox") return;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
@@ -1776,14 +1893,14 @@ export function useBuildRefInfo({
         options[index] = { ...options[index], disabled: !enable };
         updateChoiceOptions(options);
       },
-      GetCheckEnable: (labelIndex) => {
+      GetCheckEnable: (labelIndex: AnyValue) => {
         if (node.value?.type !== "Checkbox") return undefined;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
         if (!options[index]) return undefined;
         return !options[index].disabled;
       },
-      SetCheckVisible: (labelIndex, visible) => {
+      SetCheckVisible: (labelIndex: AnyValue, visible: AnyValue) => {
         if (node.value?.type !== "Checkbox") return;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
@@ -1791,20 +1908,20 @@ export function useBuildRefInfo({
         options[index] = { ...options[index], visible: Boolean(visible) };
         updateChoiceOptions(options);
       },
-      GetCheckVisible: (labelIndex) => {
+      GetCheckVisible: (labelIndex: AnyValue) => {
         if (node.value?.type !== "Checkbox") return undefined;
         const options = getChoiceOptions();
         const index = Number(labelIndex);
         if (!options[index]) return undefined;
         return options[index].visible !== false;
       },
-      CheckAll: (value) => {
+      CheckAll: (value: AnyValue) => {
         if (node.value?.type !== "Checkbox") return;
         const options = getChoiceOptions();
         const next = value ? options.map((item) => item.value) : [];
         updateNodeProps({ modelValue: next });
       },
-      SetActive: (name) => {
+      SetActive: (name: AnyValue) => {
         if (node.value?.type === "Menu") {
           updateNodeProps({ defaultActive: String(name ?? "") });
           return;
@@ -1828,7 +1945,7 @@ export function useBuildRefInfo({
         }
         return undefined;
       },
-      Collapse: (value) => {
+      Collapse: (value: AnyValue) => {
         if (node.value?.type === "Menu") {
           updateNodeProps({ collapse: Boolean(value) });
           return;
@@ -1873,20 +1990,20 @@ export function useBuildRefInfo({
           contentRef.value?.prev?.();
         }
       },
-      AddTab: (tab) => {
+      AddTab: (tab: AnyValue) => {
         if (node.value?.type !== "Tabs") return;
         const tabs = Array.isArray(node.value?.props?.tabs) ? [...node.value.props.tabs] : [];
         tabs.push(tab);
         updateNodeProps({ tabs });
       },
-      RemoveTab: (name) => {
+      RemoveTab: (name: AnyValue) => {
         if (node.value?.type !== "Tabs") return;
         const tabs = Array.isArray(node.value?.props?.tabs)
           ? node.value.props.tabs.filter((item) => item.name !== name)
           : [];
         updateNodeProps({ tabs });
       },
-      SetSelectionByKeys: (keys) => {
+      SetSelectionByKeys: (keys: AnyValue) => {
         if (node.value?.type !== "Table" && node.value?.type !== "BigDataTable") {
           return;
         }
@@ -1900,7 +2017,7 @@ export function useBuildRefInfo({
           }
         });
       },
-      MoveToRight: (keys) => {
+      MoveToRight: (keys: AnyValue) => {
         if (node.value?.type !== "Transfer") return;
         const current = Array.isArray(node.value?.props?.modelValue)
           ? [...node.value.props.modelValue]
@@ -1911,7 +2028,7 @@ export function useBuildRefInfo({
         });
         updateNodeProps({ modelValue: current });
       },
-      MoveToLeft: (keys) => {
+      MoveToLeft: (keys: AnyValue) => {
         if (node.value?.type !== "Transfer") return;
         const current = Array.isArray(node.value?.props?.modelValue)
           ? [...node.value.props.modelValue]
@@ -1920,19 +2037,19 @@ export function useBuildRefInfo({
         const next = current.filter((key) => !remove.has(key));
         updateNodeProps({ modelValue: next });
       },
-      Increase: (step) => {
+      Increase: (step: AnyValue) => {
         if (node.value?.type !== "InputNumber") return;
         const current = Number(node.value?.props?.modelValue) || 0;
         const delta = Number(step ?? node.value?.props?.step ?? 1);
         updateInputValue(current + (Number.isFinite(delta) ? delta : 1));
       },
-      Decrease: (step) => {
+      Decrease: (step: AnyValue) => {
         if (node.value?.type !== "InputNumber") return;
         const current = Number(node.value?.props?.modelValue) || 0;
         const delta = Number(step ?? node.value?.props?.step ?? 1);
         updateInputValue(current - (Number.isFinite(delta) ? delta : 1));
       },
-      SetItems: (items) => {
+      SetItems: (items: AnyValue) => {
         if (
           node.value?.type !== "Timeline" &&
           node.value?.type !== "ImageCarousel" &&
@@ -1943,7 +2060,7 @@ export function useBuildRefInfo({
         }
         updateNodeProps({ items: Array.isArray(items) ? items : [] });
       },
-      AppendItem: (item) => {
+      AppendItem: (item: AnyValue) => {
         if (node.value?.type !== "Timeline") return;
         const items = Array.isArray(node.value?.props?.items) ? [...node.value.props.items] : [];
         items.push(item);
@@ -1961,17 +2078,17 @@ export function useBuildRefInfo({
         }
         updateNodeProps({ autoplay: false });
       },
-      SetActiveItem: (nameOrIndex) => {
+      SetActiveItem: (nameOrIndex: AnyValue) => {
         if (node.value?.type !== "ImageCarousel" && node.value?.type !== "CarouselComponent") {
           return;
         }
         contentRef.value?.setActiveItem?.(nameOrIndex);
       },
-      Load: (url) => {
+      Load: (url: AnyValue) => {
         if (node.value?.type !== "WebContainer") return;
         updateNodeProps({ url: String(url ?? "") });
       },
-      PostMessage: (_data) => {
+      PostMessage: (_data: AnyValue) => {
         if (node.value?.type !== "WebContainer") return;
       },
       GetUrl: () => {
@@ -1998,7 +2115,7 @@ export function useBuildRefInfo({
           updateNodeProps({ modelValue: Number.isFinite(min) ? min : 0 });
         }
       },
-      SetTitle: (title) => {
+      SetTitle: (title: AnyValue) => {
         if (node.value?.type !== "Card" && node.value?.type !== "BusinessCard") {
           return;
         }
@@ -2012,7 +2129,7 @@ export function useBuildRefInfo({
         if (node.value?.type !== "Pagination") return undefined;
         return Number(node.value?.props?.pageSize) || 0;
       },
-      SetTotal: (total) => {
+      SetTotal: (total: AnyValue) => {
         if (node.value?.type !== "Pagination") return;
         const next = Number(total);
         if (!Number.isFinite(next)) return;
@@ -2026,7 +2143,7 @@ export function useBuildRefInfo({
         if (node.value?.type !== "Collapse") return [];
         return Array.isArray(node.value?.props?.modelValue) ? node.value.props.modelValue : [];
       },
-      SetActiveNames: (names) => {
+      SetActiveNames: (names: AnyValue) => {
         if (node.value?.type !== "Collapse") return;
         updateNodeProps({ modelValue: Array.isArray(names) ? names : [] });
       },
@@ -2034,23 +2151,23 @@ export function useBuildRefInfo({
         if (node.value?.type !== "BusinessCard") return;
         updateNodeProps({ refreshAt: Date.now() });
       },
-      OpenDetail: (_id) => {
+      OpenDetail: (_id: AnyValue) => {
         if (node.value?.type !== "BusinessCard") return;
       },
       Render: () => {
         if (node.value?.type !== "Barcode") return;
       },
-      Download: (_format) => {
+      Download: (_format: AnyValue) => {
         if (node.value?.type !== "Barcode") return undefined;
         return undefined;
       },
-      Disable: (value) => {
+      Disable: (value: AnyValue) => {
         if (node.value?.type !== "Switch" && node.value?.type !== "Slider") {
           return;
         }
         updateNodeProps({ disabled: Boolean(value) });
       },
-      SetDate: (date) => {
+      SetDate: (date: AnyValue) => {
         if (node.value?.type !== "Calendar") return;
         updateNodeProps({ date });
       },
@@ -2070,7 +2187,7 @@ export function useBuildRefInfo({
         if (node.value?.type !== "Signature") return undefined;
         return node.value?.props?.modelValue ?? "";
       },
-      SetImage: (value) => {
+      SetImage: (value: AnyValue) => {
         if (node.value?.type !== "Signature") return;
         updateInputValue(String(value ?? ""));
       },
@@ -2079,14 +2196,14 @@ export function useBuildRefInfo({
         const value = node.value?.props?.modelValue;
         return !value;
       },
-      SetPen: (_color, _width) => {
+      SetPen: (_color: AnyValue, _width: AnyValue) => {
         if (node.value?.type !== "Signature") return;
       },
     };
     const currentType = node.value.type;
     const dslMethodName = dslMethodMap[currentType];
     if (dslMethodName && !Object.hasOwn(refInfo, dslMethodName)) {
-      refInfo[dslMethodName] = (config) => {
+      refInfo[dslMethodName] = (config: AnyValue) => {
         if (node.value?.type !== currentType) return;
         applyCommonDslConfig(config);
       };

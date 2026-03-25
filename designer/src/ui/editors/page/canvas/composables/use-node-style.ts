@@ -1,4 +1,3 @@
-// @ts-nocheck — 由 JS 迁入；editor-core 等仍为 JS 出口，后续再补类型。
 /**
  * 节点样式计算 Composable
  *
@@ -8,6 +7,8 @@
  * @module ui/Canvas/composables/use-node-style
  */
 
+import type { ComputedRef, CSSProperties, Ref } from "vue";
+import type { ComponentNode } from "@/editor-core/document/types";
 import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import {
   getDescriptor,
@@ -17,16 +18,42 @@ import {
 import { componentRegistry } from "@/editor-core";
 import { normalizeStyleObject, resolveTextPropStyle } from "@/editor-core/utils/style-utils";
 
+type StyleValue = CSSProperties[keyof CSSProperties] | any;
+type StyleMap = Record<string, StyleValue>;
+type LooseRecord = Record<string, any>;
+
+interface NodeStyleProps {
+  readonly?: boolean;
+  isRoot?: boolean;
+}
+
+interface CanvasPageLike {
+  rootNodeId?: string | null;
+}
+
+interface NodeStyleHelpersDeps {
+  doc: Ref<
+    | {
+        getNode?: (id: string) => ComponentNode | null | undefined;
+        getParent?: (id: string) => ComponentNode | null | undefined;
+      }
+    | null
+    | undefined
+  >;
+  currentPage: Ref<CanvasPageLike | null | undefined>;
+  props?: NodeStyleProps;
+}
+
 /**
  * 格式化 Grid 模板
  * @param {string | number} value - 模板配置
  * @returns {string}
  */
-export function formatGridTemplate(value) {
+export function formatGridTemplate(value: unknown): string {
   if (typeof value === "number") {
     return `repeat(${value}, minmax(0, 1fr))`;
   }
-  return value;
+  return typeof value === "string" ? value : "";
 }
 
 /**
@@ -34,7 +61,7 @@ export function formatGridTemplate(value) {
  * @param {{ doc: import('vue').Ref, currentPage: import('vue').Ref, props: { readonly?: boolean } }} deps
  * @returns {{ resolveLayoutStyle: Function, resolveContainerStyle: Function, isRootCanvasContainer: Function }}
  */
-export function createNodeStyleHelpers(deps) {
+export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
   const { doc, currentPage, props = {} } = deps;
 
   function getDoc() {
@@ -48,7 +75,7 @@ export function createNodeStyleHelpers(deps) {
   /**
    * 是否根画布下的 ElContainer
    */
-  function isRootCanvasContainer(currentNode) {
+  function isRootCanvasContainer(currentNode: ComponentNode | null | undefined): boolean {
     if (!currentNode || currentNode.type !== "ElContainer") return false;
     const rootId = getCurrentPage()?.rootNodeId;
     if (!rootId) return false;
@@ -62,7 +89,7 @@ export function createNodeStyleHelpers(deps) {
    * @param {boolean} isRoot
    * @returns {Record<string, any>}
    */
-  function resolveLayoutStyle(currentNode, isRoot) {
+  function resolveLayoutStyle(currentNode: ComponentNode, isRoot: boolean): StyleMap {
     if (isRoot) {
       return {
         position: "relative",
@@ -72,7 +99,7 @@ export function createNodeStyleHelpers(deps) {
       };
     }
 
-    const style = {};
+    const style: StyleMap = {};
     const parentNode = getDoc()?.getParent?.(currentNode.id);
     if (
       parentNode?.type === "ElHeader" ||
@@ -117,7 +144,7 @@ export function createNodeStyleHelpers(deps) {
 
     if (currentNode.positioning === "flow") {
       if (currentNode.flowLayout) {
-        const flow = currentNode.flowLayout;
+        const flow = currentNode.flowLayout as LooseRecord;
         if (flow.grow !== undefined || flow.shrink !== undefined || flow.basis !== undefined) {
           style.flexGrow = flow.grow ?? 0;
           style.flexShrink = flow.shrink ?? 1;
@@ -135,11 +162,12 @@ export function createNodeStyleHelpers(deps) {
       }
       if (parentNode && getDescriptor(parentNode.type)?.childFlowLayout) {
         const parentDescriptor = getDescriptor(parentNode.type);
-        const fl = parentDescriptor.childFlowLayout;
+        const fl = parentDescriptor?.childFlowLayout as LooseRecord | null | undefined;
+        const currentFlow = currentNode.flowLayout as LooseRecord | null | undefined;
         style.position = "relative";
-        style.flexGrow = currentNode.flowLayout?.grow ?? fl.grow ?? 1;
-        style.flexShrink = currentNode.flowLayout?.shrink ?? fl.shrink ?? 1;
-        style.flexBasis = currentNode.flowLayout?.basis ?? fl.basis ?? "0%";
+        style.flexGrow = currentFlow?.grow ?? fl?.grow ?? 1;
+        style.flexShrink = currentFlow?.shrink ?? fl?.shrink ?? 1;
+        style.flexBasis = currentFlow?.basis ?? fl?.basis ?? "0%";
         style.alignSelf = style.alignSelf ?? "stretch";
         style.minWidth = style.minWidth ?? "0";
         style.minHeight = style.minHeight ?? "0";
@@ -221,10 +249,13 @@ export function createNodeStyleHelpers(deps) {
    * @param {Record<string, any>} baseStyle
    * @returns {Record<string, any>}
    */
-  function resolveContainerStyle(currentNode, baseStyle) {
-    const style = {};
+  function resolveContainerStyle(currentNode: ComponentNode, baseStyle: StyleMap): StyleMap {
+    const style: StyleMap = {};
     const manifest = componentRegistry.get(currentNode.type);
-    const descriptorContainerStyle = resolveDescriptorContainerStyle(currentNode.type, currentNode);
+    const descriptorContainerStyle = resolveDescriptorContainerStyle(
+      currentNode.type,
+      currentNode as any,
+    );
     if (descriptorContainerStyle) {
       return { ...descriptorContainerStyle };
     }
@@ -285,7 +316,7 @@ export function createNodeStyleHelpers(deps) {
       const hasMain = Boolean(mainNode);
       const hasBody = hasAside || hasMain;
       const hasTwoCols = hasAside && hasMain;
-      const containerProps = currentNode.props || {};
+      const containerProps = (currentNode.props || {}) as LooseRecord;
       const headerHeight = containerProps.headerHeight || headerNode?.props?.height || "60px";
       const footerHeight = containerProps.footerHeight || footerNode?.props?.height || "60px";
       const asideWidth = containerProps.asideWidth || asideNode?.props?.width || "200px";
@@ -293,8 +324,8 @@ export function createNodeStyleHelpers(deps) {
       style.display = "grid";
       style.position = "relative";
       style.gridTemplateColumns = hasTwoCols ? `${asideWidth} 1fr` : "1fr";
-      const rows = [];
-      const areas = [];
+      const rows: string[] = [];
+      const areas: string[] = [];
       if (hasHeader) {
         rows.push(headerHeight);
         areas.push(hasTwoCols ? '"header header"' : '"header"');
@@ -433,6 +464,7 @@ export function createNodeStyleHelpers(deps) {
       style.overflow = "hidden";
     }
 
+    void manifest;
     const isContainer = isContainerType(currentNode.type);
     if (isContainer && !baseStyle?.position) {
       style.position = style.position ?? "relative";
@@ -457,26 +489,28 @@ export function createNodeStyleHelpers(deps) {
    * @returns {import('vue').ComputedRef<Record<string, any>>}
    */
   function createContentStyle(
-    nodeRef,
-    docRef,
-    docVersionRef,
-    resolvedNodePropsRef,
-    isContainerRef,
-    isMovableRef,
-    layoutStyleRef,
-    props = {},
-  ) {
+    nodeRef: Ref<ComponentNode | null | undefined>,
+    docRef: Ref<NodeStyleHelpersDeps["doc"]["value"]>,
+    docVersionRef: Ref<number>,
+    resolvedNodePropsRef: Ref<Record<string, unknown>>,
+    isContainerRef: Ref<boolean>,
+    isMovableRef: Ref<boolean>,
+    layoutStyleRef: Ref<StyleMap>,
+    props: NodeStyleProps = {},
+  ): ComputedRef<StyleMap> {
     return computed(() => {
-      docVersionRef.value;
+      void docVersionRef.value;
       if (!nodeRef.value) return {};
       const containerStyle = resolveContainerStyle(nodeRef.value, {});
-      const customStyle = normalizeStyleObject(nodeRef.value.style || {});
+      const customStyle = normalizeStyleObject(nodeRef.value.style || {}) as StyleMap;
       const textStyle =
         nodeRef.value.type === "Text"
-          ? normalizeStyleObject(resolveTextPropStyle(resolvedNodePropsRef.value || {}))
+          ? (normalizeStyleObject(
+              resolveTextPropStyle(resolvedNodePropsRef.value || {}),
+            ) as StyleMap)
           : {};
       const parentNode = docRef.value?.getParent?.(nodeRef.value.id);
-      const style = {
+      const style: StyleMap = {
         ...containerStyle,
         ...textStyle,
         ...customStyle,
@@ -627,7 +661,7 @@ export function createNodeStyleHelpers(deps) {
       if (parentNode && nodeRef.value.positioning === "flow") {
         const parentDescriptor = getDescriptor(parentNode.type);
         if (parentDescriptor?.childStyle) {
-          const childStyle = parentDescriptor.childStyle(parentNode.type) || {};
+          const childStyle = (parentDescriptor.childStyle(parentNode.type) || {}) as LooseRecord;
           if (childStyle.width && !style.width) style.width = childStyle.width;
           if (childStyle.height && !style.height) style.height = childStyle.height;
           if (childStyle.minWidth && !style.minWidth) {
@@ -654,20 +688,21 @@ export function createNodeStyleHelpers(deps) {
    * @returns {import('vue').ComputedRef<Record<string, any>>}
    */
   function createWrapperComponentStyle(
-    nodeRef,
-    docRef,
-    useComponentWrapperRef,
-    wrapperStyleRef,
-    contentStyleRef,
-    resolvedPropsRef,
-    props = {},
-  ) {
+    nodeRef: Ref<ComponentNode | null | undefined>,
+    docRef: Ref<NodeStyleHelpersDeps["doc"]["value"]>,
+    useComponentWrapperRef: Ref<boolean>,
+    wrapperStyleRef: Ref<StyleMap>,
+    contentStyleRef: Ref<StyleMap>,
+    resolvedPropsRef: Ref<Record<string, unknown>>,
+    props: NodeStyleProps = {},
+  ): ComputedRef<StyleMap> {
     return computed(() => {
       if (!useComponentWrapperRef.value) return {};
-      const style = { ...wrapperStyleRef.value, ...contentStyleRef.value };
+      const style: StyleMap = { ...wrapperStyleRef.value, ...contentStyleRef.value };
       const type = nodeRef.value?.type;
-      const parentNode = docRef.value?.getParent?.(nodeRef.value?.id);
-      const customStyle = normalizeStyleObject(nodeRef.value?.style || {});
+      const nodeId = nodeRef.value?.id;
+      const parentNode = nodeId ? docRef.value?.getParent?.(nodeId) : null;
+      const customStyle = normalizeStyleObject(nodeRef.value?.style || {}) as StyleMap;
       const hasCustomHeight = Boolean(customStyle.height);
       const isEditingMode = !props.readonly;
       const layoutSelectInset = isEditingMode ? 6 : 0;
@@ -749,7 +784,7 @@ export function createNodeStyleHelpers(deps) {
         if (hasFixedRowHeight) {
           style.height = "100%";
         }
-        const colProps = resolvedPropsRef.value || nodeRef.value?.props || {};
+        const colProps = (resolvedPropsRef.value || nodeRef.value?.props || {}) as LooseRecord;
         const gutter = props.readonly ? 0 : Number(parentNode.props?.gutter) || 0;
         if (!gutter) {
           style.paddingLeft = `${colContentInsetX}px`;
@@ -816,8 +851,11 @@ export function createNodeStyleHelpers(deps) {
    * @param {import('vue').ComputedRef<string>} styleConfigCssRef - 样式配置 CSS ref
    * @returns {{ styleElementRef: import('vue').Ref<HTMLStyleElement | null> }}
    */
-  function createStyleElementSync(nodeRef, styleConfigCssRef) {
-    const styleElementRef = ref(null);
+  function createStyleElementSync(
+    nodeRef: Ref<ComponentNode | null | undefined>,
+    styleConfigCssRef: ComputedRef<string>,
+  ) {
+    const styleElementRef = ref<HTMLStyleElement | null>(null);
 
     const syncStyleElement = () => {
       if (typeof document === "undefined") return;
@@ -837,7 +875,7 @@ export function createNodeStyleHelpers(deps) {
         if (styleEl?.parentNode) {
           styleEl.parentNode.removeChild(styleEl);
         }
-        styleEl = document.querySelector(`style[data-style-node="${nodeId}"]`);
+        styleEl = document.querySelector<HTMLStyleElement>(`style[data-style-node="${nodeId}"]`);
         if (!styleEl) {
           styleEl = document.createElement("style");
           styleEl.setAttribute("data-style-node", nodeId);
@@ -860,7 +898,7 @@ export function createNodeStyleHelpers(deps) {
     );
 
     watchEffect(() => {
-      styleConfigCssRef.value;
+      void styleConfigCssRef.value;
       syncStyleElement();
     });
 
@@ -887,11 +925,17 @@ export function createNodeStyleHelpers(deps) {
    * @param {import('vue').Ref} isContainerRef - 是否为容器 ref
    * @returns {import('vue').ComputedRef<Record<string, any>>}
    */
-  function createWrapperStyle(nodeRef, docRef, layoutStyleRef, isMovableRef, isContainerRef) {
+  function createWrapperStyle(
+    nodeRef: Ref<ComponentNode | null | undefined>,
+    docRef: Ref<NodeStyleHelpersDeps["doc"]["value"]>,
+    layoutStyleRef: Ref<StyleMap>,
+    isMovableRef: Ref<boolean>,
+    isContainerRef: Ref<boolean>,
+  ): ComputedRef<StyleMap> {
     return computed(() => {
       if (!nodeRef.value) return {};
-      const style = { ...layoutStyleRef.value };
-      const customStyle = normalizeStyleObject(nodeRef.value.style || {});
+      const style: StyleMap = { ...layoutStyleRef.value };
+      const customStyle = normalizeStyleObject(nodeRef.value.style || {}) as StyleMap;
       if (customStyle.width && !style.width) {
         style.width = customStyle.width;
       }

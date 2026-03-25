@@ -465,8 +465,8 @@ export function parseGridTemplateParts(template: string): string[] {
     const value = trimmed.slice(valueStart, i).trim();
     const count = Number.parseInt(countStr, 10);
     if (Number.isFinite(count) && count > 0 && value) {
-      // 勿用 .fill：在严格推断下会得到 unknown[]，与 string[] 返回类型冲突
-      return Array.from({ length: count }).fill(value);
+      // 先为 Array.from 提供元素类型，再使用 fill，兼顾严格类型推断与 lint 约束
+      return Array.from<string>({ length: count } as ArrayLike<string>).fill(value);
     }
   }
 

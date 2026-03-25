@@ -1,4 +1,3 @@
-// @ts-nocheck — 由 JS 迁入；与 use-node-content.js 等并存期间先跳过校验。
 /**
  * NodeRenderer 中与组件类型相关的派生数据（computed）与菜单 DSL 解析。
  * 将 setup 内大量 .type === 分支收敛到 registry + 本 composable。
@@ -6,6 +5,8 @@
  * @module ui/Canvas/composables/use-node-renderer-derivations
  */
 
+import type { Component } from "vue";
+import type { MenuDslApplyContext, UseNodeRendererDerivationsDeps } from "./types";
 import { computed } from "vue";
 import IconEpDocument from "~icons/ep/document";
 import IconEpLocation from "~icons/ep/location";
@@ -18,6 +19,16 @@ import {
   usesComponentWrapper,
 } from "@/components/descriptors/registry";
 import { captureMenuDslConfig } from "./use-node-content";
+
+type MenuItem = Record<string, unknown>;
+type MenuConfig = Record<string, unknown> & {
+  items?: unknown[];
+  props?: Record<string, unknown> & {
+    items?: unknown[];
+  };
+  style?: Record<string, unknown>;
+  className?: string;
+};
 
 const fallbackMenuItems = [
   { index: "1", label: "菜单一" },
@@ -44,8 +55,11 @@ const fallbackCollapseItems = [
   { name: "2", title: "面板二", content: "内容二" },
 ];
 const fallbackCarouselItems = [{ label: "轮播一" }, { label: "轮播二" }];
+const fullWidthCommaPattern = /，/g;
+const fullWidthSemicolonPattern = /；/g;
+const fullWidthColonPattern = /：/g;
 
-function normalizeOptions(source, fallback) {
+function normalizeOptions<T>(source: unknown, fallback: T[]): T[] {
   if (Array.isArray(source)) return source;
   return fallback;
 }
@@ -54,42 +68,42 @@ function normalizeOptions(source, fallback) {
  * @param {string} content
  * @returns {string}
  */
-export function sanitizeDslContent(content) {
+export function sanitizeDslContent(content: string): string {
   return String(content || "")
-    .replace(/，/g, ",")
-    .replace(/；/g, ";")
-    .replace(/：/g, ":");
+    .replace(fullWidthCommaPattern, ",")
+    .replace(fullWidthSemicolonPattern, ";")
+    .replace(fullWidthColonPattern, ":");
 }
 
 /**
  * @param {string} content
  * @returns {object | null}
  */
-export function resolveMenuConfigFromContent(content) {
+export function resolveMenuConfigFromContent(content: string): MenuConfig | null {
   const text = sanitizeDslContent(content).trim();
   if (!text) return null;
-  const captured = captureMenuDslConfig(text);
+  const captured = captureMenuDslConfig(text) as MenuConfig | null;
   if (captured) return captured;
   if (text.startsWith("{") && text.endsWith("}")) {
     try {
-      return new Function(`return (${text});`)();
+      return new Function(`return (${text});`)() as MenuConfig;
     } catch {
       return null;
     }
   }
   try {
-    return new Function(`return ({${text}});`)();
+    return new Function(`return ({${text}});`)() as MenuConfig;
   } catch {
     return null;
   }
 }
 
-function resolveMenuIconComponent(icon) {
+function resolveMenuIconComponent(icon: unknown): Component | null {
   if (!icon) return null;
   if (typeof icon === "object" || typeof icon === "function") return icon;
   const key = String(icon).trim().toLowerCase();
   if (!key) return null;
-  const map = {
+  const map: Record<string, Component> = {
     location: IconEpLocation,
     document: IconEpDocument,
     menu: IconEpMenu,
@@ -129,9 +143,9 @@ export function useNodeRendererDerivations({
   isMovable,
   isDropActive,
   activeTabName,
-  tabsList,
+  tabsList: _tabsList,
   props,
-}) {
+}: UseNodeRendererDerivationsDeps) {
   const menuItems = computed(() => {
     const detailConfig = detailConfigText.value;
     const detailMenuConfig =
@@ -144,27 +158,29 @@ export function useNodeRendererDerivations({
       fallbackMenuItems,
     );
     return items
-      .map((item) => {
+      .map((item): MenuItem | null => {
         if (!item) return null;
         if (typeof item === "string") {
-          return { label: item, index: item };
+          return { label: item, index: item, iconComponent: null };
         }
         if (typeof item !== "object") return null;
-        const label = item.label ?? item.title ?? item.name ?? "";
-        const index = item.index ?? item.command ?? item.key ?? (label ? String(label) : undefined);
-        const iconComponent = resolveMenuIconComponent(item.icon);
-        return { ...item, label, index, iconComponent };
+        const menuItem = item as MenuItem;
+        const label = menuItem.label ?? menuItem.title ?? menuItem.name ?? "";
+        const index =
+          menuItem.index ?? menuItem.command ?? menuItem.key ?? (label ? String(label) : undefined);
+        const iconComponent = resolveMenuIconComponent(menuItem.icon);
+        return { ...menuItem, label, index, iconComponent };
       })
       .filter(Boolean);
   });
 
   const tableColumns = computed(() => {
-    tableRenderVersion.value;
+    void tableRenderVersion.value;
     return normalizeOptions(node.value?.props?.columns, fallbackTableColumns);
   });
 
   const bigTableColumns = computed(() => {
-    tableRenderVersion.value;
+    void tableRenderVersion.value;
     return normalizeOptions(node.value?.props?.columns, fallbackBigTableColumns);
   });
 
@@ -190,7 +206,7 @@ export function useNodeRendererDerivations({
   });
 
   const activeTabChildIds = computed(() => {
-    docVersion.value;
+    void docVersion.value;
     if (!node.value || node.value.type !== "Tabs" || !doc.value) return [];
     const current = activeTabName.value;
     return (node.value.children || []).filter((childId) => {
@@ -206,34 +222,35 @@ export function useNodeRendererDerivations({
 
   const regionHintText = computed(() => {
     if (!node.value) return "";
-    return getRegionDesignerHint(node.value.type);
+    return getRegionDesignerHint(node.value.type || "");
   });
 
   const useComponentWrapper = computed(() => {
-    return usesComponentWrapper(node.value?.type);
+    return usesComponentWrapper(node.value?.type || "");
   });
 
   const renderKey = computed(() => {
     if (!node.value) return "";
     const nodeType = node.value.type;
-    return getRenderKey(nodeType, node.value, {
+    return getRenderKey(nodeType, node.value as any, {
       tableRenderVersion: tableRenderVersion.value,
       resolvedProps: resolvedNodeProps.value || {},
     });
   });
 
   const nodeClass = computed(() => {
-    selectionVersion.value;
+    void selectionVersion.value;
     if (!node.value) return "";
-    const classes = ["designer-node"];
+    const classes: string[] = ["designer-node"];
     if (props.isRoot) classes.push("is-root");
     if (props.readonly) classes.push("is-preview");
     if (isContainer.value) classes.push("is-container");
     if (isMovable.value && !props.readonly) classes.push("is-draggable");
     if (node.value.locked) classes.push("is-locked");
 
-    const tabPosition =
-      resolvedNodeProps.value?.tabPosition || node.value.props?.tabPosition || "top";
+    const tabPosition = String(
+      resolvedNodeProps.value?.tabPosition ?? node.value.props?.tabPosition ?? "top",
+    );
     const parentNode = doc.value?.getParent?.(node.value.id);
     const gutter = Number(parentNode?.props?.gutter) || 0;
 
@@ -277,9 +294,9 @@ export function useNodeRendererDerivations({
  * @param {Function} ctx.normalizeMenuItems - 与 useNodeContent 一致
  * @returns {Function}
  */
-export function createApplyMenuDslConfig(ctx) {
+export function createApplyMenuDslConfig(ctx: MenuDslApplyContext) {
   const { node, readonly, applyPreviewPatch, editorStore, normalizeMenuItems: normMenu } = ctx;
-  return (config) => {
+  return (config: MenuConfig | null | undefined): void => {
     if (!config || typeof config !== "object") return;
     if (node.value?.type !== "Menu") return;
     const propsPatch = { ...(node.value?.props || {}) };
@@ -294,7 +311,9 @@ export function createApplyMenuDslConfig(ctx) {
     if (config.className && String(config.className).trim()) {
       propsPatch.class = String(config.className).trim();
     }
-    const nextPatch = { props: propsPatch };
+    const nextPatch: { props: Record<string, unknown>; style?: Record<string, unknown> } = {
+      props: propsPatch,
+    };
     if (config.style && typeof config.style === "object") {
       nextPatch.style = { ...(node.value?.style || {}), ...config.style };
     }

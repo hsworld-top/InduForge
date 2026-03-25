@@ -1,4 +1,3 @@
-// @ts-nocheck — 从 JS 收口为 .ts；@/data、variable-utils 仍为 JS；previewRuntime 为 .ts（@ts-nocheck）。
 /**
  * 节点属性解析 Composable
  *
@@ -8,9 +7,11 @@
  * @module ui/Canvas/composables/use-node-props
  */
 
+import type { ExpressionContextDeps, UseNodePropsDeps } from "./types";
+import type { ExpressionContext } from "@/data/types";
 import { computed } from "vue";
 import { getPropsFilter } from "@/components/descriptors/registry";
-import { evaluate, evaluateTemplate } from "@/data";
+import { evaluate, evaluateTemplate } from "@/data/ExpressionEngine";
 import { buildVarValuesFromDefinitions } from "@/editor-core/utils/variable-utils";
 import { getPreviewRuntime } from "@/ui/editors/page/preview/previewRuntime";
 
@@ -20,19 +21,23 @@ import { getPreviewRuntime } from "@/ui/editors/page/preview/previewRuntime";
  * @param {object} deps - 依赖（doc, currentPage, projectVariables）
  * @returns {import("@/data").ExpressionContext}
  */
-export function buildExpressionContext(propsValue = {}, deps) {
+export function buildExpressionContext(
+  propsValue: Record<string, unknown> = {},
+  deps: ExpressionContextDeps,
+): ExpressionContext & { $props: Record<string, unknown>; state: Record<string, unknown> } {
   const { doc, currentPage, projectVariables } = deps;
   const pageId = currentPage.value?.id;
-  const pageDefs = doc.value?.vars?.pages?.[pageId] || {};
+  const pageDefs = pageId ? doc.value?.vars?.pages?.[pageId] || {} : {};
   const globalDefs = projectVariables.value || {};
-  const runtimeGlobals = getPreviewRuntime()?.globals;
+  const runtimeGlobals = (getPreviewRuntime() as { globals?: Record<string, unknown> } | null)
+    ?.globals;
   const globalValues =
     runtimeGlobals && typeof runtimeGlobals === "object"
       ? runtimeGlobals
-      : buildVarValuesFromDefinitions(globalDefs);
+      : (buildVarValuesFromDefinitions(globalDefs) as Record<string, unknown>);
   return {
     $dp: {},
-    $vars: buildVarValuesFromDefinitions(pageDefs),
+    $vars: buildVarValuesFromDefinitions(pageDefs) as Record<string, unknown>,
     $global: globalValues,
     $props: propsValue,
     state: globalValues,
@@ -46,7 +51,11 @@ export function buildExpressionContext(propsValue = {}, deps) {
  * @param {*} fallback - 兜底值
  * @returns {*}
  */
-export function resolveExpressionValue(expr, context, fallback) {
+export function resolveExpressionValue(
+  expr: string,
+  context: ExpressionContext,
+  fallback: unknown,
+): unknown {
   if (typeof expr !== "string" || !expr.trim()) return fallback;
   const text = expr.trim();
   const value = text.includes("{{") ? evaluateTemplate(text, context) : evaluate(text, context);
@@ -60,14 +69,23 @@ export function resolveExpressionValue(expr, context, fallback) {
  * @param {object} deps - 依赖（doc, currentPage, projectVariables）
  * @returns {Record<string, any>}
  */
-function resolveExprBindings(bindings, propsValue, deps) {
+function resolveExprBindings(
+  bindings: Record<string, unknown> | null | undefined,
+  propsValue: Record<string, unknown>,
+  deps: ExpressionContextDeps,
+): Record<string, unknown> {
   if (!bindings || typeof bindings !== "object") return {};
   const context = buildExpressionContext(propsValue, deps);
-  const resolved = {};
+  const resolved: Record<string, unknown> = {};
   Object.entries(bindings).forEach(([key, binding]) => {
     if (!binding || typeof binding !== "object") return;
-    if (binding.kind !== "expr" || typeof binding.expr !== "string") return;
-    const value = resolveExpressionValue(binding.expr, context, binding.fallback);
+    const exprBinding = binding as {
+      kind?: string;
+      expr?: string;
+      fallback?: unknown;
+    };
+    if (exprBinding.kind !== "expr" || typeof exprBinding.expr !== "string") return;
+    const value = resolveExpressionValue(exprBinding.expr, context, exprBinding.fallback);
     if (value !== undefined) {
       resolved[key] = value;
     }
@@ -86,17 +104,17 @@ function resolveExprBindings(bindings, propsValue, deps) {
  * @param {import('vue').ComputedRef<boolean>} deps.readonly - 只读模式 computed
  * @returns {object} 返回 resolvedNodeProps、resolvedProps、filteredProps
  */
-export function useNodeProps(deps) {
+export function useNodeProps(deps: UseNodePropsDeps) {
   const { node, doc, currentPage, projectVariables, docVersion, readonly } = deps;
 
   // 表达式绑定依赖
-  const exprDeps = { doc, currentPage, projectVariables };
+  const exprDeps: ExpressionContextDeps = { doc, currentPage, projectVariables };
 
   /**
    * 解析后的节点属性（应用表达式绑定）
    */
   const resolvedNodeProps = computed(() => {
-    docVersion.value;
+    void docVersion.value;
     if (!node.value) return {};
     const baseProps = node.value.props || {};
     const bindingValues = resolveExprBindings(node.value.bindings, baseProps, exprDeps);
@@ -109,7 +127,7 @@ export function useNodeProps(deps) {
    * 注意：Tabs modelValue 处理已移到 useNodeContent 中，避免循环依赖
    */
   const resolvedProps = computed(() => {
-    docVersion.value;
+    void docVersion.value;
     if (!node.value) return {};
     // 直接操作 resolvedNodeProps，不再调用 filterRenderProps（已清空为浅拷贝）
     const nextProps = { ...(resolvedNodeProps.value || {}) };

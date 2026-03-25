@@ -1,4 +1,3 @@
-// @ts-nocheck — 后续补全 deps 类型并与 layout-utils 对齐
 /**
  * 节点尺寸调整 Composable
  *
@@ -8,6 +7,8 @@
  * @module ui/Canvas/composables/use-node-resize
  */
 
+import type { ResizeHandle, UseNodeResizeDeps } from "./types";
+import type { ComponentNode } from "@/editor-core/document/types";
 import { onBeforeUnmount } from "vue";
 import { createSelectableElement, UpdateNodeCommand } from "@/editor-core";
 import {
@@ -17,6 +18,19 @@ import {
   resolveElContainerMinSize,
   resolveElLayoutMinHeight,
 } from "@/editor-core/utils/layout-utils";
+
+interface ActiveDragHandlers {
+  move: (event: MouseEvent | PointerEvent) => void;
+  up: () => void;
+  userSelect?: string;
+  pointerTarget?: Element | null | undefined;
+  pointerId?: number | undefined;
+  usePointer: boolean;
+  pointerEvents?: string | undefined;
+  pointerElement?: HTMLElement | null | undefined;
+}
+
+type NodePatch = Partial<ComponentNode> & Record<string, unknown>;
 
 /**
  * 创建节点尺寸调整逻辑
@@ -36,7 +50,7 @@ import {
  * @param {Function} deps.getRegionResizeConfig - 获取区域 resize 配置函数
  * @returns {{ handleResizePointerDown: Function }}
  */
-export function useNodeResize(deps) {
+export function useNodeResize(deps: UseNodeResizeDeps) {
   const {
     node,
     doc,
@@ -53,7 +67,7 @@ export function useNodeResize(deps) {
     getRegionResizeConfig,
   } = deps;
 
-  let activeDragHandlers = null;
+  let activeDragHandlers: ActiveDragHandlers | null = null;
 
   /**
    * 清理拖拽事件监听
@@ -82,7 +96,7 @@ export function useNodeResize(deps) {
     if (pointerTarget?.releasePointerCapture && pointerId !== undefined) {
       try {
         pointerTarget.releasePointerCapture(pointerId);
-      } catch (error) {
+      } catch {
         // 忽略释放失败
       }
     }
@@ -103,7 +117,7 @@ export function useNodeResize(deps) {
    * @param {{ key: string, x: number, y: number }} handle - 方向句柄
    * @returns {void}
    */
-  const handleResizePointerDown = (event, handle) => {
+  const handleResizePointerDown = (event: PointerEvent, handle: ResizeHandle) => {
     if (readonly.value) return;
     if (activeDragHandlers) return;
     if (
@@ -163,11 +177,11 @@ export function useNodeResize(deps) {
       document.body.style.userSelect = "none";
 
       if (history.value && !history.value.isInTransaction?.()) {
-        history.value.beginTransaction();
+        history.value.beginTransaction?.();
       }
 
       const usePointer = event.type === "pointerdown";
-      const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value?.$el;
+      const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value;
       const pointerElement = nodeRef.value;
       const originalPointerEvents = pointerElement?.style.pointerEvents;
       if (pointerElement) {
@@ -176,12 +190,12 @@ export function useNodeResize(deps) {
       if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
         try {
           pointerTarget.setPointerCapture(event.pointerId);
-        } catch (error) {
+        } catch {
           // 忽略捕获失败
         }
       }
 
-      const move = (moveEvent) => {
+      const move = (moveEvent: MouseEvent | PointerEvent) => {
         if (!node.value) return;
         const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
         const rawDelta = (deltaX / rowWidth) * 24;
@@ -194,12 +208,12 @@ export function useNodeResize(deps) {
           const nextLeft = Math.max(1, totalSpan - nextSpan);
           if (nextSpan === baseSpan && nextLeft === baseLeftSpan) return;
           if (history.value?.isInTransaction?.()) {
-            history.value.executeInTransaction(
+            history.value.executeInTransaction?.(
               new UpdateNodeCommand(leftColNode.id, {
                 props: { ...(leftColNode.props || {}), span: nextLeft },
               }),
             );
-            history.value.executeInTransaction(
+            history.value.executeInTransaction?.(
               new UpdateNodeCommand(node.value.id, {
                 props: { ...(node.value.props || {}), span: nextSpan },
               }),
@@ -234,7 +248,7 @@ export function useNodeResize(deps) {
 
       const up = () => {
         if (history.value?.isInTransaction?.()) {
-          history.value.commitTransaction("调整栅格");
+          history.value.commitTransaction?.("调整栅格");
         }
         cleanupDragHandlers();
       };
@@ -295,21 +309,21 @@ export function useNodeResize(deps) {
           document.body.style.userSelect = "none";
 
           if (history.value && !history.value.isInTransaction?.()) {
-            history.value.beginTransaction();
+            history.value.beginTransaction?.();
           }
 
           const usePointer = event.type === "pointerdown";
-          const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value?.$el;
+          const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value;
           if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
             try {
               pointerTarget.setPointerCapture(event.pointerId);
-            } catch (error) {
+            } catch {
               // 忽略捕获失败
             }
           }
 
           const minSize = 1;
-          const move = (moveEvent) => {
+          const move = (moveEvent: MouseEvent | PointerEvent) => {
             if (!node.value || !targetRowNode) return;
             const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
             let nextCurrentHeight =
@@ -332,13 +346,13 @@ export function useNodeResize(deps) {
               );
             }
 
-            const currentPatch = {
+            const currentPatch: NodePatch = {
               style: {
                 ...(node.value.style || {}),
                 height: `${Math.round(nextCurrentHeight)}px`,
               },
             };
-            const targetPatch = {
+            const targetPatch: NodePatch = {
               style: {
                 ...(targetRowNode.style || {}),
                 height: `${Math.round(nextTargetHeight)}px`,
@@ -346,10 +360,10 @@ export function useNodeResize(deps) {
             };
 
             if (history.value?.isInTransaction?.()) {
-              history.value.executeInTransaction(
+              history.value.executeInTransaction?.(
                 new UpdateNodeCommand(node.value.id, currentPatch),
               );
-              history.value.executeInTransaction(
+              history.value.executeInTransaction?.(
                 new UpdateNodeCommand(targetRowNode.id, targetPatch),
               );
             } else if (history.value?.execute) {
@@ -363,7 +377,7 @@ export function useNodeResize(deps) {
 
           const up = () => {
             if (history.value?.isInTransaction?.()) {
-              history.value.commitTransaction("调整布局行高度");
+              history.value.commitTransaction?.("调整布局行高度");
             }
             cleanupDragHandlers();
           };
@@ -391,7 +405,7 @@ export function useNodeResize(deps) {
     }
 
     const zoomValue = Number(canvasZoom?.value) || 1;
-    const baseLayout = resolveAbsoluteLayout(node.value, nodeRef.value);
+    const baseLayout = resolveAbsoluteLayout(node.value, nodeRef.value || null);
     const rect = nodeRef.value?.getBoundingClientRect?.();
     const rectWidth = rect ? rect.width / zoomValue : undefined;
     const rectHeight = rect ? rect.height / zoomValue : undefined;
@@ -400,15 +414,20 @@ export function useNodeResize(deps) {
     const baseSectionSizes =
       node.value.type === "ElContainer"
         ? {
-            headerHeight: parseSizeToNumber(node.value.props?.headerHeight) ?? 60,
-            footerHeight: parseSizeToNumber(node.value.props?.footerHeight) ?? 60,
-            asideWidth: parseSizeToNumber(node.value.props?.asideWidth) ?? 200,
+            headerHeight:
+              parseSizeToNumber(node.value.props?.headerHeight as string | number) ?? 60,
+            footerHeight:
+              parseSizeToNumber(node.value.props?.footerHeight as string | number) ?? 60,
+            asideWidth: parseSizeToNumber(node.value.props?.asideWidth as string | number) ?? 200,
           }
         : null;
     const startClientX = event.clientX;
     const startClientY = event.clientY;
     const minSize = ["ElLayout", "ElLayoutRow", "ElCol"].includes(node.value?.type) ? 1 : 40;
-    const containerMinSize = resolveElContainerMinSize(node.value, doc.value);
+    const containerMinSize = resolveElContainerMinSize(
+      node.value,
+      doc.value as { getNode: (id: string) => ComponentNode | null } | null | undefined,
+    );
     const childMinSize = (() => {
       if (
         !nodeRef.value ||
@@ -454,11 +473,11 @@ export function useNodeResize(deps) {
     document.body.style.userSelect = "none";
 
     if (history.value && !history.value.isInTransaction?.()) {
-      history.value.beginTransaction();
+      history.value.beginTransaction?.();
     }
 
     const usePointer = event.type === "pointerdown";
-    const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value?.$el;
+    const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value;
     const pointerElement = nodeRef.value;
     const originalPointerEvents = pointerElement?.style.pointerEvents;
     if (pointerElement) {
@@ -467,12 +486,12 @@ export function useNodeResize(deps) {
     if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
       try {
         pointerTarget.setPointerCapture(event.pointerId);
-      } catch (error) {
+      } catch {
         // 忽略捕获失败
       }
     }
 
-    const move = (moveEvent) => {
+    const move = (moveEvent: MouseEvent | PointerEvent) => {
       if (!node.value) return;
       const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
       const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
@@ -483,7 +502,11 @@ export function useNodeResize(deps) {
         const delta = regionConfig.invert ? -rawDelta : rawDelta;
         let nextSize = currentSize + delta;
         const containerNode =
-          parentNode?.type === "ElContainer" ? parentNode : doc.value?.getParent?.(parentNode?.id);
+          parentNode?.type === "ElContainer"
+            ? parentNode
+            : parentNode?.id
+              ? doc.value?.getParent?.(parentNode.id)
+              : null;
         if (containerNode) {
           const containerEl = document.querySelector(`[data-node-id="${containerNode.id}"]`);
           const containerRect = containerEl?.getBoundingClientRect?.();
@@ -493,14 +516,18 @@ export function useNodeResize(deps) {
               const maxWidth = Math.max(minBodySize, Math.round(containerRect.width - minBodySize));
               nextSize = Math.min(nextSize, maxWidth);
             } else if (node.value.type === "ElHeader") {
-              const footerHeight = Number.parseFloat(containerNode.props?.footerHeight || "0");
+              const footerHeight = Number.parseFloat(
+                String(containerNode.props?.footerHeight ?? 0),
+              );
               const maxHeight = Math.max(
                 minBodySize,
                 Math.round(containerRect.height - footerHeight - minBodySize),
               );
               nextSize = Math.min(nextSize, maxHeight);
             } else if (node.value.type === "ElFooter") {
-              const headerHeight = Number.parseFloat(containerNode.props?.headerHeight || "0");
+              const headerHeight = Number.parseFloat(
+                String(containerNode.props?.headerHeight ?? 0),
+              );
               const maxHeight = Math.max(
                 minBodySize,
                 Math.round(containerRect.height - headerHeight - minBodySize),
@@ -535,11 +562,11 @@ export function useNodeResize(deps) {
           }
         }
 
-        const patch = { props: nextProps };
+        const patch: NodePatch = { props: nextProps };
         if (history.value?.isInTransaction?.()) {
-          history.value.executeInTransaction(new UpdateNodeCommand(node.value.id, patch));
+          history.value.executeInTransaction?.(new UpdateNodeCommand(node.value.id, patch));
           if (parentContainer && parentPatch) {
-            history.value.executeInTransaction(
+            history.value.executeInTransaction?.(
               new UpdateNodeCommand(parentContainer.id, {
                 props: { ...(parentContainer.props || {}), ...parentPatch },
               }),
@@ -635,7 +662,7 @@ export function useNodeResize(deps) {
       nextY = Math.round(nextY);
 
       const sectionPatch =
-        node.value.type === "ElContainer"
+        node.value.type === "ElContainer" && baseSectionSizes
           ? buildContainerSectionSizePatch(
               node.value,
               baseWidth,
@@ -657,7 +684,7 @@ export function useNodeResize(deps) {
         nextStyle.height = `${nextHeight}px`;
       }
 
-      let patch = sectionPatch
+      let patch: NodePatch = sectionPatch
         ? {
             style: nextStyle,
             props: { ...(node.value.props || {}), ...sectionPatch },
@@ -685,7 +712,7 @@ export function useNodeResize(deps) {
         const nextLayoutItem = {
           ...(node.value.layoutItem || {}),
           free: {
-            mode: "abs",
+            mode: "abs" as const,
             abs: { ...nextAbs },
           },
         };
@@ -704,7 +731,7 @@ export function useNodeResize(deps) {
       }
 
       if (history.value?.isInTransaction?.()) {
-        history.value.executeInTransaction(new UpdateNodeCommand(node.value.id, patch));
+        history.value.executeInTransaction?.(new UpdateNodeCommand(node.value.id, patch));
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("designer:node-transform", {
@@ -740,7 +767,7 @@ export function useNodeResize(deps) {
     const up = () => {
       cleanupDragHandlers();
       if (history.value?.isInTransaction?.()) {
-        history.value.commitTransaction("调整尺寸");
+        history.value.commitTransaction?.("调整尺寸");
       }
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("designer:node-transform-end"));

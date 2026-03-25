@@ -5,11 +5,19 @@
 import type { Ref } from "vue";
 import type { EntryConfigFromApi, PagesRefreshResult } from "./pages-sync-types";
 import type { ProjectSchema } from "@/editor-core/document/types";
+import type { CreatePageBody } from "@/services/projectApi";
 import { unwrapApiData } from "@/types/api";
+
+interface HomePageCreateResult {
+  id?: string;
+  page?: {
+    id?: string;
+  };
+}
 
 export interface HomePageProjectApi {
   /** 与 services projectApi 对齐；body 形状由调用方保证 */
-  createPage: (pid: string, payload: any) => Promise<unknown>;
+  createPage: (pid: string, payload: CreatePageBody) => Promise<unknown>;
   updatePage: (pid: string, pageId: string, payload: unknown) => Promise<unknown>;
   updateEntryConfig: (pid: string, payload: unknown) => Promise<unknown>;
 }
@@ -34,13 +42,12 @@ export async function createHomePageForStore(
       parentId: null,
     });
 
-    const created = unwrapApiData(result);
+    const created = unwrapApiData<HomePageCreateResult>(result);
     if (!created || typeof created !== "object") {
       throw new Error("创建首页失败：API 返回异常");
     }
 
-    const cr = created as { id?: string; page?: { id?: string } };
-    const pageId = cr.id ?? cr.page?.id;
+    const pageId = created.id ?? created.page?.id;
     if (!pageId) {
       throw new Error("创建首页失败：未获取到页面ID");
     }

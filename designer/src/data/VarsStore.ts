@@ -1,57 +1,63 @@
-// @ts-nocheck — 待 data/types 迁 TS 后补全 VarsDefinitions 等类型
 /**
  * VarsStore - 变量状态管理
  * 管理页面变量和全局变量
  */
 
+import type { VarDefinition, VarsDefinitions } from "./types.ts";
 import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
 
-/**
- * @typedef {import('./types.js').VarDefinition} VarDefinition
- * @typedef {import('./types.js').VarsDefinitions} VarsDefinitions
- * @typedef {import('./types.js').VarsContext} VarsContext
- */
+type VarsScope = "global" | "page";
+
+interface VarsChangePayload {
+  scope: VarsScope;
+  name: string;
+  value: unknown;
+  oldValue: unknown;
+  pageId?: string;
+}
+
+interface VarsImportState {
+  global?: Record<string, unknown>;
+  pages?: Record<string, Record<string, unknown>>;
+}
 
 /**
  * 变量存储类
  */
 export class VarsStore extends EventEmitter {
+  private _definitions: VarsDefinitions;
+
+  private _globalVars: Map<string, unknown>;
+
+  private _pageVars: Map<string, Map<string, unknown>>;
+
+  private _currentPageId: string | null;
+
   /**
    * 创建变量存储
    * @param {VarsDefinitions} [definitions] - 变量定义
    */
-  constructor(definitions = { global: {}, pages: {} }) {
+  constructor(definitions: VarsDefinitions = { global: {}, pages: {} }) {
     super();
 
-    /** @type {VarsDefinitions} */
     this._definitions = definitions;
-
-    /** @type {Map<string, *>} 全局变量值 */
     this._globalVars = new Map();
-
-    /** @type {Map<string, Map<string, *>>} 页面变量值 pageId -> (name -> value) */
     this._pageVars = new Map();
-
-    /** @type {string | null} 当前活动页面 ID */
     this._currentPageId = null;
 
-    // 初始化全局变量
     this._initGlobalVars();
   }
-
-  // ==================== 初始化 ====================
 
   /**
    * 初始化全局变量
    * @private
    */
-  _initGlobalVars() {
+  private _initGlobalVars(): void {
     const globalDefs = this._definitions.global || {};
 
     for (const [name, def] of Object.entries(globalDefs)) {
-      let value = def.default;
+      let value: unknown = def.default;
 
-      // 从 localStorage 恢复持久化变量
       if (def.persistent && typeof localStorage !== "undefined") {
         const storageKey = def.storageKey || `var_${name}`;
         try {
@@ -59,8 +65,8 @@ export class VarsStore extends EventEmitter {
           if (stored !== null) {
             value = JSON.parse(stored);
           }
-        } catch (e) {
-          console.warn(`Failed to restore var "${name}" from localStorage:`, e);
+        } catch (error) {
+          console.warn(`Failed to restore var "${name}" from localStorage:`, error);
         }
       }
 
@@ -73,9 +79,9 @@ export class VarsStore extends EventEmitter {
    * @param {string} pageId - 页面 ID
    * @param {Record<string, VarDefinition>} [definitions] - 页面变量定义
    */
-  initPageVars(pageId, definitions) {
+  initPageVars(pageId: string, definitions?: Record<string, VarDefinition>): void {
     const defs = definitions || this._definitions.pages?.[pageId] || {};
-    const vars = new Map();
+    const vars = new Map<string, unknown>();
 
     for (const [name, def] of Object.entries(defs)) {
       vars.set(name, def.default);
@@ -83,11 +89,7 @@ export class VarsStore extends EventEmitter {
 
     this._pageVars.set(pageId, vars);
 
-    // 保存页面变量定义
     if (definitions) {
-      if (!this._definitions.pages) {
-        this._definitions.pages = {};
-      }
       this._definitions.pages[pageId] = definitions;
     }
 
@@ -98,7 +100,7 @@ export class VarsStore extends EventEmitter {
    * 清理页面变量
    * @param {string} pageId - 页面 ID
    */
-  clearPageVars(pageId) {
+  clearPageVars(pageId: string): void {
     this._pageVars.delete(pageId);
     this.emit("pageClear", { pageId });
   }
@@ -107,11 +109,9 @@ export class VarsStore extends EventEmitter {
    * 设置当前页面
    * @param {string | null} pageId - 页面 ID
    */
-  setCurrentPage(pageId) {
+  setCurrentPage(pageId: string | null): void {
     this._currentPageId = pageId;
   }
-
-  // ==================== 变量读取 ====================
 
   /**
    * 获取变量值
@@ -120,17 +120,17 @@ export class VarsStore extends EventEmitter {
    * @param {string} [pageId] - 页面 ID（scope 为 page 时必填）
    * @returns {*}
    */
-  get(scope, name, pageId) {
+  get(scope: VarsScope, name: string, pageId?: string): unknown {
     if (scope === "global") {
       return this._globalVars.get(name);
-    } else {
-      const targetPageId = pageId || this._currentPageId;
-      if (!targetPageId) {
-        console.warn(`VarsStore.get: No pageId specified for page var "${name}"`);
-        return undefined;
-      }
-      return this._pageVars.get(targetPageId)?.get(name);
     }
+
+    const targetPageId = pageId || this._currentPageId;
+    if (!targetPageId) {
+      console.warn(`VarsStore.get: No pageId specified for page var "${name}"`);
+      return undefined;
+    }
+    return this._pageVars.get(targetPageId)?.get(name);
   }
 
   /**
@@ -138,7 +138,7 @@ export class VarsStore extends EventEmitter {
    * @param {string} name - 变量名
    * @returns {*}
    */
-  getGlobal(name) {
+  getGlobal(name: string): unknown {
     return this._globalVars.get(name);
   }
 
@@ -148,7 +148,7 @@ export class VarsStore extends EventEmitter {
    * @param {string} [pageId] - 页面 ID
    * @returns {*}
    */
-  getPage(name, pageId) {
+  getPage(name: string, pageId?: string): unknown {
     const targetPageId = pageId || this._currentPageId;
     if (!targetPageId) return undefined;
     return this._pageVars.get(targetPageId)?.get(name);
@@ -161,17 +161,15 @@ export class VarsStore extends EventEmitter {
    * @param {string} [pageId] - 页面 ID
    * @returns {boolean}
    */
-  has(scope, name, pageId) {
+  has(scope: VarsScope, name: string, pageId?: string): boolean {
     if (scope === "global") {
       return this._globalVars.has(name);
-    } else {
-      const targetPageId = pageId || this._currentPageId;
-      if (!targetPageId) return false;
-      return this._pageVars.get(targetPageId)?.has(name) ?? false;
     }
-  }
 
-  // ==================== 变量写入 ====================
+    const targetPageId = pageId || this._currentPageId;
+    if (!targetPageId) return false;
+    return this._pageVars.get(targetPageId)?.has(name) ?? false;
+  }
 
   /**
    * 设置变量值
@@ -180,20 +178,19 @@ export class VarsStore extends EventEmitter {
    * @param {*} value - 值
    * @param {string} [pageId] - 页面 ID（scope 为 page 时可选）
    */
-  set(scope, name, value, pageId) {
+  set(scope: VarsScope, name: string, value: unknown, pageId?: string): void {
     const oldValue = this.get(scope, name, pageId);
 
     if (scope === "global") {
       this._globalVars.set(name, value);
 
-      // 持久化
       const def = this._definitions.global?.[name];
       if (def?.persistent && typeof localStorage !== "undefined") {
         const storageKey = def.storageKey || `var_${name}`;
         try {
           localStorage.setItem(storageKey, JSON.stringify(value));
-        } catch (e) {
-          console.warn(`Failed to persist var "${name}":`, e);
+        } catch (error) {
+          console.warn(`Failed to persist var "${name}":`, error);
         }
       }
     } else {
@@ -211,14 +208,19 @@ export class VarsStore extends EventEmitter {
       pageVars.set(name, value);
     }
 
-    // 触发变更事件
-    this.emit("change", {
+    const changePayload: VarsChangePayload = {
       scope,
       name,
       value,
       oldValue,
-      pageId: scope === "page" ? pageId || this._currentPageId : undefined,
-    });
+    };
+    if (scope === "page") {
+      const resolvedPageId = pageId || this._currentPageId;
+      if (resolvedPageId !== undefined && resolvedPageId !== null) {
+        changePayload.pageId = resolvedPageId;
+      }
+    }
+    this.emit("change", changePayload);
   }
 
   /**
@@ -226,7 +228,7 @@ export class VarsStore extends EventEmitter {
    * @param {string} name - 变量名
    * @param {*} value - 值
    */
-  setGlobal(name, value) {
+  setGlobal(name: string, value: unknown): void {
     this.set("global", name, value);
   }
 
@@ -236,7 +238,7 @@ export class VarsStore extends EventEmitter {
    * @param {*} value - 值
    * @param {string} [pageId] - 页面 ID
    */
-  setPage(name, value, pageId) {
+  setPage(name: string, value: unknown, pageId?: string): void {
     this.set("page", name, value, pageId);
   }
 
@@ -245,13 +247,11 @@ export class VarsStore extends EventEmitter {
    * @param {Array<{scope: 'global' | 'page', name: string, value: *}>} vars - 变量列表
    * @param {string} [pageId] - 页面 ID
    */
-  setMany(vars, pageId) {
+  setMany(vars: Array<{ scope: VarsScope; name: string; value: unknown }>, pageId?: string): void {
     for (const { scope, name, value } of vars) {
       this.set(scope, name, value, pageId);
     }
   }
-
-  // ==================== 变量重置 ====================
 
   /**
    * 重置变量为默认值
@@ -259,13 +259,13 @@ export class VarsStore extends EventEmitter {
    * @param {string} name - 变量名
    * @param {string} [pageId] - 页面 ID
    */
-  reset(scope, name, pageId) {
-    let def;
+  reset(scope: VarsScope, name: string, pageId?: string): void {
+    let def: VarDefinition | undefined;
     if (scope === "global") {
       def = this._definitions.global?.[name];
     } else {
       const targetPageId = pageId || this._currentPageId;
-      def = this._definitions.pages?.[targetPageId]?.[name];
+      def = targetPageId ? this._definitions.pages?.[targetPageId]?.[name] : undefined;
     }
 
     if (def) {
@@ -277,7 +277,7 @@ export class VarsStore extends EventEmitter {
    * 重置所有页面变量
    * @param {string} [pageId] - 页面 ID
    */
-  resetPageVars(pageId) {
+  resetPageVars(pageId?: string): void {
     const targetPageId = pageId || this._currentPageId;
     if (!targetPageId) return;
 
@@ -290,21 +290,19 @@ export class VarsStore extends EventEmitter {
   /**
    * 重置所有全局变量
    */
-  resetGlobalVars() {
+  resetGlobalVars(): void {
     const defs = this._definitions.global || {};
     for (const [name, def] of Object.entries(defs)) {
       this.set("global", name, def.default);
     }
   }
 
-  // ==================== 上下文获取 ====================
-
   /**
    * 获取变量上下文（用于表达式求值）
    * @param {string} [pageId] - 页面 ID
    * @returns {VarsContext}
    */
-  getContext(pageId) {
+  getContext(pageId?: string) {
     const targetPageId = pageId || this._currentPageId;
     const pageVars = targetPageId ? this._pageVars.get(targetPageId) : null;
 
@@ -316,25 +314,23 @@ export class VarsStore extends EventEmitter {
 
   /**
    * 获取所有全局变量
-   * @returns {Record<string, *>}
+   * @returns {Record<string, unknown>}
    */
-  getAllGlobal() {
+  getAllGlobal(): Record<string, unknown> {
     return Object.fromEntries(this._globalVars);
   }
 
   /**
    * 获取所有页面变量
    * @param {string} [pageId] - 页面 ID
-   * @returns {Record<string, *>}
+   * @returns {Record<string, unknown>}
    */
-  getAllPage(pageId) {
+  getAllPage(pageId?: string): Record<string, unknown> {
     const targetPageId = pageId || this._currentPageId;
     if (!targetPageId) return {};
     const pageVars = this._pageVars.get(targetPageId);
     return pageVars ? Object.fromEntries(pageVars) : {};
   }
-
-  // ==================== 定义管理 ====================
 
   /**
    * 获取变量定义
@@ -343,20 +339,20 @@ export class VarsStore extends EventEmitter {
    * @param {string} [pageId] - 页面 ID
    * @returns {VarDefinition | undefined}
    */
-  getDefinition(scope, name, pageId) {
+  getDefinition(scope: VarsScope, name: string, pageId?: string): VarDefinition | undefined {
     if (scope === "global") {
       return this._definitions.global?.[name];
-    } else {
-      const targetPageId = pageId || this._currentPageId;
-      return this._definitions.pages?.[targetPageId]?.[name];
     }
+    const targetPageId = pageId || this._currentPageId;
+    if (!targetPageId) return undefined;
+    return this._definitions.pages?.[targetPageId]?.[name];
   }
 
   /**
    * 获取所有全局变量定义
    * @returns {Record<string, VarDefinition>}
    */
-  getGlobalDefinitions() {
+  getGlobalDefinitions(): Record<string, VarDefinition> {
     return this._definitions.global || {};
   }
 
@@ -365,7 +361,7 @@ export class VarsStore extends EventEmitter {
    * @param {string} [pageId] - 页面 ID
    * @returns {Record<string, VarDefinition>}
    */
-  getPageDefinitions(pageId) {
+  getPageDefinitions(pageId?: string): Record<string, VarDefinition> {
     const targetPageId = pageId || this._currentPageId;
     if (!targetPageId) return {};
     return this._definitions.pages?.[targetPageId] || {};
@@ -375,14 +371,11 @@ export class VarsStore extends EventEmitter {
    * 更新变量定义
    * @param {VarsDefinitions} definitions - 新的变量定义
    */
-  updateDefinitions(definitions) {
+  updateDefinitions(definitions: VarsDefinitions): void {
     this._definitions = definitions;
-
-    // 重新初始化全局变量
     this._globalVars.clear();
     this._initGlobalVars();
 
-    // 重新初始化已加载的页面变量
     for (const pageId of this._pageVars.keys()) {
       const pageDefs = definitions.pages?.[pageId];
       if (pageDefs) {
@@ -393,14 +386,12 @@ export class VarsStore extends EventEmitter {
     this.emit("definitionsUpdated");
   }
 
-  // ==================== 序列化 ====================
-
   /**
    * 导出当前状态
-   * @returns {{global: Record<string, *>, pages: Record<string, Record<string, *>>}}
+   * @returns {{global: Record<string, unknown>, pages: Record<string, Record<string, unknown>>}}
    */
   export() {
-    const pages = {};
+    const pages: Record<string, Record<string, unknown>> = {};
     for (const [pageId, vars] of this._pageVars.entries()) {
       pages[pageId] = Object.fromEntries(vars);
     }
@@ -413,9 +404,9 @@ export class VarsStore extends EventEmitter {
 
   /**
    * 导入状态
-   * @param {{global?: Record<string, *>, pages?: Record<string, Record<string, *>>}} state - 状态
+   * @param {{global?: Record<string, unknown>, pages?: Record<string, Record<string, unknown>>}} state - 状态
    */
-  import(state) {
+  import(state: VarsImportState): void {
     if (state.global) {
       for (const [name, value] of Object.entries(state.global)) {
         this._globalVars.set(name, value);
@@ -424,7 +415,7 @@ export class VarsStore extends EventEmitter {
 
     if (state.pages) {
       for (const [pageId, vars] of Object.entries(state.pages)) {
-        const pageVars = new Map();
+        const pageVars = new Map<string, unknown>();
         for (const [name, value] of Object.entries(vars)) {
           pageVars.set(name, value);
         }
@@ -438,7 +429,7 @@ export class VarsStore extends EventEmitter {
   /**
    * 清空所有变量
    */
-  clear() {
+  clear(): void {
     this._globalVars.clear();
     this._pageVars.clear();
     this._initGlobalVars();

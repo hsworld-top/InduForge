@@ -2,7 +2,7 @@
   App.vue - 设计器根组件
   职责：路由视图、全局加载态（设计页切换时显示，预览页不显示）
 -->
-<script setup>
+<script setup lang="ts">
 /**
  * 根组件脚本
  * - loading: 全局加载态

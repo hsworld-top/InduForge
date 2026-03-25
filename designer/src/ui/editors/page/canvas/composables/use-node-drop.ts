@@ -1,4 +1,3 @@
-// @ts-nocheck — 由 JS 迁入；依赖仍为 .js 的 utils，后续再补类型。
 /**
  * 节点拖放 Composable
  *
@@ -8,6 +7,14 @@
  * @module ui/Canvas/composables/use-node-drop
  */
 
+import type {
+  CanvasDocLike,
+  InsertLineStyleLike,
+  LayoutInsertInfoLike,
+  RowInsertInfoLike,
+  UseNodeDropDeps,
+} from "./types";
+import type { ComponentNode } from "@/editor-core/document/types";
 import { computed, ref, watch } from "vue";
 import {
   canAcceptChildByDescriptor,
@@ -28,7 +35,7 @@ import {
  * @param {string} childType - 子组件类型
  * @returns {boolean}
  */
-function canAcceptChild(parentNode, childType) {
+function canAcceptChild(parentNode: ComponentNode, childType: string) {
   const currentChildCount = (parentNode.children || []).length;
   const descriptor = getDescriptor(parentNode.type);
   if (!descriptor) return false;
@@ -40,7 +47,7 @@ function canAcceptChild(parentNode, childType) {
  * @param {import('@/editor-core').ComponentNode | null} targetNode - 目标节点
  * @returns {boolean}
  */
-function isDroppableContainer(targetNode) {
+function isDroppableContainer(targetNode: ComponentNode | null | undefined) {
   if (!targetNode) return false;
   return isContainerType(targetNode.type);
 }
@@ -52,12 +59,19 @@ function isDroppableContainer(targetNode) {
  * @param {import('@/editor-core').Document} doc - 文档实例
  * @returns {{ node: import('@/editor-core').ComponentNode, element: HTMLElement | null } | null}
  */
-function resolveDropContainer(event, childType, doc) {
+function resolveDropContainer(
+  event: DragEvent,
+  childType: string,
+  doc: CanvasDocLike | null | undefined,
+) {
   if (!doc || !event) return null;
   const hitList = document.elementsFromPoint(event.clientX, event.clientY);
-  let containerNode = null;
+  let containerNode: ComponentNode | null = null;
 
-  const canAcceptByAutoInsert = (targetNode, nextChildType) => {
+  const canAcceptByAutoInsert = (
+    targetNode: ComponentNode | null | undefined,
+    nextChildType: string,
+  ) => {
     if (!targetNode || !nextChildType) return false;
     if (targetNode.type === "ElLayout") {
       return nextChildType !== "ElLayoutRow";
@@ -84,7 +98,11 @@ function resolveDropContainer(event, childType, doc) {
     }
     if (targetNode.type === "ElContainer") {
       if (!containerNode) {
-        containerNode = resolveElContainerMain(doc, targetNode) || targetNode;
+        containerNode =
+          resolveElContainerMain(
+            doc as { getNode: (id: string) => ComponentNode | null },
+            targetNode,
+          ) || targetNode;
       }
       continue;
     }
@@ -121,7 +139,7 @@ function resolveDropContainer(event, childType, doc) {
  * @param {import('vue').ComputedRef} deps.tabsList - tabs 列表 computed
  * @returns {object} 返回 handleDragOver、handleDrop、showInsertLine 等
  */
-export function useNodeDrop(deps) {
+export function useNodeDrop(deps: UseNodeDropDeps) {
   const {
     node,
     doc,
@@ -142,9 +160,9 @@ export function useNodeDrop(deps) {
   // 拖拽状态
   const isDragOver = ref(false);
   const showInsertLine = ref(false);
-  const insertLineStyle = ref(null);
-  const rowInsertInfo = ref(null);
-  const layoutInsertInfo = ref(null);
+  const insertLineStyle = ref<InsertLineStyleLike | null>(null);
+  const rowInsertInfo = ref<RowInsertInfoLike | null>(null);
+  const layoutInsertInfo = ref<LayoutInsertInfoLike | null>(null);
   const rowInsertEdgeThreshold = 8;
   const colInsertEdgeThreshold = 8;
 
@@ -168,7 +186,7 @@ export function useNodeDrop(deps) {
    * 处理拖拽悬停
    * @param {DragEvent} event - 拖拽事件
    */
-  const handleDragOver = (event) => {
+  const handleDragOver = (event: DragEvent) => {
     if (readonly.value) return;
 
     const resolveLayoutInsertFromPoint = () => {
@@ -291,7 +309,7 @@ export function useNodeDrop(deps) {
       try {
         const parsed = JSON.parse(payload);
         dragType = parsed?.type || "";
-      } catch (error) {
+      } catch {
         dragType = payload;
       }
     }
@@ -429,9 +447,10 @@ export function useNodeDrop(deps) {
     if (node.value?.type && isFlexContainer(node.value.type)) {
       rowInsertInfo.value = null;
       layoutInsertInfo.value = null;
-      const outerElement = event.currentTarget;
+      const outerElement = event.currentTarget instanceof Element ? event.currentTarget : null;
       const contentElement =
         outerElement?.querySelector?.("[data-node-id]")?.parentElement || outerElement;
+      if (!contentElement) return;
       const direction = resolveFlexDirection(node.value.type, contentElement);
       const insertInfo = dragDropManager.calculateFlexInsertPosition(
         contentElement,
@@ -450,7 +469,7 @@ export function useNodeDrop(deps) {
    * 处理拖拽放置
    * @param {DragEvent} event - 拖拽事件
    */
-  const handleDrop = (event) => {
+  const handleDrop = (event: DragEvent) => {
     if (readonly.value) return;
     // 阻止事件冒泡，避免重复插入
     event.stopPropagation();
@@ -500,7 +519,11 @@ export function useNodeDrop(deps) {
      * @param {number} insertIndex - 行插入位置
      * @param {string} componentType - 组件类型
      */
-    const insertIntoLayoutByRow = (layoutNode, insertIndex, componentType) => {
+    const insertIntoLayoutByRow = (
+      layoutNode: ComponentNode | null | undefined,
+      insertIndex: number,
+      componentType: string,
+    ) => {
       if (!layoutNode || layoutNode.type !== "ElLayout") return false;
       const rowNode = editorStore.insertNode("ElLayoutRow", layoutNode.id, insertIndex);
       if (!rowNode) return false;
@@ -604,7 +627,7 @@ export function useNodeDrop(deps) {
         currentType === "ElMain" ||
         currentType === "ElFooter";
       if (!isElContainerScope) return null;
-      const resolveLayoutTarget = (element) => {
+      const resolveLayoutTarget = (element: Element | null | undefined) => {
         if (!element) return null;
         const nodeElement = element.closest?.("[data-node-id][data-node-type]");
         if (!nodeElement) return null;
@@ -615,7 +638,7 @@ export function useNodeDrop(deps) {
         if (!targetNode) return null;
         return { node: targetNode, element: nodeElement };
       };
-      const resolveNodeFromId = (nodeId) => {
+      const resolveNodeFromId = (nodeId: string | null | undefined) => {
         if (!nodeId) return null;
         const targetNode = doc.value?.getNode?.(nodeId);
         if (!targetNode) return null;
@@ -623,12 +646,16 @@ export function useNodeDrop(deps) {
           return { node: targetNode, element: null };
         }
         if (targetNode.type === "ElContainer") {
-          const mainNode = resolveElContainerMain(doc.value, targetNode) || targetNode;
+          const mainNode =
+            resolveElContainerMain(
+              doc.value as { getNode: (id: string) => ComponentNode | null } | null | undefined,
+              targetNode,
+            ) || targetNode;
           return { node: mainNode, element: null };
         }
         return null;
       };
-      const resolveFromElement = (element) => {
+      const resolveFromElement = (element: Element | null | undefined) => {
         if (!element) return null;
         const layoutTarget = resolveLayoutTarget(element);
         if (layoutTarget) return layoutTarget;
@@ -668,7 +695,7 @@ export function useNodeDrop(deps) {
     const fallbackType = dragState.dragType || "";
 
     try {
-      const parsed = JSON.parse(payload);
+      const parsed = JSON.parse(payload || "{}") as { type?: string };
       const type = parsed?.type || "";
       if (!type && !fallbackType) return;
       const resolvedType = type || fallbackType;
@@ -705,9 +732,11 @@ export function useNodeDrop(deps) {
       }
       const resolvedTarget = resolveElContainerTarget();
       let targetNode = (resolvedTarget && resolvedTarget.node) || node.value;
-      let targetElement = (resolvedTarget && resolvedTarget.element) || event.currentTarget;
+      let targetElement =
+        (resolvedTarget && resolvedTarget.element) ||
+        (event.currentTarget instanceof Element ? event.currentTarget : null);
       if (!isDroppableContainer(targetNode)) {
-        const resolvedContainer = resolveDropContainer(event, resolvedType);
+        const resolvedContainer = resolveDropContainer(event, resolvedType, doc.value);
         if (resolvedContainer) {
           targetNode = resolvedContainer.node;
           targetElement = resolvedContainer.element || targetElement;
@@ -737,9 +766,10 @@ export function useNodeDrop(deps) {
         if (parentNode) {
           targetNode = parentNode;
           const rowSelector = `[data-node-id="${parentNode.id}"]`;
+          const currentTarget = event.currentTarget instanceof Element ? event.currentTarget : null;
           targetElement =
             document.querySelector(rowSelector) ||
-            event.currentTarget.closest?.(rowSelector) ||
+            currentTarget?.closest?.(rowSelector) ||
             targetElement;
         }
       }
@@ -804,6 +834,11 @@ export function useNodeDrop(deps) {
         const colHasChild = (targetNode.children || []).length > 0;
         if (colHasChild) {
           const rowResolved = resolveRowInsertTarget();
+          if (!rowNode) {
+            notifyInsertFailure();
+            endDrag();
+            return;
+          }
           const colIds = (rowNode?.children || []).filter((childId) => {
             const childNode = doc.value?.getNode?.(childId);
             return childNode?.type === "ElCol";
@@ -813,7 +848,7 @@ export function useNodeDrop(deps) {
           if (rowInsertSnapshot?.rowId === rowNode.id) {
             insertIndex = rowInsertSnapshot.index;
           } else if (Number.isInteger(rowResolved?.index)) {
-            insertIndex = rowResolved.index;
+            insertIndex = rowResolved?.index ?? insertIndex;
           }
           const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
           if (colNode) {
@@ -891,19 +926,28 @@ export function useNodeDrop(deps) {
       if (targetNode?.type && isFlexContainer(targetNode.type) && !skipFlexInsertForLayout) {
         const outerEl = targetElement;
         const contentEl = outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
+        if (!contentEl) {
+          endDrag();
+          return;
+        }
         const direction = resolveFlexDirection(targetNode.type, contentEl);
         const insertInfo = dragDropManager.calculateFlexInsertPosition(contentEl, event, direction);
         insertIndex = insertInfo.index;
       }
       let dropPosition = null;
       if (targetNode?.type === "FreeContainer" && targetElement) {
+        const targetHost = targetElement instanceof HTMLElement ? targetElement : null;
+        if (!targetHost) {
+          endDrag();
+          return;
+        }
         const zoomValue = Number(canvasZoom?.value) || 1;
-        const rawPosition = eventToCanvasPosition(event, targetElement, zoomValue);
+        const rawPosition = eventToCanvasPosition(event, targetHost, zoomValue);
         const defaultSize = getDefaultSize(resolvedType) ?? {
           width: 120,
           height: 40,
         };
-        dropPosition = clampPositionInContainer(rawPosition, targetElement, defaultSize, zoomValue);
+        dropPosition = clampPositionInContainer(rawPosition, targetHost, defaultSize, zoomValue);
       }
 
       // ElLayout 内拖入组件：自动新增一行并将组件放入该行的列
@@ -997,7 +1041,7 @@ export function useNodeDrop(deps) {
         }
       }
       endDrag();
-    } catch (err) {
+    } catch {
       const type = payload || fallbackType;
       if (!type) return;
       if (!node.value) return;
@@ -1029,9 +1073,11 @@ export function useNodeDrop(deps) {
       }
       const resolvedTarget = resolveElContainerTarget();
       let targetNode = resolvedTarget?.node || node.value;
-      let targetElement = resolvedTarget?.element || event.currentTarget;
+      let targetElement =
+        resolvedTarget?.element ||
+        (event.currentTarget instanceof Element ? event.currentTarget : null);
       if (!isDroppableContainer(targetNode)) {
-        const resolvedContainer = resolveDropContainer(event, type);
+        const resolvedContainer = resolveDropContainer(event, type, doc.value);
         if (resolvedContainer) {
           targetNode = resolvedContainer.node;
           targetElement = resolvedContainer.element || targetElement;
@@ -1061,9 +1107,10 @@ export function useNodeDrop(deps) {
         if (parentNode) {
           targetNode = parentNode;
           const rowSelector = `[data-node-id="${parentNode.id}"]`;
+          const currentTarget = event.currentTarget instanceof Element ? event.currentTarget : null;
           targetElement =
             document.querySelector(rowSelector) ||
-            event.currentTarget.closest?.(rowSelector) ||
+            currentTarget?.closest?.(rowSelector) ||
             targetElement;
         }
       }
@@ -1128,6 +1175,11 @@ export function useNodeDrop(deps) {
         const colHasChild = (targetNode.children || []).length > 0;
         if (colHasChild) {
           const rowResolved = resolveRowInsertTarget();
+          if (!rowNode) {
+            notifyInsertFailure();
+            endDrag();
+            return;
+          }
           const colIds = (rowNode?.children || []).filter((childId) => {
             const childNode = doc.value?.getNode?.(childId);
             return childNode?.type === "ElCol";
@@ -1137,7 +1189,7 @@ export function useNodeDrop(deps) {
           if (rowInsertSnapshot?.rowId === rowNode.id) {
             insertIndex = rowInsertSnapshot.index;
           } else if (Number.isInteger(rowResolved?.index)) {
-            insertIndex = rowResolved.index;
+            insertIndex = rowResolved?.index ?? insertIndex;
           }
           const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
           if (colNode) {
@@ -1212,6 +1264,10 @@ export function useNodeDrop(deps) {
       if (targetNode?.type && isFlexContainer(targetNode.type) && !skipFlexInsertForLayout) {
         const outerEl = targetElement;
         const contentEl = outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
+        if (!contentEl) {
+          endDrag();
+          return;
+        }
         const direction = resolveFlexDirection(targetNode.type, contentEl);
         const insertInfo = dragDropManager.calculateFlexInsertPosition(contentEl, event, direction);
         insertIndex = insertInfo.index;
@@ -1219,10 +1275,15 @@ export function useNodeDrop(deps) {
 
       let dropPosition = null;
       if (targetNode?.type === "FreeContainer" && targetElement) {
+        const targetHost = targetElement instanceof HTMLElement ? targetElement : null;
+        if (!targetHost) {
+          endDrag();
+          return;
+        }
         const zoomValue = Number(canvasZoom?.value) || 1;
-        const rawPosition = eventToCanvasPosition(event, targetElement, zoomValue);
+        const rawPosition = eventToCanvasPosition(event, targetHost, zoomValue);
         const defaultSize = getDefaultSize(type) ?? { width: 120, height: 40 };
-        dropPosition = clampPositionInContainer(rawPosition, targetElement, defaultSize, zoomValue);
+        dropPosition = clampPositionInContainer(rawPosition, targetHost, defaultSize, zoomValue);
       }
 
       // ElLayout 内拖入组件：自动新增一行并将组件放入该行的列
@@ -1330,7 +1391,8 @@ export function useNodeDrop(deps) {
     isDragOver,
     canAcceptChild,
     isDroppableContainer,
-    resolveDropContainer: (event, childType) => resolveDropContainer(event, childType, doc.value),
+    resolveDropContainer: (event: DragEvent, childType: string) =>
+      resolveDropContainer(event, childType, doc.value),
   };
 }
 

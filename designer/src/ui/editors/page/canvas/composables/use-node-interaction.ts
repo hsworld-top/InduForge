@@ -1,4 +1,3 @@
-// @ts-nocheck — 从 JS 收口为 .ts；registry 与事件参数待补类型。
 /**
  * 节点交互 Composable
  *
@@ -9,6 +8,8 @@
  * @module ui/Canvas/composables/use-node-interaction
  */
 
+import type { RegionResizeConfig, ResizeHandle, UseNodeInteractionDeps } from "./types";
+import type { ComponentNode } from "@/editor-core/document/types";
 import { computed } from "vue";
 import { isContainerType, isLayoutType, isRegionType } from "@/components/descriptors/registry";
 
@@ -17,8 +18,8 @@ import { isContainerType, isLayoutType, isRegionType } from "@/components/descri
  * @param {string} type - 组件类型
  * @returns {object | null} resize 配置
  */
-function getRegionResizeConfig(type) {
-  const configMap = {
+function getRegionResizeConfig(type: string | undefined): RegionResizeConfig | null {
+  const configMap: Record<string, RegionResizeConfig> = {
     ElHeader: { axis: "y", prop: "height", handles: ["s"] },
     ElAside: { axis: "x", prop: "width", handles: ["e"] },
   };
@@ -30,13 +31,13 @@ function getRegionResizeConfig(type) {
       invert: true,
     };
   }
-  return configMap[type] || null;
+  return type ? configMap[type] || null : null;
 }
 
 /**
  * resize handles 定义
  */
-const resizeHandles = [
+const resizeHandles: ResizeHandle[] = [
   { key: "nw", x: -1, y: -1, cursor: "nwse-resize" },
   { key: "n", x: 0, y: -1, cursor: "ns-resize" },
   { key: "ne", x: 1, y: -1, cursor: "nesw-resize" },
@@ -65,7 +66,7 @@ const resizeHandles = [
  * @param {Function} [deps.showContextMenu] - 显示右键菜单函数（可选，通过 inject 获取）
  * @returns {object} 返回 handleClick、showResizeHandles、visibleResizeHandles 等
  */
-export function useNodeInteraction(deps) {
+export function useNodeInteraction(deps: UseNodeInteractionDeps) {
   const {
     node,
     doc,
@@ -120,7 +121,7 @@ export function useNodeInteraction(deps) {
    * 是否显示 resize handles（基础检查，不含 selection 检查）
    */
   const showResizeHandlesBase = computed(() => {
-    selectionVersion.value;
+    void selectionVersion.value;
     if (readonly.value || isRoot.value) return false;
     if (!node.value || node.value.locked) return false;
     if (isRootCanvasContainer(node.value)) return false;
@@ -165,7 +166,7 @@ export function useNodeInteraction(deps) {
    * @param {MouseEvent} event - 鼠标事件
    * @returns {import('@/editor-core').ComponentNode | null}
    */
-  const resolveClickSelectionTarget = (event) => {
+  const resolveClickSelectionTarget = (event?: MouseEvent): ComponentNode | null => {
     if (!node.value) return null;
     if (!isRegionContainer.value) return node.value;
     if (event?.altKey) return node.value;
@@ -180,7 +181,9 @@ export function useNodeInteraction(deps) {
    * @param {import('@/editor-core').ComponentNode | null} currentNode - 当前节点
    * @returns {import('@/editor-core').ComponentNode | null}
    */
-  const resolveLayoutRootNode = (currentNode) => {
+  const resolveLayoutRootNode = (
+    currentNode: ComponentNode | null | undefined,
+  ): ComponentNode | null => {
     if (!currentNode) return null;
     if (
       currentNode.type !== "ElLayout" &&
@@ -203,7 +206,9 @@ export function useNodeInteraction(deps) {
    * @param {import('@/editor-core').ComponentNode | null} currentNode - 当前节点
    * @returns {import('@/editor-core').ComponentNode | null}
    */
-  const resolveAncestorLayoutRow = (currentNode) => {
+  const resolveAncestorLayoutRow = (
+    currentNode: ComponentNode | null | undefined,
+  ): ComponentNode | null => {
     if (!currentNode || !doc.value) return null;
     if (currentNode.type === "ElLayoutRow") return currentNode;
     let parentNode = doc.value.getParent?.(currentNode.id);
@@ -219,7 +224,7 @@ export function useNodeInteraction(deps) {
    * @param {MouseEvent} event - 鼠标事件
    * @returns {boolean}
    */
-  const isClickOnContainerBorder = (event) => {
+  const isClickOnContainerBorder = (event: MouseEvent): boolean => {
     if (!node.value || !isContainer.value) return false;
     const element = nodeRef.value;
     if (!element || !event || typeof event.clientX !== "number") return false;
@@ -239,7 +244,8 @@ export function useNodeInteraction(deps) {
       rect.bottom - y <= edge;
     if (!nearEdge) return false;
     if (isLayoutNode) return true;
-    const hitNodeEl = event.target?.closest?.("[data-node-id]");
+    const eventTarget = event.target instanceof Element ? event.target : null;
+    const hitNodeEl = eventTarget?.closest?.("[data-node-id]");
     if (!hitNodeEl) return true;
     return hitNodeEl.getAttribute("data-node-id") === node.value.id;
   };
@@ -248,14 +254,15 @@ export function useNodeInteraction(deps) {
    * 处理点击事件
    * @param {MouseEvent} event - 鼠标事件
    */
-  const handleClick = (event) => {
+  const handleClick = (event: MouseEvent) => {
     if (readonly.value) {
       void runPreviewScript("click", event);
       return;
     }
     if (!node.value || !selection.value) return;
     if (node.value?.type === "Tabs") {
-      const hitNodeEl = event.target?.closest?.("[data-node-id]");
+      const eventTarget = event.target instanceof Element ? event.target : null;
+      const hitNodeEl = eventTarget?.closest?.("[data-node-id]");
       const hitNodeId = hitNodeEl?.getAttribute?.("data-node-id");
       if (hitNodeId && hitNodeId !== node.value.id) {
         return;
@@ -283,7 +290,7 @@ export function useNodeInteraction(deps) {
         if (parentNode.type === "ElLayout") {
           // Ctrl/Meta 多选优先针对当前节点切换，不再强制退化为 ElLayout 根单选
           const element = createSelectableElement("node", node.value.id);
-          selection.value.toggleSelect(element);
+          selection.value.toggleSelect?.(element);
           return;
         }
         parentNode = doc.value?.getParent?.(parentNode.id);
@@ -322,7 +329,7 @@ export function useNodeInteraction(deps) {
     if (!targetNode) return;
     const element = createSelectableElement("node", targetNode.id);
     if (event.shiftKey) {
-      selection.value.selectRange(element);
+      selection.value.selectRange?.(element);
       return;
     }
     if (forceRowSelection && (event.metaKey || event.ctrlKey)) {
@@ -330,7 +337,7 @@ export function useNodeInteraction(deps) {
       return;
     }
     if (!forceRowSelection && (event.metaKey || event.ctrlKey)) {
-      selection.value.toggleSelect(element);
+      selection.value.toggleSelect?.(element);
       return;
     }
     selection.value.select(element);
@@ -340,7 +347,7 @@ export function useNodeInteraction(deps) {
    * 处理双击事件
    * @param {MouseEvent} event - 鼠标事件
    */
-  const handleDoubleClick = (event) => {
+  const handleDoubleClick = (event: MouseEvent) => {
     if (readonly.value) return;
     if (!node.value || !selection.value) return;
     if (event && (event.ctrlKey || event.metaKey)) {
@@ -384,7 +391,7 @@ export function useNodeInteraction(deps) {
    * 处理右键菜单事件
    * @param {MouseEvent} event - 鼠标事件
    */
-  const handleContextMenu = (event) => {
+  const handleContextMenu = (event: MouseEvent) => {
     if (readonly.value) return;
     // 阻止浏览器默认右键菜单
     event.preventDefault();
@@ -394,15 +401,17 @@ export function useNodeInteraction(deps) {
     if (!node.value || !selection.value) return;
     if (node.value.locked) return;
 
+    const currentNode = node.value;
+    const currentNodeId = currentNode.id;
     const selectedElements = selection.value.getSelectedElements?.() || [];
-    const isSelected = selectedElements.some((el) => el.id === node.value.id && el.kind === "node");
+    const isSelected = selectedElements.some((el) => el.id === currentNodeId && el.kind === "node");
 
     if (!isSelected) {
       // 若已选中外层容器且当前节点是其子孙，保持外层选中
       const primary = selection.value.getPrimaryElement?.();
       let keepSelection = false;
       if (primary?.kind === "node" && doc.value) {
-        let parent = doc.value.getParent?.(node.value.id);
+        let parent = doc.value.getParent?.(currentNode.id);
         while (parent) {
           if (parent.id === primary.id) {
             keepSelection = true;
@@ -412,7 +421,7 @@ export function useNodeInteraction(deps) {
         }
       }
       if (!keepSelection) {
-        const element = createSelectableElement("node", node.value.id);
+        const element = createSelectableElement("node", currentNode.id);
         selection.value.select(element);
       }
     }
