@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 多选检查器面板
  * 显示多选元素的共同属性，支持批量编辑
@@ -8,18 +8,26 @@ import { reactive, watch } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 import { useMultiSelect } from "../composables/use-multi-select";
 
-const props = defineProps({
-  /** 选中的元素列表 */
-  elements: {
-    type: Array,
-    default: () => [],
-  },
+interface MultiInspectorElementLike {
+  id: string;
+  kind: string;
+}
+
+const props = withDefaults(defineProps<{ elements?: MultiInspectorElementLike[] }>(), {
+  elements: () => [],
 });
 
 const { selectedCount, getMultiSelectValue, setUnifiedValue } = useMultiSelect(props);
 
 // 表单数据
-const form = reactive({
+const form = reactive<{
+  opacity: number;
+  visible: boolean;
+  locked: boolean;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+}>({
   opacity: 100,
   visible: true,
   locked: false,
@@ -29,9 +37,15 @@ const form = reactive({
 });
 
 // 多选值状态
-const fillValue = reactive({ type: "same", value: "" });
-const strokeValue = reactive({ type: "same", value: "" });
-const strokeWidthValue = reactive({ type: "same", value: 1 });
+const fillValue = reactive<{ type: "same" | "mixed"; value: unknown }>({ type: "same", value: "" });
+const strokeValue = reactive<{ type: "same" | "mixed"; value: unknown }>({
+  type: "same",
+  value: "",
+});
+const strokeWidthValue = reactive<{ type: "same" | "mixed"; value: unknown }>({
+  type: "same",
+  value: 1,
+});
 
 /**
  * 同步表单数据
@@ -42,7 +56,7 @@ function syncForm() {
   // 透明度
   const opacityResult = getMultiSelectValue("style.opacity");
   if (opacityResult.type === "same") {
-    form.opacity = (opacityResult.value ?? 1) * 100;
+    form.opacity = Number(opacityResult.value ?? 1) * 100;
   }
 
   // 可见性
@@ -60,25 +74,27 @@ function syncForm() {
   // 填充颜色
   const fillResult = getMultiSelectValue("style.fill");
   fillValue.type = fillResult.type;
-  fillValue.value = fillResult.value;
+  fillValue.value = fillResult.type === "same" ? fillResult.value : fillResult.values;
   if (fillResult.type === "same") {
-    form.fill = fillResult.value || "";
+    form.fill = String(fillResult.value || "");
   }
 
   // 描边颜色
   const strokeResult = getMultiSelectValue("style.stroke");
   strokeValue.type = strokeResult.type;
-  strokeValue.value = strokeResult.value;
+  strokeValue.value =
+    strokeResult.type === "same" ? strokeResult.value : strokeResult.values;
   if (strokeResult.type === "same") {
-    form.stroke = strokeResult.value || "";
+    form.stroke = String(strokeResult.value || "");
   }
 
   // 描边宽度
   const strokeWidthResult = getMultiSelectValue("style.strokeWidth");
   strokeWidthValue.type = strokeWidthResult.type;
-  strokeWidthValue.value = strokeWidthResult.value;
+  strokeWidthValue.value =
+    strokeWidthResult.type === "same" ? strokeWidthResult.value : strokeWidthResult.values;
   if (strokeWidthResult.type === "same") {
-    form.strokeWidth = strokeWidthResult.value ?? 1;
+    form.strokeWidth = Number(strokeWidthResult.value ?? 1);
   }
 }
 
@@ -93,7 +109,7 @@ watch(
  * 处理透明度变化
  * @param {number} value - 透明度百分比
  */
-function handleOpacityChange(value) {
+function handleOpacityChange(value: number) {
   setUnifiedValue("style.opacity", value / 100);
 }
 
@@ -101,7 +117,7 @@ function handleOpacityChange(value) {
  * 处理可见性变化
  * @param {boolean} value - 是否可见
  */
-function handleVisibleChange(value) {
+function handleVisibleChange(value: boolean) {
   setUnifiedValue("visible", value);
 }
 
@@ -109,7 +125,7 @@ function handleVisibleChange(value) {
  * 处理锁定状态变化
  * @param {boolean} value - 是否锁定
  */
-function handleLockedChange(value) {
+function handleLockedChange(value: boolean) {
   setUnifiedValue("locked", value);
 }
 
@@ -117,7 +133,7 @@ function handleLockedChange(value) {
  * 处理填充颜色变化
  * @param {string} value - 颜色值
  */
-function handleFillChange(value) {
+function handleFillChange(value: string) {
   setUnifiedValue("style.fill", value);
   fillValue.type = "same";
   fillValue.value = value;
@@ -127,7 +143,7 @@ function handleFillChange(value) {
  * 处理描边颜色变化
  * @param {string} value - 颜色值
  */
-function handleStrokeChange(value) {
+function handleStrokeChange(value: string) {
   setUnifiedValue("style.stroke", value);
   strokeValue.type = "same";
   strokeValue.value = value;
@@ -137,10 +153,14 @@ function handleStrokeChange(value) {
  * 处理描边宽度变化
  * @param {number} value - 宽度值
  */
-function handleStrokeWidthChange(value) {
+function handleStrokeWidthChange(value: number) {
   setUnifiedValue("style.strokeWidth", value);
   strokeWidthValue.type = "same";
   strokeWidthValue.value = value;
+}
+
+function formatOpacityTooltip(val: number) {
+  return `${val}%`;
 }
 </script>
 
@@ -163,7 +183,7 @@ function handleStrokeWidthChange(value) {
             v-model="form.opacity"
             :min="0"
             :max="100"
-            :format-tooltip="(val) => `${val}%`"
+            :format-tooltip="formatOpacityTooltip"
             @change="handleOpacityChange"
           />
         </el-form-item>
