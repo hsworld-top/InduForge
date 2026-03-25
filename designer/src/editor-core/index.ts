@@ -71,7 +71,6 @@ export {
   inferPositioning,
 } from "./document/factory.ts";
 export * from "./document/indexes.ts";
-export { getSchemaVersion, migrate, needsMigration } from "./document/migrations.ts";
 // 序列化（从 document/ 目录导出）
 export { Serializer } from "./document/Serializer.ts";
 // 类型定义（从 document/ 目录导出）

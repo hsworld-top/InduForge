@@ -78,6 +78,14 @@ import request from "@/utils/request";
 
 import { Storage } from "@/utils/storage";
 import { normalizeEditorPageTabsForState } from "./editor-store.contracts";
+import {
+  buildFlexLayoutItem,
+  buildLayoutItem,
+  buildUniqueNodeLabel,
+  isNodeLabelUnique,
+  resolveDefaultSize,
+  resolveLayerTargetFromSelection,
+} from "./editor/editor-node-layout-helpers";
 import { createHomePageForStore } from "./editor/home-page-actions";
 import {
   clampElColOffsetPatch,
@@ -153,6 +161,15 @@ export const useEditorStore = defineStore("editor", () => {
   const canUndo = ref(false);
   const canRedo = ref(false);
   const error = ref("");
+
+  /**
+   * 解析当前页面根节点 ID
+   * @returns {string | undefined}
+   */
+  const resolveCurrentRootNodeId = () => {
+    if (!doc.value || !currentPageId.value) return undefined;
+    return doc.value.getPage(currentPageId.value)?.rootNodeId;
+  };
 
   let historyUnsubscribe: (() => void) | null = null;
   let lockUnsubscribe: (() => void) | null = null;
@@ -773,9 +790,10 @@ export const useEditorStore = defineStore("editor", () => {
 
     const buildUniqueLabel = (baseLabel: string) => {
       const label = baseLabel || "容器";
-      if (isLabelUnique(label)) return label;
+      const rootNodeId = resolveCurrentRootNodeId();
+      if (isNodeLabelUnique(doc.value, rootNodeId, label)) return label;
       let index = 1;
-      while (!isLabelUnique(`${label}${index}`)) {
+      while (!isNodeLabelUnique(doc.value, rootNodeId, `${label}${index}`)) {
         index += 1;
       }
       return `${label}${index}`;
@@ -812,34 +830,11 @@ export const useEditorStore = defineStore("editor", () => {
   };
 
   /**
-   * 同步 Element Plus Layout 的内置列
-   * @param {string} layoutId - 布局节点 ID
-   * @param {Record<string, any>} nextProps - 最新属性
+   * 构建 Element Plus Layout 的唯一标签
+   * @param {string} baseLabel - 标签前缀
    */
   const buildElLayoutUniqueLabel = (baseLabel: string) => {
-    const rootId = currentPage.value?.rootNodeId;
-    const existingLabels = new Set<string>();
-    if (rootId && doc.value) {
-      const stack = [rootId];
-      while (stack.length) {
-        const id = stack.pop()!;
-        const current = doc.value.getNode(id);
-        if (!current) continue;
-        if (current.label) existingLabels.add(current.label);
-        if (Array.isArray(current.children)) {
-          stack.push(...current.children);
-        }
-      }
-    }
-    const normalized = baseLabel || "容器";
-    if (!existingLabels.has(normalized)) return normalized;
-    let index = 1;
-    let label = `${normalized}${index}`;
-    while (existingLabels.has(label)) {
-      index += 1;
-      label = `${normalized}${index}`;
-    }
-    return label;
+    return buildUniqueNodeLabel(doc.value, resolveCurrentRootNodeId(), baseLabel);
   };
 
   /**
@@ -1231,6 +1226,14 @@ export const useEditorStore = defineStore("editor", () => {
   });
 
   /**
+   * 获取用于图层操作的节点 ID
+   * @param {string | undefined} nodeId - 指定节点
+   * @returns {string}
+   */
+  const resolveLayerTarget = (nodeId?: string) =>
+    resolveLayerTargetFromSelection(selection.value, nodeId);
+
+  /**
    * 切换当前页面
    * @param {string} pageId - 页面 ID
    * @returns {Promise<{ok: boolean, error?: Error}>}
@@ -1240,161 +1243,6 @@ export const useEditorStore = defineStore("editor", () => {
       return { ok: true };
     }
     return loadPage(pageId);
-  };
-
-  /**
-   * 解析默认尺寸
-   * @param {string} type - 组件类型
-   * @param {object | undefined} manifest - 组件清单
-   * @returns {{ width: number, height: number }}
-   */
-  const resolveDefaultSize = (
-    type: string,
-    manifest?: { defaultSize?: { width?: number; height?: number } } | null,
-  ): { width: number; height: number } => {
-    if (manifest?.defaultSize) {
-      return {
-        width: manifest.defaultSize.width || 120,
-        height: manifest.defaultSize.height || 32,
-      };
-    }
-
-    const sizeMap: Record<string, { width: number; height: number }> = {
-      FlexContainer: { width: 360, height: 200 },
-      HorizontalLayout: { width: 400, height: 160 },
-      VerticalLayout: { width: 240, height: 240 },
-      FreeContainer: { width: 360, height: 200 },
-      GridContainer: { width: 360, height: 200 },
-      ElContainer: { width: 360, height: 240 },
-      ElLayout: { width: 360, height: 200 },
-      Text: { width: 120, height: 32 },
-      Button: { width: 120, height: 36 },
-    };
-
-    return sizeMap[type] || { width: 160, height: 80 };
-  };
-
-  /**
-   * 解析 Grid 列数
-   * @param {string | number | undefined} value - 列配置
-   * @returns {number}
-   */
-  const resolveGridCount = (value: unknown) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return Math.max(1, Math.floor(value));
-    }
-
-    if (typeof value === "string") {
-      const repeatMatch = value.match(/repeat\((\d+)/i);
-      if (repeatMatch) {
-        const count = Number(repeatMatch[1]);
-        if (Number.isFinite(count)) return Math.max(1, Math.floor(count));
-      }
-      const tokens = value.trim().split(/\s+/).filter(Boolean);
-      if (tokens.length > 0) return tokens.length;
-    }
-
-    return 1;
-  };
-
-  /**
-   * 构建布局配置
-   */
-  const buildLayoutItem = (
-    parentNode: ComponentNode | null,
-    dropInfo: { x: number; y: number; width: number; height: number },
-  ): LayoutItem => {
-    if (!parentNode) {
-      return buildFreeLayoutItem(dropInfo);
-    }
-
-    if (
-      parentNode.type === "GridContainer" ||
-      parentNode.type === "ColumnLayout1" ||
-      parentNode.type === "ColumnLayout2" ||
-      parentNode.type === "ColumnLayout4"
-    ) {
-      return buildGridLayoutItem(parentNode);
-    }
-
-    if (
-      parentNode.type === "FlexContainer" ||
-      parentNode.type === "HorizontalLayout" ||
-      parentNode.type === "VerticalLayout" ||
-      parentNode.type === "ResponsiveLayout" ||
-      parentNode.type === "ElContainer" ||
-      parentNode.type === "ElLayout" ||
-      parentNode.type === "ElLayoutRow" ||
-      parentNode.type === "ElHeader" ||
-      parentNode.type === "ElAside" ||
-      parentNode.type === "ElMain" ||
-      parentNode.type === "ElFooter" ||
-      parentNode.type === "ElCol"
-    ) {
-      return buildFlexLayoutItem();
-    }
-
-    if (parentNode.type === "FreeContainer") {
-      return buildFreeLayoutItem(dropInfo);
-    }
-
-    return buildFreeLayoutItem(dropInfo);
-  };
-
-  /**
-   * 构建自由布局配置
-   */
-  const buildFreeLayoutItem = (dropInfo: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }): LayoutItem => {
-    return {
-      free: {
-        mode: "abs",
-        abs: {
-          x: Math.max(0, Math.round(dropInfo.x)),
-          y: Math.max(0, Math.round(dropInfo.y)),
-          w: dropInfo.width,
-          h: dropInfo.height,
-          z: 1,
-        },
-      },
-    };
-  };
-
-  /**
-   * 构建 Flex 布局配置
-   */
-  const buildFlexLayoutItem = (): LayoutItem => {
-    return {
-      flex: {
-        grow: 0,
-        shrink: 0,
-        basis: "auto",
-      },
-    };
-  };
-
-  /**
-   * 构建 Grid 布局配置
-   */
-  const buildGridLayoutItem = (parentNode: ComponentNode): LayoutItem => {
-    const columns = resolveGridCount(parentNode.props?.columns);
-    const colCount = Math.max(1, columns);
-    const index = parentNode.children?.length ?? 0;
-    const row = Math.floor(index / colCount) + 1;
-    const col = (index % colCount) + 1;
-
-    return {
-      grid: {
-        row,
-        col,
-        rowSpan: 1,
-        colSpan: 1,
-      },
-    };
   };
 
   /**
@@ -1799,22 +1647,8 @@ export const useEditorStore = defineStore("editor", () => {
    * @param {string} [excludeId] - 排除的节点ID
    * @returns {boolean}
    */
-  const isLabelUnique = (name: string, excludeId?: string) => {
-    if (!doc.value || !currentPage.value?.rootNodeId) return true;
-    const stack = [currentPage.value.rootNodeId];
-    while (stack.length) {
-      const id = stack.pop()!;
-      const node = doc.value.getNode(id);
-      if (!node) continue;
-      if (node.label === name && node.id !== excludeId) {
-        return false;
-      }
-      if (Array.isArray(node.children)) {
-        stack.push(...node.children);
-      }
-    }
-    return true;
-  };
+  const isLabelUnique = (name: string, excludeId?: string) =>
+    isNodeLabelUnique(doc.value, currentPage.value?.rootNodeId, name, excludeId);
 
   /**
    * 删除选中的节点
@@ -1963,17 +1797,6 @@ export const useEditorStore = defineStore("editor", () => {
     }
     selection.value?.clearSelection?.();
     return true;
-  };
-
-  /**
-   * 获取用于图层操作的节点 ID
-   * @param {string | undefined} nodeId - 指定节点
-   * @returns {string}
-   */
-  const resolveLayerTarget = (nodeId?: string) => {
-    if (nodeId) return nodeId;
-    const primary = selection.value?.getPrimaryElement?.();
-    return primary?.kind === "node" ? primary.id : "";
   };
 
   /**

@@ -60,6 +60,21 @@ import {
   resolveConfigAssetUrl,
   unwrapApiData,
 } from "./property-panel-config-assets";
+import {
+  buildMenuDslContent,
+  normalizeMenuItems,
+  resolveMenuConfigFromContent,
+} from "./property-panel-menu-dsl";
+import {
+  buildRegionSizeState,
+  clampRegionSize as clampRegionSizeValue,
+  resolveContainerMaxSize as computeContainerMaxSize,
+  resolveElContainerMinSize as computeElContainerMinSize,
+  getRegionMaxLabel as formatRegionMaxLabel,
+  getRegionSizeText,
+  parseSize,
+  regionSizeDefaults,
+} from "./property-panel-region-size";
 import { elementTypeName } from "./property-panel-utils";
 import PropertyPanelBasicSection from "./PropertyPanelBasicSection.vue";
 import PropertyPanelBindingVarEnumDialog from "./PropertyPanelBindingVarEnumDialog.vue";
@@ -126,12 +141,6 @@ watch(
   },
   { immediate: true },
 );
-
-const regionSizeDefaults = {
-  headerHeight: "60px",
-  asideWidth: "200px",
-  footerHeight: "60px",
-};
 
 const configDialogVisible = ref(false);
 const configDialogType = ref("style");
@@ -262,104 +271,6 @@ function forceUpdateNode(nodeId, patch) {
 }
 
 /**
- * 规范化菜单项
- * @param {Array} items - 菜单项
- * @returns {Array}
- */
-function normalizeMenuItems(items) {
-  if (!Array.isArray(items)) return [];
-  return items
-    .map((item) => {
-      if (!item) return null;
-      if (typeof item === "string") {
-        return { label: item, index: item };
-      }
-      if (typeof item !== "object") return null;
-      const label = item.label ?? item.title ?? item.name ?? "";
-      const index = item.index ?? item.command ?? item.key ?? (label ? String(label) : undefined);
-      return { ...item, label, index };
-    })
-    .filter(Boolean);
-}
-
-/**
- * 提取 Menu DSL 配置对象
- * @param {string} content - DSL 内容
- * @returns {Record<string, any> | null}
- */
-function extractMenuDslConfig(content) {
-  const text = String(content || "");
-  if (!text.trim()) return null;
-  const marker = /this\s*\.\s*menu\s*\(/;
-  const match = marker.exec(text);
-  if (!match) return null;
-  let i = match.index + match[0].length;
-  // 找到第一个对象起始 "{"
-  while (i < text.length && text[i] !== "{") i += 1;
-  if (i >= text.length) return null;
-  let depth = 0;
-  let inStr = false;
-  let strQuote = "";
-  const start = i;
-  for (; i < text.length; i += 1) {
-    const ch = text[i];
-    if (inStr) {
-      if (ch === "\\" && i + 1 < text.length) {
-        i += 1;
-        continue;
-      }
-      if (ch === strQuote) {
-        inStr = false;
-        strQuote = "";
-      }
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === "`") {
-      inStr = true;
-      strQuote = ch;
-      continue;
-    }
-    if (ch === "{") depth += 1;
-    if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        const body = text.slice(start, i + 1);
-        try {
-          return new Function(`return (${body});`)();
-        } catch (error) {
-          return null;
-        }
-      }
-    }
-  }
-  return null;
-}
-
-/**
- * 执行 Menu DSL 并捕获配置
- * @returns {Record<string, any> | null}
- */
-function captureMenuDslConfig(content) {
-  const text = String(content || "");
-  if (!text.trim()) return null;
-  let captured = null;
-  try {
-    const runner = new Function(
-      "context",
-      `"use strict";\nreturn (function() {\n${text}\n}).call(context);`,
-    );
-    runner({
-      menu: (config) => {
-        captured = config;
-      },
-    });
-  } catch (error) {
-    return null;
-  }
-  return captured;
-}
-
-/**
  * 设计态本地执行 Menu 详细配置
  * @param {import('@/editor-core').ComponentNode} node - 节点
  * @param {Record<string, any>} config - 配置
@@ -396,58 +307,6 @@ function applyMenuDetailConfig(node, config) {
  * @param {import('@/editor-core').ComponentNode} node - 节点
  * @param {string} content - 脚本
  */
-/**
- * 构建 Menu DSL 脚本
- * @param {string} content - 原始配置
- * @param {string} methodName - DSL 方法名
- * @returns {string}
- */
-function buildMenuDslContent(content, methodName) {
-  const text = String(content || "").trim();
-  if (!text) return "";
-  if (/this\s*\.\s*menu\s*\(/.test(text)) return text;
-  if (text.startsWith("{") && text.endsWith("}")) {
-    return `this.${methodName}(${text});`;
-  }
-  return `this.${methodName}({\n${content}\n});`;
-}
-
-/**
- * 尝试解析 Menu 配置对象
- * @param {string} content - 配置内容
- * @returns {Record<string, any> | null}
- */
-/**
- * 清理 DSL 中的常见全角符号
- * @param {string} content - DSL 内容
- * @returns {string}
- */
-function sanitizeDslContent(content) {
-  return String(content || "")
-    .replace(/[，﹐､]/g, ",")
-    .replace(/[；﹔]/g, ";")
-    .replace(/[：﹕]/g, ":");
-}
-
-function resolveMenuConfigFromContent(content) {
-  const text = sanitizeDslContent(content).trim();
-  if (!text) return null;
-  const direct = extractMenuDslConfig(text) || captureMenuDslConfig(text);
-  if (direct) return direct;
-  if (text.startsWith("{") && text.endsWith("}")) {
-    try {
-      return new Function(`return (${text});`)();
-    } catch (error) {
-      return null;
-    }
-  }
-  try {
-    return new Function(`return ({${text}});`)();
-  } catch (error) {
-    return null;
-  }
-}
-
 function runDetailConfigLocal(node, content) {
   if (!node || !content || !content.trim()) return;
   const normalizedType = elementTypeName(node?.type);
@@ -4644,49 +4503,6 @@ function resolveElementPlusStylePresets(type) {
  * @param {string} propName - 属性名
  * @returns {string | undefined}
  */
-const getRegionDefaultValue = (propName) => regionSizeDefaults[propName];
-
-/**
- * 解析尺寸字符串
- * @param {string | number | undefined} value - 原始值
- * @returns {{ value: string, unit: string }}
- */
-function parseSize(value) {
-  if (!value || value === "auto") {
-    return { value: "", unit: "auto" };
-  }
-  const str = String(value);
-  const match = str.match(/^([0-9.]+)(px|%)?$/);
-  if (match) {
-    return { value: match[1], unit: match[2] || "px" };
-  }
-  return { value: "", unit: "auto" };
-}
-
-/**
- * 将尺寸转换为数字
- * @param {string | number | undefined} value - 原始值
- * @returns {number | undefined}
- */
-function parseSizeToNumber(value) {
-  const parsed = parseSize(value);
-  if (!parsed.value || parsed.unit !== "px") return undefined;
-  const num = Number.parseFloat(parsed.value);
-  return Number.isFinite(num) ? num : undefined;
-}
-
-/**
- * 获取区域尺寸文案
- * @param {{ key: string }} item - 区域项
- * @returns {string}
- */
-function getRegionSizeText(item) {
-  if (!item) return "";
-  if (item.key === "aside") return "宽度";
-  if (item.key === "header" || item.key === "footer") return "高度";
-  return "";
-}
-
 /**
  * 判断区域是否启用
  * @param {{ toggleProp: string }} item - 区域配置项
@@ -4698,81 +4514,21 @@ function isRegionEnabled(item) {
 }
 
 /**
- * 解析容器最大尺寸
+ * 获取当前容器最大尺寸
  * @returns {{ width?: number, height?: number }}
  */
 function resolveContainerMaxSize() {
-  const el = currentElement.value;
-  if (!el || el.type !== "ElContainer") return {};
-  const liveNode = doc.value?.getNode?.(el.id) || el;
-  const styleWidth = parseSizeToNumber(liveNode.style?.width);
-  const styleHeight = parseSizeToNumber(liveNode.style?.height);
-  const absWidth =
-    liveNode.absolutePos && Number.isFinite(liveNode.absolutePos.w)
-      ? liveNode.absolutePos.w
-      : undefined;
-  const absHeight =
-    liveNode.absolutePos && Number.isFinite(liveNode.absolutePos.h)
-      ? liveNode.absolutePos.h
-      : undefined;
-  if (typeof document !== "undefined" && el.id) {
-    const containerEl = document.querySelector(`[data-node-id="${el.id}"]`);
+  const element = currentElement.value;
+  const liveNode = element?.id ? doc.value?.getNode?.(element.id) || element : element;
+  let containerRect;
+  if (typeof document !== "undefined" && element?.id) {
+    const containerEl = document.querySelector(`[data-node-id="${element.id}"]`);
     if (containerEl) {
       const rect = containerEl.getBoundingClientRect();
-      return {
-        width: rect.width || styleWidth || absWidth,
-        height: rect.height || styleHeight || absHeight,
-      };
+      containerRect = { width: rect.width, height: rect.height };
     }
   }
-  return {
-    width: styleWidth ?? absWidth,
-    height: styleHeight ?? absHeight,
-  };
-}
-
-/**
- * 解析区域尺寸上限
- * @param {string} propName - 属性名
- * @returns {number | undefined}
- */
-function resolveRegionMaxValue(propName) {
-  const maxSize = resolveContainerMaxSize();
-  const containerProps = currentElement.value?.props || {};
-  const hasHeader = containerProps.showHeader !== false;
-  const hasFooter = containerProps.showFooter !== false;
-  const hasAside = containerProps.showAside !== false;
-  const hasMain = containerProps.showMain !== false;
-  const minBodySize = 40;
-
-  const headerHeight =
-    parseSizeToNumber(containerProps.headerHeight) ??
-    parseSizeToNumber(regionSizeDefaults.headerHeight) ??
-    60;
-  const footerHeight =
-    parseSizeToNumber(containerProps.footerHeight) ??
-    parseSizeToNumber(regionSizeDefaults.footerHeight) ??
-    60;
-  const asideWidth =
-    parseSizeToNumber(containerProps.asideWidth) ??
-    parseSizeToNumber(regionSizeDefaults.asideWidth) ??
-    200;
-
-  if (propName === "asideWidth" && maxSize.width) {
-    const bodyMin = hasMain ? minBodySize : 0;
-    return Math.max(0, maxSize.width - bodyMin);
-  }
-  if (propName === "headerHeight" && maxSize.height) {
-    const footer = hasFooter ? footerHeight : 0;
-    const body = hasAside || hasMain ? minBodySize : 0;
-    return Math.max(0, maxSize.height - footer - body);
-  }
-  if (propName === "footerHeight" && maxSize.height) {
-    const header = hasHeader ? headerHeight : 0;
-    const body = hasAside || hasMain ? minBodySize : 0;
-    return Math.max(0, maxSize.height - header - body);
-  }
-  return undefined;
+  return computeContainerMaxSize(element, liveNode, containerRect);
 }
 
 /**
@@ -4781,10 +4537,7 @@ function resolveRegionMaxValue(propName) {
  * @returns {string}
  */
 function getRegionMaxLabel(propName) {
-  if (!propName) return "";
-  const maxValue = resolveRegionMaxValue(propName);
-  if (!maxValue) return "";
-  return `<= ${Math.round(maxValue)}px`;
+  return formatRegionMaxLabel(propName, currentElement.value, resolveContainerMaxSize());
 }
 
 /**
@@ -4795,88 +4548,13 @@ function getRegionMaxLabel(propName) {
  * @returns {{ value: string, unit: string }}
  */
 function clampRegionSize(propName, value, unit) {
-  const maxSize = resolveContainerMaxSize();
-  const maxValue = resolveRegionMaxValue(propName);
-  if (unit === "%") {
-    const num = Number.parseFloat(value || "0");
-    if (!Number.isFinite(num)) return { value, unit };
-    if (maxValue !== undefined && (maxSize.width || maxSize.height)) {
-      const base = propName === "asideWidth" ? maxSize.width : maxSize.height;
-      if (base) {
-        const maxPercent = Math.max(0, (maxValue / base) * 100);
-        return {
-          value: String(Math.min(num, Math.min(100, maxPercent))),
-          unit,
-        };
-      }
-    }
-    return { value: String(Math.min(100, Math.max(0, num))), unit };
-  }
-  if (unit !== "px") return { value, unit };
-  const num = Number.parseFloat(value || "0");
-  if (!Number.isFinite(num)) return { value, unit };
-  if (maxValue !== undefined) {
-    return { value: String(Math.min(num, maxValue)), unit };
-  }
-  return { value, unit };
-}
-
-/**
- * 计算 ElContainer 最小尺寸
- * @param {import('@/editor-core').ComponentNode | null} containerNode - 容器节点
- * @returns {{ width: number, height: number } | null}
- */
-function resolveElContainerMinSize(containerNode) {
-  if (!containerNode || containerNode.type !== "ElContainer") return null;
-  const children = containerNode.children || [];
-  let hasHeader = false;
-  let hasFooter = false;
-  let hasAside = false;
-  let hasMain = false;
-  for (const childId of children) {
-    const childNode = doc.value?.getNode?.(childId);
-    if (!childNode) continue;
-    if (childNode.type === "ElHeader") hasHeader = true;
-    if (childNode.type === "ElFooter") hasFooter = true;
-    if (childNode.type === "ElAside") hasAside = true;
-    if (childNode.type === "ElMain") hasMain = true;
-  }
-
-  const props = containerNode.props || {};
-  if (typeof props.showHeader === "boolean") hasHeader = props.showHeader;
-  if (typeof props.showFooter === "boolean") hasFooter = props.showFooter;
-  if (typeof props.showAside === "boolean") hasAside = props.showAside;
-  if (typeof props.showMain === "boolean") hasMain = props.showMain;
-
-  const headerHeight =
-    parseSizeToNumber(props.headerHeight) ??
-    parseSizeToNumber(regionSizeDefaults.headerHeight) ??
-    60;
-  const footerHeight =
-    parseSizeToNumber(props.footerHeight) ??
-    parseSizeToNumber(regionSizeDefaults.footerHeight) ??
-    60;
-  const asideWidth =
-    parseSizeToNumber(props.asideWidth) ?? parseSizeToNumber(regionSizeDefaults.asideWidth) ?? 200;
-  const minBodySize = 40;
-
-  const hasBody = hasAside || hasMain;
-  let minWidth = 0;
-  if (hasAside && hasMain) {
-    minWidth = asideWidth + minBodySize;
-  } else if (hasAside) {
-    minWidth = asideWidth;
-  } else if (hasMain) {
-    minWidth = minBodySize;
-  }
-
-  let minHeight = 0;
-  if (hasHeader) minHeight += headerHeight;
-  if (hasFooter) minHeight += footerHeight;
-  if (hasBody) minHeight += minBodySize;
-
-  if (minWidth <= 0 && minHeight <= 0) return null;
-  return { width: minWidth, height: minHeight };
+  return clampRegionSizeValue(
+    propName,
+    value,
+    unit,
+    currentElement.value,
+    resolveContainerMaxSize(),
+  );
 }
 
 /**
@@ -4884,12 +4562,7 @@ function resolveElContainerMinSize(containerNode) {
  * @param {Record<string, any> | undefined} props - ?
  */
 function syncRegionSizeState(props) {
-  const safeProps = props || {};
-  regionSizeState.value = {
-    headerHeight: parseSize(safeProps.headerHeight ?? getRegionDefaultValue("headerHeight")),
-    asideWidth: parseSize(safeProps.asideWidth ?? getRegionDefaultValue("asideWidth")),
-    footerHeight: parseSize(safeProps.footerHeight ?? getRegionDefaultValue("footerHeight")),
-  };
+  regionSizeState.value = buildRegionSizeState(props);
 }
 
 watch(
@@ -5834,7 +5507,9 @@ const showSizeEditor = computed(() => {
 /**
  * 当前样式对象
  */
-const containerMinSize = computed(() => resolveElContainerMinSize(selectedNode.value));
+const containerMinSize = computed(() =>
+  computeElContainerMinSize(selectedNode.value, (id) => doc.value?.getNode?.(id)),
+);
 
 /**
  * ?

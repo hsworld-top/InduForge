@@ -11,7 +11,6 @@
 import type { Socket } from "socket.io-client";
 import type {
   PreviewComponentRefInfo,
-  PreviewComponentStubApi,
   PreviewGlobalScriptsShape,
   PreviewLifecycleHandler,
   PreviewPageLifecycleShape,
@@ -33,11 +32,12 @@ import {
   requireQueriesPayload,
 } from "@/utils/datapoint-payload";
 import { Storage } from "@/utils/storage";
-
-interface PendingComponentCall {
-  method: string;
-  args: unknown[];
-}
+import { buildComponentStub } from "./preview-runtime-component-stub";
+import {
+  applyPendingCalls,
+  buildDatapointCacheKey,
+  getComponentAlias,
+} from "./preview-runtime-helpers";
 
 interface DatapointMetaCacheEntry {
   id?: string;
@@ -129,7 +129,7 @@ const previewMqttState: {
   emitDedup: new Map(),
   onValueUpdate: null,
 };
-const pendingComponentCalls = new Map<string, PendingComponentCall[]>();
+const pendingComponentCalls = new Map<string, { method: string; args: unknown[] }[]>();
 
 const connectionCache = new Map<string, unknown>();
 const queryCache = new Map<string, unknown[]>();
@@ -138,337 +138,6 @@ const mappedValuePending = new Map<string, boolean>();
 const mappedDetails = new Map<string, Record<string, unknown>>();
 const datapointMetaCache = new Map<string, DatapointMetaCacheEntry>();
 const datapointMetaPending = new Map<string, Promise<unknown>>();
-
-function buildPendingKey(pageId: unknown, name: unknown) {
-  return `${pageId || "global"}::${name}`;
-}
-function buildDatapointCacheKey(projectId: unknown, path: unknown) {
-  return `${projectId || ""}::${path || ""}`;
-}
-
-function queueComponentCall(
-  pageId: string | null | undefined,
-  name: string | null | undefined,
-  method: string,
-
-  args: unknown[],
-) {
-  if (!name) return;
-  const key = buildPendingKey(pageId, name);
-  if (!pendingComponentCalls.has(key)) {
-    pendingComponentCalls.set(key, []);
-  }
-  pendingComponentCalls.get(key)!.push({ method, args });
-}
-
-function applyPendingCalls(
-  pageId: unknown,
-  name: unknown,
-
-  refInfo: PreviewComponentRefInfo,
-) {
-  if (!name || !refInfo) return;
-  const key = buildPendingKey(pageId, name);
-  const calls = pendingComponentCalls.get(key);
-  if (!calls || calls.length === 0) return;
-  calls.forEach((call: PendingComponentCall) => {
-    const fn = refInfo[call.method];
-    if (typeof fn === "function") {
-      (fn as (...a: unknown[]) => void)(...(call.args || []));
-    }
-  });
-  pendingComponentCalls.delete(key);
-}
-
-/** 组件脚本转发：stub 方法名与 queueComponentCall 第三参一致 */
-const COMPONENT_SCRIPT_QUEUE_METHODS = [
-  "SetText",
-  "SetType",
-  "SetEllipsis",
-  "SetTooltip",
-  "SetLoading",
-  "SetDisabled",
-  "Click",
-  "SetSrc",
-  "Preview",
-  "Reload",
-  "InsertItem",
-  "DeleteItem",
-  "ClearAll",
-  "ClearSelection",
-  "AppendRow",
-  "ToggleRowSelection",
-  "ToggleAllSelection",
-  "ToggleRowExpansion",
-  "SetCurrentRow",
-  "ClearSort",
-  "ClearFilter",
-  "Dolayout",
-  "Sort",
-  "SetData",
-  "SetRadioEnable",
-  "SetRadioVisible",
-  "SetCheckState",
-  "SetCheckEnable",
-  "SetCheckVisible",
-  "CheckAll",
-  "UpdateKeyChildren",
-  "SetCheckedNodes",
-  "SetCheckedKeys",
-  "SetChecked",
-  "SetCurrentKey",
-  "SetCurrentNode",
-  "Remove",
-  "Append",
-  "InsertBefore",
-  "InsertAfter",
-  "Open",
-  "Close",
-  "Toggle",
-  "SetActive",
-  "Collapse",
-  "Next",
-  "Prev",
-  "AddTab",
-  "RemoveTab",
-  "MoveToRight",
-  "MoveToLeft",
-  "Increase",
-  "Decrease",
-  "SetItems",
-  "AppendItem",
-  "Play",
-  "Pause",
-  "SetActiveItem",
-  "Load",
-  "PostMessage",
-  "Back",
-  "Forward",
-  "Reset",
-  "SetTitle",
-  "SetTotal",
-  "SetActiveNames",
-  "Filter",
-  "ExpandAll",
-  "CollapseAll",
-  "SetExpandedKeys",
-  "ScrollToTop",
-  "ScrollToRow",
-  "DoLayoutSafe",
-  "SetSelectionByKeys",
-  "SetPage",
-  "SetPageSize",
-  "UpdateRowByKey",
-  "RemoveRowByKey",
-  "UpsertRowByKey",
-  "Clear",
-  "SetValue",
-  "SetDate",
-  "Today",
-  "SetImage",
-  "SetPen",
-  "Render",
-  "Download",
-  "Focus",
-  "Blur",
-  "Select",
-  "SetInputValue",
-  "ClearQuery",
-  "setText",
-  "setTableHeader",
-  "setOption",
-  "echarts",
-  "setTableData",
-  "setProps",
-  "setStyle",
-  "button",
-] as const;
-
-const COMPONENT_SCRIPT_VOID_METHODS = [
-  "GetText",
-  "GetSrc",
-  "GetCommandItem",
-  "GetMenuItem",
-  "GetData",
-  "GetRadioChecked",
-  "GetRadioValue",
-  "GetRadioLabel",
-  "GetRadioEnable",
-  "GetRadioVisible",
-  "GetCheckState",
-  "GetCheckEnable",
-  "GetCheckVisible",
-  "GetCheckedNodes",
-  "GetCheckedKeys",
-  "GetHalfCheckedNodes",
-  "GetHalfCheckedKeys",
-  "GetCurrentKey",
-  "GetCurrentNode",
-  "GetNode",
-  "GetVisible",
-  "GetActive",
-  "GetUrl",
-  "GetPage",
-  "GetPageSize",
-  "GetTotal",
-  "GetActiveNames",
-  "GetExpandedKeys",
-  "GetSelection",
-  "GetSelectionKeys",
-  "GetPageData",
-  "GetValue",
-  "GetDate",
-  "GetImage",
-  "IsEmpty",
-  "GetInputValue",
-] as const;
-
-const COMPONENT_SCRIPT_NULL_METHODS = [
-  "elContainer",
-  "elMain",
-  "elLayout",
-  "elLayoutRow",
-  "elCol",
-] as const;
-
-function buildComponentStub(
-  pageId: string | null | undefined,
-  name: string | null | undefined,
-): PreviewComponentStubApi {
-  const stub: Record<string, unknown> = {};
-
-  Object.defineProperty(stub, "Name", {
-    get() {
-      return name || "";
-    },
-    enumerable: true,
-    configurable: true,
-  });
-  Object.defineProperty(stub, "Comment", {
-    get() {
-      return "";
-    },
-    enumerable: true,
-    configurable: true,
-  });
-
-  const location: Record<string, unknown> = {};
-  Object.defineProperty(location, "X", {
-    get() {
-      return 0;
-    },
-    set(value: unknown) {
-      const next = Number(value);
-      if (!Number.isFinite(next)) return;
-      queueComponentCall(pageId, name, "setStyle", [{ left: `${next}px` }]);
-    },
-    enumerable: true,
-    configurable: true,
-  });
-  Object.defineProperty(location, "Y", {
-    get() {
-      return 0;
-    },
-    set(value: unknown) {
-      const next = Number(value);
-      if (!Number.isFinite(next)) return;
-      queueComponentCall(pageId, name, "setStyle", [{ top: `${next}px` }]);
-    },
-    enumerable: true,
-    configurable: true,
-  });
-  Object.defineProperty(stub, "Location", {
-    get() {
-      return location;
-    },
-    enumerable: true,
-    configurable: true,
-  });
-
-  const size: Record<string, unknown> = {};
-  Object.defineProperty(size, "Width", {
-    get() {
-      return 0;
-    },
-    set(value: unknown) {
-      const next = Number(value);
-      if (!Number.isFinite(next)) return;
-      queueComponentCall(pageId, name, "setStyle", [{ width: `${next}px` }]);
-    },
-    enumerable: true,
-    configurable: true,
-  });
-  Object.defineProperty(size, "Height", {
-    get() {
-      return 0;
-    },
-    set(value: unknown) {
-      const next = Number(value);
-      if (!Number.isFinite(next)) return;
-      queueComponentCall(pageId, name, "setStyle", [{ height: `${next}px` }]);
-    },
-    enumerable: true,
-    configurable: true,
-  });
-  Object.defineProperty(stub, "Size", {
-    get() {
-      return size;
-    },
-    enumerable: true,
-    configurable: true,
-  });
-
-  Object.defineProperty(stub, "Visible", {
-    get() {
-      return true;
-    },
-    set(_value: unknown) {},
-    enumerable: true,
-    configurable: true,
-  });
-  Object.defineProperty(stub, "Enable", {
-    get() {
-      return true;
-    },
-    set(value: unknown) {
-      queueComponentCall(pageId, name, "setProps", [{ disabled: !value }]);
-    },
-    enumerable: true,
-    configurable: true,
-  });
-  Object.defineProperty(stub, "Caption", {
-    get() {
-      return "";
-    },
-    set(value: unknown) {
-      queueComponentCall(pageId, name, "setProps", [{ text: String(value ?? "") }]);
-    },
-    enumerable: true,
-    configurable: true,
-  });
-  Object.defineProperty(stub, "Image", {
-    get() {
-      return "";
-    },
-    set(value: unknown) {
-      queueComponentCall(pageId, name, "setProps", [{ src: String(value ?? "") }]);
-    },
-    enumerable: true,
-    configurable: true,
-  });
-
-  for (const method of COMPONENT_SCRIPT_QUEUE_METHODS) {
-    stub[method] = (...args: unknown[]) => queueComponentCall(pageId, name, method, args);
-  }
-  for (const method of COMPONENT_SCRIPT_VOID_METHODS) {
-    stub[method] = () => undefined;
-  }
-  for (const method of COMPONENT_SCRIPT_NULL_METHODS) {
-    stub[method] = () => null;
-  }
-
-  return stub as PreviewComponentStubApi;
-}
 
 function getApiBase() {
   if (typeof __VITE_API_URL__ !== "undefined" && __VITE_API_URL__) {
@@ -1246,7 +915,7 @@ export function initPreviewRuntime(
               {
                 get(_subTarget, name) {
                   if (typeof name !== "string") return undefined;
-                  return buildComponentStub(prop, name);
+                  return buildComponentStub(pendingComponentCalls, prop, name);
                 },
               },
             );
@@ -1256,7 +925,7 @@ export function initPreviewRuntime(
             {
               get(_subTarget, name) {
                 if (typeof name !== "string") return undefined;
-                return pageMap.get(name) || buildComponentStub(prop, name);
+                return pageMap.get(name) || buildComponentStub(pendingComponentCalls, prop, name);
               },
             },
           );
@@ -1274,7 +943,7 @@ export function initPreviewRuntime(
           const pageMap = componentRefsByPage.get(pageId ?? "");
           if (pageMap && pageMap.has(prop)) return pageMap.get(prop);
           if (componentRefsByName.has(prop)) return componentRefsByName.get(prop);
-          return buildComponentStub(pageId, prop);
+          return buildComponentStub(pendingComponentCalls, pageId, prop);
         },
       },
     );
@@ -1405,8 +1074,8 @@ export function initPreviewRuntime(
     }
     componentRefsByPage.get(pageIdValue)!.set(name, refObj);
     componentRefsByName.set(name, refObj);
-    applyPendingCalls(pageIdValue, name, refObj);
-    const alias = String(name).replace(/\d+$/, "");
+    applyPendingCalls(pendingComponentCalls, pageIdValue, name, refObj);
+    const alias = getComponentAlias(name);
     if (alias && alias !== name) {
       const pageMap = componentRefsByPage.get(pageIdValue);
       if (pageMap && !pageMap.has(alias)) {
@@ -1415,7 +1084,7 @@ export function initPreviewRuntime(
       if (!componentRefsByName.has(alias)) {
         componentRefsByName.set(alias, refObj);
       }
-      applyPendingCalls(pageIdValue, alias, refObj);
+      applyPendingCalls(pendingComponentCalls, pageIdValue, alias, refObj);
     }
   };
 
@@ -1428,7 +1097,7 @@ export function initPreviewRuntime(
     if (componentRefsByName.get(name) === refInfo) {
       componentRefsByName.delete(name);
     }
-    const alias = String(name).replace(/\d+$/, "");
+    const alias = getComponentAlias(name);
     if (alias && alias !== name) {
       if (pageMap && pageMap.get(alias) === refInfo) {
         pageMap.delete(alias);
