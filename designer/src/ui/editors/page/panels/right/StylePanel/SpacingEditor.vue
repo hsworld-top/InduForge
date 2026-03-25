@@ -2,27 +2,30 @@
   SpacingEditor - 间距编辑器
   编辑 padding 或 margin（上右下左）
 -->
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 
-const props = defineProps({
-  title: {
-    type: String,
-    default: "间距",
-  },
-  modelValue: {
-    type: Object,
-    default: () => ({}),
-  },
-  prefix: {
-    type: String,
-    required: true, // 'padding' or 'margin'
-  },
-});
+interface SpacingStyleModel {
+  [key: string]: number | string | undefined;
+}
 
-const emit = defineEmits(["update:modelValue"]);
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    modelValue?: SpacingStyleModel;
+    prefix: string;
+  }>(),
+  {
+    title: "间距",
+    modelValue: () => ({}),
+  },
+);
 
-function parseValue(value) {
+const emit = defineEmits<{
+  (event: "update:modelValue", value: SpacingStyleModel): void;
+}>();
+
+function parseValue(value: unknown): number {
   if (!value) return 0;
   const num = Number.parseInt(String(value), 10);
   return isNaN(num) ? 0 : num;
@@ -33,28 +36,28 @@ const right = computed(() => parseValue(props.modelValue[`${props.prefix}Right`]
 const bottom = computed(() => parseValue(props.modelValue[`${props.prefix}Bottom`]));
 const left = computed(() => parseValue(props.modelValue[`${props.prefix}Left`]));
 
-function handleTopChange(value) {
+function handleTopChange(value: number) {
   emit("update:modelValue", {
     ...props.modelValue,
     [`${props.prefix}Top`]: value,
   });
 }
 
-function handleRightChange(value) {
+function handleRightChange(value: number) {
   emit("update:modelValue", {
     ...props.modelValue,
     [`${props.prefix}Right`]: value,
   });
 }
 
-function handleBottomChange(value) {
+function handleBottomChange(value: number) {
   emit("update:modelValue", {
     ...props.modelValue,
     [`${props.prefix}Bottom`]: value,
   });
 }
 
-function handleLeftChange(value) {
+function handleLeftChange(value: number) {
   emit("update:modelValue", {
     ...props.modelValue,
     [`${props.prefix}Left`]: value,
