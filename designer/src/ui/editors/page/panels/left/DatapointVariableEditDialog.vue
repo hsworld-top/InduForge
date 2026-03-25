@@ -1,77 +1,72 @@
 <!--
   数据点面板：新增/编辑变量表单（含 Monaco 初始值）
 -->
-<script setup>
-import {
-  ElButton,
-  ElDatePicker,
-  ElDialog,
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElInputNumber,
-  ElOption,
-  ElSelect,
-  ElSwitch,
-} from "element-plus";
+<script setup lang="ts">
 import MonacoEditor from "@/components/common/monaco-editor-async";
 
-defineProps({
-  editMode: { type: Boolean, default: false },
-  /** @type {string[]} */
-  types: { type: Array, required: true },
-  /** @type {{ id: string, name: string }[]} */
-  groupOptions: { type: Array, default: () => [] },
-  rootGroupId: { type: String, required: true },
-  isEditorType: { type: Boolean, default: false },
-  isTextType: { type: Boolean, default: false },
-  editorLanguage: { type: String, default: "json" },
-});
-const emit = defineEmits(["confirm", "typeChange", "editValueMarkers"]);
-const visible = defineModel({ type: Boolean, default: false });
-const editName = defineModel("editName", { type: String, default: "" });
-const editGroupId = defineModel("editGroupId", { type: String, default: "" });
-const editType = defineModel("editType", { type: String, default: "string" });
-const editValue = defineModel("editValue", { default: "" });
-const editDescription = defineModel("editDescription", { type: String, default: "" });
-const mapped = defineModel("mapped", { type: Boolean, default: false });
-const mappedField = defineModel("mappedField", { type: String, default: "" });
-const mappedSourceLabel = defineModel("mappedSourceLabel", { type: String, default: "" });
+interface DatapointGroupOptionLike {
+  id: string;
+  name: string;
+}
 
-function handleMarkers(payload) {
+defineProps<{
+  editMode?: boolean;
+  types: string[];
+  groupOptions?: DatapointGroupOptionLike[];
+  rootGroupId: string;
+  isEditorType?: boolean;
+  isTextType?: boolean;
+  editorLanguage?: string;
+}>();
+const emit = defineEmits<{
+  (event: "confirm"): void;
+  (event: "typeChange"): void;
+  (event: "editValueMarkers", payload: unknown): void;
+}>();
+const visible = defineModel<boolean>({ default: false });
+const editName = defineModel<string>("editName", { default: "" });
+const editGroupId = defineModel<string>("editGroupId", { default: "" });
+const editType = defineModel<string>("editType", { default: "string" });
+const editValue = defineModel<any>("editValue", { default: "" });
+const editDescription = defineModel<string>("editDescription", { default: "" });
+const mapped = defineModel<boolean>("mapped", { default: false });
+const mappedField = defineModel<string>("mappedField", { default: "" });
+const mappedSourceLabel = defineModel<string>("mappedSourceLabel", { default: "" });
+
+function handleMarkers(payload: unknown) {
   emit("editValueMarkers", payload);
 }
 </script>
 
 <template>
-  <ElDialog
+  <el-dialog
     v-model="visible"
     :title="editMode ? '编辑变量' : '新增变量'"
     width="520px"
     :close-on-click-modal="false"
     :lock-scroll="false"
   >
-    <ElForm label-width="80px">
-      <ElFormItem label="变量名">
-        <ElInput v-model="editName" />
-      </ElFormItem>
-      <ElFormItem label="分组">
-        <ElSelect v-model="editGroupId" placeholder="请选择分组">
-          <ElOption label="根目录" :value="rootGroupId" />
-          <ElOption
+    <el-form label-width="80px">
+      <el-form-item label="变量名">
+        <el-input v-model="editName" />
+      </el-form-item>
+      <el-form-item label="分组">
+        <el-select v-model="editGroupId" placeholder="请选择分组">
+          <el-option label="根目录" :value="rootGroupId" />
+          <el-option
             v-for="group in groupOptions"
             :key="group.id"
             :label="group.name"
             :value="group.id"
           />
-        </ElSelect>
-      </ElFormItem>
-      <ElFormItem label="类型">
-        <ElSelect v-model="editType" :disabled="mapped" @change="emit('typeChange')">
-          <ElOption v-for="t in types" :key="t" :label="t" :value="t" />
-        </ElSelect>
-      </ElFormItem>
-      <ElFormItem label="初始值">
+        </el-select>
+      </el-form-item>
+      <el-form-item label="类型">
+        <el-select v-model="editType" :disabled="mapped" @change="emit('typeChange')">
+          <el-option v-for="t in types" :key="t" :label="t" :value="t" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="初始值">
         <div v-if="isEditorType" class="edit-value-block">
           <MonacoEditor
             v-model="editValue"
@@ -80,36 +75,36 @@ function handleMarkers(payload) {
             @markers="handleMarkers"
           />
         </div>
-        <ElInput v-else-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
-        <ElInputNumber v-else-if="editType === 'number'" v-model="editValue" style="width: 100%" />
-        <ElSwitch v-else-if="editType === 'boolean'" v-model="editValue" />
-        <ElDatePicker
+        <el-input v-else-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
+        <el-input-number v-else-if="editType === 'number'" v-model="editValue" style="width: 100%" />
+        <el-switch v-else-if="editType === 'boolean'" v-model="editValue" />
+        <el-date-picker
           v-else-if="editType === 'date'"
           v-model="editValue"
           type="datetime"
           style="width: 100%"
         />
-      </ElFormItem>
-      <ElFormItem label="描述">
-        <ElInput v-model="editDescription" type="textarea" :rows="2" />
-      </ElFormItem>
-      <ElFormItem label="映射">
-        <ElSwitch v-model="mapped" />
-      </ElFormItem>
+      </el-form-item>
+      <el-form-item label="描述">
+        <el-input v-model="editDescription" type="textarea" :rows="2" />
+      </el-form-item>
+      <el-form-item label="映射">
+        <el-switch v-model="mapped" />
+      </el-form-item>
       <template v-if="mapped">
-        <ElFormItem label="路径">
-          <ElInput v-model="mappedField" disabled />
-        </ElFormItem>
-        <ElFormItem label="来源">
-          <ElInput v-model="mappedSourceLabel" disabled />
-        </ElFormItem>
+        <el-form-item label="路径">
+          <el-input v-model="mappedField" disabled />
+        </el-form-item>
+        <el-form-item label="来源">
+          <el-input v-model="mappedSourceLabel" disabled />
+        </el-form-item>
       </template>
-    </ElForm>
+    </el-form>
     <template #footer>
-      <ElButton @click="visible = false">取消</ElButton>
-      <ElButton type="primary" @click="emit('confirm')">确定</ElButton>
+      <el-button @click="visible = false">取消</el-button>
+      <el-button type="primary" @click="emit('confirm')">确定</el-button>
     </template>
-  </ElDialog>
+  </el-dialog>
 </template>
 
 <style scoped>
