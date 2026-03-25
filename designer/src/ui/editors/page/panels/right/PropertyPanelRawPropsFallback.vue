@@ -1,10 +1,10 @@
 <!--
   无 Manifest 时展示格式化后的原始 props
 -->
-<script setup>
-defineProps({
-  text: { type: String, required: true },
-});
+<script setup lang="ts">
+defineProps<{
+  text: string;
+}>();
 </script>
 
 <template>

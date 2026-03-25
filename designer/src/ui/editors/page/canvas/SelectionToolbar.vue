@@ -2,9 +2,9 @@
   SelectionToolbar - 选中工具栏
   多选时显示：对齐、分布、等大小、图层操作
 -->
-<script setup>
+<script setup lang="ts">
 import { storeToRefs } from "pinia";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
 import IconAlignCenterH from "~icons/lucide/align-horizontal-justify-center";
 
 import IconAlignRight from "~icons/lucide/align-horizontal-justify-end";
@@ -23,17 +23,31 @@ import IconEqualWidth from "~icons/lucide/unfold-horizontal";
 import IconEqualHeight from "~icons/lucide/unfold-vertical";
 import { useEditorStore } from "@/stores/editor-store";
 
+interface SelectionElementLike {
+  id: string;
+}
+
+interface SelectionLike {
+  getSelectionCount?: () => number;
+  getSelectedElements?: () => SelectionElementLike[];
+  getPrimaryElement?: () => SelectionElementLike | null;
+}
+
+type SelectionToolbarAlignType = "left" | "centerH" | "right" | "top" | "centerV" | "bottom";
+type SelectionToolbarDistributeType = "horizontal" | "vertical";
+type SelectionToolbarMatchSizeType = "width" | "height" | "both";
+
 const editorStore = useEditorStore();
 const { selection, selectionVersion, currentPage } = storeToRefs(editorStore);
 
 const TOOLBAR_GAP = 8;
 
-const pos = ref({ x: 0, y: 0 });
+const pos = ref<{ x: number; y: number }>({ x: 0, y: 0 });
 const visible = ref(false);
 
 const selectionCount = computed(() => {
   void selectionVersion.value;
-  return selection.value?.getSelectionCount?.() || 0;
+  return (selection.value as SelectionLike | null)?.getSelectionCount?.() || 0;
 });
 
 /**
@@ -41,8 +55,9 @@ const selectionCount = computed(() => {
  * @returns {{ left: number, top: number, right: number, bottom: number } | null}
  */
 function computeSelectionRect() {
-  if (!selection.value) return null;
-  const elements = selection.value.getSelectedElements?.() || [];
+  const selectionState = selection.value as SelectionLike | null;
+  if (!selectionState) return null;
+  const elements = selectionState.getSelectedElements?.() || [];
   if (!elements.length) return null;
 
   let minL = Infinity;
@@ -67,7 +82,7 @@ function updatePosition() {
     visible.value = false;
     return;
   }
-  const primaryEl = selection.value?.getPrimaryElement?.();
+  const primaryEl = (selection.value as SelectionLike | null)?.getPrimaryElement?.();
   if (primaryEl && primaryEl.id === currentPage.value?.rootNodeId) {
     visible.value = false;
     return;
@@ -96,14 +111,14 @@ function updatePosition() {
   visible.value = true;
 }
 
-const toolbarStyle = computed(() => ({
+const toolbarStyle = computed<CSSProperties>(() => ({
   position: "fixed",
   left: `${pos.value.x}px`,
   top: `${pos.value.y}px`,
   zIndex: 9999,
 }));
 
-let rafId = null;
+let rafId: number | null = null;
 function scheduleUpdate() {
   if (rafId) return;
   rafId = requestAnimationFrame(() => {
@@ -114,7 +129,7 @@ function scheduleUpdate() {
 
 watch(selectionVersion, () => nextTick(scheduleUpdate));
 
-let scrollTarget = null;
+let scrollTarget: HTMLElement | null = null;
 
 onMounted(() => {
   scrollTarget = document.querySelector(".canvas-wrapper");
@@ -133,9 +148,9 @@ onBeforeUnmount(() => {
   if (rafId) cancelAnimationFrame(rafId);
 });
 
-const handleAlign = (type) => editorStore.alignElements(type);
-const handleDistribute = (dir) => editorStore.distributeElements(dir);
-const handleMatchSize = (mode) => editorStore.matchElementSize(mode);
+const handleAlign = (type: SelectionToolbarAlignType) => editorStore.alignElements(type);
+const handleDistribute = (dir: SelectionToolbarDistributeType) => editorStore.distributeElements(dir);
+const handleMatchSize = (mode: SelectionToolbarMatchSizeType) => editorStore.matchElementSize(mode);
 const handleMoveUp = () => editorStore.moveNodeUp();
 const handleMoveDown = () => editorStore.moveNodeDown();
 const handleMoveToTop = () => editorStore.moveNodeToTop();

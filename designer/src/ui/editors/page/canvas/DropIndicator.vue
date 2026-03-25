@@ -2,19 +2,33 @@
   DropIndicator - 拖拽放置指示器
   根据 hint 显示：Flex 插入线、Grid 单元格高亮、Free 十字线
 -->
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 
-const props = defineProps({
+interface DropIndicatorVisualHint {
+  orientation?: "horizontal" | "vertical";
+  offset?: number;
+  highlightRect?: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  };
+  x?: number;
+  y?: number;
+}
+
+interface DropIndicatorHint {
+  insertRule?: "before_after" | "grid_cell" | "absolute_position";
+  visualHint?: DropIndicatorVisualHint | null;
+}
+
+const props = defineProps<{
   /**
    * 拖拽决策对象
-   * @type {Object}
    */
-  hint: {
-    type: Object,
-    default: null,
-  },
-});
+  hint?: DropIndicatorHint | null;
+}>();
 
 /**
  * 插入线样式（Flex 容器）
