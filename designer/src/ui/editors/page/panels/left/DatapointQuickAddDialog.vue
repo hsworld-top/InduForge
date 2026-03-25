@@ -1,25 +1,46 @@
 <!--
   数据点面板：从数据中心批量勾选并快速添加变量
 -->
-<script setup>
-defineProps({
-  quickLoading: { type: Boolean, default: false },
-  /** @type {unknown[]} */
-  filteredFields: { type: Array, default: () => [] },
-  quickPageSize: { type: Number, default: 200 },
-  quickTotal: { type: Number, default: 0 },
-  quickPage: { type: Number, default: 1 },
-  buildVarName: { type: Function, required: true },
-});
+<script setup lang="ts">
+interface QuickAddFieldLike {
+  name: string;
+  [key: string]: unknown;
+}
 
-const emit = defineEmits(["confirm", "pageChange", "sizeChange", "selectionChange"]);
+defineProps<{
+  quickLoading?: boolean;
+  filteredFields?: QuickAddFieldLike[];
+  quickPageSize?: number;
+  quickTotal?: number;
+  quickPage?: number;
+  buildVarName: (name: string) => string;
+}>();
 
-const visible = defineModel({ type: Boolean, default: false });
-const searchKey = defineModel("searchKey", { type: String, default: "" });
-const prefix = defineModel("prefix", { type: String, default: "" });
-const suffix = defineModel("suffix", { type: String, default: "" });
-const replaceFrom = defineModel("replaceFrom", { type: String, default: "" });
-const replaceTo = defineModel("replaceTo", { type: String, default: "" });
+const emit = defineEmits<{
+  (event: "confirm"): void;
+  (event: "pageChange", page: number): void;
+  (event: "sizeChange", size: number): void;
+  (event: "selectionChange", selection: unknown[]): void;
+}>();
+
+const visible = defineModel<boolean>({ default: false });
+const searchKey = defineModel<string>("searchKey", { default: "" });
+const prefix = defineModel<string>("prefix", { default: "" });
+const suffix = defineModel<string>("suffix", { default: "" });
+const replaceFrom = defineModel<string>("replaceFrom", { default: "" });
+const replaceTo = defineModel<string>("replaceTo", { default: "" });
+
+function handleSelectionChange(selection: unknown[]) {
+  emit("selectionChange", selection);
+}
+
+function handleCurrentChange(page: number) {
+  emit("pageChange", page);
+}
+
+function handleSizeChange(size: number) {
+  emit("sizeChange", size);
+}
 </script>
 
 <template>
@@ -65,7 +86,7 @@ const replaceTo = defineModel("replaceTo", { type: String, default: "" });
       stripe
       size="small"
       height="520"
-      @selection-change="(s) => emit('selectionChange', s)"
+      @selection-change="handleSelectionChange"
     >
       <el-table-column type="selection" width="50" />
       <el-table-column label="变量名" min-width="160">
@@ -87,8 +108,8 @@ const replaceTo = defineModel("replaceTo", { type: String, default: "" });
         :page-sizes="[50, 100, 200, 500]"
         :total="quickTotal"
         :current-page="quickPage"
-        @current-change="(p) => emit('pageChange', p)"
-        @size-change="(s) => emit('sizeChange', s)"
+        @current-change="handleCurrentChange"
+        @size-change="handleSizeChange"
       />
     </div>
 
