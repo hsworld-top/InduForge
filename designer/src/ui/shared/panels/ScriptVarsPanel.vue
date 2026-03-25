@@ -14,6 +14,8 @@ import MonacoEditor from "@/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/utils/component-methods";
 import ScriptVarsCustomSection from "./ScriptVarsCustomSection.vue";
+import ScriptVarsMetaFormDialog from "./ScriptVarsMetaFormDialog.vue";
+import ScriptVarsSystemScriptDialog from "./ScriptVarsSystemScriptDialog.vue";
 import ScriptVarsSystemSection from "./ScriptVarsSystemSection.vue";
 import ScriptVarsTimersSection from "./ScriptVarsTimersSection.vue";
 import ScriptVarsVariableChangesSection from "./ScriptVarsVariableChangesSection.vue";
@@ -1434,163 +1436,33 @@ onUnmounted(() => {
       @confirm="saveGroup"
     />
 
-    <el-dialog
+    <ScriptVarsMetaFormDialog
       v-model="metaDialogVisible"
+      v-model:meta="metaForm"
       :title="metaDialogTitle"
-      width="420px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form label-width="90px">
-        <template v-if="metaDialogModule === 'timers'">
-          <el-form-item label="定时器名称">
-            <el-input v-model="metaForm.name" />
-          </el-form-item>
-          <el-form-item label="时间(ms)">
-            <el-input-number
-              v-model="metaForm.interval"
-              :min="100"
-              :step="100"
-              style="width: 100%"
-            />
-          </el-form-item>
-          <el-form-item label="描述">
-            <el-input v-model="metaForm.description" />
-          </el-form-item>
-        </template>
-        <template v-else-if="metaDialogModule === 'variableChanges'">
-          <el-form-item label="变量">
-            <el-select v-model="metaForm.variable" placeholder="请选择变量">
-              <el-option
-                v-for="name in projectVariableNames"
-                :key="name"
-                :label="name"
-                :value="name"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="描述">
-            <el-input v-model="metaForm.description" />
-          </el-form-item>
-        </template>
-        <template v-else-if="metaDialogModule === 'custom'">
-          <el-form-item label="函数名称">
-            <el-input v-model="metaForm.name" />
-          </el-form-item>
-          <el-form-item label="入参">
-            <el-input v-model="metaForm.params" placeholder="例如: id, value" />
-          </el-form-item>
-          <el-form-item label="描述">
-            <el-input v-model="metaForm.description" />
-          </el-form-item>
-        </template>
-      </el-form>
-      <template #footer>
-        <el-button @click="metaDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveMetaDialog">确定</el-button>
-      </template>
-    </el-dialog>
+      :module="metaDialogModule"
+      :project-variable-names="projectVariableNames"
+      @confirm="saveMetaDialog"
+    />
 
-    <el-dialog
+    <ScriptVarsSystemScriptDialog
+      ref="systemEditorRef"
       v-model="systemEditorVisible"
-      :title="`${selectedSystemLabel}脚本`"
-      width="980px"
-      top="3vh"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
+      v-model:system-code="systemCode"
+      v-model:script-search="scriptSearch"
+      v-model:page-search="pageSearch"
+      :dialog-title="`${selectedSystemLabel}脚本`"
+      :meta-title="selectedSystemLabel"
+      :custom-script-sidebar-tree="customScriptSidebarTree"
+      :page-sidebar-tree="pageSidebarTree"
+      :js-completions="jsCompletions"
+      :filter-sidebar-node="filterSidebarNode"
       :before-close="handleSystemBeforeClose"
-    >
-      <div class="editor-meta">
-        <div class="meta-title">{{ selectedSystemLabel }}</div>
-        <div class="meta-desc">系统脚本</div>
-        <div class="meta-actions">
-          <el-tooltip content="枚举工程变量" placement="top">
-            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
-              <IconEpList />
-            </el-button>
-          </el-tooltip>
-        </div>
-      </div>
-      <div class="editor-body">
-        <div class="editor-main">
-          <MonacoEditor
-            ref="systemEditorRef"
-            v-model="systemCode"
-            language="javascript"
-            height="520px"
-            :completions="jsCompletions"
-          />
-        </div>
-        <div class="editor-sidebar">
-          <div class="sidebar-section">
-            <div class="sidebar-title">自定义脚本</div>
-            <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="customScriptTreeRef"
-                :data="customScriptSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handleCustomScriptInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-custom">
-                      <IconEpFolder v-if="data.type === 'group'" />
-                      <IconEpEditPen v-else />
-                    </el-icon>
-                    <span
-                      class="node-label"
-                      :class="{
-                        'is-group': data.type === 'group' || data.type === 'folder',
-                      }"
-                      >{{ data.label }}</span
-                    >
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-          <div class="sidebar-section">
-            <div class="sidebar-title">页面</div>
-            <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="pageTreeRef"
-                :data="pageSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handlePageInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-page">
-                      <IconEpFolder v-if="data.type === 'folder'" />
-                      <IconEpDocument v-else />
-                    </el-icon>
-                    <span
-                      class="node-label"
-                      :class="{
-                        'is-group': data.type === 'group' || data.type === 'folder',
-                      }"
-                      >{{ data.label }}</span
-                    >
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="systemEditorVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveSystemScript">保存 (Ctrl+S)</el-button>
-      </template>
-    </el-dialog>
+      @open-variable-enum="openVariableEnum"
+      @save="saveSystemScript"
+      @custom-insert="handleCustomScriptInsert"
+      @page-insert="handlePageInsert"
+    />
     <el-dialog
       v-model="scriptEditorVisible"
       :title="scriptEditorTitle"

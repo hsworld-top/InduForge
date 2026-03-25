@@ -16,7 +16,17 @@ import type { ViewPreset } from "@/constants";
 import type { PageConfig } from "@/editor-core/document/types";
 import type { CreatePageForStoreResult } from "@/stores/editor-store.types";
 import { storeToRefs } from "pinia";
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
+import {
+  computed,
+  defineAsyncComponent,
+  inject,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  provide,
+  ref,
+  watch,
+} from "vue";
 import { useRoute, useRouter } from "vue-router";
 import IconEpDocument from "~icons/ep/document";
 import IconEpPlus from "~icons/ep/plus";
@@ -36,15 +46,8 @@ import { VIEW_PRESETS } from "@/constants";
 import { useEditorStore } from "@/stores/editor-store";
 import { CanvasContainer } from "@/ui/editors/page/canvas";
 import SelectionToolbar from "@/ui/editors/page/canvas/SelectionToolbar.vue";
-import { DataPanel, MaterialPanel, OutlineTree } from "@/ui/editors/page/panels/left";
-import { AdvancedPanel, PropertyPanel } from "@/ui/editors/page/panels/right";
-import {
-  I18nPanel,
-  PageTree,
-  RolePanel,
-  ScriptVarsPanel,
-  VariablesPanel,
-} from "@/ui/shared/panels";
+import { MaterialPanel, OutlineTree } from "@/ui/editors/page/panels/left";
+import { I18nPanel, RolePanel } from "@/ui/shared/panels";
 import { DockPanel } from "@/ui/shell/DockPanel";
 import { ToolRail } from "@/ui/shell/ToolRail";
 import { TopToolbar } from "@/ui/shell/TopToolbar";
@@ -52,6 +55,20 @@ import { DESIGNER_DEFAULT_PAGE_CONFIG_DIMS } from "./designer-view-types";
 import { ElMessage } from "./el-message-compat";
 import { useDesignerAutoSave } from "./use-designer-auto-save";
 import { useDesignerPageTabs } from "./use-designer-page-tabs";
+
+/** 重型面板异步加载，减轻 DesignerView 首 chunk */
+const DataPanel = defineAsyncComponent(() => import("@/ui/editors/page/panels/left/DataPanel.vue"));
+const AdvancedPanel = defineAsyncComponent(
+  () => import("@/ui/editors/page/panels/right/AdvancedPanel.vue"),
+);
+const PropertyPanel = defineAsyncComponent(
+  () => import("@/ui/editors/page/panels/right/PropertyPanel.vue"),
+);
+const PageTree = defineAsyncComponent(() => import("@/ui/shared/panels/PageTree.vue"));
+const ScriptVarsPanel = defineAsyncComponent(
+  () => import("@/ui/shared/panels/ScriptVarsPanel.vue"),
+);
+const VariablesPanel = defineAsyncComponent(() => import("@/ui/shared/panels/VariablesPanel.vue"));
 
 const route = useRoute();
 const router = useRouter();

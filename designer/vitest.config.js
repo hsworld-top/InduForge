@@ -8,17 +8,13 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     /**
-     * Windows：杀毒/策略对 node_modules 下 esbuild 等子进程 spawn 可能报 EPERM。
-     * 优先排除 designer/node_modules 实时扫描；仍失败可尝试改 pool 为 "threads" 且 maxWorkers: 1。
+     * Windows：fork 池对 node_modules 下 esbuild 子进程 spawn 可能报 EPERM。
+     * 使用 threads + 单 worker 降低 spawn；仍失败请排除 designer/node_modules 实时扫描。
+     * 如需回退 forks，改回 pool: "forks" 并恢复 poolOptions.forks.singleFork。
      */
-    pool: "forks",
+    pool: "threads",
     fileParallelism: false,
     maxWorkers: 1,
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
     include: ["src/**/*.{test,spec}.{js,ts}"],
     coverage: {
       reporter: ["text", "json", "html"],

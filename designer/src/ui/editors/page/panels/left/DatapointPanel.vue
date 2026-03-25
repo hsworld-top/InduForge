@@ -11,7 +11,6 @@ import * as XLSX from "xlsx";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
-import MonacoEditor from "@/components/common/monaco-editor-async";
 import { TIME_FORMAT } from "@/constants";
 import { datacenterApi } from "@/services";
 import { useEditorStore } from "@/stores/editor-store";
@@ -20,6 +19,8 @@ import VariableGroupFormDialog from "@/ui/shared/panels/VariableGroupFormDialog.
 import { requireConnectionsPayload, requireDatapointsPagePayload } from "@/utils/datapoint-payload";
 import DatapointPanelContextMenu from "./DatapointPanelContextMenu.vue";
 import DatapointPanelToolbar from "./DatapointPanelToolbar.vue";
+import DatapointQuickAddDialog from "./DatapointQuickAddDialog.vue";
+import DatapointVariableEditDialog from "./DatapointVariableEditDialog.vue";
 
 const editorStore = useEditorStore();
 const { projectId, projectVariables, projectVariableGroups } = storeToRefs(editorStore);
@@ -54,7 +55,6 @@ const editName = ref("");
 const editType = ref("string");
 const editValue = ref("");
 const editDescription = ref("");
-const editValueEditorRef = ref(null);
 const ROOT_GROUP_ID = "__root__";
 const editGroupId = ref(ROOT_GROUP_ID);
 const mapped = ref(false);
@@ -1401,77 +1401,27 @@ onUnmounted(() => {
       @move-to="handleMoveTo"
     />
 
-    <el-dialog
+    <DatapointVariableEditDialog
       v-model="editVisible"
-      :title="editMode ? '编辑变量' : '新增变量'"
-      width="520px"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form label-width="80px">
-        <el-form-item label="变量名">
-          <el-input v-model="editName" />
-        </el-form-item>
-        <el-form-item label="分组">
-          <el-select v-model="editGroupId" placeholder="请选择分组">
-            <el-option label="根目录" :value="ROOT_GROUP_ID" />
-            <el-option
-              v-for="group in groupOptions"
-              :key="group.id"
-              :label="group.name"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="editType" :disabled="mapped" @change="resetEditValue">
-            <el-option v-for="t in types" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="初始值">
-          <div v-if="isEditorType" class="edit-value-block">
-            <MonacoEditor
-              ref="editValueEditorRef"
-              v-model="editValue"
-              :language="editorLanguage"
-              height="136px"
-              @markers="handleEditValueMarkers"
-            />
-          </div>
-          <el-input v-else-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
-          <el-input-number
-            v-else-if="editType === 'number'"
-            v-model="editValue"
-            style="width: 100%"
-          />
-          <el-switch v-else-if="editType === 'boolean'" v-model="editValue" />
-          <el-date-picker
-            v-else-if="editType === 'date'"
-            v-model="editValue"
-            type="datetime"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="editDescription" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="映射">
-          <el-switch v-model="mapped" />
-        </el-form-item>
-        <template v-if="mapped">
-          <el-form-item label="路径">
-            <el-input v-model="mappedField" disabled />
-          </el-form-item>
-          <el-form-item label="来源">
-            <el-input v-model="mappedSourceLabel" disabled />
-          </el-form-item>
-        </template>
-      </el-form>
-      <template #footer>
-        <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveEdit">确定</el-button>
-      </template>
-    </el-dialog>
+      v-model:edit-name="editName"
+      v-model:edit-group-id="editGroupId"
+      v-model:edit-type="editType"
+      v-model:edit-value="editValue"
+      v-model:edit-description="editDescription"
+      v-model:mapped="mapped"
+      v-model:mapped-field="mappedField"
+      v-model:mapped-source-label="mappedSourceLabel"
+      :edit-mode="editMode"
+      :types="types"
+      :group-options="groupOptions"
+      :root-group-id="ROOT_GROUP_ID"
+      :is-editor-type="isEditorType"
+      :is-text-type="isTextType"
+      :editor-language="editorLanguage"
+      @confirm="saveEdit"
+      @type-change="resetEditValue"
+      @edit-value-markers="handleEditValueMarkers"
+    />
     <VariableGroupFormDialog
       v-model="groupVisible"
       v-model:name="groupName"
@@ -1481,80 +1431,24 @@ onUnmounted(() => {
       @confirm="saveGroup"
     />
 
-    <el-dialog
+    <DatapointQuickAddDialog
       v-model="quickVisible"
-      title="快速添加数据点"
-      width="1100px"
-      top="3vh"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
-    >
-      <el-form :inline="true" class="quick-form" label-width="60px" size="small">
-        <el-row :gutter="12" class="quick-form-row">
-          <el-col :span="8">
-            <el-form-item label="搜索">
-              <el-input v-model="searchKey" placeholder="字段名搜索" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="4">
-            <el-form-item label="前缀">
-              <el-input v-model="prefix" placeholder="前缀" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="4">
-            <el-form-item label="后缀">
-              <el-input v-model="suffix" placeholder="后缀" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="替换" class="quick-replace">
-              <el-input v-model="replaceFrom" placeholder="替换" />
-              <span class="quick-arrow">→</span>
-              <el-input v-model="replaceTo" placeholder="为" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </el-form>
-
-      <el-table
-        v-loading="quickLoading"
-        :data="filteredFields"
-        border
-        stripe
-        size="small"
-        height="520"
-        @selection-change="onSelectFields"
-      >
-        <el-table-column type="selection" width="50" />
-        <el-table-column label="变量名" min-width="160">
-          <template #default="{ row }">
-            {{ buildVarName(row.name) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="name" label="数据点名称" sortable width="150" />
-        <el-table-column prop="path" label="路径" min-width="220" />
-        <el-table-column prop="typeLabel" label="类型" width="110" sortable />
-        <el-table-column prop="sourceLabel" label="来源" width="120" sortable />
-        <el-table-column prop="updatedAtLabel" label="更新时间" width="160" />
-      </el-table>
-      <div class="quick-pagination">
-        <el-pagination
-          background
-          layout="prev, pager, next, sizes, total"
-          :page-size="quickPageSize"
-          :page-sizes="[50, 100, 200, 500]"
-          :total="quickTotal"
-          :current-page="quickPage"
-          @current-change="handleQuickPageChange"
-          @size-change="handleQuickSizeChange"
-        />
-      </div>
-
-      <template #footer>
-        <el-button @click="quickVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmQuickAdd">添加</el-button>
-      </template>
-    </el-dialog>
+      v-model:search-key="searchKey"
+      v-model:prefix="prefix"
+      v-model:suffix="suffix"
+      v-model:replace-from="replaceFrom"
+      v-model:replace-to="replaceTo"
+      :quick-loading="quickLoading"
+      :filtered-fields="filteredFields"
+      :quick-page-size="quickPageSize"
+      :quick-total="quickTotal"
+      :quick-page="quickPage"
+      :build-var-name="buildVarName"
+      @selection-change="onSelectFields"
+      @page-change="handleQuickPageChange"
+      @size-change="handleQuickSizeChange"
+      @confirm="confirmQuickAdd"
+    />
   </div>
 </template>
 
@@ -1660,67 +1554,6 @@ onUnmounted(() => {
 
 :deep(.tree-wrap .el-tree-node__content) {
   height: 38px;
-}
-
-.quick-form {
-  --quick-control-height: var(--el-component-size-small, 28px);
-}
-
-.quick-form-row {
-  margin-bottom: 10px;
-}
-
-.quick-form :deep(.el-form-item) {
-  width: 100%;
-  margin-bottom: 8px;
-  align-items: center;
-}
-
-.quick-form :deep(.el-form-item__label) {
-  line-height: var(--quick-control-height);
-}
-
-.quick-form :deep(.el-form-item__content) {
-  flex: 1;
-  min-width: 0;
-}
-
-.quick-form :deep(.el-input),
-.quick-form :deep(.el-select) {
-  width: 100%;
-}
-
-.quick-form :deep(.el-input__wrapper),
-.quick-form :deep(.el-select .el-input__wrapper) {
-  height: var(--quick-control-height);
-  min-height: var(--quick-control-height);
-}
-
-.quick-form :deep(.el-input__inner),
-.quick-form :deep(.el-select .el-input__inner) {
-  height: var(--quick-control-height);
-  line-height: var(--quick-control-height);
-}
-
-.quick-replace :deep(.el-form-item__content) {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.quick-replace :deep(.el-input) {
-  flex: 1;
-}
-
-.quick-arrow {
-  color: #909399;
-  flex: 0 0 auto;
-}
-
-.quick-pagination {
-  margin-top: 12px;
-  display: flex;
-  justify-content: flex-end;
 }
 
 .edit-value-block {

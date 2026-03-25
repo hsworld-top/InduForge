@@ -10,7 +10,7 @@ import type {
   CanvasRowInsertTarget,
   DesignCanvasPageConfig,
 } from "./canvas-internal.types";
-import type { ComponentNode, LayoutItem } from "@/editor-core/document/types";
+import type { ComponentNode } from "@/editor-core/document/types";
 import type { EditorComponentManifest } from "@/editor-core/registry/component-registry";
 import { storeToRefs } from "pinia";
 import { computed, onBeforeUnmount, onMounted, provide, ref, toRef, toRefs, watch } from "vue";
@@ -35,6 +35,7 @@ import CanvasInsertLineOverlay from "./CanvasInsertLineOverlay.vue";
 import CanvasRulerLayer from "./CanvasRulerLayer.vue";
 import { useCanvasRulerPointer } from "./composables/use-canvas-ruler-pointer";
 import { useCanvasViewportPlacement } from "./composables/use-canvas-viewport-placement";
+import { useCanvasZoomWheel } from "./composables/use-canvas-zoom-wheel";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 import { canvasZoomKey } from "./injection-keys";
@@ -42,13 +43,6 @@ import { canvasZoomKey } from "./injection-keys";
 type CanvasContainerHost = HTMLElement & {
   __rulerObserver?: ResizeObserver | null;
 };
-
-interface CanvasDropInfo {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 interface DropTargetResolution {
   nodeId: string;
@@ -81,6 +75,11 @@ const props = defineProps({
 const emit = defineEmits(["zoomChange"]);
 
 const { width, height, zoom } = toRefs(props);
+
+const { handleZoomWheel } = useCanvasZoomWheel({
+  zoom,
+  onZoomChange: (next) => emit("zoomChange", next),
+});
 
 const containerRef = ref<HTMLElement | null>(null);
 const wrapperRef = ref<HTMLElement | null>(null);
@@ -1019,22 +1018,6 @@ function insertNode(type: string, parentId: string, x: number, y: number) {
 }
 
 /**
- * 处理画布缩放
- * @param {WheelEvent} event - 滚轮事件
- */
-function handleZoomWheel(event: WheelEvent) {
-  if (!event.ctrlKey) return;
-  event.preventDefault();
-
-  const step = 0.1;
-  const direction = event.deltaY > 0 ? -1 : 1;
-  const nextZoom = Math.min(5, Math.max(0.1, zoom.value + step * direction));
-  if (nextZoom === zoom.value) return;
-
-  emit("zoomChange", Number(nextZoom.toFixed(2)));
-}
-
-/**
  * \u70b9\u51fb\u753b\u5e03\u5916\u90e8\u7a7a\u767d\u533a\u57df\u65f6\u663e\u793a\u9875\u9762\u4fe1\u606f
  * @param {MouseEvent} event - \u9f20\u6807\u4e8b\u4ef6
  */
@@ -1044,124 +1027,6 @@ function handleContainerClick(event: MouseEvent) {
     return;
   }
   selection.value?.clearSelection();
-}
-
-/**
- * 构建布局配置
- * @param {import('@/editor-core').ComponentNode | null} parentNode - 父节点 * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
- * @returns {import('@/editor-core').LayoutItem | null}
- */
-function buildLayoutItem(parentNode: ComponentNode | null, dropInfo: CanvasDropInfo): LayoutItem {
-  if (!parentNode) {
-    return buildFreeLayoutItem(dropInfo);
-  }
-
-  if (
-    parentNode.type === "GridContainer" ||
-    parentNode.type === "ColumnLayout1" ||
-    parentNode.type === "ColumnLayout2" ||
-    parentNode.type === "ColumnLayout4"
-  ) {
-    return buildGridLayoutItem(parentNode);
-  }
-
-  if (
-    parentNode.type === "FlexContainer" ||
-    parentNode.type === "ResponsiveLayout" ||
-    parentNode.type === "ElContainer" ||
-    parentNode.type === "ElLayout" ||
-    parentNode.type === "ElLayoutRow" ||
-    parentNode.type === "ElHeader" ||
-    parentNode.type === "ElAside" ||
-    parentNode.type === "ElMain" ||
-    parentNode.type === "ElFooter" ||
-    parentNode.type === "ElCol"
-  ) {
-    return buildFlexLayoutItem();
-  }
-
-  if (parentNode.type === "FreeContainer") {
-    return buildFreeLayoutItem(dropInfo);
-  }
-
-  return buildFreeLayoutItem(dropInfo);
-}
-
-/**
- * 构建自由布局配置
- * @param {{x: number, y: number, width: number, height: number}} dropInfo - 放置信息
- * @returns {import('@/editor-core').LayoutItem}
- */
-function buildFreeLayoutItem(dropInfo: CanvasDropInfo): LayoutItem {
-  return {
-    free: {
-      mode: "abs",
-      abs: {
-        x: Math.max(0, Math.round(dropInfo.x)),
-        y: Math.max(0, Math.round(dropInfo.y)),
-        w: dropInfo.width,
-        h: dropInfo.height,
-        z: 1,
-      },
-    },
-  };
-}
-
-/**
- * 构建 Flex 布局配置
- * @returns {import('@/editor-core').LayoutItem}
- */
-function buildFlexLayoutItem() {
-  return {
-    flex: {
-      grow: 0,
-      shrink: 0,
-      basis: "auto",
-    },
-  };
-}
-
-/**
- * 构建 Grid 布局配置
- * @param {import('@/editor-core').ComponentNode} parentNode - 父节点 * @returns {import('@/editor-core').LayoutItem}
- */
-function buildGridLayoutItem(parentNode: ComponentNode): LayoutItem {
-  const columns = resolveGridCount(parentNode.props?.columns as string | number | undefined);
-  const colCount = Math.max(1, columns);
-  const index = parentNode.children?.length ?? 0;
-  const row = Math.floor(index / colCount) + 1;
-  const col = (index % colCount) + 1;
-
-  return {
-    grid: {
-      row,
-      col,
-      rowSpan: 1,
-      colSpan: 1,
-    },
-  };
-}
-
-/**
- * 解析 Grid 列数
- * @param {string | number | undefined} value - 列配置 * @returns {number}
- */
-function resolveGridCount(value: string | number | undefined): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(1, Math.floor(value));
-  }
-
-  if (typeof value === "string") {
-    const repeatMatch = value.match(/repeat\((\d+)/i);
-    if (repeatMatch) {
-      const count = Number(repeatMatch[1]);
-      if (Number.isFinite(count)) return Math.max(1, Math.floor(count));
-    }
-    const tokens = value.trim().split(/\s+/).filter(Boolean);
-    if (tokens.length > 0) return tokens.length;
-  }
-
-  return 1;
 }
 
 /**

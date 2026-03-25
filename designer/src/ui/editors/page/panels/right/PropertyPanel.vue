@@ -62,6 +62,7 @@ import {
 } from "./property-panel-config-assets";
 import { elementTypeName } from "./property-panel-utils";
 import PropertyPanelBasicSection from "./PropertyPanelBasicSection.vue";
+import PropertyPanelBindingVarEnumDialog from "./PropertyPanelBindingVarEnumDialog.vue";
 import PropertyPanelConfigStrip from "./PropertyPanelConfigStrip.vue";
 import PropertyPanelLayoutForceSection from "./PropertyPanelLayoutForceSection.vue";
 import PropertyPanelRawPropsFallback from "./PropertyPanelRawPropsFallback.vue";
@@ -200,8 +201,6 @@ const bindingVariableEnumVisible = ref(false);
 const bindingEnumTab = ref("project");
 const bindingProjectVarSearch = ref("");
 const bindingPageVarSearch = ref("");
-const bindingEnumProjectTreeRef = ref(null);
-const bindingEnumPageTreeRef = ref(null);
 const bindingEnumSelectedProjectGroupId = ref(null);
 const bindingEnumSelectedPageGroupId = ref("page-root");
 const bindingEnumSelectedProjectVar = ref(null);
@@ -6843,126 +6842,28 @@ function handlePropChange(propName, value) {
     </template>
   </el-dialog>
 
-  <el-dialog
+  <PropertyPanelBindingVarEnumDialog
     v-model="bindingVariableEnumVisible"
-    title="变量枚举"
-    width="760px"
-    :z-index="3100"
-    append-to-body
-    :modal-append-to-body="true"
-    :close-on-click-modal="false"
-    :lock-scroll="false"
-  >
-    <ElTabs v-model="bindingEnumTab">
-      <el-tab-pane label="工程变量" name="project">
-        <div class="enum-layout">
-          <div class="enum-left">
-            <div class="sidebar-title">分组</div>
-            <el-tree
-              ref="bindingEnumProjectTreeRef"
-              :data="bindingProjectGroupTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterBindingSidebarNode"
-              @node-click="handleBindingProjectGroupSelect"
-            >
-              <template #default="{ data }">
-                <div class="tree-node node-group">
-                  <el-icon class="node-icon icon-variable">
-                    <IconEpFolder />
-                  </el-icon>
-                  <span class="node-label is-group">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-          <div class="enum-right">
-            <ElInput
-              v-model="bindingProjectVarSearch"
-              size="small"
-              placeholder="搜索工程变量"
-              clearable
-            />
-            <ElTable
-              :data="bindingProjectVariableRows"
-              size="small"
-              height="320"
-              highlight-current-row
-              :row-class-name="bindingEnumProjectRowClass"
-              @row-click="handleBindingProjectRowClick"
-              @row-dblclick="handleBindingProjectRowDblClick"
-            >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="description" label="描述" min-width="160" />
-              <el-table-column prop="mapped" label="映射" width="70">
-                <template #default="{ row }">
-                  {{ row.mapped ? "是" : "" }}
-                </template>
-              </el-table-column>
-            </ElTable>
-          </div>
-        </div>
-      </el-tab-pane>
-      <el-tab-pane label="页面变量" name="page">
-        <div class="enum-layout">
-          <div class="enum-left">
-            <div class="sidebar-title">分组</div>
-            <el-tree
-              ref="bindingEnumPageTreeRef"
-              :data="bindingPageGroupTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterBindingSidebarNode"
-              @node-click="handleBindingPageGroupSelect"
-            >
-              <template #default="{ data }">
-                <div class="tree-node node-group">
-                  <el-icon class="node-icon icon-variable">
-                    <IconEpFolder />
-                  </el-icon>
-                  <span class="node-label is-group">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-          <div class="enum-right">
-            <ElInput
-              v-model="bindingPageVarSearch"
-              size="small"
-              placeholder="搜索页面变量"
-              clearable
-            />
-            <ElTable
-              :data="bindingPageVariableRows"
-              size="small"
-              height="320"
-              highlight-current-row
-              :row-class-name="bindingEnumPageRowClass"
-              @row-click="handleBindingPageRowClick"
-              @row-dblclick="handleBindingPageRowDblClick"
-            >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="description" label="描述" min-width="200" />
-            </ElTable>
-          </div>
-        </div>
-      </el-tab-pane>
-    </ElTabs>
-    <template #footer>
-      <el-button @click="bindingVariableEnumVisible = false">取消</el-button>
-      <el-button
-        type="primary"
-        :disabled="!bindingEnumSelectedProjectVar && !bindingEnumSelectedPageVar"
-        @click="confirmBindingEnumInsert"
-      >
-        插入
-      </el-button>
-    </template>
-  </el-dialog>
+    v-model:binding-enum-tab="bindingEnumTab"
+    v-model:binding-project-var-search="bindingProjectVarSearch"
+    v-model:binding-page-var-search="bindingPageVarSearch"
+    :binding-project-group-tree="bindingProjectGroupTree"
+    :binding-page-group-tree="bindingPageGroupTree"
+    :binding-project-variable-rows="bindingProjectVariableRows"
+    :binding-page-variable-rows="bindingPageVariableRows"
+    :filter-binding-sidebar-node="filterBindingSidebarNode"
+    :binding-enum-project-row-class="bindingEnumProjectRowClass"
+    :binding-enum-page-row-class="bindingEnumPageRowClass"
+    :can-confirm-insert="Boolean(bindingEnumSelectedProjectVar || bindingEnumSelectedPageVar)"
+    @project-group-select="handleBindingProjectGroupSelect"
+    @page-group-select="handleBindingPageGroupSelect"
+    @project-row-click="handleBindingProjectRowClick"
+    @page-row-click="handleBindingPageRowClick"
+    @project-row-dblclick="handleBindingProjectRowDblClick"
+    @page-row-dblclick="handleBindingPageRowDblClick"
+    @confirm-insert="confirmBindingEnumInsert"
+    @cancel="bindingVariableEnumVisible = false"
+  />
 </template>
 
 <style scoped>
