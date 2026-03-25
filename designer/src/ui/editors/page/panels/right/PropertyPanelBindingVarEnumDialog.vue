@@ -1,40 +1,70 @@
 <!--
   属性面板：绑定编辑器内「变量枚举」弹窗（工程变量 / 页面变量）
 -->
-<script setup>
+<script setup lang="ts">
 import IconEpFolder from "~icons/ep/folder";
 
-defineProps({
-  /** @type {unknown[]} */
-  bindingProjectGroupTree: { type: Array, default: () => [] },
-  /** @type {unknown[]} */
-  bindingPageGroupTree: { type: Array, default: () => [] },
-  /** @type {unknown[]} */
-  bindingProjectVariableRows: { type: Array, default: () => [] },
-  /** @type {unknown[]} */
-  bindingPageVariableRows: { type: Array, default: () => [] },
-  filterBindingSidebarNode: { type: Function, required: true },
-  bindingEnumProjectRowClass: { type: Function, required: true },
-  bindingEnumPageRowClass: { type: Function, required: true },
-  canConfirmInsert: { type: Boolean, default: false },
-});
-const emit = defineEmits([
-  "projectGroupSelect",
-  "pageGroupSelect",
-  "projectRowClick",
-  "pageRowClick",
-  "projectRowDblclick",
-  "pageRowDblclick",
-  "confirmInsert",
-  "cancel",
-]);
-const visible = defineModel({ type: Boolean, default: false });
-const bindingEnumTab = defineModel("bindingEnumTab", { type: String, default: "project" });
-const bindingProjectVarSearch = defineModel("bindingProjectVarSearch", {
-  type: String,
-  default: "",
-});
-const bindingPageVarSearch = defineModel("bindingPageVarSearch", { type: String, default: "" });
+interface BindingEnumTreeNodeLike {
+  id?: string | number;
+  label?: string;
+}
+
+type BindingEnumRowClassName =
+  | string
+  | string[]
+  | Record<string, boolean>
+  | undefined;
+
+defineProps<{
+  bindingProjectGroupTree?: BindingEnumTreeNodeLike[];
+  bindingPageGroupTree?: BindingEnumTreeNodeLike[];
+  bindingProjectVariableRows?: unknown[];
+  bindingPageVariableRows?: unknown[];
+  filterBindingSidebarNode: (data: BindingEnumTreeNodeLike, node: unknown) => boolean;
+  bindingEnumProjectRowClass: (...args: unknown[]) => BindingEnumRowClassName;
+  bindingEnumPageRowClass: (...args: unknown[]) => BindingEnumRowClassName;
+  canConfirmInsert?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (event: "projectGroupSelect", data: BindingEnumTreeNodeLike): void;
+  (event: "pageGroupSelect", data: BindingEnumTreeNodeLike): void;
+  (event: "projectRowClick", row: unknown): void;
+  (event: "pageRowClick", row: unknown): void;
+  (event: "projectRowDblclick", row: unknown): void;
+  (event: "pageRowDblclick", row: unknown): void;
+  (event: "confirmInsert"): void;
+  (event: "cancel"): void;
+}>();
+
+const visible = defineModel<boolean>({ default: false });
+const bindingEnumTab = defineModel<"project" | "page">("bindingEnumTab", { default: "project" });
+const bindingProjectVarSearch = defineModel<string>("bindingProjectVarSearch", { default: "" });
+const bindingPageVarSearch = defineModel<string>("bindingPageVarSearch", { default: "" });
+
+function handleProjectGroupSelect(data: BindingEnumTreeNodeLike) {
+  emit("projectGroupSelect", data);
+}
+
+function handlePageGroupSelect(data: BindingEnumTreeNodeLike) {
+  emit("pageGroupSelect", data);
+}
+
+function handleProjectRowClick(row: unknown) {
+  emit("projectRowClick", row);
+}
+
+function handlePageRowClick(row: unknown) {
+  emit("pageRowClick", row);
+}
+
+function handleProjectRowDblclick(row: unknown) {
+  emit("projectRowDblclick", row);
+}
+
+function handlePageRowDblclick(row: unknown) {
+  emit("pageRowDblclick", row);
+}
 </script>
 
 <template>
@@ -59,7 +89,7 @@ const bindingPageVarSearch = defineModel("bindingPageVarSearch", { type: String,
               :default-expand-all="true"
               :expand-on-click-node="false"
               :filter-node-method="filterBindingSidebarNode"
-              @node-click="(data) => emit('projectGroupSelect', data)"
+              @node-click="handleProjectGroupSelect"
             >
               <template #default="{ data }">
                 <div class="tree-node node-group">
@@ -84,8 +114,8 @@ const bindingPageVarSearch = defineModel("bindingPageVarSearch", { type: String,
               height="320"
               highlight-current-row
               :row-class-name="bindingEnumProjectRowClass"
-              @row-click="(row) => emit('projectRowClick', row)"
-              @row-dblclick="(row) => emit('projectRowDblclick', row)"
+              @row-click="handleProjectRowClick"
+              @row-dblclick="handleProjectRowDblclick"
             >
               <el-table-column prop="name" label="变量名" min-width="160" />
               <el-table-column prop="type" label="类型" width="90" />
@@ -109,7 +139,7 @@ const bindingPageVarSearch = defineModel("bindingPageVarSearch", { type: String,
               :default-expand-all="true"
               :expand-on-click-node="false"
               :filter-node-method="filterBindingSidebarNode"
-              @node-click="(data) => emit('pageGroupSelect', data)"
+              @node-click="handlePageGroupSelect"
             >
               <template #default="{ data }">
                 <div class="tree-node node-group">
@@ -134,8 +164,8 @@ const bindingPageVarSearch = defineModel("bindingPageVarSearch", { type: String,
               height="320"
               highlight-current-row
               :row-class-name="bindingEnumPageRowClass"
-              @row-click="(row) => emit('pageRowClick', row)"
-              @row-dblclick="(row) => emit('pageRowDblclick', row)"
+              @row-click="handlePageRowClick"
+              @row-dblclick="handlePageRowDblclick"
             >
               <el-table-column prop="name" label="变量名" min-width="160" />
               <el-table-column prop="type" label="类型" width="90" />
