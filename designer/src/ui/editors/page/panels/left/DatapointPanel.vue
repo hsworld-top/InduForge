@@ -2,7 +2,7 @@
   DatapointPanel - 数据点/变量面板
   管理数据点与变量（树形展示），支持快速添加、导入导出、右键菜单
 -->
-<script setup>
+<script setup lang="ts">
 import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
@@ -22,11 +22,116 @@ import DatapointPanelToolbar from "./DatapointPanelToolbar.vue";
 import DatapointQuickAddDialog from "./DatapointQuickAddDialog.vue";
 import DatapointVariableEditDialog from "./DatapointVariableEditDialog.vue";
 
+type VariableType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "array"
+  | "object"
+  | "set"
+  | "map"
+  | "date"
+  | "regexp"
+  | "function";
+
+interface VariableSourceLike {
+  type?: string;
+  path?: string;
+  sourceType?: string;
+  sourceId?: string;
+  datapointId?: string;
+}
+
+interface VariableDetailLike {
+  type?: string;
+  default?: unknown;
+  value?: unknown;
+  description?: string;
+  groupId?: string | null;
+  mapped?: boolean;
+  source?: VariableSourceLike;
+}
+
+interface VariableGroupLike {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  sortOrder?: number;
+}
+
+interface TreeNodeMetaLike extends VariableDetailLike {
+  mapped?: boolean;
+}
+
+interface TreeNodeLike {
+  id: string;
+  label: string;
+  type: "group" | "variable" | "blank";
+  name?: string;
+  meta?: TreeNodeMetaLike;
+  children?: TreeNodeLike[];
+}
+
+interface TreeControllerLike {
+  setCurrentKey?: (key: string) => void;
+}
+
+interface ContextMenuPositionLike {
+  x: number;
+  y: number;
+}
+
+interface ClipboardItemLike {
+  name: string;
+  detail: VariableDetailLike;
+}
+
+interface ClipboardLike {
+  items: ClipboardItemLike[];
+}
+
+interface DatapointFieldLike {
+  id: string;
+  name: string;
+  path: string;
+  sourceType: string;
+  sourceId: string;
+  sourceLabel: string;
+  type: string;
+  typeLabel: string;
+  updatedAtLabel: string;
+}
+
+type VariableMapLike = Record<string, VariableDetailLike>;
+type ImportRowLike = Record<string, unknown>;
+interface MarkerLike {
+  severity?: number;
+}
+type NullableString = string | null;
+interface TreeDropNodeLike {
+  data: TreeNodeLike;
+  parent?: { data?: TreeNodeLike | null } | null;
+}
+
+interface ClickLike extends MouseEvent {}
+
+const showSuccess = (message: string): void => {
+  (ElMessage as any).success(message);
+};
+
+const showWarning = (message: string): void => {
+  (ElMessage as any).warning(message);
+};
+
+const showError = (message: string): void => {
+  (ElMessage as any).error(message);
+};
+
 const editorStore = useEditorStore();
 const { projectId, projectVariables, projectVariableGroups } = storeToRefs(editorStore);
 const maxGroupDepth = 5;
 
-const types = [
+const types: VariableType[] = [
   "string",
   "number",
   "boolean",
@@ -39,13 +144,15 @@ const types = [
   "function",
 ];
 
-const treeRef = ref(null);
-const selectedNode = ref(null);
-const selectedNodes = ref([]);
-const varClipboard = ref(null);
+const treeRef = ref<TreeControllerLike | null>(null);
+const selectedNode = ref<TreeNodeLike | null>(null);
+const selectedNodes = ref<TreeNodeLike[]>([]);
+const varClipboard = ref<ClipboardLike | null>(null);
 const contextMenuVisible = ref(false);
-const contextMenuPosition = ref({ x: 0, y: 0 });
-const contextMenuNode = ref(null);
+const contextMenuPosition = ref<ContextMenuPositionLike>({ x: 0, y: 0 });
+const contextMenuNode = ref<TreeNodeLike | { id: string; type: "blank"; label?: string } | null>(
+  null,
+);
 const showMoveToMenu = ref(false);
 
 const editVisible = ref(false);
@@ -53,27 +160,27 @@ const editMode = ref(false);
 const originalName = ref("");
 const editName = ref("");
 const editType = ref("string");
-const editValue = ref("");
+const editValue = ref<string | number | boolean | null>("");
 const editDescription = ref("");
 const ROOT_GROUP_ID = "__root__";
 const editGroupId = ref(ROOT_GROUP_ID);
 const mapped = ref(false);
 const mappedField = ref("");
-const dataSources = ref([]);
+const dataSources = ref<unknown[]>([]);
 const mappedSourceLabel = ref("");
-const importInputRef = ref(null);
-const importType = ref("json");
+const importInputRef = ref<HTMLInputElement | null>(null);
+const importType = ref<"json" | "csv" | "xlsx">("json");
 const editValueHasErrors = ref(false);
 
 const groupVisible = ref(false);
 const groupEditMode = ref(false);
 const groupId = ref("");
 const groupName = ref("");
-const groupParentId = ref(null);
+const groupParentId = ref<NullableString>(null);
 
 const quickVisible = ref(false);
-const fields = ref([]);
-const selectedFields = ref([]);
+const fields = ref<DatapointFieldLike[]>([]);
+const selectedFields = ref<DatapointFieldLike[]>([]);
 const searchKey = ref("");
 const prefix = ref("");
 const suffix = ref("");
@@ -91,7 +198,9 @@ const isStructuredType = computed(() => ["array", "object", "set", "map"].includ
 const editorLanguage = computed(() => (isStructuredType.value ? "json" : "javascript"));
 const isTextType = computed(() => ["string", "regexp"].includes(editType.value));
 
-const groupOptions = computed(() => projectVariableGroups.value || []);
+const groupOptions = computed<VariableGroupLike[]>(
+  () => ((projectVariableGroups.value || []) as VariableGroupLike[]),
+);
 
 const groupParentOptions = computed(() => {
   if (!groupEditMode.value) return groupOptions.value;
@@ -103,26 +212,34 @@ const groupParentOptions = computed(() => {
 const selectedVariable = computed(() => {
   if (selectedNode.value?.type !== "variable") return null;
   const name = selectedNode.value?.name;
-  const detail = projectVariables.value?.[name];
+  const detail = name ? (projectVariables.value?.[name] as VariableDetailLike | undefined) : null;
   if (!detail) return null;
   return { name, detail };
 });
 
 const selectedGroup = computed(() => {
   if (selectedNode.value?.type !== "group") return null;
-  return projectVariableGroups.value?.find((group) => group.id === selectedNode.value.id) || null;
+  const nodeId = selectedNode.value.id;
+  return (
+    (projectVariableGroups.value as VariableGroupLike[] | undefined)?.find(
+      (group) => group.id === nodeId,
+    ) || null
+  );
 });
 
 const selectedGroupId = computed(() => {
   const groupNode = selectedNodes.value.find((node) => node.type === "group");
   if (groupNode?.id) return groupNode.id;
   if (selectedGroup.value?.id) return selectedGroup.value.id;
-  if (selectedVariable.value?.detail?.groupId) return selectedVariable.value.detail.groupId;
+  if (selectedVariable.value?.detail?.groupId) return selectedVariable.value.detail.groupId ?? null;
   return null;
 });
 
 const variableTree = computed(() =>
-  buildTree(projectVariableGroups.value || [], projectVariables.value || {}),
+  buildTree(
+    ((projectVariableGroups.value || []) as any[]) as VariableGroupLike[],
+    ((projectVariables.value || {}) as any) as VariableMapLike,
+  ),
 );
 
 const contextMenuStyle = computed(() => ({
@@ -143,11 +260,11 @@ const submenuStyle = computed(() => {
   };
 });
 
-const availableGroups = computed(() => {
+const availableGroups = computed<any[]>(() => {
   const current = contextMenuNode.value;
-  const groups = projectVariableGroups.value || [];
+  const groups = (projectVariableGroups.value || []) as VariableGroupLike[];
   if (!current || current.type !== "group") return groups;
-  return groups.filter(
+  return (groups as VariableGroupLike[]).filter(
     (group) => group.id !== current.id && !isDescendantGroup(group.id, current.id),
   );
 });
@@ -168,11 +285,11 @@ const importAccept = computed(() => {
   return ".json";
 });
 
-function buildTree(groups, variables) {
-  const groupMap = new Map();
-  const roots = [];
+function buildTree(groups: VariableGroupLike[], variables: VariableMapLike): TreeNodeLike[] {
+  const groupMap = new Map<string, TreeNodeLike>();
+  const roots: TreeNodeLike[] = [];
 
-  groups.forEach((group) => {
+  groups.forEach((group: VariableGroupLike) => {
     groupMap.set(group.id, {
       id: group.id,
       label: group.name,
@@ -182,28 +299,30 @@ function buildTree(groups, variables) {
   });
 
   groupMap.forEach((node, id) => {
-    const group = groups.find((item) => item.id === id);
+    const group = groups.find((item: VariableGroupLike) => item.id === id);
     if (group?.parentId && groupMap.has(group.parentId)) {
-      groupMap.get(group.parentId).children.push(node);
+      groupMap.get(group.parentId)?.children?.push(node);
     } else {
       roots.push(node);
     }
   });
 
   Object.entries(variables).forEach(([name, detail]) => {
+    const normalizedDetail = (detail || {}) as VariableDetailLike;
     const node = {
       id: `var:${name}`,
       label: name,
       type: "variable",
       name,
       meta: {
-        ...detail,
-        mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+        ...normalizedDetail,
+        mapped:
+          normalizedDetail.source?.type === "dataCenter" || normalizedDetail.mapped === true,
       },
-    };
-    const groupIdValue = detail?.groupId;
+    } satisfies TreeNodeLike;
+    const groupIdValue = normalizedDetail.groupId;
     if (groupIdValue && groupMap.has(groupIdValue)) {
-      groupMap.get(groupIdValue).children.push(node);
+      groupMap.get(groupIdValue)?.children?.push(node);
     } else {
       roots.push(node);
     }
@@ -212,11 +331,11 @@ function buildTree(groups, variables) {
   return roots;
 }
 
-function isNodeSelected(data) {
+function isNodeSelected(data: TreeNodeLike): boolean {
   return selectedNodes.value.some((node) => node.id === data.id);
 }
 
-function handleNodeClick(data, event) {
+function handleNodeClick(data: TreeNodeLike, event: ClickLike): void {
   const isCtrl = Boolean(event?.ctrlKey || event?.metaKey);
   if (isCtrl) {
     if (isNodeSelected(data)) {
@@ -232,14 +351,14 @@ function handleNodeClick(data, event) {
   if (contextMenuVisible.value) closeContextMenu();
 }
 
-function getMenuItemCount(nodeType) {
+function getMenuItemCount(nodeType: string): number {
   if (nodeType === "blank") return 4;
   if (nodeType === "variable") return 4;
   if (nodeType === "group") return 4;
   return 4;
 }
 
-function setContextMenuPosition(event, nodeType) {
+function setContextMenuPosition(event: MouseEvent, nodeType: string): void {
   const width = 180;
   const itemHeight = 38;
   const height = getMenuItemCount(nodeType) * itemHeight + 12;
@@ -250,7 +369,7 @@ function setContextMenuPosition(event, nodeType) {
   contextMenuPosition.value = { x, y };
 }
 
-function handleContextMenu(event, data) {
+function handleContextMenu(event: MouseEvent, data: TreeNodeLike): void {
   event.preventDefault();
   event.stopPropagation();
   if (!isNodeSelected(data)) {
@@ -263,11 +382,11 @@ function handleContextMenu(event, data) {
   showMoveToMenu.value = false;
 }
 
-function handleBlankContextMenu(event) {
+function handleBlankContextMenu(event: MouseEvent): void {
   event.preventDefault();
   selectedNode.value = null;
   selectedNodes.value = [];
-  contextMenuNode.value = { type: "blank" };
+  contextMenuNode.value = { id: "__blank__", type: "blank", label: "" };
   setContextMenuPosition(event, "blank");
   contextMenuVisible.value = true;
   showMoveToMenu.value = false;
@@ -312,13 +431,15 @@ function openGroupCreateFromMenu() {
   openGroupCreate();
 }
 
-function handleMoveTo(groupIdValue) {
+function handleMoveTo(groupIdValue: string | null): void {
   if (!contextMenuNode.value) return;
   const node = contextMenuNode.value;
   const nodesToMove = selectedNodes.value.length ? selectedNodes.value : [node];
   closeContextMenu();
-  const nextVariables = { ...(projectVariables.value || {}) };
-  let nextGroups = projectVariableGroups.value || [];
+  const nextVariables: Record<string, any> = {
+    ...((projectVariables.value || {}) as Record<string, any>),
+  };
+  let nextGroups = ((projectVariableGroups.value as VariableGroupLike[] | undefined) || []).slice();
   let blocked = false;
 
   nodesToMove.forEach((item) => {
@@ -332,14 +453,14 @@ function handleMoveTo(groupIdValue) {
         blocked = true;
         return;
       }
-      nextGroups = nextGroups.map((group) =>
+      nextGroups = nextGroups.map((group: VariableGroupLike) =>
         group.id === item.id ? { ...group, parentId: groupIdValue } : group,
       );
     }
   });
 
   if (blocked) {
-    ElMessage.warning("无法移动到子分组");
+    showWarning("无法移动到子分组");
   }
 
   projectVariables.value = nextVariables;
@@ -351,7 +472,7 @@ function allowDrag() {
   return true;
 }
 
-function allowDrop(draggingNode, dropNode, type) {
+function allowDrop(draggingNode: TreeDropNodeLike, dropNode: TreeDropNodeLike, type: string): boolean {
   const dragData = draggingNode.data;
   const dropData = dropNode.data;
 
@@ -375,13 +496,19 @@ function allowDrop(draggingNode, dropNode, type) {
   return false;
 }
 
-function handleNodeDrop(draggingNode, dropNode, dropType) {
+function handleNodeDrop(
+  draggingNode: TreeDropNodeLike,
+  dropNode: TreeDropNodeLike,
+  dropType: string,
+): void {
   const dragData = draggingNode.data;
   const targetGroupId = resolveTargetGroupId(dropNode, dropType);
 
   if (dragData.type === "variable") {
     if (!dragData.name) return;
-    const nextVariables = { ...(projectVariables.value || {}) };
+    const nextVariables: Record<string, any> = {
+      ...((projectVariables.value || {}) as Record<string, any>),
+    };
     nextVariables[dragData.name] = {
       ...nextVariables[dragData.name],
       groupId: targetGroupId,
@@ -392,15 +519,15 @@ function handleNodeDrop(draggingNode, dropNode, dropType) {
   }
 
   if (dragData.type === "group") {
-    const groups = projectVariableGroups.value || [];
-    projectVariableGroups.value = groups.map((group) =>
+    const groups = ((projectVariableGroups.value as VariableGroupLike[] | undefined) || []).slice();
+    projectVariableGroups.value = groups.map((group: VariableGroupLike) =>
       group.id === dragData.id ? { ...group, parentId: targetGroupId } : group,
     );
     persistProjectGlobals();
   }
 }
 
-function resolveTargetGroupId(dropNode, dropType) {
+function resolveTargetGroupId(dropNode: TreeDropNodeLike, dropType: string): string | null {
   const dropData = dropNode.data;
   if (dropType === "inner") {
     return dropData.type === "group" ? dropData.id : null;
@@ -409,38 +536,39 @@ function resolveTargetGroupId(dropNode, dropType) {
   return parent?.type === "group" ? parent.id : null;
 }
 
-function getGroupDepth(groupIdValue) {
+function getGroupDepth(groupIdValue: string | null | undefined): number {
   if (!groupIdValue) return 0;
   let depth = 1;
   let currentId = groupIdValue;
-  const groups = projectVariableGroups.value || [];
-  const map = new Map(groups.map((group) => [group.id, group]));
+  const groups = ((projectVariableGroups.value as VariableGroupLike[] | undefined) || []).slice();
+  const map = new Map(groups.map((group: VariableGroupLike) => [group.id, group] as const));
   while (map.get(currentId)?.parentId) {
     depth += 1;
-    currentId = map.get(currentId).parentId;
+    currentId = map.get(currentId)?.parentId || "";
   }
   return depth;
 }
 
-function getGroupSubtreeDepth(groupIdValue) {
-  const groups = projectVariableGroups.value || [];
-  const children = groups.filter((group) => group.parentId === groupIdValue);
+function getGroupSubtreeDepth(groupIdValue: string): number {
+  const groups = ((projectVariableGroups.value as VariableGroupLike[] | undefined) || []).slice();
+  const children = groups.filter((group: VariableGroupLike) => group.parentId === groupIdValue);
   if (!children.length) return 1;
-  const depths = children.map((child) => getGroupSubtreeDepth(child.id));
+  const depths = children.map((child: VariableGroupLike) => getGroupSubtreeDepth(child.id));
   return 1 + Math.max(...depths);
 }
 
-function isDescendantGroup(targetId, parentId) {
-  const groups = projectVariableGroups.value || [];
-  let current = groups.find((group) => group.id === targetId);
+function isDescendantGroup(targetId: string, parentId: string): boolean {
+  const groups = ((projectVariableGroups.value as VariableGroupLike[] | undefined) || []).slice();
+  let current = groups.find((group: VariableGroupLike) => group.id === targetId);
+  if (!current) return false;
   while (current?.parentId) {
     if (current.parentId === parentId) return true;
-    current = groups.find((group) => group.id === current.parentId);
+    current = groups.find((group) => group.id === (current?.parentId || ""));
   }
   return false;
 }
 
-function defaultEditValue(type) {
+function defaultEditValue(type: string): string | number | boolean | null {
   switch (type) {
     case "string":
       return "";
@@ -467,7 +595,7 @@ function defaultEditValue(type) {
   }
 }
 
-function parseEditValue(type, value) {
+function parseEditValue(type: string, value: unknown): unknown {
   if (type === "number") {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -518,7 +646,10 @@ function resetEditValue() {
   editValueHasErrors.value = false;
 }
 
-function parseStructuredJson(value, type) {
+function parseStructuredJson(
+  value: unknown,
+  type: string,
+): { ok: true; parsed: unknown } | { ok: false; error: string } {
   if (!isStructuredType.value) return { ok: true, parsed: value };
   if (typeof value !== "string") return { ok: true, parsed: value };
   try {
@@ -546,13 +677,13 @@ function validateStructuredValue() {
   if (!isStructuredType.value) return true;
   const result = parseStructuredJson(editValue.value, editType.value);
   if (!result.ok) {
-    ElMessage.error(result.error || "校验失败");
+    showError(result.error || "校验失败");
     return false;
   }
   return true;
 }
 
-function formatValue(value) {
+function formatValue(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (value instanceof Set) {
     return JSON.stringify(Array.from(value));
@@ -581,20 +712,20 @@ async function loadDataSourcesForMapping() {
     dataSources.value = requireConnectionsPayload(body);
   } catch {
     dataSources.value = [];
-    ElMessage.error("连接列表格式无效或加载失败");
+    showError("连接列表格式无效或加载失败");
   }
 }
 
 async function persistProjectGlobals() {
   if (!projectId.value) {
-    ElMessage.error("缺少工程信息，无法保存");
+    showError("缺少工程信息，无法保存");
     return;
   }
   const result = await editorStore.saveProjectSettings();
   if (!result.ok) {
-    ElMessage.error(result.error?.message || "保存失败");
+    showError(result.error?.message || "保存失败");
   } else {
-    ElMessage.success("已保存");
+    showSuccess("已保存");
   }
 }
 
@@ -615,15 +746,15 @@ async function openCreate() {
 
 async function openEdit() {
   if (selectedNodes.value.length > 1) {
-    ElMessage.warning("多选时不能编辑");
+    showWarning("多选时不能编辑");
     return;
   }
   if (!selectedVariable.value) return;
   editMode.value = true;
-  originalName.value = selectedVariable.value.name;
-  editName.value = selectedVariable.value.name;
+  originalName.value = String(selectedVariable.value.name || "");
+  editName.value = String(selectedVariable.value.name || "");
   editType.value = selectedVariable.value.detail?.type || "string";
-  editValue.value = formatValue(selectedVariable.value.detail?.default);
+  editValue.value = String(formatValue(selectedVariable.value.detail?.default) || "");
   editDescription.value = selectedVariable.value.detail?.description || "";
   editGroupId.value = selectedVariable.value.detail?.groupId || ROOT_GROUP_ID;
   mapped.value = selectedVariable.value.detail?.source?.type === "dataCenter";
@@ -633,9 +764,9 @@ async function openEdit() {
     const path = selectedVariable.value.detail?.source?.path || "";
     const [dsName, ...rest] = String(path).split(".");
     mappedField.value = path;
-    mappedSourceLabel.value = getDatapointSourceLabel(
+    mappedSourceLabel.value = String(getDatapointSourceLabel(
       selectedVariable.value.detail?.source?.sourceType || "",
-    );
+    ) || "");
   } else {
     mappedField.value = "";
     mappedSourceLabel.value = "";
@@ -645,15 +776,15 @@ async function openEdit() {
 
 async function saveEdit() {
   const name = editName.value.trim();
-  if (!name) return ElMessage.warning("变量名不能为空");
+  if (!name) return showWarning("变量名不能为空");
 
-  const current = projectVariables.value || {};
+  const current = (projectVariables.value || {}) as VariableMapLike;
   if ((!editMode.value || name !== originalName.value) && current[name]) {
-    return ElMessage.warning("变量名已存在");
+    return showWarning("变量名已存在");
   }
 
   if (mapped.value && !mappedField.value.trim()) {
-    return ElMessage.warning("请输入映射字段");
+    return showWarning("请输入映射字段");
   }
   if (mapped.value && selectedVariable.value?.detail?.type) {
     editType.value = selectedVariable.value.detail.type;
@@ -662,20 +793,20 @@ async function saveEdit() {
     editType.value = selectedVariable.value.detail.type;
   }
   if (editValueHasErrors.value) {
-    return ElMessage.error("初始值存在语法错误，请先修正");
+    return showError("初始值存在语法错误，请先修正");
   }
   if (isStructuredType.value && !validateStructuredValue()) {
     return;
   }
 
-  const nextVariables = { ...(projectVariables.value || {}) };
+  const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
   if (editMode.value && name !== originalName.value) {
     delete nextVariables[originalName.value];
   }
 
   const value = parseEditValue(editType.value, editValue.value);
   const groupIdValue = editGroupId.value === ROOT_GROUP_ID ? null : editGroupId.value;
-  const next = {
+  const next: VariableDetailLike = {
     type: editType.value,
     default: value,
     groupId: groupIdValue,
@@ -709,7 +840,7 @@ async function saveEdit() {
 async function removeVar() {
   if (contextMenuVisible.value) closeContextMenu();
   if (!canDeleteSelection.value) {
-    ElMessage.warning("分组与成员混选时不能删除");
+    showWarning("分组与成员混选时不能删除");
     return;
   }
   if (!selectedNodes.value.length && !selectedVariable.value) return;
@@ -735,32 +866,34 @@ async function removeVar() {
   } catch (error) {
     return;
   }
-  const nextVariables = { ...(projectVariables.value || {}) };
-  variablesToRemove.forEach((name) => {
+  const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
+  variablesToRemove.forEach((name: string | undefined) => {
+    if (!name) return;
     delete nextVariables[name];
   });
 
   if (groupsToRemove.length) {
     const parentMap = new Map();
-    (projectVariableGroups.value || []).forEach((group) => {
+    ((projectVariableGroups.value as VariableGroupLike[] | undefined) || []).forEach((group) => {
       if (groupsToRemove.includes(group.id)) {
         parentMap.set(group.id, group.parentId || null);
       }
     });
 
-    const nextGroups = (projectVariableGroups.value || [])
+    const nextGroups = (((projectVariableGroups.value as VariableGroupLike[] | undefined) || [])
       .filter((group) => !groupsToRemove.includes(group.id))
-      .map((group) =>
-        groupsToRemove.includes(group.parentId)
-          ? { ...group, parentId: parentMap.get(group.parentId) || null }
-          : group,
-      );
+      .map((group) => {
+        const parentId = group.parentId || "";
+        return groupsToRemove.includes(parentId)
+          ? { ...group, parentId: parentMap.get(parentId) || null }
+          : group;
+      })) as VariableGroupLike[];
 
     Object.entries(nextVariables).forEach(([name, detail]) => {
-      if (groupsToRemove.includes(detail?.groupId)) {
+      if (groupsToRemove.includes(detail?.groupId || "")) {
         nextVariables[name] = {
           ...detail,
-          groupId: parentMap.get(detail.groupId) || null,
+          groupId: parentMap.get(detail.groupId || "") || null,
         };
       }
     });
@@ -780,7 +913,9 @@ function copyVar() {
     .filter((node) => node.type === "variable")
     .map((node) => ({
       name: node.name,
-      detail: projectVariables.value?.[node.name],
+      detail: node.name
+        ? (projectVariables.value as Record<string, any> | undefined)?.[node.name]
+        : {},
     }));
   if (!selectedVars.length && selectedVariable.value) {
     selectedVars.push({
@@ -789,16 +924,16 @@ function copyVar() {
     });
   }
   if (!selectedVars.length) {
-    ElMessage.warning("请选择变量后再复制");
+    showWarning("请选择变量后再复制");
     return;
   }
   varClipboard.value = {
     items: selectedVars.map((item) => ({
-      name: item.name,
+      name: item.name || "变量",
       detail: JSON.parse(JSON.stringify(item.detail || {})),
     })),
   };
-  ElMessage.success(`已复制 ${varClipboard.value.items.length} 个变量`);
+  showSuccess(`已复制 ${varClipboard.value.items.length} 个变量`);
 }
 
 async function pasteVar() {
@@ -836,7 +971,7 @@ function openGroupCreate() {
   groupName.value = "";
   groupParentId.value = selectedGroup.value?.id || null;
   if (groupParentId.value && getGroupDepth(groupParentId.value) >= maxGroupDepth) {
-    ElMessage.warning(`分组最多支持 ${maxGroupDepth} 层`);
+    showWarning(`分组最多支持 ${maxGroupDepth} 层`);
     groupParentId.value = null;
   }
   groupVisible.value = true;
@@ -844,7 +979,7 @@ function openGroupCreate() {
 
 function openGroupEdit() {
   if (selectedNodes.value.filter((node) => node.type === "group").length > 1) {
-    ElMessage.warning("多选时不能编辑");
+    showWarning("多选时不能编辑");
     return;
   }
   if (!selectedGroup.value) return;
@@ -864,17 +999,17 @@ function createId() {
 
 async function saveGroup() {
   const name = groupName.value.trim();
-  if (!name) return ElMessage.warning("分组名不能为空");
+  if (!name) return showWarning("分组名不能为空");
 
   const parentId = groupParentId.value || null;
   const depth = parentId ? getGroupDepth(parentId) + 1 : 1;
   if (depth > maxGroupDepth) {
-    return ElMessage.warning(`分组最多支持 ${maxGroupDepth} 层`);
+    return showWarning(`分组最多支持 ${maxGroupDepth} 层`);
   }
 
-  const groups = projectVariableGroups.value || [];
+  const groups = ((projectVariableGroups.value as VariableGroupLike[] | undefined) || []).slice();
   if (groupEditMode.value) {
-    projectVariableGroups.value = groups.map((group) =>
+    projectVariableGroups.value = groups.map((group: VariableGroupLike) =>
       group.id === groupId.value ? { ...group, name, parentId } : group,
     );
   } else {
@@ -896,7 +1031,7 @@ async function openQuickAdd() {
   await loadDatapoints();
 }
 
-function getDatapointSourceLabel(sourceType) {
+function getDatapointSourceLabel(sourceType: string): string {
   if (!sourceType) return "未知";
   if (sourceType.includes("query")) return "查询";
   if (sourceType.includes("subscription")) return "订阅";
@@ -904,7 +1039,7 @@ function getDatapointSourceLabel(sourceType) {
   return "数据点";
 }
 
-function normalizeDatapointType(type) {
+function normalizeDatapointType(type: string): string {
   const normalized = String(type || "").toLowerCase();
   if (
     normalized.includes("int") ||
@@ -924,9 +1059,9 @@ function normalizeDatapointType(type) {
   return "string";
 }
 
-function formatDatapointTime(value) {
+function formatDatapointTime(value: unknown): string {
   if (!value) return "";
-  const date = dayjs(value);
+  const date = dayjs(value as any);
   if (!date.isValid()) return String(value);
   return date.format(TIME_FORMAT);
 }
@@ -945,23 +1080,23 @@ async function loadDatapoints() {
     const { datapoints, pagination } = requireDatapointsPagePayload(unwrapApiData(result));
     quickTotal.value = Number(pagination.total || datapoints.length || 0);
     if (!Array.isArray(datapoints) || datapoints.length === 0) {
-      ElMessage.warning("未获取到数据点，请检查数据源或权限");
+      showWarning("未获取到数据点，请检查数据源或权限");
     }
-    fields.value = datapoints.map((item) => ({
-      id: item.id,
-      name: item.name || item.path || item.id,
-      path: item.path || item.name || item.id,
-      sourceType: item.sourceType || "",
-      sourceId: item.sourceId || "",
-      sourceLabel: getDatapointSourceLabel(item.sourceType),
-      type: normalizeDatapointType(item.dataType || item.type),
-      typeLabel: item.dataType || item.type || "string",
+    fields.value = (datapoints as Array<Record<string, unknown>>).map((item) => ({
+      id: String(item.id || ""),
+      name: String(item.name || item.path || item.id || ""),
+      path: String(item.path || item.name || item.id || ""),
+      sourceType: String(item.sourceType || ""),
+      sourceId: String(item.sourceId || ""),
+      sourceLabel: getDatapointSourceLabel(String(item.sourceType || "")),
+      type: normalizeDatapointType(String(item.dataType || item.type || "")),
+      typeLabel: String(item.dataType || item.type || "string"),
       updatedAtLabel: formatDatapointTime(item.updated_at || item.updatedAt),
     }));
   } catch (err) {
     fields.value = [];
     quickTotal.value = 0;
-    ElMessage.error(err instanceof Error ? err.message : "数据点列表响应格式无效");
+    showError(err instanceof Error ? err.message : "数据点列表响应格式无效");
   } finally {
     quickLoading.value = false;
   }
@@ -971,28 +1106,28 @@ const filteredFields = computed(() =>
   fields.value.filter((field) => field.name.toLowerCase().includes(searchKey.value.toLowerCase())),
 );
 
-function handleQuickPageChange(page) {
+function handleQuickPageChange(page: number): void {
   quickPage.value = page;
   loadDatapoints();
 }
 
-function handleQuickSizeChange(size) {
+function handleQuickSizeChange(size: number): void {
   quickPageSize.value = size;
   quickPage.value = 1;
   loadDatapoints();
 }
 
-function onSelectFields(rows) {
-  selectedFields.value = rows;
+function onSelectFields(rows: any): void {
+  selectedFields.value = (rows || []) as DatapointFieldLike[];
 }
 
-function buildVarName(field) {
+function buildVarName(field: string): string {
   let name = field;
   if (replaceFrom.value) name = name.replace(replaceFrom.value, replaceTo.value);
   return `${prefix.value}${name}${suffix.value}`;
 }
 
-function buildMappedExpression(field) {
+function buildMappedExpression(field: string): string {
   return field || "";
 }
 
@@ -1034,7 +1169,7 @@ function handleClickOutside() {
   if (contextMenuVisible.value) closeContextMenu();
 }
 
-function downloadBlob(content, name, type) {
+function downloadBlob(content: BlobPart, name: string, type: string): void {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1044,66 +1179,69 @@ function downloadBlob(content, name, type) {
   URL.revokeObjectURL(url);
 }
 
-function buildGroupPathMap(groups) {
-  const map = new Map();
-  const groupMap = new Map((groups || []).map((group) => [group.id, group]));
+function buildGroupPathMap(groups: any[]): Map<string, string> {
+  const map = new Map<string, string>();
+  const groupMap = new Map<string, Record<string, any>>(
+    (groups || []).map((group: Record<string, any>) => [String(group.id || ""), group]),
+  );
 
-  const buildPath = (groupIdValue) => {
+  const buildPath = (groupIdValue: string | null | undefined): string => {
     if (!groupIdValue || !groupMap.has(groupIdValue)) return "";
-    if (map.has(groupIdValue)) return map.get(groupIdValue);
-    const group = groupMap.get(groupIdValue);
-    const parentPath = buildPath(group.parentId);
-    const path = parentPath ? `${parentPath} / ${group.name}` : group.name;
+    if (map.has(groupIdValue)) return map.get(groupIdValue) || "";
+    const group = groupMap.get(groupIdValue) as Record<string, any> | undefined;
+    if (!group) return "";
+    const parentPath = buildPath((group.parentId as string | null | undefined) || null);
+    const path = parentPath ? `${parentPath} / ${String(group.name || "")}` : String(group.name || "");
     map.set(groupIdValue, path);
     return path;
   };
 
-  (groups || []).forEach((group) => buildPath(group.id));
+  (groups || []).forEach((group: Record<string, any>) => buildPath(String(group.id || "")));
   return map;
 }
 
-function ensureGroupPath(groups, path) {
+function ensureGroupPath(groups: any[], path: string): string | null {
   if (!path) return null;
   const segments = String(path)
     .split("/")
     .map((segment) => segment.trim())
     .filter(Boolean);
   if (!segments.length) return null;
-  let parentId = null;
+  let parentId: string | null = null;
   segments.forEach((segment) => {
     let match = groups.find(
       (group) => group.name === segment && (group.parentId || null) === parentId,
-    );
+    ) as Record<string, any> | undefined;
     if (!match) {
       match = { id: createId(), name: segment, parentId, sortOrder: 0 };
       groups.push(match);
     }
-    parentId = match.id;
+    parentId = String(match.id || "");
   });
   return parentId;
 }
 
-function buildExportRows() {
-  const groupPathMap = buildGroupPathMap(projectVariableGroups.value || []);
-  return Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
+function buildExportRows(): Array<Record<string, string>> {
+  const groupPathMap = buildGroupPathMap((projectVariableGroups.value || []) as VariableGroupLike[]);
+  return Object.entries((projectVariables.value || {}) as Record<string, any>).map(([name, detail]) => ({
     name,
-    type: detail?.type || "string",
+    type: String(detail?.type || "string"),
     default: formatValue(detail?.default ?? detail?.value),
-    description: detail?.description || "",
-    groupPath: detail?.groupId ? groupPathMap.get(detail.groupId) || "" : "",
-    mappedPath: detail?.source?.path || "",
+    description: String(detail?.description || ""),
+    groupPath: detail?.groupId ? groupPathMap.get(String(detail.groupId)) || "" : "",
+    mappedPath: String(detail?.source?.path || ""),
   }));
 }
 
-function normalizeRowKey(row, key) {
+function normalizeRowKey(row: ImportRowLike, key: string): unknown {
   const lowerKey = key.toLowerCase();
   const hit = Object.keys(row).find((k) => k.toLowerCase() === lowerKey);
   return hit ? row[hit] : "";
 }
 
-async function mergeImportedRows(rows) {
-  const nextGroups = [...(projectVariableGroups.value || [])];
-  const nextVariables = { ...(projectVariables.value || {}) };
+async function mergeImportedRows(rows: Array<Record<string, any>>): Promise<void> {
+  const nextGroups = [...(((projectVariableGroups.value as VariableGroupLike[] | undefined) || []))];
+  const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
   let added = 0;
   let skipped = 0;
 
@@ -1137,12 +1275,15 @@ async function mergeImportedRows(rows) {
   projectVariableGroups.value = nextGroups;
   projectVariables.value = nextVariables;
   await persistProjectGlobals();
-  ElMessage.success(`导入完成，新增 ${added} 项，跳过 ${skipped} 项`);
+  showSuccess(`导入完成，新增 ${added} 项，跳过 ${skipped} 项`);
 }
 
-async function mergeImportedDefinitions(definitions, groups) {
-  const nextGroups = [...(projectVariableGroups.value || [])];
-  const nextVariables = { ...(projectVariables.value || {}) };
+async function mergeImportedDefinitions(
+  definitions: Record<string, any>,
+  groups: any[],
+): Promise<void> {
+    const nextGroups = [...(((projectVariableGroups.value as VariableGroupLike[] | undefined) || []))];
+  const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
   const importedGroups = Array.isArray(groups) ? groups : [];
   const importedPathMap = buildGroupPathMap(importedGroups);
   const idToNew = new Map();
@@ -1155,10 +1296,13 @@ async function mergeImportedDefinitions(definitions, groups) {
 
   Object.entries(definitions || {}).forEach(([name, detail]) => {
     if (nextVariables[name]) return;
-    const groupPath = detail?.groupId ? importedPathMap.get(detail.groupId) || "" : "";
+    const normalizedDetail = (detail || {}) as Record<string, any>;
+    const groupPath = normalizedDetail.groupId
+      ? importedPathMap.get(String(normalizedDetail.groupId)) || ""
+      : "";
     const groupIdValue = ensureGroupPath(nextGroups, groupPath);
     nextVariables[name] = {
-      ...detail,
+      ...normalizedDetail,
       groupId: groupIdValue,
     };
   });
@@ -1166,10 +1310,10 @@ async function mergeImportedDefinitions(definitions, groups) {
   projectVariableGroups.value = nextGroups;
   projectVariables.value = nextVariables;
   await persistProjectGlobals();
-  ElMessage.success("导入完成");
+  showSuccess("导入完成");
 }
 
-async function handleExport(format) {
+async function handleExport(format: "json" | "csv" | "xlsx"): Promise<void> {
   const rows = buildExportRows();
   if (format === "json") {
     const payload = {
@@ -1196,7 +1340,7 @@ async function handleExport(format) {
   );
 }
 
-function handleImport(format) {
+function handleImport(format: "json" | "csv" | "xlsx"): void {
   importType.value = format;
   nextTick(() => {
     if (importInputRef.value) {
@@ -1206,14 +1350,14 @@ function handleImport(format) {
   });
 }
 
-function decodeTextBuffer(raw) {
+function decodeTextBuffer(raw: ArrayBuffer): string {
   try {
     const bytes = raw instanceof ArrayBuffer ? new Uint8Array(raw) : new Uint8Array(raw);
     const hasUtf8Bom =
       bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
     const hasUtf16LeBom = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
     const hasUtf16BeBom = bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff;
-    const tryDecode = (encoding) => {
+    const tryDecode = (encoding: string): string => {
       try {
         return new TextDecoder(encoding, { fatal: false }).decode(raw);
       } catch (error) {
@@ -1249,38 +1393,39 @@ function decodeTextBuffer(raw) {
   }
 }
 
-async function handleFileChange(event) {
-  const file = event.target.files?.[0];
+async function handleFileChange(event: Event): Promise<void> {
+  const target = event.target as HTMLInputElement | null;
+  const file = target?.files?.[0];
   if (!file) return;
   if (importType.value === "json") {
     const text = await file.text();
     try {
       const data = JSON.parse(text);
       if (data && typeof data === "object" && (data.definitions || data.groups)) {
-        await mergeImportedDefinitions(data.definitions || {}, data.groups || []);
+        await mergeImportedDefinitions(data.definitions || {}, (data.groups || []) as any[]);
         return;
       }
       if (Array.isArray(data)) {
-        await mergeImportedRows(data);
+        await mergeImportedRows(data as Array<Record<string, any>>);
         return;
       }
-      ElMessage.error("JSON 格式不支持");
+      showError("JSON 格式不支持");
     } catch (error) {
       try {
         const buffer = await file.arrayBuffer();
         const fallbackText = decodeTextBuffer(buffer);
         const data = JSON.parse(fallbackText);
         if (data && typeof data === "object" && (data.definitions || data.groups)) {
-          await mergeImportedDefinitions(data.definitions || {}, data.groups || []);
+          await mergeImportedDefinitions(data.definitions || {}, (data.groups || []) as any[]);
           return;
         }
         if (Array.isArray(data)) {
-          await mergeImportedRows(data);
+          await mergeImportedRows(data as Array<Record<string, any>>);
           return;
         }
-        ElMessage.error("JSON 格式不支持");
+        showError("JSON 格式不支持");
       } catch (fallbackError) {
-        ElMessage.error("JSON 解析失败");
+        showError("JSON 解析失败");
       }
     }
     return;
@@ -1293,21 +1438,28 @@ async function handleFileChange(event) {
       : XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
-    ElMessage.error("文件中没有数据表");
+    showError("文件中没有数据表");
     return;
   }
-  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+  const worksheet = workbook.Sheets[sheetName];
+  if (!worksheet) {
+    showError("文件中没有数据表");
+    return;
+  }
+  const rows = XLSX.utils.sheet_to_json(worksheet as any, {
     defval: "",
-  });
+  }) as Array<Record<string, any>>;
   await mergeImportedRows(rows);
 }
 
-function handleEditValueMarkers(markers) {
+function handleEditValueMarkers(markers: unknown): void {
   if (!isEditorType.value) {
     editValueHasErrors.value = false;
     return;
   }
-  editValueHasErrors.value = (markers || []).some((marker) => marker.severity === 8);
+  editValueHasErrors.value = ((markers || []) as Array<Record<string, any>>).some(
+    (marker) => marker.severity === 8,
+  );
 }
 
 onMounted(() => {

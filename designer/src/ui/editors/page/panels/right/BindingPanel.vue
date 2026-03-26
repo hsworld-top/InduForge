@@ -2,7 +2,7 @@
   BindingPanel - 绑定配置面板
   配置页面/组件的生命周期、定时器、变量变更等绑定脚本
 -->
-<script setup>
+<script setup lang="ts">
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
@@ -17,12 +17,97 @@ import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/utils/component-methods";
 import { usePanelState } from "../composables/use-panel-state";
 
+interface LifecycleItem {
+  key: string;
+  label: string;
+}
+
+interface ScriptHandlerLike {
+  type?: string;
+  code?: string;
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
+interface TimerItemLike {
+  id: string;
+  name: string;
+  code?: string;
+  enabled?: boolean;
+  interval?: number;
+  description?: string;
+  [key: string]: unknown;
+}
+
+interface VariableChangeItemLike {
+  id: string;
+  name: string;
+  code?: string;
+  enabled?: boolean;
+  description?: string;
+  [key: string]: unknown;
+}
+
+interface SidebarTreeNodeLike {
+  id: string;
+  label: string;
+  type: "group" | "item" | "component";
+  children?: SidebarTreeNodeLike[];
+  params?: string;
+  componentName?: string;
+  componentType?: string;
+}
+
+interface VariableGroupLike {
+  id: string;
+  name: string;
+  parentId?: string | null;
+}
+
+interface ProjectVariableLike {
+  groupId?: string | null;
+  type?: string;
+  description?: string;
+  mapped?: boolean;
+  source?: {
+    type?: string;
+    [key: string]: unknown;
+  };
+}
+
+interface VariableRowLike {
+  name: string;
+  type: string;
+  description: string;
+  groupId?: string | null;
+  mapped?: boolean;
+  defaultValue?: string;
+}
+
+interface CreateFormState {
+  name: string;
+  variable: string;
+  interval: number;
+  description: string;
+}
+
+interface SelectionState {
+  timers: string[];
+  variableChanges: string[];
+}
+
+interface MonacoEditorExposeLike {
+  insertText?: (value: string) => void;
+}
+
 const { forceShow } = defineProps({
   forceShow: {
     type: Boolean,
     default: false,
   },
 });
+
+const UUID_DASH_PATTERN = /-/g;
 
 const editorStore = useEditorStore();
 const { panelState } = usePanelState();
@@ -37,36 +122,36 @@ const {
   docVersion,
 } = storeToRefs(editorStore);
 
-const lifecycleItems = [
+const lifecycleItems: LifecycleItem[] = [
   { key: "onMounted", label: "创建时" },
   { key: "onUnmounted", label: "关闭时" },
 ];
 
 const scriptCode = ref("");
 const editorVisible = ref(false);
-const editorRef = ref(null);
-const customTreeRef = ref(null);
+const editorRef = ref<MonacoEditorExposeLike | null>(null);
+const customTreeRef = ref<any>(null);
 const scriptSearch = ref("");
 const componentSearch = ref("");
-const componentTreeRef = ref(null);
+const componentTreeRef = ref<any>(null);
 const variableEnumVisible = ref(false);
 const enumTab = ref("project");
 const projectVarSearch = ref("");
 const pageVarSearch = ref("");
-const enumProjectTreeRef = ref(null);
-const enumPageTreeRef = ref(null);
-const enumSelectedProjectGroupId = ref(null);
+const enumProjectTreeRef = ref<any>(null);
+const enumPageTreeRef = ref<any>(null);
+const enumSelectedProjectGroupId = ref<string | null>(null);
 const enumSelectedPageGroupId = ref("page-root");
-const enumSelectedProjectVar = ref(null);
-const enumSelectedPageVar = ref(null);
+const enumSelectedProjectVar = ref<VariableRowLike | null>(null);
+const enumSelectedPageVar = ref<VariableRowLike | null>(null);
 const activeLifecycleKey = ref("");
-const lifecycleToggleState = ref({});
-const activeItemType = ref("");
+const lifecycleToggleState = ref<Record<string, boolean>>({});
+const activeItemType = ref<"" | "lifecycle" | "timer" | "variableChanges">("");
 const activeItemId = ref("");
-const selectedIds = ref({ timers: [], variableChanges: [] });
+const selectedIds = ref<SelectionState>({ timers: [], variableChanges: [] });
 const createDialogVisible = ref(false);
-const createDialogType = ref("timer");
-const createForm = ref({
+const createDialogType = ref<"timer" | "variable">("timer");
+const createForm = ref<CreateFormState>({
   name: "",
   variable: "",
   interval: 1000,
@@ -81,19 +166,20 @@ const pageSnapshot = computed(() => {
   return currentPage.value;
 });
 const pageTitle = computed(() => pageSnapshot.value?.name || "页面");
-const timerItems = computed(() => {
-  const list = pageSnapshot.value?.lifecycle?.timers;
+const timerItems = computed<TimerItemLike[]>(() => {
+  const list = (pageSnapshot.value?.lifecycle as Record<string, unknown> | undefined)?.timers;
   return Array.isArray(list) ? list : [];
 });
-const variableChangeItems = computed(() => {
-  const list = pageSnapshot.value?.lifecycle?.variableChanges;
+const variableChangeItems = computed<VariableChangeItemLike[]>(() => {
+  const list = (pageSnapshot.value?.lifecycle as Record<string, unknown> | undefined)
+    ?.variableChanges;
   return Array.isArray(list) ? list : [];
 });
-const createDialogTitle = computed(() => {
+const createDialogTitle = computed<string>(() => {
   return createDialogType.value === "timer" ? "新建定时器" : "新建变量改变";
 });
-const pageVariableOptions = computed(() => {
-  docVersion.value;
+const pageVariableOptions = computed<string[]>(() => {
+  void docVersion.value;
   const pageId = currentPageId.value;
   if (!pageId || !doc.value) return [];
   const vars = doc.value.vars?.pages?.[pageId];
@@ -106,11 +192,11 @@ const pageVariableOptions = computed(() => {
  * @param {string} key - 生命周期 key
  * @returns {Object | string | null} 处理器
  */
-function getLifecycleHandler(key) {
+function getLifecycleHandler(key: string): ScriptHandlerLike | string | null {
   if (!pageSnapshot.value || !key) return null;
-  const handlers = pageSnapshot.value.lifecycle?.[key];
+  const handlers = (pageSnapshot.value.lifecycle as Record<string, unknown> | undefined)?.[key];
   if (!Array.isArray(handlers) || handlers.length === 0) return null;
-  return handlers[0] || null;
+  return (handlers[0] as ScriptHandlerLike | string | null) || null;
 }
 
 /**
@@ -118,7 +204,7 @@ function getLifecycleHandler(key) {
  * @param {string} key - 生命周期 key
  * @returns {string} 脚本内容
  */
-function getLifecycleScript(key) {
+function getLifecycleScript(key: string): string {
   const handler = getLifecycleHandler(key);
   if (!handler) return "";
   if (typeof handler === "string") return handler;
@@ -129,10 +215,10 @@ function getLifecycleScript(key) {
  * 同步生命周期开关状态
  */
 function syncLifecycleToggleState() {
-  const nextState = {};
+  const nextState: Record<string, boolean> = {};
   lifecycleItems.forEach((item) => {
-    const handler = getLifecycleHandler(item.key);
-    nextState[item.key] = handler?.enabled !== false;
+    const handler = getLifecycleHandler(item.key) as any;
+    nextState[item.key] = typeof handler === "string" ? true : handler?.enabled !== false;
   });
   lifecycleToggleState.value = nextState;
 }
@@ -142,7 +228,7 @@ function syncLifecycleToggleState() {
  * @param {string} key - 生命周期 key
  * @returns {boolean} 是否启用
  */
-function getLifecycleEnabled(key) {
+function getLifecycleEnabled(key: string): boolean {
   if (!key) return true;
   return lifecycleToggleState.value[key] !== false;
 }
@@ -152,7 +238,7 @@ function getLifecycleEnabled(key) {
  * @param {string} key - 生命周期 key
  * @param {boolean} enabled - 是否启用
  */
-function handleToggleLifecycle(key, enabled) {
+function handleToggleLifecycle(key: string, enabled: boolean): void {
   if (!currentPage.value || !key) return;
   lifecycleToggleState.value = {
     ...lifecycleToggleState.value,
@@ -160,12 +246,12 @@ function handleToggleLifecycle(key, enabled) {
   };
   const handler = getLifecycleHandler(key);
   if (!handler) return;
-  const nextHandler =
+  const nextHandler: ScriptHandlerLike =
     typeof handler === "string"
       ? { type: "script", code: handler, enabled: enabled !== false }
       : { ...handler, enabled: enabled !== false };
-  const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
-  nextLifecycle[key] = [nextHandler];
+  const nextLifecycle: Record<string, unknown> = { ...(pageSnapshot.value?.lifecycle || {}) };
+  nextLifecycle[key] = [nextHandler] as ScriptHandlerLike[];
   editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
 }
 
@@ -173,7 +259,7 @@ function handleToggleLifecycle(key, enabled) {
  * 打开脚本编辑器
  * @param {{ key: string }} item - 生命周期项
  */
-function openEditor(item) {
+function openEditor(item: LifecycleItem | null | undefined): void {
   activeLifecycleKey.value = item?.key || "";
   activeItemType.value = "lifecycle";
   activeItemId.value = "";
@@ -184,7 +270,7 @@ function openEditor(item) {
 /**
  * 保存脚本
  */
-function saveScript() {
+function saveScript(): void {
   if (!currentPage.value) return;
   if (activeItemType.value === "timer" || activeItemType.value === "variableChanges") {
     const code = scriptCode.value || "";
@@ -192,7 +278,7 @@ function saveScript() {
     const nextItems = items.map((item) =>
       item.id === activeItemId.value ? { ...item, code } : item,
     );
-    const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
+    const nextLifecycle: Record<string, unknown> = { ...(pageSnapshot.value?.lifecycle || {}) };
     if (activeItemType.value === "timer") {
       nextLifecycle.timers = nextItems;
     } else {
@@ -205,7 +291,7 @@ function saveScript() {
   }
   if (!activeLifecycleKey.value) return;
   const code = scriptCode.value || "";
-  const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
+  const nextLifecycle: Record<string, unknown> = { ...(pageSnapshot.value?.lifecycle || {}) };
   if (!code.trim()) {
     delete nextLifecycle[activeLifecycleKey.value];
   } else {
@@ -240,15 +326,15 @@ const editorDescription = computed(() => {
   return `${pageTitle.value}${label}脚本`;
 });
 
-const pageVars = computed(() => {
-  docVersion.value;
+const pageVars = computed<Record<string, any>>(() => {
+  void docVersion.value;
   const pageId = currentPageId.value;
   if (!pageId || !doc.value) return {};
   const vars = doc.value.vars?.pages?.[pageId];
-  return vars && typeof vars === "object" ? vars : {};
+  return vars && typeof vars === "object" ? (vars as Record<string, any>) : {};
 });
 
-const projectGroupTree = computed(() => [
+const projectGroupTree = computed<SidebarTreeNodeLike[]>(() => [
   {
     id: "all",
     label: "全部",
@@ -257,9 +343,11 @@ const projectGroupTree = computed(() => [
   },
 ]);
 
-const projectVariableRows = computed(() => {
+const projectVariableRows = computed<VariableRowLike[]>(() => {
   const keyword = String(projectVarSearch.value || "").toLowerCase();
-  const items = Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
+  const items = Object.entries(
+    (projectVariables.value || {}) as Record<string, ProjectVariableLike>,
+  ).map(([name, detail]) => ({
     name,
     groupId: detail?.groupId || null,
     type: detail?.type || "string",
@@ -281,11 +369,11 @@ const projectVariableRows = computed(() => {
     });
 });
 
-const pageGroupTree = computed(() => [
+const pageGroupTree = computed<SidebarTreeNodeLike[]>(() => [
   { id: "page-root", label: "页面变量", type: "group", children: [] },
 ]);
 
-const pageVariableRows = computed(() => {
+const pageVariableRows = computed<VariableRowLike[]>(() => {
   const keyword = String(pageVarSearch.value || "").toLowerCase();
   return Object.entries(pageVars.value || {})
     .map(([name, detail]) => ({
@@ -302,14 +390,19 @@ const pageVariableRows = computed(() => {
     });
 });
 
-const pageComponentTree = computed(() => {
-  docVersion.value;
+const pageComponentTree = computed<any[]>(() => {
+  void docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
   if (!rootId || !doc.value) return [];
-  const buildNode = (nodeId) => {
-    const node = doc.value.getNode(nodeId);
+  const currentDoc = doc.value;
+  const buildNode = (nodeId: string): any => {
+    const node = currentDoc.getNode(nodeId) as any;
     if (!node) return null;
-    const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean);
+    const children = (node.children || []).reduce((result: any[], childId: any) => {
+      const child = buildNode(childId);
+      if (child) result.push(child);
+      return result;
+    }, [] as any[]);
     const label = node.label || node.type || "组件";
     return {
       id: node.id,
@@ -325,11 +418,11 @@ const pageComponentTree = computed(() => {
   return root.children?.length ? root.children : [root];
 });
 
-const customScriptTree = computed(() => {
-  const groups = globalScripts.value?.custom?.groups || [];
-  const items = globalScripts.value?.custom?.items || [];
-  const groupMap = new Map();
-  const roots = [];
+const customScriptTree = computed<any[]>(() => {
+  const groups = (globalScripts.value?.custom?.groups || []) as any[];
+  const items = (globalScripts.value?.custom?.items || []) as any[];
+  const groupMap = new Map<string, any>();
+  const roots: any[] = [];
 
   groups.forEach((group) => {
     groupMap.set(group.id, {
@@ -343,7 +436,7 @@ const customScriptTree = computed(() => {
   groupMap.forEach((node, id) => {
     const group = groups.find((item) => item.id === id);
     if (group?.parentId && groupMap.has(group.parentId)) {
-      groupMap.get(group.parentId).children.push(node);
+      groupMap.get(group.parentId)?.children?.push(node);
     } else {
       roots.push(node);
     }
@@ -351,14 +444,14 @@ const customScriptTree = computed(() => {
 
   items.forEach((item) => {
     if (!item?.id) return;
-    const node = {
+    const node: any = {
       id: item.id,
       label: item.name || "未命名",
       type: "item",
       params: item.params || item.args || "",
     };
     if (item.groupId && groupMap.has(item.groupId)) {
-      groupMap.get(item.groupId).children.push(node);
+      groupMap.get(item.groupId)?.children?.push(node);
     } else {
       roots.push(node);
     }
@@ -367,8 +460,8 @@ const customScriptTree = computed(() => {
   return roots;
 });
 
-const jsCompletions = computed(() => {
-  const items = [
+const jsCompletions = computed<any[]>(() => {
+  const items: any[] = [
     {
       label: "console.log",
       insertText: "console.log()",
@@ -396,7 +489,7 @@ const jsCompletions = computed(() => {
     { label: "return", insertText: "return ", kind: "Keyword" },
   ];
 
-  Object.keys(projectVariables.value || {}).forEach((name) => {
+  Object.keys((projectVariables.value || {}) as Record<string, unknown>).forEach((name) => {
     items.push({
       label: name,
       insertText: name,
@@ -406,7 +499,7 @@ const jsCompletions = computed(() => {
     });
   });
 
-  (globalScripts.value?.custom?.items || []).forEach((script) => {
+  ((globalScripts.value?.custom?.items || []) as any[]).forEach((script: any) => {
     if (!script?.name) return;
     const params =
       typeof script.params === "string" && script.params.trim()
@@ -434,14 +527,14 @@ const jsCompletions = computed(() => {
     });
   });
 
-  items.push(...buildComponentMethodCompletions(pageComponentTree.value));
+  items.push(...(buildComponentMethodCompletions(pageComponentTree.value) as any[]));
   return items;
 });
 
-function buildGroupTree(groups) {
-  const groupMap = new Map();
-  const roots = [];
-  const normalized = Array.isArray(groups) ? groups : [];
+function buildGroupTree(groups: unknown): SidebarTreeNodeLike[] {
+  const groupMap = new Map<string, SidebarTreeNodeLike>();
+  const roots: SidebarTreeNodeLike[] = [];
+  const normalized = (Array.isArray(groups) ? groups : []) as VariableGroupLike[];
   normalized.forEach((group) => {
     groupMap.set(group.id, {
       id: group.id,
@@ -453,7 +546,7 @@ function buildGroupTree(groups) {
   groupMap.forEach((node, id) => {
     const group = normalized.find((item) => item.id === id);
     if (group?.parentId && groupMap.has(group.parentId)) {
-      groupMap.get(group.parentId).children.push(node);
+      groupMap.get(group.parentId)?.children?.push(node);
     } else {
       roots.push(node);
     }
@@ -461,21 +554,21 @@ function buildGroupTree(groups) {
   return roots;
 }
 
-function formatDefaultValue(value) {
+function formatDefaultValue(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (value instanceof Set) return JSON.stringify(Array.from(value));
   if (value instanceof Map) return JSON.stringify(Array.from(value.entries()));
   if (typeof value === "object") {
     try {
       return JSON.stringify(value);
-    } catch (error) {
+    } catch {
       return String(value);
     }
   }
   return String(value);
 }
 
-function filterSidebarNode(value, data) {
+function filterSidebarNode(value: string, data: SidebarTreeNodeLike): boolean {
   if (!value) return true;
   return String(data?.label || "")
     .toLowerCase()
@@ -490,14 +583,14 @@ watch(componentSearch, (value) => {
   componentTreeRef.value?.filter?.(value);
 });
 
-function handleCustomScriptInsert(data) {
+function handleCustomScriptInsert(data: SidebarTreeNodeLike): void {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
   const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
   editorRef.value?.insertText?.(call);
 }
 
-function handleComponentInsert(data) {
+function handleComponentInsert(data: SidebarTreeNodeLike): void {
   if (!data?.componentName) return;
   editorRef.value?.insertText?.(`components.${data.componentName}`);
 }
@@ -513,47 +606,48 @@ function openVariableEnum() {
   variableEnumVisible.value = true;
 }
 
-function handleProjectGroupSelect(data) {
+function handleProjectGroupSelect(data: { id?: string } | null | undefined): void {
   if (!data) {
     enumSelectedProjectGroupId.value = null;
     return;
   }
-  enumSelectedProjectGroupId.value = data.id === "all" ? null : data.id;
+  enumSelectedProjectGroupId.value =
+    data.id === "all" ? null : ((data.id as string | null) ?? null);
 }
 
-function handlePageGroupSelect(data) {
+function handlePageGroupSelect(data: { id?: string } | null | undefined): void {
   enumSelectedPageGroupId.value = data?.id || "page-root";
 }
 
-function handleProjectRowClick(row) {
+function handleProjectRowClick(row: VariableRowLike | null | undefined): void {
   enumSelectedProjectVar.value = row || null;
 }
 
-function handlePageRowClick(row) {
+function handlePageRowClick(row: VariableRowLike | null | undefined): void {
   enumSelectedPageVar.value = row || null;
 }
 
-function handleProjectRowDblClick(row) {
+function handleProjectRowDblClick(row: VariableRowLike | null | undefined): void {
   enumSelectedProjectVar.value = row || null;
   confirmEnumInsert();
 }
 
-function handlePageRowDblClick(row) {
+function handlePageRowDblClick(row: VariableRowLike | null | undefined): void {
   enumSelectedPageVar.value = row || null;
   confirmEnumInsert();
 }
 
-function enumProjectRowClass({ row }) {
+function enumProjectRowClass({ row }: { row: VariableRowLike }): string {
   if (enumSelectedProjectVar.value?.name === row.name) return "is-selected";
   return "";
 }
 
-function enumPageRowClass({ row }) {
+function enumPageRowClass({ row }: { row: VariableRowLike }): string {
   if (enumSelectedPageVar.value?.name === row.name) return "is-selected";
   return "";
 }
 
-function confirmEnumInsert() {
+function confirmEnumInsert(): void {
   if (enumTab.value === "page" && enumSelectedPageVar.value?.name) {
     editorRef.value?.insertText?.(`$vars.${enumSelectedPageVar.value.name}`);
     variableEnumVisible.value = false;
@@ -569,7 +663,7 @@ function confirmEnumInsert() {
  * 处理创建命令
  * @param {string} command - 创建类型
  */
-function handleCreateCommand(command) {
+function handleCreateCommand(command: string): void {
   createDialogType.value = command === "variable" ? "variable" : "timer";
   createForm.value = {
     name: "",
@@ -583,13 +677,13 @@ function handleCreateCommand(command) {
 /**
  * 处理创建确认
  */
-function handleCreateConfirm() {
+function handleCreateConfirm(): void {
   if (!currentPage.value) return;
-  const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
+  const nextLifecycle: Record<string, unknown> = { ...(pageSnapshot.value?.lifecycle || {}) };
   if (createDialogType.value === "timer") {
     const name = createForm.value.name.trim();
     if (!name) {
-      ElMessage.warning("请输入定时器名称");
+      ElMessage.warning({ message: "请输入定时器名称" } as any);
       return;
     }
     const interval = Number(createForm.value.interval) || 1000;
@@ -607,12 +701,12 @@ function handleCreateConfirm() {
     nextLifecycle.timers = nextItems;
     selectedIds.value = {
       ...selectedIds.value,
-      timers: [nextItems.at(-1).id],
+      timers: [nextItems.at(-1)?.id || ""],
     };
   } else {
     const variable = createForm.value.variable.trim();
     if (!variable) {
-      ElMessage.warning("请选择变量");
+      ElMessage.warning({ message: "请选择变量" } as any);
       return;
     }
     const nextItems = [
@@ -628,7 +722,7 @@ function handleCreateConfirm() {
     nextLifecycle.variableChanges = nextItems;
     selectedIds.value = {
       ...selectedIds.value,
-      variableChanges: [nextItems.at(-1).id],
+      variableChanges: [nextItems.at(-1)?.id || ""],
     };
   }
   editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
@@ -641,10 +735,10 @@ function handleCreateConfirm() {
  * @param {string} prefix - 前缀
  * @returns {string} ID
  */
-function createId(prefix) {
+function createId(prefix: string): string {
   const random =
     typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID().replace(/-/g, "").slice(0, 8)
+      ? crypto.randomUUID().replace(UUID_DASH_PATTERN, "").slice(0, 8)
       : Math.random().toString(16).slice(2, 10);
   return `${prefix}_${Date.now().toString(16)}_${random}`;
 }
@@ -655,7 +749,7 @@ function createId(prefix) {
  * @param {string} id - 条目 ID
  * @returns {boolean} 是否选中
  */
-function isSelectedItem(type, id) {
+function isSelectedItem(type: keyof SelectionState, id: string): boolean {
   return selectedIds.value[type].includes(id);
 }
 
@@ -665,7 +759,7 @@ function isSelectedItem(type, id) {
  * @param {string} id - 条目 ID
  * @param {boolean} checked - 是否选中
  */
-function toggleSelection(type, id, checked) {
+function toggleSelection(type: keyof SelectionState, id: string, checked: boolean): void {
   const list = selectedIds.value[type] || [];
   const nextList = checked ? [...new Set([...list, id])] : list.filter((item) => item !== id);
   selectedIds.value = { ...selectedIds.value, [type]: nextList };
@@ -677,13 +771,13 @@ function toggleSelection(type, id, checked) {
  * @param {string} id - 条目 ID
  * @param {boolean} enabled - 是否启用
  */
-function handleToggleItem(type, id, enabled) {
+function handleToggleItem(type: keyof SelectionState, id: string, enabled: boolean): void {
   if (!currentPage.value) return;
   const items = type === "timers" ? timerItems.value : variableChangeItems.value;
   const nextItems = items.map((item) =>
     item.id === id ? { ...item, enabled: enabled !== false } : item,
   );
-  const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
+  const nextLifecycle: Record<string, unknown> = { ...(pageSnapshot.value?.lifecycle || {}) };
   if (type === "timers") {
     nextLifecycle.timers = nextItems;
   } else {
@@ -697,7 +791,10 @@ function handleToggleItem(type, id, enabled) {
  * @param {'timers' | 'variableChanges'} type - 类型
  * @param {{ id: string, code?: string, name?: string }} item - 条目
  */
-function openItemEditor(type, item) {
+function openItemEditor(
+  type: keyof SelectionState,
+  item: TimerItemLike | VariableChangeItemLike | null | undefined,
+): void {
   if (!item?.id) return;
   activeLifecycleKey.value = "";
   activeItemType.value = type === "timers" ? "timer" : "variableChanges";
@@ -709,13 +806,13 @@ function openItemEditor(type, item) {
 /**
  * 删除条目
  */
-function handleDelete() {
+function handleDelete(): void {
   if (!currentPage.value) return;
   const timerIds = selectedIds.value.timers || [];
   const variableIds = selectedIds.value.variableChanges || [];
   const total = timerIds.length + variableIds.length;
   if (total === 0) {
-    ElMessage.info("请选择需要删除的条目");
+    ElMessage.info({ message: "请选择需要删除的条目" } as any);
     return;
   }
   ElMessageBox.confirm(`确认删除已选的${total}条记录吗？`, "删除确认", {
@@ -724,7 +821,7 @@ function handleDelete() {
     type: "warning",
   })
     .then(() => {
-      const nextLifecycle = { ...(pageSnapshot.value?.lifecycle || {}) };
+      const nextLifecycle: Record<string, unknown> = { ...(pageSnapshot.value?.lifecycle || {}) };
       if (timerIds.length > 0) {
         nextLifecycle.timers = timerItems.value.filter((item) => !timerIds.includes(item.id));
       }
@@ -810,7 +907,7 @@ watch(
                 <span class="binding-toggle-label">启动</span>
                 <el-switch
                   :model-value="getLifecycleEnabled(item.key)"
-                  @change="(value) => handleToggleLifecycle(item.key, value)"
+                  @change="(value: any) => handleToggleLifecycle(item.key, value)"
                 />
               </div>
               <el-tooltip content="打开编辑器" placement="top">
@@ -836,7 +933,7 @@ watch(
             <el-checkbox
               class="select-check"
               :model-value="isSelectedItem('timers', item.id)"
-              @change="(value) => toggleSelection('timers', item.id, value)"
+              @change="(value: any) => toggleSelection('timers', item.id, value)"
             />
             <div class="binding-name">{{ item.name }}</div>
             <div class="binding-actions">
@@ -844,7 +941,7 @@ watch(
                 <span class="binding-toggle-label">启动</span>
                 <el-switch
                   :model-value="item.enabled !== false"
-                  @change="(value) => handleToggleItem('timers', item.id, value)"
+                  @change="(value: any) => handleToggleItem('timers', item.id, value)"
                 />
               </div>
               <el-tooltip content="打开编辑器" placement="top">
@@ -875,7 +972,7 @@ watch(
             <el-checkbox
               class="select-check"
               :model-value="isSelectedItem('variableChanges', item.id)"
-              @change="(value) => toggleSelection('variableChanges', item.id, value)"
+              @change="(value: any) => toggleSelection('variableChanges', item.id, value)"
             />
             <div class="binding-name">{{ item.name }}</div>
             <div class="binding-actions">
@@ -883,7 +980,7 @@ watch(
                 <span class="binding-toggle-label">启动</span>
                 <el-switch
                   :model-value="item.enabled !== false"
-                  @change="(value) => handleToggleItem('variableChanges', item.id, value)"
+                  @change="(value: any) => handleToggleItem('variableChanges', item.id, value)"
                 />
               </div>
               <el-tooltip content="打开编辑器" placement="top">

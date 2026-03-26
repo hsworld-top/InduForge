@@ -2,7 +2,7 @@
   ScriptVarsPanel - 脚本与变量面板
   管理系统脚本（启动/关闭）、定时器、变量变更、自定义脚本
 -->
-<script setup>
+<script setup lang="ts">
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -21,6 +21,17 @@ import ScriptVarsTimersSection from "./ScriptVarsTimersSection.vue";
 import ScriptVarsVariableChangesSection from "./ScriptVarsVariableChangesSection.vue";
 import VariableGroupFormDialog from "./VariableGroupFormDialog.vue";
 
+type ScriptModule = "system" | "timers" | "variableChanges" | "custom";
+type SystemScriptKey = string;
+type SelectedModule = "timers" | "variableChanges" | "custom";
+type GroupItem = Record<string, any>;
+type ScriptItem = Record<string, any>;
+type VariableListItem = Record<string, any>;
+type TreeNodeData = Record<string, any>;
+type TreeNodeInstance = Record<string, any>;
+type ScriptSelectionMap = Record<string, Array<any>>;
+type MetaFormState = Record<string, any>;
+
 const editorStore = useEditorStore();
 const {
   projectId,
@@ -35,12 +46,12 @@ const {
 const maxGroupDepth = 5;
 
 const activeSections = ref("system");
-const selectedSystemKey = ref("startup");
+const selectedSystemKey = ref<string>("startup");
 
 const selectedTimerId = ref("");
 const selectedVariableId = ref("");
 const selectedCustomId = ref("");
-const selectedNodes = ref({
+const selectedNodes = ref<Record<string, Array<any>>>({
   timers: [],
   variableChanges: [],
   custom: [],
@@ -54,22 +65,22 @@ const editorOriginalInterval = ref(1000);
 const editorInterval = ref(1000);
 const editorParams = ref("");
 
-const systemEditorRef = ref(null);
-const activeEditorRef = ref(null);
+const systemEditorRef = ref<any>(null);
+const activeEditorRef = ref<any>(null);
 
-const scriptClipboard = ref(null);
+const scriptClipboard = ref<Record<string, any> | null>(null);
 
 const groupDialogVisible = ref(false);
 const groupEditMode = ref(false);
-const groupDialogModule = ref("");
+const groupDialogModule = ref<SelectedModule>("custom");
 const groupId = ref("");
 const groupName = ref("");
-const groupParentId = ref(null);
+const groupParentId = ref<any>(null);
 
 const metaDialogVisible = ref(false);
-const metaDialogMode = ref("create");
-const metaDialogModule = ref("");
-const metaForm = ref({
+const metaDialogMode = ref<"create" | "edit">("create");
+const metaDialogModule = ref<SelectedModule>("custom");
+const metaForm = ref<Record<string, any>>({
   id: "",
   name: "",
   interval: 1000,
@@ -81,38 +92,72 @@ const metaForm = ref({
 
 const systemEditorVisible = ref(false);
 const scriptEditorVisible = ref(false);
-const scriptEditorModule = ref("");
+const scriptEditorModule = ref<SelectedModule>("custom");
 
 const contextMenuVisible = ref(false);
 const contextMenuPosition = ref({ x: 0, y: 0 });
-const contextMenuNode = ref(null);
-const contextMenuModule = ref("");
+const contextMenuNode = ref<any>(null);
+const contextMenuModule = ref<SelectedModule>("custom");
 const showMoveToMenu = ref(false);
 
-const projectVariableNames = computed(() => Object.keys(projectVariables.value || {}).sort());
-const projectVariablesList = computed(() =>
-  Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
+const projectVariableNames = computed<Array<string>>(
+  () => Object.keys((projectVariables.value || {}) as Record<string, any>).sort(),
+);
+const projectVariablesList = computed<Array<any>>(() =>
+  (
+    Object.entries((projectVariables.value || {}) as Record<string, any>) as Array<[string, any]>
+  ).map(([name, detail]) => ({
     name,
     groupId: detail?.groupId || null,
     meta: {
-      ...detail,
+      ...(detail || {}),
       mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
     },
   })),
 );
-const customScripts = computed(() => globalScripts.value?.custom?.items || []);
-const customScriptGroups = computed(() => globalScripts.value?.custom?.groups || []);
-const variableGroups = computed(() => projectVariableGroups.value || []);
+const customScripts = computed<Array<any>>(() => (globalScripts.value?.custom?.items || []) as Array<any>);
+const customScriptGroups = computed<Array<any>>(
+  () => (globalScripts.value?.custom?.groups || []) as Array<any>,
+);
+const variableGroups = computed<Array<any>>(() => (projectVariableGroups.value || []) as Array<any>);
 
 const scriptSearch = ref("");
-const customScriptTreeRef = ref(null);
+const customScriptTreeRef = ref<any>(null);
 const pageSearch = ref("");
-const pageTreeRef = ref(null);
+const pageTreeRef = ref<any>(null);
 const variableEnumVisible = ref(false);
 const enumVariableSearch = ref("");
-const enumGroupTreeRef = ref(null);
-const enumSelectedGroupId = ref(null);
-const enumSelectedVar = ref(null);
+const enumGroupTreeRef = ref<any>(null);
+const enumSelectedGroupId = ref<any>(null);
+const enumSelectedVar = ref<any>(null);
+
+/**
+ * 统一消息调用形态，兼容当前项目的 Element Plus 类型约束。
+ */
+function showInfo(message: string) {
+  (ElMessage as any).info(message);
+}
+
+/**
+ * 统一消息调用形态，兼容当前项目的 Element Plus 类型约束。
+ */
+function showSuccess(message: string) {
+  (ElMessage as any).success(message);
+}
+
+/**
+ * 统一消息调用形态，兼容当前项目的 Element Plus 类型约束。
+ */
+function showWarning(message: string) {
+  (ElMessage as any).warning(message);
+}
+
+/**
+ * 统一消息调用形态，兼容当前项目的 Element Plus 类型约束。
+ */
+function showError(message: string) {
+  (ElMessage as any).error(message);
+}
 
 const selectedSystemLabel = computed(() =>
   selectedSystemKey.value === "startup" ? "系统启动" : "系统关闭",
@@ -139,7 +184,7 @@ const enumGroupTree = computed(() => [
     children: buildGroupTree(variableGroups.value),
   },
 ]);
-const enumVariableRows = computed(() => {
+const enumVariableRows = computed<Array<any>>(() => {
   const keyword = String(enumVariableSearch.value || "").toLowerCase();
   return projectVariablesList.value
     .filter((item) => {
@@ -162,14 +207,16 @@ const enumVariableRows = computed(() => {
     }));
 });
 
-const pageComponentTree = computed(() => {
+const pageComponentTree = computed<Array<any>>(() => {
   docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
   if (!rootId || !doc.value) return [];
-  const buildNode = (nodeId) => {
-    const node = doc.value.getNode(nodeId);
+  const buildNode = (nodeId: any): any => {
+    const node = (doc.value as any)?.getNode(nodeId);
     if (!node) return null;
-    const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean);
+    const children = ((node.children || []) as Array<any>)
+      .map((childId: any) => buildNode(childId))
+      .filter(Boolean);
     const label = node.label || node.type || "组件";
     return {
       id: node.id,
@@ -185,8 +232,8 @@ const pageComponentTree = computed(() => {
   return root.children?.length ? root.children : [root];
 });
 
-const jsCompletions = computed(() => {
-  const items = [
+const jsCompletions = computed<Array<any>>(() => {
+  const items: Array<any> = [
     {
       label: "console.log",
       insertText: "console.log()",
@@ -249,13 +296,17 @@ const jsCompletions = computed(() => {
   return items;
 });
 
-const timerGroups = computed(() => globalScripts.value?.timers?.groups || []);
-const variableChangeGroups = computed(() => globalScripts.value?.variableChanges?.groups || []);
-const customGroups = computed(() => globalScripts.value?.custom?.groups || []);
+const timerGroups = computed<Array<any>>(() => (globalScripts.value?.timers?.groups || []) as Array<any>);
+const variableChangeGroups = computed<Array<any>>(
+  () => (globalScripts.value?.variableChanges?.groups || []) as Array<any>,
+);
+const customGroups = computed<Array<any>>(() => (globalScripts.value?.custom?.groups || []) as Array<any>);
 
-const timerItems = computed(() => globalScripts.value?.timers?.items || []);
-const variableChangeItems = computed(() => globalScripts.value?.variableChanges?.items || []);
-const customItems = computed(() => globalScripts.value?.custom?.items || []);
+const timerItems = computed<Array<any>>(() => (globalScripts.value?.timers?.items || []) as Array<any>);
+const variableChangeItems = computed<Array<any>>(
+  () => (globalScripts.value?.variableChanges?.items || []) as Array<any>,
+);
+const customItems = computed<Array<any>>(() => (globalScripts.value?.custom?.items || []) as Array<any>);
 
 const selectedTimer = computed(() =>
   timerItems.value.find((item) => item.id === selectedTimerId.value),
@@ -374,9 +425,9 @@ watch(pageSearch, (value) => {
   pageTreeRef.value?.filter?.(value);
 });
 
-function buildScriptTree(groups, items) {
-  const groupMap = new Map();
-  const roots = [];
+function buildScriptTree(groups: Array<any>, items: Array<any>): Array<any> {
+  const groupMap = new Map<any, any>();
+  const roots: Array<any> = [];
 
   groups.forEach((group) => {
     groupMap.set(group.id, {
@@ -409,9 +460,9 @@ function buildScriptTree(groups, items) {
   return roots;
 }
 
-function buildVariableTree(groups, variables) {
-  const groupMap = new Map();
-  const roots = [];
+function buildVariableTree(groups: Array<any>, variables: Array<any>): Array<any> {
+  const groupMap = new Map<any, any>();
+  const roots: Array<any> = [];
 
   groups.forEach((group) => {
     groupMap.set(group.id, {
@@ -449,9 +500,9 @@ function buildVariableTree(groups, variables) {
   return roots;
 }
 
-function buildGroupTree(groups) {
-  const groupMap = new Map();
-  const roots = [];
+function buildGroupTree(groups: Array<any>): Array<any> {
+  const groupMap = new Map<any, any>();
+  const roots: Array<any> = [];
   const normalized = Array.isArray(groups) ? groups : [];
   normalized.forEach((group) => {
     groupMap.set(group.id, {
@@ -472,9 +523,9 @@ function buildGroupTree(groups) {
   return roots;
 }
 
-function buildPageTree(pageList) {
-  const nodeMap = new Map();
-  const roots = [];
+function buildPageTree(pageList: Array<any>): Array<any> {
+  const nodeMap = new Map<any, any>();
+  const roots: Array<any> = [];
   const normalized = Array.isArray(pageList) ? pageList : [];
   normalized
     .filter((page) => page.type !== "dialog")
@@ -499,31 +550,32 @@ function buildPageTree(pageList) {
   return roots;
 }
 
-function selectSystem(key) {
+function selectSystem(key: string) {
   selectedSystemKey.value = key;
 }
 
-const getSelectedNodes = (module) => selectedNodes.value?.[module] || [];
+const getSelectedNodes = (module: any): Array<any> =>
+  selectedNodes.value?.[module] || [];
 
-function setSelectedNodes(module, nodes) {
+function setSelectedNodes(module: any, nodes: Array<any>) {
   selectedNodes.value = {
     ...selectedNodes.value,
     [module]: nodes,
   };
 }
 
-function isScriptSelected(module, data) {
+function isScriptSelected(module: any, data: any) {
   return getSelectedNodes(module).some((node) => node.id === data.id);
 }
 
-function getMenuItemCount(nodeType) {
+function getMenuItemCount(nodeType: any) {
   if (nodeType === "blank") return 3;
   if (nodeType === "item") return 5;
   if (nodeType === "group") return 4;
   return 4;
 }
 
-function setContextMenuPosition(event, nodeType) {
+function setContextMenuPosition(event: any, nodeType: any) {
   const width = 180;
   const itemHeight = 38;
   const height = getMenuItemCount(nodeType) * itemHeight + 12;
@@ -557,7 +609,7 @@ const canEditGroup = computed(() => {
 });
 
 const canDeleteSelection = computed(() => !isMixedSelection.value);
-function insertText(text) {
+function insertText(text: string) {
   if (systemEditorVisible.value) {
     systemEditorRef.value?.insertText?.(text);
     return;
@@ -567,12 +619,12 @@ function insertText(text) {
   }
 }
 
-function handleVariableInsert(data) {
+function handleVariableInsert(data: any) {
   if (data?.type !== "variable") return;
   insertText(`$global.${data.name}`);
 }
 
-function handleCustomScriptInsert(data) {
+function handleCustomScriptInsert(data: any) {
   if (data?.type !== "item") return;
   const script = customScripts.value.find((item) => item.id === data.itemId);
   if (!script?.name) return;
@@ -586,14 +638,14 @@ function handleCustomScriptInsert(data) {
   insertText(`customScripts.${call}`);
 }
 
-function handlePageInsert(data) {
+function handlePageInsert(data: any) {
   if (!data || data.type !== "page") return;
   const name = data.name || data.label;
   if (!name) return;
   insertText(`components.pages["${name}"]`);
 }
 
-function handleEnumGroupSelect(data) {
+function handleEnumGroupSelect(data: any) {
   if (!data) {
     enumSelectedGroupId.value = null;
     return;
@@ -601,21 +653,21 @@ function handleEnumGroupSelect(data) {
   enumSelectedGroupId.value = data.id === "all" ? null : data.id;
 }
 
-function handleEnumRowClick(row) {
+function handleEnumRowClick(row: any) {
   enumSelectedVar.value = row || null;
 }
 
-function handleEnumRowDblClick(row) {
+function handleEnumRowDblClick(row: any) {
   enumSelectedVar.value = row || null;
   confirmEnumInsert();
 }
 
-function enumRowClass({ row }) {
+function enumRowClass({ row }: any) {
   if (enumSelectedVar.value?.name === row.name) return "is-selected";
   return "";
 }
 
-function filterSidebarNode(value, data) {
+function filterSidebarNode(value: string, data: any) {
   if (!value) return true;
   const keyword = String(value).toLowerCase();
   return String(data?.label || "")
@@ -644,14 +696,14 @@ function formatActiveCode() {
   activeEditorRef.value?.format?.();
 }
 
-function openSystemEditor(key) {
+function openSystemEditor(key?: string) {
   if (contextMenuVisible.value) closeContextMenu();
   if (key) selectedSystemKey.value = key;
   systemOriginalCode.value = systemCode.value || "";
   systemEditorVisible.value = true;
 }
 
-function openScriptEditor(module, data) {
+function openScriptEditor(module: any, data?: any) {
   if (contextMenuVisible.value) closeContextMenu();
   if (!canOpenEditScript.value && !data) return;
   if (data?.type === "item") {
@@ -671,21 +723,21 @@ function openScriptEditor(module, data) {
 
 async function persistGlobals() {
   if (!projectId.value) {
-    ElMessage.error("缺少工程信息，无法保存");
+    showError("缺少工程信息，无法保存");
     return;
   }
   const result = await editorStore.saveProjectSettings();
   if (!result.ok) {
-    ElMessage.error(result.error?.message || "保存失败");
+    showError(result.error?.message || "保存失败");
   }
 }
 
 async function saveSystemScript() {
-  const scripts = globalScripts.value || {};
-  const system = scripts.system || {
+  const scripts = (globalScripts.value || {}) as Record<string, any>;
+  const system = (scripts.system || {
     startup: { code: "" },
     shutdown: { code: "" },
-  };
+  }) as Record<string, any>;
   const next = {
     ...system,
     [selectedSystemKey.value]: {
@@ -693,13 +745,13 @@ async function saveSystemScript() {
       code: systemCode.value || "",
     },
   };
-  globalScripts.value = { ...scripts, system: next };
+  (globalScripts.value as any) = { ...scripts, system: next };
   systemOriginalCode.value = systemCode.value || "";
   await persistGlobals();
-  ElMessage.success("已保存脚本");
+  showSuccess("已保存脚本");
 }
 
-function handleScriptNodeClick(module, data, event) {
+function handleScriptNodeClick(module: any, data: any, event?: any) {
   const isCtrl = Boolean(event?.ctrlKey || event?.metaKey);
   const current = getSelectedNodes(module);
   if (isCtrl) {
@@ -727,7 +779,7 @@ function handleScriptNodeClick(module, data, event) {
   if (contextMenuVisible.value) closeContextMenu();
 }
 
-function handleTreeContextMenu(module, event, data) {
+function handleTreeContextMenu(module: any, event: any, data: any) {
   event.preventDefault();
   event.stopPropagation();
   if (!isScriptSelected(module, data)) {
@@ -749,7 +801,7 @@ function handleTreeContextMenu(module, event, data) {
   }
 }
 
-function handleBlankContextMenu(module, event) {
+function handleBlankContextMenu(module: any, event: any) {
   event.preventDefault();
   event.stopPropagation();
   setSelectedNodes(module, []);
@@ -785,7 +837,7 @@ function openGroupCreateFromMenu() {
   groupDialogVisible.value = true;
 }
 
-function handleMoveTo(groupIdValue) {
+function handleMoveTo(groupIdValue: any) {
   const module = contextMenuModule.value;
   const node = contextMenuNode.value;
   closeContextMenu();
@@ -812,7 +864,7 @@ function handleMoveTo(groupIdValue) {
   });
 
   if (blocked) {
-    ElMessage.warning("无法移动到子分组");
+    showWarning("无法移动到子分组");
   }
 
   updateModuleGroups(module, nextGroups);
@@ -823,7 +875,12 @@ function allowScriptDrag() {
   return true;
 }
 
-function allowScriptDrop(module, draggingNode, dropNode, type) {
+function allowScriptDrop(
+  module: any,
+  draggingNode: any,
+  dropNode: any,
+  type: any,
+) {
   const dragData = draggingNode.data;
   const dropData = dropNode.data;
 
@@ -847,7 +904,12 @@ function allowScriptDrop(module, draggingNode, dropNode, type) {
   return false;
 }
 
-function handleScriptDrop(module, draggingNode, dropNode, dropType) {
+function handleScriptDrop(
+  module: any,
+  draggingNode: any,
+  dropNode: any,
+  dropType: any,
+) {
   const dragData = draggingNode.data;
   const targetGroupId = resolveTargetGroupId(dropNode, dropType);
 
@@ -867,7 +929,7 @@ function handleScriptDrop(module, draggingNode, dropNode, dropType) {
   }
 }
 
-function resolveTargetGroupId(dropNode, dropType) {
+function resolveTargetGroupId(dropNode: any, dropType: any): any {
   const dropData = dropNode.data;
   if (dropType === "inner") {
     return dropData.type === "group" ? dropData.id : null;
@@ -876,10 +938,10 @@ function resolveTargetGroupId(dropNode, dropType) {
   return parent?.type === "group" ? parent.id : null;
 }
 
-async function removeScript(module) {
+async function removeScript(module: any) {
   if (contextMenuVisible.value) closeContextMenu();
   if (!canDeleteSelection.value) {
-    ElMessage.warning("分组与成员混选时不能删除");
+    showWarning("分组与成员混选时不能删除");
     return;
   }
   const selected = getSelectedItem(module);
@@ -936,7 +998,7 @@ async function removeScript(module) {
   }
 }
 
-function copyScript(module) {
+function copyScript(module: any) {
   if (contextMenuVisible.value) closeContextMenu();
   const nodes = getSelectedNodes(module);
   const items = nodes
@@ -952,17 +1014,17 @@ function copyScript(module) {
     module,
     items: items.map((item) => JSON.parse(JSON.stringify(item))),
   };
-  ElMessage.success(`已复制 ${scriptClipboard.value.items.length} 个脚本`);
+  showSuccess(`已复制 ${scriptClipboard.value.items.length} 个脚本`);
 }
 
-async function pasteScript(module) {
+async function pasteScript(module: any) {
   if (contextMenuVisible.value) closeContextMenu();
   if (!scriptClipboard.value?.items?.length) return;
   const items = getItemsByModule(module);
   const targetGroupId = getSelectedGroupId(module);
   const nextItems = [...items];
 
-  scriptClipboard.value.items.forEach((source) => {
+  scriptClipboard.value.items.forEach((source: any) => {
     const nameBase = source.name || "脚本";
     let name = nameBase;
     let index = 1;
@@ -981,28 +1043,28 @@ async function pasteScript(module) {
   updateModuleItems(module, nextItems);
 }
 
-function getSelectedItem(module) {
+function getSelectedItem(module: any): any {
   if (module === "timers") return selectedTimer.value;
   if (module === "variableChanges") return selectedVariableChange.value;
   if (module === "custom") return selectedCustom.value;
   return null;
 }
 
-function getGroupsByModule(module) {
-  if (module === "timers") return timerGroups.value;
-  if (module === "variableChanges") return variableChangeGroups.value;
-  if (module === "custom") return customGroups.value;
+function getGroupsByModule(module: any): Array<any> {
+  if (module === "timers") return timerGroups.value as Array<any>;
+  if (module === "variableChanges") return variableChangeGroups.value as Array<any>;
+  if (module === "custom") return customGroups.value as Array<any>;
   return [];
 }
 
-function getItemsByModule(module) {
-  if (module === "timers") return timerItems.value;
-  if (module === "variableChanges") return variableChangeItems.value;
-  if (module === "custom") return customItems.value;
+function getItemsByModule(module: any): Array<any> {
+  if (module === "timers") return timerItems.value as Array<any>;
+  if (module === "variableChanges") return variableChangeItems.value as Array<any>;
+  if (module === "custom") return customItems.value as Array<any>;
   return [];
 }
 
-function getSelectedGroupId(module) {
+function getSelectedGroupId(module: any): any {
   if (module === "timers") {
     if (selectedTimerGroup.value) return selectedTimerGroup.value.id;
     if (selectedTimer.value?.groupId) return selectedTimer.value.groupId;
@@ -1018,29 +1080,31 @@ function getSelectedGroupId(module) {
   return null;
 }
 
-function updateModuleGroups(module, groups) {
-  globalScripts.value = {
-    ...globalScripts.value,
+function updateModuleGroups(module: any, groups: Array<any>) {
+  const nextScripts = (globalScripts.value || {}) as Record<string, any>;
+  (globalScripts.value as any) = {
+    ...nextScripts,
     [module]: {
-      ...(globalScripts.value?.[module] || {}),
+      ...(nextScripts[module] || {}),
       groups,
     },
   };
   persistGlobals();
 }
 
-function updateModuleItems(module, items) {
-  globalScripts.value = {
-    ...globalScripts.value,
+function updateModuleItems(module: any, items: Array<any>) {
+  const nextScripts = (globalScripts.value || {}) as Record<string, any>;
+  (globalScripts.value as any) = {
+    ...nextScripts,
     [module]: {
-      ...(globalScripts.value?.[module] || {}),
+      ...(nextScripts[module] || {}),
       items,
     },
   };
   persistGlobals();
 }
 
-function openGroupCreate(module) {
+function openGroupCreate(module: any) {
   groupEditMode.value = false;
   groupDialogModule.value = module;
   groupId.value = "";
@@ -1049,7 +1113,7 @@ function openGroupCreate(module) {
   groupDialogVisible.value = true;
 }
 
-function openGroupEdit(module) {
+function openGroupEdit(module: any) {
   const groups = getGroupsByModule(module);
   const selectedId =
     module === "timers"
@@ -1076,12 +1140,12 @@ function createId() {
 
 async function saveGroup() {
   const name = groupName.value.trim();
-  if (!name) return ElMessage.warning("分组名不能为空");
+  if (!name) return showWarning("分组名不能为空");
 
   const parentId = groupParentId.value || null;
   const depth = parentId ? getGroupDepth(parentId, groupDialogModule.value) + 1 : 1;
   if (depth > maxGroupDepth) {
-    return ElMessage.warning(`分组最多支持 ${maxGroupDepth} 层`);
+    return showWarning(`分组最多支持 ${maxGroupDepth} 层`);
   }
 
   const groups = getGroupsByModule(groupDialogModule.value);
@@ -1099,9 +1163,9 @@ async function saveGroup() {
   groupDialogVisible.value = false;
 }
 
-async function removeGroup(module) {
+async function removeGroup(module: any) {
   if (!canDeleteSelection.value) {
-    ElMessage.warning("分组与成员混选时不能删除");
+    showWarning("分组与成员混选时不能删除");
     return;
   }
   const groups = getGroupsByModule(module);
@@ -1140,7 +1204,7 @@ async function removeGroup(module) {
   updateModuleItems(module, items);
 }
 
-function getGroupDepth(groupIdValue, module) {
+function getGroupDepth(groupIdValue: any, module: any): number {
   if (!groupIdValue) return 0;
   let depth = 1;
   let currentId = groupIdValue;
@@ -1153,7 +1217,7 @@ function getGroupDepth(groupIdValue, module) {
   return depth;
 }
 
-function getGroupSubtreeDepth(groupIdValue, module) {
+function getGroupSubtreeDepth(groupIdValue: any, module: any): number {
   const groups = getGroupsByModule(module);
   const children = groups.filter((group) => group.parentId === groupIdValue);
   if (!children.length) return 1;
@@ -1161,7 +1225,7 @@ function getGroupSubtreeDepth(groupIdValue, module) {
   return 1 + Math.max(...depths);
 }
 
-function isDescendantGroup(targetId, parentId, module) {
+function isDescendantGroup(targetId: any, parentId: any, module: any): boolean {
   const groups = getGroupsByModule(module);
   let current = groups.find((group) => group.id === targetId);
   while (current?.parentId) {
@@ -1171,7 +1235,7 @@ function isDescendantGroup(targetId, parentId, module) {
   return false;
 }
 
-function saveScriptCode(module) {
+function saveScriptCode(module: any) {
   const selected = getSelectedItem(module);
   if (!selected) return;
   const items = getItemsByModule(module).map((item) =>
@@ -1186,7 +1250,7 @@ function saveScriptCode(module) {
   updateModuleItems(module, items);
   editorOriginalCode.value = editorCode.value || "";
   editorOriginalInterval.value = editorInterval.value;
-  ElMessage.success("已保存脚本");
+  showSuccess("已保存脚本");
 }
 
 function saveActiveScript() {
@@ -1198,7 +1262,7 @@ function saveActiveScript() {
     saveScriptCode("custom");
   }
 }
-async function handleSystemBeforeClose(done) {
+async function handleSystemBeforeClose(done: any) {
   const isDirty = (systemCode.value || "") !== (systemOriginalCode.value || "");
   if (!isDirty) {
     done();
@@ -1218,7 +1282,7 @@ async function handleSystemBeforeClose(done) {
   }
 }
 
-async function handleScriptBeforeClose(done) {
+async function handleScriptBeforeClose(done: any) {
   const codeDirty = (editorCode.value || "") !== (editorOriginalCode.value || "");
   const intervalDirty =
     scriptEditorModule.value === "timers" && editorInterval.value !== editorOriginalInterval.value;
@@ -1241,7 +1305,7 @@ async function handleScriptBeforeClose(done) {
   }
 }
 
-function handleEditorShortcut(event) {
+function handleEditorShortcut(event: any) {
   if (!systemEditorVisible.value && !scriptEditorVisible.value) return;
   if (!(event.ctrlKey || event.metaKey)) return;
   const key = event.key.toLowerCase();
@@ -1257,10 +1321,10 @@ function handleEditorShortcut(event) {
   }
 }
 
-function openMetaDialog(module, mode) {
+function openMetaDialog(module: any, mode: any) {
   if (contextMenuVisible.value) closeContextMenu();
   if (mode === "edit" && getSelectedNodes(module).length > 1) {
-    ElMessage.warning("多选时不能编辑");
+    showWarning("多选时不能编辑");
     return;
   }
   metaDialogMode.value = mode;
@@ -1301,23 +1365,23 @@ function saveMetaDialog() {
 
   if (module === "timers") {
     const name = metaForm.value.name.trim();
-    if (!name) return ElMessage.warning("请输入定时器名称");
+    if (!name) return showWarning("请输入定时器名称");
     const exists = items.some((item) => item.name === name && item.id !== metaForm.value.id);
-    if (exists) return ElMessage.warning("定时器名称已存在");
+    if (exists) return showWarning("定时器名称已存在");
     if (!Number.isFinite(Number(metaForm.value.interval))) {
-      return ElMessage.warning("请输入正确的时间");
+      return showWarning("请输入正确的时间");
     }
   }
 
   if (module === "variableChanges") {
-    if (!metaForm.value.variable) return ElMessage.warning("请选择变量");
+    if (!metaForm.value.variable) return showWarning("请选择变量");
   }
 
   if (module === "custom") {
     const name = metaForm.value.name.trim();
-    if (!name) return ElMessage.warning("请输入函数名称");
+    if (!name) return showWarning("请输入函数名称");
     const exists = items.some((item) => item.name === name && item.id !== metaForm.value.id);
-    if (exists) return ElMessage.warning("函数名称已存在");
+    if (exists) return showWarning("函数名称已存在");
   }
 
   if (metaDialogMode.value === "create") {
