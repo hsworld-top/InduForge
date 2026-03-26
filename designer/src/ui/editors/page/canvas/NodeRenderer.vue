@@ -2,7 +2,7 @@
   NodeRenderer - 节点渲染器
   递归渲染组件树，支持 DOM 组件与 Canvas 图形，处理绑定、事件、拖拽
 -->
-<script setup>
+<script setup lang="ts">
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, inject, nextTick, ref, watch } from "vue";
@@ -52,19 +52,21 @@ import { usePreview } from "./composables/use-preview";
 import { canvasZoomKey } from "./injection-keys";
 import { createDragDropManager } from "./services/DragDropManager";
 
-const props = defineProps({
-  nodeId: {
-    type: String,
-    required: true,
-  },
-  isRoot: {
-    type: Boolean,
-    default: false,
-  },
-  readonly: {
-    type: Boolean,
-    default: false,
-  },
+interface NodeRendererProps {
+  nodeId: string;
+  isRoot?: boolean;
+  readonly?: boolean;
+}
+
+type NodeLike = Record<string, any>;
+type TabsPaneLike = Record<string, any>;
+type EventListenerMap = Record<string, any>;
+type StyleObjectLike = Record<string, any>;
+type ShowContextMenuLike = any;
+
+const props = withDefaults(defineProps<NodeRendererProps>(), {
+  isRoot: false,
+  readonly: false,
 });
 
 const editorStore = useEditorStore();
@@ -80,12 +82,12 @@ const {
   currentPage,
   error,
 } = storeToRefs(editorStore);
-const showContextMenu = inject("showContextMenu", null);
-const nodeStyleHelpers = createNodeStyleHelpers({ doc, currentPage, props });
+const showContextMenu = inject<ShowContextMenuLike>("showContextMenu", null);
+const nodeStyleHelpers = createNodeStyleHelpers({ doc, currentPage, props } as any) as any;
 const resolveLayoutStyle = nodeStyleHelpers.resolveLayoutStyle;
 const isRootCanvasContainer = nodeStyleHelpers.isRootCanvasContainer;
 
-const node = computed(() => {
+const node = computed<NodeLike | null>(() => {
   docVersion.value;
   return doc.value?.getNode(props.nodeId) || null;
 });
@@ -95,12 +97,12 @@ const detailConfigText = computed(() => {
   return String(node.value?.detailConfig || "").trim();
 });
 
-let applyMenuDslConfig = () => {};
+let applyMenuDslConfig: any = () => {};
 
 // nodeRef 和 contentRef 需要先声明，因为会被 useNodeInteraction 等 composable 使用
-const nodeRef = ref(null);
-const contentRef = ref(null);
-function setNodeRef(el) {
+const nodeRef = ref<any>(null);
+const contentRef = ref<any>(null);
+function setNodeRef(el: any): void {
   nodeRef.value = el?.$el || el;
 }
 
@@ -108,7 +110,7 @@ function setNodeRef(el) {
  * 处理节点选中（Shift/Meta/Ctrl 多选）
  * @param {MouseEvent} event - 鼠标事件
  */
-function handleSelect(event) {
+function handleSelect(event: any): void {
   if (!node.value || !selection.value) return;
   if (node.value.locked) return;
   const element = createSelectableElement("node", node.value.id);
@@ -125,40 +127,40 @@ function handleSelect(event) {
 
 // 使用 usePreview composable（需要在 useNodeInteraction 之前，因为 runPreviewScript 需要传入）
 // buildRefInfo 由下方 useBuildRefInfo 赋值，此处先声明以便 usePreview 闭包引用
-let buildRefInfo = null;
-const previewRuntime = usePreview({
-  node,
-  doc,
-  currentPage,
-  projectVariables,
-  projectId,
-  docVersion,
-  globalScripts,
-  datacenterApi,
+let buildRefInfo: any = null;
+const previewRuntime: any = usePreview({
+  node: node as any,
+  doc: doc as any,
+  currentPage: currentPage as any,
+  projectVariables: projectVariables as any,
+  projectId: projectId as any,
+  docVersion: docVersion as any,
+  globalScripts: globalScripts as any,
+  datacenterApi: datacenterApi as any,
   buildRefInfo: () => buildRefInfo?.(),
   readonly: computed(() => props.readonly),
   detailConfigText,
-  resolveMenuConfigFromContent,
-  applyMenuDslConfig: (config) => applyMenuDslConfig(config),
-});
+  resolveMenuConfigFromContent: resolveMenuConfigFromContent as any,
+  applyMenuDslConfig: (config: any) => applyMenuDslConfig(config),
+} as any);
 const { runPreviewScript, isRunningDetailConfig: isRunningDetailConfigFn } = previewRuntime;
 
 // 使用 useNodeInteraction composable
-const nodeInteraction = useNodeInteraction({
-  node,
-  doc,
-  selection,
-  selectionVersion,
+const nodeInteraction: any = useNodeInteraction({
+  node: node as any,
+  doc: doc as any,
+  selection: selection as any,
+  selectionVersion: selectionVersion as any,
   readonly: computed(() => props.readonly),
   isRoot: computed(() => props.isRoot),
-  isRootCanvasContainer,
-  isChildResizableByDescriptor,
+  isRootCanvasContainer: isRootCanvasContainer as any,
+  isChildResizableByDescriptor: isChildResizableByDescriptor as any,
   nodeRef,
-  createSelectableElement,
-  runPreviewScript,
+  createSelectableElement: createSelectableElement as any,
+  runPreviewScript: runPreviewScript as any,
   handleSelect,
   showContextMenu,
-});
+} as any);
 const {
   handleClick,
   handleDoubleClick,
@@ -172,22 +174,22 @@ const {
   isContainer: isContainerFromComposable,
   isRegionContainer: isRegionContainerFromComposable,
 } = nodeInteraction;
-const canvasZoom = inject(canvasZoomKey, ref(1));
+const canvasZoom = inject<any>(canvasZoomKey, ref(1));
 const dragState = useDragState();
-function notifyInsertFailure(fallbackMessage) {
+function notifyInsertFailure(fallbackMessage?: string): void {
   const message = error.value || fallbackMessage || "插入失败：当前不可编辑";
-  ElMessage.warning(message);
+  ElMessage.warning({ message } as any);
 }
 
 // 使用 useNodeProps composable（不传 activeTabName，避免循环依赖）
-const nodeProps = useNodeProps({
-  node,
-  doc,
-  currentPage,
-  projectVariables,
-  docVersion,
+const nodeProps: any = useNodeProps({
+  node: node as any,
+  doc: doc as any,
+  currentPage: currentPage as any,
+  projectVariables: projectVariables as any,
+  docVersion: docVersion as any,
   readonly: computed(() => props.readonly),
-});
+} as any);
 const {
   resolvedNodeProps,
   resolvedProps: resolvedPropsBase,
@@ -195,7 +197,11 @@ const {
 } = nodeProps;
 
 // 使用 useNodeContent composable（传入 resolvedNodeProps）
-const nodeContent = useNodeContent({ node, resolvedNodeProps, docVersion });
+const nodeContent: any = useNodeContent({
+  node: node as any,
+  resolvedNodeProps: resolvedNodeProps as any,
+  docVersion: docVersion as any,
+} as any);
 const {
   selectOptions,
   radioOptions,
@@ -208,36 +214,41 @@ const {
   syncActiveTabName,
   applyTabsModelValueToProps,
 } = nodeContent;
+const selectOptionsList = computed<any[]>(() => (selectOptions.value || []) as any[]);
+const radioOptionsList = computed<any[]>(() => (radioOptions.value || []) as any[]);
+const checkboxOptionsList = computed<any[]>(() => (checkboxOptions.value || []) as any[]);
+const dropdownItemsList = computed<any[]>(() => (dropdownItems.value || []) as any[]);
+const tabsListItems = computed<any[]>(() => (tabsList.value || []) as any[]);
 
 const { buildRefInfo: buildRefInfoImpl, applyPreviewPatch } = useBuildRefInfo({
-  node,
+  node: node as any,
   nodeRef,
   contentRef,
-  editorStore,
+  editorStore: editorStore as any,
   readonly: computed(() => props.readonly),
   tableRenderVersion,
   docVersion,
-  isRunningDetailConfigFn,
-});
+  isRunningDetailConfigFn: isRunningDetailConfigFn as any,
+} as any);
 buildRefInfo = buildRefInfoImpl;
 
 useNodeRendererPreviewRef({
   readonly: computed(() => props.readonly),
-  node,
-  currentPage,
+  node: node as any,
+  currentPage: currentPage as any,
   buildRefInfo: () => buildRefInfo?.(),
-});
+} as any);
 
 applyMenuDslConfig = createApplyMenuDslConfig({
-  node,
+  node: node as any,
   readonly: computed(() => props.readonly),
-  applyPreviewPatch,
-  editorStore,
-  normalizeMenuItems,
-});
+  applyPreviewPatch: applyPreviewPatch as any,
+  editorStore: editorStore as any,
+  normalizeMenuItems: normalizeMenuItems as any,
+} as any);
 
 // 应用 Tabs modelValue 处理到 resolvedProps（通过 useNodeContent 的辅助函数）
-const resolvedProps = computed(() => {
+const resolvedProps = computed<Record<string, any>>(() => {
   const base = resolvedPropsBase.value;
   if (isTableLikeType(node.value?.type)) {
     tableRenderVersion.value;
@@ -245,9 +256,9 @@ const resolvedProps = computed(() => {
   return applyTabsModelValueToProps(base);
 });
 
-const dragDropManager = createDragDropManager();
+const dragDropManager: any = createDragDropManager();
 
-function resolveFlexDirection(type, element) {
+function resolveFlexDirection(type: any, element: any): string {
   const descriptorDirection = getFlexDirection(type);
   if (descriptorDirection) {
     return descriptorDirection;
@@ -255,31 +266,31 @@ function resolveFlexDirection(type, element) {
   if (usesLegacyFlexDirectionProps(type)) {
     return node.value?.props?.direction || "column";
   }
-  return dragDropManager.getContainerDirection(element);
+  return dragDropManager.getContainerDirection((element || undefined) as any);
 }
 
 const isMovable = computed(() => {
   if (!node.value || props.isRoot || node.value.locked) return false;
-  if (isRootCanvasContainer(node.value)) return false;
+  if (isRootCanvasContainer(node.value as any)) return false;
   return isNodeDesignerMovable(node.value.type);
 });
 
-const nodeDrop = useNodeDrop({
-  node,
-  doc,
+const nodeDrop: any = useNodeDrop({
+  node: node as any,
+  doc: doc as any,
   dragState,
-  dragDropManager,
+  dragDropManager: dragDropManager as any,
   isContainer: isContainerFromComposable,
   resolveFlexDirection,
-  isFlexContainer,
+  isFlexContainer: isFlexContainer as any,
   readonly: computed(() => props.readonly),
-  editorStore,
+  editorStore: editorStore as any,
   canvasZoom,
-  endDrag,
+  endDrag: endDrag as any,
   notifyInsertFailure,
   activeTabName,
   tabsList,
-});
+} as any);
 const {
   handleDragOver,
   handleDrop,
@@ -293,23 +304,23 @@ const {
   isDroppableContainer,
   resolveDropContainer,
 } = nodeDrop;
-const nodeResize = useNodeResize({
-  node,
-  doc,
+const nodeResize: any = useNodeResize({
+  node: node as any,
+  doc: doc as any,
   nodeRef,
   readonly: computed(() => props.readonly),
   isMovable,
   isElColInRow: isElColInRowFromComposable,
   isChildInElCol: isChildInElColFromComposable,
-  selection,
+  selection: selection as any,
   canvasZoom,
-  history,
-  editorStore,
-  isChildResizableByDescriptor,
+  history: history as any,
+  editorStore: editorStore as any,
+  isChildResizableByDescriptor: isChildResizableByDescriptor as any,
   getRegionResizeConfig: getRegionResizeConfigFromComposable,
-});
+} as any);
 const { handleResizePointerDown } = nodeResize;
-const isDropActive = computed(() => {
+const isDropActive = computed<boolean>(() => {
   if (!node.value) return isDragOver.value;
   return isDragOver.value || dragState.targetContainerId === node.value.id;
 });
@@ -329,21 +340,28 @@ const {
   renderKey,
   nodeClass,
 } = useNodeRendererDerivations({
-  node,
+  node: node as any,
   detailConfigText,
-  docVersion,
+  docVersion: docVersion as any,
   tableRenderVersion,
-  resolvedNodeProps,
-  selectionVersion,
-  selection,
-  doc,
+  resolvedNodeProps: resolvedNodeProps as any,
+  selectionVersion: selectionVersion as any,
+  selection: selection as any,
+  doc: doc as any,
   isContainer: isContainerFromComposable,
   isMovable,
   isDropActive,
   activeTabName,
   tabsList,
   props,
-});
+} as any);
+const menuItemsList = computed<any[]>(() => (menuItems.value || []) as any[]);
+const tableColumnsList = computed<any[]>(() => (tableColumns.value || []) as any[]);
+const bigTableColumnsList = computed<any[]>(() => (bigTableColumns.value || []) as any[]);
+const timelineItemsList = computed<any[]>(() => (timelineItems.value || []) as any[]);
+const collapseItemsList = computed<any[]>(() => (collapseItems.value || []) as any[]);
+const stepsItemsList = computed<any[]>(() => (stepsItems.value || []) as any[]);
+const carouselItemsList = computed<any[]>(() => (carouselItems.value || []) as any[]);
 
 const filteredProps = filteredPropsFromComposable;
 
@@ -352,7 +370,7 @@ const tabHeaderWidth = ref(0);
 /**
  * 同步 Tabs 头部宽度（用于左右布局）
  */
-function syncTabsHeaderWidth() {
+function syncTabsHeaderWidth(): void {
   if (!node.value || !isTabsType.value) return;
   const tabPosition =
     resolvedNodeProps.value?.tabPosition || node.value?.props?.tabPosition || "top";
@@ -390,7 +408,7 @@ watch(
  * 处理 Tabs 点击事件
  * @param {Object} pane - Tab 面板
  */
-function handleTabsClick(pane) {
+function handleTabsClick(pane: TabsPaneLike): void {
   if (!pane) return;
   const name = pane?.props?.name ?? pane?.name ?? pane?.paneName ?? pane?.label ?? "";
   if (name) {
@@ -402,7 +420,7 @@ function handleTabsClick(pane) {
  * 处理 Tabs 切换事件
  * @param {string} name - 激活名称
  */
-function handleTabsChange(name) {
+function handleTabsChange(name: string | number): void {
   if (!name) return;
   activeTabName.value = String(name);
 }
@@ -411,21 +429,21 @@ function handleTabsChange(name) {
  * 处理 Tabs 删除事件
  * @param {string} name - Tab 名称
  */
-function resolveTabNameValue(input) {
+function resolveTabNameValue(input: any): any {
   if (input && typeof input === "object") {
     return input?.props?.name ?? input?.name ?? input?.paneName ?? input?.label ?? "";
   }
   return input ?? "";
 }
 
-function handleTabsRemove(name) {
+function handleTabsRemove(name: any): void {
   if (!isTabsType.value) return;
   const resolvedName = resolveTabNameValue(name);
   if (!resolvedName) return;
   const tabs = Array.isArray(node.value?.props?.tabs) ? [...node.value.props.tabs] : [];
   if (!tabs.length) return;
   const normalizedName = String(resolvedName);
-  const updateTabsProps = (patch) => {
+  const updateTabsProps = (patch: Record<string, any>): void => {
     if (!node.value || !patch || typeof patch !== "object") return;
     editorStore.updateNode(node.value.id, {
       props: { ...(node.value.props || {}), ...patch },
@@ -469,11 +487,11 @@ function handleTabsRemove(name) {
  * @param {string} name - Tab 名称
  * @param {string} action - edit 动作
  */
-function handleTabsEdit(name, action) {
+function handleTabsEdit(name: any, action: string): void {
   if (action !== "remove") return;
   handleTabsRemove(name);
 }
-function isActiveTab(tab) {
+function isActiveTab(tab: any): boolean {
   if (!tab) return false;
   const name = tab.name ?? tab.label ?? "";
   return String(name) === activeTabName.value;
@@ -488,11 +506,11 @@ const isNodeVisible = computed(() => {
   const visibleConfig = node.value.conditions?.visible;
   if (typeof visibleConfig === "boolean") return visibleConfig;
   if (typeof visibleConfig !== "string" || !visibleConfig.trim()) return true;
-  const context = buildExpressionContext(resolvedNodeProps.value || {}, {
-    doc,
-    currentPage,
-    projectVariables,
-  });
+  const context = buildExpressionContext((resolvedNodeProps.value || {}) as any, {
+    doc: doc as any,
+    currentPage: currentPage as any,
+    projectVariables: projectVariables as any,
+  } as any);
   const value = resolveExpressionValue(visibleConfig, context, true);
   return Boolean(value);
 });
@@ -500,29 +518,29 @@ const isNodeVisible = computed(() => {
 const hasChildren = computed(() => {
   docVersion.value;
   if (!node.value || !doc.value) return false;
-  if (typeof doc.value.getChildren === "function") {
-    return doc.value.getChildren(node.value.id).length > 0;
+  if (typeof (doc.value as any).getChildren === "function") {
+    return (doc.value as any).getChildren(node.value.id).length > 0;
   }
   return (node.value.children || []).length > 0;
 });
 
 const nodePointer = useNodePointer({
-  node,
-  doc,
+  node: node as any,
+  doc: doc as any,
   nodeRef,
   readonly: computed(() => props.readonly),
   isMovable,
   isContainer,
-  selection,
+  selection: selection as any,
   canvasZoom,
-  history,
-  editorStore,
-  currentPage,
-  startDrag,
-  endDrag,
-  updateDropTarget,
-  clearDropTarget,
-  dragDropManager,
+  history: history as any,
+  editorStore: editorStore as any,
+  currentPage: currentPage as any,
+  startDrag: startDrag as any,
+  endDrag: endDrag as any,
+  updateDropTarget: updateDropTarget as any,
+  clearDropTarget: clearDropTarget as any,
+  dragDropManager: dragDropManager as any,
   canAcceptChild,
   showInsertLine,
   insertLineStyle,
@@ -531,7 +549,7 @@ const nodePointer = useNodePointer({
   activeTabName,
   tabsList,
   resolveFlexDirection,
-});
+} as any);
 const { handlePointerDown } = nodePointer;
 
 const visibleResizeHandles = visibleResizeHandlesFromComposable;
@@ -564,12 +582,12 @@ const {
   isCarouselSlotType,
   isDropdownType,
   suppressReadonlyEmptyHint,
-} = useNodeRendererTypeFlags(node, {
+} = useNodeRendererTypeFlags(node as any, {
   readonly: computed(() => props.readonly),
   isRegionContainer,
-});
+} as any);
 
-const renderTag = computed(() => {
+const renderTag = computed<any>(() => {
   if (!node.value) return "div";
   const type = node.value.type;
   // 使用 getRenderTag 统一处理（支持函数类型 renderTag，如 Text 组件）
@@ -582,16 +600,16 @@ const renderTag = computed(() => {
 });
 
 /** 复杂组件自定义渲染器（由 descriptor.customRenderer 指定） */
-const customRendererComponent = computed(() => {
+const customRendererComponent = computed<any>(() => {
   if (!node.value) return null;
   return getCustomRenderer(node.value.type) ?? null;
 });
 
-const outerTag = computed(() => {
+const outerTag = computed<any>(() => {
   return useComponentWrapper.value ? renderTag.value : "div";
 });
 
-const displayContent = computed(() => {
+const displayContent = computed<any>(() => {
   docVersion.value;
   if (!node.value) return null;
   const resolvedPropsValue = resolvedNodeProps.value || {};
@@ -606,18 +624,18 @@ const displayContent = computed(() => {
   return null;
 });
 
-const layoutStyle = computed(() => {
+const layoutStyle = computed<Record<string, any>>(() => {
   docVersion.value;
   if (!node.value) return {};
-  return resolveLayoutStyle(node.value, props.isRoot);
+  return resolveLayoutStyle(node.value as any, props.isRoot);
 });
 
 // 使用 use-node-style composable 创建 contentStyle
 const contentStyle = nodeStyleHelpers.createContentStyle(
-  node,
-  doc,
-  docVersion,
-  resolvedNodeProps,
+  node as any,
+  doc as any,
+  docVersion as any,
+  resolvedNodeProps as any,
   computed(() => isContainer.value),
   isMovable,
   layoutStyle,
@@ -626,8 +644,8 @@ const contentStyle = nodeStyleHelpers.createContentStyle(
 
 // 使用 use-node-style composable 创建 wrapperStyle
 const wrapperStyle = nodeStyleHelpers.createWrapperStyle(
-  node,
-  doc,
+  node as any,
+  doc as any,
   layoutStyle,
   isMovable,
   computed(() => isContainer.value),
@@ -635,8 +653,8 @@ const wrapperStyle = nodeStyleHelpers.createWrapperStyle(
 
 // 使用 use-node-style composable 创建 wrapperComponentStyle
 const wrapperComponentStyle = nodeStyleHelpers.createWrapperComponentStyle(
-  node,
-  doc,
+  node as any,
+  doc as any,
   useComponentWrapper,
   wrapperStyle,
   contentStyle,
@@ -644,34 +662,34 @@ const wrapperComponentStyle = nodeStyleHelpers.createWrapperComponentStyle(
   props,
 );
 
-const styleConfigText = computed(() => {
+const styleConfigText = computed<string>(() => {
   docVersion.value;
   return String(node.value?.styleConfig || "").trim();
 });
 const hasStyleConfigSelector = computed(() => styleConfigText.value.includes("{"));
 const hasDomIdSelector = computed(() => styleConfigText.value.includes("#domId"));
-const nodeDomId = computed(() => {
+const nodeDomId = computed<string>(() => {
   if (!node.value) return "";
   const customId = typeof node.value.props?.id === "string" ? node.value.props.id.trim() : "";
   if (customId) return customId;
   if (!node.value.id) return "";
   return `dom-${node.value.id}`;
 });
-const styleScopeSelector = computed(() => {
+const styleScopeSelector = computed<string>(() => {
   if (!node.value?.id) return "";
   if (nodeDomId.value) return `#${nodeDomId.value}`;
   return `[data-node-id="${node.value.id}"]`;
 });
-const normalizedStyleConfigText = computed(() => {
+const normalizedStyleConfigText = computed<string>(() => {
   if (!styleConfigText.value) return "";
   if (!styleScopeSelector.value) return styleConfigText.value;
   return styleConfigText.value.replaceAll("#domId", styleScopeSelector.value);
 });
-const inlineStyleConfig = computed(() => {
+const inlineStyleConfig = computed<string>(() => {
   if (hasStyleConfigSelector.value) return "";
   return styleConfigText.value ? styleConfigText.value : "";
 });
-const inlineStyleConfigObject = computed(() => {
+const inlineStyleConfigObject = computed<StyleObjectLike>(() => {
   const raw = inlineStyleConfig.value;
   if (!raw) return {};
   const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -679,7 +697,7 @@ const inlineStyleConfigObject = computed(() => {
     .split(";")
     .map((item) => item.trim())
     .filter(Boolean);
-  const result = {};
+  const result: StyleObjectLike = {};
   entries.forEach((item) => {
     const [key, ...rest] = item.split(":");
     if (!key || rest.length === 0) return;
@@ -690,7 +708,7 @@ const inlineStyleConfigObject = computed(() => {
   });
   return result;
 });
-const domIdStyleConfigObject = computed(() => {
+const domIdStyleConfigObject = computed<StyleObjectLike>(() => {
   const raw = styleConfigText.value;
   if (!raw || !raw.includes("#domId")) return {};
   const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -705,7 +723,7 @@ const domIdStyleConfigObject = computed(() => {
     .split(";")
     .map((item) => item.trim())
     .filter(Boolean);
-  const result = {};
+  const result: StyleObjectLike = {};
   entries.forEach((item) => {
     const [key, ...rest] = item.split(":");
     if (!key || rest.length === 0) return;
@@ -716,7 +734,7 @@ const domIdStyleConfigObject = computed(() => {
   });
   return result;
 });
-const resolvedInlineStyleConfigObject = computed(() => {
+const resolvedInlineStyleConfigObject = computed<StyleObjectLike>(() => {
   return {
     ...inlineStyleConfigObject.value,
     ...domIdStyleConfigObject.value,
@@ -729,7 +747,7 @@ const resolvedInlineStyleConfigObject = computed(() => {
  * @param {string} scope - 作用域选择器
  * @returns {string}
  */
-function prefixSelectors(selectorText, scope) {
+function prefixSelectors(selectorText: string, scope: string): string {
   return selectorText
     .split(",")
     .map((item) => item.trim())
@@ -744,7 +762,7 @@ function prefixSelectors(selectorText, scope) {
  * @param {number} startIndex - 起始索引
  * @returns {number}
  */
-function findMatchingBrace(text, startIndex) {
+function findMatchingBrace(text: string, startIndex: number): number {
   let depth = 0;
   for (let i = startIndex; i < text.length; i += 1) {
     const ch = text[i];
@@ -763,7 +781,7 @@ function findMatchingBrace(text, startIndex) {
  * @param {string} scope - 作用域选择器
  * @returns {string}
  */
-function buildScopedCss(cssText, scope) {
+function buildScopedCss(cssText: string, scope: string): string {
   if (!cssText) return "";
   if (!cssText.includes("{")) {
     return `${scope} { ${cssText} }`;
@@ -794,7 +812,7 @@ function buildScopedCss(cssText, scope) {
   return result;
 }
 
-const styleConfigCss = computed(() => {
+const styleConfigCss = computed<string>(() => {
   if (!node.value?.id || !hasStyleConfigSelector.value) return "";
   if (hasDomIdSelector.value) {
     return normalizedStyleConfigText.value;
@@ -804,12 +822,12 @@ const styleConfigCss = computed(() => {
 });
 
 // 使用 use-node-style composable 创建样式注入生命周期
-const { styleElementRef } = nodeStyleHelpers.createStyleElementSync(node, styleConfigCss);
+const { styleElementRef } = nodeStyleHelpers.createStyleElementSync(node as any, styleConfigCss);
 
 /**
  * 外层样式（处理组件包装模式）
  */
-const outerStyle = computed(() => {
+const outerStyle = computed<any>(() => {
   if (useComponentWrapper.value) {
     const inlineStyle = resolvedInlineStyleConfigObject.value;
     if (!inlineStyle || Object.keys(inlineStyle).length === 0) {
@@ -823,7 +841,7 @@ const outerStyle = computed(() => {
 /**
  * 内容样式（非包装组件时附加样式配置）
  */
-const contentStyleWithConfig = computed(() => {
+const contentStyleWithConfig = computed<any>(() => {
   if (useComponentWrapper.value) return contentStyle.value;
   const inlineStyle = resolvedInlineStyleConfigObject.value;
   if (!inlineStyle || Object.keys(inlineStyle).length === 0) {
@@ -845,13 +863,13 @@ const modelValueTypes = new Set([
   "Rate",
   "ColorPicker",
 ]);
-const supportsModelValue = computed(() => modelValueTypes.has(node.value?.type));
+const supportsModelValue = computed<boolean>(() => modelValueTypes.has(node.value?.type));
 
 /**
  * 更新组件的 modelValue
  * @param {any} value - 新值
  */
-function handleModelValueUpdate(value) {
+function handleModelValueUpdate(value: any): void {
   if (!node.value) return;
   if (props.readonly) {
     applyPreviewPatch({ props: { modelValue: value } });
@@ -862,9 +880,9 @@ function handleModelValueUpdate(value) {
   });
 }
 
-const componentEventListeners = computed(() => {
+const componentEventListeners = computed<EventListenerMap>(() => {
   if (!node.value) return {};
-  const listeners = {};
+  const listeners: EventListenerMap = {};
   if (supportsModelValue.value) {
     listeners["update:modelValue"] = handleModelValueUpdate;
   }
@@ -873,7 +891,7 @@ const componentEventListeners = computed(() => {
   const definitions = normalizeEventDefinitions(manifest?.events || []);
   definitions.forEach((eventItem) => {
     if (!eventItem?.name || eventItem.name === "click") return;
-    listeners[eventItem.name] = (...args) => {
+    listeners[eventItem.name] = (...args: any[]) => {
       const payload = args.length > 1 ? args : args[0];
       void runPreviewScript(eventItem.name, payload);
     };
@@ -884,7 +902,7 @@ const componentEventListeners = computed(() => {
 /**
  * 编辑态组件事件监听
  */
-const designEventListeners = computed(() => {
+const designEventListeners = computed<EventListenerMap>(() => {
   if (props.readonly || !node.value) return {};
   if (!isTabsType.value) return {};
   return {
@@ -899,14 +917,14 @@ const designEventListeners = computed(() => {
 /**
  * 合并事件监听
  */
-const mergedEventListeners = computed(() => {
+const mergedEventListeners = computed<EventListenerMap>(() => {
   return { ...componentEventListeners.value, ...designEventListeners.value };
 });
 
 /**
  * 处理拖拽离开
  */
-function handleDragLeave() {
+function handleDragLeave(): void {
   if (props.readonly) return;
   isDragOver.value = false;
   showInsertLine.value = false;
@@ -956,7 +974,7 @@ function handleDragLeave() {
       />
       <template v-if="isSelectType">
         <el-option
-          v-for="option in selectOptions"
+          v-for="option in selectOptionsList"
           :key="option.value ?? option.label"
           :label="option.label"
           :value="option.value"
@@ -964,7 +982,7 @@ function handleDragLeave() {
       </template>
       <template v-if="isRadioType">
         <el-radio
-          v-for="option in radioOptions"
+          v-for="option in radioOptionsList"
           v-show="option.visible !== false"
           :key="option.value ?? option.label"
           :label="option.value"
@@ -975,7 +993,7 @@ function handleDragLeave() {
       </template>
       <template v-if="isCheckboxType">
         <el-checkbox
-          v-for="option in checkboxOptions"
+          v-for="option in checkboxOptionsList"
           v-show="option.visible !== false"
           :key="option.value ?? option.label"
           :label="option.value"
@@ -986,21 +1004,21 @@ function handleDragLeave() {
       </template>
       <template v-if="isTableType">
         <el-table-column
-          v-for="column in tableColumns"
+          v-for="column in tableColumnsList"
           :key="column.prop ?? column.label"
           v-bind="column"
         />
       </template>
       <template v-if="isBigDataTableType">
         <el-table-column
-          v-for="column in bigTableColumns"
+          v-for="column in bigTableColumnsList"
           :key="column.prop ?? column.label"
           v-bind="column"
         />
       </template>
       <template v-if="isMenuType">
         <el-menu-item
-          v-for="item in menuItems"
+          v-for="item in menuItemsList"
           :key="item.index ?? item.label"
           :index="item.index ?? item.label"
           :disabled="Boolean(item.disabled)"
@@ -1013,7 +1031,7 @@ function handleDragLeave() {
       </template>
       <template v-if="isTimelineType">
         <el-timeline-item
-          v-for="item in timelineItems"
+          v-for="item in timelineItemsList"
           :key="item.timestamp ?? item.label"
           :timestamp="item.timestamp"
         >
@@ -1022,7 +1040,7 @@ function handleDragLeave() {
       </template>
       <template v-if="isTabsType">
         <el-tab-pane
-          v-for="tab in tabsList"
+          v-for="tab in tabsListItems"
           :key="tab.name ?? tab.label"
           :label="tab.label"
           :name="tab.name"
@@ -1066,7 +1084,7 @@ function handleDragLeave() {
       </template>
       <template v-if="isCollapseType">
         <el-collapse-item
-          v-for="item in collapseItems"
+          v-for="item in collapseItemsList"
           :key="item.name ?? item.title"
           :name="item.name"
           :title="item.title"
@@ -1076,14 +1094,14 @@ function handleDragLeave() {
       </template>
       <template v-if="isStepsType">
         <el-step
-          v-for="item in stepsItems"
+          v-for="item in stepsItemsList"
           :key="item.title"
           :title="item.title"
           :description="item.description"
         />
       </template>
       <template v-if="isCarouselSlotType">
-        <el-carousel-item v-for="item in carouselItems" :key="item.label">
+        <el-carousel-item v-for="item in carouselItemsList" :key="item.label">
           <div class="carousel-item-placeholder">{{ item.label }}</div>
         </el-carousel-item>
       </template>
@@ -1093,7 +1111,7 @@ function handleDragLeave() {
       <template v-if="isDropdownType" #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item
-            v-for="item in dropdownItems"
+            v-for="item in dropdownItemsList"
             :key="item.value ?? item.label"
             :command="item.value"
             :disabled="Boolean(item.disabled)"

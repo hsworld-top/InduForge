@@ -2,8 +2,8 @@
   PageTree - 页面树
   展示工程页面层级（基础页面、自定义页面），支持搜索、新建、重命名、删除、拖拽排序
 -->
-<script setup>
-import { ElMessage, ElMessageBox } from "element-plus";
+<script setup lang="ts">
+import { ElCheckbox, ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, h, inject, ref, watch, watchEffect } from "vue";
 import IconEpArrowDown from "~icons/ep/arrow-down";
@@ -22,25 +22,56 @@ import PageTreeBasicPagesSection from "./PageTreeBasicPagesSection.vue";
 import PageTreeCreateDialog from "./PageTreeCreateDialog.vue";
 import PageTreePageSearch from "./PageTreePageSearch.vue";
 
+type FixedSystemType = "home" | "login" | "logout";
+type CreateType = "page" | "folder" | FixedSystemType;
+type PageNodeLike = any;
+type SelectedNodeLike = any;
+type PageOrderMapLike = any;
+type DragStateLike = any;
+type DragTargetLike = any;
+type BasicPageMetaLike = any;
+type BasicSlotLike = any;
+type MoveTargetLike = any;
+interface CreateTypeOptionLike {
+  value: CreateType;
+  label: string;
+  desc: string;
+  icon: any;
+}
+
+type OpenPageTabLike = (pageId: string) => void;
+
+const showSuccess = (message: string): void => {
+  (ElMessage as any).success({ message });
+};
+
+const showWarning = (message: string): void => {
+  (ElMessage as any).warning({ message });
+};
+
+const showError = (message: string): void => {
+  (ElMessage as any).error({ message });
+};
+
 // 注入打开标签页的方法
-const openPageTab = inject("openPageTab", null);
+const openPageTab = inject<OpenPageTabLike | null>("openPageTab", null) as any;
 
 const editorStore = useEditorStore();
 const { pages, currentPageId, entryConfig, canUndo, projectId } = storeToRefs(editorStore);
-const selectedNode = ref(null);
+const selectedNode = ref<any>(null);
 const createDialogVisible = ref(false);
-const createForm = ref({ type: "page", name: "", parentId: null });
+const createForm = ref<any>({ type: "page", name: "", parentId: null });
 const creating = ref(false);
 const skipSwitchPrompt = ref(false);
 const pageSwitchPromptKey = "designer.pageSwitchPrompt.disabled";
-const pageOrderMap = ref({});
-const dragState = ref(null);
-const dragOverTarget = ref(null);
+const pageOrderMap = ref<Record<string, any>>({});
+const dragState = ref<any>(null);
+const dragOverTarget = ref<any>(null);
 let dragOverFrameId = 0;
-let pendingDragOverTarget = null;
+let pendingDragOverTarget: any = null;
 
 // 新建弹窗类型选项
-const createTypeOptions = [
+const createTypeOptions: CreateTypeOptionLike[] = [
   {
     value: "page",
     label: "业务页面",
@@ -56,18 +87,18 @@ const createTypeOptions = [
 ];
 
 // 新建弹窗标题
-const createDialogTitle = computed(() => {
+const createDialogTitle = computed<string>(() => {
   const option = createTypeOptions.find((o) => o.value === createForm.value.type);
   return `新建${option?.label || "页面"}`;
 });
 
 // 表单验证规则
-const createFormRules = {
+const createFormRules: Record<string, any> = {
   name: [
     { required: true, message: "请输入名称", trigger: "blur" },
     { min: 1, max: 50, message: "名称长度在 1 到 50 个字符", trigger: "blur" },
     {
-      validator: (_rule, value, callback) => {
+      validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
         const result = validatePageName(value);
         if (!result.valid) {
           callback(new Error(result.message));
@@ -80,7 +111,7 @@ const createFormRules = {
   ],
 };
 
-const BASIC_PAGE_META = {
+const BASIC_PAGE_META: Record<FixedSystemType, BasicPageMetaLike> = {
   home: { label: "首页", path: "/" },
   login: { label: "登录页", path: "/login" },
   logout: { label: "登出页", path: "/logout" },
@@ -91,7 +122,7 @@ const BASIC_PAGE_META = {
  * @param {"home" | "login" | "logout"} type - 基础页面类型
  * @returns {{ label: string, path: string }}
  */
-function getBasicPageMeta(type) {
+function getBasicPageMeta(type: FixedSystemType): BasicPageMetaLike {
   return BASIC_PAGE_META[type] || { label: "", path: "/" };
 }
 
@@ -100,7 +131,7 @@ function getBasicPageMeta(type) {
  * @param {string} type - 创建类型
  * @returns {boolean}
  */
-function isFixedBasicCreateType(type) {
+function isFixedBasicCreateType(type: string): boolean {
   return ["home", "login", "logout"].includes(type);
 }
 
@@ -109,7 +140,7 @@ function isFixedBasicCreateType(type) {
  * @param {import('@/editor-core').PageNode | undefined | null} page - 页面
  * @returns {"home" | "login" | "logout" | null}
  */
-function getFixedSystemType(page) {
+function getFixedSystemType(page: PageNodeLike | null | undefined): FixedSystemType | null {
   if (!page) return null;
   if (entryConfig.value?.homePageId === page.id) return "home";
   if (entryConfig.value?.loginPageId === page.id || page.path === "/login") return "login";
@@ -121,20 +152,20 @@ function getFixedSystemType(page) {
  * 在分组中创建页面
  * @param {string} folderId - 分组ID
  */
-function handleCreateInFolder(folderId) {
+function handleCreateInFolder(folderId: string): void {
   createForm.value = { type: "page", name: "", parentId: folderId };
   createDialogVisible.value = true;
 }
 
 // 搜索和展开状态
 const searchText = ref("");
-const folderStates = ref({});
+const folderStates = ref<Record<string, boolean>>({});
 
 /**
  * 切换分组展开状态
  * @param {string} folderId - 分组ID
  */
-function toggleFolder(folderId) {
+function toggleFolder(folderId: string): void {
   folderStates.value[folderId] = !folderStates.value[folderId];
 }
 
@@ -142,44 +173,44 @@ function toggleFolder(folderId) {
  * 点击分组
  * @param {Object} folder - 分组
  */
-function handleFolderClick(folder) {
-  selectedNode.value = { id: folder.id, type: "folder", label: folder.name };
+function handleFolderClick(folder: PageNodeLike): void {
+  selectedNode.value = { id: folder?.id, type: "folder", label: folder?.name || "", parentId: null };
   toggleFolder(folder.id);
 }
 
-function getProjectOrderStorageKey() {
+function getProjectOrderStorageKey(): string {
   return getPageTreeOrderStorageKey(projectId.value || "");
 }
 
-function loadPageOrderMap() {
+function loadPageOrderMap(): void {
   try {
     const raw = localStorage.getItem(getProjectOrderStorageKey());
     pageOrderMap.value = raw ? JSON.parse(raw) || {} : {};
-  } catch (error) {
+  } catch (_error) {
     pageOrderMap.value = {};
   }
 }
 
-function persistPageOrderMap() {
+function persistPageOrderMap(): void {
   try {
     localStorage.setItem(getProjectOrderStorageKey(), JSON.stringify(pageOrderMap.value || {}));
-  } catch (error) {
+  } catch (_error) {
     // ignore
   }
 }
 
-function getContainerOrderKey(parentId = null) {
+function getContainerOrderKey(parentId: string | null = null): string {
   return parentId || ROOT_CONTAINER_KEY;
 }
 
-function updateContainerOrder(containerKey, orderedIds) {
+function updateContainerOrder(containerKey: string, orderedIds: Array<string | null | undefined>): void {
   const nextMap = { ...(pageOrderMap.value || {}) };
   nextMap[containerKey] = Array.from(new Set((orderedIds || []).filter(Boolean)));
   pageOrderMap.value = nextMap;
   persistPageOrderMap();
 }
 
-function sortItemsByStoredOrder(items, containerKey) {
+function sortItemsByStoredOrder(items: Array<any>, containerKey: string): Array<any> {
   const source = Array.isArray(items) ? [...items] : [];
   const stored = Array.isArray(pageOrderMap.value?.[containerKey])
     ? pageOrderMap.value[containerKey]
@@ -189,13 +220,13 @@ function sortItemsByStoredOrder(items, containerKey) {
     const aIndex = orderIndexMap.has(a.id) ? orderIndexMap.get(a.id) : Number.MAX_SAFE_INTEGER;
     const bIndex = orderIndexMap.has(b.id) ? orderIndexMap.get(b.id) : Number.MAX_SAFE_INTEGER;
     if (aIndex !== bIndex) {
-      return aIndex - bIndex;
+      return Number(aIndex) - Number(bIndex);
     }
     return (a.name || "").localeCompare(b.name || "", "zh-CN");
   });
 }
 
-function ensureContainerOrder(containerKey, items) {
+function ensureContainerOrder(containerKey: string, items: Array<any>): void {
   const nextIds = (items || []).map((item) => item.id);
   const currentIds = Array.isArray(pageOrderMap.value?.[containerKey])
     ? pageOrderMap.value[containerKey].filter((id) => nextIds.includes(id))
@@ -219,11 +250,11 @@ watch(
  * @param {import('@/editor-core').PageNode} page - 页面
  * @returns {string}
  */
-function getPageLabel(page) {
+function getPageLabel(page: PageNodeLike): string {
   return page.name || page.title || page.id;
 }
 
-function matchesKeyword(page) {
+function matchesKeyword(page: PageNodeLike): boolean {
   const keyword = searchText.value.trim().toLowerCase();
   if (!keyword) return true;
   return (
@@ -236,7 +267,7 @@ function matchesKeyword(page) {
  * 创建活跃页面ID映射（computed 确保响应式更新）
  */
 const activePageMap = computed(() => {
-  const map = new Map();
+  const map = new Map<string, boolean>();
   if (currentPageId.value) {
     map.set(currentPageId.value, true);
   }
@@ -248,7 +279,7 @@ const activePageMap = computed(() => {
  * @param {string} pageId - 页面ID
  * @returns {boolean}
  */
-function isPageActive(pageId) {
+function isPageActive(pageId: string): boolean {
   return activePageMap.value.has(pageId);
 }
 
@@ -257,11 +288,11 @@ function isPageActive(pageId) {
  */
 watchEffect(() => {
   const pageId = currentPageId.value;
-  const pageList = pages.value;
+  const pageList = ((pages.value || []) as any[]);
 
   if (!pageId || !pageList.length) return;
 
-  const page = pageList.find((p) => p.id === pageId);
+  const page = pageList.find((p: any) => p.id === pageId) as any;
   if (page) {
     selectedNode.value = {
       id: page.id,
@@ -279,16 +310,18 @@ watchEffect(() => {
 /**
  * 所有可见页面（包含登录页、登出页等系统页面）
  */
-const appPages = computed(() => pages.value.filter((page) => page.type !== "dialog"));
-const systemPages = computed(() => ({
-  home: appPages.value.find((page) => page.id === entryConfig.value?.homePageId) || null,
+const appPages = computed<PageNodeLike[]>(() =>
+  (((pages.value || []) as any[]) as PageNodeLike[]).filter((page: any) => page.type !== "dialog"),
+);
+const systemPages = computed<Record<string, any>>(() => ({
+  home: appPages.value.find((page: any) => page.id === (entryConfig.value as any)?.homePageId) || null,
   login:
-    appPages.value.find((page) => page.id === entryConfig.value?.loginPageId) ||
-    appPages.value.find((page) => getFixedSystemPath(page) === "/login") ||
+    appPages.value.find((page: any) => page.id === (entryConfig.value as any)?.loginPageId) ||
+    appPages.value.find((page: any) => getFixedSystemPath(page) === "/login") ||
     null,
   logout:
-    appPages.value.find((page) => page.id === entryConfig.value?.logoutPageId) ||
-    appPages.value.find((page) => getFixedSystemPath(page) === "/logout") ||
+    appPages.value.find((page: any) => page.id === (entryConfig.value as any)?.logoutPageId) ||
+    appPages.value.find((page: any) => getFixedSystemPath(page) === "/logout") ||
     null,
 }));
 const basicPageIdSet = computed(
@@ -303,15 +336,15 @@ const basicPageIdSet = computed(
 );
 
 const basicPageMap = computed(() => {
-  const pageMap = new Map();
+  const pageMap = new Map<string, PageNodeLike>();
   appPages.value.forEach((page) => {
     pageMap.set(page.id, page);
   });
   return pageMap;
 });
 
-const basicPageSlots = computed(() => {
-  const slots = [
+const basicPageSlots = computed<any[]>(() => {
+  const slots: any[] = [
     {
       type: "home",
       label: "首页",
@@ -328,7 +361,7 @@ const basicPageSlots = computed(() => {
       pageId: systemPages.value.logout?.id || "",
     },
   ];
-  return slots.map((slot) => ({
+  return slots.map((slot: any) => ({
     ...slot,
     path: getBasicPageMeta(slot.type).path,
     page: slot.pageId ? basicPageMap.value.get(slot.pageId) || null : null,
@@ -367,12 +400,12 @@ const businessRootItems = computed(() =>
   }),
 );
 
-function getChildrenCount(folderId) {
+function getChildrenCount(folderId: string): number {
   return businessPages.value.filter((page) => page.type === "page" && page.parentId === folderId)
     .length;
 }
 
-function getBusinessChildren(folderId) {
+function getBusinessChildren(folderId: string): PageNodeLike[] {
   return sortItemsByStoredOrder(
     businessPages.value.filter(
       (page) => page.type === "page" && page.parentId === folderId && matchesKeyword(page),
@@ -390,7 +423,11 @@ const filteredBusinessRootItems = computed(() =>
   }),
 );
 
-function appendIdToContainer(containerKey, sourceId, visibleItems) {
+function appendIdToContainer(
+  containerKey: string,
+  sourceId: string,
+  visibleItems: Array<PageNodeLike>,
+): void {
   const nextIds = (visibleItems || []).map((item) => item.id).filter((id) => id !== sourceId);
   nextIds.push(sourceId);
   updateContainerOrder(containerKey, nextIds);
@@ -400,7 +437,7 @@ function appendIdToContainer(containerKey, sourceId, visibleItems) {
  * 仅在目标发生变化时更新拖拽高亮，避免 dragover 频繁触发整树重渲染
  * @param {{ id: string, mode: string, parentId: string | null }} nextTarget - 新目标
  */
-function setDragOverTarget(nextTarget) {
+function setDragOverTarget(nextTarget: DragTargetLike): void {
   pendingDragOverTarget = nextTarget;
   if (dragOverFrameId) return;
   dragOverFrameId = requestAnimationFrame(() => {
@@ -419,7 +456,7 @@ function setDragOverTarget(nextTarget) {
   });
 }
 
-function handleDragStart(item, parentId) {
+function handleDragStart(item: PageNodeLike, parentId: string | null): void {
   dragState.value = {
     id: item.id,
     type: item.type,
@@ -427,7 +464,7 @@ function handleDragStart(item, parentId) {
   };
 }
 
-function handleDragEnd() {
+function handleDragEnd(): void {
   if (dragOverFrameId) {
     cancelAnimationFrame(dragOverFrameId);
     dragOverFrameId = 0;
@@ -437,7 +474,7 @@ function handleDragEnd() {
   dragOverTarget.value = null;
 }
 
-function handleDragLeave(targetId) {
+function handleDragLeave(targetId: string): void {
   if (dragOverTarget.value?.id === targetId) {
     dragOverTarget.value = null;
   }
@@ -446,9 +483,11 @@ function handleDragLeave(targetId) {
   }
 }
 
-function handleNodeDragOver(event, item, parentId) {
+function handleNodeDragOver(event: DragEvent, item: PageNodeLike, parentId: string | null): void {
   if (!dragState.value || dragState.value.id === item.id) return;
-  event.dataTransfer.dropEffect = "move";
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
   setDragOverTarget({
     id: item.id,
     mode: "before",
@@ -456,9 +495,11 @@ function handleNodeDragOver(event, item, parentId) {
   });
 }
 
-function handleFolderDragOver(event, folder) {
+function handleFolderDragOver(event: DragEvent, folder: PageNodeLike): void {
   if (!dragState.value || dragState.value.id === folder.id) return;
-  event.dataTransfer.dropEffect = "move";
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
   setDragOverTarget({
     id: folder.id,
     mode: "append",
@@ -466,9 +507,11 @@ function handleFolderDragOver(event, folder) {
   });
 }
 
-function handleContainerDragOver(event, parentId) {
+function handleContainerDragOver(event: DragEvent, parentId: string | null): void {
   if (!dragState.value) return;
-  event.dataTransfer.dropEffect = "move";
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
   setDragOverTarget({
     id: getContainerOrderKey(parentId),
     mode: "append",
@@ -476,7 +519,7 @@ function handleContainerDragOver(event, parentId) {
   });
 }
 
-async function handleNodeDrop(targetItem, parentId) {
+async function handleNodeDrop(targetItem: PageNodeLike, parentId: string | null): Promise<void> {
   if (!dragState.value || dragState.value.id === targetItem.id) return;
   const source = { ...dragState.value };
   const targetParentId = parentId || null;
@@ -515,7 +558,7 @@ async function handleNodeDrop(targetItem, parentId) {
   handleDragEnd();
 }
 
-async function handleFolderDrop(folder) {
+async function handleFolderDrop(folder: PageNodeLike): Promise<void> {
   if (!dragState.value || dragState.value.id === folder.id) return;
   const source = { ...dragState.value };
   if (source.type !== "page") {
@@ -549,7 +592,7 @@ async function handleFolderDrop(folder) {
   handleDragEnd();
 }
 
-async function handleContainerDrop(parentId) {
+async function handleContainerDrop(parentId: string | null): Promise<void> {
   if (!dragState.value) return;
   const source = { ...dragState.value };
   const targetParentId = parentId || null;
@@ -622,7 +665,7 @@ function initSwitchPromptState() {
  * @param {boolean} disabled - 是否禁用
  * @returns {void}
  */
-function setSwitchPromptDisabled(disabled) {
+function setSwitchPromptDisabled(disabled: any) {
   skipSwitchPrompt.value = disabled;
   try {
     if (disabled) {
@@ -641,7 +684,7 @@ initSwitchPromptState();
  * 选中页面（只选中，不切换页面）
  * @param {{ id: string }} node - 点击的节点
  */
-function handleNodeClick(node) {
+function handleNodeClick(node: SelectedNodeLike): void {
   selectedNode.value = node;
   // 点击只选中节点，不切换页面
   // 页面切换通过双击 handleNodeDoubleClick 实现
@@ -652,7 +695,7 @@ function handleNodeClick(node) {
  * @param {{ page?: import('@/editor-core').PageNode | null }} slot - 槽位
  * @returns {void}
  */
-function handleBasicSlotClick(slot) {
+function handleBasicSlotClick(slot: BasicSlotLike): void {
   if (!slot?.page) {
     selectedNode.value = null;
     return;
@@ -665,7 +708,7 @@ function handleBasicSlotClick(slot) {
  * @param {{ page?: import('@/editor-core').PageNode | null }} slot - 槽位
  * @returns {void}
  */
-function handleBasicSlotDoubleClick(slot) {
+function handleBasicSlotDoubleClick(slot: BasicSlotLike): void {
   if (!slot?.page) return;
   void handleNodeDoubleClick({
     id: slot.page.id,
@@ -679,7 +722,7 @@ function handleBasicSlotDoubleClick(slot) {
  * @param {{ id: string, type: string, label?: string }} node - 双击的节点
  * @returns {Promise<void>}
  */
-async function handleNodeDoubleClick(node) {
+async function handleNodeDoubleClick(node: SelectedNodeLike): Promise<void> {
   if (!node || node.type !== "page") return;
 
   // 使用标签页系统打开页面
@@ -703,10 +746,10 @@ async function handleNodeDoubleClick(node) {
   try {
     const result = await editorStore.loadPage(node.id);
     if (!result.ok) {
-      ElMessage.error(result.error?.message || "切换页面失败");
+      showError(result.error?.message || "切换页面失败");
     }
-  } catch (error) {
-    ElMessage.error("切换页面失败");
+  } catch (_error) {
+    showError("切换页面失败");
   }
 }
 
@@ -715,17 +758,17 @@ async function handleNodeDoubleClick(node) {
  * @param {string} targetName - 目标页面名称
  * @returns {Promise<boolean>}
  */
-async function confirmPageSwitch(targetName) {
+async function confirmPageSwitch(targetName: string): Promise<boolean> {
   if (skipSwitchPrompt.value) return true;
 
   const skipPrompt = ref(false);
   const message = h("div", { class: "flex flex-col gap-2" }, [
     h("div", `是否切换到${targetName}页面？`),
     h(
-      ElCheckbox,
+      ElCheckbox as any,
       {
         modelValue: skipPrompt.value,
-        "onUpdate:modelValue": (value) => {
+        "onUpdate:modelValue": (value: boolean) => {
           skipPrompt.value = value;
         },
       },
@@ -734,7 +777,7 @@ async function confirmPageSwitch(targetName) {
   ]);
 
   try {
-    await ElMessageBox({
+    await (ElMessageBox as any)({
       title: "切换页面",
       message,
       showCancelButton: true,
@@ -747,7 +790,7 @@ async function confirmPageSwitch(targetName) {
       setSwitchPromptDisabled(true);
     }
     return true;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }
@@ -757,7 +800,7 @@ async function confirmPageSwitch(targetName) {
  * @param {string} targetName - 目标页面名称
  * @returns {Promise<boolean>}
  */
-async function ensureUnsavedSwitch(targetName) {
+async function ensureUnsavedSwitch(targetName: string): Promise<boolean> {
   if (!canUndo.value) return true;
   try {
     const action = await ElMessageBox.confirm(
@@ -779,42 +822,42 @@ async function ensureUnsavedSwitch(targetName) {
       return true;
     }
     if (error && error !== "close") {
-      ElMessage.error("切换页面失败");
+      showError("切换页面失败");
     }
     return false;
   }
 }
 
-const buildMoveCommand = (targetId) => `move:${targetId || "root"}`;
+const buildMoveCommand = (targetId: string | null): string => `move:${targetId || "root"}`;
 
 /**
  * 创建基础页面
  * @param {"home" | "login" | "logout"} basicType - 基础页面类型
  * @returns {Promise<void>}
  */
-async function createBasicPage(basicType) {
+async function createBasicPage(basicType: FixedSystemType): Promise<void> {
   if (basicType === "home") {
     if (entryConfig.value?.homePageId) {
-      ElMessage.warning("首页已存在");
+      showWarning("首页已存在");
       return;
     }
     if (!projectId.value) {
-      ElMessage.error("缺少工程信息");
+      showError("缺少工程信息");
       return;
     }
-    const result = await editorStore.createHomePage(projectId.value);
+    const result = (await editorStore.createHomePage(projectId.value)) as any;
     if (!result?.ok || !result.pageId) {
-      ElMessage.error(result?.error?.message || "首页创建失败");
+      showError(result?.error?.message || "首页创建失败");
       return;
     }
     await openCreatedPageTab(result.pageId);
-    ElMessage.success("首页创建成功");
+    showSuccess("首页创建成功");
     return;
   }
 
   if (basicType === "login") {
     if (entryConfig.value?.loginPageId || pages.value.some((page) => page.path === "/login")) {
-      ElMessage.warning("登录页已存在");
+      showWarning("登录页已存在");
       return;
     }
     try {
@@ -836,16 +879,16 @@ async function createBasicPage(basicType) {
       editorStore.updateEntry({ loginPageId: pageId });
       await editorStore.persistEntry();
       await openCreatedPageTab(pageId);
-      ElMessage.success("登录页创建成功");
-    } catch (error) {
-      ElMessage.error(error?.message || "登录页创建失败");
+      showSuccess("登录页创建成功");
+    } catch (error: any) {
+      showError(error?.message || "登录页创建失败");
     }
     return;
   }
 
   if (basicType === "logout") {
     if (entryConfig.value?.logoutPageId || pages.value.some((page) => page.path === "/logout")) {
-      ElMessage.warning("登出页已存在");
+      showWarning("登出页已存在");
       return;
     }
     try {
@@ -867,9 +910,9 @@ async function createBasicPage(basicType) {
       editorStore.updateEntry({ logoutPageId: pageId });
       await editorStore.persistEntry();
       await openCreatedPageTab(pageId);
-      ElMessage.success("登出页创建成功");
-    } catch (error) {
-      ElMessage.error(error?.message || "登出页创建失败");
+      showSuccess("登出页创建成功");
+    } catch (error: any) {
+      showError(error?.message || "登出页创建失败");
     }
   }
 }
@@ -880,7 +923,7 @@ async function createBasicPage(basicType) {
  * @param {{ type: "home" | "login" | "logout", page?: import('@/editor-core').PageNode | null }} slot - 槽位
  * @returns {void}
  */
-function handleBasicRowAction(command, slot) {
+function handleBasicRowAction(command: string, slot: BasicSlotLike): void {
   if (!slot) return;
   if (command === "create") {
     void createBasicPage(slot.type);
@@ -902,7 +945,7 @@ function handleBasicRowAction(command, slot) {
  * @param {import('@/editor-core').PageNode} node - 节点
  * @returns {void}
  */
-function handleRowAction(command, node) {
+function handleRowAction(command: string, node: PageNodeLike): void {
   if (!node) return;
   selectedNode.value = {
     id: node.id,
@@ -921,7 +964,7 @@ function handleRowAction(command, node) {
   }
   if (command === "rename") {
     if (getFixedSystemType(node)) {
-      ElMessage.warning("基础页面名称固定，不支持重命名");
+      showWarning("基础页面名称固定，不支持重命名");
       return;
     }
     void handleRename();
@@ -954,9 +997,9 @@ function handleRowAction(command, node) {
  * @param {string} pageId - 页面 ID
  * @param {string} label - 页面名称
  */
-function handleExportPage(pageId, label) {
+function handleExportPage(pageId: string, label: string): void {
   if (!editorStore.doc || !pageId) {
-    ElMessage.warning("暂无可导出的页面");
+    showWarning("暂无可导出的页面");
     return;
   }
   try {
@@ -970,16 +1013,16 @@ function handleExportPage(pageId, label) {
     link.download = name;
     link.click();
     URL.revokeObjectURL(url);
-    ElMessage.success("已导出页面");
-  } catch (error) {
-    ElMessage.error("导出页面失败");
+    showSuccess("已导出页面");
+  } catch (_error) {
+    showError("导出页面失败");
   }
 }
 
 /**
  * 打开新建弹窗
  */
-function openCreateDialog() {
+function openCreateDialog(): void {
   createForm.value = {
     type: "page",
     name: "",
@@ -994,9 +1037,9 @@ defineExpose({ openCreateDialog });
  * 创建完成后打开对应标签并切换到页面
  * @param {string} pageId - 页面 ID
  */
-async function openCreatedPageTab(pageId) {
+async function openCreatedPageTab(pageId: string): Promise<void> {
   if (!pageId) return;
-  selectedNode.value = { id: pageId, type: "page" };
+  selectedNode.value = { id: pageId, type: "page", label: "", parentId: null };
   if (openPageTab) {
     openPageTab(pageId);
     return;
@@ -1009,15 +1052,15 @@ async function openCreatedPageTab(pageId) {
  * @param {string} pageId - 页面 ID
  * @param {string | null} parentId - 分组 ID
  */
-async function handleMove(pageId, parentId) {
+async function handleMove(pageId: string, parentId: string | null): Promise<void> {
   try {
-    const page = pages.value.find((item) => item.id === pageId);
+    const page = ((pages.value || []) as any[]).find((item: any) => item.id === pageId) as any;
     const currentParentId = page?.parentId || null;
     if (currentParentId === (parentId || null)) {
       return;
     }
     if (getFixedSystemType(page) && parentId) {
-      ElMessage.warning("基础页面不支持移动到分组");
+      showWarning("基础页面不支持移动到分组");
       return;
     }
     const nextPath =
@@ -1025,13 +1068,13 @@ async function handleMove(pageId, parentId) {
         ? getFixedSystemPath(page) || buildBusinessPagePath(getPageLabel(page), parentId)
         : undefined;
     await editorStore.movePageToGroup(pageId, parentId, nextPath);
-    const nextPage = pages.value.find((item) => item.id === pageId);
+    const nextPage = ((pages.value || []) as any[]).find((item: any) => item.id === pageId) as any;
     if (nextPage?.type === "page") {
       await editorStore.renamePage(pageId, getPageLabel(nextPage), nextPath);
     }
-    ElMessage.success("移动成功");
-  } catch (error) {
-    ElMessage.error("移动失败");
+    showSuccess("移动成功");
+  } catch (_error) {
+    showError("移动失败");
   }
 }
 
@@ -1041,11 +1084,11 @@ async function handleMove(pageId, parentId) {
  * @param {string} [excludeId] - 排除的页面 ID
  * @returns {boolean}
  */
-function isNameUnique(name, excludeId) {
+function isNameUnique(name: any, excludeId: any) {
   const lowerName = name.trim().toLowerCase();
-  return !pages.value.some(
-    (page) => page.id !== excludeId && (page.name || "").trim().toLowerCase() === lowerName,
-  );
+  return !(((pages.value || []) as any[]).some(
+    (page: any) => page.id !== excludeId && (page.name || "").trim().toLowerCase() === lowerName,
+  ));
 }
 
 /**
@@ -1053,7 +1096,7 @@ function isNameUnique(name, excludeId) {
  * @param {string} value - 名称
  * @returns {string}
  */
-function toPathSegment(value) {
+function toPathSegment(value: any) {
   const normalized = value.trim().replace(/\s+/g, "-");
   const sanitized = normalized.replace(/[/?#\\]+/g, "-");
   return sanitized || "page";
@@ -1064,9 +1107,9 @@ function toPathSegment(value) {
  * @param {string | null | undefined} parentId - 分组 ID
  * @returns {string[]}
  */
-function getFolderPathSegments(parentId) {
-  const folder = pages.value.find(
-    (page) => page.id === (parentId || null) && page.type === "folder",
+function getFolderPathSegments(parentId: any) {
+  const folder = ((pages.value || []) as any[]).find(
+    (page: any) => page.id === (parentId || null) && page.type === "folder",
   );
   if (!folder) {
     return [];
@@ -1080,7 +1123,7 @@ function getFolderPathSegments(parentId) {
  * @param {string | null | undefined} parentId - 分组 ID
  * @returns {string}
  */
-function buildBusinessPagePath(name, parentId) {
+function buildBusinessPagePath(name: any, parentId: any) {
   const segments = [...getFolderPathSegments(parentId), toPathSegment(name)];
   return `/${segments.filter(Boolean).join("/")}`;
 }
@@ -1090,11 +1133,11 @@ function buildBusinessPagePath(name, parentId) {
  * @param {string} folderId - 分组 ID
  * @returns {Promise<void>}
  */
-async function syncFolderDescendantPaths(folderId) {
-  const descendants = pages.value.filter(
-    (page) => page.type === "page" && page.parentId === folderId,
+async function syncFolderDescendantPaths(folderId: any) {
+  const descendants = ((pages.value || []) as any[]).filter(
+    (page: any) => page.type === "page" && page.parentId === folderId,
   );
-  for (const page of descendants) {
+  for (const page of descendants as any[]) {
     const fixedPath = getFixedSystemPath(page);
     if (fixedPath) continue;
     const nextPath = buildBusinessPagePath(getPageLabel(page), page.parentId || null);
@@ -1109,7 +1152,7 @@ async function syncFolderDescendantPaths(folderId) {
  * @param {import('@/editor-core').PageNode | undefined} page - 页面
  * @returns {string | null}
  */
-function getFixedSystemPath(page) {
+function getFixedSystemPath(page: any) {
   const systemType = getFixedSystemType(page);
   return systemType ? getBasicPageMeta(systemType).path : null;
 }
@@ -1117,23 +1160,23 @@ function getFixedSystemPath(page) {
 /**
  * 创建页面/分组
  */
-function onCreateFormUpdate(next) {
+function onCreateFormUpdate(next: any) {
   createForm.value = next;
 }
 
 async function handleCreateConfirm() {
   const name = createForm.value.name?.trim();
   if (!name) {
-    ElMessage.warning("名称不能为空");
+    showWarning("名称不能为空");
     return;
   }
   const nameValidation = validatePageName(name);
   if (!nameValidation.valid) {
-    ElMessage.warning(nameValidation.message);
+    showWarning(nameValidation.message);
     return;
   }
-  if (!isNameUnique(name)) {
-    ElMessage.warning("页面或分组名称已存在");
+  if (!isNameUnique(name, undefined)) {
+    showWarning("页面或分组名称已存在");
     return;
   }
 
@@ -1144,7 +1187,7 @@ async function handleCreateConfirm() {
   try {
     if (type === "folder") {
       await editorStore.createPage({ name, type: "folder", parentId });
-      ElMessage.success("分组创建成功");
+      showSuccess("分组创建成功");
       createDialogVisible.value = false;
       creating.value = false;
       return;
@@ -1164,11 +1207,11 @@ async function handleCreateConfirm() {
     const pageId = result?.id;
     if (!pageId) throw new Error("页面创建失败");
     await openCreatedPageTab(pageId);
-    ElMessage.success("页面创建成功");
+    showSuccess("页面创建成功");
     createDialogVisible.value = false;
-  } catch (error) {
+  } catch (error: any) {
     console.error("创建失败:", error);
-    ElMessage.error(error?.message || "创建失败");
+    showError(error?.message || "创建失败");
   } finally {
     creating.value = false;
   }
@@ -1180,7 +1223,7 @@ async function handleCreateConfirm() {
 async function handleRename() {
   const target = selectedNode.value;
   if (!target) {
-    ElMessage.warning("请先选择要重命名的页面或分组");
+    showWarning("请先选择要重命名的页面或分组");
     return;
   }
   try {
@@ -1192,19 +1235,19 @@ async function handleRename() {
     });
     const name = result?.value?.trim();
     if (!name) {
-      ElMessage.warning("名称不能为空");
+      showWarning("名称不能为空");
       return;
     }
     const nameValidation = validatePageName(name);
     if (!nameValidation.valid) {
-      ElMessage.warning(nameValidation.message);
+      showWarning(nameValidation.message);
       return;
     }
     if (!isNameUnique(name, target.id)) {
-      ElMessage.warning("页面或分组名称已存在");
+      showWarning("页面或分组名称已存在");
       return;
     }
-    const page = pages.value.find((item) => item.id === target.id);
+    const page = ((pages.value || []) as any[]).find((item: any) => item.id === target.id);
     const fixedPath = getFixedSystemPath(page);
     const path =
       page?.type === "page"
@@ -1214,10 +1257,10 @@ async function handleRename() {
     if (page?.type === "folder") {
       await syncFolderDescendantPaths(target.id);
     }
-    ElMessage.success("重命名成功");
-  } catch (error) {
+    showSuccess("重命名成功");
+  } catch (error: any) {
     if (error !== "cancel") {
-      ElMessage.error("重命名失败");
+      showError("重命名失败");
     }
   }
 }
@@ -1227,8 +1270,8 @@ async function handleRename() {
  * @param {string} pageId - 页面 ID
  * @returns {boolean}
  */
-function isHomePage(pageId) {
-  return entryConfig.value?.homePageId === pageId;
+function isHomePage(pageId: any) {
+  return (entryConfig.value as any)?.homePageId === pageId;
 }
 
 /**
@@ -1236,12 +1279,12 @@ function isHomePage(pageId) {
  * @param {string} folderId - 分组 ID
  * @returns {number}
  */
-function getFolderDescendantCount(folderId) {
+function getFolderDescendantCount(folderId: any) {
   let count = 0;
   const stack = [folderId];
   while (stack.length) {
     const currentFolderId = stack.pop();
-    const children = pages.value.filter((page) => page.parentId === currentFolderId);
+    const children = ((pages.value || []) as any[]).filter((page: any) => page.parentId === currentFolderId);
     count += children.length;
     children.filter((page) => page.type === "folder").forEach((folder) => stack.push(folder.id));
   }
@@ -1254,13 +1297,13 @@ function getFolderDescendantCount(folderId) {
 async function handleDelete() {
   const target = selectedNode.value;
   if (!target) {
-    ElMessage.warning("请先选择要删除的页面或分组");
+    showWarning("请先选择要删除的页面或分组");
     return;
   }
 
   // 首页保护：不允许删除首页
   if (target.type === "page" && isHomePage(target.id)) {
-    ElMessage.warning("首页不可删除，请先设置其他页面为首页");
+    showWarning("首页不可删除，请先设置其他页面为首页");
     return;
   }
 
@@ -1295,7 +1338,7 @@ async function handleDelete() {
       }
 
       selectedNode.value = null;
-      ElMessage.success("删除成功");
+      showSuccess("删除成功");
       return;
     }
 
@@ -1308,7 +1351,7 @@ async function handleDelete() {
 
     // 如果删除的是当前页面，先切换到首页
     if (target.type === "page" && target.id === currentPageId.value) {
-      const homePageId = entryConfig.value?.homePageId;
+      const homePageId = (entryConfig.value as any)?.homePageId;
       if (homePageId && homePageId !== target.id) {
         if (openPageTab) {
           openPageTab(homePageId);
@@ -1320,10 +1363,10 @@ async function handleDelete() {
 
     await editorStore.deletePage(target.id);
     selectedNode.value = null;
-    ElMessage.success("删除成功");
-  } catch (error) {
+    showSuccess("删除成功");
+  } catch (error: any) {
     if (error !== "cancel") {
-      ElMessage.error("删除失败");
+      showError("删除失败");
     }
   }
 }
@@ -1331,8 +1374,8 @@ async function handleDelete() {
 /**
  * 分组选项
  */
-const folderOptions = computed(() =>
-  businessFolders.value.map((page) => ({ id: page.id, name: page.name })),
+const folderOptions = computed<any[]>(() =>
+  businessFolders.value.map((page: Record<string, any>) => ({ id: page.id, name: page.name || "" })),
 );
 
 /**
@@ -1340,13 +1383,13 @@ const folderOptions = computed(() =>
  * @param {{ parentId?: string | null, id?: string }} node - 节点
  * @returns {Array<{ id: string | null, label: string }>}
  */
-function getMoveTargets(node) {
+function getMoveTargets(node: any): MoveTargetLike[] {
   if (getFixedSystemType(node)) {
     return [];
   }
 
-  const targets = [];
-  const groups = folderOptions.value.filter((group) => group.id !== node.parentId);
+  const targets: MoveTargetLike[] = [];
+  const groups = folderOptions.value.filter((group: any) => group.id !== node.parentId);
   for (const group of groups) {
     targets.push({ id: group.id, label: group.name });
   }
@@ -1406,7 +1449,7 @@ function getMoveTargets(node) {
               <el-dropdown
                 trigger="click"
                 placement="bottom-end"
-                @command="(command) => handleRowAction(command, item)"
+                @command="(command: any) => handleRowAction(command, item)"
               >
                 <el-button class="node-action-btn" text @click.stop>
                   <IconEpMoreFilled />
@@ -1449,7 +1492,7 @@ function getMoveTargets(node) {
               <el-dropdown
                 trigger="click"
                 placement="bottom-end"
-                @command="(command) => handleRowAction(command, item)"
+                @command="(command: any) => handleRowAction(command, item)"
               >
                 <el-button class="node-action-btn" text @click.stop>
                   <IconEpMoreFilled />
@@ -1508,7 +1551,7 @@ function getMoveTargets(node) {
                 <el-dropdown
                   trigger="click"
                   placement="bottom-end"
-                  @command="(command) => handleRowAction(command, page)"
+                  @command="(command: any) => handleRowAction(command, page)"
                 >
                   <el-button class="node-action-btn" text @click.stop>
                     <IconEpMoreFilled />
@@ -1561,10 +1604,10 @@ function getMoveTargets(node) {
   <PageTreeCreateDialog
     v-model="createDialogVisible"
     :title="createDialogTitle"
-    :create-type-options="createTypeOptions"
-    :form="createForm"
+    :create-type-options="createTypeOptions as any"
+    :form="createForm as any"
     :rules="createFormRules"
-    :folder-options="folderOptions"
+    :folder-options="folderOptions as any"
     :creating="creating"
     :is-fixed-basic-type="isFixedBasicCreateType"
     @update:form="onCreateFormUpdate"
