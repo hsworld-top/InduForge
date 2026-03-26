@@ -2,7 +2,7 @@
   OutlineTree - 大纲树
   展示当前页面的组件层级结构，支持选中、显隐、锁定、上下移动、删除
 -->
-<script setup>
+<script setup lang="ts">
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -15,14 +15,39 @@ import IconEpUnlock from "~icons/ep/unlock";
 import IconEpView from "~icons/ep/view";
 import { useEditorStore } from "@/stores/editor-store";
 
+interface OutlineNodeLike {
+  id: string;
+  label: string;
+  hidden: boolean;
+  locked: boolean;
+  isRoot: boolean;
+  children?: OutlineNodeLike[];
+}
+
+interface TreeContextMenuData {
+  data: OutlineNodeLike;
+}
+
+function showSuccessMessage(message: string): void {
+  ElMessage.success(message as never);
+}
+
+function showInfoMessage(message: string): void {
+  ElMessage.info(message as never);
+}
+
+function showErrorMessage(message: string): void {
+  ElMessage.error(message as never);
+}
+
 const editorStore = useEditorStore();
 const { doc, currentPageId, selection, docVersion } = storeToRefs(editorStore);
 
 const selectedNodeId = ref("");
 const contextMenuVisible = ref(false);
-const contextMenuNode = ref(null);
+const contextMenuNode = ref<OutlineNodeLike | null>(null);
 const contextMenuPoint = ref({ x: 0, y: 0 });
-let unsubscribeSelection = null;
+let unsubscribeSelection: (() => void) | null = null;
 
 const contextMenuVirtualRef = {
   getBoundingClientRect: () => {
@@ -44,13 +69,13 @@ const contextMenuVirtualRef = {
  * @param {string} rootNodeId - 根节点 ID
  * @returns {Array<{id: string, label: string, hidden: boolean, locked: boolean, isRoot: boolean, children?: Array}>}
  */
-function buildOutlineTree(document, rootNodeId) {
+function buildOutlineTree(document: { getNode: (id: string) => any }, rootNodeId: string): OutlineNodeLike[] {
   const rootNode = document.getNode(rootNodeId);
   if (!rootNode) return [];
 
-  const buildChildren = (node) =>
+  const buildChildren = (node: any): OutlineNodeLike[] =>
     (node.children || [])
-      .map((childId) => {
+      .map((childId: string) => {
         const child = document.getNode(childId);
         if (!child) return null;
         return {
@@ -82,7 +107,7 @@ const outlineData = computed(() => {
  * 选中节点
  * @param {{ id: string }} node - 点击的节点
  */
-function handleSelectNode(node) {
+function handleSelectNode(node: OutlineNodeLike): void {
   selection.value?.select({ kind: "node", id: node.id });
 }
 
@@ -90,20 +115,20 @@ function handleSelectNode(node) {
  * 同步选中状态
  * @param {{ primary?: { id: string, kind: string } }} payload - 选中事件
  */
-function syncSelection(payload) {
+function syncSelection(payload: { primary?: { id: string; kind: string } } | null | undefined): void {
   const primary = payload?.primary;
-  selectedNodeId.value = primary?.kind === "node" ? primary.id : "";
+  selectedNodeId.value = primary?.kind === "node" ? primary.id || "" : "";
 }
 
 /**
  * 订阅选中变化
  * @param {import('@/editor-core').SelectionModel | null} model - 选中模型
  */
-function subscribeSelection(model) {
+function subscribeSelection(model: any): void {
   if (!model) return;
   unsubscribeSelection = model.on("change", syncSelection);
   const primary = model.getPrimaryElement();
-  selectedNodeId.value = primary?.kind === "node" ? primary.id : "";
+  selectedNodeId.value = primary?.kind === "node" ? primary.id || "" : "";
 }
 
 watch(
@@ -134,7 +159,7 @@ onBeforeUnmount(() => {
 /**
  * 全局点击处理,关闭右键菜单
  */
-function handleGlobalClick() {
+function handleGlobalClick(): void {
   contextMenuVisible.value = false;
 }
 
@@ -146,10 +171,10 @@ onMounted(() => {
  * 切换显示/隐藏
  * @param {string} nodeId - 节点 ID
  */
-function toggleVisibility(nodeId) {
+function toggleVisibility(nodeId: string): void {
   if (editorStore.toggleNodeVisibility(nodeId)) {
     const node = doc.value?.getNode(nodeId);
-    ElMessage.success(node?.hidden ? "已隐藏" : "已显示");
+    showSuccessMessage(node?.hidden ? "已隐藏" : "已显示");
   }
 }
 
@@ -157,10 +182,10 @@ function toggleVisibility(nodeId) {
  * 切换锁定/解锁
  * @param {string} nodeId - 节点 ID
  */
-function toggleLock(nodeId) {
+function toggleLock(nodeId: string): void {
   if (editorStore.toggleNodeLock(nodeId)) {
     const node = doc.value?.getNode(nodeId);
-    ElMessage.success(node?.locked ? "已锁定" : "已解锁");
+    showSuccessMessage(node?.locked ? "已锁定" : "已解锁");
   }
 }
 
@@ -168,11 +193,11 @@ function toggleLock(nodeId) {
  * 上移图层
  * @param {string} nodeId - 节点 ID
  */
-function moveUp(nodeId) {
+function moveUp(nodeId: string): void {
   if (editorStore.moveNodeUp(nodeId)) {
-    ElMessage.success("已上移");
+    showSuccessMessage("已上移");
   } else {
-    ElMessage.info("已在最上层");
+    showInfoMessage("已在最上层");
   }
 }
 
@@ -180,11 +205,11 @@ function moveUp(nodeId) {
  * 下移图层
  * @param {string} nodeId - 节点 ID
  */
-function moveDown(nodeId) {
+function moveDown(nodeId: string): void {
   if (editorStore.moveNodeDown(nodeId)) {
-    ElMessage.success("已下移");
+    showSuccessMessage("已下移");
   } else {
-    ElMessage.info("已在最下层");
+    showInfoMessage("已在最下层");
   }
 }
 
@@ -194,9 +219,9 @@ function moveDown(nodeId) {
  * @param {*} nodeData - 树节点数据
  * @param {*} node - 树节点对象
  */
-function handleContextMenu(event, nodeData, node) {
+function handleContextMenu(event: MouseEvent, nodeData: TreeContextMenuData | null | undefined): void {
   event.preventDefault();
-  if (nodeData.data.isRoot) return; // 根节点不显示菜单
+  if (!nodeData?.data || nodeData.data.isRoot) return; // 根节点不显示菜单
 
   contextMenuNode.value = nodeData.data;
   contextMenuPoint.value = { x: event.clientX, y: event.clientY };
@@ -206,7 +231,7 @@ function handleContextMenu(event, nodeData, node) {
 /**
  * 右键菜单:切换显示/隐藏
  */
-function handleToggleVisibility() {
+function handleToggleVisibility(): void {
   if (!contextMenuNode.value) return;
   toggleVisibility(contextMenuNode.value.id);
   contextMenuVisible.value = false;
@@ -215,7 +240,7 @@ function handleToggleVisibility() {
 /**
  * 右键菜单:切换锁定/解锁
  */
-function handleToggleLock() {
+function handleToggleLock(): void {
   if (!contextMenuNode.value) return;
   toggleLock(contextMenuNode.value.id);
   contextMenuVisible.value = false;
@@ -224,7 +249,7 @@ function handleToggleLock() {
 /**
  * 右键菜单:上移图层
  */
-function handleMoveUp() {
+function handleMoveUp(): void {
   if (!contextMenuNode.value) return;
   moveUp(contextMenuNode.value.id);
   contextMenuVisible.value = false;
@@ -233,7 +258,7 @@ function handleMoveUp() {
 /**
  * 右键菜单:下移图层
  */
-function handleMoveDown() {
+function handleMoveDown(): void {
   if (!contextMenuNode.value) return;
   moveDown(contextMenuNode.value.id);
   contextMenuVisible.value = false;
@@ -242,10 +267,10 @@ function handleMoveDown() {
 /**
  * 右键菜单:置顶
  */
-function handleMoveToTop() {
+function handleMoveToTop(): void {
   if (!contextMenuNode.value) return;
   if (editorStore.moveNodeToTop(contextMenuNode.value.id)) {
-    ElMessage.success("已置顶");
+    showSuccessMessage("已置顶");
   }
   contextMenuVisible.value = false;
 }
@@ -253,10 +278,10 @@ function handleMoveToTop() {
 /**
  * 右键菜单:置底
  */
-function handleMoveToBottom() {
+function handleMoveToBottom(): void {
   if (!contextMenuNode.value) return;
   if (editorStore.moveNodeToBottom(contextMenuNode.value.id)) {
-    ElMessage.success("已置底");
+    showSuccessMessage("已置底");
   }
   contextMenuVisible.value = false;
 }
@@ -265,7 +290,7 @@ function handleMoveToBottom() {
  * 删除节点
  * @param {string} nodeId - 节点 ID
  */
-function deleteNode(nodeId) {
+function deleteNode(nodeId: string): void {
   if (!nodeId) return;
 
   const node = doc.value?.getNode(nodeId);
@@ -278,9 +303,9 @@ function deleteNode(nodeId) {
   })
     .then(() => {
       if (editorStore.removeNode(nodeId)) {
-        ElMessage.success("删除成功");
+        showSuccessMessage("删除成功");
       } else {
-        ElMessage.error("删除失败");
+        showErrorMessage("删除失败");
       }
     })
     .catch(() => {
@@ -291,7 +316,7 @@ function deleteNode(nodeId) {
 /**
  * 右键菜单:删除
  */
-function handleDelete() {
+function handleDelete(): void {
   if (!contextMenuNode.value) return;
   deleteNode(contextMenuNode.value.id);
   contextMenuVisible.value = false;
