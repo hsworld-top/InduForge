@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 属性面板
  * 用于编辑组件属性、样式配置和数据绑定
@@ -8,34 +8,34 @@
  */
 
 import {
-  ElAside,
-  ElCalendar,
-  ElCard,
-  ElCarousel,
-  ElCascader,
-  ElCheckboxGroup,
-  ElCol,
-  ElCollapse,
-  ElContainer,
-  ElDropdown,
-  ElFooter,
-  ElHeader,
-  ElImage,
-  ElInput,
-  ElInputNumber,
-  ElMain,
-  ElMessage,
-  ElPagination,
-  ElRadioGroup,
-  ElRow,
-  ElSelect,
-  ElSlider,
-  ElSteps,
-  ElSwitch,
-  ElTable,
-  ElTabs,
-  ElTimeline,
-  ElTransfer,
+  ElAside as _ElAside,
+  ElCalendar as _ElCalendar,
+  ElCard as _ElCard,
+  ElCarousel as _ElCarousel,
+  ElCascader as _ElCascader,
+  ElCheckboxGroup as _ElCheckboxGroup,
+  ElCol as _ElCol,
+  ElCollapse as _ElCollapse,
+  ElContainer as _ElContainer,
+  ElDropdown as _ElDropdown,
+  ElFooter as _ElFooter,
+  ElHeader as _ElHeader,
+  ElImage as _ElImage,
+  ElInput as _ElInput,
+  ElInputNumber as _ElInputNumber,
+  ElMain as _ElMain,
+  ElMessage as _ElMessage,
+  ElPagination as _ElPagination,
+  ElRadioGroup as _ElRadioGroup,
+  ElRow as _ElRow,
+  ElSelect as _ElSelect,
+  ElSlider as _ElSlider,
+  ElSteps as _ElSteps,
+  ElSwitch as _ElSwitch,
+  ElTable as _ElTable,
+  ElTabs as _ElTabs,
+  ElTimeline as _ElTimeline,
+  ElTransfer as _ElTransfer,
 } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, nextTick, ref, watch } from "vue";
@@ -83,7 +83,70 @@ import PropertyPanelLayoutForceSection from "./PropertyPanelLayoutForceSection.v
 import PropertyPanelRawPropsFallback from "./PropertyPanelRawPropsFallback.vue";
 import { usePropertyPanelNormalizeNodeType } from "./use-property-panel-normalize-node-type";
 
-const editorStore = useEditorStore();
+interface AnyRecord extends Record<string, any> {}
+
+interface AnyArray extends Array<any> {}
+
+interface SidebarNodeLike {
+  id?: string;
+  label?: string;
+  type?: string;
+  raw?: AnyRecord;
+  componentName?: string;
+  params?: string;
+  children?: SidebarNodeLike[];
+}
+
+interface BindingRowLike {
+  name?: string;
+  groupId?: string | null;
+  type?: string;
+  description?: string;
+  mapped?: boolean;
+  [key: string]: any;
+}
+
+interface PresetFactoryLike {
+  (...args: any[]): AnyArray;
+}
+
+interface PresetGroupLike {
+  name: string;
+  types: string[];
+  detail?: PresetFactoryLike;
+  style?: PresetFactoryLike;
+}
+
+const ElAside: any = _ElAside;
+const ElCalendar: any = _ElCalendar;
+const ElCard: any = _ElCard;
+const ElCarousel: any = _ElCarousel;
+const ElCascader: any = _ElCascader;
+const ElCheckboxGroup: any = _ElCheckboxGroup;
+const ElCol: any = _ElCol;
+const ElCollapse: any = _ElCollapse;
+const ElContainer: any = _ElContainer;
+const ElDropdown: any = _ElDropdown;
+const ElFooter: any = _ElFooter;
+const ElHeader: any = _ElHeader;
+const ElImage: any = _ElImage;
+const ElInput: any = _ElInput;
+const ElInputNumber: any = _ElInputNumber;
+const ElMain: any = _ElMain;
+const ElMessage: any = _ElMessage;
+const ElPagination: any = _ElPagination;
+const ElRadioGroup: any = _ElRadioGroup;
+const ElRow: any = _ElRow;
+const ElSelect: any = _ElSelect;
+const ElSlider: any = _ElSlider;
+const ElSteps: any = _ElSteps;
+const ElSwitch: any = _ElSwitch;
+const ElTable: any = _ElTable;
+const ElTabs: any = _ElTabs;
+const ElTimeline: any = _ElTimeline;
+const ElTransfer: any = _ElTransfer;
+
+const editorStore = useEditorStore() as any;
 const {
   doc,
   docVersion,
@@ -92,9 +155,9 @@ const {
   projectVariables,
   projectVariableGroups,
   globalScripts,
-} = storeToRefs(editorStore);
+} = storeToRefs(editorStore as any) as any;
 
-const projectId = computed(
+const projectId = computed<string>(
   () => editorStore.projectId || editorStore.project?.id || currentPage.value?.projectId || "",
 );
 
@@ -103,18 +166,18 @@ const projectId = computed(
 const { panelState, selectedElements, selectedNode, selectedGraphic } = usePanelState();
 
 /** 属性 */
-const currentElement = computed(() => selectedNode.value || selectedGraphic.value);
+const currentElement = computed<AnyRecord | null>(() => selectedNode.value || selectedGraphic.value);
 
 /** 组件 ID */
-const elementId = computed(() => currentElement.value?.id || "-");
+const elementId = computed<string>(() => currentElement.value?.id || "-");
 
 /** 组件类型 */
-const elementType = computed(() => elementTypeName(currentElement.value?.type) || "-");
+const elementType = computed<string>(() => elementTypeName(currentElement.value?.type) || "-");
 
 /** 属性 */
-const elementLabel = ref("");
-const elementDescription = ref("");
-const regionSizeState = ref({});
+const elementLabel = ref<string>("");
+const elementDescription = ref<string>("");
+const regionSizeState = ref<any>(buildRegionSizeState(undefined));
 
 usePropertyPanelNormalizeNodeType(selectedNode, editorStore.updateNode);
 
@@ -123,8 +186,8 @@ watch(
   () => {
     if (!selectedNode.value) return;
     const type = elementTypeName(selectedNode.value.type);
-    const manifest = type ? getManifest(type) : null;
-    const defaults = manifest?.defaultProps || {};
+    const manifest = type ? (getManifest(type) as AnyRecord | null) : null;
+    const defaults = (manifest?.defaultProps as AnyRecord) || {};
     if (!defaults || Object.keys(defaults).length === 0) return;
     const props = selectedNode.value.props || {};
     let changed = false;
@@ -143,17 +206,17 @@ watch(
 );
 
 const configDialogVisible = ref(false);
-const configDialogType = ref("style");
-const configDraft = ref("");
-const configEditorRef = ref(null);
-const selectedPresetId = ref("");
-const presetSearch = ref("");
-const configAssetFolders = ref([]);
-const configAssets = ref([]);
-const configAssetSearch = ref("");
-const configAssetTreeRef = ref(null);
-let detailDraftTimer = null;
-function emitDetailConfig(nodeId, code) {
+const configDialogType = ref<"style" | "detail">("style");
+const configDraft = ref<string>("");
+const configEditorRef = ref<any>(null);
+const selectedPresetId = ref<string>("");
+const presetSearch = ref<string>("");
+const configAssetFolders = ref<AnyArray>([]);
+const configAssets = ref<AnyArray>([]);
+const configAssetSearch = ref<string>("");
+const configAssetTreeRef = ref<any>(null);
+let detailDraftTimer: ReturnType<typeof setTimeout> | null = null;
+function emitDetailConfig(nodeId: string, code: string) {
   if (!nodeId || !code) return;
   window.dispatchEvent(
     new CustomEvent("designer:detail-config", {
@@ -162,13 +225,13 @@ function emitDetailConfig(nodeId, code) {
   );
 }
 
-const configAssetTree = computed(() =>
+const configAssetTree = computed<AnyArray>(() =>
   buildConfigAssetTree(configAssetFolders.value, configAssets.value),
 );
 
-function handleConfigAssetNodeDblClick(data) {
+function handleConfigAssetNodeDblClick(data: SidebarNodeLike) {
   if (!data || data.type !== "asset") return;
-  const url = resolveConfigAssetUrl(data.raw);
+  const url = resolveConfigAssetUrl(data.raw as any);
   if (!url) return;
   const snippet = `url(\"${url}\")`;
   configEditorRef.value?.insertText?.(snippet);
@@ -177,7 +240,7 @@ function handleConfigAssetNodeDblClick(data) {
 async function loadConfigAssetFolders() {
   if (!projectId.value) return;
   const response = await assetApi.getFolders(projectId.value);
-  const data = unwrapApiData(response);
+  const data = unwrapApiData(response) as AnyRecord | null;
   const rawFolders = data?.folders;
   configAssetFolders.value = Array.isArray(rawFolders) ? rawFolders : [];
 }
@@ -185,7 +248,7 @@ async function loadConfigAssetFolders() {
 async function loadConfigAssets() {
   if (!projectId.value) return;
   const response = await assetApi.getAssets(projectId.value);
-  const data = unwrapApiData(response);
+  const data = unwrapApiData(response) as AnyRecord | null;
   const rawAssets = data?.assets;
   configAssets.value = Array.isArray(rawAssets) ? rawAssets : [];
 }
@@ -194,33 +257,33 @@ watch(configAssetSearch, () => {
   configAssetTreeRef.value?.filter?.(configAssetSearch.value);
 });
 const bindingDialogVisible = ref(false);
-const bindingEditorCode = ref("");
-const bindingEditorRef = ref(null);
-const bindingProp = ref(null);
-const bindingScriptSearch = ref("");
-const bindingComponentSearch = ref("");
-const bindingCustomTreeRef = ref(null);
-const bindingComponentTreeRef = ref(null);
-const configScriptSearch = ref("");
-const configComponentSearch = ref("");
-const configCustomTreeRef = ref(null);
-const configComponentTreeRef = ref(null);
-const enumInsertTarget = ref("binding");
+const bindingEditorCode = ref<string>("");
+const bindingEditorRef = ref<any>(null);
+const bindingProp = ref<{ name: string; label?: string } | null>(null);
+const bindingScriptSearch = ref<string>("");
+const bindingComponentSearch = ref<string>("");
+const bindingCustomTreeRef = ref<any>(null);
+const bindingComponentTreeRef = ref<any>(null);
+const configScriptSearch = ref<string>("");
+const configComponentSearch = ref<string>("");
+const configCustomTreeRef = ref<any>(null);
+const configComponentTreeRef = ref<any>(null);
+const enumInsertTarget = ref<"binding" | "config">("binding");
 const bindingVariableEnumVisible = ref(false);
-const bindingEnumTab = ref("project");
-const bindingProjectVarSearch = ref("");
-const bindingPageVarSearch = ref("");
-const bindingEnumSelectedProjectGroupId = ref(null);
-const bindingEnumSelectedPageGroupId = ref("page-root");
-const bindingEnumSelectedProjectVar = ref(null);
-const bindingEnumSelectedPageVar = ref(null);
+const bindingEnumTab = ref<"project" | "page">("project");
+const bindingProjectVarSearch = ref<string>("");
+const bindingPageVarSearch = ref<string>("");
+const bindingEnumSelectedProjectGroupId = ref<string | null>(null);
+const bindingEnumSelectedPageGroupId = ref<string>("page-root");
+const bindingEnumSelectedProjectVar = ref<BindingRowLike | null>(null);
+const bindingEnumSelectedPageVar = ref<BindingRowLike | null>(null);
 
 /**
  * 应用本地补丁（用于设计态强制刷新）
  * @param {import('@/editor-core').ComponentNode} node - ?
  * @param {Partial<import('@/editor-core').ComponentNode>} patch - 补丁
  */
-function applyLocalNodePatch(node, patch) {
+function applyLocalNodePatch(node: AnyRecord, patch: AnyRecord) {
   if (!node || !patch || typeof patch !== "object") return;
   if (doc.value?._updateNode && node.id) {
     doc.value._updateNode(node.id, patch);
@@ -256,7 +319,7 @@ function applyLocalNodePatch(node, patch) {
  * @param {string} nodeId - 节点 ID
  * @param {Partial<import('@/editor-core').ComponentNode>} patch - 补丁
  */
-function forceUpdateNode(nodeId, patch) {
+function forceUpdateNode(nodeId: string, patch: AnyRecord) {
   if (!nodeId || !patch || typeof patch !== "object") return;
   const target = doc.value?.getNode?.(nodeId);
   if (doc.value?._updateNode) {
@@ -275,12 +338,12 @@ function forceUpdateNode(nodeId, patch) {
  * @param {import('@/editor-core').ComponentNode} node - 节点
  * @param {Record<string, any>} config - 配置
  */
-function applyMenuDetailConfig(node, config) {
+function applyMenuDetailConfig(node: AnyRecord, config: AnyRecord) {
   const normalizedType = elementTypeName(node?.type);
   if (!node || normalizedType !== "Menu" || !config || typeof config !== "object") {
     return;
   }
-  const propsPatch = { ...(node.props || {}) };
+  const propsPatch: AnyRecord = { ...(node.props || {}) };
   const rawProps = config.props && typeof config.props === "object" ? { ...config.props } : {};
   if (Array.isArray(config.items)) {
     rawProps.items = config.items;
@@ -292,7 +355,7 @@ function applyMenuDetailConfig(node, config) {
   if (config.className && String(config.className).trim()) {
     propsPatch.class = String(config.className).trim();
   }
-  const nextPatch = { props: propsPatch };
+  const nextPatch: AnyRecord = { props: propsPatch };
   if (config.style && typeof config.style === "object") {
     nextPatch.style = { ...(node.style || {}), ...config.style };
   }
@@ -307,18 +370,18 @@ function applyMenuDetailConfig(node, config) {
  * @param {import('@/editor-core').ComponentNode} node - 节点
  * @param {string} content - 脚本
  */
-function runDetailConfigLocal(node, content) {
+function runDetailConfigLocal(node: AnyRecord, content: string) {
   if (!node || !content || !content.trim()) return;
   const normalizedType = elementTypeName(node?.type);
   const methodName = getDslMethodName(normalizedType || "");
   const safeContent =
     normalizedType === "Menu" ? buildMenuDslContent(content, methodName) : content;
-  let lastMenuConfig = null;
+  let lastMenuConfig: AnyRecord | null = null;
   const runner = new Function(
     `"use strict";\nreturn (function() {\n${safeContent}\n}).call(this);`,
   );
   const context = {
-    menu: (config) => {
+    menu: (config: AnyRecord) => {
       lastMenuConfig = config;
       applyMenuDetailConfig(node, config);
     },
@@ -333,7 +396,7 @@ function runDetailConfigLocal(node, content) {
   }
 }
 
-const stylePresets = [
+const stylePresets: AnyArray = [
   { id: "empty", label: "空模板", content: "" },
   {
     id: "center",
@@ -341,7 +404,7 @@ const stylePresets = [
     content: "display: flex;\nalign-items: center;\njustify-content: center;",
   },
 ];
-const buttonStylePresets = [
+const buttonStylePresets: AnyArray = [
   {
     id: "btn-font",
     label: "字体大小 / 颜色 / 粗细",
@@ -488,7 +551,7 @@ const buttonStylePresets = [
     content: "#domId .el-button:active {\n  transform: scale(0.97);\n}",
   },
 ];
-const textStylePresets = [
+const textStylePresets: AnyArray = [
   {
     id: "text-font",
     label: "字体大小 / 颜色 / 粗细",
@@ -633,14 +696,14 @@ const textStylePresets = [
     content: "#domId:active {\n  transform: scale(0.97);\n}",
   },
 ];
-function buildStylePreset(type, id, label, content) {
+function buildStylePreset(type: string, id: string, label: string, content: string) {
   return {
     id: `${type}-${id}`,
     label,
     content,
   };
 }
-const customStylePresetMap = {
+const customStylePresetMap: AnyRecord = {
   Image: [
     buildStylePreset(
       "Image",
@@ -1289,7 +1352,7 @@ const customStylePresetMap = {
     ),
   ],
 };
-const detailPresets = [
+const detailPresets: AnyArray = [
   {
     id: "empty",
     label: "空模板",
@@ -1301,7 +1364,7 @@ const detailPresets = [
     content: "/* id为组件的唯一标识 */\n",
   },
 ];
-const echartDetailPresets = [
+const echartDetailPresets: AnyArray = [
   {
     id: "echart-line",
     label: "折线图模板",
@@ -1363,7 +1426,7 @@ const echartDetailPresets = [
       'const option = {\n  title: { text: "多折线" },\n  tooltip: { trigger: "axis" },\n  legend: { bottom: 0 },\n  xAxis: { type: "category", data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] },\n  yAxis: { type: "value" },\n  series: [\n    { name: "A", type: "line", data: [120, 132, 101, 134, 90, 230, 210] },\n    { name: "B", type: "line", data: [220, 182, 191, 234, 290, 330, 310] },\n  ],\n};\nreturn option;',
   },
 ];
-const buttonDetailPresets = [
+const buttonDetailPresets: AnyArray = [
   {
     id: "btn-full",
     label: "通用模板（全字段）",
@@ -1459,7 +1522,7 @@ const buttonDetailPresets = [
   },
 ];
 
-const elementPlusTypes = new Set([
+const elementPlusTypes = new Set<string>([
   "Input",
   "InputNumber",
   "Select",
@@ -1499,7 +1562,7 @@ const elementPlusTypes = new Set([
  * @param {string | undefined} type - 组件类型
  * @returns {boolean}
  */
-function isElementPlusType(type) {
+function isElementPlusType(type: string | undefined) {
   const normalized = elementTypeName(type);
   if (!normalized) return false;
   if (normalized.startsWith("El")) return true;
@@ -1511,10 +1574,10 @@ function isElementPlusType(type) {
  * @param {string | undefined} type - 组件类型
  * @returns {any}
  */
-function resolveElementPlusComponent(type) {
+function resolveElementPlusComponent(type: string | undefined) {
   const normalized = elementTypeName(type);
   if (!normalized) return null;
-  const map = {
+  const map: AnyRecord = {
     Input: ElInput,
     InputNumber: ElInputNumber,
     Select: ElSelect,
@@ -1556,7 +1619,7 @@ function resolveElementPlusComponent(type) {
  * @param {string | undefined} type - 组件类型
  * @returns {Array<{ name: string, type: string, label: string, group: string, defaultValue?: any, options?: Array<{label: string, value: any}> }>}
  */
-const elementPlusPropLabelMap = {
+const elementPlusPropLabelMap: AnyRecord = {
   Input: {
     modelValue: "输入值",
     placeholder: "占位符",
@@ -1723,17 +1786,17 @@ const elementPlusPropLabelMap = {
   },
 };
 
-function buildElementPlusPropDefs(type) {
+function buildElementPlusPropDefs(type: string | undefined): AnyArray {
   const comp = resolveElementPlusComponent(type);
-  const rawProps = comp?.props || comp?.__props || null;
+  const rawProps: AnyRecord | AnyArray | null = comp?.props || comp?.__props || null;
   if (!rawProps || typeof rawProps !== "object") return [];
-  const labelMap = elementPlusPropLabelMap[elementTypeName(type)] || null;
+  const labelMap: AnyRecord | null = elementPlusPropLabelMap[elementTypeName(type)] || null;
   if (!labelMap) return [];
-  const entries = Array.isArray(rawProps)
-    ? rawProps.map((key) => [key, {}])
-    : Object.entries(rawProps);
+  const entries = (Array.isArray(rawProps)
+    ? rawProps.map((key: string) => [key, {}])
+    : Object.entries(rawProps as AnyRecord)) as Array<[string, AnyRecord]>;
 
-  const resolvePropType = (prop) => {
+  const resolvePropType = (prop: AnyRecord) => {
     const typeDef = prop?.type;
     const typeValue = Array.isArray(typeDef) ? typeDef[0] : typeDef;
     if (typeValue === Boolean) return "boolean";
@@ -1744,8 +1807,8 @@ function buildElementPlusPropDefs(type) {
   };
 
   return entries
-    .filter(([name]) => Object.hasOwn(labelMap, name))
-    .map(([name, prop]) => {
+    .filter(([name]: [string, AnyRecord]) => Object.hasOwn(labelMap, name))
+    .map(([name, prop]: [string, AnyRecord]) => {
       const typeValue = resolvePropType(prop);
       const def = typeof prop?.default === "function" ? prop.default() : prop?.default;
       const options = Array.isArray(prop?.values)
@@ -1767,7 +1830,7 @@ function buildElementPlusPropDefs(type) {
  * @param {{ group?: string }} propDef - 属性定义
  * @returns {boolean}
  */
-function shouldShowBindButton(propDef) {
+function shouldShowBindButton(propDef: AnyRecord) {
   if (!propDef) return false;
   return propDef.bindable === true;
 }
@@ -1777,7 +1840,7 @@ function shouldShowBindButton(propDef) {
  * @param {string} type - 组件类型
  * @returns {string}
  */
-function getDslMethodName(type) {
+function getDslMethodName(type: string) {
   if (!type) return "component";
   const normalized = type.replace(/^El/, "el");
   return normalized.charAt(0).toLowerCase() + normalized.slice(1);
@@ -1789,7 +1852,7 @@ function getDslMethodName(type) {
  * @param {string} key - 预设标识
  * @returns {string}
  */
-function buildPresetId(type, key) {
+function buildPresetId(type: string, key: string) {
   return `${String(type || "component").toLowerCase()}-${key}`;
 }
 
@@ -1799,11 +1862,11 @@ function buildPresetId(type, key) {
  * @param {string} body - 模板主体
  * @returns {string}
  */
-function buildDslTemplate(methodName, body) {
+function buildDslTemplate(methodName: string, body: string) {
   return `this.${methodName}({\n${body}\n});`;
 }
 
-const textDetailPresets = [
+const textDetailPresets: AnyArray = [
   {
     id: "text-basic",
     label: "最文本",
@@ -1942,7 +2005,7 @@ const textDetailPresets = [
  * @param {number} indentSize - 缩进空格数
  * @returns {string}
  */
-function formatDslValue(value, indentSize = 2) {
+function formatDslValue(value: any, indentSize = 2): string {
   if (value === undefined) return "undefined";
   const json = JSON.stringify(value, null, 2);
   if (!json) return "null";
@@ -1958,7 +2021,7 @@ function formatDslValue(value, indentSize = 2) {
  * @param {string} propName - 属性名
  * @returns {*}
  */
-function getManifestDefaultValue(type, propName) {
+function getManifestDefaultValue(type: string, propName: string): any {
   if (!type || !propName) return undefined;
   const manifest = getManifest(type);
   if (!manifest?.props?.length) return undefined;
@@ -1970,7 +2033,7 @@ function getManifestDefaultValue(type, propName) {
  * @param {string} content - 模板内容
  * @returns {string}
  */
-function extractDslBody(content) {
+function extractDslBody(content: string): string {
   const text = String(content || "");
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -1978,7 +2041,7 @@ function extractDslBody(content) {
   return text.slice(start + 1, end).trim();
 }
 
-const dslEventKeyMap = {
+const dslEventKeyMap: AnyRecord = {
   onClick: "click",
   onChange: "change",
   onRowClick: "rowClick",
@@ -1993,8 +2056,8 @@ const dslEventKeyMap = {
  * @param {string} body - 模板主体
  * @returns {string[]}
  */
-function splitTopLevelEntries(body) {
-  const entries = [];
+function splitTopLevelEntries(body: string): AnyArray {
+  const entries: AnyArray = [];
   let buffer = "";
   let depth = 0;
   let inString = false;
@@ -2036,7 +2099,7 @@ function splitTopLevelEntries(body) {
  * @param {{ id: string, label: string, content: string }} preset - 预设项
  * @returns {{ id: string, label: string, content: string }}
  */
-function normalizeDslPreset(type, preset) {
+function normalizeDslPreset(type: string, preset: AnyRecord): AnyRecord {
   const rawContent = preset?.content || "";
   if (rawContent.includes("props:") || rawContent.includes("events:")) {
     return preset;
@@ -2046,18 +2109,18 @@ function normalizeDslPreset(type, preset) {
   const entries = splitTopLevelEntries(body);
   const dslId = `${methodName}Id`;
   const label = preset?.label || "";
-  const props = [];
-  const state = [];
-  const events = [];
+  const props: AnyArray = [];
+  const state: AnyArray = [];
+  const events: AnyArray = [];
   let styleBody = "";
   let className = "";
   let idValue = "";
   let labelValue = "";
   let typeValue = "";
 
-  const normalizeValue = (value) => value.replace(/,$/, "").trim();
+  const normalizeValue = (value: string) => value.replace(/,$/, "").trim();
 
-  entries.forEach((entry) => {
+  entries.forEach((entry: string) => {
     const colonIndex = entry.indexOf(":");
     if (colonIndex === -1) return;
     const key = entry.slice(0, colonIndex).trim();
@@ -2095,7 +2158,7 @@ function normalizeDslPreset(type, preset) {
     props.push(`  ${key}: ${value}`);
   });
 
-  const toBlock = (items) =>
+  const toBlock = (items: AnyArray) =>
     items.length ? items.map((item) => item.replace(/,$/, "")).join(",\n") : "";
 
   const styleLines = styleBody
@@ -2128,7 +2191,7 @@ function normalizeDslPreset(type, preset) {
   };
 }
 
-const elementPlusPresetGroups = [
+const elementPlusPresetGroups: PresetGroupLike[] = [
   {
     name: "custom",
     types: [
@@ -4451,14 +4514,14 @@ const elementPlusPresetGroups = [
  * @param {string} type - 组件类型
  * @returns {Array<{ id: string, label: string, content: string }>}
  */
-function resolveElementPlusDetailPresets(type) {
-  const group = elementPlusPresetGroups.find((item) => item.types.includes(type));
+function resolveElementPlusDetailPresets(type: string): AnyArray {
+  const group = elementPlusPresetGroups.find((item: AnyRecord) => item.types.includes(type));
   const methodName = getDslMethodName(type);
   if (group?.detail) {
     return group
       .detail(methodName, type)
-      .map((preset) => normalizeDslPreset(type, preset))
-      .map((preset) => ({
+      .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
+      .map((preset: AnyRecord) => ({
         ...preset,
         tags: preset.tags || [type, "detail", group.name],
         keywords: preset.keywords || [preset.label, type, group.name].filter(Boolean).join(" "),
@@ -4478,18 +4541,18 @@ function resolveElementPlusDetailPresets(type) {
  * @param {string} type - 组件类型
  * @returns {Array<{ id: string, label: string, content: string }>}
  */
-function resolveElementPlusStylePresets(type) {
-  const customPresets = customStylePresetMap[type];
+function resolveElementPlusStylePresets(type: string): AnyArray {
+  const customPresets = customStylePresetMap[type] as AnyArray | undefined;
   if (customPresets) {
-    return customPresets.map((preset) => ({
+    return customPresets.map((preset: AnyRecord) => ({
       ...preset,
       tags: preset.tags || [type, "style", "custom"],
       keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
     }));
   }
-  const group = elementPlusPresetGroups.find((item) => item.types.includes(type));
+  const group = elementPlusPresetGroups.find((item: AnyRecord) => item.types.includes(type));
   if (group?.style) {
-    return group.style(type).map((preset) => ({
+    return group.style(type).map((preset: AnyRecord) => ({
       ...preset,
       tags: preset.tags || [type, "style", group.name],
       keywords: preset.keywords || [preset.label, type, group.name].filter(Boolean).join(" "),
@@ -4508,7 +4571,7 @@ function resolveElementPlusStylePresets(type) {
  * @param {{ toggleProp: string }} item - 区域配置项
  * @returns {boolean}
  */
-function isRegionEnabled(item) {
+function isRegionEnabled(item: AnyRecord) {
   if (!item?.toggleProp) return true;
   return Boolean(getPropValue(item.toggleProp));
 }
@@ -4517,7 +4580,7 @@ function isRegionEnabled(item) {
  * 获取当前容器最大尺寸
  * @returns {{ width?: number, height?: number }}
  */
-function resolveContainerMaxSize() {
+function resolveContainerMaxSize(): AnyRecord {
   const element = currentElement.value;
   const liveNode = element?.id ? doc.value?.getNode?.(element.id) || element : element;
   let containerRect;
@@ -4536,7 +4599,7 @@ function resolveContainerMaxSize() {
  * @param {string | null} propName - 属性名
  * @returns {string}
  */
-function getRegionMaxLabel(propName) {
+function getRegionMaxLabel(propName: string | null): string {
   return formatRegionMaxLabel(propName, currentElement.value, resolveContainerMaxSize());
 }
 
@@ -4547,7 +4610,7 @@ function getRegionMaxLabel(propName) {
  * @param {string} unit - 单位
  * @returns {{ value: string, unit: string }}
  */
-function clampRegionSize(propName, value, unit) {
+function clampRegionSize(propName: string, value: string, unit: string) {
   return clampRegionSizeValue(
     propName,
     value,
@@ -4561,7 +4624,7 @@ function clampRegionSize(propName, value, unit) {
  * ??
  * @param {Record<string, any> | undefined} props - ?
  */
-function syncRegionSizeState(props) {
+function syncRegionSizeState(props: AnyRecord | undefined) {
   regionSizeState.value = buildRegionSizeState(props);
 }
 
@@ -4605,7 +4668,7 @@ watch(
  * @param {Record<string, any>} patch - 更新补丁
  * @returns {boolean}
  */
-function applyNodePatch(nodeId, patch) {
+function applyNodePatch(nodeId: string, patch: AnyRecord) {
   if (!doc.value || !nodeId || !patch) return false;
   if (typeof doc.value._updateNode !== "function") return false;
   doc.value._updateNode(nodeId, patch);
@@ -4616,13 +4679,13 @@ function applyNodePatch(nodeId, patch) {
 /**
  * 获取组件 Manifest
  */
-const manifest = computed(() => {
+const manifest = computed<AnyRecord | null>(() => {
   const type = elementTypeName(currentElement.value?.type);
   if (!type) return null;
   return getManifest(type) ?? null;
 });
 
-const effectiveManifest = computed(() => {
+const effectiveManifest = computed<AnyRecord | null>(() => {
   const type = elementTypeName(currentElement.value?.type);
   const elementPlusProps = isElementPlusType(type) ? buildElementPlusPropDefs(type) : [];
   if (manifest.value) {
@@ -4648,25 +4711,25 @@ const effectiveManifest = computed(() => {
   return null;
 });
 
-const layoutForceProps = computed(() => []);
+const layoutForceProps = computed<AnyArray>(() => []);
 
-const configDialogTitle = computed(() =>
+const configDialogTitle = computed<string>(() =>
   configDialogType.value === "detail" ? "详细配置" : "样式配置",
 );
-const configEditorLanguage = computed(() =>
+const configEditorLanguage = computed<string>(() =>
   configDialogType.value === "detail" ? "javascript" : "css",
 );
-const presetLabel = computed(() =>
+const presetLabel = computed<string>(() =>
   configDialogType.value === "detail" ? "详细模板：" : "样式模板：",
 );
-const currentPresetOptions = computed(() => {
+const currentPresetOptions = computed<AnyArray>(() => {
   const type = currentElement.value?.type;
   if (configDialogType.value === "detail") {
     if (type === "EChart") return echartDetailPresets;
     if (type === "Button") {
       return buttonDetailPresets
-        .map((preset) => normalizeDslPreset(type, preset))
-        .map((preset) => ({
+        .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
+        .map((preset: AnyRecord) => ({
           ...preset,
           tags: preset.tags || [type, "detail", "button"],
           keywords: preset.keywords || [preset.label, type, "button"].filter(Boolean).join(" "),
@@ -4674,8 +4737,8 @@ const currentPresetOptions = computed(() => {
     }
     if (type === "Text") {
       return textDetailPresets
-        .map((preset) => normalizeDslPreset(type, preset))
-        .map((preset) => ({
+        .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
+        .map((preset: AnyRecord) => ({
           ...preset,
           tags: preset.tags || [type, "detail", "text"],
           keywords: preset.keywords || [preset.label, type, "text"].filter(Boolean).join(" "),
@@ -4685,21 +4748,21 @@ const currentPresetOptions = computed(() => {
     return detailPresets;
   }
   if (type === "Button") {
-    return buttonStylePresets.map((preset) => ({
+    return buttonStylePresets.map((preset: AnyRecord) => ({
       ...preset,
       tags: preset.tags || [type, "style", "button"],
       keywords: preset.keywords || [preset.label, type, "button"].filter(Boolean).join(" "),
     }));
   }
   if (type === "Text") {
-    return textStylePresets.map((preset) => ({
+    return textStylePresets.map((preset: AnyRecord) => ({
       ...preset,
       tags: preset.tags || [type, "style", "text"],
       keywords: preset.keywords || [preset.label, type, "text"].filter(Boolean).join(" "),
     }));
   }
   if (customStylePresetMap[type]) {
-    return customStylePresetMap[type].map((preset) => ({
+    return (customStylePresetMap[type] as AnyArray).map((preset: AnyRecord) => ({
       ...preset,
       tags: preset.tags || [type, "style", "custom"],
       keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
@@ -4709,31 +4772,31 @@ const currentPresetOptions = computed(() => {
   return stylePresets;
 });
 
-const filteredPresetOptions = computed(() => {
+const filteredPresetOptions = computed<AnyArray>(() => {
   const keyword = String(presetSearch.value || "")
     .trim()
     .toLowerCase();
   if (!keyword) return currentPresetOptions.value;
-  return currentPresetOptions.value.filter((item) => {
+  return currentPresetOptions.value.filter((item: AnyRecord) => {
     const haystack = `${item.label || ""} ${item.tags?.join(" ") || ""} ${item.keywords || ""}`;
     return haystack.toLowerCase().includes(keyword);
   });
 });
 
-const bindingDialogTitle = computed(() => {
+const bindingDialogTitle = computed<string>(() => {
   const label = bindingProp.value?.label || bindingProp.value?.name;
   return label ? `绑定数据 - ${label}` : "绑定数据";
 });
 
-const bindingDialogDescription = computed(() => {
+const bindingDialogDescription = computed<string>(() => {
   const elementName = elementLabel.value || elementType.value || "组件";
   const propLabel = bindingProp.value?.label || bindingProp.value?.name || "";
   return propLabel ? `${elementName} ${propLabel} 绑定脚本` : `${elementName} 绑定脚本`;
 });
 
-const isElContainer = computed(() => elementType.value === "ElContainer");
-const isEChart = computed(() => elementType.value === "EChart");
-const regionPropRows = computed(() => [
+const isElContainer = computed<boolean>(() => elementType.value === "ElContainer");
+const isEChart = computed<boolean>(() => elementType.value === "EChart");
+const regionPropRows = computed<AnyArray>(() => [
   {
     key: "header",
     label: "el-header",
@@ -4765,28 +4828,29 @@ const regionPropRows = computed(() => [
  * @param {{ props?: Array<{ name: string }> }} group - 分组
  * @returns {boolean}
  */
-function isRegionGroup(group) {
-  return Boolean(group?.props?.some((prop) => prop.name === "showHeader"));
+function isRegionGroup(group: AnyRecord) {
+  return Boolean(group?.props?.some((prop: AnyRecord) => prop.name === "showHeader"));
 }
 
 /**
  * 按 group 对属性分组
  */
-const groupedProps = computed(() => {
+const groupedProps = computed<AnyArray>(() => {
   if (!effectiveManifest.value) return [];
 
-  const groups = new Map();
-  for (const prop of effectiveManifest.value.props) {
-    const groupName = prop.group || "?";
+  const groups = new Map<string, AnyRecord>();
+  for (const prop of effectiveManifest.value.props as AnyRecord[]) {
+    const propDef: AnyRecord = prop;
+    const groupName = propDef.group || "?";
     if (!groups.has(groupName)) {
       groups.set(groupName, { name: groupName, props: [] });
     }
-    groups.get(groupName).props.push(prop);
+    groups.get(groupName)!.props.push(propDef);
   }
   return Array.from(groups.values());
 });
 
-const displayPropGroups = computed(() => {
+const displayPropGroups = computed<AnyArray>(() => {
   const groups = groupedProps.value;
   if (groups.length > 0) return groups;
   if (effectiveManifest.value?.props?.length) {
@@ -4795,29 +4859,29 @@ const displayPropGroups = computed(() => {
   return [];
 });
 
-const visibleLayoutForceProps = computed(() =>
+const visibleLayoutForceProps = computed<AnyArray>(() =>
   layoutForceProps.value.filter((propDef) => !shouldHideProp(propDef)),
 );
 
-const sectionExpanded = ref({});
+const sectionExpanded = ref<AnyRecord>({});
 
-const getGroupSectionKey = (group) => `group:${String(group?.name || "属性")}`;
+const getGroupSectionKey = (group: AnyRecord) => `group:${String(group?.name || "属性")}`;
 
-function resolveGroupTitle(group) {
+function resolveGroupTitle(group: AnyRecord) {
   const name = String(group?.name || "").trim();
   return !name || name === "?" ? "属性" : name;
 }
 
-function getVisibleGroupProps(group) {
+function getVisibleGroupProps(group: AnyRecord): AnyArray {
   return (group?.props || []).filter(
-    (propDef) =>
+    (propDef: AnyRecord) =>
       propDef && (!isEChart.value || propDef.name !== "option") && !shouldHideProp(propDef),
   );
 }
 
-const isSectionExpanded = (key) => sectionExpanded.value[key] !== false;
+const isSectionExpanded = (key: string) => sectionExpanded.value[key] !== false;
 
-function toggleSection(key) {
+function toggleSection(key: string) {
   sectionExpanded.value = {
     ...sectionExpanded.value,
     [key]: !isSectionExpanded(key),
@@ -4826,9 +4890,9 @@ function toggleSection(key) {
 
 watch(
   displayPropGroups,
-  (groups) => {
+  (groups: AnyArray) => {
     const nextState = { ...sectionExpanded.value };
-    groups.forEach((group) => {
+    groups.forEach((group: AnyRecord) => {
       const key = getGroupSectionKey(group);
       if (!(key in nextState)) {
         nextState[key] = true;
@@ -4839,7 +4903,7 @@ watch(
   { immediate: true },
 );
 
-const pageVars = computed(() => {
+const pageVars = computed<AnyRecord>(() => {
   docVersion.value;
   const pageId = currentPageId.value;
   if (!pageId || !doc.value) return {};
@@ -4852,25 +4916,25 @@ const pageVars = computed(() => {
  * @param {string} nodeId - 节点 ID
  * @param {Set<string>} nameSet - 名称集合
  */
-function collectComponentNames(nodeId, nameSet) {
+function collectComponentNames(nodeId: string, nameSet: Set<string>) {
   if (!doc.value || !nodeId) return;
   const node = doc.value.getNode?.(nodeId);
   if (!node) return;
   const label = node.label || node.type;
   if (label) nameSet.add(label);
-  (node.children || []).forEach((childId) => collectComponentNames(childId, nameSet));
+  (node.children || []).forEach((childId: string) => collectComponentNames(childId, nameSet));
 }
 
-const pageComponentNames = computed(() => {
+const pageComponentNames = computed<string[]>(() => {
   docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
   if (!rootId || !doc.value) return [];
-  const nameSet = new Set();
+  const nameSet = new Set<string>();
   collectComponentNames(rootId, nameSet);
   return Array.from(nameSet);
 });
 
-const bindingProjectGroupTree = computed(() => [
+const bindingProjectGroupTree = computed<AnyArray>(() => [
   {
     id: "all",
     label: "全部",
@@ -4879,15 +4943,17 @@ const bindingProjectGroupTree = computed(() => [
   },
 ]);
 
-const bindingProjectVariableRows = computed(() => {
+const bindingProjectVariableRows = computed<AnyArray>(() => {
   const keyword = String(bindingProjectVarSearch.value || "").toLowerCase();
-  const items = Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
-    name,
-    groupId: detail?.groupId || null,
-    type: detail?.type || "string",
-    description: detail?.description || "",
-    mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
-  }));
+  const items = (Object.entries(projectVariables.value || {}) as Array<[string, AnyRecord]>).map(
+    ([name, detail]) => ({
+      name,
+      groupId: detail?.groupId || null,
+      type: detail?.type || "string",
+      description: detail?.description || "",
+      mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+    }),
+  );
   return items
     .filter((item) => {
       if (bindingEnumSelectedProjectGroupId.value) {
@@ -4903,13 +4969,13 @@ const bindingProjectVariableRows = computed(() => {
     });
 });
 
-const bindingPageGroupTree = computed(() => [
+const bindingPageGroupTree = computed<AnyArray>(() => [
   { id: "page-root", label: "页面变量", type: "group", children: [] },
 ]);
 
-const bindingPageVariableRows = computed(() => {
+const bindingPageVariableRows = computed<AnyArray>(() => {
   const keyword = String(bindingPageVarSearch.value || "").toLowerCase();
-  return Object.entries(pageVars.value || {})
+  return (Object.entries(pageVars.value || {}) as Array<[string, AnyRecord]>)
     .map(([name, detail]) => ({
       name,
       type: detail?.type || "string",
@@ -4923,14 +4989,16 @@ const bindingPageVariableRows = computed(() => {
     });
 });
 
-const bindingPageComponentTree = computed(() => {
+const bindingPageComponentTree = computed<AnyArray>(() => {
   docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
   if (!rootId || !doc.value) return [];
-  const buildNode = (nodeId) => {
+  const buildNode = (nodeId: string): AnyRecord | null => {
     const node = doc.value.getNode(nodeId);
     if (!node) return null;
-    const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean);
+    const children = Array.isArray(node.children)
+      ? node.children.map((childId: string) => buildNode(childId)).filter(Boolean)
+      : [];
     const label = node.label || node.type || "组件";
     return {
       id: node.id,
@@ -4945,15 +5013,15 @@ const bindingPageComponentTree = computed(() => {
   return root.children?.length ? root.children : [root];
 });
 
-const bindingCustomScriptTree = computed(() => {
+const bindingCustomScriptTree = computed<AnyArray>(() => {
   const rawGroups = globalScripts.value?.custom?.groups;
-  const groups = Array.isArray(rawGroups) ? rawGroups : [];
+  const groups = Array.isArray(rawGroups) ? (rawGroups as AnyArray) : [];
   const rawItems = globalScripts.value?.custom?.items;
-  const items = Array.isArray(rawItems) ? rawItems : [];
-  const groupMap = new Map();
-  const roots = [];
+  const items = Array.isArray(rawItems) ? (rawItems as AnyArray) : [];
+  const groupMap = new Map<string, AnyRecord>();
+  const roots: AnyArray = [];
 
-  groups.forEach((group) => {
+  groups.forEach((group: AnyRecord) => {
     groupMap.set(group.id, {
       id: group.id,
       label: group.name,
@@ -4963,15 +5031,15 @@ const bindingCustomScriptTree = computed(() => {
   });
 
   groupMap.forEach((node, id) => {
-    const group = groups.find((item) => item.id === id);
+    const group = groups.find((item: AnyRecord) => item.id === id);
     if (group?.parentId && groupMap.has(group.parentId)) {
-      groupMap.get(group.parentId).children.push(node);
+      groupMap.get(group.parentId)!.children.push(node);
     } else {
       roots.push(node);
     }
   });
 
-  items.forEach((item) => {
+  items.forEach((item: AnyRecord) => {
     if (!item?.id) return;
     const node = {
       id: item.id,
@@ -4980,7 +5048,7 @@ const bindingCustomScriptTree = computed(() => {
       params: item.params || item.args || "",
     };
     if (item.groupId && groupMap.has(item.groupId)) {
-      groupMap.get(item.groupId).children.push(node);
+      groupMap.get(item.groupId)!.children.push(node);
     } else {
       roots.push(node);
     }
@@ -4989,8 +5057,8 @@ const bindingCustomScriptTree = computed(() => {
   return roots;
 });
 
-const bindingCompletions = computed(() => {
-  const items = [
+const bindingCompletions = computed<AnyArray>(() => {
+  const items: AnyArray = [
     {
       label: "console.log",
       insertText: "console.log()",
@@ -5031,7 +5099,7 @@ const bindingCompletions = computed(() => {
   (Array.isArray(globalScripts.value?.custom?.items)
     ? globalScripts.value.custom.items
     : []
-  ).forEach((script) => {
+  ).forEach((script: AnyRecord) => {
     if (!script?.name) return;
     const params =
       typeof script.params === "string" && script.params.trim()
@@ -5062,8 +5130,8 @@ const bindingCompletions = computed(() => {
   return items;
 });
 
-const detailCompletions = computed(() => {
-  const items = [
+const detailCompletions = computed<AnyArray>(() => {
+  const items: AnyArray = [
     {
       label: "console.log",
       insertText: "console.log()",
@@ -5106,7 +5174,7 @@ const detailCompletions = computed(() => {
   (Array.isArray(globalScripts.value?.custom?.items)
     ? globalScripts.value.custom.items
     : []
-  ).forEach((scriptItem) => {
+  ).forEach((scriptItem: AnyRecord) => {
     if (!scriptItem?.name) return;
     const params =
       typeof scriptItem.params === "string" && scriptItem.params.trim()
@@ -5171,7 +5239,7 @@ const detailCompletions = computed(() => {
   return items;
 });
 
-const configEditorCompletions = computed(() => {
+const configEditorCompletions = computed<AnyArray>(() => {
   return configDialogType.value === "detail" ? detailCompletions.value : [];
 });
 
@@ -5180,9 +5248,9 @@ const configEditorCompletions = computed(() => {
  * @param {Array<{ id: string, name: string, parentId?: string }>} groups - 分组数据
  * @returns {Array<{ id: string, label: string, type: string, children: Array }>}
  */
-function buildBindingGroupTree(groups) {
-  const groupMap = new Map();
-  const roots = [];
+function buildBindingGroupTree(groups: AnyArray) {
+  const groupMap = new Map<string, AnyRecord>();
+  const roots: AnyArray = [];
   const normalized = Array.isArray(groups) ? groups : [];
   normalized.forEach((group) => {
     groupMap.set(group.id, {
@@ -5195,7 +5263,7 @@ function buildBindingGroupTree(groups) {
   groupMap.forEach((node, id) => {
     const group = normalized.find((item) => item.id === id);
     if (group?.parentId && groupMap.has(group.parentId)) {
-      groupMap.get(group.parentId).children.push(node);
+      groupMap.get(group.parentId)!.children.push(node);
     } else {
       roots.push(node);
     }
@@ -5209,7 +5277,7 @@ function buildBindingGroupTree(groups) {
  * @param {{ label?: string }} data - 节点数据
  * @returns {boolean}
  */
-function filterBindingSidebarNode(value, data) {
+function filterBindingSidebarNode(value: string, data: AnyRecord) {
   if (!value) return true;
   return String(data?.label || "")
     .toLowerCase()
@@ -5237,7 +5305,7 @@ watch(configComponentSearch, (value) => {
  * @param {string} content - 样式内容
  * @returns {string}
  */
-function formatStyleConfigOutput(content) {
+function formatStyleConfigOutput(content: string): string {
   const text = String(content || "");
   if (configDialogType.value !== "style") return text;
   if (text.includes("{")) return text;
@@ -5253,13 +5321,13 @@ ${trimmed}
  * @param {string} content - 样式内容
  * @returns {string}
  */
-function prefixStyleConfigScope(content) {
+function prefixStyleConfigScope(content: string): string {
   const text = String(content || "").trim();
   if (!text || !text.includes("{")) return text;
   const blocks = text.split("}");
   const rebuilt = blocks
     .map((block) => {
-      const [selector, body] = block.split("{");
+      const [selector = "", body] = block.split("{");
       if (!body) return "";
       const trimmedSelector = selector.trim();
       if (!trimmedSelector) return "";
@@ -5285,14 +5353,14 @@ function prefixStyleConfigScope(content) {
  * @param {string} content - DSL 内容
  * @returns {{ valid: boolean, message?: string }}
  */
-function validateDetailConfig(content) {
+function validateDetailConfig(content: string): { valid: boolean; message?: string } {
   const text = String(content || "").trim();
   if (!text) return { valid: true };
   try {
     // 仅做语法检查，不执行
     new Function(text);
     return { valid: true };
-  } catch (error) {
+  } catch (error: any) {
     return { valid: false, message: error?.message || "DSL 语法错误" };
   }
 }
@@ -5302,7 +5370,7 @@ function validateDetailConfig(content) {
  * @param {string} content - DSL 内容
  * @returns {string}
  */
-function normalizeDetailConfigBindings(content) {
+function normalizeDetailConfigBindings(content: string): string {
   let text = String(content || "");
   text = text.replace(/:\s*(\$vars\.\w+)/g, ': { $var: "$1" }');
   text = text.replace(/:\s*(\$global\.\w+)/g, ': { $var: "$1" }');
@@ -5329,7 +5397,7 @@ const textStyleNumberProps = new Set(["fontSize", "lineHeight", "letterSpacing"]
  * @param {any} value - 原始值
  * @returns {any}
  */
-function resolveTextStyleValue(propName, value) {
+function resolveTextStyleValue(propName: string, value: any): any {
   if (value === null || value === undefined) return value;
   if (textStyleNumberProps.has(propName)) {
     if (typeof value === "number") return value;
@@ -5337,7 +5405,7 @@ function resolveTextStyleValue(propName, value) {
     if (!text) return undefined;
     const match = text.match(/^(-?\d+(\.\d+)?)/);
     if (match) {
-      const num = Number.parseFloat(match[1]);
+      const num = Number.parseFloat(match[1] || "0");
       return Number.isFinite(num) ? num : value;
     }
   }
@@ -5348,7 +5416,7 @@ function resolveTextStyleValue(propName, value) {
  * 读取属性值
  * @param {string} propName - 属性名
  */
-function getPropValue(propName) {
+function getPropValue(propName: string): any {
   const el = currentElement.value;
   if (!el) return undefined;
   const propValue = el.props ? el.props[propName] : undefined;
@@ -5364,7 +5432,7 @@ function getPropValue(propName) {
  * @param {string} propName - 属性名
  * @returns {{ value: string, unit: string } | undefined}
  */
-const getRegionSizeState = (propName) => regionSizeState.value[propName];
+const getRegionSizeState = (propName: string) => regionSizeState.value[propName];
 
 /**
  * 设置区域尺寸状态
@@ -5372,7 +5440,7 @@ const getRegionSizeState = (propName) => regionSizeState.value[propName];
  * @param {string} value - 值
  * @param {string} unit - 单位
  */
-function setRegionSizeState(propName, value, unit) {
+function setRegionSizeState(propName: string, value: string, unit: string) {
   if (!propName) return;
   regionSizeState.value = {
     ...regionSizeState.value,
@@ -5385,7 +5453,7 @@ function setRegionSizeState(propName, value, unit) {
  * @param {string} propName - 属性名
  * @returns {string}
  */
-function getSizeValue(propName) {
+function getSizeValue(propName: string): string {
   if (!propName) return "";
   const cached = getRegionSizeState(propName);
   if (cached) return cached.value;
@@ -5397,7 +5465,7 @@ function getSizeValue(propName) {
  * @param {string} propName - 属性名
  * @returns {string}
  */
-function getSizeUnit(propName) {
+function getSizeUnit(propName: string): string {
   if (!propName) return "auto";
   const cached = getRegionSizeState(propName);
   if (cached) return cached.unit;
@@ -5409,7 +5477,7 @@ function getSizeUnit(propName) {
  * @param {string} propName - 属性名
  * @param {string} value - 输入值
  */
-function handleSizeValueChange(propName, value) {
+function handleSizeValueChange(propName: string, value: string) {
   if (!propName) return;
   const unit = getSizeUnit(propName);
   const nextUnit = unit === "auto" ? "px" : unit;
@@ -5428,7 +5496,7 @@ function handleSizeValueChange(propName, value) {
  * @param {string} propName - 属性名
  * @param {string} unit - 单位
  */
-function handleSizeUnitChange(propName, unit) {
+function handleSizeUnitChange(propName: string, unit: string) {
   if (!propName) return;
   if (unit === "auto") {
     setRegionSizeState(propName, "", "auto");
@@ -5455,7 +5523,7 @@ const formattedProps = computed(() => {
  * @param {string} propName - 属性名
  * @returns {boolean}
  */
-function hasPropBinding(propName) {
+function hasPropBinding(propName: string): boolean {
   return Boolean(currentElement.value?.bindings?.[propName]);
 }
 
@@ -5483,7 +5551,7 @@ const hasStyleConfig = computed(() => {
  * @param {any} propDef - 属性定义
  * @returns {boolean}
  */
-function shouldHideProp(propDef) {
+function shouldHideProp(propDef: AnyRecord): boolean {
   if (!propDef || !propDef.name) return false;
   const nodeType = elementTypeName(selectedNode.value?.type);
   if (nodeType === "Tabs" && propDef.name === "tabs") return true;
@@ -5495,7 +5563,7 @@ function shouldHideProp(propDef) {
 /**
  * 是否显示尺寸编辑器
  */
-const showSizeEditor = computed(() => {
+const showSizeEditor = computed<boolean>(() => {
   const node = selectedNode.value;
   if (!node) return true;
   const regionTypes = ["ElHeader", "ElAside", "ElMain", "ElFooter"];
@@ -5507,14 +5575,14 @@ const showSizeEditor = computed(() => {
 /**
  * 当前样式对象
  */
-const containerMinSize = computed(() =>
+const containerMinSize = computed<any>(() =>
   computeElContainerMinSize(selectedNode.value, (id) => doc.value?.getNode?.(id)),
 );
 
 /**
  * ?
  */
-const currentStyle = computed(() => {
+const currentStyle = computed<AnyRecord>(() => {
   if (!selectedNode.value) return {};
   return selectedNode.value.style || {};
 });
@@ -5523,15 +5591,16 @@ const currentStyle = computed(() => {
  * 处理样式变更
  * @param {Object} newStyle - 新样式
  */
-function handleStyleChange(newStyle) {
+function handleStyleChange(newStyle: AnyRecord) {
   if (!selectedNode.value) return;
   const nodeId = selectedNode.value.id;
-  const ok = editorStore.updateNode(nodeId, { style: newStyle });
+  const nextPatch: AnyRecord = { style: newStyle };
+  const ok = editorStore.updateNode(nodeId, nextPatch);
   const latest = doc.value?.getNode?.(nodeId);
   const shouldPatch =
     !ok || (latest && JSON.stringify(latest.style || {}) !== JSON.stringify(newStyle || {}));
   if (shouldPatch) {
-    applyNodePatch(nodeId, { style: newStyle });
+    applyNodePatch(nodeId, nextPatch);
   }
   docVersion.value += 1;
 }
@@ -5540,7 +5609,7 @@ function handleStyleChange(newStyle) {
  * 打开配置弹窗
  * @param {"style" | "detail"} type - 配置类型
  */
-function openConfigDialog(type) {
+function openConfigDialog(type: "style" | "detail") {
   if (!selectedNode.value) return;
   configDialogType.value = type === "detail" ? "detail" : "style";
   if (configDialogType.value === "detail") {
@@ -5557,7 +5626,7 @@ function openConfigDialog(type) {
           });
         }
       } else {
-        configDraft.value = rawOption;
+        configDraft.value = String(rawOption || "");
       }
     } else {
       const rawDetail = node.detailConfig || "";
@@ -5571,7 +5640,7 @@ function openConfigDialog(type) {
           editorStore.updateNode(node.id, { detailConfig: nextContent });
         }
       } else {
-        configDraft.value = rawDetail;
+        configDraft.value = String(rawDetail || "");
       }
     }
   } else {
@@ -5590,7 +5659,7 @@ function openConfigDialog(type) {
 /**
  * 保存配置弹窗内容
  */
-function saveConfigDialog() {
+function saveConfigDialog(): void {
   const node = selectedNode.value;
   if (!node) return;
   let content = String(configDraft.value || "");
@@ -5603,7 +5672,7 @@ function saveConfigDialog() {
     configDraft.value = content;
     const validation = validateDetailConfig(content);
     if (!validation.valid) {
-      ElMessage.warning(validation.message || "详细配置未通过校验");
+      ElMessage.warning({ message: validation.message || "详细配置未通过校验" });
       return;
     }
   } else {
@@ -5624,11 +5693,11 @@ function saveConfigDialog() {
       if (elementTypeName(node.type) === "Menu") {
         const config = resolveMenuConfigFromContent(content);
         if (!config) {
-          ElMessage.error("Menu 详细配置无法解析为有效 DSL，请修正后再保存");
+          ElMessage.error({ message: "Menu 详细配置无法解析为有效 DSL，请修正后再保存" });
           return;
         }
         applyMenuDetailConfig(node, config);
-        const propsPatch = {
+        const propsPatch: AnyRecord = {
           ...(node.props || {}),
           ...(config.props && typeof config.props === "object" ? { ...config.props } : {}),
         };
@@ -5638,7 +5707,7 @@ function saveConfigDialog() {
         if (Array.isArray(propsPatch.items)) {
           propsPatch.items = normalizeMenuItems(propsPatch.items);
         }
-        const nextPatch = { detailConfig: content, props: propsPatch };
+        const nextPatch: AnyRecord = { detailConfig: content, props: propsPatch };
         if (config.style && typeof config.style === "object") {
           nextPatch.style = { ...(node.style || {}), ...config.style };
         }
@@ -5704,7 +5773,7 @@ function clearConfigDialog() {
  * 应用预设模板
  * @param {string} id - 预设 ID
  */
-function handlePresetChange(id) {
+function handlePresetChange(id: string): void {
   const target = currentPresetOptions.value.find((item) => item.id === id);
   if (!target) return;
   const nextContent = formatStyleConfigOutput(target.content || "");
@@ -5724,14 +5793,16 @@ function handlePresetChange(id) {
  * @param {string} propName - 属性名
  * @returns {string}
  */
-function resolveBindingExpr(propName) {
+function resolveBindingExpr(propName: string): string {
   if (!propName) return "";
   const target = currentElement.value;
   const binding = target?.bindings?.[propName];
   if (!binding || typeof binding !== "object") return "";
   if (binding.kind === "expr") return binding.expr || "";
   if (binding.kind === "var" && binding.name) {
-    return binding.scope === "global" ? `$global.${binding.name}` : `$vars.${binding.name}`;
+    return binding.scope === "global"
+      ? `$global.${binding.name || ""}`
+      : `$vars.${binding.name || ""}`;
   }
   return "";
 }
@@ -5741,7 +5812,7 @@ function resolveBindingExpr(propName) {
  * @param {string} raw - 输入值
  * @returns {string}
  */
-function normalizeBindingReference(raw) {
+function normalizeBindingReference(raw: string): string {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return "";
   if (trimmed.startsWith("{ $var:") || trimmed.startsWith("{ $expr:")) return trimmed;
@@ -5756,7 +5827,7 @@ function normalizeBindingReference(raw) {
  * @param {string} raw - 输入值
  * @returns {{ kind: "expr" | "var", expr?: string, scope?: "page" | "global", name?: string } | null}
  */
-function parseBindingInput(raw) {
+function parseBindingInput(raw: string): { kind: "expr" | "var"; expr?: string; scope?: "page" | "global"; name?: string } | null {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return null;
   if (trimmed.startsWith("$global.")) {
@@ -5776,7 +5847,7 @@ function parseBindingInput(raw) {
  * 打开绑定编辑器
  * @param {{ name: string, label?: string }} propDef - 属性定义
  */
-function handleBindClick(propDef) {
+function handleBindClick(propDef: AnyRecord) {
   if (!propDef?.name || !currentElement.value) return;
   bindingProp.value = {
     name: propDef.name,
@@ -5790,7 +5861,7 @@ function handleBindClick(propDef) {
  * 插入脚本
  * @param {{ type?: string, label?: string, params?: string }} data - 节点数据
  */
-function handleBindingCustomScriptInsert(data) {
+function handleBindingCustomScriptInsert(data: SidebarNodeLike) {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
   const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
@@ -5801,7 +5872,7 @@ function handleBindingCustomScriptInsert(data) {
  * 插入页面组件引用
  * @param {{ componentName?: string }} data - 节点数据
  */
-function handleBindingComponentInsert(data) {
+function handleBindingComponentInsert(data: SidebarNodeLike) {
   if (!data?.componentName) return;
   bindingEditorRef.value?.insertText?.(`components.${data.componentName}`);
 }
@@ -5810,7 +5881,7 @@ function handleBindingComponentInsert(data) {
  * 插入自定义脚本到详细配置
  * @param {{ type?: string, label?: string, params?: string }} data - 节点数据
  */
-function handleConfigCustomScriptInsert(data) {
+function handleConfigCustomScriptInsert(data: SidebarNodeLike) {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
   const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
@@ -5821,7 +5892,7 @@ function handleConfigCustomScriptInsert(data) {
  * @param {{ componentName?: string }} data - 节点数据
  * @param {{ componentName?: string }} data - 节点数据
  */
-function handleConfigComponentInsert(data) {
+function handleConfigComponentInsert(data: SidebarNodeLike) {
   if (!data?.componentName) return;
   configEditorRef.value?.insertText?.(`components.${data.componentName}`);
 }
@@ -5829,7 +5900,7 @@ function handleConfigComponentInsert(data) {
 /**
  * 打开变量枚举
  */
-function openBindingVariableEnum(target = "binding") {
+function openBindingVariableEnum(target: "binding" | "config" = "binding") {
   enumInsertTarget.value = target;
   bindingProjectVarSearch.value = "";
   bindingPageVarSearch.value = "";
@@ -5848,7 +5919,7 @@ function openConfigVariableEnum() {
   openBindingVariableEnum("config");
 }
 
-function handleBindingProjectGroupSelect(data) {
+function handleBindingProjectGroupSelect(data: AnyRecord | null) {
   if (!data) {
     bindingEnumSelectedProjectGroupId.value = null;
     return;
@@ -5856,40 +5927,42 @@ function handleBindingProjectGroupSelect(data) {
   bindingEnumSelectedProjectGroupId.value = data.id === "all" ? null : data.id;
 }
 
-function handleBindingPageGroupSelect(data) {
+function handleBindingPageGroupSelect(data: AnyRecord | null) {
   bindingEnumSelectedPageGroupId.value = data?.id || "page-root";
 }
 
-function handleBindingProjectRowClick(row) {
+function handleBindingProjectRowClick(row: BindingRowLike | null) {
   bindingEnumSelectedProjectVar.value = row || null;
 }
 
-function handleBindingPageRowClick(row) {
+function handleBindingPageRowClick(row: BindingRowLike | null) {
   bindingEnumSelectedPageVar.value = row || null;
 }
 
-function handleBindingProjectRowDblClick(row) {
+function handleBindingProjectRowDblClick(row: BindingRowLike | null) {
   bindingEnumSelectedProjectVar.value = row || null;
   confirmBindingEnumInsert();
 }
 
-function handleBindingPageRowDblClick(row) {
+function handleBindingPageRowDblClick(row: BindingRowLike | null) {
   bindingEnumSelectedPageVar.value = row || null;
   confirmBindingEnumInsert();
 }
 
-function bindingEnumProjectRowClass({ row }) {
+function bindingEnumProjectRowClass(...args: unknown[]): string {
+  const [{ row }] = args as [{ row: BindingRowLike }];
   if (bindingEnumSelectedProjectVar.value?.name === row.name) return "is-selected";
   return "";
 }
 
-function bindingEnumPageRowClass({ row }) {
+function bindingEnumPageRowClass(...args: unknown[]): string {
+  const [{ row }] = args as [{ row: BindingRowLike }];
   if (bindingEnumSelectedPageVar.value?.name === row.name) return "is-selected";
   return "";
 }
 
-function confirmBindingEnumInsert() {
-  const insertText = (text) => {
+function confirmBindingEnumInsert(): void {
+  const insertText = (text: string) => {
     if (enumInsertTarget.value === "config") {
       configEditorRef.value?.insertText?.(text);
       return;
@@ -5910,7 +5983,7 @@ function confirmBindingEnumInsert() {
 /**
  * 保存绑定配置
  */
-function saveBinding() {
+function saveBinding(): void {
   const target = currentElement.value;
   const propName = bindingProp.value?.name;
   if (!target || !propName) return;
@@ -5947,7 +6020,7 @@ function saveBinding() {
 /**
  * 处理组件标签修改
  */
-function handleLabelChange() {
+function handleLabelChange(): void {
   const el = currentElement.value;
   if (!el) return;
 
@@ -5957,7 +6030,7 @@ function handleLabelChange() {
     return;
   }
   if (!editorStore.isLabelUnique?.(nextLabel, el.id)) {
-    ElMessage.warning("组件名称已存在，请更换");
+    ElMessage.warning({ message: "组件名称已存在，请更换" });
     elementLabel.value = el.label || "";
     return;
   }
@@ -5972,7 +6045,7 @@ function handleLabelChange() {
 /**
  * 处理组件描述修改
  */
-function handleDescriptionChange() {
+function handleDescriptionChange(): void {
   const el = currentElement.value;
   if (!el) return;
 
@@ -5990,16 +6063,18 @@ function handleDescriptionChange() {
  * 更新按钮 DOM ID
  * @param {string} value - DOM ID
  */
-function handlePropChange(propName, value) {
+function handlePropChange(propName: string, value: any): void {
   const el = currentElement.value;
   if (!el) return;
 
-  const newProps = { ...el.props, [propName]: value };
+  const newProps: AnyRecord = { ...(el.props || {}), [propName]: value };
   const isTextComponent = elementTypeName(el.type) === "Text";
-  let nextStyle = null;
+  let nextStyle: AnyRecord = {};
+  let shouldPatchStyle = false;
   if (isTextComponent) {
     nextStyle = { ...(el.style || {}) };
-    const stylePatch = {};
+    shouldPatchStyle = true;
+    const stylePatch: AnyRecord = {};
     if (propName === "fontSize") stylePatch.fontSize = value;
     if (propName === "fontWeight") stylePatch.fontWeight = value;
     if (propName === "fontFamily") stylePatch.fontFamily = value;
@@ -6067,8 +6142,8 @@ function handlePropChange(propName, value) {
   }
 
   if (selectedNode.value) {
-    const patch = { props: newProps };
-    if (nextStyle) {
+    const patch: AnyRecord = { props: newProps };
+    if (shouldPatchStyle) {
       patch.style = nextStyle;
     }
     if (hasBinding) {
@@ -6174,7 +6249,7 @@ function handlePropChange(propName, value) {
                         :model-value="Boolean(getPropValue(item.toggleProp))"
                         size="small"
                         @update:model-value="
-                          (val) => handlePropChange(item.toggleProp, Boolean(val))
+                          (val: any) => handlePropChange(item.toggleProp, Boolean(val))
                         "
                       />
                     </div>
@@ -6185,15 +6260,15 @@ function handlePropChange(propName, value) {
                         size="small"
                         placeholder="auto"
                         :disabled="!isRegionEnabled(item)"
-                        @update:model-value="(val) => handleSizeValueChange(item.sizeProp, val)"
+                        @update:model-value="(val: any) => handleSizeValueChange(item.sizeProp, val)"
                       />
                       <ElSelect
                         :model-value="getSizeUnit(item.sizeProp)"
                         size="small"
                         class="region-unit-select"
                         :disabled="!isRegionEnabled(item)"
-                        @update:model-value="(val) => handleSizeUnitChange(item.sizeProp, val)"
-                        @change="(val) => handleSizeUnitChange(item.sizeProp, val)"
+                        @update:model-value="(val: any) => handleSizeUnitChange(item.sizeProp, val)"
+                        @change="(val: any) => handleSizeUnitChange(item.sizeProp, val)"
                       >
                         <el-option label="px" value="px" />
                         <el-option label="%" value="%" />
@@ -6204,7 +6279,7 @@ function handlePropChange(propName, value) {
                         :model-value="Boolean(getPropValue(item.toggleProp))"
                         size="small"
                         @update:model-value="
-                          (val) => handlePropChange(item.toggleProp, Boolean(val))
+                          (val: any) => handlePropChange(item.toggleProp, Boolean(val))
                         "
                       />
                     </div>
@@ -6235,7 +6310,7 @@ function handlePropChange(propName, value) {
                     <PropEditor
                       :prop="propDef"
                       :model-value="getPropValue(propDef.name)"
-                      @update:model-value="(val) => handlePropChange(propDef.name, val)"
+                      @update:model-value="(val: any) => handlePropChange(propDef.name, val)"
                     />
                   </div>
                 </template>
@@ -6526,17 +6601,17 @@ function handlePropChange(propName, value) {
     :binding-page-group-tree="bindingPageGroupTree"
     :binding-project-variable-rows="bindingProjectVariableRows"
     :binding-page-variable-rows="bindingPageVariableRows"
-    :filter-binding-sidebar-node="filterBindingSidebarNode"
-    :binding-enum-project-row-class="bindingEnumProjectRowClass"
-    :binding-enum-page-row-class="bindingEnumPageRowClass"
+    :filter-binding-sidebar-node="filterBindingSidebarNode as any"
+    :binding-enum-project-row-class="bindingEnumProjectRowClass as any"
+    :binding-enum-page-row-class="bindingEnumPageRowClass as any"
     :can-confirm-insert="Boolean(bindingEnumSelectedProjectVar || bindingEnumSelectedPageVar)"
-    @project-group-select="handleBindingProjectGroupSelect"
-    @page-group-select="handleBindingPageGroupSelect"
-    @project-row-click="handleBindingProjectRowClick"
-    @page-row-click="handleBindingPageRowClick"
-    @project-row-dblclick="handleBindingProjectRowDblClick"
-    @page-row-dblclick="handleBindingPageRowDblClick"
-    @confirm-insert="confirmBindingEnumInsert"
+    @project-group-select="handleBindingProjectGroupSelect as any"
+    @page-group-select="handleBindingPageGroupSelect as any"
+    @project-row-click="handleBindingProjectRowClick as any"
+    @page-row-click="handleBindingPageRowClick as any"
+    @project-row-dblclick="handleBindingProjectRowDblClick as any"
+    @page-row-dblclick="handleBindingPageRowDblClick as any"
+    @confirm-insert="confirmBindingEnumInsert as any"
     @cancel="bindingVariableEnumVisible = false"
   />
 </template>
