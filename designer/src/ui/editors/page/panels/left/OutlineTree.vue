@@ -69,7 +69,10 @@ const contextMenuVirtualRef = {
  * @param {string} rootNodeId - 根节点 ID
  * @returns {Array<{id: string, label: string, hidden: boolean, locked: boolean, isRoot: boolean, children?: Array}>}
  */
-function buildOutlineTree(document: { getNode: (id: string) => any }, rootNodeId: string): OutlineNodeLike[] {
+function buildOutlineTree(
+  document: { getNode: (id: string) => any },
+  rootNodeId: string,
+): OutlineNodeLike[] {
   const rootNode = document.getNode(rootNodeId);
   if (!rootNode) return [];
 
@@ -96,7 +99,7 @@ function buildOutlineTree(document: { getNode: (id: string) => any }, rootNodeId
  * 组件大纲树数据
  */
 const outlineData = computed(() => {
-  docVersion.value;
+  void docVersion.value;
   if (!doc.value || !currentPageId.value) return [];
   const page = doc.value.getPage(currentPageId.value);
   if (!page) return [];
@@ -115,7 +118,9 @@ function handleSelectNode(node: OutlineNodeLike): void {
  * 同步选中状态
  * @param {{ primary?: { id: string, kind: string } }} payload - 选中事件
  */
-function syncSelection(payload: { primary?: { id: string; kind: string } } | null | undefined): void {
+function syncSelection(
+  payload: { primary?: { id: string; kind: string } } | null | undefined,
+): void {
   const primary = payload?.primary;
   selectedNodeId.value = primary?.kind === "node" ? primary.id || "" : "";
 }
@@ -133,13 +138,10 @@ function subscribeSelection(model: any): void {
 
 watch(
   () => selection.value,
-  (model, prevModel) => {
+  (model) => {
     if (unsubscribeSelection) {
       unsubscribeSelection();
       unsubscribeSelection = null;
-    }
-    if (prevModel?.removeAllListeners) {
-      // 保持现有监听由订阅函数负责清理
     }
     if (model) {
       subscribeSelection(model);
@@ -219,7 +221,10 @@ function moveDown(nodeId: string): void {
  * @param {*} nodeData - 树节点数据
  * @param {*} node - 树节点对象
  */
-function handleContextMenu(event: MouseEvent, nodeData: TreeContextMenuData | null | undefined): void {
+function handleContextMenu(
+  event: MouseEvent,
+  nodeData: TreeContextMenuData | null | undefined,
+): void {
   event.preventDefault();
   if (!nodeData?.data || nodeData.data.isRoot) return; // 根节点不显示菜单
 
@@ -334,7 +339,7 @@ function handleDelete(): void {
       @node-click="handleSelectNode"
       @node-contextmenu="handleContextMenu"
     >
-      <template #default="{ node, data }">
+      <template #default="{ data }">
         <div class="outline-node" :class="{ 'is-hidden': data.hidden, 'is-locked': data.locked }">
           <el-button
             v-if="!data.isRoot"

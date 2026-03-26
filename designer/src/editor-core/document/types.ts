@@ -10,13 +10,17 @@
 
 // ==================== 基础类型 ====================
 
+const UUID_DASH_REGEX = /-/g;
+const PAGE_PATH_SPACE_REGEX = /\s+/g;
+const PAGE_PATH_FORBIDDEN_REGEX = /[/?#\\]+/g;
+
 /**
  * 生成唯一 ID
  * @param {string} [prefix] - ID 前缀
  * @returns {string} 唯一 ID
  */
 export function generateId(prefix = ""): string {
-  return prefix + crypto.randomUUID().replace(/-/g, "").substring(0, 12);
+  return prefix + crypto.randomUUID().replace(UUID_DASH_REGEX, "").substring(0, 12);
 }
 
 /**
@@ -1225,8 +1229,8 @@ export function createPageNode(options: Partial<PageNode> = {}): PageNode {
 export function buildPagePathFromName(name: string): string {
   const normalized = String(name || "")
     .trim()
-    .replace(/\s+/g, "-");
-  const sanitized = normalized.replace(/[/?#\\]+/g, "-");
+    .replace(PAGE_PATH_SPACE_REGEX, "-");
+  const sanitized = normalized.replace(PAGE_PATH_FORBIDDEN_REGEX, "-");
   return `/${sanitized || "page"}`;
 }
 

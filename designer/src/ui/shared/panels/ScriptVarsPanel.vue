@@ -21,16 +21,7 @@ import ScriptVarsTimersSection from "./ScriptVarsTimersSection.vue";
 import ScriptVarsVariableChangesSection from "./ScriptVarsVariableChangesSection.vue";
 import VariableGroupFormDialog from "./VariableGroupFormDialog.vue";
 
-type ScriptModule = "system" | "timers" | "variableChanges" | "custom";
-type SystemScriptKey = string;
 type SelectedModule = "timers" | "variableChanges" | "custom";
-type GroupItem = Record<string, any>;
-type ScriptItem = Record<string, any>;
-type VariableListItem = Record<string, any>;
-type TreeNodeData = Record<string, any>;
-type TreeNodeInstance = Record<string, any>;
-type ScriptSelectionMap = Record<string, Array<any>>;
-type MetaFormState = Record<string, any>;
 
 const editorStore = useEditorStore();
 const {
@@ -100,8 +91,8 @@ const contextMenuNode = ref<any>(null);
 const contextMenuModule = ref<SelectedModule>("custom");
 const showMoveToMenu = ref(false);
 
-const projectVariableNames = computed<Array<string>>(
-  () => Object.keys((projectVariables.value || {}) as Record<string, any>).sort(),
+const projectVariableNames = computed<Array<string>>(() =>
+  Object.keys((projectVariables.value || {}) as Record<string, any>).sort(),
 );
 const projectVariablesList = computed<Array<any>>(() =>
   (
@@ -115,11 +106,15 @@ const projectVariablesList = computed<Array<any>>(() =>
     },
   })),
 );
-const customScripts = computed<Array<any>>(() => (globalScripts.value?.custom?.items || []) as Array<any>);
+const customScripts = computed<Array<any>>(
+  () => (globalScripts.value?.custom?.items || []) as Array<any>,
+);
 const customScriptGroups = computed<Array<any>>(
   () => (globalScripts.value?.custom?.groups || []) as Array<any>,
 );
-const variableGroups = computed<Array<any>>(() => (projectVariableGroups.value || []) as Array<any>);
+const variableGroups = computed<Array<any>>(
+  () => (projectVariableGroups.value || []) as Array<any>,
+);
 
 const scriptSearch = ref("");
 const customScriptTreeRef = ref<any>(null);
@@ -130,13 +125,6 @@ const enumVariableSearch = ref("");
 const enumGroupTreeRef = ref<any>(null);
 const enumSelectedGroupId = ref<any>(null);
 const enumSelectedVar = ref<any>(null);
-
-/**
- * 统一消息调用形态，兼容当前项目的 Element Plus 类型约束。
- */
-function showInfo(message: string) {
-  (ElMessage as any).info(message);
-}
 
 /**
  * 统一消息调用形态，兼容当前项目的 Element Plus 类型约束。
@@ -169,9 +157,6 @@ const editorMetaDescription = computed(
   () => getSelectedItem(scriptEditorModule.value)?.description || "无描述",
 );
 
-const variableSidebarTree = computed(() =>
-  buildVariableTree(variableGroups.value, projectVariablesList.value),
-);
 const customScriptSidebarTree = computed(() =>
   buildScriptTree(customScriptGroups.value, customScripts.value),
 );
@@ -208,7 +193,7 @@ const enumVariableRows = computed<Array<any>>(() => {
 });
 
 const pageComponentTree = computed<Array<any>>(() => {
-  docVersion.value;
+  void docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
   if (!rootId || !doc.value) return [];
   const buildNode = (nodeId: any): any => {
@@ -296,17 +281,25 @@ const jsCompletions = computed<Array<any>>(() => {
   return items;
 });
 
-const timerGroups = computed<Array<any>>(() => (globalScripts.value?.timers?.groups || []) as Array<any>);
+const timerGroups = computed<Array<any>>(
+  () => (globalScripts.value?.timers?.groups || []) as Array<any>,
+);
 const variableChangeGroups = computed<Array<any>>(
   () => (globalScripts.value?.variableChanges?.groups || []) as Array<any>,
 );
-const customGroups = computed<Array<any>>(() => (globalScripts.value?.custom?.groups || []) as Array<any>);
+const customGroups = computed<Array<any>>(
+  () => (globalScripts.value?.custom?.groups || []) as Array<any>,
+);
 
-const timerItems = computed<Array<any>>(() => (globalScripts.value?.timers?.items || []) as Array<any>);
+const timerItems = computed<Array<any>>(
+  () => (globalScripts.value?.timers?.items || []) as Array<any>,
+);
 const variableChangeItems = computed<Array<any>>(
   () => (globalScripts.value?.variableChanges?.items || []) as Array<any>,
 );
-const customItems = computed<Array<any>>(() => (globalScripts.value?.custom?.items || []) as Array<any>);
+const customItems = computed<Array<any>>(
+  () => (globalScripts.value?.custom?.items || []) as Array<any>,
+);
 
 const selectedTimer = computed(() =>
   timerItems.value.find((item) => item.id === selectedTimerId.value),
@@ -460,46 +453,6 @@ function buildScriptTree(groups: Array<any>, items: Array<any>): Array<any> {
   return roots;
 }
 
-function buildVariableTree(groups: Array<any>, variables: Array<any>): Array<any> {
-  const groupMap = new Map<any, any>();
-  const roots: Array<any> = [];
-
-  groups.forEach((group) => {
-    groupMap.set(group.id, {
-      id: group.id,
-      label: group.name,
-      type: "group",
-      children: [],
-    });
-  });
-
-  groupMap.forEach((node, id) => {
-    const group = groups.find((item) => item.id === id);
-    if (group?.parentId && groupMap.has(group.parentId)) {
-      groupMap.get(group.parentId).children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-
-  variables.forEach((item) => {
-    const node = {
-      id: `var:${item.name}`,
-      label: item.name,
-      type: "variable",
-      name: item.name,
-      mapped: !!item.meta?.mapped,
-    };
-    if (item.groupId && groupMap.has(item.groupId)) {
-      groupMap.get(item.groupId).children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-
-  return roots;
-}
-
 function buildGroupTree(groups: Array<any>): Array<any> {
   const groupMap = new Map<any, any>();
   const roots: Array<any> = [];
@@ -554,8 +507,7 @@ function selectSystem(key: string) {
   selectedSystemKey.value = key;
 }
 
-const getSelectedNodes = (module: any): Array<any> =>
-  selectedNodes.value?.[module] || [];
+const getSelectedNodes = (module: any): Array<any> => selectedNodes.value?.[module] || [];
 
 function setSelectedNodes(module: any, nodes: Array<any>) {
   selectedNodes.value = {
@@ -617,11 +569,6 @@ function insertText(text: string) {
   if (scriptEditorVisible.value) {
     activeEditorRef.value?.insertText?.(text);
   }
-}
-
-function handleVariableInsert(data: any) {
-  if (data?.type !== "variable") return;
-  insertText(`$global.${data.name}`);
 }
 
 function handleCustomScriptInsert(data: any) {
@@ -875,12 +822,7 @@ function allowScriptDrag() {
   return true;
 }
 
-function allowScriptDrop(
-  module: any,
-  draggingNode: any,
-  dropNode: any,
-  type: any,
-) {
+function allowScriptDrop(module: any, draggingNode: any, dropNode: any, type: any) {
   const dragData = draggingNode.data;
   const dropData = dropNode.data;
 
@@ -904,12 +846,7 @@ function allowScriptDrop(
   return false;
 }
 
-function handleScriptDrop(
-  module: any,
-  draggingNode: any,
-  dropNode: any,
-  dropType: any,
-) {
+function handleScriptDrop(module: any, draggingNode: any, dropNode: any, dropType: any) {
   const dragData = draggingNode.data;
   const targetGroupId = resolveTargetGroupId(dropNode, dropType);
 
@@ -962,7 +899,7 @@ async function removeScript(module: any) {
       type: "warning",
       lockScroll: false,
     });
-  } catch (error) {
+  } catch {
     return;
   }
   const items = getItemsByModule(module);
@@ -1104,15 +1041,6 @@ function updateModuleItems(module: any, items: Array<any>) {
   persistGlobals();
 }
 
-function openGroupCreate(module: any) {
-  groupEditMode.value = false;
-  groupDialogModule.value = module;
-  groupId.value = "";
-  groupName.value = "";
-  groupParentId.value = null;
-  groupDialogVisible.value = true;
-}
-
 function openGroupEdit(module: any) {
   const groups = getGroupsByModule(module);
   const selectedId =
@@ -1187,7 +1115,7 @@ async function removeGroup(module: any) {
         lockScroll: false,
       },
     );
-  } catch (error) {
+  } catch {
     return;
   }
 
@@ -1277,7 +1205,7 @@ async function handleSystemBeforeClose(done: any) {
     });
     await saveSystemScript();
     done();
-  } catch (error) {
+  } catch {
     done();
   }
 }
@@ -1300,7 +1228,7 @@ async function handleScriptBeforeClose(done: any) {
     });
     saveActiveScript();
     done();
-  } catch (error) {
+  } catch {
     done();
   }
 }

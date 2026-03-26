@@ -6,6 +6,8 @@
 import type { DocumentModel } from "@/editor-core/document/DocumentModel";
 import type { ComponentNode } from "@/editor-core/document/types";
 
+const SIZE_NUMBER_REGEX = /^[\d.]+$/;
+
 export function parseSizeToNumber(value: unknown): number | undefined {
   if (value === null || value === undefined) return undefined;
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -15,7 +17,7 @@ export function parseSizeToNumber(value: unknown): number | undefined {
     const num = Number.parseFloat(text.slice(0, -2));
     return Number.isFinite(num) ? num : undefined;
   }
-  if (/^[\d.]+$/.test(text)) {
+  if (SIZE_NUMBER_REGEX.test(text)) {
     const num = Number.parseFloat(text);
     return Number.isFinite(num) ? num : undefined;
   }

@@ -15,6 +15,21 @@ interface ExpressionEngineOptions {
   strict?: boolean;
 }
 
+const FORMAT_TOKEN_RE = /%(\.\d+)?[sdf]/g;
+const EXPRESSION_BLOCK_RE = /\{\{.+?\}\}/;
+const TEMPLATE_EXPR_RE = /\{\{(.+?)\}\}/g;
+const DATA_POINT_DEP_RE = /\$dp\[['"]([^'"]+)['"]\]|\$dp\.(\w+)/g;
+const PAGE_VAR_DEP_RE = /\$vars\.(\w+)|\$vars\[['"]([^'"]+)['"]\]/g;
+const GLOBAL_VAR_DEP_RE = /\$global\.(\w+)|\$global\[['"]([^'"]+)['"]\]/g;
+
+function createDynamicFunction(
+  ...args: [string, string, string]
+): (...params: unknown[]) => unknown {
+  // 这里是受控动态执行入口，用于表达式编译，不扩散到其他层
+  // eslint-disable-next-line no-new-func
+  return new Function(...args) as (...params: unknown[]) => unknown;
+}
+
 // ==================== 内置函数 ====================
 
 /**
@@ -39,7 +54,7 @@ const builtinFunctions: Record<string, AnyFn> = {
   // 格式化函数
   format: (value, template) => {
     if (!template) return String(value);
-    return template.replace(/%(\.\d+)?[sdf]/g, (match: string) => {
+    return template.replace(FORMAT_TOKEN_RE, (match: string) => {
       if (match === "%s") return String(value);
       if (match === "%d") return String(Math.floor(Number(value)));
       if (match.startsWith("%.") && match.endsWith("f")) {
@@ -186,7 +201,7 @@ export class ExpressionEngine {
    */
   hasExpression(str: string): boolean {
     if (typeof str !== "string") return false;
-    return /\{\{.+?\}\}/.test(str);
+    return EXPRESSION_BLOCK_RE.test(str);
   }
 
   /**
@@ -200,10 +215,7 @@ export class ExpressionEngine {
     const deps = new Set<string>();
 
     // 匹配 $dp['path'] 或 $dp["path"] 或 $dp.path
-    const dpPattern = /\$dp\[['"]([^'"]+)['"]\]|\$dp\.(\w+)/g;
-    let match;
-
-    while ((match = dpPattern.exec(expr)) !== null) {
+    for (let match = DATA_POINT_DEP_RE.exec(expr); match; match = DATA_POINT_DEP_RE.exec(expr)) {
       const path = match[1] || match[2];
       if (path) deps.add(path);
     }
@@ -223,17 +235,18 @@ export class ExpressionEngine {
     const globalVars = new Set<string>();
 
     // 匹配 $vars.name 或 $vars['name']
-    const varsPattern = /\$vars\.(\w+)|\$vars\[['"]([^'"]+)['"]\]/g;
-    let match;
-    while ((match = varsPattern.exec(expr)) !== null) {
+    for (let match = PAGE_VAR_DEP_RE.exec(expr); match; match = PAGE_VAR_DEP_RE.exec(expr)) {
       const name = match[1] || match[2];
       if (name) pageVars.add(name);
     }
 
     // 匹配 $global.name 或 $global['name']
-    const globalPattern = /\$global\.(\w+)|\$global\[['"]([^'"]+)['"]\]/g;
-    while ((match = globalPattern.exec(expr)) !== null) {
-      const name = match[1] || match[2];
+    for (
+      let globalMatch = GLOBAL_VAR_DEP_RE.exec(expr);
+      globalMatch;
+      globalMatch = GLOBAL_VAR_DEP_RE.exec(expr)
+    ) {
+      const name = globalMatch[1] || globalMatch[2];
       if (name) globalVars.add(name);
     }
 
@@ -308,7 +321,7 @@ export class ExpressionEngine {
       const allDeps: string[] = [];
 
       // 替换所有 {{ expr }}
-      const result = template.replace(/\{\{(.+?)\}\}/g, (match, expr) => {
+      const result = template.replace(TEMPLATE_EXPR_RE, (match, expr) => {
         const evalResult = this.evaluate(expr.trim(), context);
         if (!evalResult.success) {
           throw new Error(evalResult.error);
@@ -362,7 +375,7 @@ export class ExpressionEngine {
     `;
 
     try {
-      const fn = new Function("ctx", "funcs", funcBody);
+      const fn = createDynamicFunction("ctx", "funcs", funcBody);
       const compiled = fn as unknown as CompiledExpressionFn;
 
       // 缓存编译结果

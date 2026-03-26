@@ -36,6 +36,10 @@ const props = withDefaults(defineProps<{ option?: EChartOptionLike }>(), {
   }),
 });
 
+const OPTION_LITERAL_RE = /^\s*[[{]/;
+const OPTION_ASSIGN_RE = /\boption\s*=/;
+const OPTION_RETURN_RE = /\breturn\b/;
+
 use([
   CanvasRenderer,
   BarChart,
@@ -148,13 +152,16 @@ function parseOptionSource(source: string) {
   if (!code) return {};
 
   try {
-    if (/^\s*[[{]/.test(code)) {
+    if (OPTION_LITERAL_RE.test(code)) {
+      // eslint-disable-next-line no-new-func
       return new Function(`"use strict"; return (${code});`)();
     }
-    if (/\boption\s*=/.test(code)) {
+    if (OPTION_ASSIGN_RE.test(code)) {
+      // eslint-disable-next-line no-new-func
       return new Function(`"use strict"; ${code}; return option;`)();
     }
-    if (/\breturn\b/.test(code)) {
+    if (OPTION_RETURN_RE.test(code)) {
+      // eslint-disable-next-line no-new-func
       return new Function(`"use strict"; ${code}`)();
     }
   } catch {

@@ -143,7 +143,7 @@ export function registerBuiltinComponents(): void {
     componentRegistry.register(componentManifest);
   }
 
-  console.log(`[Designer] 已注册 ${manifests.length} 个内置组件`);
+  console.warn(`[Designer] 已注册 ${manifests.length} 个内置组件`);
 }
 
 export default {

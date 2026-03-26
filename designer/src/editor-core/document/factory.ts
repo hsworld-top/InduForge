@@ -13,6 +13,9 @@ import type {
 } from "./types.ts";
 import { generateId } from "./types.ts";
 
+const GRID_COLUMN_REPEAT_REGEX = /repeat\((\d+)/i;
+const GRID_COLUMN_SPLIT_REGEX = /\s+/;
+
 export interface DescriptorRegistryModule {
   getChildPositioning?: (containerType: string) => "absolute" | "flow" | null | undefined;
 }
@@ -197,7 +200,7 @@ function resolveGridColumns(columns: string | number | undefined): number {
 
   if (typeof columns === "string") {
     // 尝试解析 repeat(N, ...) 格式
-    const repeatMatch = columns.match(/repeat\((\d+)/i);
+    const repeatMatch = columns.match(GRID_COLUMN_REPEAT_REGEX);
     if (repeatMatch) {
       const count = Number(repeatMatch[1]);
       if (Number.isFinite(count)) {
@@ -206,7 +209,7 @@ function resolveGridColumns(columns: string | number | undefined): number {
     }
 
     // 尝试解析空格分隔的列模板
-    const tokens = columns.trim().split(/\s+/).filter(Boolean);
+    const tokens = columns.trim().split(GRID_COLUMN_SPLIT_REGEX).filter(Boolean);
     if (tokens.length > 0) {
       return tokens.length;
     }

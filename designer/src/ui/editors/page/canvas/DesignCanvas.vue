@@ -77,7 +77,7 @@ const marqueeStyle = computed(() => {
 });
 
 const hasContent = computed(() => {
-  docVersion.value;
+  void docVersion.value;
   if (!doc.value || !currentPage.value) return false;
   const root = doc.value.getNode(currentPage.value.rootNodeId);
   return (root?.children || []).length > 0;
@@ -302,19 +302,19 @@ const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 
 const hasSelection = computed(() => {
-  selectionVersion.value;
+  void selectionVersion.value;
   return (selection.value?.getSelectedElements?.() ?? []).length > 0;
 });
 
 const isElColSelected = computed(() => {
-  selectionVersion.value;
+  void selectionVersion.value;
   const primary = selection.value?.getPrimarySelection?.();
   if (primary?.type === "ElCol") return true;
   const selectedNodes = selection.value?.getSelectedNodes?.() || [];
   return selectedNodes.some((node) => node?.type === "ElCol");
 });
 const isElLayoutRowSelected = computed(() => {
-  selectionVersion.value;
+  void selectionVersion.value;
   const primary = selection.value?.getPrimarySelection?.();
   if (primary?.type === "ElLayoutRow") return true;
   const selectedNodes = selection.value?.getSelectedNodes?.() || [];
@@ -341,7 +341,7 @@ function handleCanvasDrop(event: DragEvent): void {
     try {
       const parsed = JSON.parse(payload);
       componentType = parsed.type || "";
-    } catch (error) {
+    } catch {
       componentType = payload;
     }
   }

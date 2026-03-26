@@ -11,6 +11,13 @@ export interface GlobalVariableDetail {
   [key: string]: unknown;
 }
 
+const REGEXP_LITERAL_RE = /^\/(.*)\/([gimsuy]*)$/;
+const compileDynamicFunction = (source: string): ((...args: unknown[]) => unknown) => {
+  // 这里是受控动态执行入口，保留 Function 仅用于兼容用户自定义函数序列化
+  // eslint-disable-next-line no-new-func
+  return new Function(source) as (...args: unknown[]) => unknown;
+};
+
 /**
  * 归一化全局变量值（function / set / map / regexp 等序列化形态）
  */
@@ -31,9 +38,10 @@ export function normalizeGlobalValue(detail: unknown): unknown {
           text.startsWith("async (") ||
           text.startsWith("async(")
         ) {
+          // eslint-disable-next-line no-new-func
           return new Function(`return (${text});`)() as unknown;
         }
-        return new Function(text) as (...args: unknown[]) => unknown;
+        return compileDynamicFunction(text);
       } catch {
         return () => undefined;
       }
@@ -75,7 +83,7 @@ export function normalizeGlobalValue(detail: unknown): unknown {
     if (raw instanceof RegExp) return raw;
     if (typeof raw === "string") {
       try {
-        const match = raw.match(/^\/(.*)\/([gimsuy]*)$/);
+        const match = raw.match(REGEXP_LITERAL_RE);
         if (match) return new RegExp(match[1] ?? "", match[2] ?? "");
         return new RegExp(raw);
       } catch {

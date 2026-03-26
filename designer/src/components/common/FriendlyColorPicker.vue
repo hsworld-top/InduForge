@@ -4,9 +4,9 @@
  * 提供颜色面板、手动输入、预设色与最近使用能力
  */
 
-import { ElMessage } from "element-plus";
 import { computed, onMounted, ref, watch } from "vue";
 import IconCircleClose from "~icons/ep/circle-close";
+import { ElMessage } from "@/ui/shell/el-message-compat";
 
 interface FriendlyColorPickerProps {
   modelValue?: string;
@@ -31,6 +31,9 @@ const emit = defineEmits<{
 }>();
 const RECENT_COLORS_STORAGE_KEY = "designer:recent-colors";
 const MAX_RECENT_COLORS = 5;
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const HEX_COLOR_BODY_RE = /^(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const FUNCTION_COLOR_RE = /^(?:rgb|rgba|hsl|hsla|var)\(/i;
 const DEFAULT_PREDEFINE_COLORS = [
   "#ffffff",
   "#f5f7fa",
@@ -99,13 +102,13 @@ function persistRecentColors() {
 function normalizeColorValue(value: string): string {
   const text = String(value || "").trim();
   if (!text) return "";
-  if (/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) {
+  if (HEX_COLOR_RE.test(text)) {
     return text;
   }
-  if (/^([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) {
+  if (HEX_COLOR_BODY_RE.test(text)) {
     return `#${text}`;
   }
-  if (/^(rgb|rgba|hsl|hsla|var)\(/i.test(text)) {
+  if (FUNCTION_COLOR_RE.test(text)) {
     return text;
   }
   return "";
@@ -155,7 +158,7 @@ function commitInputDraft() {
     return;
   }
   if (!normalized) {
-    ElMessage.warning("颜色格式无效，请输入 HEX/RGBA/HSL" as never);
+    ElMessage.warning("颜色格式无效，请输入 HEX/RGBA/HSL");
     inputDraft.value = props.modelValue || "";
     return;
   }

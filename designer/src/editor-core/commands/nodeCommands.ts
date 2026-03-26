@@ -7,6 +7,8 @@ import type { DocumentModel } from "../document/DocumentModel";
 import type { Change, ComponentNode } from "../document/types";
 import { Command } from "./Command";
 
+const UUID_DASH_REGEX = /-/g;
+
 /** 深拷贝删除命令在内存中挂的子树 */
 type NodeCloneWithChildren = ComponentNode & {
   _childNodes?: ComponentNode[];
@@ -243,7 +245,7 @@ export class DuplicateNodeCommand extends Command {
   ) {
     super();
     this._sourceNodeId = sourceNodeId;
-    this._newId = newId || crypto.randomUUID().replace(/-/g, "").substring(0, 12);
+    this._newId = newId || crypto.randomUUID().replace(UUID_DASH_REGEX, "").substring(0, 12);
     this._offset = offset;
   }
 
@@ -297,7 +299,7 @@ export class DuplicateNodeCommand extends Command {
     const clone = JSON.parse(JSON.stringify(node)) as ComponentNode;
 
     const replaceIds = (n: ComponentNode): void => {
-      const newId = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
+      const newId = crypto.randomUUID().replace(UUID_DASH_REGEX, "").substring(0, 12);
       n.id = newId;
       if (n.children?.length) {
         const newChildren: string[] = [];

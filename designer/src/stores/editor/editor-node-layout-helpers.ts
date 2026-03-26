@@ -5,6 +5,9 @@
 
 import type { ComponentNode, LayoutItem } from "@/editor-core/document/types";
 
+const GRID_COLUMN_REPEAT_REGEX = /repeat\((\d+)/i;
+const GRID_COLUMN_SPLIT_REGEX = /\s+/;
+
 interface EditorDocLike {
   getNode: (id: string) => ComponentNode | null;
 }
@@ -220,12 +223,12 @@ export function resolveGridCount(value: unknown): number {
   }
 
   if (typeof value === "string") {
-    const repeatMatch = value.match(/repeat\((\d+)/i);
+    const repeatMatch = value.match(GRID_COLUMN_REPEAT_REGEX);
     if (repeatMatch) {
       const count = Number(repeatMatch[1]);
       if (Number.isFinite(count)) return Math.max(1, Math.floor(count));
     }
-    const tokens = value.trim().split(/\s+/).filter(Boolean);
+    const tokens = value.trim().split(GRID_COLUMN_SPLIT_REGEX).filter(Boolean);
     if (tokens.length > 0) return tokens.length;
   }
 

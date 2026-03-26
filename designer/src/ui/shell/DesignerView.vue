@@ -320,7 +320,6 @@ const currentPageSnapshot = computed(() => {
   const page = pages.value.find((item: DesignerStorePageRow) => item.id === currentPageId.value);
   return page || currentPage.value || null;
 });
-const activeView = computed(() => viewPresets.find((preset) => preset.key === activeViewKey.value));
 const defaultViewPreset = computed(
   () =>
     viewPresets.find((preset) => preset.key === "pc") ||
@@ -476,8 +475,8 @@ async function handleSave() {
     }
 
     ElMessage.success("保存成功");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "未知错误";
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "未知错误";
     ElMessage.error(`保存失败: ${message}`);
   }
 }
@@ -789,7 +788,7 @@ function handlePageImport() {
       await editorStore.loadPage(pageId);
       openPageTab(pageId);
       ElMessage.success("页面已导入");
-    } catch (error) {
+    } catch {
       ElMessage.error("导入页面失败");
     }
   };

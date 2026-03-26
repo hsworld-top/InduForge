@@ -19,6 +19,8 @@ interface AbsPosLike {
   z?: number;
 }
 
+const NUMERIC_TEXT_RE = /^-?\d+(?:\.\d+)?$/;
+
 export function resolveAbsoluteLayout(
   currentNode: ComponentNode,
   nodeElement: HTMLElement | null,
@@ -72,7 +74,7 @@ export function parseSizeToNumber(value: string | number | undefined | null): nu
     const num = Number.parseFloat(text.slice(0, -2));
     return Number.isFinite(num) ? num : undefined;
   }
-  if (/^[\d.]+$/.test(text)) {
+  if (NUMERIC_TEXT_RE.test(text)) {
     const num = Number.parseFloat(text);
     return Number.isFinite(num) ? num : undefined;
   }

@@ -82,8 +82,7 @@ function syncForm() {
   // 描边颜色
   const strokeResult = getMultiSelectValue("style.stroke");
   strokeValue.type = strokeResult.type;
-  strokeValue.value =
-    strokeResult.type === "same" ? strokeResult.value : strokeResult.values;
+  strokeValue.value = strokeResult.type === "same" ? strokeResult.value : strokeResult.values;
   if (strokeResult.type === "same") {
     form.stroke = String(strokeResult.value || "");
   }

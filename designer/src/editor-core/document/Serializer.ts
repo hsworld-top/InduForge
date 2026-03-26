@@ -13,6 +13,8 @@ import type {
 } from "./types.ts";
 import { DocumentModel } from "./DocumentModel";
 
+const UUID_DASH_REGEX = /-/g;
+
 export interface SerializerOptions {
   prettyPrint?: boolean;
   autoMigrate?: boolean;
@@ -162,19 +164,25 @@ export class Serializer {
     // 生成新 ID 映射
     if (generateNewIds) {
       // 页面 ID
-      const newPageId = `page_${crypto.randomUUID().replace(/-/g, "").substring(0, 8)}`;
+      const newPageId = `page_${crypto.randomUUID().replace(UUID_DASH_REGEX, "").substring(0, 8)}`;
       idMap.set(page.id, newPageId);
       page.id = newPageId;
 
       // 节点 ID
       for (const nodeId of Object.keys(nodesById)) {
-        const newNodeId = `node_${crypto.randomUUID().replace(/-/g, "").substring(0, 8)}`;
+        const newNodeId = `node_${crypto
+          .randomUUID()
+          .replace(UUID_DASH_REGEX, "")
+          .substring(0, 8)}`;
         idMap.set(nodeId, newNodeId);
       }
 
       // 图形 ID
       for (const graphicId of Object.keys(graphicsById)) {
-        const newGraphicId = `gfx_${crypto.randomUUID().replace(/-/g, "").substring(0, 8)}`;
+        const newGraphicId = `gfx_${crypto
+          .randomUUID()
+          .replace(UUID_DASH_REGEX, "")
+          .substring(0, 8)}`;
         idMap.set(graphicId, newGraphicId);
       }
 

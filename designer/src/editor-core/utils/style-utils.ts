@@ -33,6 +33,8 @@ const PX_KEYS = new Set([
   "marginLeft",
 ]);
 
+const NUMERIC_PX_RE = /^-?\d+(?:\.\d+)?$/;
+
 export function needsPxUnit(key: string): boolean {
   return PX_KEYS.has(key);
 }
@@ -41,7 +43,7 @@ export function normalizeStyleValue(key: string, value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === "string" && needsPxUnit(key)) {
     const trimmed = value.trim();
-    if (trimmed && /^-?\d+(\.\d+)?$/.test(trimmed)) {
+    if (trimmed && NUMERIC_PX_RE.test(trimmed)) {
       return `${trimmed}px`;
     }
   }

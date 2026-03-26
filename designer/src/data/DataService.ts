@@ -32,6 +32,8 @@ type ConnectionState = "disconnected" | "connecting" | "connected" | "reconnecti
 
 type DatapointCallback = (payload: DatapointValue) => void;
 
+const TRAILING_SLASH_RE = /\/$/;
+
 interface PendingRequest {
   resolve: (result: unknown) => void;
   reject: (error: unknown) => void;
@@ -86,7 +88,7 @@ export class DataService extends EventEmitter {
     this._setConnectionState("connecting");
 
     const serverUrl = url || this._baseUrl || window.location.origin;
-    const finalUrl = serverUrl.replace(/\/$/, "");
+    const finalUrl = serverUrl.replace(TRAILING_SLASH_RE, "");
 
     return new Promise((resolve, reject) => {
       const queryParams = ((): Record<string, string> | undefined => {

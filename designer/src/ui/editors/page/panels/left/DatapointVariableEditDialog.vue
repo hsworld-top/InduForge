@@ -76,7 +76,11 @@ function handleMarkers(payload: unknown) {
           />
         </div>
         <el-input v-else-if="isTextType" v-model="editValue" type="textarea" :rows="6" />
-        <el-input-number v-else-if="editType === 'number'" v-model="editValue" style="width: 100%" />
+        <el-input-number
+          v-else-if="editType === 'number'"
+          v-model="editValue"
+          style="width: 100%"
+        />
         <el-switch v-else-if="editType === 'boolean'" v-model="editValue" />
         <el-date-picker
           v-else-if="editType === 'date'"

@@ -95,10 +95,6 @@ interface EntryConfigLike extends EntryConfig {
   logoutPageId?: string | null;
 }
 
-function showSuccessMessage(message: string): void {
-  ElMessage.success(message as never);
-}
-
 function showWarningMessage(message: string): void {
   ElMessage.warning(message as never);
 }
@@ -176,11 +172,6 @@ const rootNode = computed<ComponentNode | null>(() => {
 /**
  * 判断是否存在画布样式配置
  */
-const hasCanvasStyleConfig = computed(() => {
-  const value = rootNode.value?.styleConfig;
-  return Boolean(String(value || "").trim());
-});
-
 // 诊断统计
 const diagnostic = reactive<DiagnosticSummary>({
   total: 0,
@@ -204,6 +195,21 @@ const BASIC_PAGE_META: Record<SystemPageType, SystemPageMeta> = {
   login: { label: "登录页", path: "/login" },
   logout: { label: "登出页", path: "/logout" },
 };
+const PAGE_NAME_DOTS_RE = /^\.+$/;
+const PAGE_NAME_FORBIDDEN_RE = /[/?#\\%]/;
+const NUMERIC_INPUT_RE = /^[0-9.\-]$/;
+const PATH_SEGMENT_SPACE_RE = /\s+/g;
+const PATH_SEGMENT_FORBIDDEN_RE = /[/?#\\]+/g;
+
+function hasControlChars(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if ((code >= 0 && code <= 31) || code === 127) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * 获取基础页面类型
@@ -225,8 +231,8 @@ function getFixedSystemType(page: PageRecordLike | null | undefined): PageType |
  * @returns {string}
  */
 function toPathSegment(value: string): string {
-  const normalized = value.trim().replace(/\s+/g, "-");
-  const sanitized = normalized.replace(/[/?#\\]+/g, "-");
+  const normalized = value.trim().replace(PATH_SEGMENT_SPACE_RE, "-");
+  const sanitized = normalized.replace(PATH_SEGMENT_FORBIDDEN_RE, "-");
   return sanitized || "page";
 }
 
@@ -240,13 +246,13 @@ function validatePageName(value: string): { valid: boolean; message: string } {
   if (!name) {
     return { valid: false, message: "名称不能为空" };
   }
-  if (/^\.+$/.test(name)) {
+  if (PAGE_NAME_DOTS_RE.test(name)) {
     return { valid: false, message: "页面名称不能仅包含点号" };
   }
-  if (/[/?#\\%]/.test(name)) {
+  if (PAGE_NAME_FORBIDDEN_RE.test(name)) {
     return { valid: false, message: "页面名称不能包含 / ? # % \\" };
   }
-  if (/[\u0000-\u001F\u007F]/.test(name)) {
+  if (hasControlChars(name)) {
     return { valid: false, message: "页面名称不能包含控制字符" };
   }
   return { valid: true, message: "" };
@@ -287,7 +293,7 @@ function formatPathForDisplay(path: string): string {
   if (!path) return "/";
   try {
     return decodeURIComponent(path);
-  } catch (error) {
+  } catch {
     return path;
   }
 }
@@ -540,18 +546,8 @@ function handlePageTypeChange(type: PageType): void {
 }
 
 /**
- * 设置当前页面为首页
- */
-function handleSetAsHome(): void {
-  if (!currentPageId.value) return;
-  editorStore.updateEntry({ homePageId: currentPageId.value } as unknown as Partial<EntryConfig>);
-  void editorStore.persistEntry();
-  showSuccessMessage("已设为首页");
-}
-
-/**
  * 插入画布样式模板
- * @param {any} id - 模板 ID
+ * @param {string} id - 模板 ID
  */
 function handleCanvasPresetChange(id: string): void {
   const target = canvasStylePresets.find((item) => item.id === id);
@@ -611,7 +607,7 @@ function filterNumericInput(event: KeyboardEvent): void {
   if ((event.ctrlKey || event.metaKey) && ["a", "c", "v", "x", "z"].includes(event.key)) {
     return;
   }
-  if (/^[0-9.\-]$/.test(event.key)) return;
+  if (NUMERIC_INPUT_RE.test(event.key)) return;
   event.preventDefault();
 }
 
@@ -641,15 +637,6 @@ function handleNumericBlur(
  */
 function handlePermissionConfig(): void {
   showInfoMessage("权限描述配置能力待接入");
-}
-
-/**
- * 打开样式配置弹窗
- */
-function openCanvasStyleDialog(): void {
-  if (!rootNode.value) return;
-  canvasStyleDraft.value = rootNode.value.styleConfig || "";
-  canvasStyleDialogVisible.value = true;
 }
 
 /**

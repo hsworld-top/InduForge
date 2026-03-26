@@ -3,6 +3,16 @@ export const PAGE_TREE_ORDER_PREFIX = "designer.pageTreeOrder";
 
 /** 根级容器在排序表中的键 */
 export const ROOT_CONTAINER_KEY = "__root__";
+const ONLY_DOTS_RE = /^\.+$/;
+const INVALID_PAGE_NAME_CHAR_RE = /[/?#\\%]/;
+
+function hasControlChar(text: string): boolean {
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code <= 31 || code === 127) return true;
+  }
+  return false;
+}
 
 export function getPageTreeOrderStorageKey(projectId: string): string {
   return `${PAGE_TREE_ORDER_PREFIX}:${projectId || "default"}`;
@@ -16,13 +26,13 @@ export function validatePageName(value: string | undefined | null): {
   if (!name) {
     return { valid: false, message: "名称不能为空" };
   }
-  if (/^\.+$/.test(name)) {
+  if (ONLY_DOTS_RE.test(name)) {
     return { valid: false, message: "页面名称不能仅包含点号" };
   }
-  if (/[/?#\\%]/.test(name)) {
+  if (INVALID_PAGE_NAME_CHAR_RE.test(name)) {
     return { valid: false, message: "页面名称不能包含 / ? # % \\" };
   }
-  if (/[\u0000-\u001F\u007F]/.test(name)) {
+  if (hasControlChar(name)) {
     return { valid: false, message: "页面名称不能包含控制字符" };
   }
   return { valid: true, message: "" };

@@ -11,6 +11,9 @@ import type {
   VarBinding,
 } from "../document/types.ts";
 
+const EXPRESSION_OPEN_REGEX = /\{\{/g;
+const EXPRESSION_CLOSE_REGEX = /\}\}/g;
+
 export type DatapointStatus = "active" | "invalid" | "unknown";
 
 export interface BindingValidationError {
@@ -228,8 +231,8 @@ export class BindingValidator {
       });
     }
 
-    const openCount = (expr.match(/\{\{/g) || []).length;
-    const closeCount = (expr.match(/\}\}/g) || []).length;
+    const openCount = (expr.match(EXPRESSION_OPEN_REGEX) || []).length;
+    const closeCount = (expr.match(EXPRESSION_CLOSE_REGEX) || []).length;
     if (openCount !== closeCount) {
       errors.push({
         code: "EXPR_BRACKETS_MISMATCH",

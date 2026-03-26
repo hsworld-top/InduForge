@@ -23,6 +23,8 @@ import {
   requireQueriesPayload,
 } from "@/utils/datapoint-payload";
 
+const PARAM_NAME_RE = /^[A-Z_$][\w$]*$/i;
+
 /**
  * 仅接受 { items }；顶层数组等旧格式返回空（与 previewRuntime 一致）。
  */
@@ -38,11 +40,11 @@ export { extractDatapointValue };
 export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
   const {
     node,
-    doc,
+    doc: _doc,
     currentPage,
     projectVariables,
     projectId,
-    docVersion,
+    docVersion: _docVersion,
     globalScripts,
     datacenterApi,
     buildRefInfo,
@@ -51,6 +53,8 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
     resolveMenuConfigFromContent,
     applyMenuDslConfig,
   } = deps;
+  void _doc;
+  void _docVersion;
 
   const connectionCache = new Map<string, unknown>();
   const queryCache = new Map<string, unknown[]>();
@@ -105,23 +109,6 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
         return row.name === queryName || row.id === queryName;
       }) || null
     );
-  };
-
-  const executeQueryByPath = async (path: unknown): Promise<unknown | undefined> => {
-    const [sourceName, ...rest] = String(path || "").split(".");
-    const field = rest.join(".");
-    if (!sourceName || !field) return undefined;
-    const connection = (await resolveConnection(sourceName)) as {
-      type?: string;
-      id?: string;
-    } | null;
-    if (!connection || connection.type !== "relational") return undefined;
-    const query = (await resolveQuery(connection.id, field)) as {
-      id?: string;
-    } | null;
-    if (!query?.id) return undefined;
-    const result = await datacenterApi.executeQuery(query.id);
-    return getQueryExecuteData(unwrapApiData(result));
   };
 
   const resolveMappedGlobalValue = async (_name: string, detail: unknown): Promise<unknown> => {
@@ -213,7 +200,7 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
     return value
       .split(",")
       .map((name) => name.trim())
-      .filter((name) => /^[A-Z_$][\w$]*$/i.test(name));
+      .filter((name) => PARAM_NAME_RE.test(name));
   };
 
   const buildPreviewCustomScripts = (
@@ -237,6 +224,7 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
         const localKeys = [...paramNames, ...Object.keys(scope)];
         const localValues = [...paramNames.map((_, index) => args[index]), ...Object.values(scope)];
         try {
+          // eslint-disable-next-line no-new-func
           const runner = new Function(
             ...localKeys,
             `"use strict";\nreturn (async () => {\n${code}\n})();`,
@@ -284,6 +272,7 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
     try {
       const keys = Object.keys(context);
       const values = Object.values(context);
+      // eslint-disable-next-line no-new-func
       const runner = new Function(
         ...keys,
         `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`,
@@ -325,6 +314,7 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
       };
       const keys = Object.keys(context);
       const values = Object.values(context);
+      // eslint-disable-next-line no-new-func
       const runner = new Function(
         ...keys,
         `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`,

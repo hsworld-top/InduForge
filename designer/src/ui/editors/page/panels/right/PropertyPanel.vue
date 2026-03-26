@@ -166,7 +166,9 @@ const projectId = computed<string>(
 const { panelState, selectedElements, selectedNode, selectedGraphic } = usePanelState();
 
 /** 属性 */
-const currentElement = computed<AnyRecord | null>(() => selectedNode.value || selectedGraphic.value);
+const currentElement = computed<AnyRecord | null>(
+  () => selectedNode.value || selectedGraphic.value,
+);
 
 /** 组件 ID */
 const elementId = computed<string>(() => currentElement.value?.id || "-");
@@ -1792,9 +1794,11 @@ function buildElementPlusPropDefs(type: string | undefined): AnyArray {
   if (!rawProps || typeof rawProps !== "object") return [];
   const labelMap: AnyRecord | null = elementPlusPropLabelMap[elementTypeName(type)] || null;
   if (!labelMap) return [];
-  const entries = (Array.isArray(rawProps)
-    ? rawProps.map((key: string) => [key, {}])
-    : Object.entries(rawProps as AnyRecord)) as Array<[string, AnyRecord]>;
+  const entries = (
+    Array.isArray(rawProps)
+      ? rawProps.map((key: string) => [key, {}])
+      : Object.entries(rawProps as AnyRecord)
+  ) as Array<[string, AnyRecord]>;
 
   const resolvePropType = (prop: AnyRecord) => {
     const typeDef = prop?.type;
@@ -5827,7 +5831,9 @@ function normalizeBindingReference(raw: string): string {
  * @param {string} raw - 输入值
  * @returns {{ kind: "expr" | "var", expr?: string, scope?: "page" | "global", name?: string } | null}
  */
-function parseBindingInput(raw: string): { kind: "expr" | "var"; expr?: string; scope?: "page" | "global"; name?: string } | null {
+function parseBindingInput(
+  raw: string,
+): { kind: "expr" | "var"; expr?: string; scope?: "page" | "global"; name?: string } | null {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return null;
   if (trimmed.startsWith("$global.")) {
@@ -6260,7 +6266,9 @@ function handlePropChange(propName: string, value: any): void {
                         size="small"
                         placeholder="auto"
                         :disabled="!isRegionEnabled(item)"
-                        @update:model-value="(val: any) => handleSizeValueChange(item.sizeProp, val)"
+                        @update:model-value="
+                          (val: any) => handleSizeValueChange(item.sizeProp, val)
+                        "
                       />
                       <ElSelect
                         :model-value="getSizeUnit(item.sizeProp)"

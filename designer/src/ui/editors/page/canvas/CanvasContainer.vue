@@ -11,7 +11,6 @@ import type {
   DesignCanvasPageConfig,
 } from "./canvas-internal.types";
 import type { ComponentNode } from "@/editor-core/document/types";
-import type { EditorComponentManifest } from "@/editor-core/registry/component-registry";
 import { storeToRefs } from "pinia";
 import { computed, onBeforeUnmount, onMounted, provide, ref, toRef, toRefs, watch } from "vue";
 import {
@@ -85,8 +84,7 @@ const containerRef = ref<HTMLElement | null>(null);
 const wrapperRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLElement | null>(null);
 const editorStore = useEditorStore();
-const { doc, history, selection, pages, currentPageId, currentPage, docVersion } =
-  storeToRefs(editorStore);
+const { doc, selection, pages, currentPageId, currentPage, docVersion } = storeToRefs(editorStore);
 const dragState = useDragState();
 const minorStep = CANVAS_RULER_MINOR_STEP;
 const majorStep = CANVAS_RULER_MAJOR_STEP;
@@ -101,7 +99,6 @@ const rulerInset = computed(() => (props.showRuler ? rulerSize : 0));
 const {
   pointerX,
   pointerY,
-  isNodeTransforming,
   handleRulerMouseMove,
   handleRulerMouseLeave,
   handleNodeTransform,
@@ -219,7 +216,7 @@ const workbenchStyle = computed((): Record<string, string> => {
 });
 
 const canvasStyle = computed((): Record<string, string> => {
-  docVersion.value;
+  void docVersion.value;
   const config = (currentPageSnapshot.value?.config || {}) as DesignCanvasPageConfig;
   const background = config.background || null;
   const showGrid = Boolean(config.showGrid);
@@ -377,7 +374,7 @@ function handleDragOver(event: DragEvent) {
     try {
       const parsed = JSON.parse(payload);
       componentType = parsed.type || "";
-    } catch (error) {
+    } catch {
       componentType = payload;
     }
   }
@@ -732,7 +729,7 @@ function handleDrop(event: DragEvent) {
     try {
       const parsed = JSON.parse(payload);
       componentType = parsed.type || "";
-    } catch (error) {
+    } catch {
       componentType = payload;
     }
   }
@@ -1191,30 +1188,6 @@ function calcDropOffset(
  * @param {Object | undefined} manifest - 组件清单
  * @returns {{width: number, height: number}}
  */
-function resolveDefaultSize(
-  type: string,
-  manifest: EditorComponentManifest | undefined,
-): { width: number; height: number } {
-  if (manifest?.defaultSize) {
-    return {
-      width: manifest.defaultSize.width || 120,
-      height: manifest.defaultSize.height || 32,
-    };
-  }
-
-  const sizeMap = {
-    FlexContainer: { width: 360, height: 200 },
-    FreeContainer: { width: 360, height: 200 },
-    GridContainer: { width: 360, height: 200 },
-    ElContainer: { width: 360, height: 240 },
-    ElLayout: { width: 360, height: 200 },
-    Text: { width: 120, height: 32 },
-    Button: { width: 120, height: 36 },
-  };
-
-  const preset = sizeMap[type as keyof typeof sizeMap];
-  return preset ?? { width: 160, height: 80 };
-}
 onMounted(() => {
   window.addEventListener("dragover", handleGlobalDragOver);
   window.addEventListener("drop", handleGlobalDrop);

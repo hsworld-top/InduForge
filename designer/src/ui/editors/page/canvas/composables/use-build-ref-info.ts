@@ -352,7 +352,9 @@ export function useBuildRefInfo({
         "onClick",
       ]);
       const rawProps: LooseRecord =
-        config.props && typeof config.props === "object" ? { ...(config.props as LooseRecord) } : {};
+        config.props && typeof config.props === "object"
+          ? { ...(config.props as LooseRecord) }
+          : {};
       Object.entries(config).forEach(([key, value]: [string, unknown]) => {
         if (reservedKeys.has(key)) return;
         if (rawProps[key] === undefined) {
@@ -371,10 +373,7 @@ export function useBuildRefInfo({
             const record = item as LooseRecord;
             const label = record.label ?? record.title ?? record.name ?? "";
             const index =
-              record.index ??
-              record.command ??
-              record.key ??
-              (label ? String(label) : undefined);
+              record.index ?? record.command ?? record.key ?? (label ? String(label) : undefined);
             return { ...record, label, index };
           })
           .filter(Boolean);
@@ -2089,28 +2088,30 @@ export function useBuildRefInfo({
         updateNodeProps({ url: String(url ?? "") });
       },
       PostMessage: (_data: AnyValue) => {
-        if (node.value?.type !== "WebContainer") return;
+        if (node.value?.type === "WebContainer") {
+          // 保留接口占位，不执行额外操作
+        }
       },
       GetUrl: () => {
         if (node.value?.type !== "WebContainer") return undefined;
         return node.value?.props?.url ?? "";
       },
       Back: () => {
-        if (node.value?.type !== "WebContainer") return;
+        if (node.value?.type === "WebContainer") {
+          // 保留接口占位，不执行额外操作
+        }
       },
       Forward: () => {
-        if (node.value?.type !== "WebContainer") return;
+        if (node.value?.type === "WebContainer") {
+          // 保留接口占位，不执行额外操作
+        }
       },
       Reset: () => {
         if (node.value?.type === "Steps") {
           updateNodeProps({ active: 1 });
-          return;
-        }
-        if (node.value?.type === "Pagination") {
+        } else if (node.value?.type === "Pagination") {
           updateNodeProps({ currentPage: 1 });
-          return;
-        }
-        if (node.value?.type === "Slider") {
+        } else if (node.value?.type === "Slider") {
           const min = Number(node.value?.props?.min);
           updateNodeProps({ modelValue: Number.isFinite(min) ? min : 0 });
         }
@@ -2152,14 +2153,17 @@ export function useBuildRefInfo({
         updateNodeProps({ refreshAt: Date.now() });
       },
       OpenDetail: (_id: AnyValue) => {
-        if (node.value?.type !== "BusinessCard") return;
+        if (node.value?.type === "BusinessCard") {
+          // 保留接口占位，不执行额外操作
+        }
       },
       Render: () => {
-        if (node.value?.type !== "Barcode") return;
+        if (node.value?.type === "Barcode") {
+          // 保留接口占位，不执行额外操作
+        }
       },
       Download: (_format: AnyValue) => {
         if (node.value?.type !== "Barcode") return undefined;
-        return undefined;
       },
       Disable: (value: AnyValue) => {
         if (node.value?.type !== "Switch" && node.value?.type !== "Slider") {
@@ -2197,7 +2201,9 @@ export function useBuildRefInfo({
         return !value;
       },
       SetPen: (_color: AnyValue, _width: AnyValue) => {
-        if (node.value?.type !== "Signature") return;
+        if (node.value?.type === "Signature") {
+          // 保留接口占位，不执行额外操作
+        }
       },
     };
     const currentType = node.value.type;

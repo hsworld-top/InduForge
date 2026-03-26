@@ -129,6 +129,8 @@ import {
   saveProjectSettingsForStore,
 } from "./editor/project-settings-actions";
 
+const UUID_DASH_REGEX = /-/g;
+
 /**
  * 编辑器状态管理 Store
  */
@@ -2175,7 +2177,7 @@ export const useEditorStore = defineStore("editor", () => {
           history.value.execute(new DuplicateNodeCommand(sourceId, undefined, offset));
         } else {
           const cloned = JSON.parse(JSON.stringify(item.data));
-          cloned.id = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
+          cloned.id = crypto.randomUUID().replace(UUID_DASH_REGEX, "").substring(0, 12);
           applyOffsetToNodeData(cloned, offset.x, offset.y);
           history.value.execute(new InsertNodeCommand(rootId, -1, cloned));
         }

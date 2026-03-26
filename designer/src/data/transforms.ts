@@ -5,6 +5,8 @@
 
 import dayjs from "dayjs";
 
+const FORMAT_TOKEN_REGEX = /%(\.\d+)?[sdf]/g;
+
 export interface TransformOp {
   op: string;
   args?: unknown[];
@@ -66,7 +68,7 @@ export function suffix(value: unknown, suffixText: string): string {
 export function format(value: unknown, template: string): string {
   if (!template) return String(value);
 
-  return template.replace(/%(\.\d+)?[sdf]/g, (match) => {
+  return template.replace(FORMAT_TOKEN_REGEX, (match) => {
     if (match === "%s") {
       return String(value);
     }

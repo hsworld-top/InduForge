@@ -7,6 +7,8 @@ import type { DocumentModel } from "../document/DocumentModel";
 import type { Binding, GraphicNode, GraphicProps } from "../document/types";
 import { Command } from "./Command";
 
+const UUID_DASH_REGEX = /-/g;
+
 /** 插入图形命令 */
 export class InsertGraphicCommand extends Command {
   private _pageId!: string;
@@ -233,7 +235,7 @@ export class GroupGraphicsCommand extends Command {
     super();
     this._pageId = pageId;
     this._graphicIds = graphicIds;
-    this._groupId = `gfx_group_${crypto.randomUUID().replace(/-/g, "").substring(0, 8)}`;
+    this._groupId = `gfx_group_${crypto.randomUUID().replace(UUID_DASH_REGEX, "").substring(0, 8)}`;
   }
 
   execute(doc: DocumentModel): void {

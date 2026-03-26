@@ -9,6 +9,8 @@ import type { ComputedRef, Ref } from "vue";
 import type { ComponentNode } from "@/editor-core/document/types";
 import { computed, ref, watch } from "vue";
 
+const MENU_DSL_CALL_RE = /this\s*\.\s*menu\s*\(/g;
+
 function normalizeOptions<T>(source: unknown, fallback: T[] | undefined): T[] {
   if (Array.isArray(source)) return source as T[];
   return fallback || [];
@@ -64,8 +66,9 @@ export function captureMenuDslConfig(content: unknown): unknown {
   const text = String(content || "");
   if (!text.trim()) return null;
   let captured: unknown = null;
-  const replaced = text.replace(/this\s*\.\s*menu\s*\(/g, "__menu__(");
+  const replaced = text.replace(MENU_DSL_CALL_RE, "__menu__(");
   try {
+    // eslint-disable-next-line no-new-func
     const runner = new Function("__menu__", `"use strict";\n${replaced}\nreturn null;`) as (
       fn: (config: unknown) => void,
     ) => unknown;

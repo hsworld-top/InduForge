@@ -261,7 +261,7 @@ const customScriptTree = computed<any[]>(() => {
 });
 
 const pageVars = computed<Record<string, any>>(() => {
-  docVersion.value;
+  void docVersion.value;
   const pageId = currentPage.value?.id;
   if (!pageId || !doc.value) return {};
   const vars = doc.value.vars?.pages?.[pageId];
@@ -305,7 +305,7 @@ const pageVariableRows = computed<any[]>(() => {
       type: detail?.type || "string",
       description: detail?.description || "",
     }))
-    .filter((item) => {
+    .filter(() => {
       if (!enumSelectedPageGroupId.value) return true;
       return true;
     })
@@ -318,7 +318,7 @@ const pageVariableRows = computed<any[]>(() => {
 });
 
 const pageComponentTree = computed<any[]>(() => {
-  docVersion.value;
+  void docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
   const docModel = doc.value;
   if (!rootId || !docModel) return [];

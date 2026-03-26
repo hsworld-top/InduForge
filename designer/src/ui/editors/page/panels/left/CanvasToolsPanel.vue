@@ -13,7 +13,7 @@ import IconEpPointer from "~icons/ep/pointer";
 
 type CanvasToolType = "select" | "line" | "rect" | "circle" | "text" | "image" | "pipe" | "path";
 
-const props = withDefaults(defineProps<{ modelValue?: CanvasToolType }>(), {
+withDefaults(defineProps<{ modelValue?: CanvasToolType }>(), {
   modelValue: "select",
 });
 

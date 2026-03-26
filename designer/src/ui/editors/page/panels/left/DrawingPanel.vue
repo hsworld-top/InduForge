@@ -7,7 +7,7 @@ import SymbolLibraryPanel from "./SymbolLibraryPanel.vue";
 
 type DrawingToolType = "line" | "rect" | "ellipse" | "polygon" | "pipe" | "text" | "";
 
-const props = withDefaults(defineProps<{ modelValue?: DrawingToolType }>(), {
+withDefaults(defineProps<{ modelValue?: DrawingToolType }>(), {
   modelValue: "",
 });
 

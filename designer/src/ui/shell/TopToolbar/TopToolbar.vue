@@ -125,12 +125,6 @@ const viewItems = computed(() =>
   })),
 );
 
-const currentViewLabel = computed(() => {
-  if (props.isCustomView) return "自定义";
-  const preset = props.viewPresets.find((item) => item.key === props.activeViewKey);
-  return preset?.label || "尺寸";
-});
-
 const currentCanvasSizeText = computed(() => `${Math.round(props.canvasWidth)}px`);
 
 const saveStatusText = computed(() => {

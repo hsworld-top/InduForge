@@ -104,9 +104,6 @@ interface DatapointFieldLike {
 
 type VariableMapLike = Record<string, VariableDetailLike>;
 type ImportRowLike = Record<string, unknown>;
-interface MarkerLike {
-  severity?: number;
-}
 type NullableString = string | null;
 interface TreeDropNodeLike {
   data: TreeNodeLike;
@@ -199,7 +196,7 @@ const editorLanguage = computed(() => (isStructuredType.value ? "json" : "javasc
 const isTextType = computed(() => ["string", "regexp"].includes(editType.value));
 
 const groupOptions = computed<VariableGroupLike[]>(
-  () => ((projectVariableGroups.value || []) as VariableGroupLike[]),
+  () => (projectVariableGroups.value || []) as VariableGroupLike[],
 );
 
 const groupParentOptions = computed(() => {
@@ -237,8 +234,8 @@ const selectedGroupId = computed(() => {
 
 const variableTree = computed(() =>
   buildTree(
-    ((projectVariableGroups.value || []) as any[]) as VariableGroupLike[],
-    ((projectVariables.value || {}) as any) as VariableMapLike,
+    (projectVariableGroups.value || []) as any[] as VariableGroupLike[],
+    (projectVariables.value || {}) as any as VariableMapLike,
   ),
 );
 
@@ -316,8 +313,7 @@ function buildTree(groups: VariableGroupLike[], variables: VariableMapLike): Tre
       name,
       meta: {
         ...normalizedDetail,
-        mapped:
-          normalizedDetail.source?.type === "dataCenter" || normalizedDetail.mapped === true,
+        mapped: normalizedDetail.source?.type === "dataCenter" || normalizedDetail.mapped === true,
       },
     } satisfies TreeNodeLike;
     const groupIdValue = normalizedDetail.groupId;
@@ -472,7 +468,11 @@ function allowDrag() {
   return true;
 }
 
-function allowDrop(draggingNode: TreeDropNodeLike, dropNode: TreeDropNodeLike, type: string): boolean {
+function allowDrop(
+  draggingNode: TreeDropNodeLike,
+  dropNode: TreeDropNodeLike,
+  type: string,
+): boolean {
   const dragData = draggingNode.data;
   const dropData = dropNode.data;
 
@@ -630,7 +630,7 @@ function parseEditValue(type: string, value: unknown): unknown {
           return [];
         }
         if (parsed && typeof parsed === "object") return parsed;
-      } catch (error) {
+      } catch {
         if (type === "array" || type === "set" || type === "map") return [];
         return {};
       }
@@ -668,7 +668,7 @@ function parseStructuredJson(
       }
     }
     return { ok: true, parsed };
-  } catch (error) {
+  } catch {
     return { ok: false, error: "JSON 格式不正确" };
   }
 }
@@ -694,7 +694,7 @@ function formatValue(value: unknown): string {
   if (typeof value === "object") {
     try {
       return JSON.stringify(value);
-    } catch (error) {
+    } catch {
       return "";
     }
   }
@@ -762,11 +762,10 @@ async function openEdit() {
 
   if (mapped.value) {
     const path = selectedVariable.value.detail?.source?.path || "";
-    const [dsName, ...rest] = String(path).split(".");
     mappedField.value = path;
-    mappedSourceLabel.value = String(getDatapointSourceLabel(
-      selectedVariable.value.detail?.source?.sourceType || "",
-    ) || "");
+    mappedSourceLabel.value = String(
+      getDatapointSourceLabel(selectedVariable.value.detail?.source?.sourceType || "") || "",
+    );
   } else {
     mappedField.value = "";
     mappedSourceLabel.value = "";
@@ -863,7 +862,7 @@ async function removeVar() {
       type: "warning",
       lockScroll: false,
     });
-  } catch (error) {
+  } catch {
     return;
   }
   const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
@@ -880,14 +879,14 @@ async function removeVar() {
       }
     });
 
-    const nextGroups = (((projectVariableGroups.value as VariableGroupLike[] | undefined) || [])
+    const nextGroups = ((projectVariableGroups.value as VariableGroupLike[] | undefined) || [])
       .filter((group) => !groupsToRemove.includes(group.id))
       .map((group) => {
         const parentId = group.parentId || "";
         return groupsToRemove.includes(parentId)
           ? { ...group, parentId: parentMap.get(parentId) || null }
           : group;
-      })) as VariableGroupLike[];
+      }) as VariableGroupLike[];
 
     Object.entries(nextVariables).forEach(([name, detail]) => {
       if (groupsToRemove.includes(detail?.groupId || "")) {
@@ -1093,10 +1092,10 @@ async function loadDatapoints() {
       typeLabel: String(item.dataType || item.type || "string"),
       updatedAtLabel: formatDatapointTime(item.updated_at || item.updatedAt),
     }));
-  } catch (err) {
+  } catch {
     fields.value = [];
     quickTotal.value = 0;
-    showError(err instanceof Error ? err.message : "数据点列表响应格式无效");
+    showError("数据点列表响应格式无效");
   } finally {
     quickLoading.value = false;
   }
@@ -1191,7 +1190,9 @@ function buildGroupPathMap(groups: any[]): Map<string, string> {
     const group = groupMap.get(groupIdValue) as Record<string, any> | undefined;
     if (!group) return "";
     const parentPath = buildPath((group.parentId as string | null | undefined) || null);
-    const path = parentPath ? `${parentPath} / ${String(group.name || "")}` : String(group.name || "");
+    const path = parentPath
+      ? `${parentPath} / ${String(group.name || "")}`
+      : String(group.name || "");
     map.set(groupIdValue, path);
     return path;
   };
@@ -1222,15 +1223,19 @@ function ensureGroupPath(groups: any[], path: string): string | null {
 }
 
 function buildExportRows(): Array<Record<string, string>> {
-  const groupPathMap = buildGroupPathMap((projectVariableGroups.value || []) as VariableGroupLike[]);
-  return Object.entries((projectVariables.value || {}) as Record<string, any>).map(([name, detail]) => ({
-    name,
-    type: String(detail?.type || "string"),
-    default: formatValue(detail?.default ?? detail?.value),
-    description: String(detail?.description || ""),
-    groupPath: detail?.groupId ? groupPathMap.get(String(detail.groupId)) || "" : "",
-    mappedPath: String(detail?.source?.path || ""),
-  }));
+  const groupPathMap = buildGroupPathMap(
+    (projectVariableGroups.value || []) as VariableGroupLike[],
+  );
+  return Object.entries((projectVariables.value || {}) as Record<string, any>).map(
+    ([name, detail]) => ({
+      name,
+      type: String(detail?.type || "string"),
+      default: formatValue(detail?.default ?? detail?.value),
+      description: String(detail?.description || ""),
+      groupPath: detail?.groupId ? groupPathMap.get(String(detail.groupId)) || "" : "",
+      mappedPath: String(detail?.source?.path || ""),
+    }),
+  );
 }
 
 function normalizeRowKey(row: ImportRowLike, key: string): unknown {
@@ -1240,7 +1245,7 @@ function normalizeRowKey(row: ImportRowLike, key: string): unknown {
 }
 
 async function mergeImportedRows(rows: Array<Record<string, any>>): Promise<void> {
-  const nextGroups = [...(((projectVariableGroups.value as VariableGroupLike[] | undefined) || []))];
+  const nextGroups = [...((projectVariableGroups.value as VariableGroupLike[] | undefined) || [])];
   const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
   let added = 0;
   let skipped = 0;
@@ -1282,7 +1287,7 @@ async function mergeImportedDefinitions(
   definitions: Record<string, any>,
   groups: any[],
 ): Promise<void> {
-    const nextGroups = [...(((projectVariableGroups.value as VariableGroupLike[] | undefined) || []))];
+  const nextGroups = [...((projectVariableGroups.value as VariableGroupLike[] | undefined) || [])];
   const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
   const importedGroups = Array.isArray(groups) ? groups : [];
   const importedPathMap = buildGroupPathMap(importedGroups);
@@ -1360,7 +1365,7 @@ function decodeTextBuffer(raw: ArrayBuffer): string {
     const tryDecode = (encoding: string): string => {
       try {
         return new TextDecoder(encoding, { fatal: false }).decode(raw);
-      } catch (error) {
+      } catch {
         return "";
       }
     };
@@ -1388,7 +1393,7 @@ function decodeTextBuffer(raw: ArrayBuffer): string {
     if (gbkText) return gbkText;
 
     return utf8Text || "";
-  } catch (error) {
+  } catch {
     return "";
   }
 }
@@ -1410,7 +1415,7 @@ async function handleFileChange(event: Event): Promise<void> {
         return;
       }
       showError("JSON 格式不支持");
-    } catch (error) {
+    } catch {
       try {
         const buffer = await file.arrayBuffer();
         const fallbackText = decodeTextBuffer(buffer);
@@ -1424,7 +1429,7 @@ async function handleFileChange(event: Event): Promise<void> {
           return;
         }
         showError("JSON 格式不支持");
-      } catch (fallbackError) {
+      } catch {
         showError("JSON 解析失败");
       }
     }

@@ -69,6 +69,8 @@ const props = withDefaults(defineProps<NodeRendererProps>(), {
   readonly: false,
 });
 
+const STYLE_COMMENT_RE = /\/\*[\s\S]*?\*\//g;
+
 const editorStore = useEditorStore();
 const {
   doc,
@@ -88,12 +90,12 @@ const resolveLayoutStyle = nodeStyleHelpers.resolveLayoutStyle;
 const isRootCanvasContainer = nodeStyleHelpers.isRootCanvasContainer;
 
 const node = computed<NodeLike | null>(() => {
-  docVersion.value;
+  void docVersion.value;
   return doc.value?.getNode(props.nodeId) || null;
 });
 
 const detailConfigText = computed(() => {
-  docVersion.value;
+  void docVersion.value;
   return String(node.value?.detailConfig || "").trim();
 });
 
@@ -167,12 +169,11 @@ const {
   handleContextMenu,
   showResizeHandlesBase,
   visibleResizeHandles: visibleResizeHandlesFromComposable,
-  resizeHandles: resizeHandlesFromComposable,
-  getRegionResizeConfig: getRegionResizeConfigFromComposable,
-  isElColInRow: isElColInRowFromComposable,
-  isChildInElCol: isChildInElColFromComposable,
   isContainer: isContainerFromComposable,
   isRegionContainer: isRegionContainerFromComposable,
+  isElColInRow: isElColInRowFromComposable,
+  isChildInElCol: isChildInElColFromComposable,
+  getRegionResizeConfig: getRegionResizeConfigFromComposable,
 } = nodeInteraction;
 const canvasZoom = inject<any>(canvasZoomKey, ref(1));
 const dragState = useDragState();
@@ -211,7 +212,6 @@ const {
   normalizeMenuItems,
   activeTabName,
   tableRenderVersion,
-  syncActiveTabName,
   applyTabsModelValueToProps,
 } = nodeContent;
 const selectOptionsList = computed<any[]>(() => (selectOptions.value || []) as any[]);
@@ -219,6 +219,27 @@ const radioOptionsList = computed<any[]>(() => (radioOptions.value || []) as any
 const checkboxOptionsList = computed<any[]>(() => (checkboxOptions.value || []) as any[]);
 const dropdownItemsList = computed<any[]>(() => (dropdownItems.value || []) as any[]);
 const tabsListItems = computed<any[]>(() => (tabsList.value || []) as any[]);
+const {
+  isSelectType,
+  isRadioType,
+  isCheckboxType,
+  isTableType,
+  isBigDataTableType,
+  isMenuType,
+  isTimelineType,
+  isTabsType,
+  isCollapseType,
+  isStepsType,
+  isCarouselSlotType,
+  isDropdownType,
+  suppressReadonlyEmptyHint,
+} = useNodeRendererTypeFlags(
+  node as any,
+  {
+    readonly: computed(() => props.readonly),
+    isRegionContainer: isRegionContainerFromComposable,
+  } as any,
+);
 
 const { buildRefInfo: buildRefInfoImpl, applyPreviewPatch } = useBuildRefInfo({
   node: node as any,
@@ -251,7 +272,7 @@ applyMenuDslConfig = createApplyMenuDslConfig({
 const resolvedProps = computed<Record<string, any>>(() => {
   const base = resolvedPropsBase.value;
   if (isTableLikeType(node.value?.type)) {
-    tableRenderVersion.value;
+    void tableRenderVersion.value;
   }
   return applyTabsModelValueToProps(base);
 });
@@ -301,8 +322,6 @@ const {
   insertLineBox,
   isDragOver,
   canAcceptChild,
-  isDroppableContainer,
-  resolveDropContainer,
 } = nodeDrop;
 const nodeResize: any = useNodeResize({
   node: node as any,
@@ -500,23 +519,26 @@ function isActiveTab(tab: any): boolean {
 const isContainer = isContainerFromComposable;
 
 const isNodeVisible = computed(() => {
-  docVersion.value;
+  void docVersion.value;
   if (!node.value) return false;
   if (node.value.hidden) return false;
   const visibleConfig = node.value.conditions?.visible;
   if (typeof visibleConfig === "boolean") return visibleConfig;
   if (typeof visibleConfig !== "string" || !visibleConfig.trim()) return true;
-  const context = buildExpressionContext((resolvedNodeProps.value || {}) as any, {
-    doc: doc as any,
-    currentPage: currentPage as any,
-    projectVariables: projectVariables as any,
-  } as any);
+  const context = buildExpressionContext(
+    (resolvedNodeProps.value || {}) as any,
+    {
+      doc: doc as any,
+      currentPage: currentPage as any,
+      projectVariables: projectVariables as any,
+    } as any,
+  );
   const value = resolveExpressionValue(visibleConfig, context, true);
   return Boolean(value);
 });
 
 const hasChildren = computed(() => {
-  docVersion.value;
+  void docVersion.value;
   if (!node.value || !doc.value) return false;
   if (typeof (doc.value as any).getChildren === "function") {
     return (doc.value as any).getChildren(node.value.id).length > 0;
@@ -553,10 +575,6 @@ const nodePointer = useNodePointer({
 const { handlePointerDown } = nodePointer;
 
 const visibleResizeHandles = visibleResizeHandlesFromComposable;
-const resizeHandles = resizeHandlesFromComposable;
-const getRegionResizeConfig = getRegionResizeConfigFromComposable;
-const isElColInRow = isElColInRowFromComposable;
-const isChildInElCol = isChildInElColFromComposable;
 
 // showResizeHandles 需要额外检查 selection，所以保留一个包装 computed
 const showResizeHandles = computed(() => {
@@ -567,25 +585,6 @@ const showResizeHandles = computed(() => {
 });
 
 const isRegionContainer = isRegionContainerFromComposable;
-
-const {
-  isSelectType,
-  isRadioType,
-  isCheckboxType,
-  isTableType,
-  isBigDataTableType,
-  isMenuType,
-  isTimelineType,
-  isTabsType,
-  isCollapseType,
-  isStepsType,
-  isCarouselSlotType,
-  isDropdownType,
-  suppressReadonlyEmptyHint,
-} = useNodeRendererTypeFlags(node as any, {
-  readonly: computed(() => props.readonly),
-  isRegionContainer,
-} as any);
 
 const renderTag = computed<any>(() => {
   if (!node.value) return "div";
@@ -610,7 +609,7 @@ const outerTag = computed<any>(() => {
 });
 
 const displayContent = computed<any>(() => {
-  docVersion.value;
+  void docVersion.value;
   if (!node.value) return null;
   const resolvedPropsValue = resolvedNodeProps.value || {};
 
@@ -625,7 +624,7 @@ const displayContent = computed<any>(() => {
 });
 
 const layoutStyle = computed<Record<string, any>>(() => {
-  docVersion.value;
+  void docVersion.value;
   if (!node.value) return {};
   return resolveLayoutStyle(node.value as any, props.isRoot);
 });
@@ -663,27 +662,16 @@ const wrapperComponentStyle = nodeStyleHelpers.createWrapperComponentStyle(
 );
 
 const styleConfigText = computed<string>(() => {
-  docVersion.value;
+  void docVersion.value;
   return String(node.value?.styleConfig || "").trim();
 });
 const hasStyleConfigSelector = computed(() => styleConfigText.value.includes("{"));
-const hasDomIdSelector = computed(() => styleConfigText.value.includes("#domId"));
 const nodeDomId = computed<string>(() => {
   if (!node.value) return "";
   const customId = typeof node.value.props?.id === "string" ? node.value.props.id.trim() : "";
   if (customId) return customId;
   if (!node.value.id) return "";
   return `dom-${node.value.id}`;
-});
-const styleScopeSelector = computed<string>(() => {
-  if (!node.value?.id) return "";
-  if (nodeDomId.value) return `#${nodeDomId.value}`;
-  return `[data-node-id="${node.value.id}"]`;
-});
-const normalizedStyleConfigText = computed<string>(() => {
-  if (!styleConfigText.value) return "";
-  if (!styleScopeSelector.value) return styleConfigText.value;
-  return styleConfigText.value.replaceAll("#domId", styleScopeSelector.value);
 });
 const inlineStyleConfig = computed<string>(() => {
   if (hasStyleConfigSelector.value) return "";
@@ -692,7 +680,7 @@ const inlineStyleConfig = computed<string>(() => {
 const inlineStyleConfigObject = computed<StyleObjectLike>(() => {
   const raw = inlineStyleConfig.value;
   if (!raw) return {};
-  const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "");
+  const stripped = raw.replace(STYLE_COMMENT_RE, "");
   const entries = stripped
     .split(";")
     .map((item) => item.trim())
@@ -708,121 +696,9 @@ const inlineStyleConfigObject = computed<StyleObjectLike>(() => {
   });
   return result;
 });
-const domIdStyleConfigObject = computed<StyleObjectLike>(() => {
-  const raw = styleConfigText.value;
-  if (!raw || !raw.includes("#domId")) return {};
-  const stripped = raw.replace(/\/\*[\s\S]*?\*\//g, "");
-  const selectorIndex = stripped.indexOf("#domId");
-  if (selectorIndex < 0) return {};
-  const openIndex = stripped.indexOf("{", selectorIndex);
-  if (openIndex < 0) return {};
-  const closeIndex = findMatchingBrace(stripped, openIndex);
-  if (closeIndex < 0) return {};
-  const body = stripped.slice(openIndex + 1, closeIndex);
-  const entries = body
-    .split(";")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const result: StyleObjectLike = {};
-  entries.forEach((item) => {
-    const [key, ...rest] = item.split(":");
-    if (!key || rest.length === 0) return;
-    const value = rest.join(":").trim();
-    const prop = key.trim();
-    if (!prop || !value) return;
-    result[prop] = value;
-  });
-  return result;
-});
 const resolvedInlineStyleConfigObject = computed<StyleObjectLike>(() => {
-  return {
-    ...inlineStyleConfigObject.value,
-    ...domIdStyleConfigObject.value,
-  };
+  return inlineStyleConfigObject.value;
 });
-
-/**
- * 拼接选择器前缀
- * @param {string} selectorText - 选择器文本
- * @param {string} scope - 作用域选择器
- * @returns {string}
- */
-function prefixSelectors(selectorText: string, scope: string): string {
-  return selectorText
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => (item.startsWith(scope) ? item : `${scope} ${item}`))
-    .join(", ");
-}
-
-/**
- * 查找匹配的右花括号
- * @param {string} text - 源文本
- * @param {number} startIndex - 起始索引
- * @returns {number}
- */
-function findMatchingBrace(text: string, startIndex: number): number {
-  let depth = 0;
-  for (let i = startIndex; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === "{") depth += 1;
-    if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
-
-/**
- * 构建带作用域的样式规则
- * @param {string} cssText - 原始 CSS
- * @param {string} scope - 作用域选择器
- * @returns {string}
- */
-function buildScopedCss(cssText: string, scope: string): string {
-  if (!cssText) return "";
-  if (!cssText.includes("{")) {
-    return `${scope} { ${cssText} }`;
-  }
-
-  let result = "";
-  let index = 0;
-  const text = cssText;
-
-  while (index < text.length) {
-    const nextOpen = text.indexOf("{", index);
-    if (nextOpen === -1) break;
-    const selector = text.slice(index, nextOpen).trim();
-    const closeIndex = findMatchingBrace(text, nextOpen);
-    if (closeIndex === -1) break;
-    const body = text.slice(nextOpen + 1, closeIndex);
-
-    if (selector.startsWith("@")) {
-      const nested = buildScopedCss(body, scope);
-      result += `${selector}{${nested}}`;
-    } else if (selector) {
-      result += `${prefixSelectors(selector, scope)}{${body}}`;
-    }
-
-    index = closeIndex + 1;
-  }
-
-  return result;
-}
-
-const styleConfigCss = computed<string>(() => {
-  if (!node.value?.id || !hasStyleConfigSelector.value) return "";
-  if (hasDomIdSelector.value) {
-    return normalizedStyleConfigText.value;
-  }
-  const scope = styleScopeSelector.value || `[data-node-id="${node.value.id}"]`;
-  return buildScopedCss(normalizedStyleConfigText.value, scope);
-});
-
-// 使用 use-node-style composable 创建样式注入生命周期
-const { styleElementRef } = nodeStyleHelpers.createStyleElementSync(node as any, styleConfigCss);
 
 /**
  * 外层样式（处理组件包装模式）
@@ -848,6 +724,11 @@ const contentStyleWithConfig = computed<any>(() => {
     return contentStyle.value;
   }
   return [contentStyle.value, inlineStyle];
+});
+
+const childNodeIds = computed(() => {
+  if (!node.value || isTabsType.value) return [];
+  return node.value.children || [];
 });
 
 const modelValueTypes = new Set([
@@ -1162,8 +1043,7 @@ function handleDragLeave(): void {
         }"
       />
       <NodeRenderer
-        v-for="childId in node.children || []"
-        v-if="!isTabsType"
+        v-for="childId in childNodeIds"
         :key="childId"
         :node-id="childId"
         :readonly="props.readonly"
@@ -1208,7 +1088,7 @@ function handleDragLeave(): void {
         }"
       />
       <NodeRenderer
-        v-for="childId in node.children || []"
+        v-for="childId in childNodeIds"
         :key="childId"
         :node-id="childId"
         :readonly="props.readonly"

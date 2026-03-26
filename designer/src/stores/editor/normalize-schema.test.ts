@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { isProjectSchemaPayload, normalizePageList, normalizePageSchema } from "./normalize-schema";
 
+const MISSING_PAGE_LIST_REGEX = /页面列表缺失/;
+const EXPECT_ARRAY_REGEX = /期望数组/;
+
 describe("normalize-schema", () => {
   describe("normalizePageList", () => {
     it("returns array as-is", () => {
@@ -8,11 +11,11 @@ describe("normalize-schema", () => {
     });
 
     it("throws when null", () => {
-      expect(() => normalizePageList(null)).toThrow(/页面列表缺失/);
+      expect(() => normalizePageList(null)).toThrow(MISSING_PAGE_LIST_REGEX);
     });
 
     it("throws when not array", () => {
-      expect(() => normalizePageList({})).toThrow(/期望数组/);
+      expect(() => normalizePageList({})).toThrow(EXPECT_ARRAY_REGEX);
     });
   });
 

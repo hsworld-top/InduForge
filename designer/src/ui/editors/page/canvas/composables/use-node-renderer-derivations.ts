@@ -86,12 +86,14 @@ export function resolveMenuConfigFromContent(content: string): MenuConfig | null
   if (captured) return captured;
   if (text.startsWith("{") && text.endsWith("}")) {
     try {
+      // eslint-disable-next-line no-new-func
       return new Function(`return (${text});`)() as MenuConfig;
     } catch {
       return null;
     }
   }
   try {
+    // eslint-disable-next-line no-new-func
     return new Function(`return ({${text}});`)() as MenuConfig;
   } catch {
     return null;

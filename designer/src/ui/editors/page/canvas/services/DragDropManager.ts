@@ -52,6 +52,11 @@ export interface GridCellHint {
 
 export type InsertRuleKind = "before_after" | "grid_cell" | "absolute_position";
 
+const GRID_REPEAT_HEAD_RE = /^repeat\s*\(\s*/i;
+const GRID_DIGIT_RE = /\d/;
+const GRID_WHITESPACE_RE = /\s/;
+const GRID_TEMPLATE_SPLIT_RE = /\s+/;
+
 export interface DropDecision {
   containerType: "flex" | "grid" | "free";
   positioning: "absolute" | "flow";
@@ -431,22 +436,22 @@ export function parseGridTemplateParts(template: string): string[] {
   if (!template || template === "none") return [];
 
   const trimmed = template.trim();
-  const repeatHead = /^repeat\s*\(\s*/i.exec(trimmed);
+  const repeatHead = GRID_REPEAT_HEAD_RE.exec(trimmed);
   if (repeatHead?.index === 0) {
     let i = repeatHead[0].length;
     let countStr = "";
-    while (i < trimmed.length && /\d/.test(trimmed[i]!)) {
+    while (i < trimmed.length && GRID_DIGIT_RE.test(trimmed[i]!)) {
       countStr += trimmed[i]!;
       i++;
     }
-    while (i < trimmed.length && /\s/.test(trimmed[i]!)) {
+    while (i < trimmed.length && GRID_WHITESPACE_RE.test(trimmed[i]!)) {
       i++;
     }
     if (trimmed[i] !== ",") {
-      return template.split(/\s+/).filter(Boolean);
+      return template.split(GRID_TEMPLATE_SPLIT_RE).filter(Boolean);
     }
     i++;
-    while (i < trimmed.length && /\s/.test(trimmed[i]!)) {
+    while (i < trimmed.length && GRID_WHITESPACE_RE.test(trimmed[i]!)) {
       i++;
     }
     const valueStart = i;
@@ -465,12 +470,11 @@ export function parseGridTemplateParts(template: string): string[] {
     const value = trimmed.slice(valueStart, i).trim();
     const count = Number.parseInt(countStr, 10);
     if (Number.isFinite(count) && count > 0 && value) {
-      // 先为 Array.from 提供元素类型，再使用 fill，兼顾严格类型推断与 lint 约束
       return Array.from<string>({ length: count } as ArrayLike<string>).fill(value);
     }
   }
 
-  return template.split(/\s+/).filter(Boolean);
+  return template.split(GRID_TEMPLATE_SPLIT_RE).filter(Boolean);
 }
 
 export function createDragDropManager(): DragDropManager {

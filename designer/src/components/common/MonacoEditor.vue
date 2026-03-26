@@ -74,14 +74,17 @@ function normalizeCompletionItems(items?: unknown[] | null): MonacoCompletionIte
     if (typeof record.prefix === "string" || Array.isArray(record.prefix)) {
       normalized.prefix = record.prefix as string | string[];
     }
-    if (typeof record.kind === "string" || typeof record.kind === "number") normalized.kind = record.kind;
+    if (typeof record.kind === "string" || typeof record.kind === "number")
+      normalized.kind = record.kind;
     if (typeof record.detail === "string") normalized.detail = record.detail;
     if (typeof record.documentation === "string") normalized.documentation = record.documentation;
     return normalized.label || normalized.insertText ? [normalized] : [];
   });
 }
 
-const completionItems = ref<MonacoCompletionItemLike[]>(normalizeCompletionItems(props.completions));
+const completionItems = ref<MonacoCompletionItemLike[]>(
+  normalizeCompletionItems(props.completions),
+);
 let completionProvider: monaco.IDisposable | null = null;
 let markerTooltipEl: HTMLDivElement | null = null;
 let latestMarkers: Array<{
@@ -102,8 +105,30 @@ type MonacoMarkerLike = monaco.editor.IMarkerData;
 type MonacoPositionLike = monaco.Position;
 type MonacoTextModelLike = monaco.editor.ITextModel;
 type MonacoLanguageCompletionItemKind = keyof typeof monaco.languages.CompletionItemKind;
-type MonacoCompletionItemKindValue = (typeof monaco.languages.CompletionItemKind)[MonacoLanguageCompletionItemKind];
+type MonacoCompletionItemKindValue =
+  (typeof monaco.languages.CompletionItemKind)[MonacoLanguageCompletionItemKind];
 type MonacoTextEdit = monaco.languages.TextEdit;
+
+const TRAILING_WHITESPACE_RE = /\s+$/;
+const COMMENT_LINE_RE = /^\s*\/[/*]/;
+const BLOCK_END_RE = /[;,{[(]$/;
+const ARROW_END_RE = /=>\s*$/;
+const FUNCTION_END_RE = /\)\s*$/;
+const CODE_LINE_RE = /[\w)\]"'`]+$/;
+const ANON_FUNCTION_RE = /^\s*function\s*\(/;
+const WRAPPED_FN_RE = /^const __fn\s*=\s*/;
+const WRAPPED_FN_SUFFIX_RE = /;\s*$/;
+const FLOW_CONTROL_KEYWORDS = [
+  "if",
+  "for",
+  "while",
+  "switch",
+  "catch",
+  "function",
+  "class",
+  "else",
+  "try",
+];
 
 let prettierReady: Promise<PrettierModuleLike | null> | null = null;
 
@@ -114,7 +139,7 @@ async function runEditorAction(id: string) {
   try {
     await action.run();
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -146,11 +171,14 @@ function detectTheme(): string {
 }
 
 function registerMonacoEnvironment() {
-  if (typeof self === "undefined" || (self.MonacoEnvironment && self.MonacoEnvironment.getWorker)) {
+  if (
+    typeof globalThis === "undefined" ||
+    (globalThis.MonacoEnvironment && globalThis.MonacoEnvironment.getWorker)
+  ) {
     return;
   }
 
-  self.MonacoEnvironment = {
+  globalThis.MonacoEnvironment = {
     getWorker(_moduleId: string, label: string) {
       if (label === "css" || label === "scss" || label === "less") {
         return new CssWorker();
@@ -284,7 +312,10 @@ function showMarkerTooltip(position: MonacoPositionLike | null) {
 
 function resolveCompletionKind(kind?: string | number): MonacoCompletionItemKindValue {
   if (typeof kind === "number") return kind;
-  if (typeof kind === "string" && monaco.languages.CompletionItemKind[kind as MonacoLanguageCompletionItemKind]) {
+  if (
+    typeof kind === "string" &&
+    monaco.languages.CompletionItemKind[kind as MonacoLanguageCompletionItemKind]
+  ) {
     return monaco.languages.CompletionItemKind[kind as MonacoLanguageCompletionItemKind];
   }
   return monaco.languages.CompletionItemKind.Text;
@@ -318,6 +349,23 @@ function resolveCompletionItems(model: MonacoTextModelLike, position: MonacoPosi
     .filter((item) => item.label && item.insertText);
 }
 
+function isCaseLine(text: string) {
+  const trimmed = text.trimStart();
+  return (
+    trimmed.startsWith("case ") ||
+    trimmed.startsWith("default ") ||
+    trimmed === "case" ||
+    trimmed === "default"
+  );
+}
+
+function isFlowControlLine(text: string) {
+  const trimmed = text.trimStart();
+  return FLOW_CONTROL_KEYWORDS.some(
+    (keyword) => trimmed === keyword || trimmed.startsWith(`${keyword} `),
+  );
+}
+
 function registerCompletionProvider() {
   if (completionProvider) {
     completionProvider.dispose();
@@ -338,20 +386,17 @@ function buildSemicolonEdits(model: MonacoTextModelLike): MonacoTextEdit[] {
   for (let lineNumber = 1; lineNumber <= lineCount; lineNumber += 1) {
     const line = model.getLineContent(lineNumber);
     if (!line || !line.trim()) continue;
-    const trimmed = line.replace(/\s+$/, "");
+    const trimmed = line.replace(TRAILING_WHITESPACE_RE, "");
     if (!trimmed) continue;
-    if (/^\s*\/[/*]/.test(trimmed)) continue;
-    if (/[;,{[(]$/.test(trimmed)) continue;
-    if (/=>\s*$/.test(trimmed)) continue;
+    if (COMMENT_LINE_RE.test(trimmed)) continue;
+    if (BLOCK_END_RE.test(trimmed)) continue;
+    if (ARROW_END_RE.test(trimmed)) continue;
     if (trimmed.endsWith(":")) continue;
-    if (
-      /^(if|for|while|switch|catch|function|class|else|try)\b/.test(trimmed) &&
-      /\)\s*$/.test(trimmed)
-    ) {
+    if (isFlowControlLine(trimmed) && FUNCTION_END_RE.test(trimmed)) {
       continue;
     }
-    if (/^\s*(case|default)\b/.test(trimmed)) continue;
-    if (!/[\w)\]"'`]+$/.test(trimmed)) continue;
+    if (isCaseLine(trimmed)) continue;
+    if (!CODE_LINE_RE.test(trimmed)) continue;
 
     const commentIndex = trimmed.indexOf("//");
     const insertColumn = commentIndex >= 0 ? commentIndex + 1 : trimmed.length + 1;
@@ -370,10 +415,13 @@ async function loadPrettier(): Promise<PrettierModuleLike | null> {
     import("prettier/parser-babel"),
     import("prettier/plugins/estree"),
   ])
-    .then(([prettier, parserBabel, estree]) => ({
-      format: prettier.format,
-      plugins: [parserBabel.default || parserBabel, estree.default || estree],
-    }) as PrettierModuleLike)
+    .then(
+      ([prettier, parserBabel, estree]) =>
+        ({
+          format: prettier.format,
+          plugins: [parserBabel.default || parserBabel, estree.default || estree],
+        }) as PrettierModuleLike,
+    )
     .catch(() => null);
   return prettierReady;
 }
@@ -383,7 +431,7 @@ async function formatWithPrettier(code: string, language: string): Promise<strin
   if (!prettier) return null;
   const parser = language === "typescript" ? "babel-ts" : "babel";
   const trimmed = String(code || "");
-  const isAnonFunction = /^\s*function\s*\(/.test(trimmed);
+  const isAnonFunction = ANON_FUNCTION_RE.test(trimmed);
   const wrapPrefix = "const __fn = ";
   const wrapSuffix = ";";
   const formatTarget = isAnonFunction ? `${wrapPrefix}${trimmed}${wrapSuffix}` : trimmed;
@@ -399,11 +447,11 @@ async function formatWithPrettier(code: string, language: string): Promise<strin
     });
     if (!formatted) return null;
     if (isAnonFunction) {
-      const stripped = formatted.replace(/^const __fn\s*=\s*/, "").replace(/;\s*$/, "");
+      const stripped = formatted.replace(WRAPPED_FN_RE, "").replace(WRAPPED_FN_SUFFIX_RE, "");
       return stripped;
     }
     return formatted;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -588,13 +636,13 @@ watch(
 
 watch(
   () => props.language,
-    (lang) => {
-      const model = editorInstance?.getModel();
-      if (model) {
-        monaco.editor.setModelLanguage(model, lang || props.language || "css");
-      }
-    },
-  );
+  (lang) => {
+    const model = editorInstance?.getModel();
+    if (model) {
+      monaco.editor.setModelLanguage(model, lang || props.language || "css");
+    }
+  },
+);
 
 watch(
   () => props.theme,
@@ -661,17 +709,17 @@ onBeforeUnmount(() => {
   cleanupFns.forEach((fn) => fn());
 });
 
-  defineExpose({
-    focus: () => editorInstance?.focus(),
-    format: async () => {
+defineExpose({
+  focus: () => editorInstance?.focus(),
+  format: async () => {
     if (!editorInstance) return false;
     if (await runEditorAction("editor.action.formatDocument")) return true;
     if (await runEditorAction("editor.action.formatSelection")) return true;
-      try {
+    try {
       editorInstance.trigger("format", "editor.action.formatDocument", undefined);
-        return true;
-      } catch (error) {
-        return applyFormatEdits();
+      return true;
+    } catch {
+      return applyFormatEdits();
     }
   },
   getValue: () => editorInstance?.getValue() ?? "",

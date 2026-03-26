@@ -5,7 +5,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import IconEpGrid from "~icons/ep/grid";
-import { useEditorStore } from "@/stores/editor-store";
 
 interface Diagram2DNodeLike {
   id: string;
@@ -60,7 +59,6 @@ const emit = defineEmits<{
   (event: "enterCanvasMode", payload: Diagram2DEnterCanvasModePayload): void;
 }>();
 
-const editorStore = useEditorStore();
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 /**

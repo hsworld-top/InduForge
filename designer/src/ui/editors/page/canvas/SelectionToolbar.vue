@@ -150,7 +150,8 @@ onBeforeUnmount(() => {
 });
 
 const handleAlign = (type: SelectionToolbarAlignType) => editorStore.alignElements(type);
-const handleDistribute = (dir: SelectionToolbarDistributeType) => editorStore.distributeElements(dir);
+const handleDistribute = (dir: SelectionToolbarDistributeType) =>
+  editorStore.distributeElements(dir);
 const handleMatchSize = (mode: SelectionToolbarMatchSizeType) => editorStore.matchElementSize(mode);
 const handleMoveUp = () => editorStore.moveNodeUp();
 const handleMoveDown = () => editorStore.moveNodeDown();
