@@ -2,10 +2,21 @@
   ComponentPanel - 组件物料面板
   展示可拖拽组件列表（布局、UI、图表等），支持搜索、常用/全部切换
 -->
-<script setup>
+<script setup lang="ts">
 import { computed, h, ref } from "vue";
 import { componentRegistry } from "@/editor-core";
 import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
+
+interface ComponentItemLike {
+  type: string;
+  name: string;
+}
+
+interface PreviewComponentLike {
+  render: () => ReturnType<typeof h>;
+}
+
+type PreviewComponentMapLike = Record<string, PreviewComponentLike>;
 
 /**
  * 搜索关键字
@@ -22,7 +33,7 @@ const activeUiSections = ref(["pc"]);
 /**
  * 组件筛选范围
  */
-const allowedTypesByCategory = {
+const allowedTypesByCategory: Record<string, string[]> = {
   layout: ["HorizontalLayout", "VerticalLayout"],
   uiPc: ["Button"],
   chart: ["EChart"],
@@ -33,10 +44,10 @@ const allowedTypesByCategory = {
  * @param {string} category - 组件分类
  * @returns {Array}
  */
-function filterItemsByCategory(category) {
+function filterItemsByCategory(category: string): ComponentItemLike[] {
   const keywordValue = keyword.value.trim().toLowerCase();
   const allowedTypes = showAllComponents.value ? null : allowedTypesByCategory[category];
-  return componentRegistry.getByCategory(category).filter((item) => {
+  return (componentRegistry.getByCategory(category) as ComponentItemLike[]).filter((item) => {
     if (Array.isArray(allowedTypes) && !allowedTypes.includes(item.type)) {
       return false;
     }
@@ -48,17 +59,17 @@ function filterItemsByCategory(category) {
   });
 }
 
-const layoutItems = computed(() => filterItemsByCategory("layout"));
-const pcItems = computed(() => filterItemsByCategory("uiPc"));
-const chartItems = computed(() => filterItemsByCategory("chart"));
+const layoutItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("layout"));
+const pcItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("uiPc"));
+const chartItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("chart"));
 
 /**
  * 获取组件预览组件
  * @param {string} type - 组件类型
  * @returns {import('vue').Component}
  */
-function getPreviewComponent(type) {
-  const previewMap = {
+function getPreviewComponent(type: string): PreviewComponentLike {
+  const previewMap: PreviewComponentMapLike = {
     Button: {
       render: () =>
         h("div", { class: "preview-button" }, [h("span", { class: "text-xs" }, "按钮")]),
@@ -351,7 +362,7 @@ function getPreviewComponent(type) {
  * @param {{ type: string, name: string }} item - 组件项
  * @param {DragEvent} event - 拖拽事件
  */
-function handleDragStart(item, event) {
+function handleDragStart(item: ComponentItemLike, event: DragEvent): void {
   startDrag(item.type);
   if (!event.dataTransfer) return;
 
@@ -396,7 +407,7 @@ function handleDragStart(item, event) {
  * @param {{ type: string }} item - 组件项
  * @param {MouseEvent} event - 鼠标事件
  */
-function handlePointerStart(item, event) {
+function handlePointerStart(item: ComponentItemLike, event: MouseEvent): void {
   if (event.button !== 0) return;
   startDrag(item.type);
 }
@@ -404,7 +415,7 @@ function handlePointerStart(item, event) {
 /**
  * 处理拖拽结束
  */
-function handleDragEnd() {
+function handleDragEnd(): void {
   endDrag();
 }
 
@@ -413,8 +424,8 @@ function handleDragEnd() {
  * @param {string} type - 组件类型
  * @returns {string} HTML 字符串
  */
-function getPreviewIcon(type) {
-  const iconMap = {
+function getPreviewIcon(type: string): string {
+  const iconMap: Record<string, string> = {
     Button: '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
     Text: '<div style="width:60px;height:20px;background:#606266;border-radius:2px;"></div>',
     FlexContainer:
