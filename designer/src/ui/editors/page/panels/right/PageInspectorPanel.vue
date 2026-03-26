@@ -1,9 +1,15 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 页面属性面板
  * 显示和编辑当前页面的配置信息
  */
 
+import type {
+  BackgroundConfig,
+  ComponentNode,
+  EntryConfig,
+  PageNode,
+} from "@/editor-core/document/types";
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, reactive, ref, watch } from "vue";
@@ -11,10 +17,104 @@ import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 import MonacoEditor from "@/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 
+type PageType = "business" | "login" | "logout";
+type SystemPageType = PageType | "home";
+
+interface PageInspectorForm {
+  name: string;
+  path: string;
+  description: string;
+  pageType: PageType;
+  x: number;
+  y: number;
+  windowWidth: number;
+  windowHeight: number;
+  width: number;
+  height: number;
+  showGrid: boolean;
+  enableSnap: boolean;
+  autoFit: boolean;
+  lockAspectRatio: boolean;
+  enableMinSize: boolean;
+  fontAutoFit: boolean;
+  windowStyle: string;
+  permissionDesc: string;
+  backgroundKind: BackgroundConfig["kind"];
+  backgroundValue: string;
+}
+
+interface DiagnosticSummary {
+  total: number;
+  active: number;
+  invalid: number;
+}
+
+interface SystemPageMeta {
+  label: string;
+  path: string;
+}
+
+interface CanvasStylePreset {
+  id: string;
+  label: string;
+  content: string;
+}
+
+interface PageRecordLike {
+  id: string;
+  name?: string;
+  path?: string;
+  parentId?: string | null;
+  type?: string;
+  title?: string;
+  config: PageNode["config"] & {
+    description?: string;
+    x?: number;
+    y?: number;
+    windowWidth?: number;
+    windowHeight?: number;
+    width?: number;
+    height?: number;
+    showGrid?: boolean;
+    enableSnap?: boolean;
+    autoFit?: boolean;
+    lockAspectRatio?: boolean;
+    enableMinSize?: boolean;
+    fontAutoFit?: boolean;
+    windowStyle?: string;
+    permissionDesc?: string;
+    background?: {
+      kind?: BackgroundConfig["kind"];
+      value?: string;
+    };
+  };
+  styleConfig?: string;
+}
+
+interface EntryConfigLike extends EntryConfig {
+  logoutPageId?: string | null;
+}
+
+function showSuccessMessage(message: string): void {
+  ElMessage.success(message as never);
+}
+
+function showWarningMessage(message: string): void {
+  ElMessage.warning(message as never);
+}
+
+function showErrorMessage(message: string): void {
+  ElMessage.error(message as never);
+}
+
+function showInfoMessage(message: string): void {
+  ElMessage.info(message as never);
+}
+
 const editorStore = useEditorStore();
 const { currentPage, currentPageId, pages, doc } = storeToRefs(editorStore);
 
-const form = reactive({
+const form = reactive<PageInspectorForm>({
   name: "",
   path: "",
   description: "",
@@ -39,7 +139,7 @@ const form = reactive({
 
 const canvasStyleDialogVisible = ref(false);
 const canvasStyleDraft = ref("");
-const canvasStylePresets = [
+const canvasStylePresets: CanvasStylePreset[] = [
   { id: "empty", label: "空模板", content: "" },
   {
     id: "center",
@@ -53,7 +153,7 @@ const canvasPresetSearch = ref("");
 /**
  * 根据搜索关键字过滤样式模板
  */
-const filteredCanvasPresetOptions = computed(() => {
+const filteredCanvasPresetOptions = computed<CanvasStylePreset[]>(() => {
   const keyword = String(canvasPresetSearch.value || "")
     .trim()
     .toLowerCase();
@@ -68,7 +168,7 @@ const filteredCanvasPresetOptions = computed(() => {
 /**
  * 获取当前页面根节点
  */
-const rootNode = computed(() => {
+const rootNode = computed<ComponentNode | null>(() => {
   if (!currentPage.value || !doc.value) return null;
   return doc.value.getNode?.(currentPage.value.rootNodeId) || null;
 });
@@ -82,7 +182,7 @@ const hasCanvasStyleConfig = computed(() => {
 });
 
 // 诊断统计
-const diagnostic = reactive({
+const diagnostic = reactive<DiagnosticSummary>({
   total: 0,
   active: 0,
   invalid: 0,
@@ -95,10 +195,11 @@ const isHomePage = computed(() => {
   if (!currentPageId.value || !doc.value) return false;
   return doc.value.entry?.homePageId === currentPageId.value;
 });
-const isSystemPage = computed(
+const isSystemPage = computed<boolean>(
   () => isHomePage.value || form.pageType === "login" || form.pageType === "logout",
 );
-const BASIC_PAGE_META = {
+const BASIC_PAGE_META: Record<SystemPageType, SystemPageMeta> = {
+  business: { label: "业务页", path: "" },
   home: { label: "首页", path: "/" },
   login: { label: "登录页", path: "/login" },
   logout: { label: "登出页", path: "/logout" },
@@ -109,11 +210,12 @@ const BASIC_PAGE_META = {
  * @param {Object | null | undefined} page - 页面对象
  * @returns {"home" | "login" | "logout" | null}
  */
-function getFixedSystemType(page) {
+function getFixedSystemType(page: PageRecordLike | null | undefined): PageType | "home" | null {
   if (!page) return null;
-  if (doc.value?.entry?.homePageId === page.id) return "home";
-  if (doc.value?.entry?.loginPageId === page.id || page.path === "/login") return "login";
-  if (doc.value?.entry?.logoutPageId === page.id || page.path === "/logout") return "logout";
+  const entry = doc.value?.entry as EntryConfigLike | undefined;
+  if (entry?.homePageId === page.id) return "home";
+  if (entry?.loginPageId === page.id || page.path === "/login") return "login";
+  if (entry?.logoutPageId === page.id || page.path === "/logout") return "logout";
   return null;
 }
 
@@ -122,7 +224,7 @@ function getFixedSystemType(page) {
  * @param {string} value - 名称
  * @returns {string}
  */
-function toPathSegment(value) {
+function toPathSegment(value: string): string {
   const normalized = value.trim().replace(/\s+/g, "-");
   const sanitized = normalized.replace(/[/?#\\]+/g, "-");
   return sanitized || "page";
@@ -133,7 +235,7 @@ function toPathSegment(value) {
  * @param {string} value - 页面名称
  * @returns {{ valid: boolean, message: string }}
  */
-function validatePageName(value) {
+function validatePageName(value: string): { valid: boolean; message: string } {
   const name = String(value || "").trim();
   if (!name) {
     return { valid: false, message: "名称不能为空" };
@@ -155,8 +257,8 @@ function validatePageName(value) {
  * @param {string | null | undefined} parentId - 分组 ID
  * @returns {string[]}
  */
-function getFolderPathSegments(parentId) {
-  const folder = pages.value.find(
+function getFolderPathSegments(parentId: string | null | undefined): string[] {
+  const folder = (pages.value as PageRecordLike[]).find(
     (page) => page.id === (parentId || null) && page.type === "folder",
   );
   if (!folder) {
@@ -171,7 +273,7 @@ function getFolderPathSegments(parentId) {
  * @param {string | null | undefined} parentId - 分组 ID
  * @returns {string}
  */
-function buildBusinessPagePath(name, parentId) {
+function buildBusinessPagePath(name: string, parentId: string | null | undefined): string {
   const segments = [...getFolderPathSegments(parentId), toPathSegment(name)];
   return `/${segments.filter(Boolean).join("/")}`;
 }
@@ -181,7 +283,7 @@ function buildBusinessPagePath(name, parentId) {
  * @param {string} path - 路由路径
  * @returns {string}
  */
-function formatPathForDisplay(path) {
+function formatPathForDisplay(path: string): string {
   if (!path) return "/";
   try {
     return decodeURIComponent(path);
@@ -195,10 +297,11 @@ function formatPathForDisplay(path) {
  * @param {Object} page - 页面对象
  * @returns {'business' | 'login' | 'logout'}
  */
-function getPageType(page) {
+function getPageType(page: PageRecordLike | null | undefined): PageType {
   if (!page || !doc.value) return "business";
-  if (doc.value.entry?.loginPageId === page.id) return "login";
-  if (doc.value.entry?.logoutPageId === page.id) return "logout";
+  const entry = doc.value.entry as EntryConfigLike | undefined;
+  if (entry?.loginPageId === page.id) return "login";
+  if (entry?.logoutPageId === page.id) return "logout";
   if (page.path === "/login") return "login";
   if (page.path === "/logout") return "logout";
   return "business";
@@ -210,7 +313,7 @@ function getPageType(page) {
  * @param {string} name - 页面名称
  * @returns {string}
  */
-function resolvePath(page, name) {
+function resolvePath(page: PageRecordLike | null | undefined, name: string): string {
   if (!page) return "/";
   const systemType = getFixedSystemType(page);
   if (systemType) {
@@ -225,7 +328,7 @@ function resolvePath(page, name) {
  * @param {string} excludeId - 排除的页面 ID
  * @returns {boolean}
  */
-function isNameUnique(name, excludeId) {
+function isNameUnique(name: string, excludeId: string): boolean {
   const lowerName = name.trim().toLowerCase();
   return !pages.value.some(
     (page) => page.id !== excludeId && (page.name || "").trim().toLowerCase() === lowerName,
@@ -236,10 +339,10 @@ function isNameUnique(name, excludeId) {
  * 同步表单状态
  * @param {Object} page - 页面对象
  */
-function syncForm(page) {
+function syncForm(page: PageRecordLike | null | undefined): void {
   // 优先使用列表中的页面数据，避免脏缓存
   const pageFromList = currentPageId.value
-    ? pages.value.find((p) => p.id === currentPageId.value)
+    ? (pages.value as PageRecordLike[]).find((p) => p.id === currentPageId.value) || null
     : null;
 
   if (!page && !pageFromList) {
@@ -284,7 +387,7 @@ function syncForm(page) {
 /**
  * 更新诊断统计
  */
-function updateDiagnostic() {
+function updateDiagnostic(): void {
   // 当前暂无实时诊断来源，先重置为 0
   diagnostic.total = 0;
   diagnostic.active = 0;
@@ -296,7 +399,7 @@ function updateDiagnostic() {
  * @param {string} content - 样式内容
  * @returns {string}
  */
-function formatCanvasStyleOutput(content) {
+function formatCanvasStyleOutput(content: string): string {
   const text = String(content || "");
   if (text.includes("{")) return text;
   const trimmed = text.trim();
@@ -311,13 +414,13 @@ ${trimmed}
  * @param {string} content - 样式内容
  * @returns {string}
  */
-function prefixCanvasStyleScope(content) {
+function prefixCanvasStyleScope(content: string): string {
   const text = String(content || "").trim();
   if (!text || !text.includes("{")) return text;
   const blocks = text.split("}");
   const rebuilt = blocks
     .map((block) => {
-      const [selector, body] = block.split("{");
+      const [selector = "", body] = block.split("{");
       if (!body) return "";
       const trimmedSelector = selector.trim();
       if (!trimmedSelector) return "";
@@ -350,43 +453,45 @@ watch(
 /**
  * 更新页面名称并同步路由路径
  */
-async function handleNameUpdate() {
-  if (!currentPage.value) return;
+async function handleNameUpdate(): Promise<void> {
+  const page = currentPage.value;
+  if (!page) return;
   if (isSystemPage.value) {
-    syncForm(currentPage.value);
+    syncForm(page);
     return;
   }
   const name = form.name.trim();
   if (!name) {
-    ElMessage.warning("名称不能为空");
-    syncForm(currentPage.value);
+    showWarningMessage("名称不能为空");
+    syncForm(page);
     return;
   }
   const nameValidation = validatePageName(name);
   if (!nameValidation.valid) {
-    ElMessage.warning(nameValidation.message);
-    syncForm(currentPage.value);
+    showWarningMessage(nameValidation.message);
+    syncForm(page);
     return;
   }
-  if (!isNameUnique(name, currentPage.value.id)) {
-    ElMessage.warning("页面名称已存在");
-    syncForm(currentPage.value);
+  if (!isNameUnique(name, page.id)) {
+    showWarningMessage("页面名称已存在");
+    syncForm(page);
     return;
   }
   const currentPageFromList =
-    pages.value.find((page) => page.id === currentPage.value.id) || currentPage.value;
-  if (name === (currentPage.value.name || "")) {
+    (pages.value as PageRecordLike[]).find((item) => item.id === page.id) ||
+    (page as PageRecordLike);
+  if (name === (page.name || "")) {
     const path = resolvePath(currentPageFromList, name);
     form.path = formatPathForDisplay(path);
     return;
   }
   const path = resolvePath(currentPageFromList, name);
   try {
-    await editorStore.renamePage(currentPage.value.id, name, path);
-    syncForm(currentPage.value);
-  } catch (error) {
-    ElMessage.error("更新页面名称失败");
-    syncForm(currentPage.value);
+    await editorStore.renamePage(page.id, name, path);
+    syncForm(page);
+  } catch {
+    showErrorMessage("更新页面名称失败");
+    syncForm(page);
   }
 }
 
@@ -394,32 +499,40 @@ async function handleNameUpdate() {
  * 切换页面类型并更新入口配置
  * @param {string} type - 页面类型
  */
-function handlePageTypeChange(type) {
+function handlePageTypeChange(type: PageType): void {
   if (!currentPage.value || !doc.value) return;
 
-  const pageId = currentPage.value.id;
+  const page = currentPage.value;
+  if (!page) return;
+  const pageId = page.id;
   let path = form.path;
 
   if (type === "login") {
     path = "/login";
-    editorStore.updateEntry({ loginPageId: pageId });
+    editorStore.updateEntry({
+      loginPageId: pageId,
+      logoutPageId: null,
+    } as unknown as Partial<EntryConfig>);
     void editorStore.persistEntry();
   } else if (type === "logout") {
     path = "/logout";
-    editorStore.updateEntry({ logoutPageId: pageId });
+    editorStore.updateEntry({
+      logoutPageId: pageId,
+      loginPageId: null,
+    } as unknown as Partial<EntryConfig>);
     void editorStore.persistEntry();
   } else {
     // 普通业务页，清理入口配置
-    const entry = doc.value.entry || {};
+    const entry = (doc.value.entry || {}) as EntryConfigLike;
     if (entry.loginPageId === pageId) {
-      editorStore.updateEntry({ loginPageId: null });
+      editorStore.updateEntry({ loginPageId: null } as unknown as Partial<EntryConfig>);
       void editorStore.persistEntry();
     }
     if (entry.logoutPageId === pageId) {
-      editorStore.updateEntry({ logoutPageId: null });
+      editorStore.updateEntry({ logoutPageId: null } as unknown as Partial<EntryConfig>);
       void editorStore.persistEntry();
     }
-    path = buildBusinessPagePath(form.name, currentPage.value.parentId || null);
+    path = buildBusinessPagePath(form.name, (page as PageRecordLike).parentId || null);
   }
 
   form.path = path;
@@ -429,18 +542,18 @@ function handlePageTypeChange(type) {
 /**
  * 设置当前页面为首页
  */
-function handleSetAsHome() {
+function handleSetAsHome(): void {
   if (!currentPageId.value) return;
-  editorStore.updateEntry({ homePageId: currentPageId.value });
+  editorStore.updateEntry({ homePageId: currentPageId.value } as unknown as Partial<EntryConfig>);
   void editorStore.persistEntry();
-  ElMessage.success("已设为首页");
+  showSuccessMessage("已设为首页");
 }
 
 /**
  * 插入画布样式模板
  * @param {any} id - 模板 ID
  */
-function handleCanvasPresetChange(id) {
+function handleCanvasPresetChange(id: string): void {
   const target = canvasStylePresets.find((item) => item.id === id);
   if (!target) return;
   const nextContent = formatCanvasStyleOutput(target.content || "");
@@ -453,10 +566,10 @@ function handleCanvasPresetChange(id) {
 /**
  * 更新画布配置
  */
-function handleConfigUpdate() {
+function handleConfigUpdate(): void {
   if (!currentPage.value) return;
   const nextConfig = {
-    ...currentPage.value.config,
+    ...(currentPage.value.config || {}),
     description: form.description,
     x: Number(form.x) || 0,
     y: Number(form.y) || 0,
@@ -480,7 +593,7 @@ function handleConfigUpdate() {
  * 过滤非数字输入（只允许数字、负号、小数点、退格、方向键等）
  * @param {KeyboardEvent} event - 键盘事件
  */
-function filterNumericInput(event) {
+function filterNumericInput(event: KeyboardEvent): void {
   const allowed = [
     "Backspace",
     "Delete",
@@ -507,7 +620,10 @@ function filterNumericInput(event) {
  * @param {string} field - 表单字段名
  * @param {FocusEvent} event - 失焦事件
  */
-function handleNumericBlur(field, event) {
+function handleNumericBlur(
+  field: "x" | "y" | "windowWidth" | "windowHeight" | "width" | "height",
+  event: FocusEvent,
+): void {
   const raw = String(form[field] ?? "").trim();
   const num = Number(raw);
   if (raw === "" || !Number.isFinite(num)) {
@@ -515,21 +631,22 @@ function handleNumericBlur(field, event) {
   } else {
     form[field] = num;
   }
-  event.target.setAttribute("readonly", "");
+  const target = event.target as HTMLElement | null;
+  target?.setAttribute("readonly", "");
   handleConfigUpdate();
 }
 
 /**
  * 打开权限描述配置（当前先提供占位入口）
  */
-function handlePermissionConfig() {
-  ElMessage.info("权限描述配置能力待接入");
+function handlePermissionConfig(): void {
+  showInfoMessage("权限描述配置能力待接入");
 }
 
 /**
  * 打开样式配置弹窗
  */
-function openCanvasStyleDialog() {
+function openCanvasStyleDialog(): void {
   if (!rootNode.value) return;
   canvasStyleDraft.value = rootNode.value.styleConfig || "";
   canvasStyleDialogVisible.value = true;
@@ -538,7 +655,7 @@ function openCanvasStyleDialog() {
 /**
  * 保存样式配置
  */
-function saveCanvasStyleDialog() {
+function saveCanvasStyleDialog(): void {
   if (!rootNode.value) return;
   let content = String(canvasStyleDraft.value || "");
   content = formatCanvasStyleOutput(content);
@@ -551,7 +668,7 @@ function saveCanvasStyleDialog() {
 /**
  * 清空样式配置
  */
-function clearCanvasStyleDialog() {
+function clearCanvasStyleDialog(): void {
   if (!rootNode.value) return;
   canvasStyleDraft.value = "";
   editorStore.updateNode(rootNode.value.id, { styleConfig: "" });
@@ -561,7 +678,7 @@ function clearCanvasStyleDialog() {
 /**
  * 更新背景配置
  */
-function handleBackgroundUpdate() {
+function handleBackgroundUpdate(): void {
   if (!currentPage.value) return;
   const nextConfig = {
     ...currentPage.value.config,
