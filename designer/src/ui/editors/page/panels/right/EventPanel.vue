@@ -2,7 +2,7 @@
   EventPanel - 事件配置面板
   配置组件的点击、输入等事件及对应脚本
 -->
-<script setup>
+<script setup lang="ts">
 import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
 import IconEpEditPen from "~icons/ep/edit-pen";
@@ -24,39 +24,39 @@ const { projectVariables, projectVariableGroups, globalScripts, currentPage, doc
 
 const scriptCode = ref("");
 const editorVisible = ref(false);
-const editorRef = ref(null);
-const customTreeRef = ref(null);
+const editorRef = ref<any>(null);
+const customTreeRef = ref<any>(null);
 const scriptSearch = ref("");
 const componentSearch = ref("");
-const componentTreeRef = ref(null);
+const componentTreeRef = ref<any>(null);
 const variableEnumVisible = ref(false);
-const enumProjectTreeRef = ref(null);
-const enumPageTreeRef = ref(null);
+const enumProjectTreeRef = ref<any>(null);
+const enumPageTreeRef = ref<any>(null);
 const enumTab = ref("project");
 const projectVarSearch = ref("");
 const pageVarSearch = ref("");
-const enumSelectedProjectGroupId = ref(null);
+const enumSelectedProjectGroupId = ref<string | null>(null);
 const enumSelectedPageGroupId = ref("page-root");
-const enumSelectedProjectVar = ref(null);
-const enumSelectedPageVar = ref(null);
+const enumSelectedProjectVar = ref<any>(null);
+const enumSelectedPageVar = ref<any>(null);
 const activeEventName = ref("");
-const eventToggleState = ref({});
+const eventToggleState = ref<Record<string, boolean>>({});
 
-const componentManifest = computed(() => {
+const componentManifest = computed<any>(() => {
   if (!selectedNode.value) return null;
   return componentRegistry.get(selectedNode.value.type) || null;
 });
 
-const componentLabel = computed(() => {
+const componentLabel = computed<string>(() => {
   return selectedNode.value?.label || componentManifest.value?.name || "组件";
 });
 
-const eventDefinitions = computed(() => {
+const eventDefinitions = computed<any[]>(() => {
   const events = componentManifest.value?.events || [];
   return normalizeEventDefinitions(events);
 });
 
-const isPageContext = computed(() => {
+const isPageContext = computed<boolean>(() => {
   if (panelState.value === "page") return true;
   if (selectedGraphic.value) return true;
   if (!selectedNode.value) return true;
@@ -69,7 +69,7 @@ const isPageContext = computed(() => {
  * @param {string} eventName - 事件名称
  * @returns {Object | string | null} 事件处理器
  */
-function getEventHandler(eventName) {
+function getEventHandler(eventName: string): any {
   if (!selectedNode.value || !eventName) return null;
   const handlers = selectedNode.value.events?.[eventName];
   if (!Array.isArray(handlers) || handlers.length === 0) return null;
@@ -81,7 +81,7 @@ function getEventHandler(eventName) {
  * @param {string} eventName - 事件名称
  * @returns {string} 事件脚本
  */
-function getEventScript(eventName) {
+function getEventScript(eventName: string): string {
   const handler = getEventHandler(eventName);
   if (!handler) return "";
   if (typeof handler === "string") return handler;
@@ -92,8 +92,8 @@ function getEventScript(eventName) {
  * 同步事件开关状态
  * @returns {void}
  */
-function syncEventToggleState() {
-  const nextState = {};
+function syncEventToggleState(): void {
+  const nextState: Record<string, boolean> = {};
   eventDefinitions.value.forEach((eventItem) => {
     const handler = getEventHandler(eventItem.name);
     nextState[eventItem.name] = handler?.enabled !== false;
@@ -106,7 +106,7 @@ function syncEventToggleState() {
  * @param {string} eventName - 事件名称
  * @returns {boolean} 是否启用
  */
-function getEventEnabled(eventName) {
+function getEventEnabled(eventName: string): boolean {
   if (!eventName) return true;
   return eventToggleState.value[eventName] !== false;
 }
@@ -117,7 +117,7 @@ function getEventEnabled(eventName) {
  * @param {boolean} enabled - 是否启用
  * @returns {void}
  */
-function handleToggleEvent(eventName, enabled) {
+function handleToggleEvent(eventName: string, enabled: boolean): void {
   if (!eventName) return;
   eventToggleState.value = {
     ...eventToggleState.value,
@@ -126,13 +126,18 @@ function handleToggleEvent(eventName, enabled) {
   if (!selectedNode.value) return;
   const handler = getEventHandler(eventName);
   if (!handler) return;
-  const nextHandler =
-    typeof handler === "string"
-      ? { type: "script", code: handler, enabled: enabled !== false }
-      : { ...handler, enabled: enabled !== false };
-  const nextEvents = { ...(selectedNode.value.events || {}) };
+  let nextHandler: Record<string, any>;
+  if (typeof handler === "string") {
+    nextHandler = {};
+    nextHandler.type = "script";
+    nextHandler.code = handler;
+    nextHandler.enabled = enabled !== false;
+  } else {
+    nextHandler = { ...handler, enabled: enabled !== false } as any;
+  }
+  const nextEvents: any = { ...(selectedNode.value.events || {}) };
   nextEvents[eventName] = [nextHandler];
-  editorStore.updateNode(selectedNode.value.id, { events: nextEvents });
+  editorStore.updateNode(selectedNode.value.id, { events: nextEvents as any });
 }
 
 /**
@@ -140,7 +145,7 @@ function handleToggleEvent(eventName, enabled) {
  * @param {{ name: string }} eventItem - 事件定义
  * @returns {void}
  */
-function openEditor(eventItem) {
+function openEditor(eventItem: { name?: string } | null | undefined): void {
   activeEventName.value = eventItem?.name || "";
   scriptCode.value = getEventScript(activeEventName.value) || "";
   editorVisible.value = true;
@@ -150,10 +155,10 @@ function openEditor(eventItem) {
  * 保存脚本配置
  * @returns {void}
  */
-function saveScript() {
+function saveScript(): void {
   if (!selectedNode.value || !activeEventName.value) return;
   const code = scriptCode.value || "";
-  const nextEvents = { ...(selectedNode.value.events || {}) };
+  const nextEvents: any = { ...(selectedNode.value.events || {}) };
   if (!code.trim()) {
     delete nextEvents[activeEventName.value];
   } else {
@@ -165,7 +170,7 @@ function saveScript() {
       },
     ];
   }
-  editorStore.updateNode(selectedNode.value.id, { events: nextEvents });
+  editorStore.updateNode(selectedNode.value.id, { events: nextEvents as any });
   void editorStore.saveCurrentPage?.();
   editorVisible.value = false;
 }
@@ -175,7 +180,7 @@ function saveScript() {
  * @param {{ name: string, label?: string }} eventItem - 事件定义
  * @returns {string} 标题文本
  */
-function getEventTitle(eventItem) {
+function getEventTitle(eventItem: { name?: string } | null | undefined): string {
   return eventItem?.name || "";
 }
 
@@ -213,11 +218,11 @@ const projectGroupTree = computed(() => [
   },
 ]);
 
-const customScriptTree = computed(() => {
-  const groups = globalScripts.value?.custom?.groups || [];
-  const items = globalScripts.value?.custom?.items || [];
-  const groupMap = new Map();
-  const roots = [];
+const customScriptTree = computed<any[]>(() => {
+  const groups = (globalScripts.value?.custom?.groups || []) as any[];
+  const items = (globalScripts.value?.custom?.items || []) as any[];
+  const groupMap = new Map<string, any>();
+  const roots: any[] = [];
 
   groups.forEach((group) => {
     groupMap.set(group.id, {
@@ -255,7 +260,7 @@ const customScriptTree = computed(() => {
   return roots;
 });
 
-const pageVars = computed(() => {
+const pageVars = computed<Record<string, any>>(() => {
   docVersion.value;
   const pageId = currentPage.value?.id;
   if (!pageId || !doc.value) return {};
@@ -263,9 +268,10 @@ const pageVars = computed(() => {
   return vars && typeof vars === "object" ? vars : {};
 });
 
-const projectVariableRows = computed(() => {
+const projectVariableRows = computed<any[]>(() => {
   const keyword = String(projectVarSearch.value || "").toLowerCase();
-  const items = Object.entries(projectVariables.value || {}).map(([name, detail]) => ({
+  const projectVars = (projectVariables.value || {}) as Record<string, any>;
+  const items = Object.entries(projectVars).map(([name, detail]: [string, any]) => ({
     name,
     groupId: detail?.groupId || null,
     type: detail?.type || "string",
@@ -291,7 +297,7 @@ const pageGroupTree = computed(() => [
   { id: "page-root", label: "页面变量", type: "group", children: [] },
 ]);
 
-const pageVariableRows = computed(() => {
+const pageVariableRows = computed<any[]>(() => {
   const keyword = String(pageVarSearch.value || "").toLowerCase();
   return Object.entries(pageVars.value || {})
     .map(([name, detail]) => ({
@@ -311,12 +317,13 @@ const pageVariableRows = computed(() => {
     });
 });
 
-const pageComponentTree = computed(() => {
+const pageComponentTree = computed<any[]>(() => {
   docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
-  if (!rootId || !doc.value) return [];
-  const buildNode = (nodeId) => {
-    const node = doc.value.getNode(nodeId);
+  const docModel = doc.value;
+  if (!rootId || !docModel) return [];
+  const buildNode = (nodeId: string): any => {
+    const node = docModel.getNode(nodeId);
     if (!node) return null;
     const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean);
     const label = node.label || node.type || "组件";
@@ -334,8 +341,8 @@ const pageComponentTree = computed(() => {
   return root.children?.length ? root.children : [root];
 });
 
-const jsCompletions = computed(() => {
-  const items = [
+const jsCompletions = computed<any[]>(() => {
+  const items: any[] = [
     {
       label: "console.log",
       insertText: "console.log()",
@@ -373,7 +380,7 @@ const jsCompletions = computed(() => {
     });
   });
 
-  (globalScripts.value?.custom?.items || []).forEach((script) => {
+  ((globalScripts.value?.custom?.items || []) as any[]).forEach((script) => {
     if (!script?.name) return;
     const params =
       typeof script.params === "string" && script.params.trim()
@@ -401,20 +408,20 @@ const jsCompletions = computed(() => {
     });
   });
 
-  items.push(...buildComponentMethodCompletions(pageComponentTree.value));
+  items.push(...(buildComponentMethodCompletions(pageComponentTree.value) as any[]));
   return items;
 });
 
-function filterSidebarNode(value, data) {
+function filterSidebarNode(value: string, data: { label?: string } | null | undefined): boolean {
   if (!value) return true;
   return String(data?.label || "")
     .toLowerCase()
     .includes(value.toLowerCase());
 }
 
-function buildGroupTree(groups) {
-  const groupMap = new Map();
-  const roots = [];
+function buildGroupTree(groups: any[] | null | undefined): any[] {
+  const groupMap = new Map<string, any>();
+  const roots: any[] = [];
   const normalized = Array.isArray(groups) ? groups : [];
   normalized.forEach((group) => {
     groupMap.set(group.id, {
@@ -443,19 +450,19 @@ watch(componentSearch, (value) => {
   componentTreeRef.value?.filter?.(value);
 });
 
-function handleCustomScriptInsert(data) {
+function handleCustomScriptInsert(data: any): void {
   if (data?.type === "group") return;
   const params = data?.params ? data.params : "";
   const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
   editorRef.value?.insertText?.(call);
 }
 
-function handleComponentInsert(data) {
+function handleComponentInsert(data: any): void {
   if (!data?.componentName) return;
   editorRef.value?.insertText?.(`components.${data.componentName}`);
 }
 
-function openVariableEnum() {
+function openVariableEnum(): void {
   projectVarSearch.value = "";
   pageVarSearch.value = "";
   enumTab.value = "project";
@@ -466,7 +473,7 @@ function openVariableEnum() {
   variableEnumVisible.value = true;
 }
 
-function handleProjectGroupSelect(data) {
+function handleProjectGroupSelect(data: any): void {
   if (!data) {
     enumSelectedProjectGroupId.value = null;
     return;
@@ -474,39 +481,39 @@ function handleProjectGroupSelect(data) {
   enumSelectedProjectGroupId.value = data.id === "all" ? null : data.id;
 }
 
-function handlePageGroupSelect(data) {
+function handlePageGroupSelect(data: any): void {
   enumSelectedPageGroupId.value = data?.id || "page-root";
 }
 
-function handleProjectRowClick(row) {
+function handleProjectRowClick(row: any): void {
   enumSelectedProjectVar.value = row || null;
 }
 
-function handlePageRowClick(row) {
+function handlePageRowClick(row: any): void {
   enumSelectedPageVar.value = row || null;
 }
 
-function handleProjectRowDblClick(row) {
+function handleProjectRowDblClick(row: any): void {
   enumSelectedProjectVar.value = row || null;
   confirmEnumInsert();
 }
 
-function handlePageRowDblClick(row) {
+function handlePageRowDblClick(row: any): void {
   enumSelectedPageVar.value = row || null;
   confirmEnumInsert();
 }
 
-function enumProjectRowClass({ row }) {
+function enumProjectRowClass({ row }: { row: any }): string {
   if (enumSelectedProjectVar.value?.name === row.name) return "is-selected";
   return "";
 }
 
-function enumPageRowClass({ row }) {
+function enumPageRowClass({ row }: { row: any }): string {
   if (enumSelectedPageVar.value?.name === row.name) return "is-selected";
   return "";
 }
 
-function confirmEnumInsert() {
+function confirmEnumInsert(): void {
   if (enumTab.value === "page" && enumSelectedPageVar.value?.name) {
     editorRef.value?.insertText?.(`$vars.${enumSelectedPageVar.value.name}`);
     variableEnumVisible.value = false;
@@ -537,7 +544,7 @@ function confirmEnumInsert() {
                 <span class="event-label">启用</span>
                 <el-switch
                   :model-value="getEventEnabled(eventItem.name)"
-                  @change="(value) => handleToggleEvent(eventItem.name, value)"
+                  @change="(value: boolean) => handleToggleEvent(eventItem.name, value)"
                 />
               </div>
               <el-tooltip content="打开编辑器" placement="top">
