@@ -2,44 +2,72 @@
   ResourcePanel - 资源面板
   管理工程资源（图片、字体等），支持文件夹、上传、预览、拖拽到画布
 -->
-<script setup>
+<script setup lang="ts">
+import type { AssetFolder, AssetItem } from "@/types/api";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import IconEpGrid from "~icons/ep/grid";
 import IconEpList from "~icons/ep/list";
 import assetApi from "@/services/assetApi";
 import { useEditorStore } from "@/stores/editor-store";
+import { unwrapApiData } from "@/types/api";
+
+interface TreeFilterableLike {
+  filter?: (value: string) => void;
+}
+
+interface ResourceFolderNode extends AssetFolder {
+  label: string;
+  type: "folder" | "root";
+  children: ResourceFolderNode[];
+}
+
+interface ResourceAssetView extends AssetItem {
+  displayName: string;
+  ext: string;
+  size: number;
+}
+
+interface ResourceContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  type: "asset" | "folder";
+  asset: ResourceAssetView | null;
+  folder: ResourceFolderNode | null;
+}
+
+function showSuccessMessage(message: string): void {
+  ElMessage.success(message as never);
+}
+
+function showErrorMessage(message: string): void {
+  ElMessage.error(message as never);
+}
 
 const editorStore = useEditorStore();
-const projectId = computed(() => editorStore.projectId || editorStore.project?.id || "");
+const projectId = computed(() => editorStore.projectId || "");
 
 const folderSearch = ref("");
 const assetSearch = ref("");
-const folderTreeRef = ref(null);
-const moveTreeRef = ref(null);
-const fileInputRef = ref(null);
-
-const folders = ref([]);
-const assets = ref([]);
+const folderTreeRef = ref<TreeFilterableLike | null>(null);
+const moveTreeRef = ref<TreeFilterableLike | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const folders = ref<AssetFolder[]>([]);
+const assets = ref<AssetItem[]>([]);
 const selectedFolderId = ref("root");
-const selectedFolderLabel = computed(() => {
-  if (selectedFolderId.value === "root") return "全部资源";
-  const found = folders.value.find((item) => item.id === selectedFolderId.value);
-  return found?.name || "全部资源";
-});
-
-const viewMode = ref("grid");
+const viewMode = ref<"grid" | "list">("grid");
 
 const previewVisible = ref(false);
-const previewAsset = ref(null);
+const previewAsset = ref<ResourceAssetView | null>(null);
 const detailVisible = ref(false);
-const detailAsset = ref(null);
+const detailAsset = ref<ResourceAssetView | null>(null);
 
 const moveDialogVisible = ref(false);
-const moveAssetTarget = ref(null);
-const moveTargetFolderId = ref(null);
+const moveAssetTarget = ref<ResourceAssetView | null>(null);
+const moveTargetFolderId = ref<string | null>(null);
 
-const contextMenu = ref({
+const contextMenu = ref<ResourceContextMenuState>({
   visible: false,
   x: 0,
   y: 0,
@@ -48,63 +76,43 @@ const contextMenu = ref({
   folder: null,
 });
 
-const clipboardAsset = ref(null);
-const clipboardMode = ref(null);
+const clipboardAsset = ref<ResourceAssetView | null>(null);
+const clipboardMode = ref<"copy" | "cut" | null>(null);
+const selectedFolderLabel = computed(() => {
+  if (selectedFolderId.value === "root") return "全部资源";
+  const found = folders.value.find((item) => item.id === selectedFolderId.value);
+  return found?.name || "全部资源";
+});
 
 const contextMenuStyle = computed(() => ({
   left: `${contextMenu.value.x}px`,
   top: `${contextMenu.value.y}px`,
 }));
 
-async function adjustContextMenuPosition() {
-  await nextTick();
-  const menuEl = contextMenuRef.value;
-  if (!menuEl) return;
-  const rect = menuEl.getBoundingClientRect();
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  let nextX = contextMenu.value.x;
-  let nextY = contextMenu.value.y;
-  const padding = 8;
-  if (rect.right > viewportWidth - padding) {
-    nextX = Math.max(padding, viewportWidth - rect.width - padding);
-  }
-  if (rect.bottom > viewportHeight - padding) {
-    nextY = Math.max(padding, viewportHeight - rect.height - padding);
-  }
-  if (nextX !== contextMenu.value.x || nextY !== contextMenu.value.y) {
-    contextMenu.value.x = nextX;
-    contextMenu.value.y = nextY;
-  }
-}
-
-async function handleCopyUrl(value) {
+async function handleCopyUrl(value: string | undefined): Promise<void> {
   if (!value) return;
   try {
     await navigator.clipboard.writeText(value);
-    ElMessage.success("链接已复制");
-  } catch (error) {
-    ElMessage.error("复制失败");
+    showSuccessMessage("链接已复制");
+  } catch {
+    showErrorMessage("复制失败");
   }
 }
-function unwrapApiData(response) {
-  return response?.data?.data ?? response?.data ?? response;
-}
 
-function decodeAssetName(value) {
+function decodeAssetName(value: string): string {
   if (!value) return "";
   try {
     return decodeURIComponent(value);
-  } catch (error) {
+  } catch {
     try {
       return decodeURIComponent(escape(value));
-    } catch (err) {
+    } catch {
       return value;
     }
   }
 }
 
-function getAssetExt(asset) {
+function getAssetExt(asset: Partial<AssetItem> & { displayName?: string } = {}): string {
   const name = asset?.displayName || asset?.name || asset?.originalName || "";
   const index = name.lastIndexOf(".");
   if (index > -1 && index < name.length - 1) {
@@ -112,12 +120,12 @@ function getAssetExt(asset) {
   }
   const mime = String(asset?.mimeType || "").toLowerCase();
   if (mime.includes("/")) {
-    return mime.split("/").pop();
+    return mime.split("/").pop() || "";
   }
   return asset?.type || "";
 }
 
-function formatSize(size) {
+function formatSize(size: number | string | null | undefined): string {
   if (size === null || size === undefined || size === "") return "-";
   const value = Number(size);
   if (Number.isNaN(value)) return "-";
@@ -132,38 +140,40 @@ function formatSize(size) {
   return `${num.toFixed(num >= 10 ? 0 : 1)} ${units[idx]}`;
 }
 
-function isImageAsset(asset) {
+function isImageAsset(asset: Partial<AssetItem> | null | undefined): boolean {
   const type = asset?.type || "";
-  const ext = getAssetExt(asset);
+  const ext = getAssetExt(asset || {});
   if (type === "image" || type === "svg") return true;
   return ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
 }
 
-function isPdfAsset(asset) {
-  const ext = getAssetExt(asset);
+function isPdfAsset(asset: Partial<AssetItem> | null | undefined): boolean {
+  const ext = getAssetExt(asset || {});
   if (ext === "pdf") return true;
   const mime = String(asset?.mimeType || "").toLowerCase();
   return mime.includes("pdf");
 }
 
-function buildFolderTree(items) {
+function buildFolderTree(items: AssetFolder[] | null | undefined): ResourceFolderNode[] {
   const list = Array.isArray(items) ? items : [];
-  const nodes = list.map((item) => ({
+  const nodes: ResourceFolderNode[] = list.map((item) => ({
     ...item,
     label: decodeAssetName(item.name || "未命名文件夹"),
-    type: "folder",
-    children: [],
+    type: "folder" as const,
+    children: [] as ResourceFolderNode[],
   }));
-  const map = new Map(nodes.map((item) => [item.id, item]));
-  const root = {
+  const map = new Map<string, ResourceFolderNode>(nodes.map((item) => [item.id, item]));
+  const root: ResourceFolderNode = {
     id: "root",
+    name: "全部资源",
     label: "全部资源",
-    type: "root",
+    type: "root" as const,
     children: [],
   };
   nodes.forEach((node) => {
-    if (node.parentId && map.has(node.parentId)) {
-      map.get(node.parentId).children.push(node);
+    const parent = node.parentId ? map.get(node.parentId) : undefined;
+    if (parent) {
+      parent.children.push(node);
     } else {
       root.children.push(node);
     }
@@ -171,11 +181,11 @@ function buildFolderTree(items) {
   return [root];
 }
 
-const folderTree = computed(() => buildFolderTree(folders.value));
+const folderTree = computed<ResourceFolderNode[]>(() => buildFolderTree(folders.value));
 
-const filteredFolderTree = computed(() => folderTree.value);
+const filteredFolderTree = computed<ResourceFolderNode[]>(() => folderTree.value);
 
-function filterFolderNode(value, data) {
+function filterFolderNode(value: string, data: ResourceFolderNode | null | undefined): boolean {
   if (!value) return true;
   return String(data?.label || "")
     .toLowerCase()
@@ -186,7 +196,7 @@ watch(folderSearch, () => {
   folderTreeRef.value?.filter?.(folderSearch.value);
 });
 
-const normalizedAssets = computed(() =>
+const normalizedAssets = computed<ResourceAssetView[]>(() =>
   (assets.value || []).map((asset) => {
     const displayName = decodeAssetName(asset.name || asset.originalName || "");
     return {
@@ -208,7 +218,7 @@ const normalizedAssets = computed(() =>
   }),
 );
 
-const filteredAssets = computed(() => {
+const filteredAssets = computed<ResourceAssetView[]>(() => {
   let list = normalizedAssets.value;
   if (selectedFolderId.value !== "root") {
     list = list.filter((item) => item.folderId === selectedFolderId.value);
@@ -220,52 +230,58 @@ const filteredAssets = computed(() => {
   return list;
 });
 
-function handleFolderClick(data) {
+function handleFolderClick(data: ResourceFolderNode | null | undefined): void {
   if (!data) return;
   selectedFolderId.value = data.id;
 }
 
-function handleFolderContextMenu(event, data) {
+function handleFolderContextMenu(
+  event: MouseEvent,
+  data: ResourceFolderNode | null | undefined,
+): void {
   if (!data) return;
   contextMenu.value = {
     visible: true,
     x: event.clientX,
     y: event.clientY,
     type: "folder",
-    folder: data,
+    folder: data ?? null,
     asset: null,
   };
 }
 
-function openAssetContextMenu(event, asset) {
+function openAssetContextMenu(
+  event: MouseEvent,
+  asset: ResourceAssetView | null | undefined,
+): void {
   contextMenu.value = {
     visible: true,
     x: event.clientX,
     y: event.clientY,
     type: "asset",
-    asset,
+    asset: asset ?? null,
     folder: null,
   };
 }
 
-function closeContextMenu() {
+function closeContextMenu(): void {
   contextMenu.value.visible = false;
 }
 
-function handlePreviewContext() {
+function handlePreviewContext(): void {
   if (contextMenu.value.asset) openPreview(contextMenu.value.asset);
   closeContextMenu();
 }
 
-function handleDetailContext() {
+function handleDetailContext(): void {
   if (contextMenu.value.asset) {
-    detailAsset.value = contextMenu.value.asset;
+    detailAsset.value = contextMenu.value.asset ?? null;
     detailVisible.value = true;
   }
   closeContextMenu();
 }
 
-async function handleCreateFolder() {
+async function handleCreateFolder(): Promise<void> {
   closeContextMenu();
   if (!projectId.value) return;
   const result = await ElMessageBox.prompt("请输入文件夹名称", "新建文件夹", {
@@ -284,7 +300,7 @@ async function handleCreateFolder() {
   await loadFolders();
 }
 
-async function handleRenameFolder() {
+async function handleRenameFolder(): Promise<void> {
   const folder = contextMenu.value.folder;
   closeContextMenu();
   if (!folder || folder.id === "root") return;
@@ -300,7 +316,7 @@ async function handleRenameFolder() {
   await loadFolders();
 }
 
-async function handleDeleteFolder() {
+async function handleDeleteFolder(): Promise<void> {
   const folder = contextMenu.value.folder;
   closeContextMenu();
   if (!folder || folder.id === "root") return;
@@ -312,7 +328,7 @@ async function handleDeleteFolder() {
   await loadAssets();
 }
 
-async function handleRenameAsset() {
+async function handleRenameAsset(): Promise<void> {
   const asset = contextMenu.value.asset;
   closeContextMenu();
   if (!asset) return;
@@ -326,7 +342,7 @@ async function handleRenameAsset() {
   await loadAssets();
 }
 
-async function handleDeleteAsset() {
+async function handleDeleteAsset(): Promise<void> {
   const asset = contextMenu.value.asset;
   closeContextMenu();
   if (!asset) return;
@@ -337,19 +353,19 @@ async function handleDeleteAsset() {
   await loadAssets();
 }
 
-function handleCopyAsset() {
-  clipboardAsset.value = contextMenu.value.asset;
+function handleCopyAsset(): void {
+  clipboardAsset.value = contextMenu.value.asset ?? null;
   clipboardMode.value = "copy";
   closeContextMenu();
 }
 
-function handleCutAsset() {
-  clipboardAsset.value = contextMenu.value.asset;
+function handleCutAsset(): void {
+  clipboardAsset.value = contextMenu.value.asset ?? null;
   clipboardMode.value = "cut";
   closeContextMenu();
 }
 
-async function handlePasteAsset() {
+async function handlePasteAsset(): Promise<void> {
   const targetFolderId = contextMenu.value.folder?.id || selectedFolderId.value;
   if (!clipboardAsset.value || !projectId.value) return;
   const folderId = targetFolderId === "root" ? null : targetFolderId;
@@ -368,18 +384,18 @@ async function handlePasteAsset() {
   await loadAssets();
 }
 
-function handleMoveAsset() {
+function handleMoveAsset(): void {
   moveTargetFolderId.value = selectedFolderId.value;
-  moveAssetTarget.value = contextMenu.value.asset;
+  moveAssetTarget.value = contextMenu.value.asset ?? null;
   moveDialogVisible.value = true;
   closeContextMenu();
 }
 
-function handleMoveFolderSelect(data) {
-  moveTargetFolderId.value = data?.id;
+function handleMoveFolderSelect(data: ResourceFolderNode | null | undefined): void {
+  moveTargetFolderId.value = data?.id ?? null;
 }
 
-async function confirmMove() {
+async function confirmMove(): Promise<void> {
   const asset = moveAssetTarget.value || clipboardAsset.value;
   if (!asset) return;
   const folderId = moveTargetFolderId.value === "root" ? null : moveTargetFolderId.value;
@@ -389,30 +405,31 @@ async function confirmMove() {
   await loadAssets();
 }
 
-function openPreview(asset) {
-  previewAsset.value = asset;
+function openPreview(asset: ResourceAssetView | null | undefined): void {
+  previewAsset.value = asset ?? null;
   previewVisible.value = true;
 }
 
-function triggerFileSelect() {
+function triggerFileSelect(): void {
   fileInputRef.value?.click?.();
 }
 
-async function handleFileInputChange(event) {
-  const files = Array.from(event.target.files || []);
-  event.target.value = "";
+async function handleFileInputChange(event: Event): Promise<void> {
+  const target = event.target as HTMLInputElement | null;
+  const files = Array.from(target?.files || []);
+  if (target) target.value = "";
   if (!files.length) return;
   await uploadFiles(files, selectedFolderId.value === "root" ? null : selectedFolderId.value);
 }
 
-async function handleUploadDrop(event) {
+async function handleUploadDrop(event: DragEvent): Promise<void> {
   const files = Array.from(event.dataTransfer?.files || []);
   if (!files.length) return;
   await uploadFiles(files, selectedFolderId.value === "root" ? null : selectedFolderId.value);
 }
 
-function handleDropToFolder(folder) {
-  return async (event) => {
+function handleDropToFolder(folder: ResourceFolderNode): (event: DragEvent) => Promise<void> {
+  return async (event: DragEvent): Promise<void> => {
     const files = Array.from(event.dataTransfer?.files || []);
     if (files.length) {
       await uploadFiles(files, folder.id === "root" ? null : folder.id);
@@ -428,7 +445,7 @@ function handleDropToFolder(folder) {
   };
 }
 
-function handleAssetDragStart(asset, event) {
+function handleAssetDragStart(asset: ResourceAssetView | null | undefined, event: DragEvent): void {
   if (!asset) return;
   const dataTransfer = event?.dataTransfer;
   if (dataTransfer) {
@@ -436,7 +453,7 @@ function handleAssetDragStart(asset, event) {
   }
 }
 
-async function uploadFiles(files, folderId) {
+async function uploadFiles(files: File[], folderId: string | null): Promise<void> {
   if (!projectId.value || !files.length) return;
   const duplicated = files.some((file) =>
     normalizedAssets.value.some(
@@ -452,32 +469,33 @@ async function uploadFiles(files, folderId) {
     }).catch(() => null);
     conflictStrategy = result ? "replace" : "rename";
   }
-  await assetApi.uploadAssets(projectId.value, files, folderId, {
+  await assetApi.uploadAssets(projectId.value, files, folderId ?? undefined, {
     conflictStrategy,
   });
-  ElMessage.success("上传成功");
+  showSuccessMessage("上传成功");
   await loadAssets();
 }
 
-async function loadFolders() {
+async function loadFolders(): Promise<void> {
   if (!projectId.value) return;
   const response = await assetApi.getFolders(projectId.value);
-  const data = unwrapApiData(response);
+  const data = unwrapApiData<{ folders?: AssetFolder[] }>(response);
   const rawFolders = data?.folders;
   folders.value = Array.isArray(rawFolders) ? rawFolders : [];
 }
 
-async function loadAssets() {
+async function loadAssets(): Promise<void> {
   if (!projectId.value) return;
   const response = await assetApi.getAssets(projectId.value);
-  const data = unwrapApiData(response);
+  const data = unwrapApiData<{ assets?: AssetItem[] }>(response);
   const rawAssets = data?.assets;
   assets.value = Array.isArray(rawAssets) ? rawAssets : [];
 }
 
-function handleGlobalClick(event) {
+function handleGlobalClick(event: MouseEvent): void {
   const menu = document.querySelector(".context-menu");
-  if (menu && !menu.contains(event.target)) {
+  const target = event.target;
+  if (menu && target instanceof Node && !menu.contains(target)) {
     closeContextMenu();
   }
 }
