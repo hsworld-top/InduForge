@@ -120,6 +120,7 @@ import { resolveLandingPageId } from "./editor/page-navigation-helpers";
 import {
   persistEntryConfigForStore,
   saveCurrentPageForStore,
+  saveEntryPatchForStore,
   savePageDraftForStore,
 } from "./editor/page-persist-actions";
 import { updatePageSchemaForStore } from "./editor/page-schema-remote-actions";
@@ -594,6 +595,21 @@ export const useEditorStore = defineStore("editor", () => {
       doc,
       entryConfig,
       projectApi,
+    });
+  };
+
+  /**
+   * 直接保存入口配置补丁（绕过命令栈限制）。
+   * @param {EditorEntryConfigPatch} patch - 入口配置补丁
+   * @returns {Promise<void>}
+   */
+  const saveEntryPatch = async (patch: EditorEntryConfigPatch) => {
+    await saveEntryPatchForStore({
+      projectId,
+      doc,
+      entryConfig,
+      projectApi,
+      patch,
     });
   };
 
@@ -2246,6 +2262,7 @@ export const useEditorStore = defineStore("editor", () => {
     renamePage,
     updateEntry,
     persistEntry,
+    saveEntryPatch,
     saveCurrentPage,
     savePageDraft,
     saveCurrentPageDraft,

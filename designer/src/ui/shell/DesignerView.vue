@@ -64,7 +64,7 @@ const AdvancedPanel = defineAsyncComponent(
 const PropertyPanel = defineAsyncComponent(
   () => import("@/ui/editors/page/panels/right/PropertyPanel.vue"),
 );
-const PageTree = defineAsyncComponent(() => import("@/ui/shared/panels/PageTree.vue"));
+const PageTree = defineAsyncComponent(() => import("@/ui/shared/panels/page-tree/PageTree.vue"));
 const ScriptVarsPanel = defineAsyncComponent(
   () => import("@/ui/shared/panels/ScriptVarsPanel.vue"),
 );

@@ -326,11 +326,19 @@
     color: var(--designer-text-regular);
   }
 
-  .dock-panel__body :where(p, span, label, .el-form-item__label, .el-input__inner, .el-textarea__inner, .el-button, .el-radio__label, .el-checkbox__label, .el-select__placeholder, .el-tabs__item) {
+  .dock-panel__body :where(
+      .el-form-item__label,
+      .el-input__inner,
+      .el-textarea__inner,
+      .el-radio__label,
+      .el-checkbox__label,
+      .el-select__placeholder,
+      .el-tabs__item
+    ) {
     font-size: var(--designer-panel-font);
   }
 
-  .dock-panel__body :where(svg, .el-icon) {
+  .dock-panel__body :where(.el-icon) {
     width: var(--designer-panel-icon);
     height: var(--designer-panel-icon);
   }

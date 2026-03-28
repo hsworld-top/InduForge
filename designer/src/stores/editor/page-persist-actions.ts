@@ -6,6 +6,7 @@ import type { Ref, ShallowRef } from "vue";
 import type { EditorPageDraftsMap } from "../editor-store.contracts";
 import type { DocumentModel } from "@/editor-core/document/DocumentModel.ts";
 import type { Serializer } from "@/editor-core/document/Serializer.ts";
+import { applyEntryPatchIfPresent } from "./entry-config-helpers";
 import { mergePageVariablesIntoPayload } from "./page-load-save-actions";
 
 export interface EntryPersistProjectApi {
@@ -21,6 +22,10 @@ export interface PersistEntryConfigContext {
   doc: ShallowRef<DocumentModel | null>;
   entryConfig: Ref<Record<string, unknown>>;
   projectApi: EntryPersistProjectApi;
+}
+
+export interface SaveEntryPatchContext extends PersistEntryConfigContext {
+  patch: Record<string, unknown>;
 }
 
 export interface SaveCurrentPageContext {
@@ -45,6 +50,29 @@ export async function persistEntryConfigForStore(ctx: PersistEntryConfigContext)
   const payload = raw && typeof raw === "object" ? ({ ...raw } as Record<string, unknown>) : {};
   await ctx.projectApi.updateEntryConfig(pid, payload);
   ctx.entryConfig.value = { ...payload };
+  applyEntryPatchIfPresent(ctx.doc.value, payload);
+}
+
+/**
+ * 直接保存入口配置补丁，不依赖编辑器命令栈是否可用。
+ * @param {SaveEntryPatchContext} ctx - 保存上下文
+ * @returns {Promise<void>}
+ */
+export async function saveEntryPatchForStore(ctx: SaveEntryPatchContext): Promise<void> {
+  const pid = ctx.projectId.value;
+  if (!pid) {
+    throw new Error("缺少工程信息");
+  }
+
+  const current =
+    ctx.doc.value?.entry && typeof ctx.doc.value.entry === "object"
+      ? ({ ...ctx.doc.value.entry } as Record<string, unknown>)
+      : ({ ...(ctx.entryConfig.value || {}) } as Record<string, unknown>);
+  const payload = { ...current, ...(ctx.patch || {}) };
+
+  await ctx.projectApi.updateEntryConfig(pid, payload);
+  ctx.entryConfig.value = { ...payload };
+  applyEntryPatchIfPresent(ctx.doc.value, payload);
 }
 
 export async function saveCurrentPageForStore(ctx: SaveCurrentPageContext): Promise<void> {

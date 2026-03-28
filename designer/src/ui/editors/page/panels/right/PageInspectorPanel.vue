@@ -505,44 +505,47 @@ async function handleNameUpdate(): Promise<void> {
  * 切换页面类型并更新入口配置
  * @param {string} type - 页面类型
  */
-function handlePageTypeChange(type: PageType): void {
+async function handlePageTypeChange(type: PageType): Promise<void> {
   if (!currentPage.value || !doc.value) return;
 
   const page = currentPage.value;
   if (!page) return;
   const pageId = page.id;
   let path = form.path;
+  try {
+    if (type === "login") {
+      path = "/login";
+      await editorStore.saveEntryPatch({
+        loginPageId: pageId,
+        logoutPageId: null,
+      } as unknown as Partial<EntryConfig>);
+    } else if (type === "logout") {
+      path = "/logout";
+      await editorStore.saveEntryPatch({
+        logoutPageId: pageId,
+        loginPageId: null,
+      } as unknown as Partial<EntryConfig>);
+    } else {
+      // 普通业务页，清理入口配置
+      const entry = (doc.value.entry || {}) as EntryConfigLike;
+      if (entry.loginPageId === pageId) {
+        await editorStore.saveEntryPatch({ loginPageId: null } as unknown as Partial<EntryConfig>);
+      }
+      if (entry.logoutPageId === pageId) {
+        await editorStore.saveEntryPatch({
+          logoutPageId: null,
+        } as unknown as Partial<EntryConfig>);
+      }
+      path = buildBusinessPagePath(form.name, (page as PageRecordLike).parentId || null);
+    }
 
-  if (type === "login") {
-    path = "/login";
-    editorStore.updateEntry({
-      loginPageId: pageId,
-      logoutPageId: null,
-    } as unknown as Partial<EntryConfig>);
-    void editorStore.persistEntry();
-  } else if (type === "logout") {
-    path = "/logout";
-    editorStore.updateEntry({
-      logoutPageId: pageId,
-      loginPageId: null,
-    } as unknown as Partial<EntryConfig>);
-    void editorStore.persistEntry();
-  } else {
-    // 普通业务页，清理入口配置
-    const entry = (doc.value.entry || {}) as EntryConfigLike;
-    if (entry.loginPageId === pageId) {
-      editorStore.updateEntry({ loginPageId: null } as unknown as Partial<EntryConfig>);
-      void editorStore.persistEntry();
-    }
-    if (entry.logoutPageId === pageId) {
-      editorStore.updateEntry({ logoutPageId: null } as unknown as Partial<EntryConfig>);
-      void editorStore.persistEntry();
-    }
-    path = buildBusinessPagePath(form.name, (page as PageRecordLike).parentId || null);
+    form.path = path;
+    editorStore.updateCurrentPage({ path });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "更新页面入口失败";
+    showErrorMessage(message);
+    syncForm(page);
   }
-
-  form.path = path;
-  editorStore.updateCurrentPage({ path });
 }
 
 /**

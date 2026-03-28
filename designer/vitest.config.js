@@ -23,6 +23,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "~icons": fileURLToPath(new URL("./src/test-stubs/icons", import.meta.url)),
     },
   },
 });
