@@ -36,6 +36,11 @@ const DesignPage = sequelize.define('DesignPage', {
     allowNull: false,
     comment: '页面名称',
   },
+  path: {
+    type: DataTypes.STRING(200),
+    allowNull: true,
+    comment: '路由路径',
+  },
   type: {
     type: DataTypes.ENUM('page', 'folder', 'dialog'),
     defaultValue: 'page',

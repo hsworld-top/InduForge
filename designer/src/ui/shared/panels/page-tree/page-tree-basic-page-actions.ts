@@ -29,6 +29,7 @@ interface EntryConfigLike {
 }
 
 interface PageLike {
+  id?: string | null;
   path?: string | null;
 }
 
@@ -39,6 +40,7 @@ interface EditorStoreLike {
     name: string;
     type: "page";
     parentId: null;
+    path?: string;
     schemaContent: unknown;
   }) => Promise<CreatePageResultLike | null | undefined>;
   saveEntryPatch: (patch: Record<string, unknown>) => Promise<void>;
@@ -116,11 +118,13 @@ async function createHomeBasicPage(ctx: CreateBasicPageActionContext): Promise<v
 async function createFixedEntryPage(ctx: CreateBasicPageActionContext): Promise<void> {
   const meta = ctx.getBasicPageMeta(ctx.basicType);
   const entryKey = ctx.basicType === "login" ? "loginPageId" : "logoutPageId";
+  const entryPageId = ctx.entryConfig.value?.[entryKey];
+  const hasBoundEntryPage =
+    typeof entryPageId === "string" &&
+    ctx.pages.value.some((page) => page.id === entryPageId);
+  const hasSamePathPage = ctx.pages.value.some((page) => page.path === meta.path);
 
-  if (
-    ctx.entryConfig.value?.[entryKey] ||
-    ctx.pages.value.some((page) => page.path === meta.path)
-  ) {
+  if (hasBoundEntryPage || hasSamePathPage) {
     ctx.showWarning(`${meta.label}已存在`);
     return;
   }
@@ -134,6 +138,7 @@ async function createFixedEntryPage(ctx: CreateBasicPageActionContext): Promise<
       name: meta.label,
       type: "page",
       parentId: null,
+      path: meta.path,
       schemaContent,
     });
     const pageId = result?.id || result?.page?.id;

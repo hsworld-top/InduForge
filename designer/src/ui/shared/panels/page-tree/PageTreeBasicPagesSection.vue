@@ -24,10 +24,14 @@ const boundBasicPageCount = computed<number>(
   () => props.basicSlots.filter((basicSlot) => basicSlot.page).length,
 );
 
-function createRowActionHandler(basicSlot: BasicSlotLike) {
-  return (command: string) => {
-    emit("rowAction", command, basicSlot);
-  };
+/**
+ * 处理基础页面行尾菜单命令并向父组件透传。
+ * @param {string} command - 下拉菜单命令
+ * @param {BasicSlotLike} basicSlot - 当前基础页面槽位
+ * @returns {void}
+ */
+function handleRowActionCommand(command: string, basicSlot: BasicSlotLike): void {
+  emit("rowAction", command, basicSlot);
 }
 
 /**
@@ -94,7 +98,7 @@ function getCreateActionLabel(basicSlot: BasicSlotLike): string {
           <el-dropdown
             trigger="click"
             placement="bottom-end"
-            @command="createRowActionHandler(basicSlot)"
+            @command="(command: string) => handleRowActionCommand(command, basicSlot)"
           >
             <el-button
               class="node-action-btn"

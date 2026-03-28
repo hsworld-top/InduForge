@@ -67,4 +67,31 @@ describe("pageTreeBasicPagesSection", () => {
     expect(wrapper.emitted("slotClick")).toHaveLength(1);
     expect(wrapper.emitted("rowAction")).toBeUndefined();
   });
+
+  it("下拉菜单 command 事件会正确透传 rowAction", async () => {
+    const basicSlot = { type: "logout", label: "登出页", page: null };
+    const wrapper = mount(PageTreeBasicPagesSection, {
+      props: {
+        basicSlots: [basicSlot],
+        isPageActive: () => false,
+        creatingBasicType: null,
+      },
+      global: {
+        stubs: {
+          ElDropdown: ElDropdownStub,
+          ElDropdownMenu: ElDropdownMenuStub,
+          ElDropdownItem: ElDropdownItemStub,
+          ElButton: ElButtonStub,
+          IconEpDocument: true,
+          IconEpMoreFilled: true,
+        },
+      },
+    });
+
+    const dropdown = wrapper.findComponent(ElDropdownStub as any);
+    dropdown.vm.$emit("command", "create");
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted("rowAction")).toEqual([["create", basicSlot]]);
+  });
 });

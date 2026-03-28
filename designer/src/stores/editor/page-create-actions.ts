@@ -10,6 +10,7 @@ export interface CreatePagePayload {
   name: string;
   type: string;
   parentId?: string | null;
+  path?: string;
   schemaContent?: unknown;
 }
 

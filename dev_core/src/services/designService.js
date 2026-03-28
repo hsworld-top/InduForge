@@ -11,6 +11,7 @@ const ErrorCodes = require("../constants/errorCodes");
 const { literal,QueryTypes } = require("sequelize");
 
 const LOCK_TIMEOUT_MS = 30 * 60 * 1000;
+const ENTRY_PAGE_KEYS = ["homePageId", "loginPageId", "logoutPageId"];
 
 const DEFAULT_GLOBAL_SCRIPTS = {
   system: {
@@ -84,11 +85,98 @@ const toPathSegment = (value) => {
   const sanitized = normalized.replace(/[/?#\\%]+/g, "-");
   return sanitized || "page";
 };
+
+/**
+ * 从页面 Schema 中提取路径。
+ * @param {Object|null|undefined} schemaContent - 页面 Schema
+ * @returns {string|null|undefined}
+ */
+const resolvePathFromSchemaContent = (schemaContent) => {
+  if (!schemaContent || typeof schemaContent !== "object") {
+    return undefined;
+  }
+
+  const schemaPath = schemaContent?.page?.path;
+  if (typeof schemaPath !== "string") {
+    return undefined;
+  }
+
+  const normalizedPath = schemaPath.trim();
+  return normalizedPath || null;
+};
+
+/**
+ * 统一解析需持久化的页面路径。
+ * @param {string|null|undefined} explicitPath - 显式传入路径
+ * @param {Object|null|undefined} schemaContent - 页面 Schema
+ * @param {string} type - 页面类型
+ * @returns {string|null}
+ */
+const resolvePersistedPagePath = (explicitPath, schemaContent, type = "page") => {
+  if (type !== "page" && type !== "dialog") {
+    return null;
+  }
+
+  if (typeof explicitPath === "string") {
+    const normalizedPath = explicitPath.trim();
+    return normalizedPath || null;
+  }
+
+  return resolvePathFromSchemaContent(schemaContent) ?? null;
+};
 /**
  * 设计服务类
  * 提供页面管理的业务逻辑
  */
 class DesignService {
+  /**
+   * 清理入口配置中指向已删除页面的绑定，避免残留脏引用。
+   * @param {string} projectId - 项目ID
+   * @param {string[]} removedPageIds - 已删除页面ID列表
+   * @param {import("sequelize").Transaction} [transaction] - 可选事务
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _cleanupProjectEntryConfig(projectId, removedPageIds, transaction) {
+    const normalizedRemovedIds = (Array.isArray(removedPageIds) ? removedPageIds : [])
+      .filter((id) => typeof id === "string" && id.trim())
+      .map((id) => id.trim());
+
+    if (normalizedRemovedIds.length === 0) {
+      return;
+    }
+
+    const removedIdSet = new Set(normalizedRemovedIds);
+    const project = await Project.findByPk(projectId, transaction ? { transaction } : undefined);
+    if (!project) {
+      return;
+    }
+
+    const currentEntryConfig =
+      project.entryConfig && typeof project.entryConfig === "object"
+        ? project.entryConfig
+        : {};
+    const nextEntryConfig = { ...currentEntryConfig };
+    let changed = false;
+
+    ENTRY_PAGE_KEYS.forEach((entryKey) => {
+      const boundPageId = nextEntryConfig[entryKey];
+      if (typeof boundPageId === "string" && removedIdSet.has(boundPageId)) {
+        nextEntryConfig[entryKey] = null;
+        changed = true;
+      }
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    await project.update(
+      { entryConfig: nextEntryConfig },
+      transaction ? { transaction } : undefined
+    );
+  }
+
   /**
    * 获取工程级别设置（全局变量/脚本）
    * @param {string} projectId - 项目ID
@@ -204,6 +292,7 @@ class DesignService {
       attributes: [
         "id",
         "name",
+        "path",
         "type",
         "parentId",
         "sortOrder",
@@ -227,7 +316,7 @@ class DesignService {
     const pageList = pages.map((page) => {
       const payload = page.get({ plain: true });
       const { schemaContent, ...rest } = payload;
-      const path = schemaContent?.page?.path || null;
+      const path = rest.path || resolvePathFromSchemaContent(schemaContent) || null;
       return { ...rest, path };
     });
 
@@ -286,12 +375,12 @@ class DesignService {
    * 创建新页面
    * Requirements: 7.3
    * @param {string} projectId - 项目ID
-   * @param {Object} data - 页面数据 { name, type, parentId, schemaContent }
+   * @param {Object} data - 页面数据 { name, type, parentId, path, schemaContent }
    * @param {string} userId - 创建者用户ID
    * @returns {Promise<Object>} 创建的页面数据
    */
   async createPage(projectId, data, userId) {
-    const { name, type = "page", parentId = null, schemaContent = null } = data;
+    const { name, type = "page", parentId = null, path, schemaContent = null } = data;
 
     // 验证项目是否存在
     const project = await Project.findByPk(projectId);
@@ -328,6 +417,7 @@ class DesignService {
       where: { projectId, parentId: parentId || null },
     });
     const sortOrder = (maxSortOrder || 0) + 1;
+    const persistedPath = resolvePersistedPagePath(path, schemaContent, type);
 
     // 如果提供了 schemaContent，验证其格式
     // 注意：新版 schema 格式与旧版不同，暂时跳过验证
@@ -347,6 +437,7 @@ class DesignService {
       projectId,
       parentId,
       name,
+      path: persistedPath,
       type,
       schemaContent: type === "folder" ? null : schemaContent,
       sortOrder,
@@ -359,6 +450,7 @@ class DesignService {
       projectId: page.projectId,
       parentId: page.parentId,
       name: page.name,
+      path: page.path,
       type: page.type,
       sortOrder: page.sortOrder,
       createdAt: page.createdAt,
@@ -401,10 +493,17 @@ class DesignService {
     // }
 
     // 更新页面
-    await page.update({
+    const nextPath = resolvePathFromSchemaContent(schema);
+    const updatePayload = {
       schemaContent: schema,
       updatedBy: userId,
-    });
+    };
+
+    if (nextPath !== undefined) {
+      updatePayload.path = nextPath;
+    }
+
+    await page.update(updatePayload);
   }
 
   /**
@@ -425,7 +524,10 @@ class DesignService {
     }
 
     if (page.type !== "folder") {
-      await page.destroy();
+      await sequelize.transaction(async (transaction) => {
+        await page.destroy({ transaction });
+        await this._cleanupProjectEntryConfig(page.projectId, [page.id], transaction);
+      });
       return;
     }
 
@@ -476,7 +578,10 @@ class DesignService {
           childCount: descendantPages.length + descendantFolders.length,
         });
       }
-      await page.destroy();
+      await sequelize.transaction(async (transaction) => {
+        await page.destroy({ transaction });
+        await this._cleanupProjectEntryConfig(page.projectId, [page.id], transaction);
+      });
       return;
     }
 
@@ -496,6 +601,7 @@ class DesignService {
           await childPage.update(
             {
               parentId: null,
+              path: `/${toPathSegment(childPage.name)}`,
               schemaContent,
             },
             { transaction }
@@ -506,6 +612,11 @@ class DesignService {
           await folder.destroy({ transaction });
         }
         await page.destroy({ transaction });
+        await this._cleanupProjectEntryConfig(
+          page.projectId,
+          [page.id, ...descendantFolders.map((folder) => folder.id)],
+          transaction
+        );
         return;
       }
 
@@ -516,6 +627,11 @@ class DesignService {
         await folder.destroy({ transaction });
       }
       await page.destroy({ transaction });
+      await this._cleanupProjectEntryConfig(
+        page.projectId,
+        [page.id, ...descendantPages.map((childPage) => childPage.id), ...descendantFolders.map((folder) => folder.id)],
+        transaction
+      );
     });
   }
 
@@ -541,6 +657,10 @@ class DesignService {
       name,
       updatedBy: userId,
     };
+
+    if (path !== undefined) {
+      updatePayload.path = typeof path === "string" ? path.trim() || null : path;
+    }
 
     if (page.schemaContent && typeof page.schemaContent === "object") {
       const updatedSchema = {
@@ -651,6 +771,10 @@ class DesignService {
           path,
         },
       };
+    }
+
+    if (path !== undefined) {
+      updateData.path = typeof path === "string" ? path.trim() || null : path;
     }
 
     await page.update(updateData);

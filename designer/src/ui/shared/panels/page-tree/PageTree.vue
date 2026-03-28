@@ -1152,14 +1152,16 @@ async function handleCreateConfirm() {
     }
 
     // 普通页面：一次性创建带 schema 的页面
+    const nextPath = buildBusinessPagePath(name, parentId);
     const schemaContent = editorStore.buildNewPageSchema({
       name,
-      path: buildBusinessPagePath(name, parentId),
+      path: nextPath,
     });
     const result = await editorStore.createPage({
       name,
       type: "page",
       parentId,
+      path: nextPath,
       schemaContent,
     });
     const pageId = result?.id;

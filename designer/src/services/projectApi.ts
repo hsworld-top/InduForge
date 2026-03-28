@@ -9,6 +9,7 @@ export interface CreatePageBody {
   name: string;
   type: string;
   parentId?: string | null;
+  path?: string;
   schemaContent?: unknown;
 }
 
