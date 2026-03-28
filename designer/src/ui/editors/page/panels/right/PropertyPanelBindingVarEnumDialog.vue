@@ -9,11 +9,7 @@ interface BindingEnumTreeNodeLike {
   label?: string;
 }
 
-type BindingEnumRowClassName =
-  | string
-  | string[]
-  | Record<string, boolean>
-  | undefined;
+type BindingEnumRowClassName = string | string[] | Record<string, boolean> | undefined;
 
 defineProps<{
   bindingProjectGroupTree?: BindingEnumTreeNodeLike[];

@@ -4,6 +4,8 @@
 
 import type { PreviewComponentRefInfo } from "./preview-runtime.types";
 
+const COMPONENT_ALIAS_SUFFIX_RE = /\d+$/;
+
 export interface PendingComponentCall {
   method: string;
   args: unknown[];
@@ -35,7 +37,7 @@ export function buildDatapointCacheKey(projectId: unknown, path: unknown): strin
  * @returns {string}
  */
 export function getComponentAlias(name: string): string {
-  return String(name).replace(/\d+$/, "");
+  return String(name).replace(COMPONENT_ALIAS_SUFFIX_RE, "");
 }
 
 /**

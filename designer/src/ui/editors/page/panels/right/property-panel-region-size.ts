@@ -42,6 +42,7 @@ export const regionSizeDefaults: Record<string, string> = {
   asideWidth: "200px",
   footerHeight: "60px",
 };
+const SIZE_VALUE_RE = /^([0-9.]+)(px|%)?$/;
 
 /**
  * 获取区域默认尺寸
@@ -62,7 +63,7 @@ export function parseSize(value: string | number | undefined): RegionSizeValue {
     return { value: "", unit: "auto" };
   }
   const str = String(value);
-  const match = str.match(/^([0-9.]+)(px|%)?$/);
+  const match = str.match(SIZE_VALUE_RE);
   if (match) {
     return { value: match[1] ?? "", unit: match[2] || "px" };
   }

@@ -26,6 +26,8 @@ const emit = defineEmits<{
   (event: "update:modelValue", value: SizeStyleModel): void;
 }>();
 
+const SIZE_VALUE_RE = /^([\d.]+)(px|%)?$/;
+
 /**
  * 解析尺寸值和单位
  * @param {string | number | undefined} value - 尺寸值
@@ -36,7 +38,7 @@ function parseSize(value: unknown): { value: string; unit: "auto" | "px" | "%" }
     return { value: "", unit: "auto" };
   }
   const str = String(value);
-  const match = str.match(/^([\d.]+)(px|%)?$/);
+  const match = str.match(SIZE_VALUE_RE);
   if (match) {
     return { value: match[1] ?? "", unit: (match[2] || "px") as "px" | "%" };
   }

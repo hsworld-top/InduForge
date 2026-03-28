@@ -69,7 +69,7 @@ function syncJsonDraft() {
   }
   try {
     jsonDraft.value = JSON.stringify(props.modelValue);
-  } catch (error) {
+  } catch {
     jsonDraft.value = String(props.modelValue);
   }
 }
@@ -89,7 +89,7 @@ function syncCodeDraft() {
   }
   try {
     codeDraft.value = JSON.stringify(props.modelValue, null, 2);
-  } catch (error) {
+  } catch {
     codeDraft.value = String(props.modelValue);
   }
 }
@@ -101,14 +101,6 @@ watch([() => props.modelValue, () => props.prop?.type], syncJsonDraft, {
 watch([() => props.modelValue, () => props.prop?.editor], syncCodeDraft, {
   immediate: true,
 });
-
-/**
- * 处理值变更
- * @param {any} value - 新值
- */
-function handleChange(value: unknown) {
-  emit("update:modelValue", value);
-}
 
 /**
  * 处理代码输入
@@ -138,7 +130,7 @@ function commitJsonDraft() {
   }
   try {
     emit("update:modelValue", JSON.parse(trimmed));
-  } catch (error) {
+  } catch {
     ElMessage.warning("请输入合法的 JSON" as never);
   }
 }

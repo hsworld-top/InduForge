@@ -145,6 +145,18 @@ const ElTable: any = _ElTable;
 const ElTabs: any = _ElTabs;
 const ElTimeline: any = _ElTimeline;
 const ElTransfer: any = _ElTransfer;
+const DSL_EL_PREFIX_RE = /^El/;
+const DSL_TRAILING_COMMA_RE = /,$/;
+const DETAIL_VAR_BINDING_RE = /:\s*(\$vars\.\w+)/g;
+const DETAIL_GLOBAL_BINDING_RE = /:\s*(\$global\.\w+)/g;
+const DETAIL_VAR_STRING_BINDING_RE = /:\s*["'](\$vars\.\w+)["']/g;
+const DETAIL_GLOBAL_STRING_BINDING_RE = /:\s*["'](\$global\.\w+)["']/g;
+const TEXT_NUMBER_PREFIX_RE = /^(-?\d+(\.\d+)?)/;
+const DOUBLE_QUOTE_RE = /"/g;
+const SNIPPET_OPTION_PLACEHOLDER = "$" + "{1:option}";
+const SNIPPET_BOOL_PLACEHOLDER = "$" + "{2:false}";
+const SNIPPET_METHOD_PLACEHOLDER = "$" + '{1:"setOption"}';
+const SNIPPET_OPTION_ARG_PLACEHOLDER = "$" + "{2:option}";
 
 const editorStore = useEditorStore() as any;
 const {
@@ -379,6 +391,7 @@ function runDetailConfigLocal(node: AnyRecord, content: string) {
   const safeContent =
     normalizedType === "Menu" ? buildMenuDslContent(content, methodName) : content;
   let lastMenuConfig: AnyRecord | null = null;
+  // eslint-disable-next-line no-new-func
   const runner = new Function(
     `"use strict";\nreturn (function() {\n${safeContent}\n}).call(this);`,
   );
@@ -1846,7 +1859,7 @@ function shouldShowBindButton(propDef: AnyRecord) {
  */
 function getDslMethodName(type: string) {
   if (!type) return "component";
-  const normalized = type.replace(/^El/, "el");
+  const normalized = type.replace(DSL_EL_PREFIX_RE, "el");
   return normalized.charAt(0).toLowerCase() + normalized.slice(1);
 }
 
@@ -2122,7 +2135,7 @@ function normalizeDslPreset(type: string, preset: AnyRecord): AnyRecord {
   let labelValue = "";
   let typeValue = "";
 
-  const normalizeValue = (value: string) => value.replace(/,$/, "").trim();
+  const normalizeValue = (value: string) => value.replace(DSL_TRAILING_COMMA_RE, "").trim();
 
   entries.forEach((entry: string) => {
     const colonIndex = entry.indexOf(":");
@@ -2163,14 +2176,14 @@ function normalizeDslPreset(type: string, preset: AnyRecord): AnyRecord {
   });
 
   const toBlock = (items: AnyArray) =>
-    items.length ? items.map((item) => item.replace(/,$/, "")).join(",\n") : "";
+    items.length ? items.map((item) => item.replace(DSL_TRAILING_COMMA_RE, "")).join(",\n") : "";
 
   const styleLines = styleBody
     ? styleBody
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
-        .map((line) => `  ${line.replace(/,$/, "")}`)
+        .map((line) => `  ${line.replace(DSL_TRAILING_COMMA_RE, "")}`)
         .join(",\n")
     : "";
 
@@ -4908,7 +4921,7 @@ watch(
 );
 
 const pageVars = computed<AnyRecord>(() => {
-  docVersion.value;
+  void docVersion.value;
   const pageId = currentPageId.value;
   if (!pageId || !doc.value) return {};
   const vars = doc.value.vars?.pages?.[pageId];
@@ -4930,7 +4943,7 @@ function collectComponentNames(nodeId: string, nameSet: Set<string>) {
 }
 
 const pageComponentNames = computed<string[]>(() => {
-  docVersion.value;
+  void docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
   if (!rootId || !doc.value) return [];
   const nameSet = new Set<string>();
@@ -4994,7 +5007,7 @@ const bindingPageVariableRows = computed<AnyArray>(() => {
 });
 
 const bindingPageComponentTree = computed<AnyArray>(() => {
-  docVersion.value;
+  void docVersion.value;
   const rootId = currentPage.value?.rootNodeId;
   if (!rootId || !doc.value) return [];
   const buildNode = (nodeId: string): AnyRecord | null => {
@@ -5210,14 +5223,26 @@ const detailCompletions = computed<AnyArray>(() => {
     const chartMethodCompletions = [
       {
         label: "setOption",
-        insertText: "setOption(${1:option}, ${2:false})",
+        insertText: [
+          "setOption(",
+          SNIPPET_OPTION_PLACEHOLDER,
+          ", ",
+          SNIPPET_BOOL_PLACEHOLDER,
+          ")",
+        ].join(""),
         kind: "Method",
         detail: "图表方法",
         prefix: ".",
       },
       {
         label: "echarts",
-        insertText: 'echarts(${1:"setOption"}, ${2:option})',
+        insertText: [
+          "echarts(",
+          SNIPPET_METHOD_PLACEHOLDER,
+          ", ",
+          SNIPPET_OPTION_ARG_PLACEHOLDER,
+          ")",
+        ].join(""),
         kind: "Method",
         detail: "图表方法",
         prefix: ".",
@@ -5362,7 +5387,9 @@ function validateDetailConfig(content: string): { valid: boolean; message?: stri
   if (!text) return { valid: true };
   try {
     // 仅做语法检查，不执行
-    new Function(text);
+    // eslint-disable-next-line no-new-func
+    const validator = new Function(text);
+    void validator;
     return { valid: true };
   } catch (error: any) {
     return { valid: false, message: error?.message || "DSL 语法错误" };
@@ -5376,10 +5403,10 @@ function validateDetailConfig(content: string): { valid: boolean; message?: stri
  */
 function normalizeDetailConfigBindings(content: string): string {
   let text = String(content || "");
-  text = text.replace(/:\s*(\$vars\.\w+)/g, ': { $var: "$1" }');
-  text = text.replace(/:\s*(\$global\.\w+)/g, ': { $var: "$1" }');
-  text = text.replace(/:\s*["'](\$vars\.\w+)["']/g, ': { $var: "$1" }');
-  text = text.replace(/:\s*["'](\$global\.\w+)["']/g, ': { $var: "$1" }');
+  text = text.replace(DETAIL_VAR_BINDING_RE, ': { $var: "$1" }');
+  text = text.replace(DETAIL_GLOBAL_BINDING_RE, ': { $var: "$1" }');
+  text = text.replace(DETAIL_VAR_STRING_BINDING_RE, ': { $var: "$1" }');
+  text = text.replace(DETAIL_GLOBAL_STRING_BINDING_RE, ': { $var: "$1" }');
   return text;
 }
 
@@ -5407,7 +5434,7 @@ function resolveTextStyleValue(propName: string, value: any): any {
     if (typeof value === "number") return value;
     const text = String(value).trim();
     if (!text) return undefined;
-    const match = text.match(/^(-?\d+(\.\d+)?)/);
+    const match = text.match(TEXT_NUMBER_PREFIX_RE);
     if (match) {
       const num = Number.parseFloat(match[1] || "0");
       return Number.isFinite(num) ? num : value;
@@ -5788,7 +5815,7 @@ function handlePresetChange(id: string): void {
   const separator = current ? "\n\n" : "";
   configDraft.value = `${current}${separator}${remarkBlock}${nextContent}`;
   nextTick(() => {
-    configDraft.value = configDraft.value;
+    configDraft.value = String(configDraft.value ?? "");
   });
 }
 
@@ -5823,7 +5850,7 @@ function normalizeBindingReference(raw: string): string {
   if (trimmed.startsWith("$vars.") || trimmed.startsWith("$global.")) {
     return `{ $var: "${trimmed}" }`;
   }
-  return `{ $expr: "${trimmed.replace(/"/g, '\\"')}" }`;
+  return `{ $expr: "${trimmed.replace(DOUBLE_QUOTE_RE, '\\"')}" }`;
 }
 
 /**

@@ -26,8 +26,6 @@ type FixedSystemType = "home" | "login" | "logout";
 type CreateType = "page" | "folder" | FixedSystemType;
 type PageNodeLike = any;
 type SelectedNodeLike = any;
-type PageOrderMapLike = any;
-type DragStateLike = any;
 type DragTargetLike = any;
 type BasicPageMetaLike = any;
 type BasicSlotLike = any;
@@ -116,6 +114,8 @@ const BASIC_PAGE_META: Record<FixedSystemType, BasicPageMetaLike> = {
   login: { label: "登录页", path: "/login" },
   logout: { label: "登出页", path: "/logout" },
 };
+const PAGE_TREE_SEGMENT_SPACE_RE = /\s+/g;
+const PAGE_TREE_SEGMENT_RE = /[/?#\\]+/g;
 
 /**
  * 获取基础页面固定配置
@@ -174,7 +174,12 @@ function toggleFolder(folderId: string): void {
  * @param {Object} folder - 分组
  */
 function handleFolderClick(folder: PageNodeLike): void {
-  selectedNode.value = { id: folder?.id, type: "folder", label: folder?.name || "", parentId: null };
+  selectedNode.value = {
+    id: folder?.id,
+    type: "folder",
+    label: folder?.name || "",
+    parentId: null,
+  };
   toggleFolder(folder.id);
 }
 
@@ -186,7 +191,7 @@ function loadPageOrderMap(): void {
   try {
     const raw = localStorage.getItem(getProjectOrderStorageKey());
     pageOrderMap.value = raw ? JSON.parse(raw) || {} : {};
-  } catch (_error) {
+  } catch {
     pageOrderMap.value = {};
   }
 }
@@ -194,7 +199,7 @@ function loadPageOrderMap(): void {
 function persistPageOrderMap(): void {
   try {
     localStorage.setItem(getProjectOrderStorageKey(), JSON.stringify(pageOrderMap.value || {}));
-  } catch (_error) {
+  } catch {
     // ignore
   }
 }
@@ -203,7 +208,10 @@ function getContainerOrderKey(parentId: string | null = null): string {
   return parentId || ROOT_CONTAINER_KEY;
 }
 
-function updateContainerOrder(containerKey: string, orderedIds: Array<string | null | undefined>): void {
+function updateContainerOrder(
+  containerKey: string,
+  orderedIds: Array<string | null | undefined>,
+): void {
   const nextMap = { ...(pageOrderMap.value || {}) };
   nextMap[containerKey] = Array.from(new Set((orderedIds || []).filter(Boolean)));
   pageOrderMap.value = nextMap;
@@ -288,7 +296,7 @@ function isPageActive(pageId: string): boolean {
  */
 watchEffect(() => {
   const pageId = currentPageId.value;
-  const pageList = ((pages.value || []) as any[]);
+  const pageList = (pages.value || []) as any[];
 
   if (!pageId || !pageList.length) return;
 
@@ -311,10 +319,11 @@ watchEffect(() => {
  * 所有可见页面（包含登录页、登出页等系统页面）
  */
 const appPages = computed<PageNodeLike[]>(() =>
-  (((pages.value || []) as any[]) as PageNodeLike[]).filter((page: any) => page.type !== "dialog"),
+  ((pages.value || []) as any[] as PageNodeLike[]).filter((page: any) => page.type !== "dialog"),
 );
 const systemPages = computed<Record<string, any>>(() => ({
-  home: appPages.value.find((page: any) => page.id === (entryConfig.value as any)?.homePageId) || null,
+  home:
+    appPages.value.find((page: any) => page.id === (entryConfig.value as any)?.homePageId) || null,
   login:
     appPages.value.find((page: any) => page.id === (entryConfig.value as any)?.loginPageId) ||
     appPages.value.find((page: any) => getFixedSystemPath(page) === "/login") ||
@@ -655,7 +664,7 @@ watch(
 function initSwitchPromptState() {
   try {
     skipSwitchPrompt.value = localStorage.getItem(pageSwitchPromptKey) === "1";
-  } catch (error) {
+  } catch {
     skipSwitchPrompt.value = false;
   }
 }
@@ -673,7 +682,7 @@ function setSwitchPromptDisabled(disabled: any) {
     } else {
       localStorage.removeItem(pageSwitchPromptKey);
     }
-  } catch (error) {
+  } catch {
     // 存储异常时保持内存状态
   }
 }
@@ -748,7 +757,7 @@ async function handleNodeDoubleClick(node: SelectedNodeLike): Promise<void> {
     if (!result.ok) {
       showError(result.error?.message || "切换页面失败");
     }
-  } catch (_error) {
+  } catch {
     showError("切换页面失败");
   }
 }
@@ -790,7 +799,7 @@ async function confirmPageSwitch(targetName: string): Promise<boolean> {
       setSwitchPromptDisabled(true);
     }
     return true;
-  } catch (_error) {
+  } catch {
     return false;
   }
 }
@@ -1014,7 +1023,7 @@ function handleExportPage(pageId: string, label: string): void {
     link.click();
     URL.revokeObjectURL(url);
     showSuccess("已导出页面");
-  } catch (_error) {
+  } catch {
     showError("导出页面失败");
   }
 }
@@ -1073,7 +1082,7 @@ async function handleMove(pageId: string, parentId: string | null): Promise<void
       await editorStore.renamePage(pageId, getPageLabel(nextPage), nextPath);
     }
     showSuccess("移动成功");
-  } catch (_error) {
+  } catch {
     showError("移动失败");
   }
 }
@@ -1086,9 +1095,9 @@ async function handleMove(pageId: string, parentId: string | null): Promise<void
  */
 function isNameUnique(name: any, excludeId: any) {
   const lowerName = name.trim().toLowerCase();
-  return !(((pages.value || []) as any[]).some(
+  return !((pages.value || []) as any[]).some(
     (page: any) => page.id !== excludeId && (page.name || "").trim().toLowerCase() === lowerName,
-  ));
+  );
 }
 
 /**
@@ -1097,8 +1106,8 @@ function isNameUnique(name: any, excludeId: any) {
  * @returns {string}
  */
 function toPathSegment(value: any) {
-  const normalized = value.trim().replace(/\s+/g, "-");
-  const sanitized = normalized.replace(/[/?#\\]+/g, "-");
+  const normalized = value.trim().replace(PAGE_TREE_SEGMENT_SPACE_RE, "-");
+  const sanitized = normalized.replace(PAGE_TREE_SEGMENT_RE, "-");
   return sanitized || "page";
 }
 
@@ -1284,7 +1293,9 @@ function getFolderDescendantCount(folderId: any) {
   const stack = [folderId];
   while (stack.length) {
     const currentFolderId = stack.pop();
-    const children = ((pages.value || []) as any[]).filter((page: any) => page.parentId === currentFolderId);
+    const children = ((pages.value || []) as any[]).filter(
+      (page: any) => page.parentId === currentFolderId,
+    );
     count += children.length;
     children.filter((page) => page.type === "folder").forEach((folder) => stack.push(folder.id));
   }
@@ -1375,7 +1386,10 @@ async function handleDelete() {
  * 分组选项
  */
 const folderOptions = computed<any[]>(() =>
-  businessFolders.value.map((page: Record<string, any>) => ({ id: page.id, name: page.name || "" })),
+  businessFolders.value.map((page: Record<string, any>) => ({
+    id: page.id,
+    name: page.name || "",
+  })),
 );
 
 /**

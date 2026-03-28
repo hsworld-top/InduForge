@@ -20,7 +20,7 @@ const props = withDefaults(defineProps<{ modelValue?: PositionStyleModel }>(), {
 function parseValue(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const num = Number.parseInt(String(value), 10);
-  return isNaN(num) ? undefined : num;
+  return Number.isNaN(num) ? undefined : num;
 }
 
 function formatDisplayValue(value: unknown): string {

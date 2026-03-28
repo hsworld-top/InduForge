@@ -4,6 +4,10 @@
  */
 
 type LooseRecord = Record<string, unknown>;
+const MENU_DSL_MARKER_RE = /this\s*\.\s*menu\s*\(/;
+const MENU_DSL_SANITIZE_COMMA_RE = /[，﹐､]/g;
+const MENU_DSL_SANITIZE_SEMICOLON_RE = /[；﹔]/g;
+const MENU_DSL_SANITIZE_COLON_RE = /[：﹕]/g;
 
 /**
  * 规范化菜单项
@@ -36,8 +40,7 @@ export function normalizeMenuItems(items: unknown): LooseRecord[] {
 export function extractMenuDslConfig(content: string): LooseRecord | null {
   const text = String(content || "");
   if (!text.trim()) return null;
-  const marker = /this\s*\.\s*menu\s*\(/;
-  const match = marker.exec(text);
+  const match = MENU_DSL_MARKER_RE.exec(text);
   if (!match) return null;
   let index = match.index + match[0].length;
   while (index < text.length && text[index] !== "{") index += 1;
@@ -71,6 +74,7 @@ export function extractMenuDslConfig(content: string): LooseRecord | null {
       if (depth === 0) {
         const body = text.slice(start, index + 1);
         try {
+          // eslint-disable-next-line no-new-func
           return new Function(`return (${body});`)() as LooseRecord;
         } catch {
           return null;
@@ -91,6 +95,7 @@ export function captureMenuDslConfig(content: string): LooseRecord | null {
   if (!text.trim()) return null;
   let captured: LooseRecord | null = null;
   try {
+    // eslint-disable-next-line no-new-func
     const runner = new Function(
       "context",
       `"use strict";\nreturn (function() {\n${text}\n}).call(context);`,
@@ -115,9 +120,9 @@ export function captureMenuDslConfig(content: string): LooseRecord | null {
  */
 export function sanitizeDslContent(content: string): string {
   return String(content || "")
-    .replace(/[，﹐､]/g, ",")
-    .replace(/[；﹔]/g, ";")
-    .replace(/[：﹕]/g, ":");
+    .replace(MENU_DSL_SANITIZE_COMMA_RE, ",")
+    .replace(MENU_DSL_SANITIZE_SEMICOLON_RE, ";")
+    .replace(MENU_DSL_SANITIZE_COLON_RE, ":");
 }
 
 /**
@@ -129,7 +134,7 @@ export function sanitizeDslContent(content: string): string {
 export function buildMenuDslContent(content: string, methodName: string): string {
   const text = String(content || "").trim();
   if (!text) return "";
-  if (/this\s*\.\s*menu\s*\(/.test(text)) return text;
+  if (MENU_DSL_MARKER_RE.test(text)) return text;
   if (text.startsWith("{") && text.endsWith("}")) {
     return `this.${methodName}(${text});`;
   }
@@ -148,12 +153,14 @@ export function resolveMenuConfigFromContent(content: string): LooseRecord | nul
   if (direct) return direct;
   if (text.startsWith("{") && text.endsWith("}")) {
     try {
+      // eslint-disable-next-line no-new-func
       return new Function(`return (${text});`)() as LooseRecord;
     } catch {
       return null;
     }
   }
   try {
+    // eslint-disable-next-line no-new-func
     return new Function(`return ({${text}});`)() as LooseRecord;
   } catch {
     return null;

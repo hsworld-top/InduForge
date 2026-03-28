@@ -19,8 +19,8 @@ import type {
   PreviewScriptItem,
   ScriptSectionWithItems,
 } from "./preview-runtime.types";
+import type { DataService } from "@/data";
 import { io } from "socket.io-client";
-import { DataService } from "@/data";
 import { normalizeGlobalValue } from "@/editor-core/utils/variable-utils";
 import { datacenterApi } from "@/services";
 import { unwrapApiData } from "@/types/api";
@@ -31,13 +31,15 @@ import {
   requireDatapointsPagePayload,
   requireQueriesPayload,
 } from "@/utils/datapoint-payload";
-import { Storage } from "@/utils/storage";
 import { buildComponentStub } from "./preview-runtime-component-stub";
 import {
   applyPendingCalls,
   buildDatapointCacheKey,
   getComponentAlias,
 } from "./preview-runtime-helpers";
+
+const API_BASE_TRAILING_SLASH_RE = /\/$/;
+const PARAM_NAME_RE = /^[A-Z_$][\w$]*$/i;
 
 interface DatapointMetaCacheEntry {
   id?: string;
@@ -147,16 +149,6 @@ function getApiBase() {
     return import.meta.env.VITE_API_URL;
   }
   return "http://localhost:9099";
-}
-
-function buildSocketQuery(projectId: string | null | undefined) {
-  const token = Storage.getToken();
-  const tenantId = Storage.getTenantId();
-  const query = new URLSearchParams();
-  if (projectId) query.set("projectId", String(projectId));
-  if (token) query.set("token", String(token));
-  if (tenantId) query.set("tenantId", String(tenantId));
-  return query;
 }
 
 async function resolveConnection(projectId: string | null | undefined, name: string) {
@@ -273,7 +265,7 @@ async function ensurePreviewMqttSocket(projectId: string | null | undefined) {
   if (queryParams && Object.keys(queryParams).length > 0) {
     socketOpts.query = queryParams;
   }
-  const socket = io(apiBase.replace(/\/$/, ""), socketOpts);
+  const socket = io(apiBase.replace(API_BASE_TRAILING_SLASH_RE, ""), socketOpts);
 
   previewMqttState.socket = socket;
   previewMqttState.projectId = projectId ?? null;
@@ -522,14 +514,14 @@ async function resolveMappedGlobalValue(
         );
         const value = getQueryExecuteData(unwrapApiData(result));
         return value ?? fallbackValue;
-      } catch (error) {
+      } catch {
         try {
           const fallbackResult = await executeQueryByPath(
             projectId,
             coerceDataCenterPath(source.path),
           );
           if (fallbackResult !== undefined) return fallbackResult;
-        } catch (fallbackError) {
+        } catch {
           // ignore
         }
         return fallbackValue;
@@ -565,7 +557,7 @@ async function resolveMappedGlobalValue(
         const payload = unwrapApiData(result);
         const picked = extractDatapointValue(payload, dpId);
         return picked ?? fallbackValue;
-      } catch (error) {
+      } catch {
         return fallbackValue;
       }
     }
@@ -595,7 +587,7 @@ async function resolveMappedGlobalValue(
     try {
       const result = await datacenterApi.executeQuery(query.id);
       return getQueryExecuteData(unwrapApiData(result)) ?? fallbackValue;
-    } catch (error) {
+    } catch {
       return fallbackValue;
     }
   }
@@ -603,71 +595,12 @@ async function resolveMappedGlobalValue(
   return fallbackValue;
 }
 
-async function ensurePreviewDataService(projectId: string | null | undefined) {
-  const apiBase = getApiBase();
-  const query = buildSocketQuery(projectId);
-  const wsUrl = query.toString() ? `${apiBase}?${query}` : apiBase;
-  if (previewDataServiceState.service && previewDataServiceState.projectId === projectId) {
-    if (!previewDataServiceState.connectPromise) {
-      previewDataServiceState.connectPromise =
-        previewDataServiceState.service.connect(wsUrl) || Promise.resolve();
-    }
-    await previewDataServiceState.connectPromise;
-    return previewDataServiceState.service;
-  }
-
-  if (previewDataServiceState.service) {
-    previewDataServiceState.service.destroy();
-  }
-  const service = new DataService({ baseUrl: apiBase });
-  previewDataServiceState.service = service;
-  previewDataServiceState.projectId = projectId ?? null;
-  previewDataServiceState.subscribed = new Set();
-  previewDataServiceState.pending = new Map();
-  previewDataServiceState.connectPromise = service.connect(wsUrl) || Promise.resolve();
-  await previewDataServiceState.connectPromise;
-  return service;
-}
-
-function subscribeDatapointPath(service: DataService, path: string) {
-  if (!service || !path) return;
-  if (previewDataServiceState.subscribed.has(path)) return;
-  service.subscribe(path, (payload: { value?: unknown }) => {
-    const pending = previewDataServiceState.pending.get(path);
-    if (pending?.resolve) {
-      pending.resolve(payload.value);
-      previewDataServiceState.pending.delete(path);
-    }
-  });
-  previewDataServiceState.subscribed.add(path);
-}
-
-async function getSubscriptionValue(
-  projectId: string | null | undefined,
-  path: string | null | undefined,
-) {
-  if (!path) return null;
-  const service = await ensurePreviewDataService(projectId);
-  subscribeDatapointPath(service, path);
-  const cached = service.getValue(path);
-  if (cached !== undefined) return cached;
-  const existing = previewDataServiceState.pending.get(path);
-  if (existing) return existing.promise;
-  let resolver: ((v: unknown) => void) | null = null;
-  const promise = new Promise((resolve) => {
-    resolver = resolve;
-    setTimeout(resolve, 2000, null);
-  });
-  previewDataServiceState.pending.set(path, { promise, resolve: resolver });
-  return promise;
-}
-
 function parseParamNames(value: unknown) {
   if (!value || typeof value !== "string") return [];
   return value
     .split(",")
     .map((name) => name.trim())
-    .filter((name) => /^[A-Z_$][\w$]*$/i.test(name));
+    .filter((name) => PARAM_NAME_RE.test(name));
 }
 
 export function initPreviewRuntime(
@@ -886,11 +819,12 @@ export function initPreviewRuntime(
         const localKeys = [...paramNames, ...Object.keys(scope)];
         const localValues = [...paramNames.map((_, index) => args[index]), ...Object.values(scope)];
         try {
+          // eslint-disable-next-line no-new-func
           const runner = new Function(
             ...localKeys,
             `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`,
           );
-          return await runner.call(undefined, ...localValues);
+          return await runner(...localValues);
         } catch (error) {
           console.error(`[Preview] customScripts.${item.name} error:`, error);
           return undefined;
@@ -948,12 +882,12 @@ export function initPreviewRuntime(
       },
     );
 
-  const runCode = async (
+  async function runCode(
     code: unknown,
     event: unknown,
     thisArg: unknown,
     pageId: string | null | undefined,
-  ) => {
+  ) {
     if (!code || !String(code).trim()) return;
     await preloadMappedGlobals();
     const components = getComponentsProxy(pageId || options?.pageId);
@@ -966,6 +900,7 @@ export function initPreviewRuntime(
       console,
     };
     try {
+      // eslint-disable-next-line no-new-func
       const runner = new Function(
         ...Object.keys(context),
         `"use strict";\nreturn (async function() {\n${String(code)}\n}).call(this);`,
@@ -974,9 +909,9 @@ export function initPreviewRuntime(
     } catch (error) {
       console.error("[Preview] Script error:", error);
     }
-  };
+  }
 
-  const triggerVariableChange = async (name: string, value: unknown, previous: unknown) => {
+  async function triggerVariableChange(name: string, value: unknown, previous: unknown) {
     const items = itemsFromScriptSection(
       (globalScripts as PreviewGlobalScriptsShape | undefined)?.variableChanges,
     );
@@ -985,7 +920,7 @@ export function initPreviewRuntime(
       if (item.enabled === false) continue;
       await runCode(item.code, { name, value, previous }, null, options?.pageId ?? null);
     }
-  };
+  }
 
   /**
    * 启动页面定时器

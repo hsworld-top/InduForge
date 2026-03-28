@@ -24,7 +24,7 @@ const emit = defineEmits<{
 function parseValue(value: unknown, defaultValue = 0): number {
   if (!value) return defaultValue;
   const num = Number.parseInt(String(value), 10);
-  return isNaN(num) ? defaultValue : num;
+  return Number.isNaN(num) ? defaultValue : num;
 }
 
 const borderWidth = computed(() => parseValue(props.modelValue.borderWidth, 0));

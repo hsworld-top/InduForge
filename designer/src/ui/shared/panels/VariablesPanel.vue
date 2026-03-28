@@ -18,6 +18,8 @@ import { useEditorStore } from "@/stores/editor-store";
 
 const editorStore = useEditorStore();
 const { doc, docVersion, currentPageId, pages } = storeToRefs(editorStore);
+const SANITIZE_FILE_NAME_INVALID_RE = /[\\/:*?"<>|]+/g;
+const SANITIZE_FILE_NAME_SPACE_RE = /\s+/g;
 
 interface PageVarSourceLike {
   type?: string;
@@ -111,7 +113,7 @@ const pageName = computed(() => {
 });
 
 const pageVars = computed<Record<string, PageVarDefinitionLike>>(() => {
-  docVersion.value;
+  void docVersion.value;
   const pageId = currentPageId.value;
   if (!pageId || !doc.value) return {};
   const vars = doc.value.vars?.pages?.[pageId] as Record<string, PageVarDefinitionLike> | undefined;
@@ -137,7 +139,7 @@ function formatDefaultValue(item: { default?: unknown }): string {
   if (typeof item.default === "object") {
     try {
       return JSON.stringify(item.default);
-    } catch (error) {
+    } catch {
       return String(item.default);
     }
   }
@@ -231,7 +233,7 @@ function parseStructuredJson(value: unknown, type: string): StructuredParseResul
       return { ok: false, error: "Map 需要 JSON 数组或对象" };
     }
     return { ok: true, parsed };
-  } catch (error) {
+  } catch {
     return { ok: false, error: "JSON 格式不正确" };
   }
 }
@@ -376,8 +378,8 @@ function downloadBlob(content: BlobPart, name: string, type: string): void {
 function sanitizeFileName(name: unknown): string {
   return String(name || "page")
     .trim()
-    .replace(/[\\/:*?"<>|]+/g, "-")
-    .replace(/\s+/g, "-");
+    .replace(SANITIZE_FILE_NAME_INVALID_RE, "-")
+    .replace(SANITIZE_FILE_NAME_SPACE_RE, "-");
 }
 
 function getExportBaseName(): string {
@@ -494,7 +496,7 @@ async function handleFileChange(event: Event): Promise<void> {
         return;
       }
       ElMessage.error("JSON 格式不支持" as never);
-    } catch (error) {
+    } catch {
       ElMessage.error("JSON 解析失败" as never);
     }
     return;

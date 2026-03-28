@@ -9,8 +9,10 @@
  * - 只读模式
  */
 
-import type { EditorReadonlyState, LockResult, PageLockState } from "../document/types.ts";
+import type { LockResult, PageLockState } from "../document/types.ts";
 import { EventEmitter } from "../utils/EventEmitter";
+
+const PAGE_LOCK_URL_RE = /\/pages\/(.+)\/lock/;
 
 export interface PageLockApi {
   get: (path: string) => Promise<{ data?: unknown; success?: boolean }>;
@@ -494,7 +496,7 @@ export function createMockApiClient(): PageLockApi {
 
   return {
     async get(url: string) {
-      const match = url.match(/\/pages\/(.+)\/lock/);
+      const match = url.match(PAGE_LOCK_URL_RE);
       const pageId = match?.[1];
       if (pageId) {
         const lock = locks.get(pageId);
@@ -507,7 +509,7 @@ export function createMockApiClient(): PageLockApi {
     },
 
     async post(url: string): Promise<LockAcquireResponse> {
-      const match = url.match(/\/pages\/(.+)\/lock/);
+      const match = url.match(PAGE_LOCK_URL_RE);
       const pageId = match?.[1];
       if (pageId) {
         const existingLock = locks.get(pageId);
@@ -536,7 +538,7 @@ export function createMockApiClient(): PageLockApi {
     },
 
     async delete(url: string) {
-      const match = url.match(/\/pages\/(.+)\/lock/);
+      const match = url.match(PAGE_LOCK_URL_RE);
       const pageId = match?.[1];
       if (pageId) {
         locks.delete(pageId);

@@ -72,7 +72,7 @@ const frameStyle = computed((): Record<string, string> => {
 });
 
 const canvasStyle = computed((): Record<string, string> => {
-  docVersion.value;
+  void docVersion.value;
   const config = {
     width: 1366,
     height: 768,

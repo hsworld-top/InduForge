@@ -28,7 +28,7 @@ const emit = defineEmits<{
 function parseValue(value: unknown): number {
   if (!value) return 0;
   const num = Number.parseInt(String(value), 10);
-  return isNaN(num) ? 0 : num;
+  return Number.isNaN(num) ? 0 : num;
 }
 
 const top = computed(() => parseValue(props.modelValue[`${props.prefix}Top`]));
