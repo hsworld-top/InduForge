@@ -317,10 +317,12 @@ const {
   handleDrop,
   showInsertLine,
   insertLineStyle,
+  genericInsertLineBox,
   rowInsertInfo,
   layoutInsertInfo,
   insertLineBox,
   isDragOver,
+  suppressDropByAlt,
   canAcceptChild,
 } = nodeDrop;
 const nodeResize: any = useNodeResize({
@@ -340,6 +342,7 @@ const nodeResize: any = useNodeResize({
 } as any);
 const { handleResizePointerDown } = nodeResize;
 const isDropActive = computed<boolean>(() => {
+  if (suppressDropByAlt.value) return false;
   if (!node.value) return isDragOver.value;
   return isDragOver.value || dragState.targetContainerId === node.value.id;
 });
@@ -566,6 +569,7 @@ const nodePointer = useNodePointer({
   canAcceptChild,
   showInsertLine,
   insertLineStyle,
+  genericInsertLineBox,
   rowInsertInfo,
   layoutInsertInfo,
   activeTabName,
@@ -578,10 +582,15 @@ const visibleResizeHandles = visibleResizeHandlesFromComposable;
 
 // showResizeHandles 需要额外检查 selection，所以保留一个包装 computed
 const showResizeHandles = computed(() => {
+  // 依赖 selectionVersion，保证选中变化时可重新计算手柄显示
+  void selectionVersion.value;
   const base = showResizeHandlesBase.value;
   if (!base) return false;
-  // 额外检查：只有选中时才显示
-  return Boolean(selection.value?.isSelected?.(node.value?.id));
+  const currentNodeId = node.value?.id;
+  const currentSelection = selection.value;
+  if (!currentNodeId || !currentSelection) return false;
+  // 额外检查：只有选中时才显示（与 nodeClass 保持一致的调用方式）
+  return Boolean(currentSelection.isSelected(currentNodeId));
 });
 
 const isRegionContainer = isRegionContainerFromComposable;
@@ -810,6 +819,7 @@ function handleDragLeave(): void {
   isDragOver.value = false;
   showInsertLine.value = false;
   insertLineStyle.value = null;
+  genericInsertLineBox.value = null;
   rowInsertInfo.value = null;
   layoutInsertInfo.value = null;
 }

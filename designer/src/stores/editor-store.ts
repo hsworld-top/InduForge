@@ -1270,7 +1270,7 @@ export const useEditorStore = defineStore("editor", () => {
     type: string,
     parentId: string,
     index: number | undefined,
-    options: { dropPosition?: { x: number; y: number } } = {},
+    options: { dropPosition?: { x: number; y: number }; autoSelectInserted?: boolean } = {},
   ): ComponentNode | null => {
     if (!doc.value || !history.value || !parentId) return null;
     if (!ensureEditable()) return null;
@@ -1496,7 +1496,10 @@ export const useEditorStore = defineStore("editor", () => {
     if (shouldWrapTransaction) {
       h.commitTransaction("插入容器布局");
     }
-    selection.value?.select(createSelectableElement("node", node.id));
+    const shouldAutoSelect = options.autoSelectInserted !== false;
+    if (shouldAutoSelect) {
+      selection.value?.select(createSelectableElement("node", node.id));
+    }
 
     return node;
   };

@@ -57,8 +57,8 @@ export const descriptor: ComponentDescriptor = {
     minHeight: "0",
   }),
 
-  /** 子项不允许 resize */
-  childResizable: false,
+  /** 子项允许 resize */
+  childResizable: true,
 
   isMovable: true,
 

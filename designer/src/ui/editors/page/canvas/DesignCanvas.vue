@@ -366,7 +366,9 @@ function handleCanvasDrop(event: DragEvent): void {
       const childNode = doc.value?.getNode?.(childId);
       return childNode?.type === "ElLayoutRow";
     }).length;
-    const rowNode = editorStore.insertNode("ElLayoutRow", layoutId, rowCount);
+    const rowNode = editorStore.insertNode("ElLayoutRow", layoutId, rowCount, {
+      autoSelectInserted: false,
+    });
     if (!rowNode) return false;
 
     const latestLayout = doc.value?.getNode?.(layoutId);
@@ -391,11 +393,15 @@ function handleCanvasDrop(event: DragEvent): void {
     });
     let colId = colIds[0];
     if (!colId) {
-      const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+      const colNode = editorStore.insertNode("ElCol", rowNode.id, 0, {
+        autoSelectInserted: false,
+      });
       if (!colNode) return false;
       colId = colNode.id;
     }
-    const inserted = editorStore.insertNode(componentType, colId, undefined);
+    const inserted = editorStore.insertNode(componentType, colId, undefined, {
+      autoSelectInserted: false,
+    });
     return Boolean(inserted);
   };
 
@@ -429,6 +435,7 @@ function handleCanvasDrop(event: DragEvent): void {
         x: Math.max(0, Math.round(offsetX)),
         y: Math.max(0, Math.round(offsetY)),
       },
+      autoSelectInserted: false,
     }),
   );
   if (!didInsert) {

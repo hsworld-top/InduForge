@@ -180,6 +180,7 @@ export interface InsertNodeOptionsLike {
         y: number;
       }
     | undefined;
+  autoSelectInserted?: boolean;
 }
 
 export interface CanvasEditorStoreLike {
@@ -266,6 +267,7 @@ export interface UseNodePointerDeps {
   canAcceptChild: (parentNode: ComponentNode, childType: string) => boolean;
   showInsertLine: Ref<boolean>;
   insertLineStyle: Ref<InsertLineStyleLike | null>;
+  genericInsertLineBox: Ref<InsertLineBoxLike | null>;
   rowInsertInfo: Ref<RowInsertInfoLike | null>;
   layoutInsertInfo: Ref<LayoutInsertInfoLike | null>;
   activeTabName: Ref<string>;

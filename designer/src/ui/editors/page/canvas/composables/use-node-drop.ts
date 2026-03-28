@@ -15,7 +15,7 @@ import type {
   UseNodeDropDeps,
 } from "./types";
 import type { ComponentNode } from "@/editor-core/document/types";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import {
   canAcceptChildByDescriptor,
   getDefaultSize,
@@ -53,6 +53,24 @@ function isDroppableContainer(targetNode: ComponentNode | null | undefined) {
 }
 
 /**
+ * 判断节点是否为“流式子项”的容器（Alt 拖拽时需要上提到外层）
+ * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标节点
+ * @returns {boolean}
+ */
+function isFlowDropContainer(targetNode: ComponentNode | null | undefined): boolean {
+  if (!targetNode) return false;
+  if (
+    targetNode.type === "ElLayout" ||
+    targetNode.type === "ElLayoutRow" ||
+    targetNode.type === "ElCol"
+  ) {
+    return true;
+  }
+  const descriptor = getDescriptor(targetNode.type);
+  return Boolean(descriptor?.isContainer && descriptor.childPositioning === "flow");
+}
+
+/**
  * 从鼠标位置解析可放置容器
  * @param {DragEvent} event - 拖拽事件
  * @param {string} childType - 子组件类型
@@ -63,6 +81,7 @@ function resolveDropContainer(
   event: DragEvent,
   childType: string,
   doc: CanvasDocLike | null | undefined,
+  preferOuterDropByAlt = false,
 ) {
   if (!doc || !event) return null;
   const hitList = document.elementsFromPoint(event.clientX, event.clientY);
@@ -92,6 +111,9 @@ function resolveDropContainer(
     const nodeId = nodeElement.getAttribute("data-node-id");
     const targetNode = nodeId ? doc?.getNode?.(nodeId) : null;
     if (!targetNode) continue;
+    if (preferOuterDropByAlt && isFlowDropContainer(targetNode)) {
+      continue;
+    }
     if (isRegionType(targetNode.type)) {
       if (childType && !canAcceptChild(targetNode, childType)) continue;
       return { node: targetNode, element: nodeElement };
@@ -157,30 +179,122 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     tabsList,
   } = deps;
 
+  /**
+   * 插入节点（拖入场景）：禁止自动选中新建节点
+   * @param {string} type - 组件类型
+   * @param {string | undefined} parentId - 父节点 ID
+   * @param {number | undefined} index - 插入索引
+   * @param {{ dropPosition?: { x: number; y: number } }} [options] - 插入参数
+   * @returns {import('@/editor-core').ComponentNode | null}
+   */
+  const insertNodeWithoutSelection = (
+    type: string,
+    parentId: string | undefined,
+    index?: number,
+    options: { dropPosition?: { x: number; y: number } | undefined } = {},
+  ): ComponentNode | null => {
+    const insertOptions: { dropPosition?: { x: number; y: number }; autoSelectInserted: false } = {
+      autoSelectInserted: false,
+    };
+    if (options.dropPosition) {
+      insertOptions.dropPosition = options.dropPosition;
+    }
+    return editorStore.insertNode(type, parentId, index, insertOptions);
+  };
+
   // 拖拽状态
   const isDragOver = ref(false);
   const showInsertLine = ref(false);
   const insertLineStyle = ref<InsertLineStyleLike | null>(null);
+  const genericInsertLineBox = ref<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const rowInsertInfo = ref<RowInsertInfoLike | null>(null);
   const layoutInsertInfo = ref<LayoutInsertInfoLike | null>(null);
   const rowInsertEdgeThreshold = 8;
   const colInsertEdgeThreshold = 8;
 
   const insertLineBox = computed(
-    () => rowInsertInfo.value?.lineBox || layoutInsertInfo.value?.lineBox || null,
+    () => rowInsertInfo.value?.lineBox || layoutInsertInfo.value?.lineBox || genericInsertLineBox.value || null,
   );
+  const altKeyPressed = ref(false);
+
+  /**
+   * 清理当前节点的拖拽视觉状态（高亮、插入线、快照）
+   */
+  const clearDropVisualState = () => {
+    isDragOver.value = false;
+    showInsertLine.value = false;
+    insertLineStyle.value = null;
+    genericInsertLineBox.value = null;
+    rowInsertInfo.value = null;
+    layoutInsertInfo.value = null;
+  };
+
+  /**
+   * 计算当前是否应优先走 Alt 上层放置语义
+   * - 支持拖拽过程中中途按下 Alt（不只依赖 DragEvent.altKey）
+   */
+  const shouldPreferOuterDropByAlt = (event: { altKey?: boolean } | null | undefined) => {
+    return Boolean(event?.altKey || altKeyPressed.value);
+  };
+
+  const handleGlobalAltState = (event: KeyboardEvent) => {
+    if (event.key !== "Alt") return;
+    altKeyPressed.value = event.type === "keydown";
+  };
+  const handleGlobalDragOverState = (event: DragEvent) => {
+    if (!dragState.dragType) return;
+    altKeyPressed.value = Boolean(event.altKey);
+  };
+  const handleGlobalDragEndState = () => {
+    altKeyPressed.value = false;
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("keydown", handleGlobalAltState);
+    window.addEventListener("keyup", handleGlobalAltState);
+    window.addEventListener("dragover", handleGlobalDragOverState as EventListener);
+    window.addEventListener("drop", handleGlobalDragEndState);
+    window.addEventListener("dragend", handleGlobalDragEndState);
+  }
+
+  onBeforeUnmount(() => {
+    if (typeof window === "undefined") return;
+    window.removeEventListener("keydown", handleGlobalAltState);
+    window.removeEventListener("keyup", handleGlobalAltState);
+    window.removeEventListener("dragover", handleGlobalDragOverState as EventListener);
+    window.removeEventListener("drop", handleGlobalDragEndState);
+    window.removeEventListener("dragend", handleGlobalDragEndState);
+  });
 
   watch(
     () => dragState.dragType,
     (value) => {
       if (!value) {
-        showInsertLine.value = false;
-        insertLineStyle.value = null;
-        rowInsertInfo.value = null;
-        layoutInsertInfo.value = null;
+        altKeyPressed.value = false;
+        clearDropVisualState();
       }
     },
   );
+
+  watch(
+    [() => dragState.dragType, altKeyPressed, () => node.value],
+    ([dragType, isAltActive, currentNode]) => {
+      if (!dragType || !isAltActive) return;
+      if (!isFlowDropContainer(currentNode as ComponentNode | null | undefined)) return;
+      clearDropVisualState();
+    },
+  );
+
+  const suppressDropByAlt = computed(() => {
+    if (!dragState.dragType) return false;
+    if (!altKeyPressed.value) return false;
+    return isFlowDropContainer(node.value);
+  });
 
   /**
    * 处理拖拽悬停
@@ -284,14 +398,19 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     };
 
     if (!isContainer.value) return;
-    // 阻止事件冒泡
-    event.stopPropagation();
     const hasComponent =
       event.dataTransfer?.types?.includes("application/x-designer-component") ||
       event.dataTransfer?.types?.includes("application/x-designer-node") ||
       event.dataTransfer?.types?.includes("text/plain") ||
       Boolean(dragState.dragType);
     if (!hasComponent) return;
+    const preferOuterDropByAlt = shouldPreferOuterDropByAlt(event);
+    if (preferOuterDropByAlt && isFlowDropContainer(node.value)) {
+      clearDropVisualState();
+      return;
+    }
+    // 阻止事件冒泡
+    event.stopPropagation();
 
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = "copy";
@@ -326,6 +445,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             orientation: "horizontal",
             offset: Math.max(0, lineY - layoutRect.top),
           };
+          genericInsertLineBox.value = null;
           rowInsertInfo.value = null;
           layoutInsertInfo.value = {
             layoutId: layoutNode.id,
@@ -351,6 +471,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         if (!nearEdge) {
           showInsertLine.value = false;
           insertLineStyle.value = null;
+          genericInsertLineBox.value = null;
           layoutInsertInfo.value = null;
         } else {
           const layoutRect = layoutElement.getBoundingClientRect?.();
@@ -371,6 +492,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             };
             showInsertLine.value = true;
             insertLineStyle.value = adjustedLine;
+            genericInsertLineBox.value = null;
             rowInsertInfo.value = null;
             layoutInsertInfo.value = {
               layoutId: parentNode.id,
@@ -397,6 +519,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         if (!nearEdge) {
           showInsertLine.value = false;
           insertLineStyle.value = null;
+          genericInsertLineBox.value = null;
           rowInsertInfo.value = null;
           layoutInsertInfo.value = null;
           return;
@@ -424,6 +547,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             };
             showInsertLine.value = true;
             insertLineStyle.value = adjustedLine;
+            genericInsertLineBox.value = null;
             rowInsertInfo.value = {
               rowId: parentNode.id,
               index: insertInfo.index,
@@ -447,6 +571,13 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     if (node.value?.type && isFlexContainer(node.value.type)) {
       rowInsertInfo.value = null;
       layoutInsertInfo.value = null;
+      const hasExistingChildren = (node.value.children || []).length > 0;
+      if (!hasExistingChildren) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return;
+      }
       const outerElement = event.currentTarget instanceof Element ? event.currentTarget : null;
       const contentElement =
         outerElement?.querySelector?.("[data-node-id]")?.parentElement || outerElement;
@@ -461,6 +592,19 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       if (insertInfo.insertLine) {
         showInsertLine.value = true;
         insertLineStyle.value = insertInfo.insertLine;
+        const contentRect = contentElement.getBoundingClientRect?.();
+        genericInsertLineBox.value = contentRect
+          ? {
+              left: contentRect.left,
+              top: contentRect.top,
+              width: contentRect.width,
+              height: contentRect.height,
+            }
+          : null;
+      } else {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
       }
     }
   };
@@ -471,6 +615,11 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
    */
   const handleDrop = (event: DragEvent) => {
     if (readonly.value) return;
+    const preferOuterDropByAlt = shouldPreferOuterDropByAlt(event);
+    if (preferOuterDropByAlt && isFlowDropContainer(node.value)) {
+      clearDropVisualState();
+      return;
+    }
     // 阻止事件冒泡，避免重复插入
     event.stopPropagation();
 
@@ -479,6 +628,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     isDragOver.value = false;
     showInsertLine.value = false;
     insertLineStyle.value = null;
+    genericInsertLineBox.value = null;
     rowInsertInfo.value = null;
     layoutInsertInfo.value = null;
 
@@ -525,7 +675,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       componentType: string,
     ) => {
       if (!layoutNode || layoutNode.type !== "ElLayout") return false;
-      const rowNode = editorStore.insertNode("ElLayoutRow", layoutNode.id, insertIndex);
+      const rowNode = insertNodeWithoutSelection("ElLayoutRow", layoutNode.id, insertIndex);
       if (!rowNode) return false;
       const latestLayout = doc.value?.getNode?.(layoutNode.id);
       const rowCount = (latestLayout?.children || []).filter((childId) => {
@@ -548,11 +698,11 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       });
       let colId = colIds[0];
       if (!colId) {
-        const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+        const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, 0);
         if (!colNode) return false;
         colId = colNode.id;
       }
-      return Boolean(editorStore.insertNode(componentType, colId));
+      return Boolean(insertNodeWithoutSelection(componentType, colId));
     };
 
     const resolveRowInsertTarget = () => {
@@ -736,7 +886,12 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         (resolvedTarget && resolvedTarget.element) ||
         (event.currentTarget instanceof Element ? event.currentTarget : null);
       if (!isDroppableContainer(targetNode)) {
-        const resolvedContainer = resolveDropContainer(event, resolvedType, doc.value);
+        const resolvedContainer = resolveDropContainer(
+          event,
+          resolvedType,
+          doc.value,
+          preferOuterDropByAlt,
+        );
         if (resolvedContainer) {
           targetNode = resolvedContainer.node;
           targetElement = resolvedContainer.element || targetElement;
@@ -786,7 +941,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
           layoutInsertSnapshot.layoutId === layoutNode.id &&
           resolvedType !== "ElLayoutRow"
         ) {
-          const rowNodeInserted = editorStore.insertNode(
+          const rowNodeInserted = insertNodeWithoutSelection(
             "ElLayoutRow",
             layoutNode.id,
             layoutInsertSnapshot.index,
@@ -813,7 +968,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             });
             let colId = colIds[0];
             if (!colId) {
-              const colNode = editorStore.insertNode("ElCol", rowNodeInserted.id, 0);
+              const colNode = insertNodeWithoutSelection("ElCol", rowNodeInserted.id, 0);
               if (!colNode) {
                 notifyInsertFailure();
                 endDrag();
@@ -821,7 +976,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
               }
               colId = colNode.id;
             }
-            const inserted = editorStore.insertNode(resolvedType, colId);
+            const inserted = insertNodeWithoutSelection(resolvedType, colId);
             if (!inserted) {
               notifyInsertFailure();
             }
@@ -850,7 +1005,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
           } else if (Number.isInteger(rowResolved?.index)) {
             insertIndex = rowResolved?.index ?? insertIndex;
           }
-          const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
+          const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, insertIndex);
           if (colNode) {
             const latestRow = doc.value?.getNode?.(rowNode.id);
             const colCount = (latestRow?.children || []).filter((childId) => {
@@ -863,7 +1018,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
                 columns: colCount,
               },
             });
-            const inserted = editorStore.insertNode(resolvedType, colNode.id);
+            const inserted = insertNodeWithoutSelection(resolvedType, colNode.id);
             if (!inserted) {
               notifyInsertFailure();
             }
@@ -952,7 +1107,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
       // ElLayout 内拖入组件：自动新增一行并将组件放入该行的列
       if (allowLayoutAutoInsert) {
-        const rowNode = editorStore.insertNode("ElLayoutRow", targetNode.id, insertIndex);
+        const rowNode = insertNodeWithoutSelection("ElLayoutRow", targetNode.id, insertIndex);
         if (rowNode) {
           const latestLayout = doc.value?.getNode?.(targetNode.id);
           const rowCount = (latestLayout?.children || []).filter((childId) => {
@@ -978,7 +1133,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
           });
           let colId = colIds[0];
           if (!colId) {
-            const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+            const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, 0);
             if (!colNode) {
               notifyInsertFailure();
               endDrag();
@@ -986,7 +1141,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             }
             colId = colNode.id;
           }
-          const inserted = editorStore.insertNode(resolvedType, colId);
+          const inserted = insertNodeWithoutSelection(resolvedType, colId);
           if (!inserted) {
             notifyInsertFailure();
           }
@@ -999,7 +1154,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
       // ElLayoutRow 内拖入组件：自动新增一列并将组件放入该列
       if (allowRowAutoInsert) {
-        const colNode = editorStore.insertNode("ElCol", targetNode.id, insertIndex);
+        const colNode = insertNodeWithoutSelection("ElCol", targetNode.id, insertIndex);
         if (colNode) {
           const latestRow = doc.value?.getNode?.(targetNode.id);
           const colCount = (latestRow?.children || []).filter((childId) => {
@@ -1013,7 +1168,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
               columns: nextColumns,
             },
           });
-          const inserted = editorStore.insertNode(resolvedType, colNode.id);
+          const inserted = insertNodeWithoutSelection(resolvedType, colNode.id);
           if (!inserted) {
             notifyInsertFailure();
           }
@@ -1025,7 +1180,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       }
 
       // 插入新节点
-      const inserted = editorStore.insertNode(resolvedType, targetNode?.id, insertIndex, {
+      const inserted = insertNodeWithoutSelection(resolvedType, targetNode?.id, insertIndex, {
         dropPosition: dropPosition || undefined,
       });
       if (!inserted) {
@@ -1077,7 +1232,12 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         resolvedTarget?.element ||
         (event.currentTarget instanceof Element ? event.currentTarget : null);
       if (!isDroppableContainer(targetNode)) {
-        const resolvedContainer = resolveDropContainer(event, type, doc.value);
+        const resolvedContainer = resolveDropContainer(
+          event,
+          type,
+          doc.value,
+          preferOuterDropByAlt,
+        );
         if (resolvedContainer) {
           targetNode = resolvedContainer.node;
           targetElement = resolvedContainer.element || targetElement;
@@ -1127,7 +1287,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
           layoutInsertSnapshot.layoutId === layoutNode.id &&
           type !== "ElLayoutRow"
         ) {
-          const rowNodeInserted = editorStore.insertNode(
+          const rowNodeInserted = insertNodeWithoutSelection(
             "ElLayoutRow",
             layoutNode.id,
             layoutInsertSnapshot.index,
@@ -1154,7 +1314,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             });
             let colId = colIds[0];
             if (!colId) {
-              const colNode = editorStore.insertNode("ElCol", rowNodeInserted.id, 0);
+              const colNode = insertNodeWithoutSelection("ElCol", rowNodeInserted.id, 0);
               if (!colNode) {
                 notifyInsertFailure();
                 endDrag();
@@ -1162,7 +1322,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
               }
               colId = colNode.id;
             }
-            const inserted = editorStore.insertNode(type, colId);
+            const inserted = insertNodeWithoutSelection(type, colId);
             if (!inserted) {
               notifyInsertFailure();
             }
@@ -1191,7 +1351,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
           } else if (Number.isInteger(rowResolved?.index)) {
             insertIndex = rowResolved?.index ?? insertIndex;
           }
-          const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
+          const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, insertIndex);
           if (colNode) {
             const latestRow = doc.value?.getNode?.(rowNode.id);
             const colCount = (latestRow?.children || []).filter((childId) => {
@@ -1204,7 +1364,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
                 columns: colCount,
               },
             });
-            const inserted = editorStore.insertNode(type, colNode.id);
+            const inserted = insertNodeWithoutSelection(type, colNode.id);
             if (!inserted) {
               notifyInsertFailure();
             }
@@ -1288,7 +1448,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
       // ElLayout 内拖入组件：自动新增一行并将组件放入该行的列
       if (allowLayoutAutoInsert) {
-        const rowNode = editorStore.insertNode("ElLayoutRow", targetNode.id, insertIndex);
+        const rowNode = insertNodeWithoutSelection("ElLayoutRow", targetNode.id, insertIndex);
         if (rowNode) {
           const latestLayout = doc.value?.getNode?.(targetNode.id);
           const rowCount = (latestLayout?.children || []).filter((childId) => {
@@ -1314,7 +1474,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
           });
           let colId = colIds[0];
           if (!colId) {
-            const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+            const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, 0);
             if (!colNode) {
               notifyInsertFailure();
               endDrag();
@@ -1322,7 +1482,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             }
             colId = colNode.id;
           }
-          const inserted = editorStore.insertNode(type, colId);
+          const inserted = insertNodeWithoutSelection(type, colId);
           if (!inserted) {
             notifyInsertFailure();
           }
@@ -1335,7 +1495,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
       // ElLayoutRow 内拖入组件：自动新增一列并将组件放入该列
       if (allowRowAutoInsert) {
-        const colNode = editorStore.insertNode("ElCol", targetNode.id, insertIndex);
+        const colNode = insertNodeWithoutSelection("ElCol", targetNode.id, insertIndex);
         if (colNode) {
           const latestRow = doc.value?.getNode?.(targetNode.id);
           const colCount = (latestRow?.children || []).filter((childId) => {
@@ -1349,7 +1509,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
               columns: nextColumns,
             },
           });
-          const inserted = editorStore.insertNode(type, colNode.id);
+          const inserted = insertNodeWithoutSelection(type, colNode.id);
           if (!inserted) {
             notifyInsertFailure();
           }
@@ -1361,7 +1521,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       }
 
       // 插入新节点
-      const inserted = editorStore.insertNode(type, targetNode?.id, insertIndex, {
+      const inserted = insertNodeWithoutSelection(type, targetNode?.id, insertIndex, {
         dropPosition: dropPosition || undefined,
       });
       if (!inserted) {
@@ -1385,10 +1545,12 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     handleDrop,
     showInsertLine,
     insertLineStyle,
+    genericInsertLineBox,
     rowInsertInfo,
     layoutInsertInfo,
     insertLineBox,
     isDragOver,
+    suppressDropByAlt,
     canAcceptChild,
     isDroppableContainer,
     resolveDropContainer: (event: DragEvent, childType: string) =>

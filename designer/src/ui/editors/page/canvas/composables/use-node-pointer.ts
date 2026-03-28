@@ -13,6 +13,7 @@ import {
   getDefaultSize,
   getDescriptor,
   isContainerType,
+  isFlexContainer,
   isRegionType,
 } from "@/components/descriptors/registry";
 import { MoveNodeCommand, UpdateNodeCommand } from "@/editor-core/commands/nodeCommands";
@@ -65,6 +66,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
     canAcceptChild,
     showInsertLine,
     insertLineStyle,
+    genericInsertLineBox,
     rowInsertInfo,
     layoutInsertInfo,
     activeTabName,
@@ -223,6 +225,39 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       }
       return null;
     };
+    /**
+     * Alt 拖拽时，将布局内部落点提升到布局外层容器，避免落入 ElLayout/Row/Col 内部。
+     * @param {ComponentNode | null | undefined} targetNode - 命中的目标节点
+     * @returns {ComponentNode | null}
+     */
+    const resolveOuterDropContainer = (
+      targetNode: ComponentNode | null | undefined,
+    ): ComponentNode | null => {
+      if (!targetNode || !doc.value) return null;
+      /**
+       * 判断 Alt 拖拽时是否应继续向上提升容器层级。
+       * - 兼容历史 ElLayout/Row/Col
+       * - 新增 descriptor 流式容器（如 VerticalLayout/HorizontalLayout）
+       */
+      const shouldElevateByAlt = (currentNode: ComponentNode | null) => {
+        if (!currentNode) return false;
+        if (
+          currentNode.type === "ElCol" ||
+          currentNode.type === "ElLayoutRow" ||
+          currentNode.type === "ElLayout"
+        ) {
+          return true;
+        }
+        const descriptor = getDescriptor(currentNode.type);
+        return Boolean(descriptor?.isContainer && descriptor.childPositioning === "flow");
+      };
+      let current: ComponentNode | null = targetNode;
+      while (current && shouldElevateByAlt(current)) {
+        const parent = doc.value.getParent?.(current.id);
+        current = parent || null;
+      }
+      return current;
+    };
     const dragContainer = resolveAncestorContainer(node.value?.id);
     const restrictToContainer = Boolean(dragContainer) && node.value?.type !== "ElContainer";
 
@@ -333,7 +368,10 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       }
     }
 
-    const resolveDropRegion = (upEvent: MouseEvent | PointerEvent | null | undefined) => {
+    const resolveDropRegion = (
+      upEvent: MouseEvent | PointerEvent | null | undefined,
+      preferOuterDropByAlt = false,
+    ) => {
       if (!upEvent) return null;
       const hitList = document.elementsFromPoint(upEvent.clientX, upEvent.clientY);
       const childType = node.value?.type;
@@ -348,8 +386,11 @@ export function useNodePointer(deps: UseNodePointerDeps): {
         const nodeId = nodeElement?.getAttribute?.("data-node-id");
         if (!nodeId) continue;
         if (isSelfOrDescendant(nodeId)) continue;
-        const targetNode = doc.value?.getNode?.(nodeId);
+        const hitNode = doc.value?.getNode?.(nodeId);
+        if (!hitNode) continue;
+        const targetNode = preferOuterDropByAlt ? resolveOuterDropContainer(hitNode) : hitNode;
         if (!targetNode) continue;
+        if (isSelfOrDescendant(targetNode.id)) continue;
         if (restrictToContainer && !isInsideElContainer(targetNode)) {
           continue;
         }
@@ -475,6 +516,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       if (!resolvedRow || !resolvedRow.nearEdge) {
         showInsertLine.value = false;
         insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
         rowInsertInfo.value = null;
         return false;
       }
@@ -497,6 +539,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       };
       showInsertLine.value = true;
       insertLineStyle.value = adjustedLine;
+      genericInsertLineBox.value = null;
       rowInsertInfo.value = {
         rowId: parentNode.id,
         index: insertInfo.index,
@@ -516,6 +559,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       if (!resolvedLayout) {
         showInsertLine.value = false;
         insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
         layoutInsertInfo.value = null;
         return false;
       }
@@ -527,6 +571,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
         orientation: "horizontal",
         offset: Math.max(0, lineY - layoutRect.top),
       };
+      genericInsertLineBox.value = null;
       rowInsertInfo.value = null;
       layoutInsertInfo.value = {
         layoutId: layoutNode.id,
@@ -541,8 +586,62 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       return true;
     };
 
+    const updateGenericFlexInsertLineFromPoint = (
+      pointEvent: MouseEvent | PointerEvent,
+      dropRegion: ComponentNode | null,
+    ) => {
+      if (!dropRegion?.type || !isFlexContainer(dropRegion.type)) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return false;
+      }
+      if ((dropRegion.children || []).length === 0) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return false;
+      }
+      const outerElement = document.querySelector(`[data-node-id="${dropRegion.id}"]`);
+      const contentElement =
+        outerElement?.querySelector?.("[data-node-id]")?.parentElement || outerElement;
+      if (!contentElement) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return false;
+      }
+      const direction = resolveFlexDirection(dropRegion.type, contentElement);
+      const insertInfo = dragDropManager.calculateFlexInsertPosition(
+        contentElement,
+        pointEvent,
+        direction,
+      );
+      if (!insertInfo.insertLine) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return false;
+      }
+      showInsertLine.value = true;
+      insertLineStyle.value = insertInfo.insertLine;
+      const contentRect = contentElement.getBoundingClientRect?.();
+      genericInsertLineBox.value = contentRect
+        ? {
+            left: contentRect.left,
+            top: contentRect.top,
+            width: contentRect.width,
+            height: contentRect.height,
+          }
+        : null;
+      rowInsertInfo.value = null;
+      layoutInsertInfo.value = null;
+      return true;
+    };
+
     const move = (moveEvent: MouseEvent | PointerEvent) => {
       if (!node.value) return;
+      const preferOuterDropByAlt = Boolean(moveEvent.altKey);
       const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
       const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
       // 流式容器子项：未超过自身宽/高一半时保持不动
@@ -560,7 +659,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           resetFlowStyle();
         }
         if (!isMultiDrag) {
-          const dropRegion = resolveDropRegion(moveEvent);
+          const dropRegion = resolveDropRegion(moveEvent, preferOuterDropByAlt);
           if (dropRegion?.id && !isSelfOrDescendant(dropRegion.id)) {
             const rect = document
               .querySelector(`[data-node-id="${dropRegion.id}"]`)
@@ -582,8 +681,17 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           } else {
             clearDropTarget();
           }
-          if (!updateLayoutInsertLineFromPoint(moveEvent)) {
-            updateRowInsertLineFromPoint(moveEvent);
+          if (preferOuterDropByAlt) {
+            showInsertLine.value = false;
+            insertLineStyle.value = null;
+            genericInsertLineBox.value = null;
+            rowInsertInfo.value = null;
+            layoutInsertInfo.value = null;
+          } else if (
+            !updateLayoutInsertLineFromPoint(moveEvent) &&
+            !updateRowInsertLineFromPoint(moveEvent)
+          ) {
+            updateGenericFlexInsertLineFromPoint(moveEvent, dropRegion);
           }
         }
         if (restrictToContainer && dragContainer) {
@@ -681,33 +789,36 @@ export function useNodePointer(deps: UseNodePointerDeps): {
     };
 
     const up = (upEvent: MouseEvent | PointerEvent) => {
-      const currentNode = node.value;
-      if (!currentNode) {
-        cleanupDragHandlers();
-        return;
-      }
-      // 流式容器子项：未超出阈值时回滚事务，保持原位
-      if (isFlowChildInDescContainer && !flowDragExceeded) {
-        cleanupDragHandlers();
-        if (history.value?.isInTransaction?.()) {
-          history.value.rollbackTransaction?.();
+      let transactionMode: "commit" | "rollback" | "none" = "commit";
+      let transactionLabel = "移动组件";
+      let shouldReselectDraggedNode = false;
+      const draggedNodeId = node.value?.id || null;
+      const preferOuterDropByAlt = Boolean(upEvent.altKey);
+      try {
+        const currentNode = node.value;
+        if (!currentNode) {
+          transactionMode = "rollback";
+          return;
         }
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new window.CustomEvent("designer:node-transform-end"));
+        // 流式容器子项：未超出阈值时回滚事务，保持原位
+        if (isFlowChildInDescContainer && !flowDragExceeded) {
+          transactionMode = "rollback";
+          return;
         }
-        return;
-      }
-      if (startedDragFromMove) {
-        endDrag();
-        clearDropTarget();
-      }
-      const rowInsertSnapshot = rowInsertInfo.value;
-      const layoutInsertSnapshot = layoutInsertInfo.value;
-      showInsertLine.value = false;
-      insertLineStyle.value = null;
-      rowInsertInfo.value = null;
-      layoutInsertInfo.value = null;
-      if (hasMoved && !isRegionNode && upEvent && !isMultiDrag) {
+        if (startedDragFromMove) {
+          endDrag();
+          clearDropTarget();
+        }
+        const rowInsertSnapshot = preferOuterDropByAlt ? null : rowInsertInfo.value;
+        const layoutInsertSnapshot = preferOuterDropByAlt ? null : layoutInsertInfo.value;
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        rowInsertInfo.value = null;
+        layoutInsertInfo.value = null;
+        if (hasMoved && !isRegionNode && upEvent && !isMultiDrag) {
+          shouldReselectDraggedNode = true;
+        }
         // 流式容器子项超出阈值：移出原容器，放入新容器或画布根
         if (isFlowChildInDescContainer && flowDragExceeded && originParent) {
           if (startedDragFromMove) {
@@ -716,8 +827,9 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           }
           showInsertLine.value = false;
           insertLineStyle.value = null;
+          genericInsertLineBox.value = null;
 
-          const dropRegion = resolveDropRegion(upEvent);
+          const dropRegion = resolveDropRegion(upEvent, preferOuterDropByAlt);
           const hasValidDrop =
             dropRegion &&
             dropRegion.id !== originParent.id &&
@@ -822,13 +934,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               history.value.execute(updateCmd);
             }
           }
-          cleanupDragHandlers();
-          if (history.value?.isInTransaction?.()) {
-            history.value.commitTransaction?.("移出布局容器");
-          }
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new window.CustomEvent("designer:node-transform-end"));
-          }
+          transactionLabel = "移出布局容器";
           return;
         }
         if (
@@ -843,6 +949,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               "ElLayoutRow",
               layoutNode.id,
               layoutInsertSnapshot.index,
+              { autoSelectInserted: false },
             );
             if (rowNode) {
               const latestLayout = doc.value?.getNode?.(layoutNode.id);
@@ -866,7 +973,9 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               });
               let colId = colIds[0];
               if (!colId) {
-                const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+                const colNode = editorStore.insertNode("ElCol", rowNode.id, 0, {
+                  autoSelectInserted: false,
+                });
                 if (!colNode) return;
                 colId = colNode.id;
               }
@@ -908,7 +1017,9 @@ export function useNodePointer(deps: UseNodePointerDeps): {
         ) {
           const rowNode = doc.value?.getNode?.(rowInsertSnapshot.rowId);
           if (rowNode) {
-            const colNode = editorStore.insertNode("ElCol", rowNode.id, rowInsertSnapshot.index);
+            const colNode = editorStore.insertNode("ElCol", rowNode.id, rowInsertSnapshot.index, {
+              autoSelectInserted: false,
+            });
             if (colNode) {
               const latestRow = doc.value?.getNode?.(rowNode.id);
               const colCount = (latestRow?.children || []).filter((childId) => {
@@ -962,7 +1073,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           }
           return;
         }
-        const dropRegion = resolveDropRegion(upEvent);
+        const dropRegion = resolveDropRegion(upEvent, preferOuterDropByAlt);
         if (restrictToContainer && dropRegion && isInsideElContainer(dropRegion)) {
           clearDropTarget();
           return;
@@ -1120,7 +1231,6 @@ export function useNodePointer(deps: UseNodePointerDeps): {
             }
           }
         }
-      }
       if (
         hasMoved &&
         (isRegionParent || allowRegionMoveOut) &&
@@ -1200,12 +1310,28 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           }
         }
       }
-      cleanupDragHandlers();
-      if (history.value?.isInTransaction?.()) {
-        history.value.commitTransaction?.("移动组件");
-      }
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new window.CustomEvent("designer:node-transform-end"));
+      } finally {
+        endDrag();
+        clearDropTarget();
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        rowInsertInfo.value = null;
+        layoutInsertInfo.value = null;
+        cleanupDragHandlers();
+        if (history.value?.isInTransaction?.()) {
+          if (transactionMode === "rollback") {
+            history.value.rollbackTransaction?.();
+          } else if (transactionMode === "commit") {
+            history.value.commitTransaction?.(transactionLabel);
+          }
+        }
+        if (shouldReselectDraggedNode && draggedNodeId && selection.value && !readonly.value) {
+          selection.value.select(createSelectableElement("node", draggedNodeId));
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new window.CustomEvent("designer:node-transform-end"));
+        }
       }
     };
 

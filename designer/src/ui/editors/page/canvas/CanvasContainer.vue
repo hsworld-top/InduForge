@@ -188,6 +188,26 @@ const showWorkbenchGrid = computed(() => Boolean(currentPageSnapshot.value?.conf
 const pointerXOnRuler = computed(() => Math.max(0, pointerX.value - rulerInset.value));
 const pointerYOnRuler = computed(() => Math.max(0, pointerY.value - rulerInset.value));
 
+/**
+ * 插入节点（拖入场景）：禁止自动选中新建节点
+ * @param {string} type - 组件类型
+ * @param {string} parentId - 父节点 ID
+ * @param {number | undefined} index - 插入索引
+ * @param {{ dropPosition?: { x: number; y: number } }} [options] - 插入参数
+ * @returns {import('@/editor-core').ComponentNode | null}
+ */
+function insertNodeWithoutSelection(
+  type: string,
+  parentId: string,
+  index: number | undefined,
+  options: { dropPosition?: { x: number; y: number } } = {},
+): ComponentNode | null {
+  return editorStore.insertNode(type, parentId, index, {
+    ...options,
+    autoSelectInserted: false,
+  });
+}
+
 useCanvasViewportPlacement({
   containerSize,
   rulerInset,
@@ -439,7 +459,7 @@ function insertIntoElLayout(layoutNode: ComponentNode, componentType: string) {
   });
   let rowId = rowIds[0];
   if (!rowId) {
-    const rowNode = editorStore.insertNode("ElLayoutRow", layoutNode.id, 0);
+    const rowNode = insertNodeWithoutSelection("ElLayoutRow", layoutNode.id, 0);
     if (!rowNode) return;
     const latestLayout = doc.value?.getNode?.(layoutNode.id);
     const rowCount = (latestLayout?.children || []).filter((childId) => {
@@ -475,7 +495,7 @@ function insertIntoElLayoutRow(rowNode: ComponentNode, componentType: string) {
   });
   let colId = colIds[0];
   if (!colId) {
-    const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+    const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, 0);
     colId = colNode?.id || "";
     if (colId) {
       const latestRow = doc.value?.getNode?.(rowNode.id);
@@ -492,7 +512,7 @@ function insertIntoElLayoutRow(rowNode: ComponentNode, componentType: string) {
     }
   }
   if (!colId) return;
-  editorStore.insertNode(componentType, colId, undefined);
+  insertNodeWithoutSelection(componentType, colId, undefined);
 }
 
 /**
@@ -758,7 +778,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
   const layoutInsertTarget =
     componentType !== "ElLayoutRow" ? cachedLayoutInsert || resolveLayoutInsertTarget(event) : null;
   if (layoutInsertTarget) {
-    const rowNode = editorStore.insertNode(
+    const rowNode = insertNodeWithoutSelection(
       "ElLayoutRow",
       layoutInsertTarget.layoutNode.id,
       layoutInsertTarget.index,
@@ -785,11 +805,11 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
       });
       let colId = colIds[0];
       if (!colId) {
-        const colNode = editorStore.insertNode("ElCol", rowNode.id, 0);
+        const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, 0);
         colId = colNode?.id || "";
       }
       if (colId) {
-        editorStore.insertNode(componentType, colId, undefined);
+        insertNodeWithoutSelection(componentType, colId, undefined);
       }
     }
     endDrag();
@@ -799,7 +819,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
   const rowInsertTarget =
     componentType !== "ElCol" ? cachedRowInsert || resolveRowInsertTarget(event) : null;
   if (rowInsertTarget) {
-    const colNode = editorStore.insertNode(
+    const colNode = insertNodeWithoutSelection(
       "ElCol",
       rowInsertTarget.rowNode.id,
       rowInsertTarget.index,
@@ -816,7 +836,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
           columns: Math.max(1, colCount),
         },
       });
-      editorStore.insertNode(componentType, colNode.id, undefined);
+      insertNodeWithoutSelection(componentType, colNode.id, undefined);
     }
     endDrag();
     return;
@@ -843,7 +863,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
         if (rowInsertTarget?.rowNode?.id === rowNode.id) {
           insertIndex = rowInsertTarget.index;
         }
-        const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
+        const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, insertIndex);
         if (colNode) {
           const latestRow = doc.value?.getNode?.(rowNode.id);
           const colCount = (latestRow?.children || []).filter((childId) => {
@@ -856,7 +876,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
               columns: Math.max(1, colCount),
             },
           });
-          editorStore.insertNode(componentType, colNode.id, undefined);
+          insertNodeWithoutSelection(componentType, colNode.id, undefined);
         }
         endDrag();
         return;
@@ -875,7 +895,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
             return childNode?.type === "ElCol";
           });
           const insertIndex = nearLeft ? 0 : colIds.length;
-          const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
+          const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, insertIndex);
           if (colNode) {
             const latestRow = doc.value?.getNode?.(rowNode.id);
             const colCount = (latestRow?.children || []).filter((childId) => {
@@ -888,7 +908,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
                 columns: Math.max(1, colCount),
               },
             });
-            editorStore.insertNode(componentType, colNode.id, undefined);
+            insertNodeWithoutSelection(componentType, colNode.id, undefined);
           }
           endDrag();
           return;
@@ -915,7 +935,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
             const currentIndex = Math.max(0, colIds.indexOf(nearestCol.id));
             insertIndex = currentIndex + 1;
           }
-          const colNode = editorStore.insertNode("ElCol", rowNode.id, insertIndex);
+          const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, insertIndex);
           if (colNode) {
             const latestRow = doc.value?.getNode?.(rowNode.id);
             const colCount = (latestRow?.children || []).filter((childId) => {
@@ -928,13 +948,13 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
                 columns: Math.max(1, colCount),
               },
             });
-            editorStore.insertNode(componentType, colNode.id, undefined);
+            insertNodeWithoutSelection(componentType, colNode.id, undefined);
           }
           endDrag();
           return;
         }
       } else {
-        editorStore.insertNode(componentType, nearestCol.id, undefined);
+        insertNodeWithoutSelection(componentType, nearestCol.id, undefined);
         endDrag();
         return;
       }
@@ -966,7 +986,7 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
           const currentIndex = Math.max(0, colIds.indexOf(nearestCol.id));
           insertIndex = currentIndex + 1;
         }
-        const colNode = editorStore.insertNode("ElCol", targetNode.id, insertIndex);
+        const colNode = insertNodeWithoutSelection("ElCol", targetNode.id, insertIndex);
         if (colNode) {
           const latestRow = doc.value?.getNode?.(targetNode.id);
           const colCount = (latestRow?.children || []).filter((childId) => {
@@ -979,12 +999,12 @@ function handleDropWithType(event: DragEvent | MouseEvent, componentType: string
               columns: Math.max(1, colCount),
             },
           });
-          editorStore.insertNode(componentType, colNode.id, undefined);
+          insertNodeWithoutSelection(componentType, colNode.id, undefined);
         }
         endDrag();
         return;
       }
-      editorStore.insertNode(componentType, nearestCol.id, undefined);
+      insertNodeWithoutSelection(componentType, nearestCol.id, undefined);
       endDrag();
       return;
     }
@@ -1009,7 +1029,7 @@ function insertNode(type: string, parentId: string, x: number, y: number) {
   if (!parentId) return;
   const parentNode = doc.value?.getNode(parentId);
   const insertIndex = parentNode?.children?.length ?? 0;
-  editorStore.insertNode(type, parentId, insertIndex, {
+  insertNodeWithoutSelection(type, parentId, insertIndex, {
     dropPosition: { x, y },
   });
 }
