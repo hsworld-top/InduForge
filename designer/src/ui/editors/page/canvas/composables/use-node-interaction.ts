@@ -57,7 +57,6 @@ const resizeHandles: ResizeHandle[] = [
  * @param {import('vue').ComputedRef<number>} deps.selectionVersion - 选择版本 computed
  * @param {import('vue').ComputedRef<boolean>} deps.readonly - 只读模式 computed
  * @param {import('vue').ComputedRef<boolean>} deps.isRoot - 是否为根节点 computed
- * @param {Function} deps.isRootCanvasContainer - 判断是否为根画布容器函数
  * @param {Function} deps.isChildResizableByDescriptor - 判断子节点是否可 resize 函数
  * @param {import('vue').Ref<HTMLElement>} deps.nodeRef - 节点 DOM 引用
  * @param {Function} deps.createSelectableElement - 创建可选元素函数
@@ -74,7 +73,6 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
     selectionVersion,
     readonly,
     isRoot,
-    isRootCanvasContainer,
     isChildResizableByDescriptor,
     nodeRef,
     createSelectableElement,
@@ -124,7 +122,6 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
     void selectionVersion.value;
     if (readonly.value || isRoot.value) return false;
     if (!node.value || node.value.locked) return false;
-    if (isRootCanvasContainer(node.value)) return false;
     if (node.value.type === "ElMain") return false;
     if (isChildInElCol.value) return false;
     const parentNode = doc.value?.getParent?.(node.value.id);

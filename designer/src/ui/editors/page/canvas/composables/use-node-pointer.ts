@@ -71,8 +71,120 @@ export function useNodePointer(deps: UseNodePointerDeps): {
     layoutInsertInfo,
     activeTabName,
     tabsList,
+    activeCollapseName,
+    collapseItems,
     resolveFlexDirection,
   } = deps;
+
+  const resolveActiveTabKey = (): string => {
+    const raw =
+      activeTabName.value || tabsList.value?.[0]?.name || tabsList.value?.[0]?.label || "";
+    return String(raw || "").trim();
+  };
+
+  const resolveActiveCollapseKey = (): string => {
+    const raw =
+      activeCollapseName.value ||
+      collapseItems.value?.[0]?.name ||
+      collapseItems.value?.[0]?.title ||
+      collapseItems.value?.[0]?.label ||
+      "";
+    return String(raw || "").trim();
+  };
+
+  /**
+   * 根据目标容器同步/清理 Tabs/Collapse 归属 key，避免拖拽后残留状态
+   * @param {Record<string, unknown> | undefined} sourceProps - 源属性
+   * @param {string | null | undefined} targetType - 目标容器类型
+   * @returns {Record<string, unknown>}
+   */
+  const resolveScopedSlotProps = (
+    sourceProps: Record<string, unknown> | undefined,
+    targetType: string | null | undefined,
+  ): Record<string, unknown> => {
+    const nextProps = { ...(sourceProps || {}) };
+    if (targetType === "Tabs") {
+      const tabKey = resolveActiveTabKey();
+      if (tabKey) {
+        nextProps.tabKey = tabKey;
+      }
+      if ("collapseKey" in nextProps) {
+        delete nextProps.collapseKey;
+      }
+      return nextProps;
+    }
+    if (targetType === "Collapse") {
+      const collapseKey = resolveActiveCollapseKey();
+      if (collapseKey) {
+        nextProps.collapseKey = collapseKey;
+      }
+      if ("tabKey" in nextProps) {
+        delete nextProps.tabKey;
+      }
+      return nextProps;
+    }
+    if ("tabKey" in nextProps) {
+      delete nextProps.tabKey;
+    }
+    if ("collapseKey" in nextProps) {
+      delete nextProps.collapseKey;
+    }
+    return nextProps;
+  };
+
+  /**
+   * 解析 Tabs/Collapse 的活动内容区宿主元素与子节点集合
+   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
+   * @returns {{ hostElement: Element | null, childIds: string[] } | null}
+   */
+  const resolveScopedSlotHostMeta = (targetNode: ComponentNode | null | undefined) => {
+    if (!targetNode || (targetNode.type !== "Tabs" && targetNode.type !== "Collapse")) {
+      return null;
+    }
+    const isTabs = targetNode.type === "Tabs";
+    const key = isTabs ? resolveActiveTabKey() : resolveActiveCollapseKey();
+    const attrName = isTabs ? "data-tab-key" : "data-collapse-key";
+    const keyProp = isTabs ? "tabKey" : "collapseKey";
+    const escapedKey =
+      typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(key) : key;
+    const selector = `[data-node-id="${targetNode.id}"][${attrName}="${escapedKey}"]`;
+    const hostElement = document.querySelector(selector);
+    const childIds = (targetNode.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      if (!childNode) return false;
+      const slotKey = childNode.props?.[keyProp];
+      if (!slotKey) return Boolean(key);
+      return String(slotKey) === key;
+    });
+    return { hostElement, childIds };
+  };
+
+  /**
+   * 将 Tabs/Collapse 活动区相对插入索引映射为容器绝对索引
+   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
+   * @param {string[]} scopedChildIds - 活动区子节点列表
+   * @param {number} scopedInsertIndex - 活动区相对索引
+   * @returns {number}
+   */
+  const mapScopedInsertIndex = (
+    targetNode: ComponentNode | null | undefined,
+    scopedChildIds: string[],
+    scopedInsertIndex: number,
+  ): number => {
+    const allChildIds = targetNode?.children || [];
+    if (!scopedChildIds.length) return allChildIds.length;
+    const scopedIndices = scopedChildIds
+      .map((childId) => allChildIds.indexOf(childId))
+      .filter((value) => value >= 0)
+      .sort((a, b) => a - b);
+    if (!scopedIndices.length) return allChildIds.length;
+    if (scopedInsertIndex <= 0) return scopedIndices[0] ?? allChildIds.length;
+    if (scopedInsertIndex >= scopedIndices.length) {
+      const lastIndex = scopedIndices[scopedIndices.length - 1];
+      return (lastIndex ?? allChildIds.length - 1) + 1;
+    }
+    return scopedIndices[scopedInsertIndex] ?? allChildIds.length;
+  };
 
   let activeDragHandlers: PointerDragHandlers | null = null;
   const createUpdateCommand = (nodeId: string, patch: NodePatchLike) =>
@@ -590,13 +702,47 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       pointEvent: MouseEvent | PointerEvent,
       dropRegion: ComponentNode | null,
     ) => {
-      if (!dropRegion?.type || !isFlexContainer(dropRegion.type)) {
+      if (!dropRegion?.type) {
         showInsertLine.value = false;
         insertLineStyle.value = null;
         genericInsertLineBox.value = null;
         return false;
       }
-      if ((dropRegion.children || []).length === 0) {
+      const scopedMeta = resolveScopedSlotHostMeta(dropRegion);
+      if (scopedMeta) {
+        if (!scopedMeta.childIds.length || !scopedMeta.hostElement) {
+          showInsertLine.value = false;
+          insertLineStyle.value = null;
+          genericInsertLineBox.value = null;
+          return false;
+        }
+        const insertInfo = dragDropManager.calculateFlexInsertPosition(
+          scopedMeta.hostElement,
+          pointEvent,
+          "column",
+        );
+        if (!insertInfo.insertLine) {
+          showInsertLine.value = false;
+          insertLineStyle.value = null;
+          genericInsertLineBox.value = null;
+          return false;
+        }
+        showInsertLine.value = true;
+        insertLineStyle.value = insertInfo.insertLine;
+        const contentRect = scopedMeta.hostElement.getBoundingClientRect?.();
+        genericInsertLineBox.value = contentRect
+          ? {
+              left: contentRect.left,
+              top: contentRect.top,
+              width: contentRect.width,
+              height: contentRect.height,
+            }
+          : null;
+        rowInsertInfo.value = null;
+        layoutInsertInfo.value = null;
+        return true;
+      }
+      if (!isFlexContainer(dropRegion.type)) {
         showInsertLine.value = false;
         insertLineStyle.value = null;
         genericInsertLineBox.value = null;
@@ -871,6 +1017,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
                     ? { ...parentDesc.childFlowLayout }
                     : undefined,
                   layoutItem: undefined,
+                  props: resolveScopedSlotProps(currentNode.props || {}, dropRegion.type),
                   style: {
                     ...(buildFlowResetStyle(currentNode.style) || {}),
                     ...(parentDesc.childStyle ? parentDesc.childStyle(dropRegion.type) : {}),
@@ -883,6 +1030,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
                     ...(currentNode.layoutItem || {}),
                     free: { mode: "abs" as const, abs: { ...absPosForTarget } },
                   },
+                  props: resolveScopedSlotProps(currentNode.props || {}, dropRegion.type),
                 };
             const updateCmd = createUpdateCommand(currentNode.id, updatePatch);
             if (history.value?.isInTransaction?.()) {
@@ -924,6 +1072,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
                 ...(currentNode.layoutItem || {}),
                 free: { mode: "abs" as const, abs: { ...nextAbs } },
               },
+              props: resolveScopedSlotProps(currentNode.props || {}, "FreeContainer"),
               style: buildFlowResetStyle(currentNode.style),
             });
             if (history.value?.isInTransaction?.()) {
@@ -1085,7 +1234,37 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           canAcceptChild(dropRegion, currentNode.type) &&
           !isSelfOrDescendant(dropRegion.id)
         ) {
-          const insertIndex = (dropRegion.children || []).length;
+          let insertIndex = (dropRegion.children || []).length;
+          const scopedMeta = resolveScopedSlotHostMeta(dropRegion);
+          if (scopedMeta?.hostElement) {
+            if (scopedMeta.childIds.length > 0) {
+              const scopedInsert = dragDropManager.calculateFlexInsertPosition(
+                scopedMeta.hostElement,
+                upEvent,
+                "column",
+              );
+              const scopedIndex =
+                typeof scopedInsert.index === "number"
+                  ? scopedInsert.index
+                  : scopedMeta.childIds.length;
+              insertIndex = mapScopedInsertIndex(dropRegion, scopedMeta.childIds, scopedIndex);
+            } else {
+              insertIndex = (dropRegion.children || []).length;
+            }
+          } else if (dropRegion.type && isFlexContainer(dropRegion.type)) {
+            const outerElement = document.querySelector(`[data-node-id="${dropRegion.id}"]`);
+            const contentElement =
+              outerElement?.querySelector?.("[data-node-id]")?.parentElement || outerElement;
+            if (contentElement) {
+              const direction = resolveFlexDirection(dropRegion.type, contentElement);
+              const insertInfo = dragDropManager.calculateFlexInsertPosition(
+                contentElement,
+                upEvent,
+                direction,
+              );
+              insertIndex = insertInfo.index;
+            }
+          }
           const moveCommand = new MoveNodeCommand(currentNode.id, dropRegion.id, insertIndex);
           const shouldResetSize =
             currentNode.positioning === "absolute" || currentNode.layoutItem?.free;
@@ -1105,8 +1284,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               ...(currentNode.layoutItem || {}),
               free: { mode: "abs" as const, abs: { ...nextAbs } },
             };
-            const nextProps = { ...(currentNode.props || {}) };
-            if ("tabKey" in nextProps) delete nextProps.tabKey;
+            const nextProps = resolveScopedSlotProps(currentNode.props || {}, "FreeContainer");
             const updateCommand = createUpdateCommand(currentNode.id, {
               positioning: "absolute",
               absolutePos: nextAbs,
@@ -1146,18 +1324,21 @@ export function useNodePointer(deps: UseNodePointerDeps): {
             updatePatch.style = {
               ...(buildFlowResetStyle(currentNode.style) || {}),
               width: "100%",
-              height: "100%",
+              height: isContainer.value ? "100%" : "auto",
             };
-            const tabKey =
-              activeTabName.value || tabsList.value?.[0]?.name || tabsList.value?.[0]?.label || "";
-            if (tabKey) {
-              updatePatch.props = {
-                ...(currentNode.props || {}),
-                tabKey: String(tabKey),
-              };
-            }
+            updatePatch.props = resolveScopedSlotProps(currentNode.props || {}, "Tabs");
+          } else if (dropRegion?.type === "Collapse") {
+            updatePatch.style = {
+              ...(buildFlowResetStyle(currentNode.style) || {}),
+              width: "100%",
+              height: isContainer.value ? "100%" : "auto",
+            };
+            updatePatch.props = resolveScopedSlotProps(currentNode.props || {}, "Collapse");
           } else if (shouldResetSize) {
             updatePatch.style = buildFlowResetStyle(currentNode.style);
+          }
+          if (!updatePatch.props) {
+            updatePatch.props = resolveScopedSlotProps(currentNode.props || {}, dropRegion?.type);
           }
           const updateCommand = createUpdateCommand(currentNode.id, updatePatch);
           if (history.value?.isInTransaction?.()) {
@@ -1214,6 +1395,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               positioning: "absolute",
               absolutePos: nextAbs,
               layoutItem: nextLayoutItem,
+              props: resolveScopedSlotProps(currentNode.props || {}, null),
             });
             if (history.value?.isInTransaction?.()) {
               history.value.executeInTransaction?.(moveCommand);
@@ -1227,6 +1409,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
                 positioning: "absolute",
                 absolutePos: nextAbs,
                 layoutItem: nextLayoutItem,
+                props: resolveScopedSlotProps(currentNode.props || {}, null),
               });
             }
           }
@@ -1293,6 +1476,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
             positioning: "absolute",
             absolutePos: nextAbs,
             layoutItem: nextLayoutItem,
+            props: resolveScopedSlotProps(currentNode.props || {}, null),
           });
           if (history.value?.isInTransaction?.()) {
             history.value.executeInTransaction?.(moveCommand);
@@ -1306,6 +1490,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               positioning: "absolute",
               absolutePos: nextAbs,
               layoutItem: nextLayoutItem,
+              props: resolveScopedSlotProps(currentNode.props || {}, null),
             });
           }
         }

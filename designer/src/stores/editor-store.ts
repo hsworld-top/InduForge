@@ -131,6 +131,54 @@ import {
 } from "./editor/project-settings-actions";
 
 const UUID_DASH_REGEX = /-/g;
+const EL_CONTAINER_REGION_PRESET_TOP_MAIN = "top-main";
+const EL_CONTAINER_REGION_PRESET_ASIDE_FULL_HEIGHT = "aside-full-height";
+const EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN = "aside-between";
+const EL_CONTAINER_REGION_PRESET_DEFAULT = EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN;
+
+type ElContainerRegionPreset =
+  | typeof EL_CONTAINER_REGION_PRESET_TOP_MAIN
+  | typeof EL_CONTAINER_REGION_PRESET_ASIDE_FULL_HEIGHT
+  | typeof EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN;
+
+function normalizeElContainerRegionPreset(value: unknown): ElContainerRegionPreset {
+  if (
+    value === EL_CONTAINER_REGION_PRESET_TOP_MAIN ||
+    value === EL_CONTAINER_REGION_PRESET_ASIDE_FULL_HEIGHT ||
+    value === EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN
+  ) {
+    return value;
+  }
+  return EL_CONTAINER_REGION_PRESET_DEFAULT;
+}
+
+function resolveElContainerPresetVisibility(
+  preset: ElContainerRegionPreset,
+): Record<string, boolean> {
+  if (preset === EL_CONTAINER_REGION_PRESET_TOP_MAIN) {
+    return {
+      showHeader: true,
+      showAside: false,
+      showMain: true,
+      showFooter: false,
+    };
+  }
+  return {
+    showHeader: true,
+    showAside: true,
+    showMain: true,
+    showFooter: true,
+  };
+}
+
+function applyElContainerPresetProps(props: Record<string, unknown>): Record<string, unknown> {
+  const preset = normalizeElContainerRegionPreset(props?.regionPreset);
+  return {
+    ...props,
+    regionPreset: preset,
+    ...resolveElContainerPresetVisibility(preset),
+  };
+}
 
 /**
  * 编辑器状态管理 Store
@@ -711,10 +759,10 @@ export const useEditorStore = defineStore("editor", () => {
     if (!containerNode || containerNode.type !== "ElContainer") return;
 
     const sectionDefs = [
-      { prop: "showHeader", type: "ElHeader" },
-      { prop: "showAside", type: "ElAside" },
-      { prop: "showMain", type: "ElMain" },
-      { prop: "showFooter", type: "ElFooter" },
+      { prop: "showHeader", type: "ElHeader", label: "Header区域" },
+      { prop: "showAside", type: "ElAside", label: "Aside区域" },
+      { prop: "showMain", type: "ElMain", label: "Main区域" },
+      { prop: "showFooter", type: "ElFooter", label: "Footer区域" },
     ];
     const sectionSizeMap = {
       ElHeader: {
@@ -828,7 +876,7 @@ export const useEditorStore = defineStore("editor", () => {
         : null;
       const childNode = createComponentNode(section.type, {
         parentNode: refreshedNode,
-        label: buildUniqueLabel(manifest?.name || section.type),
+        label: buildUniqueLabel(manifest?.name || section.label || section.type),
         props: {
           ...(manifest?.defaultProps || {}),
           ...(sizeConfig && sizeValue ? { [sizeConfig.prop]: sizeValue } : {}),
@@ -1106,9 +1154,16 @@ export const useEditorStore = defineStore("editor", () => {
     const clampedShiftPatch = clampElColShiftPatch(d, node, clampedOffsetPatch);
     const nextPatch = syncAbsoluteSizePatch(node, clampedShiftPatch);
     const hasPropPatch = nextPatch?.props && typeof nextPatch === "object";
-    const mergedProps = hasPropPatch
+    const hasContainerPresetPatch =
+      node?.type === "ElContainer" &&
+      hasPropPatch &&
+      Object.hasOwn(nextPatch.props || {}, "regionPreset");
+    const mergedPropsBase = hasPropPatch
       ? { ...(node.props || {}), ...(nextPatch.props || {}) }
       : { ...(node.props || {}) };
+    const mergedProps = hasContainerPresetPatch
+      ? applyElContainerPresetProps(mergedPropsBase)
+      : mergedPropsBase;
     const mergedPatch = hasPropPatch ? { ...nextPatch, props: mergedProps } : nextPatch;
     const layoutAdjustedPatch = hasPropPatch
       ? syncElLayoutMinHeightPatch(node, mergedPatch, mergedProps || {})
@@ -1333,6 +1388,8 @@ export const useEditorStore = defineStore("editor", () => {
 
     const isRegionContainer = isRegionType(parentNode.type);
     const isTabsContainer = parentNode.type === "Tabs";
+    const isCollapseContainer = parentNode.type === "Collapse";
+    const isTabbedLikeContainer = isTabsContainer || isCollapseContainer;
     if (isRegionContainer) {
       // 区域容器内默认填满
       if (parentNode.type === "ElCol") {
@@ -1355,13 +1412,13 @@ export const useEditorStore = defineStore("editor", () => {
         delete nodeStyle.minWidth;
       }
     }
-    if (isTabsContainer) {
+    if (isTabbedLikeContainer) {
+      const shouldFillContainer = Boolean(isLayoutContainer || manifest?.isContainer);
       nodeStyle = {
         ...nodeStyle,
-        width: "100%",
-        height: "100%",
+        ...(shouldFillContainer ? { width: "100%", height: "100%" } : { height: "auto" }),
       };
-      if (isLayoutContainer) {
+      if (shouldFillContainer && isLayoutContainer) {
         delete nodeStyle.minHeight;
         delete nodeStyle.minWidth;
       }
@@ -1395,6 +1452,9 @@ export const useEditorStore = defineStore("editor", () => {
       style: nodeStyle,
       layoutItem,
     });
+    if (type === "ElContainer") {
+      node.props = applyElContainerPresetProps({ ...(node.props || {}) });
+    }
     if (type === "Menu") {
       node.detailConfig = getMenuDefaultDetailConfig();
       node.props = { ...(node.props || {}), ...getMenuDefaultProps() };
@@ -1419,6 +1479,9 @@ export const useEditorStore = defineStore("editor", () => {
       parentNode.type === "FlexContainer" ||
       parentNode.type === "HorizontalLayout" ||
       parentNode.type === "VerticalLayout" ||
+      parentNode.type === "FormLayout" ||
+      parentNode.type === "Tabs" ||
+      parentNode.type === "Collapse" ||
       parentNode.type === "ResponsiveLayout" ||
       parentNode.type === "ElContainer" ||
       parentNode.type === "ElLayout" ||

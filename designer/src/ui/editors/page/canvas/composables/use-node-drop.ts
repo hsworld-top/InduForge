@@ -177,6 +177,8 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     notifyInsertFailure,
     activeTabName,
     tabsList,
+    activeCollapseName,
+    collapseItems,
   } = deps;
 
   /**
@@ -200,6 +202,127 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       insertOptions.dropPosition = options.dropPosition;
     }
     return editorStore.insertNode(type, parentId, index, insertOptions);
+  };
+
+  const resolveActiveTabKey = (): string => {
+    const raw =
+      activeTabName.value || tabsList.value?.[0]?.name || tabsList.value?.[0]?.label || "";
+    return String(raw || "").trim();
+  };
+
+  const resolveActiveCollapseKey = (): string => {
+    const raw =
+      activeCollapseName.value ||
+      collapseItems.value?.[0]?.name ||
+      collapseItems.value?.[0]?.title ||
+      collapseItems.value?.[0]?.label ||
+      "";
+    return String(raw || "").trim();
+  };
+
+  /**
+   * 解析 Tabs/Collapse 活动内容区的落点上下文
+   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
+   * @param {DragEvent} event - 拖拽事件
+   * @returns {{ key: string, keyProp: 'tabKey' | 'collapseKey', hostElement: Element | null, childIds: string[] } | null}
+   */
+  const resolveScopedSlotMeta = (
+    targetNode: ComponentNode | null | undefined,
+    event: DragEvent,
+  ) => {
+    if (!targetNode || (targetNode.type !== "Tabs" && targetNode.type !== "Collapse")) {
+      return null;
+    }
+    const isTabs = targetNode.type === "Tabs";
+    const keyProp = isTabs ? "tabKey" : "collapseKey";
+    const attrName = isTabs ? "data-tab-key" : "data-collapse-key";
+    const defaultKey = isTabs ? resolveActiveTabKey() : resolveActiveCollapseKey();
+    const currentTarget = event.currentTarget instanceof Element ? event.currentTarget : null;
+    const slotElement = currentTarget?.closest?.(`[${attrName}]`) || null;
+    let resolvedElement: Element | null = slotElement || currentTarget;
+    const rawKey =
+      slotElement?.getAttribute(attrName) ||
+      currentTarget?.getAttribute(attrName) ||
+      defaultKey ||
+      "";
+    const key = String(rawKey || "").trim();
+    if (!slotElement && currentTarget && key) {
+      const escapedKey =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(key) : key;
+      const scopedSelector = `[data-node-id="${targetNode.id}"][${attrName}="${escapedKey}"]`;
+      resolvedElement = currentTarget.querySelector(scopedSelector) || resolvedElement;
+    }
+    const childIds = (targetNode.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      if (!childNode) return false;
+      const slotKey = childNode.props?.[keyProp];
+      if (!slotKey) {
+        return Boolean(key);
+      }
+      return String(slotKey) === key;
+    });
+    return {
+      key,
+      keyProp,
+      hostElement: resolvedElement,
+      childIds,
+    };
+  };
+
+  /**
+   * 将活动内容区内的相对插入索引映射为容器 children 的绝对索引
+   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
+   * @param {string[]} scopedChildIds - 当前活动区内子节点
+   * @param {number} scopedInsertIndex - 活动区内插入索引
+   * @returns {number}
+   */
+  const mapScopedInsertIndex = (
+    targetNode: ComponentNode | null | undefined,
+    scopedChildIds: string[],
+    scopedInsertIndex: number,
+  ): number => {
+    const allChildIds = targetNode?.children || [];
+    if (!scopedChildIds.length) return allChildIds.length;
+    const scopedIndices = scopedChildIds
+      .map((childId) => allChildIds.indexOf(childId))
+      .filter((value) => value >= 0)
+      .sort((a, b) => a - b);
+    if (!scopedIndices.length) return allChildIds.length;
+    if (scopedInsertIndex <= 0) return scopedIndices[0] ?? allChildIds.length;
+    if (scopedInsertIndex >= scopedIndices.length) {
+      const lastIndex = scopedIndices[scopedIndices.length - 1];
+      return (lastIndex ?? allChildIds.length - 1) + 1;
+    }
+    return scopedIndices[scopedInsertIndex] ?? allChildIds.length;
+  };
+
+  /**
+   * 给落入 Tabs/Collapse 的新节点写入归属 key
+   * @param {import('@/editor-core').ComponentNode | null} inserted - 新插入节点
+   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
+   */
+  const applyScopedKeyForInsertedNode = (
+    inserted: ComponentNode | null,
+    targetNode: ComponentNode | null | undefined,
+  ) => {
+    if (!inserted || !targetNode) return;
+    if (targetNode.type === "Tabs") {
+      const tabKey = resolveActiveTabKey();
+      if (tabKey) {
+        editorStore.updateNode(inserted.id, {
+          props: { ...(inserted.props || {}), tabKey: String(tabKey) },
+        });
+      }
+      return;
+    }
+    if (targetNode.type === "Collapse") {
+      const collapseKey = resolveActiveCollapseKey();
+      if (collapseKey) {
+        editorStore.updateNode(inserted.id, {
+          props: { ...(inserted.props || {}), collapseKey: String(collapseKey) },
+        });
+      }
+    }
   };
 
   // 拖拽状态
@@ -566,6 +689,45 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     }
 
     // ElCol 侧边插入提示由上面的 resolveRowInsertFromPath 处理
+
+    if (node.value?.type === "Tabs" || node.value?.type === "Collapse") {
+      rowInsertInfo.value = null;
+      layoutInsertInfo.value = null;
+      const scopedMeta = resolveScopedSlotMeta(node.value, event);
+      const hostElement = scopedMeta?.hostElement;
+      const scopedChildIds = scopedMeta?.childIds || [];
+      if (!hostElement) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return;
+      }
+      if (!scopedChildIds.length) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return;
+      }
+      const insertInfo = dragDropManager.calculateFlexInsertPosition(hostElement, event, "column");
+      if (insertInfo.insertLine) {
+        showInsertLine.value = true;
+        insertLineStyle.value = insertInfo.insertLine;
+        const hostRect = hostElement.getBoundingClientRect?.();
+        genericInsertLineBox.value = hostRect
+          ? {
+              left: hostRect.left,
+              top: hostRect.top,
+              width: hostRect.width,
+              height: hostRect.height,
+            }
+          : null;
+      } else {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+      }
+      return;
+    }
 
     // 计算插入位置
     if (node.value?.type && isFlexContainer(node.value.type)) {
@@ -1078,6 +1240,26 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
       const skipFlexInsertForLayout =
         targetNode?.type === "ElLayout" && (layoutInsertSnapshot || layoutResolvedByPoint);
+      if (targetNode?.type === "Tabs" || targetNode?.type === "Collapse") {
+        const scopedMeta = resolveScopedSlotMeta(targetNode, event);
+        if (scopedMeta?.hostElement) {
+          targetElement = scopedMeta.hostElement;
+          if (scopedMeta.childIds.length > 0) {
+            const scopedInsert = dragDropManager.calculateFlexInsertPosition(
+              scopedMeta.hostElement,
+              event,
+              "column",
+            );
+            const scopedIndex =
+              typeof scopedInsert.index === "number"
+                ? scopedInsert.index
+                : scopedMeta.childIds.length;
+            insertIndex = mapScopedInsertIndex(targetNode, scopedMeta.childIds, scopedIndex);
+          } else {
+            insertIndex = (targetNode.children || []).length;
+          }
+        }
+      }
       if (targetNode?.type && isFlexContainer(targetNode.type) && !skipFlexInsertForLayout) {
         const outerEl = targetElement;
         const contentEl = outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
@@ -1186,15 +1368,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       if (!inserted) {
         notifyInsertFailure();
       }
-      if (inserted && targetNode?.type === "Tabs") {
-        const tabKey =
-          activeTabName.value || tabsList.value?.[0]?.name || tabsList.value?.[0]?.label || "";
-        if (tabKey) {
-          editorStore.updateNode(inserted.id, {
-            props: { ...(inserted.props || {}), tabKey: String(tabKey) },
-          });
-        }
-      }
+      applyScopedKeyForInsertedNode(inserted, targetNode);
       endDrag();
     } catch {
       const type = payload || fallbackType;
@@ -1421,6 +1595,26 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
       const skipFlexInsertForLayout =
         targetNode?.type === "ElLayout" && (layoutInsertSnapshot || layoutResolvedByPoint);
+      if (targetNode?.type === "Tabs" || targetNode?.type === "Collapse") {
+        const scopedMeta = resolveScopedSlotMeta(targetNode, event);
+        if (scopedMeta?.hostElement) {
+          targetElement = scopedMeta.hostElement;
+          if (scopedMeta.childIds.length > 0) {
+            const scopedInsert = dragDropManager.calculateFlexInsertPosition(
+              scopedMeta.hostElement,
+              event,
+              "column",
+            );
+            const scopedIndex =
+              typeof scopedInsert.index === "number"
+                ? scopedInsert.index
+                : scopedMeta.childIds.length;
+            insertIndex = mapScopedInsertIndex(targetNode, scopedMeta.childIds, scopedIndex);
+          } else {
+            insertIndex = (targetNode.children || []).length;
+          }
+        }
+      }
       if (targetNode?.type && isFlexContainer(targetNode.type) && !skipFlexInsertForLayout) {
         const outerEl = targetElement;
         const contentEl = outerEl?.querySelector?.("[data-node-id]")?.parentElement || outerEl;
@@ -1527,15 +1721,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       if (!inserted) {
         notifyInsertFailure();
       }
-      if (inserted && targetNode?.type === "Tabs") {
-        const tabKey =
-          activeTabName.value || tabsList.value?.[0]?.name || tabsList.value?.[0]?.label || "";
-        if (tabKey) {
-          editorStore.updateNode(inserted.id, {
-            props: { ...(inserted.props || {}), tabKey: String(tabKey) },
-          });
-        }
-      }
+      applyScopedKeyForInsertedNode(inserted, targetNode);
       endDrag();
     }
   };

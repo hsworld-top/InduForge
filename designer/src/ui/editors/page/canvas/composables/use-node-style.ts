@@ -22,6 +22,10 @@ type StyleValue = CSSProperties[keyof CSSProperties] | any;
 type StyleMap = Record<string, StyleValue>;
 type LooseRecord = Record<string, any>;
 
+const EL_CONTAINER_REGION_PRESET_TOP_MAIN = "top-main";
+const EL_CONTAINER_REGION_PRESET_ASIDE_FULL_HEIGHT = "aside-full-height";
+const EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN = "aside-between";
+
 interface NodeStyleProps {
   readonly?: boolean;
   isRoot?: boolean;
@@ -42,6 +46,24 @@ interface NodeStyleHelpersDeps {
   >;
   currentPage: Ref<CanvasPageLike | null | undefined>;
   props?: NodeStyleProps;
+}
+
+/**
+ * 解析区域布局预设
+ * @param {unknown} value - 预设值
+ * @returns {"top-main" | "aside-full-height" | "aside-between"}
+ */
+function resolveElContainerRegionPreset(
+  value: unknown,
+): "top-main" | "aside-full-height" | "aside-between" {
+  if (
+    value === EL_CONTAINER_REGION_PRESET_TOP_MAIN ||
+    value === EL_CONTAINER_REGION_PRESET_ASIDE_FULL_HEIGHT ||
+    value === EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN
+  ) {
+    return value;
+  }
+  return EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN;
 }
 
 /**
@@ -115,19 +137,6 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
         flexShrink: 1,
         alignSelf: "stretch",
         justifySelf: "stretch",
-      };
-    }
-
-    if (isRootCanvasContainer(currentNode)) {
-      const zIndex = currentNode.absolutePos?.z ?? currentNode.layoutItem?.free?.abs?.z;
-      return {
-        position: "absolute",
-        left: 0,
-        top: 0,
-        width: "100%",
-        height: "100%",
-        boxSizing: "border-box",
-        ...(zIndex !== undefined ? { zIndex } : {}),
       };
     }
 
@@ -314,32 +323,87 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
       const hasFooter = Boolean(footerNode);
       const hasAside = Boolean(asideNode);
       const hasMain = Boolean(mainNode);
-      const hasBody = hasAside || hasMain;
-      const hasTwoCols = hasAside && hasMain;
       const containerProps = (currentNode.props || {}) as LooseRecord;
       const headerHeight = containerProps.headerHeight || headerNode?.props?.height || "60px";
       const footerHeight = containerProps.footerHeight || footerNode?.props?.height || "60px";
       const asideWidth = containerProps.asideWidth || asideNode?.props?.width || "200px";
+      const regionPreset = resolveElContainerRegionPreset(containerProps.regionPreset);
 
       style.display = "grid";
       style.position = "relative";
-      style.gridTemplateColumns = hasTwoCols ? `${asideWidth} 1fr` : "1fr";
+
       const rows: string[] = [];
       const areas: string[] = [];
-      if (hasHeader) {
-        rows.push(headerHeight);
-        areas.push(hasTwoCols ? '"header header"' : '"header"');
+
+      if (regionPreset === EL_CONTAINER_REGION_PRESET_TOP_MAIN) {
+        style.gridTemplateColumns = "1fr";
+        if (hasHeader) {
+          rows.push(headerHeight);
+          areas.push('"header"');
+        }
+        if (hasMain) {
+          rows.push("1fr");
+          areas.push('"main"');
+        } else if (hasAside) {
+          rows.push("1fr");
+          areas.push('"aside"');
+        }
+        if (hasFooter) {
+          rows.push(footerHeight);
+          areas.push('"footer"');
+        }
+      } else if (regionPreset === EL_CONTAINER_REGION_PRESET_ASIDE_FULL_HEIGHT) {
+        style.gridTemplateColumns = hasAside ? `${asideWidth} 1fr` : "1fr";
+        if (hasAside) {
+          if (hasHeader) {
+            rows.push(headerHeight);
+            areas.push('"aside header"');
+          }
+          if (hasMain) {
+            rows.push("1fr");
+            areas.push('"aside main"');
+          }
+          if (hasFooter) {
+            rows.push(footerHeight);
+            areas.push('"aside footer"');
+          }
+          if (!rows.length) {
+            rows.push("1fr");
+            areas.push('"aside main"');
+          }
+        } else {
+          if (hasHeader) {
+            rows.push(headerHeight);
+            areas.push('"header"');
+          }
+          if (hasMain) {
+            rows.push("1fr");
+            areas.push('"main"');
+          }
+          if (hasFooter) {
+            rows.push(footerHeight);
+            areas.push('"footer"');
+          }
+        }
+      } else {
+        const hasTwoCols = hasAside && hasMain;
+        style.gridTemplateColumns = hasTwoCols ? `${asideWidth} 1fr` : "1fr";
+        if (hasHeader) {
+          rows.push(headerHeight);
+          areas.push(hasTwoCols ? '"header header"' : '"header"');
+        }
+        if (hasAside || hasMain) {
+          rows.push("1fr");
+          if (hasTwoCols) areas.push('"aside main"');
+          else if (hasAside) areas.push('"aside"');
+          else areas.push('"main"');
+        }
+        if (hasFooter) {
+          rows.push(footerHeight);
+          areas.push(hasTwoCols ? '"footer footer"' : '"footer"');
+        }
       }
-      if (hasBody) {
-        rows.push("1fr");
-        if (hasTwoCols) areas.push('"aside main"');
-        else if (hasAside) areas.push('"aside"');
-        else areas.push('"main"');
-      }
-      if (hasFooter) {
-        rows.push(footerHeight);
-        areas.push(hasTwoCols ? '"footer footer"' : '"footer"');
-      }
+
       if (rows.length === 0) {
         rows.push("1fr");
         areas.push('"main"');

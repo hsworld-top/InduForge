@@ -20,20 +20,12 @@ function extractDefaultProps(props: ComponentManifest["props"]): Record<string, 
 
 function getDefaultStyle(type: string): Record<string, string | number> {
   const containerTypes = [
-    "FlexContainer",
     "HorizontalLayout",
     "VerticalLayout",
-    "FreeContainer",
-    "GridContainer",
-    "ResponsiveLayout",
-    "ColumnLayout1",
-    "ColumnLayout2",
-    "ColumnLayout4",
+    "FormLayout",
     "Tabs",
+    "Collapse",
     "ElContainer",
-    "ElLayout",
-    "ElLayoutRow",
-    "ElCol",
   ];
   const baseStyle: Record<string, string | number> = {
     minHeight: "40px",

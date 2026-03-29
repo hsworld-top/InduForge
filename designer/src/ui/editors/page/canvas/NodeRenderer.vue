@@ -87,7 +87,6 @@ const {
 const showContextMenu = inject<ShowContextMenuLike>("showContextMenu", null);
 const nodeStyleHelpers = createNodeStyleHelpers({ doc, currentPage, props } as any) as any;
 const resolveLayoutStyle = nodeStyleHelpers.resolveLayoutStyle;
-const isRootCanvasContainer = nodeStyleHelpers.isRootCanvasContainer;
 
 const node = computed<NodeLike | null>(() => {
   void docVersion.value;
@@ -155,7 +154,6 @@ const nodeInteraction: any = useNodeInteraction({
   selectionVersion: selectionVersion as any,
   readonly: computed(() => props.readonly),
   isRoot: computed(() => props.isRoot),
-  isRootCanvasContainer: isRootCanvasContainer as any,
   isChildResizableByDescriptor: isChildResizableByDescriptor as any,
   nodeRef,
   createSelectableElement: createSelectableElement as any,
@@ -209,16 +207,20 @@ const {
   checkboxOptions,
   dropdownItems,
   tabsList,
+  collapseItems: collapseItemsFromContent,
   normalizeMenuItems,
   activeTabName,
+  activeCollapseName,
   tableRenderVersion,
   applyTabsModelValueToProps,
+  applyCollapseModelValueToProps,
 } = nodeContent;
 const selectOptionsList = computed<any[]>(() => (selectOptions.value || []) as any[]);
 const radioOptionsList = computed<any[]>(() => (radioOptions.value || []) as any[]);
 const checkboxOptionsList = computed<any[]>(() => (checkboxOptions.value || []) as any[]);
 const dropdownItemsList = computed<any[]>(() => (dropdownItems.value || []) as any[]);
 const tabsListItems = computed<any[]>(() => (tabsList.value || []) as any[]);
+const collapseItemsListFromContent = computed<any[]>(() => (collapseItemsFromContent.value || []) as any[]);
 const {
   isSelectType,
   isRadioType,
@@ -268,13 +270,14 @@ applyMenuDslConfig = createApplyMenuDslConfig({
   normalizeMenuItems: normalizeMenuItems as any,
 } as any);
 
-// 应用 Tabs modelValue 处理到 resolvedProps（通过 useNodeContent 的辅助函数）
+// 应用 Tabs/Collapse modelValue 处理到 resolvedProps（通过 useNodeContent 的辅助函数）
 const resolvedProps = computed<Record<string, any>>(() => {
   const base = resolvedPropsBase.value;
   if (isTableLikeType(node.value?.type)) {
     void tableRenderVersion.value;
   }
-  return applyTabsModelValueToProps(base);
+  const withTabs = applyTabsModelValueToProps(base);
+  return applyCollapseModelValueToProps(withTabs);
 });
 
 const dragDropManager: any = createDragDropManager();
@@ -292,7 +295,6 @@ function resolveFlexDirection(type: any, element: any): string {
 
 const isMovable = computed(() => {
   if (!node.value || props.isRoot || node.value.locked) return false;
-  if (isRootCanvasContainer(node.value as any)) return false;
   return isNodeDesignerMovable(node.value.type);
 });
 
@@ -311,6 +313,8 @@ const nodeDrop: any = useNodeDrop({
   notifyInsertFailure,
   activeTabName,
   tabsList,
+  activeCollapseName,
+  collapseItems: collapseItemsListFromContent,
 } as any);
 const {
   handleDragOver,
@@ -357,6 +361,7 @@ const {
   carouselItems,
   dropdownLabel,
   activeTabChildIds,
+  activeCollapseChildIds,
   regionHintText,
   useComponentWrapper,
   renderKey,
@@ -375,6 +380,8 @@ const {
   isDropActive,
   activeTabName,
   tabsList,
+  activeCollapseName,
+  collapseItems: collapseItemsListFromContent,
   props,
 } as any);
 const menuItemsList = computed<any[]>(() => (menuItems.value || []) as any[]);
@@ -519,6 +526,38 @@ function isActiveTab(tab: any): boolean {
   return String(name) === activeTabName.value;
 }
 
+function resolveCollapseItemKey(item: any): string {
+  if (!item) return "";
+  const raw = item.name ?? item.title ?? item.label ?? "";
+  return String(raw || "").trim();
+}
+
+function isActiveCollapseItem(item: any): boolean {
+  const key = resolveCollapseItemKey(item);
+  if (!key) return false;
+  return key === String(activeCollapseName.value || "").trim();
+}
+
+function handleCollapseChange(value: unknown): void {
+  if (Array.isArray(value)) {
+    const firstKey = String(value[0] ?? "").trim();
+    if (firstKey) {
+      activeCollapseName.value = firstKey;
+      return;
+    }
+  }
+  const normalized = String(value ?? "").trim();
+  if (normalized) {
+    activeCollapseName.value = normalized;
+  }
+}
+
+function handleCollapseHeaderClick(item: any): void {
+  const key = resolveCollapseItemKey(item);
+  if (!key) return;
+  activeCollapseName.value = key;
+}
+
 const isContainer = isContainerFromComposable;
 
 const isNodeVisible = computed(() => {
@@ -574,6 +613,8 @@ const nodePointer = useNodePointer({
   layoutInsertInfo,
   activeTabName,
   tabsList,
+  activeCollapseName,
+  collapseItems: collapseItemsListFromContent,
   resolveFlexDirection,
 } as any);
 const { handlePointerDown } = nodePointer;
@@ -736,7 +777,7 @@ const contentStyleWithConfig = computed<any>(() => {
 });
 
 const childNodeIds = computed(() => {
-  if (!node.value || isTabsType.value) return [];
+  if (!node.value || isTabsType.value || isCollapseType.value) return [];
   return node.value.children || [];
 });
 
@@ -794,14 +835,22 @@ const componentEventListeners = computed<EventListenerMap>(() => {
  */
 const designEventListeners = computed<EventListenerMap>(() => {
   if (props.readonly || !node.value) return {};
-  if (!isTabsType.value) return {};
-  return {
-    "tab-click": handleTabsClick,
-    "tab-change": handleTabsChange,
-    "update:modelValue": handleTabsChange,
-    "tab-remove": handleTabsRemove,
-    edit: handleTabsEdit,
-  };
+  if (isTabsType.value) {
+    return {
+      "tab-click": handleTabsClick,
+      "tab-change": handleTabsChange,
+      "update:modelValue": handleTabsChange,
+      "tab-remove": handleTabsRemove,
+      edit: handleTabsEdit,
+    };
+  }
+  if (isCollapseType.value) {
+    return {
+      change: handleCollapseChange,
+      "update:modelValue": handleCollapseChange,
+    };
+  }
+  return {};
 });
 
 /**
@@ -941,6 +990,7 @@ function handleDragLeave(): void {
             :class="{ 'is-drop-active': isDropActive }"
             :data-node-id="node.id"
             :data-node-type="node.type"
+            :data-tab-key="String(tab.name ?? tab.label ?? '')"
             @dragover.prevent="handleDragOver"
             @dragleave="handleDragLeave"
             @drop.prevent="handleDrop"
@@ -979,8 +1029,44 @@ function handleDragLeave(): void {
           :key="item.name ?? item.title"
           :name="item.name"
           :title="item.title"
+          @click="handleCollapseHeaderClick(item)"
         >
-          {{ item.content }}
+          <div
+            class="collapse-pane-body"
+            :class="{ 'is-drop-active': isDropActive && isActiveCollapseItem(item) }"
+            :data-node-id="node.id"
+            :data-node-type="node.type"
+            :data-collapse-key="resolveCollapseItemKey(item)"
+            @dragover.prevent="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop.prevent="handleDrop"
+          >
+            <template v-if="isActiveCollapseItem(item)">
+              <template v-if="isContainer && activeCollapseChildIds.length === 0 && !props.isRoot">
+                <div class="empty-container-hint">
+                  <span v-if="isDropActive">释放以添加组件</span>
+                  <span v-else>拖拽组件到此处</span>
+                </div>
+              </template>
+              <span
+                v-if="activeCollapseChildIds.length === 0 && item.content"
+                class="collapse-pane-placeholder"
+              >
+                {{ item.content }}
+              </span>
+              <NodeRenderer
+                v-for="childId in activeCollapseChildIds"
+                :key="childId"
+                :node-id="childId"
+                :readonly="props.readonly"
+              />
+            </template>
+            <template v-else>
+              <span class="collapse-pane-placeholder">
+                {{ item.content }}
+              </span>
+            </template>
+          </div>
         </el-collapse-item>
       </template>
       <template v-if="isStepsType">
@@ -1015,7 +1101,12 @@ function handleDragLeave(): void {
       </template>
       <template
         v-if="
-          isContainer && !hasChildren && !props.isRoot && !isTabsType && !suppressReadonlyEmptyHint
+          isContainer &&
+          !hasChildren &&
+          !props.isRoot &&
+          !isTabsType &&
+          !isCollapseType &&
+          !suppressReadonlyEmptyHint
         "
       >
         <div class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
@@ -1269,6 +1360,30 @@ function handleDragLeave(): void {
 }
 
 .tabs-pane-placeholder {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.collapse-pane-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 40px;
+  overflow: visible;
+}
+
+.collapse-pane-body .designer-node {
+  flex: 1 1 auto;
+}
+
+.collapse-pane-body.is-drop-active .empty-container-hint {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.collapse-pane-placeholder {
   color: #9ca3af;
   font-size: 12px;
 }

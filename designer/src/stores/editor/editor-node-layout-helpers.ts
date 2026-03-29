@@ -201,6 +201,7 @@ export function resolveDefaultSize(
     FlexContainer: { width: 360, height: 200 },
     HorizontalLayout: { width: 400, height: 160 },
     VerticalLayout: { width: 240, height: 240 },
+    FormLayout: { width: 360, height: 280 },
     FreeContainer: { width: 360, height: 200 },
     GridContainer: { width: 360, height: 200 },
     ElContainer: { width: 360, height: 240 },
@@ -262,6 +263,7 @@ export function buildLayoutItem(
     parentNode.type === "FlexContainer" ||
     parentNode.type === "HorizontalLayout" ||
     parentNode.type === "VerticalLayout" ||
+    parentNode.type === "FormLayout" ||
     parentNode.type === "ResponsiveLayout" ||
     parentNode.type === "ElContainer" ||
     parentNode.type === "ElLayout" ||

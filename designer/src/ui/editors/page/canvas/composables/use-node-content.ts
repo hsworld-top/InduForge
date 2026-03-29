@@ -37,6 +37,10 @@ const fallbackTabs = [
   { name: "tab2", label: "标签二", content: "" },
   { name: "tab3", label: "标签三", content: "" },
 ];
+const fallbackCollapseItems = [
+  { name: "1", title: "面板一", content: "内容一" },
+  { name: "2", title: "面板二", content: "内容二" },
+];
 
 export interface NormalizedMenuItem extends Record<string, unknown> {
   label: string;
@@ -107,6 +111,20 @@ function applyTabsModelValue(
   return nextProps;
 }
 
+function applyCollapseModelValue(
+  resolvedProps: Record<string, unknown>,
+  activeCollapseName: Ref<string>,
+  node: ComputedRef<ComponentNode | null | undefined>,
+): Record<string, unknown> {
+  if (!node.value || node.value.type !== "Collapse") return resolvedProps;
+  const nextProps = { ...resolvedProps };
+  const hasModelValue = Object.hasOwn(nextProps, "modelValue");
+  if (!hasModelValue && activeCollapseName.value) {
+    nextProps.modelValue = [activeCollapseName.value];
+  }
+  return nextProps;
+}
+
 export interface UseNodeContentDeps {
   node: ComputedRef<ComponentNode | null | undefined>;
   resolvedNodeProps: ComputedRef<Record<string, unknown>>;
@@ -116,6 +134,7 @@ export interface UseNodeContentDeps {
 export function useNodeContent({ node, resolvedNodeProps, docVersion }: UseNodeContentDeps) {
   const tableRenderVersion = ref(0);
   const activeTabName = ref("");
+  const activeCollapseName = ref("");
 
   const selectOptions = computed(() => {
     void docVersion.value;
@@ -142,6 +161,11 @@ export function useNodeContent({ node, resolvedNodeProps, docVersion }: UseNodeC
     return normalizeOptions(node.value?.props?.tabs, fallbackTabs);
   });
 
+  const collapseItems = computed(() => {
+    void docVersion.value;
+    return normalizeOptions(node.value?.props?.items, fallbackCollapseItems);
+  });
+
   const syncActiveTabName = (): void => {
     if (!node.value || node.value.type !== "Tabs") return;
     const resolvedPropsValue = resolvedNodeProps.value || {};
@@ -162,6 +186,34 @@ export function useNodeContent({ node, resolvedNodeProps, docVersion }: UseNodeC
     if (fallbackName) activeTabName.value = String(fallbackName);
   };
 
+  const syncActiveCollapseName = (): void => {
+    if (!node.value || node.value.type !== "Collapse") return;
+    const resolvedPropsValue = resolvedNodeProps.value || {};
+    const rawModelValue = resolvedPropsValue.modelValue ?? node.value?.props?.modelValue;
+    if (Array.isArray(rawModelValue) && rawModelValue.length) {
+      const firstValue = String(rawModelValue[0] ?? "").trim();
+      if (firstValue) {
+        activeCollapseName.value = firstValue;
+        return;
+      }
+    }
+    if (rawModelValue !== undefined && rawModelValue !== null && !Array.isArray(rawModelValue)) {
+      const normalized = String(rawModelValue).trim();
+      if (normalized) {
+        activeCollapseName.value = normalized;
+        return;
+      }
+    }
+    const firstItem = collapseItems.value?.[0] as
+      | { name?: string; title?: string; label?: string }
+      | undefined;
+    if (!firstItem) return;
+    const fallbackName = firstItem.name ?? firstItem.title ?? firstItem.label;
+    if (fallbackName) {
+      activeCollapseName.value = String(fallbackName);
+    }
+  };
+
   watch(
     () => [
       node.value?.id,
@@ -169,9 +221,11 @@ export function useNodeContent({ node, resolvedNodeProps, docVersion }: UseNodeC
       resolvedNodeProps.value?.modelValue,
       resolvedNodeProps.value?.activeName,
       tabsList.value?.length,
+      collapseItems.value?.length,
     ],
     () => {
       syncActiveTabName();
+      syncActiveCollapseName();
     },
     { immediate: true },
   );
@@ -180,18 +234,26 @@ export function useNodeContent({ node, resolvedNodeProps, docVersion }: UseNodeC
     return applyTabsModelValue(resolvedProps, activeTabName, node);
   };
 
+  const applyCollapseModelValueToProps = (resolvedProps: Record<string, unknown>) => {
+    return applyCollapseModelValue(resolvedProps, activeCollapseName, node);
+  };
+
   return {
     selectOptions,
     radioOptions,
     checkboxOptions,
     dropdownItems,
     tabsList,
+    collapseItems,
     normalizeMenuItems,
     captureMenuDslConfig,
     activeTabName,
+    activeCollapseName,
     tableRenderVersion,
     syncActiveTabName,
+    syncActiveCollapseName,
     applyTabsModelValueToProps,
+    applyCollapseModelValueToProps,
   };
 }
 

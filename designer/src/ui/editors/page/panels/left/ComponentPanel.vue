@@ -34,7 +34,14 @@ const activeUiSections = ref(["pc"]);
  * 组件筛选范围
  */
 const allowedTypesByCategory: Record<string, string[]> = {
-  layout: ["HorizontalLayout", "VerticalLayout"],
+  layout: [
+    "HorizontalLayout",
+    "VerticalLayout",
+    "Collapse",
+    "Tabs",
+    "FormLayout",
+    "ElContainer",
+  ],
   uiPc: ["Button"],
   chart: ["EChart"],
 };
@@ -46,16 +53,34 @@ const allowedTypesByCategory: Record<string, string[]> = {
  */
 function filterItemsByCategory(category: string): ComponentItemLike[] {
   const keywordValue = keyword.value.trim().toLowerCase();
-  const allowedTypes = showAllComponents.value ? null : allowedTypesByCategory[category];
-  return (componentRegistry.getByCategory(category) as ComponentItemLike[]).filter((item) => {
-    if (Array.isArray(allowedTypes) && !allowedTypes.includes(item.type)) {
-      return false;
-    }
-    if (!keywordValue) return true;
-    return (
-      item.type.toLowerCase().includes(keywordValue) ||
-      item.name.toLowerCase().includes(keywordValue)
-    );
+  const allowedTypes =
+    category === "layout"
+      ? allowedTypesByCategory.layout
+      : showAllComponents.value
+        ? null
+        : allowedTypesByCategory[category];
+  const filtered = (componentRegistry.getByCategory(category) as ComponentItemLike[]).filter(
+    (item) => {
+      if (Array.isArray(allowedTypes) && !allowedTypes.includes(item.type)) {
+        return false;
+      }
+      if (!keywordValue) return true;
+      return (
+        item.type.toLowerCase().includes(keywordValue) ||
+        item.name.toLowerCase().includes(keywordValue)
+      );
+    },
+  );
+  if (category !== "layout") {
+    return filtered;
+  }
+  const layoutTypeOrder = allowedTypesByCategory.layout ?? [];
+  return filtered.sort((a, b) => {
+    const aIndex = layoutTypeOrder.indexOf(a.type);
+    const bIndex = layoutTypeOrder.indexOf(b.type);
+    const safeA = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
+    const safeB = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
+    return safeA - safeB;
   });
 }
 
@@ -76,13 +101,6 @@ function getPreviewComponent(type: string): PreviewComponentLike {
     },
     Text: {
       render: () => h("div", { class: "preview-text" }, "文本"),
-    },
-    FlexContainer: {
-      render: () =>
-        h("div", { class: "preview-flex-container" }, [
-          h("div", { class: "preview-flex-item" }),
-          h("div", { class: "preview-flex-item" }),
-        ]),
     },
     HorizontalLayout: {
       render: () =>
@@ -111,17 +129,13 @@ function getPreviewComponent(type: string): PreviewComponentLike {
           ],
         ),
     },
-    GridContainer: {
+    FormLayout: {
       render: () =>
-        h("div", { class: "preview-grid-container" }, [
-          h("div", { class: "preview-grid-item" }),
-          h("div", { class: "preview-grid-item" }),
-          h("div", { class: "preview-grid-item" }),
-          h("div", { class: "preview-grid-item" }),
+        h("div", { class: "preview-flex-container", style: { flexDirection: "column", gap: "4px" } }, [
+          h("div", { class: "preview-form-item" }),
+          h("div", { class: "preview-form-item" }),
+          h("div", { class: "preview-form-item" }),
         ]),
-    },
-    FreeContainer: {
-      render: () => h("div", { class: "preview-free-container" }, "自由"),
     },
     ElContainer: {
       render: () =>
@@ -132,44 +146,6 @@ function getPreviewComponent(type: string): PreviewComponentLike {
             h("div", { class: "preview-el-main" }),
           ]),
           h("div", { class: "preview-el-footer" }),
-        ]),
-    },
-    ResponsiveLayout: {
-      render: () =>
-        h("div", { class: "preview-responsive-layout" }, [
-          h("div", { class: "preview-responsive-block" }),
-          h("div", { class: "preview-responsive-block" }),
-          h("div", { class: "preview-responsive-block" }),
-        ]),
-    },
-    ElLayout: {
-      render: () =>
-        h("div", { class: "preview-el-layout" }, [
-          h("div", { class: "preview-el-layout-col" }),
-          h("div", { class: "preview-el-layout-col" }),
-          h("div", { class: "preview-el-layout-col" }),
-        ]),
-    },
-    ColumnLayout1: {
-      render: () =>
-        h("div", { class: "preview-columns preview-columns-1" }, [
-          h("div", { class: "preview-columns-item" }),
-        ]),
-    },
-    ColumnLayout2: {
-      render: () =>
-        h("div", { class: "preview-columns preview-columns-2" }, [
-          h("div", { class: "preview-columns-item" }),
-          h("div", { class: "preview-columns-item" }),
-        ]),
-    },
-    ColumnLayout4: {
-      render: () =>
-        h("div", { class: "preview-columns preview-columns-4" }, [
-          h("div", { class: "preview-columns-item" }),
-          h("div", { class: "preview-columns-item" }),
-          h("div", { class: "preview-columns-item" }),
-          h("div", { class: "preview-columns-item" }),
         ]),
     },
     Table: {
@@ -428,24 +404,14 @@ function getPreviewIcon(type: string): string {
   const iconMap: Record<string, string> = {
     Button: '<div style="width:60px;height:28px;background:#409eff;border-radius:4px;"></div>',
     Text: '<div style="width:60px;height:20px;background:#606266;border-radius:2px;"></div>',
-    FlexContainer:
-      '<div style="width:60px;height:40px;background:#e4e7ed;border-radius:4px;display:flex;gap:4px;padding:4px;"><div style="flex:1;background:#909399;"></div><div style="flex:1;background:#909399;"></div></div>',
-    GridContainer:
-      '<div style="width:60px;height:40px;background:#e4e7ed;border-radius:4px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;"><div style="background:#909399;"></div><div style="background:#909399;"></div><div style="background:#909399;"></div><div style="background:#909399;"></div></div>',
-    FreeContainer:
-      '<div style="width:60px;height:40px;background:#f5f7fa;border:2px dashed #dcdfe6;border-radius:4px;"></div>',
+    HorizontalLayout:
+      '<div style="width:60px;height:40px;background:#ffffff;border:1px solid #3b6cff;border-radius:4px;display:flex;gap:4px;padding:4px;"><div style="flex:1;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#3b6cff;border-radius:2px;"></div></div>',
+    VerticalLayout:
+      '<div style="width:60px;height:40px;background:#ffffff;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:4px;padding:4px;"><div style="height:8px;background:#3b6cff;border-radius:2px;"></div><div style="height:8px;background:#3b6cff;border-radius:2px;"></div><div style="height:8px;background:#3b6cff;border-radius:2px;"></div></div>',
+    FormLayout:
+      '<div style="width:60px;height:40px;background:#ffffff;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:4px;padding:4px;"><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
     ElContainer:
       '<div style="width:60px;height:40px;border:1px solid #dcdfe6;border-radius:4px;display:flex;flex-direction:column;gap:3px;padding:4px;background:#f5f7fa;"><div style="height:6px;background:#409eff;border-radius:2px;"></div><div style="flex:1;display:flex;gap:3px;"><div style="width:12px;background:#409eff;border-radius:2px;"></div><div style="flex:1;background:#e4e7ed;border-radius:2px;"></div></div><div style="height:6px;background:#409eff;border-radius:2px;"></div></div>',
-    ResponsiveLayout:
-      '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;display:flex;gap:4px;padding:4px;"><div style="flex:1;background:#c0c4cc;"></div><div style="flex:1;background:#c0c4cc;"></div><div style="flex:1;background:#c0c4cc;"></div></div>',
-    ElLayout:
-      '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;display:flex;gap:3px;padding:4px;"><div style="flex:1;background:#409eff;border-radius:2px;"></div><div style="flex:1;background:#409eff;border-radius:2px;"></div><div style="flex:1;background:#409eff;border-radius:2px;"></div></div>',
-    ColumnLayout1:
-      '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:4px;"><div style="width:100%;height:100%;background:#c0c4cc;"></div></div>',
-    ColumnLayout2:
-      '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;"><div style="background:#c0c4cc;"></div><div style="background:#c0c4cc;"></div></div>',
-    ColumnLayout4:
-      '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;padding:4px;"><div style="background:#c0c4cc;"></div><div style="background:#c0c4cc;"></div><div style="background:#c0c4cc;"></div><div style="background:#c0c4cc;"></div></div>',
     Table:
       '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;"><div style="height:10px;background:#e4e7ed;"></div><div style="height:8px;margin:6px 6px 0;background:#c0c4cc;"></div><div style="height:8px;margin:4px 6px 0;background:#c0c4cc;"></div></div>',
     Tree: '<div style="width:60px;height:40px;background:#f5f7fa;border:1px solid #dcdfe6;border-radius:4px;padding:6px;display:flex;flex-direction:column;gap:4px;"><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div><div style="height:6px;background:#c0c4cc;"></div></div>',
@@ -757,6 +723,14 @@ function getPreviewIcon(type: string): string {
   flex: 1;
   background: #3b6cff;
   border-radius: 2px;
+}
+
+.preview-form-item {
+  width: 100%;
+  height: 7px;
+  border: 1px solid #3b6cff;
+  border-radius: 2px;
+  background: #ffffff;
 }
 
 .preview-grid-container {

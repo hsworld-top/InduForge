@@ -108,6 +108,7 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   Tabs: {
     renderTag: "el-tabs",
     isContainer: true,
+    childPositioning: "flow",
     childLayout: "none",
     renderKey: (node, ctx) => {
       const resolved = (ctx?.resolvedProps ?? {}) as Record<string, unknown>;
@@ -160,6 +161,9 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   Pagination: { renderTag: "el-pagination" },
   Collapse: {
     renderTag: "el-collapse",
+    isContainer: true,
+    childPositioning: "flow",
+    childLayout: "none",
     propsFilter: (resolvedProps) => omitResolvedKeys(resolvedProps, ["items"]),
   },
   BusinessCard: {
@@ -185,6 +189,32 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
       return nextProps;
     },
   },
+  FormLayout: {
+    renderTag: "div",
+    isContainer: true,
+    childLayout: "flex",
+    childPositioning: "flow",
+    childFlowLayout: { grow: 0, shrink: 0, basis: "auto" },
+    defaultSize: { width: 360, height: 280 },
+    containerStyle: (node: DescriptorNode) => {
+      const props = node.props ?? {};
+      const gap = Number(props.itemGap);
+      return {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
+        position: "relative",
+        boxSizing: "border-box",
+        width: "100%",
+        minHeight: "120px",
+        gap: `${Number.isFinite(gap) ? Math.max(0, gap) : 12}px`,
+      };
+    },
+    childStyle: () => ({
+      width: "100%",
+      minWidth: "0",
+    }),
+  },
   // El 系列容器：Flex 布局
   ElContainer: {
     renderTag: "el-container",
@@ -192,7 +222,13 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
     childLayout: "flex",
     defaultSize: { width: 360, height: 240 },
     propsFilter: (resolvedProps) =>
-      omitResolvedKeys(resolvedProps, ["showHeader", "showAside", "showMain", "showFooter"]),
+      omitResolvedKeys(resolvedProps, [
+        "regionPreset",
+        "showHeader",
+        "showAside",
+        "showMain",
+        "showFooter",
+      ]),
   },
   ElHeader: {
     renderTag: "el-header",

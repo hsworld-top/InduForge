@@ -42,8 +42,8 @@ registerManifest({
 // Tabs 标签页组件
 registerManifest({
   type: "Tabs",
-  name: "标签页",
-  category: "PC端组件",
+  name: "选项卡布局",
+  category: "布局",
   isContainer: true,
   defaultSize: { width: 360, height: 200 },
   props: [
@@ -370,8 +370,8 @@ registerManifest({
 // Collapse 折叠面板组件
 registerManifest({
   type: "Collapse",
-  name: "折叠面板",
-  category: "PC端组件",
+  name: "折叠面板布局",
+  category: "布局",
   defaultSize: { width: 360, height: 200 },
   props: [
     {

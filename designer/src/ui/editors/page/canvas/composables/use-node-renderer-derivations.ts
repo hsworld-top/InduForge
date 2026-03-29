@@ -129,6 +129,8 @@ function resolveMenuIconComponent(icon: unknown): Component | null {
  * @param {import('vue').ComputedRef<boolean>} deps.isDropActive
  * @param {import('vue').Ref<string>} deps.activeTabName
  * @param {import('vue').ComputedRef<Array>} deps.tabsList
+ * @param {import('vue').Ref<string>} deps.activeCollapseName
+ * @param {import('vue').ComputedRef<Array>} deps.collapseItems
  * @param {object} deps.props - defineProps 结果（isRoot, readonly）
  * @returns {object}
  */
@@ -146,6 +148,8 @@ export function useNodeRendererDerivations({
   isDropActive,
   activeTabName,
   tabsList: _tabsList,
+  activeCollapseName,
+  collapseItems: _collapseItems,
   props,
 }: UseNodeRendererDerivationsDeps) {
   const menuItems = computed(() => {
@@ -222,6 +226,21 @@ export function useNodeRendererDerivations({
     });
   });
 
+  const activeCollapseChildIds = computed(() => {
+    void docVersion.value;
+    if (!node.value || node.value.type !== "Collapse" || !doc.value) return [];
+    const current = String(activeCollapseName.value || "").trim();
+    return (node.value.children || []).filter((childId) => {
+      const childNode = doc.value?.getNode?.(childId);
+      if (!childNode) return false;
+      const collapseKey = childNode.props?.collapseKey;
+      if (!collapseKey) {
+        return Boolean(current);
+      }
+      return String(collapseKey) === current;
+    });
+  });
+
   const regionHintText = computed(() => {
     if (!node.value) return "";
     return getRegionDesignerHint(node.value.type || "");
@@ -280,6 +299,7 @@ export function useNodeRendererDerivations({
     carouselItems,
     dropdownLabel,
     activeTabChildIds,
+    activeCollapseChildIds,
     regionHintText,
     useComponentWrapper,
     renderKey,

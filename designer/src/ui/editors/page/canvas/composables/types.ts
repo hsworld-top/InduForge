@@ -69,6 +69,8 @@ export interface UseNodeRendererDerivationsDeps {
   isDropActive: ComputedRef<boolean>;
   activeTabName: Ref<string>;
   tabsList: ComputedRef<Array<Record<string, unknown>>>;
+  activeCollapseName: Ref<string>;
+  collapseItems: ComputedRef<Array<Record<string, unknown>>>;
   props: {
     isRoot?: boolean;
     readonly?: boolean;
@@ -124,7 +126,6 @@ export interface UseNodeInteractionDeps {
   selectionVersion: MaybeRef<number>;
   readonly: ComputedRef<boolean>;
   isRoot: ComputedRef<boolean>;
-  isRootCanvasContainer: (node: ComponentNode | null | undefined) => boolean;
   isChildResizableByDescriptor: (type: string) => boolean;
   nodeRef: Ref<HTMLElement | null | undefined>;
   createSelectableElement: (kind: "node" | "graphic", id: string) => SelectableElement;
@@ -208,6 +209,8 @@ export interface UseNodeDropDeps {
   notifyInsertFailure: (message?: string) => void;
   activeTabName: Ref<string>;
   tabsList: ComputedRef<Array<Record<string, unknown>>>;
+  activeCollapseName: Ref<string>;
+  collapseItems: ComputedRef<Array<Record<string, unknown>>>;
 }
 
 export interface DropTargetPositionLike {
@@ -272,6 +275,8 @@ export interface UseNodePointerDeps {
   layoutInsertInfo: Ref<LayoutInsertInfoLike | null>;
   activeTabName: Ref<string>;
   tabsList: ComputedRef<Array<Record<string, unknown>>>;
+  activeCollapseName: Ref<string>;
+  collapseItems: ComputedRef<Array<Record<string, unknown>>>;
   resolveFlexDirection: (type: string, element: Element | null | undefined) => string;
 }
 
