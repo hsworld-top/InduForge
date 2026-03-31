@@ -16,28 +16,32 @@ import { computed, reactive, ref, watch } from "vue";
 import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
 import MonacoEditor from "@/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
+import {
+  buildPageConfigPatch,
+  normalizeWindowStyle,
+  type WindowStyle,
+} from "./page-inspector-config";
+import {
+  canEditRuntimeConstraint,
+  getPageInspectorSections,
+  type PageInspectorSectionKey,
+} from "./page-inspector-sections";
 
 type PageType = "business" | "login" | "logout";
 type SystemPageType = PageType | "home";
+const SYSTEM_PAGE_WINDOW_STYLE: WindowStyle = "replace";
 
 interface PageInspectorForm {
   name: string;
   path: string;
   description: string;
   pageType: PageType;
-  x: number;
-  y: number;
-  windowWidth: number;
-  windowHeight: number;
   width: number;
   height: number;
-  showGrid: boolean;
-  enableSnap: boolean;
   autoFit: boolean;
   lockAspectRatio: boolean;
   enableMinSize: boolean;
-  fontAutoFit: boolean;
-  windowStyle: string;
+  windowStyle: WindowStyle;
   permissionDesc: string;
   backgroundKind: BackgroundConfig["kind"];
   backgroundValue: string;
@@ -69,18 +73,11 @@ interface PageRecordLike {
   title?: string;
   config: PageNode["config"] & {
     description?: string;
-    x?: number;
-    y?: number;
-    windowWidth?: number;
-    windowHeight?: number;
     width?: number;
     height?: number;
-    showGrid?: boolean;
-    enableSnap?: boolean;
     autoFit?: boolean;
     lockAspectRatio?: boolean;
     enableMinSize?: boolean;
-    fontAutoFit?: boolean;
     windowStyle?: string;
     permissionDesc?: string;
     background?: {
@@ -115,23 +112,31 @@ const form = reactive<PageInspectorForm>({
   path: "",
   description: "",
   pageType: "business",
-  x: 0,
-  y: 0,
-  windowWidth: 1990,
-  windowHeight: 1100,
   width: 1920,
   height: 1080,
-  showGrid: false,
-  enableSnap: true,
   autoFit: true,
   lockAspectRatio: false,
   enableMinSize: false,
-  fontAutoFit: false,
   windowStyle: "cover",
   permissionDesc: "0item",
   backgroundKind: "color",
   backgroundValue: "#ffffff",
 });
+
+const sectionTitleMap = new Map(
+  getPageInspectorSections().map((section) => [section.key, section.title]),
+);
+
+/**
+ * 根据分区键获取分区标题
+ * @param {PageInspectorSectionKey} key - 分区键
+ * @returns {string} 分区标题
+ */
+function getSectionTitle(key: PageInspectorSectionKey): string {
+  return sectionTitleMap.get(key) || "";
+}
+
+const canEditConstraintOptions = computed(() => canEditRuntimeConstraint(form.autoFit));
 
 const canvasStyleDialogVisible = ref(false);
 const canvasStyleDraft = ref("");
@@ -367,21 +372,18 @@ function syncForm(page: PageRecordLike | null | undefined): void {
   const path = resolvePath(displayPage, nextName);
   form.path = formatPathForDisplay(path);
 
-  form.pageType = getPageType(page || pageFromList);
+  const resolvedPageType = getPageType(page || pageFromList);
+  form.pageType = resolvedPageType;
   form.description = page?.config?.description ?? "";
-  form.x = page?.config?.x ?? 0;
-  form.y = page?.config?.y ?? 0;
-  form.windowWidth = page?.config?.windowWidth ?? 1990;
-  form.windowHeight = page?.config?.windowHeight ?? 1100;
   form.width = page?.config?.width ?? 1920;
   form.height = page?.config?.height ?? 1080;
-  form.showGrid = page?.config?.showGrid ?? false;
-  form.enableSnap = page?.config?.enableSnap ?? true;
   form.autoFit = page?.config?.autoFit ?? true;
   form.lockAspectRatio = page?.config?.lockAspectRatio ?? false;
   form.enableMinSize = page?.config?.enableMinSize ?? false;
-  form.fontAutoFit = page?.config?.fontAutoFit ?? false;
-  form.windowStyle = page?.config?.windowStyle ?? "cover";
+  form.windowStyle =
+    systemType || resolvedPageType === "login" || resolvedPageType === "logout"
+      ? SYSTEM_PAGE_WINDOW_STYLE
+      : normalizeWindowStyle(page?.config?.windowStyle);
   form.permissionDesc = page?.config?.permissionDesc ?? "0item";
   form.backgroundKind = page?.config?.background?.kind || "color";
   form.backgroundValue = page?.config?.background?.value || "#ffffff";
@@ -507,6 +509,10 @@ async function handleNameUpdate(): Promise<void> {
  */
 async function handlePageTypeChange(type: PageType): Promise<void> {
   if (!currentPage.value || !doc.value) return;
+  if (isSystemPage.value) {
+    syncForm(currentPage.value);
+    return;
+  }
 
   const page = currentPage.value;
   if (!page) return;
@@ -541,6 +547,10 @@ async function handlePageTypeChange(type: PageType): Promise<void> {
 
     form.path = path;
     editorStore.updateCurrentPage({ path });
+    if (type === "login" || type === "logout") {
+      form.windowStyle = SYSTEM_PAGE_WINDOW_STYLE;
+      handleConfigUpdate();
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "更新页面入口失败";
     showErrorMessage(message);
@@ -567,23 +577,28 @@ function handleCanvasPresetChange(id: string): void {
  */
 function handleConfigUpdate(): void {
   if (!currentPage.value) return;
-  const nextConfig = {
-    ...(currentPage.value.config || {}),
+  if (isSystemPage.value && form.windowStyle !== SYSTEM_PAGE_WINDOW_STYLE) {
+    form.windowStyle = SYSTEM_PAGE_WINDOW_STYLE;
+  }
+  const configPatch = buildPageConfigPatch({
     description: form.description,
-    x: Number(form.x) || 0,
-    y: Number(form.y) || 0,
-    windowWidth: Number(form.windowWidth) || 1990,
-    windowHeight: Number(form.windowHeight) || 1100,
-    width: Number(form.width) || currentPage.value.config?.width || 1920,
-    height: Number(form.height) || currentPage.value.config?.height || 1080,
-    showGrid: form.showGrid,
-    enableSnap: form.enableSnap,
+    width: form.width,
+    height: form.height,
     autoFit: form.autoFit,
     lockAspectRatio: form.lockAspectRatio,
     enableMinSize: form.enableMinSize,
-    fontAutoFit: form.fontAutoFit,
-    windowStyle: form.windowStyle,
+    windowStyle: isSystemPage.value ? SYSTEM_PAGE_WINDOW_STYLE : form.windowStyle,
     permissionDesc: form.permissionDesc,
+    backgroundKind: form.backgroundKind,
+    backgroundValue: form.backgroundValue,
+  });
+  if (!configPatch.autoFit) {
+    form.lockAspectRatio = false;
+    form.enableMinSize = false;
+  }
+  const nextConfig = {
+    ...(currentPage.value.config || {}),
+    ...configPatch,
   };
   editorStore.updateCurrentPage({ config: nextConfig });
 }
@@ -620,15 +635,16 @@ function filterNumericInput(event: KeyboardEvent): void {
  * @param {FocusEvent} event - 失焦事件
  */
 function handleNumericBlur(
-  field: "x" | "y" | "windowWidth" | "windowHeight" | "width" | "height",
+  field: "width" | "height",
   event: FocusEvent,
 ): void {
   const raw = String(form[field] ?? "").trim();
   const num = Number(raw);
+  const fallback = field === "width" ? 1920 : 1080;
   if (raw === "" || !Number.isFinite(num)) {
-    form[field] = 0;
+    form[field] = fallback;
   } else {
-    form[field] = num;
+    form[field] = num > 0 ? num : fallback;
   }
   const target = event.target as HTMLElement | null;
   target?.setAttribute("readonly", "");
@@ -669,15 +685,7 @@ function clearCanvasStyleDialog(): void {
  * 更新背景配置
  */
 function handleBackgroundUpdate(): void {
-  if (!currentPage.value) return;
-  const nextConfig = {
-    ...currentPage.value.config,
-    background: {
-      kind: form.backgroundKind,
-      value: form.backgroundValue,
-    },
-  };
-  editorStore.updateCurrentPage({ config: nextConfig });
+  handleConfigUpdate();
 }
 </script>
 
@@ -685,7 +693,7 @@ function handleBackgroundUpdate(): void {
   <div class="page-inspector-panel">
     <div class="page-prop-list">
       <div class="page-group">
-        <div class="section-title">基本</div>
+        <div class="section-title">{{ getSectionTitle("basic") }}</div>
         <div class="page-prop-item">
           <div class="page-prop-label">名称</div>
           <div class="page-prop-editor">
@@ -709,7 +717,7 @@ function handleBackgroundUpdate(): void {
             <el-select
               v-model="form.pageType"
               size="small"
-              :disabled="isHomePage"
+              :disabled="isSystemPage"
               @change="handlePageTypeChange"
             >
               <el-option label="业务页面" value="business" />
@@ -724,25 +732,10 @@ function handleBackgroundUpdate(): void {
             <el-input v-model="form.path" size="small" disabled />
           </div>
         </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">位置</div>
-          <div class="page-prop-editor">
-            <div class="axis-inline-group">
-              <div class="axis-inline-item">
-                <span class="axis-inline-tag">X</span>
-                <el-input v-model="form.x" size="small" disabled />
-              </div>
-              <div class="axis-inline-item">
-                <span class="axis-inline-tag">Y</span>
-                <el-input v-model="form.y" size="small" disabled />
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div class="page-group">
-        <div class="section-title">样式</div>
+        <div class="section-title">{{ getSectionTitle("visual") }}</div>
         <div class="page-prop-item">
           <div class="page-prop-label">背景类型</div>
           <div class="page-prop-editor">
@@ -769,44 +762,8 @@ function handleBackgroundUpdate(): void {
             />
           </div>
         </div>
-      </div>
-
-      <div class="page-group">
-        <div class="section-title">窗口大小</div>
         <div class="page-prop-item">
-          <div class="page-prop-label">宽度</div>
-          <div class="page-prop-editor">
-            <el-input
-              v-model="form.windowWidth"
-              size="small"
-              readonly
-              class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')"
-              @blur="handleNumericBlur('windowWidth', $event)"
-              @keydown="filterNumericInput"
-            />
-          </div>
-        </div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">高度</div>
-          <div class="page-prop-editor">
-            <el-input
-              v-model="form.windowHeight"
-              size="small"
-              readonly
-              class="num-readonly-input"
-              @focus="$event.target.removeAttribute('readonly')"
-              @blur="handleNumericBlur('windowHeight', $event)"
-              @keydown="filterNumericInput"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div class="page-group">
-        <div class="section-title">画面大小</div>
-        <div class="page-prop-item">
-          <div class="page-prop-label">宽度</div>
+          <div class="page-prop-label">画面宽度</div>
           <div class="page-prop-editor">
             <el-input
               v-model="form.width"
@@ -820,7 +777,7 @@ function handleBackgroundUpdate(): void {
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">高度</div>
+          <div class="page-prop-label">画面高度</div>
           <div class="page-prop-editor">
             <el-input
               v-model="form.height"
@@ -836,7 +793,7 @@ function handleBackgroundUpdate(): void {
       </div>
 
       <div class="page-group">
-        <div class="section-title">窗口</div>
+        <div class="section-title">{{ getSectionTitle("runtime") }}</div>
         <div class="page-prop-item page-prop-item--switch">
           <div class="page-prop-label">自适应</div>
           <div class="page-prop-editor page-prop-editor-switch">
@@ -846,40 +803,45 @@ function handleBackgroundUpdate(): void {
         <div class="page-prop-item page-prop-item--switch">
           <div class="page-prop-label">启用锁定宽高比</div>
           <div class="page-prop-editor page-prop-editor-switch">
-            <el-switch v-model="form.lockAspectRatio" @change="handleConfigUpdate" />
+            <el-switch
+              v-model="form.lockAspectRatio"
+              :disabled="!canEditConstraintOptions"
+              @change="handleConfigUpdate"
+            />
           </div>
         </div>
         <div class="page-prop-item page-prop-item--switch">
           <div class="page-prop-label">启用最小尺寸</div>
           <div class="page-prop-editor page-prop-editor-switch">
-            <el-switch v-model="form.enableMinSize" @change="handleConfigUpdate" />
-          </div>
-        </div>
-        <div class="page-prop-item page-prop-item--switch">
-          <div class="page-prop-label">字体自适应</div>
-          <div class="page-prop-editor page-prop-editor-switch">
-            <el-switch v-model="form.fontAutoFit" @change="handleConfigUpdate" />
+            <el-switch
+              v-model="form.enableMinSize"
+              :disabled="!canEditConstraintOptions"
+              @change="handleConfigUpdate"
+            />
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">窗口样式</div>
+          <div class="page-prop-label">窗口类型</div>
           <div class="page-prop-editor">
-            <el-select v-model="form.windowStyle" size="small" @change="handleConfigUpdate">
+            <el-select
+              v-model="form.windowStyle"
+              size="small"
+              :disabled="isSystemPage"
+              @change="handleConfigUpdate"
+            >
+              <el-option label="弹出式" value="popup" />
               <el-option label="覆盖式" value="cover" />
-              <el-option label="标准式" value="normal" />
+              <el-option label="替换式" value="replace" />
             </el-select>
           </div>
         </div>
-      </div>
-
-      <div class="page-group">
-        <div class="section-title">权限描述管理</div>
         <div class="page-prop-item">
-          <div class="page-prop-label">配置</div>
+          <div class="page-prop-label">权限配置</div>
           <div class="page-prop-editor">
             <el-button size="small" @click="handlePermissionConfig">
               {{ form.permissionDesc || "0item" }}
             </el-button>
+            <span class="coming-soon-text">即将支持</span>
           </div>
         </div>
       </div>
@@ -1014,6 +976,12 @@ function handleBackgroundUpdate(): void {
 .page-prop-editor {
   flex: 1;
   min-width: 0;
+}
+
+.coming-soon-text {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--designer-text-secondary);
 }
 
 .page-prop-editor-switch {

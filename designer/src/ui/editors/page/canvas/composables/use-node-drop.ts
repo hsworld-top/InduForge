@@ -28,6 +28,13 @@ import {
   clampPositionInContainer,
   eventToCanvasPosition,
 } from "@/editor-core/utils/placement-utils";
+import {
+  DESIGNER_ASSET_DRAG_MIME,
+  buildAssetNodeProps,
+  parseAssetDragPayload,
+  resolveAssetComponentType,
+  type DesignerAssetDragPayload,
+} from "@/ui/shared/utils/asset-drag";
 
 /**
  * 判断容器是否允许子组件
@@ -325,6 +332,36 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     }
   };
 
+  /**
+   * 解析拖拽中的资源 payload。
+   * @param {DragEvent} event - 拖拽事件
+   * @returns {DesignerAssetDragPayload | null}
+   */
+  const resolveDraggedAssetPayload = (event: DragEvent): DesignerAssetDragPayload | null => {
+    const raw = event.dataTransfer?.getData(DESIGNER_ASSET_DRAG_MIME) || "";
+    return parseAssetDragPayload(raw);
+  };
+
+  /**
+   * 将资源信息写入新建节点属性。
+   * @param {ComponentNode | null} inserted - 新插入节点
+   * @param {string} nodeType - 节点类型
+   * @param {DesignerAssetDragPayload | null} assetPayload - 资源 payload
+   */
+  const applyAssetPayloadToInsertedNode = (
+    inserted: ComponentNode | null,
+    nodeType: string,
+    assetPayload: DesignerAssetDragPayload | null,
+  ): void => {
+    if (!inserted || !assetPayload) return;
+    const componentType = nodeType === "Image" ? "Image" : "DownloadLink";
+    const patchProps = buildAssetNodeProps(assetPayload, componentType);
+    if (!patchProps || Object.keys(patchProps).length === 0) return;
+    editorStore.updateNode(inserted.id, {
+      props: { ...(inserted.props || {}), ...patchProps },
+    });
+  };
+
   // 拖拽状态
   const isDragOver = ref(false);
   const showInsertLine = ref(false);
@@ -521,9 +558,11 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     };
 
     if (!isContainer.value) return;
+    const assetPayload = resolveDraggedAssetPayload(event);
     const hasComponent =
       event.dataTransfer?.types?.includes("application/x-designer-component") ||
       event.dataTransfer?.types?.includes("application/x-designer-node") ||
+      event.dataTransfer?.types?.includes(DESIGNER_ASSET_DRAG_MIME) ||
       event.dataTransfer?.types?.includes("text/plain") ||
       Boolean(dragState.dragType);
     if (!hasComponent) return;
@@ -554,6 +593,9 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       } catch {
         dragType = payload;
       }
+    }
+    if (!dragType && assetPayload) {
+      dragType = resolveAssetComponentType(assetPayload);
     }
     dragType = dragType || fallbackType;
 
@@ -836,9 +878,9 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       insertIndex: number,
       componentType: string,
     ) => {
-      if (!layoutNode || layoutNode.type !== "ElLayout") return false;
+      if (!layoutNode || layoutNode.type !== "ElLayout") return null;
       const rowNode = insertNodeWithoutSelection("ElLayoutRow", layoutNode.id, insertIndex);
-      if (!rowNode) return false;
+      if (!rowNode) return null;
       const latestLayout = doc.value?.getNode?.(layoutNode.id);
       const rowCount = (latestLayout?.children || []).filter((childId) => {
         const childNode = doc.value?.getNode?.(childId);
@@ -861,10 +903,10 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       let colId = colIds[0];
       if (!colId) {
         const colNode = insertNodeWithoutSelection("ElCol", rowNode.id, 0);
-        if (!colNode) return false;
+        if (!colNode) return null;
         colId = colNode.id;
       }
-      return Boolean(insertNodeWithoutSelection(componentType, colId));
+      return insertNodeWithoutSelection(componentType, colId);
     };
 
     const resolveRowInsertTarget = () => {
@@ -1000,22 +1042,43 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       return null;
     };
 
+    const assetPayload = resolveDraggedAssetPayload(event);
     const payload =
       event.dataTransfer?.getData("application/x-designer-component") ||
       event.dataTransfer?.getData("application/x-designer-node") ||
       event.dataTransfer?.getData("text/plain");
     const fallbackType = dragState.dragType || "";
+    const assetComponentType = assetPayload ? resolveAssetComponentType(assetPayload) : "";
+    const insertNodeByResolvedType = (
+      type: string,
+      parentId: string | undefined,
+      index?: number,
+      options: { dropPosition?: { x: number; y: number } | undefined } = {},
+    ) => {
+      const inserted = insertNodeWithoutSelection(type, parentId, index, options);
+      applyAssetPayloadToInsertedNode(inserted, type, assetPayload);
+      return inserted;
+    };
+    const insertIntoLayoutByRowAndApplyAsset = (
+      layoutNode: ComponentNode | null | undefined,
+      insertIndex: number,
+      componentType: string,
+    ) => {
+      const inserted = insertIntoLayoutByRow(layoutNode, insertIndex, componentType);
+      applyAssetPayloadToInsertedNode(inserted, componentType, assetPayload);
+      return inserted;
+    };
 
     try {
       const parsed = JSON.parse(payload || "{}") as { type?: string };
       const type = parsed?.type || "";
-      if (!type && !fallbackType) return;
-      const resolvedType = type || fallbackType;
+      const resolvedType = type || assetComponentType || fallbackType;
+      if (!resolvedType) return;
       if (!node.value) return;
       if (!layoutInsertSnapshot) {
         const resolvedLayoutByPoint = resolveLayoutInsertFromPoint();
         if (resolvedLayoutByPoint && resolvedType !== "ElLayoutRow") {
-          const inserted = insertIntoLayoutByRow(
+          const inserted = insertIntoLayoutByRowAndApplyAsset(
             resolvedLayoutByPoint.layoutNode,
             resolvedLayoutByPoint.index,
             resolvedType,
@@ -1033,7 +1096,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         doc.value?.getNode?.(layoutInsertSnapshot.layoutId)?.type === "ElLayout"
       ) {
         const layoutNode = doc.value.getNode(layoutInsertSnapshot.layoutId);
-        const inserted = insertIntoLayoutByRow(
+        const inserted = insertIntoLayoutByRowAndApplyAsset(
           layoutNode,
           layoutInsertSnapshot.index,
           resolvedType,
@@ -1138,7 +1201,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
               }
               colId = colNode.id;
             }
-            const inserted = insertNodeWithoutSelection(resolvedType, colId);
+            const inserted = insertNodeByResolvedType(resolvedType, colId);
             if (!inserted) {
               notifyInsertFailure();
             }
@@ -1180,7 +1243,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
                 columns: colCount,
               },
             });
-            const inserted = insertNodeWithoutSelection(resolvedType, colNode.id);
+            const inserted = insertNodeByResolvedType(resolvedType, colNode.id);
             if (!inserted) {
               notifyInsertFailure();
             }
@@ -1323,7 +1386,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             }
             colId = colNode.id;
           }
-          const inserted = insertNodeWithoutSelection(resolvedType, colId);
+          const inserted = insertNodeByResolvedType(resolvedType, colId);
           if (!inserted) {
             notifyInsertFailure();
           }
@@ -1350,7 +1413,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
               columns: nextColumns,
             },
           });
-          const inserted = insertNodeWithoutSelection(resolvedType, colNode.id);
+          const inserted = insertNodeByResolvedType(resolvedType, colNode.id);
           if (!inserted) {
             notifyInsertFailure();
           }
@@ -1362,7 +1425,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       }
 
       // 插入新节点
-      const inserted = insertNodeWithoutSelection(resolvedType, targetNode?.id, insertIndex, {
+      const inserted = insertNodeByResolvedType(resolvedType, targetNode?.id, insertIndex, {
         dropPosition: dropPosition || undefined,
       });
       if (!inserted) {
@@ -1371,13 +1434,21 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       applyScopedKeyForInsertedNode(inserted, targetNode);
       endDrag();
     } catch {
-      const type = payload || fallbackType;
+      let type = assetComponentType || fallbackType;
+      if (!type && payload) {
+        try {
+          const parsed = JSON.parse(payload) as { type?: string };
+          type = parsed?.type || payload;
+        } catch {
+          type = payload;
+        }
+      }
       if (!type) return;
       if (!node.value) return;
       if (!layoutInsertSnapshot) {
         const resolvedLayoutByPoint = resolveLayoutInsertFromPoint();
         if (resolvedLayoutByPoint && type !== "ElLayoutRow") {
-          const inserted = insertIntoLayoutByRow(
+          const inserted = insertIntoLayoutByRowAndApplyAsset(
             resolvedLayoutByPoint.layoutNode,
             resolvedLayoutByPoint.index,
             type,
@@ -1395,7 +1466,11 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         doc.value?.getNode?.(layoutInsertSnapshot.layoutId)?.type === "ElLayout"
       ) {
         const layoutNode = doc.value.getNode(layoutInsertSnapshot.layoutId);
-        const inserted = insertIntoLayoutByRow(layoutNode, layoutInsertSnapshot.index, type);
+        const inserted = insertIntoLayoutByRowAndApplyAsset(
+          layoutNode,
+          layoutInsertSnapshot.index,
+          type,
+        );
         if (!inserted) notifyInsertFailure();
         endDrag();
         return;
@@ -1496,7 +1571,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
               }
               colId = colNode.id;
             }
-            const inserted = insertNodeWithoutSelection(type, colId);
+            const inserted = insertNodeByResolvedType(type, colId);
             if (!inserted) {
               notifyInsertFailure();
             }
@@ -1538,7 +1613,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
                 columns: colCount,
               },
             });
-            const inserted = insertNodeWithoutSelection(type, colNode.id);
+            const inserted = insertNodeByResolvedType(type, colNode.id);
             if (!inserted) {
               notifyInsertFailure();
             }
@@ -1676,7 +1751,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
             }
             colId = colNode.id;
           }
-          const inserted = insertNodeWithoutSelection(type, colId);
+          const inserted = insertNodeByResolvedType(type, colId);
           if (!inserted) {
             notifyInsertFailure();
           }
@@ -1703,7 +1778,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
               columns: nextColumns,
             },
           });
-          const inserted = insertNodeWithoutSelection(type, colNode.id);
+          const inserted = insertNodeByResolvedType(type, colNode.id);
           if (!inserted) {
             notifyInsertFailure();
           }
@@ -1715,7 +1790,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       }
 
       // 插入新节点
-      const inserted = insertNodeWithoutSelection(type, targetNode?.id, insertIndex, {
+      const inserted = insertNodeByResolvedType(type, targetNode?.id, insertIndex, {
         dropPosition: dropPosition || undefined,
       });
       if (!inserted) {

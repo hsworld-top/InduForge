@@ -485,7 +485,7 @@ function getPreviewIcon(type: string): string {
           <template #title>
             <div class="component-section-title">布局</div>
           </template>
-          <div v-if="layoutItems.length" class="grid grid-cols-2 gap-2">
+          <div v-if="layoutItems.length" class="component-grid">
             <div
               v-for="item in layoutItems"
               :key="item.type"
@@ -517,7 +517,7 @@ function getPreviewIcon(type: string): string {
               <template #title>
                 <div class="component-subsection-title">PC端组件</div>
               </template>
-              <div v-if="pcItems.length" class="grid grid-cols-2 gap-2">
+              <div v-if="pcItems.length" class="component-grid">
                 <div
                   v-for="item in pcItems"
                   :key="item.type"
@@ -546,7 +546,7 @@ function getPreviewIcon(type: string): string {
           <template #title>
             <div class="component-section-title">图表</div>
           </template>
-          <div v-if="chartItems.length" class="grid grid-cols-2 gap-2">
+          <div v-if="chartItems.length" class="component-grid">
             <div
               v-for="item in chartItems"
               :key="item.type"
@@ -653,6 +653,13 @@ function getPreviewIcon(type: string): string {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* 物料网格：随左侧面板宽度自动增减列数（不再固定 2 列） */
+.component-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
 }
 
 /* 卡片预览区 */

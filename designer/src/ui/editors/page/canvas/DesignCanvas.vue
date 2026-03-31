@@ -22,6 +22,12 @@ import { isContainerType } from "@/components/descriptors/registry";
 import { createSelectableElement } from "@/editor-core/document/types";
 import { eventToCanvasPosition } from "@/editor-core/utils/placement-utils";
 import { useEditorStore } from "@/stores/editor-store";
+import {
+  DESIGNER_ASSET_DRAG_MIME,
+  buildAssetNodeProps,
+  parseAssetDragPayload,
+  resolveAssetComponentType,
+} from "@/ui/shared/utils/asset-drag";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import { canvasZoomKey } from "./injection-keys";
 import NodeRenderer from "./NodeRenderer.vue";
@@ -232,6 +238,9 @@ function handleMarqueeUp(): void {
 function handleCanvasPointerDown(event: PointerEvent): void {
   if (!selection.value) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.focus({ preventScroll: true });
+  }
   if (!(event.target instanceof Element)) {
     closeContextMenu();
     selection.value?.clearSelection();
@@ -330,11 +339,32 @@ const canRedo = computed(() => history.value?.canRedo?.() || false);
  */
 function handleCanvasDrop(event: DragEvent): void {
   if (!currentPage.value?.rootNodeId) return;
+  const assetPayload = parseAssetDragPayload(event.dataTransfer?.getData(DESIGNER_ASSET_DRAG_MIME));
 
   const payload =
     event.dataTransfer?.getData("application/x-designer-component") ||
+    event.dataTransfer?.getData("application/x-designer-node") ||
     event.dataTransfer?.getData("text/plain");
   const fallbackType = dragState.dragType || "";
+  const assetComponentType = assetPayload ? resolveAssetComponentType(assetPayload) : "";
+
+  /**
+   * 将资源拖拽 payload 写入新建节点属性。
+   * @param {ReturnType<typeof editorStore.insertNode>} insertedNode - 新建节点
+   * @param {string} insertedType - 新建节点类型
+   */
+  const applyAssetPayloadToInsertedNode = (
+    insertedNode: ReturnType<typeof editorStore.insertNode>,
+    insertedType: string,
+  ): void => {
+    if (!insertedNode || !assetPayload) return;
+    const componentType = insertedType === "Image" ? "Image" : "DownloadLink";
+    const patchProps = buildAssetNodeProps(assetPayload, componentType);
+    if (!patchProps || Object.keys(patchProps).length === 0) return;
+    editorStore.updateNode(insertedNode.id, {
+      props: { ...(insertedNode.props || {}), ...patchProps },
+    });
+  };
 
   let componentType = "";
   if (payload) {
@@ -348,6 +378,9 @@ function handleCanvasDrop(event: DragEvent): void {
 
   if (!componentType) {
     componentType = fallbackType;
+  }
+  if (!componentType) {
+    componentType = assetComponentType;
   }
   if (!componentType) return;
 
@@ -402,6 +435,7 @@ function handleCanvasDrop(event: DragEvent): void {
     const inserted = editorStore.insertNode(componentType, colId, undefined, {
       autoSelectInserted: false,
     });
+    applyAssetPayloadToInsertedNode(inserted, componentType);
     return Boolean(inserted);
   };
 
@@ -429,15 +463,15 @@ function handleCanvasDrop(event: DragEvent): void {
     return candidate.getAttribute("data-node-id");
   };
 
-  let didInsert = Boolean(
-    editorStore.insertNode(componentType, currentPage.value.rootNodeId, undefined, {
+  const inserted = editorStore.insertNode(componentType, currentPage.value.rootNodeId, undefined, {
       dropPosition: {
         x: Math.max(0, Math.round(offsetX)),
         y: Math.max(0, Math.round(offsetY)),
       },
       autoSelectInserted: false,
-    }),
-  );
+    });
+  applyAssetPayloadToInsertedNode(inserted, componentType);
+  let didInsert = Boolean(inserted);
   if (!didInsert) {
     const layoutId = resolveLayoutFromPoint();
     if (layoutId) {
@@ -593,14 +627,46 @@ function handleClickOutside(_event: MouseEvent): void {
   }
 }
 
+/**
+ * 判断键盘事件是否来自可编辑输入上下文，避免误删输入内容
+ * @param {EventTarget | null} target - 事件目标
+ * @returns {boolean} 是否可编辑上下文
+ */
+function isEditableInputTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+}
+
+/**
+ * 全局键盘兜底监听，保证画布失焦时快捷键仍可用
+ * @param {KeyboardEvent} event - 键盘事件
+ */
+function handleGlobalKeyDown(event: KeyboardEvent): void {
+  if (isEditableInputTarget(event.target)) return;
+  if (event.key === "Delete" || event.key === "Backspace") {
+    const selectedElements = selection.value?.getSelectedElements?.() || [];
+    const hasSelectedNode = selectedElements.some((item) => item.kind === "node");
+    if (!hasSelectedNode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    editorStore.removeSelectedNodes();
+    return;
+  }
+  if (event.defaultPrevented) return;
+  handleKeyDown(event);
+}
+
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
   window.addEventListener("designer:force-refresh", handleForceRefresh);
+  window.addEventListener("keydown", handleGlobalKeyDown, true);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
   window.removeEventListener("designer:force-refresh", handleForceRefresh);
+  window.removeEventListener("keydown", handleGlobalKeyDown, true);
   document.removeEventListener("pointermove", handleMarqueeMove);
   document.removeEventListener("pointerup", handleMarqueeUp);
 });

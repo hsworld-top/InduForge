@@ -39,6 +39,50 @@ registerManifest({
   ],
 });
 
+// DownloadLink 下载链接组件
+registerManifest({
+  type: "DownloadLink",
+  name: "下载链接",
+  category: "PC端组件",
+  defaultSize: { width: 220, height: 32 },
+  props: [
+    {
+      name: "text",
+      type: "string",
+      label: "链接文本",
+      group: "基础",
+      defaultValue: "下载文件",
+      placeholder: "请输入链接文本",
+    },
+    {
+      name: "href",
+      type: "string",
+      label: "下载地址",
+      group: "基础",
+      defaultValue: "",
+      placeholder: "请输入资源 URL",
+    },
+    {
+      name: "download",
+      type: "boolean",
+      label: "启用下载",
+      group: "行为",
+      defaultValue: true,
+    },
+    {
+      name: "target",
+      type: "enum",
+      label: "打开方式",
+      group: "行为",
+      defaultValue: "_blank",
+      options: [
+        { label: "新窗口", value: "_blank" },
+        { label: "当前窗口", value: "_self" },
+      ],
+    },
+  ],
+});
+
 // Tabs 标签页组件
 registerManifest({
   type: "Tabs",

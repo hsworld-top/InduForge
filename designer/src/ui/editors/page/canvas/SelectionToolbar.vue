@@ -42,6 +42,7 @@ const editorStore = useEditorStore();
 const { selection, selectionVersion, currentPage } = storeToRefs(editorStore);
 
 const TOOLBAR_GAP = 8;
+const SELECTION_TOOLBAR_Z_INDEX = 1500;
 
 const pos = ref<{ x: number; y: number }>({ x: 0, y: 0 });
 const visible = ref(false);
@@ -116,7 +117,8 @@ const toolbarStyle = computed<CSSProperties>(() => ({
   position: "fixed",
   left: `${pos.value.x}px`,
   top: `${pos.value.y}px`,
-  zIndex: 9999,
+  // 需要高于画布节点，但低于 Element Plus 弹层（避免压住 panel 弹窗）
+  zIndex: SELECTION_TOOLBAR_Z_INDEX,
 }));
 
 let rafId: number | null = null;

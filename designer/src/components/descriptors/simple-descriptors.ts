@@ -105,6 +105,30 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   },
   Cascader: { renderTag: "el-cascader" },
   Image: { renderTag: "el-image" },
+  DownloadLink: {
+    renderTag: "a",
+    displayContent: (node, resolvedProps) =>
+      String(resolvedProps?.text ?? node?.label ?? "下载文件"),
+    propsFilter: (resolvedProps) => {
+      const nextProps = omitResolvedKeys(resolvedProps, ["text"]);
+      if (!nextProps.href) {
+        nextProps.href = "#";
+      }
+      if (!nextProps.target) {
+        nextProps.target = "_blank";
+      }
+      if (nextProps.target === "_blank" && !nextProps.rel) {
+        nextProps.rel = "noopener noreferrer";
+      }
+      if (nextProps.download === true) {
+        nextProps.download = "";
+      }
+      if (nextProps.download === false) {
+        delete nextProps.download;
+      }
+      return nextProps;
+    },
+  },
   Tabs: {
     renderTag: "el-tabs",
     isContainer: true,

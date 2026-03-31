@@ -11,6 +11,11 @@ import IconEpList from "~icons/ep/list";
 import assetApi from "@/services/assetApi";
 import { useEditorStore } from "@/stores/editor-store";
 import { unwrapApiData } from "@/types/api";
+import {
+  DESIGNER_ASSET_DRAG_MIME,
+  buildAssetDragPayload,
+  serializeAssetDragPayload,
+} from "@/ui/shared/utils/asset-drag";
 
 interface TreeFilterableLike {
   filter?: (value: string) => void;
@@ -152,6 +157,24 @@ function isPdfAsset(asset: Partial<AssetItem> | null | undefined): boolean {
   if (ext === "pdf") return true;
   const mime = String(asset?.mimeType || "").toLowerCase();
   return mime.includes("pdf");
+}
+
+function isVideoAsset(asset: Partial<AssetItem> | null | undefined): boolean {
+  const type = String(asset?.type || "").toLowerCase();
+  const ext = getAssetExt(asset || {});
+  const mime = String(asset?.mimeType || "").toLowerCase();
+  if (type === "video") return true;
+  if (mime.startsWith("video/")) return true;
+  return ["mp4", "webm", "ogg", "mov", "avi", "mkv"].includes(ext);
+}
+
+function isAudioAsset(asset: Partial<AssetItem> | null | undefined): boolean {
+  const type = String(asset?.type || "").toLowerCase();
+  const ext = getAssetExt(asset || {});
+  const mime = String(asset?.mimeType || "").toLowerCase();
+  if (type === "audio") return true;
+  if (mime.startsWith("audio/")) return true;
+  return ["mp3", "wav", "ogg", "flac", "m4a", "aac"].includes(ext);
 }
 
 function buildFolderTree(items: AssetFolder[] | null | undefined): ResourceFolderNode[] {
@@ -449,7 +472,12 @@ function handleAssetDragStart(asset: ResourceAssetView | null | undefined, event
   if (!asset) return;
   const dataTransfer = event?.dataTransfer;
   if (dataTransfer) {
+    dataTransfer.effectAllowed = "copyMove";
     dataTransfer.setData("asset-id", asset.id);
+    const dragPayload = buildAssetDragPayload(asset);
+    if (dragPayload) {
+      dataTransfer.setData(DESIGNER_ASSET_DRAG_MIME, serializeAssetDragPayload(dragPayload));
+    }
   }
 }
 
@@ -706,6 +734,18 @@ watch(projectId, (value) => {
             :src="previewAsset.url"
             :alt="previewAsset.displayName"
           />
+          <video
+            v-else-if="isVideoAsset(previewAsset)"
+            class="preview-video"
+            :src="previewAsset.url"
+            controls
+          ></video>
+          <audio
+            v-else-if="isAudioAsset(previewAsset)"
+            class="preview-audio"
+            :src="previewAsset.url"
+            controls
+          ></audio>
           <iframe
             v-else-if="isPdfAsset(previewAsset)"
             class="preview-pdf"
@@ -1025,6 +1065,15 @@ watch(projectId, (value) => {
   max-width: 100%;
   max-height: 60vh;
   object-fit: contain;
+}
+
+.preview-video {
+  max-width: 100%;
+  max-height: 60vh;
+}
+
+.preview-audio {
+  width: min(560px, 100%);
 }
 
 .preview-pdf {

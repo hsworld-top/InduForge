@@ -1744,17 +1744,16 @@ export const useEditorStore = defineStore("editor", () => {
     const d = doc.value;
     const h = history.value;
 
+    const rootId = currentPage.value?.rootNodeId;
     const selected = selection.value.getSelectedElements?.() || [];
     const nodeIds = selected.filter((el) => el.kind === "node").map((el) => el.id);
-
     if (!nodeIds.length) return false;
 
-    const rootId = currentPage.value?.rootNodeId;
-    const nodeSet = new Set(nodeIds);
-    const deletable = nodeIds.filter((nodeId) => {
-      if (nodeId === rootId) return false;
+    // 根节点不可删除，且不应阻断其子节点的删除
+    const nodeSet = new Set(nodeIds.filter((nodeId) => nodeId !== rootId));
+    const deletable = [...nodeSet].filter((nodeId) => {
       const ancestors = d.getAncestors(nodeId) || [];
-      return !ancestors.some((ancestor) => nodeSet.has(ancestor.id));
+      return !ancestors.some((ancestor) => ancestor.id !== rootId && nodeSet.has(ancestor.id));
     });
 
     if (!deletable.length) return false;
