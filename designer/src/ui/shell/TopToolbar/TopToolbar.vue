@@ -537,8 +537,8 @@ function handleMoreCommand(command: string) {
 
 .toolbar-center {
   position: absolute;
-  left: calc(var(--designer-panel-width) + var(--designer-rail-width));
-  right: calc(var(--designer-panel-width) + var(--designer-rail-width));
+  left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+  right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
   top: 0;
   bottom: 0;
   display: flex;
@@ -1025,8 +1025,8 @@ function handleMoreCommand(command: string) {
 
 @media (max-width: 1360px) {
   .toolbar-center {
-    left: calc(var(--designer-panel-width) + var(--designer-rail-width));
-    right: calc(var(--designer-panel-width) + var(--designer-rail-width));
+    left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+    right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
   }
 
   .toolbar-center-shell {
@@ -1040,8 +1040,8 @@ function handleMoreCommand(command: string) {
   }
 
   .toolbar-center {
-    left: calc(var(--designer-panel-width) + var(--designer-rail-width));
-    right: calc(var(--designer-panel-width) + var(--designer-rail-width));
+    left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+    right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
   }
 
   .toolbar-center-shell {

@@ -13,6 +13,8 @@
     --designer-toolbar-height: 40px;
     --designer-rail-width: 40px;
     --designer-panel-width: 272px;
+    --designer-left-panel-width: 272px;
+    --designer-right-panel-width: 272px;
     --designer-shell-min-width: 1366px;
     --designer-shell-min-height: 768px;
     --designer-shell-padding: 8px;
@@ -355,6 +357,11 @@
 
   .dock-panel--right.is-floating {
     right: 0;
+  }
+
+  body.dock-panel-resizing {
+    cursor: col-resize !important;
+    user-select: none;
   }
 
   .designer-node {

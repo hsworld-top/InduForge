@@ -298,6 +298,12 @@ const hasClipboard = computed(() => editorStore.hasClipboard);
 const rightActiveKey = ref("props");
 const leftFloating = ref(false);
 const rightFloating = ref(false);
+const DEFAULT_DOCK_PANEL_WIDTH = 272;
+const MIN_DOCK_PANEL_WIDTH = 220;
+const MAX_DOCK_PANEL_WIDTH = 520;
+const DOCK_PANEL_WIDTH_STORAGE_KEY = "designer:dock-panel-width:v1";
+const leftPanelWidth = ref(DEFAULT_DOCK_PANEL_WIDTH);
+const rightPanelWidth = ref(DEFAULT_DOCK_PANEL_WIDTH);
 const leftPanelRef = ref<{ openCreateDialog?: () => void } | null>(null);
 const canvasHostRef = ref<HTMLElement | null>(null);
 
@@ -424,6 +430,92 @@ const rightPanelTitle = computed(() => {
   const item = rightRailItems.find((entry) => entry.key === rightActiveKey.value);
   return item?.label || "面板";
 });
+
+/**
+ * 左侧停靠面板当前占用宽度（关闭或悬浮时不占位）。
+ */
+const leftDockWidth = computed(() => (leftActiveKey.value && !leftFloating.value ? leftPanelWidth.value : 0));
+
+/**
+ * 右侧停靠面板当前占用宽度（关闭或悬浮时不占位）。
+ */
+const rightDockWidth = computed(() =>
+  rightActiveKey.value && !rightFloating.value ? rightPanelWidth.value : 0,
+);
+
+/**
+ * 布局 CSS 变量：用于顶部工具栏中间区与面板宽度同步。
+ */
+const layoutStyleVars = computed(() => ({
+  "--designer-left-panel-width": `${leftDockWidth.value}px`,
+  "--designer-right-panel-width": `${rightDockWidth.value}px`,
+}));
+
+/**
+ * 约束面板宽度，避免拖拽过窄或过宽。
+ * @param {number} width - 目标宽度
+ * @returns {number}
+ */
+function clampPanelWidth(width: number): number {
+  const next = Number(width);
+  if (!Number.isFinite(next)) return DEFAULT_DOCK_PANEL_WIDTH;
+  return Math.min(MAX_DOCK_PANEL_WIDTH, Math.max(MIN_DOCK_PANEL_WIDTH, Math.round(next)));
+}
+
+/**
+ * 左侧面板宽度变更。
+ * @param {number} width - 目标宽度
+ */
+function handleLeftPanelResize(width: number): void {
+  leftPanelWidth.value = clampPanelWidth(width);
+}
+
+/**
+ * 右侧面板宽度变更。
+ * @param {number} width - 目标宽度
+ */
+function handleRightPanelResize(width: number): void {
+  rightPanelWidth.value = clampPanelWidth(width);
+}
+
+/**
+ * 从本地存储恢复左右面板宽度。
+ */
+function restoreDockPanelWidths(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(DOCK_PANEL_WIDTH_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as { left?: number; right?: number } | null;
+    if (!parsed || typeof parsed !== "object") return;
+    if (parsed.left !== undefined) {
+      leftPanelWidth.value = clampPanelWidth(parsed.left);
+    }
+    if (parsed.right !== undefined) {
+      rightPanelWidth.value = clampPanelWidth(parsed.right);
+    }
+  } catch {
+    // 本地数据异常时忽略，保持默认宽度
+  }
+}
+
+/**
+ * 持久化左右面板宽度到本地存储。
+ */
+function persistDockPanelWidths(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      DOCK_PANEL_WIDTH_STORAGE_KEY,
+      JSON.stringify({
+        left: leftPanelWidth.value,
+        right: rightPanelWidth.value,
+      }),
+    );
+  } catch {
+    // 存储失败时静默，不影响编辑器使用
+  }
+}
 
 /**
  * 撤销操作
@@ -896,6 +988,10 @@ watch(
   { immediate: true },
 );
 
+watch([leftPanelWidth, rightPanelWidth], () => {
+  persistDockPanelWidths();
+});
+
 /**
  * 加载工程数据
  */
@@ -917,6 +1013,7 @@ async function loadProject() {
 }
 
 onMounted(() => {
+  restoreDockPanelWidths();
   void loadProject();
   nextTick(() => {
     scheduleAutoFit();
@@ -941,7 +1038,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="designer-layout">
+  <div class="designer-layout" :style="layoutStyleVars">
     <!-- 顶部工具栏 -->
     <TopToolbar
       :page-name="pageName"
@@ -1013,8 +1110,12 @@ onBeforeUnmount(() => {
             side="left"
             :title="leftPanelTitle"
             :floating="leftFloating"
+            :width="leftPanelWidth"
+            :min-width="MIN_DOCK_PANEL_WIDTH"
+            :max-width="MAX_DOCK_PANEL_WIDTH"
             @close="handleLeftClose"
             @toggle-floating="toggleLeftFloating"
+            @resize="handleLeftPanelResize"
           >
             <template #actions>
               <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
@@ -1068,8 +1169,12 @@ onBeforeUnmount(() => {
               side="left"
               :title="leftPanelTitle"
               :floating="leftFloating"
+              :width="leftPanelWidth"
+              :min-width="MIN_DOCK_PANEL_WIDTH"
+              :max-width="MAX_DOCK_PANEL_WIDTH"
               @close="handleLeftClose"
               @toggle-floating="toggleLeftFloating"
+              @resize="handleLeftPanelResize"
             >
               <template #actions>
                 <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
@@ -1097,8 +1202,12 @@ onBeforeUnmount(() => {
               side="right"
               :title="rightPanelTitle"
               :floating="rightFloating"
+              :width="rightPanelWidth"
+              :min-width="MIN_DOCK_PANEL_WIDTH"
+              :max-width="MAX_DOCK_PANEL_WIDTH"
               @close="handleRightClose"
               @toggle-floating="toggleRightFloating"
+              @resize="handleRightPanelResize"
             >
               <component :is="rightPanelComponent" />
             </DockPanel>
@@ -1109,8 +1218,12 @@ onBeforeUnmount(() => {
             side="right"
             :title="rightPanelTitle"
             :floating="rightFloating"
+            :width="rightPanelWidth"
+            :min-width="MIN_DOCK_PANEL_WIDTH"
+            :max-width="MAX_DOCK_PANEL_WIDTH"
             @close="handleRightClose"
             @toggle-floating="toggleRightFloating"
+            @resize="handleRightPanelResize"
           >
             <component :is="rightPanelComponent" />
           </DockPanel>
