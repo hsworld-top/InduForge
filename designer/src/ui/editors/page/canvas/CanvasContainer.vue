@@ -38,6 +38,10 @@ import { useCanvasZoomWheel } from "./composables/use-canvas-zoom-wheel";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 import { canvasZoomKey } from "./injection-keys";
+import {
+  CANVAS_OUTSIDE_MARQUEE_START_EVENT,
+  type OutsideMarqueeStartDetail,
+} from "./services/marquee-interaction";
 
 type CanvasContainerHost = HTMLElement & {
   __rulerObserver?: ResizeObserver | null;
@@ -174,6 +178,26 @@ function handleGlobalMouseUp(event: MouseEvent) {
 
   const componentType = dragState.dragType;
   handleDropWithType(event, componentType);
+}
+
+/**
+ * 处理工作台灰区 pointerdown，桥接到画布内部框选。
+ * @param {PointerEvent} event - 指针事件
+ */
+function handleWrapperPointerDownCapture(event: PointerEvent): void {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (!(event.target instanceof Node)) return;
+  if (canvasRef.value?.contains(event.target)) return;
+  const detail: OutsideMarqueeStartDetail = {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    modifiers: {
+      ctrl: Boolean(event.ctrlKey),
+      meta: Boolean(event.metaKey),
+      shift: Boolean(event.shiftKey),
+    },
+  };
+  window.dispatchEvent(new CustomEvent(CANVAS_OUTSIDE_MARQUEE_START_EVENT, { detail }));
 }
 
 // 向子组件提供当前缩放比例，用于拖拽落点换算（InjectionKey 便于 TS/Volar 推断）
@@ -1263,7 +1287,11 @@ onBeforeUnmount(() => {
       :translate-x="translateX"
       :translate-y="translateY"
     />
-    <div ref="wrapperRef" class="canvas-wrapper">
+    <div
+      ref="wrapperRef"
+      class="canvas-wrapper"
+      @pointerdown.capture="handleWrapperPointerDownCapture"
+    >
       <div class="canvas-scroll-content" :style="[scrollContentStyle, workbenchStyle]">
         <div
           ref="canvasRef"

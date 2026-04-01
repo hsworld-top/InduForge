@@ -73,7 +73,10 @@ describe("asset-drag utils", () => {
     expect(props).toMatchObject({
       text: "说明文档.zip",
       href: "/api/v1/design/projects/p1/assets/a3/file",
-      download: true,
+      displayMode: "button",
+      actionMode: "download",
+      triggerMode: "double",
+      downloadFileName: "说明文档.zip",
       target: "_blank",
     });
   });

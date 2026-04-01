@@ -145,7 +145,10 @@ export function buildAssetNodeProps(
   return {
     text: fileName,
     href: url,
-    download: true,
+    displayMode: "button",
+    actionMode: "download",
+    triggerMode: "double",
+    downloadFileName: fileName,
     target: "_blank",
   };
 }

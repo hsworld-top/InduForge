@@ -16,6 +16,7 @@ import {
   buildAssetDragPayload,
   serializeAssetDragPayload,
 } from "@/ui/shared/utils/asset-drag";
+import { normalizeAssetExt, resolveAssetTypeLabel } from "@/ui/shared/utils/asset-meta";
 
 interface TreeFilterableLike {
   filter?: (value: string) => void;
@@ -121,13 +122,21 @@ function getAssetExt(asset: Partial<AssetItem> & { displayName?: string } = {}):
   const name = asset?.displayName || asset?.name || asset?.originalName || "";
   const index = name.lastIndexOf(".");
   if (index > -1 && index < name.length - 1) {
-    return name.slice(index + 1).toLowerCase();
+    return normalizeAssetExt(name.slice(index + 1).toLowerCase());
   }
   const mime = String(asset?.mimeType || "").toLowerCase();
   if (mime.includes("/")) {
-    return mime.split("/").pop() || "";
+    return normalizeAssetExt(mime.split("/").pop() || "");
   }
-  return asset?.type || "";
+  return normalizeAssetExt(asset?.type || "");
+}
+
+function getAssetTypeLabel(asset: Partial<AssetItem> & { ext?: string } = {}): string {
+  return resolveAssetTypeLabel({
+    ext: asset.ext,
+    type: asset.type,
+    mimeType: asset.mimeType,
+  });
 }
 
 function formatSize(size: number | string | null | undefined): string {
@@ -632,14 +641,14 @@ watch(projectId, (value) => {
                   :alt="asset.displayName"
                 />
                 <div v-else class="asset-thumb-placeholder">
-                  {{ asset.ext || asset.type || "file" }}
+                  {{ getAssetTypeLabel(asset) }}
                 </div>
               </div>
               <div class="asset-name" :title="asset.displayName">
                 {{ asset.displayName }}
               </div>
               <div class="asset-meta">
-                <span>{{ asset.ext || asset.type || "-" }}</span>
+                <span>{{ getAssetTypeLabel(asset) }}</span>
                 <span>{{ formatSize(asset.size) }}</span>
               </div>
             </div>
@@ -661,7 +670,7 @@ watch(projectId, (value) => {
               @contextmenu.prevent.stop="openAssetContextMenu($event, asset)"
             >
               <span class="col-name" :title="asset.displayName">{{ asset.displayName }}</span>
-              <span class="col-type">{{ asset.ext || asset.type || "-" }}</span>
+              <span class="col-type">{{ getAssetTypeLabel(asset) }}</span>
               <span class="col-size">{{ formatSize(asset.size) }}</span>
             </div>
           </div>
@@ -754,7 +763,7 @@ watch(projectId, (value) => {
           <div v-else class="preview-file">
             <div class="preview-file-name">{{ previewAsset.displayName }}</div>
             <div class="preview-file-meta">
-              {{ previewAsset.ext || "-" }} |
+              {{ getAssetTypeLabel(previewAsset) }} |
               {{ formatSize(previewAsset.size) }}
             </div>
           </div>
@@ -768,7 +777,7 @@ watch(projectId, (value) => {
           <span>名称</span><span>{{ detailAsset.displayName }}</span>
         </div>
         <div class="detail-row">
-          <span>格式</span><span>{{ detailAsset.ext || "-" }}</span>
+          <span>格式</span><span>{{ getAssetTypeLabel(detailAsset) }}</span>
         </div>
         <div class="detail-row">
           <span>大小</span><span>{{ formatSize(detailAsset.size) }}</span>

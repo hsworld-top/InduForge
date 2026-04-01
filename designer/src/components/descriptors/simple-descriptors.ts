@@ -8,6 +8,7 @@
 
 import type { ComponentDescriptor, DescriptorNode } from "./registry";
 import { registerDescriptor } from "./registry";
+import DownloadLinkRenderer from "@/components/DownloadLink/DownloadLinkRenderer.vue";
 
 function normalizeOptions<T>(source: unknown, fallback: T[]): T[] {
   if (Array.isArray(source)) return source as T[];
@@ -106,28 +107,9 @@ const SIMPLE_DESCRIPTOR_MAP: Record<string, ComponentDescriptor> = {
   Cascader: { renderTag: "el-cascader" },
   Image: { renderTag: "el-image" },
   DownloadLink: {
-    renderTag: "a",
-    displayContent: (node, resolvedProps) =>
-      String(resolvedProps?.text ?? node?.label ?? "下载文件"),
-    propsFilter: (resolvedProps) => {
-      const nextProps = omitResolvedKeys(resolvedProps, ["text"]);
-      if (!nextProps.href) {
-        nextProps.href = "#";
-      }
-      if (!nextProps.target) {
-        nextProps.target = "_blank";
-      }
-      if (nextProps.target === "_blank" && !nextProps.rel) {
-        nextProps.rel = "noopener noreferrer";
-      }
-      if (nextProps.download === true) {
-        nextProps.download = "";
-      }
-      if (nextProps.download === false) {
-        delete nextProps.download;
-      }
-      return nextProps;
-    },
+    renderTag: "div",
+    propsFilter: () => ({}),
+    customRenderer: DownloadLinkRenderer,
   },
   Tabs: {
     renderTag: "el-tabs",

@@ -30,6 +30,16 @@ import {
 } from "@/ui/shared/utils/asset-drag";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import { canvasZoomKey } from "./injection-keys";
+import { createMarqueeClickGuard } from "./services/marquee-click-guard";
+import {
+  CANVAS_OUTSIDE_MARQUEE_START_EVENT,
+  shouldClearSelectionOnMarqueeUp,
+  shouldStartMarqueeFromCanvasPointerDown,
+  type MarqueeModifiers,
+  type MarqueeStartSource,
+  type OutsideMarqueeStartDetail,
+} from "./services/marquee-interaction";
+import { collectMarqueeNodeIds } from "./services/marquee-selection";
 import NodeRenderer from "./NodeRenderer.vue";
 
 interface CanvasPoint {
@@ -45,6 +55,7 @@ interface MarqueeState {
   currentX: number;
   currentY: number;
   modifiers: { ctrl: boolean; meta: boolean; shift: boolean };
+  startSource: MarqueeStartSource;
 }
 
 const editorStore = useEditorStore();
@@ -52,6 +63,8 @@ const { doc, currentPage, selection, history, docVersion, selectionVersion, erro
   storeToRefs(editorStore);
 const canvasZoom = inject(canvasZoomKey, ref(1));
 const dragState = useDragState();
+const marqueeClickGuard = createMarqueeClickGuard();
+const designCanvasRef = ref<HTMLElement | null>(null);
 
 /** 当前页面根节点 ID */
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
@@ -68,6 +81,7 @@ const marquee = ref<MarqueeState>({
   currentX: 0,
   currentY: 0,
   modifiers: { ctrl: false, meta: false, shift: false },
+  startSource: "insideCanvas",
 });
 const marqueeStyle = computed(() => {
   const left = Math.min(marquee.value.startX, marquee.value.currentX);
@@ -98,6 +112,34 @@ function handleForceRefresh(): void {
 function resetMarquee(): void {
   marquee.value.active = false;
   marquee.value.moved = false;
+  marquee.value.startSource = "insideCanvas";
+}
+
+/**
+ * 启动框选。
+ * @param {{
+ *   clientX: number;
+ *   clientY: number;
+ *   modifiers: MarqueeModifiers;
+ *   startSource: MarqueeStartSource;
+ * }} payload - 框选起点参数
+ */
+function startMarquee(payload: {
+  clientX: number;
+  clientY: number;
+  modifiers: MarqueeModifiers;
+  startSource: MarqueeStartSource;
+}): void {
+  marquee.value.active = true;
+  marquee.value.moved = false;
+  marquee.value.startX = payload.clientX;
+  marquee.value.startY = payload.clientY;
+  marquee.value.currentX = payload.clientX;
+  marquee.value.currentY = payload.clientY;
+  marquee.value.modifiers = payload.modifiers;
+  marquee.value.startSource = payload.startSource;
+  document.addEventListener("pointermove", handleMarqueeMove);
+  document.addEventListener("pointerup", handleMarqueeUp, { once: false });
 }
 
 /** 获取框选矩形的 left/top/right/bottom/width/height */
@@ -123,54 +165,30 @@ function getMarqueeRect(): {
   };
 }
 
-interface RectLike {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-}
-
 /** 收集框选区域内相交的节点（支持单容器穿透） */
 function collectIntersectedElements(): ReturnType<typeof createSelectableElement>[] {
   const rect = getMarqueeRect();
   if (rect.width < 2 && rect.height < 2) return [];
   const rootId = rootNodeId.value;
   if (!rootId || !doc.value) return [];
-  /**
-   * 判断两个矩形是否相交
-   */
-  const rectsIntersect = (a: RectLike, b: RectLike): boolean =>
-    !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+  const hitNodeIds = collectMarqueeNodeIds({
+    rootId,
+    marqueeRect: {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+    },
+    getNode: (id) => doc.value?.getNode?.(id),
+    getRect: (id) => {
+      const el = document.querySelector(`[data-node-id="${id}"]`);
+      if (!el) return null;
+      return el.getBoundingClientRect();
+    },
+    isContainer: (type) => isContainerType(type),
+  });
 
-  /**
-   * 从指定父节点下收集相交子节点，支持单容器命中时递归穿透
-   */
-  const collectFromChildren = (parentId: string): ReturnType<typeof createSelectableElement>[] => {
-    const parentNode = doc.value!.getNode(parentId);
-    const childIds = parentNode?.children || [];
-    const hits: string[] = [];
-    for (const childId of childIds) {
-      const el = document.querySelector(`[data-node-id="${childId}"]`);
-      if (!el) continue;
-      const childRect = el.getBoundingClientRect();
-      if (rectsIntersect(childRect, rect)) {
-        hits.push(childId);
-      }
-    }
-
-    if (hits.length === 1) {
-      const soleId = hits[0]!;
-      const onlyNode = doc.value!.getNode(soleId);
-      if (isContainerType(onlyNode?.type ?? "") && (onlyNode?.children || []).length) {
-        const nested = collectFromChildren(soleId);
-        if (nested.length) return nested;
-      }
-    }
-
-    return hits.map((id) => createSelectableElement("node", id));
-  };
-
-  return collectFromChildren(rootId);
+  return hitNodeIds.map((id) => createSelectableElement("node", id));
 }
 
 /** 框选过程中更新当前坐标 */
@@ -191,6 +209,7 @@ function handleMarqueeUp(): void {
   if (!marquee.value.active) return;
   const moved = marquee.value.moved;
   const modifiers = marquee.value.modifiers;
+  const startSource = marquee.value.startSource;
   const rootId = rootNodeId.value;
   resetMarquee();
   document.removeEventListener("pointermove", handleMarqueeMove);
@@ -200,6 +219,8 @@ function handleMarqueeUp(): void {
   if (!sel) return;
 
   if (moved) {
+    // 框选释放后浏览器通常会再派发一次 click，需要吞掉避免覆盖多选结果。
+    marqueeClickGuard.markShouldSuppressNextClick();
     const elements = collectIntersectedElements();
     if (elements.length) {
       if (modifiers.ctrl || modifiers.meta || modifiers.shift) {
@@ -212,6 +233,11 @@ function handleMarqueeUp(): void {
     if (!(modifiers.ctrl || modifiers.meta || modifiers.shift)) {
       sel.clearSelection();
     }
+    return;
+  }
+
+  if (shouldClearSelectionOnMarqueeUp({ startSource, moved })) {
+    sel.clearSelection();
     return;
   }
 
@@ -232,10 +258,21 @@ function handleMarqueeUp(): void {
 }
 
 /**
+ * 画布 click 捕获：消费框选后的“补发 click”，避免节点 click 把框选结果改写成单选。
+ * @param {MouseEvent} event - 鼠标事件
+ */
+function handleCanvasClickCapture(event: MouseEvent): void {
+  if (!marqueeClickGuard.consumeShouldSuppressNextClick()) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+/**
  * 兜底处理画布点击选中，避免组件内部阻止冒泡导致无法选中
  * @param {PointerEvent | MouseEvent} event - 鼠标事件
  */
 function handleCanvasPointerDown(event: PointerEvent): void {
+  marqueeClickGuard.reset();
   if (!selection.value) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
   if (event.currentTarget instanceof HTMLElement) {
@@ -250,32 +287,46 @@ function handleCanvasPointerDown(event: PointerEvent): void {
   closeContextMenu();
 
   const nodeElement = event.target.closest(".designer-node");
-  if (nodeElement) {
-    const isRootNode = nodeElement.classList.contains("is-root");
-    const targetNodeId = nodeElement.getAttribute("data-node-id");
-    const targetNode = targetNodeId ? doc.value?.getNode?.(targetNodeId) : null;
-    const isContainerNode =
-      Boolean(targetNode?.children?.length) || isContainerType(targetNode?.type || "");
-    const hitContainerBlankArea = isContainerNode && event.target === nodeElement;
-
-    if (!isRootNode && !hitContainerBlankArea) {
-      return;
-    }
+  const shouldStartMarquee = shouldStartMarqueeFromCanvasPointerDown({
+    hasNodeElement: Boolean(nodeElement),
+    isRootNode: Boolean(nodeElement?.classList.contains("is-root")),
+  });
+  if (!shouldStartMarquee) {
+    return;
   }
+  // 启动框选后阻断事件下发到节点层，避免节点拖拽逻辑抢占同一次 pointer 序列
+  event.preventDefault();
+  event.stopPropagation();
+  startMarquee({
+    clientX: event.clientX,
+    clientY: event.clientY,
+    modifiers: {
+      ctrl: Boolean(event.ctrlKey),
+      meta: Boolean(event.metaKey),
+      shift: Boolean(event.shiftKey),
+    },
+    startSource: "insideCanvas",
+  });
+}
 
-  marquee.value.active = true;
-  marquee.value.moved = false;
-  marquee.value.startX = event.clientX;
-  marquee.value.startY = event.clientY;
-  marquee.value.currentX = event.clientX;
-  marquee.value.currentY = event.clientY;
-  marquee.value.modifiers = {
-    ctrl: Boolean(event.ctrlKey),
-    meta: Boolean(event.metaKey),
-    shift: Boolean(event.shiftKey),
-  };
-  document.addEventListener("pointermove", handleMarqueeMove);
-  document.addEventListener("pointerup", handleMarqueeUp, { once: false });
+/**
+ * 处理工作台灰区触发的框选开始事件。
+ * @param {Event} event - 自定义事件
+ */
+function handleOutsideMarqueeStart(event: Event): void {
+  marqueeClickGuard.reset();
+  if (!selection.value) return;
+  const customEvent = event as CustomEvent<OutsideMarqueeStartDetail>;
+  const detail = customEvent.detail;
+  if (!detail) return;
+  closeContextMenu();
+  designCanvasRef.value?.focus?.({ preventScroll: true });
+  startMarquee({
+    clientX: detail.clientX,
+    clientY: detail.clientY,
+    modifiers: detail.modifiers,
+    startSource: "outsideCanvas",
+  });
 }
 
 /**
@@ -659,12 +710,20 @@ function handleGlobalKeyDown(event: KeyboardEvent): void {
 
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
+  window.addEventListener(
+    CANVAS_OUTSIDE_MARQUEE_START_EVENT,
+    handleOutsideMarqueeStart as EventListener,
+  );
   window.addEventListener("designer:force-refresh", handleForceRefresh);
   window.addEventListener("keydown", handleGlobalKeyDown, true);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
+  window.removeEventListener(
+    CANVAS_OUTSIDE_MARQUEE_START_EVENT,
+    handleOutsideMarqueeStart as EventListener,
+  );
   window.removeEventListener("designer:force-refresh", handleForceRefresh);
   window.removeEventListener("keydown", handleGlobalKeyDown, true);
   document.removeEventListener("pointermove", handleMarqueeMove);
@@ -792,8 +851,10 @@ function handleKeyDown(event: KeyboardEvent): void {
 
 <template>
   <div
+    ref="designCanvasRef"
     class="design-canvas"
     tabindex="0"
+    @click.capture="handleCanvasClickCapture"
     @pointerdown.capture="handleCanvasPointerDown"
     @pointermove="handleCanvasPointerMove"
     @pointerleave="handleCanvasPointerLeave"
