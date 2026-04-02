@@ -82,8 +82,8 @@
 - [高层设计](../../高层设计.md)
 - [详细设计](../../详细设计.md)
 - [开发计划](../../开发计划.md)
-- [runtime_engine.task](../../../runtime_engine.task.md)
-- [runtime_node_agent.task](../../../runtime_node_agent.task.md)
+- [runtime_engine.task](../../ai-packages/tasks/runtime_engine.task.md)
+- [runtime_node_agent.task](../../ai-packages/tasks/runtime_node_agent.task.md)
 
 ## 10. 待确认事项
 - 当前阶段是否只支持浏览器访问。

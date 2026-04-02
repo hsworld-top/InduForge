@@ -17,4 +17,4 @@
 ## 关联文档
 - [NodeAgent 总览](../README_nodeagent.md)
 - [详细设计](../详细设计.md)
-- [runtime_node_agent.task](../../runtime_node_agent.task.md)
+- [runtime_node_agent.task](../ai-packages/tasks/runtime_node_agent.task.md)

@@ -22,7 +22,7 @@
 - [开发态预览专项计划](../开发态预览专项计划.md)
 - [NodeAgent 启动协议](../contracts/node-agent-runtime-protocol.md)
 - [Runtime 健康状态协议](../contracts/runtime-health-status-contract.md)
-- [runtime_node_agent.task](../../runtime_node_agent.task.md)
+- [runtime_node_agent.task](./tasks/runtime_node_agent.task.md)
 
 ## 6. 输出物
 - 版本目录预留方案

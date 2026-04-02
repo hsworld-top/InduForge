@@ -24,7 +24,7 @@
 - [开发态预览专项计划](../开发态预览专项计划.md)
 - [发布态 Schema 契约](../contracts/designer-publish-schema.md)
 - [IFP Manifest 契约](../contracts/ifp-manifest-contract.md)
-- [dev_core.task](../../dev_core.task.md)
+- [dev_core.task](./tasks/dev_core.task.md)
 
 ## 6. 输出物
 - 预览可消费的工程聚合结果

@@ -23,7 +23,7 @@
 - [产品决策确认版](../产品决策确认版.md)
 - [开发态预览专项计划](../开发态预览专项计划.md)
 - [发布态 Schema 契约](../contracts/designer-publish-schema.md)
-- [designer.task](../../designer.task.md)
+- [designer.task](./tasks/designer.task.md)
 
 ## 6. 输出物
 - `project.json`

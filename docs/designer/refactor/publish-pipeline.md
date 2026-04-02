@@ -94,8 +94,8 @@ project.ifp
 - [产品定义](../../产品定义.md)
 - [详细设计](../../详细设计.md)
 - [开发计划](../../开发计划.md)
-- [dev_core.task](../../../dev_core.task.md)
-- [designer.task](../../../designer.task.md)
+- [dev_core.task](../../ai-packages/tasks/dev_core.task.md)
+- [designer.task](../../ai-packages/tasks/designer.task.md)
 
 ## 8. 待确认事项
 - 当前阶段是否只做摘要校验，不做数字签名。

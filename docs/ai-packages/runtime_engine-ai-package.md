@@ -26,7 +26,7 @@
 - [IFP Manifest 契约](../contracts/ifp-manifest-contract.md)
 - [NodeAgent 启动协议](../contracts/node-agent-runtime-protocol.md)
 - [Runtime 健康状态协议](../contracts/runtime-health-status-contract.md)
-- [runtime_engine.task](../../runtime_engine.task.md)
+- [runtime_engine.task](./tasks/runtime_engine.task.md)
 
 ## 6. 输出物
 - `engine_core` 骨架

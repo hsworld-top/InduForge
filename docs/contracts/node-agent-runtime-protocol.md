@@ -90,8 +90,8 @@ runtime-data/
 ## 11. 关联文档
 - [运行时闭环专项计划](../运行时闭环专项计划.md)
 - [RuntimeEngine](../designer/refactor/runtime-engine.md)
-- [runtime_node_agent.task](../../runtime_node_agent.task.md)
-- [runtime_engine.task](../../runtime_engine.task.md)
+- [runtime_node_agent.task](../ai-packages/tasks/runtime_node_agent.task.md)
+- [runtime_engine.task](../ai-packages/tasks/runtime_engine.task.md)
 
 ## 12. 待确认事项
 - 首版是否明确“一节点只运行一个工程”。

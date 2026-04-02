@@ -20,5 +20,5 @@
 ## 关联文档
 - [产品定义](../产品定义.md)
 - [详细设计](../详细设计.md)
-- [designer.task](../../designer.task.md)
+- [designer.task](../ai-packages/tasks/designer.task.md)
 - [refactor/README](./refactor/README.md)

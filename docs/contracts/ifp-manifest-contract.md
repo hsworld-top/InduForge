@@ -92,7 +92,7 @@ project.ifp
 ## 9. 关联文档
 - [发布流水线](../designer/refactor/publish-pipeline.md)
 - [运行时闭环专项计划](../运行时闭环专项计划.md)
-- [dev_core.task](../../dev_core.task.md)
+- [dev_core.task](../ai-packages/tasks/dev_core.task.md)
 
 ## 10. 待确认事项
 - `version` 是否统一使用时间戳序列风格。

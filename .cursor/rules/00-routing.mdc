@@ -1,0 +1,10 @@
+---
+description: 优先命中离改动目录最近的 AGENTS.md
+alwaysApply: true
+---
+
+# Project Routing
+
+- 先遵守仓库根目录 `AGENTS.md`。
+- 如果任务明确落在单个模块目录，先读取该模块目录内的 `AGENTS.md`，不要把无关模块规则默认加入上下文。
+- 提交信息沿用根级 `AGENTS.md` 的中文提交规范，不再重复维护独立大段规则。
