@@ -22,4 +22,4 @@
 - [产品定义](../产品定义.md)
 - [开发计划](../开发计划.md)
 - [模块上下文摘要](../模块上下文摘要.md)
-- [dev_ide.task](../../dev_ide.task.md)
+- [dev_ide.task](../ai-packages/tasks/dev_ide.task.md)

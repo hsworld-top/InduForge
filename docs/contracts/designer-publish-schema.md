@@ -162,7 +162,7 @@ project/
 ## 11. 关联文档
 - [运行时闭环专项计划](../运行时闭环专项计划.md)
 - [详细设计](../详细设计.md)
-- [designer.task](../../designer.task.md)
+- [designer.task](../ai-packages/tasks/designer.task.md)
 
 ## 12. 待确认事项
 - `page.json` 是否需要保留 `meta` 扩展字段。

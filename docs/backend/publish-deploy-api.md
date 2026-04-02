@@ -35,5 +35,5 @@
 ## 4. 推荐阅读
 - [高层设计](../高层设计.md)
 - [详细设计](../详细设计.md)
-- [runtime_node_agent.task](../../runtime_node_agent.task.md)
-- [runtime_engine.task](../../runtime_engine.task.md)
+- [runtime_node_agent.task](../ai-packages/tasks/runtime_node_agent.task.md)
+- [runtime_engine.task](../ai-packages/tasks/runtime_engine.task.md)

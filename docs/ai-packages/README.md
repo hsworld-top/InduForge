@@ -7,6 +7,7 @@
 
 ## 2. 当前分发包
 - [dev_core AI 分发包](./dev_core-ai-package.md)
+- [datacenter AI 分发包](./datacenter-ai-package.md)
 - [designer AI 分发包](./designer-ai-package.md)
 - [runtime_node_agent AI 分发包](./runtime_node_agent-ai-package.md)
 - [runtime_engine AI 分发包](./runtime_engine-ai-package.md)
@@ -14,9 +15,6 @@
 
 ## 3. 推荐使用顺序
 1. 先看本模块 AI 分发包。
-2. 再看本模块 `*.task.md`。
+2. 再看 `./tasks/` 下对应模块任务文档。
 3. 如涉及跨模块契约，再看 `docs/contracts/`。
 4. 如涉及平台主线，先看 [开发态预览专项计划](../开发态预览专项计划.md)，再看 [运行时闭环专项计划](../运行时闭环专项计划.md)。
-
-## 4. 当前缺失
-- `datacenter` 还未单独生成 AI 分发包；若后续要并行推进处理层一期，再单独补充。

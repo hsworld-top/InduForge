@@ -1,8 +1,8 @@
 # Cursor Agent 忽略文件
-# 使用 .gitignore 语法，减少 AI 索引与上下文检索，节省 token
-# 参考：https://docs.cursor.com/context/ignore-files
+# 由 scripts/ai-rules/sync-ignore-files.mjs 自动生成，请勿手改。
+# 用于减少 Cursor 索引与上下文检索体积。
 
-# Node.js 依赖（体积大、无业务价值）
+# Node.js 依赖
 node_modules/
 **/node_modules/
 
@@ -21,9 +21,10 @@ coverage/
 *.seed
 .npm-cache/
 runtime/logs/
+runtime/node_agent/logs/
 **/logs/
 
-# 环境与密钥（安全）
+# 环境与密钥
 .env
 .env.*
 !.env.example
@@ -36,7 +37,7 @@ pnpm-lock.yaml
 package-lock.json
 yarn.lock
 
-# 其他大体积/低价值目录
+# 其他大体积或低价值目录
 docker/
 docker/images/
 minio/data*/

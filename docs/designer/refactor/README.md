@@ -3,7 +3,7 @@
 ## 说明
 - 本目录保留 Designer 重构过程中的专题设计文档。
 - 这些文档主要用于解释设计意图和拆分思路，不再默认代表当前实现现状。
-- 当前正式结论以平台级文档和 `designer.task.md` 为准。
+- 当前正式结论以平台级文档和 `docs/ai-packages/tasks/designer.task.md` 为准。
 
 ## 仍可参考的主题
 - 编辑器内核
@@ -25,4 +25,4 @@
 ## 当前入口
 - [产品定义](../../产品定义.md)
 - [详细设计](../../详细设计.md)
-- [designer.task](../../../designer.task.md)
+- [designer.task](../../ai-packages/tasks/designer.task.md)

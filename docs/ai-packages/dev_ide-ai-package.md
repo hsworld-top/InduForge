@@ -21,7 +21,7 @@
 - [开发态预览专项计划](../开发态预览专项计划.md)
 - [运行时闭环专项计划](../运行时闭环专项计划.md)
 - [Runtime 健康状态协议](../contracts/runtime-health-status-contract.md)
-- [dev_ide.task](../../dev_ide.task.md)
+- [dev_ide.task](./tasks/dev_ide.task.md)
 
 ## 6. 输出物
 - 稳定的项目与管理入口

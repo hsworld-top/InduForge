@@ -49,8 +49,6 @@ designer/dist/
 # vue-tsc 临时排障输出（勿提交）
 designer/tsc-errors.txt
 dev_core/artifacts/
-*.task.md
 
 # designer 内本地计划草稿（正式文档请放仓库 docs/）
 designer/designer-next-iteration.plan.md
-.cursor/rules/git-commit-convention.mdc
