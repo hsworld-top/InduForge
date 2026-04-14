@@ -212,6 +212,8 @@ export const useEditorStore = defineStore("editor", () => {
   const canUndo = ref(false);
   const canRedo = ref(false);
   const error = ref("");
+  const canvasMousePos = ref<{ x: number; y: number } | null>(null);
+  const hoveredNodeType = ref("");
 
   /**
    * 解析当前页面根节点 ID
@@ -350,6 +352,8 @@ export const useEditorStore = defineStore("editor", () => {
     doc.value = markRaw(nextDoc);
     history.value = markRaw(nextHistory);
     selection.value = markRaw(nextSelection);
+    canvasMousePos.value = null;
+    hoveredNodeType.value = "";
     projectName.value = nextDoc.project?.name || projectName.value;
     currentPageId.value = nextDoc.entry?.homePageId || nextDoc.getAllPages()[0]?.id || "";
     if (!pages.value.length) {
@@ -2308,6 +2312,8 @@ export const useEditorStore = defineStore("editor", () => {
     canUndo,
     canRedo,
     error,
+    canvasMousePos,
+    hoveredNodeType,
     readonlyState,
     isReadonly,
     isLocked,

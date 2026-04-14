@@ -19,7 +19,6 @@ import { storeToRefs } from "pinia";
 import {
   computed,
   defineAsyncComponent,
-  inject,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -115,6 +114,8 @@ interface EditorShellStoreRefs {
   isLocked: Ref<boolean>;
   readonlyState: Ref<{ readonly?: boolean } | undefined>;
   pageTabState: Ref<{ tabs?: DesignerPageTab[]; activeId?: string } | undefined>;
+  canvasMousePos: Ref<{ x: number; y: number } | null>;
+  hoveredNodeType: Ref<string>;
 }
 
 const editorStore = useEditorStore();
@@ -130,6 +131,8 @@ const {
   isLocked,
   readonlyState,
   pageTabState,
+  canvasMousePos,
+  hoveredNodeType,
 } = storeToRefs(editorStore) as unknown as EditorShellStoreRefs;
 
 const leftActiveKey = ref("pages");
@@ -167,12 +170,6 @@ const { saveSettings, handleSaveSettingsChange } = useDesignerAutoSave({
 });
 
 provide("openPageTab", openPageTab);
-
-// ==================== 底部状态栏数据 ====================
-/** 从 DesignCanvas 注入画布鼠标坐标（provide in DesignCanvas.vue） */
-const canvasMousePos = inject<Ref<{ x: number; y: number } | null>>("canvasMousePos", ref(null));
-/** 从 DesignCanvas 注入悬停节点类型（provide in DesignCanvas.vue） */
-const hoveredNodeType = inject<Ref<string>>("hoveredNodeType", ref(""));
 
 /**
  * 当前选中节点数量

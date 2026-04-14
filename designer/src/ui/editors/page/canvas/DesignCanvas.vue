@@ -42,11 +42,6 @@ import {
 import { collectMarqueeNodeIds } from "./services/marquee-selection";
 import NodeRenderer from "./NodeRenderer.vue";
 
-interface CanvasPoint {
-  x: number;
-  y: number;
-}
-
 interface MarqueeState {
   active: boolean;
   moved: boolean;
@@ -59,8 +54,17 @@ interface MarqueeState {
 }
 
 const editorStore = useEditorStore();
-const { doc, currentPage, selection, history, docVersion, selectionVersion, error } =
-  storeToRefs(editorStore);
+const {
+  doc,
+  currentPage,
+  selection,
+  history,
+  docVersion,
+  selectionVersion,
+  error,
+  canvasMousePos,
+  hoveredNodeType,
+} = storeToRefs(editorStore);
 const canvasZoom = inject(canvasZoomKey, ref(1));
 const dragState = useDragState();
 const marqueeClickGuard = createMarqueeClickGuard();
@@ -68,10 +72,6 @@ const designCanvasRef = ref<HTMLElement | null>(null);
 
 /** 当前页面根节点 ID */
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
-/** 鼠标在画布上的坐标（用于粘贴到鼠标位置，同时 provide 给父层状态栏） */
-const lastMouseCanvasPos = ref<CanvasPoint | null>(null);
-/** 鼠标当前悬停的节点类型（provide 给父层状态栏） */
-const hoveredNodeType = ref("");
 /** 框选状态：是否激活、是否移动、起止坐标、修饰键 */
 const marquee = ref<MarqueeState>({
   active: false,
@@ -258,10 +258,10 @@ function handleMarqueeUp(): void {
 }
 
 /**
- * 画布 click 捕获：消费框选后的“补发 click”，避免节点 click 把框选结果改写成单选。
+ * 全局 click 捕获：消费框选后的“补发 click”，避免把框选结果改写成单选/清空。
  * @param {MouseEvent} event - 鼠标事件
  */
-function handleCanvasClickCapture(event: MouseEvent): void {
+function handleDocumentClickCapture(event: MouseEvent): void {
   if (!marqueeClickGuard.consumeShouldSuppressNextClick()) return;
   event.preventDefault();
   event.stopPropagation();
@@ -338,7 +338,7 @@ function handleCanvasPointerMove(event: PointerEvent): void {
   if (!el || !(el instanceof Element)) return;
   const rect = el.getBoundingClientRect();
   const zoomValue = Number(canvasZoom?.value) || 1;
-  lastMouseCanvasPos.value = {
+  canvasMousePos.value = {
     x: (event.clientX - rect.left) / zoomValue,
     y: (event.clientY - rect.top) / zoomValue,
   };
@@ -352,7 +352,7 @@ function handleCanvasPointerMove(event: PointerEvent): void {
  * 鼠标离开画布时清空坐标与悬停信息
  */
 function handleCanvasPointerLeave(): void {
-  lastMouseCanvasPos.value = null;
+  canvasMousePos.value = null;
   hoveredNodeType.value = "";
 }
 
@@ -569,10 +569,6 @@ function closeContextMenu(): void {
 }
 
 provide("showContextMenu", showContextMenu);
-// 向父层（DesignerView）暴露画布鼠标坐标与悬停节点类型，用于底部状态栏
-provide("canvasMousePos", lastMouseCanvasPos);
-provide("hoveredNodeType", hoveredNodeType);
-
 /**
  * 处理菜单项点击
  */
@@ -710,6 +706,7 @@ function handleGlobalKeyDown(event: KeyboardEvent): void {
 
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
+  document.addEventListener("click", handleDocumentClickCapture, true);
   window.addEventListener(
     CANVAS_OUTSIDE_MARQUEE_START_EVENT,
     handleOutsideMarqueeStart as EventListener,
@@ -720,6 +717,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
+  document.removeEventListener("click", handleDocumentClickCapture, true);
   window.removeEventListener(
     CANVAS_OUTSIDE_MARQUEE_START_EVENT,
     handleOutsideMarqueeStart as EventListener,
@@ -831,7 +829,7 @@ function handleKeyDown(event: KeyboardEvent): void {
   // Ctrl+V 粘贴（粘贴到鼠标位置）
   if ((event.ctrlKey || event.metaKey) && event.key === "v" && !event.shiftKey) {
     event.preventDefault();
-    editorStore.pasteNodes(lastMouseCanvasPos.value ?? undefined);
+    editorStore.pasteNodes(canvasMousePos.value ?? undefined);
     return;
   }
 
@@ -854,7 +852,6 @@ function handleKeyDown(event: KeyboardEvent): void {
     ref="designCanvasRef"
     class="design-canvas"
     tabindex="0"
-    @click.capture="handleCanvasClickCapture"
     @pointerdown.capture="handleCanvasPointerDown"
     @pointermove="handleCanvasPointerMove"
     @pointerleave="handleCanvasPointerLeave"
