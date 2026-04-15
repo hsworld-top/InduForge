@@ -43,7 +43,12 @@
   3. 快速拖拽时 insertIndex 过期问题已修复，目标不存在时 fallback 到 append 行为正确
   4. placementResolver.ts 单一入口已抽取，支持 Strategy 模式处理 flex/free/grid 布局类型
   5. placementUtils.js 坐标工具函数已统一，消除重复计算逻辑
-**Plans**: TBD
+**Plans**: 4 plans
+**Plan list**:
+- [ ] 01-01: placement-utils scroll 补偿 + 坐标统一 (Wave 1)
+- [ ] 01-02: placementResolver Strategy 模式抽取 (Wave 1)
+- [ ] 01-03: DesignCanvas/NodeRenderer 集成 + insertIndex 修复 (Wave 2)
+- [ ] 01-04: Ghost/插入线/容器高亮视觉反馈 (Wave 2)
 
 #### Phase 2: 布局容器完善
 **Goal**: Flex/Free/Grid 布局容器的 layoutItem 联动正确，6 种布局嵌套时 children 顺序正确
@@ -151,7 +156,7 @@ Then v1.0 phases: 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. 放置与拖放统一 | v0.1 | 0/TBD | Not started | - |
+| 1. 放置与拖放统一 | v0.1 | 0/4 | Not started | - |
 | 2. 布局容器完善 | v0.1 | 0/TBD | Not started | - |
 | 3. 层级与空间修复 | v0.1 | 0/TBD | Not started | - |
 | 4. API 契约统一 | v1.0 | 0/3 | Not started | - |
