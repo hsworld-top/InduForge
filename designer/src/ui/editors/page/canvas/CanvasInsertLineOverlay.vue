@@ -35,10 +35,11 @@ defineProps<{
 <style scoped>
 .canvas-insert-line {
   position: absolute;
-  background: #ef4444;
+  background: #409EFF;
   pointer-events: none;
   z-index: 9999;
   transition: all 0.1s ease;
+  box-shadow: 0 0 4px rgba(64, 158, 255, 0.4);
 }
 
 .canvas-insert-line.horizontal {
