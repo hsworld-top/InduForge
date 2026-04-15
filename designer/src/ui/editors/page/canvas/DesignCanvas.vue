@@ -21,6 +21,7 @@ import IconEpTop from "~icons/ep/top";
 import { isContainerType } from "@/components/descriptors/registry";
 import { createSelectableElement } from "@/editor-core/document/types";
 import { eventToCanvasPosition } from "@/editor-core/utils/placement-utils";
+import { resolvePlacement } from "@/editor-core/utils/placement-resolver";
 import { useEditorStore } from "@/stores/editor-store";
 import {
   DESIGNER_ASSET_DRAG_MIME,
@@ -439,10 +440,19 @@ function handleCanvasDrop(event: DragEvent): void {
   if (!(canvasEl instanceof HTMLElement)) return;
 
   const zoomValue = Number(canvasZoom?.value) || 1;
-  const dropPos = eventToCanvasPosition(event, canvasEl, zoomValue);
-  const offsetX = dropPos.x;
-  const offsetY = dropPos.y;
 
+  // 使用 placementResolver 统一处理放置解析
+  const resolution = resolvePlacement(
+    event,
+    canvasEl,
+    doc.value!,
+    { rootNodeId: currentPage.value.rootNodeId },
+    zoomValue,
+  );
+
+  const { parentId, index, dropPosition, containerType } = resolution;
+
+  // 特殊处理 ElLayout 容器的自动插入行/列逻辑（保留原有业务规则）
   const insertIntoElLayout = (layoutId: string): boolean => {
     const layoutNode = doc.value?.getNode?.(layoutId);
     if (!layoutNode || layoutNode.type !== "ElLayout") return false;
@@ -490,45 +500,40 @@ function handleCanvasDrop(event: DragEvent): void {
     return Boolean(inserted);
   };
 
-  const resolveLayoutFromPoint = (): string | null => {
-    const layoutElements = Array.from(
-      document.querySelectorAll('[data-node-type="ElLayout"][data-node-id]'),
-    );
-    if (!layoutElements.length) return null;
-    const pointX = event.clientX;
-    const pointY = event.clientY;
-    let candidate: Element | null = null;
-    let minDistance = Number.POSITIVE_INFINITY;
-    for (const element of layoutElements) {
-      const rect = element.getBoundingClientRect();
-      const withinX = pointX >= rect.left && pointX <= rect.right;
-      const withinY = pointY >= rect.top && pointY <= rect.bottom + 24;
-      if (!withinX || !withinY) continue;
-      const distance = Math.max(0, pointY - rect.bottom);
-      if (distance < minDistance) {
-        minDistance = distance;
-        candidate = element;
-      }
-    }
-    if (!candidate) return null;
-    return candidate.getAttribute("data-node-id");
-  };
+  let didInsert = false;
 
-  const inserted = editorStore.insertNode(componentType, currentPage.value.rootNodeId, undefined, {
-      dropPosition: {
-        x: Math.max(0, Math.round(offsetX)),
-        y: Math.max(0, Math.round(offsetY)),
-      },
-      autoSelectInserted: false,
-    });
-  applyAssetPayloadToInsertedNode(inserted, componentType);
-  let didInsert = Boolean(inserted);
-  if (!didInsert) {
-    const layoutId = resolveLayoutFromPoint();
-    if (layoutId) {
-      didInsert = insertIntoElLayout(layoutId);
+  // ElLayout 需要特殊处理：自动创建行/列
+  if (containerType === "flex" && parentId) {
+    const parentNode = doc.value?.getNode?.(parentId);
+    if (parentNode?.type === "ElLayout") {
+      didInsert = insertIntoElLayout(parentId);
     }
   }
+
+  // 标准放置逻辑：使用 placementResolver 返回的 parentId、index、dropPosition
+  if (!didInsert && parentId) {
+    // 验证 insertIndex 有效性（D-05: append fallback）
+    const parentNode = doc.value?.getNode?.(parentId);
+    const siblings = parentNode?.children || [];
+    const validIndex = index >= 0 && index <= siblings.length ? index : siblings.length;
+
+    // 构建插入选项
+    const insertOptions: {
+      dropPosition?: { x: number; y: number };
+      autoSelectInserted: false;
+    } = { autoSelectInserted: false };
+    if (dropPosition) {
+      insertOptions.dropPosition = {
+        x: Math.max(0, Math.round(dropPosition.x)),
+        y: Math.max(0, Math.round(dropPosition.y)),
+      };
+    }
+
+    const inserted = editorStore.insertNode(componentType, parentId, validIndex, insertOptions);
+    applyAssetPayloadToInsertedNode(inserted, componentType);
+    didInsert = Boolean(inserted);
+  }
+
   endDrag();
   if (didInsert) {
     event.stopPropagation();
