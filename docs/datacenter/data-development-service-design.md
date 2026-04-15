@@ -38,7 +38,7 @@
 8. Redis 作为正式数据源参与发布编排与下发。
 9. 凭据安全本轮沿用现状，优先功能打通；安全治理后置。
 10. TDengine 连接器入口与关系库同级，先按查询能力接入，时序特性后置增强。
-11. Kafka 定位为可插拔消息总线能力，不作为首批阻塞项。
+11. Kafka 作为协议能力矩阵中的独立接入协议，首版先做消费链路（不生产）。
 
 ## 4. 核心定位
 
@@ -71,16 +71,44 @@ flowchart LR
 
 ## 6. 协议能力矩阵（完整目标态）
 
+### 6.1 协议接入矩阵
+
 | 协议 | 连接测试 | 对象发现 | 实时订阅 | 周期采集 | 开发态预览 | 参与发布编排 |
 | --- | --- | --- | --- | --- | --- | --- |
 | MySQL/PostgreSQL/SQLServer | 支持 | 表/字段发现 | 否 | 支持 | 支持 | 支持 |
 | TDengine | 支持 | 库表/超级表发现（逐步增强） | 否 | 支持 | 支持 | 支持 |
 | MQTT | 支持 | Topic/Tag（手工+自动发现） | 支持 | 支持 | 支持 | 支持 |
+| Kafka | 支持 | Topic 发现 | 支持（仅消费） | 支持 | 支持 | 支持 |
+| HTTP/REST | 支持 | 端点/字段映射（手工+模板） | 可选（SSE/长轮询） | 支持 | 支持 | 支持 |
+| WebSocket | 支持 | Topic/事件名映射 | 支持 | 可选 | 支持 | 支持 |
 | OPC UA | 支持 | Browse/Node 树 | 支持 | 支持 | 支持 | 支持 |
 | OPC DA | 支持 | Item 浏览 | 支持 | 支持 | 支持 | 支持 |
 | S7-300/1200 | 支持 | 标签导入/映射 | 可选 | 支持 | 支持 | 支持 |
 | Modbus TCP | 支持 | 点表映射 | 否 | 支持 | 支持 | 支持 |
+| Modbus RTU | 支持 | 点表映射 | 否 | 支持 | 支持 | 支持 |
 | Redis（单机） | 支持 | DB/Key 浏览 | Pub/Sub 支持 | 可选 | 支持 | 支持 |
+
+### 6.2 通用能力维度矩阵
+
+说明：
+
+1. 本表用于约束各协议在工业现场落地时的“工程能力”下限。
+2. 记录方式分为 `必需`、`可选`、`不适用` 三类。
+
+| 协议 | 断线缓存与补传 | 时间戳策略（设备/网关/平台） | 质量码映射（good/bad/uncertain） | 采样与上报策略（周期/变化/死区） | 安全能力（TLS/证书/账号） | 重连与退避策略 | 最大吞吐与延迟等级 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| MySQL/PostgreSQL/SQLServer | 可选 | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 |
+| TDengine | 可选 | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 |
+| MQTT | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 |
+| Kafka | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 |
+| HTTP/REST | 可选 | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 |
+| WebSocket | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 |
+| OPC UA | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 |
+| OPC DA | 可选 | 必需 | 必需 | 必需 | 可选 | 必需 | 必需 |
+| S7-300/1200 | 可选 | 必需 | 必需 | 必需 | 可选 | 必需 | 必需 |
+| Modbus TCP | 可选 | 必需 | 必需 | 必需 | 可选 | 必需 | 必需 |
+| Modbus RTU | 可选 | 必需 | 必需 | 必需 | 不适用（链路层） | 必需 | 必需 |
+| Redis（单机） | 可选 | 必需 | 必需 | 必需 | 必需 | 必需 | 必需 |
 
 ## 7. 统一数据契约
 
@@ -92,7 +120,7 @@ flowchart LR
 4. `quality`（`good|bad|uncertain` + 协议原始码）
 5. `timestamp`（设备时间）
 6. `serverTimestamp`（平台接收时间）
-7. `source`（`db|mqtt|opcua|opcda|s7|modbus|redis`）
+7. `source`（`db|mqtt|kafka|http|websocket|opcua|opcda|s7|modbus_tcp|modbus_rtu|redis`）
 8. `connectionId`
 9. `sessionId`（开发态预览）或运行态上下文标识
 
@@ -116,6 +144,9 @@ flowchart LR
 3. `data_s7_configs`
 4. `data_modbus_configs`
 5. `data_redis_configs`
+6. `data_http_configs`
+7. `data_websocket_configs`
+8. `data_kafka_configs`
 
 建议通用字段：
 
@@ -142,6 +173,9 @@ flowchart LR
 3. `data_s7_tags`
 4. `data_modbus_points`
 5. `data_redis_keys`（用于受控操作与映射，不要求全量落库）
+6. `data_http_mappings`
+7. `data_websocket_topics`
+8. `data_kafka_topics`
 
 建议通用字段：
 
@@ -190,6 +224,10 @@ flowchart LR
 2. `/api/v1/data/projects/:projectId/queries`
 3. `/api/v1/data/projects/:projectId/datapoints`
 4. `/api/v1/data/projects/:projectId/mqtt/...`
+5. `/api/v1/data/projects/:projectId/kafka/...`
+6. `/api/v1/data/projects/:projectId/http/...`
+7. `/api/v1/data/projects/:projectId/websocket/...`
+8. `/api/v1/data/projects/:projectId/modbus-rtu/...`
 
 ### 9.2 协议新增接口
 
@@ -253,9 +291,10 @@ flowchart LR
 
 ## 11.4 Kafka（可插拔能力）
 
-1. 定位：工业互联网场景常见的消息总线能力，用于解耦、削峰与跨系统分发。
-2. 设计策略：保留连接器与发布编排扩展点，不作为当前主链路上线阻塞项。
-3. 后续可扩展方向：Kafka Source（消费）与 Kafka Sink（投递）双向支持。
+1. 定位：协议能力矩阵中的消息类接入协议，与 MQTT 同级但独立。
+2. 首版范围：仅实现 Kafka Source（消费），不实现 Kafka Sink（生产）。
+3. 交互模型：连接管理、测试、启停、状态、Topic 订阅、消息预览、数据点映射。
+4. 实现策略：流程与界面尽量对齐当前 MQTT 实现，降低迁移成本。
 
 ## 12. 发布编排契约（中心侧输出）
 
