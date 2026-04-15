@@ -22,7 +22,7 @@ InduForge 是一个面向工业互联网场景的低代码开发平台，提供�
 
 **Current Milestone: v0.1 Designer 画布编辑器优化**
 
-- [ ] 统一组件放置与拖放交互（单一 placementResolver 入口）
+- [x] 统一组件放置与拖放交互（单一 placementResolver 入口） ✅ Phase 01
 - [ ] 完善布局容器实现（Flex/Free/Grid layoutItem 联动）
 - [ ] 修复层级与空间编排边界情况
 - [ ] 统一画布坐标计算与 placementUtils
