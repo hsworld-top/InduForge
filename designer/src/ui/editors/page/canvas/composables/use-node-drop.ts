@@ -28,6 +28,7 @@ import {
   clampPositionInContainer,
   eventToCanvasPosition,
 } from "@/editor-core/utils/placement-utils";
+import { calculateInsertIndexWithFallback } from "@/editor-core/utils/placement-resolver";
 import {
   DESIGNER_ASSET_DRAG_MIME,
   buildAssetNodeProps,
@@ -1055,7 +1056,18 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       index?: number,
       options: { dropPosition?: { x: number; y: number } | undefined } = {},
     ) => {
-      const inserted = insertNodeWithoutSelection(type, parentId, index, options);
+      // D-05: Fast drag-drop insertIndex staleness fix
+      // 验证 insertIndex 有效性，如果目标节点不存在则 fallback 到 append
+      let validIndex = index;
+      if (validIndex !== undefined && parentId) {
+        const parentNode = doc.value?.getNode?.(parentId);
+        const siblings = (parentNode?.children || []) as string[];
+        if (validIndex < 0 || validIndex > siblings.length || !siblings[validIndex]) {
+          // index 无效（超出范围或指向已删除节点），fallback 到 append
+          validIndex = siblings.length;
+        }
+      }
+      const inserted = insertNodeWithoutSelection(type, parentId, validIndex, options);
       applyAssetPayloadToInsertedNode(inserted, type, assetPayload);
       return inserted;
     };
