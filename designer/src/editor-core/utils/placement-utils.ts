@@ -19,6 +19,10 @@ export interface PlacementSize {
 
 /**
  * 将事件坐标转换为相对指定容器的画布坐标（已除 zoom）
+ *
+ * 修复 D-12: getBoundingClientRect() 不包含容器内部 scroll 偏移，
+ * 需要额外加上 scrollLeft/scrollTop 才能得到正确的逻辑坐标。
+ * zoom 除法在函数内只发生一次（输入 zoom → 输出坐标 = 输入坐标 / zoom）。
  */
 export function eventToCanvasPosition(
   event: MouseEvent | DragEvent,
@@ -29,8 +33,11 @@ export function eventToCanvasPosition(
     return { x: 0, y: 0 };
   }
   const rect = containerElement.getBoundingClientRect();
-  const x = (event.clientX - rect.left) / zoom;
-  const y = (event.clientY - rect.top) / zoom;
+  // D-12 修复：补偿容器内部滚动偏移
+  const scrollLeft = containerElement.scrollLeft || 0;
+  const scrollTop = containerElement.scrollTop || 0;
+  const x = (event.clientX - rect.left + scrollLeft) / zoom;
+  const y = (event.clientY - rect.top + scrollTop) / zoom;
   return {
     x: Math.max(0, Math.round(x)),
     y: Math.max(0, Math.round(y)),
