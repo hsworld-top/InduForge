@@ -45,8 +45,8 @@
   5. placementUtils.js 坐标工具函数已统一，消除重复计算逻辑
 **Plans**: 4 plans
 **Plan list**:
-- [ ] 01-01: placement-utils scroll 补偿 + 坐标统一 (Wave 1)
-- [ ] 01-02: placementResolver Strategy 模式抽取 (Wave 1)
+- [x] 01-01: placement-utils scroll 补偿 + 坐标统一 (Wave 1)
+- [x] 01-02: placementResolver Strategy 模式抽取 (Wave 1)
 - [ ] 01-03: DesignCanvas/NodeRenderer 集成 + insertIndex 修复 (Wave 2)
 - [ ] 01-04: Ghost/插入线/容器高亮视觉反馈 (Wave 2)
 
