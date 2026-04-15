@@ -1456,8 +1456,8 @@ function handleDragLeave(): void {
 }
 
 .designer-node.drag-over {
-  outline: none;
-  background-color: transparent;
+  outline: 2px dashed #409EFF;
+  background-color: rgba(64, 158, 255, 0.1);
 }
 
 .empty-container-hint {
