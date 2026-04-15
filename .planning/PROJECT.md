@@ -20,17 +20,19 @@ InduForge 是一个面向工业互联网场景的低代码开发平台，提供�
 
 ### Active
 
-- [ ] 统一 `dev_core` 业务接口返回为 `ApiResponse`，统一业务错误为 `AppError` + `ErrorCodes`。
-- [ ] 完善 Designer 发布产物与 IFP manifest 契约闭环（含 assets 打包、字段校验、版本兼容策略）。
-- [ ] 落实 Runtime 健康与状态契约，打通 NodeAgent 与平台侧状态可观测。
-- [ ] 收敛鉴权策略（开发旁路可控化）并补足关键鉴权回归验证。
-- [ ] 提升部署与运行链路稳健性（日志保留策略、重复逻辑清理、运维脚本一致性）。
+**Current Milestone: v0.1 Designer 画布编辑器优化**
+
+- [ ] 统一组件放置与拖放交互（单一 placementResolver 入口）
+- [ ] 完善布局容器实现（Flex/Free/Grid layoutItem 联动）
+- [ ] 修复层级与空间编排边界情况
+- [ ] 统一画布坐标计算与 placementUtils
 
 ### Out of Scope
 
 - 大规模 UI/视觉重设计：当前阶段以稳定性与契约收敛为先，不做全面交互改版。
 - 新增独立移动端应用：当前优先保障 Web 与节点运行链路。
 - 重构 `docker/`、`nginx/`、`miniio/` 目录：遵循仓库公共规则，本轮不作为业务开发目标。
+- 新增复杂动作系统、多视图或完整权限模型
 
 ## Context
 
@@ -74,4 +76,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-09 after initialization (assumption-based baseline)*
+*Last updated: 2026-04-15 after v0.1 milestone start*
