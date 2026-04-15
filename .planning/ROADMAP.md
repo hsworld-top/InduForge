@@ -47,8 +47,8 @@
 **Plan list**:
 - [x] 01-01: placement-utils scroll 补偿 + 坐标统一 (Wave 1)
 - [x] 01-02: placementResolver Strategy 模式抽取 (Wave 1)
-- [ ] 01-03: DesignCanvas/NodeRenderer 集成 + insertIndex 修复 (Wave 2)
-- [ ] 01-04: Ghost/插入线/容器高亮视觉反馈 (Wave 2)
+- [x] 01-03: DesignCanvas/NodeRenderer 集成 + insertIndex 修复 (Wave 2)
+- [x] 01-04: Ghost/插入线/容器高亮视觉反馈 (Wave 2)
 
 #### Phase 2: 布局容器完善
 **Goal**: Flex/Free/Grid 布局容器的 layoutItem 联动正确，6 种布局嵌套时 children 顺序正确
