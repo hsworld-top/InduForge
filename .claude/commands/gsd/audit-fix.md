@@ -25,9 +25,9 @@ Flags:
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/audit-fix.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/audit-fix.md
 </execution_context>
 
 <process>
-Execute the audit-fix workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/audit-fix.md end-to-end.
+Execute the audit-fix workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/audit-fix.md end-to-end.
 </process>

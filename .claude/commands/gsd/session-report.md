@@ -11,9 +11,9 @@ Generate a structured SESSION_REPORT.md document capturing session outcomes, wor
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/session-report.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/session-report.md
 </execution_context>
 
 <process>
-Execute the session-report workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/session-report.md end-to-end.
+Execute the session-report workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/session-report.md end-to-end.
 </process>

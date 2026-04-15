@@ -39,7 +39,7 @@ Exit.
 ## Step 2: Check for existing documents
 
 ```bash
-INIT=$(node "D:/SVNCode/indu-forge/.claude/get-shit-done/bin/gsd-tools.cjs" init map-codebase 2>/dev/null || echo "{}")
+INIT=$(node "/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/bin/gsd-tools.cjs" init map-codebase 2>/dev/null || echo "{}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 

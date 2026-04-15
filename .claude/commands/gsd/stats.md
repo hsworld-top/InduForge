@@ -10,9 +10,9 @@ Display comprehensive project statistics including phase progress, plan executio
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/stats.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/stats.md
 </execution_context>
 
 <process>
-Execute the stats workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/stats.md end-to-end.
+Execute the stats workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/stats.md end-to-end.
 </process>

@@ -17,7 +17,7 @@ Output: Conversational output only (no file creation) - ends with "What do you t
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/list-phase-assumptions.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/list-phase-assumptions.md
 </execution_context>
 
 <context>

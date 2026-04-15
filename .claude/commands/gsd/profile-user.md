@@ -19,8 +19,8 @@ Routes to the profile-user workflow which orchestrates the full flow: consent ga
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/profile-user.md
-@D:/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/profile-user.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>

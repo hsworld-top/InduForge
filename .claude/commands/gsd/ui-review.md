@@ -18,8 +18,8 @@ Output: {phase_num}-UI-REVIEW.md
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/ui-review.md
-@D:/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/ui-review.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>
@@ -27,6 +27,6 @@ Phase: $ARGUMENTS — optional, defaults to last completed phase.
 </context>
 
 <process>
-Execute @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/ui-review.md end-to-end.
+Execute @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/ui-review.md end-to-end.
 Preserve all workflow gates.
 </process>

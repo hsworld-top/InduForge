@@ -17,7 +17,7 @@ Closes the plan → execute → verify → ship loop.
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/ship.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/ship.md
 </execution_context>
 
-Execute the ship workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/ship.md end-to-end.
+Execute the ship workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/ship.md end-to-end.

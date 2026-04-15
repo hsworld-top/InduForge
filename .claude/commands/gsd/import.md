@@ -22,9 +22,9 @@ Future: `--prd` mode for PRD extraction is planned for a follow-up PR.
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/import.md
-@D:/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
-@D:/SVNCode/indu-forge/.claude/get-shit-done/references/gate-prompts.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/import.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/references/gate-prompts.md
 </execution_context>
 
 <context>

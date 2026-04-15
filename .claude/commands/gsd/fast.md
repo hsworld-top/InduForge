@@ -22,9 +22,9 @@ you could describe in one sentence and execute in under 2 minutes.
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/fast.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/fast.md
 </execution_context>
 
 <process>
-Execute the fast workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/fast.md end-to-end.
+Execute the fast workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/fast.md end-to-end.
 </process>

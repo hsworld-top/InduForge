@@ -18,9 +18,9 @@ Lightweight alternative to `/gsd-map-codebase` — spawns one mapper agent inste
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/scan.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/scan.md
 </execution_context>
 
 <process>
-Execute the scan workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/scan.md end-to-end.
+Execute the scan workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/scan.md end-to-end.
 </process>

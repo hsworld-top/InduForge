@@ -20,9 +20,9 @@ Three modes:
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/undo.md
-@D:/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
-@D:/SVNCode/indu-forge/.claude/get-shit-done/references/gate-prompts.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/undo.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/references/gate-prompts.md
 </execution_context>
 
 <context>
@@ -30,5 +30,5 @@ $ARGUMENTS
 </context>
 
 <process>
-Execute the undo workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/undo.md end-to-end.
+Execute the undo workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/undo.md end-to-end.
 </process>

@@ -19,8 +19,8 @@ Output: Milestone archived (roadmap + requirements), PROJECT.md evolved, git tag
 <execution_context>
 **Load these files NOW (before proceeding):**
 
-- @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/complete-milestone.md (main workflow)
-- @D:/SVNCode/indu-forge/.claude/get-shit-done/templates/milestone-archive.md (archive template)
+- @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/complete-milestone.md (main workflow)
+- @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/templates/milestone-archive.md (archive template)
   </execution_context>
 
 <context>

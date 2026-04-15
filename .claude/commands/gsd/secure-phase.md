@@ -22,7 +22,7 @@ Output: updated SECURITY.md.
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/secure-phase.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/secure-phase.md
 </execution_context>
 
 <context>
@@ -30,6 +30,6 @@ Phase: $ARGUMENTS — optional, defaults to last completed phase.
 </context>
 
 <process>
-Execute @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/secure-phase.md.
+Execute @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/secure-phase.md.
 Preserve all workflow gates.
 </process>

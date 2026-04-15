@@ -10,10 +10,10 @@ Scan `~/gsd-workspaces/` for workspace directories containing `WORKSPACE.md` man
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/list-workspaces.md
-@D:/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/list-workspaces.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <process>
-Execute the list-workspaces workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/list-workspaces.md end-to-end.
+Execute the list-workspaces workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/list-workspaces.md end-to-end.
 </process>

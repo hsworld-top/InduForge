@@ -19,9 +19,9 @@ Accepts an optional topic argument: `/gsd-explore authentication strategy`
 </objective>
 
 <execution_context>
-@D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/explore.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/explore.md
 </execution_context>
 
 <process>
-Execute the explore workflow from @D:/SVNCode/indu-forge/.claude/get-shit-done/workflows/explore.md end-to-end.
+Execute the explore workflow from @/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/workflows/explore.md end-to-end.
 </process>

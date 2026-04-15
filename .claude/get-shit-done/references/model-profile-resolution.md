@@ -12,7 +12,7 @@ Default: `balanced` if not set or config missing.
 
 ## Lookup Table
 
-@D:/SVNCode/indu-forge/.claude/get-shit-done/references/model-profiles.md
+@/mnt/d/SVNCode/indu-forge/.claude/get-shit-done/references/model-profiles.md
 
 Look up the agent in the table for the resolved profile. Pass the model parameter to Task calls:
 
