@@ -336,7 +336,9 @@ class GridContainerStrategy extends ContainerStrategy {
     const colsStr = window.getComputedStyle(containerElement).gridTemplateColumns || "auto";
     const cols = parseGridTemplateParts(colsStr);
     const colCount = cols.length || 3;
-    return (gridHint.row - 1) * colCount + (gridHint.col - 1);
+    const row = Math.max(1, gridHint.row || 1);
+    const col = Math.max(1, gridHint.col || 1);
+    return (row - 1) * colCount + (col - 1);
   }
 }
 
@@ -468,7 +470,7 @@ export function findTargetContainer(
           if (rootNode) {
             const rootChildren = rootNode.children || [];
             // 如果当前容器是根容器的直接子级，优先使用
-            if (rootChildren.includes(currentNodeId as never)) {
+            if ((rootChildren as string[]).includes(currentNodeId)) {
               return { node: currentNode, element: nodeElement_cur };
             }
           }

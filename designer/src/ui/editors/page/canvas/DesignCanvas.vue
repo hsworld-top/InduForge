@@ -515,7 +515,9 @@ function handleCanvasDrop(event: DragEvent): void {
     // 验证 insertIndex 有效性（D-05: append fallback）
     const parentNode = doc.value?.getNode?.(parentId);
     const siblings = parentNode?.children || [];
-    const validIndex = index >= 0 && index <= siblings.length ? index : siblings.length;
+    const validIndex = index < 0 || index > siblings.length || !siblings[index]
+      ? siblings.length
+      : index;
 
     // 构建插入选项
     const insertOptions: {
