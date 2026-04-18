@@ -1,14 +1,17 @@
 package middleware
 
 import (
+	"bufio"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/http/response"
 )
 
-// ErrorHandlerFunc 表示可能返回业务错误的 HTTP 处理函数。
+// ErrorHandlerFunc 表示一个可能返回业务错误的 HTTP 处理函数。
 type ErrorHandlerFunc func(http.ResponseWriter, *http.Request) error
 
 // ErrorHandler 将业务错误统一转换为 ApiResponse。
@@ -73,4 +76,46 @@ func (w *capturingResponseWriter) WriteHeader(statusCode int) {
 func (w *capturingResponseWriter) Write(p []byte) (int, error) {
 	w.committed = true
 	return w.ResponseWriter.Write(p)
+}
+
+// Hijack 透传底层连接劫持能力，不支持时返回标准错误。
+func (w *capturingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+
+	w.committed = true
+	return hijacker.Hijack()
+}
+
+// Flush 透传底层刷新能力，不支持时保持空操作。
+func (w *capturingResponseWriter) Flush() {
+	flusher, ok := w.ResponseWriter.(http.Flusher)
+	if !ok {
+		return
+	}
+
+	flusher.Flush()
+}
+
+// Push 透传底层 HTTP/2 推送能力，不支持时返回标准错误。
+func (w *capturingResponseWriter) Push(target string, opts *http.PushOptions) error {
+	pusher, ok := w.ResponseWriter.(http.Pusher)
+	if !ok {
+		return http.ErrNotSupported
+	}
+
+	return pusher.Push(target, opts)
+}
+
+// ReadFrom 透传底层零拷贝能力，不支持时回退到通用拷贝逻辑。
+func (w *capturingResponseWriter) ReadFrom(r io.Reader) (int64, error) {
+	w.committed = true
+
+	if readerFrom, ok := w.ResponseWriter.(io.ReaderFrom); ok {
+		return readerFrom.ReadFrom(r)
+	}
+
+	return io.Copy(w.ResponseWriter, r)
 }

@@ -25,10 +25,15 @@ type Server struct {
 
 // NewServer 创建一个带有默认超时配置的 HTTP 服务实例。
 func NewServer(cfg config.Config) *Server {
+	return newServer(cfg, middleware.RequestIDMiddleware(router.NewRouter()))
+}
+
+// newServer 允许测试复用生产级 HTTP Server 装配逻辑。
+func newServer(cfg config.Config, handler http.Handler) *Server {
 	return &Server{
 		httpServer: &http.Server{
 			Addr:              cfg.Addr,
-			Handler:           middleware.RequestIDMiddleware(router.NewRouter()),
+			Handler:           handler,
 			ReadHeaderTimeout: defaultReadHeaderTimeout,
 			ReadTimeout:       defaultReadTimeout,
 			WriteTimeout:      defaultWriteTimeout,
