@@ -54,7 +54,8 @@ func TestAuthenticate_AllowsValidBearerJWT(t *testing.T) {
 
 func TestAuthenticate_RejectsExpiredToken(t *testing.T) {
 	validator := mustNewJWTValidator(t, "secret-123")
-	token := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(-2*time.Hour))
+	now := time.Now().UTC()
+	token := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, now.Add(-time.Minute), now.Add(-2*time.Minute), now.Add(-2*time.Minute))
 
 	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next handler should not be called for expired token")
@@ -71,7 +72,8 @@ func TestAuthenticate_RejectsExpiredToken(t *testing.T) {
 
 func TestAuthenticate_RejectsNbfNotYetValid(t *testing.T) {
 	validator := mustNewJWTValidator(t, "secret-123")
-	token := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(time.Hour), time.Now().UTC().Add(-time.Hour))
+	now := time.Now().UTC()
+	token := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, now.Add(time.Minute), now.Add(time.Minute), now.Add(-time.Minute))
 
 	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next handler should not be called for not-yet-valid token")
@@ -86,9 +88,28 @@ func TestAuthenticate_RejectsNbfNotYetValid(t *testing.T) {
 	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
 }
 
+func TestAuthenticate_RejectsIatFutureToken(t *testing.T) {
+	validator := mustNewJWTValidator(t, "secret-123")
+	now := time.Now().UTC()
+	token := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, now.Add(time.Hour), now.Add(-time.Minute), now.Add(time.Minute))
+
+	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("next handler should not be called for future iat token")
+	}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	handler.ServeHTTP(rr, req)
+
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
+}
+
 func TestAuthenticate_RejectsInvalidBearerJWT(t *testing.T) {
 	validator := mustNewJWTValidator(t, "secret-123")
-	validToken := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(time.Hour), time.Now().UTC().Add(-time.Hour))
+	now := time.Now().UTC()
+	validToken := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, now.Add(time.Hour), now.Add(-time.Minute), now.Add(-time.Minute))
 	invalidToken := validToken + "tampered"
 
 	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -127,6 +148,20 @@ func TestAuthenticate_RejectsEmptySecretAtConstruction(t *testing.T) {
 	if validator != nil {
 		t.Fatal("expected validator to be nil when secret is empty")
 	}
+}
+
+func TestAuthenticate_RejectsNilValidatorWithInternalError(t *testing.T) {
+	handler := middleware.Authenticate(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("next handler should not be called when validator is nil")
+	}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer token")
+
+	handler.ServeHTTP(rr, req)
+
+	assertAuthErrorResponse(t, rr, http.StatusInternalServerError, string(apperrors.ErrorCodeAuthSecretRequired))
 }
 
 func mustNewJWTValidator(t *testing.T, secret string) *auth.JWTValidator {

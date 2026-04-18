@@ -1,13 +1,12 @@
 package auth
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -24,7 +23,7 @@ type JWTValidator struct {
 // NewJWTValidator 创建一个基于 HMAC-SHA256 的 JWT 校验器。
 func NewJWTValidator(secret string) (*JWTValidator, error) {
 	if strings.TrimSpace(secret) == "" {
-		return nil, fmt.Errorf("%s: JWT secret 未配置", apperrors.ErrorCodeAuthSecretRequired)
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthSecretRequired, http.StatusInternalServerError, "JWT secret 未配置")
 	}
 
 	return &JWTValidator{secret: []byte(secret)}, nil
@@ -33,30 +32,25 @@ func NewJWTValidator(secret string) (*JWTValidator, error) {
 // Validate 校验并解析 JWT，失败时返回错误。
 func (v *JWTValidator) Validate(token string) (*Claims, error) {
 	if v == nil {
-		return nil, errors.New("JWT 校验器未初始化")
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthSecretRequired, http.StatusInternalServerError, "JWT 校验器未初始化")
 	}
 	if len(v.secret) == 0 {
-		return nil, fmt.Errorf("%s: JWT secret 未配置", apperrors.ErrorCodeAuthSecretRequired)
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthSecretRequired, http.StatusInternalServerError, "JWT secret 未配置")
 	}
 
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, errors.New("JWT 结构无效")
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 结构无效")
 	}
 
 	headerBytes, err := decodeSegment(parts[0])
 	if err != nil {
-		return nil, fmt.Errorf("JWT header 解码失败: %w", err)
-	}
-
-	payloadBytes, err := decodeSegment(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("JWT payload 解码失败: %w", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT header 解码失败", err)
 	}
 
 	signature, err := decodeSegment(parts[2])
 	if err != nil {
-		return nil, fmt.Errorf("JWT signature 解码失败: %w", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT signature 解码失败", err)
 	}
 
 	var header struct {
@@ -64,29 +58,31 @@ func (v *JWTValidator) Validate(token string) (*Claims, error) {
 		Typ string `json:"typ"`
 	}
 	if err := json.Unmarshal(headerBytes, &header); err != nil {
-		return nil, fmt.Errorf("JWT header 解析失败: %w", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT header 解析失败", err)
 	}
 	if header.Alg != hs256Algorithm {
-		return nil, fmt.Errorf("不支持的 JWT 算法: %s", header.Alg)
-	}
-
-	var payload jwtPayload
-	decoder := json.NewDecoder(bytes.NewReader(payloadBytes))
-	decoder.UseNumber()
-	if err := decoder.Decode(&payload); err != nil {
-		return nil, fmt.Errorf("JWT payload 解析失败: %w", err)
-	}
-
-	now := time.Now().UTC()
-	if err := payload.validateTimeClaims(now); err != nil {
-		return nil, err
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, fmt.Sprintf("不支持的 JWT 算法: %s", header.Alg))
 	}
 
 	mac := hmac.New(sha256.New, v.secret)
 	_, _ = mac.Write([]byte(parts[0] + "." + parts[1]))
 	expected := mac.Sum(nil)
 	if !hmac.Equal(signature, expected) {
-		return nil, errors.New("JWT 签名校验失败")
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 签名校验失败")
+	}
+
+	payloadBytes, err := decodeSegment(parts[1])
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT payload 解码失败", err)
+	}
+
+	var payload jwtPayload
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT payload 解析失败", err)
+	}
+
+	if err := payload.validateTimeClaims(time.Now().UTC()); err != nil {
+		return nil, err
 	}
 
 	return &payload.Claims, nil
@@ -109,30 +105,30 @@ func (p *jwtPayload) validateTimeClaims(now time.Time) error {
 	if p.Exp != nil {
 		exp, err := jsonNumberToUnix(*p.Exp)
 		if err != nil {
-			return fmt.Errorf("JWT exp 声明无效: %w", err)
+			return apperrors.WrapAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT exp 声明无效", err)
 		}
 		if nowUnix >= exp {
-			return errors.New("JWT 已过期")
+			return apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 已过期")
 		}
 	}
 
 	if p.Nbf != nil {
 		nbf, err := jsonNumberToUnix(*p.Nbf)
 		if err != nil {
-			return fmt.Errorf("JWT nbf 声明无效: %w", err)
+			return apperrors.WrapAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT nbf 声明无效", err)
 		}
 		if nowUnix < nbf {
-			return errors.New("JWT 尚未生效")
+			return apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 尚未生效")
 		}
 	}
 
 	if p.Iat != nil {
 		iat, err := jsonNumberToUnix(*p.Iat)
 		if err != nil {
-			return fmt.Errorf("JWT iat 声明无效: %w", err)
+			return apperrors.WrapAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT iat 声明无效", err)
 		}
 		if nowUnix < iat {
-			return errors.New("JWT 签发时间晚于当前时间")
+			return apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 签发时间晚于当前时间")
 		}
 	}
 

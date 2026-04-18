@@ -14,19 +14,23 @@ func Authenticate(validator *auth.JWTValidator) func(http.Handler) http.Handler 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if validator == nil {
-				writeAuthError(w, r, http.StatusInternalServerError, apperrors.ErrorCodeInternal, "JWT 校验器未初始化")
+				writeAuthError(w, r, apperrors.NewAppError(apperrors.ErrorCodeAuthSecretRequired, http.StatusInternalServerError, "JWT 校验器未初始化"))
 				return
 			}
 
 			token, ok := bearerTokenFromHeader(r.Header.Get("Authorization"))
 			if !ok {
-				writeAuthError(w, r, http.StatusUnauthorized, apperrors.ErrorCodeAuthTokenRequired, "请提供 Bearer JWT")
+				writeAuthError(w, r, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenRequired, http.StatusUnauthorized, "请提供 Bearer JWT"))
 				return
 			}
 
 			claims, err := validator.Validate(token)
 			if err != nil {
-				writeAuthError(w, r, http.StatusUnauthorized, apperrors.ErrorCodeAuthTokenInvalid, "JWT 校验失败")
+				if appErr, ok := err.(*apperrors.AppError); ok {
+					writeAuthError(w, r, appErr)
+					return
+				}
+				writeAuthError(w, r, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 校验失败"))
 				return
 			}
 
@@ -54,6 +58,15 @@ func bearerTokenFromHeader(header string) (string, bool) {
 	return token, true
 }
 
-func writeAuthError(w http.ResponseWriter, r *http.Request, statusCode int, errorCode apperrors.ErrorCode, message string) {
+func writeAuthError(w http.ResponseWriter, r *http.Request, appErr *apperrors.AppError) {
+	statusCode := http.StatusInternalServerError
+	errorCode := apperrors.ErrorCodeInternal
+	message := "系统内部错误"
+	if appErr != nil {
+		statusCode = appErr.StatusCode
+		errorCode = appErr.Code
+		message = appErr.Message
+	}
+
 	response.WriteError(w, statusCode, RequestID(r.Context()), string(errorCode), message)
 }
