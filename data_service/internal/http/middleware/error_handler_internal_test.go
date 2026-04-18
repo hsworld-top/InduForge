@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/indu-forge/data_service/internal/http/response"
 )
 
 type optionalResponseWriter struct {
@@ -166,5 +168,28 @@ func TestErrorHandler_DoesNotWriteUnifiedErrorAfterFlush(t *testing.T) {
 	}
 	if got := rr.Header().Get("X-Request-ID"); got == "" {
 		t.Fatal("expected request id header to be written")
+	}
+}
+
+func TestCapturingResponseWriter_FlushWithoutFlusherDoesNotCommit(t *testing.T) {
+	underlying := &bareResponseWriter{}
+	rw := &capturingResponseWriter{ResponseWriter: underlying}
+
+	rw.Flush()
+
+	if rw.committed {
+		t.Fatal("expected flush without flusher support to keep committed=false")
+	}
+
+	response.WriteError(rw, http.StatusInternalServerError, "req-no-flusher", "INTERNAL_ERROR", "系统内部错误")
+
+	if !rw.committed {
+		t.Fatal("expected error write to mark the response as committed")
+	}
+	if got := underlying.body.String(); got == "" {
+		t.Fatal("expected unified error body to be written after flush fallback")
+	}
+	if got := underlying.body.String(); !strings.Contains(got, "\"success\":false") {
+		t.Fatalf("expected unified error response body, got %q", got)
 	}
 }

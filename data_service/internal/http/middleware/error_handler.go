@@ -91,14 +91,13 @@ func (w *capturingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) 
 
 // Flush 透传底层刷新能力，不支持时保持空操作。
 func (w *capturingResponseWriter) Flush() {
-	w.committed = true
-
 	flusher, ok := w.ResponseWriter.(http.Flusher)
 	if !ok {
 		return
 	}
 
 	flusher.Flush()
+	w.committed = true
 }
 
 // Push 透传底层 HTTP/2 推送能力，不支持时返回标准错误。
