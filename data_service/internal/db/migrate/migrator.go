@@ -4,17 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
+	"io/fs"
+	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/indu-forge/data_service/internal/db/migrations"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const schemaMigrationsTable = "schema_migrations"
+const (
+	schemaMigrationsTable = "schema_migrations"
+	migrationLockKey      = int64(4_000_001)
+)
+
+var migrationFilePattern = regexp.MustCompile(`^([0-9]{4,})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`)
 
 const createSchemaMigrationsSQL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -38,25 +43,25 @@ type Migrator struct {
 	migrations []Migration
 }
 
-// NewMigrator 使用默认 migrations 目录创建迁移器。
+// NewMigrator 使用内嵌 migration 资源创建迁移器。
 func NewMigrator(pool *pgxpool.Pool) (*Migrator, error) {
-	return NewMigratorFromDir(pool, defaultMigrationsDir())
+	return NewMigratorFromFS(pool, migrations.Files)
 }
 
-// NewMigratorFromDir 允许测试或调用方指定 migrations 目录。
-func NewMigratorFromDir(pool *pgxpool.Pool, dir string) (*Migrator, error) {
+// NewMigratorFromFS 允许测试或调用方传入任意文件系统。
+func NewMigratorFromFS(pool *pgxpool.Pool, fsys fs.ReadFileFS) (*Migrator, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("pool 不能为空")
 	}
 
-	migrations, err := loadMigrations(dir)
+	loadedMigrations, err := loadMigrations(fsys)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Migrator{
 		pool:       pool,
-		migrations: migrations,
+		migrations: loadedMigrations,
 	}, nil
 }
 
@@ -68,6 +73,9 @@ func (m *Migrator) Up(ctx context.Context) error {
 	}
 	defer rollbackQuietly(ctx, tx)
 
+	if err := acquireMigrationLock(ctx, tx); err != nil {
+		return err
+	}
 	if err := ensureSchemaMigrationsTable(ctx, tx); err != nil {
 		return err
 	}
@@ -88,7 +96,7 @@ func (m *Migrator) Up(ctx context.Context) error {
 
 		if _, err := tx.Exec(
 			ctx,
-			`INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`,
+			`INSERT INTO schema_migrations (version, name) VALUES ($1, $2) ON CONFLICT (version) DO NOTHING`,
 			migration.Version,
 			migration.Name,
 		); err != nil {
@@ -111,6 +119,9 @@ func (m *Migrator) Down(ctx context.Context) error {
 	}
 	defer rollbackQuietly(ctx, tx)
 
+	if err := acquireMigrationLock(ctx, tx); err != nil {
+		return err
+	}
 	if err := ensureSchemaMigrationsTable(ctx, tx); err != nil {
 		return err
 	}
@@ -154,6 +165,9 @@ func (m *Migrator) DownAll(ctx context.Context) error {
 	}
 	defer rollbackQuietly(ctx, tx)
 
+	if err := acquireMigrationLock(ctx, tx); err != nil {
+		return err
+	}
 	if err := ensureSchemaMigrationsTable(ctx, tx); err != nil {
 		return err
 	}
@@ -198,51 +212,66 @@ func (m *Migrator) findMigration(version string) (Migration, bool) {
 	return Migration{}, false
 }
 
-func defaultMigrationsDir() string {
-	_, filename, _, _ := runtime.Caller(0)
-	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "migrations"))
-}
-
-func loadMigrations(dir string) ([]Migration, error) {
-	entries, err := os.ReadDir(dir)
+func loadMigrations(fsys fs.ReadFileFS) ([]Migration, error) {
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
-		return nil, fmt.Errorf("读取 migrations 目录失败: %w", err)
+		return nil, fmt.Errorf("读取内嵌 migrations 失败: %w", err)
 	}
 
-	migrations := make([]Migration, 0)
+	upFiles := make(map[string]string)
+	downFiles := make(map[string]string)
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 
 		name := entry.Name()
-		if !strings.HasSuffix(name, ".sql") || strings.HasSuffix(name, "_down.sql") {
-			continue
+		switch {
+		case strings.HasSuffix(name, "_down.sql"):
+			baseName := strings.TrimSuffix(name, "_down.sql") + ".sql"
+			version, err := validateMigrationName(baseName)
+			if err != nil {
+				return nil, fmt.Errorf("down migration 文件名无效 %s: %w", name, err)
+			}
+			downFiles[version] = name
+		case strings.HasSuffix(name, ".sql"):
+			version, err := validateMigrationName(name)
+			if err != nil {
+				return nil, fmt.Errorf("up migration 文件名无效 %s: %w", name, err)
+			}
+			upFiles[version] = name
+		}
+	}
+
+	migrations := make([]Migration, 0)
+	for version, upName := range upFiles {
+		downName, ok := downFiles[version]
+		if !ok {
+			return nil, fmt.Errorf("migration %s 缺少对应的 down 文件", upName)
 		}
 
-		version := migrationVersion(name)
-		if version == "" {
-			return nil, fmt.Errorf("migration 文件名缺少版本前缀: %s", name)
-		}
-
-		upPath := filepath.Join(dir, name)
-		downPath := filepath.Join(dir, strings.TrimSuffix(name, ".sql")+"_down.sql")
-
-		upSQL, err := os.ReadFile(upPath)
+		upSQL, err := fs.ReadFile(fsys, upName)
 		if err != nil {
-			return nil, fmt.Errorf("读取 %s 失败: %w", upPath, err)
+			return nil, fmt.Errorf("读取 %s 失败: %w", upName, err)
 		}
-		downSQL, err := os.ReadFile(downPath)
+		downSQL, err := fs.ReadFile(fsys, downName)
 		if err != nil {
-			return nil, fmt.Errorf("读取 %s 失败: %w", downPath, err)
+			return nil, fmt.Errorf("读取 %s 失败: %w", downName, err)
 		}
 
 		migrations = append(migrations, Migration{
 			Version: version,
-			Name:    strings.TrimSuffix(name, ".sql"),
+			Name:    strings.TrimSuffix(upName, ".sql"),
 			UpSQL:   string(upSQL),
 			DownSQL: string(downSQL),
 		})
+	}
+
+	for version, downName := range downFiles {
+		if _, ok := upFiles[version]; !ok {
+			return nil, fmt.Errorf("down migration %s 缺少对应的 up 文件", downName)
+		}
 	}
 
 	sort.Slice(migrations, func(i, j int) bool {
@@ -252,17 +281,24 @@ func loadMigrations(dir string) ([]Migration, error) {
 	return migrations, nil
 }
 
-func migrationVersion(name string) string {
-	parts := strings.SplitN(name, "_", 2)
-	if len(parts) == 0 {
-		return ""
+func validateMigrationName(name string) (string, error) {
+	matches := migrationFilePattern.FindStringSubmatch(name)
+	if len(matches) != 3 {
+		return "", fmt.Errorf("命名需满足 0001_name.sql")
 	}
-	return strings.TrimSpace(parts[0])
+	return matches[1], nil
 }
 
 func ensureSchemaMigrationsTable(ctx context.Context, tx pgx.Tx) error {
 	if err := execSQL(ctx, tx, createSchemaMigrationsSQL); err != nil {
 		return fmt.Errorf("初始化 schema_migrations 失败: %w", err)
+	}
+	return nil
+}
+
+func acquireMigrationLock(ctx context.Context, tx pgx.Tx) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, migrationLockKey); err != nil {
+		return fmt.Errorf("获取 migration advisory lock 失败: %w", err)
 	}
 	return nil
 }

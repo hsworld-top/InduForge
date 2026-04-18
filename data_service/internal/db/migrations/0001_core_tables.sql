@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS data_queries (
 CREATE INDEX IF NOT EXISTS data_queries_project_connection_idx
     ON data_queries (project_id, connection_id);
 
+CREATE INDEX IF NOT EXISTS data_queries_connection_project_idx
+    ON data_queries (connection_id, project_id);
+
 CREATE INDEX IF NOT EXISTS data_queries_type_enabled_idx
     ON data_queries (query_type, is_enabled);
 

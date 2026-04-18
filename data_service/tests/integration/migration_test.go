@@ -2,20 +2,27 @@ package integration_test
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/indu-forge/data_service/internal/db/migrate"
 	"github.com/indu-forge/data_service/internal/db/postgres"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-const testDatabaseURLEnv = "DATA_SERVICE_TEST_DATABASE_URL"
+const (
+	testDatabaseURLEnv = "DATA_SERVICE_TEST_DATABASE_URL"
+	postgresTestImage  = "postgres:16.4-alpine"
+)
 
 func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	t.Parallel()
@@ -23,16 +30,29 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	pool := setupTestPool(t, ctx)
-	migrator := setupMigrator(t, pool)
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
 
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("执行 Up 失败: %v", err)
+	start := make(chan struct{})
+	errCh := make(chan error, 2)
+	var wg sync.WaitGroup
+
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errCh <- migrator.Up(ctx)
+		}()
 	}
+	close(start)
+	wg.Wait()
+	close(errCh)
 
-	// 再执行一次，确认重复运行不会报错。
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("重复执行 Up 失败: %v", err)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("并发执行 Up 失败: %v", err)
+		}
 	}
 
 	for _, tableName := range []string{
@@ -41,13 +61,13 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_queries",
 		"data_points",
 	} {
-		if !tableExists(ctx, t, pool, tableName) {
+		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("期望表 %s 已创建", tableName)
 		}
 	}
 
 	var appliedCount int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
+	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("查询 schema_migrations 失败: %v", err)
 	}
 	if appliedCount != 1 {
@@ -64,7 +84,7 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_queries",
 		"data_points",
 	} {
-		if tableExists(ctx, t, pool, tableName) {
+		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("期望表 %s 已被删除", tableName)
 		}
 	}
@@ -76,14 +96,14 @@ func TestMigrationIndexes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	pool := setupTestPool(t, ctx)
-	migrator := setupMigrator(t, pool)
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
 
 	if err := migrator.Up(ctx); err != nil {
 		t.Fatalf("执行 Up 失败: %v", err)
 	}
 
-	indexes := loadIndexNames(ctx, t, pool)
+	indexes := loadIndexNames(ctx, t, fixture.pool, fixture.schemaName)
 	for _, indexName := range []string{
 		"data_connections_project_type_idx",
 		"data_connections_project_status_idx",
@@ -92,6 +112,7 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_relational_configs_ssl_config_gin_idx",
 		"data_queries_project_name_key",
 		"data_queries_project_connection_idx",
+		"data_queries_connection_project_idx",
 		"data_queries_type_enabled_idx",
 		"data_queries_config_gin_idx",
 		"data_points_project_path_key",
@@ -117,24 +138,50 @@ func setupMigrator(t *testing.T, pool *pgxpool.Pool) *migrate.Migrator {
 	return migrator
 }
 
-func setupTestPool(t *testing.T, ctx context.Context) *pgxpool.Pool {
+type testDatabase struct {
+	pool       *pgxpool.Pool
+	adminPool  *pgxpool.Pool
+	schemaName string
+}
+
+func setupTestDatabase(t *testing.T, ctx context.Context) *testDatabase {
 	t.Helper()
 
 	databaseURL, cleanup := resolveTestDatabaseURL(t, ctx)
 	t.Cleanup(cleanup)
 
-	pool, err := postgres.NewPoolFromURL(ctx, databaseURL)
+	adminPool, err := postgres.NewPoolFromURL(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("创建测试管理连接池失败: %v", err)
+	}
+	t.Cleanup(adminPool.Close)
+
+	schemaName := uniqueSchemaName(t.Name())
+	if _, err := adminPool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %s`, pgx.Identifier{schemaName}.Sanitize())); err != nil {
+		t.Fatalf("创建测试 schema 失败: %v", err)
+	}
+	t.Cleanup(func() {
+		dropCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err := adminPool.Exec(dropCtx, fmt.Sprintf(`DROP SCHEMA IF EXISTS %s CASCADE`, pgx.Identifier{schemaName}.Sanitize())); err != nil {
+			t.Fatalf("删除测试 schema 失败: %v", err)
+		}
+	})
+
+	pool, err := postgres.NewPool(ctx, postgres.PoolConfig{
+		DatabaseURL: databaseURL,
+		SearchPath:  schemaName,
+	})
 	if err != nil {
 		t.Fatalf("创建测试连接池失败: %v", err)
 	}
 	t.Cleanup(pool.Close)
 
-	cleanupDatabase(ctx, t, pool)
-	t.Cleanup(func() {
-		cleanupDatabase(context.Background(), t, pool)
-	})
-
-	return pool
+	return &testDatabase{
+		pool:       pool,
+		adminPool:  adminPool,
+		schemaName: schemaName,
+	}
 }
 
 func resolveTestDatabaseURL(t *testing.T, ctx context.Context) (string, func()) {
@@ -146,12 +193,12 @@ func resolveTestDatabaseURL(t *testing.T, ctx context.Context) (string, func()) 
 
 	container, err := tcpostgres.Run(
 		ctx,
-		"postgres:16-alpine",
+		postgresTestImage,
 		tcpostgres.WithDatabase("data_service_test"),
 		tcpostgres.WithUsername("postgres"),
 		tcpostgres.WithPassword("postgres"),
 		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").WithOccurrence(2).WithStartupTimeout(90*time.Second),
+			wait.ForListeningPort("5432/tcp").WithStartupTimeout(90*time.Second),
 		),
 	)
 	if err != nil {
@@ -176,44 +223,26 @@ func resolveTestDatabaseURL(t *testing.T, ctx context.Context) (string, func()) 
 	return databaseURL, cleanup
 }
 
-func cleanupDatabase(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	statements := []string{
-		`DROP TABLE IF EXISTS schema_migrations`,
-		`DROP TABLE IF EXISTS data_points`,
-		`DROP TABLE IF EXISTS data_queries`,
-		`DROP TABLE IF EXISTS data_relational_configs`,
-		`DROP TABLE IF EXISTS data_connections`,
-	}
-
-	for _, statement := range statements {
-		if _, err := pool.Exec(ctx, statement); err != nil {
-			t.Fatalf("清理测试数据库失败: %v", err)
-		}
-	}
-}
-
-func tableExists(ctx context.Context, t *testing.T, pool *pgxpool.Pool, tableName string) bool {
+func tableExists(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schemaName string, tableName string) bool {
 	t.Helper()
 
 	var regclass *string
-	if err := pool.QueryRow(ctx, `SELECT to_regclass($1)`, "public."+tableName).Scan(&regclass); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT to_regclass($1)`, schemaName+"."+tableName).Scan(&regclass); err != nil {
 		t.Fatalf("查询表 %s 是否存在失败: %v", tableName, err)
 	}
 
 	return regclass != nil && *regclass != ""
 }
 
-func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool) map[string]struct{} {
+func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schemaName string) map[string]struct{} {
 	t.Helper()
 
 	rows, err := pool.Query(ctx, `
 		SELECT indexname
 		FROM pg_indexes
-		WHERE schemaname = 'public'
+		WHERE schemaname = $1
 		  AND tablename IN ('data_connections', 'data_relational_configs', 'data_queries', 'data_points')
-	`)
+	`, schemaName)
 	if err != nil {
 		t.Fatalf("查询索引列表失败: %v", err)
 	}
@@ -240,5 +269,11 @@ func mapsKeys(items map[string]struct{}) []string {
 	for key := range items {
 		result = append(result, key)
 	}
+	sort.Strings(result)
 	return result
+}
+
+func uniqueSchemaName(testName string) string {
+	replacer := strings.NewReplacer("/", "_", "-", "_", " ", "_")
+	return fmt.Sprintf("it_%s_%d", replacer.Replace(strings.ToLower(testName)), time.Now().UnixNano())
 }
