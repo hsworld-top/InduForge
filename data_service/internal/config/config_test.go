@@ -45,3 +45,23 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 		t.Fatalf("expected jwt secret to be loaded, got %q", cfg.JWTSecret)
 	}
 }
+
+func TestValidateJWTSecret_RejectsWeakSecret(t *testing.T) {
+	err := ValidateJWTSecret("short-secret")
+	if err == nil {
+		t.Fatal("expected weak secret to be rejected")
+	}
+	if got := err.Error(); got != "DATA_SERVICE_JWT_SECRET 长度不能少于 16 个字符" {
+		t.Fatalf("unexpected error message: %q", got)
+	}
+}
+
+func TestValidateConnectionsDependencies_RejectsMissingDatabaseURL(t *testing.T) {
+	err := ValidateConnectionsDependencies(Config{JWTSecret: "1234567890abcdef"})
+	if err == nil {
+		t.Fatal("expected missing database url to be rejected")
+	}
+	if got := err.Error(); got != "缺少 DATA_SERVICE_DATABASE_URL，connections 路由不会挂载" {
+		t.Fatalf("unexpected error message: %q", got)
+	}
+}

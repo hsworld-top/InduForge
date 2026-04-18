@@ -20,8 +20,6 @@ import (
 )
 
 func TestConnectionsCRUD(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -137,6 +135,10 @@ type apiEnvelope struct {
 	Data      json.RawMessage `json:"data"`
 }
 
+var integrationHTTPClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
 func mustListConnections(t *testing.T, baseURL, token, projectID string) []connectionPayload {
 	t.Helper()
 
@@ -210,7 +212,7 @@ func doJSONRequest(t *testing.T, method, url, token string, payload any) apiEnve
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-ID", "rid-connections-it")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := integrationHTTPClient.Do(req)
 	if err != nil {
 		t.Fatalf("执行请求失败: %v", err)
 	}

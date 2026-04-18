@@ -25,8 +25,6 @@ const (
 )
 
 func TestMigrateUp_CreatesCoreTables(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -91,8 +89,6 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 }
 
 func TestMigrationIndexes(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 

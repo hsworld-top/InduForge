@@ -16,11 +16,6 @@ import (
 )
 
 func TestNewServer_UsesProductionRouter(t *testing.T) {
-	restore := replaceRouteDependenciesFactoryForTest(func(config.Config) ([]router.Option, func(), error) {
-		return nil, nil, nil
-	})
-	defer restore()
-
 	srv, err := NewServer(config.Config{Addr: ":0"})
 	if err != nil {
 		t.Fatalf("new server failed: %v", err)
@@ -94,10 +89,25 @@ func TestServer_ProductionAssemblyKeepsUnifiedErrorResponse(t *testing.T) {
 	}
 }
 
-func replaceRouteDependenciesFactoryForTest(factory routeDependenciesFactory) func() {
-	previous := buildRouteDependencies
-	buildRouteDependencies = factory
-	return func() {
-		buildRouteDependencies = previous
+func TestNewServer_StartsBaseServiceWhenOptionalDependenciesInvalid(t *testing.T) {
+	srv, err := NewServer(config.Config{
+		Addr:      ":0",
+		JWTSecret: "short-secret",
+	})
+	if err != nil {
+		t.Fatalf("new server failed: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	resp, err := ts.Client().Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected health status %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 }

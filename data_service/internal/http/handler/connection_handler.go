@@ -79,6 +79,9 @@ func (h *ConnectionHandler) Update(w http.ResponseWriter, r *http.Request) error
 	if err := decodeJSONBody(r, &raw); err != nil {
 		return err
 	}
+	if err := validateUpdatePayloadKeys(raw); err != nil {
+		return err
+	}
 
 	input := service.UpdateConnectionInput{}
 	if value, ok := raw["name"]; ok {
@@ -162,5 +165,23 @@ func decodeJSONBody(r *http.Request, target any) error {
 	if decoder.More() {
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请求体只能包含一个 JSON 对象")
 	}
+	return nil
+}
+
+func validateUpdatePayloadKeys(raw map[string]json.RawMessage) error {
+	allowedFields := map[string]struct{}{
+		"name":   {},
+		"type":   {},
+		"status": {},
+		"config": {},
+	}
+
+	for field := range raw {
+		if _, ok := allowedFields[field]; ok {
+			continue
+		}
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "更新请求包含不支持的字段: "+field)
+	}
+
 	return nil
 }

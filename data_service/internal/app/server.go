@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -41,7 +41,9 @@ var buildRouteDependencies routeDependenciesFactory = defaultRouteDependenciesFa
 func NewServer(cfg config.Config) (*Server, error) {
 	routerOptions, cleanup, err := buildRouteDependencies(cfg)
 	if err != nil {
-		return nil, err
+		log.Printf("warning: connections routes disabled: %v", err)
+		routerOptions = nil
+		cleanup = nil
 	}
 
 	return newServer(cfg, middleware.RequestIDMiddleware(router.NewRouter(routerOptions...)), cleanup), nil
@@ -109,9 +111,8 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func(), error) {
-	databaseURL := strings.TrimSpace(cfg.DatabaseURL)
-	if databaseURL == "" {
-		return nil, nil, fmt.Errorf("DATA_SERVICE_DATABASE_URL 未配置")
+	if err := config.ValidateConnectionsDependencies(cfg); err != nil {
+		return nil, nil, err
 	}
 
 	jwtValidator, err := auth.NewJWTValidator(cfg.JWTSecret)
@@ -120,7 +121,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	}
 
 	pool, err := postgres.NewPool(context.Background(), postgres.PoolConfig{
-		DatabaseURL: databaseURL,
+		DatabaseURL: strings.TrimSpace(cfg.DatabaseURL),
 		SearchPath:  strings.TrimSpace(cfg.DatabaseSearchPath),
 	})
 	if err != nil {
