@@ -17,7 +17,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	server := app.NewServer(cfg)
+	server, err := app.NewServer(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer server.Close()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -14,12 +14,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
-	"github.com/indu-forge/data_service/internal/http/handler"
-	"github.com/indu-forge/data_service/internal/http/middleware"
-	"github.com/indu-forge/data_service/internal/http/router"
-	"github.com/indu-forge/data_service/internal/repository"
-	"github.com/indu-forge/data_service/internal/service"
+	"github.com/indu-forge/data_service/internal/config"
 )
 
 func TestConnectionsCRUD(t *testing.T) {
@@ -39,20 +36,18 @@ func TestConnectionsCRUD(t *testing.T) {
 	tenantID := "tenant-alpha"
 	secret := "connections-secret"
 
-	validator, err := auth.NewJWTValidator(secret)
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
 	if err != nil {
-		t.Fatalf("创建 JWT 校验器失败: %v", err)
+		t.Fatalf("创建默认服务失败: %v", err)
 	}
+	t.Cleanup(srv.Close)
 
-	connectionRepo := repository.NewConnectionRepository(fixture.pool)
-	connectionService := service.NewConnectionService(connectionRepo)
-	connectionHandler := handler.NewConnectionHandler(connectionService)
-
-	server := httptest.NewServer(
-		middleware.RequestIDMiddleware(
-			router.NewRouter(router.WithConnectionRoutes(connectionHandler, validator)),
-		),
-	)
+	server := httptest.NewServer(srv.Handler())
 	t.Cleanup(server.Close)
 
 	token := mustSignIntegrationJWT(t, secret, &auth.Claims{

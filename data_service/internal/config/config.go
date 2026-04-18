@@ -11,7 +11,10 @@ const defaultAddr = ":9095"
 
 // Config 定义 data_service 的基础运行配置。
 type Config struct {
-	Addr string
+	Addr               string
+	DatabaseURL        string
+	DatabaseSearchPath string
+	JWTSecret          string
 }
 
 // Load 从环境变量读取服务配置，并在缺省时使用内置默认值。
@@ -26,7 +29,10 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Addr: addr,
+		Addr:               addr,
+		DatabaseURL:        strings.TrimSpace(os.Getenv("DATA_SERVICE_DATABASE_URL")),
+		DatabaseSearchPath: strings.TrimSpace(os.Getenv("DATA_SERVICE_DATABASE_SCHEMA")),
+		JWTSecret:          strings.TrimSpace(os.Getenv("DATA_SERVICE_JWT_SECRET")),
 	}, nil
 }
 

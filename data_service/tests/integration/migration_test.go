@@ -139,9 +139,10 @@ func setupMigrator(t *testing.T, pool *pgxpool.Pool) *migrate.Migrator {
 }
 
 type testDatabase struct {
-	pool       *pgxpool.Pool
-	adminPool  *pgxpool.Pool
-	schemaName string
+	pool        *pgxpool.Pool
+	adminPool   *pgxpool.Pool
+	schemaName  string
+	databaseURL string
 }
 
 func setupTestDatabase(t *testing.T, ctx context.Context) *testDatabase {
@@ -178,9 +179,10 @@ func setupTestDatabase(t *testing.T, ctx context.Context) *testDatabase {
 	t.Cleanup(pool.Close)
 
 	return &testDatabase{
-		pool:       pool,
-		adminPool:  adminPool,
-		schemaName: schemaName,
+		pool:        pool,
+		adminPool:   adminPool,
+		schemaName:  schemaName,
+		databaseURL: databaseURL,
 	}
 }
 
@@ -238,11 +240,11 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
 	t.Helper()
 
 	rows, err := pool.Query(ctx, `
-		SELECT indexname
-		FROM pg_indexes
-		WHERE schemaname = $1
-		  AND tablename IN ('data_connections', 'data_relational_configs', 'data_queries', 'data_points')
-	`, schemaName)
+        SELECT indexname
+        FROM pg_indexes
+        WHERE schemaname = $1
+          AND tablename IN ('data_connections', 'data_relational_configs', 'data_queries', 'data_points')
+    `, schemaName)
 	if err != nil {
 		t.Fatalf("查询索引列表失败: %v", err)
 	}

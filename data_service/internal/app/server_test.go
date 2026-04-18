@@ -16,8 +16,17 @@ import (
 )
 
 func TestNewServer_UsesProductionRouter(t *testing.T) {
-	srv := NewServer(config.Config{Addr: ":0"})
-	ts := httptest.NewServer(srv.httpServer.Handler)
+	restore := replaceRouteDependenciesFactoryForTest(func(config.Config) ([]router.Option, func(), error) {
+		return nil, nil, nil
+	})
+	defer restore()
+
+	srv, err := NewServer(config.Config{Addr: ":0"})
+	if err != nil {
+		t.Fatalf("new server failed: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
 	resp, err := ts.Client().Get(ts.URL + "/health")
@@ -48,8 +57,8 @@ func TestServer_ProductionAssemblyKeepsUnifiedErrorResponse(t *testing.T) {
 		return errors.New("forced boom")
 	}))
 
-	srv := newServer(config.Config{Addr: ":0"}, middleware.RequestIDMiddleware(mux))
-	ts := httptest.NewServer(srv.httpServer.Handler)
+	srv := newServer(config.Config{Addr: ":0"}, middleware.RequestIDMiddleware(mux), nil)
+	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
 	resp, err := ts.Client().Get(ts.URL + "/boom")
@@ -82,5 +91,13 @@ func TestServer_ProductionAssemblyKeepsUnifiedErrorResponse(t *testing.T) {
 	}
 	if payload.RequestID != requestID {
 		t.Fatalf("expected requestId %q to match header %q", payload.RequestID, requestID)
+	}
+}
+
+func replaceRouteDependenciesFactoryForTest(factory routeDependenciesFactory) func() {
+	previous := buildRouteDependencies
+	buildRouteDependencies = factory
+	return func() {
+		buildRouteDependencies = previous
 	}
 }
