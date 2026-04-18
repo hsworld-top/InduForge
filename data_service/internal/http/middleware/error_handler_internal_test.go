@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -137,5 +138,33 @@ func TestCapturingResponseWriter_FallsBackWhenOptionalInterfacesAreMissing(t *te
 	}
 	if !rw.committed {
 		t.Fatal("expected readfrom to mark the response as committed")
+	}
+}
+
+func TestErrorHandler_DoesNotWriteUnifiedErrorAfterFlush(t *testing.T) {
+	handler := RequestIDMiddleware(ErrorHandler(func(w http.ResponseWriter, r *http.Request) error {
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		return errors.New("flush then fail")
+	}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(WithRequestID(req.Context(), "req-flush-error"))
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d after flush, got %d", http.StatusOK, rr.Code)
+	}
+	if rr.Body.Len() != 0 {
+		t.Fatalf("expected no unified error body after flush, got %q", rr.Body.String())
+	}
+	if got := rr.Header().Get("Content-Type"); got != "" {
+		t.Fatalf("expected no content type to be written, got %q", got)
+	}
+	if got := rr.Header().Get("X-Request-ID"); got == "" {
+		t.Fatal("expected request id header to be written")
 	}
 }
