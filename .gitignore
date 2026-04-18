@@ -60,7 +60,7 @@ designer/designer-next-iteration.plan.md
 designer/testing/local/
 designer/testing/evidence/
 designer/testing/tmp/
-designer/testing/tmp*
+
 # playwright run artifacts
 .playwright-cli/
 .playwright-cli/output/
