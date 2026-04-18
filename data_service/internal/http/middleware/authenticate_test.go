@@ -8,21 +8,24 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/indu-forge/data_service/internal/auth"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/response"
 )
 
 func TestAuthenticate_AllowsValidBearerJWT(t *testing.T) {
-	validator := auth.NewJWTValidator("secret-123")
+	validator := mustNewJWTValidator(t, "secret-123")
 	claims := &auth.Claims{
 		UserID:       "user-1",
 		TenantID:     "tenant-1",
 		ProjectIDs:   []string{"project-a", "project-b"},
 		Capabilities: []string{"project:read"},
 	}
-	token := mustSignJWT(t, "secret-123", claims)
+	now := time.Now().UTC()
+	token := mustSignJWT(t, "secret-123", claims, now.Add(time.Minute), now.Add(-time.Minute), now.Add(-time.Minute))
 
 	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotClaims, ok := auth.ClaimsFromContext(r.Context())
@@ -49,9 +52,43 @@ func TestAuthenticate_AllowsValidBearerJWT(t *testing.T) {
 	}
 }
 
+func TestAuthenticate_RejectsExpiredToken(t *testing.T) {
+	validator := mustNewJWTValidator(t, "secret-123")
+	token := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(-2*time.Hour))
+
+	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("next handler should not be called for expired token")
+	}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	handler.ServeHTTP(rr, req)
+
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
+}
+
+func TestAuthenticate_RejectsNbfNotYetValid(t *testing.T) {
+	validator := mustNewJWTValidator(t, "secret-123")
+	token := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(time.Hour), time.Now().UTC().Add(-time.Hour))
+
+	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("next handler should not be called for not-yet-valid token")
+	}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	handler.ServeHTTP(rr, req)
+
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
+}
+
 func TestAuthenticate_RejectsInvalidBearerJWT(t *testing.T) {
-	validator := auth.NewJWTValidator("secret-123")
-	validToken := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"})
+	validator := mustNewJWTValidator(t, "secret-123")
+	validToken := mustSignJWT(t, "secret-123", &auth.Claims{UserID: "user-1"}, time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(time.Hour), time.Now().UTC().Add(-time.Hour))
 	invalidToken := validToken + "tampered"
 
 	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -64,11 +101,11 @@ func TestAuthenticate_RejectsInvalidBearerJWT(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, "AUTH_TOKEN_INVALID")
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
 }
 
 func TestAuthenticate_RejectsMissingBearerPrefix(t *testing.T) {
-	validator := auth.NewJWTValidator("secret-123")
+	validator := mustNewJWTValidator(t, "secret-123")
 	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next handler should not be called for missing bearer prefix")
 	}))
@@ -79,14 +116,44 @@ func TestAuthenticate_RejectsMissingBearerPrefix(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, "AUTH_TOKEN_REQUIRED")
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenRequired))
 }
 
-func mustSignJWT(t *testing.T, secret string, claims *auth.Claims) string {
+func TestAuthenticate_RejectsEmptySecretAtConstruction(t *testing.T) {
+	validator, err := auth.NewJWTValidator("   ")
+	if err == nil {
+		t.Fatal("expected empty secret to be rejected")
+	}
+	if validator != nil {
+		t.Fatal("expected validator to be nil when secret is empty")
+	}
+}
+
+func mustNewJWTValidator(t *testing.T, secret string) *auth.JWTValidator {
+	t.Helper()
+
+	validator, err := auth.NewJWTValidator(secret)
+	if err != nil {
+		t.Fatalf("new validator failed: %v", err)
+	}
+	return validator
+}
+
+func mustSignJWT(t *testing.T, secret string, claims *auth.Claims, exp, nbf, iat time.Time) string {
 	t.Helper()
 
 	headerJSON := []byte(`{"alg":"HS256","typ":"JWT"}`)
-	payloadJSON, err := json.Marshal(claims)
+	payload := map[string]any{
+		"userId":       claims.UserID,
+		"tenantId":     claims.TenantID,
+		"projectIds":   claims.ProjectIDs,
+		"capabilities": claims.Capabilities,
+		"exp":          exp.Unix(),
+		"nbf":          nbf.Unix(),
+		"iat":          iat.Unix(),
+	}
+
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatalf("marshal claims failed: %v", err)
 	}

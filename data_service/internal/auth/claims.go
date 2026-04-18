@@ -41,3 +41,18 @@ func (c *Claims) HasCapability(required string) bool {
 
 	return false
 }
+
+// HasProjectAccess 判断当前 JWT 是否拥有指定项目的访问权。
+func (c *Claims) HasProjectAccess(projectID string) bool {
+	if c == nil || projectID == "" {
+		return false
+	}
+
+	for _, currentProjectID := range c.ProjectIDs {
+		if currentProjectID == projectID {
+			return true
+		}
+	}
+
+	return false
+}
