@@ -3,22 +3,55 @@ const dayjs = require("dayjs");
 const { logger } = require("../utils/logger");
 const { TIME_FORMAT } = require("../constants/time");
 
-let minioClient = null;
-let storageStatus = {
+let storageClient = null;
+const storageStatus = {
   connected: false,
   lastError: null,
   lastErrorTime: null,
 };
 
+const pickEnvValue = (...values) =>
+  values.find((value) => value !== undefined && value !== null && String(value).trim() !== "");
+
+const parsePort = (value, defaultPort) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : defaultPort;
+};
+
+const parseBoolean = (value, defaultValue = false) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["false", "0", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+};
+
 const getStorageConfig = () => {
-  const endpoint = process.env.MINIO_ENDPOINT || '127.0.0.1';
-  const port = Number(process.env.MINIO_PORT || 25000);
-  const useSSL = String(process.env.MINIO_USE_SSL || 'false') === 'true';
-  const accessKey = process.env.MINIO_ACCESS_KEY || '';
-  const secretKey = process.env.MINIO_SECRET_KEY || '';
-  const bucketIfp = process.env.MINIO_BUCKET_IFP || 'ifp-artifacts';
-  const bucketDesign = process.env.MINIO_BUCKET_DESIGN || 'design-assets';
-  const region = process.env.MINIO_REGION || 'us-east-1';
+  const endpoint = pickEnvValue(process.env.SEAWEEDFS_ENDPOINT, process.env.MINIO_ENDPOINT, "127.0.0.1");
+  const port = parsePort(pickEnvValue(process.env.SEAWEEDFS_PORT, process.env.MINIO_PORT), 25000);
+  const useSSL = parseBoolean(pickEnvValue(process.env.SEAWEEDFS_USE_SSL, process.env.MINIO_USE_SSL), false);
+  const accessKey = pickEnvValue(process.env.SEAWEEDFS_ACCESS_KEY, process.env.MINIO_ACCESS_KEY, "");
+  const secretKey = pickEnvValue(process.env.SEAWEEDFS_SECRET_KEY, process.env.MINIO_SECRET_KEY, "");
+  const bucketIfp = pickEnvValue(process.env.SEAWEEDFS_BUCKET_IFP, process.env.MINIO_BUCKET_IFP, "ifp-artifacts");
+  const bucketDesign = pickEnvValue(
+    process.env.SEAWEEDFS_BUCKET_DESIGN,
+    process.env.MINIO_BUCKET_DESIGN,
+    "design-assets"
+  );
+  const region = pickEnvValue(process.env.SEAWEEDFS_REGION, process.env.MINIO_REGION, "us-east-1");
+  const provider = pickEnvValue(process.env.OBJECT_STORAGE_PROVIDER, process.env.STORAGE_PROVIDER, "seaweedfs");
 
   return {
     endpoint,
@@ -29,6 +62,7 @@ const getStorageConfig = () => {
     bucketIfp,
     bucketDesign,
     region,
+    provider,
   };
 };
 
@@ -43,34 +77,34 @@ const buildClient = () => {
   });
 };
 
-const ensureBucket = async (client, bucket, region) => {
+const ensureBucket = async (client, bucket, region, provider) => {
   const exists = await client.bucketExists(bucket);
   if (!exists) {
     await client.makeBucket(bucket, region);
-    logger.info('MinIO bucket created', { bucket, region });
+    logger.info("对象存储 bucket 已创建", { provider, bucket, region });
   }
 };
 
 /**
- * 初始化 MinIO 连接并确保 Bucket 存在
+ * 初始化对象存储连接并确保 Bucket 存在
  * @returns {Promise<Minio.Client>}
  */
 const initStorage = async () => {
-  if (minioClient) {
-    return minioClient;
+  if (storageClient) {
+    return storageClient;
   }
 
-  const { bucketIfp, bucketDesign, region } = getStorageConfig();
+  const { bucketIfp, bucketDesign, region, provider } = getStorageConfig();
   const client = buildClient();
 
   try {
-    await ensureBucket(client, bucketIfp, region);
-    await ensureBucket(client, bucketDesign, region);
+    await ensureBucket(client, bucketIfp, region, provider);
+    await ensureBucket(client, bucketDesign, region, provider);
     storageStatus.connected = true;
     storageStatus.lastError = null;
     storageStatus.lastErrorTime = null;
-    minioClient = client;
-    return minioClient;
+    storageClient = client;
+    return storageClient;
   } catch (error) {
     storageStatus.connected = false;
     storageStatus.lastError = error.message;
@@ -80,19 +114,19 @@ const initStorage = async () => {
 };
 
 const getClient = async () => {
-  if (!minioClient) {
+  if (!storageClient) {
     return initStorage();
   }
-  return minioClient;
+  return storageClient;
 };
 
-const getBucketName = (type = 'ifp') => {
+const getBucketName = (type = "ifp") => {
   const { bucketIfp, bucketDesign } = getStorageConfig();
-  return type === 'design' ? bucketDesign : bucketIfp;
+  return type === "design" ? bucketDesign : bucketIfp;
 };
 
 /**
- * 上传对象到 MinIO
+ * 上传对象到对象存储
  * @param {string} bucketType
  * @param {string} objectKey
  * @param {Readable} stream
@@ -141,7 +175,7 @@ const removeObject = async (bucketType, objectKey) => {
 };
 
 /**
- * ????
+ * 复制对象
  * @param {string} bucketType
  * @param {string} sourceKey
  * @param {string} targetKey
@@ -149,13 +183,19 @@ const removeObject = async (bucketType, objectKey) => {
 const copyObject = async (bucketType, sourceKey, targetKey) => {
   const client = await getClient();
   const bucket = getBucketName(bucketType);
-  const source = "/" + bucket + "/" + sourceKey;
+  const source = `/${bucket}/${sourceKey}`;
   return client.copyObject(bucket, targetKey, source);
 };
 
-const getStorageStatus = () => ({
-  ...storageStatus,
-});
+const getStorageStatus = () => {
+  const { provider, endpoint, port } = getStorageConfig();
+  return {
+    ...storageStatus,
+    provider,
+    endpoint,
+    port,
+  };
+};
 
 module.exports = {
   initStorage,

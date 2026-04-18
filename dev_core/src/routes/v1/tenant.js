@@ -21,7 +21,7 @@ const { authenticateToken, requireRole } = require('../../middlewares/auth');
 
 /**
  * 构建租户资产访问 URL。
- * @param {string} objectKey - MinIO 对象键
+ * @param {string} objectKey - 对象存储键
  * @returns {string} 对外访问 URL
  */
 const buildTenantAssetUrl = (objectKey) =>
@@ -53,7 +53,7 @@ const parseImageDataUrl = (dataUrl) => {
 };
 
 /**
- * 上传租户品牌资产到 MinIO。
+ * 上传租户品牌资产到对象存储。
  * Logo 生成缩略图并返回缩略图 URL；背景图进行压缩后返回 URL。
  * @param {Object} params - 上传参数
  * @param {string} params.tenantId - 租户 ID
@@ -143,7 +143,7 @@ const upload = multer({
  *         required: true
  *         schema:
  *           type: string
- *         description: MinIO 对象键
+ *         description: 对象存储键
  *     responses:
  *       200:
  *         description: 获取成功
@@ -330,7 +330,7 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obj
       return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 400);
     }
 
-    // 创建租户（品牌图先置空，后续若有 base64 则上传到 MinIO 并回写 URL）
+    // 创建租户（品牌图先置空，后续若有 base64 则上传到对象存储并回写 URL）
     const tenant = await Tenant.create({
       name,
       code,

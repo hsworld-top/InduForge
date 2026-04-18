@@ -121,15 +121,15 @@ const initializeServices = async () => {
     );
   }
 
-  // 3. 初始化 MinIO（非阻塞，失败不影响启动）
+  // 3. 初始化对象存储（非阻塞，失败不影响启动）
   try {
-    logger.info("Initializing MinIO connection...");
+    logger.info("Initializing object storage connection...");
     await initStorage();
-    logger.info("MinIO connection initialized");
+    logger.info("Object storage connection initialized");
   } catch (error) {
-    logger.warn("MinIO connection failed", { error: error.message });
+    logger.warn("Object storage connection failed", { error: error.message });
     logger.info(
-      "Continuing without MinIO (storage features may be unavailable)..."
+      "Continuing without object storage (storage features may be unavailable)..."
     );
   }
 };
