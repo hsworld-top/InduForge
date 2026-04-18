@@ -414,7 +414,7 @@ datacenter/src/
 
 #### 3.1 数据点选择器组件
 
-**新增文件**：`designer/src/components/panels/DataPointSelector.vue`
+**新增文件**：`designer/src/ui/shared/tool-panels/DataPointSelector.vue`
 
 ```vue
 <template>
@@ -513,7 +513,7 @@ datacenter/src/
 
 #### 3.3 DataSourceManager 支持数据点
 
-修改 `designer/src/engine/datasource/DataSourceManager.js`：
+修改 `designer/src/data/DataService.ts`：
 
 ```javascript
 class DataSourceManager {

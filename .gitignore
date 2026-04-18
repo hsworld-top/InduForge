@@ -64,3 +64,4 @@ designer/testing/tmp/
 # playwright run artifacts
 .playwright-cli/
 .playwright-cli/output/
+miniio/PID
