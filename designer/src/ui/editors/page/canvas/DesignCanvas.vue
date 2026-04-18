@@ -883,7 +883,7 @@ function handleKeyDown(event: KeyboardEvent): void {
       >
         <div v-if="hasSelection" class="menu-item" @click="handleDelete">
           <IconEpDelete />
-          <span>鍒犻櫎</span>
+          <span>删除</span>
           <span class="shortcut">Del</span>
         </div>
         <div v-if="hasSelection" class="menu-item" @click="handleMoveUp">
@@ -898,12 +898,12 @@ function handleKeyDown(event: KeyboardEvent): void {
         </div>
         <div v-if="hasSelection" class="menu-item" @click="handleMoveToTop">
           <IconEpTop />
-          <span>缃簬椤跺眰</span>
+          <span>置于顶层</span>
           <span class="shortcut">Ctrl+Shift+]</span>
         </div>
         <div v-if="hasSelection" class="menu-item" @click="handleMoveToBottom">
           <IconEpBottom />
-          <span>缃簬搴曞眰</span>
+          <span>置于底层</span>
           <span class="shortcut">Ctrl+Shift+[</span>
         </div>
         <div v-if="hasSelection" class="menu-divider"></div>
@@ -927,12 +927,12 @@ function handleKeyDown(event: KeyboardEvent): void {
         <div v-if="isElLayoutRowSelected" class="menu-divider"></div>
         <div class="menu-item" :class="{ disabled: !canUndo }" @click="handleUndo">
           <IconEpRefreshLeft />
-          <span>鎾ら攢</span>
+          <span>撤销</span>
           <span class="shortcut">Ctrl+Z</span>
         </div>
         <div class="menu-item" :class="{ disabled: !canRedo }" @click="handleRedo">
           <IconEpRefreshRight />
-          <span>閲嶅仛</span>
+          <span>重做</span>
           <span class="shortcut">Ctrl+Y</span>
         </div>
       </div>
