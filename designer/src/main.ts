@@ -1,12 +1,12 @@
-/**
- * 设计器主入口
+﻿/**
+ * 璁捐鍣ㄤ富鍏ュ彛
  *
- * 职责：
- * - 创建 Vue 应用并挂载
- * - 注册 Pinia、Vue Router、Element Plus
- * - 注册内置组件（builtin-manifests）
- * - 移除 HTML 中的初始加载占位
- * - 监听父窗口主题更新消息（iframe 嵌入场景）
+ * 鑱岃矗锛?
+ * - 鍒涘缓 Vue 搴旂敤骞舵寕杞?
+ * - 娉ㄥ唽 Pinia銆乂ue Router銆丒lement Plus
+ * - 娉ㄥ唽鍐呯疆缁勪欢锛坆uiltin-manifests锛?
+ * - 绉婚櫎 HTML 涓殑鍒濆鍔犺浇鍗犱綅
+ * - 鐩戝惉鐖剁獥鍙ｄ富棰樻洿鏂版秷鎭紙iframe 宓屽叆鍦烘櫙锛?
  */
 
 import ElementPlus from "element-plus";
@@ -14,7 +14,7 @@ import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { registerAllDescriptors } from "./components";
-import * as descriptorRegistry from "./components/descriptors/registry";
+import * as descriptorRegistry from "./editor-core/descriptors/registry";
 import { STORAGE_KEYS } from "./constants";
 import { initDescriptorRegistry } from "./editor-core/document/factory";
 import { registerBuiltinComponents } from "./editor-core/registry/builtin-manifests";
@@ -65,3 +65,4 @@ function handleThemeMessage(event: MessageEvent) {
 }
 
 window.addEventListener("message", handleThemeMessage);
+

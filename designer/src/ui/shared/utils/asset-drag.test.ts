@@ -25,25 +25,28 @@ describe("asset-drag utils", () => {
     expect(parsed?.type).toBe("image");
   });
 
-  it("图片资源应映射为 Image 组件", () => {
-    const type = resolveAssetComponentType({
+  it("图片和视频资源应映射为对应组件", () => {
+    const imageType = resolveAssetComponentType({
       id: "asset-img",
       type: "image",
       mimeType: "image/jpeg",
     });
-    expect(type).toBe("Image");
-  });
-
-  it("非图片资源应映射为 DownloadLink 组件", () => {
-    const type = resolveAssetComponentType({
+    const videoType = resolveAssetComponentType({
+      id: "asset-video",
+      type: "video",
+      mimeType: "video/mp4",
+    });
+    const fileType = resolveAssetComponentType({
       id: "asset-zip",
       type: "other",
       mimeType: "application/zip",
     });
-    expect(type).toBe("DownloadLink");
+    expect(imageType).toBe("Image");
+    expect(videoType).toBe("Video");
+    expect(fileType).toBe("DownloadLink");
   });
 
-  it("应生成图片组件属性", () => {
+  it("应生成 Image 组件属性", () => {
     const props = buildAssetNodeProps(
       {
         id: "asset-2",
@@ -60,7 +63,26 @@ describe("asset-drag utils", () => {
     });
   });
 
-  it("应生成下载链接组件属性", () => {
+  it("应生成 Video 组件属性", () => {
+    const props = buildAssetNodeProps(
+      {
+        id: "asset-4",
+        displayName: "演示视频.mp4",
+        url: "/api/v1/design/projects/p1/assets/a4/file",
+      },
+      "Video",
+    );
+
+    expect(props).toMatchObject({
+      src: "/api/v1/design/projects/p1/assets/a4/file",
+      controls: true,
+      autoplay: false,
+      loop: false,
+      muted: false,
+    });
+  });
+
+  it("应生成 DownloadLink 组件属性", () => {
     const props = buildAssetNodeProps(
       {
         id: "asset-3",

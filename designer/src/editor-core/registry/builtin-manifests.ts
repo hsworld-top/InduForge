@@ -26,6 +26,7 @@ function getDefaultStyle(type: string): Record<string, string | number> {
     "Tabs",
     "Collapse",
     "ElContainer",
+    "FreeContainer",
   ];
   const baseStyle: Record<string, string | number> = {
     minHeight: "40px",
@@ -56,27 +57,11 @@ function getDefaultStyle(type: string): Record<string, string | number> {
     };
   }
 
-  if (type === "ElCol") {
-    return {
-      ...baseStyle,
-      width: "100%",
-      padding: "8px",
-      minHeight: "40px",
-    };
-  }
-
   if (containerTypes.includes(type)) {
     return {
       ...baseStyle,
       width: "100%",
       padding: "8px",
-    };
-  }
-
-  if (type === "Text") {
-    return {
-      fontSize: "14px",
-      color: "#333333",
     };
   }
 

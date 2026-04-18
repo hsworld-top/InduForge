@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import { computed } from "vue";
-import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
+import FriendlyColorPicker from "@/ui/shared/components/common/FriendlyColorPicker.vue";
 
 interface BackgroundStyleModel {
   background?: string;

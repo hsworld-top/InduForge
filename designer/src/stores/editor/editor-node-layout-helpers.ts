@@ -198,15 +198,13 @@ export function resolveDefaultSize(
   }
 
   const sizeMap: Record<string, { width: number; height: number }> = {
-    FlexContainer: { width: 360, height: 200 },
     HorizontalLayout: { width: 400, height: 160 },
     VerticalLayout: { width: 240, height: 240 },
+    Tabs: { width: 360, height: 200 },
+    Collapse: { width: 360, height: 200 },
     FormLayout: { width: 360, height: 280 },
     FreeContainer: { width: 360, height: 200 },
-    GridContainer: { width: 360, height: 200 },
     ElContainer: { width: 360, height: 240 },
-    ElLayout: { width: 360, height: 200 },
-    Text: { width: 120, height: 32 },
     Button: { width: 120, height: 36 },
   };
 
@@ -251,28 +249,16 @@ export function buildLayoutItem(
   }
 
   if (
-    parentNode.type === "GridContainer" ||
-    parentNode.type === "ColumnLayout1" ||
-    parentNode.type === "ColumnLayout2" ||
-    parentNode.type === "ColumnLayout4"
-  ) {
-    return buildGridLayoutItem(parentNode, resolveGridCount);
-  }
-
-  if (
-    parentNode.type === "FlexContainer" ||
     parentNode.type === "HorizontalLayout" ||
     parentNode.type === "VerticalLayout" ||
+    parentNode.type === "Tabs" ||
+    parentNode.type === "Collapse" ||
     parentNode.type === "FormLayout" ||
-    parentNode.type === "ResponsiveLayout" ||
     parentNode.type === "ElContainer" ||
-    parentNode.type === "ElLayout" ||
-    parentNode.type === "ElLayoutRow" ||
     parentNode.type === "ElHeader" ||
     parentNode.type === "ElAside" ||
     parentNode.type === "ElMain" ||
-    parentNode.type === "ElFooter" ||
-    parentNode.type === "ElCol"
+    parentNode.type === "ElFooter"
   ) {
     return buildFlexLayoutItem();
   }

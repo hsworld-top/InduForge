@@ -2,7 +2,7 @@
   数据点面板：新增/编辑变量表单（含 Monaco 初始值）
 -->
 <script setup lang="ts">
-import MonacoEditor from "@/components/common/monaco-editor-async";
+import MonacoEditor from "@/ui/shared/components/common/monaco-editor-async";
 
 interface DatapointGroupOptionLike {
   id: string;

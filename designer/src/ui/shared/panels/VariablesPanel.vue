@@ -13,7 +13,7 @@ import IconEpDownload from "~icons/ep/download";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpPlus from "~icons/ep/plus";
 import IconEpUpload from "~icons/ep/upload";
-import MonacoEditor from "@/components/common/monaco-editor-async";
+import MonacoEditor from "@/ui/shared/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 
 const editorStore = useEditorStore();

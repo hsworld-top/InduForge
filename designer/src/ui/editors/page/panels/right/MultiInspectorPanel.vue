@@ -5,7 +5,7 @@
  */
 
 import { reactive, watch } from "vue";
-import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
+import FriendlyColorPicker from "@/ui/shared/components/common/FriendlyColorPicker.vue";
 import { useMultiSelect } from "../composables/use-multi-select";
 
 interface MultiInspectorElementLike {

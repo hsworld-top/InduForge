@@ -10,7 +10,7 @@
 import type { ExpressionContextDeps, UseNodePropsDeps } from "./types";
 import type { ExpressionContext } from "@/data/types";
 import { computed } from "vue";
-import { getPropsFilter } from "@/components/descriptors/registry";
+import { getPropsFilter } from "@/editor-core/descriptors/registry";
 import { evaluate, evaluateTemplate } from "@/data/ExpressionEngine";
 import { buildVarValuesFromDefinitions } from "@/editor-core/utils/variable-utils";
 import { getPreviewRuntime } from "@/ui/editors/page/preview/previewRuntime";

@@ -3,5 +3,5 @@
  * 导出 manifest 和 descriptor
  */
 
-export { descriptor } from "../descriptors/button";
+export { descriptor } from "@/editor-core/descriptors/button";
 export { manifest } from "./manifest";

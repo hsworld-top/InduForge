@@ -12,7 +12,7 @@ import IconEpFolder from "~icons/ep/folder";
 import IconEpGrid from "~icons/ep/grid";
 import IconEpList from "~icons/ep/list";
 import IconEpPlus from "~icons/ep/plus";
-import MonacoEditor from "@/components/common/monaco-editor-async";
+import MonacoEditor from "@/ui/shared/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/utils/component-methods";
 import { usePanelState } from "../composables/use-panel-state";

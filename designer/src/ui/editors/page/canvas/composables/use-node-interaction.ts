@@ -11,7 +11,7 @@
 import type { RegionResizeConfig, ResizeHandle, UseNodeInteractionDeps } from "./types";
 import type { ComponentNode } from "@/editor-core/document/types";
 import { computed } from "vue";
-import { isContainerType, isLayoutType, isRegionType } from "@/components/descriptors/registry";
+import { isContainerType, isLayoutType, isRegionType } from "@/editor-core/descriptors/registry";
 
 /**
  * 获取区域 resize 配置

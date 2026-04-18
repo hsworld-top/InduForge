@@ -1,10 +1,9 @@
 /**
- * 组件描述符注册中心：渲染标签、容器样式、子项布局策略等元数据
+ * 组件描述符注册中心：渲染标签、容器行为、子项布局策略等元数据
  */
 
 import type { Component } from "vue";
 
-/** 画布节点在描述符 API 中的最小型状 */
 export interface DescriptorNode {
   id?: string;
   label?: string;
@@ -17,7 +16,6 @@ export type DescriptorRenderTagFn = (
   resolvedProps: Record<string, unknown> | undefined,
 ) => string | Component | undefined;
 
-/** 字符串标签或返回标签/组件的函数（Vue 组件请用 customRenderer） */
 export type DescriptorRenderTag = string | DescriptorRenderTagFn;
 
 export interface ComponentDescriptor {
@@ -43,16 +41,7 @@ export interface ComponentDescriptor {
   defaultSize?: { width: number; height: number } | null;
 }
 
-const FIXED_LAYOUT_SHELL_SLOT_TYPES = new Set([
-  "ElHeader",
-  "ElAside",
-  "ElMain",
-  "ElFooter",
-  "ElCol",
-  "ElLayoutRow",
-]);
-
-const LEGACY_FLEX_DIRECTION_TYPES = new Set(["FlexContainer", "ResponsiveLayout"]);
+const FIXED_LAYOUT_SHELL_SLOT_TYPES = new Set(["ElHeader", "ElAside", "ElMain", "ElFooter"]);
 
 const REGION_DESIGNER_HINTS: Record<string, string> = {
   ElHeader: "Header区域",
@@ -60,8 +49,6 @@ const REGION_DESIGNER_HINTS: Record<string, string> = {
   ElMain: "Main区域",
   ElFooter: "Footer区域",
 };
-
-const COMPONENT_WRAPPER_RENDER_TYPES = new Set(["ElLayoutRow", "ElCol"]);
 
 const _descriptors = new Map<string, ComponentDescriptor>();
 
@@ -80,15 +67,12 @@ export function hasDescriptor(type: string): boolean {
   return _descriptors.has(type);
 }
 
-const DEFERRED_RENDER_TAG_TYPES = new Set<string>(["EChart"]);
-
 export function getRenderTag(
   type: string,
   node?: DescriptorNode,
   resolvedProps?: Record<string, unknown>,
 ): string | Component {
   if (!type) return "div";
-  if (DEFERRED_RENDER_TAG_TYPES.has(type)) return "div";
   const descriptor = _descriptors.get(type);
   if (!descriptor) {
     throw new Error(`[descriptors] 未注册组件类型: ${type}`);
@@ -157,8 +141,8 @@ export function getRenderKey(
   return descriptor.renderKey(node, context ?? {});
 }
 
-export function isTableLikeType(type: string): boolean {
-  return type === "Table" || type === "BigDataTable";
+export function isTableLikeType(_type: string): boolean {
+  return false;
 }
 
 export function isNodeDesignerMovable(type: string): boolean {
@@ -168,12 +152,12 @@ export function isNodeDesignerMovable(type: string): boolean {
   return !FIXED_LAYOUT_SHELL_SLOT_TYPES.has(type);
 }
 
-export function usesComponentWrapper(type: string): boolean {
-  return COMPONENT_WRAPPER_RENDER_TYPES.has(type);
+export function usesComponentWrapper(_type: string): boolean {
+  return false;
 }
 
-export function usesLegacyFlexDirectionProps(type: string): boolean {
-  return LEGACY_FLEX_DIRECTION_TYPES.has(type);
+export function usesLegacyFlexDirectionProps(_type: string): boolean {
+  return false;
 }
 
 export function getRegionDesignerHint(type: string): string {
@@ -186,8 +170,6 @@ export function getDesignerNodeLayoutClasses(
 ): string[] {
   if (!type) return [];
   const out: string[] = [];
-  if (type === "ElLayout") out.push("el-layout");
-  if (type === "ElLayoutRow") out.push("el-layout-row");
   if (type === "HorizontalLayout" || type === "VerticalLayout") {
     out.push("layout-container-visible");
   }
@@ -195,10 +177,6 @@ export function getDesignerNodeLayoutClasses(
     out.push("tabs-container");
     const position = ctx.tabPosition ?? "top";
     out.push(`tabs-pos-${position}`);
-  }
-  if (type === "ElCol") {
-    out.push("el-col");
-    if ((ctx.parentGutter ?? 0) > 0) out.push("is-guttered");
   }
   return out;
 }
@@ -242,9 +220,7 @@ export function isLayoutContainerType(type: string): boolean {
 }
 
 export function isLayoutType(type: string): boolean {
-  return (
-    type === "ElLayout" || type === "ElLayoutRow" || type === "ElCol" || isLayoutContainerType(type)
-  );
+  return isLayoutContainerType(type) || type === "ElHeader" || type === "ElAside" || type === "ElMain" || type === "ElFooter";
 }
 
 export function canAcceptChildByDescriptor(
@@ -255,23 +231,14 @@ export function canAcceptChildByDescriptor(
   const descriptor = _descriptors.get(parentType);
   if (!descriptor) return false;
 
-  if (typeof descriptor.maxChildren === "number") {
-    if (currentChildCount >= descriptor.maxChildren) {
-      return false;
-    }
+  if (typeof descriptor.maxChildren === "number" && currentChildCount >= descriptor.maxChildren) {
+    return false;
   }
 
   const acceptChildren = descriptor.acceptChildren;
-  if (acceptChildren === false) {
-    return false;
-  }
-  if (acceptChildren === true) {
-    return true;
-  }
-  if (Array.isArray(acceptChildren)) {
-    return acceptChildren.includes(childType);
-  }
-
+  if (acceptChildren === false) return false;
+  if (acceptChildren === true) return true;
+  if (Array.isArray(acceptChildren)) return acceptChildren.includes(childType);
   return true;
 }
 

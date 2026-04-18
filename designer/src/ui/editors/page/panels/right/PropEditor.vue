@@ -6,8 +6,8 @@
 
 import { ElMessage } from "element-plus";
 import { computed, ref, watch } from "vue";
-import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
-import MonacoEditor from "@/components/common/monaco-editor-async";
+import FriendlyColorPicker from "@/ui/shared/components/common/FriendlyColorPicker.vue";
+import MonacoEditor from "@/ui/shared/components/common/monaco-editor-async";
 
 interface PropEditorOptionLike {
   label: string;

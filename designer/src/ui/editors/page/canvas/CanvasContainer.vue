@@ -17,7 +17,7 @@ import {
   canAcceptChildByDescriptor,
   getDescriptor,
   isContainerType,
-} from "@/components/descriptors/registry";
+} from "@/editor-core/descriptors/registry";
 import { componentRegistry } from "@/editor-core/registry/component-registry";
 import { useEditorStore } from "@/stores/editor-store";
 import {

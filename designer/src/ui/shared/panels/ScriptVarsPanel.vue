@@ -10,7 +10,7 @@ import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpList from "~icons/ep/list";
-import MonacoEditor from "@/components/common/monaco-editor-async";
+import MonacoEditor from "@/ui/shared/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/utils/component-methods";
 import ScriptVarsCustomSection from "./ScriptVarsCustomSection.vue";

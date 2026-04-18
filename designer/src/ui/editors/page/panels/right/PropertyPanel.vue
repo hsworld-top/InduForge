@@ -46,7 +46,7 @@ import IconEpGrid from "~icons/ep/grid";
 import IconEpLink from "~icons/ep/link";
 import IconEpList from "~icons/ep/list";
 import IconEpPictureFilled from "~icons/ep/picture-filled";
-import MonacoEditor from "@/components/common/monaco-editor-async";
+import MonacoEditor from "@/ui/shared/components/common/monaco-editor-async";
 import { getManifest } from "@/manifests";
 import assetApi from "@/services/assetApi";
 import { useEditorStore } from "@/stores/editor-store";

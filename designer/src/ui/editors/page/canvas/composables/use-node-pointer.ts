@@ -15,7 +15,7 @@ import {
   isContainerType,
   isFlexContainer,
   isRegionType,
-} from "@/components/descriptors/registry";
+} from "@/editor-core/descriptors/registry";
 import { MoveNodeCommand, UpdateNodeCommand } from "@/editor-core/commands/nodeCommands";
 import { createSelectableElement } from "@/editor-core/document/types";
 import {

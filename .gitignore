@@ -52,3 +52,12 @@ dev_core/artifacts/
 
 # designer 内本地计划草稿（正式文档请放仓库 docs/）
 designer/designer-next-iteration.plan.md
+
+# designer testing artifacts: keep cases only in git
+designer/testing/local/
+designer/testing/evidence/
+designer/testing/tmp/
+
+# playwright run artifacts
+.playwright-cli/
+.playwright-cli/output/

@@ -17,7 +17,7 @@ import {
   getRegionDesignerHint,
   getRenderKey,
   usesComponentWrapper,
-} from "@/components/descriptors/registry";
+} from "@/editor-core/descriptors/registry";
 import { captureMenuDslConfig } from "./use-node-content";
 
 type MenuItem = Record<string, unknown>;

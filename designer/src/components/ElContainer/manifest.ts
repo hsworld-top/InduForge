@@ -1,28 +1,11 @@
-/** 布局 manifest：区域布局与表单布局。 */
-import { registerManifest } from "./manifest-registry";
+/**
+ * ElContainer 区域布局组件 Manifest
+ */
 
-// FormLayout 表单布局
-registerManifest({
-  type: "FormLayout",
-  name: "表单布局",
-  category: "布局",
-  isContainer: true,
-  defaultSize: { width: 360, height: 280 },
-  props: [
-    {
-      name: "itemGap",
-      type: "number",
-      label: "表单项间距",
-      group: "布局",
-      defaultValue: 12,
-      min: 0,
-      max: 100,
-    },
-  ],
-});
+import type { ComponentManifest } from "@/manifests/manifest-registry";
+import { registerManifest } from "@/manifests/manifest-registry";
 
-// ElContainer 区域布局
-registerManifest({
+export const manifest: ComponentManifest = {
   type: "ElContainer",
   name: "区域布局",
   category: "布局",
@@ -90,4 +73,9 @@ registerManifest({
       defaultValue: "60px",
     },
   ],
-});
+};
+
+registerManifest(manifest);
+
+export default manifest;
+

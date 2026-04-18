@@ -99,18 +99,15 @@ export function inferPositioning(
       // 自由容器：子节点使用绝对定位
       return "absolute";
 
-    case "FlexContainer":
     case "HorizontalLayout":
     case "VerticalLayout":
-    case "ResponsiveLayout":
+    case "Tabs":
+    case "Collapse":
     case "ElContainer":
-    case "ElLayout":
-    case "ElLayoutRow":
     case "ElHeader":
     case "ElAside":
     case "ElMain":
     case "ElFooter":
-    case "ElCol":
       // Flex 容器：子节点使用流式布局
       return "flow";
 

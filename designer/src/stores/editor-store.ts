@@ -47,7 +47,7 @@ import {
   getDescriptor,
   isLayoutContainerType,
   isRegionType,
-} from "@/components/descriptors/registry";
+} from "@/editor-core/descriptors/registry";
 import {
   AlignElementsCommand,
   DistributeElementsCommand,

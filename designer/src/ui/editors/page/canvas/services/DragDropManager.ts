@@ -11,7 +11,7 @@
 
 import type { DocumentModel } from "@/editor-core/document/DocumentModel";
 import type { PageNode } from "@/editor-core/document/types";
-import { getChildPositioning, isContainerType } from "@/components/descriptors/registry";
+import { getChildPositioning, isContainerType } from "@/editor-core/descriptors/registry";
 import {
   clampPositionInContainer,
   eventToCanvasPosition,

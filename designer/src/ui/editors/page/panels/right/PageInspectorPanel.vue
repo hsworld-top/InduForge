@@ -13,8 +13,8 @@ import type {
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, reactive, ref, watch } from "vue";
-import FriendlyColorPicker from "@/components/common/FriendlyColorPicker.vue";
-import MonacoEditor from "@/components/common/monaco-editor-async";
+import FriendlyColorPicker from "@/ui/shared/components/common/FriendlyColorPicker.vue";
+import MonacoEditor from "@/ui/shared/components/common/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
 import {
   buildPageConfigPatch,

@@ -1,15 +1,15 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 /**
- * DesignCanvas - 设计画布组件
+ * DesignCanvas - 璁捐鐢诲竷缁勪欢
  *
- * 职责：
- * - 渲染当前页面的组件树（NodeRenderer）
- * - 框选（marquee）多选、右键菜单、快捷键
- * - 拖拽放置组件、画布内拖拽排序
- * - 粘贴到鼠标位置、撤销/重做
- * - 空画布占位提示
+ * 鑱岃矗锛?
+ * - 娓叉煋褰撳墠椤甸潰鐨勭粍浠舵爲锛圢odeRenderer锛?
+ * - 妗嗛€夛紙marquee锛夊閫夈€佸彸閿彍鍗曘€佸揩鎹烽敭
+ * - 鎷栨嫿鏀剧疆缁勪欢銆佺敾甯冨唴鎷栨嫿鎺掑簭
+ * - 绮樿创鍒伴紶鏍囦綅缃€佹挙閿€/閲嶅仛
+ * - 绌虹敾甯冨崰浣嶆彁绀?
  */
 import { computed, inject, onBeforeUnmount, onMounted, provide, ref } from "vue";
 import IconEpBottom from "~icons/ep/bottom";
@@ -18,7 +18,7 @@ import IconEpPlus from "~icons/ep/plus";
 import IconEpRefreshLeft from "~icons/ep/refresh-left";
 import IconEpRefreshRight from "~icons/ep/refresh-right";
 import IconEpTop from "~icons/ep/top";
-import { isContainerType } from "@/components/descriptors/registry";
+import { isContainerType } from "@/editor-core/descriptors/registry";
 import { createSelectableElement } from "@/editor-core/document/types";
 import { eventToCanvasPosition } from "@/editor-core/utils/placement-utils";
 import { resolvePlacement } from "@/editor-core/utils/placement-resolver";
@@ -71,9 +71,9 @@ const dragState = useDragState();
 const marqueeClickGuard = createMarqueeClickGuard();
 const designCanvasRef = ref<HTMLElement | null>(null);
 
-/** 当前页面根节点 ID */
+/** 褰撳墠椤甸潰鏍硅妭鐐?ID */
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
-/** 框选状态：是否激活、是否移动、起止坐标、修饰键 */
+/** 妗嗛€夌姸鎬侊細鏄惁婵€娲汇€佹槸鍚︾Щ鍔ㄣ€佽捣姝㈠潗鏍囥€佷慨楗伴敭 */
 const marquee = ref<MarqueeState>({
   active: false,
   moved: false,
@@ -104,12 +104,12 @@ const hasContent = computed(() => {
   return (root?.children || []).length > 0;
 });
 
-/** 强制刷新画布（触发 docVersion 变更） */
+/** 寮哄埗鍒锋柊鐢诲竷锛堣Е鍙?docVersion 鍙樻洿锛?*/
 function handleForceRefresh(): void {
   docVersion.value += 1;
 }
 
-/** 重置框选状态 */
+/** 閲嶇疆妗嗛€夌姸鎬?*/
 function resetMarquee(): void {
   marquee.value.active = false;
   marquee.value.moved = false;
@@ -117,13 +117,13 @@ function resetMarquee(): void {
 }
 
 /**
- * 启动框选。
+ * 鍚姩妗嗛€夈€?
  * @param {{
  *   clientX: number;
  *   clientY: number;
  *   modifiers: MarqueeModifiers;
  *   startSource: MarqueeStartSource;
- * }} payload - 框选起点参数
+ * }} payload - 妗嗛€夎捣鐐瑰弬鏁?
  */
 function startMarquee(payload: {
   clientX: number;
@@ -143,7 +143,7 @@ function startMarquee(payload: {
   document.addEventListener("pointerup", handleMarqueeUp, { once: false });
 }
 
-/** 获取框选矩形的 left/top/right/bottom/width/height */
+/** 鑾峰彇妗嗛€夌煩褰㈢殑 left/top/right/bottom/width/height */
 function getMarqueeRect(): {
   left: number;
   top: number;
@@ -166,7 +166,7 @@ function getMarqueeRect(): {
   };
 }
 
-/** 收集框选区域内相交的节点（支持单容器穿透） */
+/** 鏀堕泦妗嗛€夊尯鍩熷唴鐩镐氦鐨勮妭鐐癸紙鏀寔鍗曞鍣ㄧ┛閫忥級 */
 function collectIntersectedElements(): ReturnType<typeof createSelectableElement>[] {
   const rect = getMarqueeRect();
   if (rect.width < 2 && rect.height < 2) return [];
@@ -192,7 +192,7 @@ function collectIntersectedElements(): ReturnType<typeof createSelectableElement
   return hitNodeIds.map((id) => createSelectableElement("node", id));
 }
 
-/** 框选过程中更新当前坐标 */
+/** 妗嗛€夎繃绋嬩腑鏇存柊褰撳墠鍧愭爣 */
 function handleMarqueeMove(event: PointerEvent): void {
   if (!marquee.value.active) return;
   marquee.value.currentX = event.clientX;
@@ -205,7 +205,7 @@ function handleMarqueeMove(event: PointerEvent): void {
   }
 }
 
-/** 框选结束：应用选中结果或点击选中根节点 */
+/** 妗嗛€夌粨鏉燂細搴旂敤閫変腑缁撴灉鎴栫偣鍑婚€変腑鏍硅妭鐐?*/
 function handleMarqueeUp(): void {
   if (!marquee.value.active) return;
   const moved = marquee.value.moved;
@@ -220,7 +220,7 @@ function handleMarqueeUp(): void {
   if (!sel) return;
 
   if (moved) {
-    // 框选释放后浏览器通常会再派发一次 click，需要吞掉避免覆盖多选结果。
+    // 妗嗛€夐噴鏀惧悗娴忚鍣ㄩ€氬父浼氬啀娲惧彂涓€娆?click锛岄渶瑕佸悶鎺夐伩鍏嶈鐩栧閫夌粨鏋溿€?
     marqueeClickGuard.markShouldSuppressNextClick();
     const elements = collectIntersectedElements();
     if (elements.length) {
@@ -259,8 +259,8 @@ function handleMarqueeUp(): void {
 }
 
 /**
- * 全局 click 捕获：消费框选后的“补发 click”，避免把框选结果改写成单选/清空。
- * @param {MouseEvent} event - 鼠标事件
+ * 鍏ㄥ眬 click 鎹曡幏锛氭秷璐规閫夊悗鐨勨€滆ˉ鍙?click鈥濓紝閬垮厤鎶婃閫夌粨鏋滄敼鍐欐垚鍗曢€?娓呯┖銆?
+ * @param {MouseEvent} event - 榧犳爣浜嬩欢
  */
 function handleDocumentClickCapture(event: MouseEvent): void {
   if (!marqueeClickGuard.consumeShouldSuppressNextClick()) return;
@@ -269,8 +269,8 @@ function handleDocumentClickCapture(event: MouseEvent): void {
 }
 
 /**
- * 兜底处理画布点击选中，避免组件内部阻止冒泡导致无法选中
- * @param {PointerEvent | MouseEvent} event - 鼠标事件
+ * 鍏滃簳澶勭悊鐢诲竷鐐瑰嚮閫変腑锛岄伩鍏嶇粍浠跺唴閮ㄩ樆姝㈠啋娉″鑷存棤娉曢€変腑
+ * @param {PointerEvent | MouseEvent} event - 榧犳爣浜嬩欢
  */
 function handleCanvasPointerDown(event: PointerEvent): void {
   marqueeClickGuard.reset();
@@ -295,7 +295,7 @@ function handleCanvasPointerDown(event: PointerEvent): void {
   if (!shouldStartMarquee) {
     return;
   }
-  // 启动框选后阻断事件下发到节点层，避免节点拖拽逻辑抢占同一次 pointer 序列
+  // 鍚姩妗嗛€夊悗闃绘柇浜嬩欢涓嬪彂鍒拌妭鐐瑰眰锛岄伩鍏嶈妭鐐规嫋鎷介€昏緫鎶㈠崰鍚屼竴娆?pointer 搴忓垪
   event.preventDefault();
   event.stopPropagation();
   startMarquee({
@@ -311,8 +311,8 @@ function handleCanvasPointerDown(event: PointerEvent): void {
 }
 
 /**
- * 处理工作台灰区触发的框选开始事件。
- * @param {Event} event - 自定义事件
+ * 澶勭悊宸ヤ綔鍙扮伆鍖鸿Е鍙戠殑妗嗛€夊紑濮嬩簨浠躲€?
+ * @param {Event} event - 鑷畾涔変簨浠?
  */
 function handleOutsideMarqueeStart(event: Event): void {
   marqueeClickGuard.reset();
@@ -331,8 +331,8 @@ function handleOutsideMarqueeStart(event: Event): void {
 }
 
 /**
- * 更新画布上的鼠标坐标，以及悬停节点类型
- * @param {PointerEvent} event - 指针事件
+ * 鏇存柊鐢诲竷涓婄殑榧犳爣鍧愭爣锛屼互鍙婃偓鍋滆妭鐐圭被鍨?
+ * @param {PointerEvent} event - 鎸囬拡浜嬩欢
  */
 function handleCanvasPointerMove(event: PointerEvent): void {
   const el = event.currentTarget;
@@ -343,21 +343,21 @@ function handleCanvasPointerMove(event: PointerEvent): void {
     x: (event.clientX - rect.left) / zoomValue,
     y: (event.clientY - rect.top) / zoomValue,
   };
-  // 检测悬停节点类型（供底部状态栏展示）
+  // 妫€娴嬫偓鍋滆妭鐐圭被鍨嬶紙渚涘簳閮ㄧ姸鎬佹爮灞曠ず锛?
   const hitEl = document.elementFromPoint(event.clientX, event.clientY);
   const nodeEl = hitEl?.closest?.("[data-node-type]");
   hoveredNodeType.value = nodeEl?.getAttribute?.("data-node-type") || "";
 }
 
 /**
- * 鼠标离开画布时清空坐标与悬停信息
+ * 榧犳爣绂诲紑鐢诲竷鏃舵竻绌哄潗鏍囦笌鎮仠淇℃伅
  */
 function handleCanvasPointerLeave(): void {
   canvasMousePos.value = null;
   hoveredNodeType.value = "";
 }
 
-/** 右键菜单显示状态与坐标 */
+/** 鍙抽敭鑿滃崟鏄剧ず鐘舵€佷笌鍧愭爣 */
 const contextMenuVisible = ref(false);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
@@ -386,8 +386,8 @@ const canUndo = computed(() => history.value?.canUndo?.() || false);
 const canRedo = computed(() => history.value?.canRedo?.() || false);
 
 /**
- * 处理画布空白处放置组件
- * @param {DragEvent} event - 拖拽事件
+ * 澶勭悊鐢诲竷绌虹櫧澶勬斁缃粍浠?
+ * @param {DragEvent} event - 鎷栨嫿浜嬩欢
  */
 function handleCanvasDrop(event: DragEvent): void {
   if (!currentPage.value?.rootNodeId) return;
@@ -401,16 +401,21 @@ function handleCanvasDrop(event: DragEvent): void {
   const assetComponentType = assetPayload ? resolveAssetComponentType(assetPayload) : "";
 
   /**
-   * 将资源拖拽 payload 写入新建节点属性。
-   * @param {ReturnType<typeof editorStore.insertNode>} insertedNode - 新建节点
-   * @param {string} insertedType - 新建节点类型
+   * 灏嗚祫婧愭嫋鎷?payload 鍐欏叆鏂板缓鑺傜偣灞炴€с€?
+   * @param {ReturnType<typeof editorStore.insertNode>} insertedNode - 鏂板缓鑺傜偣
+   * @param {string} insertedType - 鏂板缓鑺傜偣绫诲瀷
    */
   const applyAssetPayloadToInsertedNode = (
     insertedNode: ReturnType<typeof editorStore.insertNode>,
     insertedType: string,
   ): void => {
     if (!insertedNode || !assetPayload) return;
-    const componentType = insertedType === "Image" ? "Image" : "DownloadLink";
+    const componentType =
+      insertedType === "Image"
+        ? "Image"
+        : insertedType === "Video"
+          ? "Video"
+          : "DownloadLink";
     const patchProps = buildAssetNodeProps(assetPayload, componentType);
     if (!patchProps || Object.keys(patchProps).length === 0) return;
     editorStore.updateNode(insertedNode.id, {
@@ -441,7 +446,7 @@ function handleCanvasDrop(event: DragEvent): void {
 
   const zoomValue = Number(canvasZoom?.value) || 1;
 
-  // 使用 placementResolver 统一处理放置解析
+  // 浣跨敤 placementResolver 缁熶竴澶勭悊鏀剧疆瑙ｆ瀽
   const resolution = resolvePlacement(
     event,
     canvasEl,
@@ -452,7 +457,7 @@ function handleCanvasDrop(event: DragEvent): void {
 
   const { parentId, index, dropPosition, containerType } = resolution;
 
-  // 特殊处理 ElLayout 容器的自动插入行/列逻辑（保留原有业务规则）
+  // 鐗规畩澶勭悊 ElLayout 瀹瑰櫒鐨勮嚜鍔ㄦ彃鍏ヨ/鍒楅€昏緫锛堜繚鐣欏師鏈変笟鍔¤鍒欙級
   const insertIntoElLayout = (layoutId: string): boolean => {
     const layoutNode = doc.value?.getNode?.(layoutId);
     if (!layoutNode || layoutNode.type !== "ElLayout") return false;
@@ -502,7 +507,7 @@ function handleCanvasDrop(event: DragEvent): void {
 
   let didInsert = false;
 
-  // ElLayout 需要特殊处理：自动创建行/列
+  // ElLayout 闇€瑕佺壒娈婂鐞嗭細鑷姩鍒涘缓琛?鍒?
   if (containerType === "flex" && parentId) {
     const parentNode = doc.value?.getNode?.(parentId);
     if (parentNode?.type === "ElLayout") {
@@ -510,16 +515,16 @@ function handleCanvasDrop(event: DragEvent): void {
     }
   }
 
-  // 标准放置逻辑：使用 placementResolver 返回的 parentId、index、dropPosition
+  // 鏍囧噯鏀剧疆閫昏緫锛氫娇鐢?placementResolver 杩斿洖鐨?parentId銆乮ndex銆乨ropPosition
   if (!didInsert && parentId) {
-    // 验证 insertIndex 有效性（D-05: append fallback）
+    // 楠岃瘉 insertIndex 鏈夋晥鎬э紙D-05: append fallback锛?
     const parentNode = doc.value?.getNode?.(parentId);
     const siblings = parentNode?.children || [];
     const validIndex = index < 0 || index > siblings.length || !siblings[index]
       ? siblings.length
       : index;
 
-    // 构建插入选项
+    // 鏋勫缓鎻掑叆閫夐」
     const insertOptions: {
       dropPosition?: { x: number; y: number };
       autoSelectInserted: false;
@@ -546,19 +551,19 @@ function handleCanvasDrop(event: DragEvent): void {
 }
 
 /**
- * 显示右键菜单（从 NodeRenderer 触发）
- * @param {MouseEvent} event - 鼠标事件
- * @param {boolean} forceShow - 是否强制显示（组件已在 NodeRenderer 中被选中）
+ * 鏄剧ず鍙抽敭鑿滃崟锛堜粠 NodeRenderer 瑙﹀彂锛?
+ * @param {MouseEvent} event - 榧犳爣浜嬩欢
+ * @param {boolean} forceShow - 鏄惁寮哄埗鏄剧ず锛堢粍浠跺凡鍦?NodeRenderer 涓閫変腑锛?
  */
 function showContextMenu(event: MouseEvent, forceShow = true): void {
-  // 如果菜单已经显示，再次右键则关闭
+  // 濡傛灉鑿滃崟宸茬粡鏄剧ず锛屽啀娆″彸閿垯鍏抽棴
   if (contextMenuVisible.value) {
     closeContextMenu();
     return;
   }
 
-  // 只有选中组件时才显示右键菜单
-  // forceShow 为 true 时表示组件已从 NodeRenderer 选中
+  // 鍙湁閫変腑缁勪欢鏃舵墠鏄剧ず鍙抽敭鑿滃崟
+  // forceShow 涓?true 鏃惰〃绀虹粍浠跺凡浠?NodeRenderer 閫変腑
   if (!forceShow && !hasSelection.value) {
     return;
   }
@@ -569,7 +574,7 @@ function showContextMenu(event: MouseEvent, forceShow = true): void {
 }
 
 /**
- * 关闭右键菜单
+ * 鍏抽棴鍙抽敭鑿滃崟
  */
 function closeContextMenu(): void {
   contextMenuVisible.value = false;
@@ -577,14 +582,14 @@ function closeContextMenu(): void {
 
 provide("showContextMenu", showContextMenu);
 /**
- * 处理菜单项点击
+ * 澶勭悊鑿滃崟椤圭偣鍑?
  */
 function handleContextMenuClick(): void {
   closeContextMenu();
 }
 
 /**
- * 删除选中节点
+ * 鍒犻櫎閫変腑鑺傜偣
  */
 function handleDelete() {
   editorStore.removeSelectedNodes();
@@ -592,7 +597,7 @@ function handleDelete() {
 }
 
 /**
- * 上移一层
+ * 涓婄Щ涓€灞?
  */
 function handleMoveUp() {
   editorStore.moveNodeUp();
@@ -600,7 +605,7 @@ function handleMoveUp() {
 }
 
 /**
- * 下移一层
+ * 涓嬬Щ涓€灞?
  */
 function handleMoveDown() {
   editorStore.moveNodeDown();
@@ -608,7 +613,7 @@ function handleMoveDown() {
 }
 
 /**
- * 置于顶层
+ * 缃簬椤跺眰
  */
 function handleMoveToTop() {
   editorStore.moveNodeToTop();
@@ -616,7 +621,7 @@ function handleMoveToTop() {
 }
 
 /**
- * 置于底层
+ * 缃簬搴曞眰
  */
 function handleMoveToBottom() {
   editorStore.moveNodeToBottom();
@@ -624,7 +629,7 @@ function handleMoveToBottom() {
 }
 
 /**
- * 在选中列左侧插入一列
+ * 鍦ㄩ€変腑鍒楀乏渚ф彃鍏ヤ竴鍒?
  */
 function handleInsertColLeft() {
   editorStore.insertElColLeft();
@@ -632,7 +637,7 @@ function handleInsertColLeft() {
 }
 
 /**
- * 在选中列右侧插入一列
+ * 鍦ㄩ€変腑鍒楀彸渚ф彃鍏ヤ竴鍒?
  */
 function handleInsertColRight() {
   editorStore.insertElColRight();
@@ -640,7 +645,7 @@ function handleInsertColRight() {
 }
 
 /**
- * 在选中行上方插入一行
+ * 鍦ㄩ€変腑琛屼笂鏂规彃鍏ヤ竴琛?
  */
 function handleInsertRowUp() {
   editorStore.insertElLayoutRowUp();
@@ -648,7 +653,7 @@ function handleInsertRowUp() {
 }
 
 /**
- * 在选中行下方插入一行
+ * 鍦ㄩ€変腑琛屼笅鏂规彃鍏ヤ竴琛?
  */
 function handleInsertRowDown() {
   editorStore.insertElLayoutRowDown();
@@ -656,7 +661,7 @@ function handleInsertRowDown() {
 }
 
 /**
- * 撤销
+ * 鎾ら攢
  */
 function handleUndo() {
   if (canUndo.value) {
@@ -666,7 +671,7 @@ function handleUndo() {
 }
 
 /**
- * 重做
+ * 閲嶅仛
  */
 function handleRedo() {
   if (canRedo.value) {
@@ -682,9 +687,9 @@ function handleClickOutside(_event: MouseEvent): void {
 }
 
 /**
- * 判断键盘事件是否来自可编辑输入上下文，避免误删输入内容
- * @param {EventTarget | null} target - 事件目标
- * @returns {boolean} 是否可编辑上下文
+ * 鍒ゆ柇閿洏浜嬩欢鏄惁鏉ヨ嚜鍙紪杈戣緭鍏ヤ笂涓嬫枃锛岄伩鍏嶈鍒犺緭鍏ュ唴瀹?
+ * @param {EventTarget | null} target - 浜嬩欢鐩爣
+ * @returns {boolean} 鏄惁鍙紪杈戜笂涓嬫枃
  */
 function isEditableInputTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -693,8 +698,8 @@ function isEditableInputTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * 全局键盘兜底监听，保证画布失焦时快捷键仍可用
- * @param {KeyboardEvent} event - 键盘事件
+ * 鍏ㄥ眬閿洏鍏滃簳鐩戝惉锛屼繚璇佺敾甯冨け鐒︽椂蹇嵎閿粛鍙敤
+ * @param {KeyboardEvent} event - 閿洏浜嬩欢
  */
 function handleGlobalKeyDown(event: KeyboardEvent): void {
   if (isEditableInputTarget(event.target)) return;
@@ -736,11 +741,11 @@ onBeforeUnmount(() => {
 });
 
 /**
- * 处理键盘事件
- * @param {KeyboardEvent} event - 键盘事件
+ * 澶勭悊閿洏浜嬩欢
+ * @param {KeyboardEvent} event - 閿洏浜嬩欢
  */
 function handleKeyDown(event: KeyboardEvent): void {
-  // 方向键移动选中节点，Shift 微调 1px
+  // 鏂瑰悜閿Щ鍔ㄩ€変腑鑺傜偣锛孲hift 寰皟 1px
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
     event.preventDefault();
     const step = event.shiftKey ? 1 : 10;
@@ -750,63 +755,63 @@ function handleKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  // Delete / Backspace 删除选中节点
+  // Delete / Backspace 鍒犻櫎閫変腑鑺傜偣
   if (event.key === "Delete" || event.key === "Backspace") {
     event.preventDefault();
     editorStore.removeSelectedNodes();
     return;
   }
 
-  // Ctrl+Z / Cmd+Z 撤销
+  // Ctrl+Z / Cmd+Z 鎾ら攢
   if ((event.ctrlKey || event.metaKey) && event.key === "z" && !event.shiftKey) {
     event.preventDefault();
     editorStore.undo();
     return;
   }
 
-  // Ctrl+Shift+Z / Cmd+Shift+Z 重做
+  // Ctrl+Shift+Z / Cmd+Shift+Z 閲嶅仛
   if ((event.ctrlKey || event.metaKey) && event.key === "z" && event.shiftKey) {
     event.preventDefault();
     editorStore.redo();
     return;
   }
 
-  // Ctrl+Y / Cmd+Y 重做
+  // Ctrl+Y / Cmd+Y 閲嶅仛
   if ((event.ctrlKey || event.metaKey) && event.key === "y") {
     event.preventDefault();
     editorStore.redo();
     return;
   }
 
-  // Ctrl+] 上移图层
+  // Ctrl+] 涓婄Щ鍥惧眰
   if ((event.ctrlKey || event.metaKey) && event.key === "]" && !event.shiftKey) {
     event.preventDefault();
     editorStore.moveNodeUp();
     return;
   }
 
-  // Ctrl+[ 下移图层
+  // Ctrl+[ 涓嬬Щ鍥惧眰
   if ((event.ctrlKey || event.metaKey) && event.key === "[" && !event.shiftKey) {
     event.preventDefault();
     editorStore.moveNodeDown();
     return;
   }
 
-  // Ctrl+Shift+] 置顶
+  // Ctrl+Shift+] 缃《
   if ((event.ctrlKey || event.metaKey) && event.key === "]" && event.shiftKey) {
     event.preventDefault();
     editorStore.moveNodeToTop();
     return;
   }
 
-  // Ctrl+Shift+[ 置底
+  // Ctrl+Shift+[ 缃簳
   if ((event.ctrlKey || event.metaKey) && event.key === "[" && event.shiftKey) {
     event.preventDefault();
     editorStore.moveNodeToBottom();
     return;
   }
 
-  // Ctrl+H 切换显示/隐藏
+  // Ctrl+H 鍒囨崲鏄剧ず/闅愯棌
   if ((event.ctrlKey || event.metaKey) && event.key === "h") {
     event.preventDefault();
     const primary = selection.value?.getPrimaryElement();
@@ -816,7 +821,7 @@ function handleKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  // Ctrl+L 切换锁定/解锁
+  // Ctrl+L 鍒囨崲閿佸畾/瑙ｉ攣
   if ((event.ctrlKey || event.metaKey) && event.key === "l") {
     event.preventDefault();
     const primary = selection.value?.getPrimaryElement();
@@ -826,28 +831,28 @@ function handleKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  // Ctrl+C 复制
+  // Ctrl+C 澶嶅埗
   if ((event.ctrlKey || event.metaKey) && event.key === "c" && !event.shiftKey) {
     event.preventDefault();
     editorStore.copyNodes();
     return;
   }
 
-  // Ctrl+V 粘贴（粘贴到鼠标位置）
+  // Ctrl+V 绮樿创锛堢矘璐村埌榧犳爣浣嶇疆锛?
   if ((event.ctrlKey || event.metaKey) && event.key === "v" && !event.shiftKey) {
     event.preventDefault();
     editorStore.pasteNodes(canvasMousePos.value ?? undefined);
     return;
   }
 
-  // Ctrl+D 复制元素
+  // Ctrl+D 澶嶅埗鍏冪礌
   if ((event.ctrlKey || event.metaKey) && event.key === "d") {
     event.preventDefault();
     editorStore.duplicateNodes();
     return;
   }
 
-  // Escape 清除选中
+  // Escape 娓呴櫎閫変腑
   if (event.key === "Escape") {
     selection.value?.clearSelection();
   }
@@ -869,10 +874,10 @@ function handleKeyDown(event: KeyboardEvent): void {
     <NodeRenderer v-if="rootNodeId" :node-id="rootNodeId" :is-root="true" />
     <div v-if="!hasContent" class="empty-placeholder">
       <IconEpPlus class="text-5xl mb-4" />
-      <p>从左侧拖拽组件到画布</p>
+      <p>浠庡乏渚ф嫋鎷界粍浠跺埌鐢诲竷</p>
     </div>
 
-    <!-- 右键菜单 -->
+    <!-- 鍙抽敭鑿滃崟 -->
     <teleport to="body">
       <div
         v-if="contextMenuVisible"
@@ -882,7 +887,7 @@ function handleKeyDown(event: KeyboardEvent): void {
       >
         <div v-if="hasSelection" class="menu-item" @click="handleDelete">
           <IconEpDelete />
-          <span>删除</span>
+          <span>鍒犻櫎</span>
           <span class="shortcut">Del</span>
         </div>
         <div v-if="hasSelection" class="menu-item" @click="handleMoveUp">
@@ -897,41 +902,41 @@ function handleKeyDown(event: KeyboardEvent): void {
         </div>
         <div v-if="hasSelection" class="menu-item" @click="handleMoveToTop">
           <IconEpTop />
-          <span>置于顶层</span>
+          <span>缃簬椤跺眰</span>
           <span class="shortcut">Ctrl+Shift+]</span>
         </div>
         <div v-if="hasSelection" class="menu-item" @click="handleMoveToBottom">
           <IconEpBottom />
-          <span>置于底层</span>
+          <span>缃簬搴曞眰</span>
           <span class="shortcut">Ctrl+Shift+[</span>
         </div>
         <div v-if="hasSelection" class="menu-divider"></div>
         <div v-if="isElColSelected" class="menu-item" @click="handleInsertColLeft">
           <IconEpPlus />
-          <span>左侧新加一列</span>
+          <span>左侧新增一列</span>
         </div>
         <div v-if="isElColSelected" class="menu-item" @click="handleInsertColRight">
           <IconEpPlus />
-          <span>右侧新加一列</span>
+          <span>右侧新增一列</span>
         </div>
         <div v-if="isElColSelected" class="menu-divider"></div>
         <div v-if="isElLayoutRowSelected" class="menu-item" @click="handleInsertRowUp">
           <IconEpPlus />
-          <span>上方新加一行</span>
+          <span>上方新增一行</span>
         </div>
         <div v-if="isElLayoutRowSelected" class="menu-item" @click="handleInsertRowDown">
           <IconEpPlus />
-          <span>下方新加一行</span>
+          <span>下方新增一行</span>
         </div>
         <div v-if="isElLayoutRowSelected" class="menu-divider"></div>
         <div class="menu-item" :class="{ disabled: !canUndo }" @click="handleUndo">
           <IconEpRefreshLeft />
-          <span>撤销</span>
+          <span>鎾ら攢</span>
           <span class="shortcut">Ctrl+Z</span>
         </div>
         <div class="menu-item" :class="{ disabled: !canRedo }" @click="handleRedo">
           <IconEpRefreshRight />
-          <span>重做</span>
+          <span>閲嶅仛</span>
           <span class="shortcut">Ctrl+Y</span>
         </div>
       </div>
@@ -973,7 +978,7 @@ function handleKeyDown(event: KeyboardEvent): void {
   color: #3b82f6;
 }
 
-/* ✅ 右键菜单样式 */
+/* 鉁?鍙抽敭鑿滃崟鏍峰紡 */
 .context-menu {
   position: fixed;
   background: white;
@@ -1059,3 +1064,4 @@ function handleKeyDown(event: KeyboardEvent): void {
   z-index: 9998;
 }
 </style>
+

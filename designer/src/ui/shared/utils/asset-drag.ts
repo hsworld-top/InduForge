@@ -17,7 +17,7 @@ export interface DesignerAssetDragPayload {
   size?: number;
 }
 
-export type DesignerAssetComponentType = "Image" | "DownloadLink";
+export type DesignerAssetComponentType = "Image" | "Video" | "DownloadLink";
 
 interface AssetLike {
   id?: string;
@@ -120,6 +120,9 @@ export function resolveAssetComponentType(
   if (type === "image" || type === "svg" || mime.startsWith("image/")) {
     return "Image";
   }
+  if (type === "video" || mime.startsWith("video/")) {
+    return "Video";
+  }
   return "DownloadLink";
 }
 
@@ -140,6 +143,15 @@ export function buildAssetNodeProps(
       src: url,
       alt: fileName,
       fit: "contain",
+    };
+  }
+  if (componentType === "Video") {
+    return {
+      src: url,
+      controls: true,
+      autoplay: false,
+      loop: false,
+      muted: false,
     };
   }
   return {

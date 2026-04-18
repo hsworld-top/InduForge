@@ -14,7 +14,7 @@ import type { CanvasDocLike } from "@/ui/editors/page/canvas/composables/types";
 import {
   getChildPositioning,
   isContainerType,
-} from "@/components/descriptors/registry";
+} from "@/editor-core/descriptors/registry";
 import {
   clampPositionInContainer,
   eventToCanvasPosition,
@@ -250,7 +250,7 @@ class FlexContainerStrategy extends ContainerStrategy {
 
   canAcceptChild(parentNode: ComponentNode, childType: string): boolean {
     // 使用 descriptor registry 判断
-    const { canAcceptChildByDescriptor } = require("@/components/descriptors/registry");
+    const { canAcceptChildByDescriptor } = require("@/editor-core/descriptors/registry");
     const currentChildCount = (parentNode.children || []).length;
     return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount);
   }
@@ -320,7 +320,7 @@ class GridContainerStrategy extends ContainerStrategy {
   readonly containerKind = "grid" as const;
 
   canAcceptChild(parentNode: ComponentNode, childType: string): boolean {
-    const { canAcceptChildByDescriptor } = require("@/components/descriptors/registry");
+    const { canAcceptChildByDescriptor } = require("@/editor-core/descriptors/registry");
     const currentChildCount = (parentNode.children || []).length;
     return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount);
   }

@@ -1,8 +1,8 @@
-/**
- * 节点拖放 Composable
+﻿/**
+ * 鑺傜偣鎷栨斁 Composable
  *
- * 从 NodeRenderer 抽取的 handleDragOver、handleDrop、插入线指示等逻辑。
- * 供递归渲染器复用。
+ * 浠?NodeRenderer 鎶藉彇鐨?handleDragOver銆乭andleDrop銆佹彃鍏ョ嚎鎸囩ず绛夐€昏緫銆?
+ * 渚涢€掑綊娓叉煋鍣ㄥ鐢ㄣ€?
  *
  * @module ui/Canvas/composables/use-node-drop
  */
@@ -22,7 +22,7 @@ import {
   getDescriptor,
   isContainerType,
   isRegionType,
-} from "@/components/descriptors/registry";
+} from "@/editor-core/descriptors/registry";
 import { resolveElContainerMain } from "@/editor-core/utils/layout-utils";
 import {
   clampPositionInContainer,
@@ -38,9 +38,9 @@ import {
 } from "@/ui/shared/utils/asset-drag";
 
 /**
- * 判断容器是否允许子组件
- * @param {import('@/editor-core').ComponentNode} parentNode - 父节点
- * @param {string} childType - 子组件类型
+ * 鍒ゆ柇瀹瑰櫒鏄惁鍏佽瀛愮粍浠?
+ * @param {import('@/editor-core').ComponentNode} parentNode - 鐖惰妭鐐?
+ * @param {string} childType - 瀛愮粍浠剁被鍨?
  * @returns {boolean}
  */
 function canAcceptChild(parentNode: ComponentNode, childType: string) {
@@ -51,8 +51,8 @@ function canAcceptChild(parentNode: ComponentNode, childType: string) {
 }
 
 /**
- * 判断节点是否为可放置容器
- * @param {import('@/editor-core').ComponentNode | null} targetNode - 目标节点
+ * 鍒ゆ柇鑺傜偣鏄惁涓哄彲鏀剧疆瀹瑰櫒
+ * @param {import('@/editor-core').ComponentNode | null} targetNode - 鐩爣鑺傜偣
  * @returns {boolean}
  */
 function isDroppableContainer(targetNode: ComponentNode | null | undefined) {
@@ -61,8 +61,8 @@ function isDroppableContainer(targetNode: ComponentNode | null | undefined) {
 }
 
 /**
- * 判断节点是否为“流式子项”的容器（Alt 拖拽时需要上提到外层）
- * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标节点
+ * 鍒ゆ柇鑺傜偣鏄惁涓衡€滄祦寮忓瓙椤光€濈殑瀹瑰櫒锛圓lt 鎷栨嫿鏃堕渶瑕佷笂鎻愬埌澶栧眰锛?
+ * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 鐩爣鑺傜偣
  * @returns {boolean}
  */
 function isFlowDropContainer(targetNode: ComponentNode | null | undefined): boolean {
@@ -79,10 +79,10 @@ function isFlowDropContainer(targetNode: ComponentNode | null | undefined): bool
 }
 
 /**
- * 从鼠标位置解析可放置容器
- * @param {DragEvent} event - 拖拽事件
- * @param {string} childType - 子组件类型
- * @param {import('@/editor-core').Document} doc - 文档实例
+ * 浠庨紶鏍囦綅缃В鏋愬彲鏀剧疆瀹瑰櫒
+ * @param {DragEvent} event - 鎷栨嫿浜嬩欢
+ * @param {string} childType - 瀛愮粍浠剁被鍨?
+ * @param {import('@/editor-core').Document} doc - 鏂囨。瀹炰緥
  * @returns {{ node: import('@/editor-core').ComponentNode, element: HTMLElement | null } | null}
  */
 function resolveDropContainer(
@@ -151,23 +151,23 @@ function resolveDropContainer(
 }
 
 /**
- * 创建节点拖放逻辑
- * @param {object} deps - 依赖
- * @param {import('vue').ComputedRef<object>} deps.node - 节点 computed
- * @param {import('vue').ComputedRef<object>} deps.doc - 文档 computed
- * @param {import('vue').ComputedRef<object>} deps.dragState - 拖拽状态 computed
- * @param {object} deps.dragDropManager - 拖拽管理器实例
- * @param {import('vue').ComputedRef<boolean>} deps.isContainer - 是否为容器 computed
- * @param {Function} deps.resolveFlexDirection - 解析 Flex 方向函数
- * @param {Function} deps.isFlexContainer - 判断是否为 Flex 容器函数
- * @param {import('vue').ComputedRef<boolean>} deps.readonly - 只读模式 computed
- * @param {object} deps.editorStore - 编辑器 store 实例
- * @param {import('vue').Ref} deps.canvasZoom - 画布缩放 ref
- * @param {Function} deps.endDrag - 结束拖拽函数
- * @param {Function} deps.notifyInsertFailure - 通知插入失败函数
- * @param {import('vue').Ref} deps.activeTabName - 当前激活的 tab 名称 ref
- * @param {import('vue').ComputedRef} deps.tabsList - tabs 列表 computed
- * @returns {object} 返回 handleDragOver、handleDrop、showInsertLine 等
+ * 鍒涘缓鑺傜偣鎷栨斁閫昏緫
+ * @param {object} deps - 渚濊禆
+ * @param {import('vue').ComputedRef<object>} deps.node - 鑺傜偣 computed
+ * @param {import('vue').ComputedRef<object>} deps.doc - 鏂囨。 computed
+ * @param {import('vue').ComputedRef<object>} deps.dragState - 鎷栨嫿鐘舵€?computed
+ * @param {object} deps.dragDropManager - 鎷栨嫿绠＄悊鍣ㄥ疄渚?
+ * @param {import('vue').ComputedRef<boolean>} deps.isContainer - 鏄惁涓哄鍣?computed
+ * @param {Function} deps.resolveFlexDirection - 瑙ｆ瀽 Flex 鏂瑰悜鍑芥暟
+ * @param {Function} deps.isFlexContainer - 鍒ゆ柇鏄惁涓?Flex 瀹瑰櫒鍑芥暟
+ * @param {import('vue').ComputedRef<boolean>} deps.readonly - 鍙妯″紡 computed
+ * @param {object} deps.editorStore - 缂栬緫鍣?store 瀹炰緥
+ * @param {import('vue').Ref} deps.canvasZoom - 鐢诲竷缂╂斁 ref
+ * @param {Function} deps.endDrag - 缁撴潫鎷栨嫿鍑芥暟
+ * @param {Function} deps.notifyInsertFailure - 閫氱煡鎻掑叆澶辫触鍑芥暟
+ * @param {import('vue').Ref} deps.activeTabName - 褰撳墠婵€娲荤殑 tab 鍚嶇О ref
+ * @param {import('vue').ComputedRef} deps.tabsList - tabs 鍒楄〃 computed
+ * @returns {object} 杩斿洖 handleDragOver銆乭andleDrop銆乻howInsertLine 绛?
  */
 export function useNodeDrop(deps: UseNodeDropDeps) {
   const {
@@ -190,11 +190,11 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   } = deps;
 
   /**
-   * 插入节点（拖入场景）：禁止自动选中新建节点
-   * @param {string} type - 组件类型
-   * @param {string | undefined} parentId - 父节点 ID
-   * @param {number | undefined} index - 插入索引
-   * @param {{ dropPosition?: { x: number; y: number } }} [options] - 插入参数
+   * 鎻掑叆鑺傜偣锛堟嫋鍏ュ満鏅級锛氱姝㈣嚜鍔ㄩ€変腑鏂板缓鑺傜偣
+   * @param {string} type - 缁勪欢绫诲瀷
+   * @param {string | undefined} parentId - 鐖惰妭鐐?ID
+   * @param {number | undefined} index - 鎻掑叆绱㈠紩
+   * @param {{ dropPosition?: { x: number; y: number } }} [options] - 鎻掑叆鍙傛暟
    * @returns {import('@/editor-core').ComponentNode | null}
    */
   const insertNodeWithoutSelection = (
@@ -229,9 +229,9 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   };
 
   /**
-   * 解析 Tabs/Collapse 活动内容区的落点上下文
-   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
-   * @param {DragEvent} event - 拖拽事件
+   * 瑙ｆ瀽 Tabs/Collapse 娲诲姩鍐呭鍖虹殑钀界偣涓婁笅鏂?
+   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 鐩爣瀹瑰櫒
+   * @param {DragEvent} event - 鎷栨嫿浜嬩欢
    * @returns {{ key: string, keyProp: 'tabKey' | 'collapseKey', hostElement: Element | null, childIds: string[] } | null}
    */
   const resolveScopedSlotMeta = (
@@ -278,10 +278,10 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   };
 
   /**
-   * 将活动内容区内的相对插入索引映射为容器 children 的绝对索引
-   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
-   * @param {string[]} scopedChildIds - 当前活动区内子节点
-   * @param {number} scopedInsertIndex - 活动区内插入索引
+   * 灏嗘椿鍔ㄥ唴瀹瑰尯鍐呯殑鐩稿鎻掑叆绱㈠紩鏄犲皠涓哄鍣?children 鐨勭粷瀵圭储寮?
+   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 鐩爣瀹瑰櫒
+   * @param {string[]} scopedChildIds - 褰撳墠娲诲姩鍖哄唴瀛愯妭鐐?
+   * @param {number} scopedInsertIndex - 娲诲姩鍖哄唴鎻掑叆绱㈠紩
    * @returns {number}
    */
   const mapScopedInsertIndex = (
@@ -305,9 +305,9 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   };
 
   /**
-   * 给落入 Tabs/Collapse 的新节点写入归属 key
-   * @param {import('@/editor-core').ComponentNode | null} inserted - 新插入节点
-   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
+   * 缁欒惤鍏?Tabs/Collapse 鐨勬柊鑺傜偣鍐欏叆褰掑睘 key
+   * @param {import('@/editor-core').ComponentNode | null} inserted - 鏂版彃鍏ヨ妭鐐?
+   * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 鐩爣瀹瑰櫒
    */
   const applyScopedKeyForInsertedNode = (
     inserted: ComponentNode | null,
@@ -334,8 +334,8 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   };
 
   /**
-   * 解析拖拽中的资源 payload。
-   * @param {DragEvent} event - 拖拽事件
+   * 瑙ｆ瀽鎷栨嫿涓殑璧勬簮 payload銆?
+   * @param {DragEvent} event - 鎷栨嫿浜嬩欢
    * @returns {DesignerAssetDragPayload | null}
    */
   const resolveDraggedAssetPayload = (event: DragEvent): DesignerAssetDragPayload | null => {
@@ -344,10 +344,10 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   };
 
   /**
-   * 将资源信息写入新建节点属性。
-   * @param {ComponentNode | null} inserted - 新插入节点
-   * @param {string} nodeType - 节点类型
-   * @param {DesignerAssetDragPayload | null} assetPayload - 资源 payload
+   * 灏嗚祫婧愪俊鎭啓鍏ユ柊寤鸿妭鐐瑰睘鎬с€?
+   * @param {ComponentNode | null} inserted - 鏂版彃鍏ヨ妭鐐?
+   * @param {string} nodeType - 鑺傜偣绫诲瀷
+   * @param {DesignerAssetDragPayload | null} assetPayload - 璧勬簮 payload
    */
   const applyAssetPayloadToInsertedNode = (
     inserted: ComponentNode | null,
@@ -355,7 +355,8 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     assetPayload: DesignerAssetDragPayload | null,
   ): void => {
     if (!inserted || !assetPayload) return;
-    const componentType = nodeType === "Image" ? "Image" : "DownloadLink";
+    const componentType =
+      nodeType === "Image" ? "Image" : nodeType === "Video" ? "Video" : "DownloadLink";
     const patchProps = buildAssetNodeProps(assetPayload, componentType);
     if (!patchProps || Object.keys(patchProps).length === 0) return;
     editorStore.updateNode(inserted.id, {
@@ -363,7 +364,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     });
   };
 
-  // 拖拽状态
+  // 鎷栨嫿鐘舵€?
   const isDragOver = ref(false);
   const showInsertLine = ref(false);
   const insertLineStyle = ref<InsertLineStyleLike | null>(null);
@@ -384,7 +385,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   const altKeyPressed = ref(false);
 
   /**
-   * 清理当前节点的拖拽视觉状态（高亮、插入线、快照）
+   * 娓呯悊褰撳墠鑺傜偣鐨勬嫋鎷借瑙夌姸鎬侊紙楂樹寒銆佹彃鍏ョ嚎銆佸揩鐓э級
    */
   const clearDropVisualState = () => {
     isDragOver.value = false;
@@ -396,8 +397,8 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   };
 
   /**
-   * 计算当前是否应优先走 Alt 上层放置语义
-   * - 支持拖拽过程中中途按下 Alt（不只依赖 DragEvent.altKey）
+   * 璁＄畻褰撳墠鏄惁搴斾紭鍏堣蛋 Alt 涓婂眰鏀剧疆璇箟
+   * - 鏀寔鎷栨嫿杩囩▼涓腑閫旀寜涓?Alt锛堜笉鍙緷璧?DragEvent.altKey锛?
    */
   const shouldPreferOuterDropByAlt = (event: { altKey?: boolean } | null | undefined) => {
     return Boolean(event?.altKey || altKeyPressed.value);
@@ -458,8 +459,8 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   });
 
   /**
-   * 处理拖拽悬停
-   * @param {DragEvent} event - 拖拽事件
+   * 澶勭悊鎷栨嫿鎮仠
+   * @param {DragEvent} event - 鎷栨嫿浜嬩欢
    */
   const handleDragOver = (event: DragEvent) => {
     if (readonly.value) return;
@@ -572,7 +573,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       clearDropVisualState();
       return;
     }
-    // 阻止事件冒泡
+    // 闃绘浜嬩欢鍐掓场
     event.stopPropagation();
 
     if (event.dataTransfer) {
@@ -580,7 +581,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
     }
     isDragOver.value = true;
 
-    // ElLayoutRow 内拖入组件时，优先提示左右插入
+    // ElLayoutRow 鍐呮嫋鍏ョ粍浠舵椂锛屼紭鍏堟彁绀哄乏鍙虫彃鍏?
     const payload =
       event.dataTransfer?.getData("application/x-designer-component") ||
       event.dataTransfer?.getData("application/x-designer-node") ||
@@ -731,7 +732,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       }
     }
 
-    // ElCol 侧边插入提示由上面的 resolveRowInsertFromPath 处理
+    // ElCol 渚ц竟鎻掑叆鎻愮ず鐢变笂闈㈢殑 resolveRowInsertFromPath 澶勭悊
 
     if (node.value?.type === "Tabs" || node.value?.type === "Collapse") {
       rowInsertInfo.value = null;
@@ -772,7 +773,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       return;
     }
 
-    // 计算插入位置
+    // 璁＄畻鎻掑叆浣嶇疆
     if (node.value?.type && isFlexContainer(node.value.type)) {
       rowInsertInfo.value = null;
       layoutInsertInfo.value = null;
@@ -815,8 +816,8 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   };
 
   /**
-   * 处理拖拽放置
-   * @param {DragEvent} event - 拖拽事件
+   * 澶勭悊鎷栨嫿鏀剧疆
+   * @param {DragEvent} event - 鎷栨嫿浜嬩欢
    */
   const handleDrop = (event: DragEvent) => {
     if (readonly.value) return;
@@ -825,7 +826,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       clearDropVisualState();
       return;
     }
-    // 阻止事件冒泡，避免重复插入
+    // 闃绘浜嬩欢鍐掓场锛岄伩鍏嶉噸澶嶆彃鍏?
     event.stopPropagation();
 
     const rowInsertSnapshot = rowInsertInfo.value;
@@ -869,10 +870,10 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       return null;
     };
     /**
-     * 在 ElLayout 中按行插入组件
-     * @param {import('@/editor-core').ComponentNode} layoutNode - 布局节点
-     * @param {number} insertIndex - 行插入位置
-     * @param {string} componentType - 组件类型
+     * 鍦?ElLayout 涓寜琛屾彃鍏ョ粍浠?
+     * @param {import('@/editor-core').ComponentNode} layoutNode - 甯冨眬鑺傜偣
+     * @param {number} insertIndex - 琛屾彃鍏ヤ綅缃?
+     * @param {string} componentType - 缁勪欢绫诲瀷
      */
     const insertIntoLayoutByRow = (
       layoutNode: ComponentNode | null | undefined,
@@ -1057,13 +1058,13 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       options: { dropPosition?: { x: number; y: number } | undefined } = {},
     ) => {
       // D-05: Fast drag-drop insertIndex staleness fix
-      // 验证 insertIndex 有效性，如果目标节点不存在则 fallback 到 append
+      // 楠岃瘉 insertIndex 鏈夋晥鎬э紝濡傛灉鐩爣鑺傜偣涓嶅瓨鍦ㄥ垯 fallback 鍒?append
       let validIndex = index;
       if (validIndex !== undefined && parentId) {
         const parentNode = doc.value?.getNode?.(parentId);
         const siblings = (parentNode?.children || []) as string[];
         if (validIndex < 0 || validIndex > siblings.length || !siblings[validIndex]) {
-          // index 无效（超出范围或指向已删除节点），fallback 到 append
+          // index 鏃犳晥锛堣秴鍑鸿寖鍥存垨鎸囧悜宸插垹闄よ妭鐐癸級锛宖allback 鍒?append
           validIndex = siblings.length;
         }
       }
@@ -1362,7 +1363,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         dropPosition = clampPositionInContainer(rawPosition, targetHost, defaultSize, zoomValue);
       }
 
-      // ElLayout 内拖入组件：自动新增一行并将组件放入该行的列
+      // ElLayout 鍐呮嫋鍏ョ粍浠讹細鑷姩鏂板涓€琛屽苟灏嗙粍浠舵斁鍏ヨ琛岀殑鍒?
       if (allowLayoutAutoInsert) {
         const rowNode = insertNodeWithoutSelection("ElLayoutRow", targetNode.id, insertIndex);
         if (rowNode) {
@@ -1409,7 +1410,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         return;
       }
 
-      // ElLayoutRow 内拖入组件：自动新增一列并将组件放入该列
+      // ElLayoutRow 鍐呮嫋鍏ョ粍浠讹細鑷姩鏂板涓€鍒楀苟灏嗙粍浠舵斁鍏ヨ鍒?
       if (allowRowAutoInsert) {
         const colNode = insertNodeWithoutSelection("ElCol", targetNode.id, insertIndex);
         if (colNode) {
@@ -1436,7 +1437,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         return;
       }
 
-      // 插入新节点
+      // 鎻掑叆鏂拌妭鐐?
       const inserted = insertNodeByResolvedType(resolvedType, targetNode?.id, insertIndex, {
         dropPosition: dropPosition || undefined,
       });
@@ -1655,7 +1656,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         return;
       }
 
-      // 计算插入位置
+      // 璁＄畻鎻掑叆浣嶇疆
       let insertIndex = (targetNode?.children || []).length;
       if (
         rowInsertSnapshot &&
@@ -1727,7 +1728,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         dropPosition = clampPositionInContainer(rawPosition, targetHost, defaultSize, zoomValue);
       }
 
-      // ElLayout 内拖入组件：自动新增一行并将组件放入该行的列
+      // ElLayout 鍐呮嫋鍏ョ粍浠讹細鑷姩鏂板涓€琛屽苟灏嗙粍浠舵斁鍏ヨ琛岀殑鍒?
       if (allowLayoutAutoInsert) {
         const rowNode = insertNodeWithoutSelection("ElLayoutRow", targetNode.id, insertIndex);
         if (rowNode) {
@@ -1774,7 +1775,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         return;
       }
 
-      // ElLayoutRow 内拖入组件：自动新增一列并将组件放入该列
+      // ElLayoutRow 鍐呮嫋鍏ョ粍浠讹細鑷姩鏂板涓€鍒楀苟灏嗙粍浠舵斁鍏ヨ鍒?
       if (allowRowAutoInsert) {
         const colNode = insertNodeWithoutSelection("ElCol", targetNode.id, insertIndex);
         if (colNode) {
@@ -1801,7 +1802,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         return;
       }
 
-      // 插入新节点
+      // 鎻掑叆鏂拌妭鐐?
       const inserted = insertNodeByResolvedType(type, targetNode?.id, insertIndex, {
         dropPosition: dropPosition || undefined,
       });
@@ -1832,3 +1833,4 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 }
 
 export default { useNodeDrop };
+

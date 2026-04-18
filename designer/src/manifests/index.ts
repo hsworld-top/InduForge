@@ -1,17 +1,19 @@
 /**
- * 组件 Manifest 注册表 — 汇总入口
- * 侧向 import 触发各类 registerManifest
+ * 组件 Manifest 注册总入口
+ * 仅保留当前版本支持的布局容器与按钮。
  */
 
-import "./layout-manifests-flexbox";
 import "@/components/HorizontalLayout/manifest";
 import "@/components/VerticalLayout/manifest";
-import "./layout-manifests-page-layouts";
-import "./form-manifests";
-import "./display-manifests-drawing-text";
+import "@/components/Collapse/manifest";
+import "@/components/Tabs/manifest";
+import "@/components/FormLayout/manifest";
+import "@/components/ElContainer/manifest";
+import "@/components/FreeContainer/manifest";
 import "@/components/Button/manifest";
-import "./display-manifests-pc-elements";
-import "./chart-manifests";
+import "@/components/Image/manifest";
+import "@/components/Video/manifest";
+import "@/components/DownloadLink/manifest";
 
 export {
   getAllManifests,

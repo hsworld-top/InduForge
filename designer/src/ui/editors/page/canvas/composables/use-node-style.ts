@@ -14,7 +14,7 @@ import {
   getDescriptor,
   isContainerType,
   resolveDescriptorContainerStyle,
-} from "@/components/descriptors/registry";
+} from "@/editor-core/descriptors/registry";
 import { componentRegistry } from "@/editor-core";
 import { normalizeStyleObject, resolveTextPropStyle } from "@/editor-core/utils/style-utils";
 

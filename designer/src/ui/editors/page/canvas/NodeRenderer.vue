@@ -16,7 +16,7 @@ import {
   isNodeDesignerMovable,
   isTableLikeType,
   usesLegacyFlexDirectionProps,
-} from "@/components/descriptors/registry";
+} from "@/editor-core/descriptors/registry";
 import { componentRegistry, createSelectableElement } from "@/editor-core";
 import { normalizeEventDefinitions } from "@/editor-core/registry/component-events";
 import { datacenterApi } from "@/services";
