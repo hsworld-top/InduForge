@@ -93,6 +93,67 @@ func TestErrorHandler_DoesNotDoubleWriteAfterCommittedResponse(t *testing.T) {
 	}
 }
 
+func TestErrorHandler_RealMuxChainUsesUnifiedResponse(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.Handle("/app-error", middleware.ErrorHandler(func(http.ResponseWriter, *http.Request) error {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "参数错误")
+	}))
+	mux.Handle("/normal-error", middleware.ErrorHandler(func(http.ResponseWriter, *http.Request) error {
+		return errors.New("普通错误")
+	}))
+
+	handler := middleware.RequestIDMiddleware(mux)
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	for _, tc := range []struct {
+		name        string
+		path        string
+		wantStatus  int
+		wantCode    string
+		wantMessage string
+	}{
+		{name: "app error", path: "/app-error", wantStatus: http.StatusBadRequest, wantCode: "BAD_REQUEST", wantMessage: "参数错误"},
+		{name: "normal error", path: "/normal-error", wantStatus: http.StatusInternalServerError, wantCode: "INTERNAL_ERROR", wantMessage: "系统内部错误"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := ts.Client().Get(ts.URL + tc.path)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("expected status %d, got %d", tc.wantStatus, resp.StatusCode)
+			}
+			if got := resp.Header.Get("X-Request-ID"); got == "" {
+				t.Fatal("expected X-Request-ID header to be set")
+			}
+
+			var payload response.ApiResponse
+			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode response failed: %v", err)
+			}
+
+			if payload.Success {
+				t.Fatal("expected success to be false")
+			}
+			if payload.ErrorCode != tc.wantCode {
+				t.Fatalf("expected errorCode %q, got %q", tc.wantCode, payload.ErrorCode)
+			}
+			if payload.Message != tc.wantMessage {
+				t.Fatalf("expected message %q, got %q", tc.wantMessage, payload.Message)
+			}
+			if payload.RequestID == "" {
+				t.Fatal("expected requestId to be set")
+			}
+			if payload.RequestID != resp.Header.Get("X-Request-ID") {
+				t.Fatalf("expected response body requestId %q to match header %q", payload.RequestID, resp.Header.Get("X-Request-ID"))
+			}
+		})
+	}
+}
+
 func assertApiErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, expectedStatus int, expectedRequestID, expectedErrorCode, expectedMessage string) {
 	t.Helper()
 
