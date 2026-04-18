@@ -5,11 +5,15 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
 
 const requestIDHeader = "X-Request-ID"
+const maxRequestIDLength = 64
+
+var requestIDAllowedPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 type requestIDKey struct{}
 
@@ -32,15 +36,24 @@ func WithRequestID(ctx context.Context, requestID string) context.Context {
 // RequestIDMiddleware 为每个请求补齐并回写请求 ID。
 func RequestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestID := strings.TrimSpace(r.Header.Get(requestIDHeader))
-		if requestID == "" {
-			requestID = generateRequestID()
-		}
+		requestID := normalizeRequestID(r.Header.Get(requestIDHeader))
 
 		w.Header().Set(requestIDHeader, requestID)
 		ctx := WithRequestID(r.Context(), requestID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// normalizeRequestID 校验请求 ID，不合法时生成新的值。
+func normalizeRequestID(requestID string) string {
+	requestID = strings.TrimSpace(requestID)
+	if len(requestID) == 0 || len(requestID) > maxRequestIDLength {
+		return generateRequestID()
+	}
+	if !requestIDAllowedPattern.MatchString(requestID) {
+		return generateRequestID()
+	}
+	return requestID
 }
 
 // generateRequestID 生成一个轻量级请求 ID。

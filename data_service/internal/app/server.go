@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/indu-forge/data_service/internal/config"
+	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/router"
 )
 
@@ -27,7 +28,7 @@ func NewServer(cfg config.Config) *Server {
 	return &Server{
 		httpServer: &http.Server{
 			Addr:              cfg.Addr,
-			Handler:           router.NewRouter(),
+			Handler:           middleware.RequestIDMiddleware(router.NewRouter()),
 			ReadHeaderTimeout: defaultReadHeaderTimeout,
 			ReadTimeout:       defaultReadTimeout,
 			WriteTimeout:      defaultWriteTimeout,

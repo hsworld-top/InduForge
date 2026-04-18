@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -13,20 +14,22 @@ type ErrorHandlerFunc func(http.ResponseWriter, *http.Request) error
 // ErrorHandler 将业务错误统一转换为 ApiResponse。
 func ErrorHandler(next ErrorHandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := next(w, r); err != nil {
+		rw := &capturingResponseWriter{ResponseWriter: w}
+		if err := next(rw, r); err != nil {
+			if rw.committed {
+				return
+			}
+
 			requestID := RequestID(r.Context())
 			appErr := normalizeError(err)
-			response.WriteError(w, appErr.StatusCode, requestID, string(appErr.Code), appErr.Message)
+			statusCode := normalizeStatusCode(appErr.StatusCode)
+			response.WriteError(rw, statusCode, requestID, string(appErr.Code), appErr.Message)
 		}
 	})
 }
 
 // normalizeError 将任意错误转换为统一业务错误。
 func normalizeError(err error) *apperrors.AppError {
-	if err == nil {
-		return apperrors.NewAppError(apperrors.ErrorCodeUnknown, http.StatusInternalServerError, "未知错误")
-	}
-
 	var appErr *apperrors.AppError
 	if AsAppError(err, &appErr) {
 		return appErr
@@ -41,28 +44,33 @@ func AsAppError(err error, target **apperrors.AppError) bool {
 		return false
 	}
 
-	if appErr, ok := err.(*apperrors.AppError); ok {
+	var appErr *apperrors.AppError
+	if errors.As(err, &appErr) {
 		*target = appErr
 		return true
 	}
-
-	type unwrapper interface {
-		Unwrap() error
-	}
-
-	current := err
-	for current != nil {
-		if appErr, ok := current.(*apperrors.AppError); ok {
-			*target = appErr
-			return true
-		}
-
-		u, ok := current.(unwrapper)
-		if !ok {
-			break
-		}
-		current = u.Unwrap()
-	}
-
 	return false
+}
+
+// normalizeStatusCode 将非法状态码回退为 500。
+func normalizeStatusCode(statusCode int) int {
+	if statusCode < http.StatusBadRequest || statusCode > 599 {
+		return http.StatusInternalServerError
+	}
+	return statusCode
+}
+
+type capturingResponseWriter struct {
+	http.ResponseWriter
+	committed bool
+}
+
+func (w *capturingResponseWriter) WriteHeader(statusCode int) {
+	w.committed = true
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *capturingResponseWriter) Write(p []byte) (int, error) {
+	w.committed = true
+	return w.ResponseWriter.Write(p)
 }
