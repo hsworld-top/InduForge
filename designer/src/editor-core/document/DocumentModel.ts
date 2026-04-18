@@ -546,11 +546,13 @@ export class DocumentModel extends EventEmitter {
     // 更新父节点的 children
     const parent = this.getNode(parentId);
     if (parent) {
-      if (!parent.children) {
-        parent.children = [];
-      }
-      const insertIndex = Math.min(Math.max(0, index), parent.children.length);
-      parent.children.splice(insertIndex, 0, node.id);
+      const currentChildren = Array.isArray(parent.children) ? parent.children : [];
+      const insertIndex = Math.min(Math.max(0, index), currentChildren.length);
+      parent.children = [
+        ...currentChildren.slice(0, insertIndex),
+        node.id,
+        ...currentChildren.slice(insertIndex),
+      ];
     }
 
     // 更新索引
@@ -597,7 +599,7 @@ export class DocumentModel extends EventEmitter {
       if (parent && parent.children) {
         const index = parent.children.indexOf(nodeId);
         if (index !== -1) {
-          parent.children.splice(index, 1);
+          parent.children = [...parent.children.slice(0, index), ...parent.children.slice(index + 1)];
         }
       }
     }
@@ -682,6 +684,7 @@ export class DocumentModel extends EventEmitter {
     if (!node) return;
 
     const oldParentId = this._parentIndex.get(nodeId);
+    let oldParentChildrenAfterRemoval: string[] | null = null;
 
     // 从旧父节点移除
     if (oldParentId) {
@@ -689,7 +692,11 @@ export class DocumentModel extends EventEmitter {
       if (oldParent && oldParent.children) {
         const index = oldParent.children.indexOf(nodeId);
         if (index !== -1) {
-          oldParent.children.splice(index, 1);
+          oldParentChildrenAfterRemoval = [
+            ...oldParent.children.slice(0, index),
+            ...oldParent.children.slice(index + 1),
+          ];
+          oldParent.children = oldParentChildrenAfterRemoval;
         }
       }
     }
@@ -697,11 +704,18 @@ export class DocumentModel extends EventEmitter {
     // 添加到新父节点
     const newParent = this.getNode(newParentId);
     if (newParent) {
-      if (!newParent.children) {
-        newParent.children = [];
-      }
-      const insertIndex = Math.min(Math.max(0, newIndex), newParent.children.length);
-      newParent.children.splice(insertIndex, 0, nodeId);
+      const baseChildren =
+        oldParentId === newParentId && oldParentChildrenAfterRemoval
+          ? oldParentChildrenAfterRemoval
+          : Array.isArray(newParent.children)
+            ? newParent.children
+            : [];
+      const insertIndex = Math.min(Math.max(0, newIndex), baseChildren.length);
+      newParent.children = [
+        ...baseChildren.slice(0, insertIndex),
+        nodeId,
+        ...baseChildren.slice(insertIndex),
+      ];
     }
 
     // 更新父索引

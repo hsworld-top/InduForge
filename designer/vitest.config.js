@@ -15,7 +15,7 @@ export default defineConfig({
     pool: "threads",
     fileParallelism: false,
     maxWorkers: 1,
-    include: ["src/**/*.{test,spec}.{js,ts}"],
+    include: ["src/**/*.{test,spec}.{js,ts}", "testing/**/*.{test,spec}.{js,ts}"],
     coverage: {
       reporter: ["text", "json", "html"],
     },

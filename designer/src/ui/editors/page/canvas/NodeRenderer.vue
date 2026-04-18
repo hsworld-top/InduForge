@@ -776,9 +776,11 @@ const contentStyleWithConfig = computed<any>(() => {
   return [contentStyle.value, inlineStyle];
 });
 
-const childNodeIds = computed(() => {
+const childNodeIds = computed<string[]>(() => {
+  void docVersion.value;
   if (!node.value || isTabsType.value || isCollapseType.value) return [];
-  return node.value.children || [];
+  const children = Array.isArray(node.value.children) ? node.value.children : [];
+  return [...children];
 });
 
 const modelValueTypes = new Set([
