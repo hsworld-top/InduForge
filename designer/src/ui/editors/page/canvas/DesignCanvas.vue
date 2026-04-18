@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 /**
@@ -28,10 +28,10 @@ import {
   buildAssetNodeProps,
   parseAssetDragPayload,
   resolveAssetComponentType,
-} from "@/ui/shared/utils/asset-drag";
+} from "@/ui/shared/helpers/asset-drag";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import { canvasZoomKey } from "./injection-keys";
-import { createMarqueeClickGuard } from "./services/marquee-click-guard";
+import { createMarqueeClickGuard } from "./interaction/marquee-click-guard";
 import {
   CANVAS_OUTSIDE_MARQUEE_START_EVENT,
   shouldClearSelectionOnMarqueeUp,
@@ -39,8 +39,8 @@ import {
   type MarqueeModifiers,
   type MarqueeStartSource,
   type OutsideMarqueeStartDetail,
-} from "./services/marquee-interaction";
-import { collectMarqueeNodeIds } from "./services/marquee-selection";
+} from "./interaction/marquee-interaction";
+import { collectMarqueeNodeIds } from "./interaction/marquee-selection";
 import NodeRenderer from "./NodeRenderer.vue";
 
 interface MarqueeState {

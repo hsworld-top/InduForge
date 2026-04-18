@@ -34,7 +34,7 @@ declare module "@/ui/editors/page/canvas" {
   export const CanvasContainer: DefineComponent<object, object, unknown>;
 }
 
-declare module "@/ui/editors/page/panels/left" {
+declare module "@/ui/editors/page/sidebar-panels/left" {
   import type { DefineComponent } from "vue";
 
   export const OutlineTree: DefineComponent<object, object, unknown>;
@@ -42,7 +42,7 @@ declare module "@/ui/editors/page/panels/left" {
   export const DataPanel: DefineComponent<object, object, unknown>;
 }
 
-declare module "@/ui/shared/panels" {
+declare module "@/ui/shared/tool-panels" {
   import type { DefineComponent } from "vue";
 
   export const PageTree: DefineComponent<object, object, unknown>;
@@ -52,7 +52,7 @@ declare module "@/ui/shared/panels" {
   export const VariablesPanel: DefineComponent<object, object, unknown>;
 }
 
-declare module "@/ui/editors/page/panels/right" {
+declare module "@/ui/editors/page/sidebar-panels/right" {
   import type { DefineComponent } from "vue";
 
   export const PropertyPanel: DefineComponent<object, object, unknown>;

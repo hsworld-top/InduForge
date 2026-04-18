@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 鑺傜偣鎷栨斁 Composable
  *
  * 浠?NodeRenderer 鎶藉彇鐨?handleDragOver銆乭andleDrop銆佹彃鍏ョ嚎鎸囩ず绛夐€昏緫銆?
@@ -35,7 +35,7 @@ import {
   parseAssetDragPayload,
   resolveAssetComponentType,
   type DesignerAssetDragPayload,
-} from "@/ui/shared/utils/asset-drag";
+} from "@/ui/shared/helpers/asset-drag";
 
 /**
  * 鍒ゆ柇瀹瑰櫒鏄惁鍏佽瀛愮粍浠?

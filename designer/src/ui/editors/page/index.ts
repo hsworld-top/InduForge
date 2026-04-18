@@ -3,5 +3,5 @@
  */
 
 export { CanvasContainer } from "./canvas/index";
-export * from "./panels/left/index";
-export * from "./panels/right/index";
+export * from "./sidebar-panels/left/index";
+export * from "./sidebar-panels/right/index";

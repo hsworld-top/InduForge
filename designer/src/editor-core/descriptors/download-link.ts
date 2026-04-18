@@ -3,7 +3,7 @@
  */
 
 import type { ComponentDescriptor } from "./registry";
-import DownloadLinkRenderer from "@/components/DownloadLink/DownloadLinkRenderer.vue";
+import DownloadLinkRenderer from "@/materials/DownloadLink/DownloadLinkRenderer.vue";
 
 export const descriptor: ComponentDescriptor = {
   renderTag: "div",

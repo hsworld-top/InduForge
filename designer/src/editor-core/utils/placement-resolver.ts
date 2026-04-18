@@ -25,8 +25,8 @@ import {
   type DropTargetResolution,
   type FlowContainerKind,
   type GridCellHint,
-} from "@/ui/editors/page/canvas/services/DragDropManager";
-import type { FlexInsertLine } from "@/ui/editors/page/canvas/services/DragDropManager";
+} from "@/ui/editors/page/canvas/interaction/DragDropManager";
+import type { FlexInsertLine } from "@/ui/editors/page/canvas/interaction/DragDropManager";
 
 // DragDropManager 单例，用于调用实例方法
 const dragDropManager = new DragDropManager();

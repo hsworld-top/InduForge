@@ -41,7 +41,7 @@ import { canvasZoomKey } from "./injection-keys";
 import {
   CANVAS_OUTSIDE_MARQUEE_START_EVENT,
   type OutsideMarqueeStartDetail,
-} from "./services/marquee-interaction";
+} from "./interaction/marquee-interaction";
 
 type CanvasContainerHost = HTMLElement & {
   __rulerObserver?: ResizeObserver | null;

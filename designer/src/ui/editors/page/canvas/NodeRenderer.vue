@@ -21,7 +21,7 @@ import { componentRegistry, createSelectableElement } from "@/editor-core";
 import { normalizeEventDefinitions } from "@/editor-core/registry/component-events";
 import { datacenterApi } from "@/services";
 import { useEditorStore } from "@/stores/editor-store";
-import EChart from "./components/EChart.vue";
+import EChart from "./renderers/EChart.vue";
 import { useBuildRefInfo } from "./composables/use-build-ref-info";
 import {
   clearDropTarget,
@@ -50,7 +50,7 @@ import { useNodeResize } from "./composables/use-node-resize";
 import { createNodeStyleHelpers } from "./composables/use-node-style";
 import { usePreview } from "./composables/use-preview";
 import { canvasZoomKey } from "./injection-keys";
-import { createDragDropManager } from "./services/DragDropManager";
+import { createDragDropManager } from "./interaction/DragDropManager";
 
 interface NodeRendererProps {
   nodeId: string;

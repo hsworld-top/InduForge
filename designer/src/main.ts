@@ -13,7 +13,7 @@ import ElementPlus from "element-plus";
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
-import { registerAllDescriptors } from "./components";
+import { registerAllDescriptors } from "./materials";
 import * as descriptorRegistry from "./editor-core/descriptors/registry";
 import { STORAGE_KEYS } from "./constants";
 import { initDescriptorRegistry } from "./editor-core/document/factory";

@@ -2,7 +2,7 @@
  * 组件注册表：可用组件类型的注册与查询
  */
 
-import type { PropDefinition } from "@/manifests/manifest-registry";
+import type { PropDefinition } from "@/materials/manifests/manifest-registry";
 
 /** 事件项：字符串名或完整定义 */
 export interface RegistryEventDefinition {

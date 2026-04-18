@@ -3,8 +3,8 @@
  */
 
 import type { EditorComponentManifest } from "./component-registry";
-import type { ComponentManifest } from "@/manifests/manifest-registry";
-import { getAllManifests } from "../../manifests";
+import type { ComponentManifest } from "@/materials/manifests/manifest-registry";
+import { getAllManifests } from "@/materials/manifests";
 import { getComponentEventDefinitions } from "./component-events";
 import { componentRegistry } from "./component-registry";
 

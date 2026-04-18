@@ -45,8 +45,8 @@ import { VIEW_PRESETS } from "@/constants";
 import { useEditorStore } from "@/stores/editor-store";
 import { CanvasContainer } from "@/ui/editors/page/canvas";
 import SelectionToolbar from "@/ui/editors/page/canvas/SelectionToolbar.vue";
-import { MaterialPanel, OutlineTree } from "@/ui/editors/page/panels/left";
-import { I18nPanel, RolePanel } from "@/ui/shared/panels";
+import { MaterialPanel, OutlineTree } from "@/ui/editors/page/sidebar-panels/left";
+import { I18nPanel, RolePanel } from "@/ui/shared/tool-panels";
 import { DockPanel } from "@/ui/shell/DockPanel";
 import { ToolRail } from "@/ui/shell/ToolRail";
 import { TopToolbar } from "@/ui/shell/TopToolbar";
@@ -56,18 +56,18 @@ import { useDesignerAutoSave } from "./use-designer-auto-save";
 import { useDesignerPageTabs } from "./use-designer-page-tabs";
 
 /** 重型面板异步加载，减轻 DesignerView 首 chunk */
-const DataPanel = defineAsyncComponent(() => import("@/ui/editors/page/panels/left/DataPanel.vue"));
+const DataPanel = defineAsyncComponent(() => import("@/ui/editors/page/sidebar-panels/left/DataPanel.vue"));
 const AdvancedPanel = defineAsyncComponent(
-  () => import("@/ui/editors/page/panels/right/AdvancedPanel.vue"),
+  () => import("@/ui/editors/page/sidebar-panels/right/AdvancedPanel.vue"),
 );
 const PropertyPanel = defineAsyncComponent(
-  () => import("@/ui/editors/page/panels/right/PropertyPanel.vue"),
+  () => import("@/ui/editors/page/sidebar-panels/right/PropertyPanel.vue"),
 );
-const PageTree = defineAsyncComponent(() => import("@/ui/shared/panels/page-tree/PageTree.vue"));
+const PageTree = defineAsyncComponent(() => import("@/ui/shared/tool-panels/page-tree/PageTree.vue"));
 const ScriptVarsPanel = defineAsyncComponent(
-  () => import("@/ui/shared/panels/ScriptVarsPanel.vue"),
+  () => import("@/ui/shared/tool-panels/ScriptVarsPanel.vue"),
 );
-const VariablesPanel = defineAsyncComponent(() => import("@/ui/shared/panels/VariablesPanel.vue"));
+const VariablesPanel = defineAsyncComponent(() => import("@/ui/shared/tool-panels/VariablesPanel.vue"));
 
 const route = useRoute();
 const router = useRouter();
