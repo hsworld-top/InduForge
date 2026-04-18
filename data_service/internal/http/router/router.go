@@ -10,6 +10,8 @@ import (
 
 type options struct {
 	connectionHandler *handler.ConnectionHandler
+	queryHandler      *handler.QueryHandler
+	dataPointHandler  *handler.DataPointHandler
 	jwtValidator      *auth.JWTValidator
 }
 
@@ -20,6 +22,15 @@ type Option func(*options)
 func WithConnectionRoutes(connectionHandler *handler.ConnectionHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.connectionHandler = connectionHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+// WithDataRoutes 注入 queries 与 datapoints 领域路由所需依赖。
+func WithDataRoutes(queryHandler *handler.QueryHandler, dataPointHandler *handler.DataPointHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.queryHandler = queryHandler
+		opts.dataPointHandler = dataPointHandler
 		opts.jwtValidator = jwtValidator
 	}
 }
@@ -38,6 +49,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	}))
 
 	mountConnectionRoutes(mux, opts)
+	mountDataRoutes(mux, opts)
 	return mux
 }
 
@@ -78,4 +90,104 @@ func mountConnectionRoutes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+}
+
+func mountDataRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	if opts.queryHandler != nil {
+		mux.Handle(
+			"GET /api/v1/data/projects/{projectId}/queries",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.queryHandler.List),
+				),
+			),
+		)
+		mux.Handle(
+			"POST /api/v1/data/projects/{projectId}/queries",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.queryHandler.Create),
+				),
+			),
+		)
+		mux.Handle(
+			"POST /api/v1/data/queries/{id}/execute",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.queryHandler.Execute),
+				),
+			),
+		)
+		mux.Handle(
+			"PUT /api/v1/data/queries/{id}",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.queryHandler.Update),
+				),
+			),
+		)
+		mux.Handle(
+			"DELETE /api/v1/data/queries/{id}",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.queryHandler.Delete),
+				),
+			),
+		)
+	}
+
+	if opts.dataPointHandler != nil {
+		mux.Handle(
+			"GET /api/v1/data/projects/{projectId}/datapoints",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.dataPointHandler.List),
+				),
+			),
+		)
+		mux.Handle(
+			"GET /api/v1/data/projects/{projectId}/datapoints/{id}",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.dataPointHandler.Get),
+				),
+			),
+		)
+		mux.Handle(
+			"GET /api/v1/data/projects/{projectId}/datapoints/value",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.dataPointHandler.GetValue),
+				),
+			),
+		)
+		mux.Handle(
+			"PUT /api/v1/data/projects/{projectId}/datapoints/{id}",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.Update),
+				),
+			),
+		)
+		mux.Handle(
+			"DELETE /api/v1/data/projects/{projectId}/datapoints/{id}",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.Delete),
+				),
+			),
+		)
+		mux.Handle(
+			"POST /api/v1/data/projects/{projectId}/datapoints/delete-batch",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.DeleteBatch),
+				),
+			),
+		)
+	}
 }

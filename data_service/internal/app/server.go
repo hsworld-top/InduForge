@@ -37,11 +37,11 @@ type routeDependenciesFactory func(config.Config) ([]router.Option, func(), erro
 
 var buildRouteDependencies routeDependenciesFactory = defaultRouteDependenciesFactory
 
-// NewServer 创建一个带有默认超时配置的 HTTP 服务实例，并默认装配 connections 路由依赖。
+// NewServer 创建一个带有默认超时配置的 HTTP 服务实例。
 func NewServer(cfg config.Config) (*Server, error) {
 	routerOptions, cleanup, err := buildRouteDependencies(cfg)
 	if err != nil {
-		log.Printf("warning: connections routes disabled: %v", err)
+		log.Printf("warning: optional routes disabled: %v", err)
 		routerOptions = nil
 		cleanup = nil
 	}
@@ -64,7 +64,7 @@ func newServer(cfg config.Config, handler http.Handler, cleanup func()) *Server 
 	}
 }
 
-// Handler 返回当前服务使用的 HTTP 处理器，便于测试复用默认装配路径。
+// Handler 返回当前服务使用的 HTTP 处理器。
 func (s *Server) Handler() http.Handler {
 	if s == nil || s.httpServer == nil {
 		return nil
@@ -72,7 +72,7 @@ func (s *Server) Handler() http.Handler {
 	return s.httpServer.Handler
 }
 
-// Close 释放由 Server 持有的外部依赖资源。
+// Close 释放 Server 持有的外部资源。
 func (s *Server) Close() {
 	if s == nil {
 		return
@@ -129,10 +129,19 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	}
 
 	connectionRepository := repository.NewConnectionRepository(pool)
+	queryRepository := repository.NewQueryRepository(pool)
+	dataPointRepository := repository.NewDataPointRepository(pool)
+
 	connectionService := service.NewConnectionService(connectionRepository)
+	queryService := service.NewQueryService(queryRepository, connectionRepository, pool)
+	dataPointService := service.NewDataPointService(dataPointRepository, queryService)
+
 	connectionHandler := handler.NewConnectionHandler(connectionService)
+	queryHandler := handler.NewQueryHandler(queryService)
+	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 
 	return []router.Option{
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
+		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 	}, pool.Close, nil
 }
