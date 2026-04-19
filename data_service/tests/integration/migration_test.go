@@ -58,6 +58,9 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_relational_configs",
 		"data_queries",
 		"data_points",
+		"data_mqtt_configs",
+		"data_mqtt_subscriptions",
+		"data_mqtt_messages",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("期望表 %s 已创建", tableName)
@@ -68,8 +71,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("查询 schema_migrations 失败: %v", err)
 	}
-	if appliedCount != 1 {
-		t.Fatalf("期望已有 1 条 migration 记录，实际为 %d", appliedCount)
+	if appliedCount != 2 {
+		t.Fatalf("期望已有 2 条 migration 记录，实际为 %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -81,6 +84,9 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_relational_configs",
 		"data_queries",
 		"data_points",
+		"data_mqtt_configs",
+		"data_mqtt_subscriptions",
+		"data_mqtt_messages",
 	} {
 		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("期望表 %s 已被删除", tableName)
@@ -116,6 +122,12 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_points_source_idx",
 		"data_points_source_config_gin_idx",
 		"data_points_tags_gin_idx",
+		"data_mqtt_configs_protocol_idx",
+		"data_mqtt_subscriptions_project_name_key",
+		"data_mqtt_subscriptions_project_connection_idx",
+		"data_mqtt_subscriptions_connection_enabled_idx",
+		"data_mqtt_messages_project_subscription_received_idx",
+		"data_mqtt_messages_subscription_received_idx",
 	} {
 		if _, ok := indexes[indexName]; !ok {
 			t.Fatalf("期望索引/约束索引 %s 存在，当前索引集合为 %v", indexName, mapsKeys(indexes))
@@ -239,7 +251,15 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
         SELECT indexname
         FROM pg_indexes
         WHERE schemaname = $1
-          AND tablename IN ('data_connections', 'data_relational_configs', 'data_queries', 'data_points')
+          AND tablename IN (
+              'data_connections',
+              'data_relational_configs',
+              'data_queries',
+              'data_points',
+              'data_mqtt_configs',
+              'data_mqtt_subscriptions',
+              'data_mqtt_messages'
+          )
     `, schemaName)
 	if err != nil {
 		t.Fatalf("查询索引列表失败: %v", err)

@@ -131,17 +131,21 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	connectionRepository := repository.NewConnectionRepository(pool)
 	queryRepository := repository.NewQueryRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
+	mqttRepository := repository.NewMqttRepository(pool)
 
 	connectionService := service.NewConnectionService(connectionRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, pool)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService)
+	mqttService := service.NewMqttService(mqttRepository)
 
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
+	mqttHandler := handler.NewMqttHandler(mqttService)
 
 	return []router.Option{
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
+		router.WithMqttRoutes(mqttHandler, jwtValidator),
 	}, pool.Close, nil
 }

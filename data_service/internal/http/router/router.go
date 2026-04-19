@@ -12,6 +12,7 @@ type options struct {
 	connectionHandler *handler.ConnectionHandler
 	queryHandler      *handler.QueryHandler
 	dataPointHandler  *handler.DataPointHandler
+	mqttHandler       *handler.MqttHandler
 	jwtValidator      *auth.JWTValidator
 }
 
@@ -35,6 +36,14 @@ func WithDataRoutes(queryHandler *handler.QueryHandler, dataPointHandler *handle
 	}
 }
 
+// WithMqttRoutes 注入 mqtt 领域路由所需依赖。
+func WithMqttRoutes(mqttHandler *handler.MqttHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.mqttHandler = mqttHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // NewRouter 创建 data_service 的基础 HTTP 路由。
 func NewRouter(routeOptions ...Option) http.Handler {
 	opts := options{}
@@ -50,6 +59,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 
 	mountConnectionRoutes(mux, opts)
 	mountDataRoutes(mux, opts)
+	mountMqttRoutes(mux, opts)
 	return mux
 }
 
@@ -190,4 +200,43 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 			),
 		)
 	}
+}
+
+func mountMqttRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.mqttHandler == nil {
+		return
+	}
+
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/mqtt/connections",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.mqttHandler.CreateConnection),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/mqtt/connections/{connectionId}/start",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.mqttHandler.StartConnection),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/mqtt/connections/{connectionId}/status",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.mqttHandler.GetConnectionStatus),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/messages",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.mqttHandler.ListMessages),
+			),
+		),
+	)
 }
