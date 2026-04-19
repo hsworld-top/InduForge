@@ -15,6 +15,7 @@ type options struct {
 	mqttHandler          *handler.MqttHandler
 	protocolWave1Handler *handler.ProtocolWave1Handler
 	protocolWave2Handler *handler.ProtocolWave2Handler
+	previewHandler       *handler.PreviewHandler
 	jwtValidator         *auth.JWTValidator
 }
 
@@ -62,6 +63,14 @@ func WithProtocolWave2Routes(protocolWave2Handler *handler.ProtocolWave2Handler,
 	}
 }
 
+// WithPreviewRoutes 注入 preview 会话路由所需依赖。
+func WithPreviewRoutes(previewHandler *handler.PreviewHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.previewHandler = previewHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // NewRouter 创建 data_service 的基础 HTTP 路由。
 func NewRouter(routeOptions ...Option) http.Handler {
 	opts := options{}
@@ -80,6 +89,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountMqttRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
+	mountPreviewRoutes(mux, opts)
 	return mux
 }
 
@@ -350,6 +360,37 @@ func mountProtocolWave2Routes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.protocolWave2Handler.ValidateOpcdaContract),
+			),
+		),
+	)
+}
+
+func mountPreviewRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.previewHandler == nil {
+		return
+	}
+
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/preview/sessions",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.previewHandler.Create),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/preview/sessions/{sessionId}/heartbeat",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.previewHandler.Heartbeat),
+			),
+		),
+	)
+	mux.Handle(
+		"DELETE /api/v1/data/preview/sessions/{sessionId}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.previewHandler.Delete),
 			),
 		),
 	)

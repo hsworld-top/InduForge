@@ -525,7 +525,7 @@ git add data_service/internal/protocol data_service/internal/http/handler data_s
 git commit -m "feat(product): 落地协议矩阵第一波（kafka/http/ws/redis）"
 ```
 
-### Task 9: 协议矩阵第二波 + OPC DA 契约（M8）
+### Task 9: 协议矩阵第二波 + OPC DA 契约（M8） ✅（已完成）
 
 **Files:**
 - Create: `data_service/internal/protocol/opcua/*`
@@ -566,14 +566,14 @@ r.HandleFunc("/api/v1/data/projects/{projectId}/opcda/contracts/validate", h.Val
 Run: `go test ./tests/integration -run TestProtocolWave2 -v`  
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add data_service/internal/protocol data_service/internal/http/handler data_service/internal/db/migrations data_service/tests/integration
 git commit -m "feat(product): 落地协议矩阵第二波与 OPC DA 契约"
 ```
 
-### Task 10: Preview 会话域（M9）
+### Task 10: Preview 会话域（M9） ✅（已完成）
 
 **Files:**
 - Create: `data_service/internal/service/preview_session_service.go`
@@ -583,7 +583,7 @@ git commit -m "feat(product): 落地协议矩阵第二波与 OPC DA 契约"
 - Create: `data_service/internal/db/migrations/0005_preview_sessions.sql`
 - Test: `data_service/tests/integration/preview_session_test.go`
 
-- [ ] **Step 1: 写 preview 滑动过期失败测试**
+- [x] **Step 1: 写 preview 滑动过期失败测试**
 
 ```go
 func TestPreviewSessionSlidingTTL(t *testing.T) {
@@ -595,12 +595,12 @@ func TestPreviewSessionSlidingTTL(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 运行失败验证**
+- [x] **Step 2: 运行失败验证**
 
 Run: `go test ./tests/integration -run TestPreviewSessionSlidingTTL -v`  
 Expected: FAIL。
 
-- [ ] **Step 3: 实现 preview 接口与 Redis key 规范**
+- [x] **Step 3: 实现 preview 接口与 Redis key 规范**
 
 ```go
 const (
@@ -617,12 +617,12 @@ r.HandleFunc("/api/v1/data/preview/sessions/{sessionId}/heartbeat", h.Heartbeat)
 r.HandleFunc("/api/v1/data/preview/sessions/{sessionId}", h.Delete).Methods(http.MethodDelete)
 ```
 
-- [ ] **Step 4: 运行 preview 用例**
+- [x] **Step 4: 运行 preview 用例**
 
 Run: `go test ./tests/integration -run TestPreviewSession -v`  
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add data_service/internal/service data_service/internal/repository data_service/internal/http/handler data_service/internal/cache data_service/internal/db/migrations data_service/tests/integration
@@ -872,8 +872,8 @@ git commit -m "test(product): 完成 data_service 全链路回归与验收文档
 
 ## 技能执行闸门（必须打勾）
 
-- [ ] 每次落库变更前执行 `design-postgres-tables` 审核（字段类型、约束、索引、查询路径映射）。
-- [ ] 报警域涉及空间能力时执行 `design-postgis-tables` 评估（本期默认仅文档声明）。
+- [x] 每次落库变更前执行 `design-postgres-tables` 审核（字段类型、约束、索引、查询路径映射）。
+- [x] 报警域涉及空间能力时执行 `design-postgis-tables` 评估（本期默认仅文档声明，Task10 已评估无空间建模需求）。
 - [ ] 每个里程碑收尾执行 `supabase-postgres-best-practices` 复审并记录结果。
 
 ## 里程碑出口标准（统一）

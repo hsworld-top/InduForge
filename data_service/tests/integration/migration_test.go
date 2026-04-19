@@ -49,7 +49,7 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 
 	for err := range errCh {
 		if err != nil {
-			t.Fatalf("并发执行 Up 失败: %v", err)
+			t.Fatalf("骞跺彂鎵ц Up 澶辫触: %v", err)
 		}
 	}
 
@@ -69,22 +69,23 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_s7_configs",
 		"data_modbus_configs",
 		"data_tdengine_configs",
+		"data_preview_sessions",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
-			t.Fatalf("期望表 %s 已创建", tableName)
+			t.Fatalf("expected table %s to exist", tableName)
 		}
 	}
 
 	var appliedCount int
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
-		t.Fatalf("查询 schema_migrations 失败: %v", err)
+		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 4 {
-		t.Fatalf("期望已有 4 条 migration 记录，实际为 %d", appliedCount)
+	if appliedCount != 5 {
+		t.Fatalf("鏈熸湜宸叉湁 5 鏉?migration 璁板綍锛屽疄闄呬负 %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
-		t.Fatalf("执行 DownAll 失败: %v", err)
+		t.Fatalf("鎵ц DownAll 澶辫触: %v", err)
 	}
 
 	for _, tableName := range []string{
@@ -103,9 +104,10 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_s7_configs",
 		"data_modbus_configs",
 		"data_tdengine_configs",
+		"data_preview_sessions",
 	} {
 		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
-			t.Fatalf("期望表 %s 已被删除", tableName)
+			t.Fatalf("鏈熸湜琛?%s 宸茶鍒犻櫎", tableName)
 		}
 	}
 }
@@ -118,7 +120,7 @@ func TestMigrationIndexes(t *testing.T) {
 	migrator := setupMigrator(t, fixture.pool)
 
 	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("执行 Up 失败: %v", err)
+		t.Fatalf("鎵ц Up 澶辫触: %v", err)
 	}
 
 	indexes := loadIndexNames(ctx, t, fixture.pool, fixture.schemaName)
@@ -152,9 +154,11 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_s7_configs_host_idx",
 		"data_modbus_configs_mode_idx",
 		"data_tdengine_configs_database_idx",
+		"data_preview_sessions_project_user_status_idx",
+		"data_preview_sessions_last_active_at_idx",
 	} {
 		if _, ok := indexes[indexName]; !ok {
-			t.Fatalf("期望索引/约束索引 %s 存在，当前索引集合为 %v", indexName, mapsKeys(indexes))
+			t.Fatalf("鏈熸湜绱㈠紩/绾︽潫绱㈠紩 %s 瀛樺湪锛屽綋鍓嶇储寮曢泦鍚堜负 %v", indexName, mapsKeys(indexes))
 		}
 	}
 }
@@ -164,7 +168,7 @@ func setupMigrator(t *testing.T, pool *pgxpool.Pool) *migrate.Migrator {
 
 	migrator, err := migrate.NewMigrator(pool)
 	if err != nil {
-		t.Fatalf("创建迁移器失败: %v", err)
+		t.Fatalf("鍒涘缓杩佺Щ鍣ㄥけ璐? %v", err)
 	}
 
 	return migrator
@@ -185,19 +189,19 @@ func setupTestDatabase(t *testing.T, ctx context.Context) *testDatabase {
 
 	adminPool, err := postgres.NewPoolFromURL(ctx, databaseURL)
 	if err != nil {
-		t.Fatalf("创建测试管理连接池失败: %v", err)
+		t.Fatalf("鍒涘缓娴嬭瘯绠＄悊杩炴帴姹犲け璐? %v", err)
 	}
 	t.Cleanup(adminPool.Close)
 
 	schemaName := uniqueSchemaName(t.Name())
 	if _, err := adminPool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %s`, pgx.Identifier{schemaName}.Sanitize())); err != nil {
-		t.Fatalf("创建测试 schema 失败: %v", err)
+		t.Fatalf("鍒涘缓娴嬭瘯 schema 澶辫触: %v", err)
 	}
 	t.Cleanup(func() {
 		dropCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if _, err := adminPool.Exec(dropCtx, fmt.Sprintf(`DROP SCHEMA IF EXISTS %s CASCADE`, pgx.Identifier{schemaName}.Sanitize())); err != nil {
-			t.Fatalf("删除测试 schema 失败: %v", err)
+			t.Fatalf("鍒犻櫎娴嬭瘯 schema 澶辫触: %v", err)
 		}
 	})
 
@@ -206,7 +210,7 @@ func setupTestDatabase(t *testing.T, ctx context.Context) *testDatabase {
 		SearchPath:  schemaName,
 	})
 	if err != nil {
-		t.Fatalf("创建测试连接池失败: %v", err)
+		t.Fatalf("鍒涘缓娴嬭瘯杩炴帴姹犲け璐? %v", err)
 	}
 	t.Cleanup(pool.Close)
 
@@ -237,7 +241,7 @@ func resolveTestDatabaseURL(t *testing.T, ctx context.Context) (string, func()) 
 	)
 	if err != nil {
 		t.Skipf(
-			"未设置 %s，且无法启动 PostgreSQL testcontainer: %v。可先启动 Docker Desktop，或显式设置 %s 指向可写测试库后重试。",
+			"%s is not set and PostgreSQL testcontainer cannot be started: %v. Start Docker Desktop or set %s to a writable test database.",
 			testDatabaseURLEnv,
 			err,
 			testDatabaseURLEnv,
@@ -247,7 +251,7 @@ func resolveTestDatabaseURL(t *testing.T, ctx context.Context) (string, func()) 
 	databaseURL, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		_ = testcontainers.TerminateContainer(container)
-		t.Fatalf("获取 testcontainer 连接串失败: %v", err)
+		t.Fatalf("鑾峰彇 testcontainer 杩炴帴涓插け璐? %v", err)
 	}
 
 	cleanup := func() {
@@ -262,7 +266,7 @@ func tableExists(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schemaNa
 
 	var regclass *string
 	if err := pool.QueryRow(ctx, `SELECT to_regclass($1)`, schemaName+"."+tableName).Scan(&regclass); err != nil {
-		t.Fatalf("查询表 %s 是否存在失败: %v", tableName, err)
+		t.Fatalf("鏌ヨ琛?%s 鏄惁瀛樺湪澶辫触: %v", tableName, err)
 	}
 
 	return regclass != nil && *regclass != ""
@@ -290,11 +294,12 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
               'data_opcua_configs',
               'data_s7_configs',
               'data_modbus_configs',
-              'data_tdengine_configs'
+              'data_tdengine_configs',
+              'data_preview_sessions'
           )
     `, schemaName)
 	if err != nil {
-		t.Fatalf("查询索引列表失败: %v", err)
+		t.Fatalf("鏌ヨ绱㈠紩鍒楄〃澶辫触: %v", err)
 	}
 	defer rows.Close()
 
@@ -302,13 +307,13 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
 	for rows.Next() {
 		var indexName string
 		if err := rows.Scan(&indexName); err != nil {
-			t.Fatalf("读取索引名称失败: %v", err)
+			t.Fatalf("璇诲彇绱㈠紩鍚嶇О澶辫触: %v", err)
 		}
 		indexes[indexName] = struct{}{}
 	}
 
 	if err := rows.Err(); err != nil {
-		t.Fatalf("遍历索引列表失败: %v", err)
+		t.Fatalf("閬嶅巻绱㈠紩鍒楄〃澶辫触: %v", err)
 	}
 
 	return indexes

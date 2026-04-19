@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/indu-forge/data_service/internal/auth"
+	"github.com/indu-forge/data_service/internal/cache"
 	"github.com/indu-forge/data_service/internal/config"
 	"github.com/indu-forge/data_service/internal/db/postgres"
 	"github.com/indu-forge/data_service/internal/http/handler"
@@ -127,6 +128,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	if err != nil {
 		return nil, nil, err
 	}
+	cleanupFns := []func(){pool.Close}
 
 	connectionRepository := repository.NewConnectionRepository(pool)
 	queryRepository := repository.NewQueryRepository(pool)
@@ -149,11 +151,46 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service)
 	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
 
-	return []router.Option{
+	routeOptions := []router.Option{
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
 		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
-	}, pool.Close, nil
+	}
+
+	if err := config.ValidatePreviewDependencies(cfg); err != nil {
+		log.Printf("warning: preview routes disabled: %v", err)
+	} else {
+		redisClient, redisErr := cache.NewRedisClient(context.Background(), cache.RedisConfig{
+			Addr:     strings.TrimSpace(cfg.RedisAddr),
+			Password: strings.TrimSpace(cfg.RedisPassword),
+			DB:       cfg.RedisDB,
+		})
+		if redisErr != nil {
+			log.Printf("warning: preview routes disabled: %v", redisErr)
+		} else {
+			cleanupFns = append(cleanupFns, func() {
+				_ = redisClient.Close()
+			})
+
+			previewRepository := repository.NewPreviewSessionRepository(pool)
+			previewService := service.NewPreviewSessionService(previewRepository, redisClient)
+			previewHandler := handler.NewPreviewHandler(previewService)
+			routeOptions = append(routeOptions, router.WithPreviewRoutes(previewHandler, jwtValidator))
+		}
+	}
+
+	return routeOptions, joinCleanup(cleanupFns...), nil
+}
+
+func joinCleanup(cleanups ...func()) func() {
+	return func() {
+		for index := len(cleanups) - 1; index >= 0; index-- {
+			if cleanups[index] == nil {
+				continue
+			}
+			cleanups[index]()
+		}
+	}
 }
