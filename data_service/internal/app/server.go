@@ -133,23 +133,27 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
 	protocolWave1Repository := repository.NewProtocolWave1Repository(pool)
+	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
 
 	connectionService := service.NewConnectionService(connectionRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, pool)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService)
 	mqttService := service.NewMqttService(mqttRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
+	protocolWave2Service := service.NewProtocolWave2Service(protocolWave2Repository)
 
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service)
+	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
 
 	return []router.Option{
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
+		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
 	}, pool.Close, nil
 }

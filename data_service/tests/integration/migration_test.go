@@ -65,6 +65,10 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_http_configs",
 		"data_websocket_configs",
 		"data_redis_configs",
+		"data_opcua_configs",
+		"data_s7_configs",
+		"data_modbus_configs",
+		"data_tdengine_configs",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("期望表 %s 已创建", tableName)
@@ -75,8 +79,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("查询 schema_migrations 失败: %v", err)
 	}
-	if appliedCount != 3 {
-		t.Fatalf("期望已有 3 条 migration 记录，实际为 %d", appliedCount)
+	if appliedCount != 4 {
+		t.Fatalf("期望已有 4 条 migration 记录，实际为 %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -95,6 +99,10 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_http_configs",
 		"data_websocket_configs",
 		"data_redis_configs",
+		"data_opcua_configs",
+		"data_s7_configs",
+		"data_modbus_configs",
+		"data_tdengine_configs",
 	} {
 		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("期望表 %s 已被删除", tableName)
@@ -140,6 +148,10 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_http_configs_method_idx",
 		"data_websocket_configs_url_idx",
 		"data_redis_configs_mode_idx",
+		"data_opcua_configs_endpoint_idx",
+		"data_s7_configs_host_idx",
+		"data_modbus_configs_mode_idx",
+		"data_tdengine_configs_database_idx",
 	} {
 		if _, ok := indexes[indexName]; !ok {
 			t.Fatalf("期望索引/约束索引 %s 存在，当前索引集合为 %v", indexName, mapsKeys(indexes))
@@ -274,7 +286,11 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
               'data_kafka_configs',
               'data_http_configs',
               'data_websocket_configs',
-              'data_redis_configs'
+              'data_redis_configs',
+              'data_opcua_configs',
+              'data_s7_configs',
+              'data_modbus_configs',
+              'data_tdengine_configs'
           )
     `, schemaName)
 	if err != nil {

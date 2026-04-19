@@ -477,7 +477,7 @@ git add data_service/internal/repository data_service/internal/service data_serv
 git commit -m "feat(product): 承接 MQTT 全链路接口与数据表"
 ```
 
-### Task 8: 协议矩阵第一波（M7）
+### Task 8: 协议矩阵第一波（M7） ✅（已完成）
 
 **Files:**
 - Create: `data_service/internal/protocol/kafka/*`
@@ -518,7 +518,7 @@ r.HandleFunc("/api/v1/data/projects/{projectId}/redis/configs", h.CreateRedisCon
 Run: `go test ./tests/integration -run TestProtocolWave1 -v`  
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add data_service/internal/protocol data_service/internal/http/handler data_service/internal/db/migrations data_service/tests/integration
@@ -537,7 +537,7 @@ git commit -m "feat(product): 落地协议矩阵第一波（kafka/http/ws/redis�
 - Create: `data_service/internal/db/migrations/0004_protocol_wave2.sql`
 - Test: `data_service/tests/integration/protocol_wave2_test.go`
 
-- [ ] **Step 1: 写 wave2 协议失败用例**
+- [x] **Step 1: 写 wave2 协议失败用例**
 
 ```go
 func TestOpcDaContractValidation(t *testing.T) {
@@ -547,12 +547,12 @@ func TestOpcDaContractValidation(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 运行失败验证**
+- [x] **Step 2: 运行失败验证**
 
 Run: `go test ./tests/integration -run TestOpcDaContractValidation -v`  
 Expected: FAIL。
 
-- [ ] **Step 3: 实现 wave2 协议路由与模型**
+- [x] **Step 3: 实现 wave2 协议路由与模型**
 
 ```go
 r.HandleFunc("/api/v1/data/projects/{projectId}/opcua/configs", h.CreateOpcuaConfig).Methods(http.MethodPost)
@@ -561,7 +561,7 @@ r.HandleFunc("/api/v1/data/projects/{projectId}/modbus/configs", h.CreateModbusC
 r.HandleFunc("/api/v1/data/projects/{projectId}/opcda/contracts/validate", h.ValidateOpcDaContract).Methods(http.MethodPost)
 ```
 
-- [ ] **Step 4: 运行 wave2 用例**
+- [x] **Step 4: 运行 wave2 用例**
 
 Run: `go test ./tests/integration -run TestProtocolWave2 -v`  
 Expected: PASS

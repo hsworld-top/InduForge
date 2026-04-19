@@ -14,6 +14,7 @@ type options struct {
 	dataPointHandler     *handler.DataPointHandler
 	mqttHandler          *handler.MqttHandler
 	protocolWave1Handler *handler.ProtocolWave1Handler
+	protocolWave2Handler *handler.ProtocolWave2Handler
 	jwtValidator         *auth.JWTValidator
 }
 
@@ -53,6 +54,14 @@ func WithProtocolWave1Routes(protocolWave1Handler *handler.ProtocolWave1Handler,
 	}
 }
 
+// WithProtocolWave2Routes 注入第二波协议路由所需依赖。
+func WithProtocolWave2Routes(protocolWave2Handler *handler.ProtocolWave2Handler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.protocolWave2Handler = protocolWave2Handler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // NewRouter 创建 data_service 的基础 HTTP 路由。
 func NewRouter(routeOptions ...Option) http.Handler {
 	opts := options{}
@@ -70,6 +79,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountDataRoutes(mux, opts)
 	mountMqttRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
+	mountProtocolWave2Routes(mux, opts)
 	return mux
 }
 
@@ -293,6 +303,53 @@ func mountProtocolWave1Routes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
 				middleware.ErrorHandler(opts.protocolWave1Handler.CreateRedisConfig),
+			),
+		),
+	)
+}
+
+func mountProtocolWave2Routes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.protocolWave2Handler == nil {
+		return
+	}
+
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/opcua/configs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave2Handler.CreateOpcuaConfig),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/s7/configs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave2Handler.CreateS7Config),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/modbus/configs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave2Handler.CreateModbusConfig),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/tdengine/configs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave2Handler.CreateTdengineConfig),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/opcda/contracts/validate",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.protocolWave2Handler.ValidateOpcdaContract),
 			),
 		),
 	)
