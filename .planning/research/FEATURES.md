@@ -139,7 +139,7 @@ Features users expect from any professional canvas editor. Missing these = produ
 | **Align selected** | Align multiple elements | Medium | Alignment calculation |
 | **Distribute selected** | Even spacing between elements | Medium | Distribution calculation |
 
-**From `docs/designer/refactor/design-interaction.md`:**
+**From `.planning/docs/process/designer/refactor/design-interaction.md`:**
 - Box selection exists (M key)
 - Align/distribute tools mentioned in context toolbar
 - Group via Ctrl+G, Ungroup via Ctrl+Shift+G (right-click menu)
@@ -183,7 +183,7 @@ Features that set InduForge apart from generic canvas editors. Not expected, but
 | **Clone PC view to large screen** | Reuse designs across viewports | Medium | View duplication |
 | **View-specific component visibility** | Show/hide components per view | Medium | View schema |
 
-**From `docs/designer/refactor/design-interaction.md`:**
+**From `.planning/docs/process/designer/refactor/design-interaction.md`:**
 - View types: Large (1200+), PC (default), Tablet (992-), Phone (768-, 480-)
 - Switch view = switch editing view schema
 
@@ -299,7 +299,7 @@ Based on the existing issues and professional editor patterns, prioritize in thi
 
 ### Project Internal Sources (HIGH Confidence - Already Read)
 
-- `docs/designer/refactor/design-interaction.md` - Canvas architecture, drag-drop, panels
+- `.planning/docs/process/designer/refactor/design-interaction.md` - Canvas architecture, drag-drop, panels
 - `docs/designer/layer-order-convention.md` - Stacking order via `children` array
 - `docs/designer/placement-and-stacking.md` - Current issues and proposed unified resolver
 - `.planning/PROJECT.md` - Current milestone context

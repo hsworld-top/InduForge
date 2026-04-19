@@ -35,4 +35,4 @@
 
 - `docs/node_agent/README.md`
 - `docs/contracts/node-agent-runtime-protocol.md`
-- `docs/ai-packages/tasks/runtime_node_agent.task.md`
+- `.planning/ai-packages/tasks/runtime_node_agent.task.md`

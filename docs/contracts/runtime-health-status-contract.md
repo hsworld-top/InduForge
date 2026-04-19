@@ -8,7 +8,7 @@
 ### 当前缺口
 - RuntimeEngine 尚未实现，因此 `/health` 和 `/status` 目前没有事实接口。
 
-## 3. 共创后建议目标
+## 3. 协议目标
 - Runtime 必须提供轻量、稳定、低歧义的运维接口。
 - NodeAgent 和 `dev_ide` 应基于该协议做探活和展示。
 
@@ -78,16 +78,13 @@
 - NodeAgent 低频调用 `/status`，并回传平台。
 - `dev_ide` 展示 `runtimeStatus`、版本号、最后错误和启动时间。
 
-## 10. 当前阶段非目标
+## 10. 非目标
 - 不定义指标采集协议。
 - 不定义完整 tracing 或 profiling 接口。
 - 不在首版引入复杂告警推送。
 
 ## 11. 关联文档
-- [RuntimeEngine](../designer/refactor/runtime-engine.md)
+- [高层设计](../高层设计.md)
+- [详细设计](../详细设计.md)
 - [NodeAgent 与 RuntimeEngine 启动协议](./node-agent-runtime-protocol.md)
-- [运行时闭环专项计划](../运行时闭环专项计划.md)
-
-## 12. 待确认事项
-- `/status` 是否需要附带组件加载错误统计。
-- `DEGRADED` 的判定规则是否在首版就细化。
+- [测试与质量策略](../测试与质量策略.md)

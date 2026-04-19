@@ -19,7 +19,7 @@
 - 统一本地状态和平台状态。
 
 ## 关联文档
-- [node_agent/README](./node_agent/README.md)
-- [node_agent_front/README](./node_agent_front/README.md)
-- [详细设计](./详细设计.md)
-- [runtime_node_agent.task](./ai-packages/tasks/runtime_node_agent.task.md)
+- [node_agent/README](../../../../docs/node_agent/README.md)
+- [node_agent_front/README](../../../../docs/node_agent_front/README.md)
+- [详细设计](../../../../docs/详细设计.md)
+- [runtime_node_agent.task](../../../ai-packages/tasks/runtime_node_agent.task.md)

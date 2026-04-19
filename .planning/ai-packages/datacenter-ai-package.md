@@ -19,8 +19,8 @@
 - 收敛数据点引用格式，服务 `designer` 与后续 `runtime_engine`。
 
 ## 5. 直接输入
-- [产品决策确认版](../产品决策确认版.md)
-- [开发态预览专项计划](../开发态预览专项计划.md)
+- [产品定义](../../docs/产品定义.md)
+- [开发态预览专项计划](../docs/process/platform/开发态预览专项计划.md)
 - [数据中心概览](../datacenter/README.md)
 - [datacenter.task](./tasks/datacenter.task.md)
 

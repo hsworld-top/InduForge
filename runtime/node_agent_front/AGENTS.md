@@ -9,7 +9,7 @@
 - `runtime/node_agent_front/package.json`
 - `runtime/node_agent_front/src/`
 - `docs/node_agent_front/README.md`
-- `docs/README_nodeagent.md`
+- `.planning/docs/process/runtime/README_nodeagent.md`
 
 ## 必须遵守
 
@@ -30,4 +30,4 @@
 ## 相关参考文档
 
 - `docs/node_agent_front/README.md`
-- `docs/ai-packages/tasks/runtime_node_agent.task.md`
+- `.planning/ai-packages/tasks/runtime_node_agent.task.md`

@@ -882,9 +882,9 @@ socket.emit("datapoint:subscribe", {
 **相关文档**：
 
 - [后端 API](./README.md)
-- [MQTT 实现](../datacenter/mqtt-implementation.md)
-- [数据绑定 v2](../designer/refactor/data-binding-v2.md)
-- [运行时引擎](../designer/refactor/runtime-engine.md)
+- [数据中心概览](../datacenter/README.md)
+- [设计器概览](../designer/README.md)
+- [详细设计](../详细设计.md)
 
 ---
 

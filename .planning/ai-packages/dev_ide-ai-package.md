@@ -17,10 +17,10 @@
 - 为未来运行态和运维展示保留接入口。
 
 ## 5. 直接输入
-- [产品决策确认版](../产品决策确认版.md)
-- [开发态预览专项计划](../开发态预览专项计划.md)
-- [运行时闭环专项计划](../运行时闭环专项计划.md)
-- [Runtime 健康状态协议](../contracts/runtime-health-status-contract.md)
+- [产品定义](../../docs/产品定义.md)
+- [开发态预览专项计划](../docs/process/platform/开发态预览专项计划.md)
+- [运行时闭环专项计划](../docs/process/platform/运行时闭环专项计划.md)
+- [Runtime 健康状态协议](../../docs/contracts/runtime-health-status-contract.md)
 - [dev_ide.task](./tasks/dev_ide.task.md)
 
 ## 6. 输出物

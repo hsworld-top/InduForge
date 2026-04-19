@@ -82,17 +82,14 @@ runtime-data/
 - 停止当前进程
 - 标记版本启动失败
 
-## 10. 当前阶段非目标
+## 10. 非目标
 - 不实现多工程同时运行。
 - 不实现复杂资源配额控制。
 - 不实现跨节点热迁移。
 
 ## 11. 关联文档
-- [运行时闭环专项计划](../运行时闭环专项计划.md)
-- [RuntimeEngine](../designer/refactor/runtime-engine.md)
-- [runtime_node_agent.task](../ai-packages/tasks/runtime_node_agent.task.md)
-- [runtime_engine.task](../ai-packages/tasks/runtime_engine.task.md)
-
-## 12. 待确认事项
-- 首版是否明确“一节点只运行一个工程”。
-- 端口由平台指定还是节点自动分配。
+- [产品定义](../产品定义.md)
+- [高层设计](../高层设计.md)
+- [详细设计](../详细设计.md)
+- [NodeAgent 后端概览](../node_agent/README.md)
+- [测试与质量策略](../测试与质量策略.md)

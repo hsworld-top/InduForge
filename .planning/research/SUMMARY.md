@@ -166,7 +166,7 @@ Phases with standard patterns (skip research-phase):
 ## Sources
 
 ### Primary (HIGH confidence)
-- Project internal docs: `docs/designer/placement-and-stacking.md`, `docs/designer/layer-order-convention.md`, `docs/designer/refactor/layout-system.md`, `docs/designer/refactor/schema-design.md`
+- Project internal docs: `docs/designer/placement-and-stacking.md`, `docs/designer/layer-order-convention.md`, `.planning/docs/process/designer/refactor/layout-system.md`, `.planning/docs/process/designer/refactor/schema-design.md`
 - Source code analysis: `designer/src/editor-core/utils/placement-utils.ts`, `designer/src/stores/editor/editor-node-layout-helpers.ts`, `designer/src/ui/editors/page/canvas/services/DragDropManager.ts`
 - npm verification: rbush, kiwi.js (versions confirmed)
 

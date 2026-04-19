@@ -519,7 +519,7 @@ CREATE TABLE data_point_usages (
 
 ## 相关文档
 
-- [数据点改造实施说明](./datapoint-implementation.md)
 - [数据中心概述](./README.md)
-- [数据绑定系统](../designer/data-binding.md)
-- [DSL 设计规范](../dsl-design.md)
+- [MQTT 自动发现与批量导入](./mqtt-auto-discovery.md)
+- [设计器概览](../designer/README.md)
+- [详细设计](../详细设计.md)

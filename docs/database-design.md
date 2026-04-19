@@ -1,74 +1,95 @@
 # 数据库设计
 
-## 1. 现有表结构分析
+## 1. 文档定位
 
-### 当前已实现核心实体
+本文档定义 InduForge 当前正式的持久化分层、核心数据对象、主要表结构边界，以及后续数据库演进原则。
 
-- 平台域：`tenants`、`users`、`projects`、`logs`
-- 设计域：`design_pages`、`design_project_settings`、`design_assets`、`design_asset_folders`
-- 数据域：`data_connections`、`data_queries`、`data_points`、`data_mqtt_*`、`data_relational_configs`
-- 发布运维域：`deployments`、`nodes`、`node_deployments`、`node_commands`
+本文档不追求把整个系统写成一套“统一物理库设计图”，而是明确当前项目已经形成的真实持久化结构：
 
-### 现状判断
+- `dev_core` 负责平台治理、工程管理、设计内容、发布部署与节点控制相关持久化。
+- `data_service` 负责平台侧与开发态数据域的独立持久化。
+- `runtime_data_service` 属于运行态工程级数据引擎，当前尚未形成正式落库实现，因此本文档只定义其长期边界，不提前冻结不存在的物理表结构。
 
-- 现有表覆盖面已经足够支撑本期，不建议大规模推翻。
-- 重点应放在字段语义补强和约束统一。
+## 2. 持久化分层
 
-## 2. 核心实体
+### 2.1 平台控制面持久化：`dev_core`
 
-### 工程实体
+`dev_core` 当前承接以下对象的持久化：
 
-- 工程 `projects`
-- 页面 `design_pages`
-- 工程设置 `design_project_settings`
+- 平台治理对象：`tenants`、`users`
+- 工程对象：`projects`
+- 设计对象：`design_pages`、`design_project_settings`、`design_assets`、`design_asset_folders`
+- 发布运维对象：`deployments`、`nodes`、`node_deployments`、`node_commands`
+- 平台日志对象：`logs`
 
-### 数据实体
+这些对象服务于平台治理、工程生命周期、设计内容管理、发布部署与节点控制。
 
-- 连接 `data_connections`
-- 查询 `data_queries`
-- 数据点 `data_points`
+### 2.2 平台侧数据域持久化：`data_service`
 
-### 运维实体
+`data_service` 已经形成独立迁移体系，当前承接以下对象的持久化：
 
-- 发布版本 `deployments`
-- 节点 `nodes`
-- 节点部署 `node_deployments`
-- 节点命令 `node_commands`
+- 连接主表：`data_connections`
+- 关系库配置：`data_relational_configs`
+- 查询定义：`data_queries`
+- 数据点定义：`data_points`
+- MQTT 配置与消息：`data_mqtt_configs`、`data_mqtt_subscriptions`、`data_mqtt_messages`
+- Wave1 协议与 Source 配置：`data_kafka_configs`、`data_http_configs`、`data_websocket_configs`、`data_redis_configs`
+- Wave2 协议配置：`data_opcua_configs`、`data_s7_configs`、`data_modbus_configs`、`data_tdengine_configs`
+- 开发态预览会话：`data_preview_sessions`
+- 计算定义与运行：`data_compute_units`、`data_compute_runs`
 
-## 3. 表设计建议
+这些对象服务于平台侧与开发态数据域能力，不归属于 `dev_core` 的长期控制面模型。
 
-### 3.1 `projects`
+### 2.3 运行态工程级持久化：`runtime_data_service`
 
-建议继续作为工程主表，保留：
+从正式架构看，`runtime_data_service` 是工程级运行态数据引擎组，长期会形成运行态本地持久化对象。但当前仓库还没有正式冻结其物理落库模型，因此本文档只明确以下长期边界：
 
-- 名称、描述、颜色标签
+- 运行态数据持久化按工程运行单元隔离，不与平台侧控制面共库。
+- 运行态数据持久化不反向承接平台治理对象。
+- 运行态数据持久化不直接复用 `dev_core` 的发布部署表作为运行数据主表。
+
+## 3. 当前数据库现实与正式口径
+
+当前代码里仍存在历史过渡状态：
+
+- `dev_core` 中仍保留 `DataConnection`、`DataQuery`、`DataPoint` 等 Sequelize 模型。
+- 同时，`data_service` 已经使用独立 Go 迁移体系维护平台侧数据域表。
+
+正式文档口径应以当前总体架构为准：
+
+- 平台治理、工程管理、设计内容、发布部署、节点控制长期归 `dev_core`。
+- 平台侧与开发态数据域长期归 `data_service`。
+- 历史上留在 `dev_core` 的数据域模型可视为过渡兼容层，而不是未来长期唯一数据域数据库边界。
+
+## 4. 平台控制面核心对象
+
+### 4.1 工程对象：`projects`
+
+`projects` 是平台工程主表，长期承接：
+
+- 工程名称、描述、颜色标签
 - 租户归属
-- 创建人/更新时间
+- 创建者、更新者
 - 工程级变量入口
+- 入口页与入口配置
 
-建议明确：
+正式要求：
 
-- `entryConfig` 的结构边界
-- 导入导出时的来源版本追踪
+- 工程必须保持租户边界清晰。
+- 工程入口配置与设计页结构需要保持一致。
+- 工程级元信息不应和发布快照、运行态状态混写。
 
-### 3.2 `design_pages`
+### 4.2 设计对象：`design_pages`、`design_project_settings`
 
-建议继续作为页面树主表，保留：
+`design_pages` 长期承接：
 
 - 页面层级
 - 页面类型
 - 页面排序
 - 页面 Schema 内容
+- 页面锁信息
 
-建议补强：
-
-- `schemaVersion`
-- 页面根节点与入口一致性校验
-- 页面锁辅助字段和超时策略说明
-
-### 3.3 `design_project_settings`
-
-建议作为工程级设置聚合表，统一承载：
+`design_project_settings` 长期承接：
 
 - 全局变量
 - 全局脚本
@@ -76,96 +97,153 @@
 - 主题配置
 - 工程入口相关元数据
 
-### 3.4 `data_points`
+正式要求：
 
-建议明确字段：
+- 编辑态模型与发布态结构要分离。
+- 页面树关系、入口页与页面类型要保持一致性约束。
 
-- `sourceType`
-- `sourceId`
-- `path`
-- `status`
-- `dataType`
-- `lastSeenAt`
+### 4.3 发布与运维对象：`deployments`、`nodes`、`node_deployments`、`node_commands`
 
-索引建议：
+`deployments` 长期承接：
 
-- `(projectId, path)` 唯一或半唯一约束
-- `(projectId, status)` 普通索引
-- `(projectId, sourceType, sourceId)` 普通索引
+- 发布版本元信息
+- 制品地址、摘要、大小
+- 发布模式与构建状态
+- Manifest 快照
+- 页面数、组件数、数据点数等统计信息
+- 构建时间线与构建日志
 
-### 3.5 `deployments`
+`nodes` 长期承接：
 
-建议明确字段语义：
+- 节点元信息
+- 节点状态与审批状态
+- 当前工程、当前版本、当前部署记录
+- 心跳、最后错误与运行指标
 
-- `mode`
-- `status`
-- `artifactUrl`
-- `artifactHash`
-- `artifactSize`
-- `manifest`
-- `errorMessage`
-- `buildLog`
-- `completedAt`
+`node_deployments` 长期承接：
 
-建议新增或补充：
+- 工程在节点上的部署关系
+- 部署状态、运行模式、运行配置
+- 部署时间线、错误信息、部署日志、运行指标
 
-- `runtimeVersion`
-- `schemaVersion`
-- `entrySnapshot`
-- `assetSummary`
+`node_commands` 长期承接：
 
-### 3.6 `node_deployments`
+- 下发到节点的命令
+- 命令类型与状态
+- 重试次数、超时时间、时间线与错误摘要
 
-建议明确：
+正式要求：
 
-- 一个节点与一个工程在同一时刻只保留一条有效部署关系
-- `mode`、`status`、`runtimeConfig`、`deployLog` 为核心字段
+- `deployments(projectId, version)` 保持强唯一语义。
+- `node_deployments(nodeId, projectId)` 需要保持单活约束。
+- 节点状态与部署状态要支持长期追踪和回溯。
 
-建议增加：
+## 5. 平台侧数据域核心对象
 
-- `lastHeartbeatAt`
-- `runtimeHealth`
-- `lastStatusReason`
+### 5.1 连接对象：`data_connections`
 
-### 3.7 `node_commands`
+`data_connections` 是平台侧数据域连接主表，长期承接：
 
-建议作为节点命令队列表长期保留，补强以下字段语义：
+- 工程归属
+- 连接名称、连接类型、连接类别
+- 连接状态、启停状态、重试与健康检查参数
+- 最后连接时间、最后错误信息
+- 元数据与创建更新审计
 
-- 命令来源
-- 命令类型
-- 重试次数
-- 超时秒数
-- 结果错误摘要
+正式要求：
 
-## 4. 字段、主键、索引、约束建议
+- 连接类型使用显式枚举，不依赖动态字符串扩展。
+- 健康检查、重试与状态信息必须可持久化。
+- 连接主表只承接连接抽象，不混入不同协议的专属配置字段。
 
-- 所有主业务表继续使用 UUID 主键
-- `deployments(projectId, version)` 保持强唯一语义
-- `node_deployments(nodeId, projectId)` 建议保持单活约束
-- `data_points(projectId, path)` 建议增加唯一性检查
-- `nodes(tenantId, name)` 应保持租户内名称唯一
+### 5.2 连接配置对象
 
-## 5. 表关系
+当前 `data_service` 已按“连接主表 + 专属配置表”方式拆分：
 
-- 一个租户有多个用户、工程、节点
-- 一个工程有多个页面、连接、查询、数据点、发布版本
-- 一个发布版本可对应多个节点部署
-- 一个节点部署可关联多个命令
+- 关系库：`data_relational_configs`
+- MQTT：`data_mqtt_configs`
+- Kafka：`data_kafka_configs`
+- HTTP：`data_http_configs`
+- WebSocket：`data_websocket_configs`
+- Redis：`data_redis_configs`
+- OPC UA：`data_opcua_configs`
+- S7：`data_s7_configs`
+- Modbus：`data_modbus_configs`
+- TDengine：`data_tdengine_configs`
 
-## 6. 数据兼容与迁移建议
+正式要求：
 
-### 当前已实现
+- 各协议配置表与 `data_connections` 保持一对一边界。
+- 专属配置字段只出现在对应配置表中，不回流到主表。
 
-- 现有表结构已可用
+### 5.3 查询对象：`data_queries`
 
-### 共创后建议目标
+`data_queries` 长期承接：
 
-- 采取增量迁移，不做破坏式重构
-- 对字段补充优先采用可空新增 + 兼容回填方式
-- 对唯一约束相关表，先清历史脏数据后再收紧约束
+- 查询归属工程与归属连接
+- 查询名称、描述、分类
+- 查询类型
+- 查询配置、转换器、缓存与超时参数
+- 启用状态与创建更新审计
 
-## 7. 待确认事项
+正式要求：
 
-- `design_project_settings` 是否统一收口国际化与主题资源
-- Runtime 运行状态是否需要独立持久化表
-- 是否需要新增制品元信息独立表而不是继续聚合在 `deployments.manifest`
+- 同一工程下查询名保持唯一。
+- 查询配置使用结构化 JSONB，而不是依赖自由文本扩展。
+
+### 5.4 数据点对象：`data_points`
+
+`data_points` 是平台侧正式数据点定义表，长期承接：
+
+- `project_id + path` 唯一的数据点标识
+- 来源类型、来源 ID、来源配置
+- 数据类型、单位、精度、默认值
+- 告警区间、标签、刷新模式、状态
+
+正式要求：
+
+- `data_points(project_id, path)` 保持唯一。
+- 数据点是正式数据域对象，不等同于某个连接或某个协议内部变量。
+- 数据点定义需要同时服务设计态预览和运行态数据域快照。
+
+### 5.5 MQTT、预览会话、计算对象
+
+平台侧数据域还包含以下正式对象：
+
+- MQTT 订阅与消息：`data_mqtt_subscriptions`、`data_mqtt_messages`
+- 开发态预览会话：`data_preview_sessions`
+- 计算定义与运行：`data_compute_units`、`data_compute_runs`
+
+这些对象分别承担：
+
+- 订阅与实时消息缓存
+- 开发态预览生命周期审计
+- 计算单元定义、运行、调试与审计
+
+## 6. 关键约束、索引与设计原则
+
+InduForge 当前数据库设计应长期遵循以下原则：
+
+- 主业务对象优先使用 UUID 主键。
+- 工程级命名对象应尽量保持工程内唯一语义。
+- 高频筛选路径应建立面向 `project_id`、状态、类型和时间的组合索引。
+- JSON / JSONB 字段只用于结构化可演进对象，不替代明确的一对一配置表。
+- 发布部署对象和运行态对象要保持分层，不把运行态瞬时状态全部挤进平台控制表。
+
+## 7. 迁移与演进原则
+
+数据库演进应遵循以下策略：
+
+- 采取增量迁移，不做破坏式重构。
+- 对字段补充优先采用可空新增与兼容回填方式。
+- 对唯一约束相关表，先清理历史脏数据后再收紧约束。
+- 平台侧数据域向 `data_service` 收敛时，优先以正式边界收敛，再处理历史兼容层。
+- 运行态数据库设计在模块正式落地前，不提前冻结不存在的物理表结构。
+
+## 8. 文档关系
+
+- [产品定义](./产品定义.md) 定义哪些模块长期拥有这些数据对象。
+- [高层设计](./高层设计.md) 定义这些持久化对象分布在哪些系统层。
+- [详细设计](./详细设计.md) 定义关键对象如何进入发布、部署和运行链路。
+- [测试与质量策略](./测试与质量策略.md) 定义数据库相关对象、迁移和契约如何被验证。
+- [data_service 概览](./data_service/README.md) 定义平台侧数据域服务的正式边界。

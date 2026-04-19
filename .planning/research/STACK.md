@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-The current designer uses Vue 3 + Konva + Element Plus + GSAP for canvas rendering. The existing codebase already has `placement-utils.ts` (coordinate calculation) and `layout-utils.ts` (layout computation), but these are incomplete for the optimization goals described in `docs/designer/placement-and-stacking.md` and `docs/designer/refactor/layout-system.md`.
+The current designer uses Vue 3 + Konva + Element Plus + GSAP for canvas rendering. The existing codebase already has `placement-utils.ts` (coordinate calculation) and `layout-utils.ts` (layout computation), but these are incomplete for the optimization goals described in `docs/designer/placement-and-stacking.md` and `.planning/docs/process/designer/refactor/layout-system.md`.
 
 This research identifies specific library additions needed to address:
 1. Inefficient hit testing (O(n) DOM queries)
@@ -54,7 +54,7 @@ npm install -D @types/rbush
 **Library:** `kiwi.js`
 **Version:** `^1.0.0`
 **Purpose:** Solve constraint equations for FreeContainer's constraint-based positioning (top/right/bottom/left/width/height/keepAspect)
-**Why:** Current implementation in `docs/designer/refactor/layout-system.md` Section 3.3 uses hand-written if-else constraint solving. A constraint solver handles edge cases (conflicting constraints, underconstrained systems) more robustly.
+**Why:** Current implementation in `.planning/docs/process/designer/refactor/layout-system.md` Section 3.3 uses hand-written if-else constraint solving. A constraint solver handles edge cases (conflicting constraints, underconstrained systems) more robustly.
 
 **Integration Points:**
 - New file: `designer/src/editor-core/layout/ConstraintsSolver.ts`
@@ -72,7 +72,7 @@ npm install -D @types/rbush
 pnpm --dir designer add kiwi.js
 ```
 
-**Note:** If `kiwi.js` proves problematic (JS ports of constraint solvers are often buggy), fallback to improved hand-written solver based on the algorithm in `docs/designer/refactor/layout-system.md`. Do NOT use `cassowary` (unmaintained, problematic JS port).
+**Note:** If `kiwi.js` proves problematic (JS ports of constraint solvers are often buggy), fallback to improved hand-written solver based on the algorithm in `.planning/docs/process/designer/refactor/layout-system.md`. Do NOT use `cassowary` (unmaintained, problematic JS port).
 
 ---
 
@@ -232,6 +232,6 @@ Week 7-8:
 
 - [rbush npm](https://www.npmjs.com/package/rbush) - Spatial indexing
 - [kiwi.js npm](https://www.npmjs.com/package/kiwi.js) - Constraint solver
-- [docs/designer/refactor/layout-system.md](./layout-system.md) - Layout mode definitions
+- [.planning/docs/process/designer/refactor/layout-system.md](./layout-system.md) - Layout mode definitions
 - [docs/designer/placement-and-stacking.md](./placement-and-stacking.md) - Current pain points
 - Existing codebase analysis: `designer/src/editor-core/utils/placement-utils.ts`, `designer/src/editor-core/utils/layout-utils.ts`

@@ -147,7 +147,7 @@ NodeRenderer reacts to docVersion change
 ### FreeContainer
 - **Schema**: `layoutItem: { free: { mode: 'abs', abs: {x,y,w,h,z} } | { mode: 'constraints', constraints: {...} } }`
 - **Positioning**: `absolutePos` on node + `layoutItem.free.abs`
-- **Constraints**: Documented in `docs/designer/refactor/layout-system.md`
+- **Constraints**: Documented in `.planning/docs/process/designer/refactor/layout-system.md`
 - **Status**: abs mode exists, constraints mode documented but not fully implemented
 
 ### GridContainer
@@ -350,6 +350,6 @@ const computedBounds = computed(() => {
 - `designer/src/ui/editors/page/canvas/composables/use-node-drop.ts` - Drop handling composable
 - `designer/src/ui/editors/page/canvas/composables/use-canvas-viewport-placement.ts` - Viewport placement
 - `designer/src/ui/editors/page/canvas/CanvasContainer.vue` - Canvas container
-- `docs/designer/refactor/layout-system.md` - Layout system design
-- `docs/designer/refactor/schema-design.md` - Schema v2 design
-- `docs/designer/refactor/editor-core.md` - Editor core architecture
+- `.planning/docs/process/designer/refactor/layout-system.md` - Layout system design
+- `.planning/docs/process/designer/refactor/schema-design.md` - Schema v2 design
+- `.planning/docs/process/designer/refactor/editor-core.md` - Editor core architecture

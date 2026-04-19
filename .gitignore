@@ -65,3 +65,7 @@ designer/testing/tmp/
 .playwright-cli/
 .playwright-cli/output/
 miniio/PID
+
+
+datacenter/dist
+data_service/*.exe

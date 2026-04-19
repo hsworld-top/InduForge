@@ -10,9 +10,9 @@
 - `designer/src/`
 - `designer/scripts/`
 - `docs/designer/README.md`
-- `docs/designer/refactor/README.md`
+- `.planning/docs/process/designer/refactor/README.md`
 - `docs/contracts/designer-publish-schema.md`
-- `docs/ai-packages/designer-ai-package.md`
+- `.planning/ai-packages/designer-ai-package.md`
 
 ## 必须遵守
 
@@ -37,5 +37,5 @@
 ## 相关参考文档
 
 - `docs/designer/README.md`
-- `docs/designer/refactor/publish-pipeline.md`
-- `docs/ai-packages/tasks/designer.task.md`
+- `.planning/docs/process/designer/refactor/publish-pipeline.md`
+- `.planning/ai-packages/tasks/designer.task.md`

@@ -8,7 +8,7 @@
 
 - `runtime/node_agent/`
 - `runtime/node_agent_front/`
-- `docs/README_nodeagent.md`
+- `.planning/docs/process/runtime/README_nodeagent.md`
 - `docs/contracts/node-agent-runtime-protocol.md`
 - `docs/contracts/runtime-health-status-contract.md`
 
@@ -30,6 +30,6 @@
 
 ## 相关参考文档
 
-- `docs/README_nodeagent.md`
-- `docs/ai-packages/runtime_node_agent-ai-package.md`
-- `docs/ai-packages/runtime_engine-ai-package.md`
+- `.planning/docs/process/runtime/README_nodeagent.md`
+- `.planning/ai-packages/runtime_node_agent-ai-package.md`
+- `.planning/ai-packages/runtime_engine-ai-package.md`

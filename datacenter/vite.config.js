@@ -8,6 +8,10 @@ import path from "path";
 export default defineConfig(({ mode }) => {
   // 从项目根目录加载环境变量
   const env = loadEnv(mode, path.resolve(__dirname, "../"), "");
+  // 数据服务本地调试地址：
+  // 1. 支持从环境变量覆盖（VITE_DATA_SERVICE_URL）
+  // 2. 未配置时默认走本地 Go 数据服务端口 19099
+  const dataServiceUrl = env.VITE_DATA_SERVICE_URL || "http://localhost:19099";
 
   return {
     base: "/datacenter/", // 部署到 /datacenter/ 路径
@@ -22,6 +26,7 @@ export default defineConfig(({ mode }) => {
     // 确保环境变量被注入到前端代码中
     define: {
       __VITE_API_URL__: JSON.stringify(env.VITE_API_URL),
+      __VITE_DATA_SERVICE_URL__: JSON.stringify(dataServiceUrl),
     },
     resolve: {
       alias: {
@@ -32,6 +37,14 @@ export default defineConfig(({ mode }) => {
       port: Number(env.VITE_DATACENTER_PORT),
       host: true,
       proxy: {
+        // 数据中心的数据域接口统一打到独立 Go 数据服务
+        // 例如 /api/v1/data/projects/:projectId/...
+        "/api/v1/data": {
+          target: dataServiceUrl,
+          changeOrigin: true,
+          secure: false,
+        },
+        // 其余 /api 仍走原有后端（dev_core）
         "/api": {
           target: env.VITE_API_URL,
           changeOrigin: true,

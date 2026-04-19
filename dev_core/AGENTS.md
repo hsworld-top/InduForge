@@ -12,7 +12,7 @@
 - `dev_core/src/services/`
 - `docs/backend/README.md`
 - `docs/contracts/designer-publish-schema.md`
-- `docs/ai-packages/dev_core-ai-package.md`
+- `.planning/ai-packages/dev_core-ai-package.md`
 
 ## 必须遵守
 
@@ -37,4 +37,4 @@
 
 - `docs/backend/publish-deploy-api.md`
 - `docs/contracts/ifp-manifest-contract.md`
-- `docs/ai-packages/tasks/dev_core.task.md`
+- `.planning/ai-packages/tasks/dev_core.task.md`

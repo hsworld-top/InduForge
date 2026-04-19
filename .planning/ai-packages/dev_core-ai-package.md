@@ -20,10 +20,10 @@
 - 保持与发布态 Schema 一致，避免两套结构。
 
 ## 5. 直接输入
-- [产品决策确认版](../产品决策确认版.md)
-- [开发态预览专项计划](../开发态预览专项计划.md)
-- [发布态 Schema 契约](../contracts/designer-publish-schema.md)
-- [IFP Manifest 契约](../contracts/ifp-manifest-contract.md)
+- [产品定义](../../docs/产品定义.md)
+- [开发态预览专项计划](../docs/process/platform/开发态预览专项计划.md)
+- [发布态 Schema 契约](../../docs/contracts/designer-publish-schema.md)
+- [IFP Manifest 契约](../../docs/contracts/ifp-manifest-contract.md)
 - [dev_core.task](./tasks/dev_core.task.md)
 
 ## 6. 输出物

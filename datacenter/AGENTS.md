@@ -10,8 +10,8 @@
 - `datacenter/src/`
 - `docs/datacenter/README.md`
 - `docs/datacenter/queries.md`
-- `docs/datacenter/mqtt-implementation.md`
-- `docs/ai-packages/datacenter-ai-package.md`
+- `.planning/docs/process/datacenter/mqtt-implementation.md`
+- `.planning/ai-packages/datacenter-ai-package.md`
 
 ## 必须遵守
 
@@ -36,4 +36,4 @@
 ## 相关参考文档
 
 - `docs/datacenter/README.md`
-- `docs/ai-packages/tasks/datacenter.task.md`
+- `.planning/ai-packages/tasks/datacenter.task.md`

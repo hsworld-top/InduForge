@@ -84,16 +84,14 @@ project.ifp
 - `checksum` 必须覆盖整个包。
 - `schemaVersion` 不兼容时，NodeAgent 或 Runtime 必须拒绝启动。
 
-## 8. 当前阶段非目标
+## 8. 非目标
 - 不做差分包。
 - 不做复杂多包依赖。
 - 不强制引入数字签名。
 
 ## 9. 关联文档
-- [发布流水线](../designer/refactor/publish-pipeline.md)
-- [运行时闭环专项计划](../运行时闭环专项计划.md)
-- [dev_core.task](../ai-packages/tasks/dev_core.task.md)
-
-## 10. 待确认事项
-- `version` 是否统一使用时间戳序列风格。
-- `capabilities` 是否需要拆成硬依赖与软依赖。
+- [产品定义](../产品定义.md)
+- [高层设计](../高层设计.md)
+- [详细设计](../详细设计.md)
+- [dev_core 后端概览](../backend/README.md)
+- [测试与质量策略](../测试与质量策略.md)

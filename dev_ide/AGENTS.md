@@ -11,7 +11,7 @@
 - `dev_ide/tests/`
 - `docs/dev_ide/README.md`
 - `docs/contracts/runtime-health-status-contract.md`
-- `docs/ai-packages/dev_ide-ai-package.md`
+- `.planning/ai-packages/dev_ide-ai-package.md`
 
 ## 必须遵守
 
@@ -36,4 +36,4 @@
 ## 相关参考文档
 
 - `docs/dev_ide/README.md`
-- `docs/ai-packages/tasks/dev_ide.task.md`
+- `.planning/ai-packages/tasks/dev_ide.task.md`

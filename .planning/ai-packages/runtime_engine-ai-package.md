@@ -20,12 +20,12 @@
 - 为未来独立运行态预留宿主接口
 
 ## 5. 直接输入
-- [产品决策确认版](../产品决策确认版.md)
-- [开发态预览专项计划](../开发态预览专项计划.md)
-- [发布态 Schema 契约](../contracts/designer-publish-schema.md)
-- [IFP Manifest 契约](../contracts/ifp-manifest-contract.md)
-- [NodeAgent 启动协议](../contracts/node-agent-runtime-protocol.md)
-- [Runtime 健康状态协议](../contracts/runtime-health-status-contract.md)
+- [产品定义](../../docs/产品定义.md)
+- [开发态预览专项计划](../docs/process/platform/开发态预览专项计划.md)
+- [发布态 Schema 契约](../../docs/contracts/designer-publish-schema.md)
+- [IFP Manifest 契约](../../docs/contracts/ifp-manifest-contract.md)
+- [NodeAgent 启动协议](../../docs/contracts/node-agent-runtime-protocol.md)
+- [Runtime 健康状态协议](../../docs/contracts/runtime-health-status-contract.md)
 - [runtime_engine.task](./tasks/runtime_engine.task.md)
 
 ## 6. 输出物
