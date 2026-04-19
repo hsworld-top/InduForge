@@ -70,6 +70,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_modbus_configs",
 		"data_tdengine_configs",
 		"data_preview_sessions",
+		"data_compute_units",
+		"data_compute_runs",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("expected table %s to exist", tableName)
@@ -80,8 +82,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 5 {
-		t.Fatalf("鏈熸湜宸叉湁 5 鏉?migration 璁板綍锛屽疄闄呬负 %d", appliedCount)
+	if appliedCount != 6 {
+		t.Fatalf("expected 6 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -105,6 +107,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_modbus_configs",
 		"data_tdengine_configs",
 		"data_preview_sessions",
+		"data_compute_units",
+		"data_compute_runs",
 	} {
 		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("鏈熸湜琛?%s 宸茶鍒犻櫎", tableName)
@@ -156,6 +160,11 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_tdengine_configs_database_idx",
 		"data_preview_sessions_project_user_status_idx",
 		"data_preview_sessions_last_active_at_idx",
+		"data_compute_units_project_name_key",
+		"data_compute_units_project_enabled_idx",
+		"data_compute_units_project_language_idx",
+		"data_compute_runs_unit_created_idx",
+		"data_compute_runs_project_created_idx",
 	} {
 		if _, ok := indexes[indexName]; !ok {
 			t.Fatalf("鏈熸湜绱㈠紩/绾︽潫绱㈠紩 %s 瀛樺湪锛屽綋鍓嶇储寮曢泦鍚堜负 %v", indexName, mapsKeys(indexes))
@@ -295,7 +304,9 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
               'data_s7_configs',
               'data_modbus_configs',
               'data_tdengine_configs',
-              'data_preview_sessions'
+              'data_preview_sessions',
+              'data_compute_units',
+              'data_compute_runs'
           )
     `, schemaName)
 	if err != nil {

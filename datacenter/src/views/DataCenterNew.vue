@@ -130,9 +130,9 @@
             <!-- 计算单元 -->
             <div
               v-else-if="tab.type === 'calc-units'"
-              class="flex-1 flex items-center justify-center text-gray-500"
+              class="flex-1 flex flex-col overflow-hidden"
             >
-              计算单元功能规划中
+              <ComputeUnitPanel :project-id="projectId" />
             </div>
 
             <!-- 报警单元 -->
@@ -334,6 +334,7 @@ import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
 import MqttTagList from "@/components/mqtt/MqttTagList.vue";
 import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
 import DataPointList from "@/components/datapoint/DataPointList.vue";
+import ComputeUnitPanel from "@/components/compute/ComputeUnitPanel.vue";
 import { useConnection } from "@/composables/useConnection";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import dataAPI from "@/api/data.api";

@@ -16,6 +16,7 @@ type options struct {
 	protocolWave1Handler *handler.ProtocolWave1Handler
 	protocolWave2Handler *handler.ProtocolWave2Handler
 	previewHandler       *handler.PreviewHandler
+	computeHandler       *handler.ComputeHandler
 	jwtValidator         *auth.JWTValidator
 }
 
@@ -71,6 +72,14 @@ func WithPreviewRoutes(previewHandler *handler.PreviewHandler, jwtValidator *aut
 	}
 }
 
+// WithComputeRoutes 注入 compute 领域路由所需依赖。
+func WithComputeRoutes(computeHandler *handler.ComputeHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.computeHandler = computeHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // NewRouter 创建 data_service 的基础 HTTP 路由。
 func NewRouter(routeOptions ...Option) http.Handler {
 	opts := options{}
@@ -90,6 +99,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
 	mountPreviewRoutes(mux, opts)
+	mountComputeRoutes(mux, opts)
 	return mux
 }
 
@@ -391,6 +401,37 @@ func mountPreviewRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
 				middleware.ErrorHandler(opts.previewHandler.Delete),
+			),
+		),
+	)
+}
+
+func mountComputeRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.computeHandler == nil {
+		return
+	}
+
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/compute-units",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.Create),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/compute-units/{id}/run",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.Run),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/compute-units/{id}/debug",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.Debug),
 			),
 		),
 	)

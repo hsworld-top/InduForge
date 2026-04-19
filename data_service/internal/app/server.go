@@ -13,6 +13,7 @@ import (
 	"github.com/indu-forge/data_service/internal/cache"
 	"github.com/indu-forge/data_service/internal/config"
 	"github.com/indu-forge/data_service/internal/db/postgres"
+	enginecompute "github.com/indu-forge/data_service/internal/engine/compute"
 	"github.com/indu-forge/data_service/internal/http/handler"
 	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/router"
@@ -136,6 +137,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	mqttRepository := repository.NewMqttRepository(pool)
 	protocolWave1Repository := repository.NewProtocolWave1Repository(pool)
 	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
+	computeRepository := repository.NewComputeRepository(pool)
 
 	connectionService := service.NewConnectionService(connectionRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, pool)
@@ -143,6 +145,12 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	mqttService := service.NewMqttService(mqttRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
 	protocolWave2Service := service.NewProtocolWave2Service(protocolWave2Repository)
+	computeService := service.NewComputeService(
+		computeRepository,
+		enginecompute.NewNodeRunner("", ""),
+		enginecompute.NewPythonRunner("", ""),
+		enginecompute.NewScheduler(),
+	)
 
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
@@ -150,6 +158,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service)
 	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
+	computeHandler := handler.NewComputeHandler(computeService)
 
 	routeOptions := []router.Option{
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
@@ -157,6 +166,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
 		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
+		router.WithComputeRoutes(computeHandler, jwtValidator),
 	}
 
 	if err := config.ValidatePreviewDependencies(cfg); err != nil {

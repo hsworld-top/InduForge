@@ -585,6 +585,51 @@ export const getMqttTagValues = (tagIds) => {
   });
 };
 
+// ===========================================
+// Compute 鐩稿叧 API
+// ===========================================
+
+/**
+ * 鍒涘缓璁＄畻鍗曞厓
+ * @param {string} projectId - 宸ョ▼ID
+ * @param {object} data - 璁＄畻鍗曞厓鏁版嵁
+ */
+export const createComputeUnit = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/compute-units`,
+    method: "post",
+    data,
+  });
+};
+
+/**
+ * 鎵ц璁＄畻鍗曞厓
+ * @param {string} projectId - 宸ョ▼ID
+ * @param {string} id - 璁＄畻鍗曞厓ID
+ * @param {object} input - 杈撳叆鍙傛暟
+ */
+export const runComputeUnit = (projectId, id, input = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/compute-units/${id}/run`,
+    method: "post",
+    data: { input },
+  });
+};
+
+/**
+ * 璋冭瘯璁＄畻鍗曞厓
+ * @param {string} projectId - 宸ョ▼ID
+ * @param {string} id - 璁＄畻鍗曞厓ID
+ * @param {object} input - 杈撳叆鍙傛暟
+ */
+export const debugComputeUnit = (projectId, id, input = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/compute-units/${id}/debug`,
+    method: "post",
+    data: { input },
+  });
+};
+
 export default {
   getConnections,
   createConnection,
@@ -634,4 +679,7 @@ export default {
   updateMqttTagsOrder,
   getMqttTagValue,
   getMqttTagValues,
+  createComputeUnit,
+  runComputeUnit,
+  debugComputeUnit,
 };
