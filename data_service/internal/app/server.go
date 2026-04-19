@@ -132,20 +132,24 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	queryRepository := repository.NewQueryRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
+	protocolWave1Repository := repository.NewProtocolWave1Repository(pool)
 
 	connectionService := service.NewConnectionService(connectionRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, pool)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService)
 	mqttService := service.NewMqttService(mqttRepository)
+	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
 
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
+	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service)
 
 	return []router.Option{
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
+		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
 	}, pool.Close, nil
 }

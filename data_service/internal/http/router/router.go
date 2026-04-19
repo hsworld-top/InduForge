@@ -9,11 +9,12 @@ import (
 )
 
 type options struct {
-	connectionHandler *handler.ConnectionHandler
-	queryHandler      *handler.QueryHandler
-	dataPointHandler  *handler.DataPointHandler
-	mqttHandler       *handler.MqttHandler
-	jwtValidator      *auth.JWTValidator
+	connectionHandler    *handler.ConnectionHandler
+	queryHandler         *handler.QueryHandler
+	dataPointHandler     *handler.DataPointHandler
+	mqttHandler          *handler.MqttHandler
+	protocolWave1Handler *handler.ProtocolWave1Handler
+	jwtValidator         *auth.JWTValidator
 }
 
 // Option 定义路由装配的可选依赖。
@@ -44,6 +45,14 @@ func WithMqttRoutes(mqttHandler *handler.MqttHandler, jwtValidator *auth.JWTVali
 	}
 }
 
+// WithProtocolWave1Routes 注入第一波协议路由所需依赖。
+func WithProtocolWave1Routes(protocolWave1Handler *handler.ProtocolWave1Handler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.protocolWave1Handler = protocolWave1Handler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // NewRouter 创建 data_service 的基础 HTTP 路由。
 func NewRouter(routeOptions ...Option) http.Handler {
 	opts := options{}
@@ -60,6 +69,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountConnectionRoutes(mux, opts)
 	mountDataRoutes(mux, opts)
 	mountMqttRoutes(mux, opts)
+	mountProtocolWave1Routes(mux, opts)
 	return mux
 }
 
@@ -236,6 +246,53 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.mqttHandler.ListMessages),
+			),
+		),
+	)
+}
+
+func mountProtocolWave1Routes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.protocolWave1Handler == nil {
+		return
+	}
+
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/kafka/configs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave1Handler.CreateKafkaConfig),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/kafka/configs/{connectionId}/preview",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.protocolWave1Handler.PreviewKafkaTopic),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/http/configs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave1Handler.CreateHTTPConfig),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/websocket/configs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave1Handler.CreateWebSocketConfig),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/redis/configs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave1Handler.CreateRedisConfig),
 			),
 		),
 	)

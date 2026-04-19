@@ -431,7 +431,7 @@ git add data_service/internal/repository data_service/internal/service data_serv
 git commit -m "feat(product): 承接 queries 与 datapoints 接口"
 ```
 
-### Task 7: MQTT 全链路承接（M6）
+### Task 7: MQTT 全链路承接（M6） ✅（已完成）
 
 **Files:**
 - Create: `data_service/internal/repository/mqtt_repository.go`
@@ -470,7 +470,7 @@ r.HandleFunc("/api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscription
 Run: `go test ./tests/integration -run TestMqttConnectionLifecycle -v`  
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add data_service/internal/repository data_service/internal/service data_service/internal/http/handler data_service/internal/db/migrations data_service/tests/integration
@@ -488,7 +488,7 @@ git commit -m "feat(product): 承接 MQTT 全链路接口与数据表"
 - Create: `data_service/internal/db/migrations/0003_protocol_wave1.sql`
 - Test: `data_service/tests/integration/protocol_wave1_test.go`
 
-- [ ] **Step 1: 写 wave1 协议失败用例**
+- [x] **Step 1: 写 wave1 协议失败用例**
 
 ```go
 func TestKafkaSourcePreview(t *testing.T) {
@@ -499,12 +499,12 @@ func TestKafkaSourcePreview(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 运行失败验证**
+- [x] **Step 2: 运行失败验证**
 
 Run: `go test ./tests/integration -run TestKafkaSourcePreview -v`  
 Expected: FAIL。
 
-- [ ] **Step 3: 实现 wave1 协议 handler 与仓储**
+- [x] **Step 3: 实现 wave1 协议 handler 与仓储**
 
 ```go
 r.HandleFunc("/api/v1/data/projects/{projectId}/kafka/configs", h.CreateKafkaConfig).Methods(http.MethodPost)
@@ -513,7 +513,7 @@ r.HandleFunc("/api/v1/data/projects/{projectId}/websocket/configs", h.CreateWebS
 r.HandleFunc("/api/v1/data/projects/{projectId}/redis/configs", h.CreateRedisConfig).Methods(http.MethodPost)
 ```
 
-- [ ] **Step 4: 跑 wave1 集成测试**
+- [x] **Step 4: 跑 wave1 集成测试**
 
 Run: `go test ./tests/integration -run TestProtocolWave1 -v`  
 Expected: PASS

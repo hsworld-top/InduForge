@@ -61,6 +61,10 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_mqtt_configs",
 		"data_mqtt_subscriptions",
 		"data_mqtt_messages",
+		"data_kafka_configs",
+		"data_http_configs",
+		"data_websocket_configs",
+		"data_redis_configs",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("期望表 %s 已创建", tableName)
@@ -71,8 +75,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("查询 schema_migrations 失败: %v", err)
 	}
-	if appliedCount != 2 {
-		t.Fatalf("期望已有 2 条 migration 记录，实际为 %d", appliedCount)
+	if appliedCount != 3 {
+		t.Fatalf("期望已有 3 条 migration 记录，实际为 %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -87,6 +91,10 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_mqtt_configs",
 		"data_mqtt_subscriptions",
 		"data_mqtt_messages",
+		"data_kafka_configs",
+		"data_http_configs",
+		"data_websocket_configs",
+		"data_redis_configs",
 	} {
 		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("期望表 %s 已被删除", tableName)
@@ -128,6 +136,10 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_mqtt_subscriptions_connection_enabled_idx",
 		"data_mqtt_messages_project_subscription_received_idx",
 		"data_mqtt_messages_subscription_received_idx",
+		"data_kafka_configs_topic_idx",
+		"data_http_configs_method_idx",
+		"data_websocket_configs_url_idx",
+		"data_redis_configs_mode_idx",
 	} {
 		if _, ok := indexes[indexName]; !ok {
 			t.Fatalf("期望索引/约束索引 %s 存在，当前索引集合为 %v", indexName, mapsKeys(indexes))
@@ -258,7 +270,11 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
               'data_points',
               'data_mqtt_configs',
               'data_mqtt_subscriptions',
-              'data_mqtt_messages'
+              'data_mqtt_messages',
+              'data_kafka_configs',
+              'data_http_configs',
+              'data_websocket_configs',
+              'data_redis_configs'
           )
     `, schemaName)
 	if err != nil {
