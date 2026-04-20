@@ -31,6 +31,26 @@
 - 平台治理、工程管理和部署操作流程必须具备稳定冒烟验证。
 - 关键运维入口不能依赖隐式状态或局部约定。
 
+## 子应用宿主化与调试
+
+### 正式入口约定
+
+- `designer` 与 `datacenter` 的正式入口由 `dev_ide` 作为宿主打开，不再依赖 URL 传递 `token`、`refreshToken`、`pid`、`tenant`、`theme`、`locale`。
+- `dev_ide` 通过 iframe 加载正式入口，并在子应用启动后使用 `postMessage` 完成 bootstrap 握手。
+- 正式入口 URL 仅允许保留 `handoff` 这类非敏感恢复票据，不允许再把鉴权或租户上下文拼到查询串。
+
+### 调试方式
+
+1. 调试正式链路时，先启动 `dev_ide`，再从 IDE 内打开设计中心或数据中心标签页。
+2. 在浏览器开发者工具里查看 iframe 的 `APP_BOOTSTRAP_REQUEST`、`APP_BOOTSTRAP_RESPONSE`、`AUTH_REFRESHED`、`AUTH_EXPIRED` 消息，确认宿主握手与续租回传是否正常。
+3. 需要验证主题、语言同步时，在 `dev_ide` 内切换对应设置，观察子应用是否收到 `THEME_UPDATE`、`LOCALE_UPDATE`。
+
+### 顶层打开与刷新行为
+
+- 用户直接访问 `/designer/`、`/datacenter/` 这类正式入口时，页面应重定向回 `dev_ide`，由 IDE 决定恢复哪个子应用标签页。
+- 如果子应用页面已经被单独打开成浏览器标签页，刷新后仍会依赖 `handoff` 回附 IDE；`handoff` 丢失或过期时，会降级回 IDE 首页。
+- 独立调试请使用子应用自己的 `/debug` 入口，不要把正式入口当成独立运行入口。
+
 ## 关联文档
 
 - [产品定义](../产品定义.md)
@@ -38,3 +58,5 @@
 - [详细设计](../详细设计.md)
 - [测试与质量策略](../测试与质量策略.md)
 - [dev_core 后端概览](../backend/README.md)
+- [设计器概览](../designer/README.md)
+- [数据中心概览](../datacenter/README.md)

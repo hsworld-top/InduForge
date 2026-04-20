@@ -1,68 +1,35 @@
-import { STORAGE_KEYS } from "../constants/index.js";
 import { Storage } from "../utils/storage.js";
 
-const APP_NAME = "datacenter";
-const APP_BOOTSTRAP_REQUEST = "APP_BOOTSTRAP_REQUEST";
-const APP_BOOTSTRAP_RESPONSE = "APP_BOOTSTRAP_RESPONSE";
-const AUTH_REFRESHED = "AUTH_REFRESHED";
-const AUTH_EXPIRED = "AUTH_EXPIRED";
+export const DATACENTER_APP = "datacenter";
+export const APP_BOOTSTRAP_REQUEST = "APP_BOOTSTRAP_REQUEST";
+export const APP_BOOTSTRAP_RESPONSE = "APP_BOOTSTRAP_RESPONSE";
+export const AUTH_REFRESHED = "AUTH_REFRESHED";
+export const AUTH_EXPIRED = "AUTH_EXPIRED";
+export const APP_BOOTSTRAP_TIMEOUT_MS = 3000;
 
-const DEFAULT_BOOTSTRAP_TIMEOUT_MS = 3000;
+const DEBUG_BASE_PATH = "/datacenter/debug";
 
 let currentSession = null;
-let bootstrapListenerAttached = false;
 
-function getRuntimeWindow() {
-  return typeof window === "undefined" ? null : window;
-}
+const asNonEmptyString = (value) =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
-function getRuntimeDocumentReferrer() {
-  return typeof document === "undefined" ? "" : document.referrer || "";
-}
+const getTimerApi = () => globalThis.window ?? globalThis;
 
-function getCurrentLocationHref() {
-  const runtimeWindow = getRuntimeWindow();
-  return runtimeWindow?.location?.href || "http://localhost/";
-}
+const resolveWindowLike = () => globalThis.window ?? null;
 
-function asNonEmptyString(value) {
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
+const resolveDocumentLike = () => globalThis.document ?? null;
 
-function toAbsoluteUrl(value, base = getCurrentLocationHref()) {
-  try {
-    return new URL(value, base);
-  } catch {
-    return null;
+const resolveCurrentUrl = (url) => {
+  const candidate =
+    asNonEmptyString(url) ?? resolveWindowLike()?.location?.href;
+  if (!candidate) {
+    throw new Error("缺少当前 URL，无法初始化宿主 bootstrap");
   }
-}
+  return new URL(candidate);
+};
 
-function resolveTrustedOriginFromReferrer(referrer) {
-  const trustedReferrer = asNonEmptyString(referrer);
-  if (!trustedReferrer) {
-    return null;
-  }
-
-  try {
-    return new URL(trustedReferrer).origin;
-  } catch {
-    return null;
-  }
-}
-
-function resolveTrustedSourceFromWindow(parentWindow, selfWindow) {
-  if (!parentWindow || parentWindow === selfWindow) {
-    return null;
-  }
-
-  return parentWindow;
-}
-
-function normalizeTimeoutMs(timeoutMs) {
-  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_BOOTSTRAP_TIMEOUT_MS;
-}
-
-function resolveHandoffValue(handoff) {
+const resolveHandoffValue = (handoff) => {
   if (typeof handoff === "string") {
     return asNonEmptyString(handoff);
   }
@@ -71,174 +38,99 @@ function resolveHandoffValue(handoff) {
     return null;
   }
 
-  return asNonEmptyString(handoff.handoffId);
-}
+  return asNonEmptyString(handoff.handoff);
+};
 
-function resolveHandoffFromUrl(url) {
-  const handoffId = asNonEmptyString(url.searchParams.get("handoffId"));
-  return handoffId ? { handoffId } : null;
-}
-
-function clearAuthStorage() {
-  Storage.remove(STORAGE_KEYS.TOKEN);
-  Storage.remove(STORAGE_KEYS.REFRESH_TOKEN);
-  Storage.remove(STORAGE_KEYS.USER_INFO);
-  Storage.remove(STORAGE_KEYS.TENANT_ID);
-}
-
-function clearProjectStorage() {
-  Storage.remove(STORAGE_KEYS.PROJECT_ID);
-}
-
-function ensureBootstrapListener() {
-  const runtimeWindow = getRuntimeWindow();
-  if (!runtimeWindow || bootstrapListenerAttached) {
-    return;
-  }
-
-  runtimeWindow.addEventListener("message", handleWindowMessage);
-  bootstrapListenerAttached = true;
-}
-
-function settleCurrentSession(value) {
-  if (!currentSession) {
-    return;
-  }
-
-  currentSession.bootstrapGate.settle(value);
-}
-
-function resolveMessagePayload(data) {
-  if (!data || typeof data !== "object") {
+const resolveMessagePayload = (value) => {
+  if (!value || typeof value !== "object") {
     return {};
   }
 
-  const record = data;
-  if (record.payload && typeof record.payload === "object") {
-    return record.payload;
+  if (value.payload && typeof value.payload === "object") {
+    return value.payload;
   }
 
-  return record;
-}
+  return value;
+};
 
-function handleWindowMessage(event) {
-  if (!currentSession || !isTrustedHostMessage(event)) {
-    return;
+function createBootstrapGate(shouldWaitForBootstrap) {
+  if (!shouldWaitForBootstrap) {
+    return {
+      promise: Promise.resolve(true),
+      settle: () => {},
+    };
   }
 
-  const data = event.data;
-  if (!data || typeof data !== "object" || data.type !== APP_BOOTSTRAP_RESPONSE) {
-    return;
-  }
-
-  const responsePayload = resolveMessagePayload(data);
-  const responseRequestId = asNonEmptyString(data.requestId) || asNonEmptyString(responsePayload.requestId);
-  const expectedRequestId = currentSession.requestMessage?.requestId || null;
-
-  if (expectedRequestId && responseRequestId && responseRequestId !== expectedRequestId) {
-    return;
-  }
-
-  applyBootstrapPayload(responsePayload);
-  settleCurrentSession(true);
-}
-
-function createBootstrapGate(timeoutMs) {
-  const runtimeWindow = getRuntimeWindow();
-  const timerApi = runtimeWindow || globalThis;
   let settled = false;
-  let resolvePromise = () => {};
-
+  let resolvePromise = (_value) => {};
+  const timerApi = getTimerApi();
   const promise = new Promise((resolve) => {
     resolvePromise = resolve;
   });
 
+  /**
+   * iframe 正式入口只允许等待有限时间。
+   * 宿主未响应、origin/source 不匹配或 requestId 对不上时，最终都必须回落，
+   * 避免路由守卫永久卡住。
+   */
   const settle = (value) => {
     if (settled) {
       return;
     }
 
     settled = true;
-    if (timeoutId !== null) {
-      timerApi.clearTimeout(timeoutId);
-    }
+    timerApi.clearTimeout(timeoutId);
     resolvePromise(value);
   };
 
   const timeoutId = timerApi.setTimeout(() => {
     settle(false);
-  }, timeoutMs);
-
-  return { promise, settle };
-}
-
-function postMessageToTarget(target, origin, message) {
-  if (!target?.postMessage || !origin) {
-    return false;
-  }
-
-  target.postMessage(message, origin);
-  return true;
-}
-
-function resolveBootstrapTarget(options = {}) {
-  const runtimeWindow = options.selfWindow ?? getRuntimeWindow();
-  const parentWindow = options.parentWindow ?? runtimeWindow?.parent ?? null;
-  const source = resolveTrustedSourceFromWindow(parentWindow, runtimeWindow);
-  const origin =
-    asNonEmptyString(options.trustedOrigin) ||
-    resolveTrustedOriginFromReferrer(options.referrer ?? getRuntimeDocumentReferrer());
+  }, APP_BOOTSTRAP_TIMEOUT_MS);
 
   return {
-    origin,
-    source,
+    promise,
+    settle,
   };
 }
 
-function resolveIdeOriginFromRuntime(options = {}) {
-  const currentUrl = options.currentUrl ?? getCurrentLocationHref();
-  const configuredIdeOrigin = asNonEmptyString(options.configuredIdeOrigin ?? import.meta.env?.VITE_IDE_ORIGIN);
-  if (configuredIdeOrigin) {
-    return configuredIdeOrigin;
-  }
-
-  const referrerOrigin = resolveTrustedOriginFromReferrer(options.referrer ?? getRuntimeDocumentReferrer());
-  if (referrerOrigin) {
-    return referrerOrigin;
-  }
-
-  const currentLocation = toAbsoluteUrl(currentUrl);
-  const currentOrigin = currentLocation?.origin || getRuntimeWindow()?.location?.origin || "http://localhost";
-
-  if (options.isDev ?? import.meta.env?.DEV) {
-    const devHost = asNonEmptyString(options.devHost ?? import.meta.env?.VITE_DEV_HOST) || "localhost";
-    const idePort = asNonEmptyString(String(options.idePort ?? import.meta.env?.VITE_IDE_PORT ?? "18601"));
-    const protocol = currentLocation?.protocol === "https:" ? "https:" : "http:";
-
-    if (devHost && idePort) {
-      return `${protocol}//${devHost}:${idePort}`;
-    }
-  }
-
-  return currentOrigin;
+function createBootstrapRequestId() {
+  return `datacenter_bootstrap_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
 }
 
-function resolveTrustedTargetSet() {
-  if (!currentSession?.target?.origin || !currentSession?.target?.source) {
-    return {
-      origins: new Set(),
-      sources: new Set(),
-    };
+function resolveTrustedHostOrigin(referrer = "") {
+  const referrerValue = asNonEmptyString(referrer);
+  if (!referrerValue) {
+    return null;
   }
 
-  return {
-    origins: new Set([currentSession.target.origin]),
-    sources: new Set([currentSession.target.source]),
-  };
+  try {
+    return new URL(referrerValue).origin;
+  } catch {
+    return null;
+  }
+}
+
+function resolveOriginCandidate(value, baseUrl) {
+  const candidate = asNonEmptyString(value);
+  if (!candidate) {
+    return null;
+  }
+
+  try {
+    return new URL(candidate, baseUrl).origin;
+  } catch {
+    return null;
+  }
 }
 
 export function shouldUseDebugMode(pathname) {
-  return pathname === "/datacenter/debug" || pathname.startsWith("/datacenter/debug/");
+  const normalizedPath = pathname || "";
+  return (
+    normalizedPath === DEBUG_BASE_PATH ||
+    normalizedPath.startsWith(`${DEBUG_BASE_PATH}/`)
+  );
 }
 
 export function shouldRedirectTopLevelToIde(pathname, isTopLevel) {
@@ -246,56 +138,56 @@ export function shouldRedirectTopLevelToIde(pathname, isTopLevel) {
 }
 
 export function buildIdeRestoreUrl(handoff, ideOrigin) {
-  const targetOrigin = asNonEmptyString(ideOrigin) || resolveIdeOriginFromRuntime();
-  const targetUrl = new URL("/", targetOrigin);
-  const handoffId = resolveHandoffValue(handoff);
-
-  if (handoffId) {
-    targetUrl.searchParams.set("handoffId", handoffId);
+  const targetUrl = new URL("/", ideOrigin);
+  const handoffValue = resolveHandoffValue(handoff);
+  if (handoffValue) {
+    targetUrl.searchParams.set("handoff", handoffValue);
   }
-
   return targetUrl.toString();
 }
 
-export function createBootstrapRequest({
-  handoff = null,
-  requestId = createBootstrapRequestId(),
-  url = getCurrentLocationHref(),
-} = {}) {
-  const resolvedUrl = toAbsoluteUrl(url) || toAbsoluteUrl(getCurrentLocationHref());
-  const handoffPayload = resolveHandoffValue(handoff);
+export function buildIdeLoginUrl(currentUrl, ideOrigin) {
+  const targetUrl = new URL("/login", ideOrigin);
+  targetUrl.searchParams.set("redirect", currentUrl);
+  return targetUrl.toString();
+}
+
+export function createBootstrapRequest({ handoff, requestId, url } = {}) {
+  const resolvedUrl = resolveCurrentUrl(url);
+  const handoffValue =
+    resolveHandoffValue(handoff) ??
+    asNonEmptyString(resolvedUrl.searchParams.get("handoff"));
+  const requestIdValue =
+    asNonEmptyString(requestId) ?? createBootstrapRequestId();
 
   return {
     type: APP_BOOTSTRAP_REQUEST,
-    app: APP_NAME,
-    requestId,
-    handoff: handoffPayload ? { handoffId: handoffPayload } : null,
-    requestedPath: resolvedUrl?.pathname || "/",
-    requestedQuery: resolvedUrl?.search || "",
+    app: DATACENTER_APP,
+    requestId: requestIdValue,
+    handoff: handoffValue,
+    requestedPath: resolvedUrl.pathname,
+    requestedQuery: resolvedUrl.search,
   };
 }
 
-export function createAuthRefreshedMessage(token, refreshToken = null) {
-  return {
-    type: AUTH_REFRESHED,
-    app: APP_NAME,
-    token,
-    refreshToken: refreshToken ?? null,
-  };
-}
+export function applyThemeToDocument(theme) {
+  if (!["light", "dark"].includes(theme)) {
+    return;
+  }
 
-export function createAuthExpiredMessage() {
-  return {
-    type: AUTH_EXPIRED,
-    app: APP_NAME,
-  };
+  resolveDocumentLike()?.documentElement?.classList?.toggle(
+    "dark",
+    theme === "dark",
+  );
 }
 
 export function applyBootstrapPayload(payload = {}) {
-  const nextToken = asNonEmptyString(payload.token) || asNonEmptyString(payload.accessToken);
+  const nextToken =
+    asNonEmptyString(payload.token) ?? asNonEmptyString(payload.accessToken);
   const nextRefreshToken = asNonEmptyString(payload.refreshToken);
   const nextTenantId = asNonEmptyString(payload.tenantId);
-  const nextProjectId = asNonEmptyString(payload.projectId) || asNonEmptyString(payload.pid);
+  const nextProjectId =
+    asNonEmptyString(payload.projectId) ?? asNonEmptyString(payload.pid);
   const nextTheme = asNonEmptyString(payload.theme);
   const nextLocale = asNonEmptyString(payload.locale);
 
@@ -315,121 +207,237 @@ export function applyBootstrapPayload(payload = {}) {
     Storage.setProjectId(nextProjectId);
   }
 
-  if (nextTheme === "light" || nextTheme === "dark") {
-    Storage.set(STORAGE_KEYS.THEME, nextTheme);
+  if (nextTheme) {
+    Storage.setTheme(nextTheme);
+    applyThemeToDocument(nextTheme);
   }
 
   if (nextLocale) {
-    Storage.set(STORAGE_KEYS.LANGUAGE, nextLocale);
+    Storage.setLanguage(nextLocale);
+  }
+}
+
+export function applyAuthRefreshedPayload(payload = {}) {
+  const nextToken =
+    asNonEmptyString(payload.token) ?? asNonEmptyString(payload.accessToken);
+  const nextRefreshToken = asNonEmptyString(payload.refreshToken);
+
+  if (!nextToken) {
+    return;
+  }
+
+  Storage.setToken(nextToken);
+  if (nextRefreshToken) {
+    Storage.setRefreshToken(nextRefreshToken);
+  }
+}
+
+export function resolveIdeOriginFromRuntime(options = {}) {
+  const currentUrl = options.currentUrl ?? resolveWindowLike()?.location?.href;
+  const configuredIdeOrigin = resolveOriginCandidate(
+    options.configuredIdeOrigin ?? import.meta.env?.VITE_IDE_ORIGIN,
+    currentUrl,
+  );
+  if (configuredIdeOrigin) {
+    return configuredIdeOrigin;
+  }
+
+  const referrerOrigin = resolveTrustedHostOrigin(
+    options.referrer ?? resolveDocumentLike()?.referrer ?? "",
+  );
+  if (referrerOrigin) {
+    return referrerOrigin;
+  }
+
+  const currentLocation = currentUrl
+    ? new URL(currentUrl)
+    : resolveWindowLike()?.location;
+  const currentProtocol =
+    currentLocation?.protocol === "https:" ? "https:" : "http:";
+  const currentHost = currentLocation?.hostname || "localhost";
+  const currentOrigin = currentLocation?.origin || "";
+
+  if (options.isDev ?? import.meta.env?.DEV) {
+    const devHost =
+      asNonEmptyString(options.devHost) ??
+      asNonEmptyString(import.meta.env?.VITE_DEV_HOST) ??
+      currentHost;
+    const idePort = String(
+      options.idePort ?? import.meta.env?.VITE_IDE_PORT ?? "18601",
+    ).trim();
+
+    if (devHost && idePort) {
+      return `${currentProtocol}//${devHost}:${idePort}`;
+    }
+  }
+
+  return currentOrigin;
+}
+
+export function resolveHostMessageTarget({
+  parentWindow,
+  referrer,
+  selfWindow,
+} = {}) {
+  const currentWindow = selfWindow ?? resolveWindowLike();
+  const currentParentWindow = parentWindow ?? currentWindow?.parent ?? null;
+
+  if (!currentParentWindow || currentParentWindow === currentWindow) {
+    return {
+      origin: null,
+      source: null,
+    };
   }
 
   return {
-    token: nextToken,
-    refreshToken: nextRefreshToken,
-    tenantId: nextTenantId,
-    projectId: nextProjectId,
-    theme: nextTheme,
-    locale: nextLocale,
+    origin: resolveTrustedHostOrigin(
+      referrer ?? resolveDocumentLike()?.referrer ?? "",
+    ),
+    source: currentParentWindow,
   };
 }
 
-export function isTrustedHostMessage(event, options = {}) {
-  const trustedOrigins =
-    options.trustedOrigins ||
-    (currentSession?.target?.origin ? new Set([currentSession.target.origin]) : resolveTrustedTargetSet().origins);
-  const trustedSources =
-    options.trustedSources ||
-    (currentSession?.target?.source ? new Set([currentSession.target.source]) : resolveTrustedTargetSet().sources);
-
-  if (!event?.origin || !event?.source) {
-    return false;
-  }
-
-  return trustedOrigins.has(event.origin) && trustedSources.has(event.source);
-}
-
-export function handleBootstrapResponseMessage(event) {
-  if (!isTrustedHostMessage(event)) {
-    return false;
-  }
-
-  const data = event?.data;
-  if (!data || typeof data !== "object" || data.type !== APP_BOOTSTRAP_RESPONSE) {
-    return false;
-  }
-
-  const responsePayload = resolveMessagePayload(data);
-  const responseRequestId = asNonEmptyString(data.requestId) || asNonEmptyString(responsePayload.requestId);
-  const expectedRequestId = currentSession?.requestMessage?.requestId || null;
-
-  if (expectedRequestId && responseRequestId && responseRequestId !== expectedRequestId) {
-    return false;
-  }
-
-  applyBootstrapPayload(responsePayload);
-  settleCurrentSession(true);
-  return true;
-}
-
-export function initializeHostBootstrap(options = {}) {
-  const currentUrl = options.currentUrl ?? getCurrentLocationHref();
-  const currentLocation = toAbsoluteUrl(currentUrl) || toAbsoluteUrl(getCurrentLocationHref());
-  const isTopLevelWindow =
-    options.isTopLevelWindow ?? (getRuntimeWindow()?.parent === getRuntimeWindow());
-  const ideOrigin = resolveIdeOriginFromRuntime({
-    configuredIdeOrigin: options.ideOrigin,
-    currentUrl,
-    devHost: options.devHost,
-    idePort: options.idePort,
-    isDev: options.isDev,
-    referrer: options.referrer,
-  });
-  const target = resolveBootstrapTarget({
-    parentWindow: options.parentWindow,
-    referrer: options.referrer,
-    selfWindow: options.selfWindow,
-    trustedOrigin: options.trustedOrigin || ideOrigin,
-  });
-  const handoff = options.handoff ?? resolveHandoffFromUrl(currentLocation || new URL(currentUrl));
-  const shouldRedirectToIde = shouldRedirectTopLevelToIde(currentLocation?.pathname || "/", isTopLevelWindow);
+export function initializeHostBootstrap({
+  currentUrl,
+  ideOrigin,
+  isTopLevelWindow,
+  parentWindow,
+  referrer,
+  selfWindow,
+} = {}) {
+  const resolvedUrl = resolveCurrentUrl(currentUrl);
+  const topLevelWindow =
+    isTopLevelWindow ??
+    resolveWindowLike()?.parent === (selfWindow ?? resolveWindowLike());
+  const trustedReferrer = referrer ?? resolveDocumentLike()?.referrer ?? "";
+  const shouldRedirectToIde = shouldRedirectTopLevelToIde(
+    resolvedUrl.pathname,
+    topLevelWindow,
+  );
   const shouldWaitForBootstrap =
-    !shouldUseDebugMode(currentLocation?.pathname || "/") &&
+    !shouldUseDebugMode(resolvedUrl.pathname) &&
     !shouldRedirectToIde &&
     !Storage.getToken();
-  const bootstrapGate = createBootstrapGate(normalizeTimeoutMs(options.bootstrapTimeoutMs));
+  const trustedOrigin = resolveTrustedHostOrigin(trustedReferrer);
+  const target = resolveHostMessageTarget({
+    parentWindow,
+    referrer: trustedReferrer,
+    selfWindow,
+  });
+  const gate = createBootstrapGate(shouldWaitForBootstrap);
   const requestMessage = shouldWaitForBootstrap
     ? createBootstrapRequest({
-        handoff,
-        url: currentLocation?.toString() || currentUrl,
+        handoff: resolvedUrl.searchParams.get("handoff"),
+        url: resolvedUrl.toString(),
       })
+    : null;
+  const restoreUrl = shouldRedirectToIde
+    ? buildIdeRestoreUrl(
+        resolvedUrl.searchParams.get("handoff"),
+        ideOrigin ??
+          resolveIdeOriginFromRuntime({
+            currentUrl: resolvedUrl.toString(),
+            referrer: trustedReferrer,
+          }),
+      )
     : null;
 
   currentSession = {
-    currentUrl: currentLocation?.toString() || currentUrl,
-    ideOrigin,
-    target,
-    handoff,
+    gate,
+    plan: {
+      handoff: asNonEmptyString(resolvedUrl.searchParams.get("handoff")),
+      ideRedirectUrl: restoreUrl,
+      shouldRedirectToIde,
+      shouldWaitForBootstrap,
+      trustedHostOrigin: trustedOrigin,
+    },
     requestMessage,
-    bootstrapGate,
-    shouldRedirectToIde,
-    shouldWaitForBootstrap,
+    target,
   };
 
-  ensureBootstrapListener();
-
-  if (currentSession.shouldRedirectToIde || !currentSession.shouldWaitForBootstrap) {
-    bootstrapGate.settle(true);
+  if (
+    shouldWaitForBootstrap &&
+    (!target.origin || !target.source || !requestMessage)
+  ) {
+    gate.settle(false);
   }
 
-  if (currentSession.shouldWaitForBootstrap && (!target.origin || !target.source || !requestMessage)) {
-    bootstrapGate.settle(false);
+  if (shouldRedirectToIde || shouldUseDebugMode(resolvedUrl.pathname)) {
+    gate.settle(true);
   }
 
-  return currentSession;
+  return currentSession.plan;
 }
 
 export function waitForHostBootstrap() {
-  return currentSession?.bootstrapGate.promise || Promise.resolve(true);
+  return currentSession?.gate.promise ?? Promise.resolve(true);
+}
+
+export function getTrustedHostOriginSet() {
+  const origin = currentSession?.target?.origin ?? null;
+  return origin ? new Set([origin]) : new Set();
+}
+
+export function getTrustedHostSources() {
+  const source = currentSession?.target?.source ?? null;
+  return source ? [source] : [];
+}
+
+export function isTrustedHostOrigin(
+  origin,
+  trustedOrigins = getTrustedHostOriginSet(),
+) {
+  if (!origin) {
+    return false;
+  }
+
+  for (const trustedOrigin of trustedOrigins) {
+    if (trustedOrigin === origin) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function isTrustedHostSource(
+  source,
+  trustedSources = getTrustedHostSources(),
+) {
+  if (!source) {
+    return false;
+  }
+
+  for (const trustedSource of trustedSources) {
+    if (trustedSource === source) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function isTrustedHostMessage(
+  event,
+  {
+    trustedOrigins = getTrustedHostOriginSet(),
+    trustedSources = getTrustedHostSources(),
+  } = {},
+) {
+  return (
+    isTrustedHostOrigin(event?.origin, trustedOrigins) &&
+    isTrustedHostSource(event?.source, trustedSources)
+  );
+}
+
+export function postMessageToHost(message) {
+  const target = currentSession?.target ?? resolveHostMessageTarget();
+  if (!target?.source?.postMessage || !target.origin) {
+    return false;
+  }
+
+  target.source.postMessage(message, target.origin);
+  return true;
 }
 
 export function postAppBootstrapRequest() {
@@ -437,36 +445,41 @@ export function postAppBootstrapRequest() {
     return false;
   }
 
-  return postMessageToTarget(currentSession.target.source, currentSession.target.origin, currentSession.requestMessage);
+  return postMessageToHost(currentSession.requestMessage);
 }
 
-export function postMessageToHost(message) {
-  if (!currentSession?.target?.source || !currentSession?.target?.origin) {
+export function handleBootstrapResponseMessage(data) {
+  if (data?.type !== APP_BOOTSTRAP_RESPONSE) {
     return false;
   }
 
-  return postMessageToTarget(currentSession.target.source, currentSession.target.origin, message);
-}
+  const payload = resolveMessagePayload(data);
+  const responseRequestId =
+    asNonEmptyString(data.requestId) ?? asNonEmptyString(payload.requestId);
+  const expectedRequestId = currentSession?.requestMessage?.requestId ?? null;
 
-export function getTrustedHostOriginSet() {
-  return resolveTrustedTargetSet().origins;
-}
-
-export function getTrustedHostSources() {
-  return resolveTrustedTargetSet().sources;
-}
-
-export function resetHostBootstrapStateForTests() {
-  const runtimeWindow = getRuntimeWindow();
-  if (runtimeWindow && bootstrapListenerAttached) {
-    runtimeWindow.removeEventListener("message", handleWindowMessage);
+  if (
+    responseRequestId &&
+    expectedRequestId &&
+    responseRequestId !== expectedRequestId
+  ) {
+    return false;
   }
 
+  applyBootstrapPayload(payload);
+  currentSession?.gate.settle(true);
+  return true;
+}
+
+export function handleAuthRefreshedMessage(data) {
+  if (data?.type !== AUTH_REFRESHED) {
+    return false;
+  }
+
+  applyAuthRefreshedPayload(resolveMessagePayload(data));
+  return true;
+}
+
+export function resetHostBootstrapSessionForTests() {
   currentSession = null;
-  bootstrapListenerAttached = false;
 }
-
-function createBootstrapRequestId() {
-  return `datacenter_bootstrap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-}
-

@@ -13,6 +13,7 @@ import type {
 import axios from "axios";
 import { ElMessage } from "element-plus";
 import { STORAGE_KEYS } from "@/constants";
+import { postMessageToHost } from "@/runtime/host-bootstrap";
 import { Storage } from "@/utils/storage";
 
 /** Element Plus 的 ElMessage 选项类型在部分 TS 配置下过窄，此处收窄为运行时实际用法 */
@@ -71,9 +72,7 @@ function handleLogout(): void {
   Storage.remove(STORAGE_KEYS.TENANT_ID);
   Storage.remove(STORAGE_KEYS.PROJECT_ID);
 
-  if (window.parent !== window) {
-    window.parent.postMessage({ type: "AUTH_EXPIRED" }, "*");
-  }
+  postMessageToHost({ type: "AUTH_EXPIRED" });
 }
 
 requestCore.interceptors.request.use(
@@ -130,6 +129,17 @@ requestCore.interceptors.response.use(
 
                   if (accessToken) Storage.setToken(accessToken);
                   if (newRefreshToken) Storage.setRefreshToken(newRefreshToken);
+
+                  if (accessToken) {
+                    postMessageToHost({
+                      type: "AUTH_REFRESHED",
+                      payload: {
+                        token: accessToken,
+                        accessToken,
+                        refreshToken: newRefreshToken,
+                      },
+                    });
+                  }
 
                   processQueue(null, accessToken ?? null);
 

@@ -2,6 +2,11 @@ import axios from "axios";
 import { ElMessage } from "element-plus";
 import { Storage } from "@/utils/storage";
 import { STORAGE_KEYS } from "@/constants";
+import {
+  buildIdeLoginUrl,
+  postMessageToHost,
+  resolveIdeOriginFromRuntime,
+} from "../runtime/host-bootstrap.js";
 
 // 创建 axios 实例
 const request = axios.create({
@@ -42,6 +47,31 @@ const refreshAccessToken = (refreshToken) => {
   return axios.post("/api/v1/auth/refresh", { refreshToken });
 };
 
+/**
+ * 将认证失效显式回传宿主。
+ * 宿主不在场时再回落到 IDE 登录页，避免 iframe 内部误跳成本地 `/login`。
+ */
+const handleLogout = () => {
+  Storage.remove(STORAGE_KEYS.TOKEN);
+  Storage.remove(STORAGE_KEYS.REFRESH_TOKEN);
+  Storage.remove(STORAGE_KEYS.USER_INFO);
+  Storage.remove(STORAGE_KEYS.TENANT_ID);
+  Storage.removeProjectId();
+
+  const posted = postMessageToHost({
+    type: "AUTH_EXPIRED",
+    app: "datacenter",
+  });
+
+  if (window.parent === window || !posted) {
+    const ideOrigin = resolveIdeOriginFromRuntime({
+      currentUrl: window.location.href,
+      referrer: document.referrer,
+    });
+    window.location.href = buildIdeLoginUrl(window.location.href, ideOrigin);
+  }
+};
+
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
@@ -76,24 +106,16 @@ request.interceptors.response.use(
       const { status, data } = response;
 
       switch (status) {
-        case 401:
+        case 401: {
           // 刷新 token 失败时直接跳转登录页
           if (config.url.includes("/auth/refresh")) {
-            Storage.remove(STORAGE_KEYS.TOKEN);
-            Storage.remove(STORAGE_KEYS.REFRESH_TOKEN);
-            Storage.remove(STORAGE_KEYS.USER_INFO);
-            Storage.remove(STORAGE_KEYS.TENANT_ID);
-            window.location.href = "/login";
+            handleLogout();
             return Promise.reject(error);
           }
 
           const refreshToken = Storage.getRefreshToken();
           if (!refreshToken) {
-            Storage.remove(STORAGE_KEYS.TOKEN);
-            Storage.remove(STORAGE_KEYS.REFRESH_TOKEN);
-            Storage.remove(STORAGE_KEYS.USER_INFO);
-            Storage.remove(STORAGE_KEYS.TENANT_ID);
-            window.location.href = "/login";
+            handleLogout();
             return Promise.reject(error);
           }
 
@@ -110,6 +132,13 @@ request.interceptors.response.use(
                   Storage.setRefreshToken(newRefreshToken);
                 }
 
+                postMessageToHost({
+                  type: "AUTH_REFRESHED",
+                  app: "datacenter",
+                  token: accessToken,
+                  refreshToken: newRefreshToken || refreshToken,
+                });
+
                 processQueue(null, accessToken);
 
                 config.headers.Authorization = `Bearer ${accessToken}`;
@@ -117,11 +146,7 @@ request.interceptors.response.use(
               })
               .catch((refreshError) => {
                 processQueue(refreshError, null);
-                Storage.remove(STORAGE_KEYS.TOKEN);
-                Storage.remove(STORAGE_KEYS.REFRESH_TOKEN);
-                Storage.remove(STORAGE_KEYS.USER_INFO);
-                Storage.remove(STORAGE_KEYS.TENANT_ID);
-                window.location.href = "/login";
+                handleLogout();
                 return Promise.reject(refreshError);
               })
               .finally(() => {
@@ -138,6 +163,7 @@ request.interceptors.response.use(
               reject,
             });
           });
+        }
         case 403:
           ElMessage.error("没有权限访问此资源");
           break;

@@ -33,6 +33,25 @@
 - 组件、页面树、属性编辑与绑定机制需要稳定回归。
 - 编辑器壳层主题与语言切换只能作用于设计器自身，不能误伤画布内用户页面。
 
+## 入口与调试
+
+### 正式入口
+
+- 正式入口应由 `dev_ide` 通过 iframe 打开，设计器启动后向宿主发送 `APP_BOOTSTRAP_REQUEST`，再由宿主回发 `APP_BOOTSTRAP_RESPONSE` 注入鉴权、工程、主题与语言上下文。
+- 正式入口不再依赖 URL 里的 `token`、`refreshToken`、`pid`、`tenant` 等敏感参数。
+- 用户直接访问正式入口时，页面会带着 `handoff` 回跳 `dev_ide`，而不是继续裸跑。
+
+### 独立调试
+
+- 需要单独调试设计器时，使用 `/designer/debug`。
+- `/designer/debug` 允许本地 mock、手动准备 Storage 或按调试需要附带非正式参数；这条链路不代表正式宿主协议。
+- 调试正式链路时，不要直接访问 `/designer/`，应从 `dev_ide` 中打开对应标签页，再在开发者工具中观察 bootstrap 消息、主题语言同步与续租回传。
+
+### 预览与边界
+
+- 画布预览不应继承编辑器壳层的主题、语言同步副作用，调试时需要分别验证编辑态与预览态。
+- 如果正式入口顶层刷新后未能恢复，优先排查 `handoff` 是否存在、是否过期，以及宿主是否正确返回 bootstrap 响应。
+
 ## 关联文档
 
 - [产品定义](../产品定义.md)
@@ -45,3 +64,4 @@
 - [层级约定](./layer-order-convention.md)
 - [放置与堆叠](./placement-and-stacking.md)
 - [尺寸约定](./size-convention.md)
+- [IDE 管理端概览](../dev_ide/README.md)

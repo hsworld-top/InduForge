@@ -1,9 +1,16 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { STORAGE_KEYS } from "@/constants";
-import { shouldRedirectTopLevelToIde, shouldUseDebugMode, waitForHostBootstrap, buildIdeRestoreUrl, resolveIdeOriginFromRuntime } from "@/runtime/host-bootstrap";
 import { Storage } from "@/utils/storage";
 // import DataCenter from "../views/DataCenter.vue"; // 原版本
 import DataCenter from "../views/DataCenterNew.vue"; // 重构版本
+import {
+  applyThemeToDocument,
+  buildIdeLoginUrl,
+  buildIdeRestoreUrl,
+  resolveIdeOriginFromRuntime,
+  shouldRedirectTopLevelToIde,
+  shouldUseDebugMode,
+  waitForHostBootstrap,
+} from "../runtime/host-bootstrap.js";
 
 const routes = [
   {
@@ -15,6 +22,15 @@ const routes = [
       requiresAuth: true,
     },
   },
+  {
+    path: "/debug",
+    name: "datacenter-debug",
+    component: DataCenter,
+    meta: {
+      title: "数据中心调试",
+      requiresAuth: false,
+    },
+  },
 ];
 
 const router = createRouter({
@@ -23,96 +39,95 @@ const router = createRouter({
 });
 
 /**
- * 应用主题到文档根节点。
- * @param {string} theme - 主题
+ * 根据目标路由拼出当前浏览器里实际会出现的 pathname。
+ * 这样即便当前 href 仍停留在正式入口，程序化跳到 `/debug` 时也不会被旧 pathname 误判。
+ * @param {string} routePath - Vue Router 路由 path
+ * @returns {string} 浏览器 pathname
  */
-const applyTheme = (theme) => {
-  document.documentElement.classList.toggle("dark", theme === "dark");
+const resolveRoutePathname = (routePath) => {
+  if (!routePath || routePath === "/") {
+    return "/datacenter/";
+  }
+
+  return `/datacenter${routePath}`.replace(/\/{2,}/g, "/");
 };
 
 /**
- * 用当前导航目标重建绝对地址，避免依赖 window.location.href 误判切路由场景。
- * @param {RouteLocationNormalized} to - 目标路由
- * @returns {URL} 目标地址
+ * 将当前 URL 与目标路由合并，得到本次守卫应当依据的入口地址。
+ * @param {string} currentUrl - 当前浏览器地址
+ * @param {string} routePath - 目标路由 path
+ * @returns {URL} 目标入口 URL
  */
-const resolveTargetUrl = (to) => {
-  const resolvedHref = router.resolve(to).href;
-  return new URL(resolvedHref, window.location.origin);
+const buildRouteRuntimeUrl = (currentUrl, routePath) => {
+  const nextUrl = new URL(currentUrl);
+  nextUrl.pathname = resolveRoutePathname(routePath);
+  return nextUrl;
 };
 
-/**
- * 从目标地址里提取 handoff 标识。
- * @param {URL} url - 目标地址
- * @returns {{handoffId?: string}|null} handoff 信息
- */
-const resolveHandoff = (url) => {
-  const handoffId = url.searchParams.get("handoffId");
-  return handoffId ? { handoffId } : null;
-};
+export function registerDatacenterBeforeEachGuard(
+  targetRouter,
+  {
+    getCurrentUrl = () => window.location.href,
+    getIdeOrigin = (currentUrl) =>
+      resolveIdeOriginFromRuntime({
+        currentUrl,
+        referrer: document.referrer,
+      }),
+    isTopLevelWindow = () => window.parent === window,
+    navigateToUrl = (url) => {
+      window.location.href = url;
+    },
+    waitForBootstrap = waitForHostBootstrap,
+  } = {},
+) {
+  return targetRouter.beforeEach(async (to, from, next) => {
+    document.title = `${to.meta.title || "数据中心"} - ProjectIDE`;
+    applyThemeToDocument(Storage.getTheme());
 
-/**
- * 构建 IDE 登录地址。
- * iframe 场景里 bootstrap 超时后，仍然保留现有的登录兜底逻辑。
- * @param {string} currentUrl - 当前访问地址
- * @param {string} ideOrigin - IDE origin
- * @returns {string} 登录地址
- */
-const buildIdeLoginUrl = (currentUrl, ideOrigin) => {
-  const loginUrl = new URL("/login", ideOrigin);
-  loginUrl.searchParams.set("redirect", currentUrl);
-  return loginUrl.toString();
-};
+    const runtimeUrl = buildRouteRuntimeUrl(getCurrentUrl(), to.path);
+    const ideOrigin = getIdeOrigin(runtimeUrl.toString());
+    const handoff = runtimeUrl.searchParams.get("handoff");
+    const isDebugRoute =
+      shouldUseDebugMode(runtimeUrl.pathname) || to.meta.requiresAuth === false;
 
-// 路由守卫 - 鉴权检查和状态恢复
-router.beforeEach(async (to, from, next) => {
-  // 设置页面标题
-  document.title = `${to.meta.title || "数据中心"} - ProjectIDE`;
+    if (shouldRedirectTopLevelToIde(runtimeUrl.pathname, isTopLevelWindow())) {
+      navigateToUrl(buildIdeRestoreUrl(handoff, ideOrigin));
+      return;
+    }
 
-  const targetUrl = resolveTargetUrl(to);
-  const isDebugRoute = shouldUseDebugMode(targetUrl.pathname);
-  const isTopLevelWindow = window.parent === window;
-  const ideOrigin = resolveIdeOriginFromRuntime({
-    currentUrl: targetUrl.toString(),
-    referrer: document.referrer,
+    if (isDebugRoute) {
+      next();
+      return;
+    }
+
+    let token = Storage.getToken();
+    if (!token) {
+      const bootstrapReady = await waitForBootstrap();
+      token = Storage.getToken();
+
+      if (!bootstrapReady || !token) {
+        navigateToUrl(buildIdeLoginUrl(runtimeUrl.toString(), ideOrigin));
+        return;
+      }
+    }
+
+    const projectId = Storage.getProjectId();
+    const tenantId = Storage.getTenantId();
+
+    if (!projectId) {
+      navigateToUrl(buildIdeRestoreUrl(handoff, ideOrigin));
+      return;
+    }
+
+    to.meta.project = {
+      id: projectId,
+      tenantId,
+    };
+
+    next();
   });
+}
 
-  if (shouldRedirectTopLevelToIde(targetUrl.pathname, isTopLevelWindow) && !isDebugRoute) {
-    next(false);
-    window.location.replace(buildIdeRestoreUrl(resolveHandoff(targetUrl), ideOrigin));
-    return;
-  }
-
-  // 正式入口只接受宿主 bootstrap 注入的运行态，不再从 URL 消费 token / refreshToken / theme / pid / tenant。
-  let token = Storage.getToken();
-  if (!token && !isDebugRoute) {
-    await waitForHostBootstrap();
-    token = Storage.getToken();
-  }
-
-  const theme = Storage.get(STORAGE_KEYS.THEME, "light");
-  applyTheme(theme);
-
-  if (!token && !isDebugRoute) {
-    next(false);
-    window.location.replace(buildIdeLoginUrl(targetUrl.toString(), ideOrigin));
-    return;
-  }
-
-  const projectId = Storage.getProjectId();
-  const tenantId = Storage.getTenantId();
-
-  if (!projectId && !isDebugRoute) {
-    next(false);
-    window.location.replace(buildIdeRestoreUrl(resolveHandoff(targetUrl), ideOrigin));
-    return;
-  }
-
-  to.meta.project = {
-    id: projectId,
-    tenantId,
-  };
-
-  next();
-});
+registerDatacenterBeforeEachGuard(router);
 
 export default router;

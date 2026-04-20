@@ -1,12 +1,10 @@
-﻿/**
- * 璁捐鍣ㄤ富鍏ュ彛
+/**
+ * 设计器主入口。
  *
- * 鑱岃矗锛?
- * - 鍒涘缓 Vue 搴旂敤骞舵寕杞?
- * - 娉ㄥ唽 Pinia銆乂ue Router銆丒lement Plus
- * - 娉ㄥ唽鍐呯疆缁勪欢锛坆uiltin-manifests锛?
- * - 绉婚櫎 HTML 涓殑鍒濆鍔犺浇鍗犱綅
- * - 鐩戝惉鐖剁獥鍙ｄ富棰樻洿鏂版秷鎭紙iframe 宓屽叆鍦烘櫙锛?
+ * 关键职责：
+ * - 初始化 Vue 应用、Pinia、Router、Element Plus；
+ * - 为正式入口建立宿主 bootstrap 握手；
+ * - 统一处理来自宿主的认证、主题、语言同步消息。
  */
 
 import ElementPlus from "element-plus";
@@ -19,12 +17,21 @@ import * as descriptorRegistry from "./editor-core/descriptors/registry";
 import { initDescriptorRegistry } from "./editor-core/document/factory";
 import { registerBuiltinComponents } from "./editor-core/registry/builtin-manifests";
 import router from "./router";
+import {
+  getTrustedHostOriginSet,
+  getTrustedHostSources,
+  handleAuthRefreshedMessage,
+  handleBootstrapResponseMessage,
+  initializeDesignerHostBootstrap,
+  isTrustedHostMessage,
+  postAppBootstrapRequest,
+  resolveDesignerIdeOriginFromRuntime,
+  type TrustedMessageSource,
+} from "./runtime/host-bootstrap";
 import { getEditorUiStore } from "./stores/editor-ui-store";
 import { shouldSyncEditorUiForPath } from "./router/runtime-settings";
 import "element-plus/dist/index.css";
 import "./assets/styles/main.css";
-
-type TrustedMessageSource = MessageEventSource | null;
 
 function isThemeUpdatePayload(data: unknown): data is {
   type: string;
@@ -72,7 +79,7 @@ export function resolveTrustedMessageSources({
   try {
     trustedOrigins.add(new URL(referrer).origin);
   } catch {
-    // 忽略无法解析的 referrer，保持当前页面 origin 为最低信任边界。
+    // referrer 不可解析时回退到当前 origin，避免把异常输入放大成信任边界。
   }
 
   return trustedOrigins;
@@ -82,35 +89,37 @@ export function createRuntimeMessageHandler({
   editorUi,
   i18n,
   getPathname = () => window.location.pathname,
-  getTrustedOriginSet = () =>
-    resolveTrustedMessageSources({
-      locationOrigin: window.location.origin,
-      referrer: document.referrer,
-    }),
-  getTrustedSources = () => {
-    const sources: TrustedMessageSource[] = [window];
-    if (window.parent !== window) {
-      sources.push(window.parent);
-    }
-    return sources;
-  },
+  getTrustedOriginSet = () => getTrustedHostOriginSet(),
+  getTrustedSources = () => getTrustedHostSources(),
 }: RuntimeMessageHandlerDependencies): (event: MessageEvent) => void {
   return (event: MessageEvent) => {
-    if (!shouldSyncEditorUiForPath(getPathname())) {
-      return;
-    }
-
-    const trustedOrigins = getTrustedOriginSet();
-    if (!trustedOrigins.has(event.origin)) {
-      return;
-    }
-
-    const trustedSources = getTrustedSources();
-    if (!trustedSources.some((source) => source === event.source)) {
+    if (
+      !isTrustedHostMessage(event, {
+        trustedOrigins: getTrustedOriginSet(),
+        trustedSources: getTrustedSources(),
+      })
+    ) {
       return;
     }
 
     const data = event.data;
+
+    if (
+      handleBootstrapResponseMessage(data, {
+        allowUiSync: shouldSyncEditorUiForPath(getPathname()),
+        editorUi,
+      })
+    ) {
+      return;
+    }
+
+    if (handleAuthRefreshedMessage(data)) {
+      return;
+    }
+
+    if (!shouldSyncEditorUiForPath(getPathname())) {
+      return;
+    }
 
     if (isThemeUpdatePayload(data)) {
       editorUi.setTheme(data.theme);
@@ -120,23 +129,50 @@ export function createRuntimeMessageHandler({
     if (isLocaleUpdatePayload(data)) {
       editorUi.setLocale(data.locale);
       i18n.global.locale.value = data.locale;
+      return;
     }
   };
 }
 
 export function bootstrapDesignerApp(): void {
+  const hostBootstrap = initializeDesignerHostBootstrap({
+    ideOrigin: resolveDesignerIdeOriginFromRuntime(),
+  });
+  if (hostBootstrap.plan.shouldRedirectToIde && hostBootstrap.plan.ideRedirectUrl) {
+    window.location.replace(hostBootstrap.plan.ideRedirectUrl);
+    return;
+  }
+
   const app = createApp(App);
+  const pinia = createPinia();
+
+  app.use(pinia);
+
   const editorUi = getEditorUiStore();
 
   registerBuiltinComponents();
   registerAllDescriptors();
   initDescriptorRegistry(descriptorRegistry);
 
-  app.use(createPinia());
+  window.addEventListener(
+    "message",
+    createRuntimeMessageHandler({
+      editorUi,
+      i18n,
+      getPathname: () => window.location.pathname,
+      getTrustedOriginSet: () => getTrustedHostOriginSet(),
+      getTrustedSources: () => getTrustedHostSources(),
+    }),
+  );
+
   app.use(router);
   app.use(i18n);
   app.use(ElementPlus);
   app.provide("editorUi", editorUi);
+
+  if (hostBootstrap.plan.shouldWaitForBootstrap) {
+    postAppBootstrapRequest();
+  }
 
   app.mount("#app");
 
@@ -150,27 +186,8 @@ export function bootstrapDesignerApp(): void {
       });
     }
   }
-
-  window.addEventListener("message", createRuntimeMessageHandler({
-    editorUi,
-    i18n,
-    getPathname: () => window.location.pathname,
-    getTrustedOriginSet: () =>
-      resolveTrustedMessageSources({
-        locationOrigin: window.location.origin,
-        referrer: document.referrer,
-      }),
-    getTrustedSources: () => {
-      const sources: TrustedMessageSource[] = [window];
-      if (window.parent !== window) {
-        sources.push(window.parent);
-      }
-      return sources;
-    },
-  }));
 }
 
 if (!import.meta.env.VITEST) {
   bootstrapDesignerApp();
 }
-

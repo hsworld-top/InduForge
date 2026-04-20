@@ -329,7 +329,14 @@
                 </div>
               </template>
               <div class="h-full overflow-hidden">
-                <component :is="tab.component" @open-tab="openTab" v-bind="tab.props" />
+                <component
+                  :is="tab.component"
+                  :tab-key="tab.key"
+                  @open-tab="openTab"
+                  @embedded-register="registerEmbeddedApp"
+                  @embedded-unregister="unregisterEmbeddedApp"
+                  v-bind="tab.props"
+                />
               </div>
             </el-tab-pane>
           </el-tabs>
@@ -374,8 +381,12 @@ import { Storage } from '@/utils/storage'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { buildAppUrl } from '@/utils/appUrl'
 import {
+  createEmbeddedUpdateMessage,
   broadcastToEmbeddedIframes,
+  handleEmbeddedWindowMessage,
+  registerEmbeddedIframe,
   syncDesignerLocaleToEmbeddedIframes,
+  unregisterEmbeddedIframe,
 } from '@/utils/embeddedIframeSync'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
@@ -417,6 +428,7 @@ export default {
     const lastPendingCount = ref(0)
     const opsSocket = ref(null)
     const wsConnectCheckTimer = ref(null)
+    const embeddedRegistry = new Map()
 
     // 侧边栏折叠状态（持久化）
     const sidebarCollapsed = computed({
@@ -508,9 +520,8 @@ export default {
      * @param {string} theme - 主题
      */
     const syncEmbeddedTheme = (theme) => {
-      const iframes = document.querySelectorAll('iframe.embedded-iframe')
       broadcastToEmbeddedIframes(
-        iframes,
+        embeddedRegistry.values(),
         createEmbeddedUpdateMessage('THEME_UPDATE', 'theme', theme)
       )
     }
@@ -520,7 +531,7 @@ export default {
      * @param {string} localeValue - 语言
      */
     const syncEmbeddedLocale = (localeValue) => {
-      syncDesignerLocaleToEmbeddedIframes(document, localeValue)
+      syncDesignerLocaleToEmbeddedIframes(embeddedRegistry.values(), localeValue)
     }
 
     // 租户相关计算属性
@@ -577,6 +588,83 @@ export default {
       } catch {
         // 用户取消操作
       }
+    }
+
+    /**
+     * 在 iframe load 后登记嵌入应用，供宿主后续按 source + origin 匹配 bootstrap 请求。
+     * 这里故意按最新 load 结果覆盖，兼容同一标签页内 iframe 重载或并行改动后的 src 更新。
+     * @param {object} payload - 注册信息
+     */
+    const registerEmbeddedApp = (payload) => {
+      registerEmbeddedIframe(embeddedRegistry, payload)
+    }
+
+    /**
+     * 标签页销毁时移除嵌入登记，避免旧 contentWindow 继续命中宿主匹配。
+     * @param {object} payload - 卸载信息
+     */
+    const unregisterEmbeddedApp = (payload = {}) => {
+      if (!payload?.iframe) return
+      unregisterEmbeddedIframe(embeddedRegistry, payload.iframe)
+    }
+
+    /**
+     * 基于当前宿主态生成 bootstrap 载荷。
+     * 敏感信息只在已登记 iframe 的定向响应里返回，不放进正式入口 URL 查询串。
+     * @param {object} entry - 已匹配的嵌入注册项
+     * @returns {object} bootstrap 宿主态
+     */
+    const resolveEmbeddedBootstrapState = (entry) => ({
+      token: Storage.getToken(),
+      refreshToken: Storage.getRefreshToken(),
+      theme: appStore.theme,
+      locale: appStore.language,
+      tenantId: entry?.project?.tenantId ?? Storage.getTenantId(),
+    })
+
+    /**
+     * 接收嵌入应用刷新后的 token，并同步回宿主缓存。
+     * 这里只更新当前前端会直接读取的 token/refreshToken，避免重做整套登录流程。
+     * @param {object} payload - 认证刷新载荷
+     */
+    const handleEmbeddedAuthRefreshed = (payload = {}) => {
+      const nextToken = payload.token ?? payload.accessToken
+      const nextRefreshToken = payload.refreshToken
+
+      if (!nextToken) return
+
+      Storage.setToken(nextToken)
+      authStore.token = nextToken
+      authStore.isAuthenticated = true
+
+      if (nextRefreshToken) {
+        Storage.setRefreshToken(nextRefreshToken)
+        authStore.refreshToken = nextRefreshToken
+      }
+    }
+
+    /**
+     * 嵌入应用认证失效后，沿用宿主已有登出与路由清理流程。
+     * 这里不再弹确认框，避免已失效会话把用户卡在不可用页面。
+     */
+    const handleEmbeddedAuthExpired = () => {
+      authStore.logout()
+      router.push({ name: 'login' })
+    }
+
+    /**
+     * 处理来自嵌入应用的消息。
+     * 只有 source + origin 能匹配已登记 iframe 时才会处理，避免未知窗口冒充宿主协议。
+     * @param {MessageEvent} event - 浏览器消息事件
+     */
+    const handleEmbeddedMessage = (event) => {
+      handleEmbeddedWindowMessage({
+        event,
+        registry: embeddedRegistry,
+        resolveBootstrapState: resolveEmbeddedBootstrapState,
+        onAuthRefreshed: handleEmbeddedAuthRefreshed,
+        onAuthExpired: handleEmbeddedAuthExpired,
+      })
     }
 
     // 打开标签页
@@ -928,6 +1016,7 @@ export default {
     onMounted(async () => {
       // 添加全局点击事件监听
       document.addEventListener('click', handleClickOutside)
+      window.addEventListener('message', handleEmbeddedMessage)
 
       // 优先恢复历史标签状态，未恢复成功时按角色打开默认标签
       const restored = restoreTabState()
@@ -960,6 +1049,8 @@ export default {
     // 组件卸载时移除事件监听
     onUnmounted(() => {
       document.removeEventListener('click', handleClickOutside)
+      window.removeEventListener('message', handleEmbeddedMessage)
+      embeddedRegistry.clear()
       const socket = getSocket()
       if (socket) {
         socket.off('connect', handleOpsSocketConnect)
@@ -1111,6 +1202,8 @@ export default {
       openProfileDialog,
       openSystemSettingsDialog,
       handleLogout,
+      registerEmbeddedApp,
+      unregisterEmbeddedApp,
       openTab,
       closeTab,
       maximizeTab,

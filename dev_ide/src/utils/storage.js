@@ -57,11 +57,38 @@ export class Storage {
   }
 
   /**
+   * 按前缀枚举 localStorage 中的键。
+   * 这个方法只负责扫描键名，不解析值，便于上层按业务前缀做映射恢复。
+   * @param {string} prefix - 键名前缀
+   * @returns {string[]} 匹配到的键名列表
+   */
+  static getKeysByPrefix(prefix) {
+    try {
+      const keys = []
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index)
+        if (key && key.startsWith(prefix)) {
+          keys.push(key)
+        }
+      }
+      return keys
+    } catch (error) {
+      console.warn(`Storage getKeysByPrefix error for prefix "${prefix}":`, error)
+      return []
+    }
+  }
+
+  /**
    * 获取认证令牌
    * @returns {string|null} 令牌
    */
   static getToken() {
-    return localStorage.getItem(STORAGE_KEYS.TOKEN)
+    try {
+      return localStorage.getItem(STORAGE_KEYS.TOKEN)
+    } catch (error) {
+      console.warn(`Storage getToken error for key "${STORAGE_KEYS.TOKEN}":`, error)
+      return null
+    }
   }
 
   /**
@@ -69,7 +96,11 @@ export class Storage {
    * @param {string} token - 令牌
    */
   static setToken(token) {
-    localStorage.setItem(STORAGE_KEYS.TOKEN, token)
+    try {
+      localStorage.setItem(STORAGE_KEYS.TOKEN, token)
+    } catch (error) {
+      console.warn(`Storage setToken error for key "${STORAGE_KEYS.TOKEN}":`, error)
+    }
   }
 
   /**
@@ -77,7 +108,12 @@ export class Storage {
    * @returns {string|null} 刷新令牌
    */
   static getRefreshToken() {
-    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+    try {
+      return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+    } catch (error) {
+      console.warn(`Storage getRefreshToken error for key "${STORAGE_KEYS.REFRESH_TOKEN}":`, error)
+      return null
+    }
   }
 
   /**
@@ -85,7 +121,11 @@ export class Storage {
    * @param {string} refreshToken - 刷新令牌
    */
   static setRefreshToken(refreshToken) {
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
+    try {
+      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
+    } catch (error) {
+      console.warn(`Storage setRefreshToken error for key "${STORAGE_KEYS.REFRESH_TOKEN}":`, error)
+    }
   }
 
   /**

@@ -1,5 +1,7 @@
 import { STORAGE_KEYS } from "../constants/index.js";
 
+const PROJECT_ID_STORAGE_KEY = STORAGE_KEYS.PROJECT_ID || "project_id";
+
 /**
  * 本地存储工具类
  */
@@ -121,20 +123,59 @@ export class Storage {
   }
 
   /**
-   * 获取项目ID。
-   * 这个值由宿主 bootstrap 写入，用于初始化数据域上下文。
-   * @returns {string|null} 项目ID
+   * 获取工程 ID。
+   * 当前 constants 尚未暴露 PROJECT_ID，故这里保留固定键兜底，
+   * 避免 bootstrap 恢复链路因为常量缺失而无法写回工程上下文。
+   * @returns {string|null} 工程 ID
    */
   static getProjectId() {
-    return this.get(STORAGE_KEYS.PROJECT_ID);
+    return this.get(PROJECT_ID_STORAGE_KEY);
   }
 
   /**
-   * 设置项目ID。
-   * 只保存当前运行态所需的 projectId，不额外扩展其他宿主上下文。
-   * @param {string} projectId - 项目ID
+   * 设置工程 ID。
+   * @param {string} projectId - 工程 ID
    */
   static setProjectId(projectId) {
-    this.set(STORAGE_KEYS.PROJECT_ID, projectId);
+    this.set(PROJECT_ID_STORAGE_KEY, projectId);
+  }
+
+  /**
+   * 删除工程 ID。
+   */
+  static removeProjectId() {
+    this.remove(PROJECT_ID_STORAGE_KEY);
+  }
+
+  /**
+   * 获取主题。
+   * @returns {string} 主题
+   */
+  static getTheme() {
+    return this.get(STORAGE_KEYS.THEME, "light");
+  }
+
+  /**
+   * 设置主题。
+   * @param {string} theme - 主题
+   */
+  static setTheme(theme) {
+    this.set(STORAGE_KEYS.THEME, theme);
+  }
+
+  /**
+   * 获取语言。
+   * @returns {string|null} 语言
+   */
+  static getLanguage() {
+    return this.get(STORAGE_KEYS.LANGUAGE);
+  }
+
+  /**
+   * 设置语言。
+   * @param {string} language - 语言
+   */
+  static setLanguage(language) {
+    this.set(STORAGE_KEYS.LANGUAGE, language);
   }
 }

@@ -1,3 +1,22 @@
+import { createBootstrapResponse } from './embeddedAppBridge.js'
+
+const EMBEDDED_IFRAME_SELECTOR = 'iframe.embedded-iframe'
+const SUPPORTED_EMBEDDED_MESSAGE_TYPES = new Set([
+  'APP_BOOTSTRAP_REQUEST',
+  'AUTH_REFRESHED',
+  'AUTH_EXPIRED',
+])
+
+/**
+ * 获取当前宿主页面 origin。
+ * 当调用方传入相对 URL 但没有显式 origin 时，只允许回落到真实宿主 origin，不能伪造 http://localhost。
+ * @returns {string|null} 当前宿主 origin
+ */
+const resolveCurrentOrigin = () => {
+  const locationLike = globalThis.window?.location ?? globalThis.location
+  return typeof locationLike?.origin === 'string' && locationLike.origin ? locationLike.origin : null
+}
+
 /**
  * 构造嵌入应用更新消息。
  * @param {string} type - 消息类型
@@ -11,16 +30,189 @@ export const createEmbeddedUpdateMessage = (type, key, value) => ({
 })
 
 /**
- * 向嵌入 iframe 广播消息。
- * @param {Iterable<object>} iframes - iframe 列表
- * @param {object} message - 要广播的消息
+ * 将输入统一转换为可遍历的嵌入目标列表。
+ * 这里同时兼容注册表 values、数组、NodeList，以及旧的 document 查询链路。
+ * @param {Iterable<object>|object} targets - 目标集合或 document-like 对象
+ * @returns {Array<object>} 归一化后的目标数组
  */
-export const broadcastToEmbeddedIframes = (iframes, message) => {
-  if (!iframes?.forEach) return
+const normalizeEmbeddedTargets = (targets) => {
+  if (!targets) return []
 
-  iframes.forEach((iframe) => {
-    iframe?.contentWindow?.postMessage?.(message, '*')
-  })
+  if (targets?.querySelectorAll) {
+    return Array.from(targets.querySelectorAll(EMBEDDED_IFRAME_SELECTOR) || [])
+  }
+
+  if (typeof targets[Symbol.iterator] === 'function') {
+    return Array.from(targets)
+  }
+
+  if (typeof targets.forEach === 'function') {
+    const items = []
+    targets.forEach((item) => items.push(item))
+    return items
+  }
+
+  return []
+}
+
+/**
+ * 提取广播或匹配时真正的 iframe 节点。
+ * 注册表项会持有 iframe，旧链路则直接传 iframe。
+ * @param {object} target - 注册表项或 iframe 节点
+ * @returns {object|null} iframe 节点
+ */
+const resolveIframeFromTarget = (target) => target?.iframe ?? target ?? null
+
+/**
+ * 从 iframe src 或注册表项里解析 origin。
+ * 主题/语言广播必须显式携带 origin，不能再使用 "*"。
+ * @param {object} target - 注册表项或 iframe 节点
+ * @returns {string|null} origin
+ */
+const resolveOriginFromTarget = (target) => {
+  if (typeof target?.origin === 'string' && target.origin) {
+    return target.origin
+  }
+
+  const iframe = resolveIframeFromTarget(target)
+  const src = iframe?.src || iframe?.getAttribute?.('src') || ''
+  if (!src) return null
+
+  try {
+    if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(src)) {
+      return new URL(src).origin
+    }
+
+    const currentOrigin = resolveCurrentOrigin()
+    return currentOrigin ? new URL(src, currentOrigin).origin : null
+  } catch (error) {
+    return null
+  }
+}
+
+/**
+ * 从 iframe src 或注册表项里解析嵌入应用类型。
+ * @param {object} target - 注册表项或 iframe 节点
+ * @returns {string|null} 应用类型
+ */
+const resolveAppTypeFromTarget = (target) => {
+  if (target?.appType === 'designer' || target?.appType === 'datacenter') {
+    return target.appType
+  }
+
+  const iframe = resolveIframeFromTarget(target)
+  const src = iframe?.src || iframe?.getAttribute?.('src') || ''
+  if (!src) return null
+
+  try {
+    const currentOrigin = resolveCurrentOrigin()
+    // 这里仅为了解析 pathname 判定 appType；即使没有真实 origin，也不能影响广播或消息匹配用到的 origin。
+    const url = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(src)
+      ? new URL(src)
+      : currentOrigin
+        ? new URL(src, currentOrigin)
+        : new URL(src, 'http://embedded.invalid')
+
+    if (url.pathname === '/designer' || url.pathname.startsWith('/designer/')) {
+      return 'designer'
+    }
+    if (url.pathname === '/datacenter' || url.pathname.startsWith('/datacenter/')) {
+      return 'datacenter'
+    }
+    return null
+  } catch (error) {
+    return null
+  }
+}
+
+/**
+ * 发送消息到嵌入目标。
+ * @param {object} target - 注册表项或 iframe 节点
+ * @param {object} message - 消息对象
+ * @returns {boolean} 是否已发送
+ */
+export const postMessageToEmbeddedTarget = (target, message) => {
+  const iframe = resolveIframeFromTarget(target)
+  const origin = resolveOriginFromTarget(target)
+  if (!iframe?.contentWindow?.postMessage || !origin) {
+    return false
+  }
+
+  iframe.contentWindow.postMessage(message, origin)
+  return true
+}
+
+/**
+ * 基于 iframe 节点和上下文构建注册表项。
+ * Dashboard 会在 iframe load 后调用它，后续 message 匹配统一走这份注册表。
+ * @param {object} payload - 注册信息
+ * @returns {object|null} 可用注册表项
+ */
+export const createEmbeddedRegistryEntry = (payload = {}) => {
+  const iframe = resolveIframeFromTarget(payload)
+  const origin = resolveOriginFromTarget(payload)
+  const appType = resolveAppTypeFromTarget(payload)
+
+  if (!iframe || !origin || !appType) {
+    return null
+  }
+
+  return {
+    iframe,
+    origin,
+    appType,
+    project: payload.project ?? null,
+    tabKey: payload.tabKey ?? null,
+    pageId: payload.pageId ?? null,
+  }
+}
+
+/**
+ * 将嵌入应用登记到宿主注册表。
+ * 注册失败时直接返回 null，调用方据此跳过后续逻辑。
+ * @param {Map<object, object>} registry - 嵌入注册表
+ * @param {object} payload - 注册信息
+ * @returns {object|null} 最终登记的注册表项
+ */
+export const registerEmbeddedIframe = (registry, payload = {}) => {
+  if (!registry?.set) return null
+
+  const entry = createEmbeddedRegistryEntry(payload)
+  if (!entry) return null
+
+  registry.set(entry.iframe, entry)
+  return entry
+}
+
+/**
+ * 从宿主注册表移除嵌入应用。
+ * @param {Map<object, object>} registry - 嵌入注册表
+ * @param {object} iframe - iframe 节点
+ */
+export const unregisterEmbeddedIframe = (registry, iframe) => {
+  registry?.delete?.(iframe)
+}
+
+/**
+ * 按 message source + origin 匹配已登记的嵌入应用。
+ * 只有完全匹配的 iframe 才允许参与 bootstrap/auth 同步，避免未知窗口冒充。
+ * @param {Map<object, object>} registry - 嵌入注册表
+ * @param {object} source - message source
+ * @param {string} origin - message origin
+ * @returns {object|null} 匹配到的注册表项
+ */
+export const findEmbeddedEntryByMessageSource = (registry, source, origin) => {
+  if (!registry?.values || !source || !origin) {
+    return null
+  }
+
+  for (const entry of registry.values()) {
+    if (entry?.iframe?.contentWindow === source && entry.origin === origin) {
+      return entry
+    }
+  }
+
+  return null
 }
 
 /**
@@ -28,30 +220,29 @@ export const broadcastToEmbeddedIframes = (iframes, message) => {
  * @param {object} iframe - iframe 节点
  * @returns {boolean} 是否为设计中心 iframe
  */
-export const isDesignerEmbeddedIframe = (iframe) => {
-  const src = iframe?.getAttribute?.('src') || iframe?.src || ''
-  if (!src) return false
+export const isDesignerEmbeddedIframe = (iframe) => resolveAppTypeFromTarget(iframe) === 'designer'
 
-  try {
-    const url = new URL(src, 'http://localhost/')
-    return url.pathname === '/designer' || url.pathname.startsWith('/designer/')
-  } catch (error) {
-    return false
+/**
+ * 向嵌入 iframe 广播消息。
+ * @param {Iterable<object>|object} targets - 注册表项集合、NodeList 或 document-like 对象
+ * @param {object} message - 要广播的消息
+ */
+export const broadcastToEmbeddedIframes = (targets, message) => {
+  for (const target of normalizeEmbeddedTargets(targets)) {
+    postMessageToEmbeddedTarget(target, message)
   }
 }
 
 /**
  * 仅向设计中心 iframe 广播消息。
- * @param {Iterable<object>} iframes - iframe 列表
+ * @param {Iterable<object>|object} targets - 注册表项集合、NodeList 或 document-like 对象
  * @param {object} message - 要广播的消息
  */
-export const broadcastToDesignerEmbeddedIframes = (iframes, message) => {
-  if (!iframes?.forEach) return
-
-  iframes.forEach((iframe) => {
-    if (!isDesignerEmbeddedIframe(iframe)) return
-    iframe?.contentWindow?.postMessage?.(message, '*')
-  })
+export const broadcastToDesignerEmbeddedIframes = (targets, message) => {
+  for (const target of normalizeEmbeddedTargets(targets)) {
+    if (resolveAppTypeFromTarget(target) !== 'designer') continue
+    postMessageToEmbeddedTarget(target, message)
+  }
 }
 
 /**
@@ -59,20 +250,97 @@ export const broadcastToDesignerEmbeddedIframes = (iframes, message) => {
  * @param {object} documentLike - 类文档对象
  * @returns {Array<object>} iframe 列表
  */
-export const getEmbeddedIframes = (documentLike) => {
-  if (!documentLike?.querySelectorAll) return []
-  return documentLike.querySelectorAll('iframe.embedded-iframe') || []
-}
+export const getEmbeddedIframes = (documentLike) => normalizeEmbeddedTargets(documentLike)
 
 /**
  * 同步设计中心语言到嵌入 iframe。
- * @param {object} documentLike - 类文档对象
+ * @param {Iterable<object>|object} targets - 注册表项集合、NodeList 或 document-like 对象
  * @param {string} locale - 语言
  */
-export const syncDesignerLocaleToEmbeddedIframes = (documentLike, locale) => {
-  const iframes = getEmbeddedIframes(documentLike)
+export const syncDesignerLocaleToEmbeddedIframes = (targets, locale) => {
   broadcastToDesignerEmbeddedIframes(
-    iframes,
+    targets,
     createEmbeddedUpdateMessage('LOCALE_UPDATE', 'locale', locale)
   )
+}
+
+/**
+ * 统一提取 message 载荷。
+ * 历史调用方可能把业务字段放在根层，也可能放在 payload 里，这里统一兼容。
+ * @param {object} data - message data
+ * @returns {object} 业务载荷
+ */
+const resolveEmbeddedMessagePayload = (data = {}) => {
+  if (data?.payload && typeof data.payload === 'object') {
+    return data.payload
+  }
+  return data
+}
+
+/**
+ * 处理来自嵌入应用的 window message。
+ * 这里不直接依赖 Vue/Pinia，只做匹配与分发，便于 Node 环境测试。
+ * @param {object} options - 处理参数
+ * @returns {object} 处理结果
+ */
+export const handleEmbeddedWindowMessage = (options = {}) => {
+  const { event, registry, resolveBootstrapState, onAuthRefreshed, onAuthExpired } = options
+  const data = event?.data
+  const type = data?.type
+
+  if (!type || !SUPPORTED_EMBEDDED_MESSAGE_TYPES.has(type)) {
+    return { handled: false, reason: 'unsupported-message' }
+  }
+
+  const entry = findEmbeddedEntryByMessageSource(registry, event?.source, event?.origin)
+  if (!entry) {
+    return { handled: false, reason: 'unregistered-source' }
+  }
+
+  const payload = resolveEmbeddedMessagePayload(data)
+  if (type === 'APP_BOOTSTRAP_REQUEST') {
+    const hostState = resolveBootstrapState?.(entry, payload) ?? {}
+    const bootstrapPayload = createBootstrapResponse(entry.appType, {
+      ...hostState,
+      projectId: hostState.projectId ?? entry.project?.id ?? entry.project?.projectId ?? null,
+      tenantId: hostState.tenantId ?? entry.project?.tenantId ?? null,
+      tabKey: hostState.tabKey ?? entry.tabKey ?? null,
+      pageId: hostState.pageId ?? entry.pageId ?? null,
+    })
+
+    const responseMessage = {
+      type: 'APP_BOOTSTRAP_RESPONSE',
+      payload: bootstrapPayload,
+    }
+
+    if (payload?.requestId) {
+      responseMessage.requestId = payload.requestId
+    }
+
+    const postMessage = options.postMessage ?? postMessageToEmbeddedTarget
+    postMessage(entry, responseMessage)
+
+    return {
+      handled: true,
+      type,
+      entry,
+      responseMessage,
+    }
+  }
+
+  if (type === 'AUTH_REFRESHED') {
+    onAuthRefreshed?.(payload, entry)
+    return {
+      handled: true,
+      type,
+      entry,
+    }
+  }
+
+  onAuthExpired?.(payload, entry)
+  return {
+    handled: true,
+    type,
+    entry,
+  }
 }

@@ -86,6 +86,7 @@ import { ref, watch, computed } from "vue";
 import { ElMessage } from "element-plus";
 import IconTablerQuestionMark from "~icons/tabler/question-mark";
 import dataAPI from "@/api/data.api";
+import { Storage } from "@/utils/storage";
 
 const props = defineProps({
   modelValue: {
@@ -144,10 +145,15 @@ const visible = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
-// 获取项目ID (从URL或其他地方)
+// 获取项目 ID。
+// 正式入口下优先使用宿主 bootstrap 已写入的本地上下文，仅在独立调试态下回退到旧 URL 参数。
 const getProjectId = () => {
-  const route = window.location;
-  const urlParams = new URLSearchParams(route.search);
+  const projectIdFromStorage = Storage.getProjectId();
+  if (projectIdFromStorage) {
+    return projectIdFromStorage;
+  }
+
+  const urlParams = new URLSearchParams(window.location.search);
   return urlParams.get("pid") || urlParams.get("id");
 };
 

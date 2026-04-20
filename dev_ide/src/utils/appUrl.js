@@ -1,30 +1,44 @@
 import { Storage } from './storage.js'
+import { createBootstrapResponse } from './embeddedAppBridge.js'
+
+/**
+ * 解析当前宿主页面的真实 origin。
+ * handoff URL 允许保持相对路径，但注册链路必须显式带上真实 origin，避免后续回落到错误默认值。
+ * @returns {string|null} 当前页面 origin
+ */
+const resolveCurrentOrigin = () => {
+  const locationLike = globalThis.window?.location ?? globalThis.location
+  return typeof locationLike?.origin === 'string' && locationLike.origin ? locationLike.origin : null
+}
+
+/**
+ * 构建设计中心或数据中心入口上下文。
+ * URL 继续保持 handoff 驱动的正式入口，origin 单独返回给注册链路使用。
+ * @param {string} appType - 应用类型（designer/datacenter）
+ * @param {object} project - 工程信息
+ * @returns {{url: string, origin: string|null}} 嵌入入口上下文
+ */
+export const buildAppEntry = (appType, project = {}) => {
+  const response = createBootstrapResponse(appType, {
+    projectId: project?.id ?? project?.projectId ?? null,
+    tenantId: project?.tenantId ?? Storage.getTenantId(),
+    token: Storage.getToken(),
+    refreshToken: Storage.getRefreshToken(),
+    theme: Storage.getTheme(),
+    locale: Storage.getLanguage(),
+  })
+
+  return {
+    url: response.url,
+    origin: resolveCurrentOrigin(),
+  }
+}
 
 /**
  * 构建设计中心或数据中心访问地址。
+ * 正式入口只输出 handoff URL，敏感上下文留给后续 bootstrap message 交换。
  * @param {string} appType - 应用类型（designer/datacenter）
  * @param {object} project - 工程信息
  * @returns {string} 访问地址
  */
-export const buildAppUrl = (appType, project = {}) => {
-  const params = new URLSearchParams()
-  if (project?.id) params.set('pid', project.id)
-  if (project?.tenantId) params.set('tenant', project.tenantId)
-
-  const token = Storage.getToken()
-  const refreshToken = Storage.getRefreshToken()
-  const theme = Storage.getTheme()
-  const locale = Storage.getLanguage()
-
-  if (token) params.set('token', token)
-  if (refreshToken) params.set('refreshToken', refreshToken)
-  if (theme) params.set('theme', theme)
-
-  if (appType === "designer") {
-    if (locale) params.set('locale', locale)
-    params.set('type', 'app')
-    return `/designer/?${params.toString()}`
-  }
-
-  return `/datacenter/?${params.toString()}`
-};
+export const buildAppUrl = (appType, project = {}) => buildAppEntry(appType, project).url

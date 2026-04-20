@@ -1,17 +1,24 @@
 /**
- * 设计器路由配置
+ * 设计器路由配置。
  *
- * 路由说明：
- * - / : 设计器主界面（DesignerView）
- * - /preview : 预览界面（PreviewView）
+ * 正式入口只允许两种启动方式：
+ * - 被 IDE 以 iframe 形式嵌入，并通过 bootstrap message 注入上下文；
+ * - `/designer/debug` 独立调试路由，直接使用本地缓存。
  */
 
 import type { NavigationGuardNext, RouteLocationNormalized, Router } from "vue-router";
 import { createRouter, createWebHistory } from "vue-router";
 import type { EditorUiStore } from "@/stores/editor-ui-store";
 import { getEditorUiStore } from "@/stores/editor-ui-store";
+import {
+  buildIdeLoginUrl,
+  buildIdeRestoreUrl,
+  resolveDesignerIdeOriginFromRuntime,
+  resolveDesignerEntrypointPlan,
+  waitForHostBootstrap,
+} from "@/runtime/host-bootstrap";
 import { Storage } from "@/utils/storage";
-import { resolveRuntimeRouteSyncPlan } from "./runtime-settings";
+import { shouldSyncEditorUiForPath } from "./runtime-settings";
 
 declare module "vue-router" {
   interface RouteMeta {
@@ -35,6 +42,15 @@ const routes = [
     },
   },
   {
+    path: "/debug",
+    name: "DesignerDebug",
+    component: () => import("@/ui/shell/DesignerView.vue"),
+    meta: {
+      title: "设计器调试",
+      requiresAuth: false,
+    },
+  },
+  {
     path: "/preview",
     name: "Preview",
     component: () => import("@/ui/editors/page/preview/PreviewView.vue"),
@@ -50,11 +66,6 @@ const router = createRouter({
   routes,
 });
 
-function applyTheme(theme: string): void {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-  document.documentElement.setAttribute("data-theme", theme);
-}
-
 function clearEditorUiThemeEffects(): void {
   document.documentElement.classList.remove("dark");
   document.documentElement.removeAttribute("data-theme");
@@ -62,78 +73,127 @@ function clearEditorUiThemeEffects(): void {
 
 type RuntimeRouteEffectsDependencies = {
   editorUi: EditorUiStore;
-  replaceState: (data: unknown, unused: string, url?: string | URL | null) => void;
+};
+
+type DesignerBeforeEachGuardDependencies = {
+  getCurrentUrl?: () => string;
+  getIdeOrigin?: () => string;
+  isTopLevelWindow?: () => boolean;
+  navigateToUrl?: (url: string) => void;
+  waitForBootstrap?: () => Promise<boolean>;
 };
 
 export function applyRuntimeRouteEffects(
   routePath: string,
-  currentUrl: string,
-  { editorUi, replaceState }: RuntimeRouteEffectsDependencies,
+  _currentUrl: string,
+  { editorUi }: RuntimeRouteEffectsDependencies,
 ): void {
-  const plan = resolveRuntimeRouteSyncPlan(new URL(currentUrl), routePath, {
+  if (!shouldSyncEditorUiForPath(routePath)) {
+    clearEditorUiThemeEffects();
+    return;
+  }
+
+  // 正式入口只能从 bootstrap/local storage 恢复 UI，不再消费 URL 注入参数。
+  editorUi.initFromRuntime({
     theme: Storage.getDesignerTheme(),
     locale: Storage.getDesignerLanguage(),
   });
-
-  if (plan.tokenFromUrl) {
-    Storage.setToken(plan.tokenFromUrl);
-  }
-
-  if (plan.refreshTokenFromUrl) {
-    Storage.setRefreshToken(plan.refreshTokenFromUrl);
-  }
-
-  if (plan.projectIdFromUrl) {
-    Storage.setProjectId(plan.projectIdFromUrl);
-  }
-
-  if (plan.tenantIdFromUrl) {
-    Storage.setTenantId(plan.tenantIdFromUrl);
-  }
-
-  if (!plan.shouldSyncEditorUi) {
-    clearEditorUiThemeEffects();
-  } else {
-    editorUi.initFromRuntime(plan.runtimeSettings);
-    applyTheme(plan.runtimeSettings.theme);
-  }
-
-  if (plan.shouldReplaceUrl) {
-    replaceState({}, "", plan.cleanedUrl);
-  }
 }
 
 function syncRuntimeSettings(routePath = window.location.pathname): void {
   applyRuntimeRouteEffects(routePath, window.location.href, {
     editorUi: getEditorUiStore(),
-    replaceState: window.history.replaceState.bind(window.history),
   });
 }
 
-export function registerDesignerBeforeEachGuard(targetRouter: Router): () => void {
+/**
+ * beforeEach 执行时浏览器地址仍可能停留在上一路由，这里显式用目标路由重建入口 URL。
+ *
+ * 只保留当前 URL 中仍需跨路由延续的 handoffId，避免把旧路由 pathname 误当成新入口模式。
+ */
+function resolveEntrypointUrlForRoute(
+  currentUrl: string,
+  targetRoute: RouteLocationNormalized,
+  targetRouter: Router,
+): string {
+  const current = new URL(currentUrl);
+  const resolvedTargetUrl = new URL(targetRouter.resolve(targetRoute).href, current);
+  const currentHandoffId = current.searchParams.get("handoffId");
+
+  if (currentHandoffId && !resolvedTargetUrl.searchParams.has("handoffId")) {
+    resolvedTargetUrl.searchParams.set("handoffId", currentHandoffId);
+  }
+
+  return resolvedTargetUrl.toString();
+}
+
+export function registerDesignerBeforeEachGuard(
+  targetRouter: Router,
+  dependencies: DesignerBeforeEachGuardDependencies = {},
+): () => void {
+  const getCurrentUrl = dependencies.getCurrentUrl ?? (() => window.location.href);
+  const getIdeOrigin = dependencies.getIdeOrigin ?? (() =>
+    resolveDesignerIdeOriginFromRuntime({
+      currentUrl: getCurrentUrl(),
+      referrer: document.referrer,
+    }));
+  const isTopLevelWindow = dependencies.isTopLevelWindow ?? (() => window.parent === window);
+  const navigateToUrl = dependencies.navigateToUrl ?? ((url: string) => window.location.replace(url));
+  const waitForBootstrap = dependencies.waitForBootstrap ?? waitForHostBootstrap;
+
   return targetRouter.beforeEach(async (to: RouteLocationNormalized, _from, next: NavigationGuardNext) => {
     document.title = `${to.meta.title || "设计器"} - InduForge`;
 
-    syncRuntimeSettings(to.path);
+    const currentUrl = getCurrentUrl();
+    const targetUrl = resolveEntrypointUrlForRoute(currentUrl, to, targetRouter);
+    const entrypointPlan = resolveDesignerEntrypointPlan(targetUrl, {
+      hasToken: Boolean(Storage.getToken()),
+      ideOrigin: getIdeOrigin(),
+      isTopLevelWindow: isTopLevelWindow(),
+      referrer: document.referrer,
+    });
 
-    const isDev = import.meta.env.DEV;
-    const devHost = import.meta.env.VITE_DEV_HOST || "localhost";
-    const idePort = import.meta.env.VITE_IDE_PORT || 18601;
-    const ideOrigin = isDev ? `http://${devHost}:${idePort}` : "";
-
-    const token = Storage.getToken();
-    if (!token && to.meta.requiresAuth) {
-      const redirectUrl = encodeURIComponent(window.location.href);
-      window.location.href = `${ideOrigin}/login?redirect=${redirectUrl}`;
+    if (entrypointPlan.shouldRedirectToIde && entrypointPlan.ideRedirectUrl) {
+      next(false);
+      navigateToUrl(entrypointPlan.ideRedirectUrl);
       return;
     }
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const projectId = urlParams.get("pid") || urlParams.get("id") || Storage.getProjectId();
-    const tenantId = urlParams.get("tenant") || Storage.getTenantId();
+    let token = Storage.getToken();
+    let bootstrapSucceeded = true;
+
+    if (entrypointPlan.shouldWaitForBootstrap && !token) {
+      // bootstrap 失败时不再挂起，后续继续落到现有登录或 IDE 回跳兜底。
+      bootstrapSucceeded = await waitForBootstrap();
+      token = Storage.getToken();
+    }
+
+    syncRuntimeSettings(to.path);
+
+    if (!token && to.meta.requiresAuth) {
+      next(false);
+      navigateToUrl(
+        buildIdeLoginUrl({
+          currentUrl: targetUrl,
+          ideOrigin: getIdeOrigin(),
+        }),
+      );
+      return;
+    }
+
+    if (!bootstrapSucceeded) {
+      // 无 token 时已在上面的登录分支收敛；保留这里是为了显式表达：
+      // 失败只负责解除等待，不改变既有 token/projectId 分支语义。
+    }
+
+    const projectId = Storage.getProjectId();
+    const tenantId = Storage.getTenantId();
 
     if (!projectId && to.name === "Designer") {
-      window.location.href = `${ideOrigin}/`;
+      next(false);
+      navigateToUrl(
+        buildIdeRestoreUrl(entrypointPlan.handoffId, getIdeOrigin()),
+      );
       return;
     }
 

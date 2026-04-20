@@ -32,6 +32,26 @@
 - 数据对象定义与设计态、运行态消费契约保持连续。
 - 关键数据工作台入口具备最小可回归验证能力。
 
+## 入口与调试
+
+### 正式入口
+
+- 正式入口应由 `dev_ide` 宿主打开，数据中心在启动时向父窗口发送 `APP_BOOTSTRAP_REQUEST`，再消费宿主回发的 `APP_BOOTSTRAP_RESPONSE`。
+- 正式入口不再依赖 URL 里的 `token`、`refreshToken`、`theme`、`pid`、`tenant` 作为主链路上下文。
+- refresh 成功后数据中心会向宿主回发 `AUTH_REFRESHED`，refresh 失败或无可用 refreshToken 时会回发 `AUTH_EXPIRED`。
+
+### 独立调试
+
+- 需要单独调试数据中心时，使用 `/datacenter/debug`。
+- `/datacenter/debug` 允许脱离 IDE 运行，但只用于本地调试；正式入口 `/datacenter/` 顶层访问时会回跳 `dev_ide`。
+- 调试正式链路时，应从 `dev_ide` 内打开数据中心标签页，再检查 bootstrap 消息、主题同步和续租回传是否正确。
+
+### `handoff` 与恢复
+
+- 子应用被单独打开成浏览器标签页后，刷新仍会依赖 `handoff` 回附 IDE。
+- `handoff` 只保存恢复映射，不保存 token 等敏感信息；丢失或过期时会降级回 IDE 首页。
+- 子应用内部组件应优先从本地上下文读取 `projectId`、`tenantId` 等工程信息，避免重新依赖旧的 URL 参数。
+
 ## 关联文档
 
 - [产品定义](../产品定义.md)
@@ -44,3 +64,4 @@
 - [MQTT 自动发现](./mqtt-auto-discovery.md)
 - [数据点设计](./datapoint-design.md)
 - [Compute/Alarm 设计](./compute-alarm-design.md)
+- [IDE 管理端概览](../dev_ide/README.md)

@@ -6,6 +6,10 @@
 import dataAPI from "@/api/data.api";
 import { Storage } from "@/utils/storage";
 import { STORAGE_KEYS } from "@/constants";
+import {
+  applyThemeToDocument,
+  isTrustedHostMessage,
+} from "../runtime/host-bootstrap.js";
 
 class MessageHandler {
   constructor() {
@@ -27,15 +31,25 @@ class MessageHandler {
       return;
     }
 
-    // 处理主题更新
+    // 宿主广播消息必须命中 trusted origin/source，避免其他窗口伪造主题同步。
     if (data.type === "THEME_UPDATE" && data.theme) {
+      if (!isTrustedHostMessage(event)) {
+        return;
+      }
+
       this.applyTheme(data.theme);
       return;
     }
 
+    const replyTarget = this.createReplyTarget(event.source, event.origin);
+
     // 处理握手
     if (data.type === "HANDSHAKE" && data.source === "designer") {
-      this.sendMessage(event.source, {
+      if (!replyTarget) {
+        return;
+      }
+
+      this.sendMessage(replyTarget, {
         type: "HANDSHAKE_ACK",
         source: "datacenter",
       });
@@ -45,15 +59,23 @@ class MessageHandler {
 
     // 处理请求
     if (data.type === "REQUEST" && data.requestId) {
+      if (!replyTarget) {
+        return;
+      }
+
       try {
-        const result = await this.handleRequest(data.action, data.payload);
-        this.sendMessage(event.source, {
+        const result = await this.handleRequest(
+          data.action,
+          data.payload,
+          replyTarget,
+        );
+        this.sendMessage(replyTarget, {
           type: "RESPONSE",
           requestId: data.requestId,
           payload: result,
         });
       } catch (error) {
-        this.sendMessage(event.source, {
+        this.sendMessage(replyTarget, {
           type: "RESPONSE",
           requestId: data.requestId,
           error: error.message,
@@ -71,7 +93,7 @@ class MessageHandler {
       return;
     }
     Storage.set(STORAGE_KEYS.THEME, theme);
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    applyThemeToDocument(theme);
   }
 
   /**
@@ -80,7 +102,7 @@ class MessageHandler {
    * @param {Object} payload - 请求数据
    * @returns {Promise<any>}
    */
-  async handleRequest(action, payload) {
+  async handleRequest(action, payload, replyTarget = null) {
     switch (action) {
       case "GET_CONNECTIONS":
         return await this.getConnections(payload);
@@ -95,7 +117,7 @@ class MessageHandler {
         return await this.executeSql(payload);
 
       case "SUBSCRIBE":
-        return await this.subscribe(payload);
+        return await this.subscribe(payload, replyTarget);
 
       case "UNSUBSCRIBE":
         return await this.unsubscribe(payload);
@@ -141,7 +163,7 @@ class MessageHandler {
    * @param {Object} payload - { projectId, queryId, parameters }
    * @returns {Promise<Object>}
    */
-  async executeQuery({ projectId, queryId, parameters }) {
+  async executeQuery({ projectId: _projectId, queryId, parameters }) {
     const response = await dataAPI.executeQuery(queryId, parameters);
     return response.data || response;
   }
@@ -166,13 +188,14 @@ class MessageHandler {
    * @param {Object} payload - { subscriptionId, projectId, queryId, parameters, interval }
    * @returns {Promise<Object>}
    */
-  async subscribe({
-    subscriptionId,
-    projectId,
-    queryId,
-    parameters,
-    interval,
-  }) {
+  async subscribe(
+    { subscriptionId, projectId, queryId, parameters, interval },
+    replyTarget,
+  ) {
+    if (!replyTarget) {
+      throw new Error("订阅请求缺少可回复的消息来源");
+    }
+
     // 立即执行一次
     const initialData = await this.executeQuery({
       projectId,
@@ -181,7 +204,7 @@ class MessageHandler {
     });
 
     // 发送初始数据
-    this.sendMessage(window.parent, {
+    this.sendMessage(replyTarget, {
       type: "SUBSCRIPTION_DATA",
       subscriptionId,
       payload: initialData,
@@ -195,13 +218,13 @@ class MessageHandler {
           queryId,
           parameters,
         });
-        this.sendMessage(window.parent, {
+        this.sendMessage(replyTarget, {
           type: "SUBSCRIPTION_DATA",
           subscriptionId,
           payload: data,
         });
       } catch (error) {
-        this.sendMessage(window.parent, {
+        this.sendMessage(replyTarget, {
           type: "SUBSCRIPTION_ERROR",
           subscriptionId,
           error: error.message,
@@ -215,6 +238,7 @@ class MessageHandler {
       queryId,
       parameters,
       interval,
+      replyTarget,
     });
 
     return { success: true };
@@ -266,12 +290,29 @@ class MessageHandler {
 
   /**
    * 发送消息
-   * @param {Window} target - 目标窗口
+   * 将当前消息来源规范化成回复目标。
+   * Designer 与 DataCenter 的桥接使用“谁发来就回给谁”的链路，不依赖父窗口身份。
+   * @param {MessageEventSource|null} source - 消息来源
+   * @param {string} origin - 消息 origin
+   * @returns {{source: MessageEventSource, origin: string}|null} 回复目标
+   */
+  createReplyTarget(source, origin) {
+    if (!source?.postMessage || typeof origin !== "string" || !origin) {
+      return null;
+    }
+
+    return {
+      source,
+      origin,
+    };
+  }
+
+  /**
    * @param {Object} message - 消息对象
    */
   sendMessage(target, message) {
-    if (target && target.postMessage) {
-      target.postMessage(message, "*");
+    if (target?.source?.postMessage && target.origin) {
+      target.source.postMessage(message, target.origin);
     }
   }
 
