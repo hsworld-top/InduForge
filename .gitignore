@@ -12,12 +12,12 @@ yarn-error.log*        # Yarn 错误日志文件
 pnpm-debug.log*        # pnpm 调试日志文件
 lerna-debug.log*       # Lerna 调试日志文件（多包管理工具）
 
-# dotenv 环境变量文件
-.env                   # 基础环境变量文件
-.env.development.local # 开发环境本地环境变量（不提交）
-.env.test.local        # 测试环境本地环境变量（不提交）
-.env.production.local  # 生产环境本地环境变量（不提交）
-.env.local             # 本地环境变量（优先级最高，不提交）
+# dotenv 环境变量文件（不提交）
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
 
 # 运行时数据
 pids                   # 进程ID文件目录
