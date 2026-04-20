@@ -94,6 +94,8 @@ type CreateRedisConfigInput struct {
 }
 
 // ProtocolWave1Service 负责第一波协议配置的输入校验和结果映射。
+// 说明：`kafka/http/websocket/redis` 属于 Phase 1 正式协议范围，但不是 MQTT 那种完整运行态深度。
+// 当前只保证配置层与 artifact 层稳定；其中仅 Kafka 暂时保留 mock preview 作为联调样本。
 type ProtocolWave1Service struct {
 	repository *repository.ProtocolWave1Repository
 }

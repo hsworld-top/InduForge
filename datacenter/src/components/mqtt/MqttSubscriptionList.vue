@@ -183,14 +183,14 @@ const loadSubscriptions = async () => {
   try {
     const response = await dataAPI.getMqttSubscriptions(
       props.projectId,
-      props.connectionId
+      props.connectionId,
     );
     if (response.success) {
       subscriptions.value = response.data || [];
     }
   } catch (error) {
     ElMessage.error(
-      "加载订阅列表失败：" + (error.response?.data?.message || error.message)
+      "加载订阅列表失败：" + (error.response?.data?.message || error.message),
     );
   } finally {
     loading.value = false;
@@ -248,7 +248,7 @@ const handleDelete = async (subscription) => {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         type: "warning",
-      }
+      },
     );
 
     await dataAPI.deleteMqttSubscription(props.projectId, subscription.id);
@@ -258,7 +258,7 @@ const handleDelete = async (subscription) => {
   } catch (error) {
     if (error !== "cancel") {
       ElMessage.error(
-        "删除失败：" + (error.response?.data?.message || error.message)
+        "删除失败：" + (error.response?.data?.message || error.message),
       );
     }
   }
@@ -346,7 +346,7 @@ watch(
       loadSubscriptions();
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // 组件挂载

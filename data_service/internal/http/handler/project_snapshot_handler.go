@@ -34,6 +34,21 @@ func (h *ProjectSnapshotHandler) Get(w http.ResponseWriter, r *http.Request) err
 	return nil
 }
 
+// GetArtifact 返回项目级 artifact v1 产物。
+func (h *ProjectSnapshotHandler) GetArtifact(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	result, err := h.service.GetArtifact(r.Context(), r.PathValue("projectId"))
+	if err != nil {
+		return err
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // Replace 用请求快照覆盖项目数据域数据。
 func (h *ProjectSnapshotHandler) Replace(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)

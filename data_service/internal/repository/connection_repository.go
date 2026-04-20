@@ -18,6 +18,7 @@ type ConnectionRecord struct {
 	ProjectID string
 	Name      string
 	Type      string
+	Category  string `json:"-"`
 	Status    string
 	Config    map[string]any
 	CreatedAt time.Time
@@ -70,7 +71,7 @@ func NewConnectionRepository(pool *pgxpool.Pool) *ConnectionRepository {
 // 当前额外按 created_at 排序，连接数量极大时可能触发排序开销，后续可视热点再补复合索引。
 func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, type, status, metadata, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1
         ORDER BY created_at DESC
@@ -101,7 +102,7 @@ func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID stri
 // 如果后续频繁走 project_id + id 联合过滤，可再评估是否需要复合索引。
 func (r *ConnectionRepository) GetByProjectAndID(ctx context.Context, projectID, connectionID string) (*ConnectionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, type, status, metadata, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1 AND id = $2
     `, projectID, connectionID)
@@ -135,7 +136,7 @@ func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnecti
             updated_by
         )
         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $7)
-        RETURNING id, project_id, name, type, status, metadata, created_at, updated_at
+        RETURNING id, project_id, name, type, category, status, metadata, created_at, updated_at
     `, params.ProjectID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
@@ -165,7 +166,7 @@ func (r *ConnectionRepository) Update(ctx context.Context, params UpdateConnecti
             updated_by = $8,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, type, status, metadata, created_at, updated_at
+        RETURNING id, project_id, name, type, category, status, metadata, created_at, updated_at
     `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
@@ -229,6 +230,7 @@ func scanConnection(row scannable) (ConnectionRecord, error) {
 		&record.ProjectID,
 		&record.Name,
 		&record.Type,
+		&record.Category,
 		&record.Status,
 		&configBytes,
 		&record.CreatedAt,

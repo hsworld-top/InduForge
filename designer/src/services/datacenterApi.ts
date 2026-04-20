@@ -11,6 +11,18 @@ export const datacenterApi = {
     });
   },
 
+  createPreviewSession(projectId: string) {
+    return request.post(`/data/projects/${projectId}/preview/sessions`, {});
+  },
+
+  heartbeatPreviewSession(sessionId: string) {
+    return request.post(`/data/preview/sessions/${sessionId}/heartbeat`, {});
+  },
+
+  deletePreviewSession(sessionId: string) {
+    return request.delete(`/data/preview/sessions/${sessionId}`);
+  },
+
   getQueries(projectId: string, params: Record<string, unknown> = {}) {
     return request.get(`/data/projects/${projectId}/queries`, {
       params,

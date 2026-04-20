@@ -14,7 +14,7 @@ import (
 	"github.com/indu-forge/data_service/internal/repository"
 )
 
-// PreviewSession 表示返回给 HTTP 层的 preview 会话对象。
+// PreviewSession 表示返回给 HTTP 层和 preview socket 的会话快照。
 type PreviewSession struct {
 	ID           string         `json:"id"`
 	ProjectID    string         `json:"projectId"`
@@ -26,12 +26,12 @@ type PreviewSession struct {
 	Meta         map[string]any `json:"meta"`
 }
 
-// CreatePreviewSessionInput 描述创建会话时允许外部传入的数据。
+// CreatePreviewSessionInput 描述创建 preview 会话时允许外部传入的附加数据。
 type CreatePreviewSessionInput struct {
 	Meta map[string]any
 }
 
-// PreviewSessionService 负责 preview 会话的鉴权边界、状态流转与缓存协同。
+// PreviewSessionService 负责 preview 会话的权限边界、状态流转与 Redis 协同。
 type PreviewSessionService struct {
 	repository *repository.PreviewSessionRepository
 	redis      *cache.RedisClient
@@ -87,7 +87,7 @@ func (s *PreviewSessionService) CreateSession(ctx context.Context, claims *auth.
 	return &session, nil
 }
 
-// HeartbeatSession 对会话做一次续期，刷新数据库快照与 Redis TTL。
+// HeartbeatSession 对会话执行一次续期，刷新数据库快照与 Redis TTL。
 func (s *PreviewSessionService) HeartbeatSession(ctx context.Context, claims *auth.Claims, sessionID string) (*PreviewSession, error) {
 	if err := s.validateDependencies(); err != nil {
 		return nil, err
@@ -95,19 +95,16 @@ func (s *PreviewSessionService) HeartbeatSession(ctx context.Context, claims *au
 	if claims == nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenRequired, http.StatusUnauthorized, "请先完成认证")
 	}
-	if _, err := uuid.Parse(strings.TrimSpace(sessionID)); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "sessionId 格式无效", err)
-	}
 
-	current, err := s.repository.GetByID(ctx, sessionID)
+	current, err := s.loadPreviewSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	if err := ensurePreviewSessionAccess(claims, *current); err != nil {
 		return nil, err
 	}
-	if current.Status != "active" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前会话状态不允许续期")
+	if err := ensurePreviewSessionActive(*current); err != nil {
+		return nil, err
 	}
 
 	now := time.Now().UTC()
@@ -138,11 +135,8 @@ func (s *PreviewSessionService) CloseSession(ctx context.Context, claims *auth.C
 	if claims == nil {
 		return apperrors.NewAppError(apperrors.ErrorCodeAuthTokenRequired, http.StatusUnauthorized, "请先完成认证")
 	}
-	if _, err := uuid.Parse(strings.TrimSpace(sessionID)); err != nil {
-		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "sessionId 格式无效", err)
-	}
 
-	current, err := s.repository.GetByID(ctx, sessionID)
+	current, err := s.loadPreviewSession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -159,11 +153,62 @@ func (s *PreviewSessionService) CloseSession(ctx context.Context, claims *auth.C
 	return nil
 }
 
+// AuthorizeSession 为 preview socket 等短时预览入口校验会话是否仍然有效。
+func (s *PreviewSessionService) AuthorizeSession(ctx context.Context, claims *auth.Claims, projectID, sessionID string) (*PreviewSession, error) {
+	if err := s.validateDependencies(); err != nil {
+		return nil, err
+	}
+	if claims == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenRequired, http.StatusUnauthorized, "请先完成认证")
+	}
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+
+	current, err := s.loadPreviewSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(current.ProjectID) != strings.TrimSpace(projectID) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodePermissionProjectMismatch, http.StatusForbidden, "项目范围不足")
+	}
+	if err := ensurePreviewSessionAccess(claims, *current); err != nil {
+		return nil, err
+	}
+	if err := ensurePreviewSessionActive(*current); err != nil {
+		return nil, err
+	}
+
+	session := toPreviewSession(*current)
+	return &session, nil
+}
+
+// GetSession 返回当前 preview 会话快照，供 socket 清理协程探测状态。
+func (s *PreviewSessionService) GetSession(ctx context.Context, sessionID string) (*PreviewSession, error) {
+	if err := s.validateDependencies(); err != nil {
+		return nil, err
+	}
+
+	current, err := s.loadPreviewSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	session := toPreviewSession(*current)
+	return &session, nil
+}
+
 func (s *PreviewSessionService) validateDependencies() error {
 	if s == nil || s.repository == nil || s.redis == nil {
 		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "preview 会话依赖未初始化")
 	}
 	return nil
+}
+
+func (s *PreviewSessionService) loadPreviewSession(ctx context.Context, sessionID string) (*repository.PreviewSessionRecord, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(sessionID)); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "sessionId 格式无效", err)
+	}
+	return s.repository.GetByID(ctx, sessionID)
 }
 
 func ensurePreviewSessionAccess(claims *auth.Claims, session repository.PreviewSessionRecord) error {
@@ -175,6 +220,16 @@ func ensurePreviewSessionAccess(claims *auth.Claims, session repository.PreviewS
 	}
 	if strings.TrimSpace(claims.UserID) != strings.TrimSpace(session.UserID) {
 		return apperrors.NewAppError(apperrors.ErrorCodePermissionInsufficient, http.StatusForbidden, "仅支持操作自己创建的预览会话")
+	}
+	return nil
+}
+
+func ensurePreviewSessionActive(session repository.PreviewSessionRecord) error {
+	if session.Status != "active" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前会话状态不允许预览")
+	}
+	if !session.ExpiredAt.IsZero() && time.Now().UTC().After(session.ExpiredAt.UTC()) {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "preview 会话已过期")
 	}
 	return nil
 }

@@ -2,9 +2,9 @@ package integration_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +15,7 @@ import (
 	"github.com/indu-forge/data_service/internal/config"
 )
 
-func TestProtocolWave2(t *testing.T) {
+func TestProtocolWave2PhaseBoundary(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -50,86 +50,47 @@ func TestProtocolWave2(t *testing.T) {
 		Capabilities: []string{"project:read", "project:write"},
 	})
 
-	opcuaConn := mustCreateOpcuaConfig(t, server.URL, token, projectID, map[string]any{
+	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcua/configs", token, map[string]any{
 		"name":     "opcua-main",
 		"endpoint": "opc.tcp://127.0.0.1:4840",
-	})
-	if opcuaConn.Type != "opcua" {
-		t.Fatalf("expected opcua type, got %q", opcuaConn.Type)
-	}
+	}, http.StatusBadRequest), "OPC UA")
 
-	s7Conn := mustCreateS7Config(t, server.URL, token, projectID, map[string]any{
+	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/s7/configs", token, map[string]any{
 		"name": "s7-main",
 		"host": "192.168.0.10",
 		"rack": 0,
 		"slot": 1,
-	})
-	if s7Conn.Type != "s7" {
-		t.Fatalf("expected s7 type, got %q", s7Conn.Type)
-	}
+	}, http.StatusBadRequest), "S7")
 
-	modbusConn := mustCreateModbusConfig(t, server.URL, token, projectID, map[string]any{
+	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/modbus/configs", token, map[string]any{
 		"name": "modbus-main",
 		"mode": "tcp",
 		"host": "192.168.0.20",
 		"port": 502,
-	})
-	if modbusConn.Type != "modbus" {
-		t.Fatalf("expected modbus type, got %q", modbusConn.Type)
-	}
+	}, http.StatusBadRequest), "Modbus")
 
-	tdengineConn := mustCreateTdengineConfig(t, server.URL, token, projectID, map[string]any{
+	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/tdengine/configs", token, map[string]any{
 		"name":     "td-main",
 		"dsn":      "taos://root:taosdata@127.0.0.1:6030",
 		"database": "factory",
-	})
-	if tdengineConn.Type != "tdengine" {
-		t.Fatalf("expected tdengine type, got %q", tdengineConn.Type)
-	}
+	}, http.StatusBadRequest), "TDengine")
 
-	invalidContract := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcda/contracts/validate", token, map[string]any{
-		"itemPath":   "",
-		"samplingMs": 1000,
-	}, http.StatusBadRequest)
-	if invalidContract.ErrorCode != "BAD_REQUEST" {
-		t.Fatalf("expected BAD_REQUEST for invalid opcda contract, got %q", invalidContract.ErrorCode)
-	}
-
-	validContract := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcda/contracts/validate", token, map[string]any{
+	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcda/contracts/validate", token, map[string]any{
 		"itemPath":   "Channel1.Device1.TagA",
 		"samplingMs": 1000,
-	})
-	var payload struct {
-		Valid bool `json:"valid"`
+	}, http.StatusBadRequest), "OPC DA")
+}
+
+func assertPhaseBoundaryError(t *testing.T, envelope apiEnvelope, protocolName string) {
+	t.Helper()
+
+	if envelope.Success {
+		t.Fatalf("expected %s endpoint to be blocked by phase boundary", protocolName)
 	}
-	if err := json.Unmarshal(validContract.Data, &payload); err != nil {
-		t.Fatalf("decode opcda validation response failed: %v", err)
+	if envelope.ErrorCode != "BAD_REQUEST" {
+		t.Fatalf("expected BAD_REQUEST for %s phase boundary, got %q", protocolName, envelope.ErrorCode)
 	}
-	if !payload.Valid {
-		t.Fatal("expected opcda contract to be valid")
+	if !strings.Contains(envelope.Message, "Phase 1 正式范围") {
+		t.Fatalf("expected %s phase boundary message, got %q", protocolName, envelope.Message)
 	}
-}
-
-func mustCreateOpcuaConfig(t *testing.T, baseURL, token, projectID string, payload map[string]any) protocolWave1ConnectionPayload {
-	t.Helper()
-	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/opcua/configs", token, payload)
-	return decodeProtocolWave1Connection(t, responseEnvelope.Data)
-}
-
-func mustCreateS7Config(t *testing.T, baseURL, token, projectID string, payload map[string]any) protocolWave1ConnectionPayload {
-	t.Helper()
-	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/s7/configs", token, payload)
-	return decodeProtocolWave1Connection(t, responseEnvelope.Data)
-}
-
-func mustCreateModbusConfig(t *testing.T, baseURL, token, projectID string, payload map[string]any) protocolWave1ConnectionPayload {
-	t.Helper()
-	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/modbus/configs", token, payload)
-	return decodeProtocolWave1Connection(t, responseEnvelope.Data)
-}
-
-func mustCreateTdengineConfig(t *testing.T, baseURL, token, projectID string, payload map[string]any) protocolWave1ConnectionPayload {
-	t.Helper()
-	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/tdengine/configs", token, payload)
-	return decodeProtocolWave1Connection(t, responseEnvelope.Data)
 }

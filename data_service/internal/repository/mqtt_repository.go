@@ -60,6 +60,19 @@ type CreateMqttConnectionParams struct {
 }
 
 // MqttRepository 负责 data_mqtt_* 相关参数化 SQL。
+// CreateMqttMessageParams 描述 MQTT 预览运行时落库最近消息时的写入参数。
+type CreateMqttMessageParams struct {
+	ProjectID      string
+	ConnectionID   string
+	SubscriptionID string
+	Topic          string
+	Payload        string
+	QOS            int
+	ReceivedAt     time.Time
+	Metadata       map[string]any
+	RetentionLimit int
+}
+
 type MqttRepository struct {
 	pool *pgxpool.Pool
 }
@@ -264,6 +277,63 @@ func (r *MqttRepository) ListMessages(ctx context.Context, projectID, subscripti
 	}
 
 	return messages, nil
+}
+
+// CreateMessage 持久化一条 MQTT 预览消息，并按订阅保留策略裁剪旧消息。
+func (r *MqttRepository) CreateMessage(ctx context.Context, params CreateMqttMessageParams) (*MqttMessageRecord, error) {
+	metadataPayload, err := marshalMqttJSONObject(params.Metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	receivedAt := params.ReceivedAt.UTC()
+	if receivedAt.IsZero() {
+		receivedAt = time.Now().UTC()
+	}
+
+	record := MqttMessageRecord{}
+	err = r.pool.QueryRow(ctx, `
+		INSERT INTO data_mqtt_messages (
+			project_id,
+			connection_id,
+			subscription_id,
+			topic,
+			payload,
+			qos,
+			received_at,
+			metadata
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+		RETURNING id, subscription_id, topic, payload, qos, received_at
+	`, params.ProjectID, params.ConnectionID, params.SubscriptionID, params.Topic, params.Payload, params.QOS, receivedAt, nullableMqttJSON(metadataPayload)).Scan(
+		&record.ID,
+		&record.SubscriptionID,
+		&record.Topic,
+		&record.Payload,
+		&record.QOS,
+		&record.ReceivedAt,
+	)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "鍐欏叆 MQTT 娑堟伅澶辫触", err)
+	}
+
+	if params.RetentionLimit > 0 {
+		if _, err := r.pool.Exec(ctx, `
+			DELETE FROM data_mqtt_messages
+			WHERE id IN (
+				SELECT id
+				FROM data_mqtt_messages
+				WHERE project_id = $1
+				  AND subscription_id = $2
+				ORDER BY received_at DESC, id DESC
+				OFFSET $3
+			)
+		`, params.ProjectID, params.SubscriptionID, params.RetentionLimit); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "瑁佸壀 MQTT 娑堟伅缂撳瓨澶辫触", err)
+		}
+	}
+
+	return &record, nil
 }
 
 func marshalMqttJSONObject(input map[string]any) ([]byte, error) {

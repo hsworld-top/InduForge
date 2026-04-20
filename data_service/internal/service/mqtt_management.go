@@ -731,11 +731,21 @@ func (s *MqttService) GetTagValue(ctx context.Context, projectID, tagID string) 
 	if err != nil {
 		return nil, err
 	}
+	snapshot, err := s.resolveLatestTagValue(ctx, projectID, *record)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
-		"tagId":       record.ID,
-		"parsedValue": defaultValueOrNil(record.DefaultValue),
-		"quality":     "unknown",
-		"timestamp":   record.UpdatedAt,
+		"tagId":          snapshot.TagID,
+		"subscriptionId": snapshot.SubscriptionID,
+		"topic":          snapshot.Topic,
+		"payload":        snapshot.Payload,
+		"value":          snapshot.Value,
+		"parsedValue":    snapshot.ParsedValue,
+		"quality":        snapshot.Quality,
+		"timestamp":      snapshot.Timestamp,
+		"receivedAt":     snapshot.ReceivedAt,
+		"error":          snapshot.Error,
 	}, nil
 }
 
@@ -750,6 +760,23 @@ func (s *MqttService) GetTagValues(ctx context.Context, projectID string, tagIDs
 		result = append(result, value)
 	}
 	return result, nil
+}
+
+func (s *MqttService) resolveLatestTagValue(ctx context.Context, projectID string, tag repository.MqttTagRecord) (MqttTagValueSnapshot, error) {
+	subscription, err := s.repository.GetSubscription(ctx, projectID, tag.SubscriptionID)
+	if err != nil {
+		return MqttTagValueSnapshot{}, err
+	}
+
+	messages, err := s.repository.ListMessages(ctx, projectID, subscription.ID, 1)
+	if err != nil {
+		return MqttTagValueSnapshot{}, err
+	}
+	if len(messages) == 0 {
+		return BuildFallbackMqttTagSnapshot(tag, tag.UpdatedAt, ""), nil
+	}
+
+	return BuildMqttTagSnapshotFromMessage(tag, messages[0]), nil
 }
 
 func (s *MqttService) syncSubscriptionDatapoint(ctx context.Context, subscription repository.MqttSubscriptionRecord, userID string) error {

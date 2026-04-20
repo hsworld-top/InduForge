@@ -218,12 +218,14 @@
                 <MqttTagList
                   :project-id="projectId"
                   :subscription-id="tab.subscriptionId"
+                  :preview-session-id="previewSessionId"
                 />
               </div>
               <div class="w-1/2 min-w-0">
                 <MqttTagMonitor
                   :project-id="projectId"
                   :subscription-id="tab.subscriptionId"
+                  :preview-session-id="previewSessionId"
                 />
               </div>
             </div>
@@ -336,6 +338,7 @@ import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
 import DataPointList from "@/components/datapoint/DataPointList.vue";
 import ComputeUnitPanel from "@/components/compute/ComputeUnitPanel.vue";
 import { useConnection } from "@/composables/useConnection";
+import { usePreviewSession } from "@/composables/usePreviewSession";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import dataAPI from "@/api/data.api";
 import dayjs from "dayjs";
@@ -356,6 +359,7 @@ const project = computed(() => {
 // 提供给子组件使用
 const projectId = computed(() => project.value?.id);
 provide("projectId", projectId);
+const { sessionId: previewSessionId } = usePreviewSession(projectId);
 
 // 使用 composable
 const {
@@ -376,7 +380,7 @@ const {
   connected: mqttSocketConnected,
   subscribeMessages,
   onMessage,
-} = useMqttSocket(projectId.value);
+} = useMqttSocket(projectId, previewSessionId);
 
 // 统一标签页管理
 const tabs = ref([]);
@@ -1378,13 +1382,12 @@ const handleMqttSubscriptionDeleted = (connection, subscription) => {
   const tagTabId = `mqtt-tags-${subscriptionId}`;
 
   tabs.value = tabs.value.filter(
-    (tab) => tab.id !== messageTabId && tab.id !== tagTabId
+    (tab) => tab.id !== messageTabId && tab.id !== tagTabId,
   );
 
   if (activeTabId.value === messageTabId || activeTabId.value === tagTabId) {
     const fallbackTab = tabs.value.find(
-      (tab) =>
-        tab.id === `mqtt-subscriptions-${connection.id}` || tab.closable
+      (tab) => tab.id === `mqtt-subscriptions-${connection.id}` || tab.closable,
     );
     activeTabId.value = fallbackTab ? fallbackTab.id : "";
   }

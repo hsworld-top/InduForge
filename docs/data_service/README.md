@@ -14,6 +14,33 @@
 - 预览会话与开发态数据支撑
 - 数据域 API 与数据域存储能力
 
+## Phase 1 协议范围
+
+### 正式协议范围
+
+- `relational`：正式支持配置、查询预览、数据点映射与 artifact 输出。
+- `mqtt`：Phase 1 样板协议，正式支持配置、短时 preview、消息样本、Tag/Subscription 管理与 artifact 输出。
+- `kafka`：正式纳入 Phase 1，当前提供配置能力、artifact 输出，以及 `mock` 级 topic preview 样本。
+- `http`：正式纳入 Phase 1，当前提供配置能力与 artifact 输出，不提供独立 preview/runtime 采集能力。
+- `websocket`：正式纳入 Phase 1，当前提供配置能力与 artifact 输出，不提供独立 preview/runtime 采集能力。
+- `redis`：正式纳入 Phase 1，当前提供配置能力与 artifact 输出，不提供独立 preview/runtime 采集能力。
+
+### 非 Phase 1 正式范围
+
+- `opcua`
+- `s7`
+- `modbus`
+- `tdengine`
+- `opcda`
+
+这些协议和校验入口当前只保留 Phase 2 的接口边界与规划占位，不再作为 Phase 1 正式可交付能力对外宣称。若调用对应接口，服务端会显式返回“未纳入 Phase 1 正式范围”的错误，而不是继续落库形成误导。
+
+### 产物与 preview 边界
+
+- `artifact v1` 的正式协议区块只包含 `mqtt` 与 `protocols.kafka/http/websocket/redis`。
+- `preview socket` 与短时会话只服务开发态调试，不承担长期采集。
+- Kafka preview 当前返回 `mock` 样本，目的是给 `datacenter` 和联调链路提供稳定调试口径，而不是承诺完整运行态消费栈。
+
 ## 正式边界
 
 - `data_service` 是平台侧与开发态数据域服务，不承担平台治理和发布部署编排职责。

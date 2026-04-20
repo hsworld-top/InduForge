@@ -72,6 +72,8 @@ type CreateTdengineConfigParams struct {
 }
 
 // ProtocolWave2Repository 负责第二波协议配置（opcua/s7/modbus/tdengine）参数化 SQL。
+// 说明：当前只保留 schema 与参数化落库实现，便于后续进入 Phase 2 时复用；
+// Phase 1 不再通过这些对象对外宣称正式协议能力。
 type ProtocolWave2Repository struct {
 	pool *pgxpool.Pool
 }

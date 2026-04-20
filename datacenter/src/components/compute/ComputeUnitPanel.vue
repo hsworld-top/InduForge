@@ -147,7 +147,9 @@ const handleCreate = async () => {
     outputText.value = JSON.stringify(response.data, null, 2);
     ElMessage.success("计算单元创建成功");
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || error.message || "创建失败");
+    ElMessage.error(
+      error.response?.data?.message || error.message || "创建失败",
+    );
   } finally {
     creating.value = false;
   }
@@ -167,7 +169,9 @@ const handleRun = async () => {
     outputText.value = JSON.stringify(response.data, null, 2);
     ElMessage.success("运行成功");
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || error.message || "运行失败");
+    ElMessage.error(
+      error.response?.data?.message || error.message || "运行失败",
+    );
   } finally {
     running.value = false;
   }
@@ -187,7 +191,9 @@ const handleDebug = async () => {
     outputText.value = JSON.stringify(response.data, null, 2);
     ElMessage.success("调试成功");
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || error.message || "调试失败");
+    ElMessage.error(
+      error.response?.data?.message || error.message || "调试失败",
+    );
   } finally {
     debugging.value = false;
   }

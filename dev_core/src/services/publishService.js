@@ -18,6 +18,96 @@ const {
 // 制品存储目录
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, "../../artifacts");
 
+const asArray = (value) => (Array.isArray(value) ? value : []);
+
+const normalizeArtifactProtocols = (protocols = {}) => ({
+  kafka: asArray(protocols?.kafka),
+  http: asArray(protocols?.http),
+  websocket: asArray(protocols?.websocket),
+  redis: asArray(protocols?.redis),
+});
+
+const resolveStoredArtifactFileName = (deployment) => {
+  const explicitFileName = deployment?.buildConfig?.artifactFileName;
+  if (explicitFileName) {
+    return path.basename(String(explicitFileName));
+  }
+
+  const artifactUrl = String(deployment?.artifactUrl || "");
+  const urlFileName = path.basename(artifactUrl);
+  if (urlFileName && urlFileName !== "download" && /\.ifp$/i.test(urlFileName)) {
+    return urlFileName;
+  }
+
+  return "";
+};
+
+const buildLegacyArtifactFilePrefix = (deployment) => {
+  const projectId = String(deployment?.projectId || "").trim();
+  const version = String(deployment?.version || "").trim();
+  if (!projectId || !version) {
+    return "";
+  }
+  return `${projectId}_v${version}_`;
+};
+
+const resolveArtifactFileCandidates = async (deployment) => {
+  const directFileName = resolveStoredArtifactFileName(deployment);
+  if (directFileName) {
+    return [path.join(ARTIFACTS_DIR, directFileName)];
+  }
+
+  const legacyPrefix = buildLegacyArtifactFilePrefix(deployment);
+  if (!legacyPrefix) {
+    return [];
+  }
+
+  const artifactNames = await fs.readdir(ARTIFACTS_DIR).catch(() => []);
+  return artifactNames
+    .filter((name) => name.startsWith(legacyPrefix) && /\.ifp$/i.test(name))
+    .sort((left, right) => right.localeCompare(left))
+    .map((name) => path.join(ARTIFACTS_DIR, name));
+};
+
+const buildRelationalConfigsFromConnections = (connections = []) =>
+  asArray(connections)
+    .filter((connection) => connection?.type === "relational")
+    .map((connection) => {
+      const config = connection?.config || {};
+      return {
+        connectionId: connection.id,
+        dbType: config.dbType || "postgresql",
+        host: config.host || "",
+        port: config.port ?? 5432,
+        database: config.database || "",
+        username: config.username || "",
+        password: config.password || "",
+        schema: config.schema || null,
+        charset: config.charset || null,
+        timezone: config.timezone || null,
+        ssl: Boolean(config.ssl),
+        sslConfig: config.sslConfig || {},
+      };
+    });
+
+const buildMqttConfigsFromArtifact = (connections = []) =>
+  asArray(connections).map((connection) => ({
+    connectionId: connection.id,
+    brokerUrl: connection.brokerUrl || "",
+    protocol: connection.protocol || "mqtt",
+    port: connection.port ?? 1883,
+    clientId: connection.clientId ?? null,
+    username: connection.username ?? null,
+    password: connection.password ?? null,
+    keepalive: connection.keepalive ?? 60,
+    cleanSession: Boolean(connection.cleanSession),
+    qos: connection.qos ?? 0,
+    reconnectPeriod: connection.reconnectPeriod ?? 1000,
+    connectTimeout: connection.connectTimeout ?? 30000,
+    will: connection.will || {},
+    sslConfig: connection.sslConfig || {},
+  }));
+
 /**
  * 发布服务类
  */
@@ -125,6 +215,10 @@ class PublishService {
         artifactUrl,
         artifactHash: hash,
         artifactSize: size,
+        buildConfig: {
+          ...(deployment.buildConfig || {}),
+          artifactFileName: path.basename(ifpPath),
+        },
         manifest: {
           name: manifest.name,
           version: manifest.version,
@@ -215,18 +309,22 @@ class PublishService {
         ["sortOrder", "ASC"],
       ],
     });
-    const snapshot = await this.dataDomainClient.getProjectSnapshot(projectId, authorization);
+    const artifact = await this.dataDomainClient.getProjectArtifact(projectId, authorization);
+    const protocols = normalizeArtifactProtocols(artifact?.protocols);
 
     return {
       pages,
-      connections: snapshot.connections,
-      relationalConfigs: snapshot.relationalConfigs,
-      queries: snapshot.queries,
-      mqttConfigs: snapshot.mqttConfigs,
-      mqttSubscriptions: snapshot.mqttSubscriptions,
-      mqttTagGroups: snapshot.mqttTagGroups,
-      mqttTags: snapshot.mqttTags,
-      dataPoints: snapshot.datapoints,
+      artifactVersion: artifact?.version || "1.0",
+      artifactGeneratedAt: artifact?.generatedAt || new Date().toISOString(),
+      connections: asArray(artifact?.connections),
+      relationalConfigs: buildRelationalConfigsFromConnections(artifact?.connections),
+      queries: asArray(artifact?.queries),
+      mqttConfigs: buildMqttConfigsFromArtifact(artifact?.mqtt?.connections),
+      mqttSubscriptions: asArray(artifact?.mqtt?.subscriptions),
+      mqttTagGroups: asArray(artifact?.mqtt?.tagGroups),
+      mqttTags: asArray(artifact?.mqtt?.tags),
+      dataPoints: asArray(artifact?.datapoints),
+      protocols,
     };
   }
 
@@ -331,6 +429,9 @@ class PublishService {
 
       // 添加 datacenter.json（数据配置）
       const datacenterJson = {
+        version: projectData.artifactVersion || "1.0",
+        projectId,
+        generatedAt: projectData.artifactGeneratedAt || new Date().toISOString(),
         connections: projectData.connections.map((c) => ({
           id: c.id,
           name: c.name,
@@ -365,6 +466,7 @@ class PublishService {
           cacheEnabled: q.cacheEnabled,
           cacheTtlSeconds: q.cacheTtlSeconds,
         })),
+        protocols: normalizeArtifactProtocols(projectData.protocols),
       };
       archive.append(JSON.stringify(datacenterJson, null, 2), { name: "datacenter.json" });
 
@@ -468,14 +570,16 @@ class PublishService {
       throw new Error("制品不存在");
     }
 
-    const fileName = path.basename(deployment.artifactUrl);
-    const filePath = path.join(ARTIFACTS_DIR, fileName);
-
-    if (!(await fs.pathExists(filePath))) {
-      throw new Error("制品文件不存在");
+    // 新记录优先使用 buildConfig 中固化的 artifactFileName；
+    // 旧记录则按 `projectId + version + 时间戳` 的既有命名规则回溯，避免受受控下载 URL 影响。
+    const candidates = await resolveArtifactFileCandidates(deployment);
+    for (const filePath of candidates) {
+      if (await fs.pathExists(filePath)) {
+        return filePath;
+      }
     }
 
-    return filePath;
+    throw new Error("制品文件不存在");
   }
 
   /**

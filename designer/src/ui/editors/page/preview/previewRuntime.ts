@@ -24,6 +24,7 @@ import { io } from "socket.io-client";
 import { normalizeGlobalValue } from "@/editor-core/utils/variable-utils";
 import { datacenterApi } from "@/services";
 import { unwrapApiData } from "@/types/api";
+import { Storage } from "@/utils/storage";
 import {
   extractDatapointValue,
   getQueryExecuteData,
@@ -40,6 +41,8 @@ import {
 
 const API_BASE_TRAILING_SLASH_RE = /\/$/;
 const PARAM_NAME_RE = /^[A-Z_$][\w$]*$/i;
+const PREVIEW_SOCKET_PATH = "/socket.io";
+const PREVIEW_SESSION_HEARTBEAT_INTERVAL = 5 * 60 * 1000;
 
 interface DatapointMetaCacheEntry {
   id?: string;
@@ -104,6 +107,7 @@ const previewMqttState: {
   socket: Socket | null;
   connectPromise: Promise<unknown> | null;
   projectId: string | null;
+  sessionId: string | null;
   tagValues: Map<string, unknown>;
   subscriptionValues: Map<string, unknown>;
   datapointValues: Map<string, unknown>;
@@ -119,6 +123,7 @@ const previewMqttState: {
   socket: null,
   connectPromise: null,
   projectId: null,
+  sessionId: null,
   tagValues: new Map(),
   subscriptionValues: new Map(),
   datapointValues: new Map(),
@@ -130,6 +135,27 @@ const previewMqttState: {
   subscribePending: new Set(),
   emitDedup: new Map(),
   onValueUpdate: null,
+};
+const previewSessionState: {
+  sessionId: string | null;
+  projectId: string | null;
+  createPromise: Promise<string | null> | null;
+  deletePromise: Promise<void> | null;
+  deleteSessionId: string | null;
+  heartbeatTimer: ReturnType<typeof setInterval> | null;
+  heartbeatInFlight: boolean;
+  generation: number;
+  createFailed: boolean;
+} = {
+  sessionId: null,
+  projectId: null,
+  createPromise: null,
+  deletePromise: null,
+  deleteSessionId: null,
+  heartbeatTimer: null,
+  heartbeatInFlight: false,
+  generation: 0,
+  createFailed: false,
 };
 const pendingComponentCalls = new Map<string, { method: string; args: unknown[] }[]>();
 
@@ -149,6 +175,160 @@ function getApiBase() {
     return import.meta.env.VITE_API_URL;
   }
   return "http://localhost:19601";
+}
+
+function extractPreviewSessionId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const candidates = [
+    record.sessionId,
+    record.id,
+    (record.data as Record<string, unknown> | undefined)?.sessionId,
+    (record.data as Record<string, unknown> | undefined)?.id,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate) return candidate;
+  }
+  return null;
+}
+
+function stopPreviewSessionHeartbeat() {
+  if (previewSessionState.heartbeatTimer) {
+    clearInterval(previewSessionState.heartbeatTimer);
+    previewSessionState.heartbeatTimer = null;
+  }
+  previewSessionState.heartbeatInFlight = false;
+}
+
+async function sendPreviewSessionHeartbeat(sessionId: string) {
+  if (!sessionId) return;
+  try {
+    await datacenterApi.heartbeatPreviewSession(sessionId);
+  } catch {
+    // 预览会话心跳是保活信号，失败时不打断现有回退读取链路。
+  }
+}
+
+function startPreviewSessionHeartbeat(sessionId: string) {
+  stopPreviewSessionHeartbeat();
+  if (!sessionId) return;
+  previewSessionState.heartbeatTimer = setInterval(() => {
+    if (!previewSessionState.sessionId || previewSessionState.sessionId !== sessionId) return;
+    if (previewSessionState.heartbeatInFlight) return;
+    previewSessionState.heartbeatInFlight = true;
+    void sendPreviewSessionHeartbeat(sessionId).finally(() => {
+      previewSessionState.heartbeatInFlight = false;
+    });
+  }, PREVIEW_SESSION_HEARTBEAT_INTERVAL);
+  void sendPreviewSessionHeartbeat(sessionId);
+}
+
+function resetPreviewMqttSocketState() {
+  if (previewMqttState.socket) {
+    previewMqttState.socket.disconnect();
+  }
+  previewMqttState.socket = null;
+  previewMqttState.connectPromise = null;
+  previewMqttState.projectId = null;
+  previewMqttState.sessionId = null;
+}
+
+function resetPreviewSessionLocalState() {
+  stopPreviewSessionHeartbeat();
+  previewSessionState.sessionId = null;
+  previewSessionState.projectId = null;
+}
+
+async function deletePreviewSessionRemote(sessionId: string) {
+  if (!sessionId) return;
+  if (previewSessionState.deletePromise && previewSessionState.deleteSessionId === sessionId) {
+    return previewSessionState.deletePromise;
+  }
+
+  const deletePromise = Promise.resolve(datacenterApi.deletePreviewSession(sessionId))
+    .then(() => undefined)
+    .catch(() => {
+      // 删除失败只记录为最佳努力清理，避免影响编辑器退出和重复清理。
+      return undefined;
+    })
+    .finally(() => {
+      if (previewSessionState.deleteSessionId === sessionId) {
+        previewSessionState.deletePromise = null;
+        previewSessionState.deleteSessionId = null;
+      }
+    }) as Promise<void>;
+
+  previewSessionState.deletePromise = deletePromise;
+  previewSessionState.deleteSessionId = sessionId;
+  return deletePromise;
+}
+
+async function ensurePreviewSession(projectId: string | null | undefined) {
+  if (!projectId) return null;
+  if (previewSessionState.sessionId && previewSessionState.projectId === projectId) {
+    return previewSessionState.sessionId;
+  }
+  if (
+    previewSessionState.createPromise &&
+    previewSessionState.projectId === projectId &&
+    !previewSessionState.sessionId
+  ) {
+    return previewSessionState.createPromise;
+  }
+
+  const token = Storage.getToken();
+  if (!token) {
+    previewSessionState.createFailed = true;
+    return null;
+  }
+
+  const requestGeneration = ++previewSessionState.generation;
+  previewSessionState.projectId = projectId;
+
+  const createPromise: Promise<string | null> = (async () => {
+    try {
+      const result = await datacenterApi.createPreviewSession(projectId);
+      const sessionId = extractPreviewSessionId(unwrapApiData(result));
+      if (!sessionId) {
+        previewSessionState.createFailed = true;
+        return null;
+      }
+
+      if (previewSessionState.generation !== requestGeneration) {
+        void deletePreviewSessionRemote(sessionId);
+        return null;
+      }
+
+      previewSessionState.sessionId = sessionId;
+      previewSessionState.projectId = projectId;
+      previewSessionState.createFailed = false;
+      startPreviewSessionHeartbeat(sessionId);
+      return sessionId;
+    } catch {
+      previewSessionState.createFailed = true;
+      return null;
+    }
+  })();
+
+  previewSessionState.createPromise = createPromise;
+  createPromise.finally(() => {
+    if (previewSessionState.createPromise === createPromise) {
+      previewSessionState.createPromise = null;
+    }
+  });
+  return createPromise;
+}
+
+async function cleanupPreviewSession(options?: { awaitRemote?: boolean }) {
+  const sessionId = previewSessionState.sessionId;
+  previewSessionState.generation += 1;
+  previewSessionState.createPromise = null;
+  resetPreviewSessionLocalState();
+  previewSessionState.createFailed = false;
+  const deletePromise = sessionId ? deletePreviewSessionRemote(sessionId) : null;
+  if (options?.awaitRemote && deletePromise) {
+    await deletePromise;
+  }
 }
 
 async function resolveConnection(projectId: string | null | undefined, name: string) {
@@ -220,12 +400,16 @@ async function executeQueryByPath(projectId: string | null | undefined, path: un
 }
 
 async function ensurePreviewMqttSocket(projectId: string | null | undefined) {
-  const apiBase = getApiBase();
-  const query = new URLSearchParams();
-  if (projectId) query.set("projectId", projectId);
-  const socketUrl = query.toString() ? `${apiBase}?${query}` : apiBase;
+  const sessionId = await ensurePreviewSession(projectId);
+  if (!projectId || !sessionId) return null;
 
-  if (previewMqttState.socket && previewMqttState.projectId === projectId) {
+  const apiBase = getApiBase().replace(API_BASE_TRAILING_SLASH_RE, "");
+
+  if (
+    previewMqttState.socket &&
+    previewMqttState.projectId === projectId &&
+    previewMqttState.sessionId === sessionId
+  ) {
     if (!previewMqttState.connectPromise) {
       const sock = previewMqttState.socket;
       previewMqttState.connectPromise = new Promise((resolve, reject) => {
@@ -233,42 +417,35 @@ async function ensurePreviewMqttSocket(projectId: string | null | undefined) {
         sock.once("connect_error", reject);
       });
     }
-    await previewMqttState.connectPromise;
-    return previewMqttState.socket;
-  }
-
-  if (previewMqttState.socket) {
-    previewMqttState.socket.disconnect();
-  }
-
-  const queryParams: Record<string, string> | undefined = (() => {
     try {
-      const urlObj = new URL(socketUrl);
-      const params: Record<string, string> = {};
-      for (const [key, value] of urlObj.searchParams.entries()) {
-        params[key] = value;
-      }
-      return params;
+      await previewMqttState.connectPromise;
+      return previewMqttState.socket;
     } catch {
-      return undefined;
+      resetPreviewMqttSocketState();
+      return null;
     }
-  })();
+  }
+
+  resetPreviewMqttSocketState();
 
   const socketOpts: NonNullable<Parameters<typeof io>[1]> = {
-    path: "/socket.io",
-    transports: ["websocket", "polling"],
+    path: PREVIEW_SOCKET_PATH,
+    transports: ["websocket"],
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: Infinity,
+    auth: {
+      token: Storage.getToken() || "",
+      projectId,
+      previewSessionId: sessionId,
+    },
   };
-  if (queryParams && Object.keys(queryParams).length > 0) {
-    socketOpts.query = queryParams;
-  }
-  const socket = io(apiBase.replace(API_BASE_TRAILING_SLASH_RE, ""), socketOpts);
+  const socket = io(apiBase, socketOpts);
 
   previewMqttState.socket = socket;
   previewMqttState.projectId = projectId ?? null;
+  previewMqttState.sessionId = sessionId;
   previewMqttState.connectPromise = new Promise((resolve, reject) => {
     socket.once("connect", () => resolve(undefined));
     socket.once("connect_error", reject);
@@ -304,8 +481,13 @@ async function ensurePreviewMqttSocket(projectId: string | null | undefined) {
     previewMqttState.onValueUpdate?.("datapoint", data.path, value, data);
   });
 
-  await previewMqttState.connectPromise;
-  return socket;
+  try {
+    await previewMqttState.connectPromise;
+    return socket;
+  } catch {
+    resetPreviewMqttSocketState();
+    return null;
+  }
 }
 
 function emitWithDedup(
@@ -966,6 +1148,8 @@ export function initPreviewRuntime(
     const system = gs?.system;
     const startup = system?.startup;
     const systemCode = startup?.code;
+    previewSessionState.createFailed = false;
+    await ensurePreviewSession(projectId ?? null);
     await runCode(systemCode, { type: "startup" }, null, options?.pageId ?? null);
     await runPageLifecycleHandlers("onMounted");
     const globalTimers = itemsFromScriptSection(gs?.timers);
@@ -999,6 +1183,8 @@ export function initPreviewRuntime(
     const shutdown = system?.shutdown;
     const shutdownCode = shutdown?.code;
     await runCode(shutdownCode, { type: "shutdown" }, null, options?.pageId ?? null);
+    resetPreviewMqttSocketState();
+    await cleanupPreviewSession({ awaitRemote: true });
   };
 
   const registerComponentRef = (pageIdValue: string, name: string, refInfo: unknown) => {
@@ -1076,12 +1262,7 @@ export function clearPreviewRuntime() {
   previewDataServiceState.projectId = null;
   previewDataServiceState.subscribed.clear();
   previewDataServiceState.pending.clear();
-  if (previewMqttState.socket) {
-    previewMqttState.socket.disconnect();
-  }
-  previewMqttState.socket = null;
-  previewMqttState.connectPromise = null;
-  previewMqttState.projectId = null;
+  resetPreviewMqttSocketState();
   previewMqttState.tagValues.clear();
   previewMqttState.subscriptionValues.clear();
   previewMqttState.datapointValues.clear();
@@ -1093,4 +1274,5 @@ export function clearPreviewRuntime() {
   previewMqttState.subscribePending.clear();
   previewMqttState.emitDedup.clear();
   previewMqttState.onValueUpdate = null;
+  void cleanupPreviewSession();
 }

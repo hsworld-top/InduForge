@@ -73,7 +73,11 @@ onBeforeUnmount(() => {
 .app-loading {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 30% 20%, rgba(14, 165, 233, 0.12), rgba(15, 23, 42, 0.2));
+  background: radial-gradient(
+    circle at 30% 20%,
+    rgba(14, 165, 233, 0.12),
+    rgba(15, 23, 42, 0.2)
+  );
   display: flex;
   align-items: center;
   justify-content: center;

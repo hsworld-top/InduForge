@@ -231,6 +231,70 @@ const normalizeProjectSnapshot = (snapshot) => ({
 });
 
 /**
+ * 规范化 artifact 协议对象（kafka/http/websocket/redis）。
+ * @param {object} record - 原始协议对象
+ * @returns {object}
+ */
+const normalizeArtifactProtocolRecord = (record) => ({
+  id: pickField(record, "id", "ID"),
+  name: pickField(record, "name", "Name"),
+  type: pickField(record, "type", "Type"),
+  status: pickField(record, "status", "Status"),
+  config: pickField(record, "config", "Config") || {},
+});
+
+/**
+ * 规范化 artifact 中的 MQTT 连接对象。
+ * @param {object} record - 原始 MQTT 连接对象
+ * @returns {object}
+ */
+const normalizeArtifactMqttConnectionRecord = (record) => ({
+  id: pickField(record, "id", "ID", "connectionId", "ConnectionID"),
+  name: pickField(record, "name", "Name") || "",
+  type: pickField(record, "type", "Type") || "mqtt",
+  status: pickField(record, "status", "Status") || "",
+  brokerUrl: pickField(record, "brokerUrl", "BrokerURL") || "",
+  protocol: pickField(record, "protocol", "Protocol") || "mqtt",
+  port: pickField(record, "port", "Port"),
+  clientId: pickField(record, "clientId", "ClientID") || null,
+  username: pickField(record, "username", "Username") || null,
+  password: pickField(record, "password", "Password") || null,
+  keepalive: pickField(record, "keepalive", "Keepalive"),
+  cleanSession: Boolean(pickField(record, "cleanSession", "CleanSession")),
+  qos: pickField(record, "qos", "QOS"),
+  reconnectPeriod: pickField(record, "reconnectPeriod", "ReconnectPeriodMS"),
+  connectTimeout: pickField(record, "connectTimeout", "ConnectTimeoutMS"),
+  will: pickField(record, "will", "Will") || {},
+  sslConfig: pickField(record, "sslConfig", "SSLConfig") || {},
+});
+
+/**
+ * 规范化项目 artifact v1。
+ * @param {object|null|undefined} artifact - 原始 artifact 响应
+ * @returns {object}
+ */
+const normalizeProjectArtifact = (artifact) => ({
+  version: pickField(artifact, "version", "Version"),
+  projectId: pickField(artifact, "projectId", "ProjectID"),
+  generatedAt: pickField(artifact, "generatedAt", "GeneratedAt"),
+  connections: asArray(artifact?.connections).map(normalizeConnectionRecord),
+  queries: asArray(artifact?.queries).map(normalizeQueryRecord),
+  datapoints: asArray(artifact?.datapoints).map(normalizeDataPointRecord),
+  mqtt: {
+    connections: asArray(artifact?.mqtt?.connections).map(normalizeArtifactMqttConnectionRecord),
+    subscriptions: asArray(artifact?.mqtt?.subscriptions).map(normalizeMqttSubscriptionRecord),
+    tagGroups: asArray(artifact?.mqtt?.tagGroups).map(normalizeMqttTagGroupRecord),
+    tags: asArray(artifact?.mqtt?.tags).map(normalizeMqttTagRecord),
+  },
+  protocols: {
+    kafka: asArray(artifact?.protocols?.kafka).map(normalizeArtifactProtocolRecord),
+    http: asArray(artifact?.protocols?.http).map(normalizeArtifactProtocolRecord),
+    websocket: asArray(artifact?.protocols?.websocket).map(normalizeArtifactProtocolRecord),
+    redis: asArray(artifact?.protocols?.redis).map(normalizeArtifactProtocolRecord),
+  },
+});
+
+/**
  * data_service 客户端，负责 dev_core 与正式数据域服务交互。
  */
 class DataDomainClient {
@@ -324,6 +388,19 @@ class DataDomainClient {
   }
 
   /**
+   * 获取项目 artifact v1。
+   * @param {string} projectId - 工程ID
+   * @param {string} [authorization] - Bearer Token
+   * @returns {Promise<object>}
+   */
+  async getProjectArtifact(projectId, authorization) {
+    const artifact = await this.request(`/api/v1/data/projects/${projectId}/artifact`, {
+      authorization,
+    });
+    return normalizeProjectArtifact(artifact);
+  }
+
+  /**
    * 用新快照覆盖项目数据域数据。
    * @param {string} projectId - 工程ID
    * @param {object} snapshot - 快照内容
@@ -343,4 +420,5 @@ module.exports = {
   DataDomainClient,
   dataDomainClient: new DataDomainClient(),
   normalizeProjectSnapshot,
+  normalizeProjectArtifact,
 };

@@ -65,6 +65,8 @@ type CreateMqttConnectionInput struct {
 }
 
 // MqttService 承载 MQTT 领域接口的输入校验和响应映射。
+// 说明：MQTT 是 Phase 1 的样板协议，配置、短时预览、Tag/Subscription 映射和 artifact
+// 都以它作为最完整的中心侧协议基线。
 type MqttService struct {
 	repository  *repository.MqttRepository
 	connections *repository.ConnectionRepository

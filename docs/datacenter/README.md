@@ -26,6 +26,13 @@
 - 协议接入配置
 - 计算与调试入口
 
+## Phase 1 协议消费边界
+
+- `datacenter` 在 Phase 1 只应把 `relational`、`mqtt`、`kafka`、`http`、`websocket`、`redis` 视为正式协议范围。
+- MQTT 是唯一要求走到“配置 + 短时 preview + artifact”完整闭环的样板协议。
+- Kafka 在工作台里只保证配置与 `mock` 样本预览；HTTP/WebSocket/Redis 只保证配置与 artifact 契约，不承诺 Phase 1 独立 preview/runtime 行为。
+- `opcua`、`s7`、`modbus`、`tdengine`、`opcda` 不属于 Phase 1 正式范围。即便后端保留路由占位，前端也不应把这些入口当成正式可用能力依赖。
+
 ## 质量关注点
 
 - 数据工作台操作与 `data_service` 提供的正式能力保持一致。

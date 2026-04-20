@@ -59,320 +59,339 @@
               @dblclick="handleDblClick"
               @contextmenu="handleContextMenu"
             >
-          <template #expanded v-if="connection.type === 'relational'">
-              <div class="mt-2 space-y-2" @dblclick.stop>
-                <!-- 查询列表 -->
-                <div
-                  class="space-y-1 pb-2 border-b border-gray-200 dark:border-gray-700"
-                >
+              <template #expanded v-if="connection.type === 'relational'">
+                <div class="mt-2 space-y-2" @dblclick.stop>
+                  <!-- 查询列表 -->
                   <div
-                    class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded"
-                    @dblclick.stop
-                    @contextmenu.prevent.stop="
-                      handleQueriesSectionContextMenu($event, connection)
-                    "
+                    class="space-y-1 pb-2 border-b border-gray-200 dark:border-gray-700"
                   >
                     <div
-                      class="flex items-center space-x-2 flex-1 cursor-pointer"
-                      @click.stop="toggleSection(connection.id, 'queries')"
-                    >
-                      <component
-                        :is="
-                          getConnectionState(connection.id).queriesExpanded
-                            ? IconTablerChevronDown
-                            : IconTablerChevronRight
-                        "
-                        class="text-blue-500 w-4 h-4"
-                      />
-                      <span class="text-blue-700 dark:text-blue-300">查询</span>
-                    </div>
-                    <div class="flex items-center space-x-1">
-                      <el-tooltip content="刷新查询列表" placement="top">
-                        <button
-                          class="p-1 hover:bg-blue-200 dark:hover:bg-blue-700 rounded"
-                          @click.stop="refreshQueries(connection.id)"
-                        >
-                          <IconTablerRefresh
-                            class="w-3 h-3 text-blue-600 dark:text-blue-400"
-                          />
-                        </button>
-                      </el-tooltip>
-                      <span
-                        v-if="!getConnectionState(connection.id).loadingQueries"
-                        class="text-blue-600 dark:text-blue-400"
-                      >
-                        {{ getConnectionState(connection.id).queries.length }}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    v-if="getConnectionState(connection.id).loadingQueries"
-                    class="pl-6 text-xs text-gray-500"
-                  >
-                    加载查询列表...
-                  </div>
-                  <template
-                    v-else-if="
-                      getConnectionState(connection.id).queriesExpanded
-                    "
-                  >
-                    <div
-                      v-if="
-                        getConnectionState(connection.id).queries.length === 0
+                      class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded"
+                      @dblclick.stop
+                      @contextmenu.prevent.stop="
+                        handleQueriesSectionContextMenu($event, connection)
                       "
-                      class="pl-6 text-xs text-gray-500"
                     >
-                      暂无查询
-                    </div>
-                    <ul
-                      v-else
-                      class="space-y-0.5 pl-6 border-l-2 border-blue-300 dark:border-blue-700"
-                    >
-                      <li
-                        v-for="query in getConnectionState(connection.id)
-                          .queries"
-                        :key="query.id"
-                        class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-blue-800 dark:hover:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800/60 cursor-pointer group px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5 hover:shadow-sm"
-                        @dblclick.stop="handleQueryDblClick(connection, query)"
-                        @contextmenu.prevent.stop="
-                          handleQueryContextMenu($event, connection, query)
-                        "
+                      <div
+                        class="flex items-center space-x-2 flex-1 cursor-pointer"
+                        @click.stop="toggleSection(connection.id, 'queries')"
                       >
-                        <el-tooltip
-                          :content="query.name"
-                          placement="top"
-                          :show-after="500"
+                        <component
+                          :is="
+                            getConnectionState(connection.id).queriesExpanded
+                              ? IconTablerChevronDown
+                              : IconTablerChevronRight
+                          "
+                          class="text-blue-500 w-4 h-4"
+                        />
+                        <span class="text-blue-700 dark:text-blue-300"
+                          >查询</span
                         >
-                          <span class="truncate flex-1 font-medium">{{
-                            query.name
-                          }}</span>
-                        </el-tooltip>
-                        <el-tooltip content="删除查询" placement="top">
+                      </div>
+                      <div class="flex items-center space-x-1">
+                        <el-tooltip content="刷新查询列表" placement="top">
                           <button
-                            class="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 dark:hover:bg-red-900 rounded transition-opacity"
-                            @click.stop="handleDeleteQuery(connection, query)"
+                            class="p-1 hover:bg-blue-200 dark:hover:bg-blue-700 rounded"
+                            @click.stop="refreshQueries(connection.id)"
                           >
-                            <IconTablerTrash class="w-3 h-3 text-red-500" />
+                            <IconTablerRefresh
+                              class="w-3 h-3 text-blue-600 dark:text-blue-400"
+                            />
                           </button>
                         </el-tooltip>
-                      </li>
-                    </ul>
-                  </template>
-                </div>
-
-                <!-- 表列表 -->
-                <div class="space-y-1 pt-1">
-                  <div
-                    class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded"
-                    @dblclick.stop
-                    @contextmenu.prevent.stop="
-                      handleTablesSectionContextMenu($event, connection)
-                    "
-                  >
-                    <div
-                      class="flex items-center space-x-2 flex-1 cursor-pointer"
-                      @click.stop="toggleSection(connection.id, 'tables')"
-                    >
-                      <component
-                        :is="
-                          getConnectionState(connection.id).tablesExpanded
-                            ? IconTablerChevronDown
-                            : IconTablerChevronRight
-                        "
-                        class="text-green-500 w-4 h-4"
-                      />
-                      <span class="text-green-700 dark:text-green-300">表</span>
-                    </div>
-                    <div class="flex items-center space-x-1">
-                      <el-tooltip content="刷新表列表" placement="top">
-                        <button
-                          class="p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded"
-                          @click.stop="refreshTables(connection.id)"
+                        <span
+                          v-if="
+                            !getConnectionState(connection.id).loadingQueries
+                          "
+                          class="text-blue-600 dark:text-blue-400"
                         >
-                          <IconTablerRefresh
-                            class="w-3 h-3 text-green-600 dark:text-green-400"
-                          />
-                        </button>
-                      </el-tooltip>
-                      <el-tooltip content="查看表列表" placement="top">
-                        <button
-                          class="p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded"
-                          @click.stop="handleViewTableList(connection)"
-                        >
-                          <IconTablerTable
-                            class="w-3 h-3 text-green-600 dark:text-green-400"
-                          />
-                        </button>
-                      </el-tooltip>
-                      <span
-                        v-if="!getConnectionState(connection.id).loading"
-                        class="text-green-600 dark:text-green-400"
-                      >
-                        {{ getConnectionState(connection.id).tables.length }}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    v-if="getConnectionState(connection.id).loading"
-                    class="pl-6 text-xs text-gray-500"
-                  >
-                    加载表列表...
-                  </div>
-                  <template
-                    v-else-if="getConnectionState(connection.id).tablesExpanded"
-                  >
-                    <div
-                      v-if="
-                        getConnectionState(connection.id).tables.length === 0
-                      "
-                      class="pl-6 text-xs text-gray-500"
-                    >
-                      暂无表
-                    </div>
-                    <ul
-                      v-else
-                      class="space-y-0.5 pl-6 border-l-2 border-green-300 dark:border-green-700"
-                    >
-                      <li
-                        v-for="table in getConnectionState(connection.id)
-                          .tables"
-                        :key="table.name"
-                        class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 cursor-pointer px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5"
-                        @dblclick.stop="handleTableDblClick(connection, table)"
-                        @contextmenu.prevent.stop="
-                          handleTableContextMenu($event, connection, table)
-                        "
-                      >
-                        <el-tooltip
-                          :content="table.name"
-                          placement="top"
-                          :show-after="500"
-                        >
-                          <span class="truncate font-medium">{{
-                            table.name
-                          }}</span>
-                        </el-tooltip>
-                        <span class="text-gray-400 text-[10px]">{{
-                          table.rows
-                        }}</span>
-                      </li>
-                    </ul>
-                  </template>
-                </div>
-              </div>
-            </template>
-            <template #expanded v-else-if="connection.type === 'mqtt'">
-              <div class="mt-2 space-y-2" @dblclick.stop>
-                <div class="space-y-1">
-                  <div
-                    class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded"
-                    @dblclick.stop
-                  >
-                    <div
-                      class="flex items-center space-x-2 flex-1 cursor-pointer"
-                      @click.stop="toggleSection(connection.id, 'mqttSubscriptions')"
-                    >
-                      <component
-                        :is="
-                          getConnectionState(connection.id)
-                            .mqttSubscriptionsExpanded
-                            ? IconTablerChevronDown
-                            : IconTablerChevronRight
-                        "
-                        class="text-purple-500 w-4 h-4"
-                      />
-                      <span class="text-purple-700 dark:text-purple-300"
-                        >订阅</span
-                      >
-                    </div>
-                    <div class="flex items-center space-x-1">
-                      <el-tooltip content="刷新订阅列表" placement="top">
-                        <button
-                          class="p-1 hover:bg-purple-200 dark:hover:bg-purple-700 rounded"
-                          @click.stop="refreshMqttSubscriptions(connection.id)"
-                        >
-                          <IconTablerRefresh
-                            class="w-3 h-3 text-purple-600 dark:text-purple-400"
-                          />
-                        </button>
-                      </el-tooltip>
-                      <span
-                        v-if="
-                          !getConnectionState(connection.id)
-                            .loadingMqttSubscriptions
-                        "
-                        class="text-purple-600 dark:text-purple-400"
-                      >
-                        {{
-                          getConnectionState(connection.id).mqttSubscriptions
-                            .length
-                        }}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    v-if="
-                      getConnectionState(connection.id).loadingMqttSubscriptions
-                    "
-                    class="pl-6 text-xs text-gray-500"
-                  >
-                    加载订阅列表...
-                  </div>
-                  <template
-                    v-else-if="
-                      getConnectionState(connection.id).mqttSubscriptionsExpanded
-                    "
-                  >
-                    <div
-                      v-if="
-                        getConnectionState(connection.id).mqttSubscriptions
-                          .length === 0
-                      "
-                      class="pl-6 text-xs text-gray-500"
-                    >
-                      暂无订阅
-                    </div>
-                    <ul
-                      v-else
-                      class="space-y-0.5 pl-6 border-l-2 border-purple-300 dark:border-purple-700"
-                    >
-                      <li
-                        v-for="subscription in getConnectionState(connection.id)
-                          .mqttSubscriptions"
-                        :key="subscription.id"
-                        class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 cursor-pointer px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5"
-                        @dblclick.stop="
-                          handleMqttSubscriptionDblClick(
-                            connection,
-                            subscription
-                          )
-                        "
-                        @contextmenu.prevent.stop="
-                          handleMqttSubscriptionContextMenu(
-                            $event,
-                            connection,
-                            subscription
-                          )
-                        "
-                      >
-                        <el-tooltip
-                          :content="subscription.name"
-                          placement="top"
-                          :show-after="500"
-                        >
-                          <span class="truncate flex-1 font-medium">{{
-                            subscription.name
-                          }}</span>
-                        </el-tooltip>
-                        <span class="text-gray-400 text-[10px] truncate ml-2">
-                          {{ subscription.topic }}
+                          {{ getConnectionState(connection.id).queries.length }}
                         </span>
-                      </li>
-                    </ul>
-                  </template>
+                      </div>
+                    </div>
+                    <div
+                      v-if="getConnectionState(connection.id).loadingQueries"
+                      class="pl-6 text-xs text-gray-500"
+                    >
+                      加载查询列表...
+                    </div>
+                    <template
+                      v-else-if="
+                        getConnectionState(connection.id).queriesExpanded
+                      "
+                    >
+                      <div
+                        v-if="
+                          getConnectionState(connection.id).queries.length === 0
+                        "
+                        class="pl-6 text-xs text-gray-500"
+                      >
+                        暂无查询
+                      </div>
+                      <ul
+                        v-else
+                        class="space-y-0.5 pl-6 border-l-2 border-blue-300 dark:border-blue-700"
+                      >
+                        <li
+                          v-for="query in getConnectionState(connection.id)
+                            .queries"
+                          :key="query.id"
+                          class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-blue-800 dark:hover:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800/60 cursor-pointer group px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5 hover:shadow-sm"
+                          @dblclick.stop="
+                            handleQueryDblClick(connection, query)
+                          "
+                          @contextmenu.prevent.stop="
+                            handleQueryContextMenu($event, connection, query)
+                          "
+                        >
+                          <el-tooltip
+                            :content="query.name"
+                            placement="top"
+                            :show-after="500"
+                          >
+                            <span class="truncate flex-1 font-medium">{{
+                              query.name
+                            }}</span>
+                          </el-tooltip>
+                          <el-tooltip content="删除查询" placement="top">
+                            <button
+                              class="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 dark:hover:bg-red-900 rounded transition-opacity"
+                              @click.stop="handleDeleteQuery(connection, query)"
+                            >
+                              <IconTablerTrash class="w-3 h-3 text-red-500" />
+                            </button>
+                          </el-tooltip>
+                        </li>
+                      </ul>
+                    </template>
+                  </div>
+
+                  <!-- 表列表 -->
+                  <div class="space-y-1 pt-1">
+                    <div
+                      class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded"
+                      @dblclick.stop
+                      @contextmenu.prevent.stop="
+                        handleTablesSectionContextMenu($event, connection)
+                      "
+                    >
+                      <div
+                        class="flex items-center space-x-2 flex-1 cursor-pointer"
+                        @click.stop="toggleSection(connection.id, 'tables')"
+                      >
+                        <component
+                          :is="
+                            getConnectionState(connection.id).tablesExpanded
+                              ? IconTablerChevronDown
+                              : IconTablerChevronRight
+                          "
+                          class="text-green-500 w-4 h-4"
+                        />
+                        <span class="text-green-700 dark:text-green-300"
+                          >表</span
+                        >
+                      </div>
+                      <div class="flex items-center space-x-1">
+                        <el-tooltip content="刷新表列表" placement="top">
+                          <button
+                            class="p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded"
+                            @click.stop="refreshTables(connection.id)"
+                          >
+                            <IconTablerRefresh
+                              class="w-3 h-3 text-green-600 dark:text-green-400"
+                            />
+                          </button>
+                        </el-tooltip>
+                        <el-tooltip content="查看表列表" placement="top">
+                          <button
+                            class="p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded"
+                            @click.stop="handleViewTableList(connection)"
+                          >
+                            <IconTablerTable
+                              class="w-3 h-3 text-green-600 dark:text-green-400"
+                            />
+                          </button>
+                        </el-tooltip>
+                        <span
+                          v-if="!getConnectionState(connection.id).loading"
+                          class="text-green-600 dark:text-green-400"
+                        >
+                          {{ getConnectionState(connection.id).tables.length }}
+                        </span>
+                      </div>
+                    </div>
+                    <div
+                      v-if="getConnectionState(connection.id).loading"
+                      class="pl-6 text-xs text-gray-500"
+                    >
+                      加载表列表...
+                    </div>
+                    <template
+                      v-else-if="
+                        getConnectionState(connection.id).tablesExpanded
+                      "
+                    >
+                      <div
+                        v-if="
+                          getConnectionState(connection.id).tables.length === 0
+                        "
+                        class="pl-6 text-xs text-gray-500"
+                      >
+                        暂无表
+                      </div>
+                      <ul
+                        v-else
+                        class="space-y-0.5 pl-6 border-l-2 border-green-300 dark:border-green-700"
+                      >
+                        <li
+                          v-for="table in getConnectionState(connection.id)
+                            .tables"
+                          :key="table.name"
+                          class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 cursor-pointer px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5"
+                          @dblclick.stop="
+                            handleTableDblClick(connection, table)
+                          "
+                          @contextmenu.prevent.stop="
+                            handleTableContextMenu($event, connection, table)
+                          "
+                        >
+                          <el-tooltip
+                            :content="table.name"
+                            placement="top"
+                            :show-after="500"
+                          >
+                            <span class="truncate font-medium">{{
+                              table.name
+                            }}</span>
+                          </el-tooltip>
+                          <span class="text-gray-400 text-[10px]">{{
+                            table.rows
+                          }}</span>
+                        </li>
+                      </ul>
+                    </template>
+                  </div>
                 </div>
-              </div>
-            </template>
+              </template>
+              <template #expanded v-else-if="connection.type === 'mqtt'">
+                <div class="mt-2 space-y-2" @dblclick.stop>
+                  <div class="space-y-1">
+                    <div
+                      class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded"
+                      @dblclick.stop
+                    >
+                      <div
+                        class="flex items-center space-x-2 flex-1 cursor-pointer"
+                        @click.stop="
+                          toggleSection(connection.id, 'mqttSubscriptions')
+                        "
+                      >
+                        <component
+                          :is="
+                            getConnectionState(connection.id)
+                              .mqttSubscriptionsExpanded
+                              ? IconTablerChevronDown
+                              : IconTablerChevronRight
+                          "
+                          class="text-purple-500 w-4 h-4"
+                        />
+                        <span class="text-purple-700 dark:text-purple-300"
+                          >订阅</span
+                        >
+                      </div>
+                      <div class="flex items-center space-x-1">
+                        <el-tooltip content="刷新订阅列表" placement="top">
+                          <button
+                            class="p-1 hover:bg-purple-200 dark:hover:bg-purple-700 rounded"
+                            @click.stop="
+                              refreshMqttSubscriptions(connection.id)
+                            "
+                          >
+                            <IconTablerRefresh
+                              class="w-3 h-3 text-purple-600 dark:text-purple-400"
+                            />
+                          </button>
+                        </el-tooltip>
+                        <span
+                          v-if="
+                            !getConnectionState(connection.id)
+                              .loadingMqttSubscriptions
+                          "
+                          class="text-purple-600 dark:text-purple-400"
+                        >
+                          {{
+                            getConnectionState(connection.id).mqttSubscriptions
+                              .length
+                          }}
+                        </span>
+                      </div>
+                    </div>
+                    <div
+                      v-if="
+                        getConnectionState(connection.id)
+                          .loadingMqttSubscriptions
+                      "
+                      class="pl-6 text-xs text-gray-500"
+                    >
+                      加载订阅列表...
+                    </div>
+                    <template
+                      v-else-if="
+                        getConnectionState(connection.id)
+                          .mqttSubscriptionsExpanded
+                      "
+                    >
+                      <div
+                        v-if="
+                          getConnectionState(connection.id).mqttSubscriptions
+                            .length === 0
+                        "
+                        class="pl-6 text-xs text-gray-500"
+                      >
+                        暂无订阅
+                      </div>
+                      <ul
+                        v-else
+                        class="space-y-0.5 pl-6 border-l-2 border-purple-300 dark:border-purple-700"
+                      >
+                        <li
+                          v-for="subscription in getConnectionState(
+                            connection.id,
+                          ).mqttSubscriptions"
+                          :key="subscription.id"
+                          class="flex items-center justify-between text-xs text-gray-700 dark:text-gray-300 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 cursor-pointer px-2 py-1.5 rounded transition-all duration-150 hover:translate-x-0.5"
+                          @dblclick.stop="
+                            handleMqttSubscriptionDblClick(
+                              connection,
+                              subscription,
+                            )
+                          "
+                          @contextmenu.prevent.stop="
+                            handleMqttSubscriptionContextMenu(
+                              $event,
+                              connection,
+                              subscription,
+                            )
+                          "
+                        >
+                          <el-tooltip
+                            :content="subscription.name"
+                            placement="top"
+                            :show-after="500"
+                          >
+                            <span class="truncate flex-1 font-medium">{{
+                              subscription.name
+                            }}</span>
+                          </el-tooltip>
+                          <span class="text-gray-400 text-[10px] truncate ml-2">
+                            {{ subscription.topic }}
+                          </span>
+                        </li>
+                      </ul>
+                    </template>
+                  </div>
+                </div>
+              </template>
             </ConnectionItem>
           </div>
         </div>
@@ -384,7 +403,9 @@
             @click="handleOpenCalcUnits"
           >
             <IconTablerCalculator class="w-4 h-4 text-amber-500" />
-            <span class="text-sm text-gray-700 dark:text-gray-200">计算单元</span>
+            <span class="text-sm text-gray-700 dark:text-gray-200"
+              >计算单元</span
+            >
           </div>
         </div>
 
@@ -394,7 +415,9 @@
             @click="handleOpenAlarmUnits"
           >
             <IconTablerBell class="w-4 h-4 text-rose-500" />
-            <span class="text-sm text-gray-700 dark:text-gray-200">报警单元</span>
+            <span class="text-sm text-gray-700 dark:text-gray-200"
+              >报警单元</span
+            >
           </div>
         </div>
 
@@ -684,11 +707,7 @@ const handleMqttSubscriptionDblClick = (connection, subscription) => {
  * @param {object} subscription - 订阅信息
  * @returns {void}
  */
-const handleMqttSubscriptionContextMenu = (
-  event,
-  connection,
-  subscription,
-) => {
+const handleMqttSubscriptionContextMenu = (event, connection, subscription) => {
   const menu = document.createElement("div");
   menu.className =
     "fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[140px]";
@@ -993,5 +1012,4 @@ defineExpose({
 .connection-items {
   padding-left: 8px;
 }
-
 </style>

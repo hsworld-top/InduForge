@@ -103,13 +103,16 @@ type UpdateDataPointInput struct {
 type DataPointService struct {
 	repository *repository.DataPointRepository
 	queries    *QueryService
+	mqtt       *repository.MqttRepository
 }
 
-// NewDataPointService 创建数据点服务。
-func NewDataPointService(repo *repository.DataPointRepository, queryService *QueryService) *DataPointService {
+// NewDataPointService ????????
+// MQTT ?????????????????????? MQTT ???????
+func NewDataPointService(repo *repository.DataPointRepository, queryService *QueryService, mqttRepository *repository.MqttRepository) *DataPointService {
 	return &DataPointService{
 		repository: repo,
 		queries:    queryService,
+		mqtt:       mqttRepository,
 	}
 }
 

@@ -1,232 +1,313 @@
-import { ref, onMounted, onBeforeUnmount } from "vue";
+/* global __VITE_API_URL__ */
+
+import { ref, watch, unref, onBeforeUnmount } from "vue";
 import { io } from "socket.io-client";
 import { ElMessage } from "element-plus";
+import { Storage } from "@/utils/storage";
+import {
+  buildMqttSocketSharedKey,
+  createMqttSocketSharedRegistry,
+} from "./mqtt-socket-shared";
+
+const sharedRegistry = createMqttSocketSharedRegistry({
+  ioFactory: io,
+  getApiUrl: () => __VITE_API_URL__ || "http://localhost:19601",
+  getToken: () => Storage.getToken(),
+  notifier: ({ type, message }) => {
+    ElMessage({
+      type,
+      message,
+      duration: 2000,
+      offset: 60,
+    });
+  },
+  logger: console,
+});
+
+let nextHandlerId = 1;
+let nextSubscriptionHandleId = 1;
+let nextTagHandleId = 1;
 
 /**
  * MQTT Socket.IO Composable
- * 管理WebSocket连接，接收实时MQTT消息
+ * 负责在 datacenter 内复用 preview session 对应的共享 socket：
+ * 1. 同一 projectId + previewSessionId + token 只建立一条底层连接
+ * 2. 多个组件共享 mqtt 订阅与 tag 订阅时做引用计数，避免互相提前解绑
+ * 3. 对组件暴露的 API 尽量保持不变，降低页面改造成本
+ *
+ * @param {import("vue").MaybeRefOrGetter<string | null | undefined>} projectIdSource
+ * @param {import("vue").MaybeRefOrGetter<string | null | undefined>} previewSessionIdSource
  */
-export function useMqttSocket(projectId) {
+export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
   const socket = ref(null);
   const connected = ref(false);
-  const messageHandlers = ref(new Map());
 
-  /**
-   * 连接到Socket.IO服务器
-   */
-  const connect = () => {
-    if (socket.value?.connected) {
-      console.log("[MqttSocket] Already connected");
+  const localMessageHandlers = new Map();
+  const localSubscriptionHandles = new Map();
+  const localTagHandles = new Map();
+
+  let currentConnectionKey = "";
+  let stopStateWatcher = null;
+
+  const readSource = (source) => {
+    if (typeof source === "function") {
+      return source();
+    }
+    return unref(source);
+  };
+
+  const readProjectId = () => readSource(projectIdSource) || "";
+  const readPreviewSessionId = () => readSource(previewSessionIdSource) || "";
+  const readToken = () => String(Storage.getToken() || "").trim();
+
+  const resolveDesiredConnectionKey = () => {
+    const token = readToken();
+    const projectId = String(readProjectId() || "").trim();
+    const previewSessionId = String(readPreviewSessionId() || "").trim();
+
+    if (!token || !projectId || !previewSessionId) {
+      return "";
+    }
+
+    return buildMqttSocketSharedKey({
+      token,
+      projectId,
+      previewSessionId,
+    });
+  };
+
+  const bindSharedState = () => {
+    if (typeof stopStateWatcher === "function") {
+      stopStateWatcher();
+      stopStateWatcher = null;
+    }
+
+    if (!currentConnectionKey) {
+      socket.value = null;
+      connected.value = false;
       return;
     }
 
-    // 获取API基础URL，通过vite define注入（因为Socket.IO不走代理）
-    const apiUrl = __VITE_API_URL__ || "http://localhost:19601";
-    const socketUrl = apiUrl.replace(/\/$/, ""); // 去掉末尾斜杠
-
-    console.log("[MqttSocket] VITE_API_URL:", __VITE_API_URL__);
-    console.log(
-      "[MqttSocket] Connecting to",
-      socketUrl,
-      "with projectId:",
-      projectId,
-    );
-
-    // 测试基础连接
-    setTimeout(() => {
-      if (socket.value && socket.value.connected) {
-        console.log("[MqttSocket] Socket.IO connected successfully");
-      } else {
-        console.error("[MqttSocket] Socket.IO connection failed");
-        console.log("[MqttSocket] Current socket state:", {
-          exists: !!socket.value,
-          connected: socket.value?.connected,
-          connecting: socket.value?.connecting,
-          disconnected: socket.value?.disconnected,
-          id: socket.value?.id,
-        });
-      }
-    }, 2000);
-
-    socket.value = io(socketUrl, {
-      path: "/socket.io",
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: Infinity,
-      query: {
-        projectId: projectId,
+    stopStateWatcher = sharedRegistry.watchState(
+      currentConnectionKey,
+      ({ socket: sharedSocket, connected: sharedConnected }) => {
+        socket.value = sharedSocket ?? null;
+        connected.value = Boolean(sharedConnected);
       },
+    );
+  };
+
+  const attachLocalResources = (connectionKey) => {
+    if (!connectionKey) {
+      return;
+    }
+
+    localMessageHandlers.forEach((handler, handlerId) => {
+      sharedRegistry.addMessageHandler(connectionKey, handlerId, handler);
     });
 
-    // 连接成功
-    socket.value.on("connect", () => {
-      connected.value = true;
-      console.log("[MqttSocket] Connected:", socket.value.id);
-      ElMessage({
-        type: "success",
-        message: "WebSocket已连接",
-        duration: 2000,
-        offset: 60,
-      });
+    localSubscriptionHandles.forEach((subscriptionId) => {
+      sharedRegistry.subscribeSubscription(connectionKey, subscriptionId);
     });
 
-    // 连接断开
-    socket.value.on("disconnect", (reason) => {
-      connected.value = false;
-      console.log("[MqttSocket] Disconnected:", reason);
-
-      if (reason !== "io client disconnect") {
-        ElMessage({
-          type: "warning",
-          message: "WebSocket连接断开",
-          duration: 2000,
-          offset: 60,
-        });
-      }
-    });
-
-    // 连接错误
-    socket.value.on("connect_error", (error) => {
-      console.error("[MqttSocket] Connection error:", error);
-    });
-
-    // 重连
-    socket.value.on("reconnect", (attemptNumber) => {
-      console.log("[MqttSocket] Reconnected after", attemptNumber, "attempts");
-      ElMessage({
-        type: "success",
-        message: "WebSocket已重连",
-        duration: 2000,
-        offset: 60,
-      });
-    });
-
-    // 接收MQTT消息
-    socket.value.on("mqtt:message", (data) => {
-      // 调用所有注册的消息处理器
-      messageHandlers.value.forEach((handler) => {
-        try {
-          handler(data);
-        } catch (error) {
-          console.error("[MqttSocket] Message handler error:", error);
-        }
-      });
-    });
-
-    // 订阅状态变化
-    socket.value.on("mqtt:subscription:status", (data) => {
-      console.log("[MqttSocket] Subscription status:", data);
-    });
-
-    // 连接状态变化
-    socket.value.on("mqtt:connection:status", (data) => {
-      console.log("[MqttSocket] Connection status:", data);
-    });
-
-    // Tag值更新
-    socket.value.on("mqtt:tag:value", (data) => {
-      console.log("[MqttSocket] Received tag value update:", data);
-      // 广播给所有注册的消息处理器
-      messageHandlers.value.forEach((handler) => {
-        try {
-          handler(data);
-        } catch (error) {
-          console.error("[MqttSocket] Tag value handler error:", error);
-        }
-      });
-    });
-
-    // 监听所有事件用于调试
-    socket.value.onAny((event, ...args) => {
-      console.log("[MqttSocket] Event received:", event, args);
+    localTagHandles.forEach((tagId) => {
+      sharedRegistry.subscribeTag(connectionKey, tagId);
     });
   };
 
-  /**
-   * 断开连接
-   */
-  const disconnect = () => {
-    if (socket.value) {
-      socket.value.disconnect();
+  const detachLocalResources = (connectionKey) => {
+    if (!connectionKey) {
+      return;
+    }
+
+    localMessageHandlers.forEach((_, handlerId) => {
+      sharedRegistry.removeMessageHandler(connectionKey, handlerId);
+    });
+
+    localSubscriptionHandles.forEach((subscriptionId) => {
+      sharedRegistry.unsubscribeSubscription(connectionKey, subscriptionId);
+    });
+
+    localTagHandles.forEach((tagId) => {
+      sharedRegistry.unsubscribeTag(connectionKey, tagId);
+    });
+  };
+
+  const releaseCurrentConnection = () => {
+    if (!currentConnectionKey) {
       socket.value = null;
       connected.value = false;
-      console.log("[MqttSocket] Disconnected manually");
+      return;
     }
+
+    detachLocalResources(currentConnectionKey);
+    if (typeof stopStateWatcher === "function") {
+      stopStateWatcher();
+      stopStateWatcher = null;
+    }
+    sharedRegistry.release(currentConnectionKey);
+
+    currentConnectionKey = "";
+    socket.value = null;
+    connected.value = false;
   };
 
-  /**
-   * 订阅MQTT主题消息
-   * @param {string} subscriptionId - 订阅ID
-   * @param {Function} handler - 消息处理函数
-   * @returns {Function} 取消订阅的函数
-   */
-  const subscribeMessages = (subscriptionId, handler) => {
-    const handlerId = `${subscriptionId}-${Date.now()}`;
+  const connect = () => {
+    const desiredConnectionKey = resolveDesiredConnectionKey();
+    if (!desiredConnectionKey) {
+      releaseCurrentConnection();
+      return null;
+    }
 
-    // 创建包装处理器，只处理特定订阅的消息
+    if (desiredConnectionKey === currentConnectionKey) {
+      bindSharedState();
+      return socket.value;
+    }
+
+    const result = sharedRegistry.acquire({
+      projectId: readProjectId(),
+      previewSessionId: readPreviewSessionId(),
+    });
+
+    if (!result) {
+      releaseCurrentConnection();
+      return null;
+    }
+
+    if (result.key === currentConnectionKey) {
+      bindSharedState();
+      return result.entry.socket;
+    }
+
+    if (currentConnectionKey) {
+      detachLocalResources(currentConnectionKey);
+      if (typeof stopStateWatcher === "function") {
+        stopStateWatcher();
+        stopStateWatcher = null;
+      }
+      sharedRegistry.release(currentConnectionKey);
+    }
+
+    currentConnectionKey = result.key;
+    bindSharedState();
+    attachLocalResources(currentConnectionKey);
+    return result.entry.socket;
+  };
+
+  const disconnect = () => {
+    releaseCurrentConnection();
+  };
+
+  const onMessage = (handler) => {
+    if (typeof handler !== "function") {
+      return () => {};
+    }
+
+    const handlerId = `global-${nextHandlerId++}`;
+    localMessageHandlers.set(handlerId, handler);
+    if (currentConnectionKey) {
+      sharedRegistry.addMessageHandler(
+        currentConnectionKey,
+        handlerId,
+        handler,
+      );
+    }
+
+    return () => {
+      if (currentConnectionKey) {
+        sharedRegistry.removeMessageHandler(currentConnectionKey, handlerId);
+      }
+      localMessageHandlers.delete(handlerId);
+    };
+  };
+
+  const subscribeMessages = (subscriptionId, handler) => {
+    const normalizedSubscriptionId = String(subscriptionId || "").trim();
+    if (!normalizedSubscriptionId) {
+      return () => {};
+    }
+
+    const handlerId = `subscription-${nextHandlerId++}`;
+    const subscriptionHandleId = `sub-${nextSubscriptionHandleId++}`;
     const wrappedHandler = (data) => {
-      if (data.subscriptionId === subscriptionId) {
+      if (
+        typeof handler === "function" &&
+        data?.subscriptionId === normalizedSubscriptionId
+      ) {
         handler(data);
       }
     };
 
-    messageHandlers.value.set(handlerId, wrappedHandler);
+    localMessageHandlers.set(handlerId, wrappedHandler);
+    localSubscriptionHandles.set(
+      subscriptionHandleId,
+      normalizedSubscriptionId,
+    );
 
-    // 通知服务器订阅
-    if (socket.value?.connected) {
-      console.log(
-        `[MqttSocket] Emitting mqtt:subscribe for subscription: ${subscriptionId}`,
+    if (currentConnectionKey) {
+      sharedRegistry.addMessageHandler(
+        currentConnectionKey,
+        handlerId,
+        wrappedHandler,
       );
-      socket.value.emit("mqtt:subscribe", { subscriptionId });
-    } else {
-      console.log(
-        `[MqttSocket] Socket not connected, cannot subscribe to: ${subscriptionId}`,
+      sharedRegistry.subscribeSubscription(
+        currentConnectionKey,
+        normalizedSubscriptionId,
       );
     }
 
-    // 返回取消订阅函数
     return () => {
-      messageHandlers.value.delete(handlerId);
-      if (socket.value?.connected) {
-        socket.value.emit("mqtt:unsubscribe", { subscriptionId });
+      if (currentConnectionKey) {
+        sharedRegistry.removeMessageHandler(currentConnectionKey, handlerId);
+        sharedRegistry.unsubscribeSubscription(
+          currentConnectionKey,
+          normalizedSubscriptionId,
+        );
       }
+
+      localMessageHandlers.delete(handlerId);
+      localSubscriptionHandles.delete(subscriptionHandleId);
     };
   };
 
-  /**
-   * 注册全局消息处理器
-   * @param {Function} handler - 消息处理函数
-   * @returns {Function} 取消注册的函数
-   */
-  const onMessage = (handler) => {
-    const handlerId = `global-${Date.now()}`;
-    messageHandlers.value.set(handlerId, handler);
-
-    // 返回取消注册函数
-    return () => {
-      messageHandlers.value.delete(handlerId);
-    };
-  };
-
-  /**
-   * 发送消息到服务器
-   */
-  const emit = (event, data) => {
-    if (socket.value?.connected) {
-      socket.value.emit(event, data);
-    } else {
-      console.warn("[MqttSocket] Not connected, cannot emit:", event);
+  const subscribeTag = (tagId) => {
+    const normalizedTagId = String(tagId || "").trim();
+    if (!normalizedTagId) {
+      return () => {};
     }
+
+    const tagHandleId = `tag-${nextTagHandleId++}`;
+    localTagHandles.set(tagHandleId, normalizedTagId);
+
+    if (currentConnectionKey) {
+      sharedRegistry.subscribeTag(currentConnectionKey, normalizedTagId);
+    }
+
+    return () => {
+      if (currentConnectionKey) {
+        sharedRegistry.unsubscribeTag(currentConnectionKey, normalizedTagId);
+      }
+      localTagHandles.delete(tagHandleId);
+    };
   };
 
-  // 组件挂载时自动连接
-  onMounted(() => {
-    connect();
-  });
+  const emit = (event, data) => {
+    if (!currentConnectionKey) {
+      console.warn("[MqttSocket] Not connected, cannot emit:", event);
+      return false;
+    }
 
-  // 组件卸载时断开连接
+    return sharedRegistry.emit(currentConnectionKey, event, data);
+  };
+
+  watch(
+    () => [readProjectId(), readPreviewSessionId(), Storage.getToken()],
+    () => {
+      connect();
+    },
+    { immediate: true },
+  );
+
   onBeforeUnmount(() => {
     disconnect();
   });
@@ -237,6 +318,7 @@ export function useMqttSocket(projectId) {
     connect,
     disconnect,
     subscribeMessages,
+    subscribeTag,
     onMessage,
     emit,
   };

@@ -115,6 +115,56 @@ func TestConnectionsCRUD(t *testing.T) {
 	}
 }
 
+func TestConnectionsRejectPhase2ReservedTypes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("执行迁移失败: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "connections-phase2-secret"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("创建默认服务失败: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-phase2",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/connections", token, map[string]any{
+		"name":   "opcua-legacy",
+		"type":   "opcua",
+		"status": "connected",
+		"config": map[string]any{
+			"endpoint": "opc.tcp://127.0.0.1:4840",
+		},
+	}, http.StatusBadRequest), "OPC UA")
+
+	currentList := mustListConnections(t, server.URL, token, projectID)
+	if len(currentList) != 0 {
+		t.Fatalf("expected no connections after rejected phase boundary request, got %d", len(currentList))
+	}
+}
+
 type connectionPayload struct {
 	ID        string         `json:"id"`
 	ProjectID string         `json:"projectId"`

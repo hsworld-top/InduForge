@@ -14,14 +14,24 @@
           placeholder="搜索路径或名称"
           class="w-52"
         />
-        <el-select v-model="typeFilter" size="small" placeholder="类型" class="w-36">
+        <el-select
+          v-model="typeFilter"
+          size="small"
+          placeholder="类型"
+          class="w-36"
+        >
           <el-option label="全部类型" value="" />
           <el-option label="数据库查询" value="db.query" />
           <el-option label="MQTT 变量" value="mqtt.tag" />
           <el-option label="MQTT 订阅" value="mqtt.subscription" />
           <el-option label="计算输出" value="calc.output" />
         </el-select>
-        <el-select v-model="statusFilter" size="small" placeholder="状态" class="w-28">
+        <el-select
+          v-model="statusFilter"
+          size="small"
+          placeholder="状态"
+          class="w-28"
+        >
           <el-option label="全部状态" value="" />
           <el-option label="活跃" value="active" />
           <el-option label="失效" value="invalid" />
@@ -30,14 +40,14 @@
       </div>
     </div>
 
-    <div class="hint px-4 py-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-900">
+    <div
+      class="hint px-4 py-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-900"
+    >
       数据点由查询、变量、计算单元自动生成，可直接在设计器中使用。
     </div>
 
     <div class="flex-1 overflow-y-auto p-4">
-      <div v-if="loading" class="py-8 text-center text-gray-400">
-        加载中...
-      </div>
+      <div v-if="loading" class="py-8 text-center text-gray-400">加载中...</div>
 
       <div v-else-if="groupedDataPoints.length === 0" class="py-8">
         <el-empty description="暂无数据点" />
@@ -275,11 +285,7 @@ const formatTime = (value) => {
  */
 const getUpdatedAt = (row) => {
   return (
-    row?.updatedAt ||
-    row?.updated_at ||
-    row?.createdAt ||
-    row?.created_at ||
-    ""
+    row?.updatedAt || row?.updated_at || row?.createdAt || row?.created_at || ""
   );
 };
 

@@ -251,6 +251,46 @@ export const deleteDataPointsBatch = (projectId, datapointIds) => {
 };
 
 // ===========================================
+// Preview Session 相关API
+// ===========================================
+
+/**
+ * 创建 preview session
+ * @param {string} projectId - 工程 ID
+ * @returns {Promise} preview session 响应
+ */
+export const createPreviewSession = (projectId) => {
+  return request({
+    url: `/data/projects/${projectId}/preview/sessions`,
+    method: "post",
+  });
+};
+
+/**
+ * 续期 preview session
+ * @param {string} sessionId - preview session ID
+ * @returns {Promise} 续期结果
+ */
+export const heartbeatPreviewSession = (sessionId) => {
+  return request({
+    url: `/data/preview/sessions/${sessionId}/heartbeat`,
+    method: "post",
+  });
+};
+
+/**
+ * 关闭 preview session
+ * @param {string} sessionId - preview session ID
+ * @returns {Promise} 关闭结果
+ */
+export const deletePreviewSession = (sessionId) => {
+  return request({
+    url: `/data/preview/sessions/${sessionId}`,
+    method: "delete",
+  });
+};
+
+// ===========================================
 // MQTT订阅相关API
 // ===========================================
 
@@ -650,6 +690,9 @@ export default {
   getDataPoints,
   deleteDataPoint,
   deleteDataPointsBatch,
+  createPreviewSession,
+  heartbeatPreviewSession,
+  deletePreviewSession,
   // MQTT订阅相关
   getMqttSubscriptions,
   getMqttSubscription,

@@ -16,14 +16,21 @@ import (
 	"github.com/indu-forge/data_service/internal/repository"
 )
 
-var connectionTypeCategoryMap = map[string]string{
+// publicConnectionTypeCategoryMap 只保留通用连接接口在 Phase 1 允许新建/改型的类型。
+// 说明：kafka/http/websocket/redis 走各自协议接口；opcua/modbus/s7/tdengine 已降级为 Phase 2 预留。
+var publicConnectionTypeCategoryMap = map[string]string{
 	"relational": "database",
 	"mqtt":       "message",
 	"websocket":  "protocol",
-	"opcua":      "protocol",
-	"modbus":     "protocol",
 	"http":       "api",
-	"s7":         "protocol",
+}
+
+// reservedPhase2ConnectionTypes 用于把“暂不支持”与“尚未纳入 Phase 1 正式范围”区分开。
+var reservedPhase2ConnectionTypes = map[string]string{
+	"opcua":    "OPC UA",
+	"modbus":   "Modbus",
+	"s7":       "S7",
+	"tdengine": "TDengine",
 }
 
 var allowedConnectionStatus = map[string]struct{}{
@@ -35,17 +42,17 @@ var allowedConnectionStatus = map[string]struct{}{
 
 // Connection 表示面向 HTTP 层返回的连接对象。
 type Connection struct {
-	ID        string         `json:"id"`
-	ProjectID string         `json:"projectId"`
-	TenantID  string         `json:"tenantId"`
-	Name      string         `json:"name"`
-	Type      string         `json:"type"`
-	Status    string         `json:"status"`
-	Config    map[string]any `json:"config"`
+	ID               string         `json:"id"`
+	ProjectID        string         `json:"projectId"`
+	TenantID         string         `json:"tenantId"`
+	Name             string         `json:"name"`
+	Type             string         `json:"type"`
+	Status           string         `json:"status"`
+	Config           map[string]any `json:"config"`
 	RelationalConfig map[string]any `json:"relationalConfig,omitempty"`
 	MqttConfig       map[string]any `json:"mqttConfig,omitempty"`
-	CreatedAt time.Time      `json:"createdAt"`
-	UpdatedAt time.Time      `json:"updatedAt"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        time.Time      `json:"updatedAt"`
 }
 
 // ConnectionTestResult 表示连接测试响应。
@@ -173,7 +180,10 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 	}
 
 	nextType := current.Type
-	nextCategory := connectionTypeCategoryMap[current.Type]
+	nextCategory := current.Category
+	if nextCategory == "" {
+		nextCategory = deriveStoredConnectionCategory(current.Type)
+	}
 	if input.Type != nil {
 		nextType, nextCategory, err = normalizeConnectionType(*input.Type)
 		if err != nil {
@@ -800,11 +810,27 @@ func normalizeConnectionName(name string) (string, error) {
 
 func normalizeConnectionType(connectionType string) (string, string, error) {
 	connectionType = strings.TrimSpace(strings.ToLower(connectionType))
-	category, ok := connectionTypeCategoryMap[connectionType]
+	if displayName, ok := reservedPhase2ConnectionTypes[connectionType]; ok {
+		return "", "", newPhaseBoundaryProtocolError(displayName)
+	}
+	category, ok := publicConnectionTypeCategoryMap[connectionType]
 	if !ok {
 		return "", "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接类型不受支持")
 	}
 	return connectionType, category, nil
+}
+
+func deriveStoredConnectionCategory(connectionType string) string {
+	switch strings.TrimSpace(strings.ToLower(connectionType)) {
+	case "relational":
+		return "database"
+	case "mqtt":
+		return "message"
+	case "kafka", "http", "websocket", "redis", "opcua", "modbus", "s7", "tdengine":
+		return "protocol"
+	default:
+		return ""
+	}
 }
 
 func normalizeConnectionStatus(status string) (string, error) {

@@ -110,6 +110,107 @@ type ProjectSnapshot struct {
 	DataPoints        []DataPointRecord                `json:"datapoints"`
 }
 
+// ProjectArtifactVersionV1 表示 Phase 1 产物契约版本号。
+const ProjectArtifactVersionV1 = "1.0"
+
+// ArtifactConnectionRecord 表示产物层通用连接对象。
+type ArtifactConnectionRecord struct {
+	ID     string         `json:"id"`
+	Name   string         `json:"name"`
+	Type   string         `json:"type"`
+	Status string         `json:"status"`
+	Config map[string]any `json:"config"`
+}
+
+// ArtifactQueryRecord 表示产物层查询对象。
+type ArtifactQueryRecord struct {
+	ID              string         `json:"id"`
+	ConnectionID    string         `json:"connectionId"`
+	Name            string         `json:"name"`
+	QueryType       string         `json:"queryType"`
+	Config          map[string]any `json:"config"`
+	TimeoutMS       int            `json:"timeoutMs"`
+	IsEnabled       bool           `json:"isEnabled"`
+	Transformer     *string        `json:"transformer,omitempty"`
+	CacheEnabled    bool           `json:"cacheEnabled"`
+	CacheTtlSeconds int            `json:"cacheTtlSeconds"`
+}
+
+// ArtifactDataPointRecord 表示产物层数据点对象。
+type ArtifactDataPointRecord struct {
+	ID                string         `json:"id"`
+	Path              string         `json:"path"`
+	Name              string         `json:"name"`
+	SourceType        string         `json:"sourceType"`
+	SourceID          *string        `json:"sourceId,omitempty"`
+	SourceConfig      map[string]any `json:"sourceConfig"`
+	DataType          string         `json:"dataType"`
+	RefreshMode       string         `json:"refreshMode"`
+	RefreshIntervalMS *int           `json:"refreshIntervalMs,omitempty"`
+	Status            string         `json:"status"`
+	Unit              *string        `json:"unit,omitempty"`
+	DefaultValue      *string        `json:"defaultValue,omitempty"`
+	Tags              []any          `json:"tags"`
+}
+
+// ArtifactMqttConnectionRecord 表示产物层 MQTT 连接对象。
+type ArtifactMqttConnectionRecord struct {
+	ID                string         `json:"id"`
+	Name              string         `json:"name"`
+	Type              string         `json:"type"`
+	Status            string         `json:"status"`
+	BrokerURL         string         `json:"brokerUrl"`
+	Protocol          string         `json:"protocol"`
+	Port              int            `json:"port"`
+	ClientID          *string        `json:"clientId,omitempty"`
+	Username          *string        `json:"username,omitempty"`
+	Password          *string        `json:"password,omitempty"`
+	Keepalive         int            `json:"keepalive"`
+	CleanSession      bool           `json:"cleanSession"`
+	QOS               int            `json:"qos"`
+	ReconnectPeriodMS int            `json:"reconnectPeriod"`
+	ConnectTimeoutMS  int            `json:"connectTimeout"`
+	Will              map[string]any `json:"will"`
+	SSLConfig         map[string]any `json:"sslConfig"`
+}
+
+// ArtifactProtocolRecord 表示产物层协议对象（kafka/http/websocket/redis）。
+type ArtifactProtocolRecord struct {
+	ID     string         `json:"id"`
+	Name   string         `json:"name"`
+	Type   string         `json:"type"`
+	Status string         `json:"status"`
+	Config map[string]any `json:"config"`
+}
+
+// ArtifactMqttPayload 表示产物层 MQTT 区块。
+type ArtifactMqttPayload struct {
+	Connections   []ArtifactMqttConnectionRecord   `json:"connections"`
+	Subscriptions []SnapshotMqttSubscriptionRecord `json:"subscriptions"`
+	TagGroups     []SnapshotMqttTagGroupRecord     `json:"tagGroups"`
+	Tags          []SnapshotMqttTagRecord          `json:"tags"`
+}
+
+// ArtifactProtocolsPayload 表示产物层其他协议区块。
+type ArtifactProtocolsPayload struct {
+	Kafka     []ArtifactProtocolRecord `json:"kafka"`
+	HTTP      []ArtifactProtocolRecord `json:"http"`
+	Websocket []ArtifactProtocolRecord `json:"websocket"`
+	Redis     []ArtifactProtocolRecord `json:"redis"`
+}
+
+// ProjectArtifactV1 表示 Phase 1 项目级数据产物。
+type ProjectArtifactV1 struct {
+	Version     string                     `json:"version"`
+	ProjectID   string                     `json:"projectId"`
+	GeneratedAt time.Time                  `json:"generatedAt"`
+	Connections []ArtifactConnectionRecord `json:"connections"`
+	Queries     []ArtifactQueryRecord      `json:"queries"`
+	DataPoints  []ArtifactDataPointRecord  `json:"datapoints"`
+	Mqtt        ArtifactMqttPayload        `json:"mqtt"`
+	Protocols   ArtifactProtocolsPayload   `json:"protocols"`
+}
+
 // ProjectSnapshotRepository 负责项目级数据域快照读写。
 type ProjectSnapshotRepository struct {
 	pool *pgxpool.Pool
@@ -202,6 +303,130 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交快照写入事务失败", err)
 	}
 	return nil
+}
+
+// BuildProjectArtifactV1 基于项目快照构建 Phase 1 产物契约对象。
+func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generatedAt time.Time) *ProjectArtifactV1 {
+	if snapshot == nil {
+		snapshot = &ProjectSnapshot{}
+	}
+	if generatedAt.IsZero() {
+		generatedAt = time.Now().UTC()
+	}
+
+	connections := make([]ArtifactConnectionRecord, 0, len(snapshot.Connections))
+	connectionIndex := make(map[string]ConnectionRecord, len(snapshot.Connections))
+	for _, connection := range snapshot.Connections {
+		connectionIndex[connection.ID] = connection
+		connections = append(connections, ArtifactConnectionRecord{
+			ID:     connection.ID,
+			Name:   connection.Name,
+			Type:   connection.Type,
+			Status: connection.Status,
+			Config: cloneSnapshotObject(connection.Config),
+		})
+	}
+
+	queries := make([]ArtifactQueryRecord, 0, len(snapshot.Queries))
+	for _, query := range snapshot.Queries {
+		queries = append(queries, ArtifactQueryRecord{
+			ID:              query.ID,
+			ConnectionID:    query.ConnectionID,
+			Name:            query.Name,
+			QueryType:       query.QueryType,
+			Config:          cloneSnapshotObject(query.Config),
+			TimeoutMS:       query.TimeoutMS,
+			IsEnabled:       query.IsEnabled,
+			Transformer:     query.Transformer,
+			CacheEnabled:    query.CacheEnabled,
+			CacheTtlSeconds: query.CacheTtlSeconds,
+		})
+	}
+
+	dataPoints := make([]ArtifactDataPointRecord, 0, len(snapshot.DataPoints))
+	for _, dataPoint := range snapshot.DataPoints {
+		dataPoints = append(dataPoints, ArtifactDataPointRecord{
+			ID:                dataPoint.ID,
+			Path:              dataPoint.Path,
+			Name:              dataPoint.Name,
+			SourceType:        dataPoint.SourceType,
+			SourceID:          dataPoint.SourceID,
+			SourceConfig:      cloneSnapshotObject(dataPoint.SourceConfig),
+			DataType:          dataPoint.DataType,
+			RefreshMode:       dataPoint.RefreshMode,
+			RefreshIntervalMS: dataPoint.RefreshIntervalMS,
+			Status:            dataPoint.Status,
+			Unit:              dataPoint.Unit,
+			DefaultValue:      dataPoint.DefaultValue,
+			Tags:              cloneSnapshotAnyArray(dataPoint.Tags),
+		})
+	}
+
+	mqttConnections := make([]ArtifactMqttConnectionRecord, 0, len(snapshot.MqttConfigs))
+	for _, mqttConfig := range snapshot.MqttConfigs {
+		connection := connectionIndex[mqttConfig.ConnectionID]
+		mqttConnections = append(mqttConnections, ArtifactMqttConnectionRecord{
+			ID:                mqttConfig.ConnectionID,
+			Name:              connection.Name,
+			Type:              coalesceProtocolType(connection.Type, "mqtt"),
+			Status:            connection.Status,
+			BrokerURL:         mqttConfig.BrokerURL,
+			Protocol:          mqttConfig.Protocol,
+			Port:              mqttConfig.Port,
+			ClientID:          mqttConfig.ClientID,
+			Username:          mqttConfig.Username,
+			Password:          mqttConfig.Password,
+			Keepalive:         mqttConfig.Keepalive,
+			CleanSession:      mqttConfig.CleanSession,
+			QOS:               mqttConfig.QOS,
+			ReconnectPeriodMS: mqttConfig.ReconnectPeriodMS,
+			ConnectTimeoutMS:  mqttConfig.ConnectTimeoutMS,
+			Will:              cloneSnapshotObject(mqttConfig.Will),
+			SSLConfig:         cloneSnapshotObject(mqttConfig.SSLConfig),
+		})
+	}
+
+	protocols := ArtifactProtocolsPayload{
+		Kafka:     make([]ArtifactProtocolRecord, 0),
+		HTTP:      make([]ArtifactProtocolRecord, 0),
+		Websocket: make([]ArtifactProtocolRecord, 0),
+		Redis:     make([]ArtifactProtocolRecord, 0),
+	}
+	for _, connection := range snapshot.Connections {
+		protocolRecord := ArtifactProtocolRecord{
+			ID:     connection.ID,
+			Name:   connection.Name,
+			Type:   connection.Type,
+			Status: connection.Status,
+			Config: cloneSnapshotObject(connection.Config),
+		}
+		switch connection.Type {
+		case "kafka":
+			protocols.Kafka = append(protocols.Kafka, protocolRecord)
+		case "http":
+			protocols.HTTP = append(protocols.HTTP, protocolRecord)
+		case "websocket":
+			protocols.Websocket = append(protocols.Websocket, protocolRecord)
+		case "redis":
+			protocols.Redis = append(protocols.Redis, protocolRecord)
+		}
+	}
+
+	return &ProjectArtifactV1{
+		Version:     ProjectArtifactVersionV1,
+		ProjectID:   projectID,
+		GeneratedAt: generatedAt.UTC(),
+		Connections: connections,
+		Queries:     queries,
+		DataPoints:  dataPoints,
+		Mqtt: ArtifactMqttPayload{
+			Connections:   mqttConnections,
+			Subscriptions: append([]SnapshotMqttSubscriptionRecord{}, snapshot.MqttSubscriptions...),
+			TagGroups:     append([]SnapshotMqttTagGroupRecord{}, snapshot.MqttTagGroups...),
+			Tags:          append([]SnapshotMqttTagRecord{}, snapshot.MqttTags...),
+		},
+		Protocols: protocols,
+	}
 }
 
 func (r *ProjectSnapshotRepository) listConnections(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
@@ -659,13 +884,38 @@ func deriveRelationalConfigs(connections []ConnectionRecord) []SnapshotRelationa
 	return result
 }
 
+func cloneSnapshotObject(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return map[string]any{}
+	}
+	cloned := make(map[string]any, len(value))
+	for key, item := range value {
+		cloned[key] = item
+	}
+	return cloned
+}
+
+func cloneSnapshotAnyArray(value []any) []any {
+	if len(value) == 0 {
+		return []any{}
+	}
+	return append([]any{}, value...)
+}
+
+func coalesceProtocolType(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
 func deriveConnectionCategory(connectionType string) string {
 	switch connectionType {
 	case "relational":
 		return "database"
 	case "mqtt":
 		return "message"
-	case "websocket", "opcua", "modbus", "s7":
+	case "kafka", "http", "websocket", "redis", "opcua", "modbus", "s7", "tdengine":
 		return "protocol"
 	default:
 		return "api"

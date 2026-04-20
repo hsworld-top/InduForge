@@ -10,12 +10,20 @@ import (
 
 // PreviewHandler 负责承接 preview 会话生命周期相关 HTTP 请求。
 type PreviewHandler struct {
-	service *service.PreviewSessionService
+	service        *service.PreviewSessionService
+	runtimeCleaner previewSessionRuntimeCleaner
+}
+
+type previewSessionRuntimeCleaner interface {
+	CloseSession(sessionID string)
 }
 
 // NewPreviewHandler 创建 preview 会话处理器。
-func NewPreviewHandler(previewService *service.PreviewSessionService) *PreviewHandler {
-	return &PreviewHandler{service: previewService}
+func NewPreviewHandler(previewService *service.PreviewSessionService, runtimeCleaner previewSessionRuntimeCleaner) *PreviewHandler {
+	return &PreviewHandler{
+		service:        previewService,
+		runtimeCleaner: runtimeCleaner,
+	}
 }
 
 // Create 创建项目内预览会话，并返回会话快照。
@@ -68,6 +76,9 @@ func (h *PreviewHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 
 	if err := h.service.CloseSession(r.Context(), claims, r.PathValue("sessionId")); err != nil {
 		return err
+	}
+	if h.runtimeCleaner != nil {
+		h.runtimeCleaner.CloseSession(r.PathValue("sessionId"))
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})

@@ -164,4 +164,108 @@ describe("dataDomainClient", () => {
       }),
     );
   });
+
+  test("getProjectArtifact 会规范化 artifact v1 并读取 mqtt/protocols 区块", async () => {
+    global.fetch.mockResolvedValue(
+      buildJsonResponse({
+        success: true,
+        data: {
+          version: "1.0",
+          projectId: "project-1",
+          generatedAt: "2026-04-20T12:00:00Z",
+          connections: [
+            {
+              id: "conn-kafka-1",
+              name: "kafka-main",
+              type: "kafka",
+              status: "connected",
+              config: { brokers: "127.0.0.1:9092" },
+            },
+          ],
+          queries: [],
+          datapoints: [],
+          mqtt: {
+            connections: [
+              {
+                id: "conn-mqtt-1",
+                name: "mqtt-main",
+                type: "mqtt",
+                status: "connected",
+                brokerUrl: "tcp://127.0.0.1:1883",
+                protocol: "mqtt",
+                port: 1883,
+                keepalive: 60,
+                cleanSession: true,
+                qos: 1,
+                reconnectPeriod: 1000,
+                connectTimeout: 30000,
+                will: {},
+                sslConfig: {},
+              },
+            ],
+            subscriptions: [
+              {
+                id: "sub-1",
+                projectId: "project-1",
+                connectionId: "conn-mqtt-1",
+                name: "sub-main",
+                topic: "factory/line1/temp",
+                qos: 1,
+                isEnabled: true,
+                messageRetention: 100,
+              },
+            ],
+            tagGroups: [],
+            tags: [],
+          },
+          protocols: {
+            kafka: [
+              {
+                id: "conn-kafka-1",
+                name: "kafka-main",
+                type: "kafka",
+                status: "connected",
+                config: { topic: "factory.events" },
+              },
+            ],
+            http: [],
+            websocket: [],
+            redis: [],
+          },
+        },
+      }),
+    );
+
+    const client = new DataDomainClient({
+      baseUrl: "http://data-service.test",
+      timeoutMs: 2000,
+    });
+
+    const artifact = await client.getProjectArtifact("project-1", "Bearer token-artifact");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://data-service.test/api/v1/data/projects/project-1/artifact",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Authorization: "Bearer token-artifact",
+          Accept: "application/json",
+        }),
+      }),
+    );
+    expect(artifact.version).toBe("1.0");
+    expect(artifact.projectId).toBe("project-1");
+    expect(artifact.mqtt.connections[0]).toEqual(
+      expect.objectContaining({
+        id: "conn-mqtt-1",
+        brokerUrl: "tcp://127.0.0.1:1883",
+      }),
+    );
+    expect(artifact.protocols.kafka[0]).toEqual(
+      expect.objectContaining({
+        id: "conn-kafka-1",
+        type: "kafka",
+      }),
+    );
+  });
 });

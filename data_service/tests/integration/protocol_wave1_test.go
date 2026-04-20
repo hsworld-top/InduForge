@@ -64,6 +64,9 @@ func TestProtocolWave1(t *testing.T) {
 	if len(previewRows) == 0 {
 		t.Fatal("expected kafka preview rows")
 	}
+	if previewRows[0].Payload != `{"source":"kafka-preview-mock","status":"ok"}` {
+		t.Fatalf("expected kafka preview to stay on mock sample in phase1, got %q", previewRows[0].Payload)
+	}
 
 	httpConn := mustCreateHTTPConfig(t, server.URL, token, projectID, map[string]any{
 		"name":    "http-source-main",

@@ -200,6 +200,44 @@ func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID s
 		return &value, nil
 	}
 
+	if s.mqtt != nil && record.SourceID != nil && strings.TrimSpace(*record.SourceID) != "" {
+		switch record.SourceType {
+		case "mqtt.tag":
+			tag, err := s.mqtt.GetTag(ctx, projectID, *record.SourceID)
+			if err != nil {
+				return nil, err
+			}
+
+			subscription, err := s.mqtt.GetSubscription(ctx, projectID, tag.SubscriptionID)
+			if err != nil {
+				return nil, err
+			}
+			messages, err := s.mqtt.ListMessages(ctx, projectID, subscription.ID, 1)
+			if err != nil {
+				return nil, err
+			}
+			if len(messages) > 0 {
+				snapshot := BuildMqttTagSnapshotFromMessage(*tag, messages[0])
+				value.Value = snapshot.Value
+				value.Quality = snapshot.Quality
+				value.Timestamp = snapshot.Timestamp
+				return &value, nil
+			}
+		case "mqtt.subscription":
+			messages, err := s.mqtt.ListMessages(ctx, projectID, *record.SourceID, 1)
+			if err != nil {
+				return nil, err
+			}
+			if len(messages) > 0 {
+				snapshot := BuildMqttSubscriptionSnapshot(messages[0])
+				value.Value = snapshot.Value
+				value.Quality = snapshot.Quality
+				value.Timestamp = snapshot.Timestamp
+				return &value, nil
+			}
+		}
+	}
+
 	if value.Value != nil {
 		value.Quality = "good"
 	}

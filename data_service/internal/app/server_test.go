@@ -20,6 +20,7 @@ func TestNewServer_UsesProductionRouter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server failed: %v", err)
 	}
+	t.Cleanup(srv.Close)
 
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
@@ -53,6 +54,7 @@ func TestServer_ProductionAssemblyKeepsUnifiedErrorResponse(t *testing.T) {
 	}))
 
 	srv := newServer(config.Config{Addr: ":0"}, middleware.RequestIDMiddleware(mux), nil)
+	t.Cleanup(srv.Close)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -97,6 +99,7 @@ func TestNewServer_StartsBaseServiceWhenOptionalDependenciesInvalid(t *testing.T
 	if err != nil {
 		t.Fatalf("new server failed: %v", err)
 	}
+	t.Cleanup(srv.Close)
 
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)

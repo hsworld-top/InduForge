@@ -84,6 +84,8 @@ type CreateRedisConfigParams struct {
 }
 
 // ProtocolWave1Repository 负责第一波协议配置（kafka/http/ws/redis）的参数化 SQL。
+// 说明：Phase 1 对这批协议只冻结配置对象与 artifact 契约，除 Kafka mock preview 外，
+// 不把它们扩成完整运行态采集栈。
 type ProtocolWave1Repository struct {
 	pool *pgxpool.Pool
 }

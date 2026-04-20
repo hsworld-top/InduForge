@@ -16,15 +16,16 @@ type options struct {
 	protocolWave1Handler   *handler.ProtocolWave1Handler
 	protocolWave2Handler   *handler.ProtocolWave2Handler
 	previewHandler         *handler.PreviewHandler
+	previewSocketHandler   http.Handler
 	computeHandler         *handler.ComputeHandler
 	projectSnapshotHandler *handler.ProjectSnapshotHandler
 	jwtValidator           *auth.JWTValidator
 }
 
-// Option 定义路由装配的可选依赖。
+// Option defines route wiring dependencies.
 type Option func(*options)
 
-// WithConnectionRoutes 注入 connections 领域路由所需依赖。
+// WithConnectionRoutes wires connection routes.
 func WithConnectionRoutes(connectionHandler *handler.ConnectionHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.connectionHandler = connectionHandler
@@ -32,7 +33,7 @@ func WithConnectionRoutes(connectionHandler *handler.ConnectionHandler, jwtValid
 	}
 }
 
-// WithDataRoutes 注入 queries 与 datapoints 领域路由所需依赖。
+// WithDataRoutes wires query and datapoint routes.
 func WithDataRoutes(queryHandler *handler.QueryHandler, dataPointHandler *handler.DataPointHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.queryHandler = queryHandler
@@ -41,7 +42,7 @@ func WithDataRoutes(queryHandler *handler.QueryHandler, dataPointHandler *handle
 	}
 }
 
-// WithMqttRoutes 注入 mqtt 领域路由所需依赖。
+// WithMqttRoutes wires MQTT routes.
 func WithMqttRoutes(mqttHandler *handler.MqttHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.mqttHandler = mqttHandler
@@ -49,7 +50,7 @@ func WithMqttRoutes(mqttHandler *handler.MqttHandler, jwtValidator *auth.JWTVali
 	}
 }
 
-// WithProtocolWave1Routes 注入第一波协议路由所需依赖。
+// WithProtocolWave1Routes wires protocol wave 1 routes.
 func WithProtocolWave1Routes(protocolWave1Handler *handler.ProtocolWave1Handler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.protocolWave1Handler = protocolWave1Handler
@@ -57,7 +58,7 @@ func WithProtocolWave1Routes(protocolWave1Handler *handler.ProtocolWave1Handler,
 	}
 }
 
-// WithProtocolWave2Routes 注入第二波协议路由所需依赖。
+// WithProtocolWave2Routes wires protocol wave 2 routes.
 func WithProtocolWave2Routes(protocolWave2Handler *handler.ProtocolWave2Handler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.protocolWave2Handler = protocolWave2Handler
@@ -65,7 +66,7 @@ func WithProtocolWave2Routes(protocolWave2Handler *handler.ProtocolWave2Handler,
 	}
 }
 
-// WithPreviewRoutes 注入 preview 会话路由所需依赖。
+// WithPreviewRoutes wires preview session routes.
 func WithPreviewRoutes(previewHandler *handler.PreviewHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.previewHandler = previewHandler
@@ -73,7 +74,14 @@ func WithPreviewRoutes(previewHandler *handler.PreviewHandler, jwtValidator *aut
 	}
 }
 
-// WithComputeRoutes 注入 compute 领域路由所需依赖。
+// WithPreviewSocketHandler wires the preview socket transport layer.
+func WithPreviewSocketHandler(previewSocketHandler http.Handler) Option {
+	return func(opts *options) {
+		opts.previewSocketHandler = previewSocketHandler
+	}
+}
+
+// WithComputeRoutes wires compute routes.
 func WithComputeRoutes(computeHandler *handler.ComputeHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.computeHandler = computeHandler
@@ -81,7 +89,7 @@ func WithComputeRoutes(computeHandler *handler.ComputeHandler, jwtValidator *aut
 	}
 }
 
-// WithProjectSnapshotRoutes 注入项目快照路由依赖。
+// WithProjectSnapshotRoutes wires project snapshot routes.
 func WithProjectSnapshotRoutes(projectSnapshotHandler *handler.ProjectSnapshotHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.projectSnapshotHandler = projectSnapshotHandler
@@ -89,7 +97,7 @@ func WithProjectSnapshotRoutes(projectSnapshotHandler *handler.ProjectSnapshotHa
 	}
 }
 
-// NewRouter 创建 data_service 的基础 HTTP 路由。
+// NewRouter builds the base HTTP router for data_service.
 func NewRouter(routeOptions ...Option) http.Handler {
 	opts := options{}
 	for _, option := range routeOptions {
@@ -107,6 +115,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountMqttRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
+	mountPreviewSocketRoutes(mux, opts)
 	mountPreviewRoutes(mux, opts)
 	mountComputeRoutes(mux, opts)
 	mountProjectSnapshotRoutes(mux, opts)
@@ -481,6 +490,14 @@ func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/artifact",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.projectSnapshotHandler.GetArtifact),
+			),
+		),
+	)
+	mux.Handle(
 		"PUT /api/v1/data/projects/{projectId}/snapshot",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
@@ -749,6 +766,15 @@ func mountPreviewRoutes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+}
+
+func mountPreviewSocketRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.previewSocketHandler == nil {
+		return
+	}
+
+	mux.Handle("/socket.io", opts.previewSocketHandler)
+	mux.Handle("/socket.io/", opts.previewSocketHandler)
 }
 
 func mountComputeRoutes(mux *http.ServeMux, opts options) {

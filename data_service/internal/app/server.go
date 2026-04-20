@@ -17,6 +17,7 @@ import (
 	"github.com/indu-forge/data_service/internal/http/handler"
 	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/router"
+	previewsocket "github.com/indu-forge/data_service/internal/http/socket"
 	"github.com/indu-forge/data_service/internal/repository"
 	"github.com/indu-forge/data_service/internal/service"
 )
@@ -142,7 +143,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 
 	connectionService := service.NewConnectionService(connectionRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, pool)
-	dataPointService := service.NewDataPointService(dataPointRepository, queryService)
+	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
@@ -190,7 +191,16 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 
 			previewRepository := repository.NewPreviewSessionRepository(pool)
 			previewService := service.NewPreviewSessionService(previewRepository, redisClient)
-			previewHandler := handler.NewPreviewHandler(previewService)
+			previewSocketServer, previewSocketErr := previewsocket.NewPreviewSocketServer(jwtValidator, previewService, dataPointService, mqttRepository)
+			if previewSocketErr != nil {
+				log.Printf("warning: preview socket disabled: %v", previewSocketErr)
+			}
+			if previewSocketServer != nil {
+				cleanupFns = append(cleanupFns, previewSocketServer.Close)
+				routeOptions = append(routeOptions, router.WithPreviewSocketHandler(previewSocketServer.Handler()))
+			}
+
+			previewHandler := handler.NewPreviewHandler(previewService, previewSocketServer)
 			routeOptions = append(routeOptions, router.WithPreviewRoutes(previewHandler, jwtValidator))
 		}
 	}

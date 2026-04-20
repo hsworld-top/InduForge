@@ -149,6 +149,56 @@ const buildProjectSnapshot = (datacenter = {}) => {
   };
 };
 
+const buildRelationalConfigsFromArtifact = (connections = []) =>
+  normalizeList(connections)
+    .filter((connection) => connection?.type === 'relational')
+    .map((connection) => {
+      const config = connection?.config || {};
+      return {
+        connectionId: connection.id,
+        dbType: config.dbType || 'postgresql',
+        host: config.host || '',
+        port: config.port ?? 5432,
+        database: config.database || '',
+        username: config.username || '',
+        password: config.password || '',
+        schema: config.schema || null,
+        charset: config.charset || null,
+        timezone: config.timezone || null,
+        ssl: Boolean(config.ssl),
+        sslConfig: config.sslConfig || {},
+      };
+    });
+
+const buildSnapshotFromArtifact = (artifact = {}) => {
+  const mqttConnections = normalizeList(artifact?.mqtt?.connections);
+  return {
+    connections: normalizeList(artifact?.connections),
+    relationalConfigs: buildRelationalConfigsFromArtifact(artifact?.connections),
+    queries: normalizeList(artifact?.queries),
+    mqttConfigs: mqttConnections.map((connection) => ({
+      connectionId: connection.id,
+      brokerUrl: connection.brokerUrl || '',
+      protocol: connection.protocol || 'mqtt',
+      port: connection.port ?? 1883,
+      clientId: connection.clientId ?? null,
+      username: connection.username ?? null,
+      password: connection.password ?? null,
+      keepalive: connection.keepalive ?? 60,
+      cleanSession: Boolean(connection.cleanSession),
+      qos: connection.qos ?? 0,
+      reconnectPeriod: connection.reconnectPeriod ?? 1000,
+      connectTimeout: connection.connectTimeout ?? 30000,
+      will: connection.will || {},
+      sslConfig: connection.sslConfig || {},
+    })),
+    mqttSubscriptions: normalizeList(artifact?.mqtt?.subscriptions),
+    mqttTagGroups: normalizeList(artifact?.mqtt?.tagGroups),
+    mqttTags: normalizeList(artifact?.mqtt?.tags),
+    datapoints: normalizeList(artifact?.datapoints),
+  };
+};
+
 const respondRouteError = (res, error, fallbackCode, fallbackStatus) => {
   if (error?.errorCode && error?.statusCode) {
     return ApiResponse.error(res, error.errorCode, error.options || {}, error.statusCode);
@@ -268,7 +318,8 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
     const globalVariables = parseJsonField(settingsRow?.globalVariables, null);
     const globalScripts = parseJsonField(settingsRow?.globalScripts, null);
 
-    const snapshot = await dataDomainClient.getProjectSnapshot(id, req.headers.authorization);
+    const artifact = await dataDomainClient.getProjectArtifact(id, req.headers.authorization);
+    const snapshot = buildSnapshotFromArtifact(artifact);
 
     const pageIndex = pages.map((page) => {
       const safeName = sanitizeFileName(page.name || page.id);
@@ -372,6 +423,10 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
     archive.append(
       JSON.stringify(snapshot.datapoints, null, 2),
       { name: 'datacenter/datapoints.json' }
+    );
+    archive.append(
+      JSON.stringify(artifact || {}, null, 2),
+      { name: 'datacenter/artifact.json' }
     );
 
     await archive.finalize();
