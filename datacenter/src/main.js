@@ -6,6 +6,7 @@ import "element-plus/dist/index.css";
 import router from "./router";
 import App from "./App.vue";
 import "./assets/styles/main.css";
+import { initializeHostBootstrap, postAppBootstrapRequest } from "./runtime/host-bootstrap";
 import { initMessageHandler } from "./utils/messageHandler";
 import "./utils/socketTest";
 
@@ -31,4 +32,14 @@ if (initialLoading) {
 }
 
 // 初始化消息处理器（用于与Designer通信）
+const hostBootstrap = initializeHostBootstrap({
+  currentUrl: window.location.href,
+  isTopLevelWindow: window.parent === window,
+  referrer: document.referrer,
+});
+
+if (hostBootstrap.shouldWaitForBootstrap) {
+  postAppBootstrapRequest();
+}
+
 initMessageHandler();

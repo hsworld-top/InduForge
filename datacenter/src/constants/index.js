@@ -10,5 +10,6 @@ export const STORAGE_KEYS = {
   THEME: "theme",
   LANGUAGE: "language",
   TENANT_ID: "tenant_id",
+  PROJECT_ID: "project_id",
   REMEMBER_ME: "remember_me",
 };

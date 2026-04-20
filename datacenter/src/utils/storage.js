@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from "@/constants";
+import { STORAGE_KEYS } from "../constants/index.js";
 
 /**
  * 本地存储工具类
@@ -118,5 +118,23 @@ export class Storage {
    */
   static setTenantId(tenantId) {
     this.set(STORAGE_KEYS.TENANT_ID, tenantId);
+  }
+
+  /**
+   * 获取项目ID。
+   * 这个值由宿主 bootstrap 写入，用于初始化数据域上下文。
+   * @returns {string|null} 项目ID
+   */
+  static getProjectId() {
+    return this.get(STORAGE_KEYS.PROJECT_ID);
+  }
+
+  /**
+   * 设置项目ID。
+   * 只保存当前运行态所需的 projectId，不额外扩展其他宿主上下文。
+   * @param {string} projectId - 项目ID
+   */
+  static setProjectId(projectId) {
+    this.set(STORAGE_KEYS.PROJECT_ID, projectId);
   }
 }

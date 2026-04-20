@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { Storage } from "@/utils/storage";
 import { STORAGE_KEYS } from "@/constants";
+import { shouldRedirectTopLevelToIde, shouldUseDebugMode, waitForHostBootstrap, buildIdeRestoreUrl, resolveIdeOriginFromRuntime } from "@/runtime/host-bootstrap";
+import { Storage } from "@/utils/storage";
 // import DataCenter from "../views/DataCenter.vue"; // 原版本
 import DataCenter from "../views/DataCenterNew.vue"; // 重构版本
 
@@ -30,45 +31,36 @@ const applyTheme = (theme) => {
 };
 
 /**
- * 从 URL 同步鉴权与主题配置。
+ * 用当前导航目标重建绝对地址，避免依赖 window.location.href 误判切路由场景。
+ * @param {RouteLocationNormalized} to - 目标路由
+ * @returns {URL} 目标地址
  */
-const syncRuntimeSettings = () => {
-  const url = new URL(window.location.href);
-  const urlParams = url.searchParams;
-  let shouldReplace = false;
+const resolveTargetUrl = (to) => {
+  const resolvedHref = router.resolve(to).href;
+  return new URL(resolvedHref, window.location.origin);
+};
 
-  const tokenFromUrl = urlParams.get("token");
-  const refreshTokenFromUrl = urlParams.get("refreshToken");
-  const themeFromUrl = urlParams.get("theme");
-  const themeValue = ["light", "dark"].includes(themeFromUrl)
-    ? themeFromUrl
-    : Storage.get(STORAGE_KEYS.THEME, "light");
+/**
+ * 从目标地址里提取 handoff 标识。
+ * @param {URL} url - 目标地址
+ * @returns {{handoffId?: string}|null} handoff 信息
+ */
+const resolveHandoff = (url) => {
+  const handoffId = url.searchParams.get("handoffId");
+  return handoffId ? { handoffId } : null;
+};
 
-  if (tokenFromUrl) {
-    Storage.setToken(tokenFromUrl);
-    urlParams.delete("token");
-    shouldReplace = true;
-  }
-
-  if (refreshTokenFromUrl) {
-    Storage.setRefreshToken(refreshTokenFromUrl);
-    urlParams.delete("refreshToken");
-    shouldReplace = true;
-  }
-
-  if (themeFromUrl && ["light", "dark"].includes(themeFromUrl)) {
-    Storage.set(STORAGE_KEYS.THEME, themeFromUrl);
-    urlParams.delete("theme");
-    shouldReplace = true;
-  }
-
-  applyTheme(themeValue);
-
-  if (shouldReplace) {
-    const nextQuery = urlParams.toString();
-    const nextUrl = nextQuery ? `${url.pathname}?${nextQuery}` : url.pathname;
-    window.history.replaceState({}, "", nextUrl);
-  }
+/**
+ * 构建 IDE 登录地址。
+ * iframe 场景里 bootstrap 超时后，仍然保留现有的登录兜底逻辑。
+ * @param {string} currentUrl - 当前访问地址
+ * @param {string} ideOrigin - IDE origin
+ * @returns {string} 登录地址
+ */
+const buildIdeLoginUrl = (currentUrl, ideOrigin) => {
+  const loginUrl = new URL("/login", ideOrigin);
+  loginUrl.searchParams.set("redirect", currentUrl);
+  return loginUrl.toString();
 };
 
 // 路由守卫 - 鉴权检查和状态恢复
@@ -76,48 +68,49 @@ router.beforeEach(async (to, from, next) => {
   // 设置页面标题
   document.title = `${to.meta.title || "数据中心"} - ProjectIDE`;
 
-  // 同步外部传入的 token/主题信息
-  syncRuntimeSettings();
+  const targetUrl = resolveTargetUrl(to);
+  const isDebugRoute = shouldUseDebugMode(targetUrl.pathname);
+  const isTopLevelWindow = window.parent === window;
+  const ideOrigin = resolveIdeOriginFromRuntime({
+    currentUrl: targetUrl.toString(),
+    referrer: document.referrer,
+  });
 
-  const isDev = import.meta.env.DEV;
-  const devHost = import.meta.env.VITE_DEV_HOST || "localhost";
-  const idePort = import.meta.env.VITE_IDE_PORT || 18601;
-  const ideOrigin = isDev ? `http://${devHost}:${idePort}` : "";
-
-  // 1. 检查鉴权 (Token) - 从 LocalStorage 读取
-  const token = Storage.getToken();
-  if (!token) {
-    // 没登录，跳回主应用登录页，并保存当前 URL 以便登录后跳转回来
-    const redirectUrl = encodeURIComponent(window.location.href);
-    window.location.href = `${ideOrigin}/login?redirect=${redirectUrl}`;
+  if (shouldRedirectTopLevelToIde(targetUrl.pathname, isTopLevelWindow) && !isDebugRoute) {
+    next(false);
+    window.location.replace(buildIdeRestoreUrl(resolveHandoff(targetUrl), ideOrigin));
     return;
   }
 
-  // 2. 从 URL 参数获取工程上下文信息
-  const urlParams = new URLSearchParams(window.location.search);
-  const projectId = urlParams.get("pid") || urlParams.get("id"); // 兼容旧的 id 参数
-  const tenantId = urlParams.get("tenant");
+  // 正式入口只接受宿主 bootstrap 注入的运行态，不再从 URL 消费 token / refreshToken / theme / pid / tenant。
+  let token = Storage.getToken();
+  if (!token && !isDebugRoute) {
+    await waitForHostBootstrap();
+    token = Storage.getToken();
+  }
 
-  // 3. 验证必需参数
-  if (!projectId) {
-    // 如果没有工程 ID，跳转回主应用的工程管理页面
-    window.location.href = `${ideOrigin}/`;
+  const theme = Storage.get(STORAGE_KEYS.THEME, "light");
+  applyTheme(theme);
+
+  if (!token && !isDebugRoute) {
+    next(false);
+    window.location.replace(buildIdeLoginUrl(targetUrl.toString(), ideOrigin));
     return;
   }
 
-  // 4. 将工程信息存储到路由 meta 中，供组件使用
+  const projectId = Storage.getProjectId();
+  const tenantId = Storage.getTenantId();
+
+  if (!projectId && !isDebugRoute) {
+    next(false);
+    window.location.replace(buildIdeRestoreUrl(resolveHandoff(targetUrl), ideOrigin));
+    return;
+  }
+
   to.meta.project = {
     id: projectId,
-    tenantId: tenantId,
+    tenantId,
   };
-
-  // 5. 确保租户 ID 已设置（如果 URL 中有）
-  if (tenantId) {
-    const currentTenantId = Storage.getTenantId();
-    if (currentTenantId !== tenantId) {
-      Storage.setTenantId(tenantId);
-    }
-  }
 
   next();
 });
