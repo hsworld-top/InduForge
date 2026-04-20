@@ -40,6 +40,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS tenants_code_uq ON tenants ("code");
 CREATE INDEX IF NOT EXISTS tenants_status_idx ON tenants ("status");
 CREATE INDEX IF NOT EXISTS tenants_expires_idx ON tenants ("expiresAt");
 
+COMMENT ON TABLE tenants IS '租户表';
+COMMENT ON COLUMN tenants."id" IS '租户ID';
+COMMENT ON COLUMN tenants."name" IS '租户名称';
+COMMENT ON COLUMN tenants."code" IS '租户代码';
+COMMENT ON COLUMN tenants."description" IS '租户描述';
+COMMENT ON COLUMN tenants."status" IS '租户状态';
+COMMENT ON COLUMN tenants."contactEmail" IS '联系邮箱';
+COMMENT ON COLUMN tenants."contactPhone" IS '联系电话';
+COMMENT ON COLUMN tenants."maxUsers" IS '最大用户数';
+COMMENT ON COLUMN tenants."maxProjects" IS '最大工程数';
+COMMENT ON COLUMN tenants."maxStorage" IS '最大存储空间(字节)';
+COMMENT ON COLUMN tenants."usedStorage" IS '已用存储空间(字节)';
+COMMENT ON COLUMN tenants."logoUrl" IS 'Logo资源路径';
+COMMENT ON COLUMN tenants."loginBackgroundUrl" IS '登录页背景图路径';
+COMMENT ON COLUMN tenants."companyName" IS '公司名称';
+COMMENT ON COLUMN tenants."companyAddress" IS '公司地址';
+COMMENT ON COLUMN tenants."companyPhone" IS '公司电话';
+COMMENT ON COLUMN tenants."companyWebsite" IS '公司网站';
+COMMENT ON COLUMN tenants."settings" IS '租户级配置';
+COMMENT ON COLUMN tenants."expiresAt" IS '租户到期时间';
+COMMENT ON COLUMN tenants."createdAt" IS '创建时间';
+COMMENT ON COLUMN tenants."updatedAt" IS '更新时间';
+
 CREATE TABLE IF NOT EXISTS users (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenantId" uuid NOT NULL REFERENCES tenants ("id") ON DELETE CASCADE,
@@ -75,6 +98,24 @@ CREATE INDEX IF NOT EXISTS users_tenant_role_idx ON users ("tenantId", "role");
 CREATE INDEX IF NOT EXISTS users_status_idx ON users ("status");
 CREATE INDEX IF NOT EXISTS users_email_idx ON users ("email");
 
+COMMENT ON TABLE users IS '用户表';
+COMMENT ON COLUMN users."id" IS '用户ID';
+COMMENT ON COLUMN users."tenantId" IS '所属租户ID';
+COMMENT ON COLUMN users."username" IS '用户名';
+COMMENT ON COLUMN users."password" IS '密码哈希';
+COMMENT ON COLUMN users."email" IS '邮箱';
+COMMENT ON COLUMN users."phone" IS '手机号';
+COMMENT ON COLUMN users."fullName" IS '真实姓名';
+COMMENT ON COLUMN users."avatar" IS '头像资源路径';
+COMMENT ON COLUMN users."role" IS '系统角色';
+COMMENT ON COLUMN users."status" IS '用户状态';
+COMMENT ON COLUMN users."preferences" IS '用户偏好设置';
+COMMENT ON COLUMN users."lastLoginAt" IS '最后登录时间';
+COMMENT ON COLUMN users."lastLoginIp" IS '最后登录IP';
+COMMENT ON COLUMN users."passwordChangedAt" IS '密码最后修改时间';
+COMMENT ON COLUMN users."createdAt" IS '创建时间';
+COMMENT ON COLUMN users."updatedAt" IS '更新时间';
+
 CREATE TABLE IF NOT EXISTS projects (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenantId" uuid NOT NULL REFERENCES tenants ("id") ON DELETE CASCADE,
@@ -102,6 +143,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS projects_tenant_code_uq
   ON projects ("tenantId", "code")
   WHERE "code" IS NOT NULL;
 
+COMMENT ON TABLE projects IS '工程表';
+COMMENT ON COLUMN projects."id" IS '工程ID';
+COMMENT ON COLUMN projects."tenantId" IS '所属租户ID';
+COMMENT ON COLUMN projects."name" IS '工程名称';
+COMMENT ON COLUMN projects."code" IS '工程代码';
+COMMENT ON COLUMN projects."description" IS '工程描述';
+COMMENT ON COLUMN projects."projectVariables" IS '工程级全局变量定义';
+COMMENT ON COLUMN projects."entryConfig" IS '工程入口配置';
+COMMENT ON COLUMN projects."colorTag" IS '颜色标签';
+COMMENT ON COLUMN projects."icon" IS '工程图标';
+COMMENT ON COLUMN projects."status" IS '工程状态';
+COMMENT ON COLUMN projects."visibility" IS '可见性';
+COMMENT ON COLUMN projects."createdBy" IS '创建者ID';
+COMMENT ON COLUMN projects."updatedBy" IS '更新者ID';
+COMMENT ON COLUMN projects."archivedAt" IS '归档时间';
+COMMENT ON COLUMN projects."createdAt" IS '创建时间';
+COMMENT ON COLUMN projects."updatedAt" IS '更新时间';
+
 CREATE TABLE IF NOT EXISTS logs (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenantId" uuid REFERENCES tenants ("id") ON DELETE SET NULL,
@@ -125,6 +184,23 @@ CREATE INDEX IF NOT EXISTS logs_project_idx ON logs ("projectId");
 CREATE INDEX IF NOT EXISTS logs_user_idx ON logs ("userId");
 CREATE INDEX IF NOT EXISTS logs_category_action_idx ON logs ("category", "action");
 CREATE INDEX IF NOT EXISTS logs_created_at_idx ON logs ("createdAt");
+
+COMMENT ON TABLE logs IS '系统日志表';
+COMMENT ON COLUMN logs."id" IS '日志ID';
+COMMENT ON COLUMN logs."tenantId" IS '租户ID';
+COMMENT ON COLUMN logs."projectId" IS '工程ID';
+COMMENT ON COLUMN logs."userId" IS '操作用户ID';
+COMMENT ON COLUMN logs."level" IS '日志级别';
+COMMENT ON COLUMN logs."category" IS '日志分类';
+COMMENT ON COLUMN logs."action" IS '操作类型';
+COMMENT ON COLUMN logs."resource" IS '资源类型';
+COMMENT ON COLUMN logs."resourceId" IS '资源ID';
+COMMENT ON COLUMN logs."message" IS '日志消息';
+COMMENT ON COLUMN logs."details" IS '详细信息';
+COMMENT ON COLUMN logs."ip" IS 'IP地址';
+COMMENT ON COLUMN logs."userAgent" IS '用户代理';
+COMMENT ON COLUMN logs."duration" IS '操作耗时(毫秒)';
+COMMENT ON COLUMN logs."createdAt" IS '创建时间';
 
 -- ============================================
 -- 2. 设计器相关表
@@ -169,6 +245,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS design_pages_project_path_uq
   ON design_pages ("projectId", "path")
   WHERE "path" IS NOT NULL;
 
+COMMENT ON TABLE design_pages IS '设计页面表';
+COMMENT ON COLUMN design_pages."id" IS '页面ID';
+COMMENT ON COLUMN design_pages."projectId" IS '所属工程ID';
+COMMENT ON COLUMN design_pages."parentId" IS '父页面或文件夹ID';
+COMMENT ON COLUMN design_pages."name" IS '页面名称';
+COMMENT ON COLUMN design_pages."path" IS '路由路径';
+COMMENT ON COLUMN design_pages."type" IS '页面类型';
+COMMENT ON COLUMN design_pages."icon" IS '菜单图标';
+COMMENT ON COLUMN design_pages."schemaVersion" IS 'DSL版本号';
+COMMENT ON COLUMN design_pages."schemaContent" IS '页面DSL内容';
+COMMENT ON COLUMN design_pages."pageConfig" IS '页面配置';
+COMMENT ON COLUMN design_pages."variables" IS '页面级变量定义';
+COMMENT ON COLUMN design_pages."dataSources" IS '页面级数据源配置';
+COMMENT ON COLUMN design_pages."lifecycle" IS '页面生命周期配置';
+COMMENT ON COLUMN design_pages."isHome" IS '是否首页';
+COMMENT ON COLUMN design_pages."isPublished" IS '是否已发布';
+COMMENT ON COLUMN design_pages."status" IS '页面状态';
+COMMENT ON COLUMN design_pages."thumbnailUrl" IS '页面缩略图路径';
+COMMENT ON COLUMN design_pages."sortOrder" IS '排序顺序';
+COMMENT ON COLUMN design_pages."lockedBy" IS '当前锁定用户ID';
+COMMENT ON COLUMN design_pages."lockedAt" IS '锁定时间';
+COMMENT ON COLUMN design_pages."publishedAt" IS '最后发布时间';
+COMMENT ON COLUMN design_pages."publishedBy" IS '最后发布人ID';
+COMMENT ON COLUMN design_pages."createdBy" IS '创建者ID';
+COMMENT ON COLUMN design_pages."updatedBy" IS '更新者ID';
+COMMENT ON COLUMN design_pages."createdAt" IS '创建时间';
+COMMENT ON COLUMN design_pages."updatedAt" IS '更新时间';
+
 CREATE TABLE IF NOT EXISTS design_asset_folders (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "projectId" uuid NOT NULL REFERENCES projects ("id") ON DELETE CASCADE,
@@ -185,6 +289,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS asset_folders_root_name_uq
 CREATE UNIQUE INDEX IF NOT EXISTS asset_folders_child_name_uq
   ON design_asset_folders ("projectId", "parentId", "name")
   WHERE "parentId" IS NOT NULL;
+
+COMMENT ON TABLE design_asset_folders IS '设计资源文件夹表';
+COMMENT ON COLUMN design_asset_folders."id" IS '文件夹ID';
+COMMENT ON COLUMN design_asset_folders."projectId" IS '所属工程ID';
+COMMENT ON COLUMN design_asset_folders."parentId" IS '父文件夹ID';
+COMMENT ON COLUMN design_asset_folders."name" IS '文件夹名称';
+COMMENT ON COLUMN design_asset_folders."sortOrder" IS '排序顺序';
+COMMENT ON COLUMN design_asset_folders."createdAt" IS '创建时间';
+COMMENT ON COLUMN design_asset_folders."updatedAt" IS '更新时间';
 
 CREATE TABLE IF NOT EXISTS design_assets (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -211,6 +324,27 @@ CREATE TABLE IF NOT EXISTS design_assets (
 CREATE INDEX IF NOT EXISTS assets_project_type_idx ON design_assets ("projectId", "type");
 CREATE INDEX IF NOT EXISTS assets_folder_idx ON design_assets ("folderId");
 
+COMMENT ON TABLE design_assets IS '设计资源文件表';
+COMMENT ON COLUMN design_assets."id" IS '资源ID';
+COMMENT ON COLUMN design_assets."projectId" IS '所属工程ID';
+COMMENT ON COLUMN design_assets."folderId" IS '所属文件夹ID';
+COMMENT ON COLUMN design_assets."name" IS '资源名称';
+COMMENT ON COLUMN design_assets."originalName" IS '原始文件名';
+COMMENT ON COLUMN design_assets."type" IS '资源类型';
+COMMENT ON COLUMN design_assets."mimeType" IS 'MIME类型';
+COMMENT ON COLUMN design_assets."url" IS '资源访问路径';
+COMMENT ON COLUMN design_assets."thumbnailUrl" IS '缩略图路径';
+COMMENT ON COLUMN design_assets."size" IS '文件大小(字节)';
+COMMENT ON COLUMN design_assets."width" IS '宽度';
+COMMENT ON COLUMN design_assets."height" IS '高度';
+COMMENT ON COLUMN design_assets."duration" IS '时长(毫秒或秒级元数据)';
+COMMENT ON COLUMN design_assets."metadata" IS '扩展元数据';
+COMMENT ON COLUMN design_assets."tags" IS '资源标签';
+COMMENT ON COLUMN design_assets."usageCount" IS '使用次数';
+COMMENT ON COLUMN design_assets."uploadedBy" IS '上传者ID';
+COMMENT ON COLUMN design_assets."createdAt" IS '创建时间';
+COMMENT ON COLUMN design_assets."updatedAt" IS '更新时间';
+
 CREATE TABLE IF NOT EXISTS design_project_settings (
   "projectId" uuid PRIMARY KEY REFERENCES projects ("id") ON DELETE CASCADE,
   "schemaVersion" text DEFAULT '1.0.0',
@@ -229,6 +363,21 @@ CREATE TABLE IF NOT EXISTS design_project_settings (
 
 CREATE INDEX IF NOT EXISTS design_project_settings_updated_by_idx
   ON design_project_settings ("updatedBy");
+
+COMMENT ON TABLE design_project_settings IS '工程级设计配置表';
+COMMENT ON COLUMN design_project_settings."projectId" IS '工程ID';
+COMMENT ON COLUMN design_project_settings."schemaVersion" IS 'DSL版本号';
+COMMENT ON COLUMN design_project_settings."globalVariables" IS '全局变量定义';
+COMMENT ON COLUMN design_project_settings."globalStyles" IS '全局样式配置';
+COMMENT ON COLUMN design_project_settings."globalScripts" IS '全局脚本配置';
+COMMENT ON COLUMN design_project_settings."globalDataSources" IS '全局数据源配置';
+COMMENT ON COLUMN design_project_settings."componentMappings" IS '自定义组件映射';
+COMMENT ON COLUMN design_project_settings."i18n" IS '国际化配置';
+COMMENT ON COLUMN design_project_settings."permissions" IS '全局权限配置';
+COMMENT ON COLUMN design_project_settings."buildConfig" IS '构建配置';
+COMMENT ON COLUMN design_project_settings."runtimeConfig" IS '运行时配置';
+COMMENT ON COLUMN design_project_settings."updatedBy" IS '最后更新者ID';
+COMMENT ON COLUMN design_project_settings."updatedAt" IS '最后更新时间';
 
 -- ============================================
 -- 3. 发布部署相关表
@@ -274,6 +423,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS deployments_version_uq
   ON deployments ("projectId", "version")
   WHERE "deletedAt" IS NULL;
 
+COMMENT ON TABLE deployments IS '发布版本表';
+COMMENT ON COLUMN deployments."id" IS '发布版本ID';
+COMMENT ON COLUMN deployments."projectId" IS '工程ID';
+COMMENT ON COLUMN deployments."tenantId" IS '租户ID';
+COMMENT ON COLUMN deployments."version" IS '版本号';
+COMMENT ON COLUMN deployments."name" IS '版本名称';
+COMMENT ON COLUMN deployments."description" IS '版本描述';
+COMMENT ON COLUMN deployments."type" IS '部署类型';
+COMMENT ON COLUMN deployments."mode" IS '运行模式';
+COMMENT ON COLUMN deployments."status" IS '构建状态';
+COMMENT ON COLUMN deployments."buildConfig" IS '构建配置';
+COMMENT ON COLUMN deployments."buildLog" IS '构建日志';
+COMMENT ON COLUMN deployments."artifactUrl" IS '构建产物URL';
+COMMENT ON COLUMN deployments."artifactHash" IS '产物SHA256哈希';
+COMMENT ON COLUMN deployments."artifactSize" IS '产物大小(字节)';
+COMMENT ON COLUMN deployments."snapshotUrl" IS '快照文件URL';
+COMMENT ON COLUMN deployments."snapshotHash" IS '快照SHA256哈希';
+COMMENT ON COLUMN deployments."manifest" IS '发布清单';
+COMMENT ON COLUMN deployments."pageCount" IS '页面数量';
+COMMENT ON COLUMN deployments."componentCount" IS '组件数量';
+COMMENT ON COLUMN deployments."datapointCount" IS '数据点数量';
+COMMENT ON COLUMN deployments."startedAt" IS '构建开始时间';
+COMMENT ON COLUMN deployments."completedAt" IS '构建完成时间';
+COMMENT ON COLUMN deployments."errorMessage" IS '错误信息';
+COMMENT ON COLUMN deployments."deployedBy" IS '发布者ID';
+COMMENT ON COLUMN deployments."createdAt" IS '创建时间';
+COMMENT ON COLUMN deployments."updatedAt" IS '更新时间';
+COMMENT ON COLUMN deployments."deletedAt" IS '软删除时间';
+
 CREATE TABLE IF NOT EXISTS nodes (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenantId" uuid NOT NULL REFERENCES tenants ("id") ON DELETE CASCADE,
@@ -311,6 +489,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS nodes_tenant_name_uq
   ON nodes ("tenantId", "name")
   WHERE "deletedAt" IS NULL;
 
+COMMENT ON TABLE nodes IS '运行时节点表';
+COMMENT ON COLUMN nodes."id" IS '节点ID';
+COMMENT ON COLUMN nodes."tenantId" IS '所属租户ID';
+COMMENT ON COLUMN nodes."name" IS '节点名称';
+COMMENT ON COLUMN nodes."description" IS '节点描述';
+COMMENT ON COLUMN nodes."agentVersion" IS 'NodeAgent版本';
+COMMENT ON COLUMN nodes."status" IS '节点状态';
+COMMENT ON COLUMN nodes."currentProjectId" IS '当前运行工程ID';
+COMMENT ON COLUMN nodes."currentVersion" IS '当前运行版本号';
+COMMENT ON COLUMN nodes."currentDeploymentId" IS '当前部署记录ID';
+COMMENT ON COLUMN nodes."ipAddress" IS '节点IP地址';
+COMMENT ON COLUMN nodes."port" IS 'RuntimeEngine运行端口';
+COMMENT ON COLUMN nodes."lastHeartbeatAt" IS '最后心跳时间';
+COMMENT ON COLUMN nodes."lastErrorMessage" IS '最后错误信息';
+COMMENT ON COLUMN nodes."lastErrorAt" IS '最后错误时间';
+COMMENT ON COLUMN nodes."metrics" IS '运行指标';
+COMMENT ON COLUMN nodes."config" IS '节点配置';
+COMMENT ON COLUMN nodes."registrationToken" IS '注册令牌';
+COMMENT ON COLUMN nodes."approvalStatus" IS '审批状态';
+COMMENT ON COLUMN nodes."approvedAt" IS '审批时间';
+COMMENT ON COLUMN nodes."approvedBy" IS '审批人ID';
+COMMENT ON COLUMN nodes."registeredBy" IS '注册申请人ID';
+COMMENT ON COLUMN nodes."mode" IS '节点模式';
+COMMENT ON COLUMN nodes."createdBy" IS '创建者ID';
+COMMENT ON COLUMN nodes."updatedBy" IS '更新者ID';
+COMMENT ON COLUMN nodes."createdAt" IS '创建时间';
+COMMENT ON COLUMN nodes."updatedAt" IS '更新时间';
+COMMENT ON COLUMN nodes."deletedAt" IS '软删除时间';
+
 CREATE TABLE IF NOT EXISTS node_deployments (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "nodeId" uuid NOT NULL REFERENCES nodes ("id") ON DELETE CASCADE,
@@ -342,6 +549,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS node_deploy_active_uq
   ON node_deployments ("nodeId", "projectId")
   WHERE "deletedAt" IS NULL AND "status" IN ('pending', 'deploying', 'running');
 
+COMMENT ON TABLE node_deployments IS '节点部署关系表';
+COMMENT ON COLUMN node_deployments."id" IS '部署记录ID';
+COMMENT ON COLUMN node_deployments."nodeId" IS '节点ID';
+COMMENT ON COLUMN node_deployments."deploymentId" IS '发布版本ID';
+COMMENT ON COLUMN node_deployments."projectId" IS '工程ID';
+COMMENT ON COLUMN node_deployments."version" IS '版本号';
+COMMENT ON COLUMN node_deployments."mode" IS '运行模式';
+COMMENT ON COLUMN node_deployments."status" IS '部署状态';
+COMMENT ON COLUMN node_deployments."runtimeConfig" IS '运行时配置';
+COMMENT ON COLUMN node_deployments."deployedAt" IS '部署完成时间';
+COMMENT ON COLUMN node_deployments."startedAt" IS '启动时间';
+COMMENT ON COLUMN node_deployments."stoppedAt" IS '停止时间';
+COMMENT ON COLUMN node_deployments."deployedBy" IS '部署操作者ID';
+COMMENT ON COLUMN node_deployments."errorMessage" IS '错误信息';
+COMMENT ON COLUMN node_deployments."errorStack" IS '错误堆栈';
+COMMENT ON COLUMN node_deployments."deployLog" IS '部署日志';
+COMMENT ON COLUMN node_deployments."runtimeMetrics" IS '运行时指标';
+COMMENT ON COLUMN node_deployments."createdAt" IS '创建时间';
+COMMENT ON COLUMN node_deployments."updatedAt" IS '更新时间';
+COMMENT ON COLUMN node_deployments."deletedAt" IS '软删除时间';
+
 CREATE TABLE IF NOT EXISTS node_commands (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenantId" uuid NOT NULL REFERENCES tenants ("id") ON DELETE CASCADE,
@@ -371,3 +599,24 @@ CREATE INDEX IF NOT EXISTS node_command_project_idx ON node_commands ("projectId
 CREATE INDEX IF NOT EXISTS node_command_status_idx ON node_commands ("status");
 CREATE INDEX IF NOT EXISTS node_command_type_idx ON node_commands ("type");
 CREATE INDEX IF NOT EXISTS node_command_requested_idx ON node_commands ("requestedAt");
+
+COMMENT ON TABLE node_commands IS '节点命令表';
+COMMENT ON COLUMN node_commands."id" IS '命令ID';
+COMMENT ON COLUMN node_commands."tenantId" IS '租户ID';
+COMMENT ON COLUMN node_commands."nodeId" IS '节点ID';
+COMMENT ON COLUMN node_commands."deploymentId" IS '节点部署记录ID';
+COMMENT ON COLUMN node_commands."projectId" IS '工程ID';
+COMMENT ON COLUMN node_commands."type" IS '命令类型';
+COMMENT ON COLUMN node_commands."status" IS '命令状态';
+COMMENT ON COLUMN node_commands."payload" IS '命令负载';
+COMMENT ON COLUMN node_commands."attempts" IS '已重试次数';
+COMMENT ON COLUMN node_commands."maxAttempts" IS '最大重试次数';
+COMMENT ON COLUMN node_commands."timeoutSeconds" IS '超时秒数';
+COMMENT ON COLUMN node_commands."requestedAt" IS '请求时间';
+COMMENT ON COLUMN node_commands."issuedAt" IS '下发时间';
+COMMENT ON COLUMN node_commands."acknowledgedAt" IS '确认时间';
+COMMENT ON COLUMN node_commands."completedAt" IS '完成时间';
+COMMENT ON COLUMN node_commands."lastError" IS '最近错误信息';
+COMMENT ON COLUMN node_commands."createdAt" IS '创建时间';
+COMMENT ON COLUMN node_commands."updatedAt" IS '更新时间';
+COMMENT ON COLUMN node_commands."deletedAt" IS '软删除时间';
