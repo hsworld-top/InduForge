@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from '@/constants'
+import { STORAGE_KEYS } from '../constants/index.js'
 
 /**
  * 本地存储工具类

@@ -26,6 +26,7 @@ import {
   ref,
   watch,
 } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import IconEpDocument from "~icons/ep/document";
 import IconEpPlus from "~icons/ep/plus";
@@ -43,6 +44,7 @@ import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
 import IconLucideUsers from "~icons/lucide/users";
 import { VIEW_PRESETS } from "@/constants";
 import { useEditorStore } from "@/stores/editor-store";
+import { getEditorUiStore } from "@/stores/editor-ui-store";
 import { CanvasContainer } from "@/ui/editors/page/canvas";
 import SelectionToolbar from "@/ui/editors/page/canvas/SelectionToolbar.vue";
 import { MaterialPanel, OutlineTree } from "@/ui/editors/page/sidebar-panels/left";
@@ -71,6 +73,8 @@ const VariablesPanel = defineAsyncComponent(() => import("@/ui/shared/tool-panel
 
 const route = useRoute();
 const router = useRouter();
+const editorUi = getEditorUiStore();
+const { t } = useI18n();
 
 function mergePageConfig(
   base: DesignerStorePageRow["config"] | undefined,
@@ -361,21 +365,21 @@ const isCustomView = computed(() => !matchedViewPreset.value);
 const showGrid = computed(() => Boolean(currentPageSnapshot.value?.config?.showGrid));
 const enableSnap = computed(() => currentPageSnapshot.value?.config?.enableSnap ?? true);
 
-const leftRailItems: ToolRailItem[] = [
-  { key: "pages", label: "页面", icon: IconLucideFileText },
-  { key: "outline", label: "大纲", icon: IconLucideList },
-  { key: "material", label: "物料", icon: IconLucideBox },
-  { key: "data", label: "数据", icon: IconLucideDatabase },
-  { key: "i18n", label: "国际", icon: IconLucideLanguages },
-  { key: "script", label: "脚本", icon: IconLucideFileCode },
-  { key: "role", label: "角色", icon: IconLucideUsers, placement: "bottom" },
-];
+const leftRailItems = computed<ToolRailItem[]>(() => [
+  { key: "pages", label: t("shell.pages"), icon: IconLucideFileText },
+  { key: "outline", label: t("shell.outline"), icon: IconLucideList },
+  { key: "material", label: t("shell.material"), icon: IconLucideBox },
+  { key: "data", label: t("shell.data"), icon: IconLucideDatabase },
+  { key: "i18n", label: t("shell.i18n"), icon: IconLucideLanguages },
+  { key: "script", label: t("shell.script"), icon: IconLucideFileCode },
+  { key: "role", label: t("shell.role"), icon: IconLucideUsers, placement: "bottom" },
+]);
 
-const rightRailItems: ToolRailItem[] = [
-  { key: "props", label: "属性", icon: IconLucideSlidersHorizontal },
-  { key: "advanced", label: "高级", icon: IconLucideSettings },
-  { key: "variables", label: "变量", icon: IconLucideBraces },
-];
+const rightRailItems = computed<ToolRailItem[]>(() => [
+  { key: "props", label: t("shell.props"), icon: IconLucideSlidersHorizontal },
+  { key: "advanced", label: t("shell.advanced"), icon: IconLucideSettings },
+  { key: "variables", label: t("shell.variables"), icon: IconLucideBraces },
+]);
 
 const leftPanelComponent = computed(() => {
   switch (leftActiveKey.value) {
@@ -399,8 +403,8 @@ const leftPanelComponent = computed(() => {
 });
 
 const leftPanelTitle = computed(() => {
-  const item = leftRailItems.find((entry) => entry.key === leftActiveKey.value);
-  return item?.label || "面板";
+  const item = leftRailItems.value.find((entry) => entry.key === leftActiveKey.value);
+  return item?.label || t("shell.panel");
 });
 
 const leftPanelProps = computed(() => {
@@ -424,8 +428,8 @@ const rightPanelComponent = computed(() => {
 });
 
 const rightPanelTitle = computed(() => {
-  const item = rightRailItems.find((entry) => entry.key === rightActiveKey.value);
-  return item?.label || "面板";
+  const item = rightRailItems.value.find((entry) => entry.key === rightActiveKey.value);
+  return item?.label || t("shell.panel");
 });
 
 /**
@@ -519,7 +523,7 @@ function persistDockPanelWidths(): void {
  */
 function handleUndo() {
   if (!editorStore.undo()) {
-    ElMessage.info("没有可撤销的操作");
+    ElMessage.info(t("message.noUndo"));
   }
 }
 
@@ -528,7 +532,7 @@ function handleUndo() {
  */
 function handleRedo() {
   if (!editorStore.redo()) {
-    ElMessage.info("没有可重做的操作");
+    ElMessage.info(t("message.noRedo"));
   }
 }
 
@@ -547,7 +551,7 @@ function handlePreview() {
  * 应用预览（占位）
  */
 function handlePreviewApp() {
-  ElMessage.info("应用预览功能开发中");
+  ElMessage.info(t("message.appPreviewWip"));
 }
 
 /**
@@ -563,10 +567,10 @@ async function handleSave() {
       tab.isDirty = false;
     }
 
-    ElMessage.success("保存成功");
+    ElMessage.success(t("message.saveSuccess"));
   } catch (err) {
-    const message = err instanceof Error ? err.message : "未知错误";
-    ElMessage.error(`保存失败: ${message}`);
+    const message = err instanceof Error ? err.message : t("message.unknownError");
+    ElMessage.error(t("message.saveFailed", { message }) as string);
   }
 }
 
@@ -605,18 +609,20 @@ async function handleToggleLock() {
   if (!result) return;
 
   if (result.success) {
-    const message = result.action === "release" ? "已释放页面锁" : "已获取页面锁";
+    const message = result.action === "release" ? t("message.pageUnlocked") : t("message.pageLocked");
     ElMessage.success(message);
     return;
   }
 
   if (result.reason === "locked") {
-    ElMessage.warning(`页面已被${result.lockedByName || "其他用户"}锁定`);
+    ElMessage.warning(
+      t("message.pageLockedBy", { user: result.lockedByName || t("message.otherUser") }) as string,
+    );
     return;
   }
 
   const err = result.error;
-  ElMessage.error(err instanceof Error ? err.message : String(err ?? "页面锁操作失败"));
+  ElMessage.error(err instanceof Error ? err.message : String(err ?? t("message.pageLockFailed")));
 }
 
 /**
@@ -624,7 +630,7 @@ async function handleToggleLock() {
  */
 function handleExport() {
   if (!editorStore.doc || !currentPageId.value) {
-    ElMessage.warning("暂无可导出的页面");
+    ElMessage.warning(t("message.noExportablePage"));
     return;
   }
   const payload = editorStore.serializer.exportPage(editorStore.doc, currentPageId.value);
@@ -637,7 +643,7 @@ function handleExport() {
   link.download = name;
   link.click();
   URL.revokeObjectURL(url);
-  ElMessage.success("已导出页面");
+  ElMessage.success(t("message.pageExported"));
 }
 
 function handleLeftSelect(key: string) {
@@ -813,7 +819,7 @@ async function handlePageCreate() {
 }
 
 function getUniquePageName(name: string | undefined) {
-  const base = (name || "导入页面").trim() || "导入页面";
+  const base = (name || t("shell.importPage")).trim() || t("shell.importPage");
   const existingNames = editorStore.pages
     .map((page: DesignerStorePageRow) => page.name)
     .filter(Boolean) as string[];
@@ -829,7 +835,7 @@ function getUniquePageName(name: string | undefined) {
 
 function handlePageImport() {
   if (!editorStore.doc) {
-    ElMessage.warning("暂无可导入的页面");
+    ElMessage.warning(t("message.noImportablePage"));
     return;
   }
   const input = document.createElement("input");
@@ -843,13 +849,13 @@ function handlePageImport() {
       const text = await file.text();
       const payload = JSON.parse(text);
       if (!payload?.page || !payload?.nodesById) {
-        ElMessage.error("页面数据格式不正确");
+        ElMessage.error(t("message.invalidPageData"));
         return;
       }
       const serializer = editorStore.serializer;
       const docModel = editorStore.doc;
       if (!docModel) {
-        ElMessage.error("导入页面失败");
+        ElMessage.error(t("message.importFailed"));
         return;
       }
       const baseSchema = serializer.exportToSchema(docModel);
@@ -869,16 +875,16 @@ function handlePageImport() {
       });
       const pageId = result?.id || result?.page?.id;
       if (!pageId) {
-        ElMessage.error("导入页面失败");
+        ElMessage.error(t("message.importFailed"));
         return;
       }
       imported.page.id = pageId;
       await editorStore.updatePageSchema(pageId, imported);
       await editorStore.loadPage(pageId);
       openPageTab(pageId);
-      ElMessage.success("页面已导入");
+      ElMessage.success(t("message.pageImported"));
     } catch {
-      ElMessage.error("导入页面失败");
+      ElMessage.error(t("message.importFailed"));
     }
   };
   input.click();
@@ -889,7 +895,7 @@ function handlePageImport() {
  */
 function handleLayerMoveUp() {
   if (editorStore.moveNodeUp()) {
-    ElMessage.success("已上移");
+    ElMessage.success(t("message.movedUp"));
   }
 }
 
@@ -898,7 +904,7 @@ function handleLayerMoveUp() {
  */
 function handleLayerMoveDown() {
   if (editorStore.moveNodeDown()) {
-    ElMessage.success("已下移");
+    ElMessage.success(t("message.movedDown"));
   }
 }
 
@@ -907,7 +913,7 @@ function handleLayerMoveDown() {
  */
 function handleLayerMoveToTop() {
   if (editorStore.moveNodeToTop()) {
-    ElMessage.success("已置顶");
+    ElMessage.success(t("message.movedToTop"));
   }
 }
 
@@ -916,12 +922,12 @@ function handleLayerMoveToTop() {
  */
 function handleLayerMoveToBottom() {
   if (editorStore.moveNodeToBottom()) {
-    ElMessage.success("已置底");
+    ElMessage.success(t("message.movedToBottom"));
   }
 }
 function handleCopy() {
   if (editorStore.copyNodes()) {
-    ElMessage.success("已复制");
+    ElMessage.success(t("message.copied"));
   }
 }
 const handlePaste = () => editorStore.pasteNodes();
@@ -931,42 +937,42 @@ const handleDeleteSelected = () => editorStore.removeSelectedNodes();
  * 更多设置：多人协作（占位）
  */
 function handleOpenCollaboration() {
-  ElMessage.info("多人协作功能开发中");
+  ElMessage.info(t("message.collaborationWip"));
 }
 
 /**
  * 工具栏：AI 助手（占位）
  */
 function handleOpenAi() {
-  ElMessage.info("AI 助手功能开发中");
+  ElMessage.info(t("message.aiAssistantWip"));
 }
 
 /**
  * 工具栏：主题切换（占位）
  */
 function handleToggleTheme() {
-  ElMessage.info("主题设置功能开发中");
+  editorUi.setTheme(editorUi.theme.value === "dark" ? "light" : "dark");
 }
 
 /**
  * 更多设置：刷新画布（占位）
  */
 function handleRefreshCanvas() {
-  ElMessage.info("画布刷新功能开发中");
+  ElMessage.info(t("message.refreshCanvasWip"));
 }
 
 /**
  * 更多设置：中英文切换（占位）
  */
 function handleToggleLocale() {
-  ElMessage.info("中英文切换功能开发中");
+  editorUi.setLocale(editorUi.locale.value === "zh" ? "en" : "zh");
 }
 
 /**
  * 工具栏：清除当前界面（占位）
  */
 function handleClearCanvas() {
-  ElMessage.info("清除当前界面功能开发中");
+  ElMessage.info(t("message.clearCanvasWip"));
 }
 
 watch(
@@ -1000,7 +1006,7 @@ async function loadProject() {
   }
   const result = await editorStore.loadProject(project.id);
   if (!result.ok) {
-    ElMessage.error(result.error?.message || "加载工程失败");
+    ElMessage.error(result.error?.message || t("message.loadProjectFailed"));
     return;
   }
   const targetPageId = String(route.query.pageId || "");
@@ -1115,12 +1121,12 @@ onBeforeUnmount(() => {
             @resize="handleLeftPanelResize"
           >
             <template #actions>
-              <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+              <el-tooltip v-if="leftActiveKey === 'pages'" :content="t('shell.newPage')">
                 <el-button size="small" text @click="handlePageCreate">
                   <IconEpPlus />
                 </el-button>
               </el-tooltip>
-              <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
+              <el-tooltip v-if="leftActiveKey === 'pages'" :content="t('shell.importPage')">
                 <el-button size="small" text @click="handlePageImport">
                   <IconEpUpload />
                 </el-button>
@@ -1152,11 +1158,11 @@ onBeforeUnmount(() => {
             <div v-else class="empty-canvas-placeholder">
               <div class="empty-content">
                 <IconEpDocument class="empty-icon" />
-                <h3 class="empty-title">暂无页面</h3>
-                <p class="empty-desc">创建一个新页面开始设计</p>
+                <h3 class="empty-title">{{ t("shell.noPages") }}</h3>
+                <p class="empty-desc">{{ t("shell.createPageHint") }}</p>
                 <el-button type="primary" @click="handlePageCreate">
                   <IconEpPlus class="mr-1" />
-                  新建页面
+                  {{ t("shell.newPage") }}
                 </el-button>
               </div>
             </div>
@@ -1174,12 +1180,12 @@ onBeforeUnmount(() => {
               @resize="handleLeftPanelResize"
             >
               <template #actions>
-                <el-tooltip v-if="leftActiveKey === 'pages'" content="新建页面">
+                <el-tooltip v-if="leftActiveKey === 'pages'" :content="t('shell.newPage')">
                   <el-button size="small" text @click="handlePageCreate">
                     <IconEpPlus />
                   </el-button>
                 </el-tooltip>
-                <el-tooltip v-if="leftActiveKey === 'pages'" content="导入页面">
+                <el-tooltip v-if="leftActiveKey === 'pages'" :content="t('shell.importPage')">
                   <el-button size="small" text @click="handlePageImport">
                     <IconEpUpload />
                   </el-button>
@@ -1242,13 +1248,17 @@ onBeforeUnmount(() => {
                   <span class="page-tab-label">
                     <IconEpDocument class="tab-icon" />
                     <span class="tab-name">{{ tab.name }}</span>
-                    <IconEpWarning v-if="tab.isDirty" class="tab-dirty-icon" title="未保存" />
+                    <IconEpWarning
+                      v-if="tab.isDirty"
+                      class="tab-dirty-icon"
+                      :title="t('toolbar.saveStatus.dirty')"
+                    />
                   </span>
                 </template>
               </el-tab-pane>
             </el-tabs>
             <div v-else class="page-tabs-empty">
-              <span>暂无页面</span>
+              <span>{{ t("shell.noPages") }}</span>
               <el-button class="page-tabs-add-btn" text @click="handlePageCreate">
                 <IconEpPlus />
               </el-button>
@@ -1259,8 +1269,11 @@ onBeforeUnmount(() => {
             <span class="status-item status-mouse">
               {{
                 canvasMousePos
-                  ? `X: ${Math.round(canvasMousePos.x)}  Y: ${Math.round(canvasMousePos.y)}`
-                  : "X: -  Y: -"
+                  ? t("shell.mousePosition", {
+                      x: Math.round(canvasMousePos.x),
+                      y: Math.round(canvasMousePos.y),
+                    })
+                  : t("shell.mousePositionEmpty")
               }}
             </span>
             <span class="status-sep">|</span>
@@ -1272,19 +1285,19 @@ onBeforeUnmount(() => {
             </template>
             <template v-if="selectedNodePos">
               <span class="status-item status-mouse">
-                {{ selectedNodePos.x }}, {{ selectedNodePos.y }}
+                {{ t("shell.nodePosition", { x: selectedNodePos.x, y: selectedNodePos.y }) }}
               </span>
               <span class="status-sep">|</span>
             </template>
             <template v-if="selectedNodeSize">
               <span class="status-item status-mouse">
-                {{ selectedNodeSize.w }} × {{ selectedNodeSize.h }}
+                {{ t("shell.nodeSize", { w: selectedNodeSize.w, h: selectedNodeSize.h }) }}
               </span>
               <span class="status-sep">|</span>
             </template>
-            <span class="status-item">选中: {{ selectionCount }}</span>
+            <span class="status-item">{{ t("shell.selectedCount", { count: selectionCount }) }}</span>
             <span class="status-sep">|</span>
-            <span class="status-item">共 {{ totalNodeCount }} 个</span>
+            <span class="status-item">{{ t("shell.totalCount", { count: totalNodeCount }) }}</span>
             <template v-if="hoveredNodeType">
               <span class="status-sep">|</span>
               <span class="status-item status-hover">{{ hoveredNodeType }}</span>

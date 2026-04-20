@@ -48,6 +48,7 @@ runtime/logs/
 
 dev_ide/dist/
 designer/dist/
+.worktrees/
 
 # vue-tsc 临时排障输出（勿提交）
 designer/tsc-errors.txt
@@ -69,3 +70,4 @@ miniio/PID
 
 datacenter/dist
 data_service/*.exe
+.worktrees/

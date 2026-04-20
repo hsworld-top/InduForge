@@ -17,6 +17,12 @@ import {
   getDeployFailureReason,
 } from '../src/views/tenant/utils/ops-status.js'
 import { messages } from '../src/lang/index.js'
+import {
+  createEmbeddedUpdateMessage,
+  isDesignerEmbeddedIframe,
+  syncDesignerLocaleToEmbeddedIframes,
+} from '../src/utils/embeddedIframeSync.js'
+import { buildAppUrl } from '../src/utils/appUrl.js'
 
 const run = (name, fn) => {
   try {
@@ -74,6 +80,122 @@ run('国际化：核心键值存在性', () => {
   assert.equal(messages.en.profile.uploadAvatar, 'Upload Avatar')
   assert.equal(messages.zh.auth.tenantCode, '租户代码')
   assert.equal(messages.en.auth.tenantCode, 'Tenant Code')
+})
+
+run('应用地址：designer 透传当前语言与主题', () => {
+  const originalLocalStorage = globalThis.localStorage
+  globalThis.localStorage = {
+    getItem(key) {
+      const values = {
+        auth_token: 'token-1',
+        refresh_token: 'refresh-1',
+        theme: JSON.stringify('dark'),
+        language: JSON.stringify('en'),
+      }
+      return values[key] ?? null
+    },
+    setItem() {},
+    removeItem() {},
+    clear() {},
+  }
+
+  try {
+    const url = buildAppUrl('designer', { id: 'p-1', tenantId: 't-1' })
+    assert.ok(url.includes('pid=p-1'))
+    assert.ok(url.includes('tenant=t-1'))
+    assert.ok(url.includes('token=token-1'))
+    assert.ok(url.includes('refreshToken=refresh-1'))
+    assert.ok(url.includes('theme=dark'))
+    assert.ok(url.includes('locale=en'))
+    assert.ok(url.includes('type=app'))
+  } finally {
+    globalThis.localStorage = originalLocalStorage
+  }
+})
+
+run('应用地址：datacenter 不追加语言参数', () => {
+  const originalLocalStorage = globalThis.localStorage
+  globalThis.localStorage = {
+    getItem(key) {
+      const values = {
+        theme: JSON.stringify('light'),
+        language: JSON.stringify('zh'),
+      }
+      return values[key] ?? null
+    },
+    setItem() {},
+    removeItem() {},
+    clear() {},
+  }
+
+  try {
+    const url = buildAppUrl('datacenter', { id: 'p-2', tenantId: 't-2' })
+    assert.ok(url.includes('/datacenter/?'))
+    assert.ok(url.includes('theme=light'))
+    assert.ok(!url.includes('locale='))
+  } finally {
+    globalThis.localStorage = originalLocalStorage
+  }
+})
+
+run('嵌入同步：生成主题更新消息', () => {
+  assert.deepEqual(createEmbeddedUpdateMessage('THEME_UPDATE', 'theme', 'dark'), {
+    type: 'THEME_UPDATE',
+    theme: 'dark',
+  })
+})
+
+run('嵌入同步：设计中心 iframe 判定', () => {
+  assert.equal(isDesignerEmbeddedIframe({ src: '/designer/?pid=1' }), true)
+  assert.equal(isDesignerEmbeddedIframe({ src: '/designer?pid=1' }), true)
+  assert.equal(isDesignerEmbeddedIframe({ src: 'http://host/designer/?pid=1' }), true)
+  assert.equal(isDesignerEmbeddedIframe({ src: '/datacenter/?pid=1' }), false)
+  assert.equal(isDesignerEmbeddedIframe({ src: '' }), false)
+  assert.equal(isDesignerEmbeddedIframe({}), false)
+  assert.equal(isDesignerEmbeddedIframe({ src: '::bad::url' }), false)
+})
+
+run('嵌入同步：仅通过 Dashboard 链路同步 designer 语言', () => {
+  const events = []
+  const designerIframe = {
+    src: '/designer/?pid=p-1',
+    contentWindow: {
+      postMessage(message, targetOrigin) {
+        events.push(['designer', message, targetOrigin])
+      },
+    },
+  }
+  const datacenterIframe = {
+    src: '/datacenter/?pid=p-1',
+    contentWindow: {
+      postMessage(message, targetOrigin) {
+        events.push(['datacenter', message, targetOrigin])
+      },
+    },
+  }
+  const malformedIframe = {
+    contentWindow: {
+      postMessage(message, targetOrigin) {
+        events.push(['malformed', message, targetOrigin])
+      },
+    },
+  }
+
+  const queries = []
+  const documentLike = {
+    querySelectorAll(selector) {
+      queries.push(selector)
+      return [designerIframe, datacenterIframe, malformedIframe, null]
+    },
+  }
+
+  syncDesignerLocaleToEmbeddedIframes(
+    documentLike,
+    createEmbeddedUpdateMessage('LOCALE_UPDATE', 'locale', 'en').locale
+  )
+
+  assert.deepEqual(queries, ['iframe.embedded-iframe'])
+  assert.deepEqual(events, [['designer', { type: 'LOCALE_UPDATE', locale: 'en' }, '*']])
 })
 
 if (process.exitCode !== 1) {

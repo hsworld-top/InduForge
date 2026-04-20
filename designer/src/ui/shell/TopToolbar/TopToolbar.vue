@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import IconEpArrowDownBold from "~icons/ep/arrow-down-bold";
 import IconLucideBot from "~icons/lucide/bot";
 import IconLucideClipboardPaste from "~icons/lucide/clipboard-paste";
@@ -56,7 +57,7 @@ const props = withDefaults(
     hasClipboard?: boolean;
   }>(),
   {
-    pageName: "未命名页面",
+    pageName: "",
     isLocked: false,
     isDirty: false,
     viewPresets: () => [],
@@ -77,6 +78,8 @@ const props = withDefaults(
     hasClipboard: false,
   },
 );
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   "update:activeViewKey": [key: string];
@@ -128,9 +131,9 @@ const viewItems = computed(() =>
 const currentCanvasSizeText = computed(() => `${Math.round(props.canvasWidth)}px`);
 
 const saveStatusText = computed(() => {
-  if (props.isSaving) return "保存中...";
-  if (props.isDirty) return "未保存";
-  return "已保存";
+  if (props.isSaving) return t("toolbar.saveStatus.saving");
+  if (props.isDirty) return t("toolbar.saveStatus.dirty");
+  return t("toolbar.saveStatus.saved");
 });
 
 const saveStatusClass = computed(() => {
@@ -139,13 +142,13 @@ const saveStatusClass = computed(() => {
   return "is-saved";
 });
 
-const saveIntervalOptions = [
-  { value: 1, label: "1分钟" },
-  { value: 3, label: "3分钟" },
-  { value: 5, label: "5分钟" },
-  { value: 10, label: "10分钟" },
-  { value: 15, label: "15分钟" },
-];
+const saveIntervalOptions = computed(() => [
+  { value: 1, label: t("toolbar.saveIntervalOption", { value: 1 }) as string },
+  { value: 3, label: t("toolbar.saveIntervalOption", { value: 3 }) as string },
+  { value: 5, label: t("toolbar.saveIntervalOption", { value: 5 }) as string },
+  { value: 10, label: t("toolbar.saveIntervalOption", { value: 10 }) as string },
+  { value: 15, label: t("toolbar.saveIntervalOption", { value: 15 }) as string },
+]);
 
 const localSaveSettings = ref({
   autoSave: false,
@@ -223,11 +226,15 @@ function handleApplyCustomSize() {
   const width = Math.round(Number(localCustomSize.value.width));
   const height = Math.round(Number(localCustomSize.value.height));
   if (!Number.isFinite(width) || width < MIN_CANVAS_WIDTH || width > MAX_CANVAS_WIDTH) {
-    ElMessage.warning(`宽度需在 ${MIN_CANVAS_WIDTH}-${MAX_CANVAS_WIDTH}px 之间`);
+    ElMessage.warning(
+      t("toolbar.widthRange", { min: MIN_CANVAS_WIDTH, max: MAX_CANVAS_WIDTH }) as string,
+    );
     return;
   }
   if (!Number.isFinite(height) || height < MIN_CANVAS_HEIGHT || height > MAX_CANVAS_HEIGHT) {
-    ElMessage.warning(`高度需在 ${MIN_CANVAS_HEIGHT}-${MAX_CANVAS_HEIGHT}px 之间`);
+    ElMessage.warning(
+      t("toolbar.heightRange", { min: MIN_CANVAS_HEIGHT, max: MAX_CANVAS_HEIGHT }) as string,
+    );
     return;
   }
   emit("applyCustomSize", { width, height });
@@ -274,11 +281,14 @@ function handleMoreCommand(command: string) {
   <header class="designer-toolbar toolbar-v2">
     <div class="toolbar-section toolbar-left">
       <div class="page-chip">
-        <span class="page-chip__label">页面：</span>
-        <span class="page-chip__name">{{ pageName || "未命名" }}</span>
+        <span class="page-chip__label">{{ t("toolbar.pageChipLabel") }}</span>
+        <span class="page-chip__name">{{ pageName || t("toolbar.untitledPage") }}</span>
         <span v-if="isDirty" class="page-chip__dirty">●</span>
       </div>
-      <el-tooltip :content="isLocked ? '释放页面锁' : '获取页面锁'" placement="bottom">
+      <el-tooltip
+        :content="isLocked ? t('toolbar.unlockPage') : t('toolbar.lockPage')"
+        placement="bottom"
+      >
         <el-button class="icon-btn" @click="handleToggleLock">
           <IconLucideLock v-if="isLocked" />
           <IconLucideLockOpen v-else />
@@ -289,17 +299,17 @@ function handleMoreCommand(command: string) {
     <div class="toolbar-section toolbar-center">
       <div class="toolbar-center-shell">
         <div class="toolbar-group toolbar-group--clipboard">
-          <el-tooltip content="复制 (Ctrl+C)" placement="bottom">
+          <el-tooltip :content="`${t('toolbar.copy')} (Ctrl+C)`" placement="bottom">
             <el-button class="icon-btn" :disabled="!hasSelection" @click="handleCopy">
               <IconLucideCopy />
             </el-button>
           </el-tooltip>
-          <el-tooltip content="粘贴 (Ctrl+V)" placement="bottom">
+          <el-tooltip :content="`${t('toolbar.paste')} (Ctrl+V)`" placement="bottom">
             <el-button class="icon-btn" :disabled="!hasClipboard" @click="handlePaste">
               <IconLucideClipboardPaste />
             </el-button>
           </el-tooltip>
-          <el-tooltip content="删除 (Del)" placement="bottom">
+          <el-tooltip :content="`${t('toolbar.delete')} (Del)`" placement="bottom">
             <el-button class="icon-btn" :disabled="!hasSelection" @click="handleDeleteSelected">
               <IconLucideTrash />
             </el-button>
@@ -319,7 +329,7 @@ function handleMoreCommand(command: string) {
             </template>
             <div class="size-panel">
               <div class="size-panel__section">
-                <div class="size-panel__title">预设尺寸</div>
+                <div class="size-panel__title">{{ t("toolbar.presetSize") }}</div>
                 <div class="size-preset-list">
                   <button
                     v-for="item in viewItems"
@@ -337,10 +347,10 @@ function handleMoreCommand(command: string) {
                 </div>
               </div>
               <div class="size-panel__section size-panel__section--custom">
-                <div class="size-panel__title">自定义尺寸</div>
+                <div class="size-panel__title">{{ t("toolbar.customSize") }}</div>
                 <div class="custom-size-grid">
                   <label class="custom-size-field">
-                    <span class="custom-size-field__label">宽度</span>
+                    <span class="custom-size-field__label">{{ t("toolbar.width") }}</span>
                     <el-input-number
                       v-model="localCustomSize.width"
                       :min="120"
@@ -350,7 +360,7 @@ function handleMoreCommand(command: string) {
                     />
                   </label>
                   <label class="custom-size-field">
-                    <span class="custom-size-field__label">高度</span>
+                    <span class="custom-size-field__label">{{ t("toolbar.height") }}</span>
                     <el-input-number
                       v-model="localCustomSize.height"
                       :min="120"
@@ -361,19 +371,19 @@ function handleMoreCommand(command: string) {
                   </label>
                 </div>
                 <el-button class="size-panel__submit" type="primary" @click="handleApplyCustomSize">
-                  应用自定义尺寸
+                  {{ t("toolbar.applyCustomSize") }}
                 </el-button>
               </div>
             </div>
           </el-popover>
           <div class="zoom-group">
-            <el-tooltip content="缩小" placement="bottom">
+            <el-tooltip :content="t('toolbar.zoomOut')" placement="bottom">
               <el-button class="icon-btn icon-btn--subtle" @click="handleZoomOut">
                 <IconLucideZoomOut />
               </el-button>
             </el-tooltip>
             <span class="zoom-pill">{{ Math.round(zoom * 100) }}%</span>
-            <el-tooltip content="放大" placement="bottom">
+            <el-tooltip :content="t('toolbar.zoomIn')" placement="bottom">
               <el-button class="icon-btn icon-btn--subtle" @click="handleZoomIn">
                 <IconLucideZoomIn />
               </el-button>
@@ -382,20 +392,20 @@ function handleMoreCommand(command: string) {
           <el-dropdown trigger="click" placement="bottom" @command="handleViewMenuCommand">
             <el-button class="view-btn">
               <IconLucideSettings2 />
-              <span class="view-btn__text">视图</span>
+              <span class="view-btn__text">{{ t("toolbar.view") }}</span>
               <IconEpArrowDownBold class="caret-icon" />
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="resetZoom"> 重置缩放 </el-dropdown-item>
+                <el-dropdown-item command="resetZoom">{{ t("toolbar.resetZoom") }}</el-dropdown-item>
                 <el-dropdown-item command="toggleRuler">
-                  {{ showRuler ? "隐藏标尺" : "显示标尺" }}
+                  {{ showRuler ? t("toolbar.hideRuler") : t("toolbar.showRuler") }}
                 </el-dropdown-item>
                 <el-dropdown-item command="toggleGrid">
-                  {{ showGrid ? "隐藏网格" : "显示网格" }}
+                  {{ showGrid ? t("toolbar.hideGrid") : t("toolbar.showGrid") }}
                 </el-dropdown-item>
                 <el-dropdown-item command="toggleSnap">
-                  {{ enableSnap ? "关闭吸附" : "启用吸附" }}
+                  {{ enableSnap ? t("toolbar.disableSnap") : t("toolbar.enableSnap") }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -403,12 +413,12 @@ function handleMoreCommand(command: string) {
         </div>
 
         <div class="toolbar-group toolbar-group--edit toolbar-center-right">
-          <el-tooltip content="撤销" placement="bottom">
+          <el-tooltip :content="t('toolbar.undo')" placement="bottom">
             <el-button class="icon-btn" :disabled="!canUndo" @click="handleUndo">
               <IconLucideUndo2 />
             </el-button>
           </el-tooltip>
-          <el-tooltip content="恢复" placement="bottom">
+          <el-tooltip :content="t('toolbar.redo')" placement="bottom">
             <el-button class="icon-btn" :disabled="!canRedo" @click="handleRedo">
               <IconLucideRedo2 />
             </el-button>
@@ -431,12 +441,12 @@ function handleMoreCommand(command: string) {
         >
           <span class="split-action__text">
             <IconLucidePlay />
-            <span>预览</span>
+            <span>{{ t("toolbar.preview") }}</span>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="pagePreview">页面预览</el-dropdown-item>
-              <el-dropdown-item command="appPreview">应用预览</el-dropdown-item>
+              <el-dropdown-item command="pagePreview">{{ t("toolbar.pagePreview") }}</el-dropdown-item>
+              <el-dropdown-item command="appPreview">{{ t("toolbar.appPreview") }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -451,17 +461,17 @@ function handleMoreCommand(command: string) {
         >
           <span class="split-action__text">
             <IconLucideSave />
-            <span>保存</span>
+            <span>{{ t("toolbar.save") }}</span>
           </span>
           <template #dropdown>
             <div class="save-settings-panel" @click.stop>
-              <div class="save-settings-panel__title">保存设置</div>
+              <div class="save-settings-panel__title">{{ t("toolbar.saveSettings") }}</div>
               <div class="save-settings-panel__row save-settings-panel__row--check">
                 <el-checkbox v-model="localSaveSettings.autoSave" />
-                <span class="save-settings-panel__label">自动保存</span>
+                <span class="save-settings-panel__label">{{ t("toolbar.autoSave") }}</span>
               </div>
               <div class="save-settings-panel__row">
-                <span class="save-settings-panel__label">保存间隔</span>
+                <span class="save-settings-panel__label">{{ t("toolbar.saveInterval") }}</span>
                 <el-select
                   v-model="localSaveSettings.intervalMinutes"
                   class="save-settings-panel__select"
@@ -476,7 +486,7 @@ function handleMoreCommand(command: string) {
                 </el-select>
               </div>
               <el-button class="save-settings-panel__submit" @click="handleSaveSettingsSubmit">
-                设置并保存
+                {{ t("toolbar.setAndSave") }}
               </el-button>
             </div>
           </template>
@@ -489,23 +499,23 @@ function handleMoreCommand(command: string) {
             <el-dropdown-menu>
               <el-dropdown-item command="openAi">
                 <IconLucideBot class="menu-icon" />
-                AI 助手
+                {{ t("toolbar.aiAssistant") }}
               </el-dropdown-item>
               <el-dropdown-item command="toggleTheme">
                 <IconLucideSun class="menu-icon" />
-                主题设置
+                {{ t("toolbar.theme") }}
               </el-dropdown-item>
               <el-dropdown-item command="export" divided>
                 <IconLucideDownload class="menu-icon" />
-                导出页面
+                {{ t("toolbar.exportPage") }}
               </el-dropdown-item>
               <el-dropdown-item command="clearCanvas">
                 <IconLucideTrash2 class="menu-icon" />
-                清除当前界面
+                {{ t("toolbar.clearCanvas") }}
               </el-dropdown-item>
-              <el-dropdown-item command="collaboration">多人协作</el-dropdown-item>
-              <el-dropdown-item command="refresh">刷新画布</el-dropdown-item>
-              <el-dropdown-item command="locale">中英文切换</el-dropdown-item>
+              <el-dropdown-item command="collaboration">{{ t("toolbar.collaboration") }}</el-dropdown-item>
+              <el-dropdown-item command="refresh">{{ t("toolbar.refreshCanvas") }}</el-dropdown-item>
+              <el-dropdown-item command="locale">{{ t("toolbar.localeToggle") }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>

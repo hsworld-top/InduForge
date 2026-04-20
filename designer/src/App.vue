@@ -9,8 +9,13 @@
  * - 路由切换时显示至少 minLoadingMs 的加载动画，避免闪烁
  * - 从预览页返回设计页时跳过加载（skipNextLoading）
  */
-import { computed, nextTick, onBeforeUnmount, ref } from "vue";
+import zhCn from "element-plus/es/locale/lang/zh-cn";
+import type { Language } from "element-plus/es/locale";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
+import { resolveAppLocaleForPath, resolveScopedLocaleForPath } from "@/router/runtime-settings";
+import { getEditorUiStore } from "@/stores/editor-ui-store";
 
 /** 是否处于加载中 */
 const loading = ref(true);
@@ -20,12 +25,17 @@ let loadingStartAt = Date.now();
 const minLoadingMs = 500;
 const router = useRouter();
 const route = useRoute();
+const editorUi = getEditorUiStore();
+const { locale } = useI18n();
 /** 当前是否为预览路由 */
 const isPreviewRoute = computed(
   () => route?.name === "Preview" || String(route?.path || "").includes("/preview"),
 );
 /** 是否显示加载遮罩（设计页加载时显示，预览页不显示） */
 const showLoading = computed(() => loading.value && !isPreviewRoute.value);
+const elementLocale = computed<Language>(() =>
+  resolveScopedLocaleForPath(route.path, editorUi.elementLocale.value as Language, zhCn as Language),
+);
 
 /** 是否跳过下一次加载（从预览返回设计时使用） */
 const skipNextLoading = ref(false);
@@ -72,6 +82,14 @@ const removeError = router.onError(() => {
 /** 应用就绪时结束初始加载 */
 router.isReady().then(() => stopLoading());
 
+watch(
+  [() => editorUi.locale.value, () => route.path],
+  ([value, path]) => {
+    locale.value = resolveAppLocaleForPath(path, value);
+  },
+  { immediate: true },
+);
+
 onBeforeUnmount(() => {
   removeBefore();
   removeAfter();
@@ -80,22 +98,24 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div id="app">
-    <router-view />
-    <!-- 设计态路由切换时显示加载动画，预览态不显示 -->
-    <div v-if="showLoading" class="app-loading">
-      <div class="loading-card">
-        <div class="loading-mark">
-          <div class="loading-ring"></div>
-          <div class="loading-dot"></div>
-        </div>
-        <div class="loading-content">
-          <div class="loading-title">设计器加载中</div>
-          <div class="loading-subtitle">正在准备画布与资源...</div>
+  <el-config-provider :locale="elementLocale">
+    <div id="app">
+      <router-view />
+      <!-- 设计态路由切换时显示加载动画，预览态不显示 -->
+      <div v-if="showLoading" class="app-loading">
+        <div class="loading-card">
+          <div class="loading-mark">
+            <div class="loading-ring"></div>
+            <div class="loading-dot"></div>
+          </div>
+          <div class="loading-content">
+            <div class="loading-title">设计器加载中</div>
+            <div class="loading-subtitle">正在准备画布与资源...</div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </el-config-provider>
 </template>
 
 <style>

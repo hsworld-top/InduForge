@@ -47,6 +47,9 @@ importers:
       vue-echarts:
         specifier: ^8.0.1
         version: 8.0.1(echarts@6.0.0)(vue@3.5.25(typescript@5.9.3))
+      vue-i18n:
+        specifier: ^11.3.2
+        version: 11.3.2(vue@3.5.25(typescript@5.9.3))
       vue-konva:
         specifier: ^3.2.6
         version: 3.2.6(konva@10.0.12)(vue@3.5.25(typescript@5.9.3))
@@ -763,6 +766,22 @@ packages:
 
   '@interactjs/utils@1.10.27':
     resolution: {integrity: sha512-+qfLOio2OxQqg1cXSnRaCl+N8MQDQLDS9w+aOGxH8YLAhIMyt7Asxx/46//sT8orgsi16pmlBPtngPHT9s8zKw==}
+
+  '@intlify/core-base@11.3.2':
+    resolution: {integrity: sha512-cgsUaV/dyD6aS49UPgerIblrWeXAZHNaDWqm4LujOGC7IafSyhghGXEiSVvuDYaDPiQTP+tSFSTM1HIu7Yp1nA==}
+    engines: {node: '>= 16'}
+
+  '@intlify/devtools-types@11.3.2':
+    resolution: {integrity: sha512-q96G2ZZw0FNoXzejbjIf9dbfgz1xyYBZu6ZT4b5TE/55j8d1O9X5jv0k+U+L3fVe7uebPcqRQFD0ffm30i5mJA==}
+    engines: {node: '>= 16'}
+
+  '@intlify/message-compiler@11.3.2':
+    resolution: {integrity: sha512-d/awyHUkNSaGPxBxT/qlUpfRizxHX9dt55CnW03xx5p1KmMyfYHKupCnvzINX+Na8JR8LAR7y32lPKjoeQGmzA==}
+    engines: {node: '>= 16'}
+
+  '@intlify/shared@11.3.2':
+    resolution: {integrity: sha512-x66fjdH6i+lNYPae5URSQGTjBL68Av6hi09jvC5Ci96iTkwfqrPhCj46aylQZmgMaG89rOZCIKqS7ApC8ZDVjg==}
+    engines: {node: '>= 16'}
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -3114,6 +3133,12 @@ packages:
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
 
+  vue-i18n@11.3.2:
+    resolution: {integrity: sha512-gmFrvM+iuf2AH4ygligw/pC7PRJ63AdRNE68E0GPlQ83Mzfyck6g6cRQC3KzkYXr+ZidR91wq+5YBmAMpkgE1A==}
+    engines: {node: '>= 16'}
+    peerDependencies:
+      vue: ^3.0.0
+
   vue-konva@3.2.6:
     resolution: {integrity: sha512-QtiM/BYHs4gyRqhg6w0lHYGONb936qD5PeGpSFFnFzTLcOaHXd3EAas2PafrWbcILdHAUNm+0j7+djJw6g6XCw==}
     engines: {node: '>= 4.0.0', npm: '>= 3.0.0'}
@@ -3770,6 +3795,24 @@ snapshots:
       '@interactjs/interact': 1.10.27
 
   '@interactjs/utils@1.10.27': {}
+
+  '@intlify/core-base@11.3.2':
+    dependencies:
+      '@intlify/devtools-types': 11.3.2
+      '@intlify/message-compiler': 11.3.2
+      '@intlify/shared': 11.3.2
+
+  '@intlify/devtools-types@11.3.2':
+    dependencies:
+      '@intlify/core-base': 11.3.2
+      '@intlify/shared': 11.3.2
+
+  '@intlify/message-compiler@11.3.2':
+    dependencies:
+      '@intlify/shared': 11.3.2
+      source-map-js: 1.2.1
+
+  '@intlify/shared@11.3.2': {}
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -6354,6 +6397,14 @@ snapshots:
       semver: 7.7.3
     transitivePeerDependencies:
       - supports-color
+
+  vue-i18n@11.3.2(vue@3.5.25(typescript@5.9.3)):
+    dependencies:
+      '@intlify/core-base': 11.3.2
+      '@intlify/devtools-types': 11.3.2
+      '@intlify/shared': 11.3.2
+      '@vue/devtools-api': 6.6.4
+      vue: 3.5.25(typescript@5.9.3)
 
   vue-konva@3.2.6(konva@10.0.12)(vue@3.5.25(typescript@5.9.3)):
     dependencies:

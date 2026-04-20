@@ -373,6 +373,10 @@ import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { Storage } from '@/utils/storage'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { buildAppUrl } from '@/utils/appUrl'
+import {
+  broadcastToEmbeddedIframes,
+  syncDesignerLocaleToEmbeddedIframes,
+} from '@/utils/embeddedIframeSync'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
 import { initSocket, getSocket } from '@/utils/socket'
@@ -505,9 +509,18 @@ export default {
      */
     const syncEmbeddedTheme = (theme) => {
       const iframes = document.querySelectorAll('iframe.embedded-iframe')
-      iframes.forEach((iframe) => {
-        iframe.contentWindow?.postMessage({ type: 'THEME_UPDATE', theme }, '*')
-      })
+      broadcastToEmbeddedIframes(
+        iframes,
+        createEmbeddedUpdateMessage('THEME_UPDATE', 'theme', theme)
+      )
+    }
+
+    /**
+     * 通知嵌入应用更新语言。
+     * @param {string} localeValue - 语言
+     */
+    const syncEmbeddedLocale = (localeValue) => {
+      syncDesignerLocaleToEmbeddedIframes(document, localeValue)
     }
 
     // 租户相关计算属性
@@ -1058,6 +1071,7 @@ export default {
         }
         return tab
       })
+      syncEmbeddedLocale(locale.value)
     })
 
     watch(

@@ -1,4 +1,4 @@
-import { Storage } from "@/utils/storage";
+import { Storage } from './storage.js'
 
 /**
  * 构建设计中心或数据中心访问地址。
@@ -7,22 +7,24 @@ import { Storage } from "@/utils/storage";
  * @returns {string} 访问地址
  */
 export const buildAppUrl = (appType, project = {}) => {
-  const params = new URLSearchParams();
-  if (project?.id) params.set("pid", project.id);
-  if (project?.tenantId) params.set("tenant", project.tenantId);
+  const params = new URLSearchParams()
+  if (project?.id) params.set('pid', project.id)
+  if (project?.tenantId) params.set('tenant', project.tenantId)
 
-  const token = Storage.getToken();
-  const refreshToken = Storage.getRefreshToken();
-  const theme = Storage.getTheme();
+  const token = Storage.getToken()
+  const refreshToken = Storage.getRefreshToken()
+  const theme = Storage.getTheme()
+  const locale = Storage.getLanguage()
 
-  if (token) params.set("token", token);
-  if (refreshToken) params.set("refreshToken", refreshToken);
-  if (theme) params.set("theme", theme);
+  if (token) params.set('token', token)
+  if (refreshToken) params.set('refreshToken', refreshToken)
+  if (theme) params.set('theme', theme)
 
   if (appType === "designer") {
-    params.set("type", "app");
-    return `/designer/?${params.toString()}`;
+    if (locale) params.set('locale', locale)
+    params.set('type', 'app')
+    return `/designer/?${params.toString()}`
   }
 
-  return `/datacenter/?${params.toString()}`;
+  return `/datacenter/?${params.toString()}`
 };

@@ -6,10 +6,12 @@
  * - /preview : 预览界面（PreviewView）
  */
 
-import type { NavigationGuardNext, RouteLocationNormalized } from "vue-router";
+import type { NavigationGuardNext, RouteLocationNormalized, Router } from "vue-router";
 import { createRouter, createWebHistory } from "vue-router";
-import { STORAGE_KEYS } from "@/constants";
+import type { EditorUiStore } from "@/stores/editor-ui-store";
+import { getEditorUiStore } from "@/stores/editor-ui-store";
 import { Storage } from "@/utils/storage";
+import { resolveRuntimeRouteSyncPlan } from "./runtime-settings";
 
 declare module "vue-router" {
   interface RouteMeta {
@@ -50,90 +52,100 @@ const router = createRouter({
 
 function applyTheme(theme: string): void {
   document.documentElement.classList.toggle("dark", theme === "dark");
+  document.documentElement.setAttribute("data-theme", theme);
 }
 
-function syncRuntimeSettings(): void {
-  const url = new URL(window.location.href);
-  const urlParams = url.searchParams;
-  let shouldReplace = false;
+function clearEditorUiThemeEffects(): void {
+  document.documentElement.classList.remove("dark");
+  document.documentElement.removeAttribute("data-theme");
+}
 
-  const tokenFromUrl = urlParams.get("token");
-  const refreshTokenFromUrl = urlParams.get("refreshToken");
-  const themeFromUrl = urlParams.get("theme");
-  const projectIdFromUrl = urlParams.get("pid") || urlParams.get("id");
-  const tenantIdFromUrl = urlParams.get("tenant");
+type RuntimeRouteEffectsDependencies = {
+  editorUi: EditorUiStore;
+  replaceState: (data: unknown, unused: string, url?: string | URL | null) => void;
+};
 
-  const themeValue = ["light", "dark"].includes(themeFromUrl || "")
-    ? (themeFromUrl as string)
-    : (Storage.get(STORAGE_KEYS.THEME, "light") as string);
+export function applyRuntimeRouteEffects(
+  routePath: string,
+  currentUrl: string,
+  { editorUi, replaceState }: RuntimeRouteEffectsDependencies,
+): void {
+  const plan = resolveRuntimeRouteSyncPlan(new URL(currentUrl), routePath, {
+    theme: Storage.getDesignerTheme(),
+    locale: Storage.getDesignerLanguage(),
+  });
 
-  if (tokenFromUrl) {
-    Storage.setToken(tokenFromUrl);
-    urlParams.delete("token");
-    shouldReplace = true;
+  if (plan.tokenFromUrl) {
+    Storage.setToken(plan.tokenFromUrl);
   }
 
-  if (refreshTokenFromUrl) {
-    Storage.setRefreshToken(refreshTokenFromUrl);
-    urlParams.delete("refreshToken");
-    shouldReplace = true;
+  if (plan.refreshTokenFromUrl) {
+    Storage.setRefreshToken(plan.refreshTokenFromUrl);
   }
 
-  if (themeFromUrl && ["light", "dark"].includes(themeFromUrl)) {
-    Storage.set(STORAGE_KEYS.THEME, themeFromUrl);
-    urlParams.delete("theme");
-    shouldReplace = true;
+  if (plan.projectIdFromUrl) {
+    Storage.setProjectId(plan.projectIdFromUrl);
   }
 
-  if (projectIdFromUrl) {
-    Storage.setProjectId(projectIdFromUrl);
+  if (plan.tenantIdFromUrl) {
+    Storage.setTenantId(plan.tenantIdFromUrl);
   }
 
-  if (tenantIdFromUrl) {
-    Storage.setTenantId(tenantIdFromUrl);
+  if (!plan.shouldSyncEditorUi) {
+    clearEditorUiThemeEffects();
+  } else {
+    editorUi.initFromRuntime(plan.runtimeSettings);
+    applyTheme(plan.runtimeSettings.theme);
   }
 
-  applyTheme(themeValue);
-
-  if (shouldReplace) {
-    const nextQuery = urlParams.toString();
-    const nextUrl = nextQuery ? `${url.pathname}?${nextQuery}` : url.pathname;
-    window.history.replaceState({}, "", nextUrl);
+  if (plan.shouldReplaceUrl) {
+    replaceState({}, "", plan.cleanedUrl);
   }
 }
 
-router.beforeEach(async (to: RouteLocationNormalized, _from, next: NavigationGuardNext) => {
-  document.title = `${to.meta.title || "设计器"} - InduForge`;
+function syncRuntimeSettings(routePath = window.location.pathname): void {
+  applyRuntimeRouteEffects(routePath, window.location.href, {
+    editorUi: getEditorUiStore(),
+    replaceState: window.history.replaceState.bind(window.history),
+  });
+}
 
-  syncRuntimeSettings();
+export function registerDesignerBeforeEachGuard(targetRouter: Router): () => void {
+  return targetRouter.beforeEach(async (to: RouteLocationNormalized, _from, next: NavigationGuardNext) => {
+    document.title = `${to.meta.title || "设计器"} - InduForge`;
 
-  const isDev = import.meta.env.DEV;
-  const devHost = import.meta.env.VITE_DEV_HOST || "localhost";
-  const idePort = import.meta.env.VITE_IDE_PORT || 9091;
-  const ideOrigin = isDev ? `http://${devHost}:${idePort}` : "";
+    syncRuntimeSettings(to.path);
 
-  const token = Storage.getToken();
-  if (!token && to.meta.requiresAuth) {
-    const redirectUrl = encodeURIComponent(window.location.href);
-    window.location.href = `${ideOrigin}/login?redirect=${redirectUrl}`;
-    return;
-  }
+    const isDev = import.meta.env.DEV;
+    const devHost = import.meta.env.VITE_DEV_HOST || "localhost";
+    const idePort = import.meta.env.VITE_IDE_PORT || 9091;
+    const ideOrigin = isDev ? `http://${devHost}:${idePort}` : "";
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const projectId = urlParams.get("pid") || urlParams.get("id") || Storage.getProjectId();
-  const tenantId = urlParams.get("tenant") || Storage.getTenantId();
+    const token = Storage.getToken();
+    if (!token && to.meta.requiresAuth) {
+      const redirectUrl = encodeURIComponent(window.location.href);
+      window.location.href = `${ideOrigin}/login?redirect=${redirectUrl}`;
+      return;
+    }
 
-  if (!projectId && to.name === "Designer") {
-    window.location.href = `${ideOrigin}/`;
-    return;
-  }
+    const urlParams = new URLSearchParams(window.location.search);
+    const projectId = urlParams.get("pid") || urlParams.get("id") || Storage.getProjectId();
+    const tenantId = urlParams.get("tenant") || Storage.getTenantId();
 
-  to.meta.project = {
-    id: projectId,
-    tenantId,
-  };
+    if (!projectId && to.name === "Designer") {
+      window.location.href = `${ideOrigin}/`;
+      return;
+    }
 
-  next();
-});
+    to.meta.project = {
+      id: projectId,
+      tenantId,
+    };
+
+    next();
+  });
+}
+
+registerDesignerBeforeEachGuard(router);
 
 export default router;
