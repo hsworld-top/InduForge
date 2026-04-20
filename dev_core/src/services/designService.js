@@ -288,7 +288,7 @@ class DesignService {
         "schemaContent",
       ],
       order: [
-        [literal("parentId IS NOT NULL"), "ASC"], // NULL 优先
+        [literal('"parentId" IS NOT NULL'), "ASC"], // PostgreSQL 需要显式保留 camelCase 列名
         ["parentId", "ASC"],
         ["sortOrder", "ASC"],
         ["createdAt", "ASC"],
