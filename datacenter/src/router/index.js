@@ -81,7 +81,7 @@ router.beforeEach(async (to, from, next) => {
 
   const isDev = import.meta.env.DEV;
   const devHost = import.meta.env.VITE_DEV_HOST || "localhost";
-  const idePort = import.meta.env.VITE_IDE_PORT || 9091;
+  const idePort = import.meta.env.VITE_IDE_PORT || 18601;
   const ideOrigin = isDev ? `http://${devHost}:${idePort}` : "";
 
   // 1. 检查鉴权 (Token) - 从 LocalStorage 读取

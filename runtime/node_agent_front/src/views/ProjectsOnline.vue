@@ -19,7 +19,7 @@
               <el-option label="https://" value="https" />
             </el-select>
             <el-input v-model="centerForm.centerIp" placeholder="127.0.0.1" />
-            <el-input v-model="centerForm.centerPort" placeholder="9099" style="width: 140px" />
+            <el-input v-model="centerForm.centerPort" placeholder="19601" style="width: 140px" />
           </div>
         </el-form-item>
         <el-form-item :label="t('remote.tenantCode')">
@@ -142,14 +142,14 @@ const snapshotStorageKey = 'node_agent_center_bind_snapshot'
 const centerForm = reactive({
   centerProtocol: 'http',
   centerIp: '',
-  centerPort: '9099',
+  centerPort: '19601',
   tenantCode: '',
   username: '',
   password: '',
   nodeName: '',
   nodeDescription: '',
   ipAddress: '',
-  nodePort: 8081,
+  nodePort: 17601,
   agentVersion: '1.0.0',
 })
 

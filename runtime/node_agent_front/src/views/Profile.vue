@@ -17,7 +17,7 @@
 
       <el-form :model="centerForm" label-width="120px" class="center-form">
         <el-form-item label="运维中心地址" required>
-          <el-input v-model="centerForm.centerUrl" placeholder="http://127.0.0.1:9099" />
+          <el-input v-model="centerForm.centerUrl" placeholder="http://127.0.0.1:19601" />
         </el-form-item>
         <el-form-item label="租户代码">
           <el-input v-model="centerForm.tenantCode" placeholder="default（可选）" />
@@ -162,7 +162,7 @@ const centerForm = reactive({
   nodeName: '',
   nodeDescription: '',
   ipAddress: '',
-  port: 8081,
+  port: 17601,
   agentVersion: '1.0.0',
 })
 const binding = ref(false)

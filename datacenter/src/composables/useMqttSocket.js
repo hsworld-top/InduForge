@@ -21,7 +21,7 @@ export function useMqttSocket(projectId) {
     }
 
     // 获取API基础URL，通过vite define注入（因为Socket.IO不走代理）
-    const apiUrl = __VITE_API_URL__ || "http://localhost:9099";
+    const apiUrl = __VITE_API_URL__ || "http://localhost:19601";
     const socketUrl = apiUrl.replace(/\/$/, ""); // 去掉末尾斜杠
 
     console.log("[MqttSocket] VITE_API_URL:", __VITE_API_URL__);

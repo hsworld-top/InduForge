@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-InduForge 是一个基于微前端架构的工业应用低代码开发平台，提供可视化设计、数据管理和工程管理等功能，专为工业互联网（IIoT）和 SCADA 应用场景设计。
+InduForge 是一个面向工业互联网场景的多模块单仓低代码平台，覆盖平台治理、数据域、可视化设计、发布部署和节点执行链路。当前仓库同时包含 Node.js 后端、多个 Vue 前端以及 Go 运行时服务，开发时应按模块分别处理，而不是把整仓当成单一应用。
 
 ## 核心特性
 
@@ -23,17 +23,17 @@ InduForge 是一个基于微前端架构的工业应用低代码开发平台，�
 │  - API 代理                                                  │
 └─────────────────────────────────────────────────────────────┘
                             ↓
-┌──────────────┬──────────────┬──────────────┬──────────────┐
-│   IDE 主应用  │  数据中心     │  设计中心     │  后端服务     │
-│   (dev_ide)  │ (datacenter) │  (designer)  │  (dev_core)  │
-│              │              │              │              │
-│  - 工程管理   │  - 数据连接   │  - 页面设计   │  - 用户认证   │
-│  - 用户管理   │  - SQL查询   │  - 组件库     │  - 租户管理   │
-│  - 租户管理   │  - 数据预览   │  - 数据绑定   │  - 数据API   │
-│              │              │              │              │
-│  Vue 3       │  Vue 3       │  Vue 3       │  Node.js     │
-│  Port: 9091  │  Port: 9092  │  Port: 9093  │  Port: 9099  │
-└──────────────┴──────────────┴──────────────┴──────────────┘
+┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+│   IDE 主应用  │  数据中心     │  设计中心     │  控制面后端    │  数据域服务    │
+│   (dev_ide)  │ (datacenter) │  (designer)  │  (dev_core)  │ (data_service)│
+│              │              │              │              │              │
+│  - 工程管理   │  - 数据连接   │  - 页面设计   │  - 用户认证   │  - 数据连接   │
+│  - 用户管理   │  - SQL 查询   │  - 组件库     │  - 租户管理   │  - 查询与数据点│
+│  - 部署运维   │  - MQTT/数据点│  - 数据绑定   │  - 发布部署   │  - 协议与预览 │
+│              │              │              │              │              │
+│  Vue 3       │  Vue 3       │  Vue 3       │  Node.js     │  Go          │
+│ Port: 18601  │ Port: 18602  │ Port: 18603  │ Port: 19601  │ Port: 19602  │
+└──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
 ```
 
 ## 技术栈
@@ -56,66 +56,128 @@ InduForge 是一个基于微前端架构的工业应用低代码开发平台，�
 - **认证**: JWT
 - **国际化**: i18next
 
+### 数据域与运行时
+- **数据域服务**: Go (`data_service`)
+- **节点执行器**: Go (`runtime/node_agent`)
+- **本地运维前端**: Vue 3 + Vite (`runtime/node_agent_front`)
+- **对象存储**: SeaweedFS S3 兼容接口
+
+## 当前模块现状
+
+- `dev_core/`：平台控制面后端，负责认证、工程管理、发布部署、节点调度和聚合 API。
+- `data_service/`：平台侧与开发态数据域服务，负责连接、查询、数据点、协议接入、计算与预览会话。
+- `dev_ide/`：平台管理与运维前端。
+- `datacenter/`：数据接入、查询管理与数据语义建模前端。
+- `designer/`：低代码页面设计器，当前是前端模块里最重的编辑器工程。
+- `runtime/node_agent/`：节点执行器后端，独立部署在节点侧。
+- `runtime/node_agent_front/`：节点本地管理前端。
+- `scripts/`：本地开发与基础设施辅助脚本，当前包含 `docker/`、`nginx/`、`seaweedfs/`。
+
+## 默认端口总览
+
+| 模块 | 服务类型 | 环境变量 | 默认端口 | 默认访问地址 |
+| --- | --- | --- | --- | --- |
+| `dev_ide` | 平台管理前端 | `VITE_IDE_PORT` | `18601` | `http://localhost:18601` |
+| `datacenter` | 数据中心前端 | `VITE_DATACENTER_PORT` | `18602` | `http://localhost:18602` |
+| `designer` | 设计器前端 | `VITE_DESIGNER_PORT` | `18603` | `http://localhost:18603` |
+| `runtime/node_agent_front` | 节点本地管理前端 | `VITE_NODE_AGENT_FRONT_PORT` | `18604` | `http://localhost:18604` |
+| `dev_core` | 平台控制面后端 | `PORT` | `19601` | `http://localhost:19601` |
+| `data_service` | 数据域服务 | `DATA_SERVICE_ADDR` / `VITE_DATA_SERVICE_URL` | `19602` | `http://localhost:19602` |
+| `runtime/node_agent` | 节点执行器后端 | `NODE_AGENT_PORT` | `17601` | `http://localhost:17601` |
+
 ## 快速开始
 
 ### 环境要求
 
 - Node.js >= 18.0.0
 - pnpm >= 8.0.0
+- Go >= 1.25.0（用于 `data_service` 与 `runtime/node_agent`）
 - MySQL >= 5.7 或 PostgreSQL >= 12
+
+### Windows 开发说明
+
+- 当前开发环境默认以 Windows + PowerShell 为主，下面示例优先使用 PowerShell 写法。
+- 若需要同时启动多个模块，建议为每个模块单独打开一个 PowerShell 窗口。
+- `scripts/seaweedfs/` 下提供了本地 SeaweedFS 启停脚本，可按需单独启动。
+- 默认端口以根 `.env` 和 `.env_example` 为准；如果本地仍沿用旧端口，需要同步更新根 `.env`。
 
 ### 安装依赖
 
-```bash
-# 安装所有模块依赖
-cd InduForge
+```powershell
+# 在仓库根目录依次安装 Node 模块依赖
+Set-Location .\dev_core
+pnpm install
 
-# 后端
-cd dev_core && pnpm install
+Set-Location ..\dev_ide
+pnpm install
 
-# IDE
-cd ../dev_ide && pnpm install
+Set-Location ..\datacenter
+pnpm install
 
-# 数据中心
-cd ../datacenter && pnpm install
+Set-Location ..\designer
+pnpm install
 
-# 设计中心
-cd ../designer && pnpm install
+Set-Location ..\runtime\node_agent_front
+pnpm install
+
+Set-Location ..\..
+```
+
+```powershell
+# 初始化 Go 模块依赖
+Set-Location .\data_service
+go mod download
+
+Set-Location ..\runtime\node_agent
+go mod download
+
+Set-Location ..\..
 ```
 
 ### 初始化数据库
 
-```bash
-cd dev_core
-cp .env.example .env
-# 编辑 .env 配置数据库连接
+```powershell
+Set-Location .\dev_core
+# 编辑根目录 .env 后再执行初始化
 pnpm run db:init
 ```
 
 ### 启动开发服务器
 
-```bash
-# 1. 启动后端服务
-cd dev_core
+```powershell
+# 1. 启动平台控制面后端
+Set-Location .\dev_core
 pnpm dev
 
-# 2. 启动 IDE（新终端）
-cd dev_ide
+# 2. 启动数据域服务（新终端，可选）
+Set-Location .\data_service
+go run .\cmd
+
+# 3. 启动 IDE（新终端）
+Set-Location .\dev_ide
 pnpm dev
 
-# 3. 启动数据中心（新终端）
-cd datacenter
+# 4. 启动数据中心（新终端）
+Set-Location .\datacenter
 pnpm dev
 
-# 4. 启动设计中心（新终端）
-cd designer
+# 5. 启动设计中心（新终端）
+Set-Location .\designer
+pnpm dev
+
+# 6. 启动节点本地管理前端（新终端，可选）
+Set-Location .\runtime\node_agent_front
 pnpm dev
 ```
 
 访问地址：
-- IDE: http://localhost:9091
-- 数据中心: http://localhost:9092
-- 设计中心: http://localhost:9093
+- IDE: http://localhost:18601
+- 数据中心: http://localhost:18602
+- 设计中心: http://localhost:18603
+- 节点本地管理前端: http://localhost:18604
+- 平台控制面后端: http://localhost:19601
+- 数据域服务: http://localhost:19602
+- 节点执行器后端: http://localhost:17601
 
 ### 默认账号
 
@@ -130,6 +192,10 @@ InduForge/
 │   ├── src/            # 源代码
 │   ├── database/       # 数据库脚本
 │   └── config/         # 配置文件
+├── data_service/       # 平台侧与开发态数据域服务（Go）
+│   ├── cmd/            # 启动入口
+│   ├── internal/       # 内部领域实现
+│   └── tests/          # 测试目录
 ├── dev_ide/            # IDE 主应用
 │   ├── src/            # 源代码
 │   └── public/         # 静态资源
@@ -140,7 +206,13 @@ InduForge/
 │   ├── src/            # 源代码
 │   ├── engine/         # 核心引擎
 │   └── registry/       # 组件注册
-├── nginx/              # Nginx 配置
+├── runtime/            # 运行时相关模块
+│   ├── node_agent/     # 节点执行器后端（Go）
+│   └── node_agent_front/ # 节点本地管理前端
+├── scripts/            # 辅助脚本与基础设施配置
+│   ├── docker/         # 本地容器相关脚本
+│   ├── nginx/          # Nginx 配置
+│   └── seaweedfs/      # SeaweedFS 启停脚本
 └── docs/               # 项目文档
 ```
 
@@ -161,6 +233,11 @@ InduForge/
 - [数据中心概述](./docs/datacenter/README.md)
 - [数据连接管理](./docs/datacenter/connections.md)
 - [查询管理](./docs/datacenter/queries.md)
+
+### 🧩 数据域与运行时文档
+- [数据域服务概述](./docs/data_service/README.md)
+- [节点执行器概述](./docs/node_agent/README.md)
+- [节点本地管理前端概述](./docs/node_agent_front/README.md)
 
 ### 🔧 后端文档
 - [后端 API 文档](./docs/backend/README.md)
@@ -200,29 +277,43 @@ chore: 构建/工具链相关
 
 ### 生产环境构建
 
-```bash
+```powershell
 # 构建所有前端应用
-cd dev_ide && pnpm build
-cd ../datacenter && pnpm build
-cd ../designer && pnpm build
+Set-Location .\dev_ide
+pnpm build
+
+Set-Location ..\datacenter
+pnpm build
+
+Set-Location ..\designer
+pnpm build
+
+Set-Location ..\runtime\node_agent_front
+pnpm build
+
+Set-Location ..\..
 ```
 
 ### Nginx 配置
 
-参考 `nginx/nginx.conf` 配置文件，主要配置：
+参考 `scripts/nginx/nginx.conf` 配置文件，主要配置：
 - 静态资源路径
 - API 代理
 - 域名和端口
 
+### 端口迁移提醒
+
+如果你的本地环境还在使用历史端口，需要同步更新根目录 `.env`。仓库文档、模板和源码中的默认端口已经统一切换到 `176xx / 186xx / 196xx` 新号段。
+
 ### 后端部署
 
-```bash
-cd dev_core
+```powershell
+Set-Location .\dev_core
 pnpm start
 ```
 
 建议使用 PM2 进行进程管理：
-```bash
+```powershell
 pm2 start src/index.js --name induforge-api
 ```
 
@@ -236,6 +327,9 @@ pm2 start src/index.js --name induforge-api
 
 ### 3. 跨域问题
 确保 Nginx 配置了正确的 CORS 头，或在开发环境使用代理。
+
+### 4. Windows 下脚本无法直接执行
+优先使用 PowerShell 执行命令；基础设施脚本统一放在 `scripts/`，例如 `scripts/seaweedfs/start.bat`。
 
 ## 贡献指南
 
@@ -258,4 +352,4 @@ ISC
 ---
 
 **版本**: 2.0.0  
-**最后更新**: 2025-12-08
+**最后更新**: 2026-04-20

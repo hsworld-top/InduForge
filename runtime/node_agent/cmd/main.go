@@ -72,7 +72,7 @@ var fileLogger *logger.FileLogger
 var consoleLogger *logger.SimpleLogger
 var initialWorkDir string
 
-const defaultNodeAgentPort = 8081
+const defaultNodeAgentPort = 17601
 
 func init() {
 	workDir, err := os.Getwd()
@@ -625,10 +625,10 @@ func generateDefaultConfig(configPath string) error {
     network:
         heartbeat:
             enabled: true
-            endpoint: http://manager:9099/api/v1/nodes/heartbeat
+            endpoint: http://manager:19601/api/v1/nodes/heartbeat
             interval: 10s
     online:
-        centerUrl: ""
+        centerUrl: "http://127.0.0.1:19601"
         nodeId: ""
         registrationToken: ""
     runtime:

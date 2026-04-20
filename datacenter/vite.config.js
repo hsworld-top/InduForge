@@ -10,8 +10,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, "../"), "");
   // 数据服务本地调试地址：
   // 1. 支持从环境变量覆盖（VITE_DATA_SERVICE_URL）
-  // 2. 未配置时默认走本地 Go 数据服务端口 19099
-  const dataServiceUrl = env.VITE_DATA_SERVICE_URL || "http://localhost:19099";
+  // 2. 未配置时默认走新的本地 Go 数据服务端口 19602
+  const dataServiceUrl = env.VITE_DATA_SERVICE_URL || "http://localhost:19602";
 
   return {
     base: "/datacenter/", // 部署到 /datacenter/ 路径

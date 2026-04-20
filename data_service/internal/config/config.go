@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const defaultAddr = ":9095"
+const defaultAddr = ":19602"
 const minJWTSecretLength = 16
 
 // Config 定义 data_service 的基础运行配置。

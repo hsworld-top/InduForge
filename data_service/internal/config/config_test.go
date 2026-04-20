@@ -26,7 +26,7 @@ func TestLoad_RejectsInvalidAddr(t *testing.T) {
 }
 
 func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
-	t.Setenv("DATA_SERVICE_ADDR", ":19095")
+	t.Setenv("DATA_SERVICE_ADDR", ":19602")
 	t.Setenv("DATA_SERVICE_DATABASE_URL", "postgres://demo")
 	t.Setenv("DATA_SERVICE_DATABASE_SCHEMA", "tenant_a")
 	t.Setenv("DATA_SERVICE_JWT_SECRET", "secret-123")

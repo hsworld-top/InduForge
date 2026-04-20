@@ -22,11 +22,25 @@ const { registerVersionedRoutes } = require('./routes/register');
  * 获取应用配置
  */
 const getAppConfig = () => {
-  const PORT = Number(process.env.PORT || 3000);
+  const PORT = Number(process.env.PORT || 19601);
   const NODE_ENV = process.env.NODE_ENV || 'development';
   const ENABLE_SWAGGER = String(process.env.ENABLE_SWAGGER || 'true') === 'true';
 
   return { PORT, NODE_ENV, ENABLE_SWAGGER };
+};
+
+/**
+ * 获取允许本地嵌入的节点前端 origin 列表。
+ * 默认使用根 `.env` 中的 VITE_NODE_AGENT_FRONT_PORT，避免端口文档和后端 CSP 漂移。
+ */
+const getLocalNodeAgentFrontOrigins = () => {
+  const nodeAgentFrontPort = Number(process.env.VITE_NODE_AGENT_FRONT_PORT || 18604);
+  return [
+    `https://127.0.0.1:${nodeAgentFrontPort}`,
+    `http://127.0.0.1:${nodeAgentFrontPort}`,
+    `https://localhost:${nodeAgentFrontPort}`,
+    `http://localhost:${nodeAgentFrontPort}`,
+  ];
 };
 
 /**
@@ -88,6 +102,7 @@ const parseCorsOrigins = (origins) => {
 function buildApp() {
   const app = express();
   const { PORT, NODE_ENV, ENABLE_SWAGGER } = getAppConfig();
+  const localNodeAgentFrontOrigins = getLocalNodeAgentFrontOrigins();
 
   // ==================== 基础中间件 ====================
   app.set('trust proxy', 1);
@@ -98,7 +113,7 @@ function buildApp() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        frameSrc: ["'self'", "https://127.0.0.1:13000", "http://127.0.0.1:13000", "https://localhost:13000", "http://localhost:13000"],
+        frameSrc: ["'self'", ...localNodeAgentFrontOrigins],
         scriptSrc: ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:"],
@@ -242,7 +257,7 @@ function buildApp() {
         return next();
       }
       // 设置允许 iframe 的 CSP，支持在页面中嵌入 designer
-      res.setHeader('Content-Security-Policy', "default-src 'self'; frame-src 'self' https://127.0.0.1:13000 http://127.0.0.1:13000 https://localhost:13000 http://localhost:13000; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'");
+      res.setHeader('Content-Security-Policy', `default-src 'self'; frame-src 'self' ${localNodeAgentFrontOrigins.join(' ')}; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'`);
       // 返回前端 index.html
       res.sendFile(viewsIndexPath);
     });

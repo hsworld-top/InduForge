@@ -16,9 +16,11 @@ const nodeService = require("./services/nodeService");
 // 环境变量配置
 const config = {
   NODE_ENV: process.env.NODE_ENV || "development",
-  PORT: Number(process.env.PORT || 3000),
+  PORT: Number(process.env.PORT || 19601),
   ENABLE_SWAGGER: String(process.env.ENABLE_SWAGGER || "true") === "true",
-  CORS_ORIGINS: process.env.CORS_ORIGINS || "http://localhost:5173",
+  CORS_ORIGINS:
+    process.env.CORS_ORIGINS ||
+    "http://localhost:18601,http://localhost:18602,http://localhost:18603,http://localhost:18604",
   DB_HOST: process.env.DB_HOST || "127.0.0.1",
   NODE_OFFLINE_CHECK_INTERVAL_MS: Number(
     process.env.NODE_OFFLINE_CHECK_INTERVAL_MS || 5000

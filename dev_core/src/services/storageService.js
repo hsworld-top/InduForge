@@ -39,18 +39,14 @@ const parseBoolean = (value, defaultValue = false) => {
 };
 
 const getStorageConfig = () => {
-  const endpoint = pickEnvValue(process.env.SEAWEEDFS_ENDPOINT, process.env.MINIO_ENDPOINT, "127.0.0.1");
-  const port = parsePort(pickEnvValue(process.env.SEAWEEDFS_PORT, process.env.MINIO_PORT), 25000);
-  const useSSL = parseBoolean(pickEnvValue(process.env.SEAWEEDFS_USE_SSL, process.env.MINIO_USE_SSL), false);
-  const accessKey = pickEnvValue(process.env.SEAWEEDFS_ACCESS_KEY, process.env.MINIO_ACCESS_KEY, "");
-  const secretKey = pickEnvValue(process.env.SEAWEEDFS_SECRET_KEY, process.env.MINIO_SECRET_KEY, "");
-  const bucketIfp = pickEnvValue(process.env.SEAWEEDFS_BUCKET_IFP, process.env.MINIO_BUCKET_IFP, "ifp-artifacts");
-  const bucketDesign = pickEnvValue(
-    process.env.SEAWEEDFS_BUCKET_DESIGN,
-    process.env.MINIO_BUCKET_DESIGN,
-    "design-assets"
-  );
-  const region = pickEnvValue(process.env.SEAWEEDFS_REGION, process.env.MINIO_REGION, "us-east-1");
+  const endpoint = pickEnvValue(process.env.SEAWEEDFS_ENDPOINT, "127.0.0.1");
+  const port = parsePort(process.env.SEAWEEDFS_PORT, 25000);
+  const useSSL = parseBoolean(process.env.SEAWEEDFS_USE_SSL, false);
+  const accessKey = pickEnvValue(process.env.SEAWEEDFS_ACCESS_KEY, "");
+  const secretKey = pickEnvValue(process.env.SEAWEEDFS_SECRET_KEY, "");
+  const bucketIfp = pickEnvValue(process.env.SEAWEEDFS_BUCKET_IFP, "ifp-artifacts");
+  const bucketDesign = pickEnvValue(process.env.SEAWEEDFS_BUCKET_DESIGN, "design-assets");
+  const region = pickEnvValue(process.env.SEAWEEDFS_REGION, "us-east-1");
   const provider = pickEnvValue(process.env.OBJECT_STORAGE_PROVIDER, process.env.STORAGE_PROVIDER, "seaweedfs");
 
   return {
@@ -68,6 +64,7 @@ const getStorageConfig = () => {
 
 const buildClient = () => {
   const { endpoint, port, useSSL, accessKey, secretKey } = getStorageConfig();
+  // SeaweedFS 提供 S3 兼容接口，这里继续复用 MinIO 客户端。
   return new Minio.Client({
     endPoint: endpoint,
     port,

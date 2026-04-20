@@ -9,7 +9,7 @@
 - **库**: Socket.IO
 - **传输**: WebSocket / HTTP Long Polling（降级）
 - **路径**: `/socket.io`
-- **端口**: 与 HTTP 服务同端口（9099）
+- **端口**: 与 HTTP 服务同端口（19601）
 
 ### 1.2 连接架构
 
@@ -51,7 +51,7 @@
 ```javascript
 import { io } from "socket.io-client";
 
-const socket = io("http://localhost:9099", {
+const socket = io("http://localhost:19601", {
   path: "/socket.io",
   transports: ["websocket", "polling"],
   query: {
@@ -578,7 +578,7 @@ import { io } from "socket.io-client";
 
 class MqttSocketManager {
   constructor(projectId) {
-    this.socket = io("http://localhost:9099", {
+    this.socket = io("http://localhost:19601", {
       query: { projectId },
     });
     this.messageHandlers = new Map();
@@ -641,7 +641,7 @@ class MqttSocketManager {
 class PreviewDataService {
   constructor(projectId) {
     this.projectId = projectId;
-    this.socket = io("http://localhost:9099", {
+    this.socket = io("http://localhost:19601", {
       query: { projectId },
     });
     this.subscribers = new Map();
@@ -699,7 +699,7 @@ class PreviewDataService {
 class NodeAgentSocket {
   constructor(nodeId, token) {
     this.nodeId = nodeId;
-    this.socket = io("http://dev-server:9099", {
+    this.socket = io("http://dev-server:19601", {
       auth: { token },
       query: { nodeId },
     });
@@ -812,7 +812,7 @@ socket.on("error", (error) => {
 
 ```javascript
 // 客户端携带 Token
-const socket = io("http://localhost:9099", {
+const socket = io("http://localhost:19601", {
   auth: {
     token: localStorage.getItem("token"),
   },

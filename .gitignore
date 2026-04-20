@@ -1,73 +1,83 @@
-# 依赖相关文件
-node_modules/          # Node.js 依赖包目录
-datacenter/node_modules/
-designer/node_modules/
-dev_ide/node_modules/
-dev_core/node_modules/
-
-.DS_Store
-npm-debug.log*         # npm 调试日志文件
-yarn-debug.log*        # Yarn 调试日志文件
-yarn-error.log*        # Yarn 错误日志文件
-pnpm-debug.log*        # pnpm 调试日志文件
-lerna-debug.log*       # Lerna 调试日志文件（多包管理工具）
-
-# dotenv 环境变量文件（不提交）
+# ============================================
+# 环境变量与本地配置
+# ============================================
 .env
+.env.local
 .env.development.local
 .env.test.local
 .env.production.local
-.env.local
 
-# 运行时数据
-pids                   # 进程ID文件目录
-*.pid                  # 进程ID文件
-*.seed                 # 随机种子文件
-*.pid.lock             # 进程ID锁文件（防止进程重复启动）
+# ============================================
+# 依赖与包管理缓存
+# ============================================
+node_modules/
+.npm-cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-
-
-.kiro
+# ============================================
+# 系统与编辑器临时文件
+# ============================================
+.DS_Store
+Thumbs.db
 .kiro/
 
+# ============================================
+# 运行时 PID、日志与临时文件
+# ============================================
+pids
+*.pid
+*.pid.lock
+*.seed
+runtime/logs/
+
+# ============================================
+# SeaweedFS 本地产物
+# ============================================
+scripts/seaweedfs/data*/
+scripts/seaweedfs/logs/
+scripts/seaweedfs/*.pid
+scripts/seaweedfs/PID
+
+# ============================================
+# 基础设施本地缓存
+# ============================================
 docker/images/*
 
-pnpm-lock.yaml
-pnpm-workspace.yaml
-
-miniio/data*
-# 对象存储可执行文件体积大，请本地放置或从官方下载，勿提交
-miniio/bin/
-miniio/weed.exe
-miniio/s3.conf
-miniio/logs/
-
-.npm-cache
-runtime/logs/
-runtime/logs/
-
+# ============================================
+# 前端构建产物
+# ============================================
 dev_ide/dist/
+datacenter/dist/
 designer/dist/
+runtime/node_agent_front/dist/
+
+# ============================================
+# Go / 运行时构建产物
+# ============================================
+data_service/*.exe
+runtime/node_agent/build/
+runtime/node_agent/data/
+runtime/node_agent/logs/
+runtime/node_agent/runtime/
+
+# ============================================
+# 项目过程文档与本地工作区
+# ============================================
+.superpower/
 .worktrees/
 
-# vue-tsc 临时排障输出（勿提交）
+# ============================================
+# 调试与测试产物
+# ============================================
+.playwright-cli/
+.playwright-cli/output/
 designer/tsc-errors.txt
 dev_core/artifacts/
-
-# designer 内本地计划草稿（正式文档请放仓库 docs/）
 designer/designer-next-iteration.plan.md
-
-# designer testing artifacts: keep cases only in git
 designer/testing/local/
 designer/testing/evidence/
 designer/testing/tmp/
-
-# playwright run artifacts
-.playwright-cli/
-.playwright-cli/output/
-miniio/PID
-
-
-datacenter/dist
-data_service/*.exe
-.worktrees/

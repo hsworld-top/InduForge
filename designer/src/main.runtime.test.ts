@@ -21,14 +21,14 @@ describe("main runtime message handler", () => {
     const handler = createRuntimeMessageHandler({
       editorUi,
       i18n,
-      getTrustedOriginSet: () => new Set(["http://localhost:9091"]),
+      getTrustedOriginSet: () => new Set(["http://localhost:18601"]),
       getTrustedSources: () => [trustedParent],
     });
 
     handler(
       new MessageEvent("message", {
         data: { type: "LOCALE_UPDATE", locale: "en" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
@@ -44,14 +44,14 @@ describe("main runtime message handler", () => {
     const handler = createRuntimeMessageHandler({
       editorUi,
       i18n,
-      getTrustedOriginSet: () => new Set(["http://localhost:9091"]),
+      getTrustedOriginSet: () => new Set(["http://localhost:18601"]),
       getTrustedSources: () => [trustedParent],
     });
 
     handler(
       new MessageEvent("message", {
         data: { type: "THEME_UPDATE", theme: "dark" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
@@ -68,7 +68,7 @@ describe("main runtime message handler", () => {
     const handler = createRuntimeMessageHandler({
       editorUi,
       i18n,
-      getTrustedOriginSet: () => new Set(["http://localhost:9091"]),
+      getTrustedOriginSet: () => new Set(["http://localhost:18601"]),
       getTrustedSources: () => [trustedParent],
     });
 
@@ -82,14 +82,14 @@ describe("main runtime message handler", () => {
     handler(
       new MessageEvent("message", {
         data: { type: "LOCALE_UPDATE", locale: "en" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: {} as Window,
       }),
     );
     handler(
       new MessageEvent("message", {
         data: { type: "LOCALE_UPDATE", locale: "en" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
@@ -105,21 +105,21 @@ describe("main runtime message handler", () => {
     const handler = createRuntimeMessageHandler({
       editorUi,
       i18n,
-      getTrustedOriginSet: () => new Set(["http://localhost:9091"]),
+      getTrustedOriginSet: () => new Set(["http://localhost:18601"]),
       getTrustedSources: () => [trustedParent],
     });
 
     handler(
       new MessageEvent("message", {
         data: { type: "LOCALE_UPDATE", locale: "jp" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
     handler(
       new MessageEvent("message", {
         data: { type: "UNKNOWN", theme: "dark" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
@@ -136,14 +136,14 @@ describe("main runtime message handler", () => {
     const handler = createRuntimeMessageHandler({
       editorUi,
       i18n,
-      getTrustedOriginSet: () => new Set(["http://localhost:9091"]),
+      getTrustedOriginSet: () => new Set(["http://localhost:18601"]),
       getTrustedSources: () => [trustedParent],
     });
 
     handler(
       new MessageEvent("message", {
         data: { type: "THEME_UPDATE", theme: "solarized" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
@@ -160,21 +160,21 @@ describe("main runtime message handler", () => {
     const handler = createRuntimeMessageHandler({
       editorUi,
       i18n,
-      getTrustedOriginSet: () => new Set(["http://localhost:9091"]),
+      getTrustedOriginSet: () => new Set(["http://localhost:18601"]),
       getTrustedSources: () => [trustedParent],
     });
 
     handler(
       new MessageEvent("message", {
         data: "THEME_UPDATE",
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
     handler(
       new MessageEvent("message", {
         data: null,
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
@@ -192,21 +192,21 @@ describe("main runtime message handler", () => {
       editorUi,
       i18n,
       getPathname: () => "/designer/preview",
-      getTrustedOriginSet: () => new Set(["http://localhost:9091"]),
+      getTrustedOriginSet: () => new Set(["http://localhost:18601"]),
       getTrustedSources: () => [trustedParent],
     });
 
     handler(
       new MessageEvent("message", {
         data: { type: "THEME_UPDATE", theme: "dark" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
     handler(
       new MessageEvent("message", {
         data: { type: "LOCALE_UPDATE", locale: "en" },
-        origin: "http://localhost:9091",
+        origin: "http://localhost:18601",
         source: trustedParent,
       }),
     );
@@ -218,10 +218,10 @@ describe("main runtime message handler", () => {
 
   it("嵌入场景下可信消息来源会包含当前 origin 与父页面 origin", () => {
     const trustedOrigins = resolveTrustedMessageSources({
-      locationOrigin: "http://localhost:9093",
-      referrer: "http://localhost:9091/dashboard",
+      locationOrigin: "http://localhost:18603",
+      referrer: "http://localhost:18601/dashboard",
     });
 
-    expect([...trustedOrigins]).toEqual(["http://localhost:9093", "http://localhost:9091"]);
+    expect([...trustedOrigins]).toEqual(["http://localhost:18603", "http://localhost:18601"]);
   });
 });

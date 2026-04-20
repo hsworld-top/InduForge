@@ -6,7 +6,7 @@ import { io } from "socket.io-client";
 export function testSocketConnection() {
   console.log("🔍 开始Socket.IO连接测试...");
 
-  const apiUrl = __VITE_API_URL__ || "http://localhost:9099";
+  const apiUrl = __VITE_API_URL__ || "http://localhost:19601";
   const socketUrl = apiUrl.replace(/\/$/, "");
 
   console.log("📡 目标URL:", socketUrl);

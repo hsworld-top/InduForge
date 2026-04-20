@@ -148,7 +148,7 @@ function getApiBase() {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  return "http://localhost:9099";
+  return "http://localhost:19601";
 }
 
 async function resolveConnection(projectId: string | null | undefined, name: string) {

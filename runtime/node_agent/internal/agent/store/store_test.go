@@ -22,7 +22,7 @@ func TestLocalStore_ProjectCRUD(t *testing.T) {
 		Status:         "running",
 		ConnectionProfile: types.ConnectionProfile{
 			Name:     "c1",
-			Endpoint: "http://127.0.0.1:9099",
+			Endpoint: "http://127.0.0.1:19601",
 		},
 		DeployedAt:    &now,
 		LastStartedAt: &now,

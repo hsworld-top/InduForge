@@ -6,7 +6,7 @@ import path from "path";
 export default defineConfig(({ mode }) => {
   // 从项目根目录加载环境变量
   const env = loadEnv(mode, path.resolve(__dirname, "../.."), "");
-  const backendPort = Number(env.NODE_AGENT_PORT || 8081);
+  const backendPort = Number(env.NODE_AGENT_PORT || 17601);
 
   return {
     plugins: [vue()],
@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: Number(env.VITE_NODE_AGENT_FRONT_PORT || 13000),
+      port: Number(env.VITE_NODE_AGENT_FRONT_PORT || 18604),
       host: true,
       proxy: {
         "/api": {

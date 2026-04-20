@@ -33,12 +33,12 @@ export default defineConfig(({ mode }) => {
         },
         // 前端子应用代理到各自 dev server，保持同源访问以共享 LocalStorage
         "/datacenter": {
-          target: `http://localhost:${env.VITE_DATACENTER_PORT || 9092}`,
+          target: `http://localhost:${env.VITE_DATACENTER_PORT || 18602}`,
           changeOrigin: true,
           secure: false,
         },
         "/designer": {
-          target: `http://localhost:${env.VITE_DESIGNER_PORT || 9093}`,
+          target: `http://localhost:${env.VITE_DESIGNER_PORT || 18603}`,
           changeOrigin: true,
           secure: false,
         },

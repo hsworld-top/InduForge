@@ -118,7 +118,7 @@ export function registerDesignerBeforeEachGuard(targetRouter: Router): () => voi
 
     const isDev = import.meta.env.DEV;
     const devHost = import.meta.env.VITE_DEV_HOST || "localhost";
-    const idePort = import.meta.env.VITE_IDE_PORT || 9091;
+    const idePort = import.meta.env.VITE_IDE_PORT || 18601;
     const ideOrigin = isDev ? `http://${devHost}:${idePort}` : "";
 
     const token = Storage.getToken();
