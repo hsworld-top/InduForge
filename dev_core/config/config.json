@@ -1,11 +1,11 @@
 {
   "development": {
-    "username": "root",
-    "password": "zhu0y1zh1nengF888",
+    "username": "postgres",
+    "password": "postgres",
     "database": "tenant_management",
-    "host": "127.0.0.1",
-    "port": 3306,
-    "dialect": "mysql",
+    "host": "172.21.242.174",
+    "port": 5432,
+    "dialect": "postgres",
     "logging": false,
     "pool": {
       "max": 5,
@@ -15,19 +15,21 @@
     }
   },
   "test": {
-    "username": "root",
-    "password": "",
+    "username": "postgres",
+    "password": "postgres",
     "database": "tenant_management_test",
-    "host": "localhost",
-    "dialect": "mysql",
+    "host": "172.21.242.174",
+    "port": 5432,
+    "dialect": "postgres",
     "logging": false
   },
   "production": {
-    "username": "root",
-    "password": "",
+    "username": "postgres",
+    "password": "postgres",
     "database": "tenant_management_prod",
-    "host": "localhost",
-    "dialect": "mysql",
+    "host": "172.21.242.174",
+    "port": 5432,
+    "dialect": "postgres",
     "logging": false
   }
 }

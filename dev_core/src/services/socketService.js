@@ -1,5 +1,4 @@
 ﻿const { Server } = require("socket.io");
-const { DataMqttSubscription, DataMqttTag } = require("../models");
 const { logger } = require("../utils/logger");
 const { normalizePath } = require("../utils/datapointPath");
 
@@ -14,30 +13,11 @@ class SocketService {
   }
 
   async ensureMqttConnectionBySubscription(subscriptionId) {
-    if (!subscriptionId) return;
-    try {
-      const subscription = await DataMqttSubscription.findByPk(subscriptionId);
-      if (!subscription?.connectionId) return;
-      const mqttService = require("./mqttService");
-      await mqttService.startConnection(subscription.connectionId);
-    } catch (error) {
-      logger.warn(
-        `[SocketService] Failed to ensure MQTT connection for subscription ${subscriptionId}: ${error?.message || error}`,
-      );
-    }
+    return;
   }
 
   async ensureMqttConnectionByTag(tagId) {
-    if (!tagId) return;
-    try {
-      const tag = await DataMqttTag.findByPk(tagId);
-      if (!tag?.subscriptionId) return;
-      await this.ensureMqttConnectionBySubscription(tag.subscriptionId);
-    } catch (error) {
-      logger.warn(
-        `[SocketService] Failed to ensure MQTT connection for tag ${tagId}: ${error?.message || error}`,
-      );
-    }
+    return;
   }
 
   /**

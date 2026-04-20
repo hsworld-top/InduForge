@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/indu-forge/data_service/internal/auth"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -142,6 +143,140 @@ func (h *ConnectionHandler) Delete(w http.ResponseWriter, r *http.Request) error
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
 	return nil
+}
+
+// TestConnection 测试外部关系库连接。
+func (h *ConnectionHandler) TestConnection(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	var request struct {
+		Type   string         `json:"type"`
+		Config map[string]any `json:"config"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	result, err := h.service.TestConnection(r.Context(), r.PathValue("projectId"), service.CreateConnectionInput{
+		Type:   request.Type,
+		Config: request.Config,
+	})
+	if err != nil {
+		return err
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// UpdateStatus 更新连接状态。
+func (h *ConnectionHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	var request struct {
+		Status string `json:"status"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	result, err := h.service.UpdateConnectionStatus(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request.Status)
+	if err != nil {
+		return err
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// ListTables 返回连接下的表列表。
+func (h *ConnectionHandler) ListTables(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	tables, err := h.service.ListTables(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
+	if err != nil {
+		return err
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"tables": tables})
+	return nil
+}
+
+// GetTableStructure 返回表结构。
+func (h *ConnectionHandler) GetTableStructure(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	result, err := h.service.GetTableStructure(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("tableName"))
+	if err != nil {
+		return err
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// GetTableData 返回表数据预览。
+func (h *ConnectionHandler) GetTableData(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	page, err := parseOptionalInt(r.URL.Query().Get("page"), 1, "page")
+	if err != nil {
+		return err
+	}
+	limit, err := parseOptionalInt(firstNonEmpty(r.URL.Query().Get("limit"), r.URL.Query().Get("pageSize")), 100, "limit")
+	if err != nil {
+		return err
+	}
+
+	result, err := h.service.GetTableData(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("tableName"), page, limit)
+	if err != nil {
+		return err
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// ExecuteSQL 执行只读 SQL。
+func (h *ConnectionHandler) ExecuteSQL(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	var request struct {
+		SQL        string `json:"sql"`
+		Parameters []any  `json:"parameters"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	result, err := h.service.ExecuteSQL(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request.SQL, request.Parameters)
+	if err != nil {
+		return err
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func requireClaims(r *http.Request) (*auth.Claims, error) {

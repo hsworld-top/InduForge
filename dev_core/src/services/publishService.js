@@ -6,17 +6,14 @@ const path = require("path");
 const fs = require("fs-extra");
 const archiver = require("archiver");
 const crypto = require("crypto");
+const { dataDomainClient } = require("./dataDomainClient");
 const {
   Project,
   DesignPage,
-  DataPoint,
-  DataConnection,
-  DataQuery,
   Deployment,
   NodeDeployment,
   User,
 } = require("../models");
-const { sequelize } = require("../config/database");
 
 // 制品存储目录
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, "../../artifacts");
@@ -25,7 +22,8 @@ const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, "../../a
  * 发布服务类
  */
 class PublishService {
-  constructor() {
+  constructor(options = {}) {
+    this.dataDomainClient = options.dataDomainClient || dataDomainClient;
     // 确保制品目录存在
     fs.ensureDirSync(ARTIFACTS_DIR);
   }
@@ -48,6 +46,7 @@ class PublishService {
       description,
       type = "development",
       deployedBy,
+      authorization,
     } = options;
 
     // 获取工程信息
@@ -102,7 +101,7 @@ class PublishService {
 
       // 2. 收集工程数据
       await this.addBuildLog(deploymentId, "收集工程数据...");
-      const projectData = await this.collectProjectData(projectId);
+      const projectData = await this.collectProjectData(projectId, authorization);
 
       // 3. 编译清单
       await this.addBuildLog(deploymentId, "生成清单文件...");
@@ -207,7 +206,7 @@ class PublishService {
   /**
    * 收集工程数据
    */
-  async collectProjectData(projectId) {
+  async collectProjectData(projectId, authorization) {
     // 获取所有页面
     const pages = await DesignPage.findAll({
       where: { projectId },
@@ -216,27 +215,18 @@ class PublishService {
         ["sortOrder", "ASC"],
       ],
     });
-
-    // 获取数据点
-    const dataPoints = await DataPoint.findAll({
-      where: { project_id: projectId },
-    });
-
-    // 获取数据连接
-    const connections = await DataConnection.findAll({
-      where: { projectId },
-    });
-
-    // 获取数据查询
-    const queries = await DataQuery.findAll({
-      where: { projectId },
-    });
+    const snapshot = await this.dataDomainClient.getProjectSnapshot(projectId, authorization);
 
     return {
       pages,
-      dataPoints,
-      connections,
-      queries,
+      connections: snapshot.connections,
+      relationalConfigs: snapshot.relationalConfigs,
+      queries: snapshot.queries,
+      mqttConfigs: snapshot.mqttConfigs,
+      mqttSubscriptions: snapshot.mqttSubscriptions,
+      mqttTagGroups: snapshot.mqttTagGroups,
+      mqttTags: snapshot.mqttTags,
+      dataPoints: snapshot.datapoints,
     };
   }
 
@@ -253,8 +243,8 @@ class PublishService {
       })),
       dataPoints: projectData.dataPoints.map((dp) => ({
         path: dp.path,
-        sourceType: dp.source_type,
-        dataType: dp.data_type,
+        sourceType: dp.sourceType,
+        dataType: dp.dataType,
       })),
     };
 
@@ -345,18 +335,24 @@ class PublishService {
           id: c.id,
           name: c.name,
           type: c.type,
-          category: c.category,
+          status: c.status,
+          config: c.config,
         })),
+        relationalConfigs: projectData.relationalConfigs.map((config) => ({ ...config })),
+        mqttConfigs: projectData.mqttConfigs.map((config) => ({ ...config })),
+        mqttSubscriptions: projectData.mqttSubscriptions.map((subscription) => ({ ...subscription })),
+        mqttTagGroups: projectData.mqttTagGroups.map((group) => ({ ...group })),
+        mqttTags: projectData.mqttTags.map((tag) => ({ ...tag })),
         dataPoints: projectData.dataPoints.map((dp) => ({
           id: dp.id,
           path: dp.path,
           name: dp.name,
-          sourceType: dp.source_type,
-          sourceId: dp.source_id,
-          sourceConfig: dp.source_config,
-          dataType: dp.data_type,
+          sourceType: dp.sourceType,
+          sourceId: dp.sourceId,
+          sourceConfig: dp.sourceConfig,
+          dataType: dp.dataType,
           unit: dp.unit,
-          defaultValue: dp.default_value,
+          defaultValue: dp.defaultValue,
         })),
         queries: projectData.queries.map((q) => ({
           id: q.id,
@@ -365,6 +361,9 @@ class PublishService {
           queryType: q.queryType,
           config: q.config,
           transformer: q.transformer,
+          timeoutMs: q.timeoutMs,
+          cacheEnabled: q.cacheEnabled,
+          cacheTtlSeconds: q.cacheTtlSeconds,
         })),
       };
       archive.append(JSON.stringify(datacenterJson, null, 2), { name: "datacenter.json" });

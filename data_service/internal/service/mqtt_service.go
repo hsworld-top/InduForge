@@ -66,12 +66,18 @@ type CreateMqttConnectionInput struct {
 
 // MqttService 承载 MQTT 领域接口的输入校验和响应映射。
 type MqttService struct {
-	repository *repository.MqttRepository
+	repository  *repository.MqttRepository
+	connections *repository.ConnectionRepository
+	datapoints  *repository.DataPointRepository
 }
 
 // NewMqttService 创建 MQTT 领域服务。
-func NewMqttService(repo *repository.MqttRepository) *MqttService {
-	return &MqttService{repository: repo}
+func NewMqttService(repo *repository.MqttRepository, connectionRepo *repository.ConnectionRepository, datapointRepo *repository.DataPointRepository) *MqttService {
+	return &MqttService{
+		repository:  repo,
+		connections: connectionRepo,
+		datapoints:  datapointRepo,
+	}
 }
 
 // CreateConnection 创建 MQTT 连接。

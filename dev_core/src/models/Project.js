@@ -14,6 +14,11 @@ const Project = sequelize.define(
       allowNull: false,
       comment: "工程名称",
     },
+    code: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: "工程代码",
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true,
@@ -43,6 +48,23 @@ const Project = sequelize.define(
       defaultValue: "#3b82f6",
       comment: "颜色标签",
     },
+    icon: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: "工程图标",
+    },
+    status: {
+      type: DataTypes.ENUM("active", "archived", "deleted"),
+      allowNull: false,
+      defaultValue: "active",
+      comment: "工程状态",
+    },
+    visibility: {
+      type: DataTypes.ENUM("private", "internal", "public"),
+      allowNull: false,
+      defaultValue: "private",
+      comment: "可见性",
+    },
     tenantId: {
       type: DataTypes.UUID,
       allowNull: false,
@@ -70,6 +92,11 @@ const Project = sequelize.define(
       },
       comment: "更新者ID",
     },
+    archivedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: "归档时间",
+    },
     createdAt: {
       type: DataTypes.DATE,
       allowNull: false,
@@ -88,6 +115,13 @@ const Project = sequelize.define(
       },
       {
         fields: ["createdBy"],
+      },
+      {
+        fields: ["status"],
+      },
+      {
+        unique: true,
+        fields: ["tenantId", "code"],
       },
     ],
   }

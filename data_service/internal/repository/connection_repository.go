@@ -24,6 +24,14 @@ type ConnectionRecord struct {
 	UpdatedAt time.Time
 }
 
+// ConnectionStatusRecord 表示连接状态更新后的返回结构。
+type ConnectionStatusRecord struct {
+	ID        string
+	ProjectID string
+	Status    string
+	UpdatedAt time.Time
+}
+
 // CreateConnectionParams 描述创建连接时需要落库的字段。
 type CreateConnectionParams struct {
 	ProjectID string
@@ -183,6 +191,27 @@ func (r *ConnectionRepository) Delete(ctx context.Context, projectID, connection
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "连接不存在")
 	}
 	return nil
+}
+
+// UpdateStatus 按项目更新连接状态。
+func (r *ConnectionRepository) UpdateStatus(ctx context.Context, projectID, connectionID, status string) (*ConnectionStatusRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+        UPDATE data_connections
+        SET status = $3,
+            updated_at = now()
+        WHERE project_id = $1 AND id = $2
+        RETURNING id, project_id, status, updated_at
+    `, projectID, connectionID, status)
+
+	record := ConnectionStatusRecord{}
+	if err := row.Scan(&record.ID, &record.ProjectID, &record.Status, &record.UpdatedAt); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "连接不存在")
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新连接状态失败", err)
+	}
+
+	return &record, nil
 }
 
 type scannable interface {

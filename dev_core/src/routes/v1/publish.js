@@ -32,6 +32,7 @@ router.post("/:projectId", authenticate, requireCapability("release:publish"), a
       description,
       type,
       deployedBy,
+      authorization: req.headers.authorization,
     });
 
     return ApiResponse.success(res, result);

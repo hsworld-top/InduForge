@@ -1,23 +1,66 @@
 const { Sequelize } = require("sequelize");
-const mysql = require("mysql2/promise");
+const { Client } = require("pg");
 const dayjs = require("dayjs");
 require("dotenv").config();
 const { logger } = require("../utils/logger");
 const { TIME_FORMAT } = require("../constants/time");
 
+const USER_ROLE_VALUES = [
+  "SUPER_ADMIN",
+  "SYSTEM_ADMIN",
+  "PROJECT_ADMIN",
+  "OPS_ADMIN",
+  "USER_ADMIN",
+  "DEVELOPER",
+  "OPERATOR",
+  "VIEWER",
+];
+
+const getDatabaseConfig = () => ({
+  host: process.env.DB_HOST || "127.0.0.1",
+  port: Number(process.env.DB_PORT || 5432),
+  user: process.env.DB_USER || "postgres",
+  password: process.env.DB_PASSWORD || "postgres",
+  database: process.env.DB_NAME || "tenant_management",
+  adminDatabase: process.env.DB_ADMIN_NAME || "postgres",
+  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 10000),
+  queryTimeout: Number(process.env.DB_QUERY_TIMEOUT || 30000),
+  sslEnabled: String(process.env.DB_SSL || "false").toLowerCase() === "true",
+});
+
+const getPgSslConfig = (dbConfig) =>
+  dbConfig.sslEnabled
+    ? {
+        rejectUnauthorized:
+          String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "false").toLowerCase() ===
+          "true",
+      }
+    : false;
+
+const buildAdminClient = (database) => {
+  const dbConfig = getDatabaseConfig();
+  return new Client({
+    host: dbConfig.host,
+    port: dbConfig.port,
+    user: dbConfig.user,
+    password: dbConfig.password,
+    database,
+    connectionTimeoutMillis: dbConfig.connectTimeout,
+    ssl: getPgSslConfig(dbConfig),
+  });
+};
+
+const sequelizeConfig = getDatabaseConfig();
+
 const sequelize = new Sequelize(
-  process.env.DB_NAME || "tenant_management",
-  process.env.DB_USER || "root",
-  process.env.DB_PASSWORD || "",
+  sequelizeConfig.database,
+  sequelizeConfig.user,
+  sequelizeConfig.password,
   {
-    host: process.env.DB_HOST || "127.0.0.1",
-    port: Number(process.env.DB_PORT || 3306),
-    dialect: "mysql",
-    // logging: process.env.NODE_ENV === 'development' ? (msg) => logger.debug(msg) : false,
+    host: sequelizeConfig.host,
+    port: sequelizeConfig.port,
+    dialect: "postgres",
     logging: false,
-    // 添加查询超时
-    queryTimeout: Number(process.env.DB_QUERY_TIMEOUT || 30000), // 30 秒查询超时
-    // 查询级重试（针对连接瞬断、连接被服务端回收等可恢复错误）
     retry: {
       max: Number(process.env.DB_QUERY_RETRY_MAX || 2),
       match: [
@@ -26,65 +69,44 @@ const sequelize = new Sequelize(
         /SequelizeConnectionAcquireTimeoutError/i,
         /SequelizeHostNotReachableError/i,
         /SequelizeConnectionTimedOutError/i,
-        /PROTOCOL_CONNECTION_LOST/i,
         /ECONNRESET/i,
         /ETIMEDOUT/i,
-        /closed state/i,
+        /Connection terminated unexpectedly/i,
+        /terminating connection due to administrator command/i,
       ],
     },
-    // 连接池配置（连接池会自动处理重连）
     pool: {
-      max: Number(process.env.DB_MAX_CONNECTIONS || 50), // 最大连接数
-      min: 5, // 最小连接数
-      acquire: 10000, // 获取连接超时时间（毫秒）
-      idle: 30000, // 连接空闲时间（毫秒），超过此时间未使用的连接会被释放
-      evict: 5000, // 检查空闲连接的间隔（毫秒）
-      handleDisconnects: true, // 自动处理断开连接
-      // 添加连接验证（高并发时确保连接有效，避免复用已关闭连接）
+      max: Number(process.env.DB_MAX_CONNECTIONS || 50),
+      min: Number(process.env.DB_MIN_CONNECTIONS || 5),
+      acquire: 10000,
+      idle: 30000,
+      evict: 5000,
       validate: (connection) => {
         if (!connection) return false;
-        if (connection._invalid) return false;
-        if (connection._closing) return false;
-        if (connection.stream?.destroyed) return false;
-        if (
-          connection.stream?.readable === false &&
-          connection.stream?.writable === false
-        )
-          return false;
-        if (connection._fatalError) return false;
-        if (connection._protocolError) return false;
+        if (connection._ending || connection.ending) return false;
+        if (connection._connected === false) return false;
         return true;
       },
     },
-    // 连接选项
     dialectOptions: {
-      connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 10000), // 连接超时（毫秒）
-      // MySQL 特定选项
-      supportBigNumbers: true, // 支持大数字
-      bigNumberStrings: true, // 大数字以字符串返回
-      // 添加连接选项
-      multipleStatements: false, // 禁用多语句执行（防止 SQL 注入）
-      // 启用 TCP keepalive，降低长连接被中间网络设备回收概率
-      enableKeepAlive: true,
-      keepAliveInitialDelay: 0,
-      // 字符集和时区配置（高并发时重要）
-      charset: "utf8mb4", // 使用 utf8mb4 支持完整的 Unicode（包括 emoji）
+      statement_timeout: sequelizeConfig.queryTimeout,
+      query_timeout: sequelizeConfig.queryTimeout,
+      keepAlive: true,
+      application_name: "dev_core",
+      ssl: getPgSslConfig(sequelizeConfig),
     },
-    // 连接后执行（优化：减少日志开销）
     hooks: {
       afterConnect: (connection) => {
-        // 仅在开发环境记录日志，生产环境减少日志开销
         if (process.env.NODE_ENV === "development") {
           logger.debug("Database connection established", {
-            threadId: connection.threadId,
+            processId: connection.processID,
           });
         }
       },
       afterDisconnect: (connection) => {
-        // 仅在开发环境记录日志
         if (process.env.NODE_ENV === "development") {
           logger.warn("Database connection closed", {
-            threadId: connection?.threadId,
+            processId: connection?.processID,
           });
         }
       },
@@ -97,7 +119,7 @@ const sequelize = new Sequelize(
  */
 let dbStatus = {
   connected: false,
-  degraded: false, // 降级状态（连接失败但服务继续运行）
+  degraded: false,
   lastError: null,
   lastErrorTime: null,
   retryCount: 0,
@@ -114,7 +136,7 @@ const startDbHealthCheck = () => {
     return;
   }
 
-  const checkInterval = Number(process.env.DB_DEGRADED_RETRY_INTERVAL || 30000); // 30秒
+  const checkInterval = Number(process.env.DB_DEGRADED_RETRY_INTERVAL || 30000);
 
   dbHealthCheckInterval = setInterval(async () => {
     if (dbStatus.degraded && !dbStatus.connected) {
@@ -126,7 +148,7 @@ const startDbHealthCheck = () => {
         dbStatus.lastError = null;
         logger.info("Database connection recovered from degraded mode");
       } catch (error) {
-        dbStatus.retryCount++;
+        dbStatus.retryCount += 1;
         dbStatus.lastError = error.message;
         dbStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
         logger.debug(
@@ -159,85 +181,75 @@ const shouldAutoSyncSchema = () => {
 };
 
 /**
- * 兼容历史数据库结构：扩展 users.role 枚举。
- * 旧库中 role 可能仅包含 DEVELOPER/OPERATOR/VIEWER，导致新角色写入失败。
+ * 兼容历史 PostgreSQL 库结构：确保 users.role 约束包含当前全部角色。
+ * 该修复不阻断启动，仅用于平滑接入旧库。
  * @returns {Promise<void>}
  */
 const ensureUserRoleEnumCompatibility = async () => {
+  const roleList = USER_ROLE_VALUES.map((value) => `'${value}'`).join(", ");
+
   try {
     await sequelize.query(`
       ALTER TABLE users
-      MODIFY COLUMN role ENUM(
-        'SUPER_ADMIN',
-        'SYSTEM_ADMIN',
-        'PROJECT_ADMIN',
-        'OPS_ADMIN',
-        'USER_ADMIN',
-        'DEVELOPER',
-        'OPERATOR',
-        'VIEWER'
-      ) NOT NULL COMMENT '系统角色'
+      DROP CONSTRAINT IF EXISTS users_role_check
     `);
-    logger.info("✅ users.role 枚举兼容检查完成");
+    await sequelize.query(`
+      ALTER TABLE users
+      ADD CONSTRAINT users_role_check
+      CHECK ("role" IN (${roleList}))
+    `);
+    logger.info("✅ users.role 约束兼容检查完成");
   } catch (error) {
-    // 该修复属于兼容增强，失败不阻断服务启动
-    logger.warn("users.role 枚举兼容修复失败，将继续启动服务", {
+    logger.warn("users.role 约束兼容修复失败，将继续启动服务", {
       error: error.message,
     });
   }
 };
 
 /**
- * 测试 MySQL 服务器连接（不指定数据库）
+ * 测试 PostgreSQL 服务连接（连接到管理库，不指定业务库）
  * @returns {Promise<{success: boolean, error?: Error}>}
  */
-const testMySQLServerConnection = async () => {
-  const connectionConfig = {
-    host: process.env.DB_HOST || "127.0.0.1",
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "",
-    connectTimeout: 10000,
-  };
+const testPostgresServerConnection = async () => {
+  const dbConfig = getDatabaseConfig();
+  const client = buildAdminClient(dbConfig.adminDatabase);
 
   try {
-    const connection = await mysql.createConnection(connectionConfig);
-    await connection.end();
+    await client.connect();
     return { success: true };
   } catch (error) {
     return { success: false, error };
+  } finally {
+    await client.end().catch(() => {});
   }
 };
 
 /**
  * 检查数据库是否存在
+ * @returns {Promise<boolean>}
  */
 const checkDatabaseExists = async () => {
-  const dbName = process.env.DB_NAME || "tenant_management";
-  const connectionConfig = {
-    host: process.env.DB_HOST || "127.0.0.1",
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "",
-    connectTimeout: 10000,
-  };
+  const dbConfig = getDatabaseConfig();
+  const client = buildAdminClient(dbConfig.adminDatabase);
 
   try {
-    const connection = await mysql.createConnection(connectionConfig);
-    const [rows] = await connection.query(
-      `SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?`,
-      [dbName],
+    await client.connect();
+    const result = await client.query(
+      "SELECT 1 FROM pg_database WHERE datname = $1 LIMIT 1",
+      [dbConfig.database],
     );
-    await connection.end();
-    return rows.length > 0;
+    return result.rowCount > 0;
   } catch (error) {
     logger.error("检查数据库是否存在时出错", { error: error.message });
     return false;
+  } finally {
+    await client.end().catch(() => {});
   }
 };
 
 /**
  * 自动创建并初始化数据库
+ * @returns {Promise<boolean>}
  */
 const autoInitializeDatabase = async () => {
   try {
@@ -254,7 +266,7 @@ const autoInitializeDatabase = async () => {
 
     console.log("\n🔧 数据库初始化指南:");
     console.log("=".repeat(50));
-    console.log("1. 确保 MySQL 服务正在运行");
+    console.log("1. 确保 PostgreSQL 服务正在运行");
     console.log("2. 手动执行数据库初始化脚本:");
     console.log(`   cd ${process.cwd()}`);
     console.log("   node scripts/init-database.js init");
@@ -267,60 +279,49 @@ const autoInitializeDatabase = async () => {
 
 // 测试数据库连接
 const testConnection = async () => {
+  const dbConfig = getDatabaseConfig();
+
   try {
-    // 1. 先测试 MySQL 服务器连接（不指定数据库）
-    logger.info("🔍 测试 MySQL 服务器连接...");
-    const serverTestResult = await testMySQLServerConnection();
+    logger.info("🔍 测试 PostgreSQL 服务连接...");
+    const serverTestResult = await testPostgresServerConnection();
 
     if (!serverTestResult.success) {
       const error = serverTestResult.error;
-      logger.error("❌ MySQL 服务器连接失败，无法启动应用", {
-        host: process.env.DB_HOST || "127.0.0.1",
-        port: process.env.DB_PORT || 3306,
-        user: process.env.DB_USER || "root",
+      logger.error("❌ PostgreSQL 服务连接失败，无法启动应用", {
+        host: dbConfig.host,
+        port: dbConfig.port,
+        user: dbConfig.user,
         error: error.message,
         code: error.code,
-        errno: error.errno,
       });
 
-      console.log("\n🔧 MySQL 服务器连接问题排查:");
+      console.log("\n🔧 PostgreSQL 服务连接问题排查:");
       console.log("=".repeat(50));
-      console.log("1. 检查 MySQL 服务是否正在运行");
-      console.log("   - Linux: sudo service mysql status");
-      console.log("   - Mac: brew services list | grep mysql");
-      console.log("   - Windows: 检查服务管理器");
-      console.log("");
+      console.log("1. 检查 PostgreSQL 服务是否正在运行");
       console.log("2. 检查连接配置:");
-      console.log(`   - DB_HOST: ${process.env.DB_HOST || "127.0.0.1"}`);
-      console.log(`   - DB_PORT: ${process.env.DB_PORT || 3306}`);
-      console.log(`   - DB_USER: ${process.env.DB_USER || "root"}`);
+      console.log(`   - DB_HOST: ${dbConfig.host}`);
+      console.log(`   - DB_PORT: ${dbConfig.port}`);
+      console.log(`   - DB_USER: ${dbConfig.user}`);
       console.log(
-        `   - DB_PASSWORD: ${process.env.DB_PASSWORD ? "*** (已设置)" : "⚠️ 未设置"}`,
+        `   - DB_PASSWORD: ${dbConfig.password ? "*** (已设置)" : "⚠️ 未设置"}`,
       );
       console.log("");
       console.log("3. 测试网络连接:");
-      console.log(`   - ping ${process.env.DB_HOST || "127.0.0.1"}`);
-      console.log(
-        `   - telnet ${process.env.DB_HOST || "127.0.0.1"} ${process.env.DB_PORT || 3306}`,
-      );
+      console.log(`   - Test-NetConnection ${dbConfig.host} -Port ${dbConfig.port}`);
       console.log("=".repeat(50));
       console.log("");
 
-      logger.warn("应用将退出，请先解决 MySQL 服务器连接问题");
+      logger.warn("应用将退出，请先解决 PostgreSQL 服务连接问题");
       process.exit(1);
     }
 
-    logger.info("✅ MySQL 服务器连接成功");
+    logger.info("✅ PostgreSQL 服务连接成功");
 
-    // 2. 检查数据库是否存在
-    const dbName = process.env.DB_NAME || "tenant_management";
-    logger.info(`🔍 检查数据库 '${dbName}' 是否存在...`);
+    logger.info(`🔍 检查数据库 '${dbConfig.database}' 是否存在...`);
     const dbExists = await checkDatabaseExists();
 
     if (!dbExists) {
-      logger.warn(`⚠️  数据库 '${dbName}' 不存在，将自动创建并初始化`);
-
-      // 3. 自动创建并初始化数据库
+      logger.warn(`⚠️ 数据库 '${dbConfig.database}' 不存在，将自动创建并初始化`);
       const initSuccess = await autoInitializeDatabase();
 
       if (!initSuccess) {
@@ -328,14 +329,12 @@ const testConnection = async () => {
         process.exit(1);
       }
 
-      // 等待一下，确保数据库创建完成
       await new Promise((resolve) => setTimeout(resolve, 1000));
     } else {
-      logger.info(`✅ 数据库 '${dbName}' 已存在`);
+      logger.info(`✅ 数据库 '${dbConfig.database}' 已存在`);
     }
 
-    // 4. 测试 Sequelize 连接（使用指定数据库）
-    logger.info("🔍 测试数据库连接...");
+    logger.info("🔍 测试业务数据库连接...");
     await sequelize.authenticate();
     logger.info("✅ 数据库连接成功");
 
@@ -351,7 +350,6 @@ const testConnection = async () => {
       logger.info("⏭️ 已禁用数据库结构自动同步（DB_AUTO_SCHEMA_SYNC=false）");
     }
 
-    // 启动时自动修复历史库 role 枚举，避免新角色写入失败。
     await ensureUserRoleEnumCompatibility();
 
     dbStatus.connected = true;
@@ -359,23 +357,17 @@ const testConnection = async () => {
     dbStatus.retryCount = 0;
     dbStatus.lastError = null;
 
-    // 启动健康检查（用于降级模式下的重连）
     startDbHealthCheck();
   } catch (error) {
-    // 检测数据库不存在的情况（双重检查，防止自动初始化失败）
-    if (
-      error.message.includes("Unknown database") ||
-      error.message.includes("ER_BAD_DB_ERROR") ||
-      (error.sqlState === "42000" && error.errno === 1049)
-    ) {
+    if (error.code === "3D000" || error.message.includes("does not exist")) {
       logger.error("❌ 数据库不存在，自动初始化可能失败", {
-        database: process.env.DB_NAME || "tenant_management",
+        database: dbConfig.database,
         error: error.message,
       });
 
       console.log("\n🔧 数据库初始化指南:");
       console.log("=".repeat(50));
-      console.log("1. 确保 MySQL 服务正在运行");
+      console.log("1. 确保 PostgreSQL 服务正在运行");
       console.log("2. 执行数据库初始化脚本:");
       console.log(`   cd ${process.cwd()}`);
       console.log("   node scripts/init-database.js init");
@@ -385,35 +377,27 @@ const testConnection = async () => {
       logger.warn("应用将退出，请先初始化数据库后再启动");
       process.exit(1);
     }
+
     dbStatus.connected = false;
     dbStatus.lastError = error.message;
     dbStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
     logger.error("Unable to connect to the database", {
       error: error.message,
       code: error.code,
-      errno: error.errno,
-      sqlState: error.sqlState,
-      host: process.env.DB_HOST || "127.0.0.1",
-      port: process.env.DB_PORT || 3306,
-      database: process.env.DB_NAME || "tenant_management",
-      user: process.env.DB_USER || "root",
+      host: dbConfig.host,
+      port: dbConfig.port,
+      database: dbConfig.database,
+      user: dbConfig.user,
     });
 
-    // 提供详细的错误诊断信息
-    if (error.message.includes("Access denied")) {
+    if (error.message.includes("password authentication failed")) {
       logger.error("Database authentication failed. Please check:", {
         checklist: [
-          `✓ DB_USER: ${process.env.DB_USER || "root"}`,
-          `✓ DB_PASSWORD: ${process.env.DB_PASSWORD ? "*** (set)" : "⚠️ NOT SET"}`,
-          `✓ DB_HOST: ${process.env.DB_HOST || "127.0.0.1"}`,
-          `✓ DB_PORT: ${process.env.DB_PORT || 3306}`,
-          `✓ DB_NAME: ${process.env.DB_NAME || "tenant_management"}`,
-        ],
-        solutions: [
-          "1. Verify password in .env file matches MySQL root password",
-          "2. Check MySQL user permissions: SELECT user, host FROM mysql.user;",
-          "3. If using Docker, ensure DB_HOST points to correct container/service name",
-          "4. Grant permissions: GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY 'password'; FLUSH PRIVILEGES;",
+          `✓ DB_USER: ${dbConfig.user}`,
+          `✓ DB_PASSWORD: ${dbConfig.password ? "*** (set)" : "⚠️ NOT SET"}`,
+          `✓ DB_HOST: ${dbConfig.host}`,
+          `✓ DB_PORT: ${dbConfig.port}`,
+          `✓ DB_NAME: ${dbConfig.database}`,
         ],
       });
     } else if (
@@ -422,23 +406,16 @@ const testConnection = async () => {
     ) {
       logger.error("Database connection refused. Please check:", {
         checklist: [
-          `✓ MySQL service is running`,
-          `✓ DB_HOST is correct: ${process.env.DB_HOST || "127.0.0.1"}`,
-          `✓ DB_PORT is correct: ${process.env.DB_PORT || 3306}`,
-          `✓ Firewall allows connection`,
-        ],
-        solutions: [
-          "1. Start MySQL service: sudo service mysql start (Linux) or brew services start mysql (Mac)",
-          "2. Check if MySQL is listening: netstat -an | grep 3306",
-          "3. If using Docker, check container status: docker ps",
-          "4. Verify network connectivity: ping <DB_HOST>",
+          "✓ PostgreSQL service is running",
+          `✓ DB_HOST is correct: ${dbConfig.host}`,
+          `✓ DB_PORT is correct: ${dbConfig.port}`,
+          "✓ Firewall allows connection",
         ],
       });
     }
 
+    dbStatus.degraded = true;
     if (process.env.NODE_ENV === "production") {
-      // 生产环境：进入降级模式而不是退出
-      dbStatus.degraded = true;
       logger.error(
         "Database connection failed in production, entering degraded mode",
         {
@@ -446,32 +423,20 @@ const testConnection = async () => {
           degraded: true,
         },
       );
-      logger.warn(
-        "⚠️  Database is in degraded mode. Service will continue but database-dependent features are disabled.",
-      );
-      logger.info(
-        "Database will continue to retry periodically. Service will recover automatically when database is available.",
-      );
-
-      // 启动健康检查（用于降级模式下的重连）
-      startDbHealthCheck();
     } else {
-      // 开发模式：进入降级模式
-      dbStatus.degraded = true;
       logger.warn("Continuing without database connection for development...");
       logger.warn(
-        "⚠️  Database-dependent features will not work until connection is established.",
+        "⚠️ Database-dependent features will not work until connection is established.",
       );
-
-      // 启动健康检查（用于降级模式下的重连）
-      startDbHealthCheck();
     }
+
+    startDbHealthCheck();
   }
 };
 
 /**
  * 检查数据库连接状态
- * @returns {Promise<boolean>} 是否连接
+ * @returns {Promise<boolean>}
  */
 const checkConnection = async () => {
   try {
@@ -495,7 +460,7 @@ const checkConnection = async () => {
 
 /**
  * 健康检查：检查数据库连接池状态
- * @returns {object} 连接池状态
+ * @returns {object}
  */
 const getPoolStatus = () => {
   try {
@@ -523,26 +488,18 @@ const getPoolStatus = () => {
 
 /**
  * 获取数据库连接状态信息
- * @returns {object} 连接状态
+ * @returns {object}
  */
-const getDbStatus = () => {
-  return {
-    ...dbStatus,
-    pool: getPoolStatus(),
-  };
-};
+const getDbStatus = () => ({
+  ...dbStatus,
+  pool: getPoolStatus(),
+});
 
 /**
  * 检查是否处于降级模式
- * @returns {boolean} 是否降级
+ * @returns {boolean}
  */
-const isDbDegraded = () => {
-  return dbStatus.degraded;
-};
-
-// 注意：Sequelize 的连接池会自动处理重连
-// 连接池会在连接断开时自动创建新连接
-// 通过 pool.handleDisconnects: true 配置启用自动重连
+const isDbDegraded = () => dbStatus.degraded;
 
 module.exports = {
   sequelize,

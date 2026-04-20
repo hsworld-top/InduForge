@@ -192,34 +192,7 @@ func (s *DataPointService) GetDataPointValue(ctx context.Context, projectID, pat
 	if err != nil {
 		return nil, err
 	}
-
-	now := time.Now().UTC()
-	value := DataPointValue{
-		Path:      record.Path,
-		Value:     nil,
-		Quality:   "unknown",
-		Timestamp: now,
-		Status:    record.Status,
-	}
-
-	if record.SourceType == "db.query" && record.SourceID != nil && strings.TrimSpace(*record.SourceID) != "" {
-		parameters, err := dataPointQueryParameters(record.SourceConfig)
-		if err != nil {
-			return nil, err
-		}
-		result, err := s.queries.ExecuteQueryForProject(ctx, projectID, *record.SourceID, ExecuteQueryInput{
-			Parameters: parameters,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		value.Value = result.Data
-		value.Quality = "good"
-		return &value, nil
-	}
-
-	return &value, nil
+	return s.buildValueFromRecord(ctx, projectID, *record)
 }
 
 // UpdateDataPoint 更新单个数据点。

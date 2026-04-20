@@ -135,6 +135,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	queryRepository := repository.NewQueryRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
+	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
 	protocolWave1Repository := repository.NewProtocolWave1Repository(pool)
 	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
 	computeRepository := repository.NewComputeRepository(pool)
@@ -142,7 +143,8 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	connectionService := service.NewConnectionService(connectionRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, pool)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService)
-	mqttService := service.NewMqttService(mqttRepository)
+	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
+	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
 	protocolWave2Service := service.NewProtocolWave2Service(protocolWave2Repository)
 	computeService := service.NewComputeService(
@@ -156,6 +158,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	queryHandler := handler.NewQueryHandler(queryService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
+	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
 	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service)
 	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
 	computeHandler := handler.NewComputeHandler(computeService)
@@ -164,6 +167,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
+		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
 		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
 		router.WithComputeRoutes(computeHandler, jwtValidator),

@@ -6,10 +6,10 @@
 
 ```bash
 # 初始化数据库（创建表结构和基础数据）
-npm run db:init
+pnpm run db:init
 
 # 重置数据库（删除所有表后重新初始化）
-npm run db:reset
+pnpm run db:reset
 ```
 
 ## 文件说明
@@ -47,13 +47,13 @@ npm run db:reset
 
 ## 环境变量
 
-脚本会从 `.env` 文件读取以下数据库配置：
+脚本会从 `.env` 文件读取以下 PostgreSQL 配置：
 
 ```env
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=123456
+DB_HOST=172.21.242.174
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
 DB_NAME=tenant_management
 ```
 
@@ -61,7 +61,7 @@ DB_NAME=tenant_management
 
 这种混合架构结合了 SQL 和 JavaScript 的优点：
 
-1. **表结构清晰可见** - SQL 文件直接展示所有表结构、索引和约束
+1. **表结构清晰可见** - SQL 文件直接展示 PostgreSQL 表结构、索引和约束
 2. **初始数据灵活处理** - JavaScript 可以进行密码哈希等复杂数据处理
 3. **开发友好** - 无需管理复杂的迁移文件版本控制
 4. **运行时保持 Sequelize** - 应用运行时仍使用 Sequelize 进行数据操作

@@ -2,36 +2,29 @@
 
 /**
  * 数据库初始化脚本
- * 执行 database/init.sql 文件来初始化数据库
+ * 使用 PostgreSQL 创建业务库，并执行 database/init.sql 完成结构同步。
  */
 
-const mysql = require("mysql2/promise");
+const { Client } = require("pg");
 const bcrypt = require("bcryptjs");
 const dayjs = require("dayjs");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 
-// 数据库配置
 const dbConfig = {
   host: process.env.DB_HOST || "127.0.0.1",
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "123456",
+  port: Number(process.env.DB_PORT || 5432),
+  user: process.env.DB_USER || "postgres",
+  password: process.env.DB_PASSWORD || "postgres",
   database: process.env.DB_NAME || "tenant_management",
-  multipleStatements: true, // 允许执行多条语句
-  connectTimeout: 60000,
+  adminDatabase: process.env.DB_ADMIN_NAME || "postgres",
+  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 60000),
+  sslEnabled: String(process.env.DB_SSL || "false").toLowerCase() === "true",
 };
 
-const NON_CRITICAL_SQL_ERROR_CODES = new Set([
-  "ER_TABLE_EXISTS_ERROR",
-  "ER_DUP_KEYNAME",
-  "ER_DUP_FIELDNAME",
-  "ER_FK_DUP_NAME",
-  "ER_DUP_ENTRY",
-]);
+const NON_CRITICAL_SQL_ERROR_CODES = new Set(["42P07", "42710", "23505"]);
 
-// 初始数据配置
 const initialData = {
   superAdmin: {
     username: process.env.SUPER_ADMIN_USERNAME || "superadmin",
@@ -56,21 +49,66 @@ const initialData = {
   },
 };
 
-/**
- * 插入初始数据
- */
-async function insertInitialData(connection) {
+const getSslConfig = () =>
+  dbConfig.sslEnabled
+    ? {
+        rejectUnauthorized:
+          String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "false").toLowerCase() ===
+          "true",
+      }
+    : false;
+
+const buildClient = (database) =>
+  new Client({
+    host: dbConfig.host,
+    port: dbConfig.port,
+    user: dbConfig.user,
+    password: dbConfig.password,
+    database,
+    connectionTimeoutMillis: dbConfig.connectTimeout,
+    ssl: getSslConfig(),
+  });
+
+const quoteIdentifier = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    throw new Error("数据库名称不能为空");
+  }
+  return `"${normalized.replace(/"/g, '""')}"`;
+};
+
+async function insertInitialData(client) {
   try {
     console.log("📝 插入初始数据...");
 
     const now = dayjs().toDate();
 
-    // 创建默认租户
     console.log("🏢 创建默认租户...");
-    await connection.query(
-      `INSERT INTO tenants (id, name, code, description, status, contactEmail, maxUsers, maxProjects, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE updatedAt = VALUES(updatedAt)`,
+    await client.query(
+      `
+        INSERT INTO tenants (
+          "id",
+          "name",
+          "code",
+          "description",
+          "status",
+          "contactEmail",
+          "maxUsers",
+          "maxProjects",
+          "createdAt",
+          "updatedAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT ("code") DO UPDATE
+        SET
+          "name" = EXCLUDED."name",
+          "description" = EXCLUDED."description",
+          "status" = EXCLUDED."status",
+          "contactEmail" = EXCLUDED."contactEmail",
+          "maxUsers" = EXCLUDED."maxUsers",
+          "maxProjects" = EXCLUDED."maxProjects",
+          "updatedAt" = EXCLUDED."updatedAt"
+      `,
       [
         initialData.defaultTenant.id,
         initialData.defaultTenant.name,
@@ -82,19 +120,36 @@ async function insertInitialData(connection) {
         initialData.defaultTenant.maxProjects,
         now,
         now,
-      ]
+      ],
     );
 
-    // 创建超级管理员用户
     console.log("👑 创建超级管理员...");
     const superAdminHashedPassword = await bcrypt.hash(
       initialData.superAdmin.password,
-      12
+      12,
     );
-    await connection.query(
-      `INSERT INTO users (id, username, password, fullName, role, status, tenantId, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE updatedAt = VALUES(updatedAt)`,
+    await client.query(
+      `
+        INSERT INTO users (
+          "id",
+          "username",
+          "password",
+          "fullName",
+          "role",
+          "status",
+          "tenantId",
+          "createdAt",
+          "updatedAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT ("tenantId", "username") DO UPDATE
+        SET
+          "password" = EXCLUDED."password",
+          "fullName" = EXCLUDED."fullName",
+          "role" = EXCLUDED."role",
+          "status" = EXCLUDED."status",
+          "updatedAt" = EXCLUDED."updatedAt"
+      `,
       [
         initialData.superAdmin.userId,
         initialData.superAdmin.username,
@@ -105,20 +160,37 @@ async function insertInitialData(connection) {
         initialData.defaultTenant.id,
         now,
         now,
-      ]
+      ],
     );
 
-    // 创建系统管理员用户
     console.log("👤 创建系统管理员...");
     const systemAdminHashedPassword = await bcrypt.hash(
       initialData.tenantDefaults.defaultAdminPassword,
-      12
+      12,
     );
     const systemAdminId = "550e8400-e29b-41d4-a716-446655440002";
-    await connection.query(
-      `INSERT INTO users (id, username, password, fullName, role, status, tenantId, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE updatedAt = VALUES(updatedAt)`,
+    await client.query(
+      `
+        INSERT INTO users (
+          "id",
+          "username",
+          "password",
+          "fullName",
+          "role",
+          "status",
+          "tenantId",
+          "createdAt",
+          "updatedAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT ("tenantId", "username") DO UPDATE
+        SET
+          "password" = EXCLUDED."password",
+          "fullName" = EXCLUDED."fullName",
+          "role" = EXCLUDED."role",
+          "status" = EXCLUDED."status",
+          "updatedAt" = EXCLUDED."updatedAt"
+      `,
       [
         systemAdminId,
         initialData.tenantDefaults.defaultAdminUsername,
@@ -129,7 +201,7 @@ async function insertInitialData(connection) {
         initialData.defaultTenant.id,
         now,
         now,
-      ]
+      ],
     );
 
     console.log("✅ 初始数据插入完成");
@@ -139,11 +211,6 @@ async function insertInitialData(connection) {
   }
 }
 
-/**
- * 将 SQL 脚本拆分为逐条可执行语句（去除注释）
- * @param {string} sqlContent SQL 文件内容
- * @returns {string[]}
- */
 function splitSqlStatements(sqlContent) {
   const lines = sqlContent
     .split("\n")
@@ -159,30 +226,51 @@ function splitSqlStatements(sqlContent) {
     .filter(Boolean);
 }
 
-/**
- * 执行 init.sql 的结构同步，确保数据库结构与 SQL 定义一致
- * @param {object} options 配置
- * @param {boolean} [options.reset=false] 是否先重置数据库
- * @param {boolean} [options.seed=true] 是否插入初始数据
- * @returns {Promise<{total:number, executed:number, skipped:number}>}
- */
-async function syncDatabaseSchema(options = {}) {
-  const { reset = false, seed = true } = options;
-  let connection;
+async function ensureDatabaseExists(reset = false) {
+  const adminClient = buildClient(dbConfig.adminDatabase);
 
   try {
-    const connectionConfig = { ...dbConfig };
-    delete connectionConfig.database;
-    connection = await mysql.createConnection(connectionConfig);
+    await adminClient.connect();
 
     if (reset) {
-      await connection.query(`DROP DATABASE IF EXISTS \`${dbConfig.database}\``);
+      await adminClient.query(
+        `
+          SELECT pg_terminate_backend(pid)
+          FROM pg_stat_activity
+          WHERE datname = $1
+            AND pid <> pg_backend_pid()
+        `,
+        [dbConfig.database],
+      );
+      await adminClient.query(
+        `DROP DATABASE IF EXISTS ${quoteIdentifier(dbConfig.database)}`,
+      );
     }
 
-    await connection.query(
-      `CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    const result = await adminClient.query(
+      "SELECT 1 FROM pg_database WHERE datname = $1 LIMIT 1",
+      [dbConfig.database],
     );
-    await connection.query(`USE \`${dbConfig.database}\``);
+
+    if (result.rowCount === 0) {
+      await adminClient.query(
+        `CREATE DATABASE ${quoteIdentifier(dbConfig.database)}`,
+      );
+    }
+  } finally {
+    await adminClient.end().catch(() => {});
+  }
+}
+
+async function syncDatabaseSchema(options = {}) {
+  const { reset = false, seed = true } = options;
+  let client;
+
+  try {
+    await ensureDatabaseExists(reset);
+
+    client = buildClient(dbConfig.database);
+    await client.connect();
 
     const sqlFilePath = path.join(__dirname, "..", "database", "init.sql");
     if (!fs.existsSync(sqlFilePath)) {
@@ -196,7 +284,7 @@ async function syncDatabaseSchema(options = {}) {
 
     for (const statement of statements) {
       try {
-        await connection.query(statement);
+        await client.query(statement);
         executed += 1;
       } catch (error) {
         if (NON_CRITICAL_SQL_ERROR_CODES.has(error.code)) {
@@ -208,7 +296,7 @@ async function syncDatabaseSchema(options = {}) {
     }
 
     if (seed) {
-      await insertInitialData(connection);
+      await insertInitialData(client);
     }
 
     return {
@@ -217,21 +305,18 @@ async function syncDatabaseSchema(options = {}) {
       skipped,
     };
   } finally {
-    if (connection) {
-      await connection.end();
+    if (client) {
+      await client.end().catch(() => {});
     }
   }
 }
 
-/**
- * 执行 SQL 文件
- */
 async function executeSqlFile() {
   try {
     console.log("🔄 正在同步数据库结构...");
     const result = await syncDatabaseSchema({ reset: false, seed: true });
     console.log(
-      `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`
+      `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`,
     );
     console.log("🎉 数据库初始化完成！");
   } catch (error) {
@@ -240,15 +325,12 @@ async function executeSqlFile() {
   }
 }
 
-/**
- * 重置数据库（删除数据库并重新创建所有表）
- */
 async function resetDatabase() {
   try {
     console.log("🔄 正在重置并同步数据库结构...");
     const result = await syncDatabaseSchema({ reset: true, seed: true });
     console.log(
-      `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`
+      `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`,
     );
     console.log("🎉 数据库重置完成！");
   } catch (error) {
@@ -257,7 +339,6 @@ async function resetDatabase() {
   }
 }
 
-// 主函数
 async function main() {
   const command = process.argv[2];
 
@@ -269,13 +350,12 @@ async function main() {
     console.log("使用方法:");
     console.log("  node scripts/init-database.js init    # 初始化数据库");
     console.log(
-      "  node scripts/init-database.js reset   # 重置数据库（删除所有表）"
+      "  node scripts/init-database.js reset   # 重置数据库（删除所有表）",
     );
     process.exit(1);
   }
 }
 
-// 运行主函数
 if (require.main === module) {
   main().catch((error) => {
     console.error("❌ 脚本执行失败:", error);
@@ -287,4 +367,5 @@ module.exports = {
   executeSqlFile,
   resetDatabase,
   syncDatabaseSchema,
+  splitSqlStatements,
 };

@@ -8,7 +8,6 @@ const userRoutes = require("./user");
 const projectRoutes = require("./project");
 const logRoutes = require("./log");
 const roleRoutes = require("./role");
-const dataRoutes = require("./data");
 const designRoutes = require("./design");
 const designAssetsRoutes = require("./designAssets");
 const pageLockRoutes = require("./pageLock");
@@ -33,7 +32,6 @@ function buildV1Router(options = {}) {
   router.use("/projects", projectRoutes);
   router.use("/logs", logRoutes);
   router.use("/roles", roleRoutes);
-  router.use("/data", dataRoutes);
   router.use("/design", designRoutes);
   router.use("/design", designAssetsRoutes);
   router.use("/pages", pageLockRoutes);

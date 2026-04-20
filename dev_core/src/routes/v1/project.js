@@ -10,7 +10,12 @@ const ErrorCodes = require('../../constants/errorCodes');
 const appConfig = require('../../config/app');
 
 const designAssetService = require('../../services/designAssetService');
+const { dataDomainClient } = require('../../services/dataDomainClient');
 const deploymentService = require('../../services/deploymentService');
+const {
+  getProjectSettingsRow,
+  upsertProjectSettings,
+} = require('../../services/projectSettingsStore');
 
 const router = express.Router();
 
@@ -20,18 +25,20 @@ const {
   Tenant,
   User,
   DesignPage,
-  DataConnection,
-  DataQuery,
-  DataMqttConfig,
-  DataMqttSubscription,
-  DataMqttTagGroup,
-  DataMqttTag,
-  DataPoint,
-  DataRelationalConfig,
   NodeDeployment,
 } = require('../../models');
 const { authenticateToken, requireResourceOwnership, hasCapability } = require('../../middlewares/auth');
 const { randomUUID } = require('crypto');
+
+const DEFAULT_GLOBAL_SCRIPTS = {
+  system: {
+    startup: { code: '' },
+    shutdown: { code: '' },
+  },
+  timers: { groups: [], items: [] },
+  variableChanges: { groups: [], items: [] },
+  custom: { groups: [], items: [] },
+};
 
 const parseJsonField = (value, fallback) => {
   if (value == null) return fallback;
@@ -58,6 +65,96 @@ const buildContentDisposition = (fileName) => {
   const asciiName = toAsciiFileName(fileName);
   const encoded = encodeURIComponent(safeName);
   return `attachment; filename="${asciiName}.zip"; filename*=UTF-8''${encoded}.zip`;
+};
+
+const normalizeList = (value) => (Array.isArray(value) ? value : []);
+
+const mergeConnectionConfig = (connection, relationalConfig, mqttConfig) => {
+  const baseConfig =
+    connection?.config && typeof connection.config === 'object'
+      ? { ...connection.config }
+      : {};
+
+  if (connection?.type === 'relational' && relationalConfig) {
+    return {
+      ...baseConfig,
+      dbType: relationalConfig.dbType || baseConfig.dbType || 'postgresql',
+      host: relationalConfig.host || baseConfig.host || '',
+      port: relationalConfig.port || baseConfig.port || 5432,
+      database: relationalConfig.database || baseConfig.database || '',
+      username: relationalConfig.username || baseConfig.username || '',
+      password: relationalConfig.password || baseConfig.password || '',
+      schema: relationalConfig.schema ?? baseConfig.schema ?? null,
+      charset: relationalConfig.charset ?? baseConfig.charset ?? null,
+      timezone: relationalConfig.timezone ?? baseConfig.timezone ?? null,
+      ssl: Boolean(relationalConfig.ssl ?? baseConfig.ssl),
+      sslConfig: relationalConfig.sslConfig || baseConfig.sslConfig || {},
+    };
+  }
+
+  if (connection?.type === 'mqtt' && mqttConfig) {
+    return {
+      ...baseConfig,
+      brokerUrl: mqttConfig.brokerUrl || baseConfig.brokerUrl || '',
+      protocol: mqttConfig.protocol || baseConfig.protocol || 'mqtt',
+      port: mqttConfig.port || baseConfig.port || 1883,
+      clientId: mqttConfig.clientId ?? baseConfig.clientId ?? null,
+      username: mqttConfig.username ?? baseConfig.username ?? null,
+      password: mqttConfig.password ?? baseConfig.password ?? null,
+      keepalive: mqttConfig.keepalive ?? baseConfig.keepalive ?? 60,
+      cleanSession: Boolean(mqttConfig.cleanSession ?? baseConfig.cleanSession ?? true),
+      qos: mqttConfig.qos ?? baseConfig.qos ?? 0,
+      reconnectPeriod: mqttConfig.reconnectPeriod ?? baseConfig.reconnectPeriod ?? 1000,
+      connectTimeout: mqttConfig.connectTimeout ?? baseConfig.connectTimeout ?? 30000,
+      will: mqttConfig.will || baseConfig.will || {},
+      sslConfig: mqttConfig.sslConfig || baseConfig.sslConfig || {},
+    };
+  }
+
+  return baseConfig;
+};
+
+const buildProjectSnapshot = (datacenter = {}) => {
+  const relationalConfigs = normalizeList(datacenter.relationalConfigs);
+  const mqttConfigs = normalizeList(datacenter.mqttConfigs);
+  const relationalConfigMap = new Map(
+    relationalConfigs
+      .filter((item) => item?.connectionId)
+      .map((item) => [item.connectionId, item])
+  );
+  const mqttConfigMap = new Map(
+    mqttConfigs
+      .filter((item) => item?.connectionId)
+      .map((item) => [item.connectionId, item])
+  );
+
+  const connections = normalizeList(datacenter.connections).map((item) => ({
+    ...item,
+    config: mergeConnectionConfig(
+      item,
+      relationalConfigMap.get(item.id),
+      mqttConfigMap.get(item.id),
+    ),
+  }));
+
+  return {
+    connections,
+    relationalConfigs,
+    queries: normalizeList(datacenter.queries),
+    mqttConfigs,
+    mqttSubscriptions: normalizeList(datacenter.mqttSubscriptions),
+    mqttTagGroups: normalizeList(datacenter.mqttTagGroups),
+    mqttTags: normalizeList(datacenter.mqttTags),
+    datapoints: normalizeList(datacenter.datapoints),
+  };
+};
+
+const respondRouteError = (res, error, fallbackCode, fallbackStatus) => {
+  if (error?.errorCode && error?.statusCode) {
+    return ApiResponse.error(res, error.errorCode, error.options || {}, error.statusCode);
+  }
+
+  return ApiResponse.error(res, fallbackCode, {}, fallbackStatus);
 };
 
 /**
@@ -166,28 +263,12 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
       order: [['sortOrder', 'ASC']],
     });
 
-    const [settingsRows] = await Project.sequelize.query(
-      'SELECT globalVariables, globalScripts FROM design_project_settings WHERE projectId = ? LIMIT 1',
-      { replacements: [id] }
-    );
-    const settingsRow = Array.isArray(settingsRows) ? settingsRows[0] : settingsRows;
+    const settingsRow = await getProjectSettingsRow(Project.sequelize, id);
 
     const globalVariables = parseJsonField(settingsRow?.globalVariables, null);
     const globalScripts = parseJsonField(settingsRow?.globalScripts, null);
 
-    const connections = await DataConnection.findAll({ where: { projectId: id } });
-    const queries = await DataQuery.findAll({ where: { projectId: id } });
-    const connectionIds = connections.map((item) => item.id);
-    const relationalConfigs = connectionIds.length
-      ? await DataRelationalConfig.findAll({ where: { connectionId: connectionIds } })
-      : [];
-    const mqttConfigs = connectionIds.length
-      ? await DataMqttConfig.findAll({ where: { connectionId: connectionIds } })
-      : [];
-    const mqttSubscriptions = await DataMqttSubscription.findAll({ where: { projectId: id } });
-    const mqttTagGroups = await DataMqttTagGroup.findAll({ where: { projectId: id } });
-    const mqttTags = await DataMqttTag.findAll({ where: { projectId: id } });
-    const datapoints = await DataPoint.findAll({ where: { projectId: id } });
+    const snapshot = await dataDomainClient.getProjectSnapshot(id, req.headers.authorization);
 
     const pageIndex = pages.map((page) => {
       const safeName = sanitizeFileName(page.name || page.id);
@@ -261,35 +342,35 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
     });
 
     archive.append(
-      JSON.stringify(connections.map((item) => item.toJSON()), null, 2),
+      JSON.stringify(snapshot.connections, null, 2),
       { name: 'datacenter/connections.json' }
     );
     archive.append(
-      JSON.stringify(relationalConfigs.map((item) => item.toJSON()), null, 2),
+      JSON.stringify(snapshot.relationalConfigs, null, 2),
       { name: 'datacenter/relational-configs.json' }
     );
     archive.append(
-      JSON.stringify(queries.map((item) => item.toJSON()), null, 2),
+      JSON.stringify(snapshot.queries, null, 2),
       { name: 'datacenter/queries.json' }
     );
     archive.append(
-      JSON.stringify(mqttConfigs.map((item) => item.toJSON()), null, 2),
+      JSON.stringify(snapshot.mqttConfigs, null, 2),
       { name: 'datacenter/mqtt-configs.json' }
     );
     archive.append(
-      JSON.stringify(mqttSubscriptions.map((item) => item.toJSON()), null, 2),
+      JSON.stringify(snapshot.mqttSubscriptions, null, 2),
       { name: 'datacenter/mqtt-subscriptions.json' }
     );
     archive.append(
-      JSON.stringify(mqttTagGroups.map((item) => item.toJSON()), null, 2),
+      JSON.stringify(snapshot.mqttTagGroups, null, 2),
       { name: 'datacenter/mqtt-tag-groups.json' }
     );
     archive.append(
-      JSON.stringify(mqttTags.map((item) => item.toJSON()), null, 2),
+      JSON.stringify(snapshot.mqttTags, null, 2),
       { name: 'datacenter/mqtt-tags.json' }
     );
     archive.append(
-      JSON.stringify(datapoints.map((item) => item.toJSON()), null, 2),
+      JSON.stringify(snapshot.datapoints, null, 2),
       { name: 'datacenter/datapoints.json' }
     );
 
@@ -297,7 +378,7 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
     return;
   } catch (error) {
     logger.error('Export project error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 
@@ -368,26 +449,14 @@ router.post('/import', authenticateToken, validate(Joi.object({
     };
     const globalScripts = settings.globalScripts || null;
 
-    await Project.sequelize.query(
-      `INSERT INTO design_project_settings
-        (projectId, schemaVersion, globalVariables, globalScripts, updatedBy, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        globalVariables = VALUES(globalVariables),
-        globalScripts = VALUES(globalScripts),
-        updatedBy = VALUES(updatedBy),
-        updatedAt = VALUES(updatedAt)`,
-      {
-        replacements: [
-          project.id,
-          '1.0.0',
-          JSON.stringify(globalVariables),
-          JSON.stringify(globalScripts || {}),
-          userId,
-          new Date(),
-        ],
-      },
-    );
+    await upsertProjectSettings(Project.sequelize, {
+      projectId: project.id,
+      schemaVersion: '1.0.0',
+      globalVariables,
+      globalScripts: globalScripts || {},
+      updatedBy: userId,
+      updatedAt: new Date(),
+    });
 
     const pageIdMap = new Map();
     pageList.forEach((item) => {
@@ -438,293 +507,18 @@ router.post('/import', authenticateToken, validate(Joi.object({
 
     await project.update({ entryConfig: nextEntry });
 
-    const datacenter = payload.datacenter || {};
-    const normalizeList = (value) => (Array.isArray(value) ? value : []);
-    const stripMeta = (item) => {
-      if (!item || typeof item !== 'object') return {};
-      const {
-        id,
-        projectId,
-        createdAt,
-        updatedAt,
-        created_by,
-        updated_by,
-        createdBy,
-        updatedBy,
-        ...rest
-      } = item;
-      return rest;
-    };
-    /**
-     * 重写查询类映射变量的 sourceId
-     * @param {Object} definitions - 变量定义
-     * @param {Map<string, string>} idMap - 旧查询ID -> 新查询ID
-     * @returns {Object} 重写后的变量定义
-     */
-    const remapVariableDefinitions = (definitions, maps) => {
-      if (!definitions || typeof definitions !== 'object') return definitions;
-      const next = {};
-      Object.entries(definitions).forEach(([name, detail]) => {
-        if (!detail || typeof detail !== 'object') {
-          next[name] = detail;
-          return;
-        }
-        const nextDetail = { ...detail };
-        const pickMappedId = (sourceType, sourceId) => {
-          if (!sourceId) return null;
-          const type = String(sourceType || '').toLowerCase();
-          if (type.includes('query')) return maps.queryIdMap.get(sourceId) || null;
-          if (type.includes('tag')) return maps.mqttTagIdMap.get(sourceId) || null;
-          if (type.includes('subscription')) {
-            return maps.mqttSubscriptionIdMap.get(sourceId) || null;
-          }
-          return null;
-        };
-        if (nextDetail.sourceType && nextDetail.sourceId) {
-          const mappedId = pickMappedId(nextDetail.sourceType, nextDetail.sourceId);
-          if (mappedId) nextDetail.sourceId = mappedId;
-        }
-        if (nextDetail.source && typeof nextDetail.source === 'object') {
-          const sourceType = nextDetail.source.sourceType || nextDetail.sourceType;
-          if (nextDetail.source.sourceId) {
-            const mappedId = pickMappedId(sourceType, nextDetail.source.sourceId);
-            if (mappedId) {
-              nextDetail.source = {
-                ...nextDetail.source,
-                sourceId: mappedId,
-              };
-            }
-          }
-          if (
-            nextDetail.source.datapointId &&
-            maps.datapointIdMap.has(nextDetail.source.datapointId)
-          ) {
-            nextDetail.source = {
-              ...nextDetail.source,
-              datapointId: maps.datapointIdMap.get(nextDetail.source.datapointId),
-            };
-          }
-        }
-        next[name] = nextDetail;
-      });
-      return next;
-    };
-    /**
-     * 重映射变量中的 sourceId / datapointId
-     * @param {Object} payload - 变量配置
-     * @param {Object} maps - 新旧ID映射
-     * @returns {Object} 重映射后的配置
-     */
-    const remapVariables = (payload, maps) => {
-      if (!payload || typeof payload !== 'object') return payload;
-      if (payload.definitions || payload.groups) {
-        return {
-          ...payload,
-          definitions: remapVariableDefinitions(payload.definitions || {}, maps),
-        };
-      }
-      return remapVariableDefinitions(payload, maps);
-    };
-    const connectionIdMap = new Map();
-    const relationalConfigIdMap = new Map();
-    const queryIdMap = new Map();
-    const mqttConfigIdMap = new Map();
-    const mqttSubscriptionIdMap = new Map();
-    const mqttTagGroupIdMap = new Map();
-    const mqttTagIdMap = new Map();
-    const datapointIdMap = new Map();
-
-    const connectionRows = normalizeList(datacenter.connections).map((item) => {
-      const newId = randomUUID();
-      connectionIdMap.set(item.id, newId);
-      return {
-        ...stripMeta(item),
-        id: newId,
-        projectId: project.id,
-        createdBy: userId,
-        updatedBy: userId,
-      };
-    });
-    if (connectionRows.length) {
-      await DataConnection.bulkCreate(connectionRows);
-    }
-
-    const relationalConfigRows = normalizeList(datacenter.relationalConfigs)
-      .map((item) => {
-        const newConnectionId = connectionIdMap.get(item.connectionId);
-        if (!newConnectionId) return null;
-        const newId = randomUUID();
-        relationalConfigIdMap.set(item.id, newId);
-        return {
-          ...stripMeta(item),
-          id: newId,
-          connectionId: newConnectionId,
-        };
-      })
-      .filter(Boolean);
-    if (relationalConfigRows.length) {
-      await DataRelationalConfig.bulkCreate(relationalConfigRows);
-    }
-
-    const queryRows = normalizeList(datacenter.queries)
-      .map((item) => {
-        const newConnectionId = connectionIdMap.get(item.connectionId);
-        if (!newConnectionId) return null;
-        const newId = randomUUID();
-        queryIdMap.set(item.id, newId);
-        return {
-          ...stripMeta(item),
-          id: newId,
-          projectId: project.id,
-          connectionId: newConnectionId,
-          createdBy: userId,
-          updatedBy: userId,
-        };
-      })
-      .filter(Boolean);
-    if (queryRows.length) {
-      await DataQuery.bulkCreate(queryRows);
-    }
-    const mqttConfigRows = normalizeList(datacenter.mqttConfigs)
-      .map((item) => {
-        const newConnectionId = connectionIdMap.get(item.connectionId);
-        if (!newConnectionId) return null;
-        const newId = randomUUID();
-        mqttConfigIdMap.set(item.id, newId);
-        return {
-          ...stripMeta(item),
-          id: newId,
-          connectionId: newConnectionId,
-        };
-      })
-      .filter(Boolean);
-    if (mqttConfigRows.length) {
-      await DataMqttConfig.bulkCreate(mqttConfigRows);
-    }
-
-    const mqttSubscriptionRows = normalizeList(datacenter.mqttSubscriptions)
-      .map((item) => {
-        const newConnectionId = connectionIdMap.get(item.connectionId);
-        if (!newConnectionId) return null;
-        const newId = randomUUID();
-        mqttSubscriptionIdMap.set(item.id, newId);
-        return {
-          ...stripMeta(item),
-          id: newId,
-          projectId: project.id,
-          connectionId: newConnectionId,
-          createdBy: userId,
-          updatedBy: userId,
-        };
-      })
-      .filter(Boolean);
-    if (mqttSubscriptionRows.length) {
-      await DataMqttSubscription.bulkCreate(mqttSubscriptionRows);
-    }
-
-    const mqttTagGroupRows = normalizeList(datacenter.mqttTagGroups)
-      .map((item) => {
-        const newSubscriptionId = mqttSubscriptionIdMap.get(item.subscriptionId);
-        if (!newSubscriptionId) return null;
-        const newId = randomUUID();
-        mqttTagGroupIdMap.set(item.id, newId);
-        return {
-          ...stripMeta(item),
-          id: newId,
-          projectId: project.id,
-          subscriptionId: newSubscriptionId,
-          createdBy: userId,
-          updatedBy: userId,
-        };
-      })
-      .filter(Boolean);
-    if (mqttTagGroupRows.length) {
-      await DataMqttTagGroup.bulkCreate(mqttTagGroupRows);
-    }
-
-    const mqttTagRows = normalizeList(datacenter.mqttTags)
-      .map((item) => {
-        const newSubscriptionId = mqttSubscriptionIdMap.get(item.subscriptionId);
-        if (!newSubscriptionId) return null;
-        const newId = randomUUID();
-        mqttTagIdMap.set(item.id, newId);
-        const newGroupId = item.groupId ? mqttTagGroupIdMap.get(item.groupId) : null;
-        return {
-          ...stripMeta(item),
-          id: newId,
-          projectId: project.id,
-          subscriptionId: newSubscriptionId,
-          groupId: newGroupId || null,
-          createdBy: userId,
-          updatedBy: userId,
-        };
-      })
-      .filter(Boolean);
-    if (mqttTagRows.length) {
-      await DataMqttTag.bulkCreate(mqttTagRows);
-    }
-
-    const resolveSourceId = (sourceType, sourceId) => {
-      if (!sourceId) return null;
-      const type = String(sourceType || '').toLowerCase();
-      if (type.includes('query')) return queryIdMap.get(sourceId) || null;
-      if (type.includes('tag')) return mqttTagIdMap.get(sourceId) || null;
-      if (type.includes('subscription')) return mqttSubscriptionIdMap.get(sourceId) || null;
-      return sourceId;
-    };
-
-    const datapointRows = normalizeList(datacenter.datapoints).map((item) => {
-      const newId = randomUUID();
-      if (item?.id) {
-        datapointIdMap.set(item.id, newId);
-      }
-      return {
-        ...stripMeta(item),
-        id: newId,
-        projectId: project.id,
-        sourceId: resolveSourceId(item.sourceType, item.sourceId),
-        createdBy: userId,
-        updatedBy: userId,
-      };
-    });
-    if (datapointRows.length) {
-      await DataPoint.bulkCreate(datapointRows);
-    }
-    const remapNeeded =
-      queryIdMap.size ||
-      mqttTagIdMap.size ||
-      mqttSubscriptionIdMap.size ||
-      datapointIdMap.size;
-    if (remapNeeded) {
-      const maps = {
-        queryIdMap,
-        mqttTagIdMap,
-        mqttSubscriptionIdMap,
-        datapointIdMap,
-      };
-      const remappedProjectVariables = remapVariables(projectVariables, maps);
-      const remappedGlobalVariables = remapVariables(globalVariables, maps);
-      await project.update({ projectVariables: remappedProjectVariables });
-      await Project.sequelize.query(
-        `UPDATE design_project_settings
-          SET globalVariables = ?, updatedBy = ?, updatedAt = ?
-          WHERE projectId = ?`,
-        {
-          replacements: [
-            JSON.stringify(remappedGlobalVariables),
-            userId,
-            new Date(),
-            project.id,
-          ],
-        },
-      );
-    }
+    const snapshot = buildProjectSnapshot(payload.datacenter || {});
+    await dataDomainClient.replaceProjectSnapshot(
+      project.id,
+      snapshot,
+      req.headers.authorization,
+    );
 
 
     return ApiResponse.success(res, { projectId: project.id }, 'project_import_success', {}, 201);
   } catch (error) {
     logger.error('Import project error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 
@@ -779,6 +573,7 @@ router.post('/', authenticateToken, validate(Joi.object({
       definitions: defaultProjectVariables,
       groups: [],
     };
+    const defaultGlobalScripts = DEFAULT_GLOBAL_SCRIPTS;
     const project = await Project.create({
       name,
       description,
@@ -788,26 +583,14 @@ router.post('/', authenticateToken, validate(Joi.object({
       projectVariables: defaultProjectVariables,
     });
     try {
-      await Project.sequelize.query(
-        `INSERT INTO design_project_settings
-          (projectId, schemaVersion, globalVariables, globalScripts, updatedBy, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-          globalVariables = VALUES(globalVariables),
-          globalScripts = VALUES(globalScripts),
-          updatedBy = VALUES(updatedBy),
-          updatedAt = VALUES(updatedAt)`,
-        {
-          replacements: [
-            project.id,
-            '1.0.0',
-            JSON.stringify(defaultGlobalVariables),
-            JSON.stringify(defaultGlobalScripts),
-            userId,
-            new Date(),
-          ],
-        },
-      );
+      await upsertProjectSettings(Project.sequelize, {
+        projectId: project.id,
+        schemaVersion: '1.0.0',
+        globalVariables: defaultGlobalVariables,
+        globalScripts: defaultGlobalScripts,
+        updatedBy: userId,
+        updatedAt: new Date(),
+      });
     } catch (error) {
       logger.warn('Init project settings failed', { error: error.message, projectId: project.id });
     }

@@ -8,7 +8,11 @@ const { sequelize } = require("../config/database");
 const { validatePageSchema } = require("../dsl/validators");
 const AppError = require("../utils/AppError");
 const ErrorCodes = require("../constants/errorCodes");
-const { literal,QueryTypes } = require("sequelize");
+const { literal } = require("sequelize");
+const {
+  getProjectSettingsRow,
+  upsertProjectSettings,
+} = require("./projectSettingsStore");
 
 const LOCK_TIMEOUT_MS = 30 * 60 * 1000;
 const ENTRY_PAGE_KEYS = ["homePageId", "loginPageId", "logoutPageId"];
@@ -193,14 +197,7 @@ class DesignService {
 
     let row = null;
     try {
-      const rows = await Project.sequelize.query(
-        "SELECT globalVariables, globalScripts FROM design_project_settings WHERE projectId = ? LIMIT 1",
-        {
-          replacements: [projectId],
-          type: QueryTypes.SELECT,
-        }
-      );
-      row = rows && rows.length ? rows[0] : null;
+      row = await getProjectSettingsRow(Project.sequelize, projectId);
     } catch (error) {
       row = null;
     }
@@ -245,26 +242,14 @@ class DesignService {
       updatedBy: userId,
     });
 
-    await Project.sequelize.query(
-      `INSERT INTO design_project_settings
-        (projectId, schemaVersion, globalVariables, globalScripts, updatedBy, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        globalVariables = VALUES(globalVariables),
-        globalScripts = VALUES(globalScripts),
-        updatedBy = VALUES(updatedBy),
-        updatedAt = VALUES(updatedAt)`,
-      {
-        replacements: [
-          projectId,
-          "1.0.0",
-          JSON.stringify(normalizedVariables),
-          JSON.stringify(normalizedScripts),
-          userId,
-          new Date(),
-        ],
-      }
-    );
+    await upsertProjectSettings(Project.sequelize, {
+      projectId,
+      schemaVersion: "1.0.0",
+      globalVariables: normalizedVariables,
+      globalScripts: normalizedScripts,
+      updatedBy: userId,
+      updatedAt: new Date(),
+    });
 
     return {
       globalVariables: normalizedVariables,
