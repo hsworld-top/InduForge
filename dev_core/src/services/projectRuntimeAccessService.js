@@ -14,8 +14,8 @@ const normalizeGrantCollection = (grants = []) => (Array.isArray(grants) ? grant
 const normalizeText = (value) => String(value ?? "").trim();
 
 const buildMapEntry = () => ({
-  allowRoles: new Set(),
-  denyRoles: new Set(),
+  localAllowRoles: new Set(),
+  localDenyRoles: new Set(),
 });
 
 const isSameValue = (left, right) => normalizeText(left) === normalizeText(right);
@@ -50,6 +50,35 @@ const assertBootstrapOwnerOrThrow = (existingUser, actorId, username) => {
   }
 };
 
+const findExistingBootstrapRuntimeUser = async ({
+  projectId,
+  actorId,
+  username,
+  transaction,
+}) => {
+  if (actorId) {
+    const ownerRuntimeUser = await ProjectRuntimeUser.findOne({
+      where: {
+        projectId,
+        createdBy: actorId,
+      },
+      transaction,
+    });
+
+    if (ownerRuntimeUser) {
+      return ownerRuntimeUser;
+    }
+  }
+
+  return ProjectRuntimeUser.findOne({
+    where: {
+      projectId,
+      username,
+    },
+    transaction,
+  });
+};
+
 const sanitizeRuntimeUser = (runtimeUser) => {
   if (!runtimeUser) {
     return null;
@@ -58,28 +87,6 @@ const sanitizeRuntimeUser = (runtimeUser) => {
   const plainUser = typeof runtimeUser.toJSON === "function" ? runtimeUser.toJSON() : { ...runtimeUser };
   delete plainUser.passwordHash;
   return plainUser;
-};
-
-const mergeGrantBucket = (baseBucket, overlayBucket) => {
-  const mergedAllow = new Set(baseBucket.allowRoles);
-  const mergedDeny = new Set(baseBucket.denyRoles);
-
-  for (const roleCode of overlayBucket.allowRoles) {
-    if (!mergedDeny.has(roleCode)) {
-      mergedAllow.add(roleCode);
-    }
-  }
-  for (const roleCode of overlayBucket.denyRoles) {
-    mergedDeny.add(roleCode);
-    mergedAllow.delete(roleCode);
-  }
-
-  return {
-    allowRoles: [...overlayBucket.allowRoles],
-    denyRoles: [...overlayBucket.denyRoles],
-    effectiveAllowRoles: [...mergedAllow],
-    effectiveDenyRoles: [...mergedDeny],
-  };
 };
 
 /**
@@ -128,49 +135,56 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
     createdBy: actorId || null,
     updatedBy: actorId || null,
   };
-  let role = await ProjectRole.findOne({
-    where: {
-      projectId: resolvedProjectId,
-      code: roleCode,
-    },
-    transaction,
-  });
+  const loadOrCreateWithRetry = async (model, where, defaults) => {
+    const existingRecord = await model.findOne({
+      where,
+      transaction,
+    });
 
-  if (!role) {
+    if (existingRecord) {
+      return existingRecord;
+    }
+
     try {
-      const [createdRole] = await ProjectRole.findOrCreate({
-        where: {
-          projectId: resolvedProjectId,
-          code: roleCode,
-        },
-        defaults: roleAttributes,
+      const [createdRecord] = await model.findOrCreate({
+        where,
+        defaults,
         transaction,
       });
-      role = createdRole;
+      return createdRecord;
     } catch (error) {
       if (error?.name !== "SequelizeUniqueConstraintError") {
         throw error;
       }
 
-      role = await ProjectRole.findOne({
-        where: {
-          projectId: resolvedProjectId,
-          code: roleCode,
-        },
+      const reloadedRecord = await model.findOne({
+        where,
         transaction,
       });
-      if (!role) {
+      if (!reloadedRecord) {
         throw error;
       }
+      return reloadedRecord;
     }
-  }
+  };
+
+  const role = await loadOrCreateWithRetry(
+    ProjectRole,
+    {
+      projectId: resolvedProjectId,
+      code: roleCode,
+    },
+    roleAttributes,
+  );
 
   const usernameWhere = {
     projectId: resolvedProjectId,
     username,
   };
-  let runtimeUser = await ProjectRuntimeUser.findOne({
-    where: usernameWhere,
+  let runtimeUser = await findExistingBootstrapRuntimeUser({
+    projectId: resolvedProjectId,
+    actorId,
+    username,
     transaction,
   });
 
@@ -188,76 +202,30 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
       status: "active",
     };
 
-    try {
-      const [createdUser] = await ProjectRuntimeUser.findOrCreate({
-        where: usernameWhere,
-        defaults: runtimeUserAttributes,
-        transaction,
-      });
-      runtimeUser = createdUser;
-      assertBootstrapOwnerOrThrow(runtimeUser, actorId, username);
-    } catch (error) {
-      if (error?.name !== "SequelizeUniqueConstraintError") {
-        throw error;
-      }
-
-      runtimeUser = await ProjectRuntimeUser.findOne({
-        where: usernameWhere,
-        transaction,
-      });
-      if (!runtimeUser) {
-        throw error;
-      }
-      assertBootstrapOwnerOrThrow(runtimeUser, actorId, username);
-    }
+    runtimeUser = await loadOrCreateWithRetry(
+      ProjectRuntimeUser,
+      usernameWhere,
+      runtimeUserAttributes,
+    );
+    assertBootstrapOwnerOrThrow(runtimeUser, actorId, username);
   }
 
-  let binding = await ProjectUserRoleBinding.findOne({
-    where: {
+  const bindingAttributes = {
+    projectId: resolvedProjectId,
+    createdBy: actorId || null,
+    runtimeUserId: runtimeUser.id,
+    roleId: role.id,
+    assignedAt: new Date(),
+  };
+  const binding = await loadOrCreateWithRetry(
+    ProjectUserRoleBinding,
+    {
       projectId: resolvedProjectId,
       runtimeUserId: runtimeUser.id,
       roleId: role.id,
     },
-    transaction,
-  });
-  if (!binding) {
-    const bindingAttributes = {
-      projectId: resolvedProjectId,
-      createdBy: actorId || null,
-      runtimeUserId: runtimeUser.id,
-      roleId: role.id,
-      assignedAt: new Date(),
-    };
-
-    try {
-      const [createdBinding] = await ProjectUserRoleBinding.findOrCreate({
-        where: {
-          projectId: resolvedProjectId,
-          runtimeUserId: runtimeUser.id,
-          roleId: role.id,
-        },
-        defaults: bindingAttributes,
-        transaction,
-      });
-      binding = createdBinding;
-    } catch (error) {
-      if (error?.name !== "SequelizeUniqueConstraintError") {
-        throw error;
-      }
-
-      binding = await ProjectUserRoleBinding.findOne({
-        where: {
-          projectId: resolvedProjectId,
-          runtimeUserId: runtimeUser.id,
-          roleId: role.id,
-        },
-        transaction,
-      });
-      if (!binding) {
-        throw error;
-      }
-    }
-  }
+    bindingAttributes,
+  );
 
   return {
     role,
@@ -305,15 +273,42 @@ function buildEffectiveRoleGrantMap(roleGrants = []) {
 
     const actionBucket = resourceInstanceBucket.get(action);
     if (effect === "deny") {
-      actionBucket.denyRoles.add(roleCode);
-      actionBucket.allowRoles.delete(roleCode);
+      actionBucket.localDenyRoles.add(roleCode);
+      actionBucket.localAllowRoles.delete(roleCode);
       continue;
     }
 
-    if (!actionBucket.denyRoles.has(roleCode)) {
-      actionBucket.allowRoles.add(roleCode);
+    if (!actionBucket.localDenyRoles.has(roleCode)) {
+      actionBucket.localAllowRoles.add(roleCode);
     }
   }
+
+  const finalizeGrantBucket = (localBucket, inheritedBucket = null) => {
+    const effectiveAllowRoles = new Set(
+      inheritedBucket ? inheritedBucket.allowRoles : [],
+    );
+    const effectiveDenyRoles = new Set(
+      inheritedBucket ? inheritedBucket.denyRoles : [],
+    );
+
+    for (const roleCode of localBucket.localAllowRoles) {
+      if (!effectiveDenyRoles.has(roleCode)) {
+        effectiveAllowRoles.add(roleCode);
+      }
+    }
+
+    for (const roleCode of localBucket.localDenyRoles) {
+      effectiveDenyRoles.add(roleCode);
+      effectiveAllowRoles.delete(roleCode);
+    }
+
+    return {
+      allowRoles: [...effectiveAllowRoles].sort(),
+      denyRoles: [...effectiveDenyRoles].sort(),
+      localAllowRoles: [...localBucket.localAllowRoles].sort(),
+      localDenyRoles: [...localBucket.localDenyRoles].sort(),
+    };
+  };
 
   return Object.fromEntries(
     [...grantMap.entries()].map(([resourceType, resourceBuckets]) => {
@@ -331,9 +326,14 @@ function buildEffectiveRoleGrantMap(roleGrants = []) {
             for (const action of actionNames) {
               const wildcardBucket = wildcardActionBuckets.get(action) || buildMapEntry();
               const specificBucket = actionBuckets.get(action) || buildMapEntry();
+              if (resourceId === "*") {
+                mergedActionBuckets.set(action, finalizeGrantBucket(wildcardBucket));
+                continue;
+              }
+
               mergedActionBuckets.set(
                 action,
-                mergeGrantBucket(wildcardBucket, specificBucket),
+                finalizeGrantBucket(specificBucket, finalizeGrantBucket(wildcardBucket)),
               );
             }
 

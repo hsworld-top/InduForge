@@ -37,6 +37,11 @@ const {
   buildEffectiveRoleGrantMap,
 } = require("../projectRuntimeAccessService");
 
+const createUniqueConstraintError = () =>
+  Object.assign(new Error("unique constraint violation"), {
+    name: "SequelizeUniqueConstraintError",
+  });
+
 describe("projectRuntimeAccessService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -137,8 +142,71 @@ describe("projectRuntimeAccessService", () => {
     expect(result.runtimeUser.passwordHash).toBeUndefined();
   });
 
-  test("ensureRuntimeAdminBootstrap 已有记录时会复用而不重复创建", async () => {
+  test("同一创建者改名后再次 bootstrap 会复用原账号而不是新建账号", async () => {
     const transaction = { id: "tx-2" };
+    const project = { id: "project-1", name: "演示工程" };
+    const creator = {
+      id: "user-creator-1",
+      username: "alice-new",
+      fullName: "张三新",
+    };
+    const existingRole = {
+      id: "role-1",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      createdBy: creator.id,
+      updatedBy: creator.id,
+    };
+    const existingUser = {
+      id: "user-1",
+      projectId: "project-1",
+      username: "alice-old",
+      createdBy: creator.id,
+      updatedBy: creator.id,
+      passwordHash: await bcrypt.hash("Initial#123", 12),
+    };
+    const existingBinding = {
+      id: "binding-1",
+      projectId: "project-1",
+      runtimeUserId: "user-1",
+      roleId: "role-1",
+    };
+
+    mockProjectRole.findOne.mockResolvedValue(existingRole);
+    mockProjectRuntimeUser.findOne.mockImplementation(({ where }) => {
+      if (Object.prototype.hasOwnProperty.call(where, "createdBy")) {
+        return existingUser;
+      }
+
+      return null;
+    });
+    mockProjectUserRoleBinding.findOne.mockResolvedValue(existingBinding);
+
+    const result = await ensureRuntimeAdminBootstrap({
+      project,
+      creator,
+      initialPassword: "Initial#123",
+      transaction,
+    });
+
+    expect(mockProjectRuntimeUser.findOrCreate).not.toHaveBeenCalled();
+    expect(mockProjectRuntimeUser.findOne).toHaveBeenCalledTimes(1);
+    expect(mockProjectRuntimeUser.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          projectId: "project-1",
+          createdBy: creator.id,
+        }),
+        transaction,
+      }),
+    );
+    expect(result.runtimeUser.id).toBe(existingUser.id);
+    expect(result.runtimeUser.username).toBe("alice-old");
+    expect(result.runtimeUser.passwordHash).toBeUndefined();
+  });
+
+  test("ensureRuntimeAdminBootstrap 已有记录时会复用而不重复创建", async () => {
+    const transaction = { id: "tx-3" };
     const project = { id: "project-1", name: "演示工程" };
     const creator = {
       id: "user-creator-1",
@@ -167,34 +235,15 @@ describe("projectRuntimeAccessService", () => {
       roleId: "role-1",
     };
 
-    mockProjectRole.findOne.mockResolvedValueOnce(null).mockResolvedValue(existingRole);
-    mockProjectRole.findOrCreate.mockImplementation(async ({ defaults }) => [
-      {
-        ...defaults,
-        id: "role-1",
-      },
-      false,
-    ]);
-    mockProjectRuntimeUser.findOne
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue(existingUser);
-    mockProjectRuntimeUser.findOrCreate.mockImplementation(async ({ defaults }) => [
-      {
-        ...defaults,
-        id: "user-1",
-      },
-      false,
-    ]);
-    mockProjectUserRoleBinding.findOne
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue(existingBinding);
-    mockProjectUserRoleBinding.findOrCreate.mockImplementation(async ({ defaults }) => [
-      {
-        ...defaults,
-        id: "binding-1",
-      },
-      false,
-    ]);
+    mockProjectRole.findOne.mockResolvedValue(existingRole);
+    mockProjectRuntimeUser.findOne.mockImplementation(({ where }) => {
+      if (Object.prototype.hasOwnProperty.call(where, "createdBy")) {
+        return existingUser;
+      }
+
+      return existingUser;
+    });
+    mockProjectUserRoleBinding.findOne.mockResolvedValue(existingBinding);
 
     const firstResult = await ensureRuntimeAdminBootstrap({
       project,
@@ -211,46 +260,12 @@ describe("projectRuntimeAccessService", () => {
 
     expect(firstResult.binding.id).toBe("binding-1");
     expect(secondResult.binding.id).toBe("binding-1");
-    expect(mockProjectRole.findOrCreate).toHaveBeenCalledTimes(1);
-    expect(mockProjectRuntimeUser.findOrCreate).toHaveBeenCalledTimes(1);
-    expect(mockProjectUserRoleBinding.findOrCreate).toHaveBeenCalledTimes(1);
-    expect(secondResult.runtimeUser.passwordHash).toBeUndefined();
+    expect(mockProjectRole.findOrCreate).not.toHaveBeenCalled();
+    expect(mockProjectRuntimeUser.findOrCreate).not.toHaveBeenCalled();
+    expect(mockProjectUserRoleBinding.findOrCreate).not.toHaveBeenCalled();
   });
 
   test("ensureRuntimeAdminBootstrap 遇到同名但非创建者来源的账号时应拒绝自动提权", async () => {
-    const transaction = { id: "tx-3" };
-    const project = { id: "project-1", name: "演示工程" };
-    const creator = {
-      id: "user-creator-1",
-      username: "alice",
-      fullName: "张三",
-    };
-
-    mockProjectRole.findOne.mockResolvedValue({
-      id: "role-1",
-      projectId: "project-1",
-      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
-    });
-    mockProjectRuntimeUser.findOne.mockResolvedValue({
-      id: "user-999",
-      projectId: "project-1",
-      username: creator.username,
-      createdBy: "someone-else",
-      updatedBy: "someone-else",
-    });
-
-    await expect(
-      ensureRuntimeAdminBootstrap({
-        project,
-        creator,
-        initialPassword: "Initial#123",
-        transaction,
-      }),
-    ).rejects.toThrow("拒绝自动提权");
-    expect(mockProjectRuntimeUser.findOrCreate).not.toHaveBeenCalled();
-  });
-
-  test("ensureRuntimeAdminBootstrap 在 findOrCreate 命中已有同名账号时也要校验归属", async () => {
     const transaction = { id: "tx-4" };
     const project = { id: "project-1", name: "演示工程" };
     const creator = {
@@ -264,16 +279,19 @@ describe("projectRuntimeAccessService", () => {
       projectId: "project-1",
       code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
     });
-    mockProjectRuntimeUser.findOne.mockResolvedValue(null);
-    mockProjectRuntimeUser.findOrCreate.mockImplementation(async ({ defaults }) => [
-      {
+    mockProjectRuntimeUser.findOne.mockImplementation(({ where }) => {
+      if (Object.prototype.hasOwnProperty.call(where, "createdBy")) {
+        return null;
+      }
+
+      return {
         id: "user-999",
-        ...defaults,
+        projectId: "project-1",
+        username: creator.username,
         createdBy: "someone-else",
         updatedBy: "someone-else",
-      },
-      false,
-    ]);
+      };
+    });
 
     await expect(
       ensureRuntimeAdminBootstrap({
@@ -283,9 +301,174 @@ describe("projectRuntimeAccessService", () => {
         transaction,
       }),
     ).rejects.toThrow("拒绝自动提权");
+    expect(mockProjectRuntimeUser.findOrCreate).not.toHaveBeenCalled();
   });
 
-  test("buildEffectiveRoleGrantMap 会按 resourceId 粒度聚合并让 deny 覆盖 allow", () => {
+  test("role 的 findOrCreate 遇到唯一冲突后会回查并复用已有记录", async () => {
+    const transaction = { id: "tx-5" };
+    const project = { id: "project-1", name: "演示工程" };
+    const creator = {
+      id: "user-creator-1",
+      username: "alice",
+      fullName: "张三",
+    };
+    const existingRole = {
+      id: "role-1",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      createdBy: creator.id,
+      updatedBy: creator.id,
+    };
+    const existingUser = {
+      id: "user-1",
+      projectId: "project-1",
+      username: creator.username,
+      createdBy: creator.id,
+      updatedBy: creator.id,
+      passwordHash: await bcrypt.hash("Initial#123", 12),
+    };
+    const existingBinding = {
+      id: "binding-1",
+      projectId: "project-1",
+      runtimeUserId: "user-1",
+      roleId: "role-1",
+    };
+
+    mockProjectRole.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(existingRole);
+    mockProjectRole.findOrCreate.mockRejectedValueOnce(createUniqueConstraintError());
+    mockProjectRuntimeUser.findOne.mockImplementation(({ where }) => {
+      if (Object.prototype.hasOwnProperty.call(where, "createdBy")) {
+        return existingUser;
+      }
+
+      return existingUser;
+    });
+    mockProjectUserRoleBinding.findOne.mockResolvedValue(existingBinding);
+
+    const result = await ensureRuntimeAdminBootstrap({
+      project,
+      creator,
+      initialPassword: "Initial#123",
+      transaction,
+    });
+
+    expect(mockProjectRole.findOrCreate).toHaveBeenCalledTimes(1);
+    expect(mockProjectRole.findOne).toHaveBeenCalledTimes(2);
+    expect(result.role.id).toBe(existingRole.id);
+  });
+
+  test("runtimeUser 的 findOrCreate 遇到唯一冲突后会回查并执行归属校验", async () => {
+    const transaction = { id: "tx-6" };
+    const project = { id: "project-1", name: "演示工程" };
+    const creator = {
+      id: "user-creator-1",
+      username: "alice",
+      fullName: "张三",
+    };
+    const existingRole = {
+      id: "role-1",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      createdBy: creator.id,
+      updatedBy: creator.id,
+    };
+    const existingUser = {
+      id: "user-1",
+      projectId: "project-1",
+      username: creator.username,
+      createdBy: creator.id,
+      updatedBy: creator.id,
+      passwordHash: await bcrypt.hash("Initial#123", 12),
+    };
+    const existingBinding = {
+      id: "binding-1",
+      projectId: "project-1",
+      runtimeUserId: "user-1",
+      roleId: "role-1",
+    };
+
+    mockProjectRole.findOne.mockResolvedValue(existingRole);
+    mockProjectRuntimeUser.findOne
+      .mockImplementationOnce(({ where }) => {
+        if (Object.prototype.hasOwnProperty.call(where, "createdBy")) {
+          return null;
+        }
+
+        return null;
+      })
+      .mockImplementationOnce(() => null)
+      .mockImplementationOnce(() => null)
+      .mockImplementationOnce(() => existingUser);
+    mockProjectRuntimeUser.findOrCreate.mockRejectedValueOnce(createUniqueConstraintError());
+    mockProjectUserRoleBinding.findOne.mockResolvedValue(existingBinding);
+
+    const result = await ensureRuntimeAdminBootstrap({
+      project,
+      creator,
+      initialPassword: "Initial#123",
+      transaction,
+    });
+
+    expect(mockProjectRuntimeUser.findOrCreate).toHaveBeenCalledTimes(1);
+    expect(mockProjectRuntimeUser.findOne).toHaveBeenCalledTimes(4);
+    expect(result.runtimeUser.id).toBe(existingUser.id);
+    expect(result.runtimeUser.passwordHash).toBeUndefined();
+  });
+
+  test("binding 的 findOrCreate 遇到唯一冲突后会回查并复用已有记录", async () => {
+    const transaction = { id: "tx-7" };
+    const project = { id: "project-1", name: "演示工程" };
+    const creator = {
+      id: "user-creator-1",
+      username: "alice",
+      fullName: "张三",
+    };
+    const existingRole = {
+      id: "role-1",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      createdBy: creator.id,
+      updatedBy: creator.id,
+    };
+    const existingUser = {
+      id: "user-1",
+      projectId: "project-1",
+      username: creator.username,
+      createdBy: creator.id,
+      updatedBy: creator.id,
+      passwordHash: await bcrypt.hash("Initial#123", 12),
+    };
+    const existingBinding = {
+      id: "binding-1",
+      projectId: "project-1",
+      runtimeUserId: "user-1",
+      roleId: "role-1",
+    };
+
+    mockProjectRole.findOne.mockResolvedValue(existingRole);
+    mockProjectRuntimeUser.findOne.mockImplementation(({ where }) => {
+      if (Object.prototype.hasOwnProperty.call(where, "createdBy")) {
+        return existingUser;
+      }
+
+      return existingUser;
+    });
+    mockProjectUserRoleBinding.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(existingBinding);
+    mockProjectUserRoleBinding.findOrCreate.mockRejectedValueOnce(createUniqueConstraintError());
+
+    const result = await ensureRuntimeAdminBootstrap({
+      project,
+      creator,
+      initialPassword: "Initial#123",
+      transaction,
+    });
+
+    expect(mockProjectUserRoleBinding.findOrCreate).toHaveBeenCalledTimes(1);
+    expect(mockProjectUserRoleBinding.findOne).toHaveBeenCalledTimes(2);
+    expect(result.binding.id).toBe(existingBinding.id);
+  });
+
+  test("buildEffectiveRoleGrantMap 的 allowRoles 和 denyRoles 是最终生效集合", () => {
     const grantMap = buildEffectiveRoleGrantMap([
       {
         roleCode: "PROJECT_RUNTIME_ADMIN",
@@ -328,24 +511,24 @@ describe("projectRuntimeAccessService", () => {
       expect.objectContaining({
         allowRoles: ["PROJECT_RUNTIME_ADMIN"],
         denyRoles: [],
-        effectiveAllowRoles: ["PROJECT_RUNTIME_ADMIN"],
-        effectiveDenyRoles: [],
+        localAllowRoles: ["PROJECT_RUNTIME_ADMIN"],
+        localDenyRoles: [],
       }),
     );
     expect(grantMap.project["project-1"].deploy).toEqual(
       expect.objectContaining({
-        allowRoles: [],
+        allowRoles: ["PROJECT_RUNTIME_ADMIN"],
         denyRoles: ["PROJECT_RUNTIME_OPERATOR"],
-        effectiveAllowRoles: ["PROJECT_RUNTIME_ADMIN"],
-        effectiveDenyRoles: ["PROJECT_RUNTIME_OPERATOR"],
+        localAllowRoles: [],
+        localDenyRoles: ["PROJECT_RUNTIME_OPERATOR"],
       }),
     );
     expect(grantMap.project["project-2"].deploy).toEqual(
       expect.objectContaining({
-        allowRoles: ["PROJECT_RUNTIME_VIEWER"],
+        allowRoles: ["PROJECT_RUNTIME_ADMIN", "PROJECT_RUNTIME_VIEWER"],
         denyRoles: ["PROJECT_RUNTIME_DENY"],
-        effectiveAllowRoles: ["PROJECT_RUNTIME_ADMIN", "PROJECT_RUNTIME_VIEWER"],
-        effectiveDenyRoles: ["PROJECT_RUNTIME_DENY"],
+        localAllowRoles: ["PROJECT_RUNTIME_VIEWER"],
+        localDenyRoles: ["PROJECT_RUNTIME_DENY"],
       }),
     );
   });
@@ -370,8 +553,8 @@ describe("projectRuntimeAccessService", () => {
 
     expect(denyGrantMap.project["project-1"].start).toEqual(
       expect.objectContaining({
-        effectiveAllowRoles: ["ROLE_SPECIFIC_ALLOW"],
-        effectiveDenyRoles: ["ROLE_WILDCARD_DENY"],
+        allowRoles: ["ROLE_SPECIFIC_ALLOW"],
+        denyRoles: ["ROLE_WILDCARD_DENY"],
       }),
     );
 
@@ -394,8 +577,8 @@ describe("projectRuntimeAccessService", () => {
 
     expect(allowGrantMap.project["project-2"].stop).toEqual(
       expect.objectContaining({
-        effectiveAllowRoles: ["ROLE_WILDCARD_ALLOW"],
-        effectiveDenyRoles: ["ROLE_SPECIFIC_DENY"],
+        allowRoles: ["ROLE_WILDCARD_ALLOW"],
+        denyRoles: ["ROLE_SPECIFIC_DENY"],
       }),
     );
   });
