@@ -133,8 +133,27 @@ export function shouldUseDebugMode(pathname) {
   );
 }
 
-export function shouldRedirectTopLevelToIde(pathname, isTopLevel) {
-  return Boolean(isTopLevel) && !shouldUseDebugMode(pathname);
+/**
+ * 独立浏览器标签页只要已经持有完整工程上下文，就允许继续运行。
+ * 这样用户把数据中心单独打开后，不会因为刷新或新标签页复用正式入口而被强制拉回 IDE。
+ */
+export function hasReusableTopLevelSession({
+  token = Storage.getToken(),
+  projectId = Storage.getProjectId(),
+} = {}) {
+  return Boolean(asNonEmptyString(token) && asNonEmptyString(projectId));
+}
+
+export function shouldRedirectTopLevelToIde(
+  pathname,
+  isTopLevel,
+  hasReusableSession = hasReusableTopLevelSession(),
+) {
+  return (
+    Boolean(isTopLevel) &&
+    !shouldUseDebugMode(pathname) &&
+    !Boolean(hasReusableSession)
+  );
 }
 
 export function buildIdeRestoreUrl(handoff, ideOrigin) {

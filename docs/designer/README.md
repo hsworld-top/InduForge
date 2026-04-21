@@ -39,13 +39,13 @@
 
 - 正式入口应由 `dev_ide` 通过 iframe 打开，设计器启动后向宿主发送 `APP_BOOTSTRAP_REQUEST`，再由宿主回发 `APP_BOOTSTRAP_RESPONSE` 注入鉴权、工程、主题与语言上下文。
 - 正式入口不再依赖 URL 里的 `token`、`refreshToken`、`pid`、`tenant` 等敏感参数。
-- 用户直接访问正式入口时，页面会带着 `handoff` 回跳 `dev_ide`，而不是继续裸跑。
+- 用户直接访问正式入口且本地缺少可复用工程会话时，页面会带着 `handoff` 回跳 `dev_ide`，而不是继续裸跑。
 
 ### 独立调试
 
 - 需要单独调试设计器时，使用 `/designer/debug`。
 - `/designer/debug` 允许本地 mock、手动准备 Storage 或按调试需要附带非正式参数；这条链路不代表正式宿主协议。
-- 调试正式链路时，不要直接访问 `/designer/`，应从 `dev_ide` 中打开对应标签页，再在开发者工具中观察 bootstrap 消息、主题语言同步与续租回传。
+- 调试正式链路时，优先从 `dev_ide` 中打开对应标签页，再在开发者工具中观察 bootstrap 消息、主题语言同步与续租回传；若正式入口已持有可复用的 token 与 projectId，则允许作为独立标签页继续运行。
 
 ### 预览与边界
 

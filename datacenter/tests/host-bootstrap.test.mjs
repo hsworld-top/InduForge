@@ -267,3 +267,19 @@ test("bootstrap 等待超时会收敛，不会无限挂起", async () => {
 
   assert.equal(bootstrapResult, false);
 });
+
+test("顶层正式入口在已有本地会话时不应强制回跳 IDE", () => {
+  globalThis.localStorage.setItem("auth_token", "cached-token");
+  globalThis.localStorage.setItem("project_id", JSON.stringify("project-cached"));
+
+  const plan = initializeHostBootstrap({
+    currentUrl: "http://datacenter.example/datacenter/?handoff=handoff-top-cache",
+    isTopLevelWindow: true,
+    referrer: "",
+    selfWindow: globalThis.window,
+  });
+
+  assert.equal(plan.shouldRedirectToIde, false);
+  assert.equal(plan.shouldWaitForBootstrap, false);
+  assert.equal(plan.ideRedirectUrl, null);
+});

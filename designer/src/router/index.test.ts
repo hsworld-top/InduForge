@@ -31,6 +31,20 @@ describe("designer 入口规划", () => {
     expect(plan.ideRedirectUrl).toBe("http://ide.example/?handoffId=handoff-1");
   });
 
+  it("正式入口顶层访问在已有本地会话时不应强制回跳 IDE", () => {
+    Storage.setToken("cached-token");
+    Storage.setProjectId("cached-project");
+
+    const plan = resolveDesignerEntrypointPlan("http://designer.example/designer/?handoffId=handoff-cached", {
+      isTopLevelWindow: true,
+      ideOrigin: "http://ide.example",
+    });
+
+    expect(plan.shouldRedirectToIde).toBe(false);
+    expect(plan.shouldWaitForBootstrap).toBe(false);
+    expect(plan.ideRedirectUrl).toBeNull();
+  });
+
   it("/designer/debug 保留独立调试模式，不会回跳 IDE", () => {
     const plan = resolveDesignerEntrypointPlan("http://designer.example/designer/debug?handoffId=handoff-1", {
       isTopLevelWindow: true,

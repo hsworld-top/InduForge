@@ -71,6 +71,7 @@ type DesignerHostBootstrapSession = {
 
 type ResolveEntrypointPlanOptions = {
   ideOrigin?: string;
+  hasProjectId?: boolean;
   isTopLevelWindow?: boolean;
   hasToken?: boolean;
   referrer?: string;
@@ -187,10 +188,24 @@ export function shouldUseDebugMode(pathname: string): boolean {
 }
 
 /**
- * 顶层窗口访问正式入口时必须回到 IDE，由 IDE 决定 handoff 恢复与 iframe 挂载。
+ * 顶层窗口缺少可复用的工程会话时才回到 IDE，由 IDE 决定 handoff 恢复与 iframe 挂载。
+ * 已经从 IDE 拿到 token 与 projectId 的独立标签页应允许继续运行，避免被硬性拉回宿主。
  */
-export function shouldRedirectTopLevelToIde(pathname: string, isTopLevel: boolean): boolean {
-  return isTopLevel && !shouldUseDebugMode(pathname);
+export function hasReusableEntrypointSession(options: {
+  hasProjectId?: boolean;
+  hasToken?: boolean;
+} = {}): boolean {
+  const hasToken = options.hasToken ?? Boolean(Storage.getToken());
+  const hasProjectId = options.hasProjectId ?? Boolean(Storage.getProjectId());
+  return hasToken && hasProjectId;
+}
+
+export function shouldRedirectTopLevelToIde(
+  pathname: string,
+  isTopLevel: boolean,
+  hasReusableSession = hasReusableEntrypointSession(),
+): boolean {
+  return isTopLevel && !shouldUseDebugMode(pathname) && !hasReusableSession;
 }
 
 export function resolveTrustedHostOrigin(referrer = ""): string | null {
@@ -277,7 +292,15 @@ export function resolveDesignerEntrypointPlan(
   const handoffId = resolveHandoffId(url);
   const isTopLevelWindow = options.isTopLevelWindow ?? true;
   const hasToken = options.hasToken ?? Boolean(Storage.getToken());
-  const shouldRedirectToIde = shouldRedirectTopLevelToIde(url.pathname, isTopLevelWindow);
+  const hasProjectId = options.hasProjectId ?? Boolean(Storage.getProjectId());
+  const shouldRedirectToIde = shouldRedirectTopLevelToIde(
+    url.pathname,
+    isTopLevelWindow,
+    hasReusableEntrypointSession({
+      hasProjectId,
+      hasToken,
+    }),
+  );
   const ideOrigin = options.ideOrigin ?? resolveDesignerIdeOriginFromRuntime({
     currentUrl,
     referrer,
@@ -376,6 +399,7 @@ export function initializeDesignerHostBootstrap(
   const currentUrl = options.currentUrl ?? window.location.href;
   const referrer = options.referrer ?? document.referrer;
   const planOptions: ResolveEntrypointPlanOptions = {
+    hasProjectId: Boolean(Storage.getProjectId()),
     hasToken: Boolean(Storage.getToken()),
     isTopLevelWindow: options.isTopLevelWindow ?? window.parent === window,
     referrer,

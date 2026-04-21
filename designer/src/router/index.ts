@@ -144,6 +144,7 @@ export function registerDesignerBeforeEachGuard(
     const currentUrl = getCurrentUrl();
     const targetUrl = resolveEntrypointUrlForRoute(currentUrl, to, targetRouter);
     const entrypointPlan = resolveDesignerEntrypointPlan(targetUrl, {
+      hasProjectId: Boolean(Storage.getProjectId()),
       hasToken: Boolean(Storage.getToken()),
       ideOrigin: getIdeOrigin(),
       isTopLevelWindow: isTopLevelWindow(),

@@ -8,6 +8,7 @@ import {
   applyThemeToDocument,
   buildIdeLoginUrl,
   buildIdeRestoreUrl,
+  hasReusableTopLevelSession,
   resolveIdeOriginFromRuntime,
   shouldRedirectTopLevelToIde,
   shouldUseDebugMode,
@@ -92,7 +93,13 @@ export function registerDatacenterBeforeEachGuard(
     const isDebugRoute =
       shouldUseDebugMode(runtimeUrl.pathname) || to.meta.requiresAuth === false;
 
-    if (shouldRedirectTopLevelToIde(runtimeUrl.pathname, isTopLevelWindow())) {
+    if (
+      shouldRedirectTopLevelToIde(
+        runtimeUrl.pathname,
+        isTopLevelWindow(),
+        hasReusableTopLevelSession(),
+      )
+    ) {
       navigateToUrl(buildIdeRestoreUrl(handoff, ideOrigin));
       return;
     }

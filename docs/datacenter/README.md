@@ -50,12 +50,12 @@
 ### 独立调试
 
 - 需要单独调试数据中心时，使用 `/datacenter/debug`。
-- `/datacenter/debug` 允许脱离 IDE 运行，但只用于本地调试；正式入口 `/datacenter/` 顶层访问时会回跳 `dev_ide`。
+- `/datacenter/debug` 允许脱离 IDE 运行，但只用于本地调试；正式入口 `/datacenter/` 在缺少本地 token 或 projectId 时会回跳 `dev_ide`。
 - 调试正式链路时，应从 `dev_ide` 内打开数据中心标签页，再检查 bootstrap 消息、主题同步和续租回传是否正确。
 
 ### `handoff` 与恢复
 
-- 子应用被单独打开成浏览器标签页后，刷新仍会依赖 `handoff` 回附 IDE。
+- 子应用被单独打开成浏览器标签页后，只要本地仍保留可复用的 token 与工程上下文，就允许继续独立运行；缺少上下文时仍会依赖 `handoff` 回附 IDE。
 - `handoff` 只保存恢复映射，不保存 token 等敏感信息；丢失或过期时会降级回 IDE 首页。
 - 子应用内部组件应优先从本地上下文读取 `projectId`、`tenantId` 等工程信息，避免重新依赖旧的 URL 参数。
 
