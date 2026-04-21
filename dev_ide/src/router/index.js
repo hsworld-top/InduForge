@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { ROLES, ROUTE_NAMES } from '@/constants'
 import { Storage } from '@/utils/storage'
+import { buildDashboardRedirectLocation } from '@/utils/dashboardEntryHandoff'
 import { hasRole } from '@/permissions'
 import i18n from '@/lang'
 
@@ -35,7 +36,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/dashboard',
+    redirect: (to) => buildDashboardRedirectLocation(to),
   },
   {
     path: '/dashboard',

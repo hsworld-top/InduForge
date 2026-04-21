@@ -40,6 +40,10 @@ import {
   resolveRestorePayload,
   saveHandoffRecord,
 } from '../src/utils/embeddedAppBridge.js'
+import {
+  buildDashboardRedirectLocation,
+  createRestoredEmbeddedTab,
+} from '../src/utils/dashboardEntryHandoff.js'
 
 const run = async (name, fn) => {
   try {
@@ -205,6 +209,83 @@ await run('应用入口：相对 handoff URL 场景返回真实 origin', () => {
       assert.equal(entry.url.startsWith('/designer/?handoffId='), true)
       assert.equal(entry.origin, 'https://ide.example.com')
     })
+  )
+})
+
+await run('仪表盘入口：根路径重定向时保留 handoff 查询参数', () => {
+  assert.deepEqual(
+    buildDashboardRedirectLocation({
+      query: {
+        handoffId: 'handoff-dashboard-1',
+        from: 'external',
+      },
+    }),
+    {
+      path: '/dashboard',
+      query: {
+        handoffId: 'handoff-dashboard-1',
+        from: 'external',
+      },
+    }
+  )
+})
+
+await run('仪表盘入口：handoff 可恢复为设计中心嵌入标签', () => {
+  assert.deepEqual(
+    createRestoredEmbeddedTab({
+      handoffId: 'handoff-designer-1',
+      appType: 'designer',
+      projectId: 'project-1',
+      tenantId: 'tenant-1',
+    }),
+    {
+      key: 'design-center-project-1',
+      titleKey: 'projectManagement.designCenter',
+      component: 'EMBEDDED_APP',
+      props: {
+        appType: 'designer',
+        project: {
+          id: 'project-1',
+          tenantId: 'tenant-1',
+        },
+      },
+      icon: 'design',
+    }
+  )
+})
+
+await run('仪表盘入口：handoff 可恢复为数据中心嵌入标签', () => {
+  assert.deepEqual(
+    createRestoredEmbeddedTab({
+      handoffId: 'handoff-datacenter-1',
+      appType: 'datacenter',
+      projectId: 'project-2',
+      tenantId: 'tenant-2',
+    }),
+    {
+      key: 'data-center-project-2',
+      titleKey: 'projectManagement.dataCenter',
+      component: 'EMBEDDED_APP',
+      props: {
+        appType: 'datacenter',
+        project: {
+          id: 'project-2',
+          tenantId: 'tenant-2',
+        },
+      },
+      icon: 'database',
+    }
+  )
+})
+
+await run('仪表盘入口：handoff 缺少工程上下文时不恢复标签', () => {
+  assert.equal(
+    createRestoredEmbeddedTab({
+      handoffId: 'handoff-broken-1',
+      appType: 'designer',
+      tenantId: 'tenant-1',
+    }),
+    null
   )
 })
 

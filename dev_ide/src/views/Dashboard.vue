@@ -374,12 +374,19 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { Storage } from '@/utils/storage'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { buildAppUrl } from '@/utils/appUrl'
+import { resolveRestorePayload } from '@/utils/embeddedAppBridge'
+import {
+  createRestoredEmbeddedTab,
+  EMBEDDED_APP_COMPONENT,
+  extractDashboardHandoffId,
+  stripDashboardHandoffQuery,
+} from '@/utils/dashboardEntryHandoff'
 import {
   createEmbeddedUpdateMessage,
   broadcastToEmbeddedIframes,
@@ -416,6 +423,7 @@ export default {
     SystemSettings,
   },
   setup() {
+    const route = useRoute()
     const router = useRouter()
     const { locale, t } = useI18n()
     const authStore = useAuthStore()
@@ -962,6 +970,32 @@ export default {
       return true
     }
 
+    /**
+     * 消费地址栏中的 handoffId，并恢复独立标签页对应的嵌入应用标签。
+     * 这里在 Dashboard 挂载后执行，确保设计中心/数据中心独立打开时能落到正确标签，而不是停留在 IDE 首页。
+     */
+    const restoreEmbeddedTabFromRoute = async () => {
+      const handoffId = extractDashboardHandoffId(route.query)
+      if (!handoffId) return
+
+      const restoredPayload = resolveRestorePayload(handoffId)
+      const restoredTab = createRestoredEmbeddedTab(restoredPayload)
+
+      if (restoredTab) {
+        openTab({
+          ...restoredTab,
+          component:
+            restoredTab.component === EMBEDDED_APP_COMPONENT ? EmbeddedApp : restoredTab.component,
+        })
+      }
+
+      await router.replace({
+        path: route.path || '/dashboard',
+        query: stripDashboardHandoffQuery(route.query),
+        hash: route.hash,
+      })
+    }
+
     // 关闭标签页
     const closeTab = (tabKey) => {
       const index = tabs.value.findIndex((tab) => tab.key === tabKey)
@@ -1022,7 +1056,9 @@ export default {
           openTab('dashboard')
         }
       }
+      await restoreEmbeddedTabFromRoute()
       tabsInitialized.value = true
+      persistTabState()
       setupOpsPendingSubscription()
       notifyExistingPendingRequests()
 
