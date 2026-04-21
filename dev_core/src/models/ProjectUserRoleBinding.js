@@ -21,6 +21,15 @@ module.exports = (sequelize, DataTypes) => {
         },
         comment: "所属工程ID",
       },
+      createdBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: "users",
+          key: "id",
+        },
+        comment: "创建者ID",
+      },
       runtimeUserId: {
         type: DataTypes.UUID,
         allowNull: false,
@@ -71,6 +80,9 @@ module.exports = (sequelize, DataTypes) => {
         },
         {
           fields: ["projectId", "roleId"],
+        },
+        {
+          fields: ["createdBy"],
         },
       ],
     },

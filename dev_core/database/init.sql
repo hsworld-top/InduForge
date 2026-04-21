@@ -168,6 +168,8 @@ COMMENT ON COLUMN projects."updatedAt" IS '更新时间';
 CREATE TABLE IF NOT EXISTS project_runtime_users (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "projectId" uuid NOT NULL REFERENCES projects ("id") ON DELETE CASCADE,
+  "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "updatedBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
   "username" text NOT NULL,
   "passwordHash" text NOT NULL,
   "displayName" text,
@@ -182,10 +184,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS project_runtime_users_project_username_uq
   ON project_runtime_users ("projectId", "username");
 CREATE INDEX IF NOT EXISTS project_runtime_users_project_status_idx
   ON project_runtime_users ("projectId", "status");
+CREATE INDEX IF NOT EXISTS project_runtime_users_created_by_idx
+  ON project_runtime_users ("createdBy");
+CREATE INDEX IF NOT EXISTS project_runtime_users_updated_by_idx
+  ON project_runtime_users ("updatedBy");
 
 COMMENT ON TABLE project_runtime_users IS '工程运行态用户表';
 COMMENT ON COLUMN project_runtime_users."id" IS '运行态用户ID';
 COMMENT ON COLUMN project_runtime_users."projectId" IS '所属工程ID';
+COMMENT ON COLUMN project_runtime_users."createdBy" IS '创建者ID';
+COMMENT ON COLUMN project_runtime_users."updatedBy" IS '更新者ID';
 COMMENT ON COLUMN project_runtime_users."username" IS '运行态用户名';
 COMMENT ON COLUMN project_runtime_users."passwordHash" IS '密码哈希';
 COMMENT ON COLUMN project_runtime_users."displayName" IS '显示名称';
@@ -198,6 +206,8 @@ COMMENT ON COLUMN project_runtime_users."updatedAt" IS '更新时间';
 CREATE TABLE IF NOT EXISTS project_roles (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "projectId" uuid NOT NULL REFERENCES projects ("id") ON DELETE CASCADE,
+  "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "updatedBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
   "code" text NOT NULL,
   "name" text NOT NULL,
   "description" text,
@@ -211,10 +221,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS project_roles_project_code_uq
   ON project_roles ("projectId", "code");
 CREATE INDEX IF NOT EXISTS project_roles_project_status_idx
   ON project_roles ("projectId", "status");
+CREATE INDEX IF NOT EXISTS project_roles_created_by_idx
+  ON project_roles ("createdBy");
+CREATE INDEX IF NOT EXISTS project_roles_updated_by_idx
+  ON project_roles ("updatedBy");
 
 COMMENT ON TABLE project_roles IS '工程运行态角色表';
 COMMENT ON COLUMN project_roles."id" IS '角色ID';
 COMMENT ON COLUMN project_roles."projectId" IS '所属工程ID';
+COMMENT ON COLUMN project_roles."createdBy" IS '创建者ID';
+COMMENT ON COLUMN project_roles."updatedBy" IS '更新者ID';
 COMMENT ON COLUMN project_roles."code" IS '角色编码';
 COMMENT ON COLUMN project_roles."name" IS '角色名称';
 COMMENT ON COLUMN project_roles."description" IS '角色描述';
@@ -226,6 +242,7 @@ COMMENT ON COLUMN project_roles."updatedAt" IS '更新时间';
 CREATE TABLE IF NOT EXISTS project_user_role_bindings (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "projectId" uuid NOT NULL REFERENCES projects ("id") ON DELETE CASCADE,
+  "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
   "runtimeUserId" uuid NOT NULL REFERENCES project_runtime_users ("id") ON DELETE CASCADE,
   "roleId" uuid NOT NULL REFERENCES project_roles ("id") ON DELETE CASCADE,
   "assignedBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
@@ -240,10 +257,13 @@ CREATE INDEX IF NOT EXISTS project_user_role_bindings_user_idx
   ON project_user_role_bindings ("projectId", "runtimeUserId");
 CREATE INDEX IF NOT EXISTS project_user_role_bindings_role_idx
   ON project_user_role_bindings ("projectId", "roleId");
+CREATE INDEX IF NOT EXISTS project_user_role_bindings_created_by_idx
+  ON project_user_role_bindings ("createdBy");
 
 COMMENT ON TABLE project_user_role_bindings IS '工程运行态用户角色绑定表';
 COMMENT ON COLUMN project_user_role_bindings."id" IS '绑定ID';
 COMMENT ON COLUMN project_user_role_bindings."projectId" IS '所属工程ID';
+COMMENT ON COLUMN project_user_role_bindings."createdBy" IS '创建者ID';
 COMMENT ON COLUMN project_user_role_bindings."runtimeUserId" IS '运行态用户ID';
 COMMENT ON COLUMN project_user_role_bindings."roleId" IS '角色ID';
 COMMENT ON COLUMN project_user_role_bindings."assignedBy" IS '分配人ID';
@@ -254,21 +274,29 @@ COMMENT ON COLUMN project_user_role_bindings."updatedAt" IS '更新时间';
 CREATE TABLE IF NOT EXISTS project_role_grants (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "projectId" uuid NOT NULL REFERENCES projects ("id") ON DELETE CASCADE,
+  "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "updatedBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
   "roleId" uuid NOT NULL REFERENCES project_roles ("id") ON DELETE CASCADE,
   "resourceType" text NOT NULL,
+  "resourceId" text NOT NULL DEFAULT '*',
   "action" text NOT NULL,
   "effect" text NOT NULL DEFAULT 'allow' CHECK ("effect" IN ('allow', 'deny')),
+  "scopeConfig" jsonb NOT NULL DEFAULT '{}'::jsonb,
   "condition" jsonb,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS project_role_grants_unique_idx
-  ON project_role_grants ("projectId", "roleId", "resourceType", "action", "effect");
+  ON project_role_grants ("projectId", "roleId", "resourceType", "resourceId", "action", "effect");
 CREATE INDEX IF NOT EXISTS project_role_grants_role_idx
   ON project_role_grants ("projectId", "roleId");
 CREATE INDEX IF NOT EXISTS project_role_grants_resource_action_idx
-  ON project_role_grants ("projectId", "resourceType", "action");
+  ON project_role_grants ("projectId", "resourceType", "resourceId", "action");
+CREATE INDEX IF NOT EXISTS project_role_grants_created_by_idx
+  ON project_role_grants ("createdBy");
+CREATE INDEX IF NOT EXISTS project_role_grants_updated_by_idx
+  ON project_role_grants ("updatedBy");
 
 COMMENT ON TABLE project_role_grants IS '工程运行态角色授权表';
 COMMENT ON COLUMN project_role_grants."id" IS '授权ID';
@@ -280,6 +308,10 @@ COMMENT ON COLUMN project_role_grants."effect" IS '授权效果';
 COMMENT ON COLUMN project_role_grants."condition" IS '授权条件';
 COMMENT ON COLUMN project_role_grants."createdAt" IS '创建时间';
 COMMENT ON COLUMN project_role_grants."updatedAt" IS '更新时间';
+COMMENT ON COLUMN project_role_grants."createdBy" IS '创建者ID';
+COMMENT ON COLUMN project_role_grants."updatedBy" IS '更新者ID';
+COMMENT ON COLUMN project_role_grants."resourceId" IS '资源实例ID，* 表示全部实例';
+COMMENT ON COLUMN project_role_grants."scopeConfig" IS '授权范围配置';
 
 CREATE TABLE IF NOT EXISTS logs (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -740,3 +772,8 @@ COMMENT ON COLUMN node_commands."lastError" IS '最近错误信息';
 COMMENT ON COLUMN node_commands."createdAt" IS '创建时间';
 COMMENT ON COLUMN node_commands."updatedAt" IS '更新时间';
 COMMENT ON COLUMN node_commands."deletedAt" IS '软删除时间';
+
+COMMENT ON COLUMN project_role_grants."createdBy" IS '创建者ID';
+COMMENT ON COLUMN project_role_grants."updatedBy" IS '更新者ID';
+COMMENT ON COLUMN project_role_grants."resourceId" IS '资源实例ID，* 表示全部实例';
+COMMENT ON COLUMN project_role_grants."scopeConfig" IS '授权范围配置';

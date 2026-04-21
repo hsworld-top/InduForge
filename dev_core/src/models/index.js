@@ -79,6 +79,22 @@ ProjectRuntimeUser.belongsTo(Project, {
   foreignKey: "projectId",
   as: "project",
 });
+User.hasMany(ProjectRuntimeUser, {
+  foreignKey: "createdBy",
+  as: "createdRuntimeUsers",
+});
+User.hasMany(ProjectRuntimeUser, {
+  foreignKey: "updatedBy",
+  as: "updatedRuntimeUsers",
+});
+ProjectRuntimeUser.belongsTo(User, {
+  foreignKey: "createdBy",
+  as: "creator",
+});
+ProjectRuntimeUser.belongsTo(User, {
+  foreignKey: "updatedBy",
+  as: "updater",
+});
 
 Project.hasMany(ProjectRole, {
   foreignKey: "projectId",
@@ -89,6 +105,22 @@ ProjectRole.belongsTo(Project, {
   foreignKey: "projectId",
   as: "project",
 });
+User.hasMany(ProjectRole, {
+  foreignKey: "createdBy",
+  as: "createdRuntimeRoles",
+});
+User.hasMany(ProjectRole, {
+  foreignKey: "updatedBy",
+  as: "updatedRuntimeRoles",
+});
+ProjectRole.belongsTo(User, {
+  foreignKey: "createdBy",
+  as: "creator",
+});
+ProjectRole.belongsTo(User, {
+  foreignKey: "updatedBy",
+  as: "updater",
+});
 
 Project.hasMany(ProjectUserRoleBinding, {
   foreignKey: "projectId",
@@ -98,6 +130,14 @@ Project.hasMany(ProjectUserRoleBinding, {
 ProjectUserRoleBinding.belongsTo(Project, {
   foreignKey: "projectId",
   as: "project",
+});
+User.hasMany(ProjectUserRoleBinding, {
+  foreignKey: "createdBy",
+  as: "createdRuntimeRoleBindings",
+});
+ProjectUserRoleBinding.belongsTo(User, {
+  foreignKey: "createdBy",
+  as: "creator",
 });
 
 ProjectRuntimeUser.hasMany(ProjectUserRoleBinding, {
@@ -128,6 +168,22 @@ Project.hasMany(ProjectRoleGrant, {
 ProjectRoleGrant.belongsTo(Project, {
   foreignKey: "projectId",
   as: "project",
+});
+User.hasMany(ProjectRoleGrant, {
+  foreignKey: "createdBy",
+  as: "createdRuntimeRoleGrants",
+});
+User.hasMany(ProjectRoleGrant, {
+  foreignKey: "updatedBy",
+  as: "updatedRuntimeRoleGrants",
+});
+ProjectRoleGrant.belongsTo(User, {
+  foreignKey: "createdBy",
+  as: "creator",
+});
+ProjectRoleGrant.belongsTo(User, {
+  foreignKey: "updatedBy",
+  as: "updater",
 });
 
 ProjectRole.hasMany(ProjectRoleGrant, {

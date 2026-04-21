@@ -23,26 +23,46 @@ const buildMapEntry = () => ({
  * 创建或补齐工程运行态的默认管理员角色、用户和绑定关系。
  * 设计上保持幂等：已有记录则直接复用，不重复创建。
  */
-async function ensureRuntimeAdminBootstrap(projectId, options = {}) {
-  const resolvedProjectId = normalizeText(projectId);
+async function ensureRuntimeAdminBootstrap(input = {}) {
+  const context =
+    typeof input === "string" ? { project: { id: input } } : input || {};
+  const project = context.project || {};
+  const creator = context.creator || project.creator || {};
+  const transaction = context.transaction;
+  const resolvedProjectId = normalizeText(
+    project.id || context.projectId || context.id,
+  );
   if (!resolvedProjectId) {
     throw new Error("projectId 不能为空");
   }
 
-  const roleCode = normalizeText(options.roleCode) || DEFAULT_RUNTIME_ADMIN_ROLE_CODE;
-  const username = normalizeText(options.username) || DEFAULT_RUNTIME_ADMIN_USERNAME;
-  const rawPassword = options.password || DEFAULT_RUNTIME_ADMIN_PASSWORD;
-  const roleName = normalizeText(options.roleName) || DEFAULT_RUNTIME_ADMIN_NAME;
+  const roleCode = normalizeText(context.roleCode) || DEFAULT_RUNTIME_ADMIN_ROLE_CODE;
+  const username =
+    normalizeText(creator.username) ||
+    normalizeText(context.username) ||
+    DEFAULT_RUNTIME_ADMIN_USERNAME;
+  const rawPassword = context.initialPassword || context.password || DEFAULT_RUNTIME_ADMIN_PASSWORD;
+  const roleName = normalizeText(context.roleName) || (
+    normalizeText(project.name)
+      ? `${normalizeText(project.name)}运行态管理员`
+      : DEFAULT_RUNTIME_ADMIN_NAME
+  );
   const roleDescription =
-    normalizeText(options.roleDescription) ||
+    normalizeText(context.roleDescription) ||
     "工程运行态默认管理员角色，用于初始化首个可管理账号";
-  const displayName = normalizeText(options.displayName) || DEFAULT_RUNTIME_ADMIN_NAME;
+  const displayName =
+    normalizeText(context.displayName) ||
+    normalizeText(creator.fullName) ||
+    normalizeText(creator.username) ||
+    DEFAULT_RUNTIME_ADMIN_NAME;
+  const actorId = normalizeText(creator.id || context.createdBy || project.createdBy);
 
   let role = await ProjectRole.findOne({
     where: {
       projectId: resolvedProjectId,
       code: roleCode,
     },
+    transaction,
   });
   if (!role) {
     role = await ProjectRole.create({
@@ -52,6 +72,10 @@ async function ensureRuntimeAdminBootstrap(projectId, options = {}) {
       description: roleDescription,
       isSystem: true,
       status: "active",
+      createdBy: actorId || null,
+      updatedBy: actorId || null,
+    }, {
+      transaction,
     });
   }
 
@@ -60,15 +84,20 @@ async function ensureRuntimeAdminBootstrap(projectId, options = {}) {
       projectId: resolvedProjectId,
       username,
     },
+    transaction,
   });
   if (!runtimeUser) {
     const passwordHash = await bcrypt.hash(rawPassword, BCRYPT_SALT_ROUNDS);
     runtimeUser = await ProjectRuntimeUser.create({
       projectId: resolvedProjectId,
+      createdBy: actorId || null,
+      updatedBy: actorId || null,
       username,
       passwordHash,
       displayName,
       status: "active",
+    }, {
+      transaction,
     });
   }
 
@@ -78,13 +107,17 @@ async function ensureRuntimeAdminBootstrap(projectId, options = {}) {
       runtimeUserId: runtimeUser.id,
       roleId: role.id,
     },
+    transaction,
   });
   if (!binding) {
     binding = await ProjectUserRoleBinding.create({
       projectId: resolvedProjectId,
+      createdBy: actorId || null,
       runtimeUserId: runtimeUser.id,
       roleId: role.id,
       assignedAt: new Date(),
+    }, {
+      transaction,
     });
   }
 
@@ -107,6 +140,9 @@ function buildEffectiveRoleGrantMap(roleGrants = []) {
 
   for (const grant of normalizeGrantCollection(roleGrants)) {
     const resourceType = normalizeText(grant?.resourceType || grant?.resource);
+    const resourceId = normalizeText(
+      grant?.resourceId || grant?.scopeConfig?.resourceId || grant?.scopeConfig?.id,
+    ) || "*";
     const action = normalizeText(grant?.action);
     const roleCode = normalizeText(grant?.roleCode || grant?.role?.code);
     const effect = normalizeText(grant?.effect).toLowerCase() || "allow";
@@ -120,11 +156,16 @@ function buildEffectiveRoleGrantMap(roleGrants = []) {
     }
 
     const resourceBucket = grantMap.get(resourceType);
-    if (!resourceBucket.has(action)) {
-      resourceBucket.set(action, buildMapEntry());
+    if (!resourceBucket.has(resourceId)) {
+      resourceBucket.set(resourceId, new Map());
     }
 
-    const actionBucket = resourceBucket.get(action);
+    const resourceInstanceBucket = resourceBucket.get(resourceId);
+    if (!resourceInstanceBucket.has(action)) {
+      resourceInstanceBucket.set(action, buildMapEntry());
+    }
+
+    const actionBucket = resourceInstanceBucket.get(action);
     if (effect === "deny") {
       actionBucket.denyRoles.add(roleCode);
       actionBucket.allowRoles.delete(roleCode);
@@ -140,12 +181,17 @@ function buildEffectiveRoleGrantMap(roleGrants = []) {
     [...grantMap.entries()].map(([resourceType, actionMap]) => [
       resourceType,
       Object.fromEntries(
-        [...actionMap.entries()].map(([action, bucket]) => [
-          action,
-          {
-            allowRoles: [...bucket.allowRoles],
-            denyRoles: [...bucket.denyRoles],
-          },
+        [...actionMap.entries()].map(([resourceId, actionBuckets]) => [
+          resourceId,
+          Object.fromEntries(
+            [...actionBuckets.entries()].map(([action, bucket]) => [
+              action,
+              {
+                allowRoles: [...bucket.allowRoles],
+                denyRoles: [...bucket.denyRoles],
+              },
+            ]),
+          ),
         ]),
       ),
     ]),
