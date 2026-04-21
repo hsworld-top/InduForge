@@ -85,7 +85,7 @@
   </el-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 import { getConnectionTypeConfig } from "@/config/connectionTypes";
 import dayjs from "dayjs";

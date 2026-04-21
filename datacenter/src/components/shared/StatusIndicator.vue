@@ -2,7 +2,7 @@
   <span :class="['w-2 h-2 rounded-full', dotClass]" :title="label"></span>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 import { getStatusInfo } from "@/composables/useConnectionStatus";
 

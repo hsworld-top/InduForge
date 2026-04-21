@@ -29,7 +29,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, inject } from "vue";
 import { useSqlServer } from "@/composables/database/useSqlServer";
 

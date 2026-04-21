@@ -69,7 +69,7 @@
   </el-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, markRaw } from "vue";
 import { ElMessage } from "element-plus";
 import { getDatabaseTypes, getDefaultConfig } from "@/config/connectionTypes";

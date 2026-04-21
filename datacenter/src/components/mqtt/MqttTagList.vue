@@ -180,7 +180,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, toRef, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {

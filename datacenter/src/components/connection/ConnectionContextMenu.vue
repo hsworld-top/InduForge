@@ -49,7 +49,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { watch } from "vue";
 import IconTablerPlugConnected from "~icons/tabler/plug-connected";
 import IconTablerPlugConnectedX from "~icons/tabler/plug-connected-x";

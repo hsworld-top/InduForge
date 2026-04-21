@@ -34,7 +34,7 @@
   </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import IconTablerTable from "~icons/tabler/table";
 import IconTablerCode from "~icons/tabler/code";
 import { t } from "@/i18n/runtime";

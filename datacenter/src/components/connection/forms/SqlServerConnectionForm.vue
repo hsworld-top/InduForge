@@ -72,7 +72,7 @@
   </el-form>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch } from "vue";
 import { t } from "@/i18n/runtime";
 
