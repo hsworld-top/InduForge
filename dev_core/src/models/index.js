@@ -4,6 +4,10 @@ const { sequelize } = require("../config/database");
 const Tenant = require("./Tenant");
 const User = require("./User");
 const Project = require("./Project");
+const ProjectRuntimeUserFn = require("./ProjectRuntimeUser");
+const ProjectRoleFn = require("./ProjectRole");
+const ProjectUserRoleBindingFn = require("./ProjectUserRoleBinding");
+const ProjectRoleGrantFn = require("./ProjectRoleGrant");
 const Log = require("./Log");
 const DesignPage = require("./DesignPage");
 const DesignAssetFolder = require("./DesignAssetFolder");
@@ -19,6 +23,13 @@ const Node = NodeFn(sequelize, Sequelize.DataTypes);
 const NodeDeployment = NodeDeploymentFn(sequelize, Sequelize.DataTypes);
 const Deployment = DeploymentFn(sequelize, Sequelize.DataTypes);
 const NodeCommand = NodeCommandFn(sequelize, Sequelize.DataTypes);
+const ProjectRuntimeUser = ProjectRuntimeUserFn(sequelize, Sequelize.DataTypes);
+const ProjectRole = ProjectRoleFn(sequelize, Sequelize.DataTypes);
+const ProjectUserRoleBinding = ProjectUserRoleBindingFn(
+  sequelize,
+  Sequelize.DataTypes,
+);
+const ProjectRoleGrant = ProjectRoleGrantFn(sequelize, Sequelize.DataTypes);
 
 // 租户与用户/工程/日志的基础关系。
 Tenant.hasMany(User, {
@@ -56,6 +67,77 @@ Project.belongsTo(User, {
 Project.belongsTo(User, {
   foreignKey: "updatedBy",
   as: "updater",
+});
+
+// 运行态授权模型：工程内的运行态用户、角色与授权关系。
+Project.hasMany(ProjectRuntimeUser, {
+  foreignKey: "projectId",
+  as: "runtimeUsers",
+  onDelete: "CASCADE",
+});
+ProjectRuntimeUser.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+Project.hasMany(ProjectRole, {
+  foreignKey: "projectId",
+  as: "runtimeRoles",
+  onDelete: "CASCADE",
+});
+ProjectRole.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+Project.hasMany(ProjectUserRoleBinding, {
+  foreignKey: "projectId",
+  as: "runtimeRoleBindings",
+  onDelete: "CASCADE",
+});
+ProjectUserRoleBinding.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+ProjectRuntimeUser.hasMany(ProjectUserRoleBinding, {
+  foreignKey: "runtimeUserId",
+  as: "roleBindings",
+  onDelete: "CASCADE",
+});
+ProjectUserRoleBinding.belongsTo(ProjectRuntimeUser, {
+  foreignKey: "runtimeUserId",
+  as: "runtimeUser",
+});
+
+ProjectRole.hasMany(ProjectUserRoleBinding, {
+  foreignKey: "roleId",
+  as: "userBindings",
+  onDelete: "CASCADE",
+});
+ProjectUserRoleBinding.belongsTo(ProjectRole, {
+  foreignKey: "roleId",
+  as: "role",
+});
+
+Project.hasMany(ProjectRoleGrant, {
+  foreignKey: "projectId",
+  as: "runtimeRoleGrants",
+  onDelete: "CASCADE",
+});
+ProjectRoleGrant.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+
+ProjectRole.hasMany(ProjectRoleGrant, {
+  foreignKey: "roleId",
+  as: "grants",
+  onDelete: "CASCADE",
+});
+ProjectRoleGrant.belongsTo(ProjectRole, {
+  foreignKey: "roleId",
+  as: "role",
 });
 
 Tenant.hasMany(Log, {
@@ -310,6 +392,10 @@ module.exports = {
   User,
   Project,
   Log,
+  ProjectRuntimeUser,
+  ProjectRole,
+  ProjectUserRoleBinding,
+  ProjectRoleGrant,
   DesignPage,
   DesignAssetFolder,
   DesignAsset,

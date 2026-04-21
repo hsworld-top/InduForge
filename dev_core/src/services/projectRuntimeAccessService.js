@@ -1,0 +1,161 @@
+const bcrypt = require("bcryptjs");
+const {
+  ProjectRole,
+  ProjectRuntimeUser,
+  ProjectUserRoleBinding,
+} = require("../models");
+
+const DEFAULT_RUNTIME_ADMIN_ROLE_CODE = "PROJECT_RUNTIME_ADMIN";
+const DEFAULT_RUNTIME_ADMIN_USERNAME = "runtime_admin";
+const DEFAULT_RUNTIME_ADMIN_PASSWORD = "RuntimeAdmin@123";
+const DEFAULT_RUNTIME_ADMIN_NAME = "运行态管理员";
+const BCRYPT_SALT_ROUNDS = 12;
+
+const normalizeGrantCollection = (grants = []) => (Array.isArray(grants) ? grants : []);
+const normalizeText = (value) => String(value ?? "").trim();
+
+const buildMapEntry = () => ({
+  allowRoles: new Set(),
+  denyRoles: new Set(),
+});
+
+/**
+ * 创建或补齐工程运行态的默认管理员角色、用户和绑定关系。
+ * 设计上保持幂等：已有记录则直接复用，不重复创建。
+ */
+async function ensureRuntimeAdminBootstrap(projectId, options = {}) {
+  const resolvedProjectId = normalizeText(projectId);
+  if (!resolvedProjectId) {
+    throw new Error("projectId 不能为空");
+  }
+
+  const roleCode = normalizeText(options.roleCode) || DEFAULT_RUNTIME_ADMIN_ROLE_CODE;
+  const username = normalizeText(options.username) || DEFAULT_RUNTIME_ADMIN_USERNAME;
+  const rawPassword = options.password || DEFAULT_RUNTIME_ADMIN_PASSWORD;
+  const roleName = normalizeText(options.roleName) || DEFAULT_RUNTIME_ADMIN_NAME;
+  const roleDescription =
+    normalizeText(options.roleDescription) ||
+    "工程运行态默认管理员角色，用于初始化首个可管理账号";
+  const displayName = normalizeText(options.displayName) || DEFAULT_RUNTIME_ADMIN_NAME;
+
+  let role = await ProjectRole.findOne({
+    where: {
+      projectId: resolvedProjectId,
+      code: roleCode,
+    },
+  });
+  if (!role) {
+    role = await ProjectRole.create({
+      projectId: resolvedProjectId,
+      code: roleCode,
+      name: roleName,
+      description: roleDescription,
+      isSystem: true,
+      status: "active",
+    });
+  }
+
+  let runtimeUser = await ProjectRuntimeUser.findOne({
+    where: {
+      projectId: resolvedProjectId,
+      username,
+    },
+  });
+  if (!runtimeUser) {
+    const passwordHash = await bcrypt.hash(rawPassword, BCRYPT_SALT_ROUNDS);
+    runtimeUser = await ProjectRuntimeUser.create({
+      projectId: resolvedProjectId,
+      username,
+      passwordHash,
+      displayName,
+      status: "active",
+    });
+  }
+
+  let binding = await ProjectUserRoleBinding.findOne({
+    where: {
+      projectId: resolvedProjectId,
+      runtimeUserId: runtimeUser.id,
+      roleId: role.id,
+    },
+  });
+  if (!binding) {
+    binding = await ProjectUserRoleBinding.create({
+      projectId: resolvedProjectId,
+      runtimeUserId: runtimeUser.id,
+      roleId: role.id,
+      assignedAt: new Date(),
+    });
+  }
+
+  return {
+    role,
+    runtimeUser,
+    binding,
+  };
+}
+
+/**
+ * 把多个角色的授权记录合并成易于权限判定的映射。
+ * 规则很简单：
+ * - 同一资源/动作下，allowRoles 记录允许的角色
+ * - denyRoles 记录拒绝的角色
+ * - 同一角色同时出现在 allow/deny 时，以 deny 为准，允许列表会被移除
+ */
+function buildEffectiveRoleGrantMap(roleGrants = []) {
+  const grantMap = new Map();
+
+  for (const grant of normalizeGrantCollection(roleGrants)) {
+    const resourceType = normalizeText(grant?.resourceType || grant?.resource);
+    const action = normalizeText(grant?.action);
+    const roleCode = normalizeText(grant?.roleCode || grant?.role?.code);
+    const effect = normalizeText(grant?.effect).toLowerCase() || "allow";
+
+    if (!resourceType || !action || !roleCode) {
+      continue;
+    }
+
+    if (!grantMap.has(resourceType)) {
+      grantMap.set(resourceType, new Map());
+    }
+
+    const resourceBucket = grantMap.get(resourceType);
+    if (!resourceBucket.has(action)) {
+      resourceBucket.set(action, buildMapEntry());
+    }
+
+    const actionBucket = resourceBucket.get(action);
+    if (effect === "deny") {
+      actionBucket.denyRoles.add(roleCode);
+      actionBucket.allowRoles.delete(roleCode);
+      continue;
+    }
+
+    if (!actionBucket.denyRoles.has(roleCode)) {
+      actionBucket.allowRoles.add(roleCode);
+    }
+  }
+
+  return Object.fromEntries(
+    [...grantMap.entries()].map(([resourceType, actionMap]) => [
+      resourceType,
+      Object.fromEntries(
+        [...actionMap.entries()].map(([action, bucket]) => [
+          action,
+          {
+            allowRoles: [...bucket.allowRoles],
+            denyRoles: [...bucket.denyRoles],
+          },
+        ]),
+      ),
+    ]),
+  );
+}
+
+module.exports = {
+  DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+  DEFAULT_RUNTIME_ADMIN_USERNAME,
+  DEFAULT_RUNTIME_ADMIN_PASSWORD,
+  ensureRuntimeAdminBootstrap,
+  buildEffectiveRoleGrantMap,
+};
