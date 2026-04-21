@@ -9,6 +9,9 @@ const mockProject = {
   create: jest.fn(),
   findByPk: jest.fn(),
 };
+const mockDesignPage = {
+  create: jest.fn(),
+};
 
 const mockService = {
   ensureRuntimeAdminBootstrap: jest.fn(),
@@ -40,7 +43,7 @@ jest.mock("../../../models", () => ({
   Project: mockProject,
   Tenant: {},
   User: {},
-  DesignPage: {},
+  DesignPage: mockDesignPage,
   NodeDeployment: { findAll: jest.fn() },
 }));
 
@@ -156,6 +159,44 @@ describe("project runtime access router", () => {
     expect(mockUpsertProjectSettings).not.toHaveBeenCalled();
   });
 
+  test("导入工程后也会初始化默认工程管理员账号并传入随机 initialPassword", async () => {
+    const projectUpdate = jest.fn().mockResolvedValue(undefined);
+    mockProject.create.mockResolvedValue({
+      id: "project-import-1",
+      tenantId: "tenant-1",
+      update: projectUpdate,
+    });
+    mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
+    mockDesignPage.create.mockResolvedValue(undefined);
+
+    const response = await request(createApp())
+      .post("/projects/import")
+      .send({
+        name: "导入工程",
+        payload: {
+          project: {
+            name: "旧工程",
+          },
+          pages: [],
+          datacenter: {},
+        },
+      });
+
+    expect(response.status).toBe(201);
+    expect(mockService.ensureRuntimeAdminBootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project: expect.objectContaining({ id: "project-import-1" }),
+        creator: expect.objectContaining({
+          id: "user-1",
+          username: "owner",
+          fullName: "工程创建者",
+        }),
+        initialPassword: "0123456789abcdef0123456789abcdef",
+      }),
+    );
+    expect(JSON.stringify(response.body)).not.toContain("0123456789abcdef0123456789abcdef");
+  });
+
   test("GET /projects/:id/runtime-users 返回 runtimeUsers", async () => {
     mockService.listRuntimeUsers.mockResolvedValue([
       { id: "runtime-user-1", username: "operator", roleIds: ["role-1"] },
@@ -241,6 +282,34 @@ describe("project runtime access router", () => {
         success: false,
         errorCode: "B0001",
         message: "系统内置角色不能删除",
+      }),
+    );
+  });
+
+  test("PATCH /projects/:id/runtime-users/:runtimeUserId/status 只走 active 或 disabled 契约", async () => {
+    mockService.updateRuntimeUserStatus.mockResolvedValue({
+      id: "runtime-user-1",
+      username: "operator",
+      status: "disabled",
+      roleIds: [],
+    });
+
+    const response = await request(createApp())
+      .patch("/projects/project-1/runtime-users/runtime-user-1/status")
+      .send({ status: "disabled" });
+
+    expect(response.status).toBe(200);
+    expect(mockService.updateRuntimeUserStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        runtimeUserId: "runtime-user-1",
+        status: "disabled",
+        actorId: "user-1",
+      }),
+    );
+    expect(response.body.data.runtimeUser).toEqual(
+      expect.objectContaining({
+        status: "disabled",
       }),
     );
   });

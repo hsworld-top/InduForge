@@ -96,6 +96,22 @@ const sanitizeRuntimeUser = (runtimeUser) => {
 const normalizeRoleIds = (roleIds = []) =>
   [...new Set((Array.isArray(roleIds) ? roleIds : []).map((item) => normalizeText(item)).filter(Boolean))];
 
+const normalizeRuntimeUserStatusForOutput = (status) => {
+  const normalizedStatus = normalizeText(status);
+  return normalizedStatus === "active" ? "active" : "disabled";
+};
+
+const normalizeRuntimeUserStatusForStorage = (status) => {
+  const normalizedStatus = normalizeText(status);
+  if (normalizedStatus === "active") {
+    return "active";
+  }
+  if (normalizedStatus === "disabled") {
+    return "inactive";
+  }
+  throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "状态值不合法" });
+};
+
 const buildRuntimeUserInclude = () => ([
   {
     model: ProjectUserRoleBinding,
@@ -143,6 +159,7 @@ const buildRuntimeUserSummary = (runtimeUser) => {
       status: role.status,
     }));
 
+  plainUser.status = normalizeRuntimeUserStatusForOutput(plainUser.status);
   plainUser.roleIds = roleBindings.map((binding) => binding.roleId).filter(Boolean);
   plainUser.roles = roles;
   delete plainUser.roleBindings;
@@ -449,13 +466,9 @@ async function updateRuntimeUserStatus({
   status,
   actorId = null,
 } = {}) {
-  const normalizedStatus = normalizeText(status);
+  const normalizedStatus = normalizeRuntimeUserStatusForStorage(status);
   if (!projectId || !runtimeUserId) {
     throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "参数不完整" });
-  }
-
-  if (!["active", "inactive", "suspended"].includes(normalizedStatus)) {
-    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "状态值不合法" });
   }
 
   const runtimeUser = await ProjectRuntimeUser.findOne({

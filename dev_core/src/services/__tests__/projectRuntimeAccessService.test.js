@@ -673,7 +673,7 @@ describe("projectRuntimeAccessService", () => {
         projectId: "project-1",
         username: "operator",
         displayName: "值班员",
-        status: "active",
+        status: "inactive",
         passwordHash: "hash-1",
         roleBindings: [
           { roleId: "role-1", role: { id: "role-1", code: "OPERATOR", name: "值班员" } },
@@ -690,6 +690,7 @@ describe("projectRuntimeAccessService", () => {
       }),
     );
     expect(result[0].passwordHash).toBeUndefined();
+    expect(result[0].status).toBe("disabled");
     expect(result[0].roleIds).toEqual(["role-1", "role-2"]);
     expect(result[0].roles).toEqual([
       expect.objectContaining({ id: "role-1", code: "OPERATOR" }),
@@ -764,6 +765,55 @@ describe("projectRuntimeAccessService", () => {
       expect.objectContaining({ id: "role-1", code: "OPERATOR" }),
       expect.objectContaining({ id: "role-2", code: "VIEWER" }),
     ]);
+    expect(result.status).toBe("active");
+  });
+
+  test("updateRuntimeUserStatus 只接受 active 或 disabled，并对外返回 active 或 disabled", async () => {
+    const runtimeUserRecord = {
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    mockProjectRuntimeUser.findOne
+      .mockResolvedValueOnce(runtimeUserRecord)
+      .mockResolvedValueOnce({
+        id: "runtime-user-1",
+        projectId: "project-1",
+        username: "operator",
+        displayName: "值班员",
+        status: "inactive",
+        passwordHash: "hash-operator",
+        roleBindings: [],
+      });
+
+    const result = await updateRuntimeUserStatus({
+      projectId: "project-1",
+      runtimeUserId: "runtime-user-1",
+      status: "disabled",
+      actorId: "user-1",
+    });
+
+    expect(runtimeUserRecord.update).toHaveBeenCalledWith({
+      status: "inactive",
+      updatedBy: "user-1",
+    });
+    expect(result.status).toBe("disabled");
+    expect(result.passwordHash).toBeUndefined();
+  });
+
+  test("updateRuntimeUserStatus 会拒绝 inactive 或 suspended 这样的旧枚举输入", async () => {
+    await expect(
+      updateRuntimeUserStatus({
+        projectId: "project-1",
+        runtimeUserId: "runtime-user-1",
+        status: "inactive",
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "状态值不合法",
+      }),
+    });
   });
 
   test("listRuntimeRoles 会返回 bindingCount 和 grantCount", async () => {

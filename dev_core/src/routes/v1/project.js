@@ -502,30 +502,14 @@ router.post('/import', authenticateToken, validate(Joi.object({
       projectInfo.projectVariables ||
       {};
 
-    const project = await Project.create({
-      name: finalName,
-      description: projectInfo.description || '',
-      colorTag: projectInfo.colorTag || '#3b82f6',
-      tenantId,
-      createdBy: userId,
-      projectVariables,
-      entryConfig: {},
-    });
+    let project = null;
+    let projectId = null;
 
     const globalVariables = settings.globalVariables || {
       definitions: projectVariables,
       groups: [],
     };
     const globalScripts = settings.globalScripts || null;
-
-    await upsertProjectSettings(Project.sequelize, {
-      projectId: project.id,
-      schemaVersion: '1.0.0',
-      globalVariables,
-      globalScripts: globalScripts || {},
-      updatedBy: userId,
-      updatedAt: new Date(),
-    });
 
     const pageIdMap = new Map();
     pageList.forEach((item) => {
@@ -535,56 +519,93 @@ router.post('/import', authenticateToken, validate(Joi.object({
       }
     });
 
-    for (const item of pageList) {
-      const pageData = item.page || item;
-      if (!pageData) continue;
-      const newPageId = pageIdMap.get(pageData.id) || randomUUID();
-      const newParentId = pageData.parentId ? pageIdMap.get(pageData.parentId) : null;
-      const schemaContent = item.schemaContent || pageData.schemaContent || null;
-      const nextSchema = schemaContent ? JSON.parse(JSON.stringify(schemaContent)) : null;
-      if (nextSchema?.page) {
-        nextSchema.page.id = newPageId;
-        nextSchema.page.parentId = newParentId;
-        nextSchema.page.name = pageData.name || nextSchema.page.name;
+    await Project.sequelize.transaction(async (transaction) => {
+      project = await Project.create({
+        name: finalName,
+        description: projectInfo.description || '',
+        colorTag: projectInfo.colorTag || '#3b82f6',
+        tenantId,
+        createdBy: userId,
+        projectVariables,
+        entryConfig: {},
+      }, {
+        transaction,
+      });
+      projectId = project.id;
+
+      for (const item of pageList) {
+        const pageData = item.page || item;
+        if (!pageData) continue;
+        const newPageId = pageIdMap.get(pageData.id) || randomUUID();
+        const newParentId = pageData.parentId ? pageIdMap.get(pageData.parentId) : null;
+        const schemaContent = item.schemaContent || pageData.schemaContent || null;
+        const nextSchema = schemaContent ? JSON.parse(JSON.stringify(schemaContent)) : null;
+        if (nextSchema?.page) {
+          nextSchema.page.id = newPageId;
+          nextSchema.page.parentId = newParentId;
+          nextSchema.page.name = pageData.name || nextSchema.page.name;
+        }
+
+        await DesignPage.create({
+          id: newPageId,
+          projectId: project.id,
+          parentId: newParentId,
+          name: pageData.name || '未命名页面',
+          type: pageData.type || 'page',
+          sortOrder: pageData.sortOrder || 0,
+          schemaContent: nextSchema,
+          createdBy: userId,
+          updatedBy: userId,
+        }, {
+          transaction,
+        });
       }
 
-      await DesignPage.create({
-        id: newPageId,
-        projectId: project.id,
-        parentId: newParentId,
-        name: pageData.name || '未命名页面',
-        type: pageData.type || 'page',
-        sortOrder: pageData.sortOrder || 0,
-        schemaContent: nextSchema,
-        createdBy: userId,
-        updatedBy: userId,
+      const nextEntry = {
+        ...entryConfig,
+      };
+      if (entryConfig?.homePageId && pageIdMap.has(entryConfig.homePageId)) {
+        nextEntry.homePageId = pageIdMap.get(entryConfig.homePageId);
+      }
+      if (entryConfig?.loginPageId && pageIdMap.has(entryConfig.loginPageId)) {
+        nextEntry.loginPageId = pageIdMap.get(entryConfig.loginPageId);
+      }
+      if (entryConfig?.logoutPageId && pageIdMap.has(entryConfig.logoutPageId)) {
+        nextEntry.logoutPageId = pageIdMap.get(entryConfig.logoutPageId);
+      }
+
+      await project.update({ entryConfig: nextEntry }, { transaction });
+
+      await ensureRuntimeAdminBootstrap({
+        project,
+        creator: {
+          id: userId,
+          username: req.user.username,
+          fullName: req.user.fullName,
+        },
+        initialPassword: buildInitialRuntimePassword(),
+        transaction,
       });
-    }
+    });
 
-    const nextEntry = {
-      ...entryConfig,
-    };
-    if (entryConfig?.homePageId && pageIdMap.has(entryConfig.homePageId)) {
-      nextEntry.homePageId = pageIdMap.get(entryConfig.homePageId);
-    }
-    if (entryConfig?.loginPageId && pageIdMap.has(entryConfig.loginPageId)) {
-      nextEntry.loginPageId = pageIdMap.get(entryConfig.loginPageId);
-    }
-    if (entryConfig?.logoutPageId && pageIdMap.has(entryConfig.logoutPageId)) {
-      nextEntry.logoutPageId = pageIdMap.get(entryConfig.logoutPageId);
-    }
-
-    await project.update({ entryConfig: nextEntry });
+    await upsertProjectSettings(Project.sequelize, {
+      projectId,
+      schemaVersion: '1.0.0',
+      globalVariables,
+      globalScripts: globalScripts || {},
+      updatedBy: userId,
+      updatedAt: new Date(),
+    });
 
     const snapshot = buildProjectSnapshot(payload.datacenter || {});
     await dataDomainClient.replaceProjectSnapshot(
-      project.id,
+      projectId,
       snapshot,
       req.headers.authorization,
     );
 
 
-    return ApiResponse.success(res, { projectId: project.id }, 'project_import_success', {}, 201);
+    return ApiResponse.success(res, { projectId }, 'project_import_success', {}, 201);
   } catch (error) {
     logger.error('Import project error', { error: error.message, requestId: req.requestId });
     return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
@@ -750,7 +771,7 @@ router.patch('/:id/runtime-users/:runtimeUserId/status', authenticateToken, requ
     runtimeUserId: Joi.string().uuid().required(),
   }),
   body: Joi.object({
-    status: Joi.string().valid('active', 'inactive', 'suspended').required(),
+    status: Joi.string().valid('active', 'disabled').required(),
   }).required(),
 })), async (req, res) => {
   try {
