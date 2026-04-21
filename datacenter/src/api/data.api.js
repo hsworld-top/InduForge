@@ -428,9 +428,9 @@ export const getMqttTagGroups = (projectId, subscriptionId, params = {}) => {
  * 获取单个变量组
  * @param {string} groupId - 变量组ID
  */
-export const getMqttTagGroup = (groupId) => {
+export const getMqttTagGroup = (projectId, groupId) => {
   return request({
-    url: `/data/mqtt/tag-groups/${groupId}`,
+    url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
     method: "get",
   });
 };
@@ -454,9 +454,9 @@ export const createMqttTagGroup = (projectId, subscriptionId, data) => {
  * @param {string} groupId - 变量组ID
  * @param {object} data - 更新数据
  */
-export const updateMqttTagGroup = (groupId, data) => {
+export const updateMqttTagGroup = (projectId, groupId, data) => {
   return request({
-    url: `/data/mqtt/tag-groups/${groupId}`,
+    url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
     method: "put",
     data,
   });
@@ -466,9 +466,9 @@ export const updateMqttTagGroup = (groupId, data) => {
  * 删除变量组
  * @param {string} groupId - 变量组ID
  */
-export const deleteMqttTagGroup = (groupId) => {
+export const deleteMqttTagGroup = (projectId, groupId) => {
   return request({
-    url: `/data/mqtt/tag-groups/${groupId}`,
+    url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
     method: "delete",
   });
 };
@@ -477,9 +477,9 @@ export const deleteMqttTagGroup = (groupId) => {
  * 更新变量组顺序
  * @param {array} groups - 变量组数组，包含id和order
  */
-export const updateMqttTagGroupsOrder = (groups) => {
+export const updateMqttTagGroupsOrder = (projectId, groups) => {
   return request({
-    url: `/data/mqtt/tag-groups/order`,
+    url: `/data/projects/${projectId}/mqtt/tag-groups/order`,
     method: "put",
     data: { groups },
   });
@@ -520,9 +520,9 @@ export const getProjectMqttTags = (projectId, params = {}) => {
  * 获取Tag详情
  * @param {string} tagId - Tag ID
  */
-export const getMqttTag = (tagId) => {
+export const getMqttTag = (projectId, tagId) => {
   return request({
-    url: `/data/mqtt/tags/${tagId}`,
+    url: `/data/projects/${projectId}/mqtt/tags/${tagId}`,
     method: "get",
   });
 };
@@ -560,9 +560,9 @@ export const createMqttTagsBatch = (projectId, subscriptionId, tags) => {
  * @param {string} tagId - Tag ID
  * @param {object} data - 更新数据
  */
-export const updateMqttTag = (tagId, data) => {
+export const updateMqttTag = (projectId, tagId, data) => {
   return request({
-    url: `/data/mqtt/tags/${tagId}`,
+    url: `/data/projects/${projectId}/mqtt/tags/${tagId}`,
     method: "put",
     data,
   });
@@ -572,9 +572,9 @@ export const updateMqttTag = (tagId, data) => {
  * 删除Tag
  * @param {string} tagId - Tag ID
  */
-export const deleteMqttTag = (tagId) => {
+export const deleteMqttTag = (projectId, tagId) => {
   return request({
-    url: `/data/mqtt/tags/${tagId}`,
+    url: `/data/projects/${projectId}/mqtt/tags/${tagId}`,
     method: "delete",
   });
 };
@@ -583,9 +583,9 @@ export const deleteMqttTag = (tagId) => {
  * 切换Tag启用状态
  * @param {string} tagId - Tag ID
  */
-export const toggleMqttTag = (tagId) => {
+export const toggleMqttTag = (projectId, tagId) => {
   return request({
-    url: `/data/mqtt/tags/${tagId}/toggle`,
+    url: `/data/projects/${projectId}/mqtt/tags/${tagId}/toggle`,
     method: "patch",
   });
 };
@@ -594,9 +594,9 @@ export const toggleMqttTag = (tagId) => {
  * 更新Tags顺序
  * @param {array} tagIds - Tag ID数组
  */
-export const updateMqttTagsOrder = (tagIds) => {
+export const updateMqttTagsOrder = (projectId, tagIds) => {
   return request({
-    url: `/data/mqtt/tags/order`,
+    url: `/data/projects/${projectId}/mqtt/tags/order`,
     method: "put",
     data: { tagIds },
   });
@@ -606,9 +606,9 @@ export const updateMqttTagsOrder = (tagIds) => {
  * 获取Tag的当前值
  * @param {string} tagId - Tag ID
  */
-export const getMqttTagValue = (tagId) => {
+export const getMqttTagValue = (projectId, tagId) => {
   return request({
-    url: `/data/mqtt/tags/${tagId}/value`,
+    url: `/data/projects/${projectId}/mqtt/tags/${tagId}/value`,
     method: "get",
   });
 };
@@ -617,9 +617,9 @@ export const getMqttTagValue = (tagId) => {
  * 获取多个Tag的当前值
  * @param {array} tagIds - Tag ID数组
  */
-export const getMqttTagValues = (tagIds) => {
+export const getMqttTagValues = (projectId, tagIds) => {
   return request({
-    url: `/data/mqtt/tags/values`,
+    url: `/data/projects/${projectId}/mqtt/tags/values`,
     method: "post",
     data: { tagIds },
   });

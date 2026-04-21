@@ -24,8 +24,10 @@ const resolveValue = (value) => {
  * 2. 如果 create 请求在组件卸载或 project 切换后才返回，会立即反向删除迟到的 session，避免泄漏。
  *
  * @param {import("vue").MaybeRefOrGetter<string | null | undefined>} projectIdSource
+ * @param {{ autoStart?: boolean }} [options]
  */
-export function usePreviewSession(projectIdSource) {
+export function usePreviewSession(projectIdSource, options = {}) {
+  const autoStart = options.autoStart !== false;
   const sessionId = ref("");
   const loading = ref(false);
   const error = ref(null);
@@ -139,7 +141,10 @@ export function usePreviewSession(projectIdSource) {
           readProjectId() !== currentProjectId
         ) {
           void deletePreviewSession(nextSessionId).catch((destroyError) => {
-            console.warn("[PreviewSession] 清理迟到 session 失败:", destroyError);
+            console.warn(
+              "[PreviewSession] 清理迟到 session 失败:",
+              destroyError,
+            );
           });
           return "";
         }
@@ -178,9 +183,13 @@ export function usePreviewSession(projectIdSource) {
         await destroySession();
       }
 
+      if (!autoStart && !sessionId.value) {
+        return;
+      }
+
       await ensureSession();
     },
-    { immediate: true },
+    { immediate: autoStart },
   );
 
   onBeforeUnmount(async () => {

@@ -1,4 +1,4 @@
-/* global __VITE_API_URL__ */
+/* global __VITE_DATA_SERVICE_URL__ */
 
 import { ref, watch, unref, onBeforeUnmount } from "vue";
 import { io } from "socket.io-client";
@@ -11,7 +11,7 @@ import {
 
 const sharedRegistry = createMqttSocketSharedRegistry({
   ioFactory: io,
-  getApiUrl: () => __VITE_API_URL__ || "http://localhost:19601",
+  getApiUrl: () => __VITE_DATA_SERVICE_URL__ || "http://localhost:19602",
   getToken: () => Storage.getToken(),
   notifier: ({ type, message }) => {
     ElMessage({

@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
     ],
     // 确保环境变量被注入到前端代码中
     define: {
+      __DATACENTER_DEBUG_ROUTE_ENABLED__: JSON.stringify(mode !== "production"),
       __VITE_API_URL__: JSON.stringify(env.VITE_API_URL),
       __VITE_DATA_SERVICE_URL__: JSON.stringify(dataServiceUrl),
     },

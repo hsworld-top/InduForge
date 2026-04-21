@@ -212,7 +212,7 @@ const handleSubmit = async () => {
         formData.value,
       );
     } else {
-      await updateMqttTagGroup(props.group.id, formData.value);
+      await updateMqttTagGroup(props.projectId, props.group.id, formData.value);
     }
 
     emit("success");

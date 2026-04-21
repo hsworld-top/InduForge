@@ -4,7 +4,7 @@
 
 import { i18n } from "@/i18n";
 
-export type PageInspectorSectionKey = "basic" | "visual" | "runtime";
+export type PageInspectorSectionKey = "identity" | "route" | "viewport" | "visual" | "runtime";
 
 export interface PageInspectorSection {
   key: PageInspectorSectionKey;
@@ -15,19 +15,45 @@ export interface PageInspectorSection {
 function buildPageInspectorSections(): PageInspectorSection[] {
   return [
     {
-      key: "basic",
-      title: i18n.global.t("pageInspector.sections.basic"),
-      fields: ["name", "description", "pageType", "path"],
+      key: "identity",
+      title: i18n.global.t("pageInspector.sections.identity"),
+      fields: ["name", "title", "description", "pageId"],
+    },
+    {
+      key: "route",
+      title: i18n.global.t("pageInspector.sections.route"),
+      fields: ["role", "routeMode", "routePath", "routeSlug", "parentRoutePath"],
+    },
+    {
+      key: "viewport",
+      title: i18n.global.t("pageInspector.sections.viewport"),
+      fields: [
+        "viewportPreset",
+        "width",
+        "height",
+        "autoFit",
+        "lockAspectRatio",
+        "minWidth",
+        "minHeight",
+        "overflowMode",
+      ],
     },
     {
       key: "visual",
       title: i18n.global.t("pageInspector.sections.visual"),
-      fields: ["backgroundKind", "backgroundValue", "width", "height"],
+      fields: [
+        "backgroundType",
+        "backgroundValue",
+        "backgroundSize",
+        "backgroundPosition",
+        "backgroundRepeat",
+        "transitionType",
+      ],
     },
     {
       key: "runtime",
       title: i18n.global.t("pageInspector.sections.runtime"),
-      fields: ["autoFit", "lockAspectRatio", "enableMinSize", "windowStyle", "permissionDesc"],
+      fields: ["openMode", "popup", "permission", "cacheMode", "preloadMode"],
     },
   ];
 }

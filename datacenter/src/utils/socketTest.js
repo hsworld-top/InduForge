@@ -1,3 +1,5 @@
+/* global __VITE_DATA_SERVICE_URL__ */
+
 /**
  * Socket.IO连接测试工具
  */
@@ -6,7 +8,7 @@ import { io } from "socket.io-client";
 export function testSocketConnection() {
   console.log("🔍 开始Socket.IO连接测试...");
 
-  const apiUrl = __VITE_API_URL__ || "http://localhost:19601";
+  const apiUrl = __VITE_DATA_SERVICE_URL__ || "http://localhost:19602";
   const socketUrl = apiUrl.replace(/\/$/, "");
 
   console.log("📡 目标URL:", socketUrl);

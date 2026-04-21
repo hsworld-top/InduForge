@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/indu-forge/data_service/internal/auth"
+	"github.com/indu-forge/data_service/internal/bootstrap"
 	"github.com/indu-forge/data_service/internal/cache"
 	"github.com/indu-forge/data_service/internal/config"
 	"github.com/indu-forge/data_service/internal/db/postgres"
@@ -39,17 +40,17 @@ type Server struct {
 type routeDependenciesFactory func(config.Config) ([]router.Option, func(), error)
 
 var buildRouteDependencies routeDependenciesFactory = defaultRouteDependenciesFactory
+var logf = log.Printf
 
 // NewServer 创建一个带有默认超时配置的 HTTP 服务实例。
 func NewServer(cfg config.Config) (*Server, error) {
 	routerOptions, cleanup, err := buildRouteDependencies(cfg)
 	if err != nil {
-		log.Printf("warning: optional routes disabled: %v", err)
-		routerOptions = nil
-		cleanup = nil
+		return nil, err
 	}
 
-	return newServer(cfg, middleware.RequestIDMiddleware(router.NewRouter(routerOptions...)), cleanup), nil
+	logf("info: data_service 路由装配完成 addr=%s", cfg.Addr)
+	return newServer(cfg, middleware.RequestIDMiddleware(middleware.AccessLogMiddleware(router.NewRouter(routerOptions...))), cleanup), nil
 }
 
 // newServer 允许测试复用生产级 HTTP Server 装配逻辑。
@@ -91,6 +92,7 @@ func (s *Server) Close() {
 func (s *Server) Run(ctx context.Context) error {
 	defer s.Close()
 
+	logf("info: data_service 准备启动 HTTP 服务 addr=%s", s.httpServer.Addr)
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -99,16 +101,20 @@ func (s *Server) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
+		logf("info: data_service 收到退出信号，开始关闭 HTTP 服务")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
 			return err
 		}
+		logf("info: data_service HTTP 服务已关闭")
 		return nil
 	case err := <-errCh:
 		if err == nil || errors.Is(err, http.ErrServerClosed) {
+			logf("info: data_service HTTP 服务已关闭")
 			return nil
 		}
+		logf("error: data_service HTTP 服务异常退出: %v", err)
 		return err
 	}
 }
@@ -117,6 +123,11 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	if err := config.ValidateConnectionsDependencies(cfg); err != nil {
 		return nil, nil, err
 	}
+	logf("info: data_service 启动阶段=connections-deps status=ready")
+	if err := bootstrap.NewRuntimeBootstrapper().EnsureReady(context.Background(), cfg); err != nil {
+		return nil, nil, err
+	}
+	logf("info: data_service 启动阶段=database-bootstrap status=ready")
 
 	jwtValidator, err := auth.NewJWTValidator(cfg.JWTSecret)
 	if err != nil {
@@ -173,9 +184,19 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
 		router.WithComputeRoutes(computeHandler, jwtValidator),
 	}
+	routeSummaryParts := []string{
+		"connections=enabled",
+		"data=enabled",
+		"mqtt=enabled",
+		"projectSnapshot=enabled",
+		"protocolWave1=enabled",
+		"protocolWave2=enabled",
+		"compute=enabled",
+		"preview=disabled",
+	}
 
 	if err := config.ValidatePreviewDependencies(cfg); err != nil {
-		log.Printf("warning: preview routes disabled: %v", err)
+		logf("warning: data_service preview 路由未启用 reason=%v", err)
 	} else {
 		redisClient, redisErr := cache.NewRedisClient(context.Background(), cache.RedisConfig{
 			Addr:     strings.TrimSpace(cfg.RedisAddr),
@@ -183,7 +204,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 			DB:       cfg.RedisDB,
 		})
 		if redisErr != nil {
-			log.Printf("warning: preview routes disabled: %v", redisErr)
+			logf("warning: data_service preview 路由未启用 reason=%v", redisErr)
 		} else {
 			cleanupFns = append(cleanupFns, func() {
 				_ = redisClient.Close()
@@ -193,17 +214,23 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 			previewService := service.NewPreviewSessionService(previewRepository, redisClient)
 			previewSocketServer, previewSocketErr := previewsocket.NewPreviewSocketServer(jwtValidator, previewService, dataPointService, mqttRepository)
 			if previewSocketErr != nil {
-				log.Printf("warning: preview socket disabled: %v", previewSocketErr)
+				logf("warning: data_service preview socket 未启用 reason=%v", previewSocketErr)
 			}
 			if previewSocketServer != nil {
 				cleanupFns = append(cleanupFns, previewSocketServer.Close)
 				routeOptions = append(routeOptions, router.WithPreviewSocketHandler(previewSocketServer.Handler()))
+				routeSummaryParts[len(routeSummaryParts)-1] = "preview=http+socket"
 			}
 
 			previewHandler := handler.NewPreviewHandler(previewService, previewSocketServer)
 			routeOptions = append(routeOptions, router.WithPreviewRoutes(previewHandler, jwtValidator))
+			if previewSocketServer == nil {
+				routeSummaryParts[len(routeSummaryParts)-1] = "preview=http-only"
+			}
 		}
 	}
+
+	logf("info: data_service 路由摘要 routeSummary=%s", strings.Join(routeSummaryParts, ","))
 
 	return routeOptions, joinCleanup(cleanupFns...), nil
 }

@@ -180,11 +180,7 @@ export function shouldRedirectTopLevelToIde(
   isTopLevel,
   hasReusableSession = hasReusableTopLevelSession(),
 ) {
-  return (
-    isTopLevel &&
-    !shouldUseDebugMode(pathname) &&
-    !hasReusableSession
-  );
+  return isTopLevel && !shouldUseDebugMode(pathname) && !hasReusableSession;
 }
 
 export function buildIdeRestoreUrl(handoff, ideOrigin) {

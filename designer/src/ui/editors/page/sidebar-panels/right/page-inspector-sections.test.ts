@@ -9,20 +9,26 @@ describe("page-inspector-sections", () => {
 
   it("returns localized section titles", () => {
     expect(getPageInspectorSections().map((section) => section.key)).toEqual([
-      "basic",
+      "identity",
+      "route",
+      "viewport",
       "visual",
       "runtime",
     ]);
     expect(getPageInspectorSections().map((section) => section.title)).toEqual([
-      "基本",
+      "页面身份",
+      "路由与入口",
+      "布局与适配",
       "视觉",
-      "运行",
+      "运行控制",
     ]);
 
     i18n.global.locale.value = "en";
 
     expect(getPageInspectorSections().map((section) => section.title)).toEqual([
-      "Basic",
+      "Identity",
+      "Route & Entry",
+      "Layout & Adaptation",
       "Visual",
       "Runtime",
     ]);
@@ -31,11 +37,11 @@ describe("page-inspector-sections", () => {
   it("contains required runtime fields", () => {
     const runtimeSection = getPageInspectorSections().find((section) => section.key === "runtime");
     expect(runtimeSection?.fields).toEqual([
-      "autoFit",
-      "lockAspectRatio",
-      "enableMinSize",
-      "windowStyle",
-      "permissionDesc",
+      "openMode",
+      "popup",
+      "permission",
+      "cacheMode",
+      "preloadMode",
     ]);
   });
 

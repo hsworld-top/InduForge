@@ -14,9 +14,6 @@ import type { EditorRouteProjectMeta } from "@/stores/editor-store.types";
 import { storeToRefs } from "pinia";
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-// 图标导入
-import IconEpArrowLeft from "~icons/ep/arrow-left";
-import IconEpRefresh from "~icons/ep/refresh";
 import { VIEW_PRESETS } from "@/constants";
 
 import { useEditorStore } from "@/stores/editor-store";
@@ -24,12 +21,192 @@ import { canvasZoomKey } from "@/ui/editors/page/canvas/injection-keys";
 import NodeRenderer from "@/ui/editors/page/canvas/NodeRenderer.vue";
 import { clearPreviewRuntime, initPreviewRuntime } from "./previewRuntime";
 
-/** 预览画布实际读取的页面配置（含壳层/历史遗留的扁平背景字段） */
-type PreviewCanvasPageConfig = PageConfig & {
+/** 预览宿主读取的页面配置视图：优先 grouped 配置，兼容旧平铺字段。 */
+type PreviewCanvasPageConfig = Partial<PageConfig> & {
+  viewport?: PreviewViewportConfig;
+  background?: PreviewBackgroundConfig | null;
   backgroundColor?: string;
   backgroundImage?: string;
   backgroundSize?: string;
+  backgroundRepeat?: string;
+  backgroundPosition?: string;
 };
+
+interface PreviewViewportConfig {
+  width?: number;
+  height?: number;
+  autoFit?: boolean;
+  lockAspectRatio?: boolean;
+  minWidth?: number;
+  minHeight?: number;
+  overflowMode?: string;
+}
+
+interface PreviewBackgroundConfig {
+  kind?: string;
+  value?: string;
+  size?: string;
+  position?: string;
+  repeat?: string;
+}
+
+interface PreviewResolvedPageViewport {
+  width: number;
+  height: number;
+  autoFit: boolean;
+  lockAspectRatio: boolean;
+  minWidth: number;
+  minHeight: number;
+  overflowMode: "auto" | "hidden" | "scroll";
+}
+
+interface PreviewResolvedCanvasBackground {
+  backgroundColor: string;
+  backgroundImage?: string;
+  backgroundSize?: string;
+  backgroundRepeat?: string;
+  backgroundPosition?: string;
+}
+
+interface PreviewContainerSize {
+  width: number;
+  height: number;
+}
+
+interface PreviewResolvedCanvasLayout {
+  width: number;
+  height: number;
+  modeLabel: string;
+}
+
+/** 统一把 grouped viewport 与旧平铺字段归一化，避免预览和编辑器侧出现双重语义。 */
+function resolvePreviewViewport(config: PreviewCanvasPageConfig): PreviewResolvedPageViewport {
+  const viewport = (config.viewport || null) as PreviewViewportConfig | null;
+  const width = Number(viewport?.width ?? config.width ?? 1366);
+  const height = Number(viewport?.height ?? config.height ?? 768);
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : 1366,
+    height: Number.isFinite(height) && height > 0 ? height : 768,
+    autoFit: Boolean(viewport?.autoFit ?? config.autoFit),
+    lockAspectRatio: Boolean(viewport?.lockAspectRatio ?? config.lockAspectRatio),
+    minWidth: Number.isFinite(Number(viewport?.minWidth)) && Number(viewport?.minWidth) > 0
+      ? Number(viewport?.minWidth)
+      : 0,
+    minHeight: Number.isFinite(Number(viewport?.minHeight)) && Number(viewport?.minHeight) > 0
+      ? Number(viewport?.minHeight)
+      : 0,
+    overflowMode:
+      viewport?.overflowMode === "hidden" || viewport?.overflowMode === "scroll"
+        ? viewport.overflowMode
+        : "auto",
+  };
+}
+
+/**
+ * 预览容器按当前预设决定大小：
+ * - 页面实际尺寸：容器等于设计尺寸，便于查看原始画面
+ * - 设备预设：容器等于预设尺寸，模拟运行容器
+ */
+function resolvePreviewContainerSize(
+  viewKey: string,
+  viewport: PreviewResolvedPageViewport,
+  presets: readonly ViewPreset[],
+): PreviewContainerSize {
+  if (viewKey === "page") {
+    return {
+      width: viewport.width,
+      height: viewport.height,
+    };
+  }
+  const preset = presets.find((item) => item.key === viewKey);
+  return {
+    width: preset?.width || viewport.width,
+    height: preset?.height || viewport.height,
+  };
+}
+
+/**
+ * 按运行容器规则计算页面根容器尺寸：
+ * - 固定尺寸：保持设计稿宽高
+ * - 自适应 + 锁比：先按容器完整显示，再受最小尺寸下限约束
+ * - 自适应 + 非锁比：宽高分别贴合容器，再受最小尺寸约束
+ */
+function resolvePreviewCanvasLayout(
+  viewport: PreviewResolvedPageViewport,
+  container: PreviewContainerSize,
+): PreviewResolvedCanvasLayout {
+  if (!viewport.autoFit) {
+    return {
+      width: viewport.width,
+      height: viewport.height,
+      modeLabel: "固定尺寸",
+    };
+  }
+
+  if (viewport.lockAspectRatio) {
+    const fitScale = Math.min(
+      container.width / Math.max(1, viewport.width),
+      container.height / Math.max(1, viewport.height),
+    );
+    const minScale = Math.max(
+      viewport.minWidth > 0 ? viewport.minWidth / Math.max(1, viewport.width) : 0,
+      viewport.minHeight > 0 ? viewport.minHeight / Math.max(1, viewport.height) : 0,
+    );
+    const scale = Math.max(fitScale, minScale, 0);
+    return {
+      width: Math.max(1, Math.round(viewport.width * scale)),
+      height: Math.max(1, Math.round(viewport.height * scale)),
+      modeLabel: "自适应-等比",
+    };
+  }
+
+  return {
+    width: Math.max(container.width, viewport.minWidth || 0),
+    height: Math.max(container.height, viewport.minHeight || 0),
+    modeLabel: "自适应-拉伸",
+  };
+}
+
+/** 归一化预览背景样式：grouped background 优先，旧 backgroundColor/backgroundImage 作为回退。 */
+function resolvePreviewBackground(config: PreviewCanvasPageConfig): PreviewResolvedCanvasBackground {
+  const background = (config.background || null) as PreviewBackgroundConfig | null;
+  const fallbackColor = config.backgroundColor || "#ffffff";
+  if (background?.kind === "color") {
+    return {
+      backgroundColor: background.value || fallbackColor,
+    };
+  }
+  if (background?.kind === "image") {
+    return {
+      backgroundColor: fallbackColor,
+      backgroundImage: `url(${background.value || ""})`,
+      backgroundSize: background.size || "cover",
+      backgroundRepeat: background.repeat || "no-repeat",
+      backgroundPosition: background.position || "center",
+    };
+  }
+  if (background?.kind === "gradient") {
+    return {
+      backgroundColor: fallbackColor,
+      backgroundImage: background.value || "",
+      backgroundSize: background.size || "cover",
+      backgroundRepeat: background.repeat || "no-repeat",
+      backgroundPosition: background.position || "center",
+    };
+  }
+  if (config.backgroundImage) {
+    return {
+      backgroundColor: fallbackColor,
+      backgroundImage: `url(${config.backgroundImage})`,
+      backgroundSize: config.backgroundSize || "cover",
+      backgroundRepeat: config.backgroundRepeat || "no-repeat",
+      backgroundPosition: config.backgroundPosition || "center",
+    };
+  }
+  return {
+    backgroundColor: fallbackColor,
+  };
+}
 
 const router = useRouter();
 const route = useRoute();
@@ -43,72 +220,73 @@ const viewPresets: readonly ViewPreset[] = VIEW_PRESETS;
 const previewOptions = computed(() => [{ key: "page", label: "页面实际尺寸" }, ...viewPresets]);
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
+const previewPageConfig = computed(() =>
+  resolvePreviewViewport(currentPage.value?.config || ({} as PreviewCanvasPageConfig)),
+);
+const previewContainerSize = computed(() =>
+  resolvePreviewContainerSize(viewKey.value, previewPageConfig.value, viewPresets),
+);
+const previewCanvasLayout = computed(() =>
+  resolvePreviewCanvasLayout(previewPageConfig.value, previewContainerSize.value),
+);
+const previewOverflowLabel = computed(() => {
+  switch (previewPageConfig.value.overflowMode) {
+    case "hidden":
+      return "隐藏";
+    case "scroll":
+      return "始终显示";
+    default:
+      return "自动";
+  }
+});
+const previewMinSizeLabel = computed(() => {
+  const { minWidth, minHeight } = previewPageConfig.value;
+  if (minWidth <= 0 && minHeight <= 0) {
+    return "未限制";
+  }
+  return `${minWidth || 0} × ${minHeight || 0}`;
+});
+const previewSummaryItems = computed(() => [
+  `设计尺寸：${previewPageConfig.value.width} × ${previewPageConfig.value.height}`,
+  `容器：${previewContainerSize.value.width} × ${previewContainerSize.value.height}`,
+  `适配：${previewCanvasLayout.value.modeLabel}`,
+  `最小尺寸：${previewMinSizeLabel.value}`,
+  `滚动：${previewOverflowLabel.value}`,
+]);
 
 // 预览框样式
 const frameStyle = computed((): Record<string, string> => {
-  const config = {
-    width: 1366,
-    height: 768,
-    ...(currentPage.value?.config || {}),
-  } as PageConfig;
-  if (viewKey.value === "page") {
-    return {
-      width: `${config.width || 1366}px`,
-      height: `${config.height || 768}px`,
-      maxWidth: "100%",
-      maxHeight: "100%",
-    };
-  }
-  const preset = viewPresets.find((item) => item.key === viewKey.value);
-  const size = preset
-    ? { width: `${preset.width}px`, height: `${preset.height}px` }
-    : { width: "100%", height: "100%" };
   return {
-    width: size.width,
-    height: size.height,
+    width: `${previewContainerSize.value.width}px`,
+    height: `${previewContainerSize.value.height}px`,
     maxWidth: "100%",
     maxHeight: "100%",
+    overflow: previewPageConfig.value.overflowMode,
   };
 });
 
 const canvasStyle = computed((): Record<string, string> => {
   void docVersion.value;
-  const config = {
-    width: 1366,
-    height: 768,
-    ...(currentPage.value?.config || {}),
-  } as PreviewCanvasPageConfig;
-  const preset = viewPresets.find((item) => item.key === viewKey.value);
-  const autoFit = Boolean(config.autoFit);
-  const width = autoFit ? "100%" : config.width || preset?.width || 1200;
-  const height = autoFit ? "100%" : config.height || preset?.height || 800;
+  const config = currentPage.value?.config || ({} as PreviewCanvasPageConfig);
+  const viewport = resolvePreviewViewport(config);
+  const background = resolvePreviewBackground(config);
   const style: Record<string, string> = {
-    width: typeof width === "number" ? `${width}px` : width,
-    height: typeof height === "number" ? `${height}px` : height,
-    backgroundColor: config.backgroundColor || "#ffffff",
+    width: `${previewCanvasLayout.value.width}px`,
+    height: `${previewCanvasLayout.value.height}px`,
+    backgroundColor: background.backgroundColor,
     position: "relative",
   };
-  const background = (config.background || null) as {
-    kind?: string;
-    value?: string;
-  } | null;
-  if (background?.kind === "color") {
-    style.backgroundColor = background.value || "#ffffff";
-  } else if (background?.kind === "image") {
-    style.backgroundImage = `url(${background.value || ""})`;
-    style.backgroundSize = "cover";
-    style.backgroundRepeat = "no-repeat";
-    style.backgroundPosition = "center";
-  } else if (background?.kind === "gradient") {
-    style.backgroundImage = background.value || "";
-    style.backgroundSize = "cover";
-    style.backgroundRepeat = "no-repeat";
-    style.backgroundPosition = "center";
-  } else if (config.backgroundImage) {
-    style.backgroundImage = `url(${config.backgroundImage})`;
-    style.backgroundSize = config.backgroundSize || "cover";
-    style.backgroundRepeat = "no-repeat";
-    style.backgroundPosition = "center";
+  if (background.backgroundImage) {
+    style.backgroundImage = background.backgroundImage;
+  }
+  if (background.backgroundSize) {
+    style.backgroundSize = background.backgroundSize;
+  }
+  if (background.backgroundRepeat) {
+    style.backgroundRepeat = background.backgroundRepeat;
+  }
+  if (background.backgroundPosition) {
+    style.backgroundPosition = background.backgroundPosition;
   }
   return style;
 });
@@ -223,7 +401,7 @@ onBeforeUnmount(() => {
     >
       <div class="flex items-center gap-2">
         <el-button size="small" @click="handleBack">
-          <IconEpArrowLeft />
+          <span aria-hidden="true">←</span>
           返回编辑
         </el-button>
         <el-divider direction="vertical" />
@@ -236,11 +414,20 @@ onBeforeUnmount(() => {
             {{ preset.label }}
           </el-radio-button>
         </el-radio-group>
+        <div class="preview-summary" data-testid="preview-summary">
+          <span
+            v-for="item in previewSummaryItems"
+            :key="item"
+            class="preview-summary__item"
+          >
+            {{ item }}
+          </span>
+        </div>
       </div>
 
       <div class="flex items-center gap-2">
         <el-button size="small" type="primary" @click="handleRefresh">
-          <IconEpRefresh />
+          <span aria-hidden="true">↻</span>
           刷新
         </el-button>
       </div>
@@ -270,6 +457,21 @@ onBeforeUnmount(() => {
 
 .preview-canvas {
   flex-shrink: 0;
+}
+
+.preview-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-left: 8px;
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.preview-summary__item {
+  flex: 0 0 auto;
 }
 
 .preview-frame::-webkit-scrollbar {

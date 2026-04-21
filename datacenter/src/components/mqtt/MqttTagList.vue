@@ -424,7 +424,7 @@ const handleDeleteGroup = async (group) => {
       },
     );
 
-    await deleteMqttTagGroup(group.id);
+    await deleteMqttTagGroup(props.projectId, group.id);
     ElMessage.success("删除成功");
     await handleRefresh();
   } catch (error) {
@@ -469,7 +469,7 @@ const handleDeleteTag = async (tag) => {
       cancelButtonText: "取消",
     });
 
-    await deleteMqttTag(tag.id);
+    await deleteMqttTag(props.projectId, tag.id);
     ElMessage.success("删除成功");
     await loadTags();
     notifyTagChange("deleted", { tagId: tag.id });
@@ -484,7 +484,7 @@ const handleDeleteTag = async (tag) => {
 const handleToggleTag = async (tag) => {
   try {
     const newState = !tag.isEnabled;
-    await toggleMqttTag(tag.id);
+    await toggleMqttTag(props.projectId, tag.id);
     ElMessage.success(`已${newState ? "启用" : "禁用"}`);
     await loadTags();
     notifyTagChange("toggled", { tagId: tag.id, isEnabled: newState });

@@ -362,7 +362,7 @@ const handleSubmit = async () => {
       );
       ElMessage.success("创建成功");
     } else {
-      await updateMqttTag(props.tag.id, formData.value);
+      await updateMqttTag(props.projectId, props.tag.id, formData.value);
       ElMessage.success("更新成功");
     }
 

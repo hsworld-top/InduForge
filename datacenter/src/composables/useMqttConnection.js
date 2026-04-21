@@ -22,7 +22,7 @@ export function useMqttConnection(projectId) {
     try {
       loading.value = true;
       const response = await request.get(
-        `/api/v1/data/projects/${projectId}/mqtt/connections`,
+        `/data/projects/${projectId}/mqtt/connections`,
         {
           params: {
             page,
@@ -31,9 +31,9 @@ export function useMqttConnection(projectId) {
         },
       );
 
-      if (response.data.success) {
-        connections.value = response.data.data.connections || [];
-        Object.assign(pagination.value, response.data.data.pagination || {});
+      if (response.success) {
+        connections.value = response.data?.connections || [];
+        Object.assign(pagination.value, response.data?.pagination || {});
       }
     } catch (error) {
       console.error("获取 MQTT 连接列表失败:", error);
@@ -50,11 +50,11 @@ export function useMqttConnection(projectId) {
   const fetchConnection = async (connectionId) => {
     try {
       const response = await request.get(
-        `/api/v1/data/mqtt/connections/${connectionId}`,
+        `/data/projects/${projectId}/mqtt/connections/${connectionId}`,
       );
 
-      if (response.data.success) {
-        return response.data.data;
+      if (response.success) {
+        return response.data;
       }
     } catch (error) {
       console.error("获取 MQTT 连接失败:", error);
@@ -70,14 +70,14 @@ export function useMqttConnection(projectId) {
     try {
       loading.value = true;
       const response = await request.post(
-        `/api/v1/data/projects/${projectId}/mqtt/connections`,
+        `/data/projects/${projectId}/mqtt/connections`,
         connectionData,
       );
 
-      if (response.data.success) {
+      if (response.success) {
         ElMessage.success("MQTT 连接创建成功");
         await fetchConnections(pagination.value.page);
-        return response.data.data;
+        return response.data;
       }
     } catch (error) {
       console.error("创建 MQTT 连接失败:", error);
@@ -95,14 +95,14 @@ export function useMqttConnection(projectId) {
     try {
       loading.value = true;
       const response = await request.put(
-        `/api/v1/data/mqtt/connections/${connectionId}`,
+        `/data/projects/${projectId}/mqtt/connections/${connectionId}`,
         connectionData,
       );
 
-      if (response.data.success) {
+      if (response.success) {
         ElMessage.success("MQTT 连接更新成功");
         await fetchConnections(pagination.value.page);
-        return response.data.data;
+        return response.data;
       }
     } catch (error) {
       console.error("更新 MQTT 连接失败:", error);
@@ -130,10 +130,10 @@ export function useMqttConnection(projectId) {
 
       loading.value = true;
       const response = await request.delete(
-        `/api/v1/data/mqtt/connections/${connectionId}`,
+        `/data/projects/${projectId}/mqtt/connections/${connectionId}`,
       );
 
-      if (response.data.success) {
+      if (response.success) {
         ElMessage.success("MQTT 连接删除成功");
         await fetchConnections(pagination.value.page);
       }
@@ -154,11 +154,11 @@ export function useMqttConnection(projectId) {
   const testConnection = async (connectionData) => {
     try {
       const response = await request.post(
-        "/api/v1/data/mqtt/connections/test",
+        `/data/projects/${projectId}/mqtt/connections/test`,
         connectionData,
       );
 
-      if (response.data.success) {
+      if (response.success) {
         ElMessage.success("MQTT 连接测试成功");
         return true;
       }
@@ -176,13 +176,13 @@ export function useMqttConnection(projectId) {
     try {
       loading.value = true;
       const response = await request.post(
-        `/api/v1/data/mqtt/connections/${connectionId}/start`,
+        `/data/projects/${projectId}/mqtt/connections/${connectionId}/start`,
       );
 
-      if (response.data.success) {
+      if (response.success) {
         ElMessage.success("MQTT 连接已启动");
         await fetchConnections(pagination.value.page);
-        return response.data.data;
+        return response.data;
       }
     } catch (error) {
       console.error("启动 MQTT 连接失败:", error);
@@ -200,13 +200,13 @@ export function useMqttConnection(projectId) {
     try {
       loading.value = true;
       const response = await request.post(
-        `/api/v1/data/mqtt/connections/${connectionId}/stop`,
+        `/data/projects/${projectId}/mqtt/connections/${connectionId}/stop`,
       );
 
-      if (response.data.success) {
+      if (response.success) {
         ElMessage.success("MQTT 连接已停止");
         await fetchConnections(pagination.value.page);
-        return response.data.data;
+        return response.data;
       }
     } catch (error) {
       console.error("停止 MQTT 连接失败:", error);
@@ -223,11 +223,11 @@ export function useMqttConnection(projectId) {
   const getConnectionStatus = async (connectionId) => {
     try {
       const response = await request.get(
-        `/api/v1/data/mqtt/connections/${connectionId}/status`,
+        `/data/projects/${projectId}/mqtt/connections/${connectionId}/status`,
       );
 
-      if (response.data.success) {
-        return response.data.data;
+      if (response.success) {
+        return response.data;
       }
     } catch (error) {
       console.error("获取连接状态失败:", error);

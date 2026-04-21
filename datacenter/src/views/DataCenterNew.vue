@@ -361,7 +361,10 @@ const project = computed(() => {
 // 提供给子组件使用
 const projectId = computed(() => project.value?.id);
 provide("projectId", projectId);
-const { sessionId: previewSessionId } = usePreviewSession(projectId);
+const { sessionId: previewSessionId, ensureSession: ensurePreviewSession } =
+  usePreviewSession(projectId, {
+    autoStart: false,
+  });
 
 // 使用 composable
 const {
@@ -602,7 +605,19 @@ const handleOpenAlarmUnitList = () => {
 /**
  * 打开MQTT消息查看器
  */
-const openMqttMessageViewer = (connection, subscription) => {
+const openMqttMessageViewer = async (connection, subscription) => {
+  const ensuredSessionId = await ensurePreviewSession();
+  if (!ensuredSessionId) {
+    ElMessage({
+      type: "error",
+      message: "预览会话不可用，请先确认 data_service 的 preview 路由已启用",
+      offset: 60,
+      duration: 5000,
+      showClose: true,
+    });
+    return;
+  }
+
   const tabId = `mqtt-messages-${subscription.id}`;
   const existingTab = tabs.value.find((t) => t.id === tabId);
 
@@ -676,7 +691,19 @@ const openMqttMessageViewer = (connection, subscription) => {
 /**
  * 打开MQTT Tag管理器
  */
-const openMqttTagManager = (connection, subscription) => {
+const openMqttTagManager = async (connection, subscription) => {
+  const ensuredSessionId = await ensurePreviewSession();
+  if (!ensuredSessionId) {
+    ElMessage({
+      type: "error",
+      message: "预览会话不可用，请先确认 data_service 的 preview 路由已启用",
+      offset: 60,
+      duration: 5000,
+      showClose: true,
+    });
+    return;
+  }
+
   const tabId = `mqtt-tags-${subscription.id}`;
   const existingTab = tabs.value.find((t) => t.id === tabId);
 
@@ -1331,22 +1358,22 @@ const handleQueryContextMenu = (event, connection, query) => {
 /**
  * 双击 MQTT 订阅
  */
-const handleMqttSubscriptionDblClick = (connection, subscription) => {
-  openMqttTagManager(connection, subscription);
+const handleMqttSubscriptionDblClick = async (connection, subscription) => {
+  await openMqttTagManager(connection, subscription);
 };
 
 /**
  * 订阅右键菜单 - 查看消息
  */
-const handleMqttSubscriptionView = (connection, subscription) => {
-  openMqttMessageViewer(connection, subscription);
+const handleMqttSubscriptionView = async (connection, subscription) => {
+  await openMqttMessageViewer(connection, subscription);
 };
 
 /**
  * 订阅右键菜单 - 管理变量
  */
-const handleMqttSubscriptionManage = (connection, subscription) => {
-  openMqttTagManager(connection, subscription);
+const handleMqttSubscriptionManage = async (connection, subscription) => {
+  await openMqttTagManager(connection, subscription);
 };
 
 /**

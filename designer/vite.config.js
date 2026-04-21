@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: "/designer/", // 部署到 /designer/ 路径
+    define: {
+      __DESIGNER_DEBUG_ROUTE_ENABLED__: JSON.stringify(mode !== "production"),
+    },
     plugins: [
       vue(),
       Icons({

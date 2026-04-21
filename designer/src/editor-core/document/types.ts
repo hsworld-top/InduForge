@@ -860,9 +860,58 @@ export interface AssetRef {
 export interface BackgroundConfig {
   kind: "color" | "image" | "gradient";
   value: string;
+  size?: "cover" | "contain" | "stretch" | "auto";
+  position?: string;
+  repeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+}
+
+export interface PageMetaConfig {
+  title?: string;
+  description?: string;
+}
+
+export interface PageRouteConfig {
+  mode?: "auto" | "manual";
+  path?: string;
+  slug?: string;
+}
+
+export interface PageViewportConfig {
+  preset?:
+    | "bigscreen"
+    | "pc"
+    | "tablet"
+    | "phoneLandscape"
+    | "phonePortrait"
+    | "custom";
+  width: number;
+  height: number;
+  autoFit?: boolean;
+  lockAspectRatio?: boolean;
+  minWidth?: number;
+  minHeight?: number;
+  overflowMode?: "auto" | "hidden" | "scroll";
+}
+
+export interface PageRuntimeConfig {
+  openMode?: "replace" | "cover" | "popup";
+  popup?: {
+    width?: number;
+    height?: number;
+    center?: boolean;
+    maskClosable?: boolean;
+  };
+  permission?: {
+    summary?: string;
+  };
+  cacheMode?: "default" | "cache" | "no-cache";
+  preloadMode?: "lazy" | "eager";
 }
 
 export interface PageConfig {
+  meta?: PageMetaConfig;
+  route?: PageRouteConfig;
+  viewport?: PageViewportConfig;
   width: number;
   height: number;
   fitMode?: FitMode;
@@ -870,6 +919,18 @@ export interface PageConfig {
   enableSnap?: boolean;
   autoFit?: boolean;
   background?: BackgroundConfig;
+  transition?: {
+    type?: "none" | "fade" | "slide" | "zoom";
+  };
+  runtime?: PageRuntimeConfig;
+  /**
+   * 以下字段仍保留在编辑态模型中，确保旧页面与旧消费链在迁移期间继续可读。
+   */
+  description?: string;
+  lockAspectRatio?: boolean;
+  enableMinSize?: boolean;
+  windowStyle?: "replace" | "cover" | "popup" | "normal";
+  permissionDesc?: string;
 }
 
 export interface RolePermission {
@@ -1210,13 +1271,60 @@ export function createPageNode(options: Partial<PageNode> = {}): PageNode {
     rootNodeId,
     graphicsIds: options.graphicsIds || [],
     config: {
+      meta: {
+        title: "",
+        description: "",
+      },
+      route: {
+        mode: "auto",
+        path: options.path || defaultPath,
+        slug: defaultPath.replace(/^\//, ""),
+      },
+      viewport: {
+        preset: "pc",
+        width: 1920,
+        height: 1080,
+        autoFit: true,
+        lockAspectRatio: false,
+        minWidth: 0,
+        minHeight: 0,
+        overflowMode: "auto",
+      },
       width: 1920,
       height: 1080,
       fitMode: "contain",
       showGrid: false,
       enableSnap: true,
       autoFit: true,
-      background: { kind: "color", value: "#ffffff" },
+      background: {
+        kind: "color",
+        value: "#ffffff",
+        size: "cover",
+        position: "center",
+        repeat: "no-repeat",
+      },
+      transition: {
+        type: "none",
+      },
+      runtime: {
+        openMode: "cover",
+        popup: {
+          width: 960,
+          height: 540,
+          center: true,
+          maskClosable: true,
+        },
+        permission: {
+          summary: "0item",
+        },
+        cacheMode: "default",
+        preloadMode: "lazy",
+      },
+      description: "",
+      lockAspectRatio: false,
+      enableMinSize: false,
+      windowStyle: "cover",
+      permissionDesc: "0item",
       ...options.config,
     },
     lifecycle: options.lifecycle || {},

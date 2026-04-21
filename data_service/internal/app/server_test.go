@@ -1,12 +1,17 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/indu-forge/data_service/internal/config"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -16,6 +21,11 @@ import (
 )
 
 func TestNewServer_UsesProductionRouter(t *testing.T) {
+	reset := stubBuildRouteDependencies(func(config.Config) ([]router.Option, func(), error) {
+		return nil, nil, nil
+	})
+	t.Cleanup(reset)
+
 	srv, err := NewServer(config.Config{Addr: ":0"})
 	if err != nil {
 		t.Fatalf("new server failed: %v", err)
@@ -91,26 +101,104 @@ func TestServer_ProductionAssemblyKeepsUnifiedErrorResponse(t *testing.T) {
 	}
 }
 
-func TestNewServer_StartsBaseServiceWhenOptionalDependenciesInvalid(t *testing.T) {
-	srv, err := NewServer(config.Config{
-		Addr:      ":0",
-		JWTSecret: "short-secret",
+func TestNewServer_FailsWhenRouteDependenciesInitializationFails(t *testing.T) {
+	expectedErr := errors.New("bootstrap failed")
+	reset := stubBuildRouteDependencies(func(config.Config) ([]router.Option, func(), error) {
+		return nil, nil, expectedErr
 	})
+	t.Cleanup(reset)
+
+	srv, err := NewServer(config.Config{Addr: ":0"})
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if srv != nil {
+		t.Fatal("expected server to be nil when dependencies initialization fails")
+	}
+}
+
+func TestNewServer_LogsInitializationSummary(t *testing.T) {
+	var buffer bytes.Buffer
+	resetLog := stubAppLogf(func(format string, args ...any) {
+		_, _ = buffer.WriteString(strings.TrimSpace(formatLogf(format, args...)) + "\n")
+	})
+	t.Cleanup(resetLog)
+
+	resetRoutes := stubBuildRouteDependencies(func(config.Config) ([]router.Option, func(), error) {
+		logf("info: data_service 路由摘要 routeSummary=connections=enabled,data=enabled,mqtt=enabled,preview=disabled")
+		return nil, nil, nil
+	})
+	t.Cleanup(resetRoutes)
+
+	srv, err := NewServer(config.Config{Addr: ":19602"})
 	if err != nil {
 		t.Fatalf("new server failed: %v", err)
 	}
 	t.Cleanup(srv.Close)
 
-	ts := httptest.NewServer(srv.Handler())
-	t.Cleanup(ts.Close)
-
-	resp, err := ts.Client().Get(ts.URL + "/health")
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
+	logOutput := buffer.String()
+	if !strings.Contains(logOutput, "data_service 路由装配完成") {
+		t.Fatalf("expected initialization log, got %q", logOutput)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected health status %d, got %d", http.StatusOK, resp.StatusCode)
+	if !strings.Contains(logOutput, "addr=:19602") {
+		t.Fatalf("expected addr in initialization log, got %q", logOutput)
 	}
+	if !strings.Contains(logOutput, "routeSummary=") {
+		t.Fatalf("expected route summary in initialization log, got %q", logOutput)
+	}
+}
+
+func TestServer_Run_LogsLifecycle(t *testing.T) {
+	var buffer bytes.Buffer
+	resetLog := stubAppLogf(func(format string, args ...any) {
+		_, _ = buffer.WriteString(strings.TrimSpace(formatLogf(format, args...)) + "\n")
+	})
+	t.Cleanup(resetLog)
+
+	srv := newServer(config.Config{Addr: "127.0.0.1:0"}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}), nil)
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- srv.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	logOutput := buffer.String()
+	if !strings.Contains(logOutput, "data_service 准备启动 HTTP 服务") {
+		t.Fatalf("expected startup log, got %q", logOutput)
+	}
+	if !strings.Contains(logOutput, "data_service 收到退出信号") {
+		t.Fatalf("expected shutdown log, got %q", logOutput)
+	}
+}
+
+func stubBuildRouteDependencies(factory routeDependenciesFactory) func() {
+	previous := buildRouteDependencies
+	buildRouteDependencies = factory
+	return func() {
+		buildRouteDependencies = previous
+	}
+}
+
+func stubAppLogf(logger func(string, ...any)) func() {
+	previous := logf
+	logf = logger
+	return func() {
+		logf = previous
+	}
+}
+
+func formatLogf(format string, args ...any) string {
+	return strings.TrimSpace(fmt.Sprintf(format, args...))
 }

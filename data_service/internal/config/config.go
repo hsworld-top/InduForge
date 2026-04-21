@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -24,6 +26,8 @@ type Config struct {
 
 // Load 从环境变量读取服务配置，并在缺省时使用内置默认值。
 func Load() (Config, error) {
+	loadDotEnvFromCurrentTree()
+
 	addr := strings.TrimSpace(os.Getenv("DATA_SERVICE_ADDR"))
 	if addr == "" {
 		addr = defaultAddr
@@ -102,4 +106,70 @@ func parseRedisDB(raw string) (int, error) {
 		return 0, fmt.Errorf("DATA_SERVICE_REDIS_DB 不能小于 0")
 	}
 	return value, nil
+}
+
+func loadDotEnvFromCurrentTree() {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+
+	for _, candidate := range candidateDotEnvPaths(workingDir) {
+		if loadDotEnvFile(candidate) {
+			return
+		}
+	}
+}
+
+func candidateDotEnvPaths(startDir string) []string {
+	current := filepath.Clean(startDir)
+	paths := make([]string, 0, 8)
+
+	for {
+		paths = append(paths, filepath.Join(current, ".env"))
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+
+	return paths
+}
+
+func loadDotEnvFile(path string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		line = strings.TrimPrefix(line, "export ")
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if existingValue, exists := os.LookupEnv(key); exists && strings.TrimSpace(existingValue) != "" {
+			continue
+		}
+
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"'`)
+		_ = os.Setenv(key, value)
+	}
+
+	return true
 }

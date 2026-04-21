@@ -142,3 +142,26 @@ test("共享注册表会复用同一条连接，并对订阅做引用计数", ()
   registry.release(second.key);
   assert.equal(sockets[0].disconnectCalls, 1);
 });
+
+test("共享注册表会使用传入的数据服务地址建立 socket 连接", () => {
+  const captured = [];
+  const registry = createMqttSocketSharedRegistry({
+    ioFactory: (url, options) => {
+      captured.push({ url, options });
+      return createFakeSocket("socket-1");
+    },
+    getApiUrl: () => "http://localhost:19602/",
+    getToken: () => "token-1",
+    logger: createSilentLogger(),
+  });
+
+  const result = registry.acquire({
+    projectId: "project-1",
+    previewSessionId: "session-1",
+  });
+
+  assert.ok(result);
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].url, "http://localhost:19602");
+  assert.equal(captured[0].options.path, "/socket.io/");
+});

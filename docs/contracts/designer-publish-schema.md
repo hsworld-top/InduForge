@@ -75,10 +75,38 @@ project/
   "id": "page_home",
   "name": "首页",
   "routePath": "/home",
-  "layout": {
-    "type": "absolute",
-    "width": 1920,
-    "height": 1080
+  "config": {
+    "viewport": {
+      "preset": "pc",
+      "width": 1920,
+      "height": 1080,
+      "autoFit": true,
+      "lockAspectRatio": false,
+      "minWidth": 0,
+      "minHeight": 0,
+      "overflowMode": "auto"
+    },
+    "background": {
+      "kind": "color",
+      "value": "#ffffff",
+      "size": "cover",
+      "position": "center",
+      "repeat": "no-repeat"
+    },
+    "runtime": {
+      "openMode": "replace",
+      "popup": {
+        "width": 1280,
+        "height": 720,
+        "center": true,
+        "maskClosable": true
+      },
+      "permission": {
+        "summary": ""
+      },
+      "cacheMode": "default",
+      "preloadMode": "lazy"
+    }
   },
   "componentTree": [
     {
@@ -105,8 +133,36 @@ project/
 | `id` | 是 | 页面 ID |
 | `name` | 是 | 页面名称 |
 | `routePath` | 是 | 运行时路由路径 |
-| `layout` | 是 | 页面布局信息 |
+| `config` | 是 | 页面发布配置，主结构为 `viewport/background/runtime` 分组 |
 | `componentTree` | 是 | 根组件列表 |
+
+### `config` 分组说明
+`config` 以分组字段作为发布态主结构，预览和运行时应优先读取分组字段，再兼容旧平铺字段。
+
+| 分组 | 说明 |
+| --- | --- |
+| `meta` | 页面运行标题与描述。`meta.title` 作为运行态显示标题，不等同于编辑器内部页面名称。 |
+| `viewport` | 页面尺寸、缩放与自适应策略。预览宿主以此计算画布外框与可视尺寸。 |
+| `background` | 页面背景色、背景图与重复/位置/尺寸。预览宿主优先使用分组背景。 |
+| `runtime` | 页面运行时策略，如打开方式、弹窗参数、权限摘要、缓存与预加载模式。预览宿主保留该组，运行时按需消费。 |
+
+### `meta.title` 语义
+- `meta.title` 表示页面的运行标题，优先级高于页面名称。
+- 当页面以主页面激活时，运行时可将其同步到浏览器标题。
+- 当页面以覆盖式、弹窗式或容器内部标签形式展示时，运行时优先将其用于容器标题，而不强制要求同步浏览器标题。
+
+### 旧字段兼容
+发布态在迁移期间仍可携带下列旧平铺字段，读取顺序为“分组优先，旧字段回退”：
+- `width`
+- `height`
+- `autoFit`
+- `backgroundColor`
+- `backgroundImage`
+- `backgroundSize`
+- `backgroundPosition`
+- `backgroundRepeat`
+
+导出实现应优先写入 `config.viewport`、`config.background`、`config.runtime`，旧字段仅用于兼容旧消费链与渐进迁移。
 
 ## 7. 组件节点契约
 ### 最小字段

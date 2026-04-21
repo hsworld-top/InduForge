@@ -271,7 +271,10 @@ test("bootstrap 等待超时会收敛，不会无限挂起", async () => {
 
 test("顶层正式入口在已有本地会话时不应强制回跳 IDE", () => {
   globalThis.localStorage.setItem("auth_token", "cached-token");
-  globalThis.localStorage.setItem("project_id", JSON.stringify("project-cached"));
+  globalThis.localStorage.setItem(
+    "project_id",
+    JSON.stringify("project-cached"),
+  );
 
   const plan = initializeHostBootstrap({
     currentUrl: "http://datacenter.example/datacenter/",
@@ -287,10 +290,14 @@ test("顶层正式入口在已有本地会话时不应强制回跳 IDE", () => {
 
 test("顶层正式入口即使已有本地会话，只要携带新的 handoff 仍应回跳 IDE 恢复指定工程", () => {
   globalThis.localStorage.setItem("auth_token", "cached-token");
-  globalThis.localStorage.setItem("project_id", JSON.stringify("project-cached"));
+  globalThis.localStorage.setItem(
+    "project_id",
+    JSON.stringify("project-cached"),
+  );
 
   const plan = initializeHostBootstrap({
-    currentUrl: "http://datacenter.example/datacenter/?handoff=handoff-top-cache",
+    currentUrl:
+      "http://datacenter.example/datacenter/?handoff=handoff-top-cache",
     isTopLevelWindow: true,
     referrer: "",
     selfWindow: globalThis.window,
@@ -306,14 +313,18 @@ test("顶层正式入口即使已有本地会话，只要携带新的 handoff �
 
 test("嵌入正式入口即使已有缓存会话，只要携带新的 handoff 也必须等待 bootstrap 覆盖旧工程", () => {
   globalThis.localStorage.setItem("auth_token", "cached-token");
-  globalThis.localStorage.setItem("project_id", JSON.stringify("project-cached"));
+  globalThis.localStorage.setItem(
+    "project_id",
+    JSON.stringify("project-cached"),
+  );
 
   const parentWindow = {
     postMessage() {},
   };
 
   const plan = initializeHostBootstrap({
-    currentUrl: "http://datacenter.example/datacenter/?handoff=handoff-iframe-cache",
+    currentUrl:
+      "http://datacenter.example/datacenter/?handoff=handoff-iframe-cache",
     isTopLevelWindow: false,
     parentWindow,
     referrer: "http://ide.example/dashboard",
