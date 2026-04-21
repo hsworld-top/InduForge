@@ -16,6 +16,18 @@ const {
   getProjectSettingsRow,
   upsertProjectSettings,
 } = require('../../services/projectSettingsStore');
+const {
+  ensureRuntimeAdminBootstrap,
+  listRuntimeUsers,
+  createRuntimeUser,
+  updateRuntimeUserStatus,
+  resetRuntimeUserPassword,
+  bindRuntimeUserRoles,
+  listRuntimeRoles,
+  createRuntimeRole,
+  updateRuntimeRole,
+  deleteRuntimeRole,
+} = require('../../services/projectRuntimeAccessService');
 
 const router = express.Router();
 
@@ -28,7 +40,7 @@ const {
   NodeDeployment,
 } = require('../../models');
 const { authenticateToken, requireResourceOwnership, hasCapability } = require('../../middlewares/auth');
-const { randomUUID } = require('crypto');
+const { randomUUID, randomBytes } = require('crypto');
 
 const DEFAULT_GLOBAL_SCRIPTS = {
   system: {
@@ -206,6 +218,8 @@ const respondRouteError = (res, error, fallbackCode, fallbackStatus) => {
 
   return ApiResponse.error(res, fallbackCode, {}, fallbackStatus);
 };
+
+const buildInitialRuntimePassword = () => randomBytes(16).toString('hex');
 
 /**
  * @swagger
@@ -629,17 +643,36 @@ router.post('/', authenticateToken, validate(Joi.object({
       groups: [],
     };
     const defaultGlobalScripts = DEFAULT_GLOBAL_SCRIPTS;
-    const project = await Project.create({
-      name,
-      description,
-      colorTag: colorTag || '#3b82f6',
-      tenantId,
-      createdBy: userId,
-      projectVariables: defaultProjectVariables,
+    let projectId = null;
+
+    await Project.sequelize.transaction(async (transaction) => {
+      const project = await Project.create({
+        name,
+        description,
+        colorTag: colorTag || '#3b82f6',
+        tenantId,
+        createdBy: userId,
+        projectVariables: defaultProjectVariables,
+      }, {
+        transaction,
+      });
+      projectId = project.id;
+
+      await ensureRuntimeAdminBootstrap({
+        project,
+        creator: {
+          id: userId,
+          username: req.user.username,
+          fullName: req.user.fullName,
+        },
+        initialPassword: buildInitialRuntimePassword(),
+        transaction,
+      });
     });
+
     try {
       await upsertProjectSettings(Project.sequelize, {
-        projectId: project.id,
+        projectId,
         schemaVersion: '1.0.0',
         globalVariables: defaultGlobalVariables,
         globalScripts: defaultGlobalScripts,
@@ -647,9 +680,10 @@ router.post('/', authenticateToken, validate(Joi.object({
         updatedAt: new Date(),
       });
     } catch (error) {
-      logger.warn('Init project settings failed', { error: error.message, projectId: project.id });
+      logger.warn('Init project settings failed', { error: error.message, projectId });
     }
-    const projectWithRelations = await Project.findByPk(project.id, {
+
+    const projectWithRelations = await Project.findByPk(projectId, {
       include: [
         { model: Tenant, as: 'tenant' },
         { model: User, as: 'creator', attributes: ['id', 'username', 'fullName'] }
@@ -667,6 +701,205 @@ router.post('/', authenticateToken, validate(Joi.object({
   } catch (error) {
     logger.error('Create project error', { error: error.message, requestId: req.requestId });
     return ApiResponse.error(res, ErrorCodes.PROJECT_CREATE_FAILED, {}, 500);
+  }
+});
+
+router.get('/:id/runtime-users', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() })
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const runtimeUsers = await listRuntimeUsers({ projectId: id });
+    return ApiResponse.success(res, { runtimeUsers });
+  } catch (error) {
+    logger.error('List runtime users error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.post('/:id/runtime-users', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() }),
+  body: Joi.object({
+    username: Joi.string().trim().required(),
+    displayName: Joi.string().allow('').optional(),
+    initialPassword: Joi.string().min(1).required(),
+    roleIds: Joi.array().items(Joi.string().uuid()).optional(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, displayName, initialPassword, roleIds } = req.body;
+    const runtimeUser = await createRuntimeUser({
+      projectId: id,
+      actorId: req.user.id,
+      username,
+      displayName,
+      initialPassword,
+      roleIds,
+    });
+    return ApiResponse.success(res, { runtimeUser }, 'create_success', {}, 201);
+  } catch (error) {
+    logger.error('Create runtime user error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.patch('/:id/runtime-users/:runtimeUserId/status', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    runtimeUserId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    status: Joi.string().valid('active', 'inactive', 'suspended').required(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id, runtimeUserId } = req.params;
+    const { status } = req.body;
+    const runtimeUser = await updateRuntimeUserStatus({
+      projectId: id,
+      runtimeUserId,
+      status,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, { runtimeUser });
+  } catch (error) {
+    logger.error('Update runtime user status error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.post('/:id/runtime-users/:runtimeUserId/reset-password', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    runtimeUserId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    newPassword: Joi.string().min(1).required(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id, runtimeUserId } = req.params;
+    const { newPassword } = req.body;
+    const runtimeUser = await resetRuntimeUserPassword({
+      projectId: id,
+      runtimeUserId,
+      newPassword,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, { runtimeUser });
+  } catch (error) {
+    logger.error('Reset runtime user password error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.put('/:id/runtime-users/:runtimeUserId/roles', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    runtimeUserId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    roleIds: Joi.array().items(Joi.string().uuid()).default([]),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id, runtimeUserId } = req.params;
+    const { roleIds } = req.body;
+    const runtimeUser = await bindRuntimeUserRoles({
+      projectId: id,
+      runtimeUserId,
+      roleIds,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, { runtimeUser });
+  } catch (error) {
+    logger.error('Bind runtime user roles error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.get('/:id/runtime-roles', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() })
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const runtimeRoles = await listRuntimeRoles({ projectId: id });
+    return ApiResponse.success(res, { runtimeRoles });
+  } catch (error) {
+    logger.error('List runtime roles error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.post('/:id/runtime-roles', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() }),
+  body: Joi.object({
+    code: Joi.string().trim().required(),
+    name: Joi.string().trim().required(),
+    description: Joi.string().allow('').optional(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const role = await createRuntimeRole({
+      projectId: id,
+      actorId: req.user.id,
+      code: req.body.code,
+      name: req.body.name,
+      description: req.body.description,
+    });
+    return ApiResponse.success(res, { role }, 'create_success', {}, 201);
+  } catch (error) {
+    logger.error('Create runtime role error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.put('/:id/runtime-roles/:roleId', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    roleId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    code: Joi.string().trim().optional(),
+    name: Joi.string().trim().optional(),
+    description: Joi.string().allow('').optional(),
+    status: Joi.string().valid('active', 'inactive').optional(),
+  }).min(1).required(),
+})), async (req, res) => {
+  try {
+    const { id, roleId } = req.params;
+    const role = await updateRuntimeRole({
+      projectId: id,
+      roleId,
+      actorId: req.user.id,
+      ...req.body,
+    });
+    return ApiResponse.success(res, { role });
+  } catch (error) {
+    logger.error('Update runtime role error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.delete('/:id/runtime-roles/:roleId', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    roleId: Joi.string().uuid().required(),
+  }),
+})), async (req, res) => {
+  try {
+    const { id, roleId } = req.params;
+    await deleteRuntimeRole({
+      projectId: id,
+      roleId,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, null, 'delete_success');
+  } catch (error) {
+    logger.error('Delete runtime role error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 

@@ -6,35 +6,56 @@ const mockProjectRole = {
   findOne: jest.fn(),
   findOrCreate: jest.fn(),
   create: jest.fn(),
+  findAll: jest.fn(),
+  findByPk: jest.fn(),
 };
 
 const mockProjectRuntimeUser = {
   findOne: jest.fn(),
   findOrCreate: jest.fn(),
   create: jest.fn(),
+  findAll: jest.fn(),
 };
 
 const mockProjectUserRoleBinding = {
   findOne: jest.fn(),
   findOrCreate: jest.fn(),
   create: jest.fn(),
+  findAll: jest.fn(),
+  destroy: jest.fn(),
 };
 
 const mockProjectRoleGrant = {
   findAll: jest.fn(),
 };
 
+const mockProjectTransaction = jest.fn(async (callback) => callback({ id: "tx-service" }));
+
 jest.mock("../../models", () => ({
   ProjectRole: mockProjectRole,
   ProjectRuntimeUser: mockProjectRuntimeUser,
   ProjectUserRoleBinding: mockProjectUserRoleBinding,
   ProjectRoleGrant: mockProjectRoleGrant,
+  Project: {
+    sequelize: {
+      transaction: mockProjectTransaction,
+    },
+  },
 }));
 
 const {
   DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
   ensureRuntimeAdminBootstrap,
   buildEffectiveRoleGrantMap,
+  listRuntimeUsers,
+  createRuntimeUser,
+  updateRuntimeUserStatus,
+  resetRuntimeUserPassword,
+  bindRuntimeUserRoles,
+  listRuntimeRoles,
+  createRuntimeRole,
+  updateRuntimeRole,
+  deleteRuntimeRole,
 } = require("../projectRuntimeAccessService");
 
 const createUniqueConstraintError = () =>
@@ -45,6 +66,7 @@ const createUniqueConstraintError = () =>
 describe("projectRuntimeAccessService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockProjectTransaction.mockImplementation(async (callback) => callback({ id: "tx-service" }));
   });
 
   test("ensureRuntimeAdminBootstrap 缺少 initialPassword 时应失败", async () => {
@@ -642,6 +664,184 @@ describe("projectRuntimeAccessService", () => {
         denyRoles: ["ROLE_SPECIFIC_DENY"],
       }),
     );
+  });
+
+  test("listRuntimeUsers 会返回脱敏后的用户列表并附带 roleIds", async () => {
+    mockProjectRuntimeUser.findAll.mockResolvedValue([
+      {
+        id: "runtime-user-1",
+        projectId: "project-1",
+        username: "operator",
+        displayName: "值班员",
+        status: "active",
+        passwordHash: "hash-1",
+        roleBindings: [
+          { roleId: "role-1", role: { id: "role-1", code: "OPERATOR", name: "值班员" } },
+          { roleId: "role-2", role: { id: "role-2", code: "VIEWER", name: "观察员" } },
+        ],
+      },
+    ]);
+
+    const result = await listRuntimeUsers({ projectId: "project-1" });
+
+    expect(mockProjectRuntimeUser.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { projectId: "project-1" },
+      }),
+    );
+    expect(result[0].passwordHash).toBeUndefined();
+    expect(result[0].roleIds).toEqual(["role-1", "role-2"]);
+    expect(result[0].roles).toEqual([
+      expect.objectContaining({ id: "role-1", code: "OPERATOR" }),
+      expect.objectContaining({ id: "role-2", code: "VIEWER" }),
+    ]);
+  });
+
+  test("createRuntimeUser 会创建用户并绑定角色，且返回对象不含 passwordHash", async () => {
+    mockProjectRole.findAll.mockResolvedValue([
+      { id: "role-1", projectId: "project-1", code: "OPERATOR", name: "值班员" },
+      { id: "role-2", projectId: "project-1", code: "VIEWER", name: "观察员" },
+    ]);
+    mockProjectRuntimeUser.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "runtime-user-1",
+        projectId: "project-1",
+        username: "operator",
+        displayName: "值班员",
+        status: "active",
+        passwordHash: "hash-operator",
+        roleBindings: [
+          { roleId: "role-1", role: { id: "role-1", code: "OPERATOR", name: "值班员" } },
+          { roleId: "role-2", role: { id: "role-2", code: "VIEWER", name: "观察员" } },
+        ],
+      });
+    mockProjectRuntimeUser.create.mockResolvedValue({
+      id: "runtime-user-1",
+      projectId: "project-1",
+      username: "operator",
+      displayName: "值班员",
+      status: "active",
+      passwordHash: "hash-operator",
+      toJSON() {
+        return {
+          id: this.id,
+          projectId: this.projectId,
+          username: this.username,
+          displayName: this.displayName,
+          status: this.status,
+          passwordHash: this.passwordHash,
+        };
+      },
+    });
+    mockProjectUserRoleBinding.create
+      .mockResolvedValueOnce({ id: "binding-1", roleId: "role-1" })
+      .mockResolvedValueOnce({ id: "binding-2", roleId: "role-2" });
+
+    const result = await createRuntimeUser({
+      projectId: "project-1",
+      actorId: "user-1",
+      username: "operator",
+      displayName: "值班员",
+      initialPassword: "Initial#123",
+      roleIds: ["role-1", "role-2"],
+    });
+
+    expect(mockProjectRuntimeUser.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        username: "operator",
+        displayName: "值班员",
+      }),
+      expect.objectContaining({
+        transaction: expect.any(Object),
+      }),
+    );
+    expect(mockProjectUserRoleBinding.create).toHaveBeenCalledTimes(2);
+    expect(result.passwordHash).toBeUndefined();
+    expect(result.roleIds).toEqual(["role-1", "role-2"]);
+    expect(result.roles).toEqual([
+      expect.objectContaining({ id: "role-1", code: "OPERATOR" }),
+      expect.objectContaining({ id: "role-2", code: "VIEWER" }),
+    ]);
+  });
+
+  test("listRuntimeRoles 会返回 bindingCount 和 grantCount", async () => {
+    mockProjectRole.findAll.mockResolvedValue([
+      {
+        id: "role-1",
+        projectId: "project-1",
+        code: "OPERATOR",
+        name: "值班员",
+        isSystem: false,
+        userBindings: [
+          { runtimeUserId: "runtime-user-1" },
+          { runtimeUserId: "runtime-user-2" },
+        ],
+        grants: [{ id: "grant-1" }, { id: "grant-2" }, { id: "grant-3" }],
+      },
+    ]);
+
+    const result = await listRuntimeRoles({ projectId: "project-1" });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        code: "OPERATOR",
+        bindingCount: 2,
+        grantCount: 3,
+      }),
+    ]);
+    expect(result[0].userCount).toBeUndefined();
+  });
+
+  test("deleteRuntimeRole 会拒绝删除系统内置角色", async () => {
+    mockProjectRole.findOne.mockResolvedValue({
+      id: "role-admin",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      isSystem: true,
+    });
+
+    await expect(
+      deleteRuntimeRole({
+        projectId: "project-1",
+        roleId: "role-admin",
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "系统内置角色不能删除",
+      }),
+    });
+  });
+
+  test("deleteRuntimeRole 会拒绝删除已绑定用户的角色", async () => {
+    mockProjectRole.findOne.mockResolvedValue({
+      id: "role-operator",
+      projectId: "project-1",
+      code: "OPERATOR",
+      isSystem: false,
+      userBindings: [{ runtimeUserId: "runtime-user-1" }],
+      grants: [],
+    });
+
+    await expect(
+      deleteRuntimeRole({
+        projectId: "project-1",
+        roleId: "role-operator",
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "角色存在绑定或授权记录，无法删除",
+        bindingCount: 1,
+        grantCount: 0,
+      }),
+    });
   });
 
   test("init.sql 包含同工程一致性复合约束", () => {

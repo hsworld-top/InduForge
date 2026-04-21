@@ -1,8 +1,13 @@
 const bcrypt = require("bcryptjs");
+const { Op } = require("sequelize");
+const AppError = require("../utils/AppError");
+const ErrorCodes = require("../constants/errorCodes");
 const {
+  Project,
   ProjectRole,
   ProjectRuntimeUser,
   ProjectUserRoleBinding,
+  ProjectRoleGrant,
 } = require("../models");
 
 const DEFAULT_RUNTIME_ADMIN_ROLE_CODE = "PROJECT_RUNTIME_ADMIN";
@@ -86,6 +91,132 @@ const sanitizeRuntimeUser = (runtimeUser) => {
   const plainUser = typeof runtimeUser.toJSON === "function" ? runtimeUser.toJSON() : { ...runtimeUser };
   delete plainUser.passwordHash;
   return plainUser;
+};
+
+const normalizeRoleIds = (roleIds = []) =>
+  [...new Set((Array.isArray(roleIds) ? roleIds : []).map((item) => normalizeText(item)).filter(Boolean))];
+
+const buildRuntimeUserInclude = () => ([
+  {
+    model: ProjectUserRoleBinding,
+    as: "roleBindings",
+    required: false,
+    include: [
+      {
+        model: ProjectRole,
+        as: "role",
+        required: false,
+      },
+    ],
+  },
+]);
+
+const buildRuntimeRoleInclude = () => ([
+  {
+    model: ProjectUserRoleBinding,
+    as: "userBindings",
+    required: false,
+  },
+  {
+    model: ProjectRoleGrant,
+    as: "grants",
+    required: false,
+  },
+]);
+
+const buildRuntimeUserSummary = (runtimeUser) => {
+  const plainUser = sanitizeRuntimeUser(runtimeUser);
+  if (!plainUser) {
+    return null;
+  }
+
+  const roleBindings = Array.isArray(plainUser.roleBindings) ? plainUser.roleBindings : [];
+  const roles = roleBindings
+    .map((binding) => binding.role || null)
+    .filter(Boolean)
+    .map((role) => ({
+      id: role.id,
+      code: role.code,
+      name: role.name,
+      description: role.description || null,
+      isSystem: Boolean(role.isSystem),
+      status: role.status,
+    }));
+
+  plainUser.roleIds = roleBindings.map((binding) => binding.roleId).filter(Boolean);
+  plainUser.roles = roles;
+  delete plainUser.roleBindings;
+  return plainUser;
+};
+
+const buildRuntimeRoleSummary = (role) => {
+  if (!role) {
+    return null;
+  }
+
+  const plainRole = typeof role.toJSON === "function" ? role.toJSON() : { ...role };
+  const bindings = Array.isArray(plainRole.userBindings) ? plainRole.userBindings : [];
+  const grants = Array.isArray(plainRole.grants) ? plainRole.grants : [];
+  const bindingCount = new Set(bindings.map((binding) => binding.runtimeUserId).filter(Boolean)).size;
+
+  delete plainRole.userBindings;
+  delete plainRole.grants;
+
+  return {
+    ...plainRole,
+    bindingCount,
+    grantCount: grants.length,
+  };
+};
+
+const loadRuntimeUserSummary = async ({
+  projectId,
+  runtimeUserId,
+  transaction = null,
+} = {}) => {
+  const runtimeUser = await ProjectRuntimeUser.findOne({
+    where: { projectId, id: runtimeUserId },
+    include: buildRuntimeUserInclude(),
+    transaction,
+  });
+  return buildRuntimeUserSummary(runtimeUser);
+};
+
+const loadRuntimeRoleSummary = async ({
+  projectId,
+  roleId,
+  transaction = null,
+} = {}) => {
+  const role = await ProjectRole.findOne({
+    where: { projectId, id: roleId },
+    include: buildRuntimeRoleInclude(),
+    transaction,
+  });
+  return buildRuntimeRoleSummary(role);
+};
+
+const ensureRoleSetBelongsToProject = async (projectId, roleIds, transaction = null) => {
+  const uniqueRoleIds = normalizeRoleIds(roleIds);
+  if (!uniqueRoleIds.length) {
+    return [];
+  }
+
+  const roles = await ProjectRole.findAll({
+    where: {
+      projectId,
+      id: { [Op.in]: uniqueRoleIds },
+    },
+    attributes: ["id"],
+    transaction,
+  });
+
+  if (roles.length !== uniqueRoleIds.length) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "角色不属于当前工程或不存在",
+    });
+  }
+
+  return uniqueRoleIds;
 };
 
 /**
@@ -233,6 +364,336 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
   };
 }
 
+async function listRuntimeUsers({ projectId } = {}) {
+  const users = await ProjectRuntimeUser.findAll({
+    where: { projectId },
+    include: buildRuntimeUserInclude(),
+    order: [["createdAt", "ASC"]],
+  });
+
+  return users.map((user) => buildRuntimeUserSummary(user));
+}
+
+async function createRuntimeUser({
+  projectId,
+  actorId = null,
+  username,
+  displayName,
+  initialPassword,
+  roleIds = [],
+} = {}) {
+  const normalizedUsername = normalizeText(username);
+  if (!projectId) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "projectId 不能为空" });
+  }
+  if (!normalizedUsername) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "用户名不能为空" });
+  }
+  if (!normalizeText(initialPassword)) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "初始密码不能为空" });
+  }
+
+  return Project.sequelize.transaction(async (transaction) => {
+    const uniqueRoleIds = await ensureRoleSetBelongsToProject(projectId, roleIds, transaction);
+    const existingUser = await ProjectRuntimeUser.findOne({
+      where: {
+        projectId,
+        username: normalizedUsername,
+      },
+      transaction,
+    });
+
+    if (existingUser) {
+      throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+        message: "运行态用户名已存在",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(initialPassword, BCRYPT_SALT_ROUNDS);
+    const runtimeUser = await ProjectRuntimeUser.create({
+      projectId,
+      createdBy: actorId || null,
+      updatedBy: actorId || null,
+      username: normalizedUsername,
+      passwordHash,
+      displayName: normalizeText(displayName) || normalizedUsername,
+      status: "active",
+    }, {
+      transaction,
+    });
+
+    for (const roleId of uniqueRoleIds) {
+      await ProjectUserRoleBinding.create({
+        projectId,
+        createdBy: actorId || null,
+        runtimeUserId: runtimeUser.id,
+        roleId,
+        assignedBy: actorId || null,
+        assignedAt: new Date(),
+      }, {
+        transaction,
+      });
+    }
+
+    return loadRuntimeUserSummary({
+      projectId,
+      runtimeUserId: runtimeUser.id,
+      transaction,
+    });
+  });
+}
+
+async function updateRuntimeUserStatus({
+  projectId,
+  runtimeUserId,
+  status,
+  actorId = null,
+} = {}) {
+  const normalizedStatus = normalizeText(status);
+  if (!projectId || !runtimeUserId) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "参数不完整" });
+  }
+
+  if (!["active", "inactive", "suspended"].includes(normalizedStatus)) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "状态值不合法" });
+  }
+
+  const runtimeUser = await ProjectRuntimeUser.findOne({
+    where: { projectId, id: runtimeUserId },
+  });
+
+  if (!runtimeUser) {
+    throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+      message: "运行态用户不存在",
+    });
+  }
+
+  await runtimeUser.update({
+    status: normalizedStatus,
+    updatedBy: actorId || null,
+  });
+
+  return loadRuntimeUserSummary({ projectId, runtimeUserId });
+}
+
+async function resetRuntimeUserPassword({
+  projectId,
+  runtimeUserId,
+  newPassword,
+  actorId = null,
+} = {}) {
+  if (!normalizeText(newPassword)) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "新密码不能为空" });
+  }
+
+  const runtimeUser = await ProjectRuntimeUser.findOne({
+    where: { projectId, id: runtimeUserId },
+  });
+  if (!runtimeUser) {
+    throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+      message: "运行态用户不存在",
+    });
+  }
+
+  await runtimeUser.update({
+    passwordHash: await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS),
+    updatedBy: actorId || null,
+  });
+
+  return loadRuntimeUserSummary({ projectId, runtimeUserId });
+}
+
+async function bindRuntimeUserRoles({
+  projectId,
+  runtimeUserId,
+  roleIds = [],
+  actorId = null,
+} = {}) {
+  return Project.sequelize.transaction(async (transaction) => {
+    const uniqueRoleIds = await ensureRoleSetBelongsToProject(projectId, roleIds, transaction);
+    const runtimeUser = await ProjectRuntimeUser.findOne({
+      where: { projectId, id: runtimeUserId },
+      transaction,
+    });
+
+    if (!runtimeUser) {
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: "运行态用户不存在",
+      });
+    }
+
+    await ProjectUserRoleBinding.destroy({
+      where: {
+        projectId,
+        runtimeUserId,
+      },
+      transaction,
+    });
+
+    for (const roleId of uniqueRoleIds) {
+      await ProjectUserRoleBinding.create({
+        projectId,
+        createdBy: actorId || null,
+        runtimeUserId,
+        roleId,
+        assignedBy: actorId || null,
+        assignedAt: new Date(),
+      }, {
+        transaction,
+      });
+    }
+
+    return loadRuntimeUserSummary({
+      projectId,
+      runtimeUserId,
+      transaction,
+    });
+  });
+}
+
+async function listRuntimeRoles({ projectId } = {}) {
+  const roles = await ProjectRole.findAll({
+    where: { projectId },
+    include: buildRuntimeRoleInclude(),
+    order: [["createdAt", "ASC"]],
+  });
+
+  return roles.map((role) => buildRuntimeRoleSummary(role));
+}
+
+async function createRuntimeRole({
+  projectId,
+  actorId = null,
+  code,
+  name,
+  description,
+} = {}) {
+  const normalizedCode = normalizeText(code);
+  const normalizedName = normalizeText(name);
+  if (!projectId) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "projectId 不能为空" });
+  }
+  if (!normalizedCode || !normalizedName) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "角色编码和名称不能为空" });
+  }
+
+  const existingRole = await ProjectRole.findOne({
+    where: {
+      projectId,
+      code: normalizedCode,
+    },
+  });
+  if (existingRole) {
+    throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+      message: "角色编码已存在",
+    });
+  }
+
+  const role = await ProjectRole.create({
+    projectId,
+    createdBy: actorId || null,
+    updatedBy: actorId || null,
+    code: normalizedCode,
+    name: normalizedName,
+    description: normalizeText(description) || null,
+    isSystem: false,
+    status: "active",
+  });
+
+  return buildRuntimeRoleSummary(role);
+}
+
+async function updateRuntimeRole({
+  projectId,
+  roleId,
+  actorId = null,
+  code,
+  name,
+  description,
+  status,
+} = {}) {
+  const role = await ProjectRole.findOne({
+    where: { projectId, id: roleId },
+  });
+
+  if (!role) {
+    throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+      message: "运行态角色不存在",
+    });
+  }
+
+  const nextCode = normalizeText(code);
+  const nextName = normalizeText(name);
+  const nextStatus = normalizeText(status);
+
+  if (nextCode && nextCode !== role.code) {
+    const duplicate = await ProjectRole.findOne({
+      where: {
+        projectId,
+        code: nextCode,
+        id: { [Op.ne]: roleId },
+      },
+    });
+    if (duplicate) {
+      throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+        message: "角色编码已存在",
+      });
+    }
+  }
+
+  await role.update({
+    ...(nextCode ? { code: nextCode } : {}),
+    ...(nextName ? { name: nextName } : {}),
+    ...(typeof description !== "undefined" ? { description: normalizeText(description) || null } : {}),
+    ...(nextStatus ? { status: nextStatus } : {}),
+    updatedBy: actorId || null,
+  });
+
+  return loadRuntimeRoleSummary({ projectId, roleId });
+}
+
+async function deleteRuntimeRole({
+  projectId,
+  roleId,
+  actorId = null,
+} = {}) {
+  const role = await ProjectRole.findOne({
+    where: { projectId, id: roleId },
+    include: buildRuntimeRoleInclude(),
+  });
+
+  if (!role) {
+    throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+      message: "运行态角色不存在",
+    });
+  }
+
+  if (role.isSystem || role.code === DEFAULT_RUNTIME_ADMIN_ROLE_CODE) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "系统内置角色不能删除",
+    });
+  }
+
+  const bindingCount = Array.isArray(role.userBindings) ? role.userBindings.length : 0;
+  const grantCount = Array.isArray(role.grants) ? role.grants.length : 0;
+  if (bindingCount > 0 || grantCount > 0) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "角色存在绑定或授权记录，无法删除",
+      bindingCount,
+      grantCount,
+    });
+  }
+
+  await role.destroy();
+
+  return {
+    deleted: true,
+    roleId,
+    projectId,
+    deletedBy: actorId || null,
+  };
+}
+
 /**
  * 把多个角色的授权记录合并成易于权限判定的映射。
  * 规则很简单：
@@ -352,4 +813,13 @@ module.exports = {
   DEFAULT_RUNTIME_ADMIN_USERNAME,
   ensureRuntimeAdminBootstrap,
   buildEffectiveRoleGrantMap,
+  listRuntimeUsers,
+  createRuntimeUser,
+  updateRuntimeUserStatus,
+  resetRuntimeUserPassword,
+  bindRuntimeUserRoles,
+  listRuntimeRoles,
+  createRuntimeRole,
+  updateRuntimeRole,
+  deleteRuntimeRole,
 };
