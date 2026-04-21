@@ -43,13 +43,21 @@ const assertBootstrapOwnerOrThrow = (existingUser, actorId, username) => {
     return;
   }
 
-  const sameOwner =
-    actorId &&
-    (isSameValue(existingUser.createdBy, actorId) || isSameValue(existingUser.updatedBy, actorId));
+  const sameOwner = actorId && isSameValue(existingUser.createdBy, actorId);
 
   if (!sameOwner) {
     throw new Error(`运行态账号 ${username} 已存在且不属于当前工程创建者，拒绝自动提权`);
   }
+};
+
+const sanitizeRuntimeUser = (runtimeUser) => {
+  if (!runtimeUser) {
+    return null;
+  }
+
+  const plainUser = typeof runtimeUser.toJSON === "function" ? runtimeUser.toJSON() : { ...runtimeUser };
+  delete plainUser.passwordHash;
+  return plainUser;
 };
 
 const mergeGrantBucket = (baseBucket, overlayBucket) => {
@@ -187,6 +195,7 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
         transaction,
       });
       runtimeUser = createdUser;
+      assertBootstrapOwnerOrThrow(runtimeUser, actorId, username);
     } catch (error) {
       if (error?.name !== "SequelizeUniqueConstraintError") {
         throw error;
@@ -196,10 +205,10 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
         where: usernameWhere,
         transaction,
       });
-      assertBootstrapOwnerOrThrow(runtimeUser, actorId, username);
       if (!runtimeUser) {
         throw error;
       }
+      assertBootstrapOwnerOrThrow(runtimeUser, actorId, username);
     }
   }
 
@@ -252,7 +261,7 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
 
   return {
     role,
-    runtimeUser,
+    runtimeUser: sanitizeRuntimeUser(runtimeUser),
     binding,
   };
 }

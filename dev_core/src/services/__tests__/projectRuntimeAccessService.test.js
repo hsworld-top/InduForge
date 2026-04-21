@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const bcrypt = require("bcryptjs");
 
 const mockProjectRole = {
@@ -92,6 +94,8 @@ describe("projectRuntimeAccessService", () => {
       transaction,
     });
 
+    const createdUserCall = mockProjectRuntimeUser.findOrCreate.mock.calls[0][0];
+
     expect(mockProjectRole.findOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         defaults: expect.objectContaining({
@@ -125,9 +129,12 @@ describe("projectRuntimeAccessService", () => {
         transaction,
       }),
     );
-    expect(await bcrypt.compare("Initial#123", result.runtimeUser.passwordHash)).toBe(true);
+    expect(
+      await bcrypt.compare("Initial#123", createdUserCall.defaults.passwordHash),
+    ).toBe(true);
     expect(result.role.code).toBe(DEFAULT_RUNTIME_ADMIN_ROLE_CODE);
     expect(result.runtimeUser.username).toBe(creator.username);
+    expect(result.runtimeUser.passwordHash).toBeUndefined();
   });
 
   test("ensureRuntimeAdminBootstrap 已有记录时会复用而不重复创建", async () => {
@@ -207,6 +214,7 @@ describe("projectRuntimeAccessService", () => {
     expect(mockProjectRole.findOrCreate).toHaveBeenCalledTimes(1);
     expect(mockProjectRuntimeUser.findOrCreate).toHaveBeenCalledTimes(1);
     expect(mockProjectUserRoleBinding.findOrCreate).toHaveBeenCalledTimes(1);
+    expect(secondResult.runtimeUser.passwordHash).toBeUndefined();
   });
 
   test("ensureRuntimeAdminBootstrap 遇到同名但非创建者来源的账号时应拒绝自动提权", async () => {
@@ -240,6 +248,41 @@ describe("projectRuntimeAccessService", () => {
       }),
     ).rejects.toThrow("拒绝自动提权");
     expect(mockProjectRuntimeUser.findOrCreate).not.toHaveBeenCalled();
+  });
+
+  test("ensureRuntimeAdminBootstrap 在 findOrCreate 命中已有同名账号时也要校验归属", async () => {
+    const transaction = { id: "tx-4" };
+    const project = { id: "project-1", name: "演示工程" };
+    const creator = {
+      id: "user-creator-1",
+      username: "alice",
+      fullName: "张三",
+    };
+
+    mockProjectRole.findOne.mockResolvedValue({
+      id: "role-1",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+    });
+    mockProjectRuntimeUser.findOne.mockResolvedValue(null);
+    mockProjectRuntimeUser.findOrCreate.mockImplementation(async ({ defaults }) => [
+      {
+        id: "user-999",
+        ...defaults,
+        createdBy: "someone-else",
+        updatedBy: "someone-else",
+      },
+      false,
+    ]);
+
+    await expect(
+      ensureRuntimeAdminBootstrap({
+        project,
+        creator,
+        initialPassword: "Initial#123",
+        transaction,
+      }),
+    ).rejects.toThrow("拒绝自动提权");
   });
 
   test("buildEffectiveRoleGrantMap 会按 resourceId 粒度聚合并让 deny 覆盖 allow", () => {
@@ -355,5 +398,18 @@ describe("projectRuntimeAccessService", () => {
         effectiveDenyRoles: ["ROLE_SPECIFIC_DENY"],
       }),
     );
+  });
+
+  test("init.sql 包含同工程一致性复合约束", () => {
+    const initSql = fs.readFileSync(
+      path.join(__dirname, "../../../database/init.sql"),
+      "utf8",
+    );
+
+    expect(initSql).toContain('CONSTRAINT project_runtime_users_id_project_uq UNIQUE ("id", "projectId")');
+    expect(initSql).toContain('CONSTRAINT project_roles_id_project_uq UNIQUE ("id", "projectId")');
+    expect(initSql).toContain('FOREIGN KEY ("runtimeUserId", "projectId")');
+    expect(initSql).toContain('FOREIGN KEY ("roleId", "projectId")');
+    expect(initSql).toContain('CONSTRAINT project_role_grants_role_project_fk');
   });
 });

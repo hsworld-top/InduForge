@@ -177,7 +177,8 @@ CREATE TABLE IF NOT EXISTS project_runtime_users (
   "lastLoginAt" timestamptz,
   "lastLoginIp" text,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
-  "updatedAt" timestamptz NOT NULL DEFAULT now()
+  "updatedAt" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT project_runtime_users_id_project_uq UNIQUE ("id", "projectId")
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS project_runtime_users_project_username_uq
@@ -214,7 +215,8 @@ CREATE TABLE IF NOT EXISTS project_roles (
   "isSystem" boolean NOT NULL DEFAULT false,
   "status" text NOT NULL DEFAULT 'active' CHECK ("status" IN ('active', 'inactive')),
   "createdAt" timestamptz NOT NULL DEFAULT now(),
-  "updatedAt" timestamptz NOT NULL DEFAULT now()
+  "updatedAt" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT project_roles_id_project_uq UNIQUE ("id", "projectId")
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS project_roles_project_code_uq
@@ -243,12 +245,20 @@ CREATE TABLE IF NOT EXISTS project_user_role_bindings (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "projectId" uuid NOT NULL REFERENCES projects ("id") ON DELETE CASCADE,
   "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
-  "runtimeUserId" uuid NOT NULL REFERENCES project_runtime_users ("id") ON DELETE CASCADE,
-  "roleId" uuid NOT NULL REFERENCES project_roles ("id") ON DELETE CASCADE,
+  "runtimeUserId" uuid NOT NULL,
+  "roleId" uuid NOT NULL,
   "assignedBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
   "assignedAt" timestamptz,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
-  "updatedAt" timestamptz NOT NULL DEFAULT now()
+  "updatedAt" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT project_user_role_bindings_runtime_user_project_fk
+    FOREIGN KEY ("runtimeUserId", "projectId")
+    REFERENCES project_runtime_users ("id", "projectId")
+    ON DELETE CASCADE,
+  CONSTRAINT project_user_role_bindings_role_project_fk
+    FOREIGN KEY ("roleId", "projectId")
+    REFERENCES project_roles ("id", "projectId")
+    ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS project_user_role_bindings_unique_idx
@@ -276,7 +286,7 @@ CREATE TABLE IF NOT EXISTS project_role_grants (
   "projectId" uuid NOT NULL REFERENCES projects ("id") ON DELETE CASCADE,
   "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
   "updatedBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
-  "roleId" uuid NOT NULL REFERENCES project_roles ("id") ON DELETE CASCADE,
+  "roleId" uuid NOT NULL,
   "resourceType" text NOT NULL,
   "resourceId" text NOT NULL DEFAULT '*',
   "action" text NOT NULL,
@@ -284,7 +294,11 @@ CREATE TABLE IF NOT EXISTS project_role_grants (
   "scopeConfig" jsonb NOT NULL DEFAULT '{}'::jsonb,
   "condition" jsonb,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
-  "updatedAt" timestamptz NOT NULL DEFAULT now()
+  "updatedAt" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT project_role_grants_role_project_fk
+    FOREIGN KEY ("roleId", "projectId")
+    REFERENCES project_roles ("id", "projectId")
+    ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS project_role_grants_unique_idx
