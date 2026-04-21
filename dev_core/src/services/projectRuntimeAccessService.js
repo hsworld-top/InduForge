@@ -112,6 +112,25 @@ const normalizeRuntimeUserStatusForStorage = (status) => {
   throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "状态值不合法" });
 };
 
+const normalizeRuntimeRoleStatusForOutput = (status) => {
+  const normalizedStatus = normalizeText(status);
+  return normalizedStatus === "active" ? "active" : "disabled";
+};
+
+const normalizeRuntimeRoleStatusForStorage = (status) => {
+  const normalizedStatus = normalizeText(status);
+  if (!normalizedStatus) {
+    return "";
+  }
+  if (normalizedStatus === "active") {
+    return "active";
+  }
+  if (normalizedStatus === "disabled") {
+    return "inactive";
+  }
+  throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "状态值不合法" });
+};
+
 const buildRuntimeUserInclude = () => ([
   {
     model: ProjectUserRoleBinding,
@@ -181,6 +200,7 @@ const buildRuntimeRoleSummary = (role) => {
 
   return {
     ...plainRole,
+    status: normalizeRuntimeRoleStatusForOutput(plainRole.status),
     bindingCount,
     grantCount: grants.length,
   };
@@ -524,6 +544,13 @@ async function bindRuntimeUserRoles({
 } = {}) {
   return Project.sequelize.transaction(async (transaction) => {
     const uniqueRoleIds = await ensureRoleSetBelongsToProject(projectId, roleIds, transaction);
+    const runtimeAdminRole = await ProjectRole.findOne({
+      where: {
+        projectId,
+        code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      },
+      transaction,
+    });
     const runtimeUser = await ProjectRuntimeUser.findOne({
       where: { projectId, id: runtimeUserId },
       transaction,
@@ -533,6 +560,38 @@ async function bindRuntimeUserRoles({
       throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
         message: "运行态用户不存在",
       });
+    }
+
+    if (runtimeAdminRole && !uniqueRoleIds.includes(runtimeAdminRole.id)) {
+      const currentBindings = await ProjectUserRoleBinding.findAll({
+        where: {
+          projectId,
+          runtimeUserId,
+        },
+        attributes: ["roleId"],
+        transaction,
+      });
+      const hasRuntimeAdminRole = currentBindings.some((binding) => binding.roleId === runtimeAdminRole.id);
+      if (hasRuntimeAdminRole) {
+        const adminBindings = await ProjectUserRoleBinding.findAll({
+          where: {
+            projectId,
+            roleId: runtimeAdminRole.id,
+          },
+          attributes: ["runtimeUserId"],
+          transaction,
+        });
+        const remainingAdminIds = new Set(
+          adminBindings
+            .map((binding) => normalizeText(binding.runtimeUserId))
+            .filter((bindingRuntimeUserId) => bindingRuntimeUserId && bindingRuntimeUserId !== runtimeUserId),
+        );
+        if (!remainingAdminIds.size) {
+          throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+            message: "至少保留一个运行态管理员",
+          });
+        }
+      }
     }
 
     await ProjectUserRoleBinding.destroy({
@@ -635,9 +694,15 @@ async function updateRuntimeRole({
     });
   }
 
+  if (role.isSystem || role.code === DEFAULT_RUNTIME_ADMIN_ROLE_CODE) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "系统内置角色不允许编辑",
+    });
+  }
+
   const nextCode = normalizeText(code);
   const nextName = normalizeText(name);
-  const nextStatus = normalizeText(status);
+  const nextStatus = normalizeRuntimeRoleStatusForStorage(status);
 
   if (nextCode && nextCode !== role.code) {
     const duplicate = await ProjectRole.findOne({

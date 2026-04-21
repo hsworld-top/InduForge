@@ -29,6 +29,17 @@ const mockService = {
 const mockUpsertProjectSettings = jest.fn();
 const mockReplaceProjectSnapshot = jest.fn();
 const mockLogger = { error: jest.fn(), warn: jest.fn() };
+let mockCurrentUserRole = "SYSTEM_ADMIN";
+const mockRequireResourceOwnership = jest.fn(() => (req, res, next) => {
+  if (req.method === "PATCH") {
+    return res.status(403).json({
+      success: false,
+      errorCode: "A1002",
+      message: "legacy project permission denied",
+    });
+  }
+  return next();
+});
 
 jest.mock("crypto", () => {
   const actualCrypto = jest.requireActual("crypto");
@@ -54,11 +65,11 @@ jest.mock("../../../middlewares/auth", () => ({
       username: "owner",
       fullName: "工程创建者",
       tenantId: "tenant-1",
-      role: "SYSTEM_ADMIN",
+      role: mockCurrentUserRole,
     };
     next();
   },
-  requireResourceOwnership: () => (req, res, next) => next(),
+  requireResourceOwnership: (...args) => mockRequireResourceOwnership(...args),
   hasCapability: () => true,
 }));
 
@@ -105,7 +116,12 @@ const createApp = () => {
 describe("project runtime access router", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCurrentUserRole = "SYSTEM_ADMIN";
     mockProject.sequelize.transaction.mockImplementation(async (callback) => callback(mockTransaction));
+    mockUpsertProjectSettings.mockResolvedValue(undefined);
+    mockReplaceProjectSnapshot.mockResolvedValue(undefined);
+    mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
+    mockDesignPage.create.mockResolvedValue(undefined);
     mockProject.findByPk.mockResolvedValue({
       id: "project-1",
       tenantId: "tenant-1",
@@ -159,12 +175,28 @@ describe("project runtime access router", () => {
     expect(mockUpsertProjectSettings).not.toHaveBeenCalled();
   });
 
+  test("创建工程在 post-commit settings 初始化失败时会补偿删除工程并返回 500", async () => {
+    const destroy = jest.fn().mockResolvedValue(undefined);
+    const createdProject = { id: "project-1", tenantId: "tenant-1", destroy };
+    mockProject.create.mockResolvedValue(createdProject);
+    mockProject.findByPk.mockResolvedValue(createdProject);
+    mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
+    mockUpsertProjectSettings.mockRejectedValue(new Error("settings failed"));
+
+    const response = await request(createApp()).post("/projects").send({ name: "新工程" });
+
+    expect(response.status).toBe(500);
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
   test("导入工程后也会初始化默认工程管理员账号并传入随机 initialPassword", async () => {
     const projectUpdate = jest.fn().mockResolvedValue(undefined);
+    const destroy = jest.fn().mockResolvedValue(undefined);
     mockProject.create.mockResolvedValue({
       id: "project-import-1",
       tenantId: "tenant-1",
       update: projectUpdate,
+      destroy,
     });
     mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
     mockDesignPage.create.mockResolvedValue(undefined);
@@ -195,6 +227,36 @@ describe("project runtime access router", () => {
       }),
     );
     expect(JSON.stringify(response.body)).not.toContain("0123456789abcdef0123456789abcdef");
+  });
+
+  test("导入工程在 snapshot 初始化失败时会补偿删除工程并返回 500", async () => {
+    const projectUpdate = jest.fn().mockResolvedValue(undefined);
+    const destroy = jest.fn().mockResolvedValue(undefined);
+    const importedProject = {
+      id: "project-import-1",
+      tenantId: "tenant-1",
+      update: projectUpdate,
+      destroy,
+    };
+    mockProject.create.mockResolvedValue(importedProject);
+    mockProject.findByPk.mockResolvedValue(importedProject);
+    mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
+    mockDesignPage.create.mockResolvedValue(undefined);
+    mockReplaceProjectSnapshot.mockRejectedValue(new Error("snapshot failed"));
+
+    const response = await request(createApp())
+      .post("/projects/import")
+      .send({
+        name: "导入工程",
+        payload: {
+          project: { name: "旧工程" },
+          pages: [],
+          datacenter: {},
+        },
+      });
+
+    expect(response.status).toBe(500);
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 
   test("GET /projects/:id/runtime-users 返回 runtimeUsers", async () => {
@@ -250,6 +312,42 @@ describe("project runtime access router", () => {
         roleIds: ["role-1", "role-2"],
       }),
     );
+  });
+
+  test("运行态管理写接口不会再被旧的 project PATCH 权限判断误拦截", async () => {
+    mockService.updateRuntimeUserStatus.mockResolvedValue({
+      id: "runtime-user-1",
+      username: "operator",
+      status: "disabled",
+      roleIds: [],
+    });
+
+    const response = await request(createApp())
+      .patch("/projects/project-1/runtime-users/runtime-user-1/status")
+      .send({ status: "disabled" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.runtimeUser).toEqual(
+      expect.objectContaining({
+        status: "disabled",
+      }),
+    );
+  });
+
+  test("OPS_ADMIN 无权调用运行态管理写接口", async () => {
+    mockCurrentUserRole = "OPS_ADMIN";
+
+    const response = await request(createApp())
+      .post("/projects/project-1/runtime-users")
+      .send({
+        username: "operator",
+        displayName: "值班员",
+        initialPassword: "Initial#123",
+        roleIds: [],
+      });
+
+    expect(response.status).toBe(403);
+    expect(mockService.createRuntimeUser).not.toHaveBeenCalled();
   });
 
   test("GET /projects/:id/runtime-roles 返回 runtimeRoles", async () => {

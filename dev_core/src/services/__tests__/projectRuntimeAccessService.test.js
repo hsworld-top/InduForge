@@ -816,6 +816,39 @@ describe("projectRuntimeAccessService", () => {
     });
   });
 
+  test("bindRuntimeUserRoles 不允许把工程里的最后一个管理员解绑干净", async () => {
+    mockProjectRole.findAll.mockResolvedValue([
+      { id: "role-viewer" },
+    ]);
+    mockProjectRole.findOne.mockResolvedValue({
+      id: "role-admin",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      isSystem: true,
+    });
+    mockProjectRuntimeUser.findOne.mockResolvedValue({
+      id: "runtime-user-1",
+      projectId: "project-1",
+    });
+    mockProjectUserRoleBinding.findAll
+      .mockResolvedValueOnce([{ roleId: "role-admin" }])
+      .mockResolvedValueOnce([{ runtimeUserId: "runtime-user-1" }]);
+
+    await expect(
+      bindRuntimeUserRoles({
+        projectId: "project-1",
+        runtimeUserId: "runtime-user-1",
+        roleIds: ["role-viewer"],
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "至少保留一个运行态管理员",
+      }),
+    });
+  });
+
   test("listRuntimeRoles 会返回 bindingCount 和 grantCount", async () => {
     mockProjectRole.findAll.mockResolvedValue([
       {
@@ -863,6 +896,32 @@ describe("projectRuntimeAccessService", () => {
       statusCode: 400,
       options: expect.objectContaining({
         message: "系统内置角色不能删除",
+      }),
+    });
+  });
+
+  test("updateRuntimeRole 不允许编辑系统角色", async () => {
+    mockProjectRole.findOne.mockResolvedValue({
+      id: "role-admin",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      isSystem: true,
+      status: "active",
+    });
+
+    await expect(
+      updateRuntimeRole({
+        projectId: "project-1",
+        roleId: "role-admin",
+        actorId: "user-1",
+        code: "OTHER_CODE",
+        status: "inactive",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "系统内置角色不允许编辑",
       }),
     });
   });

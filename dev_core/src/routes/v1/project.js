@@ -220,6 +220,53 @@ const respondRouteError = (res, error, fallbackCode, fallbackStatus) => {
 };
 
 const buildInitialRuntimePassword = () => randomBytes(16).toString('hex');
+const RUNTIME_ACCESS_ALLOWED_ROLES = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
+
+const requireRuntimeProjectManagement = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { role, tenantId } = req.user || {};
+
+    if (!RUNTIME_ACCESS_ALLOWED_ROLES.includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+    }
+
+    const project = await Project.findByPk(id, {
+      attributes: ['id', 'tenantId'],
+    });
+    if (!project) {
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+    }
+
+    if (role !== 'SYSTEM_ADMIN' && project.tenantId !== tenantId) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+    }
+
+    req.runtimeManagedProject = project;
+    return next();
+  } catch (error) {
+    logger.error('Runtime project management guard error', {
+      error: error.message,
+      requestId: req.requestId,
+    });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+};
+
+const cleanupFailedInitializedProject = async (projectRecord, projectId, requestId) => {
+  try {
+    const targetProject = projectRecord || (projectId ? await Project.findByPk(projectId) : null);
+    if (targetProject?.destroy) {
+      await targetProject.destroy();
+    }
+  } catch (cleanupError) {
+    logger.error('Cleanup failed initialized project error', {
+      error: cleanupError.message,
+      projectId,
+      requestId,
+    });
+  }
+};
 
 /**
  * @swagger
@@ -588,21 +635,26 @@ router.post('/import', authenticateToken, validate(Joi.object({
       });
     });
 
-    await upsertProjectSettings(Project.sequelize, {
-      projectId,
-      schemaVersion: '1.0.0',
-      globalVariables,
-      globalScripts: globalScripts || {},
-      updatedBy: userId,
-      updatedAt: new Date(),
-    });
+    try {
+      await upsertProjectSettings(Project.sequelize, {
+        projectId,
+        schemaVersion: '1.0.0',
+        globalVariables,
+        globalScripts: globalScripts || {},
+        updatedBy: userId,
+        updatedAt: new Date(),
+      });
 
-    const snapshot = buildProjectSnapshot(payload.datacenter || {});
-    await dataDomainClient.replaceProjectSnapshot(
-      projectId,
-      snapshot,
-      req.headers.authorization,
-    );
+      const snapshot = buildProjectSnapshot(payload.datacenter || {});
+      await dataDomainClient.replaceProjectSnapshot(
+        projectId,
+        snapshot,
+        req.headers.authorization,
+      );
+    } catch (postCommitError) {
+      await cleanupFailedInitializedProject(project, projectId, req.requestId);
+      throw postCommitError;
+    }
 
 
     return ApiResponse.success(res, { projectId }, 'project_import_success', {}, 201);
@@ -664,10 +716,11 @@ router.post('/', authenticateToken, validate(Joi.object({
       groups: [],
     };
     const defaultGlobalScripts = DEFAULT_GLOBAL_SCRIPTS;
+    let project = null;
     let projectId = null;
 
     await Project.sequelize.transaction(async (transaction) => {
-      const project = await Project.create({
+      project = await Project.create({
         name,
         description,
         colorTag: colorTag || '#3b82f6',
@@ -700,8 +753,9 @@ router.post('/', authenticateToken, validate(Joi.object({
         updatedBy: userId,
         updatedAt: new Date(),
       });
-    } catch (error) {
-      logger.warn('Init project settings failed', { error: error.message, projectId });
+    } catch (postCommitError) {
+      await cleanupFailedInitializedProject(project, projectId, req.requestId);
+      throw postCommitError;
     }
 
     const projectWithRelations = await Project.findByPk(projectId, {
@@ -725,7 +779,7 @@ router.post('/', authenticateToken, validate(Joi.object({
   }
 });
 
-router.get('/:id/runtime-users', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.get('/:id/runtime-users', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({ id: Joi.string().uuid().required() })
 })), async (req, res) => {
   try {
@@ -738,7 +792,7 @@ router.get('/:id/runtime-users', authenticateToken, requireResourceOwnership('pr
   }
 });
 
-router.post('/:id/runtime-users', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.post('/:id/runtime-users', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({ id: Joi.string().uuid().required() }),
   body: Joi.object({
     username: Joi.string().trim().required(),
@@ -765,7 +819,7 @@ router.post('/:id/runtime-users', authenticateToken, requireResourceOwnership('p
   }
 });
 
-router.patch('/:id/runtime-users/:runtimeUserId/status', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.patch('/:id/runtime-users/:runtimeUserId/status', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({
     id: Joi.string().uuid().required(),
     runtimeUserId: Joi.string().uuid().required(),
@@ -790,7 +844,7 @@ router.patch('/:id/runtime-users/:runtimeUserId/status', authenticateToken, requ
   }
 });
 
-router.post('/:id/runtime-users/:runtimeUserId/reset-password', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.post('/:id/runtime-users/:runtimeUserId/reset-password', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({
     id: Joi.string().uuid().required(),
     runtimeUserId: Joi.string().uuid().required(),
@@ -815,7 +869,7 @@ router.post('/:id/runtime-users/:runtimeUserId/reset-password', authenticateToke
   }
 });
 
-router.put('/:id/runtime-users/:runtimeUserId/roles', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.put('/:id/runtime-users/:runtimeUserId/roles', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({
     id: Joi.string().uuid().required(),
     runtimeUserId: Joi.string().uuid().required(),
@@ -840,7 +894,7 @@ router.put('/:id/runtime-users/:runtimeUserId/roles', authenticateToken, require
   }
 });
 
-router.get('/:id/runtime-roles', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.get('/:id/runtime-roles', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({ id: Joi.string().uuid().required() })
 })), async (req, res) => {
   try {
@@ -853,7 +907,7 @@ router.get('/:id/runtime-roles', authenticateToken, requireResourceOwnership('pr
   }
 });
 
-router.post('/:id/runtime-roles', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.post('/:id/runtime-roles', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({ id: Joi.string().uuid().required() }),
   body: Joi.object({
     code: Joi.string().trim().required(),
@@ -877,7 +931,7 @@ router.post('/:id/runtime-roles', authenticateToken, requireResourceOwnership('p
   }
 });
 
-router.put('/:id/runtime-roles/:roleId', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.put('/:id/runtime-roles/:roleId', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({
     id: Joi.string().uuid().required(),
     roleId: Joi.string().uuid().required(),
@@ -886,7 +940,7 @@ router.put('/:id/runtime-roles/:roleId', authenticateToken, requireResourceOwner
     code: Joi.string().trim().optional(),
     name: Joi.string().trim().optional(),
     description: Joi.string().allow('').optional(),
-    status: Joi.string().valid('active', 'inactive').optional(),
+    status: Joi.string().valid('active', 'disabled').optional(),
   }).min(1).required(),
 })), async (req, res) => {
   try {
@@ -904,7 +958,7 @@ router.put('/:id/runtime-roles/:roleId', authenticateToken, requireResourceOwner
   }
 });
 
-router.delete('/:id/runtime-roles/:roleId', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+router.delete('/:id/runtime-roles/:roleId', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
   params: Joi.object({
     id: Joi.string().uuid().required(),
     roleId: Joi.string().uuid().required(),
