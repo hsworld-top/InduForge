@@ -20,6 +20,7 @@ import {
 import {
   buildRuntimeRolePayload,
   buildRuntimeUserPayload,
+  buildRuntimeUserRoleBindingPayload,
   summarizeRuntimeGrantCount,
   resolveRuntimeAccessStatusMeta,
 } from '../src/views/tenant/components/project-runtime-access-state.js'
@@ -181,6 +182,17 @@ await run('工程运行态权限：用户载荷序列化', () => {
       initialPassword: 'ChangeMe123!',
       roleIds: ['role-1', 'role-2'],
       status: 'disabled',
+    }
+  )
+})
+
+await run('工程运行态权限：角色绑定载荷序列化', () => {
+  assert.deepEqual(
+    buildRuntimeUserRoleBindingPayload({
+      roleIds: ['role-1', ' role-2 ', 'role-1', '', null],
+    }),
+    {
+      roleIds: ['role-1', 'role-2'],
     }
   )
 })

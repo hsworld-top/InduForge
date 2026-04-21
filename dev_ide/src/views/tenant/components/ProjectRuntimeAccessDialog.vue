@@ -99,7 +99,7 @@
                 <template #default="{ row }">
                   <div class="runtime-access-actions">
                     <el-button size="small" @click="openEditUserEditor(row)">
-                      {{ t('common.edit') }}
+                      {{ t('projectManagement.runtimeAccess.users.bindRoles') }}
                     </el-button>
                     <el-button size="small" @click="toggleRuntimeUserStatus(row)">
                       {{
@@ -211,26 +211,31 @@
     :title="
       userEditorMode === 'create'
         ? t('projectManagement.runtimeAccess.users.create')
-        : t('projectManagement.runtimeAccess.users.edit')
+        : t('projectManagement.runtimeAccess.users.bindRoles')
     "
     width="560px"
     append-to-body
   >
     <el-form label-width="120px">
-      <el-form-item :label="t('projectManagement.runtimeAccess.users.username')">
+      <el-form-item v-if="userEditorMode === 'create'" :label="t('projectManagement.runtimeAccess.users.username')">
         <el-input
           v-model="userForm.username"
-          :disabled="userEditorMode === 'edit'"
           :placeholder="t('projectManagement.runtimeAccess.users.inputUsername')"
         />
       </el-form-item>
-      <el-form-item :label="t('projectManagement.runtimeAccess.users.displayName')">
+      <el-form-item
+        v-if="userEditorMode === 'create'"
+        :label="t('projectManagement.runtimeAccess.users.displayName')"
+      >
         <el-input
           v-model="userForm.displayName"
           :placeholder="t('projectManagement.runtimeAccess.users.inputDisplayName')"
         />
       </el-form-item>
-      <el-form-item :label="t('projectManagement.runtimeAccess.users.initialPassword')">
+      <el-form-item
+        v-if="userEditorMode === 'create'"
+        :label="t('projectManagement.runtimeAccess.users.initialPassword')"
+      >
         <el-input
           v-model="userForm.initialPassword"
           type="password"
@@ -238,6 +243,14 @@
           :placeholder="t('projectManagement.runtimeAccess.users.inputInitialPassword')"
         />
       </el-form-item>
+      <template v-else>
+        <el-form-item :label="t('projectManagement.runtimeAccess.users.username')">
+          <div class="runtime-access-readonly">{{ userForm.username || '--' }}</div>
+        </el-form-item>
+        <el-form-item :label="t('projectManagement.runtimeAccess.users.displayName')">
+          <div class="runtime-access-readonly">{{ userForm.displayName || '--' }}</div>
+        </el-form-item>
+      </template>
       <el-form-item :label="t('projectManagement.runtimeAccess.users.roles')">
         <el-select
           v-model="userForm.roleIds"
@@ -256,7 +269,10 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item :label="t('projectManagement.runtimeAccess.users.status')">
+      <el-form-item
+        v-if="userEditorMode === 'create'"
+        :label="t('projectManagement.runtimeAccess.users.status')"
+      >
         <el-select v-model="userForm.status" style="width: 100%">
           <el-option
             :label="t('projectManagement.runtimeAccess.statusActive')"
@@ -466,6 +482,14 @@ const formatLastLogin = (value) => value || '--'
   gap: 8px;
 }
 
+.runtime-access-readonly {
+  min-height: 32px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  color: #374151;
+}
+
 html.dark .runtime-access-toolbar__title,
 [data-theme='dark'] .runtime-access-toolbar__title {
   color: #f3f4f6;
@@ -476,6 +500,11 @@ html.dark .runtime-access-toolbar__description,
 html.dark .runtime-access-empty-text,
 [data-theme='dark'] .runtime-access-empty-text {
   color: #9ca3af;
+}
+
+html.dark .runtime-access-readonly,
+[data-theme='dark'] .runtime-access-readonly {
+  color: #e5e7eb;
 }
 
 @media (max-width: 768px) {

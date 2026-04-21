@@ -117,17 +117,6 @@ export const projectAPI = {
   },
 
   /**
-   * 更新工程运行态用户
-   * @param {string} id - 工程 ID
-   * @param {string} userId - 运行态用户 ID
-   * @param {object} payload - 用户数据
-   * @returns {Promise} 更新结果
-   */
-  updateRuntimeUser(id, userId, payload) {
-    return request.put(`/projects/${id}/runtime-users/${userId}`, payload)
-  },
-
-  /**
    * 更新工程运行态用户状态
    * @param {string} id - 工程 ID
    * @param {string} userId - 运行态用户 ID
@@ -135,7 +124,18 @@ export const projectAPI = {
    * @returns {Promise} 更新结果
    */
   updateRuntimeUserStatus(id, userId, payload) {
-    return request.put(`/projects/${id}/runtime-users/${userId}/status`, payload)
+    return request.patch(`/projects/${id}/runtime-users/${userId}/status`, payload)
+  },
+
+  /**
+   * 更新工程运行态用户角色绑定
+   * @param {string} id - 工程 ID
+   * @param {string} userId - 运行态用户 ID
+   * @param {object} payload - 角色绑定数据
+   * @returns {Promise} 更新结果
+   */
+  updateRuntimeUserRoles(id, userId, payload) {
+    return request.put(`/projects/${id}/runtime-users/${userId}/roles`, payload)
   },
 
   /**

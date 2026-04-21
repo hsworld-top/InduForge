@@ -768,6 +768,7 @@ export const messages = {
         users: {
           create: '创建用户',
           edit: '编辑用户',
+          bindRoles: '绑定角色',
           username: '登录账号',
           displayName: '显示名称',
           initialPassword: '初始密码',
@@ -788,6 +789,7 @@ export const messages = {
           passwordRequired: '请填写密码',
           createSuccess: '运行态用户创建成功',
           updateSuccess: '运行态用户更新成功',
+          rolesUpdateSuccess: '用户角色绑定已更新',
           saveFailed: '保存运行态用户失败：{message}',
           loadFailed: '加载运行态用户失败：{message}',
           toggleStatusSuccess: '用户状态已更新为“{status}”',
@@ -1593,6 +1595,7 @@ export const messages = {
         users: {
           create: 'Create User',
           edit: 'Edit User',
+          bindRoles: 'Bind Roles',
           username: 'Username',
           displayName: 'Display Name',
           initialPassword: 'Initial Password',
@@ -1613,6 +1616,7 @@ export const messages = {
           passwordRequired: 'Password is required',
           createSuccess: 'Runtime user created successfully',
           updateSuccess: 'Runtime user updated successfully',
+          rolesUpdateSuccess: 'User role bindings updated successfully',
           saveFailed: 'Failed to save runtime user: {message}',
           loadFailed: 'Failed to load runtime users: {message}',
           toggleStatusSuccess: 'User status updated to "{status}"',

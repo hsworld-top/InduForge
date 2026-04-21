@@ -57,6 +57,11 @@ const createEmptyRoleForm = () => ({
 export const resolveRuntimeAccessStatusMeta = (status) =>
   RUNTIME_STATUS_META[status] || RUNTIME_STATUS_META.disabled
 
+const resolveOptionalRuntimeStatus = (status) => {
+  const normalized = trimText(status)
+  return normalized && RUNTIME_STATUS_META[normalized] ? normalized : ''
+}
+
 export const buildRuntimeRolePayload = (form = {}) => ({
   name: trimText(form.name),
   code: normalizeCode(form.code),
@@ -65,11 +70,16 @@ export const buildRuntimeRolePayload = (form = {}) => ({
 })
 
 export const buildRuntimeUserPayload = (form = {}) => {
-  const payload = {
-    username: trimText(form.username),
-    displayName: trimText(form.displayName),
-    roleIds: normalizeIdList(form.roleIds),
-    status: resolveRuntimeAccessStatusMeta(form.status).value,
+  const payload = {}
+
+  const username = trimText(form.username)
+  if (username) {
+    payload.username = username
+  }
+
+  const displayName = trimText(form.displayName)
+  if (displayName) {
+    payload.displayName = displayName
   }
 
   const initialPassword = trimText(form.initialPassword)
@@ -77,8 +87,22 @@ export const buildRuntimeUserPayload = (form = {}) => {
     payload.initialPassword = initialPassword
   }
 
+  const roleIds = normalizeIdList(form.roleIds)
+  if (roleIds.length > 0) {
+    payload.roleIds = roleIds
+  }
+
+  const status = resolveOptionalRuntimeStatus(form.status)
+  if (status) {
+    payload.status = status
+  }
+
   return payload
 }
+
+export const buildRuntimeUserRoleBindingPayload = (form = {}) => ({
+  roleIds: normalizeIdList(form.roleIds),
+})
 
 export const summarizeRuntimeGrantCount = (roleLike) => {
   if (!roleLike || typeof roleLike !== 'object') {
@@ -367,7 +391,9 @@ export const useProjectRuntimeAccessState = ({
     const payload = buildRuntimeUserPayload(userForm)
 
     try {
-      validateUserPayload(payload, t, { requirePassword: userEditorMode.value === 'create' })
+      if (userEditorMode.value === 'create') {
+        validateUserPayload(payload, t, { requirePassword: true })
+      }
     } catch (error) {
       message.warning(error.message)
       return
@@ -376,11 +402,40 @@ export const useProjectRuntimeAccessState = ({
     userSubmitting.value = true
     try {
       if (userEditorMode.value === 'create') {
-        await api.createRuntimeUser(projectId.value, payload)
+        const createPayload = {
+          username: payload.username,
+          displayName: payload.displayName,
+          initialPassword: payload.initialPassword,
+        }
+        if (payload.status) {
+          createPayload.status = payload.status
+        }
+
+        const createResponse = await api.createRuntimeUser(projectId.value, createPayload)
+        const createdUser =
+          upsertRuntimeUser(createResponse) ||
+          extractSingle(createResponse, ['runtimeUser', 'user']) ||
+          null
+
+        const roleBindingPayload = buildRuntimeUserRoleBindingPayload(userForm)
+        let createdUserId = createdUser?.id || ''
+
+        if (roleBindingPayload.roleIds.length > 0 && !createdUserId) {
+          await loadRuntimeUsers()
+          createdUserId = runtimeUsers.value.find((user) => user.username === payload.username)?.id || ''
+        }
+
+        if (roleBindingPayload.roleIds.length > 0 && createdUserId) {
+          await api.updateRuntimeUserRoles(projectId.value, createdUserId, roleBindingPayload)
+        }
         message.success(t('projectManagement.runtimeAccess.users.createSuccess'))
       } else {
-        await api.updateRuntimeUser(projectId.value, userForm.id, payload)
-        message.success(t('projectManagement.runtimeAccess.users.updateSuccess'))
+        await api.updateRuntimeUserRoles(
+          projectId.value,
+          userForm.id,
+          buildRuntimeUserRoleBindingPayload(userForm)
+        )
+        message.success(t('projectManagement.runtimeAccess.users.rolesUpdateSuccess'))
       }
 
       userEditorVisible.value = false
