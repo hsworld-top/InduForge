@@ -2,6 +2,7 @@
   数据点面板：新增/编辑变量表单（含 Monaco 初始值）
 -->
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 
 interface DatapointGroupOptionLike {
@@ -32,6 +33,7 @@ const editDescription = defineModel<string>("editDescription", { default: "" });
 const mapped = defineModel<boolean>("mapped", { default: false });
 const mappedField = defineModel<string>("mappedField", { default: "" });
 const mappedSourceLabel = defineModel<string>("mappedSourceLabel", { default: "" });
+const { t } = useI18n();
 
 function handleMarkers(payload: unknown) {
   emit("editValueMarkers", payload);
@@ -41,18 +43,18 @@ function handleMarkers(payload: unknown) {
 <template>
   <el-dialog
     v-model="visible"
-    :title="editMode ? '编辑变量' : '新增变量'"
+    :title="editMode ? t('datapointPanel.variableDialog.editTitle') : t('datapointPanel.variableDialog.createTitle')"
     width="520px"
     :close-on-click-modal="false"
     :lock-scroll="false"
   >
     <el-form label-width="80px">
-      <el-form-item label="变量名">
+      <el-form-item :label="t('datapointPanel.variableDialog.name')">
         <el-input v-model="editName" />
       </el-form-item>
-      <el-form-item label="分组">
-        <el-select v-model="editGroupId" placeholder="请选择分组">
-          <el-option label="根目录" :value="rootGroupId" />
+      <el-form-item :label="t('datapointPanel.variableDialog.group')">
+        <el-select v-model="editGroupId" :placeholder="t('datapointPanel.variableDialog.selectGroup')">
+          <el-option :label="t('datapointPanel.variableDialog.root')" :value="rootGroupId" />
           <el-option
             v-for="group in groupOptions"
             :key="group.id"
@@ -61,12 +63,12 @@ function handleMarkers(payload: unknown) {
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="类型">
+      <el-form-item :label="t('datapointPanel.variableDialog.type')">
         <el-select v-model="editType" :disabled="mapped" @change="emit('typeChange')">
           <el-option v-for="t in types" :key="t" :label="t" :value="t" />
         </el-select>
       </el-form-item>
-      <el-form-item label="初始值">
+      <el-form-item :label="t('datapointPanel.variableDialog.initialValue')">
         <div v-if="isEditorType" class="edit-value-block">
           <MonacoEditor
             v-model="editValue"
@@ -89,24 +91,24 @@ function handleMarkers(payload: unknown) {
           style="width: 100%"
         />
       </el-form-item>
-      <el-form-item label="描述">
+      <el-form-item :label="t('datapointPanel.variableDialog.description')">
         <el-input v-model="editDescription" type="textarea" :rows="2" />
       </el-form-item>
-      <el-form-item label="映射">
+      <el-form-item :label="t('datapointPanel.variableDialog.mapping')">
         <el-switch v-model="mapped" />
       </el-form-item>
       <template v-if="mapped">
-        <el-form-item label="路径">
+        <el-form-item :label="t('datapointPanel.variableDialog.path')">
           <el-input v-model="mappedField" disabled />
         </el-form-item>
-        <el-form-item label="来源">
+        <el-form-item :label="t('datapointPanel.variableDialog.source')">
           <el-input v-model="mappedSourceLabel" disabled />
         </el-form-item>
       </template>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" @click="emit('confirm')">确定</el-button>
+      <el-button @click="visible = false">{{ t("datapointPanel.variableDialog.cancel") }}</el-button>
+      <el-button type="primary" @click="emit('confirm')">{{ t("datapointPanel.variableDialog.confirm") }}</el-button>
     </template>
   </el-dialog>
 </template>

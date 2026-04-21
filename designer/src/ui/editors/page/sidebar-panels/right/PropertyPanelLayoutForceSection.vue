@@ -2,6 +2,7 @@
   属性面板：布局强制属性区块（静态 prop-section）
 -->
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import IconEpLink from "~icons/ep/link";
 import PropEditor from "./PropEditor.vue";
 
@@ -32,6 +33,7 @@ const emit = defineEmits<{
   (event: "bindClick", propDef: LayoutPropDefLike): void;
   (event: "propChange", name: string, value: unknown): void;
 }>();
+const { t } = useI18n();
 
 function handlePropChange(name: string, value: unknown) {
   emit("propChange", name, value);
@@ -41,7 +43,7 @@ function handlePropChange(name: string, value: unknown) {
 <template>
   <div class="prop-section prop-section--static">
     <div class="prop-section-header is-static">
-      <span class="prop-section-title">布局</span>
+      <span class="prop-section-title">{{ t("propertyPanel.layout.title") }}</span>
     </div>
     <div class="prop-section-body">
       <div
@@ -51,7 +53,11 @@ function handlePropChange(name: string, value: unknown) {
       >
         <div class="prop-label">
           <span>{{ propDef.label }}</span>
-          <el-tooltip v-if="shouldShowBindButton(propDef)" content="绑定数据" placement="top">
+          <el-tooltip
+            v-if="shouldShowBindButton(propDef)"
+            :content="t('propertyPanel.layout.bindData')"
+            placement="top"
+          >
             <button
               class="bind-btn"
               :class="{ 'is-active': hasPropBinding(propDef.name) }"

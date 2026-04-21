@@ -2,6 +2,7 @@
   数据点面板顶部：快速添加、导入、导出
 -->
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import IconEpDownload from "~icons/ep/download";
 import IconEpLink from "~icons/ep/link";
 import IconEpUpload from "~icons/ep/upload";
@@ -21,37 +22,39 @@ function handleExport(command: VariableExportCommand) {
 function handleImport(command: VariableExportCommand) {
   emit("importVars", command);
 }
+
+const { t } = useI18n();
 </script>
 
 <template>
   <div class="toolbar">
     <el-button class="toolbar-button toolbar-button--ghost" size="small" @click="emit('quickAdd')">
       <IconEpLink class="toolbar-icon" />
-      快速添加数据点
+      {{ t("datapointPanel.toolbar.quickAdd") }}
     </el-button>
     <el-dropdown @command="handleExport">
       <el-button class="toolbar-button" size="small">
         <IconEpUpload class="toolbar-icon" />
-        导出变量
+        {{ t("datapointPanel.toolbar.exportVars") }}
       </el-button>
       <template #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
-          <el-dropdown-item command="xlsx">导出 XLSX</el-dropdown-item>
-          <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
+          <el-dropdown-item command="csv">{{ t("datapointPanel.toolbar.exportCsv") }}</el-dropdown-item>
+          <el-dropdown-item command="xlsx">{{ t("datapointPanel.toolbar.exportXlsx") }}</el-dropdown-item>
+          <el-dropdown-item command="json">{{ t("datapointPanel.toolbar.exportJson") }}</el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>
     <el-dropdown @command="handleImport">
       <el-button class="toolbar-button" size="small">
         <IconEpDownload class="toolbar-icon" />
-        导入变量
+        {{ t("datapointPanel.toolbar.importVars") }}
       </el-button>
       <template #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item command="csv">导入 CSV</el-dropdown-item>
-          <el-dropdown-item command="xlsx">导入 XLSX</el-dropdown-item>
-          <el-dropdown-item command="json">导入 JSON</el-dropdown-item>
+          <el-dropdown-item command="csv">{{ t("datapointPanel.toolbar.importCsv") }}</el-dropdown-item>
+          <el-dropdown-item command="xlsx">{{ t("datapointPanel.toolbar.importXlsx") }}</el-dropdown-item>
+          <el-dropdown-item command="json">{{ t("datapointPanel.toolbar.importJson") }}</el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>

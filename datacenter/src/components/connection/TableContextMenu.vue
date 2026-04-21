@@ -20,14 +20,14 @@
           @click="handleViewStructure"
         >
           <IconTablerTable class="w-4 h-4 text-blue-500" />
-          <span>查看表结构</span>
+          <span>{{ t("actions.viewStructure") }}</span>
         </div>
         <div
           class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center space-x-2 text-sm"
           @click="handleQueryTable"
         >
           <IconTablerCode class="w-4 h-4 text-green-500" />
-          <span>查询表数据</span>
+          <span>{{ t("actions.queryTable") }}</span>
         </div>
       </div>
     </div>
@@ -35,9 +35,9 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
 import IconTablerTable from "~icons/tabler/table";
 import IconTablerCode from "~icons/tabler/code";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   visible: {

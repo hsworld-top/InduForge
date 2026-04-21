@@ -90,6 +90,7 @@ function mapCategory(category: string): string {
 
 export function registerBuiltinComponents(): void {
   const manifests = getAllManifests();
+  componentRegistry.clear();
 
   for (const manifest of manifests) {
     const baseStyle = getDefaultStyle(manifest.type);

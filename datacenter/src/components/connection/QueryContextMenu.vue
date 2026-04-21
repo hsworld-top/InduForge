@@ -16,14 +16,14 @@
         class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center"
       >
         <IconTablerInfoCircle class="mr-2 w-4 h-4" />
-        查看详情
+        {{ t("actions.viewDetails") }}
       </div>
       <div
         @click="handleOpen"
         class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center"
       >
         <IconTablerFileCode class="mr-2 w-4 h-4" />
-        打开查询
+        {{ t("actions.openQuery") }}
       </div>
       <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
       <div
@@ -31,7 +31,7 @@
         class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center"
       >
         <IconTablerTrash class="mr-2 w-4 h-4" />
-        删除查询
+        {{ t("actions.delete") }}
       </div>
     </div>
   </Teleport>
@@ -42,6 +42,7 @@ import { watch, onMounted, onBeforeUnmount } from "vue";
 import IconTablerInfoCircle from "~icons/tabler/info-circle";
 import IconTablerFileCode from "~icons/tabler/file-code";
 import IconTablerTrash from "~icons/tabler/trash";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   visible: {
@@ -84,7 +85,7 @@ const handleDelete = () => {
 };
 
 // 点击外部关闭菜单
-const handleClickOutside = (event) => {
+const handleClickOutside = () => {
   if (props.visible) {
     handleClose();
   }

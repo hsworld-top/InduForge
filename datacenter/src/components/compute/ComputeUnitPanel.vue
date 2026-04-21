@@ -4,19 +4,19 @@
       type="info"
       :closable="false"
       show-icon
-      title="最小联调面板：先支持创建、运行、调试 compute 单元"
+      :title="t('compute.title')"
       class="mb-4"
     />
 
     <el-form label-width="100px" class="mb-4">
       <el-row :gutter="16">
         <el-col :xs="24" :md="12">
-          <el-form-item label="名称">
-            <el-input v-model="form.name" placeholder="例如：calc.sum" />
+          <el-form-item :label="t('compute.name')">
+            <el-input v-model="form.name" placeholder="calc.sum" />
           </el-form-item>
         </el-col>
         <el-col :xs="24" :md="12">
-          <el-form-item label="语言">
+          <el-form-item :label="t('compute.language')">
             <el-select v-model="form.language" class="w-full">
               <el-option label="JavaScript" value="js" />
               <el-option label="Python" value="python" />
@@ -27,7 +27,7 @@
 
       <el-row :gutter="16">
         <el-col :xs="24" :md="12">
-          <el-form-item label="超时(ms)">
+          <el-form-item :label="t('compute.timeout')">
             <el-input-number
               v-model="form.timeoutMs"
               :min="100"
@@ -37,44 +37,48 @@
           </el-form-item>
         </el-col>
         <el-col :xs="24" :md="12">
-          <el-form-item label="单元ID">
+          <el-form-item :label="t('compute.unitId')">
             <el-input
               v-model="computeUnitId"
-              placeholder="创建后自动回填，也可手动输入已有ID"
+              :placeholder="t('compute.unitIdPlaceholder')"
             />
           </el-form-item>
         </el-col>
       </el-row>
 
-      <el-form-item label="脚本">
+      <el-form-item :label="t('compute.script')">
         <el-input
           v-model="form.scriptCode"
           type="textarea"
           :autosize="{ minRows: 8, maxRows: 14 }"
-          placeholder="JavaScript 示例：result = (input.a || 0) + (input.b || 0);"
+          :placeholder="t('compute.scriptPlaceholder')"
         />
       </el-form-item>
 
-      <el-form-item label="输入JSON">
+      <el-form-item :label="t('compute.inputJson')">
         <el-input
           v-model="inputJSON"
           type="textarea"
           :autosize="{ minRows: 4, maxRows: 8 }"
-          placeholder='例如：{"a":1,"b":2}'
+          :placeholder="t('compute.inputJsonPlaceholder')"
         />
       </el-form-item>
 
       <el-form-item>
         <el-button type="primary" :loading="creating" @click="handleCreate">
-          创建单元
+          {{ t("actions.createUnit") }}
         </el-button>
-        <el-button :loading="running" @click="handleRun">运行</el-button>
-        <el-button :loading="debugging" @click="handleDebug">调试</el-button>
+        <el-button :loading="running" @click="handleRun">{{
+          t("actions.run")
+        }}</el-button>
+        <el-button :loading="debugging" @click="handleDebug">{{
+          t("actions.debug")
+        }}</el-button>
       </el-form-item>
     </el-form>
 
     <el-card shadow="never">
-      <template #header>运行结果</template>
+      <template #header>{{ t("compute.resultTitle") }}</template>
       <pre class="result-box">{{ outputText }}</pre>
     </el-card>
   </div>
@@ -84,6 +88,7 @@
 import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   projectId: {
@@ -101,7 +106,7 @@ const form = ref({
 
 const computeUnitId = ref("");
 const inputJSON = ref('{"a":1,"b":2}');
-const outputText = ref("尚未执行");
+const outputText = ref(t("compute.notExecuted"));
 
 const creating = ref(false);
 const running = ref(false);
@@ -116,19 +121,19 @@ const parseInput = () => {
   try {
     return JSON.parse(inputJSON.value);
   } catch {
-    throw new Error("输入 JSON 格式无效");
+    throw new Error(t("compute.invalidJson"));
   }
 };
 
 const ensureProject = () => {
   if (!currentProjectId.value) {
-    throw new Error("projectId 缺失，无法调用 compute 接口");
+    throw new Error(t("compute.missingProjectId"));
   }
 };
 
 const ensureUnitID = () => {
   if (!computeUnitId.value.trim()) {
-    throw new Error("请先创建单元或手动输入单元ID");
+    throw new Error(t("compute.missingUnitId"));
   }
 };
 
@@ -145,10 +150,12 @@ const handleCreate = async () => {
     });
     computeUnitId.value = response.data?.id || "";
     outputText.value = JSON.stringify(response.data, null, 2);
-    ElMessage.success("计算单元创建成功");
+    ElMessage.success(t("compute.createSuccess"));
   } catch (error) {
     ElMessage.error(
-      error.response?.data?.message || error.message || "创建失败",
+      error.response?.data?.message ||
+        error.message ||
+        t("compute.createFailed"),
     );
   } finally {
     creating.value = false;
@@ -167,10 +174,10 @@ const handleRun = async () => {
       input,
     );
     outputText.value = JSON.stringify(response.data, null, 2);
-    ElMessage.success("运行成功");
+    ElMessage.success(t("compute.runSuccess"));
   } catch (error) {
     ElMessage.error(
-      error.response?.data?.message || error.message || "运行失败",
+      error.response?.data?.message || error.message || t("compute.runFailed"),
     );
   } finally {
     running.value = false;
@@ -189,10 +196,12 @@ const handleDebug = async () => {
       input,
     );
     outputText.value = JSON.stringify(response.data, null, 2);
-    ElMessage.success("调试成功");
+    ElMessage.success(t("compute.debugSuccess"));
   } catch (error) {
     ElMessage.error(
-      error.response?.data?.message || error.message || "调试失败",
+      error.response?.data?.message ||
+        error.message ||
+        t("compute.debugFailed"),
     );
   } finally {
     debugging.value = false;

@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="`表结构 - ${tableName}`"
+    :title="t('tableStructure.title', { tableName })"
     width="900px"
     :close-on-click-modal="false"
     @close="handleClose"
@@ -10,11 +10,22 @@
       <!-- 标签页 -->
       <el-tabs v-model="activeTab" class="structure-tabs">
         <!-- 字段信息 -->
-        <el-tab-pane label="字段" name="columns">
+        <el-tab-pane :label="t('tableStructure.columns')" name="columns">
           <el-table :data="structure.columns" border stripe max-height="500">
-            <el-table-column prop="name" label="字段名" width="150" />
-            <el-table-column prop="type" label="类型" width="120" />
-            <el-table-column label="长度/精度" width="100">
+            <el-table-column
+              prop="name"
+              :label="t('tableStructure.columnName')"
+              width="150"
+            />
+            <el-table-column
+              prop="type"
+              :label="t('tableStructure.type')"
+              width="120"
+            />
+            <el-table-column
+              :label="t('tableStructure.lengthPrecision')"
+              width="100"
+            >
               <template #default="{ row }">
                 <span v-if="row.maxLength">{{ row.maxLength }}</span>
                 <span v-else-if="row.numericPrecision">
@@ -24,14 +35,22 @@
                 <span v-else>-</span>
               </template>
             </el-table-column>
-            <el-table-column label="允许为空" width="90" align="center">
+            <el-table-column
+              :label="t('tableStructure.nullable')"
+              width="90"
+              align="center"
+            >
               <template #default="{ row }">
                 <el-tag :type="row.nullable ? 'info' : 'success'" size="small">
-                  {{ row.nullable ? "是" : "否" }}
+                  {{ row.nullable ? t("common.yes") : t("common.no") }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="defaultValue" label="默认值" width="100">
+            <el-table-column
+              prop="defaultValue"
+              :label="t('tableStructure.defaultValue')"
+              width="100"
+            >
               <template #default="{ row }">
                 <span v-if="row.defaultValue !== null">{{
                   row.defaultValue
@@ -39,24 +58,24 @@
                 <span v-else class="text-gray-400">NULL</span>
               </template>
             </el-table-column>
-            <el-table-column label="标识" width="120">
+            <el-table-column :label="t('tableStructure.markers')" width="120">
               <template #default="{ row }">
                 <div class="flex gap-1">
-                  <el-tag v-if="row.isPrimary" type="danger" size="small"
-                    >主键</el-tag
-                  >
-                  <el-tag v-if="row.isUnique" type="warning" size="small"
-                    >唯一</el-tag
-                  >
-                  <el-tag v-if="row.autoIncrement" type="info" size="small"
-                    >自增</el-tag
-                  >
+                  <el-tag v-if="row.isPrimary" type="danger" size="small">{{
+                    t("tableStructure.primaryKey")
+                  }}</el-tag>
+                  <el-tag v-if="row.isUnique" type="warning" size="small">{{
+                    t("tableStructure.unique")
+                  }}</el-tag>
+                  <el-tag v-if="row.autoIncrement" type="info" size="small">{{
+                    t("tableStructure.autoIncrement")
+                  }}</el-tag>
                 </div>
               </template>
             </el-table-column>
             <el-table-column
               prop="comment"
-              label="注释"
+              :label="t('tableStructure.comment')"
               min-width="150"
               show-overflow-tooltip
             />
@@ -64,10 +83,14 @@
         </el-tab-pane>
 
         <!-- 索引信息 -->
-        <el-tab-pane label="索引" name="indexes">
+        <el-tab-pane :label="t('tableStructure.indexes')" name="indexes">
           <el-table :data="structure.indexes" border stripe max-height="500">
-            <el-table-column prop="name" label="索引名" width="200" />
-            <el-table-column label="类型" width="120">
+            <el-table-column
+              prop="name"
+              :label="t('tableStructure.indexName')"
+              width="200"
+            />
+            <el-table-column :label="t('tableStructure.type')" width="120">
               <template #default="{ row }">
                 <el-tag
                   :type="
@@ -83,8 +106,15 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="method" label="索引方法" width="120" />
-            <el-table-column label="包含字段" min-width="300">
+            <el-table-column
+              prop="method"
+              :label="t('tableStructure.indexMethod')"
+              width="120"
+            />
+            <el-table-column
+              :label="t('tableStructure.includedColumns')"
+              min-width="300"
+            >
               <template #default="{ row }">
                 <el-tag
                   v-for="(col, index) in row.columns"
@@ -101,28 +131,39 @@
             v-if="structure.indexes.length === 0"
             class="text-center text-gray-400 py-8"
           >
-            暂无索引信息
+            {{ t("tableStructure.noIndexes") }}
           </div>
         </el-tab-pane>
 
         <!-- 外键信息 -->
-        <el-tab-pane label="外键" name="foreignKeys">
+        <el-tab-pane
+          :label="t('tableStructure.foreignKeys')"
+          name="foreignKeys"
+        >
           <el-table
             :data="structure.foreignKeys"
             border
             stripe
             max-height="500"
           >
-            <el-table-column prop="name" label="外键名" width="200" />
-            <el-table-column prop="columnName" label="本表字段" width="150" />
+            <el-table-column
+              prop="name"
+              :label="t('tableStructure.foreignKeyName')"
+              width="200"
+            />
+            <el-table-column
+              prop="columnName"
+              :label="t('tableStructure.localColumn')"
+              width="150"
+            />
             <el-table-column
               prop="referencedTable"
-              label="引用表"
+              :label="t('tableStructure.referencedTable')"
               width="150"
             />
             <el-table-column
               prop="referencedColumn"
-              label="引用字段"
+              :label="t('tableStructure.referencedColumn')"
               width="150"
             />
             <el-table-column prop="updateRule" label="ON UPDATE" width="120" />
@@ -132,14 +173,14 @@
             v-if="structure.foreignKeys.length === 0"
             class="text-center text-gray-400 py-8"
           >
-            暂无外键信息
+            {{ t("tableStructure.noForeignKeys") }}
           </div>
         </el-tab-pane>
       </el-tabs>
     </div>
 
     <template #footer>
-      <el-button @click="handleClose">关闭</el-button>
+      <el-button @click="handleClose">{{ t("actions.close") }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -148,6 +189,7 @@
 import { ref, watch, computed } from "vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   modelValue: {
@@ -203,8 +245,9 @@ const loadTableStructure = async () => {
   } catch (error) {
     ElMessage({
       type: "error",
-      message:
-        "加载表结构失败：" + (error.response?.data?.message || error.message),
+      message: t("tableStructure.loadFailed", {
+        message: error.response?.data?.message || error.message,
+      }),
       offset: 60,
       duration: 5000,
       showClose: true,

@@ -1,7 +1,9 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="mode === 'create' ? '新建订阅' : '编辑订阅'"
+    :title="
+      mode === 'create' ? t('subscription.create') : t('subscription.edit')
+    "
     width="600px"
     :close-on-click-modal="false"
     @close="handleClose"
@@ -13,24 +15,24 @@
       label-width="100px"
       label-position="right"
     >
-      <el-form-item label="订阅名称" prop="name">
+      <el-form-item :label="t('subscription.nameLabel')" prop="name">
         <el-input
           v-model="formData.name"
-          placeholder="请输入订阅名称"
+          :placeholder="t('subscription.namePlaceholder')"
           maxlength="100"
           show-word-limit
         />
       </el-form-item>
 
-      <el-form-item label="MQTT主题" prop="topic">
+      <el-form-item :label="t('subscription.topicLabel')" prop="topic">
         <el-input
           v-model="formData.topic"
-          placeholder="例如: device/+/data 或 sensor/#"
+          :placeholder="t('subscription.topicPlaceholder')"
           maxlength="500"
         >
           <template #append>
             <el-tooltip
-              content="支持通配符: + 匹配单层, # 匹配多层"
+              :content="t('subscription.wildcardTooltip')"
               placement="top"
             >
               <el-icon><IconTablerQuestionMark /></el-icon>
@@ -38,11 +40,11 @@
           </template>
         </el-input>
         <div class="text-xs text-gray-400 mt-1">
-          支持通配符：+ (单层) 和 # (多层), 例如: device/+/data 或 sensor/#
+          {{ t("subscription.wildcardHint") }}
         </div>
       </el-form-item>
 
-      <el-form-item label="QoS等级" prop="qos">
+      <el-form-item :label="t('subscription.qosLevel')" prop="qos">
         <el-radio-group v-model="formData.qos">
           <el-radio :label="0">QoS 0 (最多一次)</el-radio>
           <el-radio :label="1">QoS 1 (至少一次)</el-radio>
@@ -50,20 +52,20 @@
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item label="是否启用" prop="isEnabled">
+      <el-form-item :label="t('subscription.enabled')" prop="isEnabled">
         <el-switch
           v-model="formData.isEnabled"
-          active-text="启用"
-          inactive-text="禁用"
+          :active-text="t('common.enabled')"
+          :inactive-text="t('common.disabled')"
         />
       </el-form-item>
 
-      <el-form-item label="备注" prop="description">
+      <el-form-item :label="t('subscription.remark')" prop="description">
         <el-input
           v-model="formData.description"
           type="textarea"
           :rows="3"
-          placeholder="请输入备注信息（可选）"
+          :placeholder="t('subscription.descriptionPlaceholder')"
           maxlength="500"
           show-word-limit
         />
@@ -72,9 +74,9 @@
 
     <template #footer>
       <div class="flex justify-end space-x-2">
-        <el-button @click="handleClose">取消</el-button>
+        <el-button @click="handleClose">{{ t("actions.cancel") }}</el-button>
         <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          {{ mode === "create" ? "创建" : "保存" }}
+          {{ mode === "create" ? t("actions.create") : t("actions.save") }}
         </el-button>
       </div>
     </template>
@@ -87,6 +89,7 @@ import { ElMessage } from "element-plus";
 import IconTablerQuestionMark from "~icons/tabler/question-mark";
 import dataAPI from "@/api/data.api";
 import { Storage } from "@/utils/storage";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   modelValue: {
@@ -125,18 +128,33 @@ const formData = ref({
 // 验证规则
 const rules = {
   name: [
-    { required: true, message: "请输入订阅名称", trigger: "blur" },
-    { min: 2, max: 100, message: "长度在 2 到 100 个字符", trigger: "blur" },
-  ],
-  topic: [
-    { required: true, message: "请输入MQTT主题", trigger: "blur" },
     {
-      pattern: /^[a-zA-Z0-9_\-\/\+\#]+$/,
-      message: "主题格式不正确，只能包含字母、数字、_、-、/、+、#",
+      required: true,
+      message: t("subscription.namePlaceholder"),
+      trigger: "blur",
+    },
+    {
+      min: 2,
+      max: 100,
+      message: t("subscription.nameLengthError"),
       trigger: "blur",
     },
   ],
-  qos: [{ required: true, message: "请选择QoS等级", trigger: "change" }],
+  topic: [
+    {
+      required: true,
+      message: t("subscription.topicPlaceholder"),
+      trigger: "blur",
+    },
+    {
+      pattern: /^[a-zA-Z0-9_/#+-]+$/,
+      message: t("subscription.topicPatternError"),
+      trigger: "blur",
+    },
+  ],
+  qos: [
+    { required: true, message: t("subscription.qosLevel"), trigger: "change" },
+  ],
 };
 
 // 计算属性：对话框可见性
@@ -153,7 +171,7 @@ const getProjectId = () => {
     return projectIdFromStorage;
   }
 
-  const urlParams = new URLSearchParams(window.location.search);
+  const urlParams = new window.URLSearchParams(window.location.search);
   return urlParams.get("pid") || urlParams.get("id");
 };
 
@@ -192,7 +210,7 @@ const handleSubmit = async () => {
 
     const projectId = getProjectId();
     if (!projectId) {
-      ElMessage.error("无法获取项目ID");
+      ElMessage.error(t("subscription.projectMissing"));
       return;
     }
 
@@ -221,7 +239,9 @@ const handleSubmit = async () => {
 
     if (response.success) {
       ElMessage.success(
-        props.mode === "create" ? "订阅创建成功" : "订阅更新成功",
+        props.mode === "create"
+          ? t("subscription.createSuccess")
+          : t("subscription.updateSuccess"),
       );
       emit("success", response.data);
       handleClose();
@@ -232,8 +252,13 @@ const handleSubmit = async () => {
       return;
     }
     ElMessage.error(
-      (props.mode === "create" ? "创建失败：" : "更新失败：") +
-        (error.response?.data?.message || error.message),
+      props.mode === "create"
+        ? t("subscription.createFailed", {
+            message: error.response?.data?.message || error.message,
+          })
+        : t("subscription.updateFailed", {
+            message: error.response?.data?.message || error.message,
+          }),
     );
   } finally {
     submitting.value = false;

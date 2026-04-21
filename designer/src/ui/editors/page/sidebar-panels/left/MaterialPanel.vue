@@ -4,6 +4,7 @@
 -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import IconEpBack from "~icons/ep/back";
 import CanvasToolsPanel from "./CanvasToolsPanel.vue";
 import ComponentPanel from "./ComponentPanel.vue";
@@ -34,6 +35,7 @@ const emit = defineEmits<{
   (event: "update:editMode", value: MaterialEditMode): void;
   (event: "update:activeTool", value: MaterialToolType | ""): void;
 }>();
+const { t } = useI18n();
 
 const activeTab = ref("components");
 
@@ -58,13 +60,13 @@ function exitCanvasMode() {
     <!-- 页面编辑模式：组件 + 绘图区 + 资源 -->
     <template v-if="editMode === 'page'">
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="组件" name="components">
+        <el-tab-pane :label="t('materialPanel.components')" name="components">
           <ComponentPanel />
         </el-tab-pane>
-        <el-tab-pane label="绘图区(暂缓)" name="diagram" disabled>
+        <el-tab-pane :label="t('materialPanel.diagram')" name="diagram" disabled>
           <DiagramAreaPanel />
         </el-tab-pane>
-        <el-tab-pane label="资源" name="resources">
+        <el-tab-pane :label="t('materialPanel.resources')" name="resources">
           <ResourcePanel />
         </el-tab-pane>
       </el-tabs>
@@ -74,10 +76,10 @@ function exitCanvasMode() {
     <template v-else-if="editMode === 'canvas'">
       <div class="canvas-tools-panel">
         <div class="panel-header">
-          <h3 class="text-sm font-medium">Canvas 绘图工具</h3>
+          <h3 class="text-sm font-medium">{{ t("materialPanel.canvasTools") }}</h3>
           <el-button size="small" text @click="exitCanvasMode">
             <IconEpBack />
-            返回页面编辑
+            {{ t("materialPanel.backToPageEditor") }}
           </el-button>
         </div>
         <CanvasToolsPanel v-model="activeToolModel" />
@@ -120,6 +122,8 @@ function exitCanvasMode() {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--el-border-color);
+  border-bottom: 1px solid var(--designer-border-color);
+  background: var(--designer-shell-surface);
+  color: var(--designer-text-primary);
 }
 </style>

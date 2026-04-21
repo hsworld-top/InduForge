@@ -4,53 +4,63 @@
       class="toolbar flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
     >
       <div class="text-base font-semibold text-gray-800 dark:text-gray-100">
-        数据点管理
+        {{ t("datapoints.title") }}
       </div>
       <div class="flex items-center gap-2">
         <el-input
           v-model="searchText"
           size="small"
           clearable
-          placeholder="搜索路径或名称"
+          :placeholder="t('datapoints.searchPlaceholder')"
           class="w-52"
         />
         <el-select
           v-model="typeFilter"
           size="small"
-          placeholder="类型"
+          :placeholder="t('datapoints.typePlaceholder')"
           class="w-36"
         >
-          <el-option label="全部类型" value="" />
-          <el-option label="数据库查询" value="db.query" />
-          <el-option label="MQTT 变量" value="mqtt.tag" />
-          <el-option label="MQTT 订阅" value="mqtt.subscription" />
-          <el-option label="计算输出" value="calc.output" />
+          <el-option :label="t('datapoints.allTypes')" value="" />
+          <el-option :label="t('datapoints.types.db.query')" value="db.query" />
+          <el-option :label="t('datapoints.types.mqtt.tag')" value="mqtt.tag" />
+          <el-option
+            :label="t('datapoints.types.mqtt.subscription')"
+            value="mqtt.subscription"
+          />
+          <el-option
+            :label="t('datapoints.types.calc.output')"
+            value="calc.output"
+          />
         </el-select>
         <el-select
           v-model="statusFilter"
           size="small"
-          placeholder="状态"
+          :placeholder="t('datapoints.statusPlaceholder')"
           class="w-28"
         >
-          <el-option label="全部状态" value="" />
-          <el-option label="活跃" value="active" />
-          <el-option label="失效" value="invalid" />
+          <el-option :label="t('datapoints.allStatuses')" value="" />
+          <el-option :label="t('common.active')" value="active" />
+          <el-option :label="t('common.invalid')" value="invalid" />
         </el-select>
-        <el-button size="small" @click="handleRefresh">刷新</el-button>
+        <el-button size="small" @click="handleRefresh">{{
+          t("actions.refresh")
+        }}</el-button>
       </div>
     </div>
 
     <div
       class="hint px-4 py-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-900"
     >
-      数据点由查询、变量、计算单元自动生成，可直接在设计器中使用。
+      {{ t("datapoints.hint") }}
     </div>
 
     <div class="flex-1 overflow-y-auto p-4">
-      <div v-if="loading" class="py-8 text-center text-gray-400">加载中...</div>
+      <div v-if="loading" class="py-8 text-center text-gray-400">
+        {{ t("common.loading") }}
+      </div>
 
       <div v-else-if="groupedDataPoints.length === 0" class="py-8">
-        <el-empty description="暂无数据点" />
+        <el-empty :description="t('datapoints.empty')" />
       </div>
 
       <div v-else class="space-y-6">
@@ -63,7 +73,11 @@
           </div>
           <div v-if="group.allowClean" class="group-actions">
             <div class="text-xs text-gray-500">
-              已选择 {{ invalidSelection.length }} 个失效数据点
+              {{
+                t("datapoints.selectedInvalid", {
+                  count: invalidSelection.length,
+                })
+              }}
             </div>
             <el-button
               size="small"
@@ -71,7 +85,7 @@
               :disabled="invalidSelection.length === 0"
               @click="handleBatchDelete"
             >
-              批量清理
+              {{ t("actions.batchClean") }}
             </el-button>
           </div>
           <el-table
@@ -89,33 +103,49 @@
               type="selection"
               width="42"
             />
-            <el-table-column label="路径" min-width="280">
+            <el-table-column :label="t('datapoints.path')" min-width="280">
               <template #default="{ row }">
                 <span class="text-xs text-gray-600 dark:text-gray-300 truncate">
                   {{ row.path }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column prop="name" label="名称" min-width="140" />
-            <el-table-column prop="dataType" label="数据类型" width="100" />
-            <el-table-column label="状态" width="90">
+            <el-table-column
+              prop="name"
+              :label="t('datapoints.name')"
+              min-width="140"
+            />
+            <el-table-column
+              prop="dataType"
+              :label="t('datapoints.dataType')"
+              width="100"
+            />
+            <el-table-column :label="t('datapoints.status')" width="90">
               <template #default="{ row }">
                 <el-tag
                   size="small"
                   :type="row.status === 'invalid' ? 'info' : 'success'"
                 >
-                  {{ row.status === "invalid" ? "失效" : "活跃" }}
+                  {{
+                    row.status === "invalid"
+                      ? t("common.invalid")
+                      : t("common.active")
+                  }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="更新时间" width="160">
+            <el-table-column :label="t('datapoints.updatedAt')" width="160">
               <template #default="{ row }">
                 <span class="text-xs text-gray-500 dark:text-gray-400">
                   {{ formatTime(getUpdatedAt(row)) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column v-if="group.allowClean" label="操作" width="100">
+            <el-table-column
+              v-if="group.allowClean"
+              :label="t('subscription.operations')"
+              width="100"
+            >
               <template #default="{ row }">
                 <el-button
                   link
@@ -123,7 +153,7 @@
                   class="text-red-500"
                   @click="handleDelete(row)"
                 >
-                  清理
+                  {{ t("actions.clean") }}
                 </el-button>
               </template>
             </el-table-column>
@@ -140,6 +170,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";
 import dataAPI from "@/api/data.api";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   projectId: {
@@ -157,11 +188,11 @@ const debounceTimer = ref(null);
 const invalidSelection = ref([]);
 
 const typeLabels = {
-  "db.query": "数据库查询",
-  "mqtt.tag": "MQTT 变量",
-  "mqtt.subscription": "MQTT 订阅",
-  "calc.output": "计算输出",
-  "static.var": "静态变量",
+  "db.query": t("datapoints.types.db.query"),
+  "mqtt.tag": t("datapoints.types.mqtt.tag"),
+  "mqtt.subscription": t("datapoints.types.mqtt.subscription"),
+  "calc.output": t("datapoints.types.calc.output"),
+  "static.var": t("datapoints.types.static.var"),
 };
 
 /**
@@ -184,7 +215,9 @@ const loadDataPoints = async () => {
     }
   } catch (error) {
     ElMessage.error(
-      "加载数据点失败：" + (error.response?.data?.message || error.message),
+      t("datapoints.loadFailed", {
+        message: error.response?.data?.message || error.message,
+      }),
     );
   } finally {
     loading.value = false;
@@ -197,7 +230,7 @@ const loadDataPoints = async () => {
  */
 const handleRefresh = async () => {
   await loadDataPoints();
-  ElMessage.success("数据点列表已刷新");
+  ElMessage.success(t("datapoints.refreshSuccess"));
 };
 
 /**
@@ -208,21 +241,23 @@ const handleRefresh = async () => {
 const handleDelete = async (datapoint) => {
   try {
     await ElMessageBox.confirm(
-      `确定要清理数据点 "${datapoint.name}" 吗？`,
-      "清理确认",
+      t("datapoints.deleteConfirm", { name: datapoint.name }),
+      t("datapoints.deleteConfirmTitle"),
       {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
+        confirmButtonText: t("actions.clean"),
+        cancelButtonText: t("actions.cancel"),
         type: "warning",
       },
     );
     await dataAPI.deleteDataPoint(props.projectId, datapoint.id);
-    ElMessage.success("数据点已清理");
+    ElMessage.success(t("datapoints.deleteSuccess"));
     await loadDataPoints();
   } catch (error) {
     if (error !== "cancel") {
       ElMessage.error(
-        "清理失败：" + (error.response?.data?.message || error.message),
+        t("datapoints.deleteFailed", {
+          message: error.response?.data?.message || error.message,
+        }),
       );
     }
   }
@@ -243,11 +278,13 @@ const handleBatchDelete = async () => {
   if (invalidSelection.value.length === 0) return;
   try {
     await ElMessageBox.confirm(
-      `确定要清理 ${invalidSelection.value.length} 个失效数据点吗？`,
-      "批量清理确认",
+      t("datapoints.batchDeleteConfirm", {
+        count: invalidSelection.value.length,
+      }),
+      t("datapoints.batchDeleteConfirmTitle"),
       {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
+        confirmButtonText: t("actions.batchClean"),
+        cancelButtonText: t("actions.cancel"),
         type: "warning",
       },
     );
@@ -256,13 +293,17 @@ const handleBatchDelete = async () => {
       invalidSelection.value.map((item) => item.id),
     );
     const deletedCount = response?.data?.deletedCount ?? 0;
-    ElMessage.success(`已清理 ${deletedCount} 个失效数据点`);
+    ElMessage.success(
+      t("datapoints.batchDeleteSuccess", { count: deletedCount }),
+    );
     invalidSelection.value = [];
     await loadDataPoints();
   } catch (error) {
     if (error !== "cancel") {
       ElMessage.error(
-        "批量清理失败：" + (error.response?.data?.message || error.message),
+        t("datapoints.batchDeleteFailed", {
+          message: error.response?.data?.message || error.message,
+        }),
       );
     }
   }
@@ -315,7 +356,7 @@ const groupedDataPoints = computed(() => {
     if (invalidItems.length > 0) {
       result.push({
         key: "invalid",
-        label: "已失效",
+        label: t("datapoints.invalidGroup"),
         items: invalidItems,
         allowClean: true,
       });
@@ -327,7 +368,7 @@ const groupedDataPoints = computed(() => {
 
 watch([searchText, typeFilter, statusFilter], () => {
   if (debounceTimer.value) {
-    clearTimeout(debounceTimer.value);
+    window.clearTimeout(debounceTimer.value);
   }
   debounceTimer.value = setTimeout(() => {
     loadDataPoints();
@@ -340,7 +381,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (debounceTimer.value) {
-    clearTimeout(debounceTimer.value);
+    window.clearTimeout(debounceTimer.value);
   }
 });
 

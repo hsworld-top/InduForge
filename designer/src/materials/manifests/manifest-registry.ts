@@ -2,6 +2,8 @@
  * 组件 Manifest 注册表：属性、样式、事件等元数据
  */
 
+import { i18n } from "@/i18n";
+
 export type PropType = "string" | "number" | "boolean" | "color" | "enum" | "object" | "array";
 
 export interface PropOption {
@@ -52,6 +54,127 @@ export interface ComponentManifest {
 
 const manifestRegistry = new Map<string, ComponentManifest>();
 
+const manifestLiteralKeyMap: Record<string, string> = {
+  按钮: "componentManifest.names.Button",
+  水平布局: "componentManifest.names.HorizontalLayout",
+  垂直布局: "componentManifest.names.VerticalLayout",
+  折叠面板布局: "componentManifest.names.Collapse",
+  选项卡布局: "componentManifest.names.Tabs",
+  表单布局: "componentManifest.names.FormLayout",
+  区域布局: "componentManifest.names.ElContainer",
+  页面根布局: "componentManifest.names.FreeContainer",
+  布局: "componentManifest.groups.layout",
+  显示: "componentManifest.groups.display",
+  数据: "componentManifest.groups.data",
+  状态: "componentManifest.groups.state",
+  样式: "componentManifest.groups.style",
+  功能: "componentManifest.groups.features",
+  属性: "componentManifest.groups.props",
+  安全策略: "componentManifest.groups.security",
+  区域预设: "componentManifest.labels.regionPreset",
+  Header区域: "componentManifest.labels.showHeader",
+  Aside区域: "componentManifest.labels.showAside",
+  Main区域: "componentManifest.labels.showMain",
+  Footer区域: "componentManifest.labels.showFooter",
+  Header高度: "componentManifest.labels.headerHeight",
+  Aside宽度: "componentManifest.labels.asideWidth",
+  Footer高度: "componentManifest.labels.footerHeight",
+  水平排列: "componentManifest.labels.horizontalJustify",
+  垂直对齐: "componentManifest.labels.verticalAlign",
+  间距: "componentManifest.labels.gap",
+  垂直排列: "componentManifest.labels.verticalJustify",
+  水平对齐: "componentManifest.labels.horizontalAlign",
+  表单项间距: "componentManifest.labels.itemGap",
+  面板: "componentManifest.labels.panels",
+  默认激活: "componentManifest.labels.defaultActive",
+  风格: "componentManifest.labels.variant",
+  可关闭: "componentManifest.labels.closable",
+  标签位置: "componentManifest.labels.tabPosition",
+  宽度自撑: "componentManifest.labels.stretch",
+  标签页: "componentManifest.labels.tabs",
+  是否添加权限控制: "componentManifest.labels.safetyControl",
+  权限描述: "componentManifest.labels.safetyDesc",
+  起始: "componentManifest.options.start",
+  居中: "componentManifest.options.center",
+  末尾: "componentManifest.options.end",
+  两端: "componentManifest.options.between",
+  环绕: "componentManifest.options.around",
+  均匀: "componentManifest.options.evenly",
+  拉伸: "componentManifest.options.stretch",
+  顶部: "componentManifest.options.top",
+  底部: "componentManifest.options.bottom",
+  基线: "componentManifest.options.baseline",
+  左侧: "componentManifest.options.left",
+  右侧: "componentManifest.options.right",
+  默认: "componentManifest.options.default",
+  卡片: "componentManifest.options.card",
+  边框卡片: "componentManifest.options.borderCard",
+  上: "componentManifest.options.topShort",
+  右: "componentManifest.options.rightShort",
+  下: "componentManifest.options.bottomShort",
+  左: "componentManifest.options.leftShort",
+  上下: "componentManifest.options.topMain",
+  "上左下（左单独一列）": "componentManifest.options.asideFullHeight",
+  "上左下（左被上下夹着）": "componentManifest.options.asideBetween",
+  主要: "componentManifest.options.primary",
+  成功: "componentManifest.options.success",
+  警告: "componentManifest.options.warning",
+  危险: "componentManifest.options.danger",
+  信息: "componentManifest.options.info",
+  文本: "componentManifest.options.text",
+  "如: el-icon-search": "componentManifest.placeholders.icon",
+  请输入权限描述: "componentManifest.placeholders.safetyDesc",
+};
+
+function translateManifestLiteral(value: string | undefined): string {
+  const text = String(value || "");
+  const key = manifestLiteralKeyMap[text];
+  return key ? i18n.global.t(key) : text;
+}
+
+function localizePropOption(option: PropOption): PropOption {
+  return {
+    ...option,
+    label: translateManifestLiteral(option.label),
+  };
+}
+
+function localizePropDefinition(prop: PropDefinition): PropDefinition {
+  return {
+    ...prop,
+    label: translateManifestLiteral(prop.label),
+    ...(prop.group !== undefined ? { group: translateManifestLiteral(prop.group) } : {}),
+    ...(prop.placeholder !== undefined
+      ? { placeholder: translateManifestLiteral(prop.placeholder) }
+      : {}),
+    ...(Array.isArray(prop.options) ? { options: prop.options.map(localizePropOption) } : {}),
+  };
+}
+
+function localizeEventDefinition(event: EventDefinition): EventDefinition {
+  return {
+    ...event,
+    label: translateManifestLiteral(event.label),
+    ...(event.description !== undefined
+      ? { description: translateManifestLiteral(event.description) }
+      : {}),
+  };
+}
+
+function localizeManifest(manifest: ComponentManifest): ComponentManifest {
+  return {
+    ...manifest,
+    name: translateManifestLiteral(manifest.name),
+    props: Array.isArray(manifest.props) ? manifest.props.map(localizePropDefinition) : [],
+    ...(manifest.description !== undefined
+      ? { description: translateManifestLiteral(manifest.description) }
+      : {}),
+    ...(Array.isArray(manifest.events)
+      ? { events: manifest.events.map(localizeEventDefinition) }
+      : {}),
+  };
+}
+
 export function registerManifest(manifest: ComponentManifest): void {
   if (!manifest?.type) {
     throw new Error("Invalid manifest: missing type");
@@ -60,11 +183,12 @@ export function registerManifest(manifest: ComponentManifest): void {
 }
 
 export function getManifest(type: string): ComponentManifest | undefined {
-  return manifestRegistry.get(type);
+  const manifest = manifestRegistry.get(type);
+  return manifest ? localizeManifest(manifest) : undefined;
 }
 
 export function getAllManifests(): ComponentManifest[] {
-  return Array.from(manifestRegistry.values());
+  return Array.from(manifestRegistry.values(), localizeManifest);
 }
 
 export function getManifestsByCategory(category: string): ComponentManifest[] {

@@ -120,6 +120,32 @@
     --scrollbar-thumb-hover: rgba(148, 163, 184, 0.3);
     --scrollbar-thumb-active: rgba(148, 163, 184, 0.46);
     --scrollbar-track: rgba(148, 163, 184, 0.03);
+    --designer-shell-bg: #0f172a;
+    --designer-shell-surface: #111827;
+    --designer-surface-elevated: #1f2937;
+    --designer-group-surface: #1a2437;
+    --designer-chip-surface: #1f2937;
+    --designer-border-color: #273449;
+    --designer-border-soft: #1e293b;
+    --designer-border-strong: #334155;
+    --designer-text-primary: #f8fafc;
+    --designer-text-regular: #e5e7eb;
+    --designer-text-secondary: #cbd5e1;
+    --designer-text-muted: #94a3b8;
+    --designer-hover-surface: #1e293b;
+    --designer-active-surface: rgba(37, 99, 235, 0.18);
+    --designer-primary: #60a5fa;
+    --designer-primary-border: #3b82f6;
+    --designer-primary-text: #93c5fd;
+    --designer-primary-soft: rgba(59, 130, 246, 0.14);
+    --designer-success-surface: rgba(34, 197, 94, 0.1);
+    --designer-success-text: #86efac;
+    --designer-warning-surface: rgba(245, 158, 11, 0.12);
+    --designer-warning-text: #fcd34d;
+    --designer-info-surface: rgba(59, 130, 246, 0.12);
+    --designer-info-text: #93c5fd;
+    --designer-shadow-panel: 0 12px 28px rgba(2, 6, 23, 0.42);
+    --designer-shadow-popover: 0 14px 32px rgba(2, 6, 23, 0.52);
   }
 
   /* Element Plus 滚动条 */

@@ -129,6 +129,7 @@ export function createRuntimeMessageHandler({
     if (isLocaleUpdatePayload(data)) {
       editorUi.setLocale(data.locale);
       i18n.global.locale.value = data.locale;
+      registerBuiltinComponents();
       return;
     }
   };

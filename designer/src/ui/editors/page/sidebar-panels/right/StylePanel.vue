@@ -5,6 +5,7 @@ import { storeToRefs } from "pinia";
  * 提供基础样式和布局样式的编辑功能
  */
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useEditorStore } from "@/stores/editor-store";
 import BackgroundEditor from "./StylePanel/BackgroundEditor.vue";
 import BorderEditor from "./StylePanel/BorderEditor.vue";
@@ -14,6 +15,7 @@ import SpacingEditor from "./StylePanel/SpacingEditor.vue";
 
 const editorStore = useEditorStore();
 const { doc, selection } = storeToRefs(editorStore);
+const { t } = useI18n();
 
 const activeNames = ref(["basic", "layout"]);
 
@@ -148,7 +150,7 @@ function handleStyleChange(newStyle: any) {
     <template v-if="hasSelection">
       <el-collapse v-model="activeNames">
         <!-- 基础样式 -->
-        <el-collapse-item title="基础样式" name="basic">
+        <el-collapse-item :title="t('propertyPanel.stylePanel.basicStyles')" name="basic">
           <template v-if="showSizeEditor">
             <SizeEditor
               :model-value="currentStyle"
@@ -164,18 +166,18 @@ function handleStyleChange(newStyle: any) {
         </el-collapse-item>
 
         <!-- 布局样式 -->
-        <el-collapse-item title="布局样式" name="layout">
+        <el-collapse-item :title="t('propertyPanel.stylePanel.layoutStyles')" name="layout">
           <PositionEditor :model-value="currentStyle" @update:model-value="handleStyleChange" />
           <el-divider style="margin: 12px 0" />
           <SpacingEditor
-            title="内边距"
+            :title="t('propertyPanel.stylePanel.padding')"
             prefix="padding"
             :model-value="currentStyle"
             @update:model-value="handleStyleChange"
           />
           <el-divider style="margin: 12px 0" />
           <SpacingEditor
-            title="外边距"
+            :title="t('propertyPanel.stylePanel.margin')"
             prefix="margin"
             :model-value="currentStyle"
             @update:model-value="handleStyleChange"
@@ -183,7 +185,9 @@ function handleStyleChange(newStyle: any) {
         </el-collapse-item>
       </el-collapse>
     </template>
-    <div v-else class="text-sm text-gray-400 text-center py-6">请选择组件</div>
+    <div v-else class="text-sm text-gray-400 text-center py-6">
+      {{ t("propertyPanel.stylePanel.selectComponent") }}
+    </div>
   </div>
 </template>
 

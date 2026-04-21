@@ -13,6 +13,7 @@ import type {
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import FriendlyColorPicker from "@/ui/shared/widgets/base/FriendlyColorPicker.vue";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
@@ -106,6 +107,7 @@ function showInfoMessage(message: string): void {
 
 const editorStore = useEditorStore();
 const { currentPage, currentPageId, pages, doc } = storeToRefs(editorStore);
+const { t, locale } = useI18n();
 
 const form = reactive<PageInspectorForm>({
   name: "",
@@ -123,33 +125,44 @@ const form = reactive<PageInspectorForm>({
   backgroundValue: "#ffffff",
 });
 
-const sectionTitleMap = new Map(
-  getPageInspectorSections().map((section) => [section.key, section.title]),
-);
-
 /**
  * 根据分区键获取分区标题
  * @param {PageInspectorSectionKey} key - 分区键
  * @returns {string} 分区标题
  */
 function getSectionTitle(key: PageInspectorSectionKey): string {
-  return sectionTitleMap.get(key) || "";
+  return getPageInspectorSections().find((section) => section.key === key)?.title || "";
 }
 
 const canEditConstraintOptions = computed(() => canEditRuntimeConstraint(form.autoFit));
 
 const canvasStyleDialogVisible = ref(false);
 const canvasStyleDraft = ref("");
-const canvasStylePresets: CanvasStylePreset[] = [
-  { id: "empty", label: "空模板", content: "" },
+const canvasStylePresets = computed<CanvasStylePreset[]>(() => [
+  { id: "empty", label: t("pageInspector.presets.empty"), content: "" },
   {
     id: "center",
-    label: "居中布局",
+    label: t("pageInspector.presets.center"),
     content: "display: flex;\nalign-items: center;\njustify-content: center;",
   },
-];
+]);
 const selectedCanvasPresetId = ref("");
 const canvasPresetSearch = ref("");
+const pageTypeOptions = computed(() => [
+  { label: t("pageInspector.pageTypes.business"), value: "business" },
+  { label: t("pageInspector.pageTypes.login"), value: "login" },
+  { label: t("pageInspector.pageTypes.logout"), value: "logout" },
+]);
+const backgroundKindOptions = computed(() => [
+  { label: t("pageInspector.backgroundKinds.color"), value: "color" },
+  { label: t("pageInspector.backgroundKinds.image"), value: "image" },
+  { label: t("pageInspector.backgroundKinds.gradient"), value: "gradient" },
+]);
+const windowStyleOptions = computed(() => [
+  { label: t("pageInspector.windowStyles.popup"), value: "popup" },
+  { label: t("pageInspector.windowStyles.cover"), value: "cover" },
+  { label: t("pageInspector.windowStyles.replace"), value: "replace" },
+]);
 
 /**
  * 根据搜索关键字过滤样式模板
@@ -158,8 +171,8 @@ const filteredCanvasPresetOptions = computed<CanvasStylePreset[]>(() => {
   const keyword = String(canvasPresetSearch.value || "")
     .trim()
     .toLowerCase();
-  if (!keyword) return canvasStylePresets;
-  return canvasStylePresets.filter((item) =>
+  if (!keyword) return canvasStylePresets.value;
+  return canvasStylePresets.value.filter((item) =>
     String(item.label || "")
       .toLowerCase()
       .includes(keyword),
@@ -194,17 +207,20 @@ const isHomePage = computed(() => {
 const isSystemPage = computed<boolean>(
   () => isHomePage.value || form.pageType === "login" || form.pageType === "logout",
 );
-const BASIC_PAGE_META: Record<SystemPageType, SystemPageMeta> = {
-  business: { label: "业务页", path: "" },
-  home: { label: "首页", path: "/" },
-  login: { label: "登录页", path: "/login" },
-  logout: { label: "登出页", path: "/logout" },
-};
 const PAGE_NAME_DOTS_RE = /^\.+$/;
 const PAGE_NAME_FORBIDDEN_RE = /[/?#\\%]/;
 const NUMERIC_INPUT_RE = /^[0-9.\-]$/;
 const PATH_SEGMENT_SPACE_RE = /\s+/g;
 const PATH_SEGMENT_FORBIDDEN_RE = /[/?#\\]+/g;
+
+function getBasicPageMeta(): Record<SystemPageType, SystemPageMeta> {
+  return {
+    business: { label: t("pageInspector.systemPages.business"), path: "" },
+    home: { label: t("pageInspector.systemPages.home"), path: "/" },
+    login: { label: t("pageInspector.systemPages.login"), path: "/login" },
+    logout: { label: t("pageInspector.systemPages.logout"), path: "/logout" },
+  };
+}
 
 function hasControlChars(value: string): boolean {
   for (let i = 0; i < value.length; i++) {
@@ -249,16 +265,16 @@ function toPathSegment(value: string): string {
 function validatePageName(value: string): { valid: boolean; message: string } {
   const name = String(value || "").trim();
   if (!name) {
-    return { valid: false, message: "名称不能为空" };
+    return { valid: false, message: t("pageInspector.messages.nameRequired") };
   }
   if (PAGE_NAME_DOTS_RE.test(name)) {
-    return { valid: false, message: "页面名称不能仅包含点号" };
+    return { valid: false, message: t("pageInspector.messages.nameDotsOnly") };
   }
   if (PAGE_NAME_FORBIDDEN_RE.test(name)) {
-    return { valid: false, message: "页面名称不能包含 / ? # % \\" };
+    return { valid: false, message: t("pageInspector.messages.nameForbiddenChars") };
   }
   if (hasControlChars(name)) {
-    return { valid: false, message: "页面名称不能包含控制字符" };
+    return { valid: false, message: t("pageInspector.messages.nameControlChars") };
   }
   return { valid: true, message: "" };
 }
@@ -328,7 +344,7 @@ function resolvePath(page: PageRecordLike | null | undefined, name: string): str
   if (!page) return "/";
   const systemType = getFixedSystemType(page);
   if (systemType) {
-    return BASIC_PAGE_META[systemType].path;
+    return getBasicPageMeta()[systemType].path;
   }
   return buildBusinessPagePath(name, page.parentId || null);
 }
@@ -364,7 +380,7 @@ function syncForm(page: PageRecordLike | null | undefined): void {
   const displayPage = pageFromList || page;
   const systemType = getFixedSystemType(displayPage);
   const nextName = systemType
-    ? BASIC_PAGE_META[systemType].label
+    ? getBasicPageMeta()[systemType].label
     : pageFromList?.name || page?.name || "";
   form.name = nextName;
 
@@ -458,6 +474,13 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => locale.value,
+  () => {
+    syncForm(currentPage.value);
+  },
+);
+
 /**
  * 更新页面名称并同步路由路径
  */
@@ -470,7 +493,7 @@ async function handleNameUpdate(): Promise<void> {
   }
   const name = form.name.trim();
   if (!name) {
-    showWarningMessage("名称不能为空");
+    showWarningMessage(t("pageInspector.messages.nameRequired"));
     syncForm(page);
     return;
   }
@@ -481,7 +504,7 @@ async function handleNameUpdate(): Promise<void> {
     return;
   }
   if (!isNameUnique(name, page.id)) {
-    showWarningMessage("页面名称已存在");
+    showWarningMessage(t("pageInspector.messages.duplicatedName"));
     syncForm(page);
     return;
   }
@@ -498,7 +521,7 @@ async function handleNameUpdate(): Promise<void> {
     await editorStore.renamePage(page.id, name, path);
     syncForm(page);
   } catch {
-    showErrorMessage("更新页面名称失败");
+    showErrorMessage(t("pageInspector.messages.renameFailed"));
     syncForm(page);
   }
 }
@@ -552,7 +575,8 @@ async function handlePageTypeChange(type: PageType): Promise<void> {
       handleConfigUpdate();
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "更新页面入口失败";
+    const message =
+      error instanceof Error ? error.message : t("pageInspector.messages.entryUpdateFailed");
     showErrorMessage(message);
     syncForm(page);
   }
@@ -563,7 +587,7 @@ async function handlePageTypeChange(type: PageType): Promise<void> {
  * @param {string} id - 模板 ID
  */
 function handleCanvasPresetChange(id: string): void {
-  const target = canvasStylePresets.find((item) => item.id === id);
+  const target = canvasStylePresets.value.find((item) => item.id === id);
   if (!target) return;
   const nextContent = formatCanvasStyleOutput(target.content || "");
   if (!nextContent) return;
@@ -655,7 +679,7 @@ function handleNumericBlur(
  * 打开权限描述配置（当前先提供占位入口）
  */
 function handlePermissionConfig(): void {
-  showInfoMessage("权限描述配置能力待接入");
+  showInfoMessage(t("pageInspector.messages.permissionConfigComingSoon"));
 }
 
 /**
@@ -695,7 +719,7 @@ function handleBackgroundUpdate(): void {
       <div class="page-group">
         <div class="section-title">{{ getSectionTitle("basic") }}</div>
         <div class="page-prop-item">
-          <div class="page-prop-label">名称</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.name") }}</div>
           <div class="page-prop-editor">
             <el-input
               v-model="form.name"
@@ -706,13 +730,13 @@ function handleBackgroundUpdate(): void {
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">描述</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.description") }}</div>
           <div class="page-prop-editor">
             <el-input v-model="form.description" size="small" @blur="handleConfigUpdate" />
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">页面类型</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.pageType") }}</div>
           <div class="page-prop-editor">
             <el-select
               v-model="form.pageType"
@@ -720,14 +744,17 @@ function handleBackgroundUpdate(): void {
               :disabled="isSystemPage"
               @change="handlePageTypeChange"
             >
-              <el-option label="业务页面" value="business" />
-              <el-option label="登录页" value="login" />
-              <el-option label="登出页" value="logout" />
+              <el-option
+                v-for="item in pageTypeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">路由</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.route") }}</div>
           <div class="page-prop-editor">
             <el-input v-model="form.path" size="small" disabled />
           </div>
@@ -737,17 +764,20 @@ function handleBackgroundUpdate(): void {
       <div class="page-group">
         <div class="section-title">{{ getSectionTitle("visual") }}</div>
         <div class="page-prop-item">
-          <div class="page-prop-label">背景类型</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.backgroundType") }}</div>
           <div class="page-prop-editor">
             <el-select v-model="form.backgroundKind" size="small" @change="handleBackgroundUpdate">
-              <el-option label="纯色" value="color" />
-              <el-option label="图片" value="image" />
-              <el-option label="渐变" value="gradient" />
+              <el-option
+                v-for="item in backgroundKindOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </div>
         </div>
         <div class="page-prop-item page-prop-item--stacked">
-          <div class="page-prop-label">背景值</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.backgroundValue") }}</div>
           <div class="page-prop-editor page-prop-editor-stacked">
             <FriendlyColorPicker
               v-if="form.backgroundKind === 'color'"
@@ -763,7 +793,7 @@ function handleBackgroundUpdate(): void {
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">画面宽度</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.canvasWidth") }}</div>
           <div class="page-prop-editor">
             <el-input
               v-model="form.width"
@@ -777,7 +807,7 @@ function handleBackgroundUpdate(): void {
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">画面高度</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.canvasHeight") }}</div>
           <div class="page-prop-editor">
             <el-input
               v-model="form.height"
@@ -795,13 +825,13 @@ function handleBackgroundUpdate(): void {
       <div class="page-group">
         <div class="section-title">{{ getSectionTitle("runtime") }}</div>
         <div class="page-prop-item page-prop-item--switch">
-          <div class="page-prop-label">自适应</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.autoFit") }}</div>
           <div class="page-prop-editor page-prop-editor-switch">
             <el-switch v-model="form.autoFit" @change="handleConfigUpdate" />
           </div>
         </div>
         <div class="page-prop-item page-prop-item--switch">
-          <div class="page-prop-label">启用锁定宽高比</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.lockAspectRatio") }}</div>
           <div class="page-prop-editor page-prop-editor-switch">
             <el-switch
               v-model="form.lockAspectRatio"
@@ -811,7 +841,7 @@ function handleBackgroundUpdate(): void {
           </div>
         </div>
         <div class="page-prop-item page-prop-item--switch">
-          <div class="page-prop-label">启用最小尺寸</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.enableMinSize") }}</div>
           <div class="page-prop-editor page-prop-editor-switch">
             <el-switch
               v-model="form.enableMinSize"
@@ -821,7 +851,7 @@ function handleBackgroundUpdate(): void {
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">窗口类型</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.windowStyle") }}</div>
           <div class="page-prop-editor">
             <el-select
               v-model="form.windowStyle"
@@ -829,19 +859,22 @@ function handleBackgroundUpdate(): void {
               :disabled="isSystemPage"
               @change="handleConfigUpdate"
             >
-              <el-option label="弹出式" value="popup" />
-              <el-option label="覆盖式" value="cover" />
-              <el-option label="替换式" value="replace" />
+              <el-option
+                v-for="item in windowStyleOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </div>
         </div>
         <div class="page-prop-item">
-          <div class="page-prop-label">权限配置</div>
+          <div class="page-prop-label">{{ t("pageInspector.labels.permissionConfig") }}</div>
           <div class="page-prop-editor">
             <el-button size="small" @click="handlePermissionConfig">
               {{ form.permissionDesc || "0item" }}
             </el-button>
-            <span class="coming-soon-text">即将支持</span>
+            <span class="coming-soon-text">{{ t("pageInspector.labels.comingSoon") }}</span>
           </div>
         </div>
       </div>
@@ -850,7 +883,7 @@ function handleBackgroundUpdate(): void {
 
   <el-dialog
     v-model="canvasStyleDialogVisible"
-    title="样式配置"
+    :title="t('pageInspector.labels.styleConfig')"
     width="980px"
     top="4vh"
     :close-on-click-modal="false"
@@ -858,12 +891,12 @@ function handleBackgroundUpdate(): void {
   >
     <div class="config-toolbar">
       <div class="config-toolbar-item">
-        <span class="config-label">样式模板：</span>
+        <span class="config-label">{{ t("pageInspector.labels.stylePreset") }}</span>
         <el-select
           v-model="selectedCanvasPresetId"
           size="small"
           class="config-select preset-select"
-          placeholder="请选择"
+          :placeholder="t('pageInspector.placeholders.select')"
           @change="handleCanvasPresetChange"
         >
           <el-option
@@ -875,12 +908,12 @@ function handleBackgroundUpdate(): void {
         </el-select>
       </div>
       <div class="config-toolbar-item">
-        <span class="config-label">筛选：</span>
+        <span class="config-label">{{ t("pageInspector.labels.filter") }}</span>
         <el-input
           v-model="canvasPresetSearch"
           size="small"
           class="config-select"
-          placeholder="搜索模板"
+          :placeholder="t('pageInspector.placeholders.searchPreset')"
           clearable
         />
       </div>
@@ -889,9 +922,13 @@ function handleBackgroundUpdate(): void {
       <MonacoEditor v-model="canvasStyleDraft" language="css" height="520px" />
     </div>
     <template #footer>
-      <el-button @click="clearCanvasStyleDialog">清除</el-button>
-      <el-button @click="canvasStyleDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveCanvasStyleDialog">保存</el-button>
+      <el-button @click="clearCanvasStyleDialog">{{ t("pageInspector.actions.clear") }}</el-button>
+      <el-button @click="canvasStyleDialogVisible = false">
+        {{ t("pageInspector.actions.cancel") }}
+      </el-button>
+      <el-button type="primary" @click="saveCanvasStyleDialog">
+        {{ t("pageInspector.actions.save") }}
+      </el-button>
     </template>
   </el-dialog>
 </template>

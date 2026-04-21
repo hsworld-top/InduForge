@@ -16,74 +16,27 @@ import {
   isTrustedHostMessage,
   postAppBootstrapRequest,
 } from "./runtime/host-bootstrap.js";
+import { setDatacenterLocale } from "./i18n/runtime.js";
+import { createRuntimeMessageHandler } from "./runtime/runtime-message-handler.js";
 import { initMessageHandler } from "./utils/messageHandler";
 import { Storage } from "./utils/storage.js";
 import "./utils/socketTest";
-
-export function createRuntimeMessageHandler({
-  getTrustedOriginSet = () => getTrustedHostOriginSet(),
-  getTrustedSources = () => getTrustedHostSources(),
-} = {}) {
-  return (event) => {
-    const data = event.data;
-    if (!data || typeof data !== "object") {
-      return;
-    }
-
-    if (
-      ![
-        "APP_BOOTSTRAP_RESPONSE",
-        "AUTH_REFRESHED",
-        "THEME_UPDATE",
-        "LOCALE_UPDATE",
-      ].includes(data.type)
-    ) {
-      return;
-    }
-
-    if (
-      !isTrustedHostMessage(event, {
-        trustedOrigins: getTrustedOriginSet(),
-        trustedSources: getTrustedSources(),
-      })
-    ) {
-      return;
-    }
-
-    if (handleBootstrapResponseMessage(data)) {
-      return;
-    }
-
-    if (handleAuthRefreshedMessage(data)) {
-      return;
-    }
-
-    if (
-      data.type === "THEME_UPDATE" &&
-      ["light", "dark"].includes(data.theme)
-    ) {
-      Storage.setTheme(data.theme);
-      applyThemeToDocument(data.theme);
-      return;
-    }
-
-    if (data.type === "LOCALE_UPDATE" && typeof data.locale === "string") {
-      const locale = data.locale.trim();
-      if (locale) {
-        Storage.setLanguage(locale);
-      }
-    }
-  };
-}
 
 const hostBootstrap = initializeHostBootstrap({
   currentUrl: window.location.href,
   isTopLevelWindow: window.parent === window,
   referrer: document.referrer,
 });
-const runtimeMessageHandler = createRuntimeMessageHandler();
+const runtimeMessageHandler = createRuntimeMessageHandler({
+  getTrustedOriginSet: () => getTrustedHostOriginSet(),
+  getTrustedSources: () => getTrustedHostSources(),
+  isTrustedHostMessage,
+  handleBootstrapResponseMessage,
+  handleAuthRefreshedMessage,
+});
 
 applyThemeToDocument(Storage.getTheme());
+setDatacenterLocale(Storage.getLanguage());
 window.addEventListener("message", runtimeMessageHandler);
 
 const app = createApp(App);

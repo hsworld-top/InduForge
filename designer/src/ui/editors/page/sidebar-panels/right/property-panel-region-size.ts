@@ -3,6 +3,8 @@
  * 只负责尺寸解析、上限计算、最小尺寸推导，不处理节点更新副作用。
  */
 
+import { i18n } from "@/i18n";
+
 export interface RegionSizeValue {
   value: string;
   unit: string;
@@ -89,8 +91,10 @@ export function parseSizeToNumber(value: string | number | undefined): number | 
  */
 export function getRegionSizeText(item: RegionSizeItemLike | null | undefined): string {
   if (!item) return "";
-  if (item.key === "aside") return "宽度";
-  if (item.key === "header" || item.key === "footer") return "高度";
+  if (item.key === "aside") return i18n.global.t("componentManifest.labels.width");
+  if (item.key === "header" || item.key === "footer") {
+    return i18n.global.t("componentManifest.labels.height");
+  }
   return "";
 }
 

@@ -6,6 +6,7 @@
 import type { AssetFolder, AssetItem } from "@/types/api";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import IconEpGrid from "~icons/ep/grid";
 import IconEpList from "~icons/ep/list";
 import assetApi from "@/services/assetApi";
@@ -53,6 +54,7 @@ function showErrorMessage(message: string): void {
 
 const editorStore = useEditorStore();
 const projectId = computed(() => editorStore.projectId || "");
+const { t } = useI18n();
 
 const folderSearch = ref("");
 const assetSearch = ref("");
@@ -85,9 +87,9 @@ const contextMenu = ref<ResourceContextMenuState>({
 const clipboardAsset = ref<ResourceAssetView | null>(null);
 const clipboardMode = ref<"copy" | "cut" | null>(null);
 const selectedFolderLabel = computed(() => {
-  if (selectedFolderId.value === "root") return "全部资源";
+  if (selectedFolderId.value === "root") return t("resourcePanel.rootLabel");
   const found = folders.value.find((item) => item.id === selectedFolderId.value);
-  return found?.name || "全部资源";
+  return found?.name || t("resourcePanel.rootLabel");
 });
 
 const contextMenuStyle = computed(() => ({
@@ -99,9 +101,9 @@ async function handleCopyUrl(value: string | undefined): Promise<void> {
   if (!value) return;
   try {
     await navigator.clipboard.writeText(value);
-    showSuccessMessage("链接已复制");
+    showSuccessMessage(t("resourcePanel.copiedLink"));
   } catch {
-    showErrorMessage("复制失败");
+    showErrorMessage(t("resourcePanel.copyFailed"));
   }
 }
 
@@ -190,15 +192,15 @@ function buildFolderTree(items: AssetFolder[] | null | undefined): ResourceFolde
   const list = Array.isArray(items) ? items : [];
   const nodes: ResourceFolderNode[] = list.map((item) => ({
     ...item,
-    label: decodeAssetName(item.name || "未命名文件夹"),
+    label: decodeAssetName(item.name || t("resourcePanel.untitledFolder")),
     type: "folder" as const,
     children: [] as ResourceFolderNode[],
   }));
   const map = new Map<string, ResourceFolderNode>(nodes.map((item) => [item.id, item]));
   const root: ResourceFolderNode = {
     id: "root",
-    name: "全部资源",
-    label: "全部资源",
+    name: t("resourcePanel.rootLabel"),
+    label: t("resourcePanel.rootLabel"),
     type: "root" as const,
     children: [],
   };
@@ -316,11 +318,15 @@ function handleDetailContext(): void {
 async function handleCreateFolder(): Promise<void> {
   closeContextMenu();
   if (!projectId.value) return;
-  const result = await ElMessageBox.prompt("请输入文件夹名称", "新建文件夹", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputPlaceholder: "文件夹名称",
-  }).catch(() => null);
+  const result = await ElMessageBox.prompt(
+    t("resourcePanel.createFolderPrompt"),
+    t("resourcePanel.createFolderTitle"),
+    {
+      confirmButtonText: t("resourcePanel.confirm"),
+      cancelButtonText: t("resourcePanel.cancel"),
+      inputPlaceholder: t("resourcePanel.folderNamePlaceholder"),
+    },
+  ).catch(() => null);
   if (!result?.value) return;
   await assetApi.createFolder(projectId.value, {
     name: result.value,
@@ -336,11 +342,15 @@ async function handleRenameFolder(): Promise<void> {
   const folder = contextMenu.value.folder;
   closeContextMenu();
   if (!folder || folder.id === "root") return;
-  const result = await ElMessageBox.prompt("请输入新的文件夹名称", "重命名", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputValue: folder.label,
-  }).catch(() => null);
+  const result = await ElMessageBox.prompt(
+    t("resourcePanel.renameFolderPrompt"),
+    t("resourcePanel.renameTitle"),
+    {
+      confirmButtonText: t("resourcePanel.confirm"),
+      cancelButtonText: t("resourcePanel.cancel"),
+      inputValue: folder.label,
+    },
+  ).catch(() => null);
   if (!result?.value) return;
   await assetApi.renameFolder(projectId.value, folder.id, {
     name: result.value,
@@ -352,7 +362,7 @@ async function handleDeleteFolder(): Promise<void> {
   const folder = contextMenu.value.folder;
   closeContextMenu();
   if (!folder || folder.id === "root") return;
-  await ElMessageBox.confirm("确认删除该文件夹吗？删除后无法恢复。", "删除确认", {
+  await ElMessageBox.confirm(t("resourcePanel.deleteFolderConfirm"), t("resourcePanel.deleteTitle"), {
     type: "warning",
   }).catch(() => null);
   await assetApi.deleteFolder(projectId.value, folder.id);
@@ -364,11 +374,15 @@ async function handleRenameAsset(): Promise<void> {
   const asset = contextMenu.value.asset;
   closeContextMenu();
   if (!asset) return;
-  const result = await ElMessageBox.prompt("请输入新的资源名称", "重命名", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputValue: asset.displayName,
-  }).catch(() => null);
+  const result = await ElMessageBox.prompt(
+    t("resourcePanel.renameAssetPrompt"),
+    t("resourcePanel.renameTitle"),
+    {
+      confirmButtonText: t("resourcePanel.confirm"),
+      cancelButtonText: t("resourcePanel.cancel"),
+      inputValue: asset.displayName,
+    },
+  ).catch(() => null);
   if (!result?.value) return;
   await assetApi.updateAsset(projectId.value, asset.id, { name: result.value });
   await loadAssets();
@@ -378,7 +392,7 @@ async function handleDeleteAsset(): Promise<void> {
   const asset = contextMenu.value.asset;
   closeContextMenu();
   if (!asset) return;
-  await ElMessageBox.confirm("确认删除该资源吗？", "删除确认", {
+  await ElMessageBox.confirm(t("resourcePanel.deleteAssetConfirm"), t("resourcePanel.deleteTitle"), {
     type: "warning",
   }).catch(() => null);
   await assetApi.deleteAsset(projectId.value, asset.id);
@@ -499,17 +513,21 @@ async function uploadFiles(files: File[], folderId: string | null): Promise<void
   );
   let conflictStrategy = "rename";
   if (duplicated) {
-    const result = await ElMessageBox.confirm("存在同名资源，是否替换？", "上传冲突", {
-      confirmButtonText: "替换",
-      cancelButtonText: "重命名",
-      type: "warning",
-    }).catch(() => null);
+    const result = await ElMessageBox.confirm(
+      t("resourcePanel.uploadConflictMessage"),
+      t("resourcePanel.uploadConflictTitle"),
+      {
+        confirmButtonText: t("resourcePanel.replace"),
+        cancelButtonText: t("resourcePanel.rename"),
+        type: "warning",
+      },
+    ).catch(() => null);
     conflictStrategy = result ? "replace" : "rename";
   }
   await assetApi.uploadAssets(projectId.value, files, folderId ?? undefined, {
     conflictStrategy,
   });
-  showSuccessMessage("上传成功");
+  showSuccessMessage(t("resourcePanel.uploadSuccess"));
   await loadAssets();
 }
 
@@ -560,14 +578,16 @@ watch(projectId, (value) => {
 <template>
   <div class="resource-panel" @contextmenu.prevent>
     <div class="resource-search">
-      <el-input v-model="folderSearch" size="small" placeholder="搜索分组" clearable />
+      <el-input v-model="folderSearch" size="small" :placeholder="t('resourcePanel.searchGroups')" clearable />
     </div>
 
     <div class="resource-layout">
       <div class="resource-folders">
         <div class="pane-title">
-          <span>资源分组</span>
-          <el-button size="small" text @click="handleCreateFolder">新建文件夹</el-button>
+          <span>{{ t("resourcePanel.groupTitle") }}</span>
+          <el-button size="small" text @click="handleCreateFolder">
+            {{ t("resourcePanel.createFolder") }}
+          </el-button>
         </div>
         <el-scrollbar class="folder-scroll">
           <el-tree
@@ -606,11 +626,11 @@ watch(projectId, (value) => {
             <el-input
               v-model="assetSearch"
               size="small"
-              placeholder="搜索资源"
+              :placeholder="t('resourcePanel.searchAssets')"
               clearable
               class="asset-search"
             />
-            <span class="asset-count">{{ filteredAssets.length }} 项</span>
+            <span class="asset-count">{{ t("resourcePanel.itemCount", { count: filteredAssets.length }) }}</span>
           </div>
         </div>
 
@@ -620,7 +640,7 @@ watch(projectId, (value) => {
           @dragover.prevent
           @drop.prevent="handleUploadDrop"
         >
-          拖拽文件到此区域上传
+          {{ t("resourcePanel.uploadHint") }}
         </div>
 
         <el-scrollbar class="asset-scroll">
@@ -656,9 +676,9 @@ watch(projectId, (value) => {
 
           <div v-else class="asset-table">
             <div class="asset-table-header">
-              <span class="col-name">名称</span>
-              <span class="col-type">格式</span>
-              <span class="col-size">大小</span>
+              <span class="col-name">{{ t("resourcePanel.name") }}</span>
+              <span class="col-type">{{ t("resourcePanel.format") }}</span>
+              <span class="col-size">{{ t("resourcePanel.size") }}</span>
             </div>
             <div
               v-for="asset in filteredAssets"
@@ -707,30 +727,30 @@ watch(projectId, (value) => {
 
     <div v-if="contextMenu.visible" class="context-menu" :style="contextMenuStyle">
       <template v-if="contextMenu.type === 'asset'">
-        <div class="context-item" @click="handlePreviewContext">预览</div>
-        <div class="context-item" @click="handleDetailContext">查看详情</div>
-        <div class="context-item" @click="handleRenameAsset">重命名</div>
-        <div class="context-item" @click="handleMoveAsset">移动</div>
-        <div class="context-item" @click="handleCopyAsset">复制</div>
-        <div class="context-item" @click="handleCutAsset">剪切</div>
+        <div class="context-item" @click="handlePreviewContext">{{ t("resourcePanel.preview") }}</div>
+        <div class="context-item" @click="handleDetailContext">{{ t("resourcePanel.detail") }}</div>
+        <div class="context-item" @click="handleRenameAsset">{{ t("resourcePanel.rename") }}</div>
+        <div class="context-item" @click="handleMoveAsset">{{ t("resourcePanel.move") }}</div>
+        <div class="context-item" @click="handleCopyAsset">{{ t("resourcePanel.copy") }}</div>
+        <div class="context-item" @click="handleCutAsset">{{ t("resourcePanel.cut") }}</div>
         <div class="context-item" :class="{ disabled: !clipboardAsset }" @click="handlePasteAsset">
-          粘贴
+          {{ t("resourcePanel.paste") }}
         </div>
-        <div class="context-item danger" @click="handleDeleteAsset">删除</div>
+        <div class="context-item danger" @click="handleDeleteAsset">{{ t("resourcePanel.delete") }}</div>
       </template>
       <template v-else>
-        <div class="context-item" @click="handleCreateFolder">新建文件夹</div>
-        <div class="context-item" @click="handleRenameFolder">重命名</div>
+        <div class="context-item" @click="handleCreateFolder">{{ t("resourcePanel.createFolder") }}</div>
+        <div class="context-item" @click="handleRenameFolder">{{ t("resourcePanel.rename") }}</div>
         <div class="context-item" :class="{ disabled: !clipboardAsset }" @click="handlePasteAsset">
-          粘贴
+          {{ t("resourcePanel.paste") }}
         </div>
-        <div class="context-item danger" @click="handleDeleteFolder">删除</div>
+        <div class="context-item danger" @click="handleDeleteFolder">{{ t("resourcePanel.delete") }}</div>
       </template>
     </div>
 
     <el-dialog
       v-model="previewVisible"
-      title="资源预览"
+      :title="t('resourcePanel.previewTitle')"
       width="70vw"
       top="6vh"
       :close-on-click-modal="false"
@@ -771,22 +791,28 @@ watch(projectId, (value) => {
       </div>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" title="资源详情" width="520px" top="30vh" append-to-body>
+    <el-dialog
+      v-model="detailVisible"
+      :title="t('resourcePanel.detailTitle')"
+      width="520px"
+      top="30vh"
+      append-to-body
+    >
       <div v-if="detailAsset" class="detail-body">
         <div class="detail-row">
-          <span>名称</span><span>{{ detailAsset.displayName }}</span>
+          <span>{{ t("resourcePanel.name") }}</span><span>{{ detailAsset.displayName }}</span>
         </div>
         <div class="detail-row">
-          <span>格式</span><span>{{ getAssetTypeLabel(detailAsset) }}</span>
+          <span>{{ t("resourcePanel.format") }}</span><span>{{ getAssetTypeLabel(detailAsset) }}</span>
         </div>
         <div class="detail-row">
-          <span>大小</span><span>{{ formatSize(detailAsset.size) }}</span>
+          <span>{{ t("resourcePanel.size") }}</span><span>{{ formatSize(detailAsset.size) }}</span>
         </div>
         <div class="detail-row">
-          <span>类型</span><span>{{ detailAsset.type || "-" }}</span>
+          <span>{{ t("resourcePanel.type") }}</span><span>{{ detailAsset.type || "-" }}</span>
         </div>
         <div class="detail-row">
-          <span>链接</span>
+          <span>{{ t("resourcePanel.link") }}</span>
           <span
             class="detail-link"
             :title="detailAsset.url"
@@ -798,7 +824,7 @@ watch(projectId, (value) => {
       </div>
     </el-dialog>
 
-    <el-dialog v-model="moveDialogVisible" title="移动到" width="420px" append-to-body>
+    <el-dialog v-model="moveDialogVisible" :title="t('resourcePanel.moveTitle')" width="420px" append-to-body>
       <el-tree
         ref="moveTreeRef"
         class="folder-tree"
@@ -817,8 +843,8 @@ watch(projectId, (value) => {
         </template>
       </el-tree>
       <template #footer>
-        <el-button @click="moveDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmMove">确定</el-button>
+        <el-button @click="moveDialogVisible = false">{{ t("resourcePanel.cancel") }}</el-button>
+        <el-button type="primary" @click="confirmMove">{{ t("resourcePanel.confirm") }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -849,7 +875,7 @@ watch(projectId, (value) => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid #edf0f5;
+  border-bottom: 1px solid var(--designer-border-soft);
   padding-bottom: 10px;
   min-height: 0;
   flex: 0 0 42%;
@@ -907,14 +933,14 @@ watch(projectId, (value) => {
 
 .asset-count {
   font-size: 12px;
-  color: #8b95a6;
+  color: var(--designer-text-muted);
 }
 
 .asset-dropzone {
-  border: 1px dashed #d8dfea;
+  border: 1px dashed var(--designer-border-strong);
   border-radius: 8px;
   padding: 8px 10px;
-  color: #8b95a6;
+  color: var(--designer-text-muted);
   font-size: 12px;
   text-align: center;
   margin-bottom: 8px;
@@ -929,10 +955,10 @@ watch(projectId, (value) => {
 }
 
 .asset-card {
-  border: 1px solid #edf0f5;
+  border: 1px solid var(--designer-border-soft);
   border-radius: 10px;
   padding: 8px;
-  background: #fff;
+  background: var(--designer-shell-surface);
   cursor: pointer;
 }
 
@@ -941,7 +967,7 @@ watch(projectId, (value) => {
   height: 100px;
   border-radius: 8px;
   overflow: hidden;
-  background: #f5f7fb;
+  background: var(--designer-group-surface);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -955,7 +981,7 @@ watch(projectId, (value) => {
 
 .asset-thumb-placeholder {
   font-size: 12px;
-  color: #8b95a6;
+  color: var(--designer-text-muted);
 }
 
 .asset-name {
@@ -970,7 +996,7 @@ watch(projectId, (value) => {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #8b95a6;
+  color: var(--designer-text-muted);
 }
 .asset-search {
   width: 80%;
@@ -998,7 +1024,7 @@ watch(projectId, (value) => {
 
 .asset-table-header {
   font-size: 12px;
-  color: #8b95a6;
+  color: var(--designer-text-muted);
   padding: 6px 8px;
 }
 
@@ -1008,7 +1034,7 @@ watch(projectId, (value) => {
 }
 
 .asset-table-row:hover {
-  background: #f5f7fb;
+  background: var(--designer-hover-surface);
 }
 
 .col-name {
@@ -1030,9 +1056,9 @@ watch(projectId, (value) => {
 
 .context-menu {
   position: fixed;
-  background: #fff;
-  border: 1px solid #e6ebf2;
-  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.12);
+  background: var(--designer-shell-surface);
+  border: 1px solid var(--designer-border-color);
+  box-shadow: var(--designer-shadow-popover);
   border-radius: 8px;
   padding: 6px;
   z-index: 9999;
@@ -1042,13 +1068,13 @@ watch(projectId, (value) => {
 .context-item {
   padding: 6px 10px;
   font-size: 12px;
-  color: #1f2d3d;
+  color: var(--designer-text-primary);
   cursor: pointer;
   border-radius: 6px;
 }
 
 .context-item:hover {
-  background: #f5f7fb;
+  background: var(--designer-hover-surface);
 }
 
 .context-item.danger {
@@ -1056,7 +1082,7 @@ watch(projectId, (value) => {
 }
 
 .context-item.disabled {
-  color: #c0c4cc;
+  color: var(--designer-text-muted);
   cursor: not-allowed;
 }
 
@@ -1110,7 +1136,7 @@ watch(projectId, (value) => {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
-  color: #1f2d3d;
+  color: var(--designer-text-primary);
 }
 
 :deep(.el-scrollbar__bar) {
@@ -1148,7 +1174,7 @@ watch(projectId, (value) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
-  color: #1f2d3d;
+  color: var(--designer-text-primary);
 }
 
 .asset-subline {

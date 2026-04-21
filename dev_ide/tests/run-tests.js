@@ -24,8 +24,10 @@ import {
   handleEmbeddedWindowMessage,
   isDesignerEmbeddedIframe,
   syncDesignerLocaleToEmbeddedIframes,
+  syncLocaleToEmbeddedIframes,
 } from '../src/utils/embeddedIframeSync.js'
 import { buildAppEntry, buildAppUrl } from '../src/utils/appUrl.js'
+import { resolveDashboardTabTitle } from '../src/utils/dashboardTabTitle.js'
 import {
   createBootstrapResponse,
   createHandoffRecord,
@@ -537,7 +539,7 @@ await run('嵌入同步：广播使用注册项 origin', () => {
   assert.deepEqual(events, [[{ type: 'THEME_UPDATE', theme: 'dark' }, 'https://designer.example.com']])
 })
 
-await run('嵌入同步：仅通过 Dashboard 链路同步 designer 语言', () => {
+await run('嵌入同步：Dashboard 语言会同步到所有嵌入应用', () => {
   const events = []
   const designerEntry = {
     appType: 'designer',
@@ -564,11 +566,31 @@ await run('嵌入同步：仅通过 Dashboard 链路同步 designer 语言', () 
     },
   }
 
-  syncDesignerLocaleToEmbeddedIframes([designerEntry, datacenterEntry], 'en')
+  syncLocaleToEmbeddedIframes([designerEntry, datacenterEntry], 'en')
 
   assert.deepEqual(events, [
     ['designer', { type: 'LOCALE_UPDATE', locale: 'en' }, 'https://designer.example.com'],
+    ['datacenter', { type: 'LOCALE_UPDATE', locale: 'en' }, 'https://datacenter.example.com'],
   ])
+})
+
+await run('标签标题：工程嵌入页会按当前语言实时重算', () => {
+  const tab = {
+    titlePrefix: '示例工程',
+    titleKey: 'projectManagement.designCenter',
+  }
+
+  const zhTitle = resolveDashboardTabTitle(tab, (key) => {
+    assert.equal(key, 'projectManagement.designCenter')
+    return '设计中心'
+  })
+  const enTitle = resolveDashboardTabTitle(tab, (key) => {
+    assert.equal(key, 'projectManagement.designCenter')
+    return 'Design Center'
+  })
+
+  assert.equal(zhTitle, '示例工程 - 设计中心')
+  assert.equal(enTitle, '示例工程 - Design Center')
 })
 
 await run('嵌入同步：bootstrap 仅给已注册 iframe 回包', () => {

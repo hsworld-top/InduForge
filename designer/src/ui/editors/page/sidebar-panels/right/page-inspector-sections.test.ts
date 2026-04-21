@@ -1,11 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { i18n } from "@/i18n";
 import { canEditRuntimeConstraint, getPageInspectorSections } from "./page-inspector-sections";
 
 describe("page-inspector-sections", () => {
-  it("returns fixed section order", () => {
-    const sections = getPageInspectorSections();
-    expect(sections.map((section) => section.key)).toEqual(["basic", "visual", "runtime"]);
-    expect(sections.map((section) => section.title)).toEqual(["基本", "视觉", "运行"]);
+  afterEach(() => {
+    i18n.global.locale.value = "zh";
+  });
+
+  it("returns localized section titles", () => {
+    expect(getPageInspectorSections().map((section) => section.key)).toEqual([
+      "basic",
+      "visual",
+      "runtime",
+    ]);
+    expect(getPageInspectorSections().map((section) => section.title)).toEqual([
+      "基本",
+      "视觉",
+      "运行",
+    ]);
+
+    i18n.global.locale.value = "en";
+
+    expect(getPageInspectorSections().map((section) => section.title)).toEqual([
+      "Basic",
+      "Visual",
+      "Runtime",
+    ]);
   });
 
   it("contains required runtime fields", () => {

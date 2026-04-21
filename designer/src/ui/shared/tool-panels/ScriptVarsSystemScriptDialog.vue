@@ -3,6 +3,7 @@
 -->
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
@@ -42,6 +43,7 @@ interface MonacoExposeLike {
 const monacoRef = ref<MonacoExposeLike | null>(null);
 const customTreeRef = ref<TreeFilterLike | null>(null);
 const pageTreeInnerRef = ref<TreeFilterLike | null>(null);
+const { t } = useI18n();
 
 watch(scriptSearch, (value: string) => {
   customTreeRef.value?.filter?.(value);
@@ -77,9 +79,9 @@ function handlePageInsert(data: SidebarNodeLike) {
   >
     <div class="editor-meta">
       <div class="meta-title">{{ metaTitle }}</div>
-      <div class="meta-desc">系统脚本</div>
+      <div class="meta-desc">{{ t("scriptPanel.editor.systemScript") }}</div>
       <div class="meta-actions">
-        <el-tooltip content="枚举工程变量" placement="top">
+        <el-tooltip :content="t('scriptPanel.editor.variableEnum')" placement="top">
           <el-button class="icon-button" size="small" circle @click="emit('openVariableEnum')">
             <IconEpList />
           </el-button>
@@ -98,8 +100,8 @@ function handlePageInsert(data: SidebarNodeLike) {
       </div>
       <div class="editor-sidebar">
         <div class="sidebar-section">
-          <div class="sidebar-title">自定义脚本</div>
-          <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
+          <div class="sidebar-title">{{ t("scriptPanel.editor.customScripts") }}</div>
+          <el-input v-model="scriptSearch" size="small" :placeholder="t('scriptPanel.editor.searchScripts')" clearable />
           <div class="sidebar-scroll">
             <el-tree
               ref="customTreeRef"
@@ -129,8 +131,8 @@ function handlePageInsert(data: SidebarNodeLike) {
           </div>
         </div>
         <div class="sidebar-section">
-          <div class="sidebar-title">页面</div>
-          <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
+          <div class="sidebar-title">{{ t("scriptPanel.editor.pages") }}</div>
+          <el-input v-model="pageSearch" size="small" :placeholder="t('scriptPanel.editor.searchPages')" clearable />
           <div class="sidebar-scroll">
             <el-tree
               ref="pageTreeInnerRef"
@@ -162,8 +164,8 @@ function handlePageInsert(data: SidebarNodeLike) {
       </div>
     </div>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" @click="emit('save')">保存 (Ctrl+S)</el-button>
+      <el-button @click="visible = false">{{ t("scriptPanel.editor.cancel") }}</el-button>
+      <el-button type="primary" @click="emit('save')">{{ t("scriptPanel.editor.saveShortcut") }}</el-button>
     </template>
   </el-dialog>
 </template>

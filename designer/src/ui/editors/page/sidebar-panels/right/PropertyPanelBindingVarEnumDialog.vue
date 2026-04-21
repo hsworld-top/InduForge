@@ -2,6 +2,7 @@
   属性面板：绑定编辑器内「变量枚举」弹窗（工程变量 / 页面变量）
 -->
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import IconEpFolder from "~icons/ep/folder";
 
 interface BindingEnumTreeNodeLike {
@@ -37,6 +38,7 @@ const visible = defineModel<boolean>({ default: false });
 const bindingEnumTab = defineModel<"project" | "page">("bindingEnumTab", { default: "project" });
 const bindingProjectVarSearch = defineModel<string>("bindingProjectVarSearch", { default: "" });
 const bindingPageVarSearch = defineModel<string>("bindingPageVarSearch", { default: "" });
+const { t } = useI18n();
 
 function handleProjectGroupSelect(data: BindingEnumTreeNodeLike) {
   emit("projectGroupSelect", data);
@@ -66,7 +68,7 @@ function handlePageRowDblclick(row: unknown) {
 <template>
   <el-dialog
     v-model="visible"
-    title="变量枚举"
+    :title="t('propertyPanel.bindingVarEnum.title')"
     width="760px"
     :z-index="3100"
     append-to-body
@@ -75,10 +77,10 @@ function handlePageRowDblclick(row: unknown) {
     :lock-scroll="false"
   >
     <el-tabs v-model="bindingEnumTab">
-      <el-tab-pane label="工程变量" name="project">
+      <el-tab-pane :label="t('propertyPanel.bindingVarEnum.projectVars')" name="project">
         <div class="enum-layout">
           <div class="enum-left">
-            <div class="sidebar-title">分组</div>
+            <div class="sidebar-title">{{ t("propertyPanel.bindingVarEnum.groups") }}</div>
             <el-tree
               :data="bindingProjectGroupTree"
               node-key="id"
@@ -101,7 +103,7 @@ function handlePageRowDblclick(row: unknown) {
             <el-input
               v-model="bindingProjectVarSearch"
               size="small"
-              placeholder="搜索工程变量"
+              :placeholder="t('propertyPanel.bindingVarEnum.searchProjectVars')"
               clearable
             />
             <el-table
@@ -113,22 +115,22 @@ function handlePageRowDblclick(row: unknown) {
               @row-click="handleProjectRowClick"
               @row-dblclick="handleProjectRowDblclick"
             >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="description" label="描述" min-width="160" />
-              <el-table-column prop="mapped" label="映射" width="70">
+              <el-table-column prop="name" :label="t('propertyPanel.bindingVarEnum.name')" min-width="160" />
+              <el-table-column prop="type" :label="t('propertyPanel.bindingVarEnum.type')" width="90" />
+              <el-table-column prop="description" :label="t('propertyPanel.bindingVarEnum.description')" min-width="160" />
+              <el-table-column prop="mapped" :label="t('propertyPanel.bindingVarEnum.mapped')" width="70">
                 <template #default="{ row }">
-                  {{ row.mapped ? "是" : "" }}
+                  {{ row.mapped ? t("propertyPanel.bindingVarEnum.yes") : "" }}
                 </template>
               </el-table-column>
             </el-table>
           </div>
         </div>
       </el-tab-pane>
-      <el-tab-pane label="页面变量" name="page">
+      <el-tab-pane :label="t('propertyPanel.bindingVarEnum.pageVars')" name="page">
         <div class="enum-layout">
           <div class="enum-left">
-            <div class="sidebar-title">分组</div>
+            <div class="sidebar-title">{{ t("propertyPanel.bindingVarEnum.groups") }}</div>
             <el-tree
               :data="bindingPageGroupTree"
               node-key="id"
@@ -151,7 +153,7 @@ function handlePageRowDblclick(row: unknown) {
             <el-input
               v-model="bindingPageVarSearch"
               size="small"
-              placeholder="搜索页面变量"
+              :placeholder="t('propertyPanel.bindingVarEnum.searchPageVars')"
               clearable
             />
             <el-table
@@ -163,18 +165,18 @@ function handlePageRowDblclick(row: unknown) {
               @row-click="handlePageRowClick"
               @row-dblclick="handlePageRowDblclick"
             >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="description" label="描述" min-width="200" />
+              <el-table-column prop="name" :label="t('propertyPanel.bindingVarEnum.name')" min-width="160" />
+              <el-table-column prop="type" :label="t('propertyPanel.bindingVarEnum.type')" width="90" />
+              <el-table-column prop="description" :label="t('propertyPanel.bindingVarEnum.description')" min-width="200" />
             </el-table>
           </div>
         </div>
       </el-tab-pane>
     </el-tabs>
     <template #footer>
-      <el-button @click="emit('cancel')">取消</el-button>
+      <el-button @click="emit('cancel')">{{ t("propertyPanel.bindingVarEnum.cancel") }}</el-button>
       <el-button type="primary" :disabled="!canConfirmInsert" @click="emit('confirmInsert')">
-        插入
+        {{ t("propertyPanel.bindingVarEnum.insert") }}
       </el-button>
     </template>
   </el-dialog>

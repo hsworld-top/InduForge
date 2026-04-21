@@ -1,5 +1,7 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { nextTick } from "vue";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { i18n } from "@/i18n";
 import PageTreeBasicPagesSection from "./PageTreeBasicPagesSection.vue";
 
 vi.mock("~icons/ep/document", () => ({
@@ -39,6 +41,10 @@ const ElButtonStub = {
 };
 
 describe("pageTreeBasicPagesSection", () => {
+  afterEach(() => {
+    i18n.global.locale.value = "zh";
+  });
+
   it("空槽位展示菜单创建提示，且单击卡片不直接触发创建", async () => {
     const basicSlot = { type: "login", label: "登录页", page: null };
     const wrapper = mount(PageTreeBasicPagesSection, {
@@ -48,6 +54,7 @@ describe("pageTreeBasicPagesSection", () => {
         creatingBasicType: null,
       },
       global: {
+        plugins: [i18n],
         stubs: {
           ElDropdown: ElDropdownStub,
           ElDropdownMenu: ElDropdownMenuStub,
@@ -77,6 +84,7 @@ describe("pageTreeBasicPagesSection", () => {
         creatingBasicType: null,
       },
       global: {
+        plugins: [i18n],
         stubs: {
           ElDropdown: ElDropdownStub,
           ElDropdownMenu: ElDropdownMenuStub,
@@ -93,5 +101,39 @@ describe("pageTreeBasicPagesSection", () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.emitted("rowAction")).toEqual([["create", basicSlot]]);
+  });
+
+  it("会随 locale 切换更新基础页面文案", async () => {
+    const wrapper = mount(PageTreeBasicPagesSection, {
+      props: {
+        basicSlots: [{ type: "login", label: "登录页", page: null }],
+        isPageActive: () => false,
+        creatingBasicType: null,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          ElDropdown: ElDropdownStub,
+          ElDropdownMenu: ElDropdownMenuStub,
+          ElDropdownItem: ElDropdownItemStub,
+          ElButton: ElButtonStub,
+          IconEpDocument: true,
+          IconEpMoreFilled: true,
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain("基础页面");
+    expect(wrapper.text()).toContain("固定入口");
+    expect(wrapper.text()).toContain("通过右侧菜单创建固定入口页");
+    expect(wrapper.text()).toContain("创建登录页");
+
+    i18n.global.locale.value = "en";
+    await nextTick();
+
+    expect(wrapper.text()).toContain("Basic Pages");
+    expect(wrapper.text()).toContain("Fixed Entry");
+    expect(wrapper.text()).toContain("Create a fixed entry page from the menu on the right");
+    expect(wrapper.text()).toContain("Create Login Page");
   });
 });

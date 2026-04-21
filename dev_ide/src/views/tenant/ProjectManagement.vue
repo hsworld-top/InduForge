@@ -1532,7 +1532,8 @@ export default {
         const EmbeddedApp = module.default;
         emit("open-tab", {
           key: `design-center-${project.id}`,
-          title: `${project.name} - ${t("projectManagement.designCenter")}`,
+          titlePrefix: project.name,
+          titleKey: "projectManagement.designCenter",
           component: EmbeddedApp,
           props: {
             appType: "designer",
@@ -1551,7 +1552,8 @@ export default {
         const EmbeddedApp = module.default;
         emit("open-tab", {
           key: `data-center-${project.id}`,
-          title: `${project.name} - ${t("projectManagement.dataCenter")}`,
+          titlePrefix: project.name,
+          titleKey: "projectManagement.dataCenter",
           component: EmbeddedApp,
           props: {
             appType: "datacenter",

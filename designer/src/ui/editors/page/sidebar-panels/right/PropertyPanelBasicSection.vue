@@ -3,6 +3,7 @@
 -->
 <script setup lang="ts">
 import { unref } from "vue";
+import { useI18n } from "vue-i18n";
 import { formatStyleValue } from "./property-panel-utils";
 
 interface BasicSectionStyleLike {
@@ -20,6 +21,7 @@ const emit = defineEmits<{
   (event: "labelCommit"): void;
   (event: "descriptionCommit"): void;
 }>();
+const { t } = useI18n();
 
 const label = defineModel<string>("label", { default: "" });
 const description = defineModel<string>("description", { default: "" });
@@ -36,39 +38,39 @@ function onDescriptionUpdate(v: string | null | undefined) {
 <template>
   <div class="prop-section">
     <div class="prop-section-header is-static">
-      <span class="prop-section-title">基本</span>
+      <span class="prop-section-title">{{ t("propertyPanel.basic.title") }}</span>
     </div>
     <div class="prop-section-body">
       <div class="prop-item">
-        <div class="prop-label">名称</div>
+        <div class="prop-label">{{ t("propertyPanel.basic.name") }}</div>
         <el-input
           :model-value="unref(label)"
           size="small"
-          placeholder="未命名"
+          :placeholder="t('propertyPanel.basic.namePlaceholder')"
           @update:model-value="onLabelUpdate"
           @change="emit('labelCommit')"
         />
       </div>
       <div class="prop-item">
-        <div class="prop-label">描述</div>
+        <div class="prop-label">{{ t("propertyPanel.basic.description") }}</div>
         <el-input
           :model-value="unref(description)"
           size="small"
-          placeholder="请输入描述"
+          :placeholder="t('propertyPanel.basic.descriptionPlaceholder')"
           @update:model-value="onDescriptionUpdate"
           @change="emit('descriptionCommit')"
         />
       </div>
       <div class="prop-item">
-        <div class="prop-label">类型</div>
+        <div class="prop-label">{{ t("propertyPanel.basic.type") }}</div>
         <el-input :model-value="elementType" size="small" disabled />
       </div>
       <div class="prop-item">
-        <div class="prop-label">ID</div>
+        <div class="prop-label">{{ t("propertyPanel.basic.id") }}</div>
         <el-input :model-value="elementId" size="small" disabled />
       </div>
       <div class="prop-item">
-        <div class="prop-label">位置</div>
+        <div class="prop-label">{{ t("propertyPanel.basic.position") }}</div>
         <div class="axis-inline-group">
           <div class="axis-inline-item">
             <span class="axis-inline-tag">X</span>

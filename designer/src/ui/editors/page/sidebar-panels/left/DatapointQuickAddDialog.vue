@@ -2,6 +2,8 @@
   数据点面板：从数据中心批量勾选并快速添加变量
 -->
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+
 interface QuickAddFieldLike {
   name: string;
   [key: string]: unknown;
@@ -41,12 +43,14 @@ function handleCurrentChange(page: number) {
 function handleSizeChange(size: number) {
   emit("sizeChange", size);
 }
+
+const { t } = useI18n();
 </script>
 
 <template>
   <el-dialog
     v-model="visible"
-    title="快速添加数据点"
+    :title="t('datapointPanel.quickAddDialog.title')"
     width="1100px"
     top="3vh"
     :close-on-click-modal="false"
@@ -55,25 +59,25 @@ function handleSizeChange(size: number) {
     <el-form :inline="true" class="quick-form" label-width="60px" size="small">
       <el-row :gutter="12" class="quick-form-row">
         <el-col :span="8">
-          <el-form-item label="搜索">
-            <el-input v-model="searchKey" placeholder="字段名搜索" />
+          <el-form-item :label="t('datapointPanel.quickAddDialog.search')">
+            <el-input v-model="searchKey" :placeholder="t('datapointPanel.quickAddDialog.searchPlaceholder')" />
           </el-form-item>
         </el-col>
         <el-col :span="4">
-          <el-form-item label="前缀">
-            <el-input v-model="prefix" placeholder="前缀" />
+          <el-form-item :label="t('datapointPanel.quickAddDialog.prefix')">
+            <el-input v-model="prefix" :placeholder="t('datapointPanel.quickAddDialog.prefixPlaceholder')" />
           </el-form-item>
         </el-col>
         <el-col :span="4">
-          <el-form-item label="后缀">
-            <el-input v-model="suffix" placeholder="后缀" />
+          <el-form-item :label="t('datapointPanel.quickAddDialog.suffix')">
+            <el-input v-model="suffix" :placeholder="t('datapointPanel.quickAddDialog.suffixPlaceholder')" />
           </el-form-item>
         </el-col>
         <el-col :span="8">
-          <el-form-item label="替换" class="quick-replace">
-            <el-input v-model="replaceFrom" placeholder="替换" />
+          <el-form-item :label="t('datapointPanel.quickAddDialog.replace')" class="quick-replace">
+            <el-input v-model="replaceFrom" :placeholder="t('datapointPanel.quickAddDialog.replaceFromPlaceholder')" />
             <span class="quick-arrow">→</span>
-            <el-input v-model="replaceTo" placeholder="为" />
+            <el-input v-model="replaceTo" :placeholder="t('datapointPanel.quickAddDialog.replaceToPlaceholder')" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -89,16 +93,16 @@ function handleSizeChange(size: number) {
       @selection-change="handleSelectionChange"
     >
       <el-table-column type="selection" width="50" />
-      <el-table-column label="变量名" min-width="160">
+      <el-table-column :label="t('datapointPanel.quickAddDialog.variableName')" min-width="160">
         <template #default="{ row }">
           {{ buildVarName(row.name) }}
         </template>
       </el-table-column>
-      <el-table-column prop="name" label="数据点名称" sortable width="150" />
-      <el-table-column prop="path" label="路径" min-width="220" />
-      <el-table-column prop="typeLabel" label="类型" width="110" sortable />
-      <el-table-column prop="sourceLabel" label="来源" width="120" sortable />
-      <el-table-column prop="updatedAtLabel" label="更新时间" width="160" />
+      <el-table-column prop="name" :label="t('datapointPanel.quickAddDialog.datapointName')" sortable width="150" />
+      <el-table-column prop="path" :label="t('datapointPanel.quickAddDialog.path')" min-width="220" />
+      <el-table-column prop="typeLabel" :label="t('datapointPanel.quickAddDialog.type')" width="110" sortable />
+      <el-table-column prop="sourceLabel" :label="t('datapointPanel.quickAddDialog.source')" width="120" sortable />
+      <el-table-column prop="updatedAtLabel" :label="t('datapointPanel.quickAddDialog.updatedAt')" width="160" />
     </el-table>
     <div class="quick-pagination">
       <el-pagination
@@ -114,8 +118,8 @@ function handleSizeChange(size: number) {
     </div>
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" @click="emit('confirm')">添加</el-button>
+      <el-button @click="visible = false">{{ t("datapointPanel.quickAddDialog.cancel") }}</el-button>
+      <el-button type="primary" @click="emit('confirm')">{{ t("datapointPanel.quickAddDialog.add") }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -175,7 +179,7 @@ function handleSizeChange(size: number) {
 
 .quick-arrow {
   flex-shrink: 0;
-  color: #909399;
+  color: var(--designer-text-muted);
   flex: 0 0 auto;
 }
 

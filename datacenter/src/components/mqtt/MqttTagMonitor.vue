@@ -391,11 +391,11 @@ onMounted(async () => {
     }
   });
 
-  stopSocketWatch = watch(
-    () => [
-      socketConnected.value,
-      enabledTags.value.map((tag) => tag.id).join(","),
-    ],
+    stopSocketWatch = watch(
+      () => [
+        socketConnected.value,
+        enabledTags.value.map((tag) => tag.id).join(","),
+      ],
     () => {
       if (!socketConnected.value) {
         return;

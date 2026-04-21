@@ -5,26 +5,30 @@
     <div class="px-2.5 py-2 flex-1 overflow-y-auto min-h-0">
       <div class="space-y-2">
         <div class="section-block">
-          <div class="section-title">基础配置</div>
+          <div class="section-title">{{ t("connection.basicConfig") }}</div>
           <div
             class="section-entry flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer"
             @click="handleOpenDataPoints"
           >
             <IconTablerDatabase class="w-4 h-4 text-indigo-500" />
-            <span class="text-sm text-gray-700 dark:text-gray-200">数据点</span>
+            <span class="text-sm text-gray-700 dark:text-gray-200">{{
+              t("connection.datapoints")
+            }}</span>
           </div>
         </div>
 
         <div class="section-block">
           <div class="section-head">
-            <span class="section-title">连接管理</span>
+            <span class="section-title">{{
+              t("connection.connectionManagement")
+            }}</span>
             <div class="section-actions">
               <el-button
                 size="small"
                 circle
                 @click="handleCreate"
                 class="header-btn icon-btn"
-                title="新建连接"
+                :title="t('actions.createConnection')"
               >
                 <IconTablerPlus class="w-4 h-4" />
               </el-button>
@@ -33,7 +37,7 @@
                 circle
                 @click="handleRefresh"
                 class="header-btn icon-btn"
-                title="刷新列表"
+                :title="t('actions.refresh')"
               >
                 <IconTablerRefresh class="w-4 h-4" />
               </el-button>
@@ -43,7 +47,7 @@
             <el-input
               v-model="searchText"
               size="small"
-              placeholder="搜索连接..."
+              :placeholder="t('connection.searchPlaceholder')"
               clearable
               class="connection-search flex-1"
             />
@@ -84,12 +88,15 @@
                           "
                           class="text-blue-500 w-4 h-4"
                         />
-                        <span class="text-blue-700 dark:text-blue-300"
-                          >查询</span
-                        >
+                        <span class="text-blue-700 dark:text-blue-300">{{
+                          t("connection.querySection")
+                        }}</span>
                       </div>
                       <div class="flex items-center space-x-1">
-                        <el-tooltip content="刷新查询列表" placement="top">
+                        <el-tooltip
+                          :content="t('connection.refreshQueryList')"
+                          placement="top"
+                        >
                           <button
                             class="p-1 hover:bg-blue-200 dark:hover:bg-blue-700 rounded"
                             @click.stop="refreshQueries(connection.id)"
@@ -113,7 +120,7 @@
                       v-if="getConnectionState(connection.id).loadingQueries"
                       class="pl-6 text-xs text-gray-500"
                     >
-                      加载查询列表...
+                      {{ t("connection.loadingQueries") }}
                     </div>
                     <template
                       v-else-if="
@@ -126,7 +133,7 @@
                         "
                         class="pl-6 text-xs text-gray-500"
                       >
-                        暂无查询
+                        {{ t("connection.emptyQueries") }}
                       </div>
                       <ul
                         v-else
@@ -153,7 +160,10 @@
                               query.name
                             }}</span>
                           </el-tooltip>
-                          <el-tooltip content="删除查询" placement="top">
+                          <el-tooltip
+                            :content="t('actions.delete')"
+                            placement="top"
+                          >
                             <button
                               class="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 dark:hover:bg-red-900 rounded transition-opacity"
                               @click.stop="handleDeleteQuery(connection, query)"
@@ -187,12 +197,15 @@
                           "
                           class="text-green-500 w-4 h-4"
                         />
-                        <span class="text-green-700 dark:text-green-300"
-                          >表</span
-                        >
+                        <span class="text-green-700 dark:text-green-300">{{
+                          t("connection.tableSection")
+                        }}</span>
                       </div>
                       <div class="flex items-center space-x-1">
-                        <el-tooltip content="刷新表列表" placement="top">
+                        <el-tooltip
+                          :content="t('connection.refreshTableList')"
+                          placement="top"
+                        >
                           <button
                             class="p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded"
                             @click.stop="refreshTables(connection.id)"
@@ -202,7 +215,10 @@
                             />
                           </button>
                         </el-tooltip>
-                        <el-tooltip content="查看表列表" placement="top">
+                        <el-tooltip
+                          :content="t('connection.viewTableList')"
+                          placement="top"
+                        >
                           <button
                             class="p-1 hover:bg-green-200 dark:hover:bg-green-700 rounded"
                             @click.stop="handleViewTableList(connection)"
@@ -224,7 +240,7 @@
                       v-if="getConnectionState(connection.id).loading"
                       class="pl-6 text-xs text-gray-500"
                     >
-                      加载表列表...
+                      {{ t("connection.loadingTables") }}
                     </div>
                     <template
                       v-else-if="
@@ -237,7 +253,7 @@
                         "
                         class="pl-6 text-xs text-gray-500"
                       >
-                        暂无表
+                        {{ t("connection.emptyTables") }}
                       </div>
                       <ul
                         v-else
@@ -295,12 +311,15 @@
                           "
                           class="text-purple-500 w-4 h-4"
                         />
-                        <span class="text-purple-700 dark:text-purple-300"
-                          >订阅</span
-                        >
+                        <span class="text-purple-700 dark:text-purple-300">{{
+                          t("connection.subscriptionSection")
+                        }}</span>
                       </div>
                       <div class="flex items-center space-x-1">
-                        <el-tooltip content="刷新订阅列表" placement="top">
+                        <el-tooltip
+                          :content="t('connection.refreshSubscriptionList')"
+                          placement="top"
+                        >
                           <button
                             class="p-1 hover:bg-purple-200 dark:hover:bg-purple-700 rounded"
                             @click.stop="
@@ -333,7 +352,7 @@
                       "
                       class="pl-6 text-xs text-gray-500"
                     >
-                      加载订阅列表...
+                      {{ t("connection.loadingSubscriptions") }}
                     </div>
                     <template
                       v-else-if="
@@ -348,7 +367,7 @@
                         "
                         class="pl-6 text-xs text-gray-500"
                       >
-                        暂无订阅
+                        {{ t("connection.emptySubscriptions") }}
                       </div>
                       <ul
                         v-else
@@ -397,15 +416,15 @@
         </div>
 
         <div class="section-block">
-          <div class="section-title">处理逻辑</div>
+          <div class="section-title">{{ t("connection.processingLogic") }}</div>
           <div
             class="section-entry flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer"
             @click="handleOpenCalcUnits"
           >
             <IconTablerCalculator class="w-4 h-4 text-amber-500" />
-            <span class="text-sm text-gray-700 dark:text-gray-200"
-              >计算单元</span
-            >
+            <span class="text-sm text-gray-700 dark:text-gray-200">{{
+              t("connection.computeUnits")
+            }}</span>
           </div>
         </div>
 
@@ -415,9 +434,9 @@
             @click="handleOpenAlarmUnits"
           >
             <IconTablerBell class="w-4 h-4 text-rose-500" />
-            <span class="text-sm text-gray-700 dark:text-gray-200"
-              >报警单元</span
-            >
+            <span class="text-sm text-gray-700 dark:text-gray-200">{{
+              t("connection.alarmUnits")
+            }}</span>
           </div>
         </div>
 
@@ -427,7 +446,11 @@
           class="text-center py-8 text-gray-500"
         >
           <div class="text-sm">
-            {{ searchText ? "未找到匹配连接" : "暂无数据连接" }}
+            {{
+              searchText
+                ? t("states.noMatchedConnections")
+                : t("states.noDataConnections")
+            }}
           </div>
           <el-button
             type="primary"
@@ -435,7 +458,7 @@
             @click="handleCreate"
             class="mt-2"
           >
-            创建连接
+            {{ t("actions.createConnection") }}
           </el-button>
         </div>
       </div>
@@ -457,6 +480,7 @@ import IconTablerBell from "~icons/tabler/bell";
 import ConnectionItem from "./ConnectionItem.vue";
 import dataAPI from "@/api/data.api";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   connections: {
@@ -629,7 +653,7 @@ const loadTables = async (connectionId) => {
     }
   } catch (error) {
     ElMessage.error(
-      "加载表列表失败：" + (error.response?.data?.message || error.message),
+      `${t("connection.loadingTables")} ${error.response?.data?.message || error.message}`,
     );
   } finally {
     state.loading = false;
@@ -649,7 +673,7 @@ const loadQueries = async (connectionId) => {
     }
   } catch (error) {
     ElMessage.error(
-      "加载查询列表失败：" + (error.response?.data?.message || error.message),
+      `${t("connection.loadingQueries")} ${error.response?.data?.message || error.message}`,
     );
   } finally {
     state.loadingQueries = false;
@@ -675,7 +699,9 @@ const loadMqttSubscriptions = async (connectionId) => {
     }
   } catch (error) {
     ElMessage.error(
-      "加载订阅列表失败：" + (error.response?.data?.message || error.message),
+      t("subscription.loadFailed", {
+        message: error.response?.data?.message || error.message,
+      }),
     );
   } finally {
     state.loadingMqttSubscriptions = false;
@@ -716,7 +742,7 @@ const handleMqttSubscriptionContextMenu = (event, connection, subscription) => {
   const viewItem = document.createElement("div");
   viewItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
-  viewItem.textContent = "查看消息";
+  viewItem.textContent = t("actions.viewMessages");
   viewItem.onclick = () => {
     emit("mqtt-subscription-view", connection, subscription);
     document.body.removeChild(menu);
@@ -725,7 +751,7 @@ const handleMqttSubscriptionContextMenu = (event, connection, subscription) => {
   const manageItem = document.createElement("div");
   manageItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
-  manageItem.textContent = "管理变量";
+  manageItem.textContent = t("actions.manageVariables");
   manageItem.onclick = () => {
     emit("mqtt-subscription-manage", connection, subscription);
     document.body.removeChild(menu);
@@ -734,7 +760,7 @@ const handleMqttSubscriptionContextMenu = (event, connection, subscription) => {
   const editItem = document.createElement("div");
   editItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
-  editItem.textContent = "编辑订阅";
+  editItem.textContent = t("subscription.edit");
   editItem.onclick = () => {
     emit("mqtt-subscription-edit", connection, subscription);
     document.body.removeChild(menu);
@@ -743,7 +769,7 @@ const handleMqttSubscriptionContextMenu = (event, connection, subscription) => {
   const deleteItem = document.createElement("div");
   deleteItem.className =
     "px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer";
-  deleteItem.textContent = "删除";
+  deleteItem.textContent = t("actions.delete");
   deleteItem.onclick = () => {
     emit("mqtt-subscription-delete", connection, subscription);
     document.body.removeChild(menu);
@@ -771,17 +797,17 @@ const handleMqttSubscriptionContextMenu = (event, connection, subscription) => {
 const handleDeleteQuery = async (connection, query) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除查询 "${query.name}" 吗？`,
-      "删除确认",
+      t("query.deleteQueryConfirm", { name: query.name }),
+      t("query.deleteConnectionTitle"),
       {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
+        confirmButtonText: t("actions.delete"),
+        cancelButtonText: t("actions.cancel"),
         type: "warning",
       },
     );
 
     await dataAPI.deleteQuery(query.id);
-    ElMessage.success("查询已删除");
+    ElMessage.success(t("query.deleted"));
 
     // 从列表中移除
     const state = getConnectionState(connection.id);
@@ -794,7 +820,9 @@ const handleDeleteQuery = async (connection, query) => {
   } catch (error) {
     if (error !== "cancel") {
       ElMessage.error(
-        "删除查询失败：" + (error.response?.data?.message || error.message),
+        t("query.deleteQueryFailed", {
+          message: error.response?.data?.message || error.message,
+        }),
       );
     }
   }
@@ -805,7 +833,7 @@ const handleDeleteQuery = async (connection, query) => {
  */
 const refreshTables = async (connectionId) => {
   await loadTables(connectionId);
-  ElMessage.success("表列表已刷新");
+  ElMessage.success(t("connection.refreshTableList"));
 };
 
 /**
@@ -813,7 +841,7 @@ const refreshTables = async (connectionId) => {
  */
 const refreshQueries = async (connectionId) => {
   await loadQueries(connectionId);
-  ElMessage.success("查询列表已刷新");
+  ElMessage.success(t("connection.refreshQueryList"));
 };
 
 /**
@@ -823,7 +851,7 @@ const refreshQueries = async (connectionId) => {
  */
 const refreshMqttSubscriptions = async (connectionId) => {
   await loadMqttSubscriptions(connectionId);
-  ElMessage.success("订阅列表已刷新");
+  ElMessage.success(t("connection.refreshSubscriptionList"));
 };
 
 /**
@@ -839,7 +867,7 @@ const handleQueriesSectionContextMenu = (event, connection) => {
   const refreshItem = document.createElement("div");
   refreshItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center";
-  refreshItem.innerHTML = '<span class="mr-2">🔄</span>刷新查询列表';
+  refreshItem.innerHTML = `<span class="mr-2">🔄</span>${t("connection.refreshQueryList")}`;
   refreshItem.onclick = () => {
     refreshQueries(connection.id);
     document.body.removeChild(menu);
@@ -875,7 +903,7 @@ const handleTablesSectionContextMenu = (event, connection) => {
   const refreshItem = document.createElement("div");
   refreshItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center";
-  refreshItem.innerHTML = '<span class="mr-2">🔄</span>刷新表列表';
+  refreshItem.innerHTML = `<span class="mr-2">🔄</span>${t("connection.refreshTableList")}`;
   refreshItem.onclick = () => {
     refreshTables(connection.id);
     document.body.removeChild(menu);
@@ -884,7 +912,7 @@ const handleTablesSectionContextMenu = (event, connection) => {
   const viewItem = document.createElement("div");
   viewItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center";
-  viewItem.innerHTML = '<span class="mr-2">📋</span>查看表列表';
+  viewItem.innerHTML = `<span class="mr-2">📋</span>${t("connection.viewTableList")}`;
   viewItem.onclick = () => {
     handleViewTableList(connection);
     document.body.removeChild(menu);

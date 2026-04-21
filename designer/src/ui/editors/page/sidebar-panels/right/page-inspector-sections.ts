@@ -2,6 +2,8 @@
  * 页面属性面板分区定义
  */
 
+import { i18n } from "@/i18n";
+
 export type PageInspectorSectionKey = "basic" | "visual" | "runtime";
 
 export interface PageInspectorSection {
@@ -10,30 +12,32 @@ export interface PageInspectorSection {
   fields: string[];
 }
 
-const PAGE_INSPECTOR_SECTIONS: PageInspectorSection[] = [
-  {
-    key: "basic",
-    title: "基本",
-    fields: ["name", "description", "pageType", "path"],
-  },
-  {
-    key: "visual",
-    title: "视觉",
-    fields: ["backgroundKind", "backgroundValue", "width", "height"],
-  },
-  {
-    key: "runtime",
-    title: "运行",
-    fields: ["autoFit", "lockAspectRatio", "enableMinSize", "windowStyle", "permissionDesc"],
-  },
-];
+function buildPageInspectorSections(): PageInspectorSection[] {
+  return [
+    {
+      key: "basic",
+      title: i18n.global.t("pageInspector.sections.basic"),
+      fields: ["name", "description", "pageType", "path"],
+    },
+    {
+      key: "visual",
+      title: i18n.global.t("pageInspector.sections.visual"),
+      fields: ["backgroundKind", "backgroundValue", "width", "height"],
+    },
+    {
+      key: "runtime",
+      title: i18n.global.t("pageInspector.sections.runtime"),
+      fields: ["autoFit", "lockAspectRatio", "enableMinSize", "windowStyle", "permissionDesc"],
+    },
+  ];
+}
 
 /**
  * 获取页面属性面板分区定义
  * @returns {PageInspectorSection[]} 固定分区列表
  */
 export function getPageInspectorSections(): PageInspectorSection[] {
-  return PAGE_INSPECTOR_SECTIONS.map((section) => ({
+  return buildPageInspectorSections().map((section) => ({
     ...section,
     fields: [...section.fields],
   }));
