@@ -51,6 +51,10 @@ module.exports = (sequelize, DataTypes) => {
       assignedBy: {
         type: DataTypes.UUID,
         allowNull: true,
+        references: {
+          model: "users",
+          key: "id",
+        },
         comment: "分配人ID",
       },
       assignedAt: {

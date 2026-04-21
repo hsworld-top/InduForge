@@ -773,7 +773,3 @@ COMMENT ON COLUMN node_commands."createdAt" IS '创建时间';
 COMMENT ON COLUMN node_commands."updatedAt" IS '更新时间';
 COMMENT ON COLUMN node_commands."deletedAt" IS '软删除时间';
 
-COMMENT ON COLUMN project_role_grants."createdBy" IS '创建者ID';
-COMMENT ON COLUMN project_role_grants."updatedBy" IS '更新者ID';
-COMMENT ON COLUMN project_role_grants."resourceId" IS '资源实例ID，* 表示全部实例';
-COMMENT ON COLUMN project_role_grants."scopeConfig" IS '授权范围配置';

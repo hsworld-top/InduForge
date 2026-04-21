@@ -7,7 +7,6 @@ const {
 
 const DEFAULT_RUNTIME_ADMIN_ROLE_CODE = "PROJECT_RUNTIME_ADMIN";
 const DEFAULT_RUNTIME_ADMIN_USERNAME = "runtime_admin";
-const DEFAULT_RUNTIME_ADMIN_PASSWORD = "RuntimeAdmin@123";
 const DEFAULT_RUNTIME_ADMIN_NAME = "运行态管理员";
 const BCRYPT_SALT_ROUNDS = 12;
 
@@ -19,13 +18,71 @@ const buildMapEntry = () => ({
   denyRoles: new Set(),
 });
 
+const isSameValue = (left, right) => normalizeText(left) === normalizeText(right);
+
+const extractActorId = (context = {}) =>
+  normalizeText(
+    context.creator?.id || context.createdBy || context.project?.createdBy || context.project?.creator?.id,
+  );
+
+const buildBootstrapUsername = (context = {}) =>
+  normalizeText(context.creator?.username || context.username) || DEFAULT_RUNTIME_ADMIN_USERNAME;
+
+const buildBootstrapDisplayName = (context = {}) => {
+  const creator = context.creator || {};
+  return (
+    normalizeText(context.displayName) ||
+    normalizeText(creator.fullName) ||
+    normalizeText(creator.username) ||
+    DEFAULT_RUNTIME_ADMIN_NAME
+  );
+};
+
+const assertBootstrapOwnerOrThrow = (existingUser, actorId, username) => {
+  if (!existingUser) {
+    return;
+  }
+
+  const sameOwner =
+    actorId &&
+    (isSameValue(existingUser.createdBy, actorId) || isSameValue(existingUser.updatedBy, actorId));
+
+  if (!sameOwner) {
+    throw new Error(`运行态账号 ${username} 已存在且不属于当前工程创建者，拒绝自动提权`);
+  }
+};
+
+const mergeGrantBucket = (baseBucket, overlayBucket) => {
+  const mergedAllow = new Set(baseBucket.allowRoles);
+  const mergedDeny = new Set(baseBucket.denyRoles);
+
+  for (const roleCode of overlayBucket.allowRoles) {
+    if (!mergedDeny.has(roleCode)) {
+      mergedAllow.add(roleCode);
+    }
+  }
+  for (const roleCode of overlayBucket.denyRoles) {
+    mergedDeny.add(roleCode);
+    mergedAllow.delete(roleCode);
+  }
+
+  return {
+    allowRoles: [...overlayBucket.allowRoles],
+    denyRoles: [...overlayBucket.denyRoles],
+    effectiveAllowRoles: [...mergedAllow],
+    effectiveDenyRoles: [...mergedDeny],
+  };
+};
+
 /**
  * 创建或补齐工程运行态的默认管理员角色、用户和绑定关系。
  * 设计上保持幂等：已有记录则直接复用，不重复创建。
  */
-async function ensureRuntimeAdminBootstrap(input = {}) {
+async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
   const context =
-    typeof input === "string" ? { project: { id: input } } : input || {};
+    typeof input === "string"
+      ? { project: { id: input }, ...(legacyOptions || {}) }
+      : input || {};
   const project = context.project || {};
   const creator = context.creator || project.creator || {};
   const transaction = context.transaction;
@@ -36,12 +93,13 @@ async function ensureRuntimeAdminBootstrap(input = {}) {
     throw new Error("projectId 不能为空");
   }
 
+  const initialPassword = normalizeText(context.initialPassword);
+  if (!initialPassword) {
+    throw new Error("initialPassword 不能为空");
+  }
+
   const roleCode = normalizeText(context.roleCode) || DEFAULT_RUNTIME_ADMIN_ROLE_CODE;
-  const username =
-    normalizeText(creator.username) ||
-    normalizeText(context.username) ||
-    DEFAULT_RUNTIME_ADMIN_USERNAME;
-  const rawPassword = context.initialPassword || context.password || DEFAULT_RUNTIME_ADMIN_PASSWORD;
+  const username = buildBootstrapUsername(context);
   const roleName = normalizeText(context.roleName) || (
     normalizeText(project.name)
       ? `${normalizeText(project.name)}运行态管理员`
@@ -50,13 +108,18 @@ async function ensureRuntimeAdminBootstrap(input = {}) {
   const roleDescription =
     normalizeText(context.roleDescription) ||
     "工程运行态默认管理员角色，用于初始化首个可管理账号";
-  const displayName =
-    normalizeText(context.displayName) ||
-    normalizeText(creator.fullName) ||
-    normalizeText(creator.username) ||
-    DEFAULT_RUNTIME_ADMIN_NAME;
-  const actorId = normalizeText(creator.id || context.createdBy || project.createdBy);
-
+  const displayName = buildBootstrapDisplayName(context);
+  const actorId = extractActorId(context);
+  const roleAttributes = {
+    projectId: resolvedProjectId,
+    code: roleCode,
+    name: roleName,
+    description: roleDescription,
+    isSystem: true,
+    status: "active",
+    createdBy: actorId || null,
+    updatedBy: actorId || null,
+  };
   let role = await ProjectRole.findOne({
     where: {
       projectId: resolvedProjectId,
@@ -64,31 +127,50 @@ async function ensureRuntimeAdminBootstrap(input = {}) {
     },
     transaction,
   });
+
   if (!role) {
-    role = await ProjectRole.create({
-      projectId: resolvedProjectId,
-      code: roleCode,
-      name: roleName,
-      description: roleDescription,
-      isSystem: true,
-      status: "active",
-      createdBy: actorId || null,
-      updatedBy: actorId || null,
-    }, {
-      transaction,
-    });
+    try {
+      const [createdRole] = await ProjectRole.findOrCreate({
+        where: {
+          projectId: resolvedProjectId,
+          code: roleCode,
+        },
+        defaults: roleAttributes,
+        transaction,
+      });
+      role = createdRole;
+    } catch (error) {
+      if (error?.name !== "SequelizeUniqueConstraintError") {
+        throw error;
+      }
+
+      role = await ProjectRole.findOne({
+        where: {
+          projectId: resolvedProjectId,
+          code: roleCode,
+        },
+        transaction,
+      });
+      if (!role) {
+        throw error;
+      }
+    }
   }
 
+  const usernameWhere = {
+    projectId: resolvedProjectId,
+    username,
+  };
   let runtimeUser = await ProjectRuntimeUser.findOne({
-    where: {
-      projectId: resolvedProjectId,
-      username,
-    },
+    where: usernameWhere,
     transaction,
   });
-  if (!runtimeUser) {
-    const passwordHash = await bcrypt.hash(rawPassword, BCRYPT_SALT_ROUNDS);
-    runtimeUser = await ProjectRuntimeUser.create({
+
+  if (runtimeUser) {
+    assertBootstrapOwnerOrThrow(runtimeUser, actorId, username);
+  } else {
+    const passwordHash = await bcrypt.hash(initialPassword, BCRYPT_SALT_ROUNDS);
+    const runtimeUserAttributes = {
       projectId: resolvedProjectId,
       createdBy: actorId || null,
       updatedBy: actorId || null,
@@ -96,9 +178,29 @@ async function ensureRuntimeAdminBootstrap(input = {}) {
       passwordHash,
       displayName,
       status: "active",
-    }, {
-      transaction,
-    });
+    };
+
+    try {
+      const [createdUser] = await ProjectRuntimeUser.findOrCreate({
+        where: usernameWhere,
+        defaults: runtimeUserAttributes,
+        transaction,
+      });
+      runtimeUser = createdUser;
+    } catch (error) {
+      if (error?.name !== "SequelizeUniqueConstraintError") {
+        throw error;
+      }
+
+      runtimeUser = await ProjectRuntimeUser.findOne({
+        where: usernameWhere,
+        transaction,
+      });
+      assertBootstrapOwnerOrThrow(runtimeUser, actorId, username);
+      if (!runtimeUser) {
+        throw error;
+      }
+    }
   }
 
   let binding = await ProjectUserRoleBinding.findOne({
@@ -110,15 +212,42 @@ async function ensureRuntimeAdminBootstrap(input = {}) {
     transaction,
   });
   if (!binding) {
-    binding = await ProjectUserRoleBinding.create({
+    const bindingAttributes = {
       projectId: resolvedProjectId,
       createdBy: actorId || null,
       runtimeUserId: runtimeUser.id,
       roleId: role.id,
       assignedAt: new Date(),
-    }, {
-      transaction,
-    });
+    };
+
+    try {
+      const [createdBinding] = await ProjectUserRoleBinding.findOrCreate({
+        where: {
+          projectId: resolvedProjectId,
+          runtimeUserId: runtimeUser.id,
+          roleId: role.id,
+        },
+        defaults: bindingAttributes,
+        transaction,
+      });
+      binding = createdBinding;
+    } catch (error) {
+      if (error?.name !== "SequelizeUniqueConstraintError") {
+        throw error;
+      }
+
+      binding = await ProjectUserRoleBinding.findOne({
+        where: {
+          projectId: resolvedProjectId,
+          runtimeUserId: runtimeUser.id,
+          roleId: role.id,
+        },
+        transaction,
+      });
+      if (!binding) {
+        throw error;
+      }
+    }
   }
 
   return {
@@ -178,30 +307,41 @@ function buildEffectiveRoleGrantMap(roleGrants = []) {
   }
 
   return Object.fromEntries(
-    [...grantMap.entries()].map(([resourceType, actionMap]) => [
-      resourceType,
-      Object.fromEntries(
-        [...actionMap.entries()].map(([resourceId, actionBuckets]) => [
-          resourceId,
-          Object.fromEntries(
-            [...actionBuckets.entries()].map(([action, bucket]) => [
-              action,
-              {
-                allowRoles: [...bucket.allowRoles],
-                denyRoles: [...bucket.denyRoles],
-              },
-            ]),
-          ),
-        ]),
-      ),
-    ]),
+    [...grantMap.entries()].map(([resourceType, resourceBuckets]) => {
+      const wildcardActionBuckets = resourceBuckets.get("*") || new Map();
+      return [
+        resourceType,
+        Object.fromEntries(
+          [...resourceBuckets.entries()].map(([resourceId, actionBuckets]) => {
+            const mergedActionBuckets = new Map();
+            const actionNames = new Set([
+              ...wildcardActionBuckets.keys(),
+              ...actionBuckets.keys(),
+            ]);
+
+            for (const action of actionNames) {
+              const wildcardBucket = wildcardActionBuckets.get(action) || buildMapEntry();
+              const specificBucket = actionBuckets.get(action) || buildMapEntry();
+              mergedActionBuckets.set(
+                action,
+                mergeGrantBucket(wildcardBucket, specificBucket),
+              );
+            }
+
+            return [
+              resourceId,
+              Object.fromEntries(mergedActionBuckets.entries()),
+            ];
+          }),
+        ),
+      ];
+    }),
   );
 }
 
 module.exports = {
   DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
   DEFAULT_RUNTIME_ADMIN_USERNAME,
-  DEFAULT_RUNTIME_ADMIN_PASSWORD,
   ensureRuntimeAdminBootstrap,
   buildEffectiveRoleGrantMap,
 };

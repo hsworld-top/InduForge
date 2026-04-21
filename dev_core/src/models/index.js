@@ -139,6 +139,14 @@ ProjectUserRoleBinding.belongsTo(User, {
   foreignKey: "createdBy",
   as: "creator",
 });
+User.hasMany(ProjectUserRoleBinding, {
+  foreignKey: "assignedBy",
+  as: "assignedRuntimeRoleBindings",
+});
+ProjectUserRoleBinding.belongsTo(User, {
+  foreignKey: "assignedBy",
+  as: "assigner",
+});
 
 ProjectRuntimeUser.hasMany(ProjectUserRoleBinding, {
   foreignKey: "runtimeUserId",
