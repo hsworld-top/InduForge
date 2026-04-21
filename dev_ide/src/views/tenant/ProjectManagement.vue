@@ -145,7 +145,11 @@
             </div>
 
             <!-- 操作按钮 -->
-            <div class="flex justify-end space-x-2">
+            <div class="flex flex-wrap justify-end gap-2">
+              <el-button v-if="canManageProjects" type="warning" size="small"
+                @click.stop="openRuntimeAccessDialog(project)">
+                {{ t('projectManagement.memberAndPermission') }}
+              </el-button>
               <el-button v-if="canPerformOps" type="primary" size="small" @click.stop="openDeployDialog(project)">
                 {{ t('projectManagement.publishAndDeploy') }}
               </el-button>
@@ -206,9 +210,13 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column :label="t('projectManagement.actions')" min-width="320" fixed="right"
+          <el-table-column :label="t('projectManagement.actions')" min-width="420" fixed="right"
             v-if="canManageProjects || canPerformOps">
             <template #default="scope">
+              <el-button v-if="canManageProjects" type="warning" size="small"
+                @click="openRuntimeAccessDialog(scope.row)" class="mr-2">
+                {{ t('projectManagement.memberAndPermission') }}
+              </el-button>
               <el-button v-if="canPerformOps" type="primary" size="small" @click="openDeployDialog(scope.row)"
                 class="mr-2">
                 {{ t('projectManagement.publishAndDeploy') }}
@@ -637,6 +645,8 @@
         </div>
       </template>
     </el-dialog>
+
+    <ProjectRuntimeAccessDialog v-model:visible="runtimeAccessDialogVisible" :project="runtimeAccessProject" />
   </div>
 </template>
 
@@ -660,9 +670,13 @@ import { ColorTagEnum } from "@/enums";
 import { formatDateTime, formatDate, formatCurrency } from "@/utils";
 import { initSocket, getSocket } from "@/utils/socket";
 import { Storage } from "@/utils/storage";
+import ProjectRuntimeAccessDialog from "./components/ProjectRuntimeAccessDialog.vue";
 
 export default {
   name: "ProjectManagement",
+  components: {
+    ProjectRuntimeAccessDialog,
+  },
   setup() {
     const { t } = useI18n();
     const { emit } = getCurrentInstance();
@@ -687,6 +701,7 @@ export default {
     const showDeployDialog = ref(false);
     const showVersionManageDialog = ref(false);
     const projectDialogVisible = ref(false);
+    const runtimeAccessDialogVisible = ref(false);
 
     // 视图模式
     const viewMode = ref("card"); // 'card' 或 'list'
@@ -699,6 +714,7 @@ export default {
     // 当前操作的工程
     const currentProject = ref(null);
     const selectedProject = ref(null);
+    const runtimeAccessProject = ref(null);
 
     // 部署相关状态
     const deployLoading = ref(false);
@@ -1524,6 +1540,12 @@ export default {
       projectDialogVisible.value = true;
     };
 
+    // 打开运行态成员与权限对话框。
+    const openRuntimeAccessDialog = (project) => {
+      runtimeAccessProject.value = project;
+      runtimeAccessDialogVisible.value = true;
+    };
+
     // 打开设计中心
     const openDesignCenter = (project) => {
       projectDialogVisible.value = false;
@@ -2178,6 +2200,7 @@ export default {
       showDeployDialog,
       showVersionManageDialog,
       projectDialogVisible,
+      runtimeAccessDialogVisible,
 
       // 视图
       viewMode,
@@ -2187,6 +2210,7 @@ export default {
       selectedProjects,
       currentProject,
       selectedProject,
+      runtimeAccessProject,
 
       // 数据
       projectList,
@@ -2248,6 +2272,7 @@ export default {
       openOperationDialog,
       performOperation,
       openProjectDialog,
+      openRuntimeAccessDialog,
       openDesignCenter,
       openDataCenter,
       isProjectDeployed,

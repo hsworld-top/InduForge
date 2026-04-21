@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import { ROLES } from '../src/constants/index.js'
 import {
@@ -16,7 +17,12 @@ import {
   isFailedDeploy,
   getDeployFailureReason,
 } from '../src/views/tenant/utils/ops-status.js'
-import { messages } from '../src/lang/index.js'
+import {
+  buildRuntimeRolePayload,
+  buildRuntimeUserPayload,
+  summarizeRuntimeGrantCount,
+  resolveRuntimeAccessStatusMeta,
+} from '../src/views/tenant/components/project-runtime-access-state.js'
 import {
   createEmbeddedUpdateMessage,
   broadcastToEmbeddedIframes,
@@ -40,6 +46,8 @@ import {
   resolveRestorePayload,
   saveHandoffRecord,
 } from '../src/utils/embeddedAppBridge.js'
+
+const langSource = readFileSync(new URL('../src/lang/index.js', import.meta.url), 'utf8')
 
 const run = async (name, fn) => {
   try {
@@ -141,13 +149,83 @@ await run('运维状态：映射与失败判定', () => {
   assert.equal(getDeployFailureReason({ errorMessage: 'network error' }), 'network error')
 })
 
+await run('工程运行态权限：角色载荷序列化', () => {
+  assert.deepEqual(
+    buildRuntimeRolePayload({
+      name: ' 巡检员 ',
+      code: ' inspector ',
+      description: ' 只负责巡检 ',
+      status: 'disabled',
+    }),
+    {
+      name: '巡检员',
+      code: 'INSPECTOR',
+      description: '只负责巡检',
+      status: 'disabled',
+    }
+  )
+})
+
+await run('工程运行态权限：用户载荷序列化', () => {
+  assert.deepEqual(
+    buildRuntimeUserPayload({
+      username: ' operator ',
+      displayName: ' 操作员 ',
+      initialPassword: ' ChangeMe123! ',
+      roleIds: ['role-1', 'role-2', 'role-1', '', null],
+      status: 'disabled',
+    }),
+    {
+      username: 'operator',
+      displayName: '操作员',
+      initialPassword: 'ChangeMe123!',
+      roleIds: ['role-1', 'role-2'],
+      status: 'disabled',
+    }
+  )
+})
+
+await run('工程运行态权限：授权汇总', () => {
+  assert.equal(
+    summarizeRuntimeGrantCount({
+      grantCount: null,
+      grants: [{ count: 2 }, { count: 3 }, { count: 'bad' }],
+    }),
+    5
+  )
+  assert.equal(summarizeRuntimeGrantCount({ grantCount: 4 }), 4)
+  assert.equal(summarizeRuntimeGrantCount(null), 0)
+})
+
+await run('工程运行态权限：状态元数据映射', () => {
+  assert.deepEqual(resolveRuntimeAccessStatusMeta('active'), {
+    value: 'active',
+    tagType: 'success',
+    labelKey: 'projectManagement.runtimeAccess.statusActive',
+  })
+  assert.deepEqual(resolveRuntimeAccessStatusMeta('disabled'), {
+    value: 'disabled',
+    tagType: 'info',
+    labelKey: 'projectManagement.runtimeAccess.statusDisabled',
+  })
+  assert.deepEqual(resolveRuntimeAccessStatusMeta('unexpected'), {
+    value: 'disabled',
+    tagType: 'info',
+    labelKey: 'projectManagement.runtimeAccess.statusDisabled',
+  })
+})
+
 await run('国际化：核心键值存在性', () => {
-  assert.equal(messages.zh.dashboard.title, '仪表盘')
-  assert.equal(messages.en.dashboard.title, 'Dashboard')
-  assert.equal(messages.zh.profile.uploadAvatar, '上传头像')
-  assert.equal(messages.en.profile.uploadAvatar, 'Upload Avatar')
-  assert.equal(messages.zh.auth.tenantCode, '租户代码')
-  assert.equal(messages.en.auth.tenantCode, 'Tenant Code')
+  assert.match(langSource, /dashboard:\s*\{[\s\S]*title:\s*'仪表盘'/)
+  assert.match(langSource, /dashboard:\s*\{[\s\S]*title:\s*'Dashboard'/)
+  assert.match(langSource, /profile:\s*\{[\s\S]*uploadAvatar:\s*'上传头像'/)
+  assert.match(langSource, /profile:\s*\{[\s\S]*uploadAvatar:\s*'Upload Avatar'/)
+  assert.match(langSource, /auth:\s*\{[\s\S]*tenantCode:\s*'租户代码'/)
+  assert.match(langSource, /auth:\s*\{[\s\S]*tenantCode:\s*'Tenant Code'/)
+  assert.match(langSource, /memberAndPermission:\s*'成员与权限'/)
+  assert.match(langSource, /memberAndPermission:\s*'Members & Access'/)
+  assert.match(langSource, /tabs:\s*\{[\s\S]*users:\s*'用户管理'/)
+  assert.match(langSource, /tabs:\s*\{[\s\S]*roles:\s*'Role Management'/)
 })
 
 await run('应用地址：designer 透传当前语言与主题', () => {
