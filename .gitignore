@@ -41,6 +41,8 @@ scripts/seaweedfs/data*/
 scripts/seaweedfs/logs/
 scripts/seaweedfs/*.pid
 scripts/seaweedfs/PID
+scripts/seaweedfs/*.exe
+scripts/seaweedfs/*.conf
 
 # ============================================
 # 基础设施本地缓存
