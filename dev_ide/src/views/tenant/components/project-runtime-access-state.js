@@ -62,14 +62,23 @@ const resolveOptionalRuntimeStatus = (status) => {
   return normalized && RUNTIME_STATUS_META[normalized] ? normalized : ''
 }
 
-export const buildRuntimeRolePayload = (form = {}) => ({
-  name: trimText(form.name),
-  code: normalizeCode(form.code),
-  description: trimText(form.description),
-  status: resolveRuntimeAccessStatusMeta(form.status).value,
-})
+export const buildRuntimeRolePayload = (form = {}, options = {}) => {
+  const { includeStatus = true } = options
+  const payload = {
+    name: trimText(form.name),
+    code: normalizeCode(form.code),
+    description: trimText(form.description),
+  }
 
-export const buildRuntimeUserPayload = (form = {}) => {
+  if (includeStatus) {
+    payload.status = resolveRuntimeAccessStatusMeta(form.status).value
+  }
+
+  return payload
+}
+
+export const buildRuntimeUserPayload = (form = {}, options = {}) => {
+  const { includeStatus = true } = options
   const payload = {}
 
   const username = trimText(form.username)
@@ -93,7 +102,7 @@ export const buildRuntimeUserPayload = (form = {}) => {
   }
 
   const status = resolveOptionalRuntimeStatus(form.status)
-  if (status) {
+  if (includeStatus && status) {
     payload.status = status
   }
 
@@ -388,7 +397,9 @@ export const useProjectRuntimeAccessState = ({
       return
     }
 
-    const payload = buildRuntimeUserPayload(userForm)
+    const payload = buildRuntimeUserPayload(userForm, {
+      includeStatus: userEditorMode.value !== 'create',
+    })
 
     try {
       if (userEditorMode.value === 'create') {
@@ -535,7 +546,9 @@ export const useProjectRuntimeAccessState = ({
       return
     }
 
-    const payload = buildRuntimeRolePayload(roleForm)
+    const payload = buildRuntimeRolePayload(roleForm, {
+      includeStatus: roleEditorMode.value !== 'create',
+    })
 
     try {
       validateRolePayload(payload, t)

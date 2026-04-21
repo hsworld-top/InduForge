@@ -165,6 +165,22 @@ await run('工程运行态权限：角色载荷序列化', () => {
       status: 'disabled',
     }
   )
+  assert.deepEqual(
+    buildRuntimeRolePayload(
+      {
+        name: ' 巡检员 ',
+        code: ' inspector ',
+        description: ' 只负责巡检 ',
+        status: 'disabled',
+      },
+      { includeStatus: false }
+    ),
+    {
+      name: '巡检员',
+      code: 'INSPECTOR',
+      description: '只负责巡检',
+    }
+  )
 })
 
 await run('工程运行态权限：用户载荷序列化', () => {
@@ -182,6 +198,24 @@ await run('工程运行态权限：用户载荷序列化', () => {
       initialPassword: 'ChangeMe123!',
       roleIds: ['role-1', 'role-2'],
       status: 'disabled',
+    }
+  )
+  assert.deepEqual(
+    buildRuntimeUserPayload(
+      {
+        username: ' operator ',
+        displayName: ' 操作员 ',
+        initialPassword: ' ChangeMe123! ',
+        roleIds: ['role-1', 'role-2', 'role-1', '', null],
+        status: 'disabled',
+      },
+      { includeStatus: false }
+    ),
+    {
+      username: 'operator',
+      displayName: '操作员',
+      initialPassword: 'ChangeMe123!',
+      roleIds: ['role-1', 'role-2'],
     }
   )
 })

@@ -269,21 +269,6 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item
-        v-if="userEditorMode === 'create'"
-        :label="t('projectManagement.runtimeAccess.users.status')"
-      >
-        <el-select v-model="userForm.status" style="width: 100%">
-          <el-option
-            :label="t('projectManagement.runtimeAccess.statusActive')"
-            value="active"
-          />
-          <el-option
-            :label="t('projectManagement.runtimeAccess.statusDisabled')"
-            value="disabled"
-          />
-        </el-select>
-      </el-form-item>
     </el-form>
 
     <template #footer>
@@ -328,7 +313,10 @@
           :placeholder="t('projectManagement.runtimeAccess.roles.inputDescription')"
         />
       </el-form-item>
-      <el-form-item :label="t('projectManagement.runtimeAccess.roles.status')">
+      <el-form-item
+        v-if="roleEditorMode === 'edit'"
+        :label="t('projectManagement.runtimeAccess.roles.status')"
+      >
         <el-select v-model="roleForm.status" style="width: 100%">
           <el-option
             :label="t('projectManagement.runtimeAccess.statusActive')"
