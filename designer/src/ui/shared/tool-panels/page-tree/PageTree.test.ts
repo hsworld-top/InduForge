@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { i18n } from "@/i18n";
 import PageTree from "./PageTree.vue";
 
 const mocks = vi.hoisted(() => {
@@ -120,6 +121,7 @@ describe("page tree", () => {
 
     const wrapper = mount(PageTree, {
       global: {
+        plugins: [i18n],
         stubs: {
           PageTreeBasicPagesSection: PageTreeBasicPagesSectionStub,
           PageTreePageSearch: PageTreePageSearchStub,
@@ -171,6 +173,7 @@ describe("page tree", () => {
 
     const wrapper = mount(PageTree, {
       global: {
+        plugins: [i18n],
         stubs: {
           PageTreeBasicPagesSection: PageTreeBasicPagesSectionStub,
           PageTreePageSearch: PageTreePageSearchStub,
@@ -208,6 +211,7 @@ describe("page tree", () => {
 
     const wrapper = mount(PageTree, {
       global: {
+        plugins: [i18n],
         stubs: {
           PageTreeBasicPagesSection: PageTreeBasicPagesSectionStub,
           PageTreePageSearch: PageTreePageSearchStub,

@@ -2,6 +2,7 @@
   脚本面板：定时器折叠块（树 + 拖拽）
 -->
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpTimer from "~icons/ep/timer";
 
@@ -41,11 +42,12 @@ function handleNodeDrop(draggingNode: unknown, dropNode: unknown, dropType: unkn
 function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
   emit("nodeClick", data, event);
 }
+const { t } = useI18n();
 </script>
 
 <template>
   <el-collapse-item name="timers">
-    <template #title> 定时器 </template>
+    <template #title> {{ t("scriptPanel.sections.timers") }} </template>
     <div class="scripts-layout">
       <div class="scripts-list is-full" @contextmenu="emit('blankContextmenu', $event)">
         <el-tree
@@ -96,13 +98,13 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
 
 .scripts-list {
   width: 100%;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--designer-border-color);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fff;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  background: var(--designer-shell-surface);
+  box-shadow: var(--designer-shadow-panel);
   min-height: 320px;
   flex: 1;
 }
@@ -133,12 +135,12 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
 }
 
 .node-icon {
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   flex-shrink: 0;
 }
 
 .node-group .node-icon {
-  color: #3b82f6;
+  color: var(--designer-primary-text);
 }
 
 .node-item .node-icon.icon-timer {
@@ -146,17 +148,17 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
 }
 
 .tree-node:hover {
-  background: #f5f7fa;
+  background: var(--designer-hover-surface);
 }
 
 .tree-node.is-selected {
-  background: #e8f3ff;
-  color: #303133;
+  background: var(--designer-primary-soft);
+  color: var(--designer-text-primary);
 }
 
 .node-label {
   font-size: 13px;
-  color: #303133;
+  color: var(--designer-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -12,7 +12,7 @@
         @click="handleCreate"
       >
         <IconTablerPlus class="mr-1 w-4 h-4" />
-        新建订阅
+        {{ t("subscription.create") }}
       </el-button>
     </div>
 
@@ -21,7 +21,7 @@
       <el-scrollbar>
         <div v-if="loading" class="p-4 text-center text-gray-500">
           <el-icon class="is-loading"><IconTablerLoader /></el-icon>
-          <span class="ml-2">加载中...</span>
+          <span class="ml-2">{{ t("subscription.loading") }}</span>
         </div>
 
         <div
@@ -29,8 +29,8 @@
           class="p-8 text-center text-gray-400"
         >
           <IconTablerInbox class="mx-auto mb-2 w-12 h-12 opacity-50" />
-          <p>暂无订阅</p>
-          <p class="text-sm mt-1">点击上方按钮创建新订阅</p>
+          <p>{{ t("subscription.empty") }}</p>
+          <p class="text-sm mt-1">{{ t("subscription.emptyHint") }}</p>
         </div>
 
         <el-table
@@ -47,7 +47,7 @@
             (row, column, event) => handleContextMenu(event, row)
           "
         >
-          <el-table-column label="名称" min-width="120">
+          <el-table-column :label="t('subscription.name')" min-width="120">
             <template #default="{ row }">
               <span
                 class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate"
@@ -56,7 +56,7 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="主题 (Topic)" min-width="160">
+          <el-table-column :label="t('subscription.topic')" min-width="160">
             <template #default="{ row }">
               <span class="text-xs text-gray-500 dark:text-gray-400 truncate">
                 {{ row.topic }}
@@ -64,64 +64,74 @@
             </template>
           </el-table-column>
           <el-table-column prop="qos" label="QoS" width="70" />
-          <el-table-column label="状态" width="90">
+          <el-table-column :label="t('subscription.status')" width="90">
             <template #default="{ row }">
               <el-tag
                 size="small"
                 :type="row.isEnabled === false ? 'info' : 'success'"
               >
-                {{ row.isEnabled === false ? "停用" : "启用" }}
+                {{
+                  row.isEnabled === false
+                    ? t("common.disabled")
+                    : t("common.enabled")
+                }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="备注" min-width="120">
+          <el-table-column :label="t('subscription.remark')" min-width="120">
             <template #default="{ row }">
               <span class="text-xs text-gray-500 dark:text-gray-400 truncate">
                 {{ row.description || "-" }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="280">
+          <el-table-column :label="t('subscription.operations')" width="280">
             <template #default="{ row }">
               <div class="action-cell flex items-center gap-2">
-                <el-tooltip content="查看消息" placement="top">
+                <el-tooltip
+                  :content="t('actions.viewMessages')"
+                  placement="top"
+                >
                   <el-button
                     class="action-link"
                     link
                     size="small"
                     @click.stop="handleView(row)"
                   >
-                    查看消息
+                    {{ t("actions.viewMessages") }}
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="管理变量" placement="top">
+                <el-tooltip
+                  :content="t('actions.manageVariables')"
+                  placement="top"
+                >
                   <el-button
                     class="action-link"
                     link
                     size="small"
                     @click.stop="handleManageTags(row)"
                   >
-                    管理变量
+                    {{ t("actions.manageVariables") }}
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="编辑" placement="top">
+                <el-tooltip :content="t('actions.edit')" placement="top">
                   <el-button
                     class="action-link"
                     link
                     size="small"
                     @click.stop="handleEdit(row)"
                   >
-                    编辑
+                    {{ t("actions.edit") }}
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="删除" placement="top">
+                <el-tooltip :content="t('actions.delete')" placement="top">
                   <el-button
                     class="action-link"
                     link
                     size="small"
                     @click.stop="handleDelete(row)"
                   >
-                    删除
+                    {{ t("actions.delete") }}
                   </el-button>
                 </el-tooltip>
               </div>
@@ -150,6 +160,7 @@ import IconTablerLoader from "~icons/tabler/loader";
 import IconTablerInbox from "~icons/tabler/inbox";
 import MqttSubscriptionDialog from "./MqttSubscriptionDialog.vue";
 import dataAPI from "@/api/data.api";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   connectionId: {
@@ -183,14 +194,16 @@ const loadSubscriptions = async () => {
   try {
     const response = await dataAPI.getMqttSubscriptions(
       props.projectId,
-      props.connectionId
+      props.connectionId,
     );
     if (response.success) {
       subscriptions.value = response.data || [];
     }
   } catch (error) {
     ElMessage.error(
-      "加载订阅列表失败：" + (error.response?.data?.message || error.message)
+      t("subscription.loadFailed", {
+        message: error.response?.data?.message || error.message,
+      }),
     );
   } finally {
     loading.value = false;
@@ -242,23 +255,25 @@ const handleEdit = (subscription) => {
 const handleDelete = async (subscription) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除订阅 "${subscription.name}" 吗？`,
-      "删除确认",
+      t("subscription.deleteConfirm", { name: subscription.name }),
+      t("subscription.deleteConfirmTitle"),
       {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
+        confirmButtonText: t("actions.delete"),
+        cancelButtonText: t("actions.cancel"),
         type: "warning",
-      }
+      },
     );
 
     await dataAPI.deleteMqttSubscription(props.projectId, subscription.id);
-    ElMessage.success("订阅已删除");
+    ElMessage.success(t("subscription.deleted"));
     await loadSubscriptions();
     emit("subscription-deleted", subscription);
   } catch (error) {
     if (error !== "cancel") {
       ElMessage.error(
-        "删除失败：" + (error.response?.data?.message || error.message)
+        t("subscription.deleteFailed", {
+          message: error.response?.data?.message || error.message,
+        }),
       );
     }
   }
@@ -279,7 +294,7 @@ const handleContextMenu = (event, subscription) => {
   const openItem = document.createElement("div");
   openItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
-  openItem.textContent = "查看消息";
+  openItem.textContent = t("actions.viewMessages");
   openItem.onclick = () => {
     handleView(subscription);
     document.body.removeChild(menu);
@@ -288,7 +303,7 @@ const handleContextMenu = (event, subscription) => {
   const manageItem = document.createElement("div");
   manageItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
-  manageItem.textContent = "管理变量";
+  manageItem.textContent = t("actions.manageVariables");
   manageItem.onclick = () => {
     handleManageTags(subscription);
     document.body.removeChild(menu);
@@ -297,7 +312,7 @@ const handleContextMenu = (event, subscription) => {
   const editItem = document.createElement("div");
   editItem.className =
     "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
-  editItem.textContent = "编辑订阅";
+  editItem.textContent = t("subscription.edit");
   editItem.onclick = () => {
     handleEdit(subscription);
     document.body.removeChild(menu);
@@ -306,7 +321,7 @@ const handleContextMenu = (event, subscription) => {
   const deleteItem = document.createElement("div");
   deleteItem.className =
     "px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer";
-  deleteItem.textContent = "删除";
+  deleteItem.textContent = t("actions.delete");
   deleteItem.onclick = async () => {
     document.body.removeChild(menu);
     await handleDelete(subscription);
@@ -346,7 +361,7 @@ watch(
       loadSubscriptions();
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // 组件挂载

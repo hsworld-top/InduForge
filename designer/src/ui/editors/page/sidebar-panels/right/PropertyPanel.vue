@@ -39,6 +39,7 @@ import {
 } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, nextTick, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import IconEpArrowRight from "~icons/ep/arrow-right";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
@@ -192,6 +193,136 @@ const elementType = computed<string>(() => elementTypeName(currentElement.value?
 const elementLabel = ref<string>("");
 const elementDescription = ref<string>("");
 const regionSizeState = ref<any>(buildRegionSizeState(undefined));
+const { t, locale } = useI18n();
+const propertyPanelLanguage = computed<string>(() =>
+  String(locale.value || "")
+    .toLowerCase()
+    .startsWith("en")
+    ? "en"
+    : "zh",
+);
+const propertyPanelPresetLabelMap: Record<string, string> = {
+  empty: "Empty Template",
+  center: "Center Layout",
+  "btn-font": "Font Size / Color / Weight",
+  "btn-type-primary": "Primary Variant",
+  "btn-type-text": "Text Variant",
+  "btn-focus": "Remove Focus Border",
+  "btn-radius-none": "Square Corners",
+  "btn-radius-pill": "Pill Radius",
+  "btn-bg-solid": "Solid Background",
+  "btn-bg-gradient": "Gradient Background",
+  "btn-bg-image": "Image Button",
+  "btn-bg-image-hover": "Hover Background Swap",
+  "btn-size-fixed": "Fixed Size Button",
+  "btn-size-lineheight": "Auto Height + Centered Line Height",
+  "btn-size-block": "Full Width Block Button",
+  "btn-icon-size": "Icon Size",
+  "btn-icon-gap": "Icon/Text Gap",
+  "btn-icon-only": "Icon Only Button",
+  "btn-disabled": "Disabled but Visible",
+  "btn-disabled-keep": "Disabled Without Dimming",
+  "btn-text-hover": "Text Hover Without Background",
+  "btn-text-underline": "Text Button Underline",
+  "btn-group-radius": "Remove Group Radius",
+  "btn-group-divider": "Button Group Divider",
+  "btn-hover-scale": "Hover Scale Up",
+  "btn-active-scale": "Active Scale Down",
+  "text-font": "Font Size / Color / Weight",
+  "text-type-primary": "Primary Variant",
+  "text-type-text": "Text Variant",
+  "text-focus": "Remove Focus Border",
+  "text-radius-none": "Square Corners",
+  "text-radius-pill": "Pill Radius",
+  "text-bg-solid": "Solid Background",
+  "text-bg-gradient": "Gradient Background",
+  "text-bg-image": "Background Image",
+  "text-bg-image-hover": "Hover Background Swap",
+  "text-size-fixed": "Fixed Size",
+  "text-size-lineheight": "Auto Height + Centered Line Height",
+  "text-size-block": "Full Width Block",
+  "text-icon-size": "Icon Size",
+  "text-icon-gap": "Icon/Text Gap",
+  "text-icon-only": "Icon Only",
+  "text-disabled": "Disabled but Visible",
+  "text-disabled-keep": "Disabled Without Dimming",
+  "text-hover-clear": "Hover Without Background",
+  "text-underline": "Underline",
+  "text-group-radius": "Remove Radius",
+  "text-group-divider": "Divider",
+  "text-hover-scale": "Hover Scale Up",
+  "text-active-scale": "Active Scale Down",
+  comment: "Comment Template",
+  "echart-line": "Line Chart Template",
+  "echart-bar": "Bar Chart Template",
+  "echart-pie": "Pie Chart Template",
+  "echart-radar": "Radar Chart Template",
+  "echart-scatter": "Scatter Chart Template",
+  "echart-gauge": "Gauge Template",
+  "echart-area": "Area Line Chart",
+  "echart-stacked-bar": "Stacked Bar Chart",
+  "echart-donut": "Donut Chart",
+  "echart-multi-line": "Multi-Line Chart",
+  "btn-full": "Full Template",
+  "btn-basic": "Basic Button",
+  "btn-text": "Text Button",
+  "btn-types": "Button Types",
+  "btn-plain": "Plain Button",
+  "btn-state": "Disabled / Loading",
+  "btn-size": "Size Variants",
+  "btn-round": "Rounded / Circle",
+  "btn-icon": "Icon Button",
+  "btn-native": "Form Submit Button",
+  "btn-block": "Block Button (block/width)",
+  "btn-confirm": "Confirmation Button",
+  "btn-throttle": "Throttle",
+  "btn-debounce": "Debounce",
+  "btn-perms": "Permission Button",
+  "btn-visibility": "Conditional Visibility",
+  "text-basic": "Basic Text",
+  "text-bind": "Bound Field",
+  "text-empty": "Placeholder Text",
+  "text-style": "Styled Text",
+  "text-wrap": "Multi-line Text",
+  "text-ellipsis": "Ellipsis",
+  "text-ellipsis-tooltip": "Ellipsis + Tooltip",
+  "text-dict": "Status Text Mapping",
+  "text-dict-color": "Status Mapping + Color",
+  "text-tag": "Tag Text",
+  "text-link": "Clickable Text",
+  "text-tooltip": "Tooltip Text",
+  "text-copy": "Copy Text",
+  "text-format-money": "Currency Format",
+  "text-format-datetime": "Datetime Format",
+  "text-action-edit": "Table Action - Edit",
+  "text-action-delete": "Table Action - Delete",
+  "text-multi-prefix": "Multi-Text Group Prefix",
+  "text-multi-price": "Multi-Text Group Price",
+  "text-full-dsl": "Full Config Template",
+};
+const propertyPanelLiteralLabelMap: Record<string, string> = {
+  属性: "Properties",
+  组件: "Component",
+  未命名: "Unnamed",
+  工程变量: "Project Variables",
+  自定义脚本: "Custom Scripts",
+  页面变量: "Page Variables",
+  图表方法: "Chart Methods",
+  页面组件: "Page Components",
+};
+
+function localizePropertyPanelPreset(preset: AnyRecord) {
+  if (propertyPanelLanguage.value !== "en") return preset;
+  return {
+    ...preset,
+    label: propertyPanelPresetLabelMap[String(preset.id || "")] || preset.label,
+  };
+}
+
+function localizePropertyPanelLiteral(value: string) {
+  if (propertyPanelLanguage.value !== "en") return value;
+  return propertyPanelLiteralLabelMap[value] || value;
+}
 
 usePropertyPanelNormalizeNodeType(selectedNode, editorStore.updateNode);
 
@@ -4538,6 +4669,7 @@ function resolveElementPlusDetailPresets(type: string): AnyArray {
     return group
       .detail(methodName, type)
       .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
+      .map((preset: AnyRecord) => localizePropertyPanelPreset(preset))
       .map((preset: AnyRecord) => ({
         ...preset,
         tags: preset.tags || [type, "detail", group.name],
@@ -4545,11 +4677,11 @@ function resolveElementPlusDetailPresets(type: string): AnyArray {
       }));
   }
   return [
-    normalizeDslPreset(type, {
+    localizePropertyPanelPreset(normalizeDslPreset(type, {
       id: buildPresetId(type, "basic"),
       label: "DSL 模板",
       content: buildDslTemplate(methodName, '  id: "component",\n  props: {},'),
-    }),
+    })),
   ];
 }
 
@@ -4562,7 +4694,7 @@ function resolveElementPlusStylePresets(type: string): AnyArray {
   const customPresets = customStylePresetMap[type] as AnyArray | undefined;
   if (customPresets) {
     return customPresets.map((preset: AnyRecord) => ({
-      ...preset,
+      ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", "custom"],
       keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
     }));
@@ -4570,12 +4702,12 @@ function resolveElementPlusStylePresets(type: string): AnyArray {
   const group = elementPlusPresetGroups.find((item: AnyRecord) => item.types.includes(type));
   if (group?.style) {
     return group.style(type).map((preset: AnyRecord) => ({
-      ...preset,
+      ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", group.name],
       keywords: preset.keywords || [preset.label, type, group.name].filter(Boolean).join(" "),
     }));
   }
-  return stylePresets;
+  return stylePresets.map((preset: AnyRecord) => localizePropertyPanelPreset(preset));
 }
 
 /**
@@ -4697,6 +4829,7 @@ function applyNodePatch(nodeId: string, patch: AnyRecord) {
  * 获取组件 Manifest
  */
 const manifest = computed<AnyRecord | null>(() => {
+  void locale.value;
   const type = elementTypeName(currentElement.value?.type);
   if (!type) return null;
   return getManifest(type) ?? null;
@@ -4721,7 +4854,7 @@ const effectiveManifest = computed<AnyRecord | null>(() => {
     return {
       type: type || "ElementPlus",
       name: type || "ElementPlus",
-      category: "组件",
+      category: localizePropertyPanelLiteral("组件"),
       props: elementPlusProps,
     };
   }
@@ -4731,21 +4864,26 @@ const effectiveManifest = computed<AnyRecord | null>(() => {
 const layoutForceProps = computed<AnyArray>(() => []);
 
 const configDialogTitle = computed<string>(() =>
-  configDialogType.value === "detail" ? "详细配置" : "样式配置",
+  configDialogType.value === "detail"
+    ? t("propertyPanel.configDialog.detailTitle")
+    : t("propertyPanel.configDialog.styleTitle"),
 );
 const configEditorLanguage = computed<string>(() =>
   configDialogType.value === "detail" ? "javascript" : "css",
 );
 const presetLabel = computed<string>(() =>
-  configDialogType.value === "detail" ? "详细模板：" : "样式模板：",
+  configDialogType.value === "detail"
+    ? t("propertyPanel.configDialog.detailPreset")
+    : t("propertyPanel.configDialog.stylePreset"),
 );
 const currentPresetOptions = computed<AnyArray>(() => {
   const type = currentElement.value?.type;
   if (configDialogType.value === "detail") {
-    if (type === "EChart") return echartDetailPresets;
+    if (type === "EChart") return echartDetailPresets.map((preset: AnyRecord) => localizePropertyPanelPreset(preset));
     if (type === "Button") {
       return buttonDetailPresets
         .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
+        .map((preset: AnyRecord) => localizePropertyPanelPreset(preset))
         .map((preset: AnyRecord) => ({
           ...preset,
           tags: preset.tags || [type, "detail", "button"],
@@ -4755,6 +4893,7 @@ const currentPresetOptions = computed<AnyArray>(() => {
     if (type === "Text") {
       return textDetailPresets
         .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
+        .map((preset: AnyRecord) => localizePropertyPanelPreset(preset))
         .map((preset: AnyRecord) => ({
           ...preset,
           tags: preset.tags || [type, "detail", "text"],
@@ -4762,31 +4901,31 @@ const currentPresetOptions = computed<AnyArray>(() => {
         }));
     }
     if (isElementPlusType(type)) return resolveElementPlusDetailPresets(type);
-    return detailPresets;
+    return detailPresets.map((preset: AnyRecord) => localizePropertyPanelPreset(preset));
   }
   if (type === "Button") {
     return buttonStylePresets.map((preset: AnyRecord) => ({
-      ...preset,
+      ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", "button"],
       keywords: preset.keywords || [preset.label, type, "button"].filter(Boolean).join(" "),
     }));
   }
   if (type === "Text") {
     return textStylePresets.map((preset: AnyRecord) => ({
-      ...preset,
+      ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", "text"],
       keywords: preset.keywords || [preset.label, type, "text"].filter(Boolean).join(" "),
     }));
   }
   if (customStylePresetMap[type]) {
     return (customStylePresetMap[type] as AnyArray).map((preset: AnyRecord) => ({
-      ...preset,
+      ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", "custom"],
       keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
     }));
   }
   if (isElementPlusType(type)) return resolveElementPlusStylePresets(type);
-  return stylePresets;
+  return stylePresets.map((preset: AnyRecord) => localizePropertyPanelPreset(preset));
 });
 
 const filteredPresetOptions = computed<AnyArray>(() => {
@@ -4802,13 +4941,18 @@ const filteredPresetOptions = computed<AnyArray>(() => {
 
 const bindingDialogTitle = computed<string>(() => {
   const label = bindingProp.value?.label || bindingProp.value?.name;
-  return label ? `绑定数据 - ${label}` : "绑定数据";
+  return label
+    ? t("propertyPanel.bindingDialog.titleWithLabel", { label })
+    : t("propertyPanel.bindingDialog.title");
 });
 
 const bindingDialogDescription = computed<string>(() => {
-  const elementName = elementLabel.value || elementType.value || "组件";
+  const elementName =
+    elementLabel.value || elementType.value || t("propertyPanel.bindingDialog.targetFallback");
   const propLabel = bindingProp.value?.label || bindingProp.value?.name || "";
-  return propLabel ? `${elementName} ${propLabel} 绑定脚本` : `${elementName} 绑定脚本`;
+  return propLabel
+    ? t("propertyPanel.bindingDialog.descriptionWithProp", { elementName, propLabel })
+    : t("propertyPanel.bindingDialog.description", { elementName });
 });
 
 const isElContainer = computed<boolean>(() => elementType.value === "ElContainer");
@@ -4871,7 +5015,7 @@ const displayPropGroups = computed<AnyArray>(() => {
   const groups = groupedProps.value;
   if (groups.length > 0) return groups;
   if (effectiveManifest.value?.props?.length) {
-    return [{ name: "属性", props: effectiveManifest.value.props }];
+    return [{ name: localizePropertyPanelLiteral("属性"), props: effectiveManifest.value.props }];
   }
   return [];
 });
@@ -4886,7 +5030,7 @@ const getGroupSectionKey = (group: AnyRecord) => `group:${String(group?.name || 
 
 function resolveGroupTitle(group: AnyRecord) {
   const name = String(group?.name || "").trim();
-  return !name || name === "?" ? "属性" : name;
+  return !name || name === "?" ? localizePropertyPanelLiteral("属性") : localizePropertyPanelLiteral(name);
 }
 
 function getVisibleGroupProps(group: AnyRecord): AnyArray {
@@ -4954,7 +5098,7 @@ const pageComponentNames = computed<string[]>(() => {
 const bindingProjectGroupTree = computed<AnyArray>(() => [
   {
     id: "all",
-    label: "全部",
+    label: t("propertyPanel.bindingVarEnum.all"),
     type: "group",
     children: buildBindingGroupTree(projectVariableGroups.value || []),
   },
@@ -4987,7 +5131,7 @@ const bindingProjectVariableRows = computed<AnyArray>(() => {
 });
 
 const bindingPageGroupTree = computed<AnyArray>(() => [
-  { id: "page-root", label: "页面变量", type: "group", children: [] },
+  { id: "page-root", label: t("propertyPanel.bindingVarEnum.pageRoot"), type: "group", children: [] },
 ]);
 
 const bindingPageVariableRows = computed<AnyArray>(() => {
@@ -5016,7 +5160,7 @@ const bindingPageComponentTree = computed<AnyArray>(() => {
     const children = Array.isArray(node.children)
       ? node.children.map((childId: string) => buildNode(childId)).filter(Boolean)
       : [];
-    const label = node.label || node.type || "组件";
+    const label = node.label || node.type || localizePropertyPanelLiteral("组件");
     return {
       id: node.id,
       label,
@@ -5060,7 +5204,7 @@ const bindingCustomScriptTree = computed<AnyArray>(() => {
     if (!item?.id) return;
     const node = {
       id: item.id,
-      label: item.name || "未命名",
+      label: item.name || localizePropertyPanelLiteral("未命名"),
       type: "item",
       params: item.params || item.args || "",
     };
@@ -5108,7 +5252,7 @@ const bindingCompletions = computed<AnyArray>(() => {
       label: name,
       insertText: name,
       kind: "Variable",
-      detail: "工程变量",
+      detail: localizePropertyPanelLiteral("工程变量"),
       prefix: "$global.",
     });
   });
@@ -5129,7 +5273,7 @@ const bindingCompletions = computed<AnyArray>(() => {
       label: script.name,
       insertText: call,
       kind: "Function",
-      detail: "自定义脚本",
+      detail: localizePropertyPanelLiteral("自定义脚本"),
       prefix: "customScripts.",
     });
   });
@@ -5139,7 +5283,7 @@ const bindingCompletions = computed<AnyArray>(() => {
       label: name,
       insertText: name,
       kind: "Variable",
-      detail: "页面变量",
+      detail: localizePropertyPanelLiteral("页面变量"),
       prefix: "$vars.",
     });
   });
@@ -5183,7 +5327,7 @@ const detailCompletions = computed<AnyArray>(() => {
       label: name,
       insertText: name,
       kind: "Variable",
-      detail: "工程变量",
+      detail: localizePropertyPanelLiteral("工程变量"),
       prefix: "$global.",
     });
   });
@@ -5204,7 +5348,7 @@ const detailCompletions = computed<AnyArray>(() => {
       label: scriptItem.name,
       insertText: call,
       kind: "Function",
-      detail: "自定义脚本",
+      detail: localizePropertyPanelLiteral("自定义脚本"),
       prefix: "customScripts.",
     });
   });
@@ -5214,7 +5358,7 @@ const detailCompletions = computed<AnyArray>(() => {
       label: name,
       insertText: name,
       kind: "Variable",
-      detail: "页面变量",
+      detail: localizePropertyPanelLiteral("页面变量"),
       prefix: "$vars.",
     });
   });
@@ -5231,7 +5375,7 @@ const detailCompletions = computed<AnyArray>(() => {
           ")",
         ].join(""),
         kind: "Method",
-        detail: "图表方法",
+        detail: localizePropertyPanelLiteral("图表方法"),
         prefix: ".",
       },
       {
@@ -5244,14 +5388,14 @@ const detailCompletions = computed<AnyArray>(() => {
           ")",
         ].join(""),
         kind: "Method",
-        detail: "图表方法",
+        detail: localizePropertyPanelLiteral("图表方法"),
         prefix: ".",
       },
       {
         label: "getInstance",
         insertText: "getInstance()",
         kind: "Method",
-        detail: "图表方法",
+        detail: localizePropertyPanelLiteral("图表方法"),
         prefix: ".",
       },
     ];
@@ -5260,7 +5404,7 @@ const detailCompletions = computed<AnyArray>(() => {
       label: name,
       insertText: name,
       kind: "Variable",
-      detail: "页面组件",
+      detail: localizePropertyPanelLiteral("页面组件"),
       prefix: "components.",
     });
   });
@@ -5392,7 +5536,10 @@ function validateDetailConfig(content: string): { valid: boolean; message?: stri
     void validator;
     return { valid: true };
   } catch (error: any) {
-    return { valid: false, message: error?.message || "DSL 语法错误" };
+    return {
+      valid: false,
+      message: error?.message || t("propertyPanel.configDialog.dslSyntaxError"),
+    };
   }
 }
 
@@ -5703,7 +5850,9 @@ function saveConfigDialog(): void {
     configDraft.value = content;
     const validation = validateDetailConfig(content);
     if (!validation.valid) {
-      ElMessage.warning({ message: validation.message || "详细配置未通过校验" });
+      ElMessage.warning({
+        message: validation.message || t("propertyPanel.configDialog.validationFailed"),
+      });
       return;
     }
   } else {
@@ -5724,7 +5873,7 @@ function saveConfigDialog(): void {
       if (elementTypeName(node.type) === "Menu") {
         const config = resolveMenuConfigFromContent(content);
         if (!config) {
-          ElMessage.error({ message: "Menu 详细配置无法解析为有效 DSL，请修正后再保存" });
+    ElMessage.error({ message: t("propertyPanel.configDialog.menuDslInvalid") });
           return;
         }
         applyMenuDetailConfig(node, config);
@@ -6063,7 +6212,7 @@ function handleLabelChange(): void {
     return;
   }
   if (!editorStore.isLabelUnique?.(nextLabel, el.id)) {
-    ElMessage.warning({ message: "组件名称已存在，请更换" });
+    ElMessage.warning({ message: t("propertyPanel.duplicateName") });
     elementLabel.value = el.label || "";
     return;
   }
@@ -6330,7 +6479,7 @@ function handlePropChange(propName: string, value: any): void {
                       <span>{{ propDef.label }}</span>
                       <el-tooltip
                         v-if="shouldShowBindButton(propDef)"
-                        content="绑定数据"
+                        :content="t('propertyPanel.bindingDialog.tooltip')"
                         placement="top"
                       >
                         <button
@@ -6358,7 +6507,9 @@ function handlePropChange(propName: string, value: any): void {
       <!-- 无 Manifest 时显示原始 Props -->
       <PropertyPanelRawPropsFallback v-else :text="formattedProps" />
 
-      <div v-if="!hasStyleSelection" class="text-sm text-gray-400 text-center py-6">请选择组件</div>
+      <div v-if="!hasStyleSelection" class="text-sm text-gray-400 text-center py-6">
+        {{ t("propertyPanel.stylePanel.selectComponent") }}
+      </div>
     </div>
   </div>
 
@@ -6377,7 +6528,7 @@ function handlePropChange(propName: string, value: any): void {
           v-model="selectedPresetId"
           size="small"
           class="config-select preset-select"
-          placeholder="请选择"
+          :placeholder="t('propertyPanel.configDialog.selectPlaceholder')"
           @change="handlePresetChange"
         >
           <el-option
@@ -6389,17 +6540,17 @@ function handlePropChange(propName: string, value: any): void {
         </ElSelect>
       </div>
       <div class="config-toolbar-item">
-        <span class="config-label">筛选：</span>
+        <span class="config-label">{{ t("propertyPanel.configDialog.filterLabel") }}</span>
         <ElInput
           v-model="presetSearch"
           size="small"
           class="config-select"
-          placeholder="搜索模板"
+          :placeholder="t('propertyPanel.configDialog.searchPreset')"
           clearable
         />
       </div>
       <div v-if="configDialogType === 'detail'" class="config-toolbar-item config-toolbar-actions">
-        <el-tooltip content="变量枚举" placement="top">
+        <el-tooltip :content="t('propertyPanel.configDialog.variableEnum')" placement="top">
           <el-button class="icon-button" size="small" circle @click.stop="openConfigVariableEnum">
             <IconEpList />
           </el-button>
@@ -6418,11 +6569,11 @@ function handlePropChange(propName: string, value: any): void {
       </div>
       <div v-if="configDialogType === 'detail'" class="config-sidebar">
         <div class="sidebar-section">
-          <div class="sidebar-title">自定义脚本</div>
+          <div class="sidebar-title">{{ t("propertyPanel.configDialog.customScripts") }}</div>
           <ElInput
             v-model="configScriptSearch"
             size="small"
-            placeholder="搜索脚本/分组"
+            :placeholder="t('propertyPanel.configDialog.searchScripts')"
             clearable
           />
           <div class="sidebar-scroll">
@@ -6450,11 +6601,11 @@ function handlePropChange(propName: string, value: any): void {
           </div>
         </div>
         <div class="sidebar-section">
-          <div class="sidebar-title">页面组件</div>
+          <div class="sidebar-title">{{ t("propertyPanel.configDialog.pageComponents") }}</div>
           <ElInput
             v-model="configComponentSearch"
             size="small"
-            placeholder="搜索组件/分组"
+            :placeholder="t('propertyPanel.configDialog.searchComponents')"
             clearable
           />
           <div class="sidebar-scroll">
@@ -6484,9 +6635,14 @@ function handlePropChange(propName: string, value: any): void {
       </div>
       <div v-if="configDialogType === 'style'" class="config-assets">
         <div class="config-assets-header">
-          <span>资源库</span>
+          <span>{{ t("propertyPanel.configDialog.assetLibrary") }}</span>
         </div>
-        <ElInput v-model="configAssetSearch" size="small" placeholder="搜索资源" clearable />
+        <ElInput
+          v-model="configAssetSearch"
+          size="small"
+          :placeholder="t('propertyPanel.configDialog.searchAssets')"
+          clearable
+        />
         <div class="config-assets-body">
           <el-scrollbar>
             <el-tree
@@ -6516,9 +6672,9 @@ function handlePropChange(propName: string, value: any): void {
       </div>
     </div>
     <template #footer>
-      <el-button @click="clearConfigDialog">清除</el-button>
-      <el-button @click="configDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveConfigDialog()">保存</el-button>
+      <el-button @click="clearConfigDialog">{{ t("propertyPanel.configDialog.clear") }}</el-button>
+      <el-button @click="configDialogVisible = false">{{ t("propertyPanel.configDialog.cancel") }}</el-button>
+      <el-button type="primary" @click="saveConfigDialog()">{{ t("propertyPanel.configDialog.save") }}</el-button>
     </template>
   </el-dialog>
 
@@ -6537,7 +6693,7 @@ function handlePropChange(propName: string, value: any): void {
       <div class="meta-title">{{ bindingDialogTitle }}</div>
       <div class="meta-desc">{{ bindingDialogDescription }}</div>
       <div class="meta-actions">
-        <el-tooltip content="变量枚举" placement="top">
+        <el-tooltip :content="t('propertyPanel.bindingDialog.variableEnum')" placement="top">
           <el-button class="icon-button" size="small" circle @click.stop="openBindingVariableEnum">
             <IconEpList />
           </el-button>
@@ -6556,11 +6712,11 @@ function handlePropChange(propName: string, value: any): void {
       </div>
       <div class="editor-sidebar">
         <div class="sidebar-section">
-          <div class="sidebar-title">自定义脚本</div>
+          <div class="sidebar-title">{{ t("propertyPanel.bindingDialog.customScripts") }}</div>
           <ElInput
             v-model="bindingScriptSearch"
             size="small"
-            placeholder="搜索脚本/分组"
+            :placeholder="t('propertyPanel.bindingDialog.searchScripts')"
             clearable
           />
           <div class="sidebar-scroll">
@@ -6588,11 +6744,11 @@ function handlePropChange(propName: string, value: any): void {
           </div>
         </div>
         <div class="sidebar-section">
-          <div class="sidebar-title">页面组件</div>
+          <div class="sidebar-title">{{ t("propertyPanel.bindingDialog.pageComponents") }}</div>
           <ElInput
             v-model="bindingComponentSearch"
             size="small"
-            placeholder="搜索组件/分组"
+            :placeholder="t('propertyPanel.bindingDialog.searchComponents')"
             clearable
           />
           <div class="sidebar-scroll">
@@ -6622,8 +6778,8 @@ function handlePropChange(propName: string, value: any): void {
       </div>
     </div>
     <template #footer>
-      <el-button @click="bindingDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="saveBinding">保存</el-button>
+      <el-button @click="bindingDialogVisible = false">{{ t("propertyPanel.bindingDialog.cancel") }}</el-button>
+      <el-button type="primary" @click="saveBinding">{{ t("propertyPanel.bindingDialog.save") }}</el-button>
     </template>
   </el-dialog>
 

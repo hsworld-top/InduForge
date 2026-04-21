@@ -2,6 +2,7 @@
   属性面板：尺寸编辑 + 详细/样式配置入口
 -->
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import SizeEditor from "./StylePanel/SizeEditor.vue";
@@ -29,6 +30,7 @@ const emit = defineEmits<{
   (event: "update:currentStyle", value: ConfigStripStyleLike): void;
   (event: "openConfig", tab: "detail" | "style"): void;
 }>();
+const { t } = useI18n();
 
 function onStyleUpdate(val: ConfigStripStyleLike) {
   emit("update:currentStyle", val);
@@ -47,7 +49,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
     </div>
     <div class="panel-section">
       <div class="config-entry-header">
-        <span class="panel-section-title">配置</span>
+        <span class="panel-section-title">{{ t("propertyPanel.configStrip.title") }}</span>
       </div>
       <div class="config-entry-bar">
         <button
@@ -57,7 +59,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
           @click="emit('openConfig', 'detail')"
         >
           <IconEpDocument class="config-entry-icon" />
-          <span>详细</span>
+          <span>{{ t("propertyPanel.configStrip.detail") }}</span>
         </button>
         <button
           class="config-entry"
@@ -66,7 +68,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
           @click="emit('openConfig', 'style')"
         >
           <IconEpEditPen class="config-entry-icon" />
-          <span>样式</span>
+          <span>{{ t("propertyPanel.configStrip.style") }}</span>
         </button>
       </div>
     </div>

@@ -8,22 +8,28 @@
   >
     <!-- 连接类型选择（仅创建模式） -->
     <el-form v-if="mode === 'create'" label-width="120px" class="mb-4">
-      <el-form-item label="连接类型">
+      <el-form-item :label="t('connection.connectionType')">
         <el-select
           v-model="connectionType"
-          placeholder="选择连接类型"
+          :placeholder="t('connection.selectConnectionType')"
           class="w-full"
           @change="handleTypeChange"
         >
-          <el-option label="关系数据库" value="relational" />
+          <el-option
+            :label="t('connection.relationalDatabase')"
+            value="relational"
+          />
           <el-option label="MQTT" value="mqtt" />
         </el-select>
       </el-form-item>
 
-      <el-form-item v-if="connectionType === 'relational'" label="数据库类型">
+      <el-form-item
+        v-if="connectionType === 'relational'"
+        :label="t('connection.databaseType')"
+      >
         <el-select
           v-model="dbType"
-          placeholder="选择数据库类型"
+          :placeholder="t('connection.selectDatabaseType')"
           class="w-full"
           @change="handleDbTypeChange"
         >
@@ -48,10 +54,16 @@
     />
 
     <template #footer>
-      <el-button @click="handleClose">取消</el-button>
-      <el-button @click="handleTest" :loading="testing">测试连接</el-button>
+      <el-button @click="handleClose">{{ t("actions.cancel") }}</el-button>
+      <el-button @click="handleTest" :loading="testing">{{
+        t("actions.testConnection")
+      }}</el-button>
       <el-button type="primary" @click="handleSubmit" :loading="submitting">
-        {{ mode === "create" ? "创建连接" : "保存修改" }}
+        {{
+          mode === "create"
+            ? t("actions.createConnection")
+            : t("actions.saveChanges")
+        }}
       </el-button>
     </template>
   </el-dialog>
@@ -61,6 +73,7 @@
 import { ref, computed, watch, markRaw } from "vue";
 import { ElMessage } from "element-plus";
 import { getDatabaseTypes, getDefaultConfig } from "@/config/connectionTypes";
+import { t } from "@/i18n/runtime";
 import MysqlConnectionForm from "../connection/forms/MysqlConnectionForm.vue";
 import PostgresConnectionForm from "../connection/forms/PostgresConnectionForm.vue";
 import SqlServerConnectionForm from "../connection/forms/SqlServerConnectionForm.vue";
@@ -90,7 +103,9 @@ const visible = computed({
 });
 
 const dialogTitle = computed(() => {
-  return props.mode === "create" ? "新建数据连接" : "编辑数据连接";
+  return props.mode === "create"
+    ? t("connection.createTitle")
+    : t("connection.editTitle");
 });
 
 const connectionType = ref("relational");
@@ -181,7 +196,7 @@ const handleTest = async () => {
 
   const valid = await formRef.value.validate();
   if (!valid) {
-    ElMessage.warning("请填写完整的连接信息");
+    ElMessage.warning(t("connection.incompleteInfoWarning"));
     return;
   }
 
@@ -210,7 +225,7 @@ const handleSubmit = async () => {
 
   const valid = await formRef.value.validate();
   if (!valid) {
-    ElMessage.warning("请填写完整的连接信息");
+    ElMessage.warning(t("connection.incompleteInfoWarning"));
     return;
   }
 

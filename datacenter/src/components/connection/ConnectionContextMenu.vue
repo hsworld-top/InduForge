@@ -14,14 +14,14 @@
       class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center"
     >
       <IconTablerPlugConnected class="mr-2 w-4 h-4" />
-      打开连接
+      {{ t("actions.openConnection") }}
     </div>
     <div
       @click="handleDisconnect"
       class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center"
     >
       <IconTablerPlugConnectedX class="mr-2 w-4 h-4" />
-      断开连接
+      {{ t("actions.disconnectConnection") }}
     </div>
     <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
     <div
@@ -29,14 +29,14 @@
       class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center"
     >
       <IconTablerEye class="mr-2 w-4 h-4" />
-      查看详情
+      {{ t("actions.viewDetails") }}
     </div>
     <div
       @click="handleEdit"
       class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center"
     >
       <IconTablerEdit class="mr-2 w-4 h-4" />
-      编辑连接
+      {{ t("actions.edit") }}
     </div>
     <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
     <div
@@ -44,18 +44,19 @@
       class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center"
     >
       <IconTablerTrash class="mr-2 w-4 h-4" />
-      删除连接
+      {{ t("actions.delete") }}
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { watch } from "vue";
 import IconTablerPlugConnected from "~icons/tabler/plug-connected";
 import IconTablerPlugConnectedX from "~icons/tabler/plug-connected-x";
 import IconTablerEye from "~icons/tabler/eye";
 import IconTablerEdit from "~icons/tabler/edit";
 import IconTablerTrash from "~icons/tabler/trash";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   visible: {

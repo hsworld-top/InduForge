@@ -265,6 +265,19 @@ export const syncDesignerLocaleToEmbeddedIframes = (targets, locale) => {
 }
 
 /**
+ * 同步语言到全部嵌入 iframe。
+ * 设计中心与数据中心都依赖宿主语言，不能再只广播给 designer。
+ * @param {Iterable<object>|object} targets - 注册表项集合、NodeList 或 document-like 对象
+ * @param {string} locale - 语言
+ */
+export const syncLocaleToEmbeddedIframes = (targets, locale) => {
+  broadcastToEmbeddedIframes(
+    targets,
+    createEmbeddedUpdateMessage('LOCALE_UPDATE', 'locale', locale)
+  )
+}
+
+/**
  * 统一提取 message 载荷。
  * 历史调用方可能把业务字段放在根层，也可能放在 payload 里，这里统一兼容。
  * @param {object} data - message data

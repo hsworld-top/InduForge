@@ -265,7 +265,7 @@ const filteredTags = computed(() => {
   return tags.value.filter(
     (tag) =>
       tag.name.toLowerCase().includes(keyword) ||
-      tag.code.toLowerCase().includes(keyword)
+      tag.code.toLowerCase().includes(keyword),
   );
 });
 
@@ -316,7 +316,7 @@ const buildGroupBackgroundColor = (color) => {
   }
 
   const rgbMatch = normalized.match(
-    /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i
+    /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i,
   );
   if (rgbMatch) {
     const r = Number(rgbMatch[1]);
@@ -343,7 +343,7 @@ const loadGroups = async () => {
   try {
     const response = await getMqttTagGroups(
       props.projectId,
-      props.subscriptionId
+      props.subscriptionId,
     );
     if (response.success) {
       groups.value = response.data.groups || [];
@@ -444,7 +444,7 @@ const handleDeleteGroup = async (group) => {
         type: "warning",
         confirmButtonText: "删除",
         cancelButtonText: "取消",
-      }
+      },
     );
 
     await deleteMqttTagGroup(group.id);
@@ -462,7 +462,7 @@ const handleGroupDialogSuccess = async () => {
   groupDialogVisible.value = false;
   await loadGroups();
   ElMessage.success(
-    groupDialogMode.value === "create" ? "创建成功" : "更新成功"
+    groupDialogMode.value === "create" ? "创建成功" : "更新成功",
   );
 };
 

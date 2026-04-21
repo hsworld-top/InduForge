@@ -6,6 +6,7 @@
 import { ElCheckbox, ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, h, inject, ref, watch, watchEffect } from "vue";
+import { useI18n } from "vue-i18n";
 import IconEpArrowDown from "~icons/ep/arrow-down";
 import IconEpArrowRight from "~icons/ep/arrow-right";
 import IconEpDocument from "~icons/ep/document";
@@ -56,6 +57,7 @@ const showError = (message: string): void => {
 const openPageTab = inject<OpenPageTabLike | null>("openPageTab", null) as any;
 
 const editorStore = useEditorStore();
+const { t } = useI18n();
 const { pages, currentPageId, entryConfig, canUndo, projectId } = storeToRefs(editorStore);
 const selectedNode = ref<any>(null);
 const createDialogVisible = ref(false);
@@ -71,32 +73,34 @@ let dragOverFrameId = 0;
 let pendingDragOverTarget: any = null;
 
 // 新建弹窗类型选项
-const createTypeOptions: CreateTypeOptionLike[] = [
+const createTypeOptions = computed<CreateTypeOptionLike[]>(() => [
   {
     value: "page",
-    label: "业务页面",
-    desc: "创建一个普通业务页面",
+    label: t("pageTree.pageType"),
+    desc: t("pageTree.pageTypeDesc"),
     icon: IconEpDocument,
   },
   {
     value: "folder",
-    label: "分组",
-    desc: "创建一个分组来组织页面",
+    label: t("pageTree.folderType"),
+    desc: t("pageTree.folderTypeDesc"),
     icon: IconEpFolder,
   },
-];
+]);
 
 // 新建弹窗标题
 const createDialogTitle = computed<string>(() => {
-  const option = createTypeOptions.find((o) => o.value === createForm.value.type);
-  return `新建${option?.label || "页面"}`;
+  const option = createTypeOptions.value.find((o) => o.value === createForm.value.type);
+  return t("pageTree.newItemTitle", {
+    label: option?.label || t("pageTree.pageFallback"),
+  });
 });
 
 // 表单验证规则
-const createFormRules: Record<string, any> = {
+const createFormRules = computed<Record<string, any>>(() => ({
   name: [
-    { required: true, message: "请输入名称", trigger: "blur" },
-    { min: 1, max: 50, message: "名称长度在 1 到 50 个字符", trigger: "blur" },
+    { required: true, message: t("pageTree.enterName"), trigger: "blur" },
+    { min: 1, max: 50, message: t("pageTree.nameLength"), trigger: "blur" },
     {
       validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
         const result = validatePageName(value);
@@ -109,12 +113,12 @@ const createFormRules: Record<string, any> = {
       trigger: "blur",
     },
   ],
-};
+}));
 
-const BASIC_PAGE_META: Record<FixedSystemType, BasicPageMetaLike> = {
-  home: { label: "首页", path: "/" },
-  login: { label: "登录页", path: "/login" },
-  logout: { label: "登出页", path: "/logout" },
+const BASIC_PAGE_PATH_MAP: Record<FixedSystemType, string> = {
+  home: "/",
+  login: "/login",
+  logout: "/logout",
 };
 const PAGE_TREE_SEGMENT_SPACE_RE = /\s+/g;
 const PAGE_TREE_SEGMENT_RE = /[/?#\\]+/g;
@@ -125,7 +129,16 @@ const PAGE_TREE_SEGMENT_RE = /[/?#\\]+/g;
  * @returns {{ label: string, path: string }}
  */
 function getBasicPageMeta(type: FixedSystemType): BasicPageMetaLike {
-  return BASIC_PAGE_META[type] || { label: "", path: "/" };
+  if (type === "home") {
+    return { label: t("pageTree.homeLabel"), path: BASIC_PAGE_PATH_MAP.home };
+  }
+  if (type === "login") {
+    return { label: t("pageTree.loginLabel"), path: BASIC_PAGE_PATH_MAP.login };
+  }
+  if (type === "logout") {
+    return { label: t("pageTree.logoutLabel"), path: BASIC_PAGE_PATH_MAP.logout };
+  }
+  return { label: "", path: "/" };
 }
 
 /**
@@ -770,10 +783,10 @@ async function handleNodeDoubleClick(node: SelectedNodeLike): Promise<void> {
   try {
     const result = await editorStore.loadPage(node.id);
     if (!result.ok) {
-      showError(result.error?.message || "切换页面失败");
+      showError(result.error?.message || t("pageTree.switchFailed"));
     }
   } catch {
-    showError("切换页面失败");
+    showError(t("pageTree.switchFailed"));
   }
 }
 
@@ -787,7 +800,7 @@ async function confirmPageSwitch(targetName: string): Promise<boolean> {
 
   const skipPrompt = ref(false);
   const message = h("div", { class: "flex flex-col gap-2" }, [
-    h("div", `是否切换到${targetName}页面？`),
+    h("div", t("pageTree.switchPageConfirm", { targetName })),
     h(
       ElCheckbox as any,
       {
@@ -796,17 +809,17 @@ async function confirmPageSwitch(targetName: string): Promise<boolean> {
           skipPrompt.value = value;
         },
       },
-      () => "不再提示",
+      () => t("pageTree.doNotPromptAgain"),
     ),
   ]);
 
   try {
     await (ElMessageBox as any)({
-      title: "切换页面",
+      title: t("pageTree.switchPageTitle"),
       message,
       showCancelButton: true,
-      confirmButtonText: "切换",
-      cancelButtonText: "取消",
+      confirmButtonText: t("pageTree.switch"),
+      cancelButtonText: t("pageTree.cancel"),
       distinguishCancelAndClose: true,
       closeOnClickModal: false,
     });
@@ -828,11 +841,11 @@ async function ensureUnsavedSwitch(targetName: string): Promise<boolean> {
   if (!canUndo.value) return true;
   try {
     const action = await ElMessageBox.confirm(
-      `当前页面未保存，是否切换到${targetName}页面？`,
-      "切换页面",
+      t("pageTree.unsavedSwitchConfirm", { targetName }),
+      t("pageTree.switchPageTitle"),
       {
-        confirmButtonText: "保存并切换",
-        cancelButtonText: "不保存切换",
+        confirmButtonText: t("pageTree.saveAndSwitch"),
+        cancelButtonText: t("pageTree.switchWithoutSave"),
         distinguishCancelAndClose: true,
         closeOnClickModal: false,
       },
@@ -846,7 +859,7 @@ async function ensureUnsavedSwitch(targetName: string): Promise<boolean> {
       return true;
     }
     if (error && error !== "close") {
-      showError("切换页面失败");
+      showError(t("pageTree.switchFailed"));
     }
     return false;
   }
@@ -921,8 +934,8 @@ function handleRowAction(command: string, node: PageNodeLike): void {
     return;
   }
   if (command === "rename") {
-    if (getFixedSystemType(node)) {
-      showWarning("基础页面名称固定，不支持重命名");
+  if (getFixedSystemType(node)) {
+      showWarning(t("pageTree.basicPageRenameDisabled"));
       return;
     }
     void handleRename();
@@ -1125,7 +1138,7 @@ function onCreateFormUpdate(next: any) {
 async function handleCreateConfirm() {
   const name = createForm.value.name?.trim();
   if (!name) {
-    showWarning("名称不能为空");
+    showWarning(t("pageTree.nameRequired"));
     return;
   }
   const nameValidation = validatePageName(name);
@@ -1134,7 +1147,7 @@ async function handleCreateConfirm() {
     return;
   }
   if (!isNameUnique(name, undefined)) {
-    showWarning("页面或分组名称已存在");
+    showWarning(t("pageTree.duplicatedName"));
     return;
   }
 
@@ -1145,7 +1158,7 @@ async function handleCreateConfirm() {
   try {
     if (type === "folder") {
       await editorStore.createPage({ name, type: "folder", parentId });
-      showSuccess("分组创建成功");
+      showSuccess(t("pageTree.groupCreated"));
       createDialogVisible.value = false;
       creating.value = false;
       return;
@@ -1165,13 +1178,13 @@ async function handleCreateConfirm() {
       schemaContent,
     });
     const pageId = result?.id;
-    if (!pageId) throw new Error("页面创建失败");
+    if (!pageId) throw new Error(t("pageTree.createFailed"));
     await openCreatedPageTab(pageId);
-    showSuccess("页面创建成功");
+    showSuccess(t("pageTree.pageCreated"));
     createDialogVisible.value = false;
   } catch (error: any) {
     console.error("创建失败:", error);
-    showError(error?.message || "创建失败");
+    showError(error?.message || t("pageTree.createFailed"));
   } finally {
     creating.value = false;
   }
@@ -1183,19 +1196,19 @@ async function handleCreateConfirm() {
 async function handleRename() {
   const target = selectedNode.value;
   if (!target) {
-    showWarning("请先选择要重命名的页面或分组");
+    showWarning(t("pageTree.renameSelectFirst"));
     return;
   }
   try {
-    const result = await ElMessageBox.prompt("请输入新名称", "重命名", {
+    const result = await ElMessageBox.prompt(t("pageTree.enterNewName"), t("pageTree.renameTitle"), {
       inputValue: target.label || "",
-      confirmButtonText: "确定",
-      cancelButtonText: "取消",
+      confirmButtonText: t("pageTree.confirm"),
+      cancelButtonText: t("pageTree.cancel"),
       closeOnClickModal: false,
     });
     const name = result?.value?.trim();
     if (!name) {
-      showWarning("名称不能为空");
+      showWarning(t("pageTree.nameRequired"));
       return;
     }
     const nameValidation = validatePageName(name);
@@ -1204,7 +1217,7 @@ async function handleRename() {
       return;
     }
     if (!isNameUnique(name, target.id)) {
-      showWarning("页面或分组名称已存在");
+      showWarning(t("pageTree.duplicatedName"));
       return;
     }
     const page = ((pages.value || []) as any[]).find((item: any) => item.id === target.id);
@@ -1217,10 +1230,10 @@ async function handleRename() {
     if (page?.type === "folder") {
       await syncFolderDescendantPaths(target.id);
     }
-    showSuccess("重命名成功");
+    showSuccess(t("pageTree.renameSuccess"));
   } catch (error: any) {
     if (error !== "cancel") {
-      showError("重命名失败");
+      showError(t("pageTree.renameFailed"));
     }
   }
 }
@@ -1259,13 +1272,13 @@ function getFolderDescendantCount(folderId: any) {
 async function handleDelete() {
   const target = selectedNode.value;
   if (!target) {
-    showWarning("请先选择要删除的页面或分组");
+    showWarning(t("pageTree.deleteSelectFirst"));
     return;
   }
 
   // 首页保护：不允许删除首页
   if (target.type === "page" && isHomePage(target.id)) {
-    showWarning("首页不可删除，请先设置其他页面为首页");
+    showWarning(t("pageTree.homePageProtected"));
     return;
   }
 
@@ -1275,12 +1288,17 @@ async function handleDelete() {
       try {
         await ElMessageBox.confirm(
           childCount > 0
-            ? `分组 "${target.label}" 下还有 ${childCount} 个子项。建议优先选择“仅删除分组”，组下页面会自动移到根目录；“删除组和页面”会一并删除全部子项，且不可恢复。`
-            : `确定删除分组 "${target.label}" 吗？`,
-          "删除分组",
+            ? t("pageTree.deleteGroupWithChildrenConfirm", {
+                label: target.label,
+                count: childCount,
+              })
+            : t("pageTree.deleteGroupConfirm", { label: target.label }),
+          t("pageTree.deleteGroupTitle"),
           {
-            confirmButtonText: childCount > 0 ? "仅删除分组" : "删除分组",
-            cancelButtonText: childCount > 0 ? "删除组和页面" : "取消",
+            confirmButtonText:
+              childCount > 0 ? t("pageTree.deleteGroupOnly") : t("pageTree.deleteGroup"),
+            cancelButtonText:
+              childCount > 0 ? t("pageTree.deleteGroupAndPages") : t("pageTree.cancel"),
             type: "warning",
             closeOnClickModal: false,
             distinguishCancelAndClose: true,
@@ -1300,13 +1318,13 @@ async function handleDelete() {
       }
 
       selectedNode.value = null;
-      showSuccess("删除成功");
+      showSuccess(t("pageTree.deleteSuccess"));
       return;
     }
 
-    await ElMessageBox.confirm(`确定删除 "${target.label}" 吗？此操作不可恢复。`, "删除确认", {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
+    await ElMessageBox.confirm(t("pageTree.deleteConfirm", { label: target.label }), t("pageTree.deleteConfirmTitle"), {
+      confirmButtonText: t("pageTree.delete"),
+      cancelButtonText: t("pageTree.cancel"),
       type: "warning",
       confirmButtonClass: "el-button--danger",
     });
@@ -1325,10 +1343,10 @@ async function handleDelete() {
 
     await editorStore.deletePage(target.id);
     selectedNode.value = null;
-    showSuccess("删除成功");
+    showSuccess(t("pageTree.deleteSuccess"));
   } catch (error: any) {
     if (error !== "cancel") {
-      showError("删除失败");
+      showError(t("pageTree.deleteFailed"));
     }
   }
 }
@@ -1383,11 +1401,11 @@ function getMoveTargets(node: any): MoveTargetLike[] {
         @drop.prevent="handleContainerDrop(null)"
       >
         <div class="page-section__header">
-          <span class="page-section__title">普通页面</span>
+          <span class="page-section__title">{{ t("pageTree.businessPages") }}</span>
           <div class="page-section__meta">
             <span class="page-section__badge">{{ visibleBusinessPageCount }}</span>
             <span v-if="visibleFolderCount" class="page-section__hint">
-              {{ visibleFolderCount }} 个分组
+              {{ t("pageTree.groupCount", { count: visibleFolderCount }) }}
             </span>
           </div>
         </div>
@@ -1418,7 +1436,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
               <IconEpFolder class="node-icon folder" />
               <div class="node-main">
                 <span class="node-label">{{ item.name }}</span>
-                <span class="node-meta">页面分组</span>
+                <span class="node-meta">{{ t("pageTree.pageGroup") }}</span>
               </div>
               <span class="node-count">{{ getChildrenCount(item.id) }}</span>
               <el-dropdown
@@ -1431,9 +1449,9 @@ function getMoveTargets(node: any): MoveTargetLike[] {
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                    <el-dropdown-item command="createPage">新建页面</el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>删除分组</el-dropdown-item>
+                    <el-dropdown-item command="rename">{{ t("pageTree.rename") }}</el-dropdown-item>
+                    <el-dropdown-item command="createPage">{{ t("pageTree.createPage") }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>{{ t("pageTree.deleteGroup") }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -1465,7 +1483,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
               <IconEpDocument class="node-icon page" />
               <div class="node-main">
                 <span class="node-label">{{ getPageLabel(item) }}</span>
-                <span class="node-meta">{{ item.path || "未配置路径" }}</span>
+                <span class="node-meta">{{ item.path || t("pageTree.pathNotConfigured") }}</span>
               </div>
               <el-dropdown
                 trigger="click"
@@ -1477,11 +1495,11 @@ function getMoveTargets(node: any): MoveTargetLike[] {
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="open">打开</el-dropdown-item>
-                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                    <el-dropdown-item command="export">导出页面</el-dropdown-item>
+                    <el-dropdown-item command="open">{{ t("pageTree.open") }}</el-dropdown-item>
+                    <el-dropdown-item command="rename">{{ t("pageTree.rename") }}</el-dropdown-item>
+                    <el-dropdown-item command="export">{{ t("pageTree.exportPage") }}</el-dropdown-item>
                     <el-dropdown-item v-if="item.parentId" command="moveToRoot" divided>
-                      移到根目录
+                      {{ t("pageTree.moveToRoot") }}
                     </el-dropdown-item>
                     <el-dropdown-item
                       v-for="target in getMoveTargets(item)"
@@ -1490,7 +1508,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
                     >
                       {{ target.label }}
                     </el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>{{ t("pageTree.delete") }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -1527,7 +1545,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
                 <IconEpDocument class="node-icon page" />
                 <div class="node-main">
                   <span class="node-label">{{ getPageLabel(page) }}</span>
-                  <span class="node-meta">{{ page.path || "未配置路径" }}</span>
+                  <span class="node-meta">{{ page.path || t("pageTree.pathNotConfigured") }}</span>
                 </div>
                 <el-dropdown
                   trigger="click"
@@ -1539,11 +1557,11 @@ function getMoveTargets(node: any): MoveTargetLike[] {
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
-                      <el-dropdown-item command="open">打开</el-dropdown-item>
-                      <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                      <el-dropdown-item command="export">导出页面</el-dropdown-item>
+                      <el-dropdown-item command="open">{{ t("pageTree.open") }}</el-dropdown-item>
+                      <el-dropdown-item command="rename">{{ t("pageTree.rename") }}</el-dropdown-item>
+                      <el-dropdown-item command="export">{{ t("pageTree.exportPage") }}</el-dropdown-item>
                       <el-dropdown-item v-if="page.parentId" command="moveToRoot" divided>
-                        移到根目录
+                        {{ t("pageTree.moveToRoot") }}
                       </el-dropdown-item>
                       <el-dropdown-item
                         v-for="target in getMoveTargets(page)"
@@ -1552,7 +1570,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
                       >
                         {{ target.label }}
                       </el-dropdown-item>
-                      <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                      <el-dropdown-item command="delete" divided>{{ t("pageTree.delete") }}</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
@@ -1564,12 +1582,12 @@ function getMoveTargets(node: any): MoveTargetLike[] {
                 @dragleave="handleDragLeave(item.id)"
                 @drop.prevent="handleFolderDrop(item)"
               >
-                拖拽页面到此分组
+                {{ t("pageTree.dragPageToGroup") }}
               </div>
             </div>
           </template>
         </div>
-        <div v-else class="page-section__empty">暂无普通页面</div>
+        <div v-else class="page-section__empty">{{ t("pageTree.emptyBusinessPages") }}</div>
       </section>
 
       <div
@@ -1577,8 +1595,8 @@ function getMoveTargets(node: any): MoveTargetLike[] {
         class="empty-state"
       >
         <IconEpDocument class="empty-icon" />
-        <p class="empty-text">暂无页面</p>
-        <p class="empty-hint">点击上方按钮新建页面</p>
+        <p class="empty-text">{{ t("pageTree.emptyPages") }}</p>
+        <p class="empty-hint">{{ t("pageTree.createPageHint") }}</p>
       </div>
     </div>
   </div>

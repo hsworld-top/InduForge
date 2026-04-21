@@ -4,6 +4,7 @@
 -->
 <script setup lang="ts">
 import { computed, h, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { componentRegistry } from "@/editor-core";
 import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
 
@@ -16,6 +17,7 @@ type PreviewComponentMapLike = Record<string, () => ReturnType<typeof h>>;
 
 const keyword = ref("");
 const activeSections = ref(["layout", "ui"]);
+const { t, locale } = useI18n();
 
 const layoutTypeOrder = [
   "HorizontalLayout",
@@ -32,6 +34,7 @@ const allowedTypesByCategory: Record<string, string[]> = {
 };
 
 function filterItemsByCategory(category: string): ComponentItemLike[] {
+  void locale.value;
   const keywordValue = keyword.value.trim().toLowerCase();
   const allowedTypes = allowedTypesByCategory[category] ?? [];
   const items = componentRegistry.getByCategory(category) as ComponentItemLike[];
@@ -52,7 +55,7 @@ const uiItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("uiPc"
 
 function getPreviewComponent(type: string): { render: () => ReturnType<typeof h> } {
   const previewMap: PreviewComponentMapLike = {
-    Button: () => h("div", { class: "preview-button" }, "按钮"),
+    Button: () => h("div", { class: "preview-button" }, t("componentPanel.previewButton")),
     HorizontalLayout: () =>
       h("div", { class: "preview-flex" }, [
         h("div", { class: "preview-block" }),
@@ -157,13 +160,13 @@ function handleDragEnd(): void {
 </script>
 
 <template>
-  <div class="component-panel">
-    <el-input v-model="keyword" size="small" placeholder="搜索组件" clearable />
+    <div class="component-panel">
+    <el-input v-model="keyword" size="small" :placeholder="t('componentPanel.searchPlaceholder')" clearable />
     <div class="component-list">
       <el-collapse v-model="activeSections" class="component-collapse">
         <el-collapse-item name="layout">
           <template #title>
-            <span class="component-section-title">布局</span>
+            <span class="component-section-title">{{ t("componentPanel.layout") }}</span>
           </template>
           <div v-if="layoutItems.length" class="component-grid">
             <div
@@ -181,12 +184,12 @@ function handleDragEnd(): void {
               <div class="card-name">{{ item.name }}</div>
             </div>
           </div>
-          <div v-else class="empty-tip">暂无可用布局</div>
+          <div v-else class="empty-tip">{{ t("componentPanel.emptyLayout") }}</div>
         </el-collapse-item>
 
         <el-collapse-item name="ui">
           <template #title>
-            <span class="component-section-title">UI组件</span>
+            <span class="component-section-title">{{ t("componentPanel.ui") }}</span>
           </template>
           <div v-if="uiItems.length" class="component-grid">
             <div
@@ -204,7 +207,7 @@ function handleDragEnd(): void {
               <div class="card-name">{{ item.name }}</div>
             </div>
           </div>
-          <div v-else class="empty-tip">暂无可用 UI 组件</div>
+          <div v-else class="empty-tip">{{ t("componentPanel.emptyUi") }}</div>
         </el-collapse-item>
       </el-collapse>
     </div>
@@ -231,14 +234,14 @@ function handleDragEnd(): void {
 }
 
 .component-collapse .el-collapse-item__header {
-  background: #eef3ff;
+  background: var(--designer-primary-soft);
   border: none;
   border-radius: 6px;
   padding: 0 10px;
   margin-bottom: 6px;
   height: 34px;
   font-size: 13px;
-  color: #303133;
+  color: var(--designer-text-primary);
 }
 
 .component-collapse .el-collapse-item__content {
@@ -258,16 +261,16 @@ function handleDragEnd(): void {
 .component-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--designer-border-color);
   border-radius: 8px;
   overflow: hidden;
   cursor: grab;
   transition: all 0.2s;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .component-card:hover {
-  border-color: #409eff;
+  border-color: var(--designer-primary-border);
   box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
 }
 
@@ -280,7 +283,7 @@ function handleDragEnd(): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f7f8fa;
+  background: var(--designer-group-surface);
   padding: 10px 8px 6px;
 }
 
@@ -289,11 +292,12 @@ function handleDragEnd(): void {
   text-align: center;
   font-size: 12px;
   font-weight: 500;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--designer-border-color);
+  color: var(--designer-text-primary);
 }
 
 .empty-tip {
-  color: #909399;
+  color: var(--designer-text-muted);
   font-size: 12px;
   text-align: center;
   padding: 16px 0;
@@ -309,7 +313,7 @@ function handleDragEnd(): void {
   justify-content: center;
   font-size: 12px;
   color: #3b6cff;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .preview-flex {
@@ -320,7 +324,7 @@ function handleDragEnd(): void {
   display: flex;
   gap: 4px;
   padding: 4px;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .preview-flex-column {
@@ -342,7 +346,7 @@ function handleDragEnd(): void {
   flex-direction: column;
   gap: 4px;
   padding: 4px;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .preview-form-item {
@@ -360,7 +364,7 @@ function handleDragEnd(): void {
   flex-direction: column;
   gap: 3px;
   padding: 4px;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .preview-el-header,
@@ -384,7 +388,7 @@ function handleDragEnd(): void {
 
 .preview-el-main {
   flex: 1;
-  background: #e4e7ed;
+  background: var(--designer-border-color);
   border-radius: 2px;
 }
 
@@ -394,7 +398,7 @@ function handleDragEnd(): void {
   border: 1px solid #3b6cff;
   border-radius: 4px;
   padding: 4px;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .preview-tabs-header {
@@ -415,7 +419,7 @@ function handleDragEnd(): void {
   height: 36px;
   border: 1px solid #3b6cff;
   border-radius: 4px;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .preview-collapse-header {
@@ -433,7 +437,7 @@ function handleDragEnd(): void {
 
 .preview-unknown {
   font-size: 10px;
-  color: #909399;
+  color: var(--designer-text-muted);
 }
 </style>
 

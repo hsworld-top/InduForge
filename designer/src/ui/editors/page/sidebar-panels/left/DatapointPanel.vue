@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import * as XLSX from "xlsx";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
@@ -127,6 +128,7 @@ const showError = (message: string): void => {
 const editorStore = useEditorStore();
 const { projectId, projectVariables, projectVariableGroups } = storeToRefs(editorStore);
 const maxGroupDepth = 5;
+const { t } = useI18n();
 
 const types: VariableType[] = [
   "string",
@@ -456,7 +458,7 @@ function handleMoveTo(groupIdValue: string | null): void {
   });
 
   if (blocked) {
-    showWarning("无法移动到子分组");
+    showWarning(t("datapointPanel.moveToChildGroupBlocked"));
   }
 
   projectVariables.value = nextVariables;
@@ -655,21 +657,21 @@ function parseStructuredJson(
   try {
     const parsed = JSON.parse(value);
     if (type === "array" && !Array.isArray(parsed)) {
-      return { ok: false, error: "数组类型需要 JSON 数组" };
+      return { ok: false, error: t("datapointPanel.invalidArrayJson") };
     }
     if (type === "object") {
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return { ok: false, error: "对象类型需要 JSON 对象" };
+        return { ok: false, error: t("datapointPanel.invalidObjectJson") };
       }
     }
     if (type === "set" || type === "map") {
       if (!Array.isArray(parsed) && (!parsed || typeof parsed !== "object")) {
-        return { ok: false, error: "Set/Map 需要 JSON 数组或对象" };
+        return { ok: false, error: t("datapointPanel.invalidSetMapJson") };
       }
     }
     return { ok: true, parsed };
   } catch {
-    return { ok: false, error: "JSON 格式不正确" };
+    return { ok: false, error: t("datapointPanel.invalidJson") };
   }
 }
 
@@ -677,7 +679,7 @@ function validateStructuredValue() {
   if (!isStructuredType.value) return true;
   const result = parseStructuredJson(editValue.value, editType.value);
   if (!result.ok) {
-    showError(result.error || "校验失败");
+    showError(result.error || t("datapointPanel.validationFailed"));
     return false;
   }
   return true;
@@ -712,20 +714,20 @@ async function loadDataSourcesForMapping() {
     dataSources.value = requireConnectionsPayload(body);
   } catch {
     dataSources.value = [];
-    showError("连接列表格式无效或加载失败");
+    showError(t("datapointPanel.invalidConnectionsPayload"));
   }
 }
 
 async function persistProjectGlobals() {
   if (!projectId.value) {
-    showError("缺少工程信息，无法保存");
+    showError(t("datapointPanel.missingProject"));
     return;
   }
   const result = await editorStore.saveProjectSettings();
   if (!result.ok) {
-    showError(result.error?.message || "保存失败");
+    showError(result.error?.message || t("datapointPanel.saveFailed"));
   } else {
-    showSuccess("已保存");
+    showSuccess(t("datapointPanel.saved"));
   }
 }
 
@@ -746,7 +748,7 @@ async function openCreate() {
 
 async function openEdit() {
   if (selectedNodes.value.length > 1) {
-    showWarning("多选时不能编辑");
+    showWarning(t("datapointPanel.multiEditBlocked"));
     return;
   }
   if (!selectedVariable.value) return;
@@ -775,15 +777,15 @@ async function openEdit() {
 
 async function saveEdit() {
   const name = editName.value.trim();
-  if (!name) return showWarning("变量名不能为空");
+  if (!name) return showWarning(t("datapointPanel.variableNameRequired"));
 
   const current = (projectVariables.value || {}) as VariableMapLike;
   if ((!editMode.value || name !== originalName.value) && current[name]) {
-    return showWarning("变量名已存在");
+    return showWarning(t("datapointPanel.variableNameDuplicated"));
   }
 
   if (mapped.value && !mappedField.value.trim()) {
-    return showWarning("请输入映射字段");
+    return showWarning(t("datapointPanel.mappedFieldRequired"));
   }
   if (mapped.value && selectedVariable.value?.detail?.type) {
     editType.value = selectedVariable.value.detail.type;
@@ -792,7 +794,7 @@ async function saveEdit() {
     editType.value = selectedVariable.value.detail.type;
   }
   if (editValueHasErrors.value) {
-    return showError("初始值存在语法错误，请先修正");
+    return showError(t("datapointPanel.initialValueSyntaxError"));
   }
   if (isStructuredType.value && !validateStructuredValue()) {
     return;
@@ -839,7 +841,7 @@ async function saveEdit() {
 async function removeVar() {
   if (contextMenuVisible.value) closeContextMenu();
   if (!canDeleteSelection.value) {
-    showWarning("分组与成员混选时不能删除");
+    showWarning(t("datapointPanel.mixedDeleteBlocked"));
     return;
   }
   if (!selectedNodes.value.length && !selectedVariable.value) return;
@@ -851,14 +853,16 @@ async function removeVar() {
     .map((node) => node.id);
   try {
     const count = variablesToRemove.length + groupsToRemove.length;
-    let message = `确定删除变量 "${selectedVariable.value?.name || ""}" 吗？`;
+    let message = t("datapointPanel.deleteVariableNamed", {
+      name: selectedVariable.value?.name || "",
+    });
     if (count > 1) {
-      message = `确定删除选中的 ${count} 项吗？`;
+      message = t("datapointPanel.deleteSelectedCount", { count });
     } else if (groupsToRemove.length === 1 && variablesToRemove.length === 0) {
       const name = selectedNodes.value.find((node) => node.type === "group")?.label || "";
-      message = `确定删除分组 "${name}" 吗？分组内成员会移动到父级。`;
+      message = t("datapointPanel.deleteGroupNamed", { name });
     }
-    await ElMessageBox.confirm(message, "确认删除", {
+    await ElMessageBox.confirm(message, t("datapointPanel.deleteTitle"), {
       type: "warning",
       lockScroll: false,
     });
@@ -923,16 +927,16 @@ function copyVar() {
     });
   }
   if (!selectedVars.length) {
-    showWarning("请选择变量后再复制");
+    showWarning(t("datapointPanel.copySelectFirst"));
     return;
   }
   varClipboard.value = {
     items: selectedVars.map((item) => ({
-      name: item.name || "变量",
+      name: item.name || t("datapointPanel.variableFallback"),
       detail: JSON.parse(JSON.stringify(item.detail || {})),
     })),
   };
-  showSuccess(`已复制 ${varClipboard.value.items.length} 个变量`);
+  showSuccess(t("datapointPanel.copiedCount", { count: varClipboard.value.items.length }));
 }
 
 async function pasteVar() {
@@ -943,7 +947,7 @@ async function pasteVar() {
   let lastName = "";
 
   varClipboard.value.items.forEach((item) => {
-    const baseName = item.name || "变量";
+    const baseName = item.name || t("datapointPanel.variableFallback");
     let name = baseName;
     let index = 1;
     while (nextVariables[name]) {
@@ -978,7 +982,7 @@ function openGroupCreate() {
 
 function openGroupEdit() {
   if (selectedNodes.value.filter((node) => node.type === "group").length > 1) {
-    showWarning("多选时不能编辑");
+    showWarning(t("datapointPanel.multiEditBlocked"));
     return;
   }
   if (!selectedGroup.value) return;
@@ -998,7 +1002,7 @@ function createId() {
 
 async function saveGroup() {
   const name = groupName.value.trim();
-  if (!name) return showWarning("分组名不能为空");
+  if (!name) return showWarning(t("datapointPanel.groupNameRequired"));
 
   const parentId = groupParentId.value || null;
   const depth = parentId ? getGroupDepth(parentId) + 1 : 1;
@@ -1031,11 +1035,11 @@ async function openQuickAdd() {
 }
 
 function getDatapointSourceLabel(sourceType: string): string {
-  if (!sourceType) return "未知";
-  if (sourceType.includes("query")) return "查询";
-  if (sourceType.includes("subscription")) return "订阅";
-  if (sourceType.includes("tag")) return "订阅";
-  return "数据点";
+  if (!sourceType) return t("datapointPanel.sourceUnknown");
+  if (sourceType.includes("query")) return t("datapointPanel.sourceQuery");
+  if (sourceType.includes("subscription")) return t("datapointPanel.sourceSubscription");
+  if (sourceType.includes("tag")) return t("datapointPanel.sourceSubscription");
+  return t("datapointPanel.sourceDatapoint");
 }
 
 function normalizeDatapointType(type: string): string {
@@ -1079,7 +1083,7 @@ async function loadDatapoints() {
     const { datapoints, pagination } = requireDatapointsPagePayload(unwrapApiData(result));
     quickTotal.value = Number(pagination.total || datapoints.length || 0);
     if (!Array.isArray(datapoints) || datapoints.length === 0) {
-      showWarning("未获取到数据点，请检查数据源或权限");
+      showWarning(t("datapointPanel.noDatapoints"));
     }
     fields.value = (datapoints as Array<Record<string, unknown>>).map((item) => ({
       id: String(item.id || ""),
@@ -1095,7 +1099,7 @@ async function loadDatapoints() {
   } catch {
     fields.value = [];
     quickTotal.value = 0;
-    showError("数据点列表响应格式无效");
+    showError(t("datapointPanel.invalidDatapointsPayload"));
   } finally {
     quickLoading.value = false;
   }
@@ -1280,7 +1284,7 @@ async function mergeImportedRows(rows: Array<Record<string, any>>): Promise<void
   projectVariableGroups.value = nextGroups;
   projectVariables.value = nextVariables;
   await persistProjectGlobals();
-  showSuccess(`导入完成，新增 ${added} 项，跳过 ${skipped} 项`);
+  showSuccess(t("datapointPanel.importFinished", { added, skipped }));
 }
 
 async function mergeImportedDefinitions(
@@ -1315,7 +1319,7 @@ async function mergeImportedDefinitions(
   projectVariableGroups.value = nextGroups;
   projectVariables.value = nextVariables;
   await persistProjectGlobals();
-  showSuccess("导入完成");
+  showSuccess(t("datapointPanel.importFinishedSimple"));
 }
 
 async function handleExport(format: "json" | "csv" | "xlsx"): Promise<void> {
@@ -1414,7 +1418,7 @@ async function handleFileChange(event: Event): Promise<void> {
         await mergeImportedRows(data as Array<Record<string, any>>);
         return;
       }
-      showError("JSON 格式不支持");
+      showError(t("datapointPanel.unsupportedJson"));
     } catch {
       try {
         const buffer = await file.arrayBuffer();
@@ -1428,9 +1432,9 @@ async function handleFileChange(event: Event): Promise<void> {
           await mergeImportedRows(data as Array<Record<string, any>>);
           return;
         }
-        showError("JSON 格式不支持");
+        showError(t("datapointPanel.unsupportedJson"));
       } catch {
-        showError("JSON 解析失败");
+        showError(t("datapointPanel.jsonParseFailed"));
       }
     }
     return;
@@ -1443,12 +1447,12 @@ async function handleFileChange(event: Event): Promise<void> {
       : XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
-    showError("文件中没有数据表");
+    showError(t("datapointPanel.noWorksheet"));
     return;
   }
   const worksheet = workbook.Sheets[sheetName];
   if (!worksheet) {
-    showError("文件中没有数据表");
+    showError(t("datapointPanel.noWorksheet"));
     return;
   }
   const rows = XLSX.utils.sheet_to_json(worksheet as any, {
@@ -1532,7 +1536,7 @@ onUnmounted(() => {
         </template>
       </el-tree>
       <div v-if="!variableTree.length" class="tree-empty">
-        <el-empty description="暂无工程变量" :image-size="60" />
+        <el-empty :description="t('datapointPanel.empty')" :image-size="60" />
       </div>
     </div>
     <DatapointPanelContextMenu
@@ -1627,11 +1631,11 @@ onUnmounted(() => {
 .tree-wrap {
   flex: 1;
   overflow: auto;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--designer-border-color);
   border-radius: 10px;
   position: relative;
-  background: #fff;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  background: var(--designer-shell-surface);
+  box-shadow: var(--designer-shadow-panel);
   min-height: 0;
 }
 
@@ -1641,7 +1645,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: var(--designer-shell-surface);
 }
 
 .tree-node {
@@ -1656,12 +1660,12 @@ onUnmounted(() => {
 }
 
 .node-icon {
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   flex-shrink: 0;
 }
 
 .node-group .node-icon {
-  color: #3b82f6;
+  color: var(--designer-primary-text);
 }
 
 .node-variable .node-icon {
@@ -1669,27 +1673,27 @@ onUnmounted(() => {
 }
 
 .node-icon.is-mapped {
-  color: #2563eb;
+  color: var(--designer-primary-text);
 }
 
 .node-icon.is-unmapped {
-  color: #94a3b8;
+  color: var(--designer-text-muted);
 }
 
 .tree-node:hover {
-  background: #f5f7fa;
+  background: var(--designer-hover-surface);
 }
 
 .tree-node.is-selected {
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.14), rgba(59, 130, 246, 0.06));
-  color: #1d4ed8;
+  background: linear-gradient(90deg, var(--designer-primary-soft), rgba(59, 130, 246, 0.06));
+  color: var(--designer-primary-text);
   border: 1px solid rgba(59, 130, 246, 0.18);
   box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);
 }
 
 .node-label {
   font-size: 13px;
-  color: #303133;
+  color: var(--designer-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1701,7 +1705,7 @@ onUnmounted(() => {
 
 .node-meta {
   font-size: 12px;
-  color: #909399;
+  color: var(--designer-text-muted);
 }
 
 :deep(.tree-wrap .el-tree) {

@@ -1,15 +1,9 @@
 <template>
-  <el-tooltip
-    :content="detailText"
-    placement="right"
-    :disabled="!detailText"
-  >
+  <el-tooltip :content="detailText" placement="right" :disabled="!detailText">
     <div
       :class="[
         'connection-item transition-colors',
-        isSelected
-          ? 'is-selected'
-          : 'hover:bg-gray-100 dark:hover:bg-gray-700',
+        isSelected ? 'is-selected' : 'hover:bg-gray-100 dark:hover:bg-gray-700',
         isExpanded ? 'is-expanded' : '',
       ]"
     >
@@ -55,7 +49,9 @@
         <div class="flex-shrink-0 flex items-center space-x-1">
           <StatusIndicator :status="connection.status" />
           <component
-            v-if="connection.type === 'relational' || connection.type === 'mqtt'"
+            v-if="
+              connection.type === 'relational' || connection.type === 'mqtt'
+            "
             :is="isExpanded ? IconTablerChevronDown : IconTablerChevronRight"
             class="expand-icon text-gray-400 w-4 h-4"
           />
@@ -110,7 +106,10 @@ const typeLabel = computed(() => {
 });
 
 const detailText = computed(() => {
-  if (props.connection.type === "relational" && props.connection.relationalConfig) {
+  if (
+    props.connection.type === "relational" &&
+    props.connection.relationalConfig
+  ) {
     const config = props.connection.relationalConfig;
     return `${config.dbType} - ${config.host}:${config.port}`;
   }

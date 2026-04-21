@@ -1,14 +1,14 @@
 <template>
   <el-form ref="formRef" :model="formData" :rules="rules" label-width="120px">
-    <el-form-item label="连接名称" prop="name">
-      <el-input v-model="formData.name" placeholder="请输入连接名称" />
+    <el-form-item :label="t('connection.name')" prop="name">
+      <el-input v-model="formData.name" :placeholder="t('connection.name')" />
     </el-form-item>
 
-    <el-form-item label="主机地址" prop="host">
+    <el-form-item :label="t('connection.host')" prop="host">
       <el-input v-model="formData.host" placeholder="localhost" />
     </el-form-item>
 
-    <el-form-item label="端口" prop="port">
+    <el-form-item :label="t('connection.port')" prop="port">
       <el-input-number
         v-model="formData.port"
         :min="1"
@@ -17,100 +17,111 @@
       />
     </el-form-item>
 
-    <el-form-item label="数据库名" prop="database">
-      <el-input v-model="formData.database" placeholder="请输入数据库名" />
+    <el-form-item :label="t('connection.database')" prop="database">
+      <el-input
+        v-model="formData.database"
+        :placeholder="t('connection.database')"
+      />
     </el-form-item>
 
-    <el-form-item label="用户名" prop="username">
+    <el-form-item :label="t('connection.username')" prop="username">
       <el-input v-model="formData.username" placeholder="postgres" />
     </el-form-item>
 
-    <el-form-item label="密码" prop="password">
+    <el-form-item :label="t('connection.password')" prop="password">
       <el-input
         v-model="formData.password"
         type="password"
-        placeholder="请输入密码"
+        :placeholder="t('connection.password')"
         show-password
       />
     </el-form-item>
 
-    <el-form-item label="Schema">
+    <el-form-item :label="t('connection.schema')">
       <el-input v-model="formData.schema" placeholder="public" />
-      <span class="text-xs text-gray-500 ml-2">默认使用 public schema</span>
+      <span class="text-xs text-gray-500 ml-2">{{
+        t("connection.schemaHint")
+      }}</span>
     </el-form-item>
 
-    <el-form-item label="SSL 连接">
+    <el-form-item :label="t('connection.sslConnection')">
       <el-select
         v-model="formData.sslMode"
-        placeholder="选择 SSL 模式"
+        :placeholder="t('connection.sslModePlaceholder')"
         class="w-full"
         @change="handleSslModeChange"
       >
-        <el-option label="禁用" value="disable">
-          <span>禁用</span>
+        <el-option :label="t('connection.sslDisabled')" value="disable">
+          <span>{{ t("connection.sslDisabled") }}</span>
           <span class="text-xs text-gray-400 ml-2"
-            >- 不使用 SSL（仅本地开发）</span
+            >- {{ t("connection.sslDisabledHint") }}</span
           >
         </el-option>
-        <el-option label="首选" value="prefer">
-          <span>首选</span>
+        <el-option :label="t('connection.sslPrefer')" value="prefer">
+          <span>{{ t("connection.sslPrefer") }}</span>
           <span class="text-xs text-gray-400 ml-2"
-            >- 优先 SSL，失败则降级（推荐）</span
+            >- {{ t("connection.sslPreferHint") }}</span
           >
         </el-option>
-        <el-option label="必需" value="require">
-          <span>必需</span>
-          <span class="text-xs text-gray-400 ml-2">- 必须使用 SSL</span>
+        <el-option :label="t('connection.sslRequire')" value="require">
+          <span>{{ t("connection.sslRequire") }}</span>
+          <span class="text-xs text-gray-400 ml-2"
+            >- {{ t("connection.sslRequireHint") }}</span
+          >
         </el-option>
-        <el-option label="验证证书" value="verify-ca">
-          <span>验证证书</span>
-          <span class="text-xs text-gray-400 ml-2">- 验证服务器证书</span>
+        <el-option :label="t('connection.sslVerify')" value="verify-ca">
+          <span>{{ t("connection.sslVerify") }}</span>
+          <span class="text-xs text-gray-400 ml-2"
+            >- {{ t("connection.sslVerifyHint") }}</span
+          >
         </el-option>
       </el-select>
     </el-form-item>
 
     <!-- SSL 证书配置（仅在 verify-ca 模式下显示） -->
     <template v-if="needsCertificate">
-      <el-divider content-position="left">SSL 证书配置</el-divider>
+      <el-divider content-position="left">{{
+        t("connection.sslCertificateConfig")
+      }}</el-divider>
 
-      <el-form-item label="CA 证书">
+      <el-form-item :label="t('connection.caCertificate')">
         <el-input
           v-model="formData.sslCa"
           type="textarea"
           :rows="4"
           placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
         />
-        <span class="text-xs text-gray-500 ml-2"
-          >粘贴服务器 CA 证书内容（PEM 格式）</span
-        >
+        <span class="text-xs text-gray-500 ml-2">{{
+          t("connection.caCertificateHint")
+        }}</span>
       </el-form-item>
 
-      <el-form-item label="客户端证书">
+      <el-form-item :label="t('connection.clientCertificate')">
         <el-input
           v-model="formData.sslCert"
           type="textarea"
           :rows="4"
           placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
         />
-        <span class="text-xs text-gray-500 ml-2"
-          >粘贴客户端证书内容（PEM 格式，可选）</span
-        >
+        <span class="text-xs text-gray-500 ml-2">{{
+          t("connection.clientCertificateHint")
+        }}</span>
       </el-form-item>
 
-      <el-form-item label="客户端密钥">
+      <el-form-item :label="t('connection.clientKey')">
         <el-input
           v-model="formData.sslKey"
           type="textarea"
           :rows="4"
           placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
         />
-        <span class="text-xs text-gray-500 ml-2"
-          >粘贴客户端私钥内容（PEM 格式，可选）</span
-        >
+        <span class="text-xs text-gray-500 ml-2">{{
+          t("connection.clientKeyHint")
+        }}</span>
       </el-form-item>
     </template>
 
-    <el-form-item label="连接超时">
+    <el-form-item :label="t('connection.connectionTimeout')">
       <el-input-number
         v-model="formData.connectionTimeout"
         :min="1000"
@@ -118,10 +129,12 @@
         :step="1000"
         class="w-full"
       />
-      <span class="text-xs text-gray-500 ml-2">毫秒（默认 3000ms）</span>
+      <span class="text-xs text-gray-500 ml-2">{{
+        t("connection.connectionTimeoutHint")
+      }}</span>
     </el-form-item>
 
-    <el-form-item label="查询超时">
+    <el-form-item :label="t('connection.queryTimeout')">
       <el-input-number
         v-model="formData.queryTimeout"
         :min="1000"
@@ -129,17 +142,21 @@
         :step="1000"
         class="w-full"
       />
-      <span class="text-xs text-gray-500 ml-2">毫秒</span>
+      <span class="text-xs text-gray-500 ml-2">{{
+        t("common.milliseconds")
+      }}</span>
     </el-form-item>
 
-    <el-form-item label="最大连接数">
+    <el-form-item :label="t('connection.maxConnections')">
       <el-input-number
         v-model="formData.maxConnections"
         :min="1"
         :max="100"
         class="w-full"
       />
-      <span class="text-xs text-gray-500 ml-2">连接池最大连接数</span>
+      <span class="text-xs text-gray-500 ml-2">{{
+        t("connection.maxConnectionsHint")
+      }}</span>
     </el-form-item>
   </el-form>
 </template>
@@ -147,6 +164,7 @@
 <script setup>
 import { ref, watch, onMounted, computed } from "vue";
 import { getDefaultConfig } from "@/config/connectionTypes";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   modelValue: {
@@ -190,18 +208,22 @@ const needsCertificate = computed(() => {
 
 const rules = {
   name: [
-    { required: true, message: "请输入连接名称", trigger: "blur" },
+    { required: true, message: t("connection.name"), trigger: "blur" },
     {
       min: 2,
       max: 100,
-      message: "连接名称长度在 2 到 100 个字符",
+      message: t("query.nameLengthError"),
       trigger: "blur",
     },
   ],
-  host: [{ required: true, message: "请输入主机地址", trigger: "blur" }],
-  port: [{ required: true, message: "请输入端口号", trigger: "blur" }],
-  database: [{ required: true, message: "请输入数据库名", trigger: "blur" }],
-  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  host: [{ required: true, message: t("connection.host"), trigger: "blur" }],
+  port: [{ required: true, message: t("connection.port"), trigger: "blur" }],
+  database: [
+    { required: true, message: t("connection.database"), trigger: "blur" },
+  ],
+  username: [
+    { required: true, message: t("connection.username"), trigger: "blur" },
+  ],
 };
 
 // 初始化表单数据
@@ -270,7 +292,7 @@ const validate = async () => {
     await formRef.value.validate();
     emit("validate", true, formData.value);
     return true;
-  } catch (error) {
+  } catch {
     emit("validate", false, null);
     return false;
   }

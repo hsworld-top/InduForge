@@ -6,6 +6,7 @@
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import IconEpDocument from "~icons/ep/document";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
@@ -35,6 +36,7 @@ const {
   currentPage,
 } = storeToRefs(editorStore);
 const maxGroupDepth = 5;
+const { t } = useI18n();
 
 const activeSections = ref("system");
 const selectedSystemKey = ref<string>("startup");
@@ -148,13 +150,15 @@ function showError(message: string) {
 }
 
 const selectedSystemLabel = computed(() =>
-  selectedSystemKey.value === "startup" ? "系统启动" : "系统关闭",
+  selectedSystemKey.value === "startup"
+    ? t("scriptPanel.sections.startup")
+    : t("scriptPanel.sections.shutdown"),
 );
 const editorMetaTitle = computed(
-  () => getSelectedItem(scriptEditorModule.value)?.name || "未命名脚本",
+  () => getSelectedItem(scriptEditorModule.value)?.name || t("scriptPanel.editor.untitledScript"),
 );
 const editorMetaDescription = computed(
-  () => getSelectedItem(scriptEditorModule.value)?.description || "无描述",
+  () => getSelectedItem(scriptEditorModule.value)?.description || t("scriptPanel.editor.noDescription"),
 );
 
 const customScriptSidebarTree = computed(() =>
@@ -164,7 +168,7 @@ const pageSidebarTree = computed(() => buildPageTree(pages.value || []));
 const enumGroupTree = computed(() => [
   {
     id: "all",
-    label: "全部",
+    label: t("scriptPanel.variableEnum.all"),
     type: "group",
     children: buildGroupTree(variableGroups.value),
   },
@@ -202,7 +206,7 @@ const pageComponentTree = computed<Array<any>>(() => {
     const children = ((node.children || []) as Array<any>)
       .map((childId: any) => buildNode(childId))
       .filter(Boolean);
-    const label = node.label || node.type || "组件";
+    const label = node.label || node.type || t("propertyPanel.bindingDialog.targetFallback");
     return {
       id: node.id,
       label,
@@ -253,7 +257,7 @@ const jsCompletions = computed<Array<any>>(() => {
       label: name,
       insertText: name,
       kind: "Variable",
-      detail: "工程变量",
+      detail: t("scriptPanel.messages.variableDetail"),
       prefix: "$global.",
     });
   });
@@ -271,7 +275,7 @@ const jsCompletions = computed<Array<any>>(() => {
       label: script.name,
       insertText: call,
       kind: "Function",
-      detail: "自定义脚本",
+      detail: t("scriptPanel.messages.customScriptDetail"),
       prefix: "customScripts.",
     });
   });
@@ -368,19 +372,32 @@ const groupParentOptions = computed(() => {
 const scriptEditorTitle = computed(() => {
   const module = scriptEditorModule.value || contextMenuModule.value || "system";
   const selected = getSelectedItem(module);
-  if (selected?.name) return `${selected.name}脚本`;
-  if (module === "timers") return "定时器脚本";
-  if (module === "variableChanges") return "变量监听脚本";
-  if (module === "custom") return "自定义脚本";
-  return "脚本";
+  if (selected?.name) return `${selected.name}${t("scriptPanel.editor.genericScript")}`;
+  if (module === "timers") return t("scriptPanel.editor.timerScript");
+  if (module === "variableChanges") return t("scriptPanel.editor.variableChangeScript");
+  if (module === "custom") return t("scriptPanel.editor.customScript");
+  return t("scriptPanel.editor.genericScript");
 });
 
 const metaDialogTitle = computed(() => {
-  const action = metaDialogMode.value === "edit" ? "编辑" : "新建";
-  if (metaDialogModule.value === "timers") return `${action}定时器`;
-  if (metaDialogModule.value === "variableChanges") return `${action}变量监听`;
-  if (metaDialogModule.value === "custom") return `${action}自定义脚本`;
-  return `${action}脚本`;
+  if (metaDialogModule.value === "timers") {
+    return metaDialogMode.value === "edit"
+      ? t("scriptPanel.messages.editTimer")
+      : t("scriptPanel.messages.createTimer");
+  }
+  if (metaDialogModule.value === "variableChanges") {
+    return metaDialogMode.value === "edit"
+      ? t("scriptPanel.messages.editVariableChange")
+      : t("scriptPanel.messages.createVariableChange");
+  }
+  if (metaDialogModule.value === "custom") {
+    return metaDialogMode.value === "edit"
+      ? t("scriptPanel.messages.editCustom")
+      : t("scriptPanel.messages.createCustom");
+  }
+  return metaDialogMode.value === "edit"
+    ? t("scriptPanel.messages.editScript")
+    : t("scriptPanel.messages.createScript");
 });
 
 function syncSystemCode() {
@@ -441,7 +458,7 @@ function buildScriptTree(groups: Array<any>, items: Array<any>): Array<any> {
   });
 
   items.forEach((item) => {
-    const label = item.name || item.variable || "未命名";
+    const label = item.name || item.variable || t("scriptPanel.editor.untitledScript");
     const node = { id: item.id, label, type: "item", itemId: item.id };
     if (item.groupId && groupMap.has(item.groupId)) {
       groupMap.get(item.groupId).children.push(node);
@@ -485,8 +502,8 @@ function buildPageTree(pageList: Array<any>): Array<any> {
     .forEach((page) => {
       nodeMap.set(page.id, {
         id: page.id,
-        label: page.name || page.title || "未命名页面",
-        name: page.name || page.title || "未命名页面",
+        label: page.name || page.title || t("shell.untitledPage"),
+        name: page.name || page.title || t("shell.untitledPage"),
         type: page.type || "page",
         parentId: page.parentId || null,
         children: [],
@@ -670,12 +687,12 @@ function openScriptEditor(module: any, data?: any) {
 
 async function persistGlobals() {
   if (!projectId.value) {
-    showError("缺少工程信息，无法保存");
+    showError(t("datapointPanel.missingProject"));
     return;
   }
   const result = await editorStore.saveProjectSettings();
   if (!result.ok) {
-    showError(result.error?.message || "保存失败");
+    showError(result.error?.message || t("scriptPanel.messages.saveFailed"));
   }
 }
 
@@ -695,7 +712,7 @@ async function saveSystemScript() {
   (globalScripts.value as any) = { ...scripts, system: next };
   systemOriginalCode.value = systemCode.value || "";
   await persistGlobals();
-  showSuccess("已保存脚本");
+  showSuccess(t("scriptPanel.messages.savedScript"));
 }
 
 function handleScriptNodeClick(module: any, data: any, event?: any) {
@@ -811,7 +828,7 @@ function handleMoveTo(groupIdValue: any) {
   });
 
   if (blocked) {
-    showWarning("无法移动到子分组");
+    showWarning(t("scriptPanel.messages.moveToChildGroupBlocked"));
   }
 
   updateModuleGroups(module, nextGroups);
@@ -878,7 +895,7 @@ function resolveTargetGroupId(dropNode: any, dropType: any): any {
 async function removeScript(module: any) {
   if (contextMenuVisible.value) closeContextMenu();
   if (!canDeleteSelection.value) {
-    showWarning("分组与成员混选时不能删除");
+    showWarning(t("scriptPanel.messages.mixedDeleteBlocked"));
     return;
   }
   const selected = getSelectedItem(module);
@@ -888,14 +905,16 @@ async function removeScript(module: any) {
   if (!itemsToRemove.length && !groupsToRemove.length && !selected) return;
   try {
     const count = itemsToRemove.length + groupsToRemove.length || 1;
-    let message = `确定删除 "${selected?.name || "未命名"}" 吗？`;
+    let message = t("scriptPanel.messages.deleteScriptNamed", {
+      name: selected?.name || t("scriptPanel.editor.untitledScript"),
+    });
     if (count > 1) {
-      message = `确定删除选中的 ${count} 项吗？`;
+      message = t("scriptPanel.messages.deleteSelectedCount", { count });
     } else if (groupsToRemove.length === 1 && itemsToRemove.length === 0) {
       const name = getSelectedNodes(module).find((node) => node.type === "group")?.label || "";
-      message = `确定删除分组 "${name}" 吗？组内成员会移动到父级。`;
+      message = t("scriptPanel.messages.deleteGroupNamed", { name });
     }
-    await ElMessageBox.confirm(message, "确认删除", {
+    await ElMessageBox.confirm(message, t("scriptPanel.messages.deleteTitle"), {
       type: "warning",
       lockScroll: false,
     });
@@ -962,7 +981,7 @@ async function pasteScript(module: any) {
   const nextItems = [...items];
 
   scriptClipboard.value.items.forEach((source: any) => {
-    const nameBase = source.name || "脚本";
+    const nameBase = source.name || t("scriptPanel.editor.genericScript");
     let name = nameBase;
     let index = 1;
     while (nextItems.some((item) => item.name === name)) {
@@ -1068,7 +1087,7 @@ function createId() {
 
 async function saveGroup() {
   const name = groupName.value.trim();
-  if (!name) return showWarning("分组名不能为空");
+  if (!name) return showWarning(t("datapointPanel.groupNameRequired"));
 
   const parentId = groupParentId.value || null;
   const depth = parentId ? getGroupDepth(parentId, groupDialogModule.value) + 1 : 1;
@@ -1093,7 +1112,7 @@ async function saveGroup() {
 
 async function removeGroup(module: any) {
   if (!canDeleteSelection.value) {
-    showWarning("分组与成员混选时不能删除");
+    showWarning(t("scriptPanel.messages.mixedDeleteBlocked"));
     return;
   }
   const groups = getGroupsByModule(module);
@@ -1108,8 +1127,8 @@ async function removeGroup(module: any) {
 
   try {
     await ElMessageBox.confirm(
-      `确定删除分组 "${group.name}" 吗？组内成员会移动到父级。`,
-      "确认删除",
+      t("scriptPanel.messages.deleteGroupNamed", { name: group.name }),
+      t("scriptPanel.messages.deleteTitle"),
       {
         type: "warning",
         lockScroll: false,
@@ -1178,7 +1197,7 @@ function saveScriptCode(module: any) {
   updateModuleItems(module, items);
   editorOriginalCode.value = editorCode.value || "";
   editorOriginalInterval.value = editorInterval.value;
-  showSuccess("已保存脚本");
+  showSuccess(t("scriptPanel.messages.savedScript"));
 }
 
 function saveActiveScript() {
@@ -1197,9 +1216,9 @@ async function handleSystemBeforeClose(done: any) {
     return;
   }
   try {
-    await ElMessageBox.confirm("脚本已修改，是否保存？", "提示", {
-      confirmButtonText: "保存",
-      cancelButtonText: "不保存",
+    await ElMessageBox.confirm(t("scriptPanel.messages.saveModifiedPrompt"), t("scriptPanel.messages.promptTitle"), {
+      confirmButtonText: t("propertyPanel.bindingDialog.save"),
+      cancelButtonText: t("pageTree.switchWithoutSave"),
       type: "warning",
       lockScroll: false,
     });
@@ -1220,9 +1239,9 @@ async function handleScriptBeforeClose(done: any) {
     return;
   }
   try {
-    await ElMessageBox.confirm("脚本已修改，是否保存？", "提示", {
-      confirmButtonText: "保存",
-      cancelButtonText: "不保存",
+    await ElMessageBox.confirm(t("scriptPanel.messages.saveModifiedPrompt"), t("scriptPanel.messages.promptTitle"), {
+      confirmButtonText: t("propertyPanel.bindingDialog.save"),
+      cancelButtonText: t("pageTree.switchWithoutSave"),
       type: "warning",
       lockScroll: false,
     });
@@ -1252,7 +1271,7 @@ function handleEditorShortcut(event: any) {
 function openMetaDialog(module: any, mode: any) {
   if (contextMenuVisible.value) closeContextMenu();
   if (mode === "edit" && getSelectedNodes(module).length > 1) {
-    showWarning("多选时不能编辑");
+    showWarning(t("scriptPanel.messages.multiEditBlocked"));
     return;
   }
   metaDialogMode.value = mode;
@@ -1293,23 +1312,23 @@ function saveMetaDialog() {
 
   if (module === "timers") {
     const name = metaForm.value.name.trim();
-    if (!name) return showWarning("请输入定时器名称");
+    if (!name) return showWarning(t("scriptPanel.messages.timerNameRequired"));
     const exists = items.some((item) => item.name === name && item.id !== metaForm.value.id);
-    if (exists) return showWarning("定时器名称已存在");
+    if (exists) return showWarning(t("scriptPanel.messages.functionNameExists"));
     if (!Number.isFinite(Number(metaForm.value.interval))) {
-      return showWarning("请输入正确的时间");
+      return showWarning(t("scriptPanel.messages.invalidInterval"));
     }
   }
 
   if (module === "variableChanges") {
-    if (!metaForm.value.variable) return showWarning("请选择变量");
+    if (!metaForm.value.variable) return showWarning(t("scriptPanel.metaDialog.selectVariable"));
   }
 
   if (module === "custom") {
     const name = metaForm.value.name.trim();
-    if (!name) return showWarning("请输入函数名称");
+    if (!name) return showWarning(t("scriptPanel.messages.functionNameRequired"));
     const exists = items.some((item) => item.name === name && item.id !== metaForm.value.id);
-    if (exists) return showWarning("函数名称已存在");
+    if (exists) return showWarning(t("scriptPanel.messages.functionNameExists"));
   }
 
   if (metaDialogMode.value === "create") {
@@ -1443,7 +1462,7 @@ onUnmounted(() => {
       v-model:system-code="systemCode"
       v-model:script-search="scriptSearch"
       v-model:page-search="pageSearch"
-      :dialog-title="`${selectedSystemLabel}脚本`"
+      :dialog-title="`${selectedSystemLabel}${t('scriptPanel.editor.genericScript')}`"
       :meta-title="selectedSystemLabel"
       :custom-script-sidebar-tree="customScriptSidebarTree"
       :page-sidebar-tree="pageSidebarTree"
@@ -1468,15 +1487,15 @@ onUnmounted(() => {
         <div class="meta-title">{{ editorMetaTitle }}</div>
         <div class="meta-desc">{{ editorMetaDescription }}</div>
         <div v-if="scriptEditorModule === 'timers'" class="meta-inline">
-          <span class="meta-label">时间(ms)</span>
+          <span class="meta-label">{{ t("scriptPanel.editor.timeMs") }}</span>
           <el-input-number v-model="editorInterval" :min="100" :step="100" size="small" />
         </div>
         <div v-if="scriptEditorModule === 'custom'" class="meta-inline">
-          <span class="meta-label">入参</span>
-          <span class="meta-value">{{ editorParams || "无" }}</span>
+          <span class="meta-label">{{ t("scriptPanel.editor.params") }}</span>
+          <span class="meta-value">{{ editorParams || t("scriptPanel.editor.none") }}</span>
         </div>
         <div class="meta-actions">
-          <el-tooltip content="枚举工程变量" placement="top">
+          <el-tooltip :content="t('scriptPanel.editor.variableEnum')" placement="top">
             <el-button class="icon-button" size="small" circle @click="openVariableEnum">
               <IconEpList />
             </el-button>
@@ -1495,8 +1514,8 @@ onUnmounted(() => {
         </div>
         <div class="editor-sidebar">
           <div class="sidebar-section">
-            <div class="sidebar-title">自定义脚本</div>
-            <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
+            <div class="sidebar-title">{{ t("scriptPanel.editor.customScripts") }}</div>
+            <el-input v-model="scriptSearch" size="small" :placeholder="t('scriptPanel.editor.searchScripts')" clearable />
             <div class="sidebar-scroll">
               <el-tree
                 ref="customScriptTreeRef"
@@ -1522,8 +1541,8 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="sidebar-section">
-            <div class="sidebar-title">页面</div>
-            <el-input v-model="pageSearch" size="small" placeholder="搜索页面/分组" clearable />
+            <div class="sidebar-title">{{ t("scriptPanel.editor.pages") }}</div>
+            <el-input v-model="pageSearch" size="small" :placeholder="t('scriptPanel.editor.searchPages')" clearable />
             <div class="sidebar-scroll">
               <el-tree
                 ref="pageTreeRef"
@@ -1551,21 +1570,21 @@ onUnmounted(() => {
         </div>
       </div>
       <template #footer>
-        <el-button @click="scriptEditorVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveActiveScript">保存 (Ctrl+S)</el-button>
+        <el-button @click="scriptEditorVisible = false">{{ t("scriptPanel.editor.cancel") }}</el-button>
+        <el-button type="primary" @click="saveActiveScript">{{ t("scriptPanel.editor.saveShortcut") }}</el-button>
       </template>
     </el-dialog>
 
     <el-dialog
       v-model="variableEnumVisible"
-      title="工程变量"
+      :title="t('scriptPanel.variableEnum.title')"
       width="760px"
       :close-on-click-modal="false"
       :lock-scroll="false"
     >
       <div class="enum-layout">
         <div class="enum-left">
-          <div class="sidebar-title">分组</div>
+          <div class="sidebar-title">{{ t("scriptPanel.variableEnum.groups") }}</div>
           <el-tree
             ref="enumGroupTreeRef"
             :data="enumGroupTree"
@@ -1589,7 +1608,7 @@ onUnmounted(() => {
           <el-input
             v-model="enumVariableSearch"
             size="small"
-            placeholder="搜索工程变量"
+            :placeholder="t('scriptPanel.variableEnum.search')"
             clearable
           />
           <el-table
@@ -1601,22 +1620,22 @@ onUnmounted(() => {
             @row-click="handleEnumRowClick"
             @row-dblclick="handleEnumRowDblClick"
           >
-            <el-table-column prop="name" label="变量名" min-width="160" />
-            <el-table-column prop="type" label="类型" width="90" />
-            <el-table-column prop="description" label="描述" min-width="160" />
-            <el-table-column prop="mapped" label="映射" width="70">
+            <el-table-column prop="name" :label="t('scriptPanel.variableEnum.name')" min-width="160" />
+            <el-table-column prop="type" :label="t('scriptPanel.variableEnum.type')" width="90" />
+            <el-table-column prop="description" :label="t('scriptPanel.variableEnum.description')" min-width="160" />
+            <el-table-column prop="mapped" :label="t('scriptPanel.variableEnum.mapped')" width="70">
               <template #default="{ row }">
-                {{ row.mapped ? "是" : "" }}
+                {{ row.mapped ? t("scriptPanel.variableEnum.yes") : "" }}
               </template>
             </el-table-column>
           </el-table>
         </div>
       </div>
       <template #footer>
-        <el-button @click="variableEnumVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!enumSelectedVar" @click="confirmEnumInsert"
-          >插入</el-button
-        >
+        <el-button @click="variableEnumVisible = false">{{ t("scriptPanel.variableEnum.cancel") }}</el-button>
+        <el-button type="primary" :disabled="!enumSelectedVar" @click="confirmEnumInsert">
+          {{ t("scriptPanel.variableEnum.insert") }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -1628,16 +1647,16 @@ onUnmounted(() => {
       @mousedown.stop
     >
       <template v-if="contextMenuNode?.type === 'blank'">
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建分组</div>
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">{{ t("scriptPanel.contextMenu.newGroup") }}</div>
         <div class="context-menu-item" @click="openMetaDialog(contextMenuModule, 'create')">
-          新建脚本
+          {{ t("scriptPanel.contextMenu.newScript") }}
         </div>
         <div
           class="context-menu-item"
           :class="{ 'is-disabled': !scriptClipboard }"
           @click="pasteScript(contextMenuModule)"
         >
-          粘贴
+          {{ t("scriptPanel.contextMenu.paste") }}
         </div>
       </template>
       <template v-else-if="contextMenuNode?.type === 'item'">
@@ -1646,23 +1665,23 @@ onUnmounted(() => {
           :class="{ 'is-disabled': !canOpenEditScript }"
           @click="openScriptEditor(contextMenuModule)"
         >
-          打开
+          {{ t("scriptPanel.contextMenu.open") }}
         </div>
         <div
           class="context-menu-item"
           :class="{ 'is-disabled': !canOpenEditScript }"
           @click="openMetaDialog(contextMenuModule, 'edit')"
         >
-          编辑
+          {{ t("scriptPanel.contextMenu.edit") }}
         </div>
-        <div class="context-menu-item" @click="copyScript(contextMenuModule)">复制</div>
-        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
+        <div class="context-menu-item" @click="copyScript(contextMenuModule)">{{ t("scriptPanel.contextMenu.copy") }}</div>
+        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">{{ t("scriptPanel.contextMenu.moveTo") }}</div>
         <div
           class="context-menu-item context-menu-item--danger"
           :class="{ 'is-disabled': !canDeleteSelection }"
           @click="removeScript(contextMenuModule)"
         >
-          删除
+          {{ t("scriptPanel.contextMenu.delete") }}
         </div>
       </template>
       <template v-else-if="contextMenuNode?.type === 'group'">
@@ -1671,16 +1690,16 @@ onUnmounted(() => {
           :class="{ 'is-disabled': !canEditGroup }"
           @click="openGroupEditFromMenu"
         >
-          编辑分组
+          {{ t("scriptPanel.contextMenu.editGroup") }}
         </div>
-        <div class="context-menu-item" @click="openGroupCreateFromMenu">新建子分组</div>
-        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">移动到</div>
+        <div class="context-menu-item" @click="openGroupCreateFromMenu">{{ t("scriptPanel.contextMenu.newChildGroup") }}</div>
+        <div class="context-menu-item" @click="showMoveToMenu = !showMoveToMenu">{{ t("scriptPanel.contextMenu.moveTo") }}</div>
         <div
           class="context-menu-item context-menu-item--danger"
           :class="{ 'is-disabled': !canDeleteSelection }"
           @click="removeGroup(contextMenuModule)"
         >
-          删除分组
+          {{ t("scriptPanel.contextMenu.deleteGroup") }}
         </div>
       </template>
     </div>
@@ -1692,7 +1711,7 @@ onUnmounted(() => {
       @click.stop
       @mousedown.stop
     >
-      <div class="context-menu-item" @click="handleMoveTo(null)">根目录</div>
+      <div class="context-menu-item" @click="handleMoveTo(null)">{{ t("scriptPanel.contextMenu.root") }}</div>
       <div
         v-for="group in availableGroups"
         :key="group.id"
@@ -1757,13 +1776,13 @@ onUnmounted(() => {
 
 .scripts-list {
   width: 100%;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--designer-border-color);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fff;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  background: var(--designer-shell-surface);
+  box-shadow: var(--designer-shadow-panel);
   min-height: 320px;
   flex: 1;
 }
@@ -1789,9 +1808,9 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 12px 16px;
   padding: 10px 12px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--designer-border-color);
   border-radius: 6px;
-  background: #fafafa;
+  background: var(--designer-group-surface);
   margin-bottom: 10px;
   align-items: center;
 }
@@ -1799,12 +1818,12 @@ onUnmounted(() => {
 .meta-title {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--designer-text-primary);
 }
 
 .meta-desc {
   font-size: 12px;
-  color: #606266;
+  color: var(--designer-text-secondary);
 }
 
 .meta-inline {
@@ -1815,12 +1834,12 @@ onUnmounted(() => {
 
 .meta-label {
   font-size: 12px;
-  color: #909399;
+  color: var(--designer-text-muted);
 }
 
 .meta-value {
   font-size: 12px;
-  color: #303133;
+  color: var(--designer-text-primary);
 }
 
 .meta-actions {
@@ -1830,13 +1849,13 @@ onUnmounted(() => {
 }
 
 .icon-button {
-  background: #eef2ff;
+  background: var(--designer-primary-soft);
   border: none;
-  color: #4f46e5;
+  color: var(--designer-primary-text);
 }
 
 .icon-button:hover {
-  background: #e0e7ff;
+  background: var(--designer-hover-surface);
 }
 
 .editor-main {
@@ -1847,7 +1866,7 @@ onUnmounted(() => {
 .editor-sidebar {
   width: 200px;
   height: 520px;
-  border-left: 1px solid #e4e7ed;
+  border-left: 1px solid var(--designer-border-color);
   padding-left: 12px;
   display: flex;
   flex-direction: column;
@@ -1865,7 +1884,7 @@ onUnmounted(() => {
 .sidebar-title {
   font-size: 12px;
   font-weight: 600;
-  color: #606266;
+  color: var(--designer-text-secondary);
 }
 
 .sidebar-scroll {
@@ -1887,12 +1906,12 @@ onUnmounted(() => {
 }
 
 .node-icon {
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   flex-shrink: 0;
 }
 
 .node-group .node-icon {
-  color: #3b82f6;
+  color: var(--designer-primary-text);
 }
 
 .node-item .node-icon {
@@ -1925,17 +1944,17 @@ onUnmounted(() => {
 }
 
 .tree-node:hover {
-  background: #f5f7fa;
+  background: var(--designer-hover-surface);
 }
 
 .tree-node.is-selected {
-  background: #e8f3ff;
-  color: #303133;
+  background: var(--designer-primary-soft);
+  color: var(--designer-text-primary);
 }
 
 .node-label {
   font-size: 13px;
-  color: #303133;
+  color: var(--designer-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1958,7 +1977,7 @@ onUnmounted(() => {
 
 .enum-left {
   width: 200px;
-  border-right: 1px solid #e4e7ed;
+  border-right: 1px solid var(--designer-border-color);
   padding-right: 8px;
   max-height: 420px;
   overflow: auto;
@@ -1973,7 +1992,7 @@ onUnmounted(() => {
 }
 
 .enum-right :deep(.el-table__row.is-selected) {
-  background: #eef2ff;
+  background: var(--designer-primary-soft);
 }
 
 :deep(.scripts-list .el-tree) {
@@ -1988,10 +2007,10 @@ onUnmounted(() => {
 
 .context-menu {
   position: fixed;
-  background: #fff;
-  border: 1px solid #e4e7ed;
+  background: var(--designer-shell-surface);
+  border: 1px solid var(--designer-border-color);
   border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  box-shadow: var(--designer-shadow-popover);
   z-index: 4000;
   min-width: 160px;
   padding: 6px 0;
@@ -2001,12 +2020,12 @@ onUnmounted(() => {
   padding: 10px 18px;
   cursor: pointer;
   font-size: 14px;
-  color: #606266;
+  color: var(--designer-text-secondary);
   white-space: nowrap;
 }
 
 .context-menu-item:hover {
-  background-color: #f5f7fa;
+  background-color: var(--designer-hover-surface);
 }
 
 .context-menu-item--danger {
@@ -2023,7 +2042,7 @@ onUnmounted(() => {
 }
 
 .context-menu-item.is-disabled {
-  color: #c0c4cc;
+  color: var(--designer-text-muted);
   pointer-events: none;
 }
 </style>

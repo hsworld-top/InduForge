@@ -385,9 +385,10 @@ import {
   broadcastToEmbeddedIframes,
   handleEmbeddedWindowMessage,
   registerEmbeddedIframe,
-  syncDesignerLocaleToEmbeddedIframes,
+  syncLocaleToEmbeddedIframes,
   unregisterEmbeddedIframe,
 } from '@/utils/embeddedIframeSync'
+import { resolveDashboardTabTitle } from '@/utils/dashboardTabTitle'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
 import { initSocket, getSocket } from '@/utils/socket'
@@ -531,7 +532,7 @@ export default {
      * @param {string} localeValue - 语言
      */
     const syncEmbeddedLocale = (localeValue) => {
-      syncDesignerLocaleToEmbeddedIframes(embeddedRegistry.values(), localeValue)
+      syncLocaleToEmbeddedIframes(embeddedRegistry.values(), localeValue)
     }
 
     // 租户相关计算属性
@@ -673,6 +674,8 @@ export default {
       const isObject = typeof tabData === 'object'
       const tabKey = isObject ? tabData.key : tabData
       const customTitle = isObject ? tabData.title : null
+      const customTitlePrefix = isObject ? tabData.titlePrefix : null
+      const customTitleParams = isObject ? tabData.titleParams : null
       const customComponent = isObject ? tabData.component : null
       const customProps = isObject ? tabData.props : null
 
@@ -688,6 +691,8 @@ export default {
           component: component,
           icon: tabData.icon || 'folder',
           titleKey: tabData.titleKey || null,
+          titlePrefix: customTitlePrefix,
+          titleParams: customTitleParams,
         }
       } else {
         // 标准标签页配置
@@ -718,8 +723,10 @@ export default {
       // 添加新标签页
       const newTab = {
         key: tabKey,
-        title: config.titleKey ? t(config.titleKey) : config.title,
+        title: resolveDashboardTabTitle(config, t),
         titleKey: config.titleKey || null,
+        titlePrefix: config.titlePrefix || null,
+        titleParams: config.titleParams || null,
         component: config.component,
         icon: config.icon,
         props: customProps,
@@ -1124,9 +1131,7 @@ export default {
 
     // 获取当前标签页标题
     const getTabTitle = (tab) => {
-      if (!tab) return ''
-      if (tab.titleKey) return t(tab.titleKey)
-      return tab.title || ''
+      return resolveDashboardTabTitle(tab, t)
     }
 
     /**
@@ -1154,13 +1159,10 @@ export default {
 
     watch(locale, () => {
       tabs.value = tabs.value.map((tab) => {
-        if (tab.titleKey) {
-          return {
-            ...tab,
-            title: t(tab.titleKey),
-          }
+        return {
+          ...tab,
+          title: resolveDashboardTabTitle(tab, t),
         }
-        return tab
       })
       syncEmbeddedLocale(locale.value)
     })

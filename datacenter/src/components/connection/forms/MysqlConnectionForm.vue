@@ -1,14 +1,14 @@
 <template>
   <el-form ref="formRef" :model="formData" :rules="rules" label-width="120px">
-    <el-form-item label="连接名称" prop="name">
-      <el-input v-model="formData.name" placeholder="请输入连接名称" />
+    <el-form-item :label="t('connection.name')" prop="name">
+      <el-input v-model="formData.name" :placeholder="t('connection.name')" />
     </el-form-item>
 
-    <el-form-item label="主机地址" prop="host">
+    <el-form-item :label="t('connection.host')" prop="host">
       <el-input v-model="formData.host" placeholder="localhost" />
     </el-form-item>
 
-    <el-form-item label="端口" prop="port">
+    <el-form-item :label="t('connection.port')" prop="port">
       <el-input-number
         v-model="formData.port"
         :min="1"
@@ -17,27 +17,30 @@
       />
     </el-form-item>
 
-    <el-form-item label="数据库名" prop="database">
-      <el-input v-model="formData.database" placeholder="请输入数据库名" />
+    <el-form-item :label="t('connection.database')" prop="database">
+      <el-input
+        v-model="formData.database"
+        :placeholder="t('connection.database')"
+      />
     </el-form-item>
 
-    <el-form-item label="用户名" prop="username">
+    <el-form-item :label="t('connection.username')" prop="username">
       <el-input v-model="formData.username" placeholder="root" />
     </el-form-item>
 
-    <el-form-item label="密码" prop="password">
+    <el-form-item :label="t('connection.password')" prop="password">
       <el-input
         v-model="formData.password"
         type="password"
-        placeholder="请输入密码"
+        :placeholder="t('connection.password')"
         show-password
       />
     </el-form-item>
 
-    <el-form-item label="字符集">
+    <el-form-item :label="t('connection.charset')">
       <el-select
         v-model="formData.charset"
-        placeholder="选择字符集"
+        :placeholder="t('connection.charset')"
         class="w-full"
       >
         <el-option label="utf8mb4" value="utf8mb4" />
@@ -47,7 +50,7 @@
       </el-select>
     </el-form-item>
 
-    <el-form-item label="查询超时">
+    <el-form-item :label="t('connection.queryTimeout')">
       <el-input-number
         v-model="formData.queryTimeout"
         :min="1000"
@@ -55,7 +58,9 @@
         :step="1000"
         class="w-full"
       />
-      <span class="text-xs text-gray-500 ml-2">毫秒</span>
+      <span class="text-xs text-gray-500 ml-2">{{
+        t("common.milliseconds")
+      }}</span>
     </el-form-item>
   </el-form>
 </template>
@@ -63,6 +68,7 @@
 <script setup>
 import { ref, watch, onMounted } from "vue";
 import { getDefaultConfig } from "@/config/connectionTypes";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   modelValue: {
@@ -95,18 +101,22 @@ const isUpdatingFromParent = ref(false);
 
 const rules = {
   name: [
-    { required: true, message: "请输入连接名称", trigger: "blur" },
+    { required: true, message: t("connection.name"), trigger: "blur" },
     {
       min: 2,
       max: 100,
-      message: "连接名称长度在 2 到 100 个字符",
+      message: t("query.nameLengthError"),
       trigger: "blur",
     },
   ],
-  host: [{ required: true, message: "请输入主机地址", trigger: "blur" }],
-  port: [{ required: true, message: "请输入端口号", trigger: "blur" }],
-  database: [{ required: true, message: "请输入数据库名", trigger: "blur" }],
-  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  host: [{ required: true, message: t("connection.host"), trigger: "blur" }],
+  port: [{ required: true, message: t("connection.port"), trigger: "blur" }],
+  database: [
+    { required: true, message: t("connection.database"), trigger: "blur" },
+  ],
+  username: [
+    { required: true, message: t("connection.username"), trigger: "blur" },
+  ],
 };
 
 // 初始化表单数据
@@ -163,7 +173,7 @@ const validate = async () => {
     await formRef.value.validate();
     emit("validate", true, formData.value);
     return true;
-  } catch (error) {
+  } catch {
     emit("validate", false, null);
     return false;
   }

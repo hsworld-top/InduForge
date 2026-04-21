@@ -1,6 +1,8 @@
 <template>
   <div id="app">
-    <router-view />
+    <el-config-provider :locale="elementLocale">
+      <router-view />
+    </el-config-provider>
     <div v-if="loading" class="app-loading">
       <div class="loading-card">
         <div class="loading-mark">
@@ -8,8 +10,8 @@
           <div class="loading-dot"></div>
         </div>
         <div class="loading-content">
-          <div class="loading-title">数据中心加载中</div>
-          <div class="loading-subtitle">正在连接数据服务...</div>
+          <div class="loading-title">{{ t("app.loadingTitle") }}</div>
+          <div class="loading-subtitle">{{ t("app.loadingSubtitle") }}</div>
         </div>
       </div>
     </div>
@@ -19,11 +21,13 @@
 <script setup>
 import { ref, nextTick, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
+import { elementPlusLocale, t } from "./i18n/runtime.js";
 
 const loading = ref(true);
 let loadingStartAt = Date.now();
 const minLoadingMs = 500;
 const router = useRouter();
+const elementLocale = elementPlusLocale;
 
 const startLoading = () => {
   loadingStartAt = Date.now();
@@ -73,7 +77,11 @@ onBeforeUnmount(() => {
 .app-loading {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 30% 20%, rgba(14, 165, 233, 0.12), rgba(15, 23, 42, 0.2));
+  background: radial-gradient(
+    circle at 30% 20%,
+    rgba(14, 165, 233, 0.12),
+    rgba(15, 23, 42, 0.2)
+  );
   display: flex;
   align-items: center;
   justify-content: center;

@@ -23,7 +23,11 @@
           <span class="text-xs text-gray-500">数据点:</span>
           <span
             class="text-xs ml-1 truncate"
-            :class="tag.datapointStatus === 'invalid' ? 'text-gray-400' : 'text-gray-700'"
+            :class="
+              tag.datapointStatus === 'invalid'
+                ? 'text-gray-400'
+                : 'text-gray-700'
+            "
           >
             {{ tag.datapointPath || "-" }}
           </span>

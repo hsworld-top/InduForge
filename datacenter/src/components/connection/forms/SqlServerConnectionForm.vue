@@ -1,14 +1,14 @@
 <template>
   <el-form :model="formData" :rules="rules" ref="formRef" label-width="120px">
-    <el-form-item label="连接名称" prop="name">
-      <el-input v-model="formData.name" placeholder="请输入连接名称" />
+    <el-form-item :label="t('connection.name')" prop="name">
+      <el-input v-model="formData.name" :placeholder="t('connection.name')" />
     </el-form-item>
 
-    <el-form-item label="主机地址" prop="host">
-      <el-input v-model="formData.host" placeholder="例如: localhost" />
+    <el-form-item :label="t('connection.host')" prop="host">
+      <el-input v-model="formData.host" placeholder="localhost" />
     </el-form-item>
 
-    <el-form-item label="端口" prop="port">
+    <el-form-item :label="t('connection.port')" prop="port">
       <el-input-number
         v-model="formData.port"
         :min="1"
@@ -17,34 +17,47 @@
       />
     </el-form-item>
 
-    <el-form-item label="数据库名" prop="database">
-      <el-input v-model="formData.database" placeholder="请输入数据库名" />
+    <el-form-item :label="t('connection.database')" prop="database">
+      <el-input
+        v-model="formData.database"
+        :placeholder="t('connection.database')"
+      />
     </el-form-item>
 
-    <el-form-item label="用户名" prop="username">
-      <el-input v-model="formData.username" placeholder="请输入用户名" />
+    <el-form-item :label="t('connection.username')" prop="username">
+      <el-input
+        v-model="formData.username"
+        :placeholder="t('connection.username')"
+      />
     </el-form-item>
 
-    <el-form-item label="密码" prop="password">
+    <el-form-item :label="t('connection.password')" prop="password">
       <el-input
         v-model="formData.password"
         type="password"
-        placeholder="请输入密码"
+        :placeholder="t('connection.password')"
         show-password
       />
     </el-form-item>
 
-    <el-form-item label="加密连接">
+    <el-form-item :label="t('connection.encryption')">
       <el-switch v-model="formData.encrypt" />
-      <span class="ml-2 text-sm text-gray-500">启用 TLS/SSL 加密</span>
+      <span class="ml-2 text-sm text-gray-500">{{
+        t("connection.encryptionHint")
+      }}</span>
     </el-form-item>
 
-    <el-form-item label="信任证书" v-if="formData.encrypt">
+    <el-form-item
+      :label="t('connection.trustCertificate')"
+      v-if="formData.encrypt"
+    >
       <el-switch v-model="formData.trustServerCertificate" />
-      <span class="ml-2 text-sm text-gray-500">信任服务器自签名证书</span>
+      <span class="ml-2 text-sm text-gray-500">{{
+        t("connection.trustCertificateHint")
+      }}</span>
     </el-form-item>
 
-    <el-form-item label="连接超时">
+    <el-form-item :label="t('connection.connectionTimeout')">
       <el-input-number
         v-model="formData.timeout"
         :min="1000"
@@ -52,13 +65,16 @@
         :step="1000"
         class="w-full"
       />
-      <span class="ml-2 text-sm text-gray-500">毫秒</span>
+      <span class="ml-2 text-sm text-gray-500">{{
+        t("common.milliseconds")
+      }}</span>
     </el-form-item>
   </el-form>
 </template>
 
 <script setup>
 import { ref, watch } from "vue";
+import { t } from "@/i18n/runtime";
 
 const props = defineProps({
   modelValue: {
@@ -88,12 +104,18 @@ const formData = ref({
 });
 
 const rules = {
-  name: [{ required: true, message: "请输入连接名称", trigger: "blur" }],
-  host: [{ required: true, message: "请输入主机地址", trigger: "blur" }],
-  port: [{ required: true, message: "请输入端口", trigger: "blur" }],
-  database: [{ required: true, message: "请输入数据库名", trigger: "blur" }],
-  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
-  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
+  name: [{ required: true, message: t("connection.name"), trigger: "blur" }],
+  host: [{ required: true, message: t("connection.host"), trigger: "blur" }],
+  port: [{ required: true, message: t("connection.port"), trigger: "blur" }],
+  database: [
+    { required: true, message: t("connection.database"), trigger: "blur" },
+  ],
+  username: [
+    { required: true, message: t("connection.username"), trigger: "blur" },
+  ],
+  password: [
+    { required: true, message: t("connection.password"), trigger: "blur" },
+  ],
 };
 
 watch(

@@ -7,7 +7,7 @@
       <div class="flex items-center space-x-3">
         <el-select
           v-model="currentConnectionId"
-          placeholder="选择数据库"
+          :placeholder="t('queryEditor.selectDatabase')"
           size="small"
           class="w-56"
           filterable
@@ -29,7 +29,7 @@
         </el-select>
         <el-select
           v-model="localTab.table"
-          placeholder="选择表"
+          :placeholder="t('queryEditor.selectTable')"
           size="small"
           class="w-48"
           filterable
@@ -46,7 +46,7 @@
       <div class="flex items-center space-x-2">
         <el-button size="small" @click="handleFormat">
           <IconTablerFileCheck class="mr-1 w-4 h-4" />
-          美化SQL
+          {{ t("actions.formatSql") }}
         </el-button>
         <el-button
           type="primary"
@@ -55,11 +55,14 @@
           :loading="localTab.executing"
         >
           <IconTablerPlayerPlay class="mr-1 w-4 h-4" />
-          运行
+          {{ t("actions.run") }}
         </el-button>
-        <el-button size="small" @click="handleSave" :loading="localTab.saving">
-          保存
-        </el-button>
+        <el-button
+          size="small"
+          @click="handleSave"
+          :loading="localTab.saving"
+          >{{ t("actions.save") }}</el-button
+        >
       </div>
     </div>
 
@@ -69,16 +72,7 @@
         class="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400"
       >
         <IconTablerInfoCircle class="w-4 h-4" />
-        <span
-          >提示：使用
-          <code class="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded"
-            >$1, $2, ...</code
-          >
-          作为参数占位符，例如：<code
-            class="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded"
-            >WHERE id = $1</code
-          ></span
-        >
+        <span>{{ t("queryEditor.parameterHintPostgres") }}</span>
       </div>
     </div>
 
@@ -120,12 +114,14 @@
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center space-x-2">
           <IconTablerList class="text-gray-500 w-4 h-4" />
-          <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
-            >SQL 参数</span
-          >
-          <el-tag size="small" type="info"
-            >{{ localTab.parameters.length }} 个参数</el-tag
-          >
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{
+            t("queryEditor.sqlParameters")
+          }}</span>
+          <el-tag size="small" type="info">{{
+            t("queryEditor.parameterCount", {
+              count: localTab.parameters.length,
+            })
+          }}</el-tag>
         </div>
         <el-button
           size="small"
@@ -140,7 +136,11 @@
             "
             class="mr-1 w-4 h-4"
           />
-          {{ localTab.parametersExpanded ? "收起" : "展开" }}
+          {{
+            localTab.parametersExpanded
+              ? t("actions.collapse")
+              : t("actions.expand")
+          }}
         </el-button>
       </div>
 
@@ -153,11 +153,13 @@
           <div
             class="w-24 text-sm text-gray-600 dark:text-gray-400 flex-shrink-0"
           >
-            参数 {{ index + 1 }}:
+            {{ t("queryEditor.parameterIndex", { index: index + 1 }) }}
           </div>
           <el-input
             v-model="param.value"
-            :placeholder="`请输入参数 ${index + 1} 的值`"
+            :placeholder="
+              t('queryEditor.parameterPlaceholder', { index: index + 1 })
+            "
             size="small"
             class="flex-1"
           >
@@ -176,10 +178,16 @@
     >
       <div class="flex items-center justify-between mb-2 flex-shrink-0">
         <div class="text-sm text-gray-600 dark:text-gray-400">
-          查询结果 ({{ localTab.result.rowCount }} 行，耗时
-          {{ localTab.result.executionTime }}ms)
+          {{
+            t("queryEditor.resultSummary", {
+              rowCount: localTab.result.rowCount,
+              executionTime: localTab.result.executionTime,
+            })
+          }}
         </div>
-        <el-button size="small" @click="clearResult">关闭</el-button>
+        <el-button size="small" @click="clearResult">{{
+          t("actions.close")
+        }}</el-button>
       </div>
       <div
         class="flex-1 flex flex-col border border-gray-200 dark:border-gray-700 rounded min-h-0"
@@ -200,15 +208,16 @@
           class="flex items-center justify-between px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0"
         >
           <div class="text-sm text-gray-600 dark:text-gray-400">
-            显示第
-            {{ (localTab.resultPage - 1) * localTab.resultPageSize + 1 }} -
             {{
-              Math.min(
-                localTab.resultPage * localTab.resultPageSize,
-                localTab.result.rowCount,
-              )
+              t("queryEditor.paginationSummary", {
+                start: (localTab.resultPage - 1) * localTab.resultPageSize + 1,
+                end: Math.min(
+                  localTab.resultPage * localTab.resultPageSize,
+                  localTab.result.rowCount,
+                ),
+                total: localTab.result.rowCount,
+              })
             }}
-            条， 共 {{ localTab.result.rowCount }} 条
           </div>
           <el-pagination
             v-model:current-page="localTab.resultPage"
@@ -239,6 +248,7 @@ import IconTablerList from "~icons/tabler/list";
 import IconTablerChevronDown from "~icons/tabler/chevron-down";
 import IconTablerChevronRight from "~icons/tabler/chevron-right";
 import IconTablerInfoCircle from "~icons/tabler/info-circle";
+import { t } from "@/i18n/runtime";
 import MonacoEditor from "@/components/MonacoEditor.vue";
 import { usePostgres } from "@/composables/database/usePostgres";
 import { useConnection } from "@/composables/useConnection";

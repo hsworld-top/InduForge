@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { watch } from "vue";
 import { Storage } from "@/utils/storage";
+import { datacenterLocale, getDatacenterRouteTitle } from "@/i18n/runtime";
 // import DataCenter from "../views/DataCenter.vue"; // 原版本
 import DataCenter from "../views/DataCenterNew.vue"; // 重构版本
 import {
@@ -18,7 +20,7 @@ const routes = [
     name: "datacenter",
     component: DataCenter,
     meta: {
-      title: "数据中心",
+      titleKey: "route.datacenter",
       requiresAuth: true,
     },
   },
@@ -27,7 +29,7 @@ const routes = [
     name: "datacenter-debug",
     component: DataCenter,
     meta: {
-      title: "数据中心调试",
+      titleKey: "route.datacenterDebug",
       requiresAuth: false,
     },
   },
@@ -81,7 +83,7 @@ export function registerDatacenterBeforeEachGuard(
   } = {},
 ) {
   return targetRouter.beforeEach(async (to, from, next) => {
-    document.title = `${to.meta.title || "数据中心"} - ProjectIDE`;
+    document.title = `${getDatacenterRouteTitle(to.name)} - ProjectIDE`;
     applyThemeToDocument(Storage.getTheme());
 
     const runtimeUrl = buildRouteRuntimeUrl(getCurrentUrl(), to.path);
@@ -129,5 +131,14 @@ export function registerDatacenterBeforeEachGuard(
 }
 
 registerDatacenterBeforeEachGuard(router);
+
+watch(
+  datacenterLocale,
+  () => {
+    const currentRoute = router.currentRoute.value;
+    document.title = `${getDatacenterRouteTitle(currentRoute.name)} - ProjectIDE`;
+  },
+  { immediate: true },
+);
 
 export default router;

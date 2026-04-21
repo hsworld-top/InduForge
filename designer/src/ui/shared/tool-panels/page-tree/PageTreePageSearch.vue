@@ -2,9 +2,11 @@
   页面树顶部搜索框
 -->
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import IconEpSearch from "~icons/ep/search";
 
 const searchText = defineModel({ type: String, default: "" });
+const { t } = useI18n();
 </script>
 
 <template>
@@ -12,7 +14,7 @@ const searchText = defineModel({ type: String, default: "" });
     <el-input
       v-model="searchText"
       size="small"
-      placeholder="搜索页面或路径"
+      :placeholder="t('pageTree.searchPlaceholder')"
       clearable
       :prefix-icon="IconEpSearch"
     />

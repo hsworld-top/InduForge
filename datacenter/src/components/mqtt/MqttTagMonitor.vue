@@ -101,7 +101,9 @@
           </div>
 
           <!-- Tag值显示 -->
-          <div class="tag-value mt-2 p-3 bg-white rounded-lg border border-gray-200">
+          <div
+            class="tag-value mt-2 p-3 bg-white rounded-lg border border-gray-200"
+          >
             <div
               v-if="tag.currentValue"
               class="flex items-baseline justify-between"
@@ -163,11 +165,7 @@
           <span>时间戳</span>
           <span>质量</span>
         </div>
-        <div
-          v-for="tag in enabledTags"
-          :key="tag.id"
-          class="tag-row"
-        >
+        <div v-for="tag in enabledTags" :key="tag.id" class="tag-row">
           <span class="truncate" :title="tag.name">{{ tag.name }}</span>
           <span>{{ getDataTypeLabel(tag.dataType) }}</span>
           <span class="truncate">
@@ -433,7 +431,10 @@ onMounted(async () => {
   });
 
   const stopWatch = watch(
-    () => [socketConnected.value, enabledTags.value.map((tag) => tag.id).join(",")],
+    () => [
+      socketConnected.value,
+      enabledTags.value.map((tag) => tag.id).join(","),
+    ],
     () => {
       if (!socketConnected.value) {
         subscribedTagIds.value.clear();
@@ -441,7 +442,7 @@ onMounted(async () => {
       }
       syncSubscriptions();
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   const cleanup = () => {
