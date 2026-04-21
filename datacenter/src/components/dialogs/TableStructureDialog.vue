@@ -185,7 +185,7 @@
   </el-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch, computed } from "vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";

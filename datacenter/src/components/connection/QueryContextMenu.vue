@@ -37,7 +37,7 @@
   </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { watch, onMounted, onBeforeUnmount } from "vue";
 import IconTablerInfoCircle from "~icons/tabler/info-circle";
 import IconTablerFileCode from "~icons/tabler/file-code";
