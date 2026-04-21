@@ -645,36 +645,16 @@ async function bindRuntimeUserRoles({
       });
     }
 
-    if (runtimeAdminRole && !uniqueRoleIds.includes(runtimeAdminRole.id)) {
-      const currentBindings = await ProjectUserRoleBinding.findAll({
-        where: {
-          projectId,
-          runtimeUserId,
-        },
-        attributes: ["roleId"],
+    if (
+      runtimeAdminRole
+      && normalizeText(runtimeUser.status) === "active"
+      && !uniqueRoleIds.includes(runtimeAdminRole.id)
+    ) {
+      await assertAnotherActiveRuntimeAdminExists({
+        projectId,
+        runtimeUserId,
         transaction,
       });
-      const hasRuntimeAdminRole = currentBindings.some((binding) => binding.roleId === runtimeAdminRole.id);
-      if (hasRuntimeAdminRole) {
-        const adminBindings = await ProjectUserRoleBinding.findAll({
-          where: {
-            projectId,
-            roleId: runtimeAdminRole.id,
-          },
-          attributes: ["runtimeUserId"],
-          transaction,
-        });
-        const remainingAdminIds = new Set(
-          adminBindings
-            .map((binding) => normalizeText(binding.runtimeUserId))
-            .filter((bindingRuntimeUserId) => bindingRuntimeUserId && bindingRuntimeUserId !== runtimeUserId),
-        );
-        if (!remainingAdminIds.size) {
-          throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-            message: "至少保留一个运行态管理员",
-          });
-        }
-      }
     }
 
     await ProjectUserRoleBinding.destroy({

@@ -955,6 +955,7 @@ describe("projectRuntimeAccessService", () => {
     mockProjectRuntimeUser.findOne.mockResolvedValue({
       id: "runtime-user-1",
       projectId: "project-1",
+      status: "active",
     });
     mockProjectUserRoleBinding.findAll
       .mockResolvedValueOnce([{ roleId: "role-admin" }])
@@ -971,7 +972,45 @@ describe("projectRuntimeAccessService", () => {
       errorCode: "B0001",
       statusCode: 400,
       options: expect.objectContaining({
-        message: "至少保留一个运行态管理员",
+        message: "至少保留一个启用中的运行态管理员",
+      }),
+    });
+  });
+
+  test("bindRuntimeUserRoles 在剩余管理员都已 disabled 时不允许移除当前 active 管理员角色", async () => {
+    mockProjectRole.findAll.mockResolvedValue([
+      { id: "role-viewer" },
+    ]);
+    mockProjectRole.findOne.mockResolvedValue({
+      id: "role-admin",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      isSystem: true,
+    });
+    mockProjectRuntimeUser.findOne.mockResolvedValue({
+      id: "runtime-user-1",
+      projectId: "project-1",
+      status: "active",
+    });
+    mockProjectUserRoleBinding.findAll
+      .mockResolvedValueOnce([{ roleId: "role-admin" }])
+      .mockResolvedValueOnce([
+        { runtimeUserId: "runtime-user-1" },
+        { runtimeUserId: "runtime-user-2" },
+      ]);
+    mockProjectRuntimeUser.findAll.mockResolvedValue([]);
+
+    await expect(
+      bindRuntimeUserRoles({
+        projectId: "project-1",
+        runtimeUserId: "runtime-user-1",
+        roleIds: ["role-viewer"],
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "至少保留一个启用中的运行态管理员",
       }),
     });
   });
