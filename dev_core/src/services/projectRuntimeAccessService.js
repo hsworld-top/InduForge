@@ -25,11 +25,10 @@ const extractActorId = (context = {}) =>
     context.creator?.id || context.createdBy || context.project?.createdBy || context.project?.creator?.id,
   );
 
-const buildBootstrapUsername = (context = {}) =>
-  normalizeText(context.creator?.username || context.username) || DEFAULT_RUNTIME_ADMIN_USERNAME;
+const buildBootstrapUsername = (creator = {}, context = {}) =>
+  normalizeText(creator.username || context.username) || DEFAULT_RUNTIME_ADMIN_USERNAME;
 
-const buildBootstrapDisplayName = (context = {}) => {
-  const creator = context.creator || {};
+const buildBootstrapDisplayName = (creator = {}, context = {}) => {
   return (
     normalizeText(context.displayName) ||
     normalizeText(creator.fullName) ||
@@ -114,7 +113,7 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
   }
 
   const roleCode = normalizeText(context.roleCode) || DEFAULT_RUNTIME_ADMIN_ROLE_CODE;
-  const username = buildBootstrapUsername(context);
+  const username = buildBootstrapUsername(creator, context);
   const roleName = normalizeText(context.roleName) || (
     normalizeText(project.name)
       ? `${normalizeText(project.name)}运行态管理员`
@@ -123,7 +122,7 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
   const roleDescription =
     normalizeText(context.roleDescription) ||
     "工程运行态默认管理员角色，用于初始化首个可管理账号";
-  const displayName = buildBootstrapDisplayName(context);
+  const displayName = buildBootstrapDisplayName(creator, context);
   const actorId = extractActorId(context);
   const roleAttributes = {
     projectId: resolvedProjectId,

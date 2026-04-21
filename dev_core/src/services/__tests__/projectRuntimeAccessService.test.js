@@ -142,6 +142,67 @@ describe("projectRuntimeAccessService", () => {
     expect(result.runtimeUser.passwordHash).toBeUndefined();
   });
 
+  test("ensureRuntimeAdminBootstrap 只提供 project.creator 时也能继承默认账号和显示名", async () => {
+    const transaction = { id: "tx-1b" };
+    const projectCreator = {
+      id: "user-project-creator-1",
+      username: "project.owner",
+      fullName: "工程创建者",
+    };
+    const project = {
+      id: "project-1",
+      name: "演示工程",
+      creator: projectCreator,
+    };
+
+    mockProjectRole.findOne.mockResolvedValue(null);
+    mockProjectRole.findOrCreate.mockImplementation(async ({ defaults }) => [
+      {
+        id: "role-1",
+        ...defaults,
+      },
+      true,
+    ]);
+    mockProjectRuntimeUser.findOne.mockResolvedValue(null);
+    mockProjectRuntimeUser.findOrCreate.mockImplementation(async ({ defaults }) => [
+      {
+        id: "user-1",
+        ...defaults,
+      },
+      true,
+    ]);
+    mockProjectUserRoleBinding.findOne.mockResolvedValue(null);
+    mockProjectUserRoleBinding.findOrCreate.mockImplementation(async ({ defaults }) => [
+      {
+        id: "binding-1",
+        ...defaults,
+      },
+      true,
+    ]);
+
+    const result = await ensureRuntimeAdminBootstrap({
+      project,
+      initialPassword: "Initial#123",
+      transaction,
+    });
+
+    const createdUserCall = mockProjectRuntimeUser.findOrCreate.mock.calls[0][0];
+
+    expect(mockProjectRuntimeUser.findOrCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaults: expect.objectContaining({
+          username: projectCreator.username,
+          displayName: projectCreator.fullName,
+          createdBy: projectCreator.id,
+          updatedBy: projectCreator.id,
+        }),
+      }),
+    );
+    expect(await bcrypt.compare("Initial#123", createdUserCall.defaults.passwordHash)).toBe(true);
+    expect(result.runtimeUser.username).toBe(projectCreator.username);
+    expect(result.runtimeUser.displayName).toBe(projectCreator.fullName);
+  });
+
   test("同一创建者改名后再次 bootstrap 会复用原账号而不是新建账号", async () => {
     const transaction = { id: "tx-2" };
     const project = { id: "project-1", name: "演示工程" };
