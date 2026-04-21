@@ -768,6 +768,33 @@ describe("projectRuntimeAccessService", () => {
     expect(result.status).toBe("active");
   });
 
+  test("createRuntimeUser 遇到并发唯一键冲突时会翻译成 409 业务错误", async () => {
+    mockProjectRole.findAll.mockResolvedValue([]);
+    mockProjectRuntimeUser.findOne.mockResolvedValue(null);
+    mockProjectRuntimeUser.create.mockRejectedValue(
+      Object.assign(new Error("unique conflict"), {
+        name: "SequelizeUniqueConstraintError",
+      }),
+    );
+
+    await expect(
+      createRuntimeUser({
+        projectId: "project-1",
+        actorId: "user-1",
+        username: "operator",
+        displayName: "值班员",
+        initialPassword: "Initial#123",
+        roleIds: [],
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B1002",
+      statusCode: 409,
+      options: expect.objectContaining({
+        message: "运行态用户名已存在",
+      }),
+    });
+  });
+
   test("updateRuntimeUserStatus 只接受 active 或 disabled，并对外返回 active 或 disabled", async () => {
     const runtimeUserRecord = {
       update: jest.fn().mockResolvedValue(undefined),
@@ -781,7 +808,17 @@ describe("projectRuntimeAccessService", () => {
         displayName: "值班员",
         status: "inactive",
         passwordHash: "hash-operator",
-        roleBindings: [],
+        roleBindings: [
+          {
+            roleId: "role-1",
+            role: {
+              id: "role-1",
+              code: "VIEWER",
+              name: "观察员",
+              status: "inactive",
+            },
+          },
+        ],
       });
 
     const result = await updateRuntimeUserStatus({
@@ -797,6 +834,12 @@ describe("projectRuntimeAccessService", () => {
     });
     expect(result.status).toBe("disabled");
     expect(result.passwordHash).toBeUndefined();
+    expect(result.roles).toEqual([
+      expect.objectContaining({
+        id: "role-1",
+        status: "disabled",
+      }),
+    ]);
   });
 
   test("updateRuntimeUserStatus 会拒绝 inactive 或 suspended 这样的旧枚举输入", async () => {
@@ -814,6 +857,90 @@ describe("projectRuntimeAccessService", () => {
         message: "状态值不合法",
       }),
     });
+  });
+
+  test("updateRuntimeUserStatus 不允许禁用唯一 active 的运行态管理员", async () => {
+    const runtimeUserRecord = {
+      id: "runtime-user-1",
+      projectId: "project-1",
+      status: "active",
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    mockProjectRuntimeUser.findOne.mockResolvedValue(runtimeUserRecord);
+    mockProjectRole.findOne.mockResolvedValue({
+      id: "role-admin",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      isSystem: true,
+    });
+    mockProjectUserRoleBinding.findAll
+      .mockResolvedValueOnce([{ roleId: "role-admin" }])
+      .mockResolvedValueOnce([{ runtimeUserId: "runtime-user-1" }]);
+    mockProjectRuntimeUser.findAll.mockResolvedValue([]);
+
+    await expect(
+      updateRuntimeUserStatus({
+        projectId: "project-1",
+        runtimeUserId: "runtime-user-1",
+        status: "disabled",
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "至少保留一个启用中的运行态管理员",
+      }),
+    });
+    expect(runtimeUserRecord.update).not.toHaveBeenCalled();
+  });
+
+  test("updateRuntimeUserStatus 在还有其他 active 管理员时允许禁用当前管理员", async () => {
+    const runtimeUserRecord = {
+      id: "runtime-user-1",
+      projectId: "project-1",
+      status: "active",
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    mockProjectRuntimeUser.findOne
+      .mockResolvedValueOnce(runtimeUserRecord)
+      .mockResolvedValueOnce({
+        id: "runtime-user-1",
+        projectId: "project-1",
+        username: "operator",
+        displayName: "值班员",
+        status: "inactive",
+        passwordHash: "hash-operator",
+        roleBindings: [],
+      });
+    mockProjectRole.findOne.mockResolvedValue({
+      id: "role-admin",
+      projectId: "project-1",
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+      isSystem: true,
+    });
+    mockProjectUserRoleBinding.findAll
+      .mockResolvedValueOnce([{ roleId: "role-admin" }])
+      .mockResolvedValueOnce([
+        { runtimeUserId: "runtime-user-1" },
+        { runtimeUserId: "runtime-user-2" },
+      ]);
+    mockProjectRuntimeUser.findAll.mockResolvedValue([
+      { id: "runtime-user-2", status: "active" },
+    ]);
+
+    const result = await updateRuntimeUserStatus({
+      projectId: "project-1",
+      runtimeUserId: "runtime-user-1",
+      status: "disabled",
+      actorId: "user-1",
+    });
+
+    expect(runtimeUserRecord.update).toHaveBeenCalledWith({
+      status: "inactive",
+      updatedBy: "user-1",
+    });
+    expect(result.status).toBe("disabled");
   });
 
   test("bindRuntimeUserRoles 不允许把工程里的最后一个管理员解绑干净", async () => {

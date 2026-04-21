@@ -17,6 +17,7 @@ const BCRYPT_SALT_ROUNDS = 12;
 
 const normalizeGrantCollection = (grants = []) => (Array.isArray(grants) ? grants : []);
 const normalizeText = (value) => String(value ?? "").trim();
+const isUniqueConstraintError = (error) => error?.name === "SequelizeUniqueConstraintError";
 
 const buildMapEntry = () => ({
   localAllowRoles: new Set(),
@@ -175,7 +176,7 @@ const buildRuntimeUserSummary = (runtimeUser) => {
       name: role.name,
       description: role.description || null,
       isSystem: Boolean(role.isSystem),
-      status: role.status,
+      status: normalizeRuntimeRoleStatusForOutput(role.status),
     }));
 
   plainUser.status = normalizeRuntimeUserStatusForOutput(plainUser.status);
@@ -254,6 +255,79 @@ const ensureRoleSetBelongsToProject = async (projectId, roleIds, transaction = n
   }
 
   return uniqueRoleIds;
+};
+
+const translateUniqueConstraintError = (error, message) => {
+  if (isUniqueConstraintError(error)) {
+    throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, { message });
+  }
+  throw error;
+};
+
+const assertAnotherActiveRuntimeAdminExists = async ({
+  projectId,
+  runtimeUserId,
+  transaction = null,
+} = {}) => {
+  const runtimeAdminRole = await ProjectRole.findOne({
+    where: {
+      projectId,
+      code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+    },
+    transaction,
+  });
+  if (!runtimeAdminRole) {
+    return;
+  }
+
+  const currentBindings = await ProjectUserRoleBinding.findAll({
+    where: {
+      projectId,
+      runtimeUserId,
+    },
+    attributes: ["roleId"],
+    transaction,
+  });
+  const hasRuntimeAdminRole = currentBindings.some((binding) => binding.roleId === runtimeAdminRole.id);
+  if (!hasRuntimeAdminRole) {
+    return;
+  }
+
+  const adminBindings = await ProjectUserRoleBinding.findAll({
+    where: {
+      projectId,
+      roleId: runtimeAdminRole.id,
+    },
+    attributes: ["runtimeUserId"],
+    transaction,
+  });
+  const otherAdminIds = [
+    ...new Set(
+      adminBindings
+        .map((binding) => normalizeText(binding.runtimeUserId))
+        .filter((bindingRuntimeUserId) => bindingRuntimeUserId && bindingRuntimeUserId !== runtimeUserId),
+    ),
+  ];
+  if (!otherAdminIds.length) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "至少保留一个启用中的运行态管理员",
+    });
+  }
+
+  const activeAdmins = await ProjectRuntimeUser.findAll({
+    where: {
+      projectId,
+      id: { [Op.in]: otherAdminIds },
+      status: "active",
+    },
+    attributes: ["id", "status"],
+    transaction,
+  });
+  if (!activeAdmins.length) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "至少保留一个启用中的运行态管理员",
+    });
+  }
 };
 
 /**
@@ -447,17 +521,22 @@ async function createRuntimeUser({
     }
 
     const passwordHash = await bcrypt.hash(initialPassword, BCRYPT_SALT_ROUNDS);
-    const runtimeUser = await ProjectRuntimeUser.create({
-      projectId,
-      createdBy: actorId || null,
-      updatedBy: actorId || null,
-      username: normalizedUsername,
-      passwordHash,
-      displayName: normalizeText(displayName) || normalizedUsername,
-      status: "active",
-    }, {
-      transaction,
-    });
+    let runtimeUser;
+    try {
+      runtimeUser = await ProjectRuntimeUser.create({
+        projectId,
+        createdBy: actorId || null,
+        updatedBy: actorId || null,
+        username: normalizedUsername,
+        passwordHash,
+        displayName: normalizeText(displayName) || normalizedUsername,
+        status: "active",
+      }, {
+        transaction,
+      });
+    } catch (error) {
+      translateUniqueConstraintError(error, "运行态用户名已存在");
+    }
 
     for (const roleId of uniqueRoleIds) {
       await ProjectUserRoleBinding.create({
@@ -499,6 +578,10 @@ async function updateRuntimeUserStatus({
     throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
       message: "运行态用户不存在",
     });
+  }
+
+  if (normalizedStatus === "inactive" && normalizeText(runtimeUser.status) === "active") {
+    await assertAnotherActiveRuntimeAdminExists({ projectId, runtimeUserId });
   }
 
   await runtimeUser.update({
@@ -661,16 +744,21 @@ async function createRuntimeRole({
     });
   }
 
-  const role = await ProjectRole.create({
-    projectId,
-    createdBy: actorId || null,
-    updatedBy: actorId || null,
-    code: normalizedCode,
-    name: normalizedName,
-    description: normalizeText(description) || null,
-    isSystem: false,
-    status: "active",
-  });
+  let role;
+  try {
+    role = await ProjectRole.create({
+      projectId,
+      createdBy: actorId || null,
+      updatedBy: actorId || null,
+      code: normalizedCode,
+      name: normalizedName,
+      description: normalizeText(description) || null,
+      isSystem: false,
+      status: "active",
+    });
+  } catch (error) {
+    translateUniqueConstraintError(error, "角色编码已存在");
+  }
 
   return buildRuntimeRoleSummary(role);
 }
