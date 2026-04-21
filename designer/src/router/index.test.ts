@@ -52,15 +52,26 @@ describe("designer 入口规划", () => {
   it("正式入口顶层访问即使已有本地会话，只要携带新的 handoffId 仍应回跳 IDE 恢复指定工程", () => {
     Storage.setToken("cached-token");
     Storage.setProjectId("cached-project");
+    localStorage.setItem(
+      "embedded_app_handoff:handoff-cached",
+      JSON.stringify({
+        handoffId: "handoff-cached",
+        appType: "designer",
+        projectId: "handoff-project",
+        tenantId: "handoff-tenant",
+        issuedAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
 
     const plan = resolveDesignerEntrypointPlan("http://designer.example/designer/?handoffId=handoff-cached", {
       isTopLevelWindow: true,
       ideOrigin: "http://ide.example",
     });
 
-    expect(plan.shouldRedirectToIde).toBe(true);
+    expect(plan.shouldRedirectToIde).toBe(false);
     expect(plan.shouldWaitForBootstrap).toBe(false);
-    expect(plan.ideRedirectUrl).toBe("http://ide.example/?handoffId=handoff-cached");
+    expect(plan.ideRedirectUrl).toBeNull();
   });
 
   it("/designer/debug 保留独立调试模式，不会回跳 IDE", () => {
@@ -260,7 +271,22 @@ describe("router beforeEach bootstrap", () => {
     removeGuard();
   });
 
-  it("正式入口顶层访问会直接回跳 IDE，不等待 bootstrap", async () => {
+  it("正式入口顶层访问在存在有效 handoff 记录时会直接恢复指定工程，不再回跳 IDE", async () => {
+    Storage.setToken("cached-token");
+    Storage.setProjectId("cached-project");
+    Storage.setTenantId("tenant-cached");
+    localStorage.setItem(
+      "embedded_app_handoff:handoff-top",
+      JSON.stringify({
+        handoffId: "handoff-top",
+        appType: "designer",
+        projectId: "handoff-project",
+        tenantId: "handoff-tenant",
+        issuedAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
+
     const waitForBootstrap = vi.fn(async () => true);
     const navigateToUrl = vi.fn();
     const testRouter = createRouter({
@@ -285,7 +311,13 @@ describe("router beforeEach bootstrap", () => {
     await testRouter.push("/");
 
     expect(waitForBootstrap).not.toHaveBeenCalled();
-    expect(navigateToUrl).toHaveBeenCalledWith("http://ide.example/?handoffId=handoff-top");
+    expect(navigateToUrl).not.toHaveBeenCalled();
+    expect(testRouter.currentRoute.value.meta.project).toEqual({
+      id: "handoff-project",
+      tenantId: "handoff-tenant",
+    });
+    expect(Storage.getProjectId()).toBe("handoff-project");
+    expect(Storage.getTenantId()).toBe("handoff-tenant");
 
     removeGuard();
   });

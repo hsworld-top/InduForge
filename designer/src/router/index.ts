@@ -16,6 +16,7 @@ import { isDesignerDebugRouteEnabled } from "@/runtime/debug-route";
 import {
   buildIdeLoginUrl,
   buildIdeRestoreUrl,
+  restoreEntrypointSessionFromHandoff,
   resolveDesignerIdeOriginFromRuntime,
   resolveDesignerEntrypointPlan,
   waitForHostBootstrap,
@@ -221,6 +222,14 @@ export function registerDesignerBeforeEachGuard(
       next(false);
       navigateToUrl(entrypointPlan.ideRedirectUrl);
       return;
+    }
+
+    if (entrypointPlan.handoffId && isTopLevelWindow() && !entrypointPlan.isDebugRoute) {
+      /**
+       * 纯顶层独立标签页没有宿主 iframe 可回消息，因此这里直接按 handoff 记录
+       * 覆盖本地工程上下文，让“在新标签页打开设计中心”保持在设计器内完成。
+       */
+      restoreEntrypointSessionFromHandoff(entrypointPlan.handoffId);
     }
 
     let token = Storage.getToken();

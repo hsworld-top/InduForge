@@ -1,8 +1,10 @@
 import type { EditorLocale, EditorTheme, EditorUiStore } from "@/stores/editor-ui-store";
+import { STORAGE_KEYS } from "@/constants";
 import { Storage } from "@/utils/storage";
 import { shouldUseDebugMode as resolveDebugModeForPath } from "./debug-route";
 
 const DESIGNER_APP_TYPE = "designer";
+const HANDOFF_STORAGE_PREFIX = "embedded_app_handoff:";
 const APP_BOOTSTRAP_REQUEST = "APP_BOOTSTRAP_REQUEST";
 const APP_BOOTSTRAP_RESPONSE = "APP_BOOTSTRAP_RESPONSE";
 const AUTH_REFRESHED = "AUTH_REFRESHED";
@@ -102,6 +104,11 @@ type ApplyBootstrapResponseDependencies = {
   editorUi: EditorUiStore;
 };
 
+type LocalHandoffProjectContext = {
+  projectId: string;
+  tenantId: string | null;
+};
+
 const isEditorTheme = (value: unknown): value is EditorTheme => value === "light" || value === "dark";
 
 const isEditorLocale = (value: unknown): value is EditorLocale => value === "zh" || value === "en";
@@ -121,6 +128,52 @@ const resolveMessagePayload = (value: unknown): RuntimeMessageRecord => {
 
   return record;
 };
+
+function resolveLocalHandoffProjectContext(
+  handoffId: string | null,
+  appType: string,
+): LocalHandoffProjectContext | null {
+  const normalizedHandoffId = asNonEmptyString(handoffId);
+  if (!normalizedHandoffId) {
+    return null;
+  }
+
+  try {
+    const rawRecord = localStorage.getItem(`${HANDOFF_STORAGE_PREFIX}${normalizedHandoffId}`);
+    if (!rawRecord) {
+      return null;
+    }
+
+    const parsedRecord = JSON.parse(rawRecord) as RuntimeMessageRecord;
+    if (asNonEmptyString(parsedRecord.handoffId) !== normalizedHandoffId) {
+      return null;
+    }
+
+    if (asNonEmptyString(parsedRecord.appType) !== appType) {
+      return null;
+    }
+
+    const expiresAt =
+      typeof parsedRecord.expiresAt === "number" ? parsedRecord.expiresAt : Number.NaN;
+    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+      localStorage.removeItem(`${HANDOFF_STORAGE_PREFIX}${normalizedHandoffId}`);
+      return null;
+    }
+
+    const projectId = asNonEmptyString(parsedRecord.projectId);
+    if (!projectId) {
+      return null;
+    }
+
+    return {
+      projectId,
+      tenantId: asNonEmptyString(parsedRecord.tenantId),
+    };
+  } catch (error) {
+    console.warn(`Resolve handoff project context failed for "${normalizedHandoffId}":`, error);
+    return null;
+  }
+}
 
 function createBootstrapGate(shouldWaitForBootstrap: boolean): BootstrapGate {
   if (!shouldWaitForBootstrap) {
@@ -199,18 +252,44 @@ export function hasReusableEntrypointSession(options: {
   hasToken?: boolean;
   handoffId?: string | null;
 } = {}): boolean {
+  const hasToken = options.hasToken ?? Boolean(Storage.getToken());
+  const handoffId = asNonEmptyString(options.handoffId);
   /**
-   * handoffId 代表宿主明确要求恢复某一次打开动作。
-   * 此时即便本地残留 token/projectId，也不能视为“可复用会话”，
-   * 否则新的工程入口会直接复用旧工程上下文，导致打开 test 时仍落到 test1。
+   * handoffId 代表宿主明确要求恢复某一次新的打开动作。
+   * 不能继续把“本地旧 projectId”当成可复用会话；但如果同源 localStorage
+   * 里已经存在这次 handoff 对应的 projectId/tenantId，就允许顶层新标签页
+   * 直接按 handoff 恢复，避免被无谓拉回 IDE。
    */
-  if (asNonEmptyString(options.handoffId)) {
+  if (handoffId) {
+    return Boolean(hasToken && resolveLocalHandoffProjectContext(handoffId, DESIGNER_APP_TYPE)?.projectId);
+  }
+
+  const hasProjectId = options.hasProjectId ?? Boolean(Storage.getProjectId());
+  return hasToken && hasProjectId;
+}
+
+/**
+ * 顶层独立标签页携带 handoffId 时，直接从同源 handoff 记录恢复工程上下文。
+ * 这样可以在新标签页进入纯设计中心，同时避免继续复用旧 projectId。
+ * @param handoffId - handoff 标识
+ * @returns 是否恢复成功
+ */
+export function restoreEntrypointSessionFromHandoff(
+  handoffId: string | null,
+): boolean {
+  const projectContext = resolveLocalHandoffProjectContext(handoffId, DESIGNER_APP_TYPE);
+  if (!projectContext) {
     return false;
   }
 
-  const hasToken = options.hasToken ?? Boolean(Storage.getToken());
-  const hasProjectId = options.hasProjectId ?? Boolean(Storage.getProjectId());
-  return hasToken && hasProjectId;
+  Storage.setProjectId(projectContext.projectId);
+  if (projectContext.tenantId) {
+    Storage.setTenantId(projectContext.tenantId);
+  } else {
+    Storage.remove(STORAGE_KEYS.TENANT_ID);
+  }
+
+  return true;
 }
 
 export function shouldRedirectTopLevelToIde(
