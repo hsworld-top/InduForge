@@ -44,7 +44,6 @@ import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
 import IconLucideUsers from "~icons/lucide/users";
 import { VIEW_PRESETS } from "@/constants";
 import { useEditorStore } from "@/stores/editor-store";
-import { getEditorUiStore } from "@/stores/editor-ui-store";
 import { CanvasContainer } from "@/ui/editors/page/canvas";
 import SelectionToolbar from "@/ui/editors/page/canvas/SelectionToolbar.vue";
 import { MaterialPanel, OutlineTree } from "@/ui/editors/page/sidebar-panels/left";
@@ -73,7 +72,6 @@ const VariablesPanel = defineAsyncComponent(() => import("@/ui/shared/tool-panel
 
 const route = useRoute();
 const router = useRouter();
-const editorUi = getEditorUiStore();
 const { t } = useI18n();
 
 function mergePageConfig(
@@ -948,24 +946,10 @@ function handleOpenAi() {
 }
 
 /**
- * 工具栏：主题切换（占位）
- */
-function handleToggleTheme() {
-  editorUi.setTheme(editorUi.theme.value === "dark" ? "light" : "dark");
-}
-
-/**
  * 更多设置：刷新画布（占位）
  */
 function handleRefreshCanvas() {
   ElMessage.info(t("message.refreshCanvasWip"));
-}
-
-/**
- * 更多设置：中英文切换（占位）
- */
-function handleToggleLocale() {
-  editorUi.setLocale(editorUi.locale.value === "zh" ? "en" : "zh");
 }
 
 /**
@@ -1077,9 +1061,7 @@ onBeforeUnmount(() => {
       @move-to-bottom="handleLayerMoveToBottom"
       @open-collaboration="handleOpenCollaboration"
       @refresh-canvas="handleRefreshCanvas"
-      @toggle-locale="handleToggleLocale"
       @open-ai="handleOpenAi"
-      @toggle-theme="handleToggleTheme"
       @clear-canvas="handleClearCanvas"
       @apply-custom-size="handleApplyCustomSize"
       @save-settings-change="handleSaveSettingsChange"

@@ -3,8 +3,6 @@ import { createEditorUiStore, getEditorUiStore } from "./editor-ui-store";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import en from "element-plus/es/locale/lang/en";
 import { i18n } from "@/i18n";
-import { STORAGE_KEYS } from "@/constants";
-
 const store: Record<string, string> = {};
 
 function stubStorage() {
@@ -45,20 +43,21 @@ describe("editor-ui-store", () => {
     expect(i18n.global.locale.value).toBe("en");
   });
 
-  it("非法输入会回退到本地缓存和默认值", () => {
+  it("非法输入会固定回退到默认值", () => {
     stubStorage();
     store.theme = JSON.stringify("dark");
+    store.language = JSON.stringify("en");
 
     const ui = createEditorUiStore();
     ui.initFromRuntime({ theme: "solarized", locale: "jp" });
 
-    expect(ui.theme.value).toBe("dark");
+    expect(ui.theme.value).toBe("light");
     expect(ui.locale.value).toBe("zh");
     expect(ui.elementLocale.value).toBe(zhCn);
     expect(i18n.global.locale.value).toBe("zh");
   });
 
-  it("切换主题时同步更新 DOM 与本地缓存", () => {
+  it("切换主题时只更新 DOM，不写 designer 专属缓存", () => {
     stubStorage();
 
     const ui = createEditorUiStore();
@@ -67,11 +66,10 @@ describe("editor-ui-store", () => {
 
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-    expect(store[STORAGE_KEYS.DESIGNER_THEME]).toBe(JSON.stringify("dark"));
-    expect(store[STORAGE_KEYS.THEME]).toBeUndefined();
+    expect(Object.keys(store)).toEqual([]);
   });
 
-  it("切换语言时同步更新本地缓存与 Element Plus locale", () => {
+  it("切换语言时不写 designer 专属缓存，但会更新 Element Plus locale", () => {
     stubStorage();
 
     const ui = createEditorUiStore();
@@ -81,50 +79,21 @@ describe("editor-ui-store", () => {
     expect(ui.locale.value).toBe("en");
     expect(ui.elementLocale.value).toBe(en);
     expect(i18n.global.locale.value).toBe("en");
-    expect(store[STORAGE_KEYS.DESIGNER_LANGUAGE]).toBe(JSON.stringify("en"));
-    expect(store[STORAGE_KEYS.LANGUAGE]).toBeUndefined();
+    expect(Object.keys(store)).toEqual([]);
   });
 
-  it("无运行时输入时优先读取 designer 专属键，缺失时回退通用键", () => {
+  it("无运行时输入时固定使用默认 light + zh，而不是读取本地缓存", () => {
     stubStorage();
-    store[STORAGE_KEYS.DESIGNER_THEME] = JSON.stringify("dark");
-    store[STORAGE_KEYS.DESIGNER_LANGUAGE] = JSON.stringify("en");
-    store[STORAGE_KEYS.THEME] = JSON.stringify("light");
-    store[STORAGE_KEYS.LANGUAGE] = JSON.stringify("zh");
+    store.theme = JSON.stringify("dark");
+    store.language = JSON.stringify("en");
+    store.designer_theme = JSON.stringify("dark");
+    store.designer_language = JSON.stringify("en");
 
     const ui = createEditorUiStore();
     ui.initFromRuntime();
 
-    expect(ui.theme.value).toBe("dark");
-    expect(ui.locale.value).toBe("en");
-    expect(store[STORAGE_KEYS.DESIGNER_THEME]).toBe(JSON.stringify("dark"));
-    expect(store[STORAGE_KEYS.DESIGNER_LANGUAGE]).toBe(JSON.stringify("en"));
-  });
-
-  it("designer 专属键缺失时才会回退读取通用键", () => {
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => {
-        if (key === STORAGE_KEYS.DESIGNER_THEME || key === STORAGE_KEYS.DESIGNER_LANGUAGE) {
-          return null;
-        }
-        if (key === STORAGE_KEYS.THEME) {
-          return JSON.stringify("dark");
-        }
-        if (key === STORAGE_KEYS.LANGUAGE) {
-          return JSON.stringify("en");
-        }
-        return null;
-      },
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    });
-
-    const ui = createEditorUiStore();
-    ui.initFromRuntime();
-
-    expect(ui.theme.value).toBe("dark");
-    expect(ui.locale.value).toBe("en");
+    expect(ui.theme.value).toBe("light");
+    expect(ui.locale.value).toBe("zh");
   });
 
   it("多次获取时返回同一状态源", () => {

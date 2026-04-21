@@ -72,6 +72,19 @@ describe("main runtime message handler", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
+  it("无宿主消息时不会从本地缓存恢复主题与语言", () => {
+    Storage.setTheme("dark");
+    Storage.setLanguage("en");
+
+    const editorUi = getEditorUiStore();
+    editorUi.initFromRuntime();
+
+    expect(editorUi.theme.value).toBe("light");
+    expect(editorUi.locale.value).toBe("zh");
+    expect(i18n.global.locale.value).toBe("zh");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+
   it("AUTH_REFRESHED 会更新 token 与 refreshToken", () => {
     const editorUi = getEditorUiStore();
     const trustedParent = {} as Window;

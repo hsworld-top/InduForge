@@ -2,7 +2,6 @@ import { computed, ref, type ComputedRef, type Ref } from "vue";
 import enLocale from "element-plus/es/locale/lang/en";
 import zhLocale from "element-plus/es/locale/lang/zh-cn";
 import { i18n } from "@/i18n";
-import { Storage } from "@/utils/storage";
 
 export type EditorTheme = "light" | "dark";
 export type EditorLocale = "zh" | "en";
@@ -29,25 +28,11 @@ export interface EditorUiStore {
 /**
  * 编辑器 UI 状态单元。
  *
- * 只负责编辑器壳层的主题、语言和本地缓存，不触碰页面 Schema。
+ * 只负责编辑器壳层的主题、语言状态与 DOM 同步，不触碰页面 Schema。
+ * 主题/语言的来源只允许是宿主 bootstrap、宿主 postMessage 或显式运行时入参，
+ * 不再从设计器本地缓存恢复，也不再把切换结果写回 localStorage。
  */
 let editorUiStore: EditorUiStore | null = null;
-
-const resolveTheme = (input?: unknown): EditorTheme => {
-  if (isEditorTheme(input)) {
-    return input;
-  }
-
-  return Storage.getDesignerTheme();
-};
-
-const resolveLocale = (input?: unknown): EditorLocale => {
-  if (isEditorLocale(input)) {
-    return input;
-  }
-
-  return Storage.getDesignerLanguage();
-};
 
 const syncLocaleToI18n = (nextLocale: EditorLocale): void => {
   i18n.global.locale.value = nextLocale;
@@ -68,13 +53,11 @@ const createEditorUiStoreImpl = (): EditorUiStore => {
   };
 
   const initFromRuntime = (input?: EditorUiRuntimeInput): void => {
-    theme.value = resolveTheme(input?.theme);
-    locale.value = resolveLocale(input?.locale);
+    theme.value = isEditorTheme(input?.theme) ? input.theme : "light";
+    locale.value = isEditorLocale(input?.locale) ? input.locale : "zh";
 
     applyThemeToDom(theme.value);
     syncLocaleToI18n(locale.value);
-    Storage.setDesignerTheme(theme.value);
-    Storage.setDesignerLanguage(locale.value);
   };
 
   const setTheme = (nextTheme: EditorTheme): void => {
@@ -84,7 +67,6 @@ const createEditorUiStoreImpl = (): EditorUiStore => {
 
     theme.value = nextTheme;
     applyThemeToDom(nextTheme);
-    Storage.setDesignerTheme(nextTheme);
   };
 
   const setLocale = (nextLocale: EditorLocale): void => {
@@ -94,7 +76,6 @@ const createEditorUiStoreImpl = (): EditorUiStore => {
 
     locale.value = nextLocale;
     syncLocaleToI18n(nextLocale);
-    Storage.setDesignerLanguage(nextLocale);
   };
 
   const elementLocale = computed(() => (locale.value === "en" ? enLocale : zhLocale));

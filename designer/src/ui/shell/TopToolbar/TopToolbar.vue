@@ -13,7 +13,6 @@ import IconLucidePlay from "~icons/lucide/play";
 import IconLucideRedo2 from "~icons/lucide/redo-2";
 import IconLucideSave from "~icons/lucide/save";
 import IconLucideSettings2 from "~icons/lucide/settings-2";
-import IconLucideSun from "~icons/lucide/sun";
 import IconLucideTrash from "~icons/lucide/trash";
 import IconLucideTrash2 from "~icons/lucide/trash-2";
 import IconLucideUndo2 from "~icons/lucide/undo-2";
@@ -92,14 +91,12 @@ const emit = defineEmits<{
   previewApp: [];
   save: [];
   openAi: [];
-  toggleTheme: [];
   moveUp: [];
   moveDown: [];
   moveToTop: [];
   moveToBottom: [];
   openCollaboration: [];
   refreshCanvas: [];
-  toggleLocale: [];
   clearCanvas: [];
   saveSettingsChange: [settings: ToolbarSaveSettings];
   zoomIn: [];
@@ -251,10 +248,6 @@ function handleMoreCommand(command: string) {
     emit("openAi");
     return;
   }
-  if (command === "toggleTheme") {
-    emit("toggleTheme");
-    return;
-  }
   if (command === "export") {
     emit("export");
     return;
@@ -269,10 +262,6 @@ function handleMoreCommand(command: string) {
   }
   if (command === "refresh") {
     emit("refreshCanvas");
-    return;
-  }
-  if (command === "locale") {
-    emit("toggleLocale");
   }
 }
 </script>
@@ -501,10 +490,6 @@ function handleMoreCommand(command: string) {
                 <IconLucideBot class="menu-icon" />
                 {{ t("toolbar.aiAssistant") }}
               </el-dropdown-item>
-              <el-dropdown-item command="toggleTheme">
-                <IconLucideSun class="menu-icon" />
-                {{ t("toolbar.theme") }}
-              </el-dropdown-item>
               <el-dropdown-item command="export" divided>
                 <IconLucideDownload class="menu-icon" />
                 {{ t("toolbar.exportPage") }}
@@ -515,7 +500,6 @@ function handleMoreCommand(command: string) {
               </el-dropdown-item>
               <el-dropdown-item command="collaboration">{{ t("toolbar.collaboration") }}</el-dropdown-item>
               <el-dropdown-item command="refresh">{{ t("toolbar.refreshCanvas") }}</el-dropdown-item>
-              <el-dropdown-item command="locale">{{ t("toolbar.localeToggle") }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>

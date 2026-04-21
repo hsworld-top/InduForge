@@ -66,8 +66,8 @@ describe("TopToolbar i18n", () => {
     expect(wrapper.text()).toContain("预览");
     expect(wrapper.text()).toContain("保存");
     expect(wrapper.text()).toContain("撤销");
-    expect(wrapper.text()).toContain("主题");
-    expect(wrapper.text()).toContain("语言");
+    expect(wrapper.text()).not.toContain("主题");
+    expect(wrapper.text()).not.toContain("语言");
     expect(wrapper.text()).toContain("预设尺寸");
     expect(wrapper.text()).toContain("自动保存");
 
@@ -77,8 +77,8 @@ describe("TopToolbar i18n", () => {
     expect(wrapper.text()).toContain("Preview");
     expect(wrapper.text()).toContain("Save");
     expect(wrapper.text()).toContain("Undo");
-    expect(wrapper.text()).toContain("Theme");
-    expect(wrapper.text()).toContain("Language");
+    expect(wrapper.text()).not.toContain("Theme");
+    expect(wrapper.text()).not.toContain("Language");
     expect(wrapper.text()).toContain("Preset Size");
     expect(wrapper.text()).toContain("Auto Save");
   });

@@ -29,6 +29,10 @@ import {
 import { buildAppEntry, buildAppUrl } from '../src/utils/appUrl.js'
 import { resolveDashboardTabTitle } from '../src/utils/dashboardTabTitle.js'
 import {
+  serializeDashboardTabState,
+  restoreDashboardTabState,
+} from '../src/utils/dashboardTabState.js'
+import {
   createBootstrapResponse,
   createHandoffRecord,
   buildEmbeddedAppUrl,
@@ -591,6 +595,150 @@ await run('标签标题：工程嵌入页会按当前语言实时重算', () => 
 
   assert.equal(zhTitle, '示例工程 - 设计中心')
   assert.equal(enTitle, '示例工程 - Design Center')
+})
+
+await run('标签状态：工程嵌入页会持久化 appType 与工程上下文', () => {
+  const tabConfigMap = {
+    dashboard: {
+      titleKey: 'dashboard.title',
+      component: { name: 'DashboardContent' },
+      icon: 'home',
+    },
+  }
+
+  const savedState = serializeDashboardTabState({
+    tabs: [
+      {
+        key: 'dashboard',
+        titleKey: 'dashboard.title',
+        component: tabConfigMap.dashboard.component,
+        icon: 'home',
+        props: null,
+      },
+      {
+        key: 'design-center-p-1',
+        titleKey: 'projectManagement.designCenter',
+        titlePrefix: '示例工程',
+        component: { name: 'EmbeddedApp' },
+        icon: 'design',
+        props: {
+          appType: 'designer',
+          project: {
+            id: 'p-1',
+            tenantId: 't-1',
+            name: '示例工程',
+          },
+        },
+      },
+    ],
+    activeTab: 'design-center-p-1',
+    tabConfigMap,
+    hasTabPermission: () => true,
+  })
+
+  assert.deepEqual(savedState, {
+    tabs: [
+      { type: 'standard', key: 'dashboard' },
+      {
+        type: 'embedded',
+        key: 'design-center-p-1',
+        titleKey: 'projectManagement.designCenter',
+        titlePrefix: '示例工程',
+        titleParams: null,
+        title: '',
+        icon: 'design',
+        props: {
+          appType: 'designer',
+          project: {
+            id: 'p-1',
+            tenantId: 't-1',
+            name: '示例工程',
+          },
+        },
+      },
+    ],
+    activeTab: 'design-center-p-1',
+  })
+})
+
+await run('标签状态：刷新后会恢复设计中心与数据中心嵌入标签', () => {
+  const embeddedComponent = { name: 'EmbeddedApp' }
+  const tabConfigMap = {
+    dashboard: {
+      titleKey: 'dashboard.title',
+      component: { name: 'DashboardContent' },
+      icon: 'home',
+    },
+  }
+
+  const restoredState = restoreDashboardTabState(
+    {
+      tabs: [
+        { type: 'standard', key: 'dashboard' },
+        {
+          type: 'embedded',
+          key: 'data-center-p-2',
+          titleKey: 'projectManagement.dataCenter',
+          titlePrefix: '项目二',
+          titleParams: null,
+          title: '',
+          icon: 'database',
+          props: {
+            appType: 'datacenter',
+            project: {
+              id: 'p-2',
+              tenantId: 't-2',
+              name: '项目二',
+            },
+          },
+        },
+      ],
+      activeTab: 'data-center-p-2',
+    },
+    {
+      tabConfigMap,
+      hasTabPermission: () => true,
+      embeddedComponent,
+      translate(key) {
+        if (key === 'dashboard.title') return '仪表盘'
+        if (key === 'projectManagement.dataCenter') return '数据中心'
+        return key
+      },
+    }
+  )
+
+  assert.deepEqual(restoredState, {
+    tabs: [
+      {
+        key: 'dashboard',
+        title: '仪表盘',
+        titleKey: 'dashboard.title',
+        titlePrefix: null,
+        titleParams: null,
+        component: tabConfigMap.dashboard.component,
+        icon: 'home',
+        props: null,
+      },
+      {
+        key: 'data-center-p-2',
+        title: '项目二 - 数据中心',
+        titleKey: 'projectManagement.dataCenter',
+        titlePrefix: '项目二',
+        titleParams: null,
+        component: embeddedComponent,
+        icon: 'database',
+        props: {
+          appType: 'datacenter',
+          project: {
+            id: 'p-2',
+            tenantId: 't-2',
+            name: '项目二',
+          },
+        },
+      },
+    ],
+    activeTab: 'data-center-p-2',
+  })
 })
 
 await run('嵌入同步：bootstrap 仅给已注册 iframe 回包', () => {

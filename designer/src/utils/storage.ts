@@ -110,29 +110,4 @@ export class Storage {
     this.set(STORAGE_KEYS.LANGUAGE, language);
   }
 
-  static getDesignerTheme(): "light" | "dark" {
-    const designerTheme = this.get<"light" | "dark">(STORAGE_KEYS.DESIGNER_THEME, null);
-    if (designerTheme === "light" || designerTheme === "dark") {
-      return designerTheme;
-    }
-
-    return this.getTheme();
-  }
-
-  static setDesignerTheme(theme: "light" | "dark"): void {
-    this.set(STORAGE_KEYS.DESIGNER_THEME, theme);
-  }
-
-  static getDesignerLanguage(): "zh" | "en" {
-    const designerLanguage = this.get<"zh" | "en">(STORAGE_KEYS.DESIGNER_LANGUAGE, null);
-    if (designerLanguage === "zh" || designerLanguage === "en") {
-      return designerLanguage;
-    }
-
-    return this.getLanguage();
-  }
-
-  static setDesignerLanguage(language: "zh" | "en"): void {
-    this.set(STORAGE_KEYS.DESIGNER_LANGUAGE, language);
-  }
 }

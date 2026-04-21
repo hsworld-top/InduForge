@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { registerDesignerBeforeEachGuard } from "./index";
+import { applyRuntimeRouteEffects, registerDesignerBeforeEachGuard } from "./index";
 import {
   buildIdeRestoreUrl,
   createBootstrapRequest,
@@ -10,6 +10,8 @@ import {
   shouldUseDebugMode,
 } from "../runtime/host-bootstrap";
 import { Storage } from "@/utils/storage";
+import { getEditorUiStore } from "@/stores/editor-ui-store";
+import { i18n } from "@/i18n";
 
 describe("designer 入口规划", () => {
   afterEach(() => {
@@ -71,6 +73,33 @@ describe("designer 入口规划", () => {
         idePort: "18601",
       }),
     ).toBe("http://127.0.0.1:18601");
+  });
+});
+
+describe("runtime route effects", () => {
+  afterEach(() => {
+    localStorage.clear();
+    document.documentElement.className = "";
+    document.documentElement.removeAttribute("data-theme");
+    const editorUi = getEditorUiStore();
+    editorUi.initFromRuntime({ theme: "light", locale: "zh" });
+    i18n.global.locale.value = "zh";
+  });
+
+  it("设计态路由不会从本地缓存恢复主题语言，而是保留当前 editorUi 状态", () => {
+    Storage.setTheme("dark");
+    Storage.setLanguage("en");
+
+    const editorUi = getEditorUiStore();
+    editorUi.initFromRuntime({ theme: "dark", locale: "en" });
+
+    applyRuntimeRouteEffects("/", "http://designer.example/designer/", { editorUi });
+
+    expect(editorUi.theme.value).toBe("dark");
+    expect(editorUi.locale.value).toBe("en");
+    expect(i18n.global.locale.value).toBe("en");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 });
 

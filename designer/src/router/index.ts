@@ -3,7 +3,7 @@
  *
  * 正式入口只允许两种启动方式：
  * - 被 IDE 以 iframe 形式嵌入，并通过 bootstrap message 注入上下文；
- * - `/designer/debug` 独立调试路由，直接使用本地缓存。
+ * - `/designer/debug` 独立调试路由，使用固定默认 UI（light + zh）。
  */
 
 import type { NavigationGuardNext, RouteLocationNormalized, Router } from "vue-router";
@@ -93,11 +93,8 @@ export function applyRuntimeRouteEffects(
     return;
   }
 
-  // 正式入口只能从 bootstrap/local storage 恢复 UI，不再消费 URL 注入参数。
-  editorUi.initFromRuntime({
-    theme: Storage.getDesignerTheme(),
-    locale: Storage.getDesignerLanguage(),
-  });
+  // 设计态路由只把当前 UI 状态重新同步到 DOM，避免路由切换时覆盖宿主已经下发的主题/语言。
+  editorUi.applyThemeToDom();
 }
 
 function syncRuntimeSettings(routePath = window.location.pathname): void {

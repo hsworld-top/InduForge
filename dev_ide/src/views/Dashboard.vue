@@ -389,6 +389,7 @@ import {
   unregisterEmbeddedIframe,
 } from '@/utils/embeddedIframeSync'
 import { resolveDashboardTabTitle } from '@/utils/dashboardTabTitle'
+import { restoreDashboardTabState, serializeDashboardTabState } from '@/utils/dashboardTabState'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
 import { initSocket, getSocket } from '@/utils/socket'
@@ -403,6 +404,7 @@ const OpsManagement = defineAsyncComponent(() => import('@/views/tenant/OpsManag
 const SystemLogs = defineAsyncComponent(() => import('@/views/tenant/SystemLogs.vue'))
 const SystemSettings = defineAsyncComponent(() => import('@/views/tenant/SystemSettings.vue'))
 const Profile = defineAsyncComponent(() => import('@/views/profile/Profile.vue'))
+const EmbeddedApp = defineAsyncComponent(() => import('@/components/EmbeddedApp.vue'))
 
 // 导入默认Logo图片
 import defaultLogo from '@/assets/images/default-logo.svg'
@@ -930,18 +932,15 @@ export default {
      */
     const persistTabState = () => {
       if (!tabsInitialized.value) return
-      const tabConfigMap = getTabConfigMap()
-      const persistedKeys = tabs.value
-        .map((tab) => tab.key)
-        .filter((key) => tabConfigMap[key] && hasTabPermission(key))
-      const safeActiveTab = persistedKeys.includes(activeTab.value)
-        ? activeTab.value
-        : persistedKeys[0] || ''
-
-      Storage.set(getTabStateStorageKey(), {
-        tabs: persistedKeys,
-        activeTab: safeActiveTab,
-      })
+      Storage.set(
+        getTabStateStorageKey(),
+        serializeDashboardTabState({
+          tabs: tabs.value,
+          activeTab: activeTab.value,
+          tabConfigMap: getTabConfigMap(),
+          hasTabPermission,
+        })
+      )
     }
 
     /**
@@ -949,27 +948,16 @@ export default {
      * @returns {boolean} 是否恢复成功
      */
     const restoreTabState = () => {
-      const savedState = Storage.get(getTabStateStorageKey(), null)
-      if (!savedState || !Array.isArray(savedState.tabs)) return false
+      const restoredState = restoreDashboardTabState(Storage.get(getTabStateStorageKey(), null), {
+        tabConfigMap: getTabConfigMap(),
+        hasTabPermission,
+        embeddedComponent: EmbeddedApp,
+        translate: t,
+      })
+      if (!restoredState) return false
 
-      const tabConfigMap = getTabConfigMap()
-      const restoredKeys = savedState.tabs.filter((key) => tabConfigMap[key] && hasTabPermission(key))
-      if (restoredKeys.length === 0) return false
-
-      tabs.value = restoredKeys.map((key) => ({
-        key,
-        title: t(tabConfigMap[key].titleKey),
-        titleKey: tabConfigMap[key].titleKey,
-        component: tabConfigMap[key].component,
-        icon: tabConfigMap[key].icon,
-        props: null,
-      }))
-
-      if (savedState.activeTab && restoredKeys.includes(savedState.activeTab)) {
-        activeTab.value = savedState.activeTab
-      } else {
-        activeTab.value = restoredKeys[0]
-      }
+      tabs.value = restoredState.tabs
+      activeTab.value = restoredState.activeTab
 
       return true
     }

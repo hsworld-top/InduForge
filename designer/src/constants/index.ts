@@ -12,8 +12,6 @@ export const STORAGE_KEYS = {
   USER_INFO: "user_info",
   THEME: "theme",
   LANGUAGE: "language",
-  DESIGNER_THEME: "designer_theme",
-  DESIGNER_LANGUAGE: "designer_language",
   TENANT_ID: "tenant_id",
   PROJECT_ID: "project_id",
 } as const;
