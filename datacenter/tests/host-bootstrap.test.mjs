@@ -89,6 +89,7 @@ test("shouldRedirectTopLevelToIde 会区分正式入口和 debug 入口", () => 
   assert.equal(shouldRedirectTopLevelToIde("/datacenter/", true), true);
   assert.equal(shouldRedirectTopLevelToIde("/datacenter/debug", true), false);
   assert.equal(shouldUseDebugMode("/datacenter/debug"), true);
+  assert.equal(shouldUseDebugMode("/datacenter/debug", false), false);
   assert.equal(shouldUseDebugMode("/datacenter/debug/query"), true);
   assert.equal(shouldUseDebugMode("/datacenter/"), false);
 });
@@ -273,7 +274,7 @@ test("顶层正式入口在已有本地会话时不应强制回跳 IDE", () => {
   globalThis.localStorage.setItem("project_id", JSON.stringify("project-cached"));
 
   const plan = initializeHostBootstrap({
-    currentUrl: "http://datacenter.example/datacenter/?handoff=handoff-top-cache",
+    currentUrl: "http://datacenter.example/datacenter/",
     isTopLevelWindow: true,
     referrer: "",
     selfWindow: globalThis.window,
@@ -282,4 +283,43 @@ test("顶层正式入口在已有本地会话时不应强制回跳 IDE", () => {
   assert.equal(plan.shouldRedirectToIde, false);
   assert.equal(plan.shouldWaitForBootstrap, false);
   assert.equal(plan.ideRedirectUrl, null);
+});
+
+test("顶层正式入口即使已有本地会话，只要携带新的 handoff 仍应回跳 IDE 恢复指定工程", () => {
+  globalThis.localStorage.setItem("auth_token", "cached-token");
+  globalThis.localStorage.setItem("project_id", JSON.stringify("project-cached"));
+
+  const plan = initializeHostBootstrap({
+    currentUrl: "http://datacenter.example/datacenter/?handoff=handoff-top-cache",
+    isTopLevelWindow: true,
+    referrer: "",
+    selfWindow: globalThis.window,
+  });
+
+  assert.equal(plan.shouldRedirectToIde, true);
+  assert.equal(plan.shouldWaitForBootstrap, false);
+  assert.equal(
+    plan.ideRedirectUrl,
+    "http://datacenter.example/?handoff=handoff-top-cache",
+  );
+});
+
+test("嵌入正式入口即使已有缓存会话，只要携带新的 handoff 也必须等待 bootstrap 覆盖旧工程", () => {
+  globalThis.localStorage.setItem("auth_token", "cached-token");
+  globalThis.localStorage.setItem("project_id", JSON.stringify("project-cached"));
+
+  const parentWindow = {
+    postMessage() {},
+  };
+
+  const plan = initializeHostBootstrap({
+    currentUrl: "http://datacenter.example/datacenter/?handoff=handoff-iframe-cache",
+    isTopLevelWindow: false,
+    parentWindow,
+    referrer: "http://ide.example/dashboard",
+    selfWindow: globalThis.window,
+  });
+
+  assert.equal(plan.shouldRedirectToIde, false);
+  assert.equal(plan.shouldWaitForBootstrap, true);
 });

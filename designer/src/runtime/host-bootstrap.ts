@@ -183,8 +183,11 @@ function resolveHandoffValue(handoff: string | { handoffId?: unknown } | null | 
 /**
  * 正式入口的 debug 例外只由 pathname 决定，避免不同入口重复维护判断逻辑。
  */
-export function shouldUseDebugMode(pathname: string): boolean {
-  return resolveDebugModeForPath(pathname);
+export function shouldUseDebugMode(
+  pathname: string,
+  debugRouteEnabled?: boolean,
+): boolean {
+  return resolveDebugModeForPath(pathname, debugRouteEnabled);
 }
 
 /**
@@ -194,7 +197,17 @@ export function shouldUseDebugMode(pathname: string): boolean {
 export function hasReusableEntrypointSession(options: {
   hasProjectId?: boolean;
   hasToken?: boolean;
+  handoffId?: string | null;
 } = {}): boolean {
+  /**
+   * handoffId 代表宿主明确要求恢复某一次打开动作。
+   * 此时即便本地残留 token/projectId，也不能视为“可复用会话”，
+   * 否则新的工程入口会直接复用旧工程上下文，导致打开 test 时仍落到 test1。
+   */
+  if (asNonEmptyString(options.handoffId)) {
+    return false;
+  }
+
   const hasToken = options.hasToken ?? Boolean(Storage.getToken());
   const hasProjectId = options.hasProjectId ?? Boolean(Storage.getProjectId());
   return hasToken && hasProjectId;
@@ -293,10 +306,12 @@ export function resolveDesignerEntrypointPlan(
   const isTopLevelWindow = options.isTopLevelWindow ?? true;
   const hasToken = options.hasToken ?? Boolean(Storage.getToken());
   const hasProjectId = options.hasProjectId ?? Boolean(Storage.getProjectId());
+  const shouldForceBootstrapByHandoff = Boolean(handoffId) && !isTopLevelWindow;
   const shouldRedirectToIde = shouldRedirectTopLevelToIde(
     url.pathname,
     isTopLevelWindow,
     hasReusableEntrypointSession({
+      handoffId,
       hasProjectId,
       hasToken,
     }),
@@ -314,8 +329,13 @@ export function resolveDesignerEntrypointPlan(
     handoffId,
     shouldRedirectToIde,
     ideRedirectUrl,
-    // 正式入口仅在 iframe 场景且当前缺 token 时等待宿主 bootstrap，避免已有会话被无条件阻塞。
-    shouldWaitForBootstrap: !isDebugRoute && !shouldRedirectToIde && !hasToken,
+    /**
+     * iframe 正式入口一旦带 handoffId，就表示宿主显式指定了新的工程上下文，
+     * 必须等待 bootstrap 覆盖本地旧 token/projectId；否则会把上一工程错误复用到新入口。
+     * 只有“无 handoffId 的独立续用场景”才允许依赖本地 token 直接进入。
+     */
+    shouldWaitForBootstrap:
+      !isDebugRoute && !shouldRedirectToIde && (shouldForceBootstrapByHandoff || !hasToken),
     trustedHostOrigin: resolveTrustedHostOrigin(referrer),
   };
 }

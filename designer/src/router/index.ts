@@ -8,8 +8,11 @@
 
 import type { NavigationGuardNext, RouteLocationNormalized, Router } from "vue-router";
 import { createRouter, createWebHistory } from "vue-router";
+import { STORAGE_KEYS } from "@/constants";
 import type { EditorUiStore } from "@/stores/editor-ui-store";
 import { getEditorUiStore } from "@/stores/editor-ui-store";
+import { debugProjectApi } from "@/services/debugProjectApi";
+import { isDesignerDebugRouteEnabled } from "@/runtime/debug-route";
 import {
   buildIdeLoginUrl,
   buildIdeRestoreUrl,
@@ -31,26 +34,39 @@ declare module "vue-router" {
   }
 }
 
-const routes = [
-  {
-    path: "/",
-    name: "Designer",
-    component: () => import("@/ui/shell/DesignerView.vue"),
-    meta: {
-      title: "设计器",
-      requiresAuth: true,
+type DesignerDebugProjectMeta = {
+  id: string | null;
+  tenantId: string | null;
+};
+
+type ResolveDefaultDebugProject = () => Promise<DesignerDebugProjectMeta | null>;
+
+export function createDesignerRoutes(enableDebugRoute?: boolean) {
+  const routes = [
+    {
+      path: "/",
+      name: "Designer",
+      component: () => import("@/ui/shell/DesignerView.vue"),
+      meta: {
+        title: "设计器",
+        requiresAuth: true,
+      },
     },
-  },
-  {
-    path: "/debug",
-    name: "DesignerDebug",
-    component: () => import("@/ui/shell/DesignerView.vue"),
-    meta: {
-      title: "设计器调试",
-      requiresAuth: false,
-    },
-  },
-  {
+  ];
+
+  if (isDesignerDebugRouteEnabled(enableDebugRoute)) {
+    routes.push({
+      path: "/debug",
+      name: "DesignerDebug",
+      component: () => import("@/ui/shell/DesignerView.vue"),
+      meta: {
+        title: "设计器调试",
+        requiresAuth: false,
+      },
+    });
+  }
+
+  routes.push({
     path: "/preview",
     name: "Preview",
     component: () => import("@/ui/editors/page/preview/PreviewView.vue"),
@@ -58,8 +74,12 @@ const routes = [
       title: "预览",
       requiresAuth: true,
     },
-  },
-];
+  });
+
+  return routes;
+}
+
+const routes = createDesignerRoutes();
 
 const router = createRouter({
   history: createWebHistory("/designer/"),
@@ -80,8 +100,52 @@ type DesignerBeforeEachGuardDependencies = {
   getIdeOrigin?: () => string;
   isTopLevelWindow?: () => boolean;
   navigateToUrl?: (url: string) => void;
+  resolveDefaultDebugProject?: ResolveDefaultDebugProject;
   waitForBootstrap?: () => Promise<boolean>;
 };
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+async function resolveDesignerDebugProjectMeta(
+  targetUrl: string,
+  resolveDefaultDebugProject: ResolveDefaultDebugProject,
+): Promise<DesignerDebugProjectMeta> {
+  const url = new URL(targetUrl);
+  const projectIdFromUrl = asNonEmptyString(url.searchParams.get("pid")) ?? asNonEmptyString(url.searchParams.get("id"));
+  const tenantIdFromUrl = asNonEmptyString(url.searchParams.get("tenant"));
+
+  if (projectIdFromUrl) {
+    Storage.setProjectId(projectIdFromUrl);
+    if (tenantIdFromUrl) {
+      Storage.setTenantId(tenantIdFromUrl);
+    }
+
+    return {
+      id: projectIdFromUrl,
+      tenantId: tenantIdFromUrl ?? Storage.getTenantId(),
+    };
+  }
+
+  const defaultDebugProject = await resolveDefaultDebugProject();
+  if (defaultDebugProject?.id) {
+    Storage.setProjectId(defaultDebugProject.id);
+    if (defaultDebugProject.tenantId) {
+      Storage.setTenantId(defaultDebugProject.tenantId);
+    }
+
+    return {
+      id: defaultDebugProject.id,
+      tenantId: defaultDebugProject.tenantId ?? Storage.getTenantId(),
+    };
+  }
+
+  return {
+    id: Storage.getProjectId(),
+    tenantId: Storage.getTenantId(),
+  };
+}
 
 export function applyRuntimeRouteEffects(
   routePath: string,
@@ -136,6 +200,8 @@ export function registerDesignerBeforeEachGuard(
     }));
   const isTopLevelWindow = dependencies.isTopLevelWindow ?? (() => window.parent === window);
   const navigateToUrl = dependencies.navigateToUrl ?? ((url: string) => window.location.replace(url));
+  const resolveDefaultDebugProject = dependencies.resolveDefaultDebugProject ?? (() =>
+    debugProjectApi.resolveDefaultProjectByName());
   const waitForBootstrap = dependencies.waitForBootstrap ?? waitForHostBootstrap;
 
   return targetRouter.beforeEach(async (to: RouteLocationNormalized, _from, next: NavigationGuardNext) => {
@@ -160,13 +226,26 @@ export function registerDesignerBeforeEachGuard(
     let token = Storage.getToken();
     let bootstrapSucceeded = true;
 
-    if (entrypointPlan.shouldWaitForBootstrap && !token) {
+    if (entrypointPlan.shouldWaitForBootstrap) {
+      /**
+       * handoff 代表宿主要求切换到新的工程上下文。
+       * 等待前先清掉旧工程标识，避免 bootstrap 超时后仍把上一工程误当成当前入口恢复。
+       */
+      if (entrypointPlan.handoffId) {
+        Storage.remove(STORAGE_KEYS.PROJECT_ID);
+        Storage.remove(STORAGE_KEYS.TENANT_ID);
+      }
+
       // bootstrap 失败时不再挂起，后续继续落到现有登录或 IDE 回跳兜底。
       bootstrapSucceeded = await waitForBootstrap();
       token = Storage.getToken();
     }
 
     syncRuntimeSettings(to.path);
+
+    if (entrypointPlan.isDebugRoute) {
+      to.meta.project = await resolveDesignerDebugProjectMeta(targetUrl, resolveDefaultDebugProject);
+    }
 
     if (!token && to.meta.requiresAuth) {
       next(false);

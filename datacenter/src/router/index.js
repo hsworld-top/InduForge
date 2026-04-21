@@ -1,9 +1,13 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { watch } from "vue";
+import { debugProjectAPI } from "@/api/debug-project.api";
+import { STORAGE_KEYS } from "@/constants/index.js";
 import { Storage } from "@/utils/storage";
 import { datacenterLocale, getDatacenterRouteTitle } from "@/i18n/runtime";
 // import DataCenter from "../views/DataCenter.vue"; // 原版本
 import DataCenter from "../views/DataCenterNew.vue"; // 重构版本
+import { resolveDatacenterDebugProjectMeta } from "./debug-project.js";
+import { createDatacenterRoutes } from "./route-config.js";
 import {
   applyThemeToDocument,
   buildIdeLoginUrl,
@@ -15,26 +19,9 @@ import {
   waitForHostBootstrap,
 } from "../runtime/host-bootstrap.js";
 
-const routes = [
-  {
-    path: "/",
-    name: "datacenter",
-    component: DataCenter,
-    meta: {
-      titleKey: "route.datacenter",
-      requiresAuth: true,
-    },
-  },
-  {
-    path: "/debug",
-    name: "datacenter-debug",
-    component: DataCenter,
-    meta: {
-      titleKey: "route.datacenterDebug",
-      requiresAuth: false,
-    },
-  },
-];
+const routes = createDatacenterRoutes({
+  DataCenterComponent: DataCenter,
+});
 
 const router = createRouter({
   history: createWebHistory("/datacenter/"),
@@ -80,6 +67,8 @@ export function registerDatacenterBeforeEachGuard(
     navigateToUrl = (url) => {
       window.location.href = url;
     },
+    resolveDefaultDebugProject = () =>
+      debugProjectAPI.resolveDefaultProjectByName(),
     waitForBootstrap = waitForHostBootstrap,
   } = {},
 ) {
@@ -105,19 +94,41 @@ export function registerDatacenterBeforeEachGuard(
     }
 
     if (isDebugRoute) {
+      to.meta.project = await resolveDatacenterDebugProjectMeta({
+        targetUrl: runtimeUrl.toString(),
+        resolveDefaultDebugProject,
+        getStoredProjectId: () => Storage.getProjectId(),
+        getStoredTenantId: () => Storage.getTenantId(),
+        setProjectId: (value) => Storage.setProjectId(value),
+        setTenantId: (value) => Storage.setTenantId(value),
+      });
       next();
       return;
     }
 
     let token = Storage.getToken();
-    if (!token) {
-      const bootstrapReady = await waitForBootstrap();
-      token = Storage.getToken();
+    let bootstrapReady = true;
+    if (handoff) {
+      /**
+       * handoff 表示宿主要求恢复新的工程上下文。
+       * 等待 bootstrap 前先清掉旧工程与租户，避免超时时继续读到上一工程残留。
+       */
+      Storage.removeProjectId();
+      Storage.remove(STORAGE_KEYS.TENANT_ID);
+    }
 
-      if (!bootstrapReady || !token) {
-        navigateToUrl(buildIdeLoginUrl(runtimeUrl.toString(), ideOrigin));
-        return;
-      }
+    if (!token || handoff) {
+      bootstrapReady = await waitForBootstrap();
+      token = Storage.getToken();
+    }
+
+    if (!token) {
+      navigateToUrl(buildIdeLoginUrl(runtimeUrl.toString(), ideOrigin));
+      return;
+    }
+
+    if (!bootstrapReady) {
+      // handoff 超时只负责解除等待；后续由 projectId 缺失分支回到 IDE 恢复，不再误导到登录页。
     }
 
     const projectId = Storage.getProjectId();

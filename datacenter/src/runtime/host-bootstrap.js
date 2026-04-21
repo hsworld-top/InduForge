@@ -1,3 +1,5 @@
+/* global __DATACENTER_DEBUG_ROUTE_ENABLED__ */
+
 import { Storage } from "../utils/storage.js";
 
 export const DATACENTER_APP = "datacenter";
@@ -8,6 +10,10 @@ export const AUTH_EXPIRED = "AUTH_EXPIRED";
 export const APP_BOOTSTRAP_TIMEOUT_MS = 3000;
 
 const DEBUG_BASE_PATH = "/datacenter/debug";
+const DEFAULT_DEBUG_ROUTE_ENABLED =
+  typeof __DATACENTER_DEBUG_ROUTE_ENABLED__ !== "undefined"
+    ? __DATACENTER_DEBUG_ROUTE_ENABLED__
+    : true;
 
 let currentSession = null;
 
@@ -125,7 +131,22 @@ function resolveOriginCandidate(value, baseUrl) {
   }
 }
 
-export function shouldUseDebugMode(pathname) {
+function normalizeDebugRouteEnabled(debugRouteEnabled) {
+  if (typeof debugRouteEnabled === "string") {
+    return debugRouteEnabled !== "false";
+  }
+
+  return Boolean(debugRouteEnabled);
+}
+
+export function shouldUseDebugMode(
+  pathname,
+  debugRouteEnabled = DEFAULT_DEBUG_ROUTE_ENABLED,
+) {
+  if (!normalizeDebugRouteEnabled(debugRouteEnabled)) {
+    return false;
+  }
+
   const normalizedPath = pathname || "";
   return (
     normalizedPath === DEBUG_BASE_PATH ||
@@ -138,9 +159,19 @@ export function shouldUseDebugMode(pathname) {
  * 这样用户把数据中心单独打开后，不会因为刷新或新标签页复用正式入口而被强制拉回 IDE。
  */
 export function hasReusableTopLevelSession({
+  handoff = null,
   token = Storage.getToken(),
   projectId = Storage.getProjectId(),
 } = {}) {
+  /**
+   * handoff 代表宿主显式指定了一次新的工程打开动作。
+   * 只要入口带 handoff，就不能继续复用本地残留的旧工程上下文，
+   * 否则 test 与 test1 会落到同一个旧 projectId。
+   */
+  if (asNonEmptyString(handoff)) {
+    return false;
+  }
+
   return Boolean(asNonEmptyString(token) && asNonEmptyString(projectId));
 }
 
@@ -150,9 +181,9 @@ export function shouldRedirectTopLevelToIde(
   hasReusableSession = hasReusableTopLevelSession(),
 ) {
   return (
-    Boolean(isTopLevel) &&
+    isTopLevel &&
     !shouldUseDebugMode(pathname) &&
-    !Boolean(hasReusableSession)
+    !hasReusableSession
   );
 }
 
@@ -325,6 +356,7 @@ export function initializeHostBootstrap({
   selfWindow,
 } = {}) {
   const resolvedUrl = resolveCurrentUrl(currentUrl);
+  const handoff = asNonEmptyString(resolvedUrl.searchParams.get("handoff"));
   const topLevelWindow =
     isTopLevelWindow ??
     resolveWindowLike()?.parent === (selfWindow ?? resolveWindowLike());
@@ -332,11 +364,15 @@ export function initializeHostBootstrap({
   const shouldRedirectToIde = shouldRedirectTopLevelToIde(
     resolvedUrl.pathname,
     topLevelWindow,
+    hasReusableTopLevelSession({
+      handoff,
+    }),
   );
+  const shouldForceBootstrapByHandoff = Boolean(handoff) && !topLevelWindow;
   const shouldWaitForBootstrap =
     !shouldUseDebugMode(resolvedUrl.pathname) &&
     !shouldRedirectToIde &&
-    !Storage.getToken();
+    (shouldForceBootstrapByHandoff || !Storage.getToken());
   const trustedOrigin = resolveTrustedHostOrigin(trustedReferrer);
   const target = resolveHostMessageTarget({
     parentWindow,
@@ -364,7 +400,7 @@ export function initializeHostBootstrap({
   currentSession = {
     gate,
     plan: {
-      handoff: asNonEmptyString(resolvedUrl.searchParams.get("handoff")),
+      handoff,
       ideRedirectUrl: restoreUrl,
       shouldRedirectToIde,
       shouldWaitForBootstrap,
