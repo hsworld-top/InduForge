@@ -24,6 +24,15 @@ export interface AuthTokens {
 }
 
 /**
+ * 用户所属租户的精简信息。
+ */
+export interface UserTenant {
+  id?: string | number
+  code?: string
+  name?: string
+}
+
+/**
  * 当前登录用户核心信息。
  */
 export interface UserInfo {
@@ -35,4 +44,5 @@ export interface UserInfo {
   avatar?: string
   avatarUrl?: string
   tenantId?: string | number | null
+  tenant?: UserTenant
 }
