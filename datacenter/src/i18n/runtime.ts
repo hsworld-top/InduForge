@@ -216,6 +216,18 @@ export const datacenterMessages = {
       name: "名称",
       dataType: "数据类型",
       status: "状态",
+      runtimePermission: "运行态写权限",
+      runtimePermissionHint:
+        "这里只编辑当前数据点的运行态写权限，不扩展为完整权限系统。",
+      runtimePermissionSummaryLabel: "权限摘要",
+      runtimePermissionDialogTitle: "编辑写权限 - {name}",
+      runtimePermissionAllowRoles: "允许角色",
+      runtimePermissionDenyRoles: "拒绝角色",
+      runtimePermissionInherit: "继承上级权限",
+      runtimePermissionRolesPlaceholder:
+        "每行一个角色 ID，也支持使用逗号分隔",
+      runtimePermissionSaveSuccess: "数据点写权限已更新",
+      runtimePermissionSaveFailed: "更新数据点写权限失败：{message}",
       updatedAt: "更新时间",
       refreshSuccess: "数据点列表已刷新",
       loadFailed: "加载数据点失败：{message}",
@@ -561,6 +573,19 @@ export const datacenterMessages = {
       name: "Name",
       dataType: "Data Type",
       status: "Status",
+      runtimePermission: "Runtime Write Permission",
+      runtimePermissionHint:
+        "Only edit the current data point write permission here, without expanding to a full permission system.",
+      runtimePermissionSummaryLabel: "Permission Summary",
+      runtimePermissionDialogTitle: "Edit Write Permission - {name}",
+      runtimePermissionAllowRoles: "Allowed Roles",
+      runtimePermissionDenyRoles: "Denied Roles",
+      runtimePermissionInherit: "Inherit parent permission",
+      runtimePermissionRolesPlaceholder:
+        "One role ID per line, commas are also supported",
+      runtimePermissionSaveSuccess: "Data point write permission updated",
+      runtimePermissionSaveFailed:
+        "Failed to update data point write permission: {message}",
       updatedAt: "Updated At",
       refreshSuccess: "Data points refreshed",
       loadFailed: "Failed to load data points: {message}",

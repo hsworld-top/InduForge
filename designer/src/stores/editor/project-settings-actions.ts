@@ -18,12 +18,23 @@ export interface ProjectSettingsStateRefs {
   globalScripts: Ref<unknown>;
 }
 
-export async function loadProjectSettingsForStore(
+export interface ProjectSettingsSnapshot {
+  projectVariables: Record<string, unknown>;
+  projectVariableGroups: unknown[];
+  globalScripts: ReturnType<typeof normalizeGlobalScripts>;
+}
+
+export async function fetchProjectSettingsForStore(
   projectId: string,
-  api: ProjectSettingsApi,
-  out: ProjectSettingsStateRefs,
-): Promise<void> {
-  if (!projectId) return;
+  api: Pick<ProjectSettingsApi, "getProjectSettings">,
+): Promise<ProjectSettingsSnapshot> {
+  if (!projectId) {
+    return {
+      projectVariables: {},
+      projectVariableGroups: [],
+      globalScripts: normalizeGlobalScripts({}),
+    };
+  }
 
   const settingsRaw = await api.getProjectSettings(projectId);
   const settingsResult = unwrapApiData(settingsRaw);
@@ -37,11 +48,23 @@ export async function loadProjectSettingsForStore(
       ? (gv as Record<string, unknown>)
       : { definitions: {}, groups: [] },
   );
-  out.projectVariables.value = normalizedVariables.definitions as Record<string, unknown>;
-  out.projectVariableGroups.value = normalizedVariables.groups;
-  out.globalScripts.value = normalizeGlobalScripts(
-    (sr.globalScripts as Record<string, unknown>) || {},
-  );
+
+  return {
+    projectVariables: normalizedVariables.definitions as Record<string, unknown>,
+    projectVariableGroups: normalizedVariables.groups,
+    globalScripts: normalizeGlobalScripts((sr.globalScripts as Record<string, unknown>) || {}),
+  };
+}
+
+export async function loadProjectSettingsForStore(
+  projectId: string,
+  api: ProjectSettingsApi,
+  out: ProjectSettingsStateRefs,
+): Promise<void> {
+  const snapshot = await fetchProjectSettingsForStore(projectId, api);
+  out.projectVariables.value = snapshot.projectVariables;
+  out.projectVariableGroups.value = snapshot.projectVariableGroups;
+  out.globalScripts.value = snapshot.globalScripts;
 }
 
 export async function saveProjectSettingsForStore(

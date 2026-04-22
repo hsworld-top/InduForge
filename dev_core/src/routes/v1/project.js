@@ -16,6 +16,18 @@ const {
   getProjectSettingsRow,
   upsertProjectSettings,
 } = require('../../services/projectSettingsStore');
+const {
+  ensureRuntimeAdminBootstrap,
+  listRuntimeUsers,
+  createRuntimeUser,
+  updateRuntimeUserStatus,
+  resetRuntimeUserPassword,
+  bindRuntimeUserRoles,
+  listRuntimeRoles,
+  createRuntimeRole,
+  updateRuntimeRole,
+  deleteRuntimeRole,
+} = require('../../services/projectRuntimeAccessService');
 
 const router = express.Router();
 
@@ -28,7 +40,7 @@ const {
   NodeDeployment,
 } = require('../../models');
 const { authenticateToken, requireResourceOwnership, hasCapability } = require('../../middlewares/auth');
-const { randomUUID } = require('crypto');
+const { randomUUID, randomBytes } = require('crypto');
 
 const DEFAULT_GLOBAL_SCRIPTS = {
   system: {
@@ -205,6 +217,55 @@ const respondRouteError = (res, error, fallbackCode, fallbackStatus) => {
   }
 
   return ApiResponse.error(res, fallbackCode, {}, fallbackStatus);
+};
+
+const buildInitialRuntimePassword = () => randomBytes(16).toString('hex');
+const RUNTIME_ACCESS_ALLOWED_ROLES = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
+
+const requireRuntimeProjectManagement = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { role, tenantId } = req.user || {};
+
+    if (!RUNTIME_ACCESS_ALLOWED_ROLES.includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+    }
+
+    const project = await Project.findByPk(id, {
+      attributes: ['id', 'tenantId'],
+    });
+    if (!project) {
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+    }
+
+    if (role !== 'SYSTEM_ADMIN' && project.tenantId !== tenantId) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+    }
+
+    req.runtimeManagedProject = project;
+    return next();
+  } catch (error) {
+    logger.error('Runtime project management guard error', {
+      error: error.message,
+      requestId: req.requestId,
+    });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+};
+
+const cleanupFailedInitializedProject = async (projectRecord, projectId, requestId) => {
+  try {
+    const targetProject = projectRecord || (projectId ? await Project.findByPk(projectId) : null);
+    if (targetProject?.destroy) {
+      await targetProject.destroy();
+    }
+  } catch (cleanupError) {
+    logger.error('Cleanup failed initialized project error', {
+      error: cleanupError.message,
+      projectId,
+      requestId,
+    });
+  }
 };
 
 /**
@@ -488,30 +549,14 @@ router.post('/import', authenticateToken, validate(Joi.object({
       projectInfo.projectVariables ||
       {};
 
-    const project = await Project.create({
-      name: finalName,
-      description: projectInfo.description || '',
-      colorTag: projectInfo.colorTag || '#3b82f6',
-      tenantId,
-      createdBy: userId,
-      projectVariables,
-      entryConfig: {},
-    });
+    let project = null;
+    let projectId = null;
 
     const globalVariables = settings.globalVariables || {
       definitions: projectVariables,
       groups: [],
     };
     const globalScripts = settings.globalScripts || null;
-
-    await upsertProjectSettings(Project.sequelize, {
-      projectId: project.id,
-      schemaVersion: '1.0.0',
-      globalVariables,
-      globalScripts: globalScripts || {},
-      updatedBy: userId,
-      updatedAt: new Date(),
-    });
 
     const pageIdMap = new Map();
     pageList.forEach((item) => {
@@ -521,56 +566,98 @@ router.post('/import', authenticateToken, validate(Joi.object({
       }
     });
 
-    for (const item of pageList) {
-      const pageData = item.page || item;
-      if (!pageData) continue;
-      const newPageId = pageIdMap.get(pageData.id) || randomUUID();
-      const newParentId = pageData.parentId ? pageIdMap.get(pageData.parentId) : null;
-      const schemaContent = item.schemaContent || pageData.schemaContent || null;
-      const nextSchema = schemaContent ? JSON.parse(JSON.stringify(schemaContent)) : null;
-      if (nextSchema?.page) {
-        nextSchema.page.id = newPageId;
-        nextSchema.page.parentId = newParentId;
-        nextSchema.page.name = pageData.name || nextSchema.page.name;
+    await Project.sequelize.transaction(async (transaction) => {
+      project = await Project.create({
+        name: finalName,
+        description: projectInfo.description || '',
+        colorTag: projectInfo.colorTag || '#3b82f6',
+        tenantId,
+        createdBy: userId,
+        projectVariables,
+        entryConfig: {},
+      }, {
+        transaction,
+      });
+      projectId = project.id;
+
+      for (const item of pageList) {
+        const pageData = item.page || item;
+        if (!pageData) continue;
+        const newPageId = pageIdMap.get(pageData.id) || randomUUID();
+        const newParentId = pageData.parentId ? pageIdMap.get(pageData.parentId) : null;
+        const schemaContent = item.schemaContent || pageData.schemaContent || null;
+        const nextSchema = schemaContent ? JSON.parse(JSON.stringify(schemaContent)) : null;
+        if (nextSchema?.page) {
+          nextSchema.page.id = newPageId;
+          nextSchema.page.parentId = newParentId;
+          nextSchema.page.name = pageData.name || nextSchema.page.name;
+        }
+
+        await DesignPage.create({
+          id: newPageId,
+          projectId: project.id,
+          parentId: newParentId,
+          name: pageData.name || '未命名页面',
+          type: pageData.type || 'page',
+          sortOrder: pageData.sortOrder || 0,
+          schemaContent: nextSchema,
+          createdBy: userId,
+          updatedBy: userId,
+        }, {
+          transaction,
+        });
       }
 
-      await DesignPage.create({
-        id: newPageId,
-        projectId: project.id,
-        parentId: newParentId,
-        name: pageData.name || '未命名页面',
-        type: pageData.type || 'page',
-        sortOrder: pageData.sortOrder || 0,
-        schemaContent: nextSchema,
-        createdBy: userId,
-        updatedBy: userId,
+      const nextEntry = {
+        ...entryConfig,
+      };
+      if (entryConfig?.homePageId && pageIdMap.has(entryConfig.homePageId)) {
+        nextEntry.homePageId = pageIdMap.get(entryConfig.homePageId);
+      }
+      if (entryConfig?.loginPageId && pageIdMap.has(entryConfig.loginPageId)) {
+        nextEntry.loginPageId = pageIdMap.get(entryConfig.loginPageId);
+      }
+      if (entryConfig?.logoutPageId && pageIdMap.has(entryConfig.logoutPageId)) {
+        nextEntry.logoutPageId = pageIdMap.get(entryConfig.logoutPageId);
+      }
+
+      await project.update({ entryConfig: nextEntry }, { transaction });
+
+      await ensureRuntimeAdminBootstrap({
+        project,
+        creator: {
+          id: userId,
+          username: req.user.username,
+          fullName: req.user.fullName,
+        },
+        initialPassword: buildInitialRuntimePassword(),
+        transaction,
       });
+    });
+
+    try {
+      await upsertProjectSettings(Project.sequelize, {
+        projectId,
+        schemaVersion: '1.0.0',
+        globalVariables,
+        globalScripts: globalScripts || {},
+        updatedBy: userId,
+        updatedAt: new Date(),
+      });
+
+      const snapshot = buildProjectSnapshot(payload.datacenter || {});
+      await dataDomainClient.replaceProjectSnapshot(
+        projectId,
+        snapshot,
+        req.headers.authorization,
+      );
+    } catch (postCommitError) {
+      await cleanupFailedInitializedProject(project, projectId, req.requestId);
+      throw postCommitError;
     }
 
-    const nextEntry = {
-      ...entryConfig,
-    };
-    if (entryConfig?.homePageId && pageIdMap.has(entryConfig.homePageId)) {
-      nextEntry.homePageId = pageIdMap.get(entryConfig.homePageId);
-    }
-    if (entryConfig?.loginPageId && pageIdMap.has(entryConfig.loginPageId)) {
-      nextEntry.loginPageId = pageIdMap.get(entryConfig.loginPageId);
-    }
-    if (entryConfig?.logoutPageId && pageIdMap.has(entryConfig.logoutPageId)) {
-      nextEntry.logoutPageId = pageIdMap.get(entryConfig.logoutPageId);
-    }
 
-    await project.update({ entryConfig: nextEntry });
-
-    const snapshot = buildProjectSnapshot(payload.datacenter || {});
-    await dataDomainClient.replaceProjectSnapshot(
-      project.id,
-      snapshot,
-      req.headers.authorization,
-    );
-
-
-    return ApiResponse.success(res, { projectId: project.id }, 'project_import_success', {}, 201);
+    return ApiResponse.success(res, { projectId }, 'project_import_success', {}, 201);
   } catch (error) {
     logger.error('Import project error', { error: error.message, requestId: req.requestId });
     return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
@@ -629,27 +716,49 @@ router.post('/', authenticateToken, validate(Joi.object({
       groups: [],
     };
     const defaultGlobalScripts = DEFAULT_GLOBAL_SCRIPTS;
-    const project = await Project.create({
-      name,
-      description,
-      colorTag: colorTag || '#3b82f6',
-      tenantId,
-      createdBy: userId,
-      projectVariables: defaultProjectVariables,
+    let project = null;
+    let projectId = null;
+
+    await Project.sequelize.transaction(async (transaction) => {
+      project = await Project.create({
+        name,
+        description,
+        colorTag: colorTag || '#3b82f6',
+        tenantId,
+        createdBy: userId,
+        projectVariables: defaultProjectVariables,
+      }, {
+        transaction,
+      });
+      projectId = project.id;
+
+      await ensureRuntimeAdminBootstrap({
+        project,
+        creator: {
+          id: userId,
+          username: req.user.username,
+          fullName: req.user.fullName,
+        },
+        initialPassword: buildInitialRuntimePassword(),
+        transaction,
+      });
     });
+
     try {
       await upsertProjectSettings(Project.sequelize, {
-        projectId: project.id,
+        projectId,
         schemaVersion: '1.0.0',
         globalVariables: defaultGlobalVariables,
         globalScripts: defaultGlobalScripts,
         updatedBy: userId,
         updatedAt: new Date(),
       });
-    } catch (error) {
-      logger.warn('Init project settings failed', { error: error.message, projectId: project.id });
+    } catch (postCommitError) {
+      await cleanupFailedInitializedProject(project, projectId, req.requestId);
+      throw postCommitError;
     }
-    const projectWithRelations = await Project.findByPk(project.id, {
+
+    const projectWithRelations = await Project.findByPk(projectId, {
       include: [
         { model: Tenant, as: 'tenant' },
         { model: User, as: 'creator', attributes: ['id', 'username', 'fullName'] }
@@ -667,6 +776,205 @@ router.post('/', authenticateToken, validate(Joi.object({
   } catch (error) {
     logger.error('Create project error', { error: error.message, requestId: req.requestId });
     return ApiResponse.error(res, ErrorCodes.PROJECT_CREATE_FAILED, {}, 500);
+  }
+});
+
+router.get('/:id/runtime-users', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() })
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const runtimeUsers = await listRuntimeUsers({ projectId: id });
+    return ApiResponse.success(res, { runtimeUsers });
+  } catch (error) {
+    logger.error('List runtime users error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.post('/:id/runtime-users', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() }),
+  body: Joi.object({
+    username: Joi.string().trim().required(),
+    displayName: Joi.string().allow('').optional(),
+    initialPassword: Joi.string().min(1).required(),
+    roleIds: Joi.array().items(Joi.string().uuid()).optional(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, displayName, initialPassword, roleIds } = req.body;
+    const runtimeUser = await createRuntimeUser({
+      projectId: id,
+      actorId: req.user.id,
+      username,
+      displayName,
+      initialPassword,
+      roleIds,
+    });
+    return ApiResponse.success(res, { runtimeUser }, 'create_success', {}, 201);
+  } catch (error) {
+    logger.error('Create runtime user error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.patch('/:id/runtime-users/:runtimeUserId/status', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    runtimeUserId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    status: Joi.string().valid('active', 'disabled').required(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id, runtimeUserId } = req.params;
+    const { status } = req.body;
+    const runtimeUser = await updateRuntimeUserStatus({
+      projectId: id,
+      runtimeUserId,
+      status,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, { runtimeUser });
+  } catch (error) {
+    logger.error('Update runtime user status error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.post('/:id/runtime-users/:runtimeUserId/reset-password', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    runtimeUserId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    newPassword: Joi.string().min(1).required(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id, runtimeUserId } = req.params;
+    const { newPassword } = req.body;
+    const runtimeUser = await resetRuntimeUserPassword({
+      projectId: id,
+      runtimeUserId,
+      newPassword,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, { runtimeUser });
+  } catch (error) {
+    logger.error('Reset runtime user password error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.put('/:id/runtime-users/:runtimeUserId/roles', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    runtimeUserId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    roleIds: Joi.array().items(Joi.string().uuid()).default([]),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id, runtimeUserId } = req.params;
+    const { roleIds } = req.body;
+    const runtimeUser = await bindRuntimeUserRoles({
+      projectId: id,
+      runtimeUserId,
+      roleIds,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, { runtimeUser });
+  } catch (error) {
+    logger.error('Bind runtime user roles error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.get('/:id/runtime-roles', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() })
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const runtimeRoles = await listRuntimeRoles({ projectId: id });
+    return ApiResponse.success(res, { runtimeRoles });
+  } catch (error) {
+    logger.error('List runtime roles error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.post('/:id/runtime-roles', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({ id: Joi.string().uuid().required() }),
+  body: Joi.object({
+    code: Joi.string().trim().required(),
+    name: Joi.string().trim().required(),
+    description: Joi.string().allow('').optional(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const role = await createRuntimeRole({
+      projectId: id,
+      actorId: req.user.id,
+      code: req.body.code,
+      name: req.body.name,
+      description: req.body.description,
+    });
+    return ApiResponse.success(res, { role }, 'create_success', {}, 201);
+  } catch (error) {
+    logger.error('Create runtime role error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.put('/:id/runtime-roles/:roleId', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    roleId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    code: Joi.string().trim().optional(),
+    name: Joi.string().trim().optional(),
+    description: Joi.string().allow('').optional(),
+    status: Joi.string().valid('active', 'disabled').optional(),
+  }).min(1).required(),
+})), async (req, res) => {
+  try {
+    const { id, roleId } = req.params;
+    const role = await updateRuntimeRole({
+      projectId: id,
+      roleId,
+      actorId: req.user.id,
+      ...req.body,
+    });
+    return ApiResponse.success(res, { role });
+  } catch (error) {
+    logger.error('Update runtime role error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.delete('/:id/runtime-roles/:roleId', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    roleId: Joi.string().uuid().required(),
+  }),
+})), async (req, res) => {
+  try {
+    const { id, roleId } = req.params;
+    await deleteRuntimeRole({
+      projectId: id,
+      roleId,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, null, 'delete_success');
+  } catch (error) {
+    logger.error('Delete runtime role error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 

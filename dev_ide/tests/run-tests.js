@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import { ROLES } from '../src/constants/index.js'
 import {
@@ -16,7 +17,16 @@ import {
   isFailedDeploy,
   getDeployFailureReason,
 } from '../src/views/tenant/utils/ops-status.js'
-import { messages } from '../src/lang/index.js'
+import {
+  buildRuntimeRolePayload,
+  buildRuntimeUserPayload,
+  buildRuntimeUserRoleBindingPayload,
+  summarizeRuntimeGrantCount,
+  resolveRuntimeAccessStatusMeta,
+  resolveRuntimeUserBindingPlan,
+  shouldApplyRuntimeAccessLoadResult,
+  isRuntimeAccessDialogCancelled,
+} from '../src/views/tenant/components/project-runtime-access-state.js'
 import {
   createEmbeddedUpdateMessage,
   broadcastToEmbeddedIframes,
@@ -44,6 +54,8 @@ import {
   buildDashboardRedirectLocation,
   createRestoredEmbeddedTab,
 } from '../src/utils/dashboardEntryHandoff.js'
+
+const langSource = readFileSync(new URL('../src/lang/index.js', import.meta.url), 'utf8')
 
 const run = async (name, fn) => {
   try {
@@ -145,13 +157,226 @@ await run('运维状态：映射与失败判定', () => {
   assert.equal(getDeployFailureReason({ errorMessage: 'network error' }), 'network error')
 })
 
+await run('工程运行态权限：角色载荷序列化', () => {
+  assert.deepEqual(
+    buildRuntimeRolePayload({
+      name: ' 巡检员 ',
+      code: ' inspector ',
+      description: ' 只负责巡检 ',
+      status: 'disabled',
+    }),
+    {
+      name: '巡检员',
+      code: 'INSPECTOR',
+      description: '只负责巡检',
+      status: 'disabled',
+    }
+  )
+  assert.deepEqual(
+    buildRuntimeRolePayload(
+      {
+        name: ' 巡检员 ',
+        code: ' inspector ',
+        description: ' 只负责巡检 ',
+        status: 'disabled',
+      },
+      { includeStatus: false }
+    ),
+    {
+      name: '巡检员',
+      code: 'INSPECTOR',
+      description: '只负责巡检',
+    }
+  )
+})
+
+await run('工程运行态权限：用户载荷序列化', () => {
+  assert.deepEqual(
+    buildRuntimeUserPayload({
+      username: ' operator ',
+      displayName: ' 操作员 ',
+      initialPassword: ' ChangeMe123! ',
+      roleIds: ['role-1', 'role-2', 'role-1', '', null],
+      status: 'disabled',
+    }),
+    {
+      username: 'operator',
+      displayName: '操作员',
+      initialPassword: 'ChangeMe123!',
+      roleIds: ['role-1', 'role-2'],
+      status: 'disabled',
+    }
+  )
+  assert.deepEqual(
+    buildRuntimeUserPayload(
+      {
+        username: ' operator ',
+        displayName: ' 操作员 ',
+        initialPassword: ' ChangeMe123! ',
+        roleIds: ['role-1', 'role-2', 'role-1', '', null],
+        status: 'disabled',
+      },
+      { includeStatus: false }
+    ),
+    {
+      username: 'operator',
+      displayName: '操作员',
+      initialPassword: 'ChangeMe123!',
+      roleIds: ['role-1', 'role-2'],
+    }
+  )
+})
+
+await run('工程运行态权限：角色绑定载荷序列化', () => {
+  assert.deepEqual(
+    buildRuntimeUserRoleBindingPayload({
+      roleIds: ['role-1', ' role-2 ', 'role-1', '', null],
+    }),
+    {
+      roleIds: ['role-1', 'role-2'],
+    }
+  )
+})
+
+await run('工程运行态权限：授权汇总', () => {
+  assert.equal(
+    summarizeRuntimeGrantCount({
+      grantCount: null,
+      grants: [{ count: 2 }, { count: 3 }, { count: 'bad' }],
+    }),
+    5
+  )
+  assert.equal(summarizeRuntimeGrantCount({ grantCount: 4 }), 4)
+  assert.equal(summarizeRuntimeGrantCount(null), 0)
+})
+
+await run('工程运行态权限：状态元数据映射', () => {
+  assert.deepEqual(resolveRuntimeAccessStatusMeta('active'), {
+    value: 'active',
+    tagType: 'success',
+    labelKey: 'projectManagement.runtimeAccess.statusActive',
+  })
+  assert.deepEqual(resolveRuntimeAccessStatusMeta('disabled'), {
+    value: 'disabled',
+    tagType: 'info',
+    labelKey: 'projectManagement.runtimeAccess.statusDisabled',
+  })
+  assert.deepEqual(resolveRuntimeAccessStatusMeta('unexpected'), {
+    value: 'disabled',
+    tagType: 'info',
+    labelKey: 'projectManagement.runtimeAccess.statusDisabled',
+  })
+})
+
+await run('工程运行态权限：创建后角色绑定分支解析', () => {
+  assert.deepEqual(
+    resolveRuntimeUserBindingPlan({
+      selectedRoleIds: [],
+      createdUserId: '',
+      fallbackUserId: '',
+    }),
+    {
+      type: 'skip',
+      userId: '',
+    }
+  )
+  assert.deepEqual(
+    resolveRuntimeUserBindingPlan({
+      selectedRoleIds: ['role-1'],
+      createdUserId: 'user-1',
+      fallbackUserId: '',
+    }),
+    {
+      type: 'bind',
+      userId: 'user-1',
+    }
+  )
+  assert.deepEqual(
+    resolveRuntimeUserBindingPlan({
+      selectedRoleIds: ['role-1'],
+      createdUserId: '',
+      fallbackUserId: 'user-2',
+    }),
+    {
+      type: 'bind',
+      userId: 'user-2',
+    }
+  )
+  assert.deepEqual(
+    resolveRuntimeUserBindingPlan({
+      selectedRoleIds: ['role-1'],
+      createdUserId: '',
+      fallbackUserId: '',
+    }),
+    {
+      type: 'partial_success_missing_user_id',
+      userId: '',
+    }
+  )
+})
+
+await run('工程运行态权限：旧请求结果不会回写新工程状态', () => {
+  assert.equal(
+    shouldApplyRuntimeAccessLoadResult({
+      requestProjectId: 'project-a',
+      activeProjectId: 'project-a',
+      requestToken: 2,
+      activeToken: 2,
+      visible: true,
+    }),
+    true
+  )
+  assert.equal(
+    shouldApplyRuntimeAccessLoadResult({
+      requestProjectId: 'project-a',
+      activeProjectId: 'project-b',
+      requestToken: 2,
+      activeToken: 2,
+      visible: true,
+    }),
+    false
+  )
+  assert.equal(
+    shouldApplyRuntimeAccessLoadResult({
+      requestProjectId: 'project-a',
+      activeProjectId: 'project-a',
+      requestToken: 2,
+      activeToken: 3,
+      visible: true,
+    }),
+    false
+  )
+  assert.equal(
+    shouldApplyRuntimeAccessLoadResult({
+      requestProjectId: 'project-a',
+      activeProjectId: 'project-a',
+      requestToken: 2,
+      activeToken: 2,
+      visible: false,
+    }),
+    false
+  )
+})
+
+await run('工程运行态权限：对话框主动关闭视为取消', () => {
+  assert.equal(isRuntimeAccessDialogCancelled('cancel'), true)
+  assert.equal(isRuntimeAccessDialogCancelled('close'), true)
+  assert.equal(isRuntimeAccessDialogCancelled({ action: 'close' }), true)
+  assert.equal(isRuntimeAccessDialogCancelled({ action: 'cancel' }), true)
+  assert.equal(isRuntimeAccessDialogCancelled(new Error('boom')), false)
+})
+
 await run('国际化：核心键值存在性', () => {
-  assert.equal(messages.zh.dashboard.title, '仪表盘')
-  assert.equal(messages.en.dashboard.title, 'Dashboard')
-  assert.equal(messages.zh.profile.uploadAvatar, '上传头像')
-  assert.equal(messages.en.profile.uploadAvatar, 'Upload Avatar')
-  assert.equal(messages.zh.auth.tenantCode, '租户代码')
-  assert.equal(messages.en.auth.tenantCode, 'Tenant Code')
+  assert.match(langSource, /dashboard:\s*\{[\s\S]*title:\s*'仪表盘'/)
+  assert.match(langSource, /dashboard:\s*\{[\s\S]*title:\s*'Dashboard'/)
+  assert.match(langSource, /profile:\s*\{[\s\S]*uploadAvatar:\s*'上传头像'/)
+  assert.match(langSource, /profile:\s*\{[\s\S]*uploadAvatar:\s*'Upload Avatar'/)
+  assert.match(langSource, /auth:\s*\{[\s\S]*tenantCode:\s*'租户代码'/)
+  assert.match(langSource, /auth:\s*\{[\s\S]*tenantCode:\s*'Tenant Code'/)
+  assert.match(langSource, /memberAndPermission:\s*'成员与权限'/)
+  assert.match(langSource, /memberAndPermission:\s*'Members & Access'/)
+  assert.match(langSource, /tabs:\s*\{[\s\S]*users:\s*'用户管理'/)
+  assert.match(langSource, /tabs:\s*\{[\s\S]*roles:\s*'Role Management'/)
 })
 
 await run('应用地址：designer 透传当前语言与主题', () => {

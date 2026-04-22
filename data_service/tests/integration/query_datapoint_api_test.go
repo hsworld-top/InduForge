@@ -351,19 +351,30 @@ type paginationPayload struct {
 }
 
 type dataPointPayload struct {
-	ID         string  `json:"id"`
-	ProjectID  string  `json:"projectId"`
-	Path       string  `json:"path"`
-	Name       string  `json:"name"`
-	SourceType string  `json:"sourceType"`
-	SourceID   *string `json:"sourceId"`
-	Unit       *string `json:"unit"`
-	Status     string  `json:"status"`
+	ID                 string                   `json:"id"`
+	ProjectID          string                   `json:"projectId"`
+	Path               string                   `json:"path"`
+	Name               string                   `json:"name"`
+	SourceType         string                   `json:"sourceType"`
+	SourceID           *string                  `json:"sourceId"`
+	Unit               *string                  `json:"unit"`
+	Status             string                   `json:"status"`
+	RuntimePermissions dataPointPermissionGroup `json:"runtimePermissions"`
 }
 
 type dataPointListPayload struct {
 	DataPoints []dataPointPayload `json:"datapoints"`
 	Pagination paginationPayload  `json:"pagination"`
+}
+
+type dataPointPermissionGroup struct {
+	Write dataPointRuntimeGrant `json:"write"`
+}
+
+type dataPointRuntimeGrant struct {
+	AllowRoles []string `json:"allowRoles"`
+	DenyRoles  []string `json:"denyRoles"`
+	Inherit    bool     `json:"inherit"`
 }
 
 type dataPointValuePayload struct {
@@ -500,6 +511,31 @@ func mustDeleteDataPointsBatch(t *testing.T, baseURL, token, projectID string, i
 	return result
 }
 
+func mustUpdateDataPointRuntimePermissions(t *testing.T, baseURL, token, projectID, id string, payload map[string]any) dataPointPayload {
+	t.Helper()
+
+	responseEnvelope := doJSONRequest(t, http.MethodPut, baseURL+"/api/v1/data/projects/"+projectID+"/datapoints/"+id+"/runtime-permissions", token, payload)
+	var result dataPointPayload
+	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
+		t.Fatalf("decode datapoint runtime permissions response failed: %v", err)
+	}
+	return result
+}
+
+func assertRuntimeGrant(t *testing.T, grant dataPointRuntimeGrant, allowRoles, denyRoles []string, inherit bool) {
+	t.Helper()
+
+	if grant.Inherit != inherit {
+		t.Fatalf("expected inherit=%v, got %v", inherit, grant.Inherit)
+	}
+	if fmt.Sprintf("%v", grant.AllowRoles) != fmt.Sprintf("%v", allowRoles) {
+		t.Fatalf("expected allowRoles=%v, got %v", allowRoles, grant.AllowRoles)
+	}
+	if fmt.Sprintf("%v", grant.DenyRoles) != fmt.Sprintf("%v", denyRoles) {
+		t.Fatalf("expected denyRoles=%v, got %v", denyRoles, grant.DenyRoles)
+	}
+}
+
 func insertTestConnection(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, userID string) string {
 	t.Helper()
 
@@ -546,6 +582,65 @@ func insertInvalidDataPoints(t *testing.T, ctx context.Context, fixture *testDat
 		ids = append(ids, insertOneDataPoint(t, ctx, fixture, projectID, userID, fmt.Sprintf("metrics.invalid.%d", i), "invalid"))
 	}
 	return ids
+}
+
+func TestDataPointRuntimePermissionsListAndSave(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "runtime-permission-secret-01"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-runtime-permission",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	dpID := insertOneDataPoint(t, ctx, fixture, projectID, userID, "metrics.runtime.permission", "active")
+
+	initialList := mustListDataPoints(t, server.URL, token, projectID, "search=metrics.runtime.permission")
+	if len(initialList.DataPoints) != 1 {
+		t.Fatalf("expected 1 datapoint in list, got %d", len(initialList.DataPoints))
+	}
+	assertRuntimeGrant(t, initialList.DataPoints[0].RuntimePermissions.Write, []string{}, []string{}, true)
+
+	updated := mustUpdateDataPointRuntimePermissions(t, server.URL, token, projectID, dpID, map[string]any{
+		"write": map[string]any{
+			"allowRoles": []string{"operator", "maintainer"},
+			"denyRoles":  []string{"guest"},
+			"inherit":    false,
+		},
+	})
+	assertRuntimeGrant(t, updated.RuntimePermissions.Write, []string{"operator", "maintainer"}, []string{"guest"}, false)
+
+	detail := mustGetDataPoint(t, server.URL, token, projectID, dpID)
+	assertRuntimeGrant(t, detail.RuntimePermissions.Write, []string{"operator", "maintainer"}, []string{"guest"}, false)
+
+	refreshedList := mustListDataPoints(t, server.URL, token, projectID, "search=metrics.runtime.permission")
+	assertRuntimeGrant(t, refreshedList.DataPoints[0].RuntimePermissions.Write, []string{"operator", "maintainer"}, []string{"guest"}, false)
 }
 
 func doJSONRequestWithStatus(t *testing.T, method, url, token string, payload any, statusCode int) apiEnvelope {

@@ -2,16 +2,19 @@
 import type { OpenMode, PageInspectorFormState } from "./page-inspector-types";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import RoleGrantEditor from "@/ui/shared/permissions/RoleGrantEditor.vue";
+import { summarizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 
 const props = defineProps<{
   form: PageInspectorFormState;
   permissionEnabled: boolean;
   isSystemPage: boolean;
+  roleOptions?: string[];
 }>();
 
 defineEmits<{
   updateConfig: [];
-  permissionConfig: [];
+  permissionConfig: [value: PageInspectorFormState["pageViewPermission"]];
 }>();
 
 const { t } = useI18n();
@@ -34,6 +37,7 @@ const preloadOptions = computed(() => [
 ]);
 
 const showPopupOptions = computed(() => props.form.openMode === "popup");
+const pagePermissionSummary = computed(() => summarizeRoleGrant(props.form.pageViewPermission));
 </script>
 
 <template>
@@ -113,10 +117,13 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
           <span class="label-tip">?</span>
         </el-tooltip>
       </div>
-      <div class="page-prop-editor page-prop-editor-inline">
-        <el-button size="small" :disabled="!permissionEnabled" @click="$emit('permissionConfig')">
-          {{ form.permissionSummary }}
-        </el-button>
+      <div class="page-prop-editor page-prop-editor-stacked">
+        <span class="permission-summary-text">{{ pagePermissionSummary }}</span>
+        <RoleGrantEditor
+          :model-value="form.pageViewPermission"
+          :role-options="roleOptions || []"
+          @update:model-value="$emit('permissionConfig', $event)"
+        />
       </div>
     </div>
 
@@ -196,6 +203,13 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
   align-items: center;
 }
 
+.page-prop-editor-stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--designer-gap-xs);
+}
+
 .label-tip {
   display: inline-flex;
   align-items: center;
@@ -219,7 +233,13 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
 }
 
 .page-prop-editor :deep(.el-select),
-.page-prop-editor :deep(.el-input-number) {
+.page-prop-editor :deep(.el-input-number),
+.page-prop-editor :deep(.el-input) {
   width: 100%;
+}
+
+.permission-summary-text {
+  font-size: 12px;
+  color: var(--designer-text-secondary);
 }
 </style>

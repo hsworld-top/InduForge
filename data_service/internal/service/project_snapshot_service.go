@@ -57,7 +57,27 @@ func (s *ProjectSnapshotService) Replace(ctx context.Context, projectID, actorID
 			return err
 		}
 	}
-	return s.repository.ReplaceProjectData(ctx, projectID, actorID, snapshot)
+
+	normalizedSnapshot := normalizeProjectSnapshot(snapshot)
+	return s.repository.ReplaceProjectData(ctx, projectID, actorID, normalizedSnapshot)
+}
+
+// normalizeProjectSnapshot 在快照导入前补齐数据点运行态权限默认值。
+// 关键边界：当 HTTP payload 明确传入 runtimePermissions 时保持原值；仅对完全缺省的场景补成 inherit=true。
+func normalizeProjectSnapshot(snapshot repository.ProjectSnapshot) repository.ProjectSnapshot {
+	if len(snapshot.DataPoints) == 0 {
+		return snapshot
+	}
+
+	normalized := snapshot
+	normalized.DataPoints = append([]repository.DataPointRecord(nil), snapshot.DataPoints...)
+	for index := range normalized.DataPoints {
+		if normalized.DataPoints[index].RuntimePermissionsDefined {
+			continue
+		}
+		normalized.DataPoints[index].RuntimePermissions = repository.DefaultDataPointRuntimePermissions()
+	}
+	return normalized
 }
 
 func validateSnapshotConnectionType(connectionType string) error {

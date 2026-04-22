@@ -35,7 +35,7 @@ type CreateDataPointParams struct {
 func (r *DataPointRepository) GetByProjectAndSource(ctx context.Context, projectID, sourceType, sourceID string) (*DataPointRecord, error) {
 	row := r.pool.QueryRow(ctx, `
         SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
+               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
                refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
         FROM data_points
         WHERE project_id = $1 AND source_type = $2 AND source_id = $3
@@ -58,7 +58,7 @@ func (r *DataPointRepository) ListByProjectAndPaths(ctx context.Context, project
 
 	rows, err := r.pool.Query(ctx, `
         SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
+               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
                refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
         FROM data_points
         WHERE project_id = $1 AND path = ANY($2::text[])
@@ -94,21 +94,25 @@ func (r *DataPointRepository) Create(ctx context.Context, params CreateDataPoint
 	if err != nil {
 		return nil, err
 	}
+	runtimePermissionsBytes, err := marshalDataPointRuntimePermissions(DefaultDataPointRuntimePermissions())
+	if err != nil {
+		return nil, err
+	}
 
 	row := r.pool.QueryRow(ctx, `
         INSERT INTO data_points (
             project_id, path, name, description, source_type, source_id, source_config, data_type,
-            unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
+            unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
             refresh_mode, refresh_interval_ms, status, created_by, updated_by
         )
         VALUES (
             $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15,
-            $16::jsonb, $17, $18, $19, $20, $20
+            $16::jsonb, $17::jsonb, $18, $19, $20, $21, $21
         )
         RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
+                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
                   refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
 
 	record, err := scanDataPointRecord(row)
 	if err != nil {

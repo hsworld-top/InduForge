@@ -96,4 +96,96 @@ export const projectAPI = {
   importProject(payload) {
     return request.post('/projects/import', payload)
   },
+
+  /**
+   * 获取工程运行态用户列表
+   * @param {string} id - 工程 ID
+   * @returns {Promise} 用户列表
+   */
+  listRuntimeUsers(id) {
+    return request.get(`/projects/${id}/runtime-users`)
+  },
+
+  /**
+   * 创建工程运行态用户
+   * @param {string} id - 工程 ID
+   * @param {object} payload - 用户数据
+   * @returns {Promise} 创建结果
+   */
+  createRuntimeUser(id, payload) {
+    return request.post(`/projects/${id}/runtime-users`, payload)
+  },
+
+  /**
+   * 更新工程运行态用户状态
+   * @param {string} id - 工程 ID
+   * @param {string} userId - 运行态用户 ID
+   * @param {object} payload - 状态数据
+   * @returns {Promise} 更新结果
+   */
+  updateRuntimeUserStatus(id, userId, payload) {
+    return request.patch(`/projects/${id}/runtime-users/${userId}/status`, payload)
+  },
+
+  /**
+   * 更新工程运行态用户角色绑定
+   * @param {string} id - 工程 ID
+   * @param {string} userId - 运行态用户 ID
+   * @param {object} payload - 角色绑定数据
+   * @returns {Promise} 更新结果
+   */
+  updateRuntimeUserRoles(id, userId, payload) {
+    return request.put(`/projects/${id}/runtime-users/${userId}/roles`, payload)
+  },
+
+  /**
+   * 重置工程运行态用户密码
+   * @param {string} id - 工程 ID
+   * @param {string} userId - 运行态用户 ID
+   * @param {object} payload - 新密码数据
+   * @returns {Promise} 重置结果
+   */
+  resetRuntimeUserPassword(id, userId, payload) {
+    return request.post(`/projects/${id}/runtime-users/${userId}/reset-password`, payload)
+  },
+
+  /**
+   * 获取工程运行态角色列表
+   * @param {string} id - 工程 ID
+   * @returns {Promise} 角色列表
+   */
+  listRuntimeRoles(id) {
+    return request.get(`/projects/${id}/runtime-roles`)
+  },
+
+  /**
+   * 创建工程运行态角色
+   * @param {string} id - 工程 ID
+   * @param {object} payload - 角色数据
+   * @returns {Promise} 创建结果
+   */
+  createRuntimeRole(id, payload) {
+    return request.post(`/projects/${id}/runtime-roles`, payload)
+  },
+
+  /**
+   * 更新工程运行态角色
+   * @param {string} id - 工程 ID
+   * @param {string} roleId - 角色 ID
+   * @param {object} payload - 角色数据
+   * @returns {Promise} 更新结果
+   */
+  updateRuntimeRole(id, roleId, payload) {
+    return request.put(`/projects/${id}/runtime-roles/${roleId}`, payload)
+  },
+
+  /**
+   * 删除工程运行态角色
+   * @param {string} id - 工程 ID
+   * @param {string} roleId - 角色 ID
+   * @returns {Promise} 删除结果
+   */
+  deleteRuntimeRole(id, roleId) {
+    return request.delete(`/projects/${id}/runtime-roles/${roleId}`)
+  },
 }

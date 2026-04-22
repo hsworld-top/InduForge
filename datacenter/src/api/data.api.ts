@@ -225,6 +225,24 @@ export const getDataPoints = (projectId, params = {}) => {
 };
 
 /**
+ * 更新数据点运行态权限
+ * @param {string} projectId - 工程ID
+ * @param {string} datapointId - 数据点ID
+ * @param {object} data - 运行态权限数据
+ */
+export const updateDatapointRuntimePermissions = (
+  projectId,
+  datapointId,
+  data,
+) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}/runtime-permissions`,
+    method: "put",
+    data,
+  });
+};
+
+/**
  * 删除数据点
  * @param {string} projectId - 工程ID
  * @param {string} datapointId - 数据点ID
@@ -689,6 +707,7 @@ export default {
   deleteQuery,
   // 数据点相关
   getDataPoints,
+  updateDatapointRuntimePermissions,
   deleteDataPoint,
   deleteDataPointsBatch,
   createPreviewSession,

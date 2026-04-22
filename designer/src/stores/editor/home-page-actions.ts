@@ -20,6 +20,7 @@ export interface HomePageProjectApi {
   createPage: (pid: string, payload: CreatePageBody) => Promise<unknown>;
   updatePage: (pid: string, pageId: string, payload: unknown) => Promise<unknown>;
   updateEntryConfig: (pid: string, payload: unknown) => Promise<unknown>;
+  deletePage: (pid: string, pageId: string, mode?: "single" | "folder-only" | "cascade") => Promise<unknown>;
 }
 
 export interface CreateHomePageContext {
@@ -28,6 +29,8 @@ export interface CreateHomePageContext {
   initEditor: (schema: ProjectSchema) => void;
   createBaseSchema: (projectId: string) => ProjectSchema;
   projectApi: HomePageProjectApi;
+  canCommit?: () => boolean;
+  shouldRollbackStaleRemote?: () => boolean;
 }
 
 export async function createHomePageForStore(
@@ -35,6 +38,43 @@ export async function createHomePageForStore(
   pid: string,
   refreshPages: () => Promise<PagesRefreshResult>,
 ): Promise<{ ok: true; pageId: string } | { ok: false; error: Error }> {
+  const canCommit = () => !ctx.canCommit || ctx.canCommit();
+  const shouldRollbackStaleRemote = () =>
+    ctx.shouldRollbackStaleRemote ? ctx.shouldRollbackStaleRemote() : true;
+  const previousEntryConfig = { ...ctx.entryConfig.value };
+  let createdPageId = "";
+  let entryConfigWritten = false;
+
+  /**
+   * 空工程自动建首页时，请求可能在任一 await 之后失效。
+   * 一旦失效，后续远端写入必须立即停止，并尽量把当前流程已写入的首页/入口配置回滚掉。
+   */
+  const rollbackStaleCreation = async () => {
+    /**
+     * 同一工程内重入加载时，旧请求虽然本地已过期，但新请求可能已经接受或复用这个首页；
+     * 这种场景只能停止旧请求的后续提交，不能再去回滚远端副作用。
+     */
+    if (!shouldRollbackStaleRemote()) {
+      return;
+    }
+
+    if (entryConfigWritten) {
+      try {
+        await ctx.projectApi.updateEntryConfig(pid, previousEntryConfig);
+      } catch (rollbackError) {
+        console.error("回滚首页入口配置失败:", rollbackError);
+      }
+    }
+
+    if (createdPageId) {
+      try {
+        await ctx.projectApi.deletePage(pid, createdPageId, "single");
+      } catch (rollbackError) {
+        console.error("回滚首页页面失败:", rollbackError);
+      }
+    }
+  };
+
   try {
     const result = await ctx.projectApi.createPage(pid, {
       name: "首页",
@@ -50,6 +90,12 @@ export async function createHomePageForStore(
     const pageId = created.id ?? created.page?.id;
     if (!pageId) {
       throw new Error("创建首页失败：未获取到页面ID");
+    }
+    createdPageId = pageId;
+
+    if (!canCommit()) {
+      await rollbackStaleCreation();
+      return { ok: true, pageId };
     }
 
     const schema = ctx.createBaseSchema(pid);
@@ -75,15 +121,27 @@ export async function createHomePageForStore(
       graphicsById: {},
     };
     await ctx.projectApi.updatePage(pid, pageId, pagePayload);
+    if (!canCommit()) {
+      await rollbackStaleCreation();
+      return { ok: true, pageId };
+    }
 
     const newEntryConfig = { homePageId: pageId };
     await ctx.projectApi.updateEntryConfig(pid, newEntryConfig);
+    entryConfigWritten = true;
+    if (!canCommit()) {
+      await rollbackStaleCreation();
+      return { ok: true, pageId };
+    }
     ctx.entryConfig.value = newEntryConfig;
 
     schema.pagesById = { [pageId]: pageNode };
     ctx.initEditor(schema);
     ctx.currentPageId.value = pageId;
 
+    if (!canCommit()) {
+      return { ok: true, pageId };
+    }
     await refreshPages();
     return { ok: true, pageId };
   } catch (err) {

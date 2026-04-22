@@ -410,6 +410,82 @@ func TestProjectSnapshotReplaceRejectsPhase2ReservedConnections(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotReplacePreservesDataPointRuntimePermissions(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "snapshot-roundtrip-secret-04"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-snapshot",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/snapshot", token, map[string]any{
+		"datapoints": []map[string]any{
+			{
+				"id":           uuid.NewString(),
+				"projectId":    projectID,
+				"path":         "metrics.snapshot.permission",
+				"name":         "metrics.snapshot.permission",
+				"sourceType":   "manual",
+				"sourceConfig": map[string]any{},
+				"dataType":     "string",
+				"tags":         []any{"snapshot"},
+				"refreshMode":  "auto",
+				"status":       "active",
+				"runtimePermissions": map[string]any{
+					"write": map[string]any{
+						"allowRoles": []string{"ops"},
+						"denyRoles":  []string{"guest"},
+						"inherit":    false,
+					},
+				},
+			},
+		},
+	})
+
+	responseEnvelope := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/projects/"+projectID+"/snapshot", token, nil)
+	var snapshot struct {
+		DataPoints []struct {
+			Path               string                   `json:"path"`
+			RuntimePermissions dataPointPermissionGroup `json:"runtimePermissions"`
+		} `json:"datapoints"`
+	}
+	if err := json.Unmarshal(responseEnvelope.Data, &snapshot); err != nil {
+		t.Fatalf("decode snapshot payload failed: %v", err)
+	}
+
+	if len(snapshot.DataPoints) != 1 || snapshot.DataPoints[0].Path != "metrics.snapshot.permission" {
+		t.Fatal("expected snapshot datapoints include metrics.snapshot.permission")
+	}
+	assertRuntimeGrant(t, snapshot.DataPoints[0].RuntimePermissions.Write, []string{"ops"}, []string{"guest"}, false)
+}
+
 func mustGetProjectSnapshot(t *testing.T, baseURL, token, projectID string) repository.ProjectSnapshot {
 	t.Helper()
 

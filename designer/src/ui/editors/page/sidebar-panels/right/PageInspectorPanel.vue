@@ -6,9 +6,10 @@
  * - 主文件只负责把当前页面、入口配置和表单状态聚合起来
  * - 具体字段 UI 拆到 5 个小节组件，避免继续堆积在一个超长组件里
  * - 写回时优先生成新的 grouped page config，同时保留旧平铺字段双写兼容
+ * - 页面运行态权限继续挂在 runtime 小节，避免再单独开一条全局权限面板链路
  */
 
-import type { PageNode } from "@/editor-core/document/types";
+import type { PageNode, RolePermission } from "@/editor-core/document/types";
 import type { PageRole, RouteMode, ViewportPreset } from "./page-inspector/page-inspector-types";
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
@@ -24,6 +25,7 @@ import {
   buildPageConfigPatch,
   createDefaultPageInspectorFormState,
   hydratePageInspectorForm,
+  mergePageConfigPatch,
 } from "./page-inspector-config";
 import { resolveRouteByRole } from "./page-inspector/page-inspector-route";
 import {
@@ -31,6 +33,7 @@ import {
   getPageInspectorSections,
   type PageInspectorSectionKey,
 } from "./page-inspector-sections";
+import { summarizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 
 interface EntryConfigLike {
   homePageId?: string | null;
@@ -58,7 +61,9 @@ const PRESET_VIEWPORT_SIZES: Record<
 };
 
 const editorStore = useEditorStore();
-const { currentPage, currentPageId, pages, doc } = storeToRefs(editorStore);
+const editorRefs = storeToRefs(editorStore);
+const { currentPage, currentPageId, pages, doc } = editorRefs;
+const rawRuntimeRoleCodes = (editorRefs as unknown as { runtimeRoleCodes?: { value: string[] } }).runtimeRoleCodes;
 const { t, locale } = useI18n();
 
 const form = reactive(createDefaultPageInspectorFormState());
@@ -69,10 +74,6 @@ function showWarningMessage(message: string): void {
 
 function showErrorMessage(message: string): void {
   ElMessage.error(message as never);
-}
-
-function showInfoMessage(message: string): void {
-  ElMessage.info(message as never);
 }
 
 function getSectionTitle(key: PageInspectorSectionKey): string {
@@ -111,10 +112,12 @@ function getSystemRoleLabel(role: Exclude<PageRole, "normal">): string {
 }
 
 function toPathSegment(value: string): string {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[/?#\\]+/g, "-") || "page";
+  return (
+    String(value || "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[/?#\\]+/g, "-") || "page"
+  );
 }
 
 /**
@@ -126,7 +129,10 @@ function getFolderPathSegments(parentId: string | null | undefined): string[] {
     (page) => page.id === parentId && page.type === "folder",
   );
   if (!folder) return [];
-  return [...getFolderPathSegments(folder.parentId || null), toPathSegment(folder.name || folder.title || folder.id)];
+  return [
+    ...getFolderPathSegments(folder.parentId || null),
+    toPathSegment(folder.name || folder.title || folder.id),
+  ];
 }
 
 function getParentRoutePath(page: PageRecordLike | null | undefined): string {
@@ -149,9 +155,15 @@ function getFixedRole(page: PageRecordLike | null | undefined): PageRole | null 
   return null;
 }
 
-const pageRole = computed<PageRole>(() => getFixedRole(getCurrentPageRecord() || (currentPage.value as PageRecordLike | null)) || "normal");
+const pageRole = computed<PageRole>(
+  () => getFixedRole(getCurrentPageRecord() || (currentPage.value as PageRecordLike | null)) || "normal",
+);
 const isSystemPage = computed(() => pageRole.value !== "normal");
 const canEditConstraintOptions = computed(() => canEditRuntimeConstraint(form.autoFit));
+const availableRuntimeRoles = computed<string[]>(() => {
+  const value = rawRuntimeRoleCodes?.value;
+  return Array.isArray(value) ? value : [];
+});
 
 function isNameUnique(name: string, excludeId: string): boolean {
   const lowerName = name.trim().toLowerCase();
@@ -169,9 +181,7 @@ function syncForm(page: PageRecordLike | null | undefined): void {
   }
 
   const role = getFixedRole(displayPage) || "normal";
-  const name = role === "normal"
-    ? pageFromList?.name || page?.name || ""
-    : getSystemRoleLabel(role);
+  const name = role === "normal" ? pageFromList?.name || page?.name || "" : getSystemRoleLabel(role);
   const parentRoutePath = getParentRoutePath(displayPage);
   const nextForm = hydratePageInspectorForm({
     name,
@@ -192,6 +202,7 @@ function syncForm(page: PageRecordLike | null | undefined): void {
 
   Object.assign(form, nextForm, resolvedRoute, {
     openMode: role === "normal" ? nextForm.openMode : "replace",
+    permissionSummary: summarizeRoleGrant(nextForm.pageViewPermission),
   });
 }
 
@@ -249,6 +260,7 @@ function updateCurrentPageConfig(): void {
     popupCenter: form.popupCenter,
     popupMaskClosable: form.popupMaskClosable,
     permissionSummary: form.permissionSummary,
+    pageViewPermission: form.pageViewPermission,
     cacheMode: form.cacheMode,
     preloadMode: form.preloadMode,
   });
@@ -260,12 +272,12 @@ function updateCurrentPageConfig(): void {
   if (isSystemPage.value) {
     form.openMode = "replace";
   }
+  const nextConfig = mergePageConfigPatch(currentPage.value.config, configPatch, {
+    clearPageViewPermission: !form.pageViewPermission,
+  });
   editorStore.updateCurrentPage({
     path: form.routePath,
-    config: {
-      ...(currentPage.value.config || {}),
-      ...configPatch,
-    },
+    config: nextConfig,
   });
 }
 
@@ -385,8 +397,10 @@ function handleConfigUpdate(): void {
   updateCurrentPageConfig();
 }
 
-function handlePermissionConfig(): void {
-  showInfoMessage(t("pageInspector.messages.permissionConfigComingSoon"));
+function handlePagePermissionChange(permission: RolePermission | undefined): void {
+  form.pageViewPermission = permission;
+  form.permissionSummary = summarizeRoleGrant(permission);
+  updateCurrentPageConfig();
 }
 </script>
 
@@ -433,10 +447,11 @@ function handlePermissionConfig(): void {
       <div class="section-title">{{ getSectionTitle("runtime") }}</div>
       <PageRuntimeSection
         :form="form"
-        :permission-enabled="false"
+        :permission-enabled="true"
         :is-system-page="isSystemPage"
+        :role-options="availableRuntimeRoles"
         @update-config="handleConfigUpdate"
-        @permission-config="handlePermissionConfig"
+        @permission-config="handlePagePermissionChange"
       />
     </div>
   </div>
