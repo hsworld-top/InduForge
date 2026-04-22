@@ -1,21 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }))
+const { postMock, getMock } = vi.hoisted(() => ({
+  postMock: vi.fn(),
+  getMock: vi.fn(),
+}))
 
 vi.mock('@/utils/request', () => ({
   default: {
     post: postMock,
+    get: getMock,
   },
 }))
 
 import { authAPI } from '@/api/auth.api'
 
-describe('authAPI.login', () => {
+describe('authAPI', () => {
   beforeEach(() => {
     postMock.mockReset()
+    getMock.mockReset()
   })
 
-  it('应调用登录接口并透传登录参数', async () => {
+  it('login 应调用登录接口并透传登录参数', async () => {
     const credentials = {
       username: 'tester',
       password: 'secret',
@@ -37,5 +42,14 @@ describe('authAPI.login', () => {
       captchaCode: '1234',
     })
     expect(result).toEqual({ success: true })
+  })
+
+  it('getConfig 传入 undefined 时不应下发 params', async () => {
+    getMock.mockResolvedValueOnce({ data: {} })
+
+    await authAPI.getConfig(undefined)
+
+    expect(getMock).toHaveBeenCalledTimes(1)
+    expect(getMock).toHaveBeenCalledWith('/auth/config')
   })
 })

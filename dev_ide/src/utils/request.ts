@@ -1,8 +1,9 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import { Storage } from '@/utils/storage'
-import { authAPI } from '@/api/auth.api'
+import { authAPI, type AuthTokenPayload } from '@/api/auth.api'
 import { STORAGE_KEYS } from '@/constants'
+import type { ApiResponse } from '@/types/api'
 
 // 创建 axios 实例
 const request = axios.create({
@@ -20,12 +21,6 @@ type QueueEntry = {
   reject: (error: unknown) => void
 }
 let failedQueue: QueueEntry[] = []
-
-type RequestConfigWithRetry = InternalAxiosRequestConfig & {
-  _retry?: boolean
-  forcePermissionToast?: boolean
-  skipPermissionToast?: boolean
-}
 
 type ErrorResponseData = {
   message?: string
@@ -91,7 +86,7 @@ request.interceptors.response.use(
   },
   (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
-    const config = error.config as RequestConfigWithRetry | undefined
+    const config = error.config as InternalAxiosRequestConfig | undefined
     const requestUrl = config?.url || ''
 
     if (response) {
@@ -134,7 +129,7 @@ request.interceptors.response.use(
             isRefreshing = true
 
             return authAPI.refreshToken(refreshToken)
-              .then((result: { data?: { accessToken?: string; token?: string; refreshToken?: string } }) => {
+              .then((result: ApiResponse<AuthTokenPayload>) => {
                 const accessToken = result.data?.accessToken || result.data?.token
                 const newRefreshToken = result.data?.refreshToken
 

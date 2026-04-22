@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import type { ApiResponse, ApiRecord } from '@/types/api'
 
 type LoginCredentials = {
   username: string
@@ -12,6 +13,43 @@ type PasswordData = {
   oldPassword: string
   newPassword: string
 }
+
+export interface AuthTokenPayload {
+  token?: string
+  accessToken?: string
+  refreshToken?: string
+  expiresIn?: number
+}
+
+export interface AuthConfigPayload extends ApiRecord {
+  tenantCode?: string
+  tenantName?: string
+  appName?: string
+  logoUrl?: string
+  loginBackgroundUrl?: string
+}
+
+export interface AuthUserPayload extends ApiRecord {
+  id?: string | number
+  username?: string
+  fullName?: string
+  email?: string
+  role?: string
+  tenantId?: string | number
+}
+
+export interface AuthChangePasswordPayload extends ApiRecord {
+  success?: boolean
+}
+
+export interface AuthCaptchaPayload extends ApiRecord {
+  key?: string
+  image?: string
+  expireSeconds?: number
+}
+
+type ApiResult<T> = Promise<ApiResponse<T>>
+const asApiResult = <T>(promise: unknown): ApiResult<T> => promise as ApiResult<T>
 
 /**
  * 认证相关 API
@@ -29,11 +67,11 @@ export const authAPI = {
    */
   login(credentials: LoginCredentials) {
     const { captchaKey, captchaCode, ...others } = credentials
-    return request.post('/auth/login', {
+    return asApiResult<AuthTokenPayload>(request.post<ApiResponse<AuthTokenPayload>>('/auth/login', {
       ...others,
       captchaKey,
       captchaCode,
-    })
+    }))
   },
 
   /**
@@ -41,7 +79,7 @@ export const authAPI = {
    * @returns {Promise} 验证码数据 (key, image, expireSeconds)
    */
   getCaptcha() {
-    return request.get('/auth/captcha')
+    return asApiResult<AuthCaptchaPayload>(request.get<ApiResponse<AuthCaptchaPayload>>('/auth/captcha'))
   },
 
   /**
@@ -49,9 +87,12 @@ export const authAPI = {
    * @returns {Promise} 应用配置
    */
   getConfig(tenantCode?: string) {
-    return request.get('/auth/config', {
-      params: tenantCode ? { tenantCode } : undefined,
-    })
+    if (!tenantCode) {
+      return asApiResult<AuthConfigPayload>(request.get<ApiResponse<AuthConfigPayload>>('/auth/config'))
+    }
+    return asApiResult<AuthConfigPayload>(request.get<ApiResponse<AuthConfigPayload>>('/auth/config', {
+      params: { tenantCode },
+    }))
   },
 
   /**
@@ -60,7 +101,9 @@ export const authAPI = {
    * @returns {Promise} 新的访问令牌
    */
   refreshToken(refreshToken: string) {
-    return request.post('/auth/refresh', { refreshToken })
+    return asApiResult<AuthTokenPayload>(request.post<ApiResponse<AuthTokenPayload>>('/auth/refresh', {
+      refreshToken,
+    }))
   },
 
   /**
@@ -68,7 +111,7 @@ export const authAPI = {
    * @returns {Promise} 登出结果
    */
   logout() {
-    return request.post('/auth/logout')
+    return asApiResult<ApiRecord>(request.post<ApiResponse<ApiRecord>>('/auth/logout'))
   },
 
   /**
@@ -76,7 +119,7 @@ export const authAPI = {
    * @returns {Promise} 用户信息
    */
   getCurrentUser() {
-    return request.get('/auth/me')
+    return asApiResult<AuthUserPayload>(request.get<ApiResponse<AuthUserPayload>>('/auth/me'))
   },
 
   /**
@@ -87,6 +130,9 @@ export const authAPI = {
    * @returns {Promise} 修改结果
    */
   changePassword(passwordData: PasswordData) {
-    return request.put('/auth/password', passwordData)
+    return asApiResult<AuthChangePasswordPayload>(request.put<ApiResponse<AuthChangePasswordPayload>>(
+      '/auth/password',
+      passwordData
+    ))
   },
 }
