@@ -1,4 +1,5 @@
 import { HttpService } from '@opentiny/tiny-engine'
+import type { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { useBroadcastChannel } from '@vueuse/core'
 import { constants } from '@opentiny/tiny-engine-utils'
 
@@ -17,7 +18,20 @@ const showError = (url: string | undefined, message: string | undefined) => {
   })
 }
 
-const preRequest = (config: Record<string, any>) => {
+interface ServiceErrorPayload {
+  message?: string
+  [key: string]: unknown
+}
+
+interface ServiceResponseEnvelope<TData = unknown> {
+  data?: TData
+  error?: ServiceErrorPayload
+}
+
+type ServiceResponse<TData = unknown> = AxiosResponse<ServiceResponseEnvelope<TData> | TData>
+type ServiceResponseError = AxiosError<{ error?: ServiceErrorPayload; message?: string }>
+
+const preRequest = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
   const isDevelopEnv = import.meta.env.MODE?.includes('dev')
 
   if (isDevelopEnv && typeof config.url === 'string' && config.url.match(/\/generate\//)) {
@@ -31,17 +45,23 @@ const preRequest = (config: Record<string, any>) => {
   return config
 }
 
-const preResponse = (res: Record<string, any>) => {
-  if (res.data?.error) {
-    showError(res.config?.url, res?.data?.error?.message)
+const preResponse = (res: ServiceResponse): unknown => {
+  const responseData = res.data
+  const envelope =
+    responseData && typeof responseData === 'object'
+      ? (responseData as ServiceResponseEnvelope)
+      : undefined
 
-    return Promise.reject(res.data.error)
+  if (envelope?.error) {
+    showError(res.config?.url, envelope.error.message)
+
+    return Promise.reject(envelope.error)
   }
 
-  return res.data?.data || res.data
+  return envelope?.data ?? responseData
 }
 
-const errorResponse = (error: Record<string, any>) => {
+const errorResponse = (error: ServiceResponseError) => {
   // 用户信息失效时，弹窗提示登录
   const { response } = error
 
@@ -54,7 +74,7 @@ const errorResponse = (error: Record<string, any>) => {
 
   showError(error.config?.url, error?.message)
 
-  return response?.data.error ? Promise.reject(response.data.error) : Promise.reject(error.message)
+  return response?.data?.error ? Promise.reject(response.data.error) : Promise.reject(error.message)
 }
 
 const getConfig = (env: ImportMetaEnv = import.meta.env) => {

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { STORAGE_KEYS } from '@/constants'
-import { Storage } from '@/utils/storage'
+import { Storage as StorageUtil } from '@/utils/storage'
 
-const createMockStorage = (): Storage => {
+const createMockStorage = (): globalThis.Storage => {
   const bucket = new Map<string, string>()
 
   return {
@@ -50,9 +50,9 @@ describe('utils/storage', () => {
       enabled: true,
     }
 
-    Storage.set(STORAGE_KEYS.USER_INFO, payload)
+    StorageUtil.set(STORAGE_KEYS.USER_INFO, payload)
 
-    expect(Storage.get(STORAGE_KEYS.USER_INFO)).toEqual(payload)
+    expect(StorageUtil.get(STORAGE_KEYS.USER_INFO)).toEqual(payload)
   })
 
   it('getTheme 在未设置时返回默认值 light', () => {
@@ -61,6 +61,6 @@ describe('utils/storage', () => {
       value: createMockStorage(),
     })
 
-    expect(Storage.getTheme()).toBe('light')
+    expect(StorageUtil.getTheme()).toBe('light')
   })
 })

@@ -23,8 +23,29 @@ declare module '@opentiny/tiny-engine-utils' {
 }
 
 declare module '@opentiny/tiny-engine-meta-register' {
-  export const META_SERVICE: Record<string, string>
-  export const META_APP: Record<string, string>
+  interface MetaServiceMap {
+    Http: string
+    [key: string]: string | undefined
+  }
+
+  interface MetaAppMap {
+    Layout: string
+    Page: string
+    State: string
+    OutlineTree: string
+    Materials: string
+    Schema: string
+    Help: string
+    Save: string
+    GenerateCode: string
+    Lang: string
+    ViewSetting: string
+    Preview: string
+    [key: string]: string | undefined
+  }
+
+  export const META_SERVICE: MetaServiceMap
+  export const META_APP: MetaAppMap
 }
 
 declare module '@vueuse/core' {
