@@ -21,7 +21,7 @@
 <script setup>
 import { ref, nextTick, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { elementPlusLocale, t } from "./i18n/runtime.js";
+import { elementPlusLocale, t } from "./i18n/runtime";
 
 const loading = ref(true);
 let loadingStartAt = Date.now();

@@ -51,6 +51,9 @@ import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { getManifest } from "@/materials/manifests";
 import assetApi from "@/services/assetApi";
 import { useEditorStore } from "@/stores/editor-store";
+import type { Action, RolePermission } from "@/editor-core/document/types";
+import RoleGrantEditor from "@/ui/shared/permissions/RoleGrantEditor.vue";
+import { summarizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 import { usePanelState } from "../composables/use-panel-state";
 import MultiInspectorPanel from "./MultiInspectorPanel.vue";
 import PageInspectorPanel from "./PageInspectorPanel.vue";
@@ -66,6 +69,7 @@ import {
   normalizeMenuItems,
   resolveMenuConfigFromContent,
 } from "./property-panel-menu-dsl";
+import { updateNodeActionPermission } from "./property-panel-action-permissions";
 import {
   buildRegionSizeState,
   clampRegionSize as clampRegionSizeValue,
@@ -118,6 +122,15 @@ interface PresetGroupLike {
   style?: PresetFactoryLike;
 }
 
+interface ActionPermissionRow {
+  key: string;
+  eventName: string;
+  index: number;
+  action: Action;
+  title: string;
+  summary: string;
+}
+
 const ElAside: any = _ElAside;
 const ElCalendar: any = _ElCalendar;
 const ElCard: any = _ElCard;
@@ -168,6 +181,7 @@ const {
   projectVariables,
   projectVariableGroups,
   globalScripts,
+  runtimeRoleCodes,
 } = storeToRefs(editorStore as any) as any;
 
 const projectId = computed<string>(
@@ -4954,6 +4968,24 @@ const bindingDialogDescription = computed<string>(() => {
     ? t("propertyPanel.bindingDialog.descriptionWithProp", { elementName, propLabel })
     : t("propertyPanel.bindingDialog.description", { elementName });
 });
+const availableRoles = computed<string[]>(() => {
+  return Array.isArray(runtimeRoleCodes.value) ? runtimeRoleCodes.value : [];
+});
+const actionPermissionRows = computed<ActionPermissionRow[]>(() => {
+  const node = selectedNode.value;
+  if (!node) return [];
+
+  return Object.entries(node.events || {}).flatMap(([eventName, actions]) =>
+    (Array.isArray(actions) ? actions : []).map((action, index) => ({
+      key: `${eventName}:${index}`,
+      eventName,
+      index,
+      action: action as Action,
+      title: `${eventName} / ${String((action as Action)?.type || "unknown")}`,
+      summary: summarizeRoleGrant((action as Action)?.permissions),
+    })),
+  );
+});
 
 const isElContainer = computed<boolean>(() => elementType.value === "ElContainer");
 const isEChart = computed<boolean>(() => elementType.value === "EChart");
@@ -6344,6 +6376,29 @@ function handlePropChange(propName: string, value: any): void {
     editorStore.updateGraphic(el.id, { props: newProps });
   }
 }
+
+/**
+ * 更新动作的轻量角色授权，保持变更局限在当前节点事件配置内。
+ * @param {string} eventName - 事件名
+ * @param {number} actionIndex - 动作索引
+ * @param {RolePermission | undefined} permission - 新权限
+ */
+function handleActionPermissionChange(
+  eventName: string,
+  actionIndex: number,
+  permission: RolePermission | undefined,
+): void {
+  const node = selectedNode.value;
+  if (!node) return;
+  const nextEvents = updateNodeActionPermission(node.events || {}, eventName, actionIndex, permission);
+
+  const patch: AnyRecord = { events: nextEvents };
+  const ok = editorStore.updateNode(node.id, patch);
+  if (!ok) {
+    applyNodePatch(node.id, patch);
+  }
+  docVersion.value += 1;
+}
 </script>
 
 <template>
@@ -6377,6 +6432,33 @@ function handlePropChange(propName: string, value: any): void {
           @open-config="openConfigDialog"
         />
       </template>
+
+      <div v-if="actionPermissionRows.length > 0" class="prop-section">
+        <div class="prop-section-header is-static">
+          <span class="prop-section-heading">
+            <span class="prop-section-title">动作授权</span>
+          </span>
+        </div>
+        <div class="prop-section-body">
+          <div
+            v-for="row in actionPermissionRows"
+            :key="row.key"
+            class="action-permission-item"
+          >
+            <div class="action-permission-item__header">
+              <span class="action-permission-item__title">{{ row.title }}</span>
+              <span class="action-permission-item__summary">{{ row.summary }}</span>
+            </div>
+            <RoleGrantEditor
+              :model-value="row.action.permissions"
+              :role-options="availableRoles"
+              @update:model-value="
+                (value) => handleActionPermissionChange(row.eventName, row.index, value)
+              "
+            />
+          </div>
+        </div>
+      </div>
 
       <!-- 属性表单：根据 Manifest 生成 -->
       <template v-if="layoutForceProps.length > 0">
@@ -6969,6 +7051,35 @@ function handlePropChange(propName: string, value: any): void {
 
 .prop-item :deep(.el-switch) {
   margin-left: auto;
+}
+
+.action-permission-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--designer-gap-xs);
+  padding: 6px 4px;
+  border-radius: var(--designer-radius-sm);
+}
+
+.action-permission-item + .action-permission-item {
+  border-top: 1px solid var(--designer-border-soft);
+}
+
+.action-permission-item__header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--designer-gap-sm);
+}
+
+.action-permission-item__title {
+  font-size: var(--designer-font-sm);
+  font-weight: 600;
+  color: var(--designer-text-primary);
+}
+
+.action-permission-item__summary {
+  font-size: 12px;
+  color: var(--designer-text-secondary);
 }
 
 .prop-label {

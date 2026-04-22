@@ -1,5 +1,6 @@
-import test from "node:test";
+// @ts-nocheck
 import assert from "node:assert/strict";
+import { test } from "vitest";
 
 import {
   datacenterLocale,
@@ -7,9 +8,9 @@ import {
   normalizeDatacenterLocale,
   setDatacenterLocale,
   t,
-} from "../src/i18n/runtime.js";
-import { createRuntimeMessageHandler } from "../src/runtime/runtime-message-handler.js";
-import { resolveDatacenterTabLabel } from "../src/utils/tabTitle.js";
+} from "../src/i18n/runtime";
+import { createRuntimeMessageHandler } from "../src/runtime/runtime-message-handler";
+import { resolveDatacenterTabLabel } from "../src/utils/tabTitle";
 
 test("locale 归一化与翻译输出", () => {
   assert.equal(normalizeDatacenterLocale("en-US"), "en");

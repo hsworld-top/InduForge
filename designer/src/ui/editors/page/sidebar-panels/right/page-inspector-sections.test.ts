@@ -35,7 +35,7 @@ describe("page-inspector-sections", () => {
       "lockAspectRatio",
       "enableMinSize",
       "windowStyle",
-      "permissionDesc",
+      "pageViewPermission",
     ]);
   });
 

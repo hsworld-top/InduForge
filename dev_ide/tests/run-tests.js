@@ -23,6 +23,9 @@ import {
   buildRuntimeUserRoleBindingPayload,
   summarizeRuntimeGrantCount,
   resolveRuntimeAccessStatusMeta,
+  resolveRuntimeUserBindingPlan,
+  shouldApplyRuntimeAccessLoadResult,
+  isRuntimeAccessDialogCancelled,
 } from '../src/views/tenant/components/project-runtime-access-state.js'
 import {
   createEmbeddedUpdateMessage,
@@ -259,6 +262,104 @@ await run('工程运行态权限：状态元数据映射', () => {
     tagType: 'info',
     labelKey: 'projectManagement.runtimeAccess.statusDisabled',
   })
+})
+
+await run('工程运行态权限：创建后角色绑定分支解析', () => {
+  assert.deepEqual(
+    resolveRuntimeUserBindingPlan({
+      selectedRoleIds: [],
+      createdUserId: '',
+      fallbackUserId: '',
+    }),
+    {
+      type: 'skip',
+      userId: '',
+    }
+  )
+  assert.deepEqual(
+    resolveRuntimeUserBindingPlan({
+      selectedRoleIds: ['role-1'],
+      createdUserId: 'user-1',
+      fallbackUserId: '',
+    }),
+    {
+      type: 'bind',
+      userId: 'user-1',
+    }
+  )
+  assert.deepEqual(
+    resolveRuntimeUserBindingPlan({
+      selectedRoleIds: ['role-1'],
+      createdUserId: '',
+      fallbackUserId: 'user-2',
+    }),
+    {
+      type: 'bind',
+      userId: 'user-2',
+    }
+  )
+  assert.deepEqual(
+    resolveRuntimeUserBindingPlan({
+      selectedRoleIds: ['role-1'],
+      createdUserId: '',
+      fallbackUserId: '',
+    }),
+    {
+      type: 'partial_success_missing_user_id',
+      userId: '',
+    }
+  )
+})
+
+await run('工程运行态权限：旧请求结果不会回写新工程状态', () => {
+  assert.equal(
+    shouldApplyRuntimeAccessLoadResult({
+      requestProjectId: 'project-a',
+      activeProjectId: 'project-a',
+      requestToken: 2,
+      activeToken: 2,
+      visible: true,
+    }),
+    true
+  )
+  assert.equal(
+    shouldApplyRuntimeAccessLoadResult({
+      requestProjectId: 'project-a',
+      activeProjectId: 'project-b',
+      requestToken: 2,
+      activeToken: 2,
+      visible: true,
+    }),
+    false
+  )
+  assert.equal(
+    shouldApplyRuntimeAccessLoadResult({
+      requestProjectId: 'project-a',
+      activeProjectId: 'project-a',
+      requestToken: 2,
+      activeToken: 3,
+      visible: true,
+    }),
+    false
+  )
+  assert.equal(
+    shouldApplyRuntimeAccessLoadResult({
+      requestProjectId: 'project-a',
+      activeProjectId: 'project-a',
+      requestToken: 2,
+      activeToken: 2,
+      visible: false,
+    }),
+    false
+  )
+})
+
+await run('工程运行态权限：对话框主动关闭视为取消', () => {
+  assert.equal(isRuntimeAccessDialogCancelled('cancel'), true)
+  assert.equal(isRuntimeAccessDialogCancelled('close'), true)
+  assert.equal(isRuntimeAccessDialogCancelled({ action: 'close' }), true)
+  assert.equal(isRuntimeAccessDialogCancelled({ action: 'cancel' }), true)
+  assert.equal(isRuntimeAccessDialogCancelled(new Error('boom')), false)
 })
 
 await run('国际化：核心键值存在性', () => {

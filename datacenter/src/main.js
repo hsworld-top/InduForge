@@ -16,7 +16,7 @@ import {
   isTrustedHostMessage,
   postAppBootstrapRequest,
 } from "./runtime/host-bootstrap.js";
-import { setDatacenterLocale } from "./i18n/runtime.js";
+import { setDatacenterLocale } from "./i18n/runtime";
 import { createRuntimeMessageHandler } from "./runtime/runtime-message-handler.js";
 import { initMessageHandler } from "./utils/messageHandler";
 import { Storage } from "./utils/storage.js";

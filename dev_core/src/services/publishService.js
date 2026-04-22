@@ -13,10 +13,15 @@ const {
   Deployment,
   NodeDeployment,
   User,
+  ProjectRuntimeUser,
+  ProjectRole,
+  ProjectUserRoleBinding,
+  ProjectRoleGrant,
 } = require("../models");
 
 // 制品存储目录
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, "../../artifacts");
+const RUNTIME_SECURITY_FILE_NAME = "runtime-security.json";
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -108,6 +113,35 @@ const buildMqttConfigsFromArtifact = (connections = []) =>
     sslConfig: connection.sslConfig || {},
   }));
 
+const collectPlainRows = async (model, where) =>
+  model.findAll({
+    where,
+    order: [["createdAt", "ASC"]],
+    raw: true,
+  });
+
+const buildManifestWithRuntimeSecurity = (manifest, runtimeSecuritySnapshot) => {
+  const snapshot = runtimeSecuritySnapshot || {
+    version: new Date().toISOString(),
+    users: [],
+    roles: [],
+    bindings: [],
+    grants: [],
+  };
+
+  return {
+    ...manifest,
+    security: {
+      ...(manifest.security || {}),
+      runtimeSecuritySnapshot: {
+        included: true,
+        fileName: RUNTIME_SECURITY_FILE_NAME,
+        version: snapshot.version,
+      },
+    },
+  };
+};
+
 /**
  * 发布服务类
  */
@@ -196,13 +230,17 @@ class PublishService {
       // 3. 编译清单
       await this.addBuildLog(deploymentId, "生成清单文件...");
       const manifest = await this.compileManifest(project, projectData, version);
+      const manifestWithRuntimeSecurity = buildManifestWithRuntimeSecurity(
+        manifest,
+        projectData.runtimeSecuritySnapshot,
+      );
 
       // 4. 打包 IFP
       await this.addBuildLog(deploymentId, "打包 IFP 文件...");
       const { ifpPath, hash, size } = await this.bundleIFP(
         deploymentId,
         projectId,
-        manifest,
+        manifestWithRuntimeSecurity,
         projectData
       );
 
@@ -219,12 +257,7 @@ class PublishService {
           ...(deployment.buildConfig || {}),
           artifactFileName: path.basename(ifpPath),
         },
-        manifest: {
-          name: manifest.name,
-          version: manifest.version,
-          dataRequirements: manifest.dataRequirements,
-          capabilities: manifest.capabilities,
-        },
+        manifest: manifestWithRuntimeSecurity,
         pageCount: projectData.pages.length,
         componentCount: this.countComponents(projectData.pages),
         datapointCount: projectData.dataPoints.length,
@@ -309,7 +342,11 @@ class PublishService {
         ["sortOrder", "ASC"],
       ],
     });
-    const artifact = await this.dataDomainClient.getProjectArtifact(projectId, authorization);
+    // 发布包需要同时携带数据域制品与运行态安全快照，节点侧才能完成离线认证与鉴权。
+    const [artifact, runtimeSecuritySnapshot] = await Promise.all([
+      this.dataDomainClient.getProjectArtifact(projectId, authorization),
+      this.collectRuntimeSecuritySnapshot(projectId),
+    ]);
     const protocols = normalizeArtifactProtocols(artifact?.protocols);
 
     return {
@@ -325,6 +362,28 @@ class PublishService {
       mqttTags: asArray(artifact?.mqtt?.tags),
       dataPoints: asArray(artifact?.datapoints),
       protocols,
+      runtimeSecuritySnapshot,
+    };
+  }
+
+  /**
+   * 收集工程运行态安全快照
+   * @description 只导出当前工程自己的运行态用户、角色、绑定和授权记录，保持为普通对象数组，避免把 Sequelize 实例直接塞进发布包。
+   */
+  async collectRuntimeSecuritySnapshot(projectId) {
+    const [users, roles, bindings, grants] = await Promise.all([
+      collectPlainRows(ProjectRuntimeUser, { projectId }),
+      collectPlainRows(ProjectRole, { projectId }),
+      collectPlainRows(ProjectUserRoleBinding, { projectId }),
+      collectPlainRows(ProjectRoleGrant, { projectId }),
+    ]);
+
+    return {
+      version: new Date().toISOString(),
+      users,
+      roles,
+      bindings,
+      grants,
     };
   }
 
@@ -381,6 +440,17 @@ class PublishService {
   async bundleIFP(deploymentId, projectId, manifest, projectData) {
     const fileName = `${projectId}_v${manifest.version}_${Date.now()}.ifp`;
     const ifpPath = path.join(ARTIFACTS_DIR, fileName);
+    const runtimeSecuritySnapshot = projectData.runtimeSecuritySnapshot || {
+      version: new Date().toISOString(),
+      users: [],
+      roles: [],
+      bindings: [],
+      grants: [],
+    };
+    const manifestWithSecurity = buildManifestWithRuntimeSecurity(
+      manifest,
+      runtimeSecuritySnapshot,
+    );
 
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(ifpPath);
@@ -397,6 +467,9 @@ class PublishService {
           size: stats.size,
         });
       });
+      output.on("error", (err) => {
+        reject(err);
+      });
 
       archive.on("error", (err) => {
         reject(err);
@@ -405,7 +478,7 @@ class PublishService {
       archive.pipe(output);
 
       // 添加 manifest.json
-      archive.append(JSON.stringify(manifest, null, 2), { name: "manifest.json" });
+      archive.append(JSON.stringify(manifestWithSecurity, null, 2), { name: "manifest.json" });
 
       // 添加 project.json（页面和组件 Schema）
       const projectJson = {
@@ -469,6 +542,11 @@ class PublishService {
         protocols: normalizeArtifactProtocols(projectData.protocols),
       };
       archive.append(JSON.stringify(datacenterJson, null, 2), { name: "datacenter.json" });
+
+      // 添加运行态安全快照，供节点侧离线认证和鉴权直接读取。
+      archive.append(JSON.stringify(runtimeSecuritySnapshot, null, 2), {
+        name: RUNTIME_SECURITY_FILE_NAME,
+      });
 
       // TODO: 添加 assets 目录（如果有资源文件）
 

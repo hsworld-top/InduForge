@@ -1,5 +1,5 @@
 import { applyThemeToDocument } from "./host-bootstrap.js";
-import { setDatacenterLocale } from "../i18n/runtime.js";
+import { setDatacenterLocale } from "../i18n/runtime";
 import { Storage } from "../utils/storage.js";
 
 export function createRuntimeMessageHandler({

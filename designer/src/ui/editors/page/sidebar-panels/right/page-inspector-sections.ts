@@ -27,7 +27,7 @@ function buildPageInspectorSections(): PageInspectorSection[] {
     {
       key: "runtime",
       title: i18n.global.t("pageInspector.sections.runtime"),
-      fields: ["autoFit", "lockAspectRatio", "enableMinSize", "windowStyle", "permissionDesc"],
+      fields: ["autoFit", "lockAspectRatio", "enableMinSize", "windowStyle", "pageViewPermission"],
     },
   ];
 }

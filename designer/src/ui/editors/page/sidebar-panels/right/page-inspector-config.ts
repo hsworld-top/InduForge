@@ -1,7 +1,13 @@
 /**
  * 页面属性面板配置构建工具
  */
-import type { BackgroundConfig, PageNode } from "@/editor-core/document/types";
+import type {
+  BackgroundConfig,
+  PageConfig,
+  PageNode,
+  RolePermission,
+} from "@/editor-core/document/types";
+import { sanitizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 
 export type WindowStyle = "popup" | "cover" | "replace";
 export type BackgroundKind = BackgroundConfig["kind"];
@@ -14,7 +20,7 @@ export interface PageInspectorConfigInput {
   lockAspectRatio: boolean;
   enableMinSize: boolean;
   windowStyle: string;
-  permissionDesc: string;
+  pageViewPermission: RolePermission | undefined;
   backgroundKind: BackgroundKind;
   backgroundValue: string;
 }
@@ -24,14 +30,11 @@ export interface PageInspectorConfigPatch extends Partial<PageNode["config"]> {
   lockAspectRatio?: boolean;
   enableMinSize?: boolean;
   windowStyle?: WindowStyle;
-  permissionDesc?: string;
 }
 
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 const DEFAULT_BACKGROUND_COLOR = "#ffffff";
-const DEFAULT_PERMISSION_DESC = "0item";
-
 /**
  * 规范化窗口类型（兼容旧值 normal）
  * @param {unknown} value - 原始窗口类型
@@ -77,7 +80,8 @@ function normalizeNumber(value: unknown, fallback: number): number {
  */
 export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspectorConfigPatch {
   const autoFit = Boolean(input.autoFit);
-  return {
+  const pageViewPermission = sanitizeRoleGrant(input.pageViewPermission);
+  const patch: PageInspectorConfigPatch = {
     description: String(input.description || ""),
     width: normalizeNumber(input.width, DEFAULT_WIDTH),
     height: normalizeNumber(input.height, DEFAULT_HEIGHT),
@@ -85,10 +89,61 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
     lockAspectRatio: autoFit && Boolean(input.lockAspectRatio),
     enableMinSize: autoFit && Boolean(input.enableMinSize),
     windowStyle: normalizeWindowStyle(input.windowStyle),
-    permissionDesc: String(input.permissionDesc || DEFAULT_PERMISSION_DESC),
     background: {
       kind: normalizeBackgroundKind(input.backgroundKind),
       value: String(input.backgroundValue || DEFAULT_BACKGROUND_COLOR),
     },
   };
+  if (pageViewPermission) {
+    patch.runtimePermissions = {
+      pageView: pageViewPermission,
+    };
+  }
+  return patch;
+}
+
+/**
+ * 合并页面配置补丁。对运行态权限使用显式移除语义，避免旧的 pageView 残留。
+ * @param {PageConfig | undefined} baseConfig - 当前页面配置
+ * @param {PageInspectorConfigPatch} patch - 页面属性面板构建出的补丁
+ * @returns {PageConfig} 合并后的配置
+ */
+export function mergePageConfigPatch(
+  baseConfig: PageConfig | undefined,
+  patch: PageInspectorConfigPatch,
+  options: {
+    clearPageViewPermission?: boolean;
+  } = {},
+): PageConfig {
+  const nextConfig = {
+    ...(baseConfig || {}),
+    ...patch,
+  } as PageConfig;
+
+  if ("runtimePermissions" in patch) {
+    if (patch.runtimePermissions?.pageView) {
+      nextConfig.runtimePermissions = {
+        ...(baseConfig?.runtimePermissions || {}),
+        ...patch.runtimePermissions,
+      };
+    } else {
+      const remainingPermissions = { ...(baseConfig?.runtimePermissions || {}) };
+      delete remainingPermissions.pageView;
+      if (Object.keys(remainingPermissions).length > 0) {
+        nextConfig.runtimePermissions = remainingPermissions;
+      } else {
+        delete nextConfig.runtimePermissions;
+      }
+    }
+  } else if (options.clearPageViewPermission) {
+    const remainingPermissions = { ...(baseConfig?.runtimePermissions || {}) };
+    delete remainingPermissions.pageView;
+    if (Object.keys(remainingPermissions).length > 0) {
+      nextConfig.runtimePermissions = remainingPermissions;
+    } else {
+      delete nextConfig.runtimePermissions;
+    }
+  }
+
+  return nextConfig;
 }

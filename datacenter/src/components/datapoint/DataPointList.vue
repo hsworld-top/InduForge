@@ -134,6 +134,21 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column
+              :label="t('datapoints.runtimePermission')"
+              min-width="200"
+            >
+              <template #default="{ row }">
+                <el-button
+                  link
+                  size="small"
+                  class="permission-entry"
+                  @click="openPermissionDialog(row)"
+                >
+                  {{ summarizeRuntimeGrant(getWriteRuntimeGrant(row)) }}
+                </el-button>
+              </template>
+            </el-table-column>
             <el-table-column :label="t('datapoints.updatedAt')" width="160">
               <template #default="{ row }">
                 <span class="text-xs text-gray-500 dark:text-gray-400">
@@ -161,16 +176,83 @@
         </div>
       </div>
     </div>
+
+    <el-dialog
+      v-model="permissionDialogVisible"
+      :title="
+        t('datapoints.runtimePermissionDialogTitle', {
+          name: currentPermissionDatapoint?.name || '-',
+        })
+      "
+      width="520px"
+      destroy-on-close
+    >
+      <div class="permission-dialog">
+        <div class="permission-dialog__hint">
+          {{ t("datapoints.runtimePermissionHint") }}
+        </div>
+
+        <el-form label-position="top">
+          <el-form-item :label="t('datapoints.runtimePermissionSummaryLabel')">
+            <el-tag type="info">
+              {{ summarizeRuntimeGrant(draftWriteRuntimeGrant) }}
+            </el-tag>
+          </el-form-item>
+
+          <el-form-item :label="t('datapoints.runtimePermissionInherit')">
+            <el-switch v-model="permissionForm.inherit" />
+          </el-form-item>
+
+          <el-form-item :label="t('datapoints.runtimePermissionAllowRoles')">
+            <el-input
+              v-model="allowRolesInput"
+              type="textarea"
+              :rows="4"
+              :placeholder="t('datapoints.runtimePermissionRolesPlaceholder')"
+            />
+          </el-form-item>
+
+          <el-form-item :label="t('datapoints.runtimePermissionDenyRoles')">
+            <el-input
+              v-model="denyRolesInput"
+              type="textarea"
+              :rows="4"
+              :placeholder="t('datapoints.runtimePermissionRolesPlaceholder')"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="permissionDialogVisible = false">
+            {{ t("actions.cancel") }}
+          </el-button>
+          <el-button
+            type="primary"
+            :loading="permissionSaving"
+            @click="handlePermissionSave"
+          >
+            {{ t("actions.save") }}
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+// @ts-nocheck
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";
 import dataAPI from "@/api/data.api";
 import { t } from "@/i18n/runtime";
+import {
+  normalizeRuntimeGrantPayload,
+  summarizeRuntimeGrant,
+} from "@/utils/runtime-permission-grants";
 
 const props = defineProps({
   projectId: {
@@ -186,6 +268,12 @@ const typeFilter = ref("");
 const statusFilter = ref("");
 const debounceTimer = ref(null);
 const invalidSelection = ref([]);
+const permissionDialogVisible = ref(false);
+const permissionSaving = ref(false);
+const currentPermissionDatapoint = ref(null);
+const permissionForm = ref(normalizeRuntimeGrantPayload());
+const allowRolesInput = ref("");
+const denyRolesInput = ref("");
 
 const typeLabels = {
   "db.query": t("datapoints.types.db.query"),
@@ -310,6 +398,93 @@ const handleBatchDelete = async () => {
 };
 
 /**
+ * 从文本框解析角色列表。
+ * 这里故意只接受换行和中英文逗号分隔，避免在轻量弹窗里引入复杂选择器。
+ * @param {string} value - 原始输入
+ * @returns {string[]}
+ */
+const parseRoleInput = (value) => {
+  return String(value || "")
+    .split(/[\n,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+/**
+ * 兼容不同后端返回字段，统一提取数据点 write 权限。
+ * datacenter 侧只负责前端编辑模型兼容，不在这里推导真实继承结果。
+ * @param {object} row - 数据点对象
+ * @returns {{allowRoles: string[], denyRoles: string[], inherit: boolean}}
+ */
+const getWriteRuntimeGrant = (row) => {
+  return normalizeRuntimeGrantPayload(
+    row?.runtimePermissions?.write ||
+      row?.runtimePermissionGrants?.write ||
+      row?.writePermission ||
+      {},
+  );
+};
+
+/**
+ * 计算弹窗当前输入对应的待保存权限。
+ * 摘要和最终提交都基于这份归一化结果，避免界面展示与实际 payload 不一致。
+ */
+const draftWriteRuntimeGrant = computed(() =>
+  normalizeRuntimeGrantPayload({
+    allowRoles: parseRoleInput(allowRolesInput.value),
+    denyRoles: parseRoleInput(denyRolesInput.value),
+    inherit: permissionForm.value.inherit,
+  }),
+);
+
+/**
+ * 打开运行态写权限弹窗，并将当前数据点权限快照写入表单。
+ * @param {object} row - 数据点对象
+ */
+const openPermissionDialog = (row) => {
+  const currentGrant = getWriteRuntimeGrant(row);
+  currentPermissionDatapoint.value = row;
+  permissionForm.value = currentGrant;
+  allowRolesInput.value = currentGrant.allowRoles.join("\n");
+  denyRolesInput.value = currentGrant.denyRoles.join("\n");
+  permissionDialogVisible.value = true;
+};
+
+/**
+ * 保存当前数据点的写权限。
+ * 边界条件：只提交 write 节点，避免前端误覆盖未来可能扩展的其他动作权限。
+ * 异常分支：接口失败时保留当前弹窗内容，便于用户调整后重试。
+ */
+const handlePermissionSave = async () => {
+  if (!props.projectId || !currentPermissionDatapoint.value?.id) {
+    return;
+  }
+
+  const writeGrant = draftWriteRuntimeGrant.value;
+
+  permissionSaving.value = true;
+  try {
+    await dataAPI.updateDatapointRuntimePermissions(
+      props.projectId,
+      currentPermissionDatapoint.value.id,
+      { write: writeGrant },
+    );
+    permissionForm.value = writeGrant;
+    ElMessage.success(t("datapoints.runtimePermissionSaveSuccess"));
+    permissionDialogVisible.value = false;
+    await loadDataPoints();
+  } catch (error) {
+    ElMessage.error(
+      t("datapoints.runtimePermissionSaveFailed", {
+        message: error.response?.data?.message || error.message,
+      }),
+    );
+  } finally {
+    permissionSaving.value = false;
+  }
+};
+
+/**
  * 时间格式化
  * @param {string} value - 时间
  * @returns {string}
@@ -423,5 +598,23 @@ defineExpose({
 .dark .group-count {
   background: #1f2937;
   color: #9ca3af;
+}
+
+.permission-entry {
+  padding: 0;
+  white-space: normal;
+  text-align: left;
+}
+
+.permission-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.permission-dialog__hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6b7280;
 }
 </style>

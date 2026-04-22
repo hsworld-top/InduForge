@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildPageConfigPatch, normalizeWindowStyle } from "./page-inspector-config";
+import {
+  buildPageConfigPatch,
+  mergePageConfigPatch,
+  normalizeWindowStyle,
+} from "./page-inspector-config";
 
 describe("page-inspector-config", () => {
   it("maps legacy normal window style to replace", () => {
@@ -15,7 +19,11 @@ describe("page-inspector-config", () => {
       lockAspectRatio: true,
       enableMinSize: true,
       windowStyle: "popup",
-      permissionDesc: "2item",
+      pageViewPermission: {
+        allowRoles: ["admin", " operator ", "admin"],
+        denyRoles: ["guest"],
+        inherit: false,
+      },
       backgroundKind: "gradient",
       backgroundValue: "linear-gradient(#fff,#000)",
     });
@@ -28,10 +36,16 @@ describe("page-inspector-config", () => {
       lockAspectRatio: true,
       enableMinSize: true,
       windowStyle: "popup",
-      permissionDesc: "2item",
       background: {
         kind: "gradient",
         value: "linear-gradient(#fff,#000)",
+      },
+      runtimePermissions: {
+        pageView: {
+          allowRoles: ["admin", "operator"],
+          denyRoles: ["guest"],
+          inherit: false,
+        },
       },
     });
 
@@ -41,9 +55,10 @@ describe("page-inspector-config", () => {
     expect("windowHeight" in patch).toBe(false);
     expect("x" in patch).toBe(false);
     expect("y" in patch).toBe(false);
+    expect("permissionDesc" in patch).toBe(false);
   });
 
-  it("does not persist fontAutoFit and disables runtime constraints when autoFit is false", () => {
+  it("does not persist fontAutoFit and clears page permissions when grant is empty", () => {
     const patch = buildPageConfigPatch({
       description: "",
       width: 0,
@@ -52,7 +67,10 @@ describe("page-inspector-config", () => {
       lockAspectRatio: true,
       enableMinSize: true,
       windowStyle: "normal",
-      permissionDesc: "",
+      pageViewPermission: {
+        allowRoles: ["", " "],
+        denyRoles: [],
+      },
       backgroundKind: "color",
       backgroundValue: "",
     });
@@ -65,7 +83,6 @@ describe("page-inspector-config", () => {
       lockAspectRatio: false,
       enableMinSize: false,
       windowStyle: "replace",
-      permissionDesc: "0item",
       background: {
         kind: "color",
         value: "#ffffff",
@@ -73,5 +90,39 @@ describe("page-inspector-config", () => {
     });
 
     expect("fontAutoFit" in patch).toBe(false);
+    expect("runtimePermissions" in patch).toBe(false);
+  });
+
+  it("removes existing page view permissions from merged config when grant is cleared", () => {
+    const patch = buildPageConfigPatch({
+      description: "desc",
+      width: 1440,
+      height: 900,
+      autoFit: true,
+      lockAspectRatio: false,
+      enableMinSize: false,
+      windowStyle: "cover",
+      pageViewPermission: undefined,
+      backgroundKind: "color",
+      backgroundValue: "#000000",
+    });
+
+    const merged = mergePageConfigPatch(
+      {
+        width: 1920,
+        height: 1080,
+        runtimePermissions: {
+          pageView: {
+            allowRoles: ["admin"],
+            denyRoles: ["guest"],
+            inherit: false,
+          },
+        },
+      },
+      patch,
+      { clearPageViewPermission: true },
+    );
+
+    expect(merged.runtimePermissions).toBeUndefined();
   });
 });

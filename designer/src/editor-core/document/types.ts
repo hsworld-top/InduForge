@@ -156,6 +156,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {boolean} [enableSnap] - 启用吸附
  * @property {boolean} [autoFit] - 预览自适应
  * @property {BackgroundConfig} [background] - 背景配置
+ * @property {PageRuntimePermissions} [runtimePermissions] - 页面运行态权限配置
  */
 
 /**
@@ -292,6 +293,13 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * 角色权限
  * @property {string[]} [allowRoles] - 允许的角色
  * @property {string[]} [denyRoles] - 拒绝的角色
+ * @property {boolean} [inherit] - 是否继承上级角色限制
+ */
+
+/**
+ * @typedef {object} PageRuntimePermissions
+ * 页面运行态权限
+ * @property {RolePermission} [pageView] - 页面访问权限
  */
 
 /**
@@ -870,11 +878,17 @@ export interface PageConfig {
   enableSnap?: boolean;
   autoFit?: boolean;
   background?: BackgroundConfig;
+  runtimePermissions?: PageRuntimePermissions;
 }
 
 export interface RolePermission {
   allowRoles?: string[];
   denyRoles?: string[];
+  inherit?: boolean;
+}
+
+export interface PageRuntimePermissions {
+  pageView?: RolePermission;
 }
 
 export interface Action {

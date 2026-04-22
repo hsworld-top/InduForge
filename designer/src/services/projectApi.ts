@@ -18,6 +18,18 @@ export interface ProjectSettingsPayload {
   globalScripts?: unknown;
 }
 
+export interface ProjectRuntimeRoleItem {
+  id?: string;
+  code?: string;
+  name?: string;
+  description?: string | null;
+  status?: string;
+}
+
+export interface ProjectRuntimeRolesPayload {
+  runtimeRoles?: ProjectRuntimeRoleItem[];
+}
+
 export const projectApi = {
   getPages(projectId: string) {
     return request.get<PagesListPayload>(`/design/projects/${projectId}/pages`);
@@ -69,6 +81,10 @@ export const projectApi = {
 
   getProjectSettings(projectId: string) {
     return request.get<ProjectSettingsPayload>(`/design/projects/${projectId}/settings`);
+  },
+
+  getRuntimeRoles(projectId: string) {
+    return request.get<ProjectRuntimeRolesPayload>(`/projects/${projectId}/runtime-roles`);
   },
 
   updateProjectSettings(projectId: string, settings: unknown) {

@@ -1,5 +1,6 @@
-import test from "node:test";
+// @ts-nocheck
 import assert from "node:assert/strict";
+import { afterEach, beforeEach, test } from "vitest";
 
 import {
   APP_BOOTSTRAP_TIMEOUT_MS,
@@ -14,7 +15,7 @@ import {
   shouldRedirectTopLevelToIde,
   shouldUseDebugMode,
   waitForHostBootstrap,
-} from "../src/runtime/host-bootstrap.js";
+} from "../src/runtime/host-bootstrap";
 
 function createLocalStorageMock() {
   const store = new Map();
@@ -73,12 +74,12 @@ function installBrowserMocks() {
   };
 }
 
-test.beforeEach(() => {
+beforeEach(() => {
   installBrowserMocks();
   resetHostBootstrapSessionForTests();
 });
 
-test.afterEach(() => {
+afterEach(() => {
   resetHostBootstrapSessionForTests();
   delete globalThis.document;
   delete globalThis.localStorage;

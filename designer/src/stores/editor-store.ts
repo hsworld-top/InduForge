@@ -109,7 +109,8 @@ import {
   getMenuDefaultProps,
 } from "./editor/normalize-settings";
 import { createPageForStore } from "./editor/page-create-actions";
-import { refreshPagesForStore } from "./editor/page-list-sync-actions";
+import { applyEntryPatchIfPresent } from "./editor/entry-config-helpers";
+import { fetchNormalizedPageList } from "./editor/project-page-actions";
 import {
   deletePageForStore,
   movePageToGroupForStore,
@@ -126,9 +127,13 @@ import {
 import { updatePageSchemaForStore } from "./editor/page-schema-remote-actions";
 import { loadProjectForStore } from "./editor/project-load-actions";
 import {
-  loadProjectSettingsForStore,
+  fetchProjectSettingsForStore,
   saveProjectSettingsForStore,
 } from "./editor/project-settings-actions";
+import {
+  applyRuntimeRoleCodesToSchema,
+  loadProjectRuntimeRoleCodesForStore,
+} from "./editor/project-runtime-role-actions";
 
 const UUID_DASH_REGEX = /-/g;
 const EL_CONTAINER_REGION_PRESET_TOP_MAIN = "top-main";
@@ -203,6 +208,12 @@ export const useEditorStore = defineStore("editor", () => {
   const projectVariables = ref<Record<string, unknown>>({});
   const projectVariableGroups = ref<unknown[]>([]);
   const globalScripts = ref(getDefaultGlobalScripts());
+  const runtimeRoleCodes = ref<string[]>([]);
+  const runtimeRoleLoadState = ref<"idle" | "loading" | "ready" | "error">("idle");
+  const runtimeRoleLoadError = ref("");
+  const runtimeRoleRequestSerial = ref(0);
+  const projectLoadRequestSerial = ref(0);
+  const projectLoadInvalidatorProjectIds = ref<Record<number, string>>({});
   const projectName = ref("");
   const currentPageId = ref("");
   const pages = ref<PageNode[]>([]);
@@ -428,12 +439,49 @@ export const useEditorStore = defineStore("editor", () => {
    * 加载工程级变量与脚本设置
    * @returns {Promise<void>}
    */
-  const loadProjectSettings = async () => {
-    await loadProjectSettingsForStore(projectId.value, projectApi, {
-      projectVariables,
-      projectVariableGroups,
-      globalScripts,
+  const loadProjectSettings = async (canCommit: () => boolean = () => true) => {
+    const snapshot = await fetchProjectSettingsForStore(projectId.value, projectApi);
+    if (!canCommit()) {
+      return;
+    }
+    projectVariables.value = snapshot.projectVariables;
+    projectVariableGroups.value = snapshot.projectVariableGroups;
+    globalScripts.value = snapshot.globalScripts;
+  };
+
+  /**
+   * 拉取工程真实运行态角色。
+   * 接口失败时会显式清空为 []，避免默认 admin/operator/viewer 继续污染权限编辑与保存结果。
+   */
+  const loadProjectRuntimeRoles = async (targetProjectId: string) => {
+    const result = await loadProjectRuntimeRoleCodesForStore(targetProjectId, projectApi, {
+      activeProjectId: projectId,
+      runtimeRoleCodes,
+      runtimeRoleLoadState,
+      runtimeRoleLoadError,
+      runtimeRoleRequestSerial,
     });
+
+    // 角色请求不阻塞工程加载；只有结果仍属于当前工程且请求未过期时，才把角色补写回当前文档。
+    if (!result.accepted || projectId.value !== targetProjectId || !doc.value) {
+      return result;
+    }
+
+    applyRuntimeRoleCodesToSchema(doc.value.schema, result.runtimeRoleCodes);
+    docVersion.value += 1;
+    return result;
+  };
+
+  /**
+   * 把当前工程角色主数据同步进 schema。
+   * 统一用于首开、切页和回退空 schema，确保 doc.securityDecl.roles 始终反映真实运行态角色。
+   */
+  const applyCurrentRuntimeRoleCodes = (schema: ProjectSchema) => {
+    return applyRuntimeRoleCodesToSchema(schema, runtimeRoleCodes.value);
+  };
+
+  const createBaseSchemaWithRuntimeRoles = (targetProjectId: string) => {
+    return applyCurrentRuntimeRoleCodes(createBaseSchema(targetProjectId));
   };
 
   /**
@@ -455,14 +503,28 @@ export const useEditorStore = defineStore("editor", () => {
    * 刷新页面列表
    * @returns {Promise<{pages: Array, entryConfig: object}>}
    */
-  const refreshPages = async () => {
-    return refreshPagesForStore({
-      projectId: projectId.value,
-      pages,
-      entryConfig,
-      doc,
+  const refreshPages = async (canCommit: () => boolean = () => true) => {
+    if (!projectId.value) {
+      if (canCommit()) {
+        pages.value = [];
+        entryConfig.value = {} as EntryConfigFromApi;
+      }
+      return { pages: [], entryConfig: {} as EntryConfigFromApi };
+    }
+
+    const { pages: pageList, entryConfig: newEntryConfig } = await fetchNormalizedPageList(
+      projectId.value,
       projectApi,
-    });
+    );
+    if (!canCommit()) {
+      return { pages: pageList, entryConfig: newEntryConfig };
+    }
+
+    // 页面列表接口返回的是轻量 PageListEntry；store 现有 pages 状态长期复用这个列表形状。
+    pages.value = pageList as unknown as PageNode[];
+    entryConfig.value = newEntryConfig;
+    applyEntryPatchIfPresent(doc.value, newEntryConfig);
+    return { pages: pageList, entryConfig: newEntryConfig };
   };
 
   /**
@@ -470,17 +532,23 @@ export const useEditorStore = defineStore("editor", () => {
    * @param {string} pid - 工程 ID
    * @returns {Promise<{ok: boolean, pageId?: string, error?: Error}>}
    */
-  const createHomePage = async (pid: string): Promise<EditorCreateHomePageResult> => {
+  const createHomePage = async (
+    pid: string,
+    canCommit: () => boolean = () => true,
+    shouldRollbackStaleRemote?: () => boolean,
+  ): Promise<EditorCreateHomePageResult> => {
     const result = await createHomePageForStore(
       {
         entryConfig,
         currentPageId,
         initEditor,
-        createBaseSchema,
+        createBaseSchema: createBaseSchemaWithRuntimeRoles,
         projectApi,
+        canCommit,
+        ...(shouldRollbackStaleRemote ? { shouldRollbackStaleRemote } : {}),
       },
       pid,
-      refreshPages,
+      () => refreshPages(canCommit),
     );
     if (result.ok) {
       return { ok: true, pageId: result.pageId };
@@ -491,16 +559,20 @@ export const useEditorStore = defineStore("editor", () => {
   const loadProject = async (id: string): Promise<LoadProjectForStoreResult> => {
     return loadProjectForStore(id, {
       projectId,
+      projectLoadRequestSerial,
+      projectLoadInvalidatorProjectIds,
       isLoading,
       error,
       doc,
       currentPageId,
       loadProjectSettings,
+      loadProjectRuntimeRoles,
       releasePageLock,
       refreshPages,
       createHomePage,
       initEditor,
-      createBaseSchema,
+      createBaseSchema: createBaseSchemaWithRuntimeRoles,
+      applyRuntimeRoleCodesToSchema: applyCurrentRuntimeRoleCodes,
       resolveLandingPageId,
       projectApi,
       resolveProjectSchema,
@@ -533,7 +605,7 @@ export const useEditorStore = defineStore("editor", () => {
         projectApi,
         resolveProjectSchema,
       });
-      initEditor(nextSchema);
+      initEditor(applyCurrentRuntimeRoleCodes(nextSchema));
       currentPageId.value = pageId;
       return { ok: true };
     } catch (cause) {
@@ -2303,6 +2375,9 @@ export const useEditorStore = defineStore("editor", () => {
     projectVariables,
     projectVariableGroups,
     globalScripts,
+    runtimeRoleCodes,
+    runtimeRoleLoadState,
+    runtimeRoleLoadError,
     currentPageId,
     currentPage,
     pages,

@@ -9,6 +9,7 @@ import type {
   ComponentNode,
   EntryConfig,
   PageNode,
+  RolePermission,
 } from "@/editor-core/document/types";
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
@@ -17,8 +18,11 @@ import { useI18n } from "vue-i18n";
 import FriendlyColorPicker from "@/ui/shared/widgets/base/FriendlyColorPicker.vue";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { useEditorStore } from "@/stores/editor-store";
+import RoleGrantEditor from "@/ui/shared/permissions/RoleGrantEditor.vue";
+import { summarizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 import {
   buildPageConfigPatch,
+  mergePageConfigPatch,
   normalizeWindowStyle,
   type WindowStyle,
 } from "./page-inspector-config";
@@ -43,7 +47,7 @@ interface PageInspectorForm {
   lockAspectRatio: boolean;
   enableMinSize: boolean;
   windowStyle: WindowStyle;
-  permissionDesc: string;
+  pageViewPermission: RolePermission | undefined;
   backgroundKind: BackgroundConfig["kind"];
   backgroundValue: string;
 }
@@ -80,10 +84,12 @@ interface PageRecordLike {
     lockAspectRatio?: boolean;
     enableMinSize?: boolean;
     windowStyle?: string;
-    permissionDesc?: string;
     background?: {
       kind?: BackgroundConfig["kind"];
       value?: string;
+    };
+    runtimePermissions?: {
+      pageView?: RolePermission;
     };
   };
   styleConfig?: string;
@@ -101,12 +107,8 @@ function showErrorMessage(message: string): void {
   ElMessage.error(message as never);
 }
 
-function showInfoMessage(message: string): void {
-  ElMessage.info(message as never);
-}
-
 const editorStore = useEditorStore();
-const { currentPage, currentPageId, pages, doc } = storeToRefs(editorStore);
+const { currentPage, currentPageId, pages, doc, runtimeRoleCodes } = storeToRefs(editorStore);
 const { t, locale } = useI18n();
 
 const form = reactive<PageInspectorForm>({
@@ -120,7 +122,7 @@ const form = reactive<PageInspectorForm>({
   lockAspectRatio: false,
   enableMinSize: false,
   windowStyle: "cover",
-  permissionDesc: "0item",
+  pageViewPermission: undefined,
   backgroundKind: "color",
   backgroundValue: "#ffffff",
 });
@@ -135,6 +137,10 @@ function getSectionTitle(key: PageInspectorSectionKey): string {
 }
 
 const canEditConstraintOptions = computed(() => canEditRuntimeConstraint(form.autoFit));
+const availableRoles = computed<string[]>(() => {
+  return Array.isArray(runtimeRoleCodes.value) ? runtimeRoleCodes.value : [];
+});
+const pageViewPermissionSummary = computed(() => summarizeRoleGrant(form.pageViewPermission));
 
 const canvasStyleDialogVisible = ref(false);
 const canvasStyleDraft = ref("");
@@ -400,7 +406,9 @@ function syncForm(page: PageRecordLike | null | undefined): void {
     systemType || resolvedPageType === "login" || resolvedPageType === "logout"
       ? SYSTEM_PAGE_WINDOW_STYLE
       : normalizeWindowStyle(page?.config?.windowStyle);
-  form.permissionDesc = page?.config?.permissionDesc ?? "0item";
+  form.pageViewPermission = page?.config?.runtimePermissions?.pageView
+    ? { ...page.config.runtimePermissions.pageView }
+    : undefined;
   form.backgroundKind = page?.config?.background?.kind || "color";
   form.backgroundValue = page?.config?.background?.value || "#ffffff";
 
@@ -612,7 +620,7 @@ function handleConfigUpdate(): void {
     lockAspectRatio: form.lockAspectRatio,
     enableMinSize: form.enableMinSize,
     windowStyle: isSystemPage.value ? SYSTEM_PAGE_WINDOW_STYLE : form.windowStyle,
-    permissionDesc: form.permissionDesc,
+    pageViewPermission: form.pageViewPermission,
     backgroundKind: form.backgroundKind,
     backgroundValue: form.backgroundValue,
   });
@@ -620,10 +628,9 @@ function handleConfigUpdate(): void {
     form.lockAspectRatio = false;
     form.enableMinSize = false;
   }
-  const nextConfig = {
-    ...(currentPage.value.config || {}),
-    ...configPatch,
-  };
+  const nextConfig = mergePageConfigPatch(currentPage.value.config, configPatch, {
+    clearPageViewPermission: !form.pageViewPermission,
+  });
   editorStore.updateCurrentPage({ config: nextConfig });
 }
 
@@ -676,10 +683,12 @@ function handleNumericBlur(
 }
 
 /**
- * 打开权限描述配置（当前先提供占位入口）
+ * 更新页面访问权限配置
+ * @param {RolePermission | undefined} permission - 页面访问权限
  */
-function handlePermissionConfig(): void {
-  showInfoMessage(t("pageInspector.messages.permissionConfigComingSoon"));
+function handlePageViewPermissionChange(permission: RolePermission | undefined): void {
+  form.pageViewPermission = permission;
+  handleConfigUpdate();
 }
 
 /**
@@ -868,13 +877,15 @@ function handleBackgroundUpdate(): void {
             </el-select>
           </div>
         </div>
-        <div class="page-prop-item">
+        <div class="page-prop-item page-prop-item--stacked">
           <div class="page-prop-label">{{ t("pageInspector.labels.permissionConfig") }}</div>
-          <div class="page-prop-editor">
-            <el-button size="small" @click="handlePermissionConfig">
-              {{ form.permissionDesc || "0item" }}
-            </el-button>
-            <span class="coming-soon-text">{{ t("pageInspector.labels.comingSoon") }}</span>
+          <div class="page-prop-editor page-prop-editor-stacked">
+            <span class="permission-summary-text">{{ pageViewPermissionSummary }}</span>
+            <RoleGrantEditor
+              :model-value="form.pageViewPermission"
+              :role-options="availableRoles"
+              @update:model-value="handlePageViewPermissionChange"
+            />
           </div>
         </div>
       </div>
@@ -1015,12 +1026,6 @@ function handleBackgroundUpdate(): void {
   min-width: 0;
 }
 
-.coming-soon-text {
-  margin-left: 8px;
-  font-size: 12px;
-  color: var(--designer-text-secondary);
-}
-
 .page-prop-editor-switch {
   display: flex;
   justify-content: flex-end;
@@ -1065,6 +1070,11 @@ function handleBackgroundUpdate(): void {
   color: var(--designer-text-secondary);
   font-size: 11px;
   font-weight: 600;
+}
+
+.permission-summary-text {
+  font-size: 12px;
+  color: var(--designer-text-secondary);
 }
 
 .page-prop-editor :deep(.el-input),

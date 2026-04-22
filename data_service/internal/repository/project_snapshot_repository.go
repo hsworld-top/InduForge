@@ -138,19 +138,20 @@ type ArtifactQueryRecord struct {
 
 // ArtifactDataPointRecord 表示产物层数据点对象。
 type ArtifactDataPointRecord struct {
-	ID                string         `json:"id"`
-	Path              string         `json:"path"`
-	Name              string         `json:"name"`
-	SourceType        string         `json:"sourceType"`
-	SourceID          *string        `json:"sourceId,omitempty"`
-	SourceConfig      map[string]any `json:"sourceConfig"`
-	DataType          string         `json:"dataType"`
-	RefreshMode       string         `json:"refreshMode"`
-	RefreshIntervalMS *int           `json:"refreshIntervalMs,omitempty"`
-	Status            string         `json:"status"`
-	Unit              *string        `json:"unit,omitempty"`
-	DefaultValue      *string        `json:"defaultValue,omitempty"`
-	Tags              []any          `json:"tags"`
+	ID                 string                      `json:"id"`
+	Path               string                      `json:"path"`
+	Name               string                      `json:"name"`
+	SourceType         string                      `json:"sourceType"`
+	SourceID           *string                     `json:"sourceId,omitempty"`
+	SourceConfig       map[string]any              `json:"sourceConfig"`
+	DataType           string                      `json:"dataType"`
+	RuntimePermissions DataPointRuntimePermissions `json:"runtimePermissions"`
+	RefreshMode        string                      `json:"refreshMode"`
+	RefreshIntervalMS  *int                        `json:"refreshIntervalMs,omitempty"`
+	Status             string                      `json:"status"`
+	Unit               *string                     `json:"unit,omitempty"`
+	DefaultValue       *string                     `json:"defaultValue,omitempty"`
+	Tags               []any                       `json:"tags"`
 }
 
 // ArtifactMqttConnectionRecord 表示产物层 MQTT 连接对象。
@@ -346,19 +347,20 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 	dataPoints := make([]ArtifactDataPointRecord, 0, len(snapshot.DataPoints))
 	for _, dataPoint := range snapshot.DataPoints {
 		dataPoints = append(dataPoints, ArtifactDataPointRecord{
-			ID:                dataPoint.ID,
-			Path:              dataPoint.Path,
-			Name:              dataPoint.Name,
-			SourceType:        dataPoint.SourceType,
-			SourceID:          dataPoint.SourceID,
-			SourceConfig:      cloneSnapshotObject(dataPoint.SourceConfig),
-			DataType:          dataPoint.DataType,
-			RefreshMode:       dataPoint.RefreshMode,
-			RefreshIntervalMS: dataPoint.RefreshIntervalMS,
-			Status:            dataPoint.Status,
-			Unit:              dataPoint.Unit,
-			DefaultValue:      dataPoint.DefaultValue,
-			Tags:              cloneSnapshotAnyArray(dataPoint.Tags),
+			ID:                 dataPoint.ID,
+			Path:               dataPoint.Path,
+			Name:               dataPoint.Name,
+			SourceType:         dataPoint.SourceType,
+			SourceID:           dataPoint.SourceID,
+			SourceConfig:       cloneSnapshotObject(dataPoint.SourceConfig),
+			DataType:           dataPoint.DataType,
+			RuntimePermissions: normalizeDataPointRuntimePermissions(dataPoint.RuntimePermissions),
+			RefreshMode:        dataPoint.RefreshMode,
+			RefreshIntervalMS:  dataPoint.RefreshIntervalMS,
+			Status:             dataPoint.Status,
+			Unit:               dataPoint.Unit,
+			DefaultValue:       dataPoint.DefaultValue,
+			Tags:               cloneSnapshotAnyArray(dataPoint.Tags),
 		})
 	}
 
@@ -485,7 +487,7 @@ func (r *ProjectSnapshotRepository) listQueries(ctx context.Context, projectID s
 func (r *ProjectSnapshotRepository) listDataPoints(ctx context.Context, projectID string) ([]DataPointRecord, error) {
 	rows, err := r.pool.Query(ctx, `
         SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
+               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
                refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
         FROM data_points
         WHERE project_id = $1
@@ -839,16 +841,20 @@ func (r *ProjectSnapshotRepository) insertDataPoints(ctx context.Context, tx pgx
 		if err != nil {
 			return err
 		}
+		runtimePermissionsBytes, err := marshalDataPointRuntimePermissions(datapoint.RuntimePermissions)
+		if err != nil {
+			return err
+		}
 		createdAt := coalesceTime(datapoint.CreatedAt)
 		updatedAt := coalesceTime(datapoint.UpdatedAt)
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_points (
                 id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
+                unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
                 refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20, $21, $22, $23, $24)
-        `, datapoint.ID, projectID, datapoint.Path, datapoint.Name, datapoint.Description, datapoint.SourceType, datapoint.SourceID, string(sourceConfigBytes), datapoint.DataType, datapoint.Unit, datapoint.PrecisionNum, datapoint.DefaultValue, datapoint.MinValue, datapoint.MaxValue, datapoint.AlarmLow, datapoint.AlarmHigh, string(tagsBytes), datapoint.RefreshMode, datapoint.RefreshIntervalMS, datapoint.Status, actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24, $25)
+        `, datapoint.ID, projectID, datapoint.Path, datapoint.Name, datapoint.Description, datapoint.SourceType, datapoint.SourceID, string(sourceConfigBytes), datapoint.DataType, datapoint.Unit, datapoint.PrecisionNum, datapoint.DefaultValue, datapoint.MinValue, datapoint.MaxValue, datapoint.AlarmLow, datapoint.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), datapoint.RefreshMode, datapoint.RefreshIntervalMS, datapoint.Status, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照数据点失败", err)
 		}
 	}

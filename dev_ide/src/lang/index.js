@@ -790,6 +790,8 @@ export const messages = {
           createSuccess: '运行态用户创建成功',
           updateSuccess: '运行态用户更新成功',
           rolesUpdateSuccess: '用户角色绑定已更新',
+          partialSuccessRoleBindingFailed: '运行态用户已创建，但角色绑定失败：{message}',
+          partialSuccessMissingUserId: '运行态用户已创建，但未能确认新账号，未执行角色绑定，请刷新后检查。',
           saveFailed: '保存运行态用户失败：{message}',
           loadFailed: '加载运行态用户失败：{message}',
           toggleStatusSuccess: '用户状态已更新为“{status}”',
@@ -1617,6 +1619,10 @@ export const messages = {
           createSuccess: 'Runtime user created successfully',
           updateSuccess: 'Runtime user updated successfully',
           rolesUpdateSuccess: 'User role bindings updated successfully',
+          partialSuccessRoleBindingFailed:
+            'Runtime user was created, but role binding failed: {message}',
+          partialSuccessMissingUserId:
+            'Runtime user was created, but the new account could not be confirmed, so role binding was skipped. Please refresh and verify.',
           saveFailed: 'Failed to save runtime user: {message}',
           loadFailed: 'Failed to load runtime users: {message}',
           toggleStatusSuccess: 'User status updated to "{status}"',

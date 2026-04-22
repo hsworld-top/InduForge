@@ -58,6 +58,7 @@ export class PageLockManager extends EventEmitter {
   _socket: PageLockSocket | null;
   _currentUserId: string;
   _heartbeatInterval: number;
+  _lockVersion: number;
   _currentPageId: string | null;
   _lockState: PageLockState | null;
   _heartbeatTimer: ReturnType<typeof setInterval> | null;
@@ -76,6 +77,8 @@ export class PageLockManager extends EventEmitter {
     this._currentUserId = options.currentUserId ?? "";
 
     this._heartbeatInterval = options.heartbeatInterval ?? 5 * 60 * 1000;
+
+    this._lockVersion = 0;
 
     this._currentPageId = null;
 
@@ -164,6 +167,7 @@ export class PageLockManager extends EventEmitter {
 
       if (response.success) {
         const d = response.data ?? {};
+        this._lockVersion += 1;
         this._currentPageId = pageId;
         this._lockState = {
           pageId,
@@ -211,6 +215,7 @@ export class PageLockManager extends EventEmitter {
     }
 
     const pageId = this._currentPageId;
+    const lockVersion = this._lockVersion;
 
     try {
       if (this._api) {
@@ -219,9 +224,16 @@ export class PageLockManager extends EventEmitter {
     } catch (error) {
       console.error("释放页面锁失败:", error);
     } finally {
-      this.stopHeartbeat();
-      this._currentPageId = null;
-      this._lockState = null;
+      /**
+       * 释放请求可能在网络层悬挂较久；期间既可能是同一把锁被改写（如锁丢失），
+       * 也可能是用户已经重新拿到了另一把锁。这里用锁版本区分“同一会话”与“新会话”：
+       * 只有版本未变化时才清理，避免旧请求误删新锁状态，同时保证同一把锁的残留能被收口。
+       */
+      if (this._currentPageId === pageId && this._lockVersion === lockVersion) {
+        this.stopHeartbeat();
+        this._currentPageId = null;
+        this._lockState = null;
+      }
 
       this.emit("lockReleased", { pageId });
     }

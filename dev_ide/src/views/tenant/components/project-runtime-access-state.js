@@ -113,6 +113,56 @@ export const buildRuntimeUserRoleBindingPayload = (form = {}) => ({
   roleIds: normalizeIdList(form.roleIds),
 })
 
+export const resolveRuntimeUserBindingPlan = ({
+  selectedRoleIds = [],
+  createdUserId = '',
+  fallbackUserId = '',
+}) => {
+  const normalizedRoleIds = normalizeIdList(selectedRoleIds)
+  if (normalizedRoleIds.length === 0) {
+    return {
+      type: 'skip',
+      userId: '',
+    }
+  }
+
+  const resolvedUserId = trimText(createdUserId) || trimText(fallbackUserId)
+  if (resolvedUserId) {
+    return {
+      type: 'bind',
+      userId: resolvedUserId,
+    }
+  }
+
+  return {
+    type: 'partial_success_missing_user_id',
+    userId: '',
+  }
+}
+
+export const shouldApplyRuntimeAccessLoadResult = ({
+  requestProjectId = '',
+  activeProjectId = '',
+  requestToken = 0,
+  activeToken = 0,
+  visible = false,
+}) =>
+  Boolean(
+    visible &&
+      trimText(requestProjectId) &&
+      trimText(requestProjectId) === trimText(activeProjectId) &&
+      requestToken === activeToken
+  )
+
+export const isRuntimeAccessDialogCancelled = (error) => {
+  if (error === 'cancel' || error === 'close') {
+    return true
+  }
+
+  const action = trimText(error?.action)
+  return action === 'cancel' || action === 'close'
+}
+
 export const summarizeRuntimeGrantCount = (roleLike) => {
   if (!roleLike || typeof roleLike !== 'object') {
     return 0
@@ -269,6 +319,12 @@ const validateRolePayload = (payload, t) => {
   }
 }
 
+const createRuntimeUserPartialSuccessError = (type, cause = null) => ({
+  kind: 'runtime_user_partial_success',
+  type,
+  cause,
+})
+
 export const useProjectRuntimeAccessState = ({
   visibleRef,
   projectRef,
@@ -294,6 +350,8 @@ export const useProjectRuntimeAccessState = ({
   const roleEditorMode = ref('create')
   const userForm = reactive(createEmptyUserForm())
   const roleForm = reactive(createEmptyRoleForm())
+  const runtimeUsersRequestToken = ref(0)
+  const runtimeRolesRequestToken = ref(0)
 
   const roleOptions = computed(() =>
     runtimeRoles.value.map((role) => ({
@@ -313,49 +371,150 @@ export const useProjectRuntimeAccessState = ({
 
   const projectId = computed(() => projectRef.value?.id || '')
 
+  const clearRuntimeAccessData = () => {
+    runtimeUsers.value = []
+    runtimeRoles.value = []
+    userLoading.value = false
+    roleLoading.value = false
+  }
+
+  const invalidateRuntimeAccessRequests = () => {
+    runtimeUsersRequestToken.value += 1
+    runtimeRolesRequestToken.value += 1
+  }
+
+  const resetRuntimeAccessState = () => {
+    invalidateRuntimeAccessRequests()
+    clearRuntimeAccessData()
+    userEditorVisible.value = false
+    roleEditorVisible.value = false
+    applyUserForm(userForm)
+    applyRoleForm(roleForm)
+  }
+
   const loadRuntimeUsers = async () => {
-    if (!projectId.value) {
+    if (!projectId.value || !visibleRef.value) {
       runtimeUsers.value = []
-      return
+      return []
     }
 
+    const requestProjectId = projectId.value
+    const requestToken = runtimeUsersRequestToken.value + 1
+    runtimeUsersRequestToken.value = requestToken
     userLoading.value = true
     try {
-      const response = await api.listRuntimeUsers(projectId.value)
+      const response = await api.listRuntimeUsers(requestProjectId)
+      if (
+        !shouldApplyRuntimeAccessLoadResult({
+          requestProjectId,
+          activeProjectId: projectId.value,
+          requestToken,
+          activeToken: runtimeUsersRequestToken.value,
+          visible: visibleRef.value,
+        })
+      ) {
+        return []
+      }
+
       runtimeUsers.value = extractList(response, ['runtimeUsers', 'items', 'list']).map(
         normalizeRuntimeUserRecord
       )
+      return runtimeUsers.value
     } catch (error) {
+      if (
+        !shouldApplyRuntimeAccessLoadResult({
+          requestProjectId,
+          activeProjectId: projectId.value,
+          requestToken,
+          activeToken: runtimeUsersRequestToken.value,
+          visible: visibleRef.value,
+        })
+      ) {
+        return []
+      }
+
+      runtimeUsers.value = []
       message.error(
         t('projectManagement.runtimeAccess.users.loadFailed', {
           message: getErrorMessage(error, t('common.error')),
         })
       )
+      return []
     } finally {
-      userLoading.value = false
+      if (
+        shouldApplyRuntimeAccessLoadResult({
+          requestProjectId,
+          activeProjectId: projectId.value,
+          requestToken,
+          activeToken: runtimeUsersRequestToken.value,
+          visible: visibleRef.value,
+        })
+      ) {
+        userLoading.value = false
+      }
     }
   }
 
   const loadRuntimeRoles = async () => {
-    if (!projectId.value) {
+    if (!projectId.value || !visibleRef.value) {
       runtimeRoles.value = []
-      return
+      return []
     }
 
+    const requestProjectId = projectId.value
+    const requestToken = runtimeRolesRequestToken.value + 1
+    runtimeRolesRequestToken.value = requestToken
     roleLoading.value = true
     try {
-      const response = await api.listRuntimeRoles(projectId.value)
+      const response = await api.listRuntimeRoles(requestProjectId)
+      if (
+        !shouldApplyRuntimeAccessLoadResult({
+          requestProjectId,
+          activeProjectId: projectId.value,
+          requestToken,
+          activeToken: runtimeRolesRequestToken.value,
+          visible: visibleRef.value,
+        })
+      ) {
+        return []
+      }
+
       runtimeRoles.value = extractList(response, ['runtimeRoles', 'items', 'list']).map(
         normalizeRuntimeRoleRecord
       )
+      return runtimeRoles.value
     } catch (error) {
+      if (
+        !shouldApplyRuntimeAccessLoadResult({
+          requestProjectId,
+          activeProjectId: projectId.value,
+          requestToken,
+          activeToken: runtimeRolesRequestToken.value,
+          visible: visibleRef.value,
+        })
+      ) {
+        return []
+      }
+
+      runtimeRoles.value = []
       message.error(
         t('projectManagement.runtimeAccess.roles.loadFailed', {
           message: getErrorMessage(error, t('common.error')),
         })
       )
+      return []
     } finally {
-      roleLoading.value = false
+      if (
+        shouldApplyRuntimeAccessLoadResult({
+          requestProjectId,
+          activeProjectId: projectId.value,
+          requestToken,
+          activeToken: runtimeRolesRequestToken.value,
+          visible: visibleRef.value,
+        })
+      ) {
+        roleLoading.value = false
+      }
     }
   }
 
@@ -365,12 +524,19 @@ export const useProjectRuntimeAccessState = ({
 
   watch(
     () => [visibleRef.value, projectId.value],
-    ([visible, id]) => {
+    ([visible, id], [previousVisible, previousProjectId]) => {
+      if (!visible || !id) {
+        resetRuntimeAccessState()
+        activeTab.value = RUNTIME_ACCESS_TABS.USERS
+        return
+      }
+
+      if (!previousVisible || previousProjectId !== id) {
+        resetRuntimeAccessState()
+      }
+
       if (visible && id) {
         refreshAll()
-      }
-      if (!visible) {
-        activeTab.value = RUNTIME_ACCESS_TABS.USERS
       }
     },
     { immediate: true }
@@ -418,9 +584,6 @@ export const useProjectRuntimeAccessState = ({
           displayName: payload.displayName,
           initialPassword: payload.initialPassword,
         }
-        if (payload.status) {
-          createPayload.status = payload.status
-        }
 
         const createResponse = await api.createRuntimeUser(projectId.value, createPayload)
         const createdUser =
@@ -429,16 +592,32 @@ export const useProjectRuntimeAccessState = ({
           null
 
         const roleBindingPayload = buildRuntimeUserRoleBindingPayload(userForm)
-        let createdUserId = createdUser?.id || ''
+        let fallbackUserId = ''
 
-        if (roleBindingPayload.roleIds.length > 0 && !createdUserId) {
-          await loadRuntimeUsers()
-          createdUserId = runtimeUsers.value.find((user) => user.username === payload.username)?.id || ''
+        if (roleBindingPayload.roleIds.length > 0 && !createdUser?.id) {
+          const refreshedUsers = await loadRuntimeUsers()
+          fallbackUserId =
+            refreshedUsers.find((user) => user.username === payload.username)?.id ||
+            runtimeUsers.value.find((user) => user.username === payload.username)?.id ||
+            ''
         }
 
-        if (roleBindingPayload.roleIds.length > 0 && createdUserId) {
-          await api.updateRuntimeUserRoles(projectId.value, createdUserId, roleBindingPayload)
+        const bindingPlan = resolveRuntimeUserBindingPlan({
+          selectedRoleIds: roleBindingPayload.roleIds,
+          createdUserId: createdUser?.id,
+          fallbackUserId,
+        })
+
+        if (bindingPlan.type === 'bind') {
+          try {
+            await api.updateRuntimeUserRoles(projectId.value, bindingPlan.userId, roleBindingPayload)
+          } catch (error) {
+            throw createRuntimeUserPartialSuccessError('role_binding_failed', error)
+          }
+        } else if (bindingPlan.type === 'partial_success_missing_user_id') {
+          throw createRuntimeUserPartialSuccessError('missing_user_id')
         }
+
         message.success(t('projectManagement.runtimeAccess.users.createSuccess'))
       } else {
         await api.updateRuntimeUserRoles(
@@ -452,6 +631,21 @@ export const useProjectRuntimeAccessState = ({
       userEditorVisible.value = false
       await Promise.all([loadRuntimeUsers(), loadRuntimeRoles()])
     } catch (error) {
+      if (error?.kind === 'runtime_user_partial_success') {
+        userEditorVisible.value = false
+        await Promise.all([loadRuntimeUsers(), loadRuntimeRoles()])
+        const messageKey =
+          error.type === 'role_binding_failed'
+            ? 'projectManagement.runtimeAccess.users.partialSuccessRoleBindingFailed'
+            : 'projectManagement.runtimeAccess.users.partialSuccessMissingUserId'
+        message.warning(
+          t(messageKey, {
+            message: getErrorMessage(error.cause, t('common.error')),
+          })
+        )
+        return
+      }
+
       message.error(
         t('projectManagement.runtimeAccess.users.saveFailed', {
           message: getErrorMessage(error, t('common.error')),
@@ -513,7 +707,7 @@ export const useProjectRuntimeAccessState = ({
       })
       message.success(t('projectManagement.runtimeAccess.users.resetPasswordSuccess'))
     } catch (error) {
-      if (error === 'cancel') {
+      if (isRuntimeAccessDialogCancelled(error)) {
         return
       }
 
@@ -602,7 +796,7 @@ export const useProjectRuntimeAccessState = ({
       message.success(t('projectManagement.runtimeAccess.roles.deleteSuccess'))
       await Promise.all([loadRuntimeRoles(), loadRuntimeUsers()])
     } catch (error) {
-      if (error === 'cancel') {
+      if (isRuntimeAccessDialogCancelled(error)) {
         return
       }
 

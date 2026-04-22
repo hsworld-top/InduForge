@@ -1,7 +1,8 @@
-import test from "node:test";
+// @ts-nocheck
 import assert from "node:assert/strict";
+import { test } from "vitest";
 
-import { createMqttSocketSharedRegistry } from "../src/composables/mqtt-socket-shared.js";
+import { createMqttSocketSharedRegistry } from "../src/composables/mqtt-socket-shared";
 
 function createFakeSocket(id) {
   const listeners = new Map();
