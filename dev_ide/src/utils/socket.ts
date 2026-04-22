@@ -1,9 +1,9 @@
-import { io } from 'socket.io-client'
+import { io, type Socket } from 'socket.io-client'
 import { Storage } from './storage'
 
-let socket = null
+let socket: Socket | null = null
 
-export const initSocket = (tenantId) => {
+export const initSocket = (tenantId?: string | null): Socket => {
   if (socket) return socket
 
   const token = Storage.getToken()
@@ -26,7 +26,7 @@ export const initSocket = (tenantId) => {
   socket.on('connect', () => {
     console.log('[Socket] Connected to server')
     if (tenantId) {
-      socket.emit('ops:subscribe', { tenantId })
+      socket?.emit('ops:subscribe', { tenantId })
     }
   })
 
@@ -37,9 +37,9 @@ export const initSocket = (tenantId) => {
   return socket
 }
 
-export const getSocket = () => socket
+export const getSocket = (): Socket | null => socket
 
-export const closeSocket = () => {
+export const closeSocket = (): void => {
   if (socket) {
     socket.close()
     socket = null

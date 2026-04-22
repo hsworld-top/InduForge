@@ -1,19 +1,26 @@
 import { STORAGE_KEYS } from '../constants/index.js'
 
+interface RememberMeCredentials {
+  username?: string
+  password?: string
+  tenantCode?: string
+  rememberMe?: boolean
+}
+
 /**
  * 本地存储工具类
  */
 export class Storage {
   /**
    * 获取存储的值
-   * @param {string} key - 存储键
-   * @param {*} defaultValue - 默认值
-   * @returns {*} 存储的值或默认值
+   * @param key 存储键
+   * @param defaultValue 默认值
+   * @returns 存储的值或默认值
    */
-  static get(key, defaultValue = null) {
+  static get<T = unknown>(key: string, defaultValue: T | null = null): T | null {
     try {
       const item = localStorage.getItem(key)
-      return item ? JSON.parse(item) : defaultValue
+      return item ? (JSON.parse(item) as T) : defaultValue
     } catch (error) {
       console.warn(`Storage get error for key "${key}":`, error)
       return defaultValue
@@ -22,10 +29,10 @@ export class Storage {
 
   /**
    * 设置存储的值
-   * @param {string} key - 存储键
-   * @param {*} value - 要存储的值
+   * @param key 存储键
+   * @param value 要存储的值
    */
-  static set(key, value) {
+  static set(key: string, value: unknown): void {
     try {
       localStorage.setItem(key, JSON.stringify(value))
     } catch (error) {
@@ -35,9 +42,9 @@ export class Storage {
 
   /**
    * 删除存储的值
-   * @param {string} key - 存储键
+   * @param key 存储键
    */
-  static remove(key) {
+  static remove(key: string): void {
     try {
       localStorage.removeItem(key)
     } catch (error) {
@@ -48,7 +55,7 @@ export class Storage {
   /**
    * 清空所有存储
    */
-  static clear() {
+  static clear(): void {
     try {
       localStorage.clear()
     } catch (error) {
@@ -59,12 +66,12 @@ export class Storage {
   /**
    * 按前缀枚举 localStorage 中的键。
    * 这个方法只负责扫描键名，不解析值，便于上层按业务前缀做映射恢复。
-   * @param {string} prefix - 键名前缀
-   * @returns {string[]} 匹配到的键名列表
+   * @param prefix 键名前缀
+   * @returns 匹配到的键名列表
    */
-  static getKeysByPrefix(prefix) {
+  static getKeysByPrefix(prefix: string): string[] {
     try {
-      const keys = []
+      const keys: string[] = []
       for (let index = 0; index < localStorage.length; index += 1) {
         const key = localStorage.key(index)
         if (key && key.startsWith(prefix)) {
@@ -80,9 +87,9 @@ export class Storage {
 
   /**
    * 获取认证令牌
-   * @returns {string|null} 令牌
+   * @returns 令牌
    */
-  static getToken() {
+  static getToken(): string | null {
     try {
       return localStorage.getItem(STORAGE_KEYS.TOKEN)
     } catch (error) {
@@ -93,9 +100,9 @@ export class Storage {
 
   /**
    * 设置认证令牌
-   * @param {string} token - 令牌
+   * @param token 令牌
    */
-  static setToken(token) {
+  static setToken(token: string): void {
     try {
       localStorage.setItem(STORAGE_KEYS.TOKEN, token)
     } catch (error) {
@@ -105,9 +112,9 @@ export class Storage {
 
   /**
    * 获取刷新令牌
-   * @returns {string|null} 刷新令牌
+   * @returns 刷新令牌
    */
-  static getRefreshToken() {
+  static getRefreshToken(): string | null {
     try {
       return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
     } catch (error) {
@@ -118,9 +125,9 @@ export class Storage {
 
   /**
    * 设置刷新令牌
-   * @param {string} refreshToken - 刷新令牌
+   * @param refreshToken 刷新令牌
    */
-  static setRefreshToken(refreshToken) {
+  static setRefreshToken(refreshToken: string): void {
     try {
       localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
     } catch (error) {
@@ -130,97 +137,97 @@ export class Storage {
 
   /**
    * 获取用户信息
-   * @returns {object|null} 用户信息
+   * @returns 用户信息
    */
-  static getUserInfo() {
-    return this.get(STORAGE_KEYS.USER_INFO)
+  static getUserInfo(): Record<string, unknown> | null {
+    return this.get<Record<string, unknown>>(STORAGE_KEYS.USER_INFO)
   }
 
   /**
    * 设置用户信息
-   * @param {object} userInfo - 用户信息
+   * @param userInfo 用户信息
    */
-  static setUserInfo(userInfo) {
+  static setUserInfo(userInfo: Record<string, unknown>): void {
     this.set(STORAGE_KEYS.USER_INFO, userInfo)
   }
 
   /**
    * 获取租户ID
-   * @returns {string|null} 租户ID
+   * @returns 租户ID
    */
-  static getTenantId() {
-    return this.get(STORAGE_KEYS.TENANT_ID)
+  static getTenantId(): string | null {
+    return this.get<string>(STORAGE_KEYS.TENANT_ID)
   }
 
   /**
    * 设置租户ID
-   * @param {string} tenantId - 租户ID
+   * @param tenantId 租户ID
    */
-  static setTenantId(tenantId) {
+  static setTenantId(tenantId: string): void {
     this.set(STORAGE_KEYS.TENANT_ID, tenantId)
   }
 
   /**
    * 获取主题设置
-   * @returns {string} 主题
+   * @returns 主题
    */
-  static getTheme() {
-    return this.get(STORAGE_KEYS.THEME, 'light')
+  static getTheme(): string {
+    return this.get<string>(STORAGE_KEYS.THEME, 'light') ?? 'light'
   }
 
   /**
    * 设置主题
-   * @param {string} theme - 主题
+   * @param theme 主题
    */
-  static setTheme(theme) {
+  static setTheme(theme: string): void {
     this.set(STORAGE_KEYS.THEME, theme)
   }
 
   /**
    * 获取语言设置
-   * @returns {string} 语言
+   * @returns 语言
    */
-  static getLanguage() {
-    return this.get(STORAGE_KEYS.LANGUAGE, 'zh')
+  static getLanguage(): string {
+    return this.get<string>(STORAGE_KEYS.LANGUAGE, 'zh') ?? 'zh'
   }
 
   /**
    * 设置语言
-   * @param {string} language - 语言
+   * @param language 语言
    */
-  static setLanguage(language) {
+  static setLanguage(language: string): void {
     this.set(STORAGE_KEYS.LANGUAGE, language)
   }
 
   /**
    * 获取侧边栏折叠状态
-   * @returns {boolean} 是否折叠
+   * @returns 是否折叠
    */
-  static getSidebarCollapsed() {
-    return this.get(STORAGE_KEYS.SIDEBAR_COLLAPSED, true)
+  static getSidebarCollapsed(): boolean {
+    return this.get<boolean>(STORAGE_KEYS.SIDEBAR_COLLAPSED, true) ?? true
   }
 
   /**
    * 设置侧边栏折叠状态
-   * @param {boolean} collapsed - 是否折叠
+   * @param collapsed 是否折叠
    */
-  static setSidebarCollapsed(collapsed) {
+  static setSidebarCollapsed(collapsed: boolean): void {
     this.set(STORAGE_KEYS.SIDEBAR_COLLAPSED, !!collapsed)
   }
 
   /**
    * 获取记住我的凭据
-   * @returns {object|null} 记住的凭据 {username, password, tenantCode, rememberMe}
+   * @returns 记住的凭据 {username, password, tenantCode, rememberMe}
    */
-  static getRememberMeCredentials() {
-    return this.get(STORAGE_KEYS.REMEMBER_ME)
+  static getRememberMeCredentials(): RememberMeCredentials | null {
+    return this.get<RememberMeCredentials>(STORAGE_KEYS.REMEMBER_ME)
   }
 
   /**
    * 设置记住我的凭据
-   * @param {object} credentials - 凭据 {username, password, tenantCode, rememberMe}
+   * @param credentials 凭据 {username, password, tenantCode, rememberMe}
    */
-  static setRememberMeCredentials(credentials) {
+  static setRememberMeCredentials(credentials?: RememberMeCredentials | null): void {
     if (credentials && credentials.rememberMe) {
       this.set(STORAGE_KEYS.REMEMBER_ME, {
         username: credentials.username,
@@ -236,7 +243,7 @@ export class Storage {
   /**
    * 清除记住我的凭据
    */
-  static clearRememberMeCredentials() {
+  static clearRememberMeCredentials(): void {
     this.remove(STORAGE_KEYS.REMEMBER_ME)
   }
 }

@@ -9,58 +9,58 @@
  * A PARTICULAR PURPOSE. SEE THE APPLICABLE LICENSES FOR MORE DETAILS.
  *
  */
-import { META_SERVICE, META_APP } from "@opentiny/tiny-engine-meta-register";
-import { HttpService } from "./composable";
+import { META_SERVICE, META_APP } from '@opentiny/tiny-engine-meta-register'
+import { HttpService } from './composable'
 
-const baseURL = import.meta.env.BASE_URL || ".";
-const baseURLWithoutSlash = baseURL.replace(/\/$/, "");
+const baseURL = import.meta.env.BASE_URL || '.'
+const baseURLWithoutSlash = baseURL.replace(/\/$/, '')
 
 const engineConfig = {
-  id: "engine.config",
-  theme: "light",
-  material: ["/mock/bundle.json"],
+  id: 'engine.config',
+  theme: 'light',
+  material: ['/mock/bundle.json'],
   scripts: [],
   styles: [],
   // 是否开启 TailWindCSS 特性
   enableTailwindCSS: true,
-};
+}
 
 export const registry = {
   [META_SERVICE.Http]: HttpService,
-  "engine.config": {
-    ...engineConfig
+  'engine.config': {
+    ...engineConfig,
   },
   // 调整插件顺序示例:
   [META_APP.Layout]: {
     options: {
       relativeLayoutConfig: {
         [META_APP.Page]: {
-          insertBefore: META_APP.State
+          insertBefore: META_APP.State,
         },
         // 调整插件顺序
         [META_APP.OutlineTree]: {
-          insertAfter: META_APP.Materials
+          insertAfter: META_APP.Materials,
         },
         // 调整插件上下位置
         [META_APP.Schema]: {
-          insertBefore: META_APP.Help
+          insertBefore: META_APP.Help,
         },
         // 调整工具栏顺序
         [META_APP.Save]: {
-          insertAfter: META_APP.GenerateCode
+          insertAfter: META_APP.GenerateCode,
         },
         // 支持切换组
         [META_APP.Lang]: {
-          insertAfter: META_APP.ViewSetting
-        }
-      }
-    }
+          insertAfter: META_APP.ViewSetting,
+        },
+      },
+    },
   },
   [META_APP.Preview]: {
     options: {
       // 配置预览跳转的 url：根据实际业务需求进行配置
       // 文档：https://opentiny.design/tiny-engine#/help-center/course/dev/preview-api
-      previewUrl: ["prod", "alpha"].includes(import.meta.env.MODE) ? `${baseURLWithoutSlash}/preview.html` : ""
-    }
-  }
+      previewUrl: ['prod', 'alpha'].includes(import.meta.env.MODE) ? `${baseURLWithoutSlash}/preview.html` : '',
+    },
+  },
 }

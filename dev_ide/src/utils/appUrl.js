@@ -1,4 +1,4 @@
-import { Storage } from './storage.js'
+import { Storage } from './storage.ts'
 import { createBootstrapResponse } from './embeddedAppBridge.js'
 
 /**

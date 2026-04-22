@@ -2,15 +2,18 @@
  * 日期工具函数
  */
 import dayjs from 'dayjs'
+import type { Dayjs } from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
+
+type DateInput = Date | string | number | Dayjs
 
 /**
  * 格式化日期
- * @param {Date|string|number} date - 日期
- * @param {string} format - 格式化字符串
- * @returns {string} 格式化后的日期字符串
+ * @param date 日期
+ * @param format 格式化字符串
+ * @returns 格式化后的日期字符串
  */
-export function formatDate(date, format = TIME_FORMAT) {
+export function formatDate(date: DateInput | null | undefined, format: string = TIME_FORMAT): string {
   if (!date) return ''
   const parsed = dayjs(date)
   return parsed.isValid() ? parsed.format(format) : ''
@@ -18,19 +21,19 @@ export function formatDate(date, format = TIME_FORMAT) {
 
 /**
  * 格式化日期时间
- * @param {Date|string|number} date - 日期
- * @returns {string} 格式化后的日期时间字符串
+ * @param date 日期
+ * @returns 格式化后的日期时间字符串
  */
-export function formatDateTime(date) {
+export function formatDateTime(date: DateInput | null | undefined): string {
   return formatDate(date, TIME_FORMAT)
 }
 
 /**
  * 获取相对时间
- * @param {Date|string|number} date - 日期
- * @returns {string} 相对时间字符串
+ * @param date 日期
+ * @returns 相对时间字符串
  */
-export function getRelativeTime(date) {
+export function getRelativeTime(date: DateInput | null | undefined): string {
   if (!date) return ''
 
   const d = dayjs(date)
@@ -60,10 +63,10 @@ export function getRelativeTime(date) {
 
 /**
  * 获取日期范围
- * @param {number} days - 天数
- * @returns {Array} [startDate, endDate]
+ * @param days 天数
+ * @returns [startDate, endDate]
  */
-export function getDateRange(days) {
+export function getDateRange(days: number): [Date, Date] {
   const endDate = dayjs()
   const startDate = dayjs().subtract(days, 'day')
 
@@ -72,12 +75,12 @@ export function getDateRange(days) {
 
 /**
  * 检查日期是否在范围内
- * @param {Date} date - 要检查的日期
- * @param {Date} startDate - 开始日期
- * @param {Date} endDate - 结束日期
- * @returns {boolean} 是否在范围内
+ * @param date 要检查的日期
+ * @param startDate 开始日期
+ * @param endDate 结束日期
+ * @returns 是否在范围内
  */
-export function isDateInRange(date, startDate, endDate) {
+export function isDateInRange(date: DateInput, startDate: DateInput, endDate: DateInput): boolean {
   const d = dayjs(date)
   const start = dayjs(startDate)
   const end = dayjs(endDate)
@@ -87,12 +90,12 @@ export function isDateInRange(date, startDate, endDate) {
 
 /**
  * 格式化货币
- * @param {number} amount - 金额
- * @param {string} currency - 货币符号
- * @returns {string} 格式化后的货币字符串
+ * @param amount 金额
+ * @param currency 货币符号
+ * @returns 格式化后的货币字符串
  */
-export function formatCurrency(amount, currency = '¥') {
-  if (amount === null || amount === undefined || isNaN(amount)) {
+export function formatCurrency(amount: number | null | undefined, currency = '¥'): string {
+  if (amount === null || amount === undefined || Number.isNaN(amount)) {
     return '-'
   }
 

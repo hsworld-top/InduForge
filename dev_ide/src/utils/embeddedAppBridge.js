@@ -1,4 +1,4 @@
-import { Storage } from './storage.js'
+import { Storage } from './storage.ts'
 
 const HANDOFF_STORAGE_PREFIX = 'embedded_app_handoff:'
 const DEFAULT_HANDOFF_TTL_MS = 10 * 60 * 1000
