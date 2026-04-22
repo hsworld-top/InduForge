@@ -25,7 +25,6 @@ declare module '@opentiny/tiny-engine-utils' {
 declare module '@opentiny/tiny-engine-meta-register' {
   interface MetaServiceMap {
     Http: string
-    [key: string]: string | undefined
   }
 
   interface MetaAppMap {
@@ -41,7 +40,6 @@ declare module '@opentiny/tiny-engine-meta-register' {
     Lang: string
     ViewSetting: string
     Preview: string
-    [key: string]: string | undefined
   }
 
   export const META_SERVICE: MetaServiceMap
