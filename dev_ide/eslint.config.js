@@ -1,4 +1,5 @@
 import js from '@eslint/js'
+import tsEslintPlugin from '@typescript-eslint/eslint-plugin'
 import vue from 'eslint-plugin-vue'
 import prettier from '@vue/eslint-config-prettier'
 import tsParser from '@typescript-eslint/parser'
@@ -21,10 +22,20 @@ const sharedGlobals = {
 
 const sharedRules = {
   'vue/multi-word-component-names': 'off',
-  'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
   'prefer-const': 'error',
   'no-var': 'error',
   'no-useless-catch': 'off', // 在某些情况下 try/catch 是必要的
+}
+
+const jsRules = {
+  ...sharedRules,
+  'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+}
+
+const typedRules = {
+  ...sharedRules,
+  'no-unused-vars': 'off',
+  '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
 }
 
 export default [
@@ -39,22 +50,28 @@ export default [
       sourceType: 'module',
       globals: sharedGlobals,
     },
-    rules: sharedRules,
+    rules: jsRules,
   },
   {
     name: 'projectide-frontend-ts',
     files: ['**/*.{ts,mts,cts,tsx}', '**/*.d.ts'],
+    plugins: {
+      '@typescript-eslint': tsEslintPlugin,
+    },
     languageOptions: {
       parser: tsParser,
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: sharedGlobals,
     },
-    rules: sharedRules,
+    rules: typedRules,
   },
   {
     name: 'projectide-frontend-vue',
     files: ['**/*.vue'],
+    plugins: {
+      '@typescript-eslint': tsEslintPlugin,
+    },
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -65,7 +82,7 @@ export default [
         sourceType: 'module',
       },
     },
-    rules: sharedRules,
+    rules: typedRules,
   },
   {
     ignores: ['dist/**', 'node_modules/**', '.vite/**'],

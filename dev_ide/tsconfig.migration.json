@@ -2,8 +2,16 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "allowJs": true,
-    "checkJs": false
+    "checkJs": true,
+    "strict": false
   },
-  "include": ["src/**/*.js"],
+  "include": [
+    "src/main.js",
+    "src/env.d.ts",
+    "src/migration-check-shims.d.ts",
+    "src/router.d.ts",
+    "src/lang.d.ts",
+    "src/utils/storage.d.ts"
+  ],
   "exclude": ["dist", "node_modules"]
 }
