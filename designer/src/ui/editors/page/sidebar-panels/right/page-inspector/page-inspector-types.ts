@@ -1,3 +1,5 @@
+import type { RolePermission } from "@/editor-core/document/types";
+
 /**
  * 页面属性面板的 UI 层类型定义
  * 统一约束页面角色、路由模式和整张表单的字段结构，避免各小节组件重复声明。
@@ -49,6 +51,7 @@ export interface PageInspectorFormState {
   popupCenter: boolean;
   popupMaskClosable: boolean;
   permissionSummary: string;
+  pageViewPermission: RolePermission | undefined;
   cacheMode: CacheMode;
   preloadMode: PreloadMode;
 }

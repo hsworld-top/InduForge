@@ -26,28 +26,29 @@ var allowedRefreshModes = map[string]struct{}{
 
 // DataPoint 表示面向 HTTP 层返回的数据点对象。
 type DataPoint struct {
-	ID                string         `json:"id"`
-	ProjectID         string         `json:"projectId"`
-	Path              string         `json:"path"`
-	Name              string         `json:"name"`
-	Description       *string        `json:"description"`
-	SourceType        string         `json:"sourceType"`
-	SourceID          *string        `json:"sourceId"`
-	SourceConfig      map[string]any `json:"sourceConfig"`
-	DataType          string         `json:"dataType"`
-	Unit              *string        `json:"unit"`
-	PrecisionNum      *int           `json:"precisionNum"`
-	DefaultValue      *string        `json:"defaultValue"`
-	MinValue          *float64       `json:"minValue"`
-	MaxValue          *float64       `json:"maxValue"`
-	AlarmLow          *float64       `json:"alarmLow"`
-	AlarmHigh         *float64       `json:"alarmHigh"`
-	Tags              []any          `json:"tags"`
-	RefreshMode       string         `json:"refreshMode"`
-	RefreshIntervalMS *int           `json:"refreshIntervalMs"`
-	Status            string         `json:"status"`
-	CreatedAt         time.Time      `json:"createdAt"`
-	UpdatedAt         time.Time      `json:"updatedAt"`
+	ID                 string                                 `json:"id"`
+	ProjectID          string                                 `json:"projectId"`
+	Path               string                                 `json:"path"`
+	Name               string                                 `json:"name"`
+	Description        *string                                `json:"description"`
+	SourceType         string                                 `json:"sourceType"`
+	SourceID           *string                                `json:"sourceId"`
+	SourceConfig       map[string]any                         `json:"sourceConfig"`
+	DataType           string                                 `json:"dataType"`
+	RuntimePermissions repository.DataPointRuntimePermissions `json:"runtimePermissions"`
+	Unit               *string                                `json:"unit"`
+	PrecisionNum       *int                                   `json:"precisionNum"`
+	DefaultValue       *string                                `json:"defaultValue"`
+	MinValue           *float64                               `json:"minValue"`
+	MaxValue           *float64                               `json:"maxValue"`
+	AlarmLow           *float64                               `json:"alarmLow"`
+	AlarmHigh          *float64                               `json:"alarmHigh"`
+	Tags               []any                                  `json:"tags"`
+	RefreshMode        string                                 `json:"refreshMode"`
+	RefreshIntervalMS  *int                                   `json:"refreshIntervalMs"`
+	Status             string                                 `json:"status"`
+	CreatedAt          time.Time                              `json:"createdAt"`
+	UpdatedAt          time.Time                              `json:"updatedAt"`
 }
 
 // DataPointPagination 表示数据点列表分页信息。
@@ -97,6 +98,11 @@ type UpdateDataPointInput struct {
 	RefreshMode       *string
 	RefreshIntervalMS *int
 	Status            *string
+}
+
+// UpdateDataPointRuntimePermissionsInput 表示运行态权限更新入参。
+type UpdateDataPointRuntimePermissionsInput struct {
+	Write repository.RuntimePermissionGrant
 }
 
 // DataPointService 承载数据点领域的校验、映射与值读取逻辑。
@@ -356,6 +362,35 @@ func (s *DataPointService) UpdateDataPoint(ctx context.Context, projectID, id, u
 	return &dataPoint, nil
 }
 
+// UpdateDataPointRuntimePermissions 更新数据点运行态写权限。
+// 说明：当前只开放 write 节点，service 负责项目/用户边界校验，仓储层只做参数化持久化。
+func (s *DataPointService) UpdateDataPointRuntimePermissions(ctx context.Context, projectID, id, userID string, input UpdateDataPointRuntimePermissionsInput) (*DataPoint, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateDataPointID(id); err != nil {
+		return nil, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.repository.UpdateRuntimePermissions(ctx, repository.UpdateDataPointRuntimePermissionsParams{
+		ID:        id,
+		ProjectID: projectID,
+		UserID:    userID,
+		RuntimePermissions: repository.DataPointRuntimePermissions{
+			Write: input.Write,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	dataPoint := toDataPoint(*updated)
+	return &dataPoint, nil
+}
+
 // DeleteDataPoint 删除单个数据点，但仅允许删除 invalid 状态的数据点。
 func (s *DataPointService) DeleteDataPoint(ctx context.Context, projectID, id string) error {
 	if err := validateProjectID(projectID); err != nil {
@@ -456,28 +491,29 @@ func normalizeDataPointListFilter(filter DataPointListFilter) (DataPointListFilt
 // toDataPoint 将仓储记录映射为 HTTP 返回对象。
 func toDataPoint(record repository.DataPointRecord) DataPoint {
 	return DataPoint{
-		ID:                record.ID,
-		ProjectID:         record.ProjectID,
-		Path:              record.Path,
-		Name:              record.Name,
-		Description:       cloneOptionalString(record.Description),
-		SourceType:        record.SourceType,
-		SourceID:          cloneOptionalString(record.SourceID),
-		SourceConfig:      cloneMap(record.SourceConfig),
-		DataType:          record.DataType,
-		Unit:              cloneOptionalString(record.Unit),
-		PrecisionNum:      cloneOptionalInt(record.PrecisionNum),
-		DefaultValue:      cloneOptionalString(record.DefaultValue),
-		MinValue:          cloneOptionalFloat64(record.MinValue),
-		MaxValue:          cloneOptionalFloat64(record.MaxValue),
-		AlarmLow:          cloneOptionalFloat64(record.AlarmLow),
-		AlarmHigh:         cloneOptionalFloat64(record.AlarmHigh),
-		Tags:              cloneJSONArray(record.Tags),
-		RefreshMode:       record.RefreshMode,
-		RefreshIntervalMS: cloneOptionalInt(record.RefreshIntervalMS),
-		Status:            record.Status,
-		CreatedAt:         record.CreatedAt,
-		UpdatedAt:         record.UpdatedAt,
+		ID:                 record.ID,
+		ProjectID:          record.ProjectID,
+		Path:               record.Path,
+		Name:               record.Name,
+		Description:        cloneOptionalString(record.Description),
+		SourceType:         record.SourceType,
+		SourceID:           cloneOptionalString(record.SourceID),
+		SourceConfig:       cloneMap(record.SourceConfig),
+		DataType:           record.DataType,
+		RuntimePermissions: record.RuntimePermissions,
+		Unit:               cloneOptionalString(record.Unit),
+		PrecisionNum:       cloneOptionalInt(record.PrecisionNum),
+		DefaultValue:       cloneOptionalString(record.DefaultValue),
+		MinValue:           cloneOptionalFloat64(record.MinValue),
+		MaxValue:           cloneOptionalFloat64(record.MaxValue),
+		AlarmLow:           cloneOptionalFloat64(record.AlarmLow),
+		AlarmHigh:          cloneOptionalFloat64(record.AlarmHigh),
+		Tags:               cloneJSONArray(record.Tags),
+		RefreshMode:        record.RefreshMode,
+		RefreshIntervalMS:  cloneOptionalInt(record.RefreshIntervalMS),
+		Status:             record.Status,
+		CreatedAt:          record.CreatedAt,
+		UpdatedAt:          record.UpdatedAt,
 	}
 }
 

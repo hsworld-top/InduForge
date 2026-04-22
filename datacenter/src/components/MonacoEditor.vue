@@ -6,7 +6,7 @@
   ></div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import * as monaco from "monaco-editor";
 

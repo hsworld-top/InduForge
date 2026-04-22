@@ -192,7 +192,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, toRef } from "vue";
 import { ElMessage } from "element-plus";
 import { getMqttTags } from "@/api/data.api";

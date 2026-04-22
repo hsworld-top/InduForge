@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/response"
+	"github.com/indu-forge/data_service/internal/repository"
 	"github.com/indu-forge/data_service/internal/service"
 )
 
@@ -92,6 +94,32 @@ func (h *DataPointHandler) Update(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	result, err := h.service.UpdateDataPoint(r.Context(), r.PathValue("projectId"), r.PathValue("id"), claims.UserID, input)
+	if err != nil {
+		return err
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// UpdateRuntimePermissions 更新数据点运行态写权限。
+func (h *DataPointHandler) UpdateRuntimePermissions(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	raw, err := decodeJSONObjectBody(r)
+	if err != nil {
+		return err
+	}
+
+	input, err := parseDataPointRuntimePermissionsInput(raw)
+	if err != nil {
+		return err
+	}
+
+	result, err := h.service.UpdateDataPointRuntimePermissions(r.Context(), r.PathValue("projectId"), r.PathValue("id"), claims.UserID, input)
 	if err != nil {
 		return err
 	}
@@ -327,4 +355,61 @@ func parseDataPointUpdateInput(raw map[string]json.RawMessage) (service.UpdateDa
 	}
 
 	return input, nil
+}
+
+func parseDataPointRuntimePermissionsInput(raw map[string]json.RawMessage) (service.UpdateDataPointRuntimePermissionsInput, error) {
+	for field := range raw {
+		if field == "write" {
+			continue
+		}
+		return service.UpdateDataPointRuntimePermissionsInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "更新请求包含不支持的字段: "+field)
+	}
+
+	writePayload, ok := raw["write"]
+	if !ok {
+		return service.UpdateDataPointRuntimePermissionsInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "运行态权限请求缺少 write 字段")
+	}
+	if bytes.Equal(bytes.TrimSpace(writePayload), []byte("null")) {
+		return service.UpdateDataPointRuntimePermissionsInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "write 权限字段不能为空")
+	}
+
+	payload, err := json.Marshal(map[string]json.RawMessage{
+		"write": writePayload,
+	})
+	if err != nil {
+		return service.UpdateDataPointRuntimePermissionsInput{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "write 权限字段格式无效", err)
+	}
+
+	var runtimePermissions repository.DataPointRuntimePermissions
+	if err := json.Unmarshal(payload, &runtimePermissions); err != nil {
+		return service.UpdateDataPointRuntimePermissionsInput{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "write 权限字段格式无效", err)
+	}
+
+	return service.UpdateDataPointRuntimePermissionsInput{
+		Write: runtimePermissions.Write,
+	}, nil
+}
+
+func normalizeRoleNames(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	if len(result) == 0 {
+		return []string{}
+	}
+	return result
 }

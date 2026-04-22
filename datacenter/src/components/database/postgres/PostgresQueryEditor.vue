@@ -240,7 +240,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, inject, onMounted, onUnmounted } from "vue";
 import IconTablerFileCheck from "~icons/tabler/file-check";
 import IconTablerPlayerPlay from "~icons/tabler/player-play";

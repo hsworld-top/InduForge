@@ -1,7 +1,7 @@
 /**
  * 页面属性面板配置构建工具
  */
-import type { BackgroundConfig, PageNode } from "@/editor-core/document/types";
+import type { BackgroundConfig, PageConfig, PageNode, RolePermission } from "@/editor-core/document/types";
 import type {
   BackgroundRepeat,
   BackgroundSize,
@@ -15,6 +15,7 @@ import type {
   TransitionType,
   ViewportPreset,
 } from "./page-inspector/page-inspector-types";
+import { sanitizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 
 export type WindowStyle = "popup" | "cover" | "replace";
 export type BackgroundKind = BackgroundConfig["kind"];
@@ -46,6 +47,7 @@ export interface PageInspectorConfigInput {
   popupCenter: boolean;
   popupMaskClosable: boolean;
   permissionSummary: string;
+  pageViewPermission: RolePermission | undefined;
   cacheMode: CacheMode;
   preloadMode: PreloadMode;
 }
@@ -223,6 +225,17 @@ function normalizeOpenMode(value: unknown): OpenMode {
   return "cover";
 }
 
+/**
+ * 归一化数字输入
+ * @param {unknown} value - 原始数值
+ * @param {number} fallback - 回退值
+ * @returns {number} 归一化后的数字
+ */
+function normalizeNumber(value: unknown, fallback: number): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
+
 export function createDefaultPageInspectorFormState(): PageInspectorFormState {
   return {
     name: "",
@@ -253,6 +266,7 @@ export function createDefaultPageInspectorFormState(): PageInspectorFormState {
     popupCenter: true,
     popupMaskClosable: true,
     permissionSummary: DEFAULT_PERMISSION_DESC,
+    pageViewPermission: undefined,
     cacheMode: "default",
     preloadMode: "lazy",
   };
@@ -270,7 +284,8 @@ export function hydratePageInspectorForm(input: {
   const viewport = (config.viewport || {}) as Partial<NonNullable<PageNode["config"]["viewport"]>>;
   const route = (config.route || {}) as Partial<NonNullable<PageNode["config"]["route"]>>;
   const runtime = (config.runtime || {}) as Partial<NonNullable<PageNode["config"]["runtime"]>>;
-  const popup = (runtime.popup || {}) as Partial<NonNullable<NonNullable<PageNode["config"]["runtime"]>["popup"]>>;
+  const popup =
+    (runtime.popup || {}) as Partial<NonNullable<NonNullable<PageNode["config"]["runtime"]>["popup"]>>;
   const permission = (runtime.permission || {}) as Partial<
     NonNullable<NonNullable<PageNode["config"]["runtime"]>["permission"]>
   >;
@@ -283,6 +298,8 @@ export function hydratePageInspectorForm(input: {
   const height = normalizeNumber(viewport.height ?? config.height, DEFAULT_HEIGHT);
   const autoFit = Boolean(viewport.autoFit ?? config.autoFit ?? base.autoFit);
   const lockAspectRatio = Boolean(viewport.lockAspectRatio ?? config.lockAspectRatio ?? false);
+  const pageViewPermission = sanitizeRoleGrant(config.runtimePermissions?.pageView);
+
   return {
     ...base,
     name: String(input.name || ""),
@@ -316,21 +333,13 @@ export function hydratePageInspectorForm(input: {
     popupHeight: normalizeNumber(popup.height, DEFAULT_POPUP_HEIGHT),
     popupCenter: popup.center ?? true,
     popupMaskClosable: popup.maskClosable ?? true,
-    permissionSummary: String(permission.summary ?? config.permissionDesc ?? DEFAULT_PERMISSION_DESC),
+    permissionSummary: pageViewPermission
+      ? "已配置页面访问权限"
+      : String(permission.summary ?? config.permissionDesc ?? DEFAULT_PERMISSION_DESC),
+    pageViewPermission,
     cacheMode: normalizeCacheMode(runtime.cacheMode),
     preloadMode: normalizePreloadMode(runtime.preloadMode),
   };
-}
-
-/**
- * 归一化数字输入
- * @param {unknown} value - 原始数值
- * @param {number} fallback - 回退值
- * @returns {number} 归一化后的数字
- */
-function normalizeNumber(value: unknown, fallback: number): number {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
 }
 
 /**
@@ -343,7 +352,8 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
   const normalizedWindowStyle = normalizeWindowStyle(input.openMode);
   const normalizedPermissionSummary = String(input.permissionSummary || DEFAULT_PERMISSION_DESC);
   const backgroundKind = normalizeBackgroundKind(input.backgroundType);
-  return {
+  const pageViewPermission = sanitizeRoleGrant(input.pageViewPermission);
+  const patch: PageInspectorConfigPatch = {
     meta: {
       title: String(input.title || ""),
       description: String(input.description || ""),
@@ -372,7 +382,7 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
         maskClosable: Boolean(input.popupMaskClosable),
       },
       permission: {
-        summary: normalizedPermissionSummary,
+        summary: pageViewPermission ? "已配置页面访问权限" : normalizedPermissionSummary,
       },
       cacheMode: normalizeCacheMode(input.cacheMode),
       preloadMode: normalizePreloadMode(input.preloadMode),
@@ -389,7 +399,7 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
       autoFit
       && (normalizeOptionalNumber(input.minWidth) > 0 || normalizeOptionalNumber(input.minHeight) > 0),
     windowStyle: normalizedWindowStyle,
-    permissionDesc: normalizedPermissionSummary,
+    permissionDesc: pageViewPermission ? "已配置页面访问权限" : normalizedPermissionSummary,
     background: {
       kind: backgroundKind,
       value: String(input.backgroundValue || DEFAULT_BACKGROUND_COLOR),
@@ -398,4 +408,91 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
       repeat: normalizeBackgroundRepeat(input.backgroundRepeat),
     },
   };
+
+  if (pageViewPermission) {
+    patch.runtimePermissions = {
+      ...(patch.runtimePermissions || {}),
+      pageView: pageViewPermission,
+    };
+  }
+
+  return patch;
+}
+
+/**
+ * 合并页面配置补丁。对运行态权限使用显式移除语义，避免旧的 pageView 残留。
+ * @param {PageConfig | undefined} baseConfig - 当前页面配置
+ * @param {PageInspectorConfigPatch} patch - 页面属性面板构建出的补丁
+ * @returns {PageConfig} 合并后的配置
+ */
+export function mergePageConfigPatch(
+  baseConfig: PageConfig | undefined,
+  patch: PageInspectorConfigPatch,
+  options: {
+    clearPageViewPermission?: boolean;
+  } = {},
+): PageConfig {
+  const nextConfig = {
+    ...(baseConfig || {}),
+    ...patch,
+    meta: {
+      ...(baseConfig?.meta || {}),
+      ...(patch.meta || {}),
+    },
+    route: {
+      ...(baseConfig?.route || {}),
+      ...(patch.route || {}),
+    },
+    viewport: {
+      ...(baseConfig?.viewport || {}),
+      ...(patch.viewport || {}),
+    },
+    runtime: {
+      ...(baseConfig?.runtime || {}),
+      ...(patch.runtime || {}),
+      popup: {
+        ...(baseConfig?.runtime?.popup || {}),
+        ...(patch.runtime?.popup || {}),
+      },
+      permission: {
+        ...(baseConfig?.runtime?.permission || {}),
+        ...(patch.runtime?.permission || {}),
+      },
+    },
+    transition: {
+      ...(baseConfig?.transition || {}),
+      ...(patch.transition || {}),
+    },
+    background: {
+      ...(baseConfig?.background || {}),
+      ...(patch.background || {}),
+    },
+  } as PageConfig;
+
+  if ("runtimePermissions" in patch) {
+    if (patch.runtimePermissions?.pageView) {
+      nextConfig.runtimePermissions = {
+        ...(baseConfig?.runtimePermissions || {}),
+        ...patch.runtimePermissions,
+      };
+    } else {
+      const remainingPermissions = { ...(baseConfig?.runtimePermissions || {}) };
+      delete remainingPermissions.pageView;
+      if (Object.keys(remainingPermissions).length > 0) {
+        nextConfig.runtimePermissions = remainingPermissions;
+      } else {
+        delete nextConfig.runtimePermissions;
+      }
+    }
+  } else if (options.clearPageViewPermission) {
+    const remainingPermissions = { ...(baseConfig?.runtimePermissions || {}) };
+    delete remainingPermissions.pageView;
+    if (Object.keys(remainingPermissions).length > 0) {
+      nextConfig.runtimePermissions = remainingPermissions;
+    } else {
+      delete nextConfig.runtimePermissions;
+    }
+  }
+
+  return nextConfig;
 }

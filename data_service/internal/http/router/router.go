@@ -331,6 +331,14 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 			),
 		)
 		mux.Handle(
+			"PUT /api/v1/data/projects/{projectId}/datapoints/{id}/runtime-permissions",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.UpdateRuntimePermissions),
+				),
+			),
+		)
+		mux.Handle(
 			"GET /api/v1/data/projects/{projectId}/datapoints/{id}/usages",
 			middleware.Authenticate(opts.jwtValidator)(
 				middleware.RequireCapability("project:read")(

@@ -64,7 +64,7 @@
   </el-tooltip>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 import IconTablerDatabase from "~icons/tabler/database";
 import IconTablerCloudDataConnection from "~icons/tabler/cloud-data-connection";

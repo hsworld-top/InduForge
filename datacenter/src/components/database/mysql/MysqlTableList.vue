@@ -33,7 +33,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, inject, watch } from "vue";
 import IconTablerLoader from "~icons/tabler/loader";
 import { useMysql } from "@/composables/database/useMysql";

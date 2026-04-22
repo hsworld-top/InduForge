@@ -71,7 +71,14 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	})
 
 	dataPointID := insertOneDataPoint(t, ctx, fixture, projectID, userID, "metrics.main.temp", "active")
-	_ = dataPointID
+	_, err = fixture.pool.Exec(ctx, `
+        UPDATE data_points
+        SET runtime_permissions = $3::jsonb
+        WHERE project_id = $1 AND id = $2
+    `, projectID, dataPointID, `{"write":{"allowRoles":["operator"],"denyRoles":["guest"],"inherit":false}}`)
+	if err != nil {
+		t.Fatalf("update datapoint runtime permissions failed: %v", err)
+	}
 
 	mqttConnection := mustCreateMqttConnection(t, server.URL, token, projectID, map[string]any{
 		"name":      "mqtt-main",
@@ -118,6 +125,11 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	if !artifactHasDataPointPath(artifact.DataPoints, "metrics.main.temp") {
 		t.Fatal("expected datapoint metrics.main.temp in artifact")
 	}
+	artifactDataPoint := findArtifactDataPointByPath(artifact.DataPoints, "metrics.main.temp")
+	if artifactDataPoint == nil {
+		t.Fatal("expected datapoint metrics.main.temp in artifact")
+	}
+	assertRuntimeGrant(t, artifactDataPoint.RuntimePermissions.Write, []string{"operator"}, []string{"guest"}, false)
 	if !artifactHasMqttConnection(artifact.Mqtt.Connections, mqttConnection.ID) {
 		t.Fatalf("expected mqtt.connections include %q", mqttConnection.ID)
 	}
@@ -157,8 +169,9 @@ type projectArtifactQuery struct {
 }
 
 type projectArtifactDataPoint struct {
-	ID   string `json:"id"`
-	Path string `json:"path"`
+	ID                 string                   `json:"id"`
+	Path               string                   `json:"path"`
+	RuntimePermissions dataPointPermissionGroup `json:"runtimePermissions"`
 }
 
 type projectArtifactMqttPayload struct {
@@ -260,6 +273,15 @@ func artifactHasDataPointPath(dataPoints []projectArtifactDataPoint, path string
 		}
 	}
 	return false
+}
+
+func findArtifactDataPointByPath(dataPoints []projectArtifactDataPoint, path string) *projectArtifactDataPoint {
+	for index := range dataPoints {
+		if dataPoints[index].Path == path {
+			return &dataPoints[index]
+		}
+	}
+	return nil
 }
 
 func artifactHasMqttConnection(connections []projectArtifactMqttConnection, id string) bool {

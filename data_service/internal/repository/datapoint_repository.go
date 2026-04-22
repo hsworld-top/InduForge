@@ -19,30 +19,32 @@ import (
 
 // DataPointRecord 表示 data_points 表在仓储层的投影结果。
 type DataPointRecord struct {
-	ID                string
-	ProjectID         string
-	Path              string
-	Name              string
-	Description       *string
-	SourceType        string
-	SourceID          *string
-	SourceConfig      map[string]any
-	DataType          string
-	Unit              *string
-	PrecisionNum      *int
-	DefaultValue      *string
-	MinValue          *float64
-	MaxValue          *float64
-	AlarmLow          *float64
-	AlarmHigh         *float64
-	Tags              []any
-	RefreshMode       string
-	RefreshIntervalMS *int
-	Status            string
-	CreatedBy         *string
-	UpdatedBy         *string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                        string
+	ProjectID                 string
+	Path                      string
+	Name                      string
+	Description               *string
+	SourceType                string
+	SourceID                  *string
+	SourceConfig              map[string]any
+	DataType                  string
+	Unit                      *string
+	PrecisionNum              *int
+	DefaultValue              *string
+	MinValue                  *float64
+	MaxValue                  *float64
+	AlarmLow                  *float64
+	AlarmHigh                 *float64
+	Tags                      []any
+	RuntimePermissions        DataPointRuntimePermissions
+	RuntimePermissionsDefined bool
+	RefreshMode               string
+	RefreshIntervalMS         *int
+	Status                    string
+	CreatedBy                 *string
+	UpdatedBy                 *string
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 }
 
 // DataPointListFilter 表示数据点列表的过滤条件。
@@ -84,9 +86,9 @@ func (r *DataPointRepository) ListByProject(ctx context.Context, projectID strin
 
 	selectArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
-               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+		SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+		       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+		       refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
         FROM data_points
         WHERE `+whereSQL+`
         ORDER BY created_at DESC
@@ -117,9 +119,9 @@ func (r *DataPointRepository) ListByProject(ctx context.Context, projectID strin
 // 潜在性能风险：单条主键读取性能稳定，但高频调用 value 接口时应关注上游查询执行成本而非此处扫描成本。
 func (r *DataPointRepository) GetByProjectAndID(ctx context.Context, projectID, id string) (*DataPointRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
-               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+		SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+		       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+		       refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
         FROM data_points
         WHERE project_id = $1 AND id = $2
     `, projectID, id)
@@ -136,9 +138,9 @@ func (r *DataPointRepository) GetByProjectAndID(ctx context.Context, projectID, 
 // 潜在性能风险：若 path 频繁被模糊搜索，不要把该唯一索引误当作搜索索引使用。
 func (r *DataPointRepository) GetByProjectAndPath(ctx context.Context, projectID, path string) (*DataPointRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
-               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+		SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+		       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+		       refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
         FROM data_points
         WHERE project_id = $1 AND path = $2
     `, projectID, path)
@@ -159,9 +161,9 @@ func (r *DataPointRepository) GetByProjectAndIDs(ctx context.Context, projectID 
 	}
 
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
-               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+		SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+		       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+		       refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
         FROM data_points
         WHERE project_id = $1 AND id = ANY($2::uuid[])
         ORDER BY id
@@ -222,7 +224,7 @@ func (r *DataPointRepository) Update(ctx context.Context, params UpdateDataPoint
             updated_at = now()
         WHERE project_id = $1 AND id = $2
         RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags,
+                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
                   refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
     `, params.ProjectID, params.ID, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
 
@@ -231,6 +233,32 @@ func (r *DataPointRepository) Update(ctx context.Context, params UpdateDataPoint
 		return nil, translateDataPointWriteError(err)
 	}
 
+	return &record, nil
+}
+
+// UpdateRuntimePermissions 只更新运行态权限 JSON 字段。
+// 说明：本轮仅开放 write 权限，因此这里整体覆盖 runtime_permissions，避免与其他业务字段耦合。
+func (r *DataPointRepository) UpdateRuntimePermissions(ctx context.Context, params UpdateDataPointRuntimePermissionsParams) (*DataPointRecord, error) {
+	runtimePermissionsBytes, err := marshalDataPointRuntimePermissions(params.RuntimePermissions)
+	if err != nil {
+		return nil, err
+	}
+
+	row := r.pool.QueryRow(ctx, `
+        UPDATE data_points
+        SET runtime_permissions = $3::jsonb,
+            updated_by = $4,
+            updated_at = now()
+        WHERE project_id = $1 AND id = $2
+        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+    `, params.ProjectID, params.ID, string(runtimePermissionsBytes), params.UserID)
+
+	record, err := scanDataPointRecord(row)
+	if err != nil {
+		return nil, translateDataPointWriteError(err)
+	}
 	return &record, nil
 }
 
@@ -293,27 +321,36 @@ type UpdateDataPointParams struct {
 	Status            string
 }
 
+// UpdateDataPointRuntimePermissionsParams 表示运行态权限更新参数。
+type UpdateDataPointRuntimePermissionsParams struct {
+	ID                 string
+	ProjectID          string
+	UserID             string
+	RuntimePermissions DataPointRuntimePermissions
+}
+
 type dataPointScannable interface {
 	Scan(dest ...any) error
 }
 
 func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 	var (
-		record            DataPointRecord
-		description       sql.NullString
-		sourceID          sql.NullString
-		unit              sql.NullString
-		precisionNum      sql.NullInt32
-		defaultValue      sql.NullString
-		minValue          sql.NullFloat64
-		maxValue          sql.NullFloat64
-		alarmLow          sql.NullFloat64
-		alarmHigh         sql.NullFloat64
-		refreshIntervalMS sql.NullInt32
-		createdBy         sql.NullString
-		updatedBy         sql.NullString
-		sourceConfigBytes []byte
-		tagsBytes         []byte
+		record                  DataPointRecord
+		description             sql.NullString
+		sourceID                sql.NullString
+		unit                    sql.NullString
+		precisionNum            sql.NullInt32
+		defaultValue            sql.NullString
+		minValue                sql.NullFloat64
+		maxValue                sql.NullFloat64
+		alarmLow                sql.NullFloat64
+		alarmHigh               sql.NullFloat64
+		refreshIntervalMS       sql.NullInt32
+		createdBy               sql.NullString
+		updatedBy               sql.NullString
+		sourceConfigBytes       []byte
+		tagsBytes               []byte
+		runtimePermissionsBytes []byte
 	)
 
 	if err := row.Scan(
@@ -334,6 +371,7 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 		&alarmLow,
 		&alarmHigh,
 		&tagsBytes,
+		&runtimePermissionsBytes,
 		&record.RefreshMode,
 		&refreshIntervalMS,
 		&record.Status,
@@ -378,6 +416,12 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 			record.Tags = make([]any, 0)
 		}
 	}
+	runtimePermissions, err := unmarshalDataPointRuntimePermissions(runtimePermissionsBytes)
+	if err != nil {
+		return DataPointRecord{}, err
+	}
+	record.RuntimePermissions = runtimePermissions
+	record.RuntimePermissionsDefined = true
 
 	return record, nil
 }

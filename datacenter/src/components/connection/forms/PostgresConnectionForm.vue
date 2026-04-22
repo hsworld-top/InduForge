@@ -161,7 +161,7 @@
   </el-form>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch, onMounted, computed } from "vue";
 import { getDefaultConfig } from "@/config/connectionTypes";
 import { t } from "@/i18n/runtime";
