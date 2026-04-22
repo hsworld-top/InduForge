@@ -341,7 +341,7 @@
   </el-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, reactive, ref, toRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -350,7 +350,7 @@ import { projectAPI } from '../../../api/project.api.js'
 import {
   RUNTIME_ACCESS_TABS,
   useProjectRuntimeAccessState,
-} from './project-runtime-access-state.js'
+} from './project-runtime-access-state.ts'
 
 const props = defineProps({
   visible: {

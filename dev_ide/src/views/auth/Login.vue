@@ -188,6 +188,7 @@
                   id="username"
                   v-model="form.username"
                   type="text"
+                  autocomplete="username"
                   required
                   class="input-field"
                   :placeholder="$t('auth.username')"
@@ -221,6 +222,7 @@
                   id="password"
                   v-model="form.password"
                   :type="showPassword ? 'text' : 'password'"
+                  autocomplete="current-password"
                   required
                   class="input-field"
                   :placeholder="$t('auth.password')"
@@ -638,6 +640,7 @@ export default {
       showCaptcha,
       captchaData,
       showPassword,
+      locale,
       backgroundImageUrl,
       logoUrl,
       appConfig,

@@ -307,9 +307,15 @@
       <!-- 右侧标签页区域 -->
       <div :class="['flex-1 overflow-hidden relative', isTabMaximized ? '' : 'pl-3']">
         <div v-if="tabs.length > 0" class="h-full flex flex-col">
-          <el-tabs v-model="activeTab" type="card" :closable="(tab) => tab.key !== 'dashboard'" @tab-remove="closeTab"
+          <el-tabs v-model="activeTab" type="card" @tab-remove="closeTab"
             :class="['dashboard-tabs h-full flex-1 min-h-0', isTabMaximized ? 'dashboard-tabs-maximized' : '']">
-            <el-tab-pane v-for="tab in tabs" :key="tab.key" :name="tab.key" :v-show="isTabVisible(tab.key)">
+            <el-tab-pane
+              v-for="tab in tabs"
+              :key="tab.key"
+              :name="tab.key"
+              :v-show="isTabVisible(tab.key)"
+              :closable="tab.key !== 'dashboard'"
+            >
               <template #label>
                 <div class="flex items-center space-x-2">
                   <span>{{ getTabTitle(tab) }}</span>
@@ -374,7 +380,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent, markRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
@@ -404,15 +410,15 @@ import { initSocket, getSocket } from '@/utils/socket'
 import request from '@/utils/request'
 
 // 标签页组件懒加载，提升首次加载速度
-const DashboardContent = defineAsyncComponent(() => import('@/views/DashboardContent.vue'))
-const TenantManagement = defineAsyncComponent(() => import('@/views/admin/TenantManagement.vue'))
-const UserManagement = defineAsyncComponent(() => import('@/views/tenant/UserManagement.vue'))
-const ProjectManagement = defineAsyncComponent(() => import('@/views/tenant/ProjectManagement.vue'))
-const OpsManagement = defineAsyncComponent(() => import('@/views/tenant/OpsManagement.vue'))
-const SystemLogs = defineAsyncComponent(() => import('@/views/tenant/SystemLogs.vue'))
-const SystemSettings = defineAsyncComponent(() => import('@/views/tenant/SystemSettings.vue'))
-const Profile = defineAsyncComponent(() => import('@/views/profile/Profile.vue'))
-const EmbeddedApp = defineAsyncComponent(() => import('@/components/EmbeddedApp.vue'))
+const DashboardContent = markRaw(defineAsyncComponent(() => import('@/views/DashboardContent.vue')))
+const TenantManagement = markRaw(defineAsyncComponent(() => import('@/views/admin/TenantManagement.vue')))
+const UserManagement = markRaw(defineAsyncComponent(() => import('@/views/tenant/UserManagement.vue')))
+const ProjectManagement = markRaw(defineAsyncComponent(() => import('@/views/tenant/ProjectManagement.vue')))
+const OpsManagement = markRaw(defineAsyncComponent(() => import('@/views/tenant/OpsManagement.vue')))
+const SystemLogs = markRaw(defineAsyncComponent(() => import('@/views/tenant/SystemLogs.vue')))
+const SystemSettings = markRaw(defineAsyncComponent(() => import('@/views/tenant/SystemSettings.vue')))
+const Profile = markRaw(defineAsyncComponent(() => import('@/views/profile/Profile.vue')))
+const EmbeddedApp = markRaw(defineAsyncComponent(() => import('@/components/EmbeddedApp.vue')))
 
 // 导入默认Logo图片
 import defaultLogo from '@/assets/images/default-logo.svg'
@@ -695,8 +701,8 @@ export default {
         // 自定义标签页配置
         // 如果组件是函数（可能是动态导入），使用 defineAsyncComponent 包装以确保正确处理
         const component = typeof customComponent === 'function'
-          ? defineAsyncComponent(customComponent)
-          : customComponent
+          ? markRaw(defineAsyncComponent(customComponent))
+          : markRaw(customComponent)
         config = {
           title: customTitle,
           component: component,

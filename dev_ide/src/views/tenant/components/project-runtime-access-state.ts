@@ -524,7 +524,7 @@ export const useProjectRuntimeAccessState = ({
 
   watch(
     () => [visibleRef.value, projectId.value],
-    ([visible, id], [previousVisible, previousProjectId]) => {
+    ([visible, id], [previousVisible, previousProjectId] = []) => {
       if (!visible || !id) {
         resetRuntimeAccessState()
         activeTab.value = RUNTIME_ACCESS_TABS.USERS

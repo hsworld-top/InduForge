@@ -69,6 +69,7 @@
           <el-date-picker
             v-model="filters.dateRange"
             type="datetimerange"
+            :name="['system-log-time-range-start', 'system-log-time-range-end']"
             value-format="YYYY-MM-DD HH:mm:ss"
             :range-separator="t('systemLogs.rangeTo')"
             :start-placeholder="t('systemLogs.startTime')"
