@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from '../constants/index.js'
+import { STORAGE_KEYS } from '../constants'
 
 interface RememberMeCredentials {
   username?: string

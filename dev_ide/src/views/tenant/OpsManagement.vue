@@ -561,7 +561,8 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+// @ts-nocheck
 import { ref, reactive, onMounted, computed, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1330,3 +1331,6 @@ watch(
   padding: 12px 16px;
 }
 </style>
+
+
+

@@ -206,7 +206,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+// @ts-nocheck
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -801,3 +802,6 @@ html.dark :deep(.el-dialog__header),
   width: 100%;
 }
 </style>
+
+
+

@@ -8,4 +8,4 @@ export {
   canManageUsers,
   canApproveNodes,
   canRequestTenantStats,
-} from './rules.js'
+} from './rules'

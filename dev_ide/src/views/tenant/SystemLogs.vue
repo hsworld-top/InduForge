@@ -175,7 +175,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+// @ts-nocheck
 import { ref, reactive, onMounted, computed } from 'vue'
 import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
@@ -660,6 +661,9 @@ export default {
   flex-shrink: 0;
 }
 </style>
+
+
+
 
 
 

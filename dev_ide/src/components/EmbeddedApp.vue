@@ -14,28 +14,36 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { buildAppEntry } from '@/utils/appUrl'
+import type { EmbeddedAppType, EmbeddedProjectContext } from '@/types/embedded'
 
-const props = defineProps({
-  appType: {
-    type: String,
-    required: true,
-    validator: (value) => ['datacenter', 'designer'].includes(value),
-  },
-  project: {
-    type: Object,
-    required: true,
-  },
-  tabKey: {
-    type: String,
-    default: '',
-  },
-})
+const props = withDefaults(
+  defineProps<{
+    appType: EmbeddedAppType
+    project: EmbeddedProjectContext
+    tabKey?: string
+  }>(),
+  {
+    tabKey: '',
+  }
+)
 
-const emit = defineEmits(['embedded-register', 'embedded-unregister'])
-const iframeRef = ref(null)
+const emit = defineEmits<{
+  (
+    event: 'embedded-register',
+    payload: {
+      iframe: HTMLIFrameElement
+      origin: string
+      appType: EmbeddedAppType
+      project: EmbeddedProjectContext
+      tabKey: string
+    }
+  ): void
+  (event: 'embedded-unregister', payload: { iframe: HTMLIFrameElement }): void
+}>()
+const iframeRef = ref<HTMLIFrameElement | null>(null)
 
 const appEntry = computed(() => buildAppEntry(props.appType, props.project))
 const appUrl = computed(() => appEntry.value.url)
@@ -49,7 +57,7 @@ const handleIframeLoad = () => {
 
   emit('embedded-register', {
     iframe: iframeRef.value,
-    origin: appEntry.value.origin,
+    origin: appEntry.value.origin || window.location.origin,
     appType: props.appType,
     project: props.project,
     tabKey: props.tabKey,
@@ -81,3 +89,4 @@ onBeforeUnmount(() => {
   border: none;
 }
 </style>
+

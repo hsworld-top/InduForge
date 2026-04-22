@@ -396,7 +396,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+// @ts-nocheck
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useAppStore } from '@/store'
@@ -768,3 +769,6 @@ input:focus + .input-icon {
   background-color: rgba(20, 184, 166, 0.2);
 }
 </style>
+
+
+

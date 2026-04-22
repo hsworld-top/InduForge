@@ -1,9 +1,19 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { ROLES, ROUTE_NAMES } from '@/constants'
+import type { Role, UserInfo } from '@/types/auth'
 import { Storage } from '@/utils/storage'
 import { buildDashboardRedirectLocation } from '@/utils/dashboardEntryHandoff'
 import { hasRole } from '@/permissions'
 import i18n from '@/lang'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: string
+    titleKey?: string
+    requiresAuth?: boolean
+    roles?: Role[]
+  }
+}
 
 // 路由组件懒加载
 const Login = () => import('@/views/auth/Login.vue')
@@ -23,7 +33,7 @@ const SystemSettings = () => import('@/views/tenant/SystemSettings.vue')
 const Profile = () => import('@/views/profile/Profile.vue')
 
 // 路由配置
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: ROUTE_NAMES.LOGIN,
@@ -154,10 +164,16 @@ const router = createRouter({
   routes,
 })
 
+const getCurrentUserRole = (): Role | null => {
+  const userInfo = Storage.getUserInfo() as UserInfo | null
+  return (userInfo?.role as Role | undefined) ?? null
+}
+
 // 路由守卫
 router.beforeEach((to, from, next) => {
   // 设置页面标题
-  const title = to.meta.titleKey ? i18n.global.t(to.meta.titleKey) : to.meta.title || 'InduForge'
+  const translatedTitle = to.meta.titleKey ? i18n.global.t(to.meta.titleKey) : null
+  const title = String(translatedTitle || to.meta.title || 'InduForge')
   document.title = `${title} - ProjectIDE`
 
   // 检查认证
@@ -172,8 +188,8 @@ router.beforeEach((to, from, next) => {
 
   // 如果已登录且访问登录页，根据角色重定向
   if (to.name === ROUTE_NAMES.LOGIN && isAuthenticated) {
-    const userInfo = Storage.getUserInfo()
-    if (userInfo?.role === ROLES.SUPER_ADMIN) {
+    const userRole = getCurrentUserRole()
+    if (userRole === ROLES.SUPER_ADMIN) {
       next('/admin')
     } else {
       next({ name: ROUTE_NAMES.DASHBOARD })
@@ -183,8 +199,7 @@ router.beforeEach((to, from, next) => {
 
   // 检查角色权限
   if (to.meta.roles && to.meta.roles.length > 0) {
-    const userInfo = Storage.getUserInfo()
-    const userRole = userInfo?.role
+    const userRole = getCurrentUserRole()
 
     if (!hasRole(userRole, to.meta.roles)) {
       // 权限不足，重定向到仪表板
@@ -195,8 +210,7 @@ router.beforeEach((to, from, next) => {
 
   // 超级管理员访问限制：不允许访问普通dashboard，必须访问管理员控制台
   if (isAuthenticated) {
-    const userInfo = Storage.getUserInfo()
-    const userRole = userInfo?.role
+    const userRole = getCurrentUserRole()
 
     if (userRole === ROLES.SUPER_ADMIN) {
       // 超级管理员不能访问普通dashboard

@@ -133,7 +133,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+// @ts-nocheck
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -586,3 +587,6 @@ export default {
   @apply text-sm text-gray-900 dark:text-gray-100 font-medium text-right break-all;
 }
 </style>
+
+
+

@@ -31,6 +31,7 @@ export interface AuthConfigPayload extends ApiRecord {
   appName?: string
   logoUrl?: string
   loginBackgroundUrl?: string
+  multiTenant?: boolean
 }
 
 export interface AuthUserPayload extends ApiRecord {

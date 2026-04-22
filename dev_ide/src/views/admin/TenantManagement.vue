@@ -581,7 +581,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+// @ts-nocheck
 import { ref, reactive, onMounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -1949,3 +1950,6 @@ html.dark .tm-page .tm-mask,
   background: rgba(2, 6, 23, 0.62) !important;
 }
 </style>
+
+
+

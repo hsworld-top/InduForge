@@ -2,7 +2,8 @@
   <div ref="editorContainerRef" class="monaco-editor-container" :style="{ height: height, width: '100%' }"></div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+// @ts-nocheck
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as monaco from 'monaco-editor'
 
@@ -325,4 +326,7 @@ onBeforeUnmount(() => {
   background-color: var(--vscode-editor-background, #ffffff);
 }
 </style>
+
+
+
 

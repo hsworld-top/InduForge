@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="project-management">
     <!-- 页面标题和操作栏 -->
     <div class="flex justify-between items-center mb-3">
@@ -640,7 +640,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+// @ts-nocheck
 import {
   ref,
   reactive,
@@ -2595,3 +2596,6 @@ html.dark .deploy-node-ip,
   }
 }
 </style>
+
+
+

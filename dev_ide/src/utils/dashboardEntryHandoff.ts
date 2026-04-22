@@ -13,7 +13,7 @@ const EMBEDDED_APP_TAB_META = {
 
 export const EMBEDDED_APP_COMPONENT = 'EMBEDDED_APP'
 
-type QueryValue = string | string[] | null | undefined
+type QueryValue = string | null | undefined | Array<string | null>
 type DashboardQuery = Record<string, QueryValue>
 type EmbeddedAppType = keyof typeof EMBEDDED_APP_TAB_META
 

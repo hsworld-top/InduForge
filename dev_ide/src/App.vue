@@ -6,7 +6,7 @@
   </el-config-provider>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import en from 'element-plus/es/locale/lang/en'
@@ -27,3 +27,4 @@ const elementLocale = computed(() => {
   min-height: 100vh;
 }
 </style>
+

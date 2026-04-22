@@ -1,4 +1,4 @@
-import { ROLES } from '../constants/index.js'
+import { ROLES } from '../constants'
 
 // 角色枚举
 export const RoleEnum = ROLES

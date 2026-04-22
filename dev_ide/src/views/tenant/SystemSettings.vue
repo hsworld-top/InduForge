@@ -88,7 +88,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+// @ts-nocheck
 import { ref, reactive, onMounted, computed, onUnmounted } from 'vue'
 import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
@@ -256,3 +257,6 @@ export default {
   @apply text-lg font-semibold text-gray-900 dark:text-white mb-4;
 }
 </style>
+
+
+

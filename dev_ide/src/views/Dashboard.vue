@@ -372,7 +372,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+// @ts-nocheck
 import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -1437,3 +1438,6 @@ html.dark .maximize-restore-floating-button,
   opacity: 1;
 }
 </style>
+
+
+

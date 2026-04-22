@@ -1,4 +1,4 @@
-import { ROLES } from '../constants/index.js'
+import { ROLES } from '../constants'
 import type { Role } from '../types/auth'
 
 export type Capability =

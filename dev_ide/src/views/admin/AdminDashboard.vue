@@ -128,14 +128,14 @@
   </div>
 </template>
 
-<script>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+<script lang="ts">
+import { ref, computed, onMounted, onUnmounted, defineComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/store'
 import defaultLogoUrl from '@/assets/images/default-logo.svg'
 
-export default {
+export default defineComponent({
   name: 'AdminDashboard',
   setup() {
     const { t } = useI18n()
@@ -162,9 +162,9 @@ export default {
     }
 
     // 点击其他地方关闭用户菜单
-    const handleClickOutside = (event) => {
+    const handleClickOutside = (event: MouseEvent) => {
       const userMenu = document.querySelector('.relative')
-      if (userMenu && !userMenu.contains(event.target)) {
+      if (userMenu && event.target instanceof Node && !userMenu.contains(event.target)) {
         showUserMenu.value = false
       }
     }
@@ -187,7 +187,7 @@ export default {
       handleLogout,
     }
   },
-}
+})
 </script>
 
 <style scoped>
@@ -197,3 +197,4 @@ export default {
   flex-direction: column;
 }
 </style>
+

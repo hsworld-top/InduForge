@@ -1515,11 +1515,18 @@ export const messages = {
   },
 }
 
-const resolveInitialLocale = () => {
+type SupportedLocale = keyof typeof messages
+
+const resolveInitialLocale = (): SupportedLocale => {
   try {
     const rawLocale = localStorage.getItem('language')
     const parsedLocale = rawLocale ? JSON.parse(rawLocale) : 'zh'
-    return Object.prototype.hasOwnProperty.call(messages, parsedLocale) ? parsedLocale : 'zh'
+
+    if (typeof parsedLocale === 'string' && Object.prototype.hasOwnProperty.call(messages, parsedLocale)) {
+      return parsedLocale as SupportedLocale
+    }
+
+    return 'zh'
   } catch {
     return 'zh'
   }
