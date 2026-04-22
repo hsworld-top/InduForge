@@ -1,9 +1,22 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import { Storage } from '@/utils/storage'
 import { authAPI, type AuthTokenPayload } from '@/api/auth.api'
 import { STORAGE_KEYS } from '@/constants'
 import type { ApiResponse } from '@/types/api'
+
+type RequestInstance = AxiosInstance & {
+  <T = unknown, D = unknown>(config: AxiosRequestConfig<D>): Promise<T>
+  <T = unknown, D = unknown>(url: string, config?: AxiosRequestConfig<D>): Promise<T>
+  request<T = unknown, D = unknown>(config: AxiosRequestConfig<D>): Promise<T>
+  get<T = unknown, D = unknown>(url: string, config?: AxiosRequestConfig<D>): Promise<T>
+  delete<T = unknown, D = unknown>(url: string, config?: AxiosRequestConfig<D>): Promise<T>
+  head<T = unknown, D = unknown>(url: string, config?: AxiosRequestConfig<D>): Promise<T>
+  options<T = unknown, D = unknown>(url: string, config?: AxiosRequestConfig<D>): Promise<T>
+  post<T = unknown, D = unknown>(url: string, data?: D, config?: AxiosRequestConfig<D>): Promise<T>
+  put<T = unknown, D = unknown>(url: string, data?: D, config?: AxiosRequestConfig<D>): Promise<T>
+  patch<T = unknown, D = unknown>(url: string, data?: D, config?: AxiosRequestConfig<D>): Promise<T>
+}
 
 // 创建 axios 实例
 const request = axios.create({
@@ -12,7 +25,7 @@ const request = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-})
+}) as RequestInstance
 
 // 刷新token的状态标志
 let isRefreshing = false
@@ -129,9 +142,10 @@ request.interceptors.response.use(
             isRefreshing = true
 
             return authAPI.refreshToken(refreshToken)
-              .then((result: ApiResponse<AuthTokenPayload>) => {
-                const accessToken = result.data?.accessToken || result.data?.token
-                const newRefreshToken = result.data?.refreshToken
+              .then((result: ApiResponse<AuthTokenPayload> | { data: ApiResponse<AuthTokenPayload> }) => {
+                const refreshResult = 'code' in result ? result : result.data
+                const accessToken = refreshResult.data?.accessToken || refreshResult.data?.token
+                const newRefreshToken = refreshResult.data?.refreshToken
 
                 // 更新存储的token
                 if (!accessToken) {

@@ -21,6 +21,10 @@ export interface AuthTokenPayload {
   expiresIn?: number
 }
 
+export interface AuthLoginPayload extends AuthTokenPayload {
+  user: AuthUserPayload
+}
+
 export interface AuthConfigPayload extends ApiRecord {
   tenantCode?: string
   tenantName?: string
@@ -48,9 +52,6 @@ export interface AuthCaptchaPayload extends ApiRecord {
   expireSeconds?: number
 }
 
-type ApiResult<T> = Promise<ApiResponse<T>>
-const asApiResult = <T>(promise: unknown): ApiResult<T> => promise as ApiResult<T>
-
 /**
  * 认证相关 API
  */
@@ -67,11 +68,11 @@ export const authAPI = {
    */
   login(credentials: LoginCredentials) {
     const { captchaKey, captchaCode, ...others } = credentials
-    return asApiResult<AuthTokenPayload>(request.post<ApiResponse<AuthTokenPayload>>('/auth/login', {
+    return request.post<ApiResponse<AuthLoginPayload>>('/auth/login', {
       ...others,
       captchaKey,
       captchaCode,
-    }))
+    })
   },
 
   /**
@@ -79,7 +80,7 @@ export const authAPI = {
    * @returns {Promise} 验证码数据 (key, image, expireSeconds)
    */
   getCaptcha() {
-    return asApiResult<AuthCaptchaPayload>(request.get<ApiResponse<AuthCaptchaPayload>>('/auth/captcha'))
+    return request.get<ApiResponse<AuthCaptchaPayload>>('/auth/captcha')
   },
 
   /**
@@ -88,11 +89,11 @@ export const authAPI = {
    */
   getConfig(tenantCode?: string) {
     if (!tenantCode) {
-      return asApiResult<AuthConfigPayload>(request.get<ApiResponse<AuthConfigPayload>>('/auth/config'))
+      return request.get<ApiResponse<AuthConfigPayload>>('/auth/config')
     }
-    return asApiResult<AuthConfigPayload>(request.get<ApiResponse<AuthConfigPayload>>('/auth/config', {
+    return request.get<ApiResponse<AuthConfigPayload>>('/auth/config', {
       params: { tenantCode },
-    }))
+    })
   },
 
   /**
@@ -101,9 +102,9 @@ export const authAPI = {
    * @returns {Promise} 新的访问令牌
    */
   refreshToken(refreshToken: string) {
-    return asApiResult<AuthTokenPayload>(request.post<ApiResponse<AuthTokenPayload>>('/auth/refresh', {
+    return request.post<ApiResponse<AuthTokenPayload>>('/auth/refresh', {
       refreshToken,
-    }))
+    })
   },
 
   /**
@@ -111,7 +112,7 @@ export const authAPI = {
    * @returns {Promise} 登出结果
    */
   logout() {
-    return asApiResult<ApiRecord>(request.post<ApiResponse<ApiRecord>>('/auth/logout'))
+    return request.post<ApiResponse<ApiRecord>>('/auth/logout')
   },
 
   /**
@@ -119,7 +120,7 @@ export const authAPI = {
    * @returns {Promise} 用户信息
    */
   getCurrentUser() {
-    return asApiResult<AuthUserPayload>(request.get<ApiResponse<AuthUserPayload>>('/auth/me'))
+    return request.get<ApiResponse<AuthUserPayload>>('/auth/me')
   },
 
   /**
@@ -130,9 +131,9 @@ export const authAPI = {
    * @returns {Promise} 修改结果
    */
   changePassword(passwordData: PasswordData) {
-    return asApiResult<AuthChangePasswordPayload>(request.put<ApiResponse<AuthChangePasswordPayload>>(
+    return request.put<ApiResponse<AuthChangePasswordPayload>>(
       '/auth/password',
       passwordData
-    ))
+    )
   },
 }
