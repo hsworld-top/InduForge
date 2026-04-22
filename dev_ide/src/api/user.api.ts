@@ -1,5 +1,9 @@
 import request from '@/utils/request'
 
+type ApiId = string | number
+type QueryParams = Record<string, unknown>
+type UserPayload = Record<string, unknown>
+
 /**
  * 用户管理 API
  */
@@ -14,7 +18,7 @@ export const userAPI = {
    * @param {string} params.status - 状态筛选
    * @returns {Promise} 用户列表
    */
-  getUsers(params = {}) {
+  getUsers(params: QueryParams = {}) {
     return request.get('/users', { params })
   },
 
@@ -29,7 +33,7 @@ export const userAPI = {
    * @param {string} userData.tenantId - 租户ID
    * @returns {Promise} 创建结果
    */
-  createUser(userData) {
+  createUser(userData: UserPayload) {
     return request.post('/users', userData)
   },
 
@@ -43,7 +47,7 @@ export const userAPI = {
    * @param {string} userData.status - 状态
    * @returns {Promise} 更新结果
    */
-  updateUser(id, userData) {
+  updateUser(id: ApiId, userData: UserPayload) {
     return request.put(`/users/${id}`, userData)
   },
 
@@ -53,7 +57,7 @@ export const userAPI = {
    * @param {string} newPassword - 新密码
    * @returns {Promise} 修改结果
    */
-  updatePassword(id, newPassword) {
+  updatePassword(id: ApiId, newPassword: string) {
     return request.put(`/users/${id}/password`, { newPassword })
   },
 
@@ -62,7 +66,7 @@ export const userAPI = {
    * @param {string} id - 用户ID
    * @returns {Promise} 删除结果
    */
-  deleteUser(id) {
+  deleteUser(id: ApiId) {
     return request.delete(`/users/${id}`)
   },
 }

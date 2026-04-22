@@ -1,4 +1,8 @@
-import request from "@/utils/request";
+import request from '@/utils/request'
+
+type ApiId = string | number
+type QueryParams = Record<string, unknown>
+type TenantPayload = Record<string, unknown>
 
 /**
  * 租户管理 API
@@ -13,8 +17,8 @@ export const tenantAPI = {
    * @param {string} params.status - 状态筛选
    * @returns {Promise} 租户列表
    */
-  getTenants(params = {}) {
-    return request.get("/tenants", { params });
+  getTenants(params: QueryParams = {}) {
+    return request.get('/tenants', { params })
   },
 
   /**
@@ -22,8 +26,8 @@ export const tenantAPI = {
    * @param {number} id - 租户ID
    * @returns {Promise} 租户详情
    */
-  getTenantById(id) {
-    return request.get(`/tenants/${id}`);
+  getTenantById(id: ApiId) {
+    return request.get(`/tenants/${id}`)
   },
 
   /**
@@ -39,8 +43,8 @@ export const tenantAPI = {
    * @param {object} tenantData.settings - 租户扩展配置
    * @returns {Promise} 创建结果
    */
-  createTenant(tenantData) {
-    return request.post("/tenants", tenantData);
+  createTenant(tenantData: TenantPayload) {
+    return request.post('/tenants', tenantData)
   },
 
   /**
@@ -49,8 +53,8 @@ export const tenantAPI = {
    * @param {object} tenantData - 租户数据
    * @returns {Promise} 更新结果
    */
-  updateTenant(code, tenantData) {
-    return request.put(`/tenants/${code}`, tenantData);
+  updateTenant(code: string, tenantData: TenantPayload) {
+    return request.put(`/tenants/${code}`, tenantData)
   },
 
   /**
@@ -58,8 +62,8 @@ export const tenantAPI = {
    * @param {number} id - 租户ID
    * @returns {Promise} 删除结果
    */
-  deleteTenant(id) {
-    return request.delete(`/tenants/${id}`);
+  deleteTenant(id: ApiId) {
+    return request.delete(`/tenants/${id}`)
   },
 
   /**
@@ -67,8 +71,8 @@ export const tenantAPI = {
    * @param {number} id - 租户ID
    * @returns {Promise} 激活结果
    */
-  activateTenant(id) {
-    return request.post(`/tenants/${id}/activate`);
+  activateTenant(id: ApiId) {
+    return request.post(`/tenants/${id}/activate`)
   },
 
   /**
@@ -76,8 +80,8 @@ export const tenantAPI = {
    * @param {number} id - 租户ID
    * @returns {Promise} 暂停结果
    */
-  suspendTenant(id) {
-    return request.post(`/tenants/${id}/suspend`);
+  suspendTenant(id: ApiId) {
+    return request.post(`/tenants/${id}/suspend`)
   },
 
   /**
@@ -87,7 +91,7 @@ export const tenantAPI = {
    * @param {FormData} formData - 文件数据
    * @returns {Promise} 上传结果
    */
-  uploadFile(tenantId, type, formData) {
-    return request.post(`/tenants/${tenantId}/upload?type=${type}`, formData);
+  uploadFile(tenantId: ApiId, type: string, formData: FormData) {
+    return request.post(`/tenants/${tenantId}/upload?type=${type}`, formData)
   },
-};
+}

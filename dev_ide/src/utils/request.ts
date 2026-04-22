@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import { Storage } from '@/utils/storage'
 import { authAPI } from '@/api/auth.api'
@@ -15,7 +15,22 @@ const request = axios.create({
 
 // 刷新token的状态标志
 let isRefreshing = false
-let failedQueue = []
+type QueueEntry = {
+  resolve: (token: string | null) => void
+  reject: (error: unknown) => void
+}
+let failedQueue: QueueEntry[] = []
+
+type RequestConfigWithRetry = InternalAxiosRequestConfig & {
+  _retry?: boolean
+  forcePermissionToast?: boolean
+  skipPermissionToast?: boolean
+}
+
+type ErrorResponseData = {
+  message?: string
+  errors?: Record<string, string[]>
+}
 
 const clearAuthAndRedirectToLogin = () => {
   Storage.remove(STORAGE_KEYS.TOKEN)
@@ -26,8 +41,8 @@ const clearAuthAndRedirectToLogin = () => {
 }
 
 // 处理失败的请求队列
-const processQueue = (error, token = null) => {
-  failedQueue.forEach(prom => {
+const processQueue = (error: unknown, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error)
     } else {
@@ -53,13 +68,13 @@ request.interceptors.request.use(
     // 添加认证 token
     const token = Storage.getToken()
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+      ;(config.headers as Record<string, string>).Authorization = `Bearer ${token}`
     }
 
     // 添加租户 ID
     const tenantId = Storage.getTenantId()
     if (tenantId) {
-      config.headers['X-Tenant-ID'] = tenantId
+      ;(config.headers as Record<string, string>)['X-Tenant-ID'] = tenantId
     }
 
     return config
@@ -74,8 +89,9 @@ request.interceptors.response.use(
   (response) => {
     return response.data
   },
-  (error) => {
-    const { response, config } = error
+  (error: AxiosError<ErrorResponseData>) => {
+    const response = error.response
+    const config = error.config as RequestConfigWithRetry | undefined
     const requestUrl = config?.url || ''
 
     if (response) {
@@ -108,12 +124,17 @@ request.interceptors.response.use(
             clearAuthAndRedirectToLogin()
             return Promise.reject(error)
           }
+          if (!config) {
+            // 缺失原始请求配置时无法重放，请求按未登录处理。
+            clearAuthAndRedirectToLogin()
+            return Promise.reject(error)
+          }
 
           if (!isRefreshing) {
             isRefreshing = true
 
             return authAPI.refreshToken(refreshToken)
-              .then(result => {
+              .then((result: { data?: { accessToken?: string; token?: string; refreshToken?: string } }) => {
                 const accessToken = result.data?.accessToken || result.data?.token
                 const newRefreshToken = result.data?.refreshToken
 
@@ -132,10 +153,10 @@ request.interceptors.response.use(
                 // 重新发起原始请求
                 config._retry = true
                 config.headers = config.headers || {}
-                config.headers.Authorization = `Bearer ${accessToken}`
+                ;(config.headers as Record<string, string>).Authorization = `Bearer ${accessToken}`
                 return request(config)
               })
-              .catch(refreshError => {
+              .catch((refreshError: unknown) => {
                 // 刷新失败，跳转到登录页
                 processQueue(refreshError, null)
                 clearAuthAndRedirectToLogin()
@@ -149,7 +170,8 @@ request.interceptors.response.use(
             return new Promise((resolve, reject) => {
               failedQueue.push({
                 resolve: (token) => {
-                  config.headers.Authorization = `Bearer ${token}`
+                  config.headers = config.headers || {}
+                  ;(config.headers as Record<string, string>).Authorization = `Bearer ${token}`
                   resolve(request(config))
                 },
                 reject

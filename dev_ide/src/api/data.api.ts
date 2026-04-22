@@ -1,5 +1,8 @@
 import request from '@/utils/request'
 
+type ApiId = string | number
+type QueryParams = Record<string, unknown>
+
 // ===========================================
 // 数据连接相关API
 // ===========================================
@@ -9,7 +12,7 @@ import request from '@/utils/request'
  * @param {string} projectId - 工程ID
  * @param {object} params - 查询参数
  */
-export const getConnections = (projectId, params = {}) => {
+export const getConnections = (projectId: ApiId, params: QueryParams = {}) => {
   return request({
     url: `/data/projects/${projectId}/connections`,
     method: 'get',
@@ -22,7 +25,7 @@ export const getConnections = (projectId, params = {}) => {
  * @param {string} projectId - 工程ID
  * @param {object} data - 连接数据
  */
-export const createConnection = (projectId, data) => {
+export const createConnection = (projectId: ApiId, data: unknown) => {
   return request({
     url: `/data/projects/${projectId}/connections`,
     method: 'post',
@@ -30,7 +33,7 @@ export const createConnection = (projectId, data) => {
   })
 }
 
-export const testConnection = (projectId, data) => {
+export const testConnection = (projectId: ApiId, data: unknown) => {
   return request({
     url: `/data/projects/${projectId}/connections/test`,
     method: 'post',
@@ -38,14 +41,19 @@ export const testConnection = (projectId, data) => {
   })
 }
 
-export const getConnectionTables = (projectId, connectionId) => {
+export const getConnectionTables = (projectId: ApiId, connectionId: ApiId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
     method: 'get'
   })
 }
 
-export const getTableData = (projectId, connectionId, tableName, params = {}) => {
+export const getTableData = (
+  projectId: ApiId,
+  connectionId: ApiId,
+  tableName: string,
+  params: QueryParams = {}
+) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/data`,
     method: 'get',
@@ -58,7 +66,7 @@ export const getTableData = (projectId, connectionId, tableName, params = {}) =>
  * @param {string} id - 连接ID
  * @param {object} data - 更新数据
  */
-export const updateConnection = (id, data) => {
+export const updateConnection = (id: ApiId, data: unknown) => {
   return request({
     url: `/data/connections/${id}`,
     method: 'put',
@@ -70,7 +78,7 @@ export const updateConnection = (id, data) => {
  * 删除数据连接
  * @param {string} id - 连接ID
  */
-export const deleteConnection = (id) => {
+export const deleteConnection = (id: ApiId) => {
   return request({
     url: `/data/connections/${id}`,
     method: 'delete'
@@ -87,7 +95,7 @@ export const deleteConnection = (id) => {
  * @param {string} projectId - 工程ID
  * @param {object} params - 查询参数
  */
-export const getQueries = (projectId, params = {}) => {
+export const getQueries = (projectId: ApiId, params: QueryParams = {}) => {
   return request({
     url: `/data/projects/${projectId}/queries`,
     method: 'get',
@@ -100,7 +108,7 @@ export const getQueries = (projectId, params = {}) => {
  * @param {string} projectId - 工程ID
  * @param {object} data - 查询数据
  */
-export const createQuery = (projectId, data) => {
+export const createQuery = (projectId: ApiId, data: unknown) => {
   return request({
     url: `/data/projects/${projectId}/queries`,
     method: 'post',
@@ -113,7 +121,7 @@ export const createQuery = (projectId, data) => {
  * @param {string} id - 查询ID
  * @param {object} data - 更新数据
  */
-export const updateQuery = (id, data) => {
+export const updateQuery = (id: ApiId, data: unknown) => {
   return request({
     url: `/data/queries/${id}`,
     method: 'put',
@@ -125,7 +133,7 @@ export const updateQuery = (id, data) => {
  * 删除数据查询
  * @param {string} id - 查询ID
  */
-export const deleteQuery = (id) => {
+export const deleteQuery = (id: ApiId) => {
   return request({
     url: `/data/queries/${id}`,
     method: 'delete'
@@ -137,7 +145,7 @@ export const deleteQuery = (id) => {
  * @param {string} id - 查询ID
  * @param {object} parameters - 查询参数
  */
-export const executeQuery = (id, parameters = {}) => {
+export const executeQuery = (id: ApiId, parameters: QueryParams = {}) => {
   return request({
     url: `/data/queries/${id}/execute`,
     method: 'post',
@@ -152,7 +160,12 @@ export const executeQuery = (id, parameters = {}) => {
  * @param {string} sql - SQL语句
  * @param {array} parameters - 参数数组（可选）
  */
-export const executeSql = (projectId, connectionId, sql, parameters = []) => {
+export const executeSql = (
+  projectId: ApiId,
+  connectionId: ApiId,
+  sql: string,
+  parameters: unknown[] = []
+) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/execute-sql`,
     method: 'post',
@@ -165,7 +178,7 @@ export const executeSql = (projectId, connectionId, sql, parameters = []) => {
  * @param {string} id - 查询ID
  * @param {object} data - 查询数据
  */
-export const saveQuery = (id, data) => {
+export const saveQuery = (id: ApiId, data: unknown) => {
   return request({
     url: `/data/queries/${id}`,
     method: 'put',

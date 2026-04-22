@@ -1,5 +1,18 @@
 import request from '@/utils/request'
 
+type LoginCredentials = {
+  username: string
+  password: string
+  captchaKey?: string
+  captchaCode?: string
+  tenantCode?: string
+}
+
+type PasswordData = {
+  oldPassword: string
+  newPassword: string
+}
+
 /**
  * 认证相关 API
  */
@@ -14,7 +27,7 @@ export const authAPI = {
    * @param {string} credentials.tenantCode - 租户代码（多租户模式下可选）
    * @returns {Promise} 登录结果
    */
-  login(credentials) {
+  login(credentials: LoginCredentials) {
     const { captchaKey, captchaCode, ...others } = credentials
     return request.post('/auth/login', {
       ...others,
@@ -35,7 +48,7 @@ export const authAPI = {
    * 获取应用配置
    * @returns {Promise} 应用配置
    */
-  getConfig(tenantCode) {
+  getConfig(tenantCode?: string) {
     return request.get('/auth/config', {
       params: tenantCode ? { tenantCode } : undefined,
     })
@@ -46,7 +59,7 @@ export const authAPI = {
    * @param {string} refreshToken - 刷新令牌
    * @returns {Promise} 新的访问令牌
    */
-  refreshToken(refreshToken) {
+  refreshToken(refreshToken: string) {
     return request.post('/auth/refresh', { refreshToken })
   },
 
@@ -73,7 +86,7 @@ export const authAPI = {
    * @param {string} passwordData.newPassword - 新密码
    * @returns {Promise} 修改结果
    */
-  changePassword(passwordData) {
+  changePassword(passwordData: PasswordData) {
     return request.put('/auth/password', passwordData)
   },
 }

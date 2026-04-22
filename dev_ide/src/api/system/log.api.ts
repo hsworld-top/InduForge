@@ -1,5 +1,8 @@
 import request from '@/utils/request'
 
+type ApiId = string | number
+type QueryParams = Record<string, unknown>
+
 /**
  * 系统日志 API
  */
@@ -16,7 +19,7 @@ export const logAPI = {
    * @param {string} params.userId - 用户ID
    * @returns {Promise} 日志列表
    */
-  getLogs(params = {}) {
+  getLogs(params: QueryParams = {}) {
     return request.get('/logs', { params })
   },
 
@@ -25,7 +28,7 @@ export const logAPI = {
    * @param {number} id - 日志ID
    * @returns {Promise} 日志详情
    */
-  getLogById(id) {
+  getLogById(id: ApiId) {
     return request.get(`/logs/${id}`)
   },
 
@@ -34,7 +37,7 @@ export const logAPI = {
    * @param {object} params - 导出参数
    * @returns {Promise} 导出结果
    */
-  exportLogs(params = {}) {
+  exportLogs(params: QueryParams = {}) {
     return request.get('/logs/export', {
       params,
       responseType: 'blob',
@@ -46,7 +49,7 @@ export const logAPI = {
    * @param {string} beforeDate - 删除此日期之前的日志
    * @returns {Promise} 删除结果
    */
-  deleteOldLogs(beforeDate) {
+  deleteOldLogs(beforeDate: string) {
     return request.delete('/logs', { params: { beforeDate } })
   },
 
@@ -57,7 +60,7 @@ export const logAPI = {
    * @param {string} params.endDate - 结束日期
    * @returns {Promise} 统计信息
    */
-  getLogStats(params = {}) {
+  getLogStats(params: QueryParams = {}) {
     return request.get('/logs/stats', { params })
   },
 
@@ -67,7 +70,7 @@ export const logAPI = {
    * @param {number} params.limit - 数量限制
    * @returns {Promise} 最近活动
    */
-  getRecentActivities(params = {}) {
+  getRecentActivities(params: QueryParams = {}) {
     return request.get('/logs/recent-activities', { params })
   },
 }

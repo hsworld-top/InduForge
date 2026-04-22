@@ -1,5 +1,11 @@
 import request from '@/utils/request'
 
+type ApiId = string | number
+type QueryParams = Record<string, unknown>
+type DeleteOptions = {
+  force?: boolean
+}
+
 /**
  * 工程管理 API
  */
@@ -14,7 +20,7 @@ export const projectAPI = {
    * @param {string} params.priority - 优先级筛选
    * @returns {Promise} 工程列表
    */
-  getProjects(params = {}) {
+  getProjects(params: QueryParams = {}) {
     return request.get('/projects', { params })
   },
 
@@ -26,7 +32,7 @@ export const projectAPI = {
    * @param {string} projectData.colorTag - 颜色标签
    * @returns {Promise} 创建结果
    */
-  createProject(projectData) {
+  createProject(projectData: Record<string, unknown>) {
     return request.post('/projects', projectData)
   },
 
@@ -39,7 +45,7 @@ export const projectAPI = {
    * @param {string} projectData.colorTag - 颜色标签
    * @returns {Promise} 更新结果
    */
-  updateProject(id, projectData) {
+  updateProject(id: ApiId, projectData: Record<string, unknown>) {
     return request.put(`/projects/${id}`, projectData)
   },
 
@@ -50,7 +56,7 @@ export const projectAPI = {
    * @param {boolean} options.force - 是否强制删除（系统管理员）
    * @returns {Promise} 删除结果
    */
-  deleteProject(id, options = {}) {
+  deleteProject(id: ApiId, options: DeleteOptions = {}) {
     return request.delete(`/projects/${id}`, {
       data: {
         force: Boolean(options.force),
@@ -63,7 +69,7 @@ export const projectAPI = {
    * @param {string} id - 工程ID
    * @returns {Promise} 影响评估结果
    */
-  getDeleteImpact(id) {
+  getDeleteImpact(id: ApiId) {
     return request.get(`/projects/${id}/delete-impact`)
   },
 
@@ -73,7 +79,7 @@ export const projectAPI = {
    * @param {string} operation - 操作类型 (start, stop, restart, deploy, backup)
    * @returns {Promise} 操作结果
    */
-  performOperation(id, operation) {
+  performOperation(id: ApiId, operation: string) {
     return request.post(`/projects/${id}/operations/${operation}`)
   },
 
@@ -82,7 +88,7 @@ export const projectAPI = {
    * @param {string} id - 工程ID
    * @returns {Promise} 导出结果
    */
-  exportProject(id) {
+  exportProject(id: ApiId) {
     return request.get(`/projects/${id}/export`, { responseType: 'blob' })
   },
 
@@ -93,7 +99,7 @@ export const projectAPI = {
    * @param {object} payload.payload - 工程导出内容
    * @returns {Promise} 导入结果
    */
-  importProject(payload) {
+  importProject(payload: Record<string, unknown>) {
     return request.post('/projects/import', payload)
   },
 }
