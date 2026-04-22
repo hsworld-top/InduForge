@@ -1,7 +1,7 @@
 import { ROLES } from '../constants/index.js'
 import type { Role } from '../types/auth'
 
-type Capability =
+export type Capability =
   | '*'
   | 'tenant:manage'
   | 'project:read'
@@ -68,10 +68,10 @@ export const hasRole = (userRole: Role | null | undefined, allowedRoles: readonl
   return allowedRoles.includes(userRole)
 }
 
-export const can = (userRole: Role | null | undefined, capability: Capability | string | null | undefined) => {
-  if (!userRole || !capability) return false
+export const can = (userRole: Role | null | undefined, capability: Capability) => {
+  if (!userRole) return false
   const caps = ROLE_CAPABILITY_MAP[userRole] || []
-  return caps.includes('*') || caps.includes(capability as Capability)
+  return caps.includes('*') || caps.includes(capability)
 }
 
 export const canAccessTab = (tabKey: string, userRole: Role | null | undefined) => {

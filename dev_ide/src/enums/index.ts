@@ -1,12 +1,7 @@
+import { ROLES } from '../constants/index.js'
+
 // 角色枚举
-export const RoleEnum = {
-  SUPER_ADMIN: 'SUPER_ADMIN',
-  SYSTEM_ADMIN: 'SYSTEM_ADMIN',
-  PROJECT_ADMIN: 'PROJECT_ADMIN',
-  OPS_ADMIN: 'OPS_ADMIN',
-  USER_ADMIN: 'USER_ADMIN',
-  USER: 'USER',
-} as const
+export const RoleEnum = ROLES
 
 // 工程状态枚举
 export const ProjectStatusEnum = {
