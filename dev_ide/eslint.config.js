@@ -1,6 +1,7 @@
 import js from '@eslint/js'
 import vue from 'eslint-plugin-vue'
 import prettier from '@vue/eslint-config-prettier'
+import tsParser from '@typescript-eslint/parser'
 
 export default [
   js.configs.recommended,
@@ -8,7 +9,7 @@ export default [
   prettier,
   {
     name: 'projectide-frontend',
-    files: ['**/*.{js,mjs,cjs,vue}'],
+    files: ['**/*.{js,mjs,cjs,ts,mts,cts,vue}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -27,6 +28,7 @@ export default [
         ElMessageBox: 'readonly',
       },
       parserOptions: {
+        parser: tsParser,
         ecmaVersion: 'latest',
         sourceType: 'module',
       },
