@@ -1,13 +1,13 @@
 <template>
-  <div class="h-full flex flex-col relative dashboard-tabs-area" :class="{ 'has-hamburger': sidebarCollapsed && !isTabMaximized }">
+  <div class="h-full w-full flex-1 flex flex-col relative dashboard-tabs-area" :class="{ 'has-hamburger': sidebarCollapsed && !isTabMaximized }">
     <!-- 汉堡菜单按钮 (绝对定位在 Tabs 左侧) -->
     <div 
       v-if="sidebarCollapsed && !isTabMaximized" 
-      class="absolute left-0 top-0 h-[40px] w-[48px] flex items-center justify-center z-10"
+      class="absolute left-0 top-0 h-[40px] w-[52px] flex items-center justify-center z-10 border-r border-transparent"
     >
       <button 
         @click="openSidebar" 
-        class="p-1.5 rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        class="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-all cursor-pointer"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -17,7 +17,6 @@
 
     <el-tabs 
       v-model="internalActiveTab" 
-      type="card" 
       @tab-remove="handleCloseTab"
       :class="['dashboard-tabs h-full flex-1 min-h-0', isTabMaximized ? 'dashboard-tabs-maximized' : '']"
     >
@@ -29,9 +28,9 @@
         :closable="tab.key !== 'dashboard'"
       >
         <template #label>
-          <div class="flex items-center space-x-2">
-            <span>{{ getTabTitle(tab) }}</span>
-            <el-button v-if="tab.props?.appType" size="small" text circle class="!p-0 !w-4 !h-4"
+          <div class="flex items-center space-x-2 tab-label-content">
+            <span class="truncate max-w-[150px]">{{ getTabTitle(tab) }}</span>
+            <el-button v-if="tab.props?.appType" size="small" text circle class="!p-0 !w-5 !h-5 !ml-2 opacity-60 hover:opacity-100 transition-opacity"
               @click.stop="$emit('open-external-tab', tab)">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -39,7 +38,7 @@
               </svg>
             </el-button>
             <el-button v-if="!isTabMaximized && tab.key !== 'dashboard'" size="small" text circle
-              class="!p-0 !w-4 !h-4" @click.stop="$emit('maximize-tab', tab.key)">
+              class="!p-0 !w-5 !h-5 !ml-1 opacity-60 hover:opacity-100 transition-opacity" @click.stop="$emit('maximize-tab', tab.key)">
               <el-icon class="text-xs">
                 <FullScreen />
               </el-icon>
@@ -139,13 +138,92 @@ const handleCloseTab = (targetName) => {
 </script>
 
 <style>
-/* 当带有汉堡菜单时，给 el-tabs 的 header 部分增加左内边距，以免标签被遮挡 */
-.dashboard-tabs-area.has-hamburger .el-tabs__header {
-  padding-left: 48px;
+/* Dashboard Tabs 极简浮岛风格优化 */
+
+/* 为汉堡菜单预留空间 */
+.dashboard-tabs-area.has-hamburger .dashboard-tabs .el-tabs__header {
+  padding-left: 52px;
 }
-/* 移除 el-tabs 的底部 margin 和强制边框，使其更干净 */
-.dashboard-tabs-area .el-tabs__header {
+
+/* 顶部标签区域背景：轻微降低层级感，高度更紧凑 */
+.dashboard-tabs .el-tabs__header {
   margin-bottom: 0 !important;
-  background-color: var(--el-bg-color);
+  padding: 4px 8px;
+  background-color: var(--el-bg-color-page);
+  border-bottom: 1px solid var(--el-border-color-light) !important;
+}
+
+/* 修复 Element Plus Tabs 内容区域无法撑满高度的问题 */
+.dashboard-tabs {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.dashboard-tabs .el-tabs__content {
+  flex: 1 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+.dashboard-tabs .el-tab-pane {
+  height: 100% !important;
+}
+
+/* 去除默认底线和游标 */
+.dashboard-tabs .el-tabs__nav-wrap::after,
+.dashboard-tabs .el-tabs__active-bar {
+  display: none !important;
+}
+
+/* 标签列表排版 */
+.dashboard-tabs .el-tabs__nav {
+  gap: 6px;
+  border: none !important;
+}
+
+/* 默认状态：透明无边框的圆角按钮 */
+.dashboard-tabs .el-tabs__item {
+  height: 32px !important;
+  line-height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 6px !important;
+  color: var(--el-text-color-regular) !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border: 1px solid transparent !important;
+}
+
+/* 悬停状态：微妙背景加深 */
+.dashboard-tabs .el-tabs__item:hover {
+  background-color: var(--el-fill-color) !important;
+  color: var(--el-text-color-primary) !important;
+}
+
+/* 激活状态：变成一个立体悬浮的卡片 (Pill) */
+.dashboard-tabs .el-tabs__item.is-active {
+  background-color: var(--el-bg-color) !important;
+  color: var(--el-color-primary) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02) !important;
+  border-color: var(--el-border-color-lighter) !important;
+}
+
+/* 内置组件：调整关闭按钮样式 */
+.dashboard-tabs .el-tabs__item .is-icon-close {
+  width: 16px !important;
+  height: 16px !important;
+  line-height: 16px !important;
+  margin-left: 8px !important;
+  margin-right: -4px !important;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+.dashboard-tabs .el-tabs__item .is-icon-close:hover {
+  background-color: var(--el-fill-color-dark);
+  color: var(--el-text-color-primary);
+}
+
+/* Flex对齐辅助 */
+.dashboard-tabs .tab-label-content {
+  display: inline-flex;
+  align-items: center;
 }
 </style>
