@@ -1,18 +1,60 @@
-import { createBootstrapResponse } from './embeddedAppBridge.js'
+import { createBootstrapResponse } from './embeddedAppBridge'
 
 const EMBEDDED_IFRAME_SELECTOR = 'iframe.embedded-iframe'
-const SUPPORTED_EMBEDDED_MESSAGE_TYPES = new Set([
-  'APP_BOOTSTRAP_REQUEST',
-  'AUTH_REFRESHED',
-  'AUTH_EXPIRED',
-])
+const SUPPORTED_EMBEDDED_MESSAGE_TYPES = new Set(['APP_BOOTSTRAP_REQUEST', 'AUTH_REFRESHED', 'AUTH_EXPIRED'])
+
+type EmbeddedMessageType = 'APP_BOOTSTRAP_REQUEST' | 'AUTH_REFRESHED' | 'AUTH_EXPIRED'
+type EmbeddedAppType = 'designer' | 'datacenter'
+
+interface MessageWindowLike {
+  postMessage?: (message: unknown, targetOrigin: string) => void
+}
+
+interface IframeLike {
+  src?: string
+  contentWindow?: MessageWindowLike | null
+  getAttribute?: (name: string) => string | null | undefined
+}
+
+interface EmbeddedRegistryEntry {
+  iframe: IframeLike
+  origin: string
+  appType: EmbeddedAppType
+  project: Record<string, unknown> | null
+  tabKey: unknown
+  pageId: unknown
+}
+
+interface MessageEventLike {
+  data?: Record<string, any>
+  source?: unknown
+  origin?: string
+}
+
+interface HandleEmbeddedMessageOptions {
+  event?: MessageEventLike
+  registry?: Map<unknown, EmbeddedRegistryEntry> | null
+  resolveBootstrapState?: (
+    entry: EmbeddedRegistryEntry,
+    payload: Record<string, unknown>
+  ) => Record<string, unknown> | null | undefined
+  onAuthRefreshed?: (payload: Record<string, unknown>, entry: EmbeddedRegistryEntry) => void
+  onAuthExpired?: (payload: Record<string, unknown>, entry: EmbeddedRegistryEntry) => void
+  postMessage?: (target: EmbeddedRegistryEntry, message: Record<string, unknown>) => unknown
+}
+
+interface DocumentLike {
+  querySelectorAll?: (selector: string) => Iterable<unknown> | null
+}
+
+type EmbeddedTarget = EmbeddedRegistryEntry | IframeLike | Record<string, any>
 
 /**
  * 获取当前宿主页面 origin。
  * 当调用方传入相对 URL 但没有显式 origin 时，只允许回落到真实宿主 origin，不能伪造 http://localhost。
  * @returns {string|null} 当前宿主 origin
  */
-const resolveCurrentOrigin = () => {
+const resolveCurrentOrigin = (): string | null => {
   const locationLike = globalThis.window?.location ?? globalThis.location
   return typeof locationLike?.origin === 'string' && locationLike.origin ? locationLike.origin : null
 }
@@ -24,7 +66,11 @@ const resolveCurrentOrigin = () => {
  * @param {string} value - 消息值
  * @returns {object} 消息对象
  */
-export const createEmbeddedUpdateMessage = (type, key, value) => ({
+export const createEmbeddedUpdateMessage = (
+  type: string,
+  key: string,
+  value: string
+): Record<string, string> => ({
   type,
   [key]: value,
 })
@@ -35,20 +81,22 @@ export const createEmbeddedUpdateMessage = (type, key, value) => ({
  * @param {Iterable<object>|object} targets - 目标集合或 document-like 对象
  * @returns {Array<object>} 归一化后的目标数组
  */
-const normalizeEmbeddedTargets = (targets) => {
+const normalizeEmbeddedTargets = (targets: unknown): EmbeddedTarget[] => {
   if (!targets) return []
 
-  if (targets?.querySelectorAll) {
-    return Array.from(targets.querySelectorAll(EMBEDDED_IFRAME_SELECTOR) || [])
+  const documentLike = targets as DocumentLike
+  if (documentLike?.querySelectorAll) {
+    return Array.from(documentLike.querySelectorAll(EMBEDDED_IFRAME_SELECTOR) || []) as EmbeddedTarget[]
   }
 
-  if (typeof targets[Symbol.iterator] === 'function') {
-    return Array.from(targets)
+  if (typeof (targets as Record<PropertyKey, unknown>)[Symbol.iterator] === 'function') {
+    return Array.from(targets as Iterable<EmbeddedTarget>)
   }
 
-  if (typeof targets.forEach === 'function') {
-    const items = []
-    targets.forEach((item) => items.push(item))
+  const forEachLike = targets as { forEach?: (handler: (item: EmbeddedTarget) => void) => void }
+  if (typeof forEachLike.forEach === 'function') {
+    const items: EmbeddedTarget[] = []
+    forEachLike.forEach((item: EmbeddedTarget) => items.push(item))
     return items
   }
 
@@ -61,7 +109,14 @@ const normalizeEmbeddedTargets = (targets) => {
  * @param {object} target - 注册表项或 iframe 节点
  * @returns {object|null} iframe 节点
  */
-const resolveIframeFromTarget = (target) => target?.iframe ?? target ?? null
+const resolveIframeFromTarget = (target: unknown): IframeLike | null => {
+  if (!target || typeof target !== 'object') {
+    return null
+  }
+  const record = target as Record<string, unknown>
+  const iframe = (record.iframe ?? target) as IframeLike | null
+  return iframe ?? null
+}
 
 /**
  * 从 iframe src 或注册表项里解析 origin。
@@ -69,9 +124,12 @@ const resolveIframeFromTarget = (target) => target?.iframe ?? target ?? null
  * @param {object} target - 注册表项或 iframe 节点
  * @returns {string|null} origin
  */
-const resolveOriginFromTarget = (target) => {
-  if (typeof target?.origin === 'string' && target.origin) {
-    return target.origin
+const resolveOriginFromTarget = (target: unknown): string | null => {
+  if (target && typeof target === 'object') {
+    const record = target as Record<string, unknown>
+    if (typeof record.origin === 'string' && record.origin) {
+      return record.origin
+    }
   }
 
   const iframe = resolveIframeFromTarget(target)
@@ -85,7 +143,7 @@ const resolveOriginFromTarget = (target) => {
 
     const currentOrigin = resolveCurrentOrigin()
     return currentOrigin ? new URL(src, currentOrigin).origin : null
-  } catch (error) {
+  } catch (_error) {
     return null
   }
 }
@@ -95,9 +153,12 @@ const resolveOriginFromTarget = (target) => {
  * @param {object} target - 注册表项或 iframe 节点
  * @returns {string|null} 应用类型
  */
-const resolveAppTypeFromTarget = (target) => {
-  if (target?.appType === 'designer' || target?.appType === 'datacenter') {
-    return target.appType
+const resolveAppTypeFromTarget = (target: unknown): EmbeddedAppType | null => {
+  if (target && typeof target === 'object') {
+    const record = target as Record<string, unknown>
+    if (record.appType === 'designer' || record.appType === 'datacenter') {
+      return record.appType
+    }
   }
 
   const iframe = resolveIframeFromTarget(target)
@@ -120,7 +181,7 @@ const resolveAppTypeFromTarget = (target) => {
       return 'datacenter'
     }
     return null
-  } catch (error) {
+  } catch (_error) {
     return null
   }
 }
@@ -131,7 +192,7 @@ const resolveAppTypeFromTarget = (target) => {
  * @param {object} message - 消息对象
  * @returns {boolean} 是否已发送
  */
-export const postMessageToEmbeddedTarget = (target, message) => {
+export const postMessageToEmbeddedTarget = (target: unknown, message: Record<string, unknown>): boolean => {
   const iframe = resolveIframeFromTarget(target)
   const origin = resolveOriginFromTarget(target)
   if (!iframe?.contentWindow?.postMessage || !origin) {
@@ -148,7 +209,7 @@ export const postMessageToEmbeddedTarget = (target, message) => {
  * @param {object} payload - 注册信息
  * @returns {object|null} 可用注册表项
  */
-export const createEmbeddedRegistryEntry = (payload = {}) => {
+export const createEmbeddedRegistryEntry = (payload: Record<string, unknown> = {}): EmbeddedRegistryEntry | null => {
   const iframe = resolveIframeFromTarget(payload)
   const origin = resolveOriginFromTarget(payload)
   const appType = resolveAppTypeFromTarget(payload)
@@ -161,7 +222,7 @@ export const createEmbeddedRegistryEntry = (payload = {}) => {
     iframe,
     origin,
     appType,
-    project: payload.project ?? null,
+    project: (payload.project as Record<string, unknown>) ?? null,
     tabKey: payload.tabKey ?? null,
     pageId: payload.pageId ?? null,
   }
@@ -174,7 +235,10 @@ export const createEmbeddedRegistryEntry = (payload = {}) => {
  * @param {object} payload - 注册信息
  * @returns {object|null} 最终登记的注册表项
  */
-export const registerEmbeddedIframe = (registry, payload = {}) => {
+export const registerEmbeddedIframe = (
+  registry: Map<unknown, EmbeddedRegistryEntry> | null | undefined,
+  payload: Record<string, unknown> = {}
+): EmbeddedRegistryEntry | null => {
   if (!registry?.set) return null
 
   const entry = createEmbeddedRegistryEntry(payload)
@@ -189,7 +253,10 @@ export const registerEmbeddedIframe = (registry, payload = {}) => {
  * @param {Map<object, object>} registry - 嵌入注册表
  * @param {object} iframe - iframe 节点
  */
-export const unregisterEmbeddedIframe = (registry, iframe) => {
+export const unregisterEmbeddedIframe = (
+  registry: Map<unknown, EmbeddedRegistryEntry> | null | undefined,
+  iframe: unknown
+): void => {
   registry?.delete?.(iframe)
 }
 
@@ -201,7 +268,11 @@ export const unregisterEmbeddedIframe = (registry, iframe) => {
  * @param {string} origin - message origin
  * @returns {object|null} 匹配到的注册表项
  */
-export const findEmbeddedEntryByMessageSource = (registry, source, origin) => {
+export const findEmbeddedEntryByMessageSource = (
+  registry: Map<unknown, EmbeddedRegistryEntry> | null | undefined,
+  source: unknown,
+  origin: string | undefined
+): EmbeddedRegistryEntry | null => {
   if (!registry?.values || !source || !origin) {
     return null
   }
@@ -220,14 +291,14 @@ export const findEmbeddedEntryByMessageSource = (registry, source, origin) => {
  * @param {object} iframe - iframe 节点
  * @returns {boolean} 是否为设计中心 iframe
  */
-export const isDesignerEmbeddedIframe = (iframe) => resolveAppTypeFromTarget(iframe) === 'designer'
+export const isDesignerEmbeddedIframe = (iframe: unknown): boolean => resolveAppTypeFromTarget(iframe) === 'designer'
 
 /**
  * 向嵌入 iframe 广播消息。
  * @param {Iterable<object>|object} targets - 注册表项集合、NodeList 或 document-like 对象
  * @param {object} message - 要广播的消息
  */
-export const broadcastToEmbeddedIframes = (targets, message) => {
+export const broadcastToEmbeddedIframes = (targets: unknown, message: Record<string, unknown>): void => {
   for (const target of normalizeEmbeddedTargets(targets)) {
     postMessageToEmbeddedTarget(target, message)
   }
@@ -238,7 +309,7 @@ export const broadcastToEmbeddedIframes = (targets, message) => {
  * @param {Iterable<object>|object} targets - 注册表项集合、NodeList 或 document-like 对象
  * @param {object} message - 要广播的消息
  */
-export const broadcastToDesignerEmbeddedIframes = (targets, message) => {
+export const broadcastToDesignerEmbeddedIframes = (targets: unknown, message: Record<string, unknown>): void => {
   for (const target of normalizeEmbeddedTargets(targets)) {
     if (resolveAppTypeFromTarget(target) !== 'designer') continue
     postMessageToEmbeddedTarget(target, message)
@@ -250,18 +321,15 @@ export const broadcastToDesignerEmbeddedIframes = (targets, message) => {
  * @param {object} documentLike - 类文档对象
  * @returns {Array<object>} iframe 列表
  */
-export const getEmbeddedIframes = (documentLike) => normalizeEmbeddedTargets(documentLike)
+export const getEmbeddedIframes = (documentLike: DocumentLike): EmbeddedTarget[] => normalizeEmbeddedTargets(documentLike)
 
 /**
  * 同步设计中心语言到嵌入 iframe。
  * @param {Iterable<object>|object} targets - 注册表项集合、NodeList 或 document-like 对象
  * @param {string} locale - 语言
  */
-export const syncDesignerLocaleToEmbeddedIframes = (targets, locale) => {
-  broadcastToDesignerEmbeddedIframes(
-    targets,
-    createEmbeddedUpdateMessage('LOCALE_UPDATE', 'locale', locale)
-  )
+export const syncDesignerLocaleToEmbeddedIframes = (targets: unknown, locale: string): void => {
+  broadcastToDesignerEmbeddedIframes(targets, createEmbeddedUpdateMessage('LOCALE_UPDATE', 'locale', locale))
 }
 
 /**
@@ -270,11 +338,8 @@ export const syncDesignerLocaleToEmbeddedIframes = (targets, locale) => {
  * @param {Iterable<object>|object} targets - 注册表项集合、NodeList 或 document-like 对象
  * @param {string} locale - 语言
  */
-export const syncLocaleToEmbeddedIframes = (targets, locale) => {
-  broadcastToEmbeddedIframes(
-    targets,
-    createEmbeddedUpdateMessage('LOCALE_UPDATE', 'locale', locale)
-  )
+export const syncLocaleToEmbeddedIframes = (targets: unknown, locale: string): void => {
+  broadcastToEmbeddedIframes(targets, createEmbeddedUpdateMessage('LOCALE_UPDATE', 'locale', locale))
 }
 
 /**
@@ -283,9 +348,9 @@ export const syncLocaleToEmbeddedIframes = (targets, locale) => {
  * @param {object} data - message data
  * @returns {object} 业务载荷
  */
-const resolveEmbeddedMessagePayload = (data = {}) => {
-  if (data?.payload && typeof data.payload === 'object') {
-    return data.payload
+const resolveEmbeddedMessagePayload = (data: Record<string, unknown> = {}): Record<string, unknown> => {
+  if (data?.payload && typeof data.payload === 'object' && !Array.isArray(data.payload)) {
+    return data.payload as Record<string, unknown>
   }
   return data
 }
@@ -296,12 +361,21 @@ const resolveEmbeddedMessagePayload = (data = {}) => {
  * @param {object} options - 处理参数
  * @returns {object} 处理结果
  */
-export const handleEmbeddedWindowMessage = (options = {}) => {
+export const handleEmbeddedWindowMessage = (
+  options: HandleEmbeddedMessageOptions = {}
+):
+  | { handled: false; reason: 'unsupported-message' | 'unregistered-source' }
+  | {
+      handled: true
+      type: EmbeddedMessageType
+      entry: EmbeddedRegistryEntry
+      responseMessage?: Record<string, unknown>
+    } => {
   const { event, registry, resolveBootstrapState, onAuthRefreshed, onAuthExpired } = options
   const data = event?.data
   const type = data?.type
 
-  if (!type || !SUPPORTED_EMBEDDED_MESSAGE_TYPES.has(type)) {
+  if (typeof type !== 'string' || !SUPPORTED_EMBEDDED_MESSAGE_TYPES.has(type)) {
     return { handled: false, reason: 'unsupported-message' }
   }
 
@@ -311,17 +385,19 @@ export const handleEmbeddedWindowMessage = (options = {}) => {
   }
 
   const payload = resolveEmbeddedMessagePayload(data)
-  if (type === 'APP_BOOTSTRAP_REQUEST') {
+  const messageType = type as EmbeddedMessageType
+  if (messageType === 'APP_BOOTSTRAP_REQUEST') {
     const hostState = resolveBootstrapState?.(entry, payload) ?? {}
+    const project = entry.project
     const bootstrapPayload = createBootstrapResponse(entry.appType, {
       ...hostState,
-      projectId: hostState.projectId ?? entry.project?.id ?? entry.project?.projectId ?? null,
-      tenantId: hostState.tenantId ?? entry.project?.tenantId ?? null,
+      projectId: hostState.projectId ?? project?.id ?? project?.projectId ?? null,
+      tenantId: hostState.tenantId ?? project?.tenantId ?? null,
       tabKey: hostState.tabKey ?? entry.tabKey ?? null,
       pageId: hostState.pageId ?? entry.pageId ?? null,
     })
 
-    const responseMessage = {
+    const responseMessage: Record<string, unknown> = {
       type: 'APP_BOOTSTRAP_RESPONSE',
       payload: bootstrapPayload,
     }
@@ -335,17 +411,17 @@ export const handleEmbeddedWindowMessage = (options = {}) => {
 
     return {
       handled: true,
-      type,
+      type: messageType,
       entry,
       responseMessage,
     }
   }
 
-  if (type === 'AUTH_REFRESHED') {
+  if (messageType === 'AUTH_REFRESHED') {
     onAuthRefreshed?.(payload, entry)
     return {
       handled: true,
-      type,
+      type: messageType,
       entry,
     }
   }
@@ -353,7 +429,7 @@ export const handleEmbeddedWindowMessage = (options = {}) => {
   onAuthExpired?.(payload, entry)
   return {
     handled: true,
-    type,
+    type: messageType,
     entry,
   }
 }

@@ -1,4 +1,4 @@
-import { Storage } from './storage.ts'
+import { Storage } from './storage'
 
 const HANDOFF_STORAGE_PREFIX = 'embedded_app_handoff:'
 const DEFAULT_HANDOFF_TTL_MS = 10 * 60 * 1000
@@ -11,15 +11,63 @@ const HANDOFF_RECORD_FIELDS = [
   'pageId',
   'issuedAt',
   'expiresAt',
-]
+] as const
 const SUPPORTED_APP_TYPES = new Set(['designer', 'datacenter'])
+
+type SupportedAppType = 'designer' | 'datacenter'
+
+interface HostState {
+  appType?: unknown
+  projectId?: unknown
+  pid?: unknown
+  tenantId?: unknown
+  tabKey?: unknown
+  pageId?: unknown
+  [key: string]: unknown
+}
+
+interface HandoffRecord {
+  handoffId: string
+  appType?: unknown
+  projectId?: unknown
+  tenantId?: unknown
+  tabKey?: unknown
+  pageId?: unknown
+  issuedAt?: unknown
+  expiresAt?: unknown
+}
+
+interface PersistedHandoffRecord {
+  handoffId: string
+  appType: SupportedAppType
+  projectId?: unknown
+  tenantId?: unknown
+  tabKey?: unknown
+  pageId?: unknown
+  issuedAt: number
+  expiresAt: number
+}
+
+interface CreateRecordOptions {
+  now?: number
+  ttlMs?: number
+  handoffId?: string
+}
+
+export interface BootstrapResponse extends Record<string, unknown> {
+  url: string
+  handoffId: string
+}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
 
 /**
  * 生成一次性 handoff 标识。
  * 这个值只用于定位宿主态记录，不携带任何业务凭据。
  * @returns {string} opaque handoff id
  */
-export const createHandoffId = () => {
+export const createHandoffId = (): string => {
   const timestamp = Date.now().toString(36)
   const randomPart = Math.random().toString(36).slice(2, 10)
   return `handoff_${timestamp}_${randomPart}`
@@ -31,7 +79,7 @@ export const createHandoffId = () => {
  * @param {object} hostState - 宿主态输入
  * @returns {object} 规范化后的 handoff 恢复索引
  */
-const normalizeHandoffState = (hostState = {}) => ({
+const normalizeHandoffState = (hostState: HostState = {}): Omit<HandoffRecord, 'handoffId'> => ({
   appType: hostState.appType ?? null,
   projectId: hostState.projectId ?? hostState.pid ?? null,
   tenantId: hostState.tenantId ?? null,
@@ -45,15 +93,26 @@ const normalizeHandoffState = (hostState = {}) => ({
  * @param {object} record - 原始记录
  * @returns {object|null} 去敏后的记录
  */
-const sanitizeHandoffRecord = (record = {}) => {
-  if (!record?.handoffId) {
+const sanitizeHandoffRecord = (record: unknown): HandoffRecord | null => {
+  if (!isPlainObject(record)) {
     return null
   }
 
-  const sanitized = {}
+  if (typeof record.handoffId !== 'string' || !record.handoffId) {
+    return null
+  }
+
+  const sanitized: HandoffRecord = {
+    handoffId: record.handoffId,
+  }
+
   for (const field of HANDOFF_RECORD_FIELDS) {
-    if (record[field] !== undefined && record[field] !== null) {
-      sanitized[field] = record[field]
+    if (field === 'handoffId') {
+      continue
+    }
+    const value = record[field]
+    if (value !== undefined && value !== null) {
+      sanitized[field] = value
     }
   }
 
@@ -66,7 +125,16 @@ const sanitizeHandoffRecord = (record = {}) => {
  * @param {string} appType - 应用类型
  * @returns {boolean} 是否允许
  */
-const isSupportedAppType = (appType) => SUPPORTED_APP_TYPES.has(appType)
+const isSupportedAppType = (appType: unknown): appType is SupportedAppType =>
+  typeof appType === 'string' && SUPPORTED_APP_TYPES.has(appType)
+
+/**
+ * 判断 handoff 记录是否已经过期。
+ * @param {object} record - 已去敏的 handoff 记录
+ * @returns {boolean} 是否过期
+ */
+const isExpiredHandoffRecord = (record: HandoffRecord): boolean =>
+  typeof record.expiresAt === 'number' && record.expiresAt <= Date.now()
 
 /**
  * 统一处理 handoff 记录的去敏和过期判断。
@@ -74,7 +142,7 @@ const isSupportedAppType = (appType) => SUPPORTED_APP_TYPES.has(appType)
  * @param {object} record - 原始或已解析的 handoff 记录
  * @returns {object|null} 可恢复的去敏记录
  */
-const normalizeHandoffRecordForRestore = (record = {}) => {
+const normalizeHandoffRecordForRestore = (record: unknown): PersistedHandoffRecord | null => {
   const sanitized = sanitizeHandoffRecord(record)
   if (!sanitized) {
     return null
@@ -84,20 +152,16 @@ const normalizeHandoffRecordForRestore = (record = {}) => {
     return null
   }
 
+  if (typeof sanitized.issuedAt !== 'number' || typeof sanitized.expiresAt !== 'number') {
+    return null
+  }
+
   if (isExpiredHandoffRecord(sanitized)) {
     return null
   }
 
-  return sanitized
+  return sanitized as PersistedHandoffRecord
 }
-
-/**
- * 判断 handoff 记录是否已经过期。
- * @param {object} record - 已去敏的 handoff 记录
- * @returns {boolean} 是否过期
- */
-const isExpiredHandoffRecord = (record = {}) =>
-  typeof record.expiresAt === 'number' && record.expiresAt <= Date.now()
 
 /**
  * 校验 handoff 记录是否满足持久化与恢复要求。
@@ -105,7 +169,7 @@ const isExpiredHandoffRecord = (record = {}) =>
  * @param {object} record - 待保存的 handoff 记录
  * @returns {object|null} 可持久化的记录
  */
-const validateHandoffRecordForPersistence = (record = {}) => {
+const validateHandoffRecordForPersistence = (record: unknown): PersistedHandoffRecord | null => {
   const sanitized = sanitizeHandoffRecord(record)
   if (!sanitized) {
     return null
@@ -123,7 +187,7 @@ const validateHandoffRecordForPersistence = (record = {}) => {
     return null
   }
 
-  return sanitized
+  return sanitized as PersistedHandoffRecord
 }
 
 /**
@@ -132,7 +196,7 @@ const validateHandoffRecordForPersistence = (record = {}) => {
  * @param {string} appType - 应用类型
  * @returns {string} 规范化后的 base path
  */
-const resolveAppBasePath = (appType) => {
+const resolveAppBasePath = (appType: string): string => {
   if (appType === 'designer') {
     return '/designer/'
   }
@@ -154,9 +218,9 @@ const resolveAppBasePath = (appType) => {
  * @param {string} [options.handoffId] - 外部注入的 handoff id
  * @returns {object} handoff 记录
  */
-export const createHandoffRecord = (hostState = {}, options = {}) => {
+export const createHandoffRecord = (hostState: HostState = {}, options: CreateRecordOptions = {}): HandoffRecord => {
   const now = options.now ?? Date.now()
-  const ttlMs = Number.isFinite(options.ttlMs) && options.ttlMs > 0 ? options.ttlMs : DEFAULT_HANDOFF_TTL_MS
+  const ttlMs = Number.isFinite(options.ttlMs) && (options.ttlMs as number) > 0 ? (options.ttlMs as number) : DEFAULT_HANDOFF_TTL_MS
   const handoffId = options.handoffId ?? createHandoffId()
 
   return {
@@ -174,7 +238,7 @@ export const createHandoffRecord = (hostState = {}, options = {}) => {
  * @param {string} handoffId - handoff 标识
  * @returns {string} 可直接打开的嵌入地址
  */
-export const buildEmbeddedAppUrl = (appType, handoffId) => {
+export const buildEmbeddedAppUrl = (appType: string, handoffId?: string | null): string => {
   const params = new URLSearchParams()
   if (handoffId) {
     params.set('handoffId', handoffId)
@@ -190,23 +254,59 @@ export const buildEmbeddedAppUrl = (appType, handoffId) => {
  * @param {object} record - handoff 记录
  * @returns {object|null} 保存成功返回记录，失败返回 null
  */
-export const saveHandoffRecord = (record) => {
+export const saveHandoffRecord = (record: unknown): PersistedHandoffRecord => {
   const sanitizedRecord = validateHandoffRecordForPersistence(record)
   if (!sanitizedRecord) {
     throw new Error('handoff 票据无效，必须包含 appType、issuedAt 和未过期的 expiresAt')
   }
 
   try {
-    localStorage.setItem(
-      `${HANDOFF_STORAGE_PREFIX}${sanitizedRecord.handoffId}`,
-      JSON.stringify(sanitizedRecord)
-    )
+    localStorage.setItem(`${HANDOFF_STORAGE_PREFIX}${sanitizedRecord.handoffId}`, JSON.stringify(sanitizedRecord))
     return sanitizedRecord
   } catch (error) {
-    const wrappedError = new Error(`保存 handoff 票据失败: ${error.message}`)
-    wrappedError.cause = error
+    const message = error instanceof Error ? error.message : String(error)
+    const wrappedError = new Error(`保存 handoff 票据失败: ${message}`)
+    ;(wrappedError as Error & { cause?: unknown }).cause = error
     console.warn('Save handoff record error:', wrappedError)
     throw wrappedError
+  }
+}
+
+/**
+ * 从 localStorage 读取并解析 handoff 记录。
+ * @param {string} storageKey - 存储键
+ * @returns {object|null} 记录或 null
+ */
+const readHandoffRecord = (storageKey: string): PersistedHandoffRecord | null => {
+  try {
+    const rawValue = localStorage.getItem(storageKey)
+    if (!rawValue) {
+      return null
+    }
+
+    const record = sanitizeHandoffRecord(JSON.parse(rawValue))
+    if (!record) {
+      return null
+    }
+
+    if (isExpiredHandoffRecord(record)) {
+      // 过期票据必须从存储里清掉，避免后续前缀扫描再次捞到同一条脏数据。
+      localStorage.removeItem(storageKey)
+      return null
+    }
+
+    if (!isSupportedAppType(record.appType)) {
+      return null
+    }
+
+    if (typeof record.issuedAt !== 'number' || typeof record.expiresAt !== 'number') {
+      return null
+    }
+
+    return record as PersistedHandoffRecord
+  } catch (error) {
+    console.warn(`Read handoff record error for key "${storageKey}":`, error)
+    return null
   }
 }
 
@@ -217,7 +317,7 @@ export const saveHandoffRecord = (record) => {
  * @param {string} handoffId - handoff 标识
  * @returns {object|null} 记录不存在或已过期时返回 null
  */
-export const loadHandoffRecord = (handoffId) => {
+export const loadHandoffRecord = (handoffId?: string | null): PersistedHandoffRecord | null => {
   if (!handoffId) {
     return null
   }
@@ -245,14 +345,14 @@ export const loadHandoffRecord = (handoffId) => {
  * @param {string|object} handoff - handoff id 或已加载记录
  * @returns {object|null} 恢复载荷
  */
-export const resolveRestorePayload = (handoff) => {
+export const resolveRestorePayload = (handoff: string | Record<string, unknown>): Record<string, unknown> | null => {
   const record =
     typeof handoff === 'string' ? loadHandoffRecord(handoff) : normalizeHandoffRecordForRestore(handoff)
   if (!record?.handoffId) {
     return null
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     handoffId: record.handoffId,
     appType: record.appType,
   }
@@ -284,9 +384,13 @@ export const resolveRestorePayload = (handoff) => {
  * @param {object} options - 可选参数
  * @returns {object} bootstrap 响应
  */
-export const createBootstrapResponse = (appType, hostState = {}, options = {}) => {
+export const createBootstrapResponse = (
+  appType: string,
+  hostState: Record<string, unknown> = {},
+  options: CreateRecordOptions = {}
+): BootstrapResponse => {
   const { pid, projectId: inputProjectId, ...restHostState } = hostState
-  const bootstrapState = {
+  const bootstrapState: Record<string, unknown> = {
     ...restHostState,
     appType,
     projectId: inputProjectId ?? pid ?? null,
@@ -299,39 +403,5 @@ export const createBootstrapResponse = (appType, hostState = {}, options = {}) =
     ...bootstrapState,
     url,
     handoffId: savedRecord.handoffId,
-  }
-}
-
-/**
- * 从 localStorage 读取并解析 handoff 记录。
- * @param {string} storageKey - 存储键
- * @returns {object|null} 记录或 null
- */
-const readHandoffRecord = (storageKey) => {
-  try {
-    const rawValue = localStorage.getItem(storageKey)
-    if (!rawValue) {
-      return null
-    }
-
-    const record = sanitizeHandoffRecord(JSON.parse(rawValue))
-    if (!record) {
-      return null
-    }
-
-    if (isExpiredHandoffRecord(record)) {
-      // 过期票据必须从存储里清掉，避免后续前缀扫描再次捞到同一条脏数据。
-      localStorage.removeItem(storageKey)
-      return null
-    }
-
-    if (!isSupportedAppType(record.appType)) {
-      return null
-    }
-
-    return record
-  } catch (error) {
-    console.warn(`Read handoff record error for key "${storageKey}":`, error)
-    return null
   }
 }

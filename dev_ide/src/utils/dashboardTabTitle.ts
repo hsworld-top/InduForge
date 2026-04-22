@@ -1,3 +1,12 @@
+type Translate = (key: string, params?: Record<string, unknown>) => string
+
+interface DashboardTabTitleLike {
+  title?: string
+  titleKey?: string | null
+  titlePrefix?: string | null
+  titleParams?: Record<string, unknown> | null
+}
+
 /**
  * 统一解析 Dashboard 标签标题。
  *
@@ -8,7 +17,10 @@
  * @param {(key: string, params?: Record<string, unknown>) => string} translate - i18n 翻译函数
  * @returns {string} 最终标题
  */
-export const resolveDashboardTabTitle = (tab, translate) => {
+export const resolveDashboardTabTitle = (
+  tab: DashboardTabTitleLike | null | undefined,
+  translate: Translate
+): string => {
   if (!tab || typeof translate !== 'function') return ''
 
   const titleKey = typeof tab.titleKey === 'string' ? tab.titleKey : ''

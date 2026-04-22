@@ -19,13 +19,7 @@ const ALLOWED_JS_SOURCE_FILES = [
   'permissions/rules.js',
   'router/index.js',
   'store/index.js',
-  'utils/appUrl.js',
-  'utils/dashboardEntryHandoff.js',
-  'utils/dashboardTabState.js',
-  'utils/dashboardTabTitle.js',
   'utils/date.js',
-  'utils/embeddedAppBridge.js',
-  'utils/embeddedIframeSync.js',
   'utils/index.js',
   'utils/opentiny/composable/http/index.js',
   'utils/opentiny/composable/index.js',
@@ -34,7 +28,6 @@ const ALLOWED_JS_SOURCE_FILES = [
   'utils/socket.js',
   'utils/storage.js',
   'utils/validate.js',
-  'views/tenant/utils/ops-status.js',
 ] as const
 const ALLOWED_JS_SOURCE_SET = new Set<string>(ALLOWED_JS_SOURCE_FILES)
 

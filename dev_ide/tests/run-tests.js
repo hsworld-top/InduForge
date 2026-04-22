@@ -15,7 +15,7 @@ import {
   getDeployLabel,
   isFailedDeploy,
   getDeployFailureReason,
-} from '../src/views/tenant/utils/ops-status.js'
+} from '../src/views/tenant/utils/ops-status.ts'
 import { messages } from '../src/lang/index.js'
 import {
   createEmbeddedUpdateMessage,
@@ -25,13 +25,13 @@ import {
   isDesignerEmbeddedIframe,
   syncDesignerLocaleToEmbeddedIframes,
   syncLocaleToEmbeddedIframes,
-} from '../src/utils/embeddedIframeSync.js'
-import { buildAppEntry, buildAppUrl } from '../src/utils/appUrl.js'
-import { resolveDashboardTabTitle } from '../src/utils/dashboardTabTitle.js'
+} from '../src/utils/embeddedIframeSync.ts'
+import { buildAppEntry, buildAppUrl } from '../src/utils/appUrl.ts'
+import { resolveDashboardTabTitle } from '../src/utils/dashboardTabTitle.ts'
 import {
   serializeDashboardTabState,
   restoreDashboardTabState,
-} from '../src/utils/dashboardTabState.js'
+} from '../src/utils/dashboardTabState.ts'
 import {
   createBootstrapResponse,
   createHandoffRecord,
@@ -39,11 +39,11 @@ import {
   loadHandoffRecord,
   resolveRestorePayload,
   saveHandoffRecord,
-} from '../src/utils/embeddedAppBridge.js'
+} from '../src/utils/embeddedAppBridge.ts'
 import {
   buildDashboardRedirectLocation,
   createRestoredEmbeddedTab,
-} from '../src/utils/dashboardEntryHandoff.js'
+} from '../src/utils/dashboardEntryHandoff.ts'
 
 const run = async (name, fn) => {
   try {

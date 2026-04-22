@@ -1,6 +1,64 @@
-import { resolveDashboardTabTitle } from './dashboardTabTitle.js'
+import { resolveDashboardTabTitle } from './dashboardTabTitle'
 
 const SUPPORTED_EMBEDDED_APP_TYPES = new Set(['designer', 'datacenter'])
+
+type Translate = (key: string, params?: Record<string, unknown>) => string
+
+interface EmbeddedProps {
+  appType: 'designer' | 'datacenter'
+  project: Record<string, any> & { id: unknown; projectId?: unknown }
+}
+
+interface DashboardTab {
+  key: string
+  title: string
+  titleKey: string | null
+  titlePrefix: string | null
+  titleParams: Record<string, unknown> | null
+  component: unknown
+  icon: unknown
+  props: EmbeddedProps | null
+}
+
+type PersistedTab =
+  | {
+      type: 'standard'
+      key: string
+    }
+  | {
+      type: 'embedded'
+      key: string
+      titleKey: string | null
+      titlePrefix: string
+      titleParams: Record<string, unknown> | null
+      title: string
+      icon: string
+      props: EmbeddedProps
+    }
+
+interface SerializedDashboardTabState {
+  tabs: PersistedTab[]
+  activeTab: string
+}
+
+interface SerializeOptions {
+  tabs?: Array<Record<string, any>>
+  activeTab?: string
+  tabConfigMap?: Record<string, Record<string, any>>
+  hasTabPermission?: (key: string) => boolean
+}
+
+interface RestoreOptions {
+  tabConfigMap?: Record<string, Record<string, any>>
+  hasTabPermission?: (key: string) => boolean
+  embeddedComponent?: unknown
+  translate?: Translate
+}
+
+interface SavedStateLike {
+  tabs?: unknown[]
+  activeTab?: unknown
+}
 
 /**
  * 判断值是否为普通对象。
@@ -9,7 +67,8 @@ const SUPPORTED_EMBEDDED_APP_TYPES = new Set(['designer', 'datacenter'])
  * @param {unknown} value - 待判断值
  * @returns {boolean} 是否为普通对象
  */
-const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
+const isPlainObject = (value: unknown): value is Record<string, any> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
 
 /**
  * 规范化标题参数。
@@ -18,7 +77,8 @@ const isPlainObject = (value) => value !== null && typeof value === 'object' && 
  * @param {unknown} titleParams - 原始标题参数
  * @returns {Record<string, unknown>|null} 安全标题参数
  */
-const normalizeTitleParams = (titleParams) => (isPlainObject(titleParams) ? { ...titleParams } : null)
+const normalizeTitleParams = (titleParams: unknown): Record<string, unknown> | null =>
+  isPlainObject(titleParams) ? { ...titleParams } : null
 
 /**
  * 校验并复制嵌入工程所需的 props。
@@ -27,7 +87,7 @@ const normalizeTitleParams = (titleParams) => (isPlainObject(titleParams) ? { ..
  * @param {unknown} props - 标签 props
  * @returns {{appType: string, project: Record<string, unknown>}|null} 安全 props
  */
-const normalizeEmbeddedProps = (props) => {
+const normalizeEmbeddedProps = (props: unknown): EmbeddedProps | null => {
   if (!isPlainObject(props)) return null
 
   const appType = typeof props.appType === 'string' ? props.appType : ''
@@ -42,8 +102,8 @@ const normalizeEmbeddedProps = (props) => {
   }
 
   return {
-    appType,
-    project,
+    appType: appType as EmbeddedProps['appType'],
+    project: project as EmbeddedProps['project'],
   }
 }
 
@@ -55,12 +115,16 @@ const normalizeEmbeddedProps = (props) => {
  * @param {(key: string, params?: Record<string, unknown>) => string} translate - 翻译函数
  * @returns {object|null} 可渲染标签
  */
-const buildStandardTab = (key, tabConfigMap, translate) => {
+const buildStandardTab = (
+  key: string,
+  tabConfigMap: Record<string, Record<string, any>>,
+  translate: Translate
+): DashboardTab | null => {
   const config = tabConfigMap?.[key]
   if (!config) return null
 
   const titleKey = typeof config.titleKey === 'string' ? config.titleKey : null
-  const normalizedTab = {
+  const normalizedTab: DashboardTab = {
     key,
     title: typeof config.title === 'string' ? config.title : '',
     titleKey,
@@ -71,9 +135,7 @@ const buildStandardTab = (key, tabConfigMap, translate) => {
     props: null,
   }
 
-  normalizedTab.title = titleKey
-    ? resolveDashboardTabTitle(normalizedTab, translate)
-    : normalizedTab.title
+  normalizedTab.title = titleKey ? resolveDashboardTabTitle(normalizedTab, translate) : normalizedTab.title
 
   return normalizedTab
 }
@@ -86,14 +148,18 @@ const buildStandardTab = (key, tabConfigMap, translate) => {
  * @param {(key: string, params?: Record<string, unknown>) => string} translate - 翻译函数
  * @returns {object|null} 可渲染标签
  */
-const buildEmbeddedTab = (record, embeddedComponent, translate) => {
+const buildEmbeddedTab = (
+  record: Record<string, any>,
+  embeddedComponent: unknown,
+  translate: Translate
+): DashboardTab | null => {
   if (!isPlainObject(record) || !embeddedComponent) return null
 
   const key = typeof record.key === 'string' ? record.key : ''
   const props = normalizeEmbeddedProps(record.props)
   if (!key || !props) return null
 
-  const normalizedTab = {
+  const normalizedTab: DashboardTab = {
     key,
     title: typeof record.title === 'string' ? record.title : '',
     titleKey: typeof record.titleKey === 'string' ? record.titleKey : null,
@@ -101,11 +167,7 @@ const buildEmbeddedTab = (record, embeddedComponent, translate) => {
     titleParams: normalizeTitleParams(record.titleParams),
     component: embeddedComponent,
     icon:
-      typeof record.icon === 'string' && record.icon
-        ? record.icon
-        : props.appType === 'designer'
-          ? 'design'
-          : 'database',
+      typeof record.icon === 'string' && record.icon ? record.icon : props.appType === 'designer' ? 'design' : 'database',
     props,
   }
 
@@ -131,8 +193,8 @@ export const serializeDashboardTabState = ({
   activeTab = '',
   tabConfigMap = {},
   hasTabPermission = () => true,
-} = {}) => {
-  const persistedTabs = []
+}: SerializeOptions = {}): SerializedDashboardTabState => {
+  const persistedTabs: PersistedTab[] = []
 
   for (const tab of tabs) {
     if (!isPlainObject(tab) || typeof tab.key !== 'string') continue
@@ -181,17 +243,17 @@ export const serializeDashboardTabState = ({
  * @returns {{tabs: Array<object>, activeTab: string}|null} 恢复结果
  */
 export const restoreDashboardTabState = (
-  savedState,
+  savedState: SavedStateLike | null | undefined,
   {
     tabConfigMap = {},
     hasTabPermission = () => true,
     embeddedComponent = null,
-    translate = (key) => key,
-  } = {}
-) => {
+    translate = (key: string) => key,
+  }: RestoreOptions = {}
+): { tabs: DashboardTab[]; activeTab: string } | null => {
   if (!savedState || !Array.isArray(savedState.tabs)) return null
 
-  const restoredTabs = []
+  const restoredTabs: DashboardTab[] = []
 
   for (const record of savedState.tabs) {
     if (typeof record === 'string') {
