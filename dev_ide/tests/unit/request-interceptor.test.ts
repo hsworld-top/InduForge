@@ -133,4 +133,31 @@ describe('request interceptor', () => {
     await expect(responseRejected!(error)).rejects.toBe(error)
     expect(ElMessage.error).toHaveBeenCalledWith('没有权限访问此资源')
   })
+
+  it('403 且 skipPermissionToast=true 时不应调用 ElMessage.error', async () => {
+    await import('@/utils/request')
+
+    const responseRejected = responseUseMock.mock.calls[0]?.[1] as
+      | ((error: unknown) => Promise<unknown>)
+      | undefined
+
+    expect(typeof responseRejected).toBe('function')
+
+    const error = {
+      response: {
+        status: 403,
+        data: {
+          message: '没有权限访问此资源',
+        },
+      },
+      config: {
+        url: '/users',
+        forcePermissionToast: true,
+        skipPermissionToast: true,
+      },
+    }
+
+    await expect(responseRejected!(error)).rejects.toBe(error)
+    expect(ElMessage.error).not.toHaveBeenCalled()
+  })
 })
