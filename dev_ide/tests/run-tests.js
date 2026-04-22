@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { ROLES } from '../src/constants/index.js'
+import { ROLES } from '../src/constants/index.ts'
 import {
   hasRole,
   canAccessTab,
@@ -8,7 +8,7 @@ import {
   canApproveNodes,
   canRequestTenantStats,
   getTabAccessDeniedMessage,
-} from '../src/permissions/rules.js'
+} from '../src/permissions/rules.ts'
 import {
   buildDeployStatusSummary,
   getDeployStatusType,
