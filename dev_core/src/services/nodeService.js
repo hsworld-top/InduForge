@@ -7,6 +7,8 @@ const { Node, NodeDeployment, NodeCommand, Deployment, Project, Tenant, User, Lo
 const { Op } = require("sequelize");
 const socketService = require("./socketService");
 const bcrypt = require("bcryptjs");
+const AppError = require("../utils/AppError");
+const ErrorCodes = require("../constants/errorCodes");
 
 /**
  * 生成节点注册令牌
@@ -50,10 +52,14 @@ function ensureNodeTokenValid(node, registrationToken) {
   const expectedToken = String(node?.registrationToken || "").trim();
   const providedToken = String(registrationToken || "").trim();
   if (!expectedToken) {
-    throw new Error(`节点 ${node?.id} 缺少注册令牌，请重新审批节点`);
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: `节点 ${node?.id} 缺少注册令牌，请重新审批节点`,
+    });
   }
   if (!providedToken || providedToken !== expectedToken) {
-    throw new Error(`节点 ${node?.id} 令牌无效`);
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: `节点 ${node?.id} 令牌无效`,
+    });
   }
 }
 
@@ -68,7 +74,9 @@ async function ensureNodeNameReusable(tenantId, nodeName) {
     where: { tenantId, name: nodeName, deletedAt: null },
   });
   if (activeNode) {
-    throw new Error(`节点名称 "${nodeName}" 已存在`);
+    throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+      message: `节点名称 "${nodeName}" 已存在`,
+    });
   }
 
   const softDeletedNode = await Node.findOne({
@@ -93,9 +101,13 @@ function normalizeRegisterError(error, nodeName) {
     const message = String(error.message || "").toLowerCase();
     const conflictField = Object.keys(error.fields || {}).join(",").toLowerCase();
     if (message.includes("primary") || conflictField.includes("id")) {
-      return new Error("节点ID已存在，请检查当前运维代理机器码");
+      return new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+        message: "节点ID已存在，请检查当前运维代理机器码",
+      });
     }
-    return new Error(`节点名称 "${nodeName}" 已存在`);
+    return new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+      message: `节点名称 "${nodeName}" 已存在`,
+    });
   }
   return error;
 }
@@ -215,7 +227,9 @@ class NodeService {
     // 验证节点名称格式
     const namePattern = /^[a-zA-Z0-9_-]{3,50}$/;
     if (!namePattern.test(nodeName)) {
-      throw new Error("节点名称格式不正确，仅允许字母、数字、中划线、下划线，长度3-50个字符");
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "节点名称格式不正确，仅允许字母、数字、中划线、下划线，长度3-50个字符",
+      });
     }
 
     // 验证用户身份
@@ -225,18 +239,18 @@ class NodeService {
     });
 
     if (!user) {
-      throw new Error("用户名或密码错误");
+      throw new AppError(ErrorCodes.AUTH_TOKEN_INVALID, 401, { message: "用户名或密码错误" });
     }
 
     // 验证密码
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw new Error("用户名或密码错误");
+      throw new AppError(ErrorCodes.AUTH_TOKEN_INVALID, 401, { message: "用户名或密码错误" });
     }
 
     // 检查租户状态
     if (user.tenant && user.tenant.status !== "active") {
-      throw new Error("租户已被禁用");
+      throw new AppError(ErrorCodes.AUTH_TENANT_INACTIVE, 403, { message: "租户已被禁用" });
     }
 
     const tenantId = user.tenantId;
@@ -282,7 +296,9 @@ class NodeService {
         if (existingNodeById.deletedAt) {
           await existingNodeById.destroy({ force: true });
         } else {
-          throw new Error("节点ID已存在，请检查当前运维代理机器码");
+          throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+            message: "节点ID已存在，请检查当前运维代理机器码",
+          });
         }
       }
 
@@ -365,7 +381,9 @@ class NodeService {
     });
 
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
 
     const result = {
@@ -397,12 +415,16 @@ class NodeService {
 
     const node = await Node.findByPk(nodeId);
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
 
     // 检查审批状态
     if (node.approvalStatus !== "approved") {
-      throw new Error(`节点 ${nodeId} 未通过审批，无法上报心跳`);
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: `节点 ${nodeId} 未通过审批，无法上报心跳`,
+      });
     }
     ensureNodeTokenValid(node, registrationToken);
     const previousStatus = node.status;
@@ -744,7 +766,9 @@ class NodeService {
     });
 
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
 
     return node;
@@ -760,7 +784,9 @@ class NodeService {
   async update(nodeId, data, userId) {
     const node = await Node.findByPk(nodeId);
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
 
     const { name, description, port, config } = data;
@@ -777,7 +803,9 @@ class NodeService {
         },
       });
       if (existing) {
-        throw new Error(`节点名称 "${name}" 已存在`);
+        throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+          message: `节点名称 "${name}" 已存在`,
+        });
       }
       updateData.name = name;
     }
@@ -798,7 +826,9 @@ class NodeService {
   async delete(nodeId) {
     const node = await Node.findByPk(nodeId);
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
 
     // 检查是否有正在运行的工程
@@ -811,7 +841,9 @@ class NodeService {
     });
 
     if (runningCount > 0 && node.status === "online") {
-      throw new Error(`节点仍有 ${runningCount} 个工程在运行中，请先停止后再删除`);
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: `节点仍有 ${runningCount} 个工程在运行中，请先停止后再删除`,
+      });
     }
 
     await node.destroy({ force: true }); // 物理删除，避免同名唯一约束残留
@@ -828,7 +860,9 @@ class NodeService {
   async offline(nodeId, data = {}, registrationToken = "") {
     const node = await Node.findByPk(nodeId);
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
     ensureNodeTokenValid(node, registrationToken);
 
@@ -933,7 +967,9 @@ class NodeService {
   async approve(nodeId, userId) {
     const node = await Node.findByPk(nodeId);
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
 
     // 如果尚未生成 registrationToken，则生成一个
@@ -960,7 +996,9 @@ class NodeService {
   async reject(nodeId, userId) {
     const node = await Node.findByPk(nodeId);
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
 
     await node.update({
@@ -983,7 +1021,9 @@ class NodeService {
 
     const node = await Node.findByPk(nodeId);
     if (!node) {
-      throw new Error(`节点 ${nodeId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `节点 ${nodeId} 不存在`,
+      });
     }
     ensureNodeTokenValid(node, registrationToken);
 
@@ -992,7 +1032,9 @@ class NodeService {
     });
 
     if (!nodeDeployment) {
-      throw new Error(`部署记录 ${deploymentId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `部署记录 ${deploymentId} 不存在`,
+      });
     }
 
     const updateData = { status };

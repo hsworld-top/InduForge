@@ -10,6 +10,29 @@ const ErrorCodes = require("../constants/errorCodes");
 const { getErrorMessage } = require("../utils/i18n");
 
 /**
+ * 当业务失败仍需携带额外数据时（例如页面已被锁定），手动输出统一契约：
+ * code/msg/data/reqId。
+ */
+function respondBusinessErrorWithData(res, errorCode, message, data) {
+  const request = res.req || {};
+  const locals = res.locals || {};
+  const language = locals.language || request.language || "zh-CN";
+  const reqId = locals.requestId || request.requestId || null;
+
+  res.locals = locals;
+  res.locals.language = language;
+  res.locals.requestId = reqId;
+  res.setHeader("Content-Language", language);
+
+  return res.status(200).json({
+    code: ErrorCodes.toPublicCode(errorCode),
+    msg: message,
+    data,
+    reqId,
+  });
+}
+
+/**
  * 检查用户是否有权限访问指定工程
  * @param {Object} req - Express 请求对象
  * @param {string} projectId - 工程ID
@@ -68,20 +91,15 @@ async function acquirePageLock(req, res, next) {
     }
 
     const language = res.locals.language || res.req.language || "zh-CN";
-    const requestId = res.locals.requestId || res.req.requestId;
-    res.locals.language = language;
-    res.locals.requestId = requestId;
-    res.setHeader("Content-Language", language);
-
-    return res.status(200).json({
-      success: false,
-      errorCode: ErrorCodes.DESIGN_PAGE_LOCKED,
-      message: getErrorMessage(language, ErrorCodes.DESIGN_PAGE_LOCKED, {
-        message: "页面已被其他用户锁定",
-      }),
-      requestId,
-      data: result.data,
+    const message = getErrorMessage(language, ErrorCodes.DESIGN_PAGE_LOCKED, {
+      message: "页面已被其他用户锁定",
     });
+    return respondBusinessErrorWithData(
+      res,
+      ErrorCodes.DESIGN_PAGE_LOCKED,
+      message,
+      result.data
+    );
   } catch (error) {
     return next(error);
   }

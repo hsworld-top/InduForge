@@ -18,6 +18,8 @@ const {
   ProjectUserRoleBinding,
   ProjectRoleGrant,
 } = require("../models");
+const AppError = require("../utils/AppError");
+const ErrorCodes = require("../constants/errorCodes");
 
 // 制品存储目录
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, "../../artifacts");
@@ -176,7 +178,9 @@ class PublishService {
     // 获取工程信息
     const project = await Project.findByPk(projectId);
     if (!project) {
-      throw new Error(`工程 ${projectId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `工程 ${projectId} 不存在`,
+      });
     }
 
     // 检查版本号是否已存在（包含软删除记录，避免唯一索引冲突）。
@@ -191,11 +195,15 @@ class PublishService {
           where: { deploymentId: existingVersion.id },
         });
         if (referencedCount > 0) {
-          throw new Error(`版本 ${version} 已存在且被部署引用，无法复用`);
+          throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+            message: `版本 ${version} 已存在且被部署引用，无法复用`,
+          });
         }
         await existingVersion.destroy({ force: true });
       } else {
-        throw new Error(`版本 ${version} 已存在`);
+        throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+          message: `版本 ${version} 已存在`,
+        });
       }
     }
 
@@ -220,7 +228,9 @@ class PublishService {
       await this.addBuildLog(deploymentId, "验证工程配置...");
       const validation = await this.validateProject(projectId);
       if (!validation.valid) {
-        throw new Error(`工程验证失败: ${validation.errors.join(", ")}`);
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: `工程验证失败: ${validation.errors.join(", ")}`,
+        });
       }
 
       // 2. 收集工程数据
@@ -645,7 +655,7 @@ class PublishService {
   async getArtifactPath(deploymentId) {
     const deployment = await Deployment.findByPk(deploymentId);
     if (!deployment || !deployment.artifactUrl) {
-      throw new Error("制品不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "制品不存在" });
     }
 
     // 新记录优先使用 buildConfig 中固化的 artifactFileName；
@@ -657,7 +667,7 @@ class PublishService {
       }
     }
 
-    throw new Error("制品文件不存在");
+    throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "制品文件不存在" });
   }
 
   /**
@@ -669,14 +679,16 @@ class PublishService {
   async deleteDeployment(deploymentId) {
     const deployment = await Deployment.findByPk(deploymentId);
     if (!deployment) {
-      throw new Error("发布记录不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "发布记录不存在" });
     }
 
     const referencedCount = await NodeDeployment.count({
       where: { deploymentId },
     });
     if (referencedCount > 0) {
-      throw new Error("发布版本已被部署引用，无法删除");
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "发布版本已被部署引用，无法删除",
+      });
     }
 
     // 发布版本号受唯一索引约束，删除时必须物理删除以释放版本号。

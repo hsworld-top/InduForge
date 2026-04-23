@@ -4,11 +4,29 @@ const { validate } = require('../../middlewares/validate');
 const { authenticateToken, requireRole } = require('../../middlewares/auth');
 const { logger } = require('../../utils/logger');
 const ApiResponse = require('../../utils/response');
-const ErrorCodes = require('../../constants/errorCodes');
 const AppError = require('../../utils/AppError');
+const ErrorCodes = require('../../constants/errorCodes');
 const { User } = require('../../models');
 
 const router = express.Router();
+
+/**
+ * 路由统一错误响应：
+ * - 业务错误：HTTP 200 + 非 0 code
+ * - 技术异常：保留 5xx
+ */
+function respondRouteError(res, error, _fallbackCode, fallbackStatus = 500) {
+  const isAppError = error instanceof AppError || error?.name === "AppError";
+  if (isAppError && error?.errorCode && error?.statusCode) {
+    const normalizedStatus = Number(error.statusCode) >= 500 ? Number(error.statusCode) : 200;
+    const options = error.options || (error.message ? { message: error.message } : {});
+    return ApiResponse.error(res, error.errorCode, options, normalizedStatus);
+  }
+
+  const normalizedFallbackStatus = Number(fallbackStatus) >= 500 ? Number(fallbackStatus) : 500;
+  const options = error?.message ? { message: error.message } : {};
+  return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, options, normalizedFallbackStatus);
+}
 
 // 角色与权限说明（与中间件保持一致）
 const ROLE_PERMISSIONS = {
@@ -47,13 +65,13 @@ router.get('/', authenticateToken, (req, res) => {
 
 // 内置角色禁止增删改：统一返回 405
 router.post('/', authenticateToken, (req, res) => {
-  return ApiResponse.error(res, ErrorCodes.REQUEST_METHOD_NOT_ALLOWED, {}, 405);
+  return ApiResponse.error(res, ErrorCodes.REQUEST_METHOD_NOT_ALLOWED, {}, 200);
 });
 router.put('/', authenticateToken, (req, res) => {
-  return ApiResponse.error(res, ErrorCodes.REQUEST_METHOD_NOT_ALLOWED, {}, 405);
+  return ApiResponse.error(res, ErrorCodes.REQUEST_METHOD_NOT_ALLOWED, {}, 200);
 });
 router.delete('/', authenticateToken, (req, res) => {
-  return ApiResponse.error(res, ErrorCodes.REQUEST_METHOD_NOT_ALLOWED, {}, 405);
+  return ApiResponse.error(res, ErrorCodes.REQUEST_METHOD_NOT_ALLOWED, {}, 200);
 });
 
 /**
@@ -121,19 +139,19 @@ router.put('/users/:id',
 
       const user = await User.findByPk(id);
       if (!user) {
-        return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 404);
+        return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 200);
       }
 
       // 不允许将任何人升级为 SUPER_ADMIN
       if (role === 'SUPER_ADMIN') {
-        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: 'Cannot assign SUPER_ADMIN via API' }, 400);
+        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: 'Cannot assign SUPER_ADMIN via API' }, 200);
       }
 
       await user.update({ role });
       return ApiResponse.success(res, { user: { id: user.id, role: user.role } }, 'role_update_success');
     } catch (error) {
       logger.error('Update user role error', { error: error.message, requestId: req.requestId });
-      return ApiResponse.error(res, ErrorCodes.USER_ROLE_CHANGE_FAILED, {}, 500);
+      return respondRouteError(res, error, ErrorCodes.USER_ROLE_CHANGE_FAILED, 500);
     }
   }
 );

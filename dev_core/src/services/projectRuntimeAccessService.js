@@ -51,7 +51,9 @@ const assertBootstrapOwnerOrThrow = (existingUser, actorId, username) => {
   const sameOwner = actorId && isSameValue(existingUser.createdBy, actorId);
 
   if (!sameOwner) {
-    throw new Error(`运行态账号 ${username} 已存在且不属于当前工程创建者，拒绝自动提权`);
+    throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
+      message: `运行态账号 ${username} 已存在且不属于当前工程创建者，拒绝自动提权`,
+    });
   }
 };
 
@@ -346,12 +348,16 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
     project.id || context.projectId || context.id,
   );
   if (!resolvedProjectId) {
-    throw new Error("projectId 不能为空");
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "projectId 不能为空",
+    });
   }
 
   const initialPassword = normalizeText(context.initialPassword);
   if (!initialPassword) {
-    throw new Error("initialPassword 不能为空");
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "initialPassword 不能为空",
+    });
   }
 
   const roleCode = normalizeText(context.roleCode) || DEFAULT_RUNTIME_ADMIN_ROLE_CODE;

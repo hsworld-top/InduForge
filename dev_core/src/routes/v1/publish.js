@@ -8,7 +8,26 @@ const path = require("path");
 const publishService = require("../../services/publishService");
 const { authenticate, checkProjectAccess, requireCapability } = require("../../middlewares/auth");
 const ApiResponse = require("../../utils/response");
+const AppError = require("../../utils/AppError");
 const ErrorCodes = require("../../constants/errorCodes");
+
+/**
+ * 路由统一错误响应：
+ * - 业务错误：HTTP 200 + 非 0 code
+ * - 技术异常：保留 5xx
+ */
+function respondRouteError(res, error, _fallbackCode, fallbackStatus = 500) {
+  const isAppError = error instanceof AppError || error?.name === "AppError";
+  if (isAppError && error?.errorCode && error?.statusCode) {
+    const normalizedStatus = Number(error.statusCode) >= 500 ? Number(error.statusCode) : 200;
+    const options = error.options || (error.message ? { message: error.message } : {});
+    return ApiResponse.error(res, error.errorCode, options, normalizedStatus);
+  }
+
+  const normalizedFallbackStatus = Number(fallbackStatus) >= 500 ? Number(fallbackStatus) : 500;
+  const options = error?.message ? { message: error.message } : {};
+  return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, options, normalizedFallbackStatus);
+}
 
 /**
  * @route POST /api/v1/publish/:projectId
@@ -23,7 +42,7 @@ router.post("/:projectId", authenticate, requireCapability("release:publish"), a
     await checkProjectAccess(req, projectId);
 
     if (!version) {
-      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "版本号不能为空" }, 400);
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "版本号不能为空" }, 200);
     }
 
     const result = await publishService.publish(projectId, {
@@ -38,7 +57,7 @@ router.post("/:projectId", authenticate, requireCapability("release:publish"), a
     return ApiResponse.success(res, result);
   } catch (error) {
     console.error("发布失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -61,7 +80,7 @@ router.get("/:projectId/versions", authenticate, async (req, res) => {
     return ApiResponse.success(res, result);
   } catch (error) {
     console.error("获取发布版本列表失败:", error);
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, { message: error.message }, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 
@@ -76,14 +95,14 @@ router.get("/deployment/:id", authenticate, async (req, res) => {
     const deployment = await publishService.getDeployment(id);
 
     if (!deployment) {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: "发布记录不存在" }, 404);
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: "发布记录不存在" }, 200);
     }
     await checkProjectAccess(req, deployment.projectId);
 
     return ApiResponse.success(res, deployment);
   } catch (error) {
     console.error("获取发布详情失败:", error);
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, { message: error.message }, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 
@@ -97,7 +116,7 @@ router.get("/deployment/:id/download", authenticate, async (req, res) => {
     const { id } = req.params;
     const deployment = await publishService.getDeployment(id);
     if (!deployment) {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: "发布记录不存在" }, 404);
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: "发布记录不存在" }, 200);
     }
     await checkProjectAccess(req, deployment.projectId);
     const filePath = await publishService.getArtifactPath(id);
@@ -106,7 +125,7 @@ router.get("/deployment/:id/download", authenticate, async (req, res) => {
     res.download(filePath, fileName);
   } catch (error) {
     console.error("下载制品失败:", error);
-    return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: error.message }, 404);
+    return respondRouteError(res, error, ErrorCodes.RESOURCE_NOT_FOUND, 200);
   }
 });
 
@@ -120,7 +139,7 @@ router.delete("/deployment/:id", authenticate, requireCapability("release:publis
     const { id } = req.params;
     const deployment = await publishService.getDeployment(id);
     if (!deployment) {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: "发布记录不存在" }, 404);
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: "发布记录不存在" }, 200);
     }
     await checkProjectAccess(req, deployment.projectId);
 
@@ -128,7 +147,7 @@ router.delete("/deployment/:id", authenticate, requireCapability("release:publis
     return ApiResponse.success(res, result);
   } catch (error) {
     console.error("删除发布记录失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 

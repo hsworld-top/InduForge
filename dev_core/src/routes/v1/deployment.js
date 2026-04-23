@@ -7,7 +7,26 @@ const router = express.Router();
 const deploymentService = require("../../services/deploymentService");
 const { authenticate, checkProjectAccess, requireCapability } = require("../../middlewares/auth");
 const ApiResponse = require("../../utils/response");
+const AppError = require("../../utils/AppError");
 const ErrorCodes = require("../../constants/errorCodes");
+
+/**
+ * 路由统一错误响应：
+ * - 业务错误：HTTP 200 + 非 0 code
+ * - 技术异常：保留 5xx
+ */
+function respondRouteError(res, error, _fallbackCode, fallbackStatus = 500) {
+  const isAppError = error instanceof AppError || error?.name === "AppError";
+  if (isAppError && error?.errorCode && error?.statusCode) {
+    const normalizedStatus = Number(error.statusCode) >= 500 ? Number(error.statusCode) : 200;
+    const options = error.options || (error.message ? { message: error.message } : {});
+    return ApiResponse.error(res, error.errorCode, options, normalizedStatus);
+  }
+
+  const normalizedFallbackStatus = Number(fallbackStatus) >= 500 ? Number(fallbackStatus) : 500;
+  const options = error?.message ? { message: error.message } : {};
+  return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, options, normalizedFallbackStatus);
+}
 
 /**
  * @route GET /api/v1/deployments/project/:projectId
@@ -31,7 +50,7 @@ router.get("/project/:projectId", authenticate, async (req, res) => {
     return ApiResponse.success(res, result);
   } catch (error) {
     console.error("获取发布版本列表失败:", error);
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, { message: error.message }, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 
@@ -50,7 +69,7 @@ router.get("/:id", authenticate, async (req, res) => {
     return ApiResponse.success(res, deployment);
   } catch (error) {
     console.error("获取发布版本详情失败:", error);
-    return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: error.message }, 404);
+    return respondRouteError(res, error, ErrorCodes.RESOURCE_NOT_FOUND, 200);
   }
 });
 
@@ -67,7 +86,7 @@ router.post("/project/:projectId/deploy-dev", authenticate, requireCapability("d
     await checkProjectAccess(req, projectId);
 
     if (!nodeIds || !Array.isArray(nodeIds) || nodeIds.length === 0) {
-      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "请选择至少一个目标节点" }, 400);
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "请选择至少一个目标节点" }, 200);
     }
 
     const results = await deploymentService.deployDevToNodesByProject(
@@ -89,7 +108,7 @@ router.post("/project/:projectId/deploy-dev", authenticate, requireCapability("d
       }, "operation_success", { message: `DEV部署任务已下发：${successCount} 个成功，${failCount} 个失败` });
   } catch (error) {
     console.error("DEV部署失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -107,18 +126,18 @@ router.post("/:id/deploy", authenticate, requireCapability("deploy:execute"), as
     await checkProjectAccess(req, projectId);
 
     if (!nodeIds || !Array.isArray(nodeIds) || nodeIds.length === 0) {
-      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "请选择至少一个目标节点" }, 400);
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "请选择至少一个目标节点" }, 200);
     }
 
     if (!mode || !["DEV", "RELEASE"].includes(mode)) {
-      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "请指定运行模式 DEV 或 RELEASE" }, 400);
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "请指定运行模式 DEV 或 RELEASE" }, 200);
     }
 
     if (mode === "DEV") {
       return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, {
         message:
           "DEV模式无需版本，请调用 /api/v1/deployments/project/:projectId/deploy-dev",
-      }, 400);
+      }, 200);
     }
 
     const results = await deploymentService.deployToNodes(
@@ -144,7 +163,7 @@ router.post("/:id/deploy", authenticate, requireCapability("deploy:execute"), as
       }` });
   } catch (error) {
     console.error("部署失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -163,7 +182,7 @@ router.post("/node-deployment/:id/start", authenticate, requireCapability("runti
     return ApiResponse.success(res, { id: result.id, status: result.status }, "operation_success", { message: "启动指令已下发" });
   } catch (error) {
     console.error("启动失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -182,7 +201,7 @@ router.post("/node-deployment/:id/stop", authenticate, requireCapability("runtim
     return ApiResponse.success(res, { id: result.id, status: result.status }, "operation_success", { message: "停止指令已下发" });
   } catch (error) {
     console.error("停止失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -201,7 +220,7 @@ router.post("/node-deployment/:id/restart", authenticate, requireCapability("run
     return ApiResponse.success(res, { id: result.id, status: result.status }, "operation_success", { message: "重启指令已下发" });
   } catch (error) {
     console.error("重启失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -220,7 +239,7 @@ router.delete("/node-deployment/:id", authenticate, requireCapability("runtime:o
     return ApiResponse.success(res, { id: result.id, status: result.status }, "operation_success", { message: "撤销部署成功" });
   } catch (error) {
     console.error("撤销部署失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -244,7 +263,7 @@ router.get(
       return ApiResponse.success(res, { mode });
     } catch (error) {
       console.error("获取部署模式失败:", error);
-      return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+      return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
     }
   }
 );
@@ -263,7 +282,7 @@ router.post("/:id/rollback", authenticate, requireCapability("runtime:operate"),
     await checkProjectAccess(req, projectId);
 
     if (!nodeId) {
-      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "请指定目标节点" }, 400);
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: "请指定目标节点" }, 200);
     }
 
     const result = await deploymentService.rollback(
@@ -275,7 +294,7 @@ router.post("/:id/rollback", authenticate, requireCapability("runtime:operate"),
     return ApiResponse.success(res, { id: result.id, status: result.status }, "operation_success", { message: "回滚任务已创建" });
   } catch (error) {
     console.error("回滚失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -292,7 +311,7 @@ router.get("/project/:projectId/nodes", authenticate, async (req, res) => {
     return ApiResponse.success(res, items);
   } catch (error) {
     console.error("获取工程节点部署关系失败:", error);
-    return ApiResponse.error(res, ErrorCodes.PROJECT_OPERATION_FAILED, { message: error.message }, 400);
+    return respondRouteError(res, error, ErrorCodes.PROJECT_OPERATION_FAILED, 200);
   }
 });
 
@@ -314,7 +333,7 @@ router.get("/node/:nodeId/history", authenticate, async (req, res) => {
     return ApiResponse.success(res, result);
   } catch (error) {
     console.error("获取部署历史失败:", error);
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, { message: error.message }, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 
