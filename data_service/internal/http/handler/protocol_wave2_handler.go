@@ -54,7 +54,7 @@ func (h *ProtocolWave2Handler) CreateOpcuaConfig(w http.ResponseWriter, r *http.
 		Options:        request.Options,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -93,7 +93,7 @@ func (h *ProtocolWave2Handler) CreateS7Config(w http.ResponseWriter, r *http.Req
 		Options:        request.Options,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -138,7 +138,7 @@ func (h *ProtocolWave2Handler) CreateModbusConfig(w http.ResponseWriter, r *http
 		Options:        request.Options,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -173,7 +173,7 @@ func (h *ProtocolWave2Handler) CreateTdengineConfig(w http.ResponseWriter, r *ht
 		Options:  request.Options,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -199,7 +199,7 @@ func (h *ProtocolWave2Handler) ValidateOpcdaContract(w http.ResponseWriter, r *h
 		SamplingMS: request.SamplingMS,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)

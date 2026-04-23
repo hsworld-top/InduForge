@@ -11,9 +11,7 @@ const asNonEmptyString = (value) =>
 const normalizeProjectList = (payload) => {
   const projects = Array.isArray(payload?.data?.projects)
     ? payload.data.projects
-    : Array.isArray(payload?.projects)
-      ? payload.projects
-      : [];
+    : [];
 
   return projects
     .map((item) => {

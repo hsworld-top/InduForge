@@ -11,6 +11,109 @@ import type {
   VarBinding,
 } from "../editor-core/document/types.ts";
 
+/**
+ * 统一 API 包络（HTTP 2xx 场景）：只有 code===0 表示成功。
+ * data 在部分接口可省略（例如纯写操作），因此保持可选。
+ */
+export interface ApiEnvelope<T = unknown> {
+  code: number;
+  msg: string;
+  data?: T;
+  reqId?: string;
+}
+
+export interface ApiErrorMeta {
+  code?: number | undefined;
+  msg: string;
+  reqId?: string | undefined;
+  status?: number | undefined;
+  data?: unknown;
+  isBusinessError?: boolean;
+}
+
+export const DEFAULT_API_ERROR_CODE = 30000;
+
+const DIGITS_ONLY_RE = /^\d+$/;
+
+function hasOwn(target: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(target, key);
+}
+
+export function toApiNumericCode(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && DIGITS_ONLY_RE.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10);
+  }
+  return undefined;
+}
+
+/**
+ * 包络识别策略：
+ * 1. 需可解析 code；
+ * 2. 需包含 msg 或包络标识字段（data/reqId/msg 任一显式存在）。
+ */
+export function isApiEnvelopePayload(
+  value: unknown,
+): value is Partial<ApiEnvelope<unknown>> & Record<string, unknown> {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const code = toApiNumericCode(payload.code);
+  if (code === undefined) {
+    return false;
+  }
+
+  const hasStringMsg = typeof payload.msg === "string";
+  const hasEnvelopeMarker =
+    hasOwn(payload, "msg") || hasOwn(payload, "data") || hasOwn(payload, "reqId");
+
+  return hasStringMsg || hasEnvelopeMarker;
+}
+
+/**
+ * fetch/业务层统一错误模型，兼容：
+ * - 业务失败（2xx + code!=0）
+ * - 技术失败（4xx/5xx 或网络异常）
+ */
+export class ApiRequestError extends Error {
+  code: number | undefined;
+  reqId: string | undefined;
+  status: number | undefined;
+  data: unknown;
+  isBusinessError: boolean;
+
+  constructor(meta: ApiErrorMeta) {
+    super(meta.msg || "请求失败");
+    this.name = "ApiRequestError";
+    this.code = meta.code;
+    this.reqId = meta.reqId;
+    this.status = meta.status;
+    this.data = meta.data;
+    this.isBusinessError = meta.isBusinessError === true;
+  }
+}
+
+export function normalizeApiEnvelope<T = unknown>(payload: unknown): ApiEnvelope<T> | null {
+  if (!isApiEnvelopePayload(payload)) {
+    return null;
+  }
+
+  const normalizedCode = toApiNumericCode(payload.code) ?? DEFAULT_API_ERROR_CODE;
+  const normalizedMsg = typeof payload.msg === "string" ? payload.msg : "";
+  const normalizedReqId = typeof payload.reqId === "string" ? payload.reqId : undefined;
+
+  return {
+    code: normalizedCode,
+    msg: normalizedMsg,
+    data: payload.data as T,
+    ...(normalizedReqId ? { reqId: normalizedReqId } : {}),
+  };
+}
+
 export type DatapointStatus = "active" | "invalid" | "unknown";
 
 export interface DatapointStatusInfo {

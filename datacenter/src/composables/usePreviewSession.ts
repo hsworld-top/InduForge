@@ -5,6 +5,7 @@ import {
   heartbeatPreviewSession,
   deletePreviewSession,
 } from "@/api/data.api";
+import { getApiErrorMessage } from "@/utils/request";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -63,7 +64,10 @@ export function usePreviewSession(projectIdSource, options = {}) {
       await heartbeatPreviewSession(currentSessionId);
       error.value = null;
     } catch (heartbeatError) {
-      console.warn("[PreviewSession] 心跳失败:", heartbeatError);
+      console.warn(
+        "[PreviewSession] 心跳失败:",
+        getApiErrorMessage(heartbeatError, "预览会话心跳失败"),
+      );
       error.value = heartbeatError;
     }
   };
@@ -128,7 +132,7 @@ export function usePreviewSession(projectIdSource, options = {}) {
 
     createPromise = createPreviewSession(currentProjectId)
       .then((response) => {
-        const payload = response?.data || response || {};
+        const payload = response?.data || {};
         const nextSessionId =
           payload.previewSessionId || payload.sessionId || payload.id || "";
 
@@ -155,7 +159,10 @@ export function usePreviewSession(projectIdSource, options = {}) {
         return nextSessionId;
       })
       .catch((createError) => {
-        console.error("[PreviewSession] 创建失败:", createError);
+        console.error(
+          "[PreviewSession] 创建失败:",
+          getApiErrorMessage(createError, "预览会话创建失败"),
+        );
         error.value = createError;
         stopSession();
         return "";

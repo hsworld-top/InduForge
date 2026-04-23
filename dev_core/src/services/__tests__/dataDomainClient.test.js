@@ -1,4 +1,5 @@
 const { DataDomainClient } = require("../dataDomainClient");
+const ErrorCodes = require("../../constants/errorCodes");
 
 const buildJsonResponse = (body, options = {}) => ({
   ok: options.ok ?? true,
@@ -267,5 +268,36 @@ describe("dataDomainClient", () => {
         type: "kafka",
       }),
     );
+  });
+
+  test("request 在非 2xx 响应时会抛出 AppError，并使用技术异常状态边界 502", async () => {
+    global.fetch.mockResolvedValue(
+      buildJsonResponse(
+        {
+          message: "upstream 404",
+        },
+        {
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+        },
+      ),
+    );
+
+    const client = new DataDomainClient({
+      baseUrl: "http://data-service.test",
+      timeoutMs: 2000,
+    });
+
+    await expect(
+      client.getProjectSnapshot("project-1", "Bearer token-1"),
+    ).rejects.toMatchObject({
+      name: "AppError",
+      errorCode: ErrorCodes.EXTERNAL_SERVICE_ERROR,
+      statusCode: 502,
+      options: expect.objectContaining({
+        message: "upstream 404",
+      }),
+    });
   });
 });

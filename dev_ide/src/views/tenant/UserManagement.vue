@@ -370,6 +370,7 @@ import { useAuthStore } from '@/store'
 import { userAPI } from '@/api/user.api'
 import { RoleEnum, UserStatusEnum } from '@/enums'
 import { formatDateTime } from '@/utils/date'
+import { getApiErrorMessage } from '@/utils/request'
 import { canManageUsers } from '@/permissions'
 import { ROLES } from '@/constants'
 
@@ -682,7 +683,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('userManagement.fetchUsersFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           }),
         )
       } finally {
@@ -760,7 +761,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('userManagement.createUserFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           }),
         )
       } finally {
@@ -823,7 +824,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('userManagement.updateUserFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           }),
         )
       } finally {
@@ -858,7 +859,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('userManagement.resetPasswordFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           }),
         )
       } finally {
@@ -886,7 +887,7 @@ export default {
         if (error !== 'cancel') {
           ElMessage.error(
             t('userManagement.deleteUserFailed', {
-              message: error.response?.data?.message || error.message,
+              message: getApiErrorMessage(error, t('auth.retry')),
             }),
           )
         }

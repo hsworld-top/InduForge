@@ -13,6 +13,8 @@ const {
 } = require("../models");
 const { Op } = require("sequelize");
 const socketService = require("./socketService");
+const AppError = require("../utils/AppError");
+const ErrorCodes = require("../constants/errorCodes");
 
 /**
  * 部署服务类
@@ -44,27 +46,35 @@ class DeploymentService {
   async ensureRuntimeCommandAllowed(nodeDeployment, commandType) {
     const inFlightCommand = await this.getInFlightCommand(nodeDeployment);
     if (inFlightCommand) {
-      throw new Error(`当前存在未完成的 ${inFlightCommand.type} 指令，请稍后重试`);
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: `当前存在未完成的 ${inFlightCommand.type} 指令，请稍后重试`,
+      });
     }
 
     const currentStatus = nodeDeployment.status;
     if (commandType === "start") {
       if (!["stopped", "error"].includes(currentStatus)) {
-        throw new Error(`当前状态为 ${currentStatus}，仅 stopped/error 状态可启动`);
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: `当前状态为 ${currentStatus}，仅 stopped/error 状态可启动`,
+        });
       }
       return;
     }
 
     if (commandType === "stop") {
       if (currentStatus !== "running") {
-        throw new Error(`当前状态为 ${currentStatus}，仅 running 状态可停止`);
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: `当前状态为 ${currentStatus}，仅 running 状态可停止`,
+        });
       }
       return;
     }
 
     if (commandType === "restart") {
       if (currentStatus !== "running") {
-        throw new Error(`当前状态为 ${currentStatus}，仅 running 状态可重启`);
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: `当前状态为 ${currentStatus}，仅 running 状态可重启`,
+        });
       }
     }
   }
@@ -133,7 +143,7 @@ class DeploymentService {
       attributes: ["id", "tenantId", "name"],
     });
     if (!project) {
-      throw new Error("工程不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "工程不存在" });
     }
     return project;
   }
@@ -192,7 +202,7 @@ class DeploymentService {
       attributes: ["id", "projectId"],
     });
     if (!deployment) {
-      throw new Error("发布版本不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "发布版本不存在" });
     }
     return deployment.projectId;
   }
@@ -207,7 +217,7 @@ class DeploymentService {
       attributes: ["id", "projectId"],
     });
     if (!nodeDeployment) {
-      throw new Error("部署记录不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
     }
     return nodeDeployment.projectId;
   }
@@ -235,7 +245,9 @@ class DeploymentService {
         where: { projectId, version, deletedAt: null },
       });
       if (existing) {
-        throw new Error(`版本 ${version} 已存在`);
+        throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
+          message: `版本 ${version} 已存在`,
+        });
       }
     }
 
@@ -265,7 +277,9 @@ class DeploymentService {
   async updateDeploymentStatus(deploymentId, data) {
     const deployment = await Deployment.findByPk(deploymentId);
     if (!deployment) {
-      throw new Error(`发布版本 ${deploymentId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `发布版本 ${deploymentId} 不存在`,
+      });
     }
 
     const {
@@ -380,7 +394,9 @@ class DeploymentService {
     });
 
     if (!deployment) {
-      throw new Error(`发布版本 ${deploymentId} 不存在`);
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: `发布版本 ${deploymentId} 不存在`,
+      });
     }
 
     return deployment;
@@ -395,10 +411,12 @@ class DeploymentService {
   async deployDevMode(deploymentId, nodeId, deployedBy) {
     const sourceDeployment = await Deployment.findByPk(deploymentId);
     if (!sourceDeployment) {
-      throw new Error("源部署记录不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "源部署记录不存在" });
     }
     if (sourceDeployment.status !== "success") {
-      throw new Error("仅支持使用构建成功的版本进行DEV部署");
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "仅支持使用构建成功的版本进行DEV部署",
+      });
     }
 
     // 检查节点是否已有部署
@@ -413,9 +431,9 @@ class DeploymentService {
     if (existingDeployment) {
       // 检查当前模式
       if (existingDeployment.mode === "RELEASE") {
-        throw new Error(
-          "该节点当前处于RELEASE模式，请先撤销部署后再切换到DEV模式"
-        );
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: "该节点当前处于RELEASE模式，请先撤销部署后再切换到DEV模式",
+        });
       }
 
       // 已经是DEV模式，直接更新状态为运行
@@ -501,13 +519,17 @@ class DeploymentService {
   async deployReleaseMode(deploymentId, nodeId, runtimeConfig, deployedBy) {
     const deployment = await Deployment.findByPk(deploymentId);
     if (!deployment) {
-      throw new Error("发布版本不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "发布版本不存在" });
     }
     if (deployment.mode !== "RELEASE") {
-      throw new Error("仅支持RELEASE模式的发布版本进行部署");
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "仅支持RELEASE模式的发布版本进行部署",
+      });
     }
     if (deployment.status !== "success") {
-      throw new Error("仅支持部署构建成功的发布版本");
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "仅支持部署构建成功的发布版本",
+      });
     }
 
     // 检查节点当前是否已有该工程部署记录（数据库层对 nodeId+projectId 做了唯一约束）
@@ -679,7 +701,7 @@ class DeploymentService {
       attributes: ["id", "tenantId"],
     });
     if (!node) {
-      throw new Error("节点不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "节点不存在" });
     }
 
     await NodeCommand.create({
@@ -712,7 +734,7 @@ class DeploymentService {
   async start(nodeDeploymentId) {
     const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId);
     if (!nodeDeployment) {
-      throw new Error("部署记录不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
     }
     await this.ensureRuntimeCommandAllowed(nodeDeployment, "start");
     return this.enqueueRuntimeCommand(nodeDeployment, "start", "deploying", "已下发启动指令，等待节点执行");
@@ -725,7 +747,7 @@ class DeploymentService {
   async stop(nodeDeploymentId) {
     const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId);
     if (!nodeDeployment) {
-      throw new Error("部署记录不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
     }
     await this.ensureRuntimeCommandAllowed(nodeDeployment, "stop");
     return this.enqueueRuntimeCommand(nodeDeployment, "stop", null, "已下发停止指令，等待节点执行");
@@ -738,7 +760,7 @@ class DeploymentService {
   async restart(nodeDeploymentId) {
     const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId);
     if (!nodeDeployment) {
-      throw new Error("部署记录不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
     }
     await this.ensureRuntimeCommandAllowed(nodeDeployment, "restart");
     return this.enqueueRuntimeCommand(nodeDeployment, "restart", null, "已下发重启指令，等待节点执行");
@@ -751,7 +773,7 @@ class DeploymentService {
   async undeploy(nodeDeploymentId) {
     const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId);
     if (!nodeDeployment) {
-      throw new Error("部署记录不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
     }
 
     const now = new Date();
@@ -841,13 +863,17 @@ class DeploymentService {
       attributes: ["id", "mode", "status"],
     });
     if (!targetDeployment) {
-      throw new Error("回滚目标版本不存在");
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "回滚目标版本不存在" });
     }
     if (targetDeployment.mode !== "RELEASE") {
-      throw new Error("仅支持回滚到RELEASE模式版本");
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "仅支持回滚到RELEASE模式版本",
+      });
     }
     if (targetDeployment.status !== "success") {
-      throw new Error("仅支持回滚到构建成功的版本");
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "仅支持回滚到构建成功的版本",
+      });
     }
 
     // 回滚仅作用于RELEASE模式

@@ -209,6 +209,7 @@ import IconTablerFile from "~icons/tabler/file";
 import IconTablerChevronRight from "~icons/tabler/chevron-right";
 import IconTablerChevronDown from "~icons/tabler/chevron-down";
 import IconTablerDownload from "~icons/tabler/download";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   projectId: {
@@ -331,16 +332,14 @@ const loadGroups = async () => {
       props.projectId,
       props.subscriptionId,
     );
-    if (response.success) {
-      groups.value = response.data.groups || [];
-      activeGroups.value = [
-        "ungrouped",
-        ...groups.value.map((group) => group.id),
-      ];
-    }
+    groups.value = response.data?.groups || [];
+    activeGroups.value = [
+      "ungrouped",
+      ...groups.value.map((group) => group.id),
+    ];
   } catch (error) {
     console.error("Failed to load tag groups:", error);
-    ElMessage.error("加载变量组失败");
+    ElMessage.error(getApiErrorMessage(error, "加载变量组失败"));
   }
 };
 
@@ -348,13 +347,11 @@ const loadTags = async () => {
   try {
     loading.value = true;
     const response = await getMqttTags(props.projectId, props.subscriptionId);
-    if (response.success) {
-      tags.value = response.data || [];
-      await loadTagDatapoints(tags.value);
-    }
+    tags.value = response.data || [];
+    await loadTagDatapoints(tags.value);
   } catch (error) {
     console.error("Failed to load tags:", error);
-    ElMessage.error("加载变量失败");
+    ElMessage.error(getApiErrorMessage(error, "加载变量失败"));
   } finally {
     loading.value = false;
   }
@@ -377,15 +374,13 @@ const loadTagDatapoints = async (tagList) => {
       page: 1,
       pageSize: 200,
     });
-    if (response.success) {
-      const list = response.data?.datapoints || [];
-      const map = new Map(list.map((item) => [item.sourceId, item]));
-      tags.value.forEach((tag) => {
-        const datapoint = map.get(tag.id);
-        tag.datapointPath = datapoint?.path || "";
-        tag.datapointStatus = datapoint?.status || "";
-      });
-    }
+    const list = response.data?.datapoints || [];
+    const map = new Map(list.map((item) => [item.sourceId, item]));
+    tags.value.forEach((tag) => {
+      const datapoint = map.get(tag.id);
+      tag.datapointPath = datapoint?.path || "";
+      tag.datapointStatus = datapoint?.status || "";
+    });
   } catch (error) {
     console.error("Failed to load datapoints:", error);
   }

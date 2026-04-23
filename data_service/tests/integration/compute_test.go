@@ -16,6 +16,7 @@ import (
 	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
 func TestComputeRunTimeout(t *testing.T) {
@@ -70,11 +71,11 @@ func TestComputeRunTimeout(t *testing.T) {
 	timeoutEnvelope := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/compute-units/"+unit.ID+"/run", token, map[string]any{
 		"input": map[string]any{},
 	}, http.StatusBadRequest)
-	if timeoutEnvelope.ErrorCode != "BAD_REQUEST" {
-		t.Fatalf("expected BAD_REQUEST for timeout, got %q", timeoutEnvelope.ErrorCode)
+	if timeoutEnvelope.Code != apperrors.PublicCodeBadRequest {
+		t.Fatalf("expected code %d for timeout, got %d", apperrors.PublicCodeBadRequest, timeoutEnvelope.Code)
 	}
-	if !strings.Contains(timeoutEnvelope.Message, "超时") {
-		t.Fatalf("expected timeout message, got %q", timeoutEnvelope.Message)
+	if !strings.Contains(timeoutEnvelope.Msg, "超时") {
+		t.Fatalf("expected timeout message, got %q", timeoutEnvelope.Msg)
 	}
 }
 
@@ -188,7 +189,10 @@ func mustRunComputeUnit(t *testing.T, baseURL, token, projectID, unitID string, 
 		"input": input,
 	})
 	if statusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d, errorCode=%q message=%q", statusCode, responseEnvelope.ErrorCode, responseEnvelope.Message)
+		t.Fatalf("expected status 200, got %d, code=%d msg=%q", statusCode, responseEnvelope.Code, responseEnvelope.Msg)
+	}
+	if responseEnvelope.Code != apperrors.SuccessCode {
+		t.Fatalf("expected code=%d, got %d", apperrors.SuccessCode, responseEnvelope.Code)
 	}
 	var result computeRunPayload
 	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {

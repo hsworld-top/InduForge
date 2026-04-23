@@ -45,6 +45,7 @@
 import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   projectId: {
@@ -79,12 +80,10 @@ const loadDataPoints = async () => {
       page: 1,
       pageSize: 200,
     });
-    if (response.success) {
-      datapoints.value = response.data?.datapoints || [];
-    }
+    datapoints.value = response.data?.datapoints || [];
   } catch (error) {
     ElMessage.error(
-      "加载数据点失败：" + (error.response?.data?.message || error.message),
+      "加载数据点失败：" + getApiErrorMessage(error, "加载数据点失败"),
     );
   } finally {
     loading.value = false;

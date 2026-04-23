@@ -36,7 +36,7 @@ func (h *DataPointHandler) List(w http.ResponseWriter, r *http.Request) error {
 
 	result, err := h.service.ListDataPoints(r.Context(), r.PathValue("projectId"), filter)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -51,7 +51,7 @@ func (h *DataPointHandler) Get(w http.ResponseWriter, r *http.Request) error {
 
 	result, err := h.service.GetDataPoint(r.Context(), r.PathValue("projectId"), r.PathValue("id"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -66,7 +66,7 @@ func (h *DataPointHandler) GetValue(w http.ResponseWriter, r *http.Request) erro
 
 	result, err := h.service.GetDataPointValue(r.Context(), r.PathValue("projectId"), r.URL.Query().Get("path"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -95,7 +95,7 @@ func (h *DataPointHandler) Update(w http.ResponseWriter, r *http.Request) error 
 
 	result, err := h.service.UpdateDataPoint(r.Context(), r.PathValue("projectId"), r.PathValue("id"), claims.UserID, input)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -121,7 +121,7 @@ func (h *DataPointHandler) UpdateRuntimePermissions(w http.ResponseWriter, r *ht
 
 	result, err := h.service.UpdateDataPointRuntimePermissions(r.Context(), r.PathValue("projectId"), r.PathValue("id"), claims.UserID, input)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -135,7 +135,7 @@ func (h *DataPointHandler) Delete(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	if err := h.service.DeleteDataPoint(r.Context(), r.PathValue("projectId"), r.PathValue("id")); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
@@ -159,7 +159,7 @@ func (h *DataPointHandler) DeleteBatch(w http.ResponseWriter, r *http.Request) e
 
 	deletedCount, err := h.service.DeleteDataPointsBatch(r.Context(), r.PathValue("projectId"), request.IDs)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"deletedCount": deletedCount})

@@ -36,6 +36,19 @@ const isImageDataUrl = (value) =>
   typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value);
 
 /**
+ * 判断对象存储错误是否为资源不存在。
+ * 说明：文件流接口成功允许直出，但异常仍要回到统一错误包络。
+ * @param {Error} error - 异常对象
+ * @returns {boolean} 是否为不存在类错误
+ */
+const isStorageNotFoundError = (error) => {
+  const normalizedCode = String(error?.code || '').trim().toUpperCase();
+  const statusCode = Number(error?.statusCode || error?.status);
+  const notFoundCodes = new Set(['NOTFOUND', 'NOSUCHKEY', 'NO_SUCH_KEY', 'NOSUCHBUCKET', 'NO_SUCH_BUCKET']);
+  return statusCode === 404 || notFoundCodes.has(normalizedCode);
+};
+
+/**
  * 解析 base64 图片 DataURL。
  * @param {string} dataUrl - DataURL 字符串
  * @returns {{mimeType: string, buffer: Buffer}} 解析结果
@@ -156,7 +169,7 @@ router.get('/assets', validate(Joi.object({
   try {
     const { key } = req.query;
     if (!key.startsWith('tenant-assets/')) {
-      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '非法资源路径' }, 400);
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '非法资源路径' }, 200);
     }
 
     const [stat, stream] = await Promise.all([
@@ -173,7 +186,10 @@ router.get('/assets', validate(Joi.object({
     return stream.pipe(res);
   } catch (error) {
     logger.error('Get tenant asset error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 404);
+    if (isStorageNotFoundError(error)) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 404);
+    }
+    return ApiResponse.error(res, ErrorCodes.EXTERNAL_SERVICE_ERROR, {}, 500);
   }
 });
 
@@ -327,7 +343,7 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obj
     // 检查租户代码是否已存在
     const existingTenant = await Tenant.findOne({ where: { code } });
     if (existingTenant) {
-      return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 400);
+      return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 200);
     }
 
     // 创建租户（品牌图先置空，后续若有 base64 则上传到对象存储并回写 URL）
@@ -469,14 +485,14 @@ router.put('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.o
       tenant = await Tenant.findOne({ where: { code: id } });
     }
     if (!tenant) {
-      return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200);
     }
 
     // 如果更新代码，检查是否重复
     if (updateData.code && updateData.code !== tenant.code) {
       const existingTenant = await Tenant.findOne({ where: { code: updateData.code } });
       if (existingTenant) {
-        return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 400);
+        return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 200);
       }
     }
 
@@ -552,7 +568,7 @@ router.delete('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Jo
       tenant = await Tenant.findOne({ where: { code: id } });
     }
     if (!tenant) {
-      return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200);
     }
 
     await tenant.destroy();
@@ -616,7 +632,7 @@ router.post('/:id/upload', authenticateToken, requireRole('SUPER_ADMIN'),
       const { type } = req.query;
 
       if (!req.file) {
-        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '没有上传文件' }, 400);
+        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '没有上传文件' }, 200);
       }
 
       // 检查租户是否存在（支持通过UUID或租户代码查找）
@@ -628,7 +644,7 @@ router.post('/:id/upload', authenticateToken, requireRole('SUPER_ADMIN'),
         tenant = await Tenant.findOne({ where: { code: id } });
       }
       if (!tenant) {
-        return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 404);
+        return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200);
       }
 
       const uploadResult = await uploadTenantAsset({
@@ -658,13 +674,13 @@ router.post('/:id/upload', authenticateToken, requireRole('SUPER_ADMIN'),
       // 如果是multer错误
       if (error instanceof multer.MulterError) {
         if (error.code === 'LIMIT_FILE_SIZE') {
-          return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '文件大小超过限制（最大5MB）' }, 400);
+          return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '文件大小超过限制（最大5MB）' }, 200);
         }
       }
 
       // 如果是自定义错误（如文件类型不匹配）
       if (error.message === '只允许上传图片文件') {
-        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: error.message }, 400);
+        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: error.message }, 200);
       }
 
       return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);

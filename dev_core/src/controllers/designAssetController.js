@@ -1,5 +1,6 @@
 ﻿const designAssetService = require("../services/designAssetService");
 const { Project } = require("../models");
+const ApiResponse = require("../utils/response");
 const AppError = require("../utils/AppError");
 const ErrorCodes = require("../constants/errorCodes");
 
@@ -30,9 +31,9 @@ async function getFolders(req, res, next) {
     await checkProjectAccess(req, projectId);
 
     const folders = await designAssetService.listFolders(projectId);
-    res.json({ success: true, data: { folders } });
+    return ApiResponse.success(res, { folders });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -53,13 +54,9 @@ async function createFolder(req, res, next) {
       parentId,
       name
     );
-    res.status(201).json({
-      success: true,
-      message: "文件夹创建成功",
-      data: folder,
-    });
+    return ApiResponse.success(res, folder, null, {}, 201);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -80,13 +77,9 @@ async function renameFolder(req, res, next) {
       parentId,
     });
 
-    res.json({
-      success: true,
-      message: "文件夹已更新",
-      data: folder,
-    });
+    return ApiResponse.success(res, folder);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -96,9 +89,9 @@ async function deleteFolder(req, res, next) {
     await checkProjectAccess(req, projectId);
 
     await designAssetService.deleteFolder(projectId, folderId);
-    res.json({ success: true, message: "文件夹已删除" });
+    return ApiResponse.success(res, null);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -114,9 +107,9 @@ async function getAssets(req, res, next) {
       type,
     });
 
-    res.json({ success: true, data: { assets } });
+    return ApiResponse.success(res, { assets });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -141,13 +134,9 @@ async function uploadAssets(req, res, next) {
       { conflictStrategy }
     );
 
-    res.status(201).json({
-      success: true,
-      message: "资源上传成功",
-      data: { assets },
-    });
+    return ApiResponse.success(res, { assets }, null, {}, 201);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -157,9 +146,9 @@ async function deleteAsset(req, res, next) {
     await checkProjectAccess(req, projectId);
 
     await designAssetService.deleteAsset(projectId, assetId);
-    res.json({ success: true, message: "资源已删除" });
+    return ApiResponse.success(res, null);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -174,13 +163,9 @@ async function updateAsset(req, res, next) {
       folderId,
     });
 
-    res.json({
-      success: true,
-      message: "资源已更新",
-      data: asset,
-    });
+    return ApiResponse.success(res, asset);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -198,13 +183,9 @@ async function copyAsset(req, res, next) {
       req.user.id
     );
 
-    res.status(201).json({
-      success: true,
-      message: "资源已复制",
-      data: asset,
-    });
+    return ApiResponse.success(res, asset, null, {}, 201);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 

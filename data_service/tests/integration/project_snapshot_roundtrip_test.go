@@ -326,8 +326,8 @@ func TestProjectSnapshotReplaceRejectsIncompleteConnections(t *testing.T) {
 				Config:    map[string]any{},
 			},
 		},
-	}, http.StatusBadRequest)
-	if invalidEnvelope.Success {
+	}, http.StatusOK)
+	if invalidEnvelope.Code == 0 {
 		t.Fatal("expected replace snapshot response to fail for incomplete connection")
 	}
 
@@ -399,7 +399,7 @@ func TestProjectSnapshotReplaceRejectsPhase2ReservedConnections(t *testing.T) {
 				},
 			},
 		},
-	}, http.StatusBadRequest), "OPC UA")
+	}, http.StatusOK), "OPC UA")
 
 	currentSnapshot := mustGetProjectSnapshot(t, server.URL, token, projectID)
 	if len(currentSnapshot.Connections) != 1 {

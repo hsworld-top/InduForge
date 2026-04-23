@@ -5,6 +5,27 @@
 const express = require("express");
 const router = express.Router();
 const nodeService = require("../../services/nodeService");
+const ApiResponse = require("../../utils/response");
+const AppError = require("../../utils/AppError");
+const ErrorCodes = require("../../constants/errorCodes");
+
+/**
+ * 路由统一错误响应：
+ * - 业务错误：HTTP 200 + 非 0 code
+ * - 技术异常：保留 5xx
+ */
+function respondRouteError(res, error, _fallbackCode, fallbackStatus = 500) {
+  const isAppError = error instanceof AppError || error?.name === "AppError";
+  if (isAppError && error?.errorCode && error?.statusCode) {
+    const normalizedStatus = Number(error.statusCode) >= 500 ? Number(error.statusCode) : 200;
+    const options = error.options || (error.message ? { message: error.message } : {});
+    return ApiResponse.error(res, error.errorCode, options, normalizedStatus);
+  }
+
+  const normalizedFallbackStatus = Number(fallbackStatus) >= 500 ? Number(fallbackStatus) : 500;
+  const options = error?.message ? { message: error.message } : {};
+  return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, options, normalizedFallbackStatus);
+}
 
 /**
  * @route POST /api/v1/node-register/register-with-auth
@@ -27,17 +48,21 @@ router.post("/register-with-auth", async (req, res) => {
 
     // 参数验证
     if (!username || !password) {
-      return res.status(400).json({
-        success: false,
-        error: "用户名和密码不能为空",
-      });
+      return ApiResponse.error(
+        res,
+        ErrorCodes.VALIDATION_FAILED,
+        { message: "用户名和密码不能为空" },
+        200
+      );
     }
 
     if (!nodeName) {
-      return res.status(400).json({
-        success: false,
-        error: "节点名称不能为空",
-      });
+      return ApiResponse.error(
+        res,
+        ErrorCodes.VALIDATION_FAILED,
+        { message: "节点名称不能为空" },
+        200
+      );
     }
 
     const result = await nodeService.registerWithAuth({
@@ -53,16 +78,15 @@ router.post("/register-with-auth", async (req, res) => {
       userAgent: req.get("user-agent") || "",
     });
 
-    res.status(201).json({
-      success: true,
-      data: result,
-    });
+    return ApiResponse.success(res, result, null, {}, 201);
   } catch (error) {
     console.error("节点注册失败:", error);
-    res.status(400).json({
-      success: false,
-      error: error.message,
-    });
+    return respondRouteError(
+      res,
+      error,
+      ErrorCodes.PROJECT_OPERATION_FAILED,
+      200
+    );
   }
 });
 
@@ -76,24 +100,25 @@ router.get("/:nodeId/approval-status", async (req, res) => {
     const { nodeId } = req.params;
 
     if (!nodeId) {
-      return res.status(400).json({
-        success: false,
-        error: "节点ID不能为空",
-      });
+      return ApiResponse.error(
+        res,
+        ErrorCodes.VALIDATION_FAILED,
+        { message: "节点ID不能为空" },
+        200
+      );
     }
 
     const result = await nodeService.getApprovalStatus(nodeId);
 
-    res.json({
-      success: true,
-      data: result,
-    });
+    return ApiResponse.success(res, result);
   } catch (error) {
     console.error("查询审批状态失败:", error);
-    res.status(404).json({
-      success: false,
-      error: error.message,
-    });
+    return respondRouteError(
+      res,
+      error,
+      ErrorCodes.RESOURCE_NOT_FOUND,
+      200
+    );
   }
 });
 

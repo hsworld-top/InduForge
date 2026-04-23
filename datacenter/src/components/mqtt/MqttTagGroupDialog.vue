@@ -63,6 +63,7 @@
 import { ref, computed, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { createMqttTagGroup, updateMqttTagGroup } from "@/api/data.api";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   visible: {
@@ -221,8 +222,10 @@ const handleSubmit = async () => {
       // 非表单校验错误
       console.error("Failed to submit group:", error);
       ElMessage.error(
-        error.response?.data?.message ||
-          (props.mode === "create" ? "创建失败" : "更新失败"),
+        getApiErrorMessage(
+          error,
+          props.mode === "create" ? "创建失败" : "更新失败",
+        ),
       );
     }
   } finally {

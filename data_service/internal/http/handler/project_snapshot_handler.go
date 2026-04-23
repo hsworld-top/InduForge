@@ -27,7 +27,7 @@ func (h *ProjectSnapshotHandler) Get(w http.ResponseWriter, r *http.Request) err
 
 	result, err := h.service.Get(r.Context(), r.PathValue("projectId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -42,7 +42,7 @@ func (h *ProjectSnapshotHandler) GetArtifact(w http.ResponseWriter, r *http.Requ
 
 	result, err := h.service.GetArtifact(r.Context(), r.PathValue("projectId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -62,7 +62,7 @@ func (h *ProjectSnapshotHandler) Replace(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.service.Replace(r.Context(), r.PathValue("projectId"), claims.UserID, request); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"updated": true})

@@ -9,6 +9,7 @@ import { ElMessage } from "element-plus";
 import { format } from "sql-formatter";
 import { validateSql, extractParameters, parseSql } from "@/utils/sqlParser";
 import dataAPI from "@/api/data.api";
+import { getApiErrorMessage } from "@/utils/request";
 
 export function useMysql(projectId, connectionId) {
   const tables = ref([]);
@@ -34,13 +35,11 @@ export function useMysql(projectId, connectionId) {
         projectId.value,
         connectionId.value,
       );
-      if (response.success) {
-        tables.value = response.data.tables || [];
-        return tables.value;
-      }
+      tables.value = response.data?.tables || [];
+      return tables.value;
     } catch (error) {
       ElMessage.error(
-        "加载表列表失败：" + (error.response?.data?.message || error.message),
+        "加载表列表失败：" + getApiErrorMessage(error, "加载表列表失败"),
       );
       throw error;
     } finally {
@@ -63,23 +62,21 @@ export function useMysql(projectId, connectionId) {
         { page, limit: tablePagination.value.limit },
       );
 
-      if (response.success) {
-        tableColumns.value = response.data.columns || [];
-        tableData.value = response.data.rows || [];
+      tableColumns.value = response.data?.columns || [];
+      tableData.value = response.data?.rows || [];
 
-        const pagination = response.data.pagination || {};
-        tablePagination.value = {
-          page: pagination.page || 1,
-          limit: pagination.limit || 100,
-          total: pagination.total || 0,
-          totalPages: pagination.totalPages || 0,
-        };
+      const pagination = response.data?.pagination || {};
+      tablePagination.value = {
+        page: pagination.page || 1,
+        limit: pagination.limit || 100,
+        total: pagination.total || 0,
+        totalPages: pagination.totalPages || 0,
+      };
 
-        return response.data;
-      }
+      return response.data;
     } catch (error) {
       ElMessage.error(
-        "加载表数据失败：" + (error.response?.data?.message || error.message),
+        "加载表数据失败：" + getApiErrorMessage(error, "加载表数据失败"),
       );
       throw error;
     } finally {
@@ -101,17 +98,15 @@ export function useMysql(projectId, connectionId) {
         parameters,
       );
 
-      if (response.success) {
-        return {
-          columns: response.data.columns || [],
-          rows: response.data.rows || [],
-          rowCount: response.data.rowCount || 0,
-          executionTime: response.executionTime || 0,
-        };
-      }
+      return {
+        columns: response.data?.columns || [],
+        rows: response.data?.rows || [],
+        rowCount: response.data?.rowCount || 0,
+        executionTime: response.data?.executionTime || 0,
+      };
     } catch (error) {
       ElMessage.error(
-        "执行SQL失败：" + (error.response?.data?.message || error.message),
+        "执行SQL失败：" + getApiErrorMessage(error, "执行SQL失败"),
       );
       throw error;
     }

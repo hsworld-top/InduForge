@@ -55,14 +55,14 @@ func TestRequireCapability_ReturnsApiResponseWhenMissing(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
-	if payload.Success {
-		t.Fatal("expected success to be false")
+	if payload.Code != apperrors.PublicCodePermissionInsufficient {
+		t.Fatalf("expected code %d, got %d", apperrors.PublicCodePermissionInsufficient, payload.Code)
 	}
-	if payload.ErrorCode != string(apperrors.ErrorCodePermissionInsufficient) {
-		t.Fatalf("expected errorCode %q, got %q", apperrors.ErrorCodePermissionInsufficient, payload.ErrorCode)
+	if payload.Msg != "权限不足" {
+		t.Fatalf("expected msg %q, got %q", "权限不足", payload.Msg)
 	}
-	if payload.Message != "权限不足" {
-		t.Fatalf("expected message %q, got %q", "权限不足", payload.Message)
+	if payload.Data != nil {
+		t.Fatalf("expected error data to be nil, got %#v", payload.Data)
 	}
 }
 
@@ -89,8 +89,8 @@ func TestRequireCapability_RejectsEmptyRequiredCapability(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
-	if payload.ErrorCode != string(apperrors.ErrorCodeBadRequest) {
-		t.Fatalf("expected errorCode %q, got %q", apperrors.ErrorCodeBadRequest, payload.ErrorCode)
+	if payload.Code != apperrors.PublicCodeBadRequest {
+		t.Fatalf("expected code %d, got %d", apperrors.PublicCodeBadRequest, payload.Code)
 	}
 }
 
@@ -117,11 +117,11 @@ func TestRequireCapability_RejectsCrossProjectAccess(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
-	if payload.ErrorCode != string(apperrors.ErrorCodePermissionProjectMismatch) {
-		t.Fatalf("expected errorCode %q, got %q", apperrors.ErrorCodePermissionProjectMismatch, payload.ErrorCode)
+	if payload.Code != apperrors.PublicCodePermissionProjectMismatch {
+		t.Fatalf("expected code %d, got %d", apperrors.PublicCodePermissionProjectMismatch, payload.Code)
 	}
-	if payload.Message != "项目范围不足" {
-		t.Fatalf("expected message %q, got %q", "项目范围不足", payload.Message)
+	if payload.Msg != "项目范围不足" {
+		t.Fatalf("expected msg %q, got %q", "项目范围不足", payload.Msg)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestRequireCapability_RejectsProjectRouteWithoutProjectID(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
-	if payload.ErrorCode != string(apperrors.ErrorCodePermissionProjectMismatch) {
-		t.Fatalf("expected errorCode %q, got %q", apperrors.ErrorCodePermissionProjectMismatch, payload.ErrorCode)
+	if payload.Code != apperrors.PublicCodePermissionProjectMismatch {
+		t.Fatalf("expected code %d, got %d", apperrors.PublicCodePermissionProjectMismatch, payload.Code)
 	}
 }

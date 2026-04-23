@@ -25,8 +25,8 @@ func ErrorHandler(next ErrorHandlerFunc) http.Handler {
 
 			requestID := RequestID(r.Context())
 			appErr := normalizeError(err)
-			statusCode := normalizeStatusCode(appErr.StatusCode)
-			response.WriteError(rw, statusCode, requestID, string(appErr.Code), appErr.Message)
+			statusCode := normalizeStatusCode(appErr.StatusCode, true)
+			response.WriteAppError(rw, statusCode, requestID, appErr.Code, appErr.Message)
 		}
 	})
 }
@@ -55,12 +55,20 @@ func AsAppError(err error, target **apperrors.AppError) bool {
 	return false
 }
 
-// normalizeStatusCode 将非法状态码回退为 500。
-func normalizeStatusCode(statusCode int) int {
+// normalizeStatusCode 将非法状态码回退为 500，并按场景决定是否允许业务 2xx。
+func normalizeStatusCode(statusCode int, allowBusinessStatus bool) int {
+	if allowBusinessStatus && statusCode >= http.StatusOK && statusCode <= 299 {
+		return statusCode
+	}
 	if statusCode < http.StatusBadRequest || statusCode > 599 {
 		return http.StatusInternalServerError
 	}
 	return statusCode
+}
+
+// normalizeTechnicalStatusCode 仅允许技术异常状态码（4xx/5xx）。
+func normalizeTechnicalStatusCode(statusCode int) int {
+	return normalizeStatusCode(statusCode, false)
 }
 
 type capturingResponseWriter struct {

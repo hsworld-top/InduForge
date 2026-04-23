@@ -3,6 +3,7 @@
  * 管理和追踪所有数据点的状态
  */
 
+import { ApiRequestError, normalizeApiEnvelope } from "./types.ts";
 import type {
   DatapointStatus,
   DatapointStatusInfo,
@@ -10,6 +11,10 @@ import type {
   DiagnosticsSummary,
 } from "./types.ts";
 import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
 
 interface DiagnosticsStoreOptions {
   apiBaseUrl?: string;
@@ -230,16 +235,77 @@ export class DiagnosticsStore extends EventEmitter {
         body: JSON.stringify({ paths }),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      let payload: unknown = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
       }
 
-      const result = await response.json();
+      const envelope = normalizeApiEnvelope<DatapointStatusInfo[]>(payload);
 
-      if (result.success && result.data) {
-        for (const info of result.data as DatapointStatusInfo[]) {
-          this._updateCache(info);
+      if (!response.ok) {
+        throw new ApiRequestError({
+          code: envelope?.code,
+          msg: envelope?.msg || `HTTP ${response.status}`,
+          reqId: envelope?.reqId,
+          status: response.status,
+          data: envelope?.data,
+          isBusinessError: false,
+        });
+      }
+
+      if (envelope && envelope.code !== 0) {
+        throw new ApiRequestError({
+          code: envelope.code,
+          msg: envelope.msg || "查询数据点状态失败",
+          reqId: envelope.reqId,
+          status: response.status,
+          data: envelope.data,
+          isBusinessError: true,
+        });
+      }
+
+      let statusList: DatapointStatusInfo[] = [];
+      if (envelope) {
+        statusList = Array.isArray(envelope.data) ? envelope.data : [];
+      } else if (Array.isArray(payload)) {
+        // 兼容极旧链路：接口直接返回状态数组。
+        statusList = payload as DatapointStatusInfo[];
+      } else if (isRecord(payload) && typeof payload.success === "boolean") {
+        // 兼容旧包络：{ success, data, message }
+        if (!payload.success) {
+          throw new ApiRequestError({
+            msg:
+              typeof payload.message === "string"
+                ? payload.message
+                : "查询数据点状态失败",
+            status: response.status,
+            data: payload.data,
+            isBusinessError: true,
+          });
         }
+
+        if (!Array.isArray(payload.data)) {
+          throw new ApiRequestError({
+            msg: "查询数据点状态失败: data 不是数组",
+            status: response.status,
+            data: payload.data,
+            isBusinessError: false,
+          });
+        }
+        statusList = payload.data as DatapointStatusInfo[];
+      } else {
+        throw new ApiRequestError({
+          msg: "查询数据点状态失败: 响应格式不受支持",
+          status: response.status,
+          data: payload,
+          isBusinessError: false,
+        });
+      }
+
+      for (const info of statusList) {
+        this._updateCache(info);
       }
     } catch (error) {
       console.error("Failed to fetch datapoint status:", error);

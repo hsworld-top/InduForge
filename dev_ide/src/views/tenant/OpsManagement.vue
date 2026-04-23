@@ -808,7 +808,7 @@ import {
   Bell,
   Warning,
 } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import request, { getApiErrorMessage } from '@/utils/request'
 import dayjs from 'dayjs'
 import { initSocket, getSocket } from '@/utils/socket'
 import { Storage } from '@/utils/storage'
@@ -938,24 +938,23 @@ const fetchNodes = async () => {
         approvalStatus: 'approved',
       },
     })
-    if (res.success) {
-      nodeList.value = res.data.items
-      nodePagination.total = res.data.total
-      approvedCount.value = res.data.total
-      // 详细列表视图默认全展开；其他视图保持原展开态过滤。
-      const currentNodeIds = (res.data.items || []).map((item) => item.id)
-      if (activeView.value === 'list') {
-        expandedNodeRowKeys.value = currentNodeIds
-      } else {
-        const currentNodeIdSet = new Set(currentNodeIds)
-        expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) =>
-          currentNodeIdSet.has(id),
-        )
-      }
+    const nodeItems = Array.isArray(res?.data?.items) ? res.data.items : []
+    nodeList.value = nodeItems
+    nodePagination.total = res?.data?.total || 0
+    approvedCount.value = res?.data?.total || 0
+    // 详细列表视图默认全展开；其他视图保持原展开态过滤。
+    const currentNodeIds = nodeItems.map((item) => item.id)
+    if (activeView.value === 'list') {
+      expandedNodeRowKeys.value = currentNodeIds
+    } else {
+      const currentNodeIdSet = new Set(currentNodeIds)
+      expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) =>
+        currentNodeIdSet.has(id),
+      )
     }
   } catch (error) {
     console.error('获取节点失败:', error)
-    nodeLoadError.value = error.response?.data?.message || t('opsManagement.fetchNodesFailed')
+    nodeLoadError.value = getApiErrorMessage(error, t('opsManagement.fetchNodesFailed'))
     ElMessage.error(t('opsManagement.fetchNodesFailed'))
   } finally {
     nodeLoading.value = false
@@ -981,10 +980,8 @@ const fetchPendingList = async () => {
         approvalStatus: 'pending',
       },
     })
-    if (res.success) {
-      pendingList.value = res.data.items
-      pendingCount.value = res.data.total
-    }
+    pendingList.value = res?.data?.items || []
+    pendingCount.value = res?.data?.total || 0
   } catch (error) {
     console.error('获取待审核申请失败:', error)
   }
@@ -992,16 +989,14 @@ const fetchPendingList = async () => {
 
 const handleApprove = async (node) => {
   try {
-    const res = await request.put(`/nodes/${node.id}/approve`)
-    if (res.success) {
-      ElMessage.success(t('opsManagement.approvePassed'))
-      showPendingDialog.value = false
-      fetchNodes()
-      fetchPendingList() // 刷新待审核列表
-      updateCounts() // 异步刷新统计
-    }
+    await request.put(`/nodes/${node.id}/approve`)
+    ElMessage.success(t('opsManagement.approvePassed'))
+    showPendingDialog.value = false
+    fetchNodes()
+    fetchPendingList() // 刷新待审核列表
+    updateCounts() // 异步刷新统计
   } catch (error) {
-    ElMessage.error(error.response?.data?.error || t('opsManagement.approveFailed'))
+    ElMessage.error(getApiErrorMessage(error, t('opsManagement.approveFailed')))
   }
 }
 
@@ -1012,16 +1007,14 @@ const handleReject = (node) => {
     type: 'warning',
   }).then(async () => {
     try {
-      const res = await request.put(`/nodes/${node.id}/reject`)
-      if (res.success) {
-        ElMessage.warning(t('opsManagement.rejectedTip'))
-        showPendingDialog.value = false
-        fetchNodes()
-        fetchPendingList()
-        updateCounts()
-      }
-    } catch {
-      ElMessage.error(t('opsManagement.operationFailed'))
+      await request.put(`/nodes/${node.id}/reject`)
+      ElMessage.warning(t('opsManagement.rejectedTip'))
+      showPendingDialog.value = false
+      fetchNodes()
+      fetchPendingList()
+      updateCounts()
+    } catch (error) {
+      ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailed')))
     }
   })
 }
@@ -1112,7 +1105,7 @@ const deleteNode = async (node) => {
     fetchNodes()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.message || t('opsManagement.nodeDeleteFailed'))
+      ElMessage.error(getApiErrorMessage(error, t('opsManagement.nodeDeleteFailed')))
     }
   }
 }
@@ -1173,7 +1166,7 @@ const handleStartProject = async (deploy) => {
     ElMessage.success(t('opsManagement.startIssued'))
     fetchNodes()
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || t('opsManagement.startFailed'))
+    ElMessage.error(getApiErrorMessage(error, t('opsManagement.startFailed')))
   }
 }
 
@@ -1190,7 +1183,7 @@ const handleStopProject = async (deploy) => {
     fetchNodes()
   } catch (error) {
     if (error !== 'cancel')
-      ElMessage.error(error.response?.data?.message || t('opsManagement.stopFailed'))
+      ElMessage.error(getApiErrorMessage(error, t('opsManagement.stopFailed')))
   }
 }
 
@@ -1250,7 +1243,7 @@ const handleRestartProject = async (deploy) => {
     fetchNodes()
   } catch (error) {
     if (error !== 'cancel')
-      ElMessage.error(error.response?.data?.message || t('opsManagement.restartFailed'))
+      ElMessage.error(getApiErrorMessage(error, t('opsManagement.restartFailed')))
   }
 }
 
@@ -1295,9 +1288,7 @@ const handleRollback = async (deploy) => {
       rollbackTargetDeploymentId.value = candidates[0].id
     }
   } catch (error) {
-    ElMessage.error(
-      error.response?.data?.message || error.message || t('opsManagement.rollbackLoadFailed'),
-    )
+    ElMessage.error(getApiErrorMessage(error, t('opsManagement.rollbackLoadFailed')))
     showRollbackDialog.value = false
   } finally {
     rollbackDialogLoading.value = false
@@ -1333,7 +1324,7 @@ const confirmRollback = async () => {
     await fetchNodes()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.message || t('opsManagement.rollbackFailed'))
+      ElMessage.error(getApiErrorMessage(error, t('opsManagement.rollbackFailed')))
     }
   } finally {
     rollbackSubmitLoading.value = false
@@ -1358,7 +1349,7 @@ const handleUndeploy = async (deploy) => {
     fetchNodes()
   } catch (error) {
     if (error !== 'cancel')
-      ElMessage.error(error.response?.data?.message || t('opsManagement.undeployFailed'))
+      ElMessage.error(getApiErrorMessage(error, t('opsManagement.undeployFailed')))
   }
 }
 

@@ -6,10 +6,24 @@ const { Op, fn, col } = require('sequelize');
 const dayjs = require('dayjs');
 const ApiResponse = require('../../utils/response');
 const ErrorCodes = require('../../constants/errorCodes');
-const AppError = require('../../utils/AppError');
 const appConfig = require('../../config/app');
 
 const router = express.Router();
+/**
+ * 路由统一错误响应：
+ * - 业务错误：HTTP 200 + 非 0 code
+ * - 技术异常：保留 5xx
+ */
+function respondRouteError(res, error, fallbackCode, fallbackStatus = 200) {
+  if (error?.errorCode && error?.statusCode) {
+    const normalizedStatus = error.statusCode >= 500 ? error.statusCode : 200;
+    const options = error.options || (error.message ? { message: error.message } : {});
+    return ApiResponse.error(res, error.errorCode, options, normalizedStatus);
+  }
+
+  const options = error?.message ? { message: error.message } : {};
+  return ApiResponse.error(res, fallbackCode, options, fallbackStatus);
+}
 
 // 导入模型和中间件
 const { Log, User, Tenant } = require('../../models');
@@ -81,7 +95,7 @@ router.get('/', authenticateToken, validate(Joi.object({
     } = req.query;
     const { tenantId, role } = req.user;
     if (!ALLOWED_SYSTEM_LOG_ROLES.includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
     }
 
     const where = { tenantId };
@@ -122,7 +136,7 @@ router.get('/', authenticateToken, validate(Joi.object({
     });
   } catch (error) {
     logger.error('Get logs error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 
@@ -142,7 +156,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
   try {
     const { tenantId, role } = req.user;
     if (!ALLOWED_SYSTEM_LOG_ROLES.includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
     }
 
     const where = { tenantId };
@@ -201,7 +215,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
 
   } catch (error) {
     logger.error('Get log stats error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 
@@ -244,7 +258,7 @@ router.get('/recent-activities', authenticateToken, validate(Joi.object({
     return ApiResponse.success(res, { activities: logs });
   } catch (error) {
     logger.error('Get recent activities error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });
 

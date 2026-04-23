@@ -51,8 +51,26 @@ func TestNewServer_UsesProductionRouter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read body failed: %v", err)
 	}
-	if string(body) != "healthy\n" {
-		t.Fatalf("expected healthy body, got %q", string(body))
+	var payload response.ApiResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode health response failed: %v", err)
+	}
+	if payload.Code != apperrors.SuccessCode {
+		t.Fatalf("expected code %d, got %d", apperrors.SuccessCode, payload.Code)
+	}
+	if payload.ReqID == "" {
+		t.Fatal("expected reqId to be set")
+	}
+	var data map[string]string
+	raw, err := json.Marshal(payload.Data)
+	if err != nil {
+		t.Fatalf("marshal health data failed: %v", err)
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("decode health data failed: %v", err)
+	}
+	if data["status"] != "healthy" {
+		t.Fatalf("expected status=healthy, got %q", data["status"])
 	}
 }
 
@@ -87,17 +105,17 @@ func TestServer_ProductionAssemblyKeepsUnifiedErrorResponse(t *testing.T) {
 		t.Fatalf("decode response failed: %v", err)
 	}
 
-	if payload.Success {
-		t.Fatal("expected success to be false")
+	if payload.Code != apperrors.PublicCodeInternal {
+		t.Fatalf("expected code %d, got %d", apperrors.PublicCodeInternal, payload.Code)
 	}
-	if payload.ErrorCode != string(apperrors.ErrorCodeInternal) {
-		t.Fatalf("expected errorCode %q, got %q", apperrors.ErrorCodeInternal, payload.ErrorCode)
+	if payload.Msg != "系统内部错误" {
+		t.Fatalf("expected msg %q, got %q", "系统内部错误", payload.Msg)
 	}
-	if payload.Message != "系统内部错误" {
-		t.Fatalf("expected message %q, got %q", "系统内部错误", payload.Message)
+	if payload.Data != nil {
+		t.Fatalf("expected data to be nil in error response, got %#v", payload.Data)
 	}
-	if payload.RequestID != requestID {
-		t.Fatalf("expected requestId %q to match header %q", payload.RequestID, requestID)
+	if payload.ReqID != requestID {
+		t.Fatalf("expected reqId %q to match header %q", payload.ReqID, requestID)
 	}
 }
 

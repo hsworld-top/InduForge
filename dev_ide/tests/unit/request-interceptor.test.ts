@@ -107,6 +107,35 @@ describe('request interceptor', () => {
     expect(Storage.remove).toHaveBeenCalledTimes(4)
   })
 
+  it('2xx 且业务 code!=0 时应抛出 ApiBusinessError', async () => {
+    const { ApiBusinessError } = await import('@/utils/request')
+
+    const responseFulfilled = responseUseMock.mock.calls[0]?.[0] as
+      | ((response: unknown) => Promise<unknown> | unknown)
+      | undefined
+
+    expect(typeof responseFulfilled).toBe('function')
+
+    const response = {
+      status: 200,
+      data: {
+        code: 10010,
+        msg: '验证码错误',
+        data: {},
+        reqId: 'req_123',
+      },
+    }
+
+    const result = responseFulfilled!(response)
+    await expect(Promise.resolve(result)).rejects.toBeInstanceOf(ApiBusinessError)
+    await expect(Promise.resolve(result)).rejects.toMatchObject({
+      code: 10010,
+      message: '验证码错误',
+      reqId: 'req_123',
+      isBusinessError: true,
+    })
+  })
+
   it('403 且开启权限提示时应调用 ElMessage.error', async () => {
     await import('@/utils/request')
 
@@ -120,7 +149,7 @@ describe('request interceptor', () => {
       response: {
         status: 403,
         data: {
-          message: '没有权限访问此资源',
+          msg: '没有权限访问此资源',
         },
       },
       config: {
@@ -147,7 +176,7 @@ describe('request interceptor', () => {
       response: {
         status: 403,
         data: {
-          message: '没有权限访问此资源',
+          msg: '没有权限访问此资源',
         },
       },
       config: {
@@ -159,5 +188,23 @@ describe('request interceptor', () => {
 
     await expect(responseRejected!(error)).rejects.toBe(error)
     expect(ElMessage.error).not.toHaveBeenCalled()
+  })
+
+  it('错误提取函数应读取 code/msg/reqId', async () => {
+    const { getApiErrorCode, getApiErrorMessage, getApiErrorReqId } = await import('@/utils/request')
+    const error = {
+      response: {
+        status: 400,
+        data: {
+          code: 20001,
+          msg: '请求参数错误',
+          reqId: 'req_abc',
+        },
+      },
+    }
+
+    expect(getApiErrorCode(error)).toBe(20001)
+    expect(getApiErrorMessage(error)).toBe('请求参数错误')
+    expect(getApiErrorReqId(error)).toBe('req_abc')
   })
 })

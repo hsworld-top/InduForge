@@ -17,6 +17,7 @@ import (
 	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
 func TestConnectionsCRUD(t *testing.T) {
@@ -157,7 +158,7 @@ func TestConnectionsRejectPhase2ReservedTypes(t *testing.T) {
 		"config": map[string]any{
 			"endpoint": "opc.tcp://127.0.0.1:4840",
 		},
-	}, http.StatusBadRequest), "OPC UA")
+	}, http.StatusOK), "OPC UA")
 
 	currentList := mustListConnections(t, server.URL, token, projectID)
 	if len(currentList) != 0 {
@@ -178,11 +179,10 @@ type connectionPayload struct {
 }
 
 type apiEnvelope struct {
-	Success   bool            `json:"success"`
-	ErrorCode string          `json:"errorCode"`
-	Message   string          `json:"message"`
-	RequestID string          `json:"requestId"`
-	Data      json.RawMessage `json:"data"`
+	Code  int             `json:"code"`
+	Msg   string          `json:"msg"`
+	ReqID string          `json:"reqId"`
+	Data  json.RawMessage `json:"data"`
 }
 
 var integrationHTTPClient = &http.Client{
@@ -276,11 +276,11 @@ func doJSONRequest(t *testing.T, method, url, token string, payload any) apiEnve
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		t.Fatalf("解析响应失败: %v", err)
 	}
-	if !envelope.Success {
-		t.Fatalf("期望 success=true，实际 errorCode=%q message=%q", envelope.ErrorCode, envelope.Message)
+	if envelope.Code != apperrors.SuccessCode {
+		t.Fatalf("期望 code=%d，实际 code=%d msg=%q", apperrors.SuccessCode, envelope.Code, envelope.Msg)
 	}
-	if envelope.RequestID == "" {
-		t.Fatal("期望响应包含 requestId")
+	if envelope.ReqID == "" {
+		t.Fatal("期望响应包含 reqId")
 	}
 
 	return envelope

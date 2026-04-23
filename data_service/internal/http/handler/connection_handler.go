@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -31,7 +32,7 @@ func (h *ConnectionHandler) List(w http.ResponseWriter, r *http.Request) error {
 
 	connections, err := h.service.ListConnections(r.Context(), r.PathValue("projectId"), claims.TenantID)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connections)
@@ -62,7 +63,7 @@ func (h *ConnectionHandler) Create(w http.ResponseWriter, r *http.Request) error
 		Config: request.Config,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -124,7 +125,7 @@ func (h *ConnectionHandler) Update(w http.ResponseWriter, r *http.Request) error
 		input,
 	)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -138,7 +139,7 @@ func (h *ConnectionHandler) Delete(w http.ResponseWriter, r *http.Request) error
 	}
 
 	if err := h.service.DeleteConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId")); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
@@ -164,7 +165,7 @@ func (h *ConnectionHandler) TestConnection(w http.ResponseWriter, r *http.Reques
 		Config: request.Config,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -186,7 +187,7 @@ func (h *ConnectionHandler) UpdateStatus(w http.ResponseWriter, r *http.Request)
 
 	result, err := h.service.UpdateConnectionStatus(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request.Status)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -201,7 +202,7 @@ func (h *ConnectionHandler) ListTables(w http.ResponseWriter, r *http.Request) e
 
 	tables, err := h.service.ListTables(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"tables": tables})
@@ -216,7 +217,7 @@ func (h *ConnectionHandler) GetTableStructure(w http.ResponseWriter, r *http.Req
 
 	result, err := h.service.GetTableStructure(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("tableName"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -240,7 +241,7 @@ func (h *ConnectionHandler) GetTableData(w http.ResponseWriter, r *http.Request)
 
 	result, err := h.service.GetTableData(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("tableName"), page, limit)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -263,7 +264,7 @@ func (h *ConnectionHandler) ExecuteSQL(w http.ResponseWriter, r *http.Request) e
 
 	result, err := h.service.ExecuteSQL(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request.SQL, request.Parameters)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -285,6 +286,62 @@ func requireClaims(r *http.Request) (*auth.Claims, error) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenRequired, http.StatusUnauthorized, "请先完成认证")
 	}
 	return claims, nil
+}
+
+// normalizeRepresentativeHandlerError 统一代表 handler 的业务失败边界：
+// 1. 业务失败（部分 BAD_REQUEST / NOT_FOUND / 权限类）统一返回 HTTP 200 + 非 0 code。
+// 2. 技术异常继续保留 4xx/5xx，避免认证、解码、下游故障被压成 200。
+func normalizeRepresentativeHandlerError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var appErr *apperrors.AppError
+	if !errors.As(err, &appErr) || appErr == nil {
+		return err
+	}
+	if !isRepresentativeBusinessFailure(appErr) {
+		return err
+	}
+	if appErr.StatusCode == http.StatusOK {
+		return err
+	}
+
+	if appErr.Err != nil {
+		return apperrors.WrapAppError(appErr.Code, http.StatusOK, appErr.Message, appErr.Err)
+	}
+	return apperrors.NewAppError(appErr.Code, http.StatusOK, appErr.Message)
+}
+
+func isRepresentativeBusinessFailure(appErr *apperrors.AppError) bool {
+	if appErr == nil {
+		return false
+	}
+	if hasWrappedAppErrorCause(appErr) {
+		return false
+	}
+
+	switch appErr.Code {
+	case apperrors.ErrorCodeBadRequest:
+		return appErr.StatusCode == http.StatusBadRequest
+	case apperrors.ErrorCodeNotFound:
+		return appErr.StatusCode == http.StatusNotFound
+	case apperrors.ErrorCodePermissionInsufficient, apperrors.ErrorCodePermissionProjectMismatch:
+		return appErr.StatusCode == http.StatusForbidden
+	case apperrors.ErrorCodeAuthTokenRequired, apperrors.ErrorCodeAuthTokenInvalid, apperrors.ErrorCodeAuthSecretRequired:
+		return false
+	case apperrors.ErrorCodeInternal:
+		return false
+	default:
+		return false
+	}
+}
+
+func hasWrappedAppErrorCause(appErr *apperrors.AppError) bool {
+	if appErr == nil {
+		return false
+	}
+	return errors.Unwrap(appErr) != nil
 }
 
 func decodeJSONBody(r *http.Request, target any) error {

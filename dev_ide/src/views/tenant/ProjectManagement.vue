@@ -1028,7 +1028,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import JSZip from 'jszip'
 import { useAuthStore, useAppStore } from '@/store'
 import { can } from '@/permissions'
-import request from '@/utils/request'
+import request, { getApiErrorMessage as resolveApiErrorMessage } from '@/utils/request'
 import { projectAPI } from '@/api/project.api'
 import { ColorTagEnum } from '@/enums'
 import { formatDateTime, formatDate, formatCurrency } from '@/utils'
@@ -1230,9 +1230,7 @@ export default {
      * @returns {string}
      */
     const getApiErrorMessage = (error, fallback) => {
-      return (
-        error?.response?.data?.message || error?.response?.data?.error || error?.message || fallback
-      )
+      return resolveApiErrorMessage(error, fallback)
     }
 
     /**
@@ -1302,8 +1300,8 @@ export default {
         await fetchProjectDeployState()
       } catch (error) {
         ElMessage.error(
-          t('projectManagement.fetchFailed', {
-            message: error.response?.data?.message || error.message,
+            t('projectManagement.fetchFailed', {
+            message: getApiErrorMessage(error, t('projectManagement.fetchFailed')),
           }),
         )
       } finally {
@@ -1378,8 +1376,8 @@ export default {
         fetchProjects()
       } catch (error) {
         ElMessage.error(
-          t('projectManagement.createFailed', {
-            message: error.response?.data?.message || error.message,
+            t('projectManagement.createFailed', {
+            message: getApiErrorMessage(error, t('projectManagement.createFailed')),
           }),
         )
       } finally {
@@ -1446,8 +1444,8 @@ export default {
         fetchProjects()
       } catch (error) {
         ElMessage.error(
-          t('projectManagement.updateDevFailed', {
-            message: error.response?.data?.message || error.message,
+            t('projectManagement.updateDevFailed', {
+            message: getApiErrorMessage(error, t('projectManagement.updateDevFailed')),
           }),
         )
       } finally {
@@ -1517,8 +1515,8 @@ export default {
       } catch (error) {
         if (error !== 'cancel') {
           ElMessage.error(
-            t('projectManagement.deleteFailed', {
-              message: error.response?.data?.message || error.message,
+              t('projectManagement.deleteFailed', {
+                message: getApiErrorMessage(error, t('projectManagement.deleteFailed')),
             }),
           )
         }
@@ -1547,8 +1545,8 @@ export default {
         ElMessage.success(t('projectManagement.exportSuccess'))
       } catch (error) {
         ElMessage.error(
-          t('projectManagement.exportFailed', {
-            message: error.response?.data?.message || error.message,
+            t('projectManagement.exportFailed', {
+            message: getApiErrorMessage(error, t('projectManagement.exportFailed')),
           }),
         )
       }
@@ -1637,8 +1635,8 @@ export default {
           fetchProjects()
         } catch (error) {
           ElMessage.error(
-            t('projectManagement.importFailed', {
-              message: error.response?.data?.message || error.message,
+              t('projectManagement.importFailed', {
+                message: getApiErrorMessage(error, t('projectManagement.importFailed')),
             }),
           )
         }
@@ -1680,7 +1678,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('projectManagement.operationFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('projectManagement.operationFailed')),
           }),
         )
       } finally {
@@ -1812,7 +1810,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('projectManagement.batchExportError', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('projectManagement.batchExportError')),
           }),
         )
       } finally {
@@ -1873,8 +1871,8 @@ export default {
       } catch (error) {
         if (error !== 'cancel') {
           ElMessage.error(
-            t('projectManagement.batchDeleteError', {
-              message: error.response?.data?.message || error.message,
+              t('projectManagement.batchDeleteError', {
+                message: getApiErrorMessage(error, t('projectManagement.batchDeleteError')),
             }),
           )
         }
@@ -1971,9 +1969,6 @@ export default {
           },
         })
         const payload = res?.data ?? res
-        if (payload?.success === false) {
-          return
-        }
         const nodes = payload?.data?.items || payload?.items || []
         nodes.forEach((node) => {
           const deployments = Array.isArray(node?.deployments) ? node.deployments : []
@@ -2365,11 +2360,6 @@ export default {
                 description: t('projectManagement.publishByDeployDialog'),
               })
               const retryPublishPayload = retryPublishRes?.data ?? retryPublishRes
-              if (retryPublishPayload?.success === false) {
-                throw new Error(
-                  retryPublishPayload?.message || t('projectManagement.publishFailed'),
-                )
-              }
               deploymentId = retryPublishPayload?.data?.id || retryPublishPayload?.id
               if (!deploymentId) {
                 throw new Error(t('projectManagement.publishFailed'))
@@ -2396,9 +2386,6 @@ export default {
               description: t('projectManagement.publishByDeployDialog'),
             })
             const publishPayload = publishRes?.data ?? publishRes
-            if (publishPayload?.success === false) {
-              throw new Error(publishPayload?.message || t('projectManagement.publishFailed'))
-            }
             deploymentId = publishPayload?.data?.id || publishPayload?.id
             if (!deploymentId) {
               throw new Error(t('projectManagement.publishFailed'))
@@ -2423,9 +2410,6 @@ export default {
             runtimeConfig: {},
           })
           const deployPayload = deployRes?.data ?? deployRes
-          if (deployPayload?.success === false) {
-            throw new Error(deployPayload?.message || t('opsManagement.operationFailedFallback'))
-          }
           const { success: successCount = 0, failed: failCount = 0 } =
             deployPayload?.data?.summary || deployPayload?.summary || {}
 
@@ -2465,9 +2449,6 @@ export default {
             nodeIds: targetNodes,
           })
           const deployPayload = deployRes?.data ?? deployRes
-          if (deployPayload?.success === false) {
-            throw new Error(deployPayload?.message || t('opsManagement.operationFailedFallback'))
-          }
           const { success: successCount = 0, failed: failCount = 0 } =
             deployPayload?.data?.summary || deployPayload?.summary || {}
           if (failCount > 0) {

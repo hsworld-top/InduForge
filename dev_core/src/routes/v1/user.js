@@ -68,7 +68,7 @@ router.get('/', authenticateToken, validate(Joi.object({
     // 检查当前用户是否有权限查看用户
     const canViewUsers = ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
     if (!canViewUsers) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
     }
 
     // 平台管理员和用户管理员都只能查看本租户用户
@@ -167,7 +167,7 @@ router.post('/', authenticateToken, validate(Joi.object({
     // 只有系统管理员和用户管理员可以创建用户
     const canCreateUsers = ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
     if (!canCreateUsers) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
     }
 
     // 检查权限
@@ -185,7 +185,7 @@ router.post('/', authenticateToken, validate(Joi.object({
       }
     });
     if (existingUser) {
-      return ApiResponse.error(res, ErrorCodes.USER_USERNAME_EXISTS, {}, 400);
+      return ApiResponse.error(res, ErrorCodes.USER_USERNAME_EXISTS, {}, 200);
     }
 
     // 创建用户
@@ -259,22 +259,22 @@ router.put('/:id', authenticateToken, validate(Joi.object({
 
     const user = await User.findByPk(id);
     if (!user) {
-      return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 200);
     }
 
     // 检查权限
     if (currentUserRole !== 'SYSTEM_ADMIN' && user.tenantId !== currentUserTenantId) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
     }
 
     // 防止修改超级管理员的角色
     if (user.role === 'SUPER_ADMIN' && updateData.role && updateData.role !== 'SUPER_ADMIN') {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_DELETE_SUPER_ADMIN, {}, 400);
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_DELETE_SUPER_ADMIN, {}, 200);
     }
 
     // 只允许系统管理员和用户管理员修改用户角色
     if (updateData.role && !['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     await user.update(updateData);
@@ -331,7 +331,7 @@ router.put('/:id/password', authenticateToken, validate(Joi.object({
 
     const user = await User.findByPk(id);
     if (!user) {
-      return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 200);
     }
 
     // 检查权限：用户可以修改自己的密码，系统管理员和用户管理员可以修改本租户用户的密码
@@ -339,7 +339,7 @@ router.put('/:id/password', authenticateToken, validate(Joi.object({
       id === currentUserId || // 修改自己的密码
       (['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole) && user.tenantId === currentUserTenantId); // 同租户管理员
     if (!canModifyPassword) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
     }
 
     await user.update({ password: newPassword });
@@ -381,27 +381,27 @@ router.delete('/:id', authenticateToken, validate(Joi.object({
     // 只有系统管理员和用户管理员可以删除用户
     const canDeleteUsers = ['SYSTEM_ADMIN', 'USER_ADMIN'].includes(currentUserRole);
     if (!canDeleteUsers) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
     }
 
     const user = await User.findByPk(id);
     if (!user) {
-      return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.USER_NOT_FOUND, {}, 200);
     }
 
     // 防止删除自己
     if (id === currentUserId) {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_DELETE_SELF, {}, 400);
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_DELETE_SELF, {}, 200);
     }
 
     // 防止删除超级管理员
     if (user.role === 'SUPER_ADMIN') {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_DELETE_SUPER_ADMIN, {}, 400);
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_DELETE_SUPER_ADMIN, {}, 200);
     }
 
     // 检查权限
     if (currentUserRole !== 'SYSTEM_ADMIN' && user.tenantId !== currentUserTenantId) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
     }
 
     await user.destroy();

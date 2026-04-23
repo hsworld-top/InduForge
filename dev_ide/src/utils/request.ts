@@ -41,8 +41,124 @@ type QueueEntry = {
 let failedQueue: QueueEntry[] = []
 
 type ErrorResponseData = {
-  message?: string
+  code?: number | string
+  msg?: string
+  reqId?: string
   errors?: Record<string, string[]>
+  data?: unknown
+  [key: string]: unknown
+}
+
+type ExtendedRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
+  forcePermissionToast?: boolean
+  skipPermissionToast?: boolean
+}
+
+type ApiErrorMeta = {
+  code?: number
+  msg: string
+  reqId?: string
+  status?: number
+}
+
+const toNumericCode = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10)
+  }
+  return undefined
+}
+
+const isApiResponsePayload = (value: unknown): value is ApiResponse<unknown> => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const payload = value as Record<string, unknown>
+  const code = toNumericCode(payload.code)
+  return code !== undefined && typeof payload.msg === 'string' && 'data' in payload
+}
+
+export class ApiBusinessError extends Error {
+  code: number
+  reqId?: string
+  data: unknown
+  status?: number
+  isBusinessError = true
+
+  constructor(payload: ApiResponse<unknown>, status?: number) {
+    super(payload.msg || '请求失败')
+    this.name = 'ApiBusinessError'
+    this.code = payload.code
+    this.reqId = payload.reqId
+    this.data = payload.data
+    this.status = status
+  }
+}
+
+export const isApiBusinessError = (error: unknown): error is ApiBusinessError => {
+  return error instanceof ApiBusinessError || (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { isBusinessError?: unknown }).isBusinessError === true
+  )
+}
+
+const pickAxiosErrorData = (error: unknown): ErrorResponseData | undefined => {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return undefined
+  }
+
+  return (error as { response?: { data?: ErrorResponseData } }).response?.data
+}
+
+const pickAxiosStatus = (error: unknown): number | undefined => {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return undefined
+  }
+
+  const status = (error as { response?: { status?: number } }).response?.status
+  return typeof status === 'number' ? status : undefined
+}
+
+export const resolveApiError = (error: unknown, fallback = '请求失败'): ApiErrorMeta => {
+  if (isApiBusinessError(error)) {
+    return {
+      code: error.code,
+      msg: error.message || fallback,
+      reqId: error.reqId,
+      status: error.status,
+    }
+  }
+
+  const data = pickAxiosErrorData(error)
+  const status = pickAxiosStatus(error)
+  const responseCode = toNumericCode(data?.code)
+  const responseMsg = typeof data?.msg === 'string' ? data.msg : ''
+  const responseReqId = typeof data?.reqId === 'string' ? data.reqId : undefined
+  const nativeMessage = error instanceof Error ? error.message : ''
+
+  return {
+    code: responseCode,
+    msg: responseMsg || nativeMessage || fallback,
+    reqId: responseReqId,
+    status,
+  }
+}
+
+export const getApiErrorMessage = (error: unknown, fallback = '请求失败'): string => {
+  return resolveApiError(error, fallback).msg
+}
+
+export const getApiErrorCode = (error: unknown): number | undefined => {
+  return resolveApiError(error).code
+}
+
+export const getApiErrorReqId = (error: unknown): string | undefined => {
+  return resolveApiError(error).reqId
 }
 
 const clearAuthAndRedirectToLogin = () => {
@@ -100,11 +216,25 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response) => {
-    return response.data
+    const responseData = response.data
+    if (isApiResponsePayload(responseData)) {
+      const normalizedCode = toNumericCode(responseData.code) ?? 30000
+      const normalizedPayload: ApiResponse<unknown> = {
+        code: normalizedCode,
+        msg: responseData.msg,
+        data: responseData.data,
+        reqId: responseData.reqId,
+      }
+      if (normalizedCode !== 0) {
+        return Promise.reject(new ApiBusinessError(normalizedPayload, response.status))
+      }
+      return normalizedPayload
+    }
+    return responseData
   },
   (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
-    const config = error.config as InternalAxiosRequestConfig | undefined
+    const config = error.config as ExtendedRequestConfig | undefined
     const requestUrl = config?.url || ''
 
     if (response) {
@@ -190,6 +320,10 @@ request.interceptors.response.use(
             return new Promise((resolve, reject) => {
               failedQueue.push({
                 resolve: (token) => {
+                  if (!token) {
+                    reject(new Error('刷新令牌后未获取到 access token'))
+                    return
+                  }
                   config.headers = config.headers || {}
                   ;(config.headers as Record<string, string>).Authorization = `Bearer ${token}`
                   resolve(request(config))
@@ -203,7 +337,7 @@ request.interceptors.response.use(
           // 默认不弹全局 403 提示，避免与业务层 catch 中的错误提示重复。
           // 如需全局提示，可在请求配置中显式传 forcePermissionToast: true。
           if (config?.forcePermissionToast && !config?.skipPermissionToast) {
-            ElMessage.error(data?.message || '没有权限访问此资源')
+            ElMessage.error(typeof data?.msg === 'string' ? data.msg : '没有权限访问此资源')
           }
           break
         case 404:
@@ -215,14 +349,14 @@ request.interceptors.response.use(
             const errorMessages = Object.values(data.errors).flat()
             ElMessage.error(errorMessages.join('; '))
           } else {
-            ElMessage.error(data.message || '请求参数错误')
+            ElMessage.error(typeof data?.msg === 'string' ? data.msg : '请求参数错误')
           }
           break
         case 500:
           ElMessage.error('服务器内部错误')
           break
         default:
-          ElMessage.error(data.message || '请求失败')
+          ElMessage.error(typeof data?.msg === 'string' ? data.msg : '请求失败')
       }
     } else {
       // 网络错误

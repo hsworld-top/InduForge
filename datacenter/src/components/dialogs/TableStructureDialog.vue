@@ -190,6 +190,7 @@ import { ref, watch, computed } from "vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
 import { t } from "@/i18n/runtime";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   modelValue: {
@@ -239,14 +240,16 @@ const loadTableStructure = async () => {
       props.tableName,
     );
 
-    if (response.success) {
-      structure.value = response.data;
-    }
+    structure.value = response.data || {
+      columns: [],
+      indexes: [],
+      foreignKeys: [],
+    };
   } catch (error) {
     ElMessage({
       type: "error",
       message: t("tableStructure.loadFailed", {
-        message: error.response?.data?.message || error.message,
+        message: getApiErrorMessage(error, "加载表结构失败"),
       }),
       offset: 60,
       duration: 5000,

@@ -43,9 +43,7 @@ export interface AuthUserPayload extends ApiRecord {
   tenantId?: string | number
 }
 
-export interface AuthChangePasswordPayload extends ApiRecord {
-  success?: boolean
-}
+export type AuthChangePasswordPayload = ApiRecord
 
 export interface AuthCaptchaPayload extends ApiRecord {
   key?: string

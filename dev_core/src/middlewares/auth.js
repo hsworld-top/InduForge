@@ -50,7 +50,7 @@ const authenticateToken = async (req, res, next) => {
     if (!token) {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200);
     }
 
     // 检查是否在黑名单中
@@ -58,7 +58,7 @@ const authenticateToken = async (req, res, next) => {
     if (isBlacklisted) {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
     }
 
     // 验证 Access Token
@@ -66,7 +66,7 @@ const authenticateToken = async (req, res, next) => {
     if (!decoded) {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
     }
 
     // 获取用户信息
@@ -77,14 +77,14 @@ const authenticateToken = async (req, res, next) => {
     if (!user || user.status !== 'active') {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200);
     }
 
     // 检查租户状态
     if (user.tenant && user.tenant.status !== 'active') {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_INACTIVE, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_INACTIVE, {}, 200);
     }
 
     req.user = {
@@ -101,10 +101,10 @@ const authenticateToken = async (req, res, next) => {
     res.locals.requestId = req.requestId;
     
     if (error.name === 'JsonWebTokenError') {
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
     }
     if (error.name === 'TokenExpiredError') {
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_EXPIRED, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_EXPIRED, {}, 200);
     }
     console.error('Auth middleware error:', error);
     return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
@@ -117,13 +117,13 @@ const requireRole = (...allowedRoles) => {
     if (!req.user) {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200);
     }
 
     if (!allowedRoles.includes(req.user.role)) {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     next();
@@ -141,13 +141,13 @@ const requireCapability = (...capabilities) => {
     if (!req.user) {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200);
     }
     const canPass = capabilities.some((cap) => hasCapability(req.user.role, cap));
     if (!canPass) {
       res.locals.language = req.language || 'zh-CN';
       res.locals.requestId = req.requestId;
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
     next();
   };
@@ -166,7 +166,7 @@ const requireTenantAccess = (req, res, next) => {
   if (tenantId && tenantId !== userTenantId) {
     res.locals.language = req.language || 'zh-CN';
     res.locals.requestId = req.requestId;
-    return ApiResponse.error(res, ErrorCodes.PERMISSION_TENANT_MISMATCH, {}, 403);
+    return ApiResponse.error(res, ErrorCodes.PERMISSION_TENANT_MISMATCH, {}, 200);
   }
 
   next();
@@ -194,20 +194,20 @@ const requireResourceOwnership = (resourceType) => {
         default:
           res.locals.language = req.language || 'zh-CN';
           res.locals.requestId = req.requestId;
-          return ApiResponse.error(res, ErrorCodes.RESOURCE_INVALID_TYPE, {}, 400);
+          return ApiResponse.error(res, ErrorCodes.RESOURCE_INVALID_TYPE, {}, 200);
       }
 
       if (!resource) {
         res.locals.language = req.language || 'zh-CN';
         res.locals.requestId = req.requestId;
-        return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 404);
+        return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 200);
       }
 
       // 检查资源是否属于用户的租户
       if (resource.tenantId !== req.user.tenantId) {
         res.locals.language = req.language || 'zh-CN';
         res.locals.requestId = req.requestId;
-        return ApiResponse.error(res, ErrorCodes.PERMISSION_RESOURCE_OWNERSHIP, {}, 403);
+        return ApiResponse.error(res, ErrorCodes.PERMISSION_RESOURCE_OWNERSHIP, {}, 200);
       }
 
       // 检查用户是否有权限操作此资源
@@ -215,7 +215,7 @@ const requireResourceOwnership = (resourceType) => {
       if (!hasPermission) {
         res.locals.language = req.language || 'zh-CN';
         res.locals.requestId = req.requestId;
-        return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+        return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
       }
 
       req.resource = resource;

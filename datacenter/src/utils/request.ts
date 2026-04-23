@@ -9,6 +9,13 @@ import {
   resolveIdeOriginFromRuntime,
 } from "../runtime/host-bootstrap";
 
+/**
+ * 统一响应契约：
+ * 成功/业务失败均为 HTTP 2xx，响应体为 { code, msg, data, reqId }。
+ * 其中仅 code === 0 视为成功，其余 code 统一按业务异常处理。
+ */
+const DEFAULT_BUSINESS_ERROR_CODE = 30000;
+
 // 创建 axios 实例
 const request = axios.create({
   baseURL: "/api/v1",
@@ -21,6 +28,125 @@ const request = axios.create({
 // 刷新token的状态标志
 let isRefreshing = false;
 let failedQueue = [];
+
+const toNumericCode = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10);
+  }
+  return undefined;
+};
+
+const hasOwn = (target, key) =>
+  Object.prototype.hasOwnProperty.call(target, key);
+
+/**
+ * 业务响应包络识别规则：
+ * 1. 必须能解析出 code；
+ * 2. 需要具备 msg，或至少具备统一包络中的显式字段（data/reqId/msg 键）。
+ *
+ * 说明：
+ * - 后端可能省略 data，因此不能把 data 作为必须项；
+ * - 一旦识别为业务包络，code != 0 必须抛出 ApiBusinessError，避免业务失败被吞掉。
+ */
+const isApiResponsePayload = (value) => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const payload = value;
+  const code = toNumericCode(payload.code);
+  if (code === undefined) {
+    return false;
+  }
+
+  const hasStringMsg = typeof payload.msg === "string";
+  const hasEnvelopeMarker =
+    hasOwn(payload, "msg") || hasOwn(payload, "data") || hasOwn(payload, "reqId");
+
+  return hasStringMsg || hasEnvelopeMarker;
+};
+
+export class ApiBusinessError extends Error {
+  constructor(payload, status) {
+    super(payload.msg || "请求失败");
+    this.name = "ApiBusinessError";
+    this.code = payload.code;
+    this.reqId = payload.reqId;
+    this.data = payload.data;
+    this.status = status;
+    this.isBusinessError = true;
+  }
+}
+
+export const isApiBusinessError = (error) => {
+  return (
+    error instanceof ApiBusinessError ||
+    (typeof error === "object" &&
+      error !== null &&
+      error.isBusinessError === true)
+  );
+};
+
+const pickAxiosErrorData = (error) => {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return undefined;
+  }
+  return error.response?.data;
+};
+
+const pickAxiosStatus = (error) => {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return undefined;
+  }
+  const status = error.response?.status;
+  return typeof status === "number" ? status : undefined;
+};
+
+/**
+ * 统一提取 API 错误信息：
+ * 1. 业务失败（2xx + code!=0）优先读取业务 code/msg/reqId
+ * 2. 技术失败（4xx/5xx）读取 HTTP 响应中的 msg 与 status
+ * 3. 兜底到 Error.message 或调用方传入的 fallback
+ */
+export const resolveApiError = (error, fallback = "请求失败") => {
+  if (isApiBusinessError(error)) {
+    return {
+      code: error.code,
+      msg: error.message || fallback,
+      reqId: error.reqId,
+      status: error.status,
+    };
+  }
+
+  const data = pickAxiosErrorData(error);
+  const status = pickAxiosStatus(error);
+  const responseCode = toNumericCode(data?.code);
+  const responseMsg = typeof data?.msg === "string" ? data.msg : "";
+  const responseReqId = typeof data?.reqId === "string" ? data.reqId : undefined;
+  const nativeMessage = error instanceof Error ? error.message : "";
+
+  return {
+    code: responseCode,
+    msg: responseMsg || nativeMessage || fallback,
+    reqId: responseReqId,
+    status,
+  };
+};
+
+export const getApiErrorMessage = (error, fallback = "请求失败") => {
+  return resolveApiError(error, fallback).msg;
+};
+
+export const getApiErrorCode = (error) => {
+  return resolveApiError(error).code;
+};
+
+export const getApiErrorReqId = (error) => {
+  return resolveApiError(error).reqId;
+};
 
 /**
  * 处理失败的请求队列。
@@ -98,10 +224,32 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response) => {
-    return response.data;
+    const responseData = response.data;
+    if (isApiResponsePayload(responseData)) {
+      const normalizedCode =
+        toNumericCode(responseData.code) ?? DEFAULT_BUSINESS_ERROR_CODE;
+      const normalizedMsg =
+        typeof responseData.msg === "string" ? responseData.msg : "";
+      const normalizedPayload = {
+        code: normalizedCode,
+        msg: normalizedMsg,
+        data: responseData.data,
+        reqId: responseData.reqId,
+      };
+
+      if (normalizedCode !== 0) {
+        return Promise.reject(
+          new ApiBusinessError(normalizedPayload, response.status),
+        );
+      }
+      return normalizedPayload;
+    }
+
+    return responseData;
   },
   (error) => {
     const { response, config } = error;
+    const requestUrl = config?.url || "";
 
     if (response) {
       const { status, data } = response;
@@ -109,13 +257,17 @@ request.interceptors.response.use(
       switch (status) {
         case 401: {
           // 刷新 token 失败时直接跳转登录页
-          if (config.url.includes("/auth/refresh")) {
+          if (requestUrl.includes("/auth/refresh")) {
             handleLogout();
             return Promise.reject(error);
           }
 
           const refreshToken = Storage.getRefreshToken();
           if (!refreshToken) {
+            handleLogout();
+            return Promise.reject(error);
+          }
+          if (!config) {
             handleLogout();
             return Promise.reject(error);
           }
@@ -142,6 +294,7 @@ request.interceptors.response.use(
 
                 processQueue(null, accessToken);
 
+                config.headers = config.headers || {};
                 config.headers.Authorization = `Bearer ${accessToken}`;
                 return request(config);
               })
@@ -158,6 +311,11 @@ request.interceptors.response.use(
           return new Promise((resolve, reject) => {
             failedQueue.push({
               resolve: (token) => {
+                if (!token) {
+                  reject(new Error("刷新令牌后未获取到 access token"));
+                  return;
+                }
+                config.headers = config.headers || {};
                 config.headers.Authorization = `Bearer ${token}`;
                 resolve(request(config));
               },
@@ -173,11 +331,13 @@ request.interceptors.response.use(
           break;
         case 422:
           // 验证错误
-          if (data.errors) {
+          if (data?.errors) {
             const errorMessages = Object.values(data.errors).flat();
             ElMessage.error(errorMessages.join("; "));
           } else {
-            ElMessage.error(data.message || "请求参数错误");
+            ElMessage.error(
+              typeof data?.msg === "string" ? data.msg : "请求参数错误",
+            );
           }
           break;
         case 500:

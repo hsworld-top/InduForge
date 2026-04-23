@@ -5,6 +5,7 @@
  */
 const designService = require("../services/designService");
 const { Project } = require("../models");
+const ApiResponse = require("../utils/response");
 const AppError = require("../utils/AppError");
 const ErrorCodes = require("../constants/errorCodes");
 
@@ -43,12 +44,9 @@ async function getPages(req, res, next) {
 
     const pages = await designService.getPages(projectId);
 
-    res.json({
-      success: true,
-      data: pages,
-    });
+    return ApiResponse.success(res, pages);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -71,12 +69,9 @@ async function getPage(req, res, next) {
     }
 
     // 返回 schema 内容
-    res.json({
-      success: true,
-      data: pageDetail.schemaContent,
-    });
+    return ApiResponse.success(res, pageDetail.schemaContent);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -104,13 +99,9 @@ async function createPage(req, res, next) {
       req.user.id
     );
 
-    res.status(201).json({
-      success: true,
-      message: "页面创建成功",
-      data: page,
-    });
+    return ApiResponse.success(res, page, null, {}, 201);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -142,12 +133,9 @@ async function updatePage(req, res, next) {
 
     await designService.updatePage(pageId, schema, req.user.id);
 
-    res.json({
-      success: true,
-      message: "页面更新成功",
-    });
+    return ApiResponse.success(res, null);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -172,12 +160,9 @@ async function deletePage(req, res, next) {
 
     await designService.deletePage(pageId, mode);
 
-    res.json({
-      success: true,
-      message: "页面删除成功",
-    });
+    return ApiResponse.success(res, null);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -208,12 +193,9 @@ async function renamePage(req, res, next) {
 
     await designService.renamePage(pageId, name.trim(), req.user.id, path);
 
-    res.json({
-      success: true,
-      message: "页面重命名成功",
-    });
+    return ApiResponse.success(res, null);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -238,12 +220,9 @@ async function movePage(req, res, next) {
 
     await designService.movePage(pageId, { parentId, sortOrder, path }, req.user.id);
 
-    res.json({
-      success: true,
-      message: "页面移动成功",
-    });
+    return ApiResponse.success(res, null);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -264,12 +243,9 @@ async function getProjectVariables(req, res, next) {
       });
     }
 
-    res.json({
-      success: true,
-      data: project.projectVariables || {},
-    });
+    return ApiResponse.success(res, project.projectVariables || {});
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -306,13 +282,9 @@ async function updateProjectVariables(req, res, next) {
       updatedBy: req.user.id,
     });
 
-    res.json({
-      success: true,
-      message: "工程变量已更新",
-      data: project.projectVariables || {},
-    });
+    return ApiResponse.success(res, project.projectVariables || {});
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -341,13 +313,9 @@ async function updateEntryConfig(req, res, next) {
       entryConfig
     );
 
-    res.json({
-      success: true,
-      message: "入口配置已更新",
-      data: result,
-    });
+    return ApiResponse.success(res, result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -364,12 +332,9 @@ async function getProjectSettings(req, res, next) {
 
     const settings = await designService.getProjectSettings(projectId);
 
-    res.json({
-      success: true,
-      data: settings,
-    });
+    return ApiResponse.success(res, settings);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 
@@ -395,13 +360,9 @@ async function updateProjectSettings(req, res, next) {
       req.user.id
     );
 
-    res.json({
-      success: true,
-      message: "工程设置已更新",
-      data: result,
-    });
+    return ApiResponse.success(res, result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 }
 

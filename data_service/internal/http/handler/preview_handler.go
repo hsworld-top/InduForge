@@ -44,7 +44,7 @@ func (h *PreviewHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		Meta: request.Meta,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -60,7 +60,7 @@ func (h *PreviewHandler) Heartbeat(w http.ResponseWriter, r *http.Request) error
 
 	result, err := h.service.HeartbeatSession(r.Context(), claims, r.PathValue("sessionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -75,7 +75,7 @@ func (h *PreviewHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := h.service.CloseSession(r.Context(), claims, r.PathValue("sessionId")); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	if h.runtimeCleaner != nil {
 		h.runtimeCleaner.CloseSession(r.PathValue("sessionId"))
