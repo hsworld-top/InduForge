@@ -28,9 +28,9 @@
         @click="closeSidebar"
         class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 shrink-0 transition-colors"
       >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-        </svg>
+        <el-icon class="text-[18px]">
+          <Fold />
+        </el-icon>
       </button>
     </div>
 
@@ -191,7 +191,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
-import { UserFilled } from '@element-plus/icons-vue'
+import { UserFilled, Fold } from '@element-plus/icons-vue'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { canAccessTab } from '@/permissions'
 import { ROLES } from '@/constants'

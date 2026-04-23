@@ -9,9 +9,9 @@
         @click="openSidebar" 
         class="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-all cursor-pointer"
       >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
+        <el-icon class="text-[18px]">
+          <Expand />
+        </el-icon>
       </button>
     </div>
 
@@ -80,7 +80,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useAppStore } from '@/store'
-import { FullScreen, Close } from '@element-plus/icons-vue'
+import { FullScreen, Close, Expand } from '@element-plus/icons-vue'
 
 const props = defineProps({
   tabs: {
