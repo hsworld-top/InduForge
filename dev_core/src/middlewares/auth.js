@@ -3,15 +3,7 @@ const ApiResponse = require('../utils/response');
 const ErrorCodes = require('../constants/errorCodes');
 const AppError = require('../utils/AppError');
 const TokenManager = require('../utils/token');
-
-const ROLE_CAPABILITIES = {
-  SUPER_ADMIN: ['tenant:manage'],
-  SYSTEM_ADMIN: ['*'],
-  PROJECT_ADMIN: ['project:read', 'project:write', 'release:publish', 'deploy:execute', 'runtime:operate', 'node:read'],
-  OPS_ADMIN: ['project:read', 'release:publish', 'deploy:execute', 'runtime:operate', 'node:read', 'node:approve'],
-  USER_ADMIN: ['user:write'],
-  USER: ['project:read'],
-};
+const { hasCapability } = require('../utils/authz');
 
 // 验证JWT token中间件
 const authenticateToken = async (req, res, next) => {
@@ -128,12 +120,6 @@ const requireRole = (...allowedRoles) => {
 
     next();
   };
-};
-
-const hasCapability = (userRole, capability) => {
-  if (!userRole || !capability) return false;
-  const caps = ROLE_CAPABILITIES[userRole] || [];
-  return caps.includes('*') || caps.includes(capability);
 };
 
 const requireCapability = (...capabilities) => {

@@ -1,8 +1,30 @@
 // @ts-nocheck
-import { test } from "vitest";
+import { beforeEach, test, vi } from "vitest";
 import assert from "node:assert/strict";
 
 import { resolveDatacenterDebugProjectMeta } from "../src/router/debug-project";
+
+const requestGetMock = vi.fn();
+const storageGetTokenMock = vi.fn();
+
+vi.mock("../src/utils/request", () => ({
+  default: {
+    get: requestGetMock,
+  },
+}));
+
+vi.mock("../src/utils/storage", () => ({
+  Storage: {
+    getToken: storageGetTokenMock,
+  },
+}));
+
+import { debugProjectAPI } from "../src/api/debug-project.api";
+
+beforeEach(() => {
+  requestGetMock.mockReset();
+  storageGetTokenMock.mockReset();
+});
 
 test("debug 入口未带 pid 时默认解析名称为 test 的工程", async () => {
   const writes = [];
@@ -30,4 +52,37 @@ test("debug 入口未带 pid 时默认解析名称为 test 的工程", async () 
     ["projectId", "project-test"],
     ["tenantId", "tenant-test"],
   ]);
+});
+
+test("默认工程解析兼容 projects 接口的 data.list.projects 包络", async () => {
+  storageGetTokenMock.mockReturnValue("debug-token");
+  requestGetMock.mockResolvedValue({
+    code: 0,
+    msg: "操作成功",
+    data: {
+      list: {
+        projects: [
+          {
+            id: "project-test",
+            name: "test",
+            tenantId: "tenant-test",
+          },
+          {
+            id: "project-other",
+            name: "test1",
+            tenantId: "tenant-other",
+          },
+        ],
+      },
+    },
+  });
+
+  const project = await debugProjectAPI.resolveDefaultProjectByName();
+
+  assert.deepEqual(project, {
+    id: "project-test",
+    name: "test",
+    tenantId: "tenant-test",
+  });
+  assert.equal(requestGetMock.mock.calls.length, 1);
 });

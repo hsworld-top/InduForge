@@ -7,9 +7,23 @@ type claimsContextKey struct{}
 // Claims 表示 data_service 认证后解析出来的 JWT 业务信息。
 type Claims struct {
 	UserID       string   `json:"userId"`
+	Role         string   `json:"role"`
 	TenantID     string   `json:"tenantId"`
 	ProjectIDs   []string `json:"projectIds"`
 	Capabilities []string `json:"capabilities"`
+}
+
+func (c *Claims) hasGlobalAccessRole() bool {
+	if c == nil {
+		return false
+	}
+
+	switch c.Role {
+	case "SYSTEM_ADMIN", "SUPER_ADMIN":
+		return true
+	default:
+		return false
+	}
 }
 
 // WithClaims 将解析后的 JWT 业务信息写入上下文。
@@ -32,9 +46,12 @@ func (c *Claims) HasCapability(required string) bool {
 	if c == nil || required == "" {
 		return false
 	}
+	if c.hasGlobalAccessRole() {
+		return true
+	}
 
 	for _, capability := range c.Capabilities {
-		if capability == required {
+		if capability == "*" || capability == required {
 			return true
 		}
 	}
@@ -47,9 +64,12 @@ func (c *Claims) HasProjectAccess(projectID string) bool {
 	if c == nil || projectID == "" {
 		return false
 	}
+	if c.hasGlobalAccessRole() {
+		return true
+	}
 
 	for _, currentProjectID := range c.ProjectIDs {
-		if currentProjectID == projectID {
+		if currentProjectID == "*" || currentProjectID == projectID {
 			return true
 		}
 	}

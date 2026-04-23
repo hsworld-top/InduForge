@@ -9,13 +9,14 @@ const ErrorCodes = require('../../constants/errorCodes');
 const AppError = require('../../utils/AppError');
 const appConfig = require('../../config/app');
 const TokenManager = require('../../utils/token');
+const { buildAccessTokenPayload, listAccessibleProjectIds } = require('../../utils/authz');
 const Captcha = require('../../utils/captcha');
 const { TIME_FORMAT } = require('../../constants/time');
 
 const router = express.Router();
 
 // 导入模型
-const { User, Tenant, Log } = require('../../models');
+const { User, Tenant, Project, Log } = require('../../models');
 
 /**
  * @swagger
@@ -137,12 +138,13 @@ router.post('/login',
           logger.warn('Write super admin login log failed', { error: logError.message, requestId: req.requestId });
         }
 
-        const payload = {
+        const payload = buildAccessTokenPayload({
           userId: appConfig.superAdmin.userId,
           username: appConfig.superAdmin.username,
           role: appConfig.superAdmin.role,
-          tenantId: appConfig.defaultTenant.id
-        };
+          tenantId: appConfig.defaultTenant.id,
+          projectIds: ['*'],
+        });
 
         // 生成双令牌
         const { accessToken, refreshToken } = await TokenManager.generateTokenPair(
@@ -229,12 +231,17 @@ router.post('/login',
         logger.warn('Write user login log failed', { error: logError.message, requestId: req.requestId });
       }
 
-      const payload = {
+      const projectIds = await listAccessibleProjectIds(Project, {
+        tenantId: user.tenantId,
+        role: user.role,
+      });
+      const payload = buildAccessTokenPayload({
         userId: user.id,
         username: user.username,
         role: user.role,
-        tenantId: user.tenantId
-      };
+        tenantId: user.tenantId,
+        projectIds,
+      });
 
       // 生成双令牌
       const { accessToken, refreshToken } = await TokenManager.generateTokenPair(
@@ -332,12 +339,17 @@ router.post('/refresh',
       }
 
       // 生成新的 Access Token
-      const payload = {
+      const projectIds = await listAccessibleProjectIds(Project, {
+        tenantId: user.tenantId,
+        role: user.role,
+      });
+      const payload = buildAccessTokenPayload({
         userId: user.id,
         username: user.username,
         role: user.role,
-        tenantId: user.tenantId
-      };
+        tenantId: user.tenantId,
+        projectIds,
+      });
 
       const result = await TokenManager.refreshAccessToken(refreshToken, payload);
       if (!result) {

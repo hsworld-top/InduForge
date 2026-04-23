@@ -9,6 +9,25 @@ import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
 import { getApiErrorMessage } from "@/utils/request";
 
+/**
+ * 兼容 data_service 当前返回的两类连接列表包络：
+ * 1. { data: { connections: [...] } }：前端旧假设
+ * 2. { data: [...] }：后端当前实际返回
+ *
+ * 这里统一收敛成数组，避免 debug 链路在接口成功时仍被误判为“暂无连接”。
+ */
+export function normalizeConnectionsPayload(response) {
+  if (Array.isArray(response?.data?.connections)) {
+    return response.data.connections;
+  }
+
+  if (Array.isArray(response?.data)) {
+    return response.data;
+  }
+
+  return [];
+}
+
 export function useConnection(projectId) {
   const connections = ref([]);
   const selectedConnectionId = ref(null);
@@ -35,7 +54,7 @@ export function useConnection(projectId) {
     loading.value = true;
     try {
       const response = await dataAPI.getConnections(projectId.value);
-      connections.value = response.data?.connections || [];
+      connections.value = normalizeConnectionsPayload(response);
     } catch (error) {
       console.error("加载连接列表失败:", error);
       ElMessage({

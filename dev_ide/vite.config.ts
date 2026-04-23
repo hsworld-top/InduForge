@@ -20,6 +20,14 @@ export default defineConfig(({ mode }) => {
       port: Number(env.VITE_IDE_PORT),
       host: true,
       proxy: {
+        // 数据中心挂在 IDE 宿主下运行时，数据域请求必须优先命中 data_service。
+        // 若只保留泛化的 /api 规则，/api/v1/data/** 会被错误转发到 dev_core，
+        // 从而返回 “API端点不存在”。
+        '/api/v1/data': {
+          target: env.VITE_DATA_SERVICE_URL,
+          changeOrigin: true,
+          secure: false,
+        },
         '/api': {
           target: env.VITE_API_URL,
           changeOrigin: true,

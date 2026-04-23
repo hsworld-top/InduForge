@@ -8,10 +8,29 @@ const DEBUG_PROJECT_QUERY_LIMIT = 50;
 const asNonEmptyString = (value) =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
+/**
+ * 统一提取 projects 列表。
+ *
+ * 当前项目接口存在两种包络：
+ * 1. 旧结构：data.projects
+ * 2. 现结构：data.list.projects
+ * debug 默认工程解析只关心工程数组本身，这里做兼容收敛，避免 `/datacenter/debug`
+ * 在接口包络升级后拿不到默认工程上下文。
+ */
+const extractProjects = (payload) => {
+  if (Array.isArray(payload?.data?.projects)) {
+    return payload.data.projects;
+  }
+
+  if (Array.isArray(payload?.data?.list?.projects)) {
+    return payload.data.list.projects;
+  }
+
+  return [];
+};
+
 const normalizeProjectList = (payload) => {
-  const projects = Array.isArray(payload?.data?.projects)
-    ? payload.data.projects
-    : [];
+  const projects = extractProjects(payload);
 
   return projects
     .map((item) => {
