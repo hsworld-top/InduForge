@@ -1,172 +1,137 @@
 <template>
   <div class="project-management">
-    <!-- 页面标题和操作栏 -->
-    <div class="flex justify-between items-center mb-3">
-      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
-        {{ t('projectManagement.title') }}
-      </h1>
-      <div class="flex items-center space-x-2">
+    <!-- 顶部操作栏 (Cockpit-style) -->
+    <div class="flex items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-6">
+      <!-- 左侧：搜索与视图切换 -->
+      <div class="flex items-center space-x-3">
+        <!-- 圆角搜索框 -->
+        <el-input v-model="searchForm.name" :placeholder="t('projectManagement.searchPlaceholder')" clearable
+          class="!w-64 rounded-full-input" prefix-icon="Search" @input="handleSearch" />
+        
         <!-- 视图切换 -->
-        <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+        <div class="flex items-center bg-gray-50 dark:bg-gray-900 rounded-full p-1 border border-gray-100 dark:border-gray-700">
           <button @click="viewMode = 'card'" :class="[
-            'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
-            viewMode === 'card'
-              ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
+            'w-8 h-7 rounded-full flex items-center justify-center transition-colors',
+            viewMode === 'card' ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
           ]">
-            <el-icon class="mr-1">
-              <Grid />
-            </el-icon>
-            {{ t('projectManagement.cardView') }}
+            <el-icon><Grid /></el-icon>
           </button>
           <button @click="viewMode = 'list'" :class="[
-            'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
-            viewMode === 'list'
-              ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
+            'w-8 h-7 rounded-full flex items-center justify-center transition-colors',
+            viewMode === 'list' ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
           ]">
-            <el-icon class="mr-1">
-              <List />
-            </el-icon>
-            {{ t('projectManagement.listView') }}
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
           </button>
         </div>
 
-        <!-- 添加工程按钮 -->
-        <el-button v-if="canManageProjects" type="primary" @click="showCreateDialog = true" size="small"
-          class="bg-blue-600 hover:bg-blue-700">
-          <el-icon class="mr-2">
-            <Plus />
-          </el-icon>
-          {{ t('projectManagement.addProject') }}
-        </el-button>
-        <el-button v-if="canManageProjects" type="default" @click="handleImportProject" size="small">
-          <el-icon class="mr-2">
-            <Upload />
-          </el-icon>
-          {{ t('projectManagement.importProject') }}
-        </el-button>
+        <!-- 批量操作 (有选中时显示) -->
+        <div v-if="selectedProjects.length > 0" class="flex items-center space-x-2 pl-3 border-l border-gray-200 dark:border-gray-700">
+          <el-button v-if="canExportProjects" type="success" size="small" round @click="batchExportProjects"
+            :disabled="selectedProjects.length === 0" :loading="batchOperationLoading">
+            <el-icon class="mr-1"><Download /></el-icon>
+            {{ t('projectManagement.batchExport') }} ({{ selectedProjects.length }})
+          </el-button>
+          <el-button v-if="canDeleteProjects" type="danger" size="small" round @click="batchDeleteProjects"
+            :disabled="selectedProjects.length === 0" :loading="batchOperationLoading">
+            <el-icon class="mr-1"><Delete /></el-icon>
+            {{ t('projectManagement.batchDelete') }} ({{ selectedProjects.length }})
+          </el-button>
+        </div>
       </div>
-    </div>
 
-    <!-- 搜索和筛选栏 -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
-      <div class="flex items-center justify-between">
-        <!-- 搜索表单 -->
-        <div class="flex items-center space-x-3">
-          <el-input v-model="searchForm.name" :placeholder="t('projectManagement.searchPlaceholder')" clearable
-            style="width: 200px" @input="handleSearch" />
-          <el-button @click="resetSearch" type="default" size="small">
-            <el-icon>
-              <Refresh />
-            </el-icon>
-          </el-button>
-        </div>
-
-        <!-- 操作按钮组 -->
-        <div class="flex items-center space-x-3">
-          <template v-if="selectionMode">
-            <el-button v-if="canExportProjects" type="success" size="small" @click="batchExportProjects"
-              :disabled="selectedProjects.length === 0" :loading="batchOperationLoading">
-              <el-icon class="mr-1">
-                <Download />
-              </el-icon>
-              {{ t('projectManagement.batchExport') }} ({{ selectedProjects.length }})
-            </el-button>
-            <el-button v-if="canDeleteProjects" type="danger" size="small" @click="batchDeleteProjects"
-              :disabled="selectedProjects.length === 0" :loading="batchOperationLoading">
-              <el-icon class="mr-1">
-                <Delete />
-              </el-icon>
-              {{ t('projectManagement.batchDelete') }} ({{ selectedProjects.length }})
-            </el-button>
-            <el-divider direction="vertical" />
-          </template>
-
-          <!-- 多选切换按钮 -->
-          <el-button :type="selectionMode ? 'primary' : 'default'" size="small" @click="toggleSelectionMode">
-            <el-icon class="mr-1"><Select /></el-icon>
-            {{ selectionMode ? t("projectManagement.cancelSelection") : t("projectManagement.multiSelect") }}
-          </el-button>
-        </div>
+      <!-- 右侧：全局操作按钮组 -->
+      <div class="flex items-center space-x-3">
+        <el-tooltip :content="t('projectManagement.addProject')" placement="top" v-if="canManageProjects">
+          <button class="w-9 h-9 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors shadow-sm" @click="showCreateDialog = true">
+            <el-icon><Plus /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip :content="t('projectManagement.importProject')" placement="top" v-if="canManageProjects">
+          <button class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm" @click="handleImportProject">
+            <el-icon><Upload /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip :content="t('common.refresh')" placement="top">
+          <button class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm" @click="resetSearch">
+            <el-icon><RefreshRight /></el-icon>
+          </button>
+        </el-tooltip>
       </div>
     </div>
 
     <!-- 工程列表 -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-      <!-- 卡片视图 -->
-      <div v-if="viewMode === 'card'" class="p-6">
+    <div :class="viewMode === 'list' ? 'bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden' : ''">
+      <!-- 卡片视图 (Cockpit-style) -->
+      <div v-if="viewMode === 'card'" class="py-2">
         <div v-if="projectList.length === 0 && !loading" class="text-center py-12">
           <el-empty :description="t('projectManagement.emptyProjects')" />
         </div>
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
           <div v-for="project in projectList" :key="project.id"
-            class="project-card relative border border-gray-200 dark:border-gray-600 rounded-lg p-6 hover:shadow-lg transition-all duration-200 cursor-pointer"
-            :class="{
-              'ring-4 ring-blue-500': selectedProjects.includes(project.id),
-              'opacity-60': selectionMode,
-            }" :style="getProjectCardStyle(project)" @click="handleCardClick(project)">
-            <!-- 选择模式下的复选框 -->
-            <div v-if="selectionMode" class="absolute top-2 right-2 z-10" @click.stop>
-              <el-checkbox :model-value="selectedProjects.includes(project.id)"
-                @change="(val) => toggleProjectSelection(project.id, val)" size="large" :style="{
-                  '--el-checkbox-checked-bg-color': '#10b981',
-                  '--el-checkbox-checked-input-border-color': '#10b981',
-                }" />
-            </div>
-
-            <!-- 卡片头部 -->
-            <div class="flex items-start justify-between mb-4">
-              <div class="flex-1">
-                <h3 class="text-lg font-semibold text-white mb-1">
+            class="project-card relative bg-white dark:bg-gray-800 rounded-2xl p-5 transition-all duration-300 cursor-pointer flex flex-col border border-gray-200/80 dark:border-gray-700 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5"
+            :class="{ 'ring-2 ring-blue-500 border-blue-500': selectedProjects.includes(project.id), 'opacity-60': selectionMode && !selectedProjects.includes(project.id) }"
+            @click="handleCardClick(project)">
+            
+            <!-- 卡片头部 (标题 + Tag) -->
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5 overflow-hidden flex-1">
+                <el-checkbox :model-value="selectedProjects.includes(project.id)"
+                  @change="(val) => toggleProjectSelection(project.id, val)" size="large" @click.stop class="!mr-0" />
+                <h3 class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 truncate flex-1" :title="project.name">
                   {{ project.name }}
                 </h3>
               </div>
-              <div class="w-6 h-6 rounded-full border-2 border-white shadow-sm bg-white opacity-20"></div>
-            </div>
-
-            <!-- 工程描述 -->
-            <p class="text-sm text-white opacity-90 mb-4 line-clamp-2">
-              {{ project.description || t("projectManagement.noDescription") }}
-            </p>
-
-            <!-- 工程信息 -->
-            <div class="space-y-2 mb-4">
-              <div class="flex justify-between text-sm">
-                <span class="text-white opacity-75">{{ t('projectManagement.creator') }}:</span>
-                <span class="text-white font-medium">{{ getProjectCreatorDisplay(project) }}</span>
-              </div>
-              <div class="flex justify-between text-sm">
-                <span class="text-white opacity-75">{{ t('projectManagement.runtimeMode') }}:</span>
-                <el-tag :type="getProjectModeTagType(project)" size="small" effect="dark">
-                  {{ getProjectModeDisplay(project) }}
-                </el-tag>
+              <div class="flex gap-2 shrink-0 ml-2">
+                 <!-- 状态Tag -->
+                 <div v-if="project.colorTag" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white shadow-sm flex items-center" :style="{ backgroundColor: project.colorTag }">
+                   {{ t('projectManagement.color') }}
+                 </div>
+                 <div class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 flex items-center tracking-wide">
+                   {{ getProjectModeDisplay(project) }}
+                 </div>
               </div>
             </div>
 
-            <!-- 操作按钮 -->
-            <div class="flex flex-wrap justify-end gap-2">
-              <el-button v-if="canManageProjects" type="warning" size="small"
-                @click.stop="openRuntimeAccessDialog(project)">
-                {{ t('projectManagement.memberAndPermission') }}
-              </el-button>
-              <el-button v-if="canPerformOps" type="primary" size="small" @click.stop="openDeployDialog(project)">
-                {{ t('projectManagement.publishAndDeploy') }}
-              </el-button>
-              <el-button v-if="canPerformOps && isProjectDeployed(project)" type="info" size="small"
-                @click.stop="openOpsManagement(project)">
-                {{ t('opsManagement.title') }}
-              </el-button>
-              <el-button v-if="canExportProjects" type="success" size="small"
-                @click.stop="handleExportProject(project)">
-                <el-icon class="mr-1">
-                  <Download />
-                </el-icon>
-                {{ t('projectManagement.export') }}
-              </el-button>
-              <el-button v-if="canDeleteProjects" type="danger" size="small" @click.stop="deleteProject(project)">
-                {{ t('projectManagement.delete') }}
-              </el-button>
+            <!-- 卡片主体内容 (灰底框) -->
+            <div class="bg-gray-50/80 dark:bg-gray-900/40 rounded-xl p-4 flex-1 mb-4 border border-gray-100 dark:border-gray-800">
+              <p class="text-[13px] text-gray-500 dark:text-gray-400 mb-3 line-clamp-2 min-h-[38px] leading-relaxed">
+                {{ project.description || t("projectManagement.noDescription") }}
+              </p>
+              <div class="flex justify-between items-center text-[13px] border-t border-gray-200/60 dark:border-gray-700/60 pt-3 mt-3">
+                <span class="text-gray-400">{{ t('projectManagement.creator') }}:</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ getProjectCreatorDisplay(project) }}</span>
+              </div>
+            </div>
+
+            <!-- 底部操作区 (时间戳 + 圆形图标按钮组) -->
+            <div class="flex items-center justify-between pt-1">
+               <div class="text-[11px] text-gray-400 font-mono bg-gray-50 dark:bg-gray-800/80 px-2 py-1 rounded border border-gray-100 dark:border-gray-700/50">
+                 {{ formatDate(project.createdAt) }}
+               </div>
+               <div class="flex items-center gap-1">
+                 <el-tooltip :content="t('projectManagement.memberAndPermission')" placement="top">
+                   <button v-if="canManageProjects" class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors" @click.stop="openRuntimeAccessDialog(project)"><el-icon class="text-sm"><User /></el-icon></button>
+                 </el-tooltip>
+                 <el-tooltip :content="t('projectManagement.publishAndDeploy')" placement="top">
+                   <button v-if="canPerformOps" class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/30 dark:hover:text-blue-400 transition-colors" @click.stop="openDeployDialog(project)"><el-icon class="text-sm"><UploadFilled /></el-icon></button>
+                 </el-tooltip>
+                 <el-tooltip :content="t('opsManagement.title')" placement="top" v-if="canPerformOps && isProjectDeployed(project)">
+                   <button class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/30 dark:hover:text-green-400 transition-colors" @click.stop="openOpsManagement(project)"><el-icon class="text-sm"><Odometer /></el-icon></button>
+                 </el-tooltip>
+                 <el-tooltip :content="t('projectManagement.export')" placement="top">
+                   <button v-if="canExportProjects" class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors" @click.stop="handleExportProject(project)"><el-icon class="text-sm"><Download /></el-icon></button>
+                 </el-tooltip>
+                 <el-tooltip :content="t('projectManagement.delete')" placement="top">
+                   <button v-if="canDeleteProjects" class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors" @click.stop="deleteProject(project)"><el-icon class="text-sm"><Delete /></el-icon></button>
+                 </el-tooltip>
+               </div>
             </div>
           </div>
         </div>
@@ -176,8 +141,8 @@
       <div v-else>
         <el-table :data="projectList" v-loading="loading" style="width: 100%"
           :header-cell-style="{ background: '#f9fafb', color: '#374151' }" @selection-change="handleSelectionChange">
-          <!-- 选择列（仅在选择模式显示） -->
-          <el-table-column v-if="selectionMode" type="selection" width="55" fixed="left" />
+          <!-- 选择列 -->
+          <el-table-column type="selection" width="55" fixed="left" />
           <el-table-column :label="t('projectManagement.color')" width="80">
             <template #default="scope">
               <div class="w-6 h-6 rounded-full border-2 border-white shadow-sm"
