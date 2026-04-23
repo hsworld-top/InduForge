@@ -345,6 +345,7 @@ import dataAPI from "@/api/data.api";
 import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";
 import { resolveDatacenterTabLabel } from "@/utils/tabTitle";
+import { getApiErrorMessage } from "@/utils/request";
 
 // 从路由获取 project 信息
 const route = useRoute();
@@ -951,7 +952,7 @@ const handleConnectionDblClick = async (connection) => {
 
       // 如果未展开，则测试连接并展开
       const config = connection.relationalConfig;
-      const response = await dataAPI.testConnection(projectId.value, {
+      await dataAPI.testConnection(projectId.value, {
         type: connection.type,
         config: {
           dbType: config.dbType,
@@ -963,40 +964,32 @@ const handleConnectionDblClick = async (connection) => {
         },
       });
 
-      if (response.success) {
-        await updateConnectionStatus(connection.id, "connected");
-        ElMessage({
-          type: "success",
-          message: t("query.connectionTestSuccess"),
-          offset: 60,
-          duration: 3000,
-        });
+      await updateConnectionStatus(connection.id, "connected");
+      ElMessage({
+        type: "success",
+        message: t("query.connectionTestSuccess"),
+        offset: 60,
+        duration: 3000,
+      });
 
-        // 展开连接并加载表列表和查询列表
-        if (connectionListRef.value) {
-          const state = connectionListRef.value.getConnectionState(
-            connection.id,
-          );
-          state.expanded = true;
+      // 展开连接并加载表列表和查询列表
+      if (connectionListRef.value) {
+        const state = connectionListRef.value.getConnectionState(connection.id);
+        state.expanded = true;
 
-          // 并行加载表列表和查询列表
-          const loadPromises = [];
+        // 并行加载表列表和查询列表
+        const loadPromises = [];
 
-          if (state.tables.length === 0) {
-            loadPromises.push(
-              connectionListRef.value.loadTables(connection.id),
-            );
-          }
+        if (state.tables.length === 0) {
+          loadPromises.push(connectionListRef.value.loadTables(connection.id));
+        }
 
-          if (state.queries.length === 0) {
-            loadPromises.push(
-              connectionListRef.value.loadQueries(connection.id),
-            );
-          }
+        if (state.queries.length === 0) {
+          loadPromises.push(connectionListRef.value.loadQueries(connection.id));
+        }
 
-          if (loadPromises.length > 0) {
-            await Promise.all(loadPromises);
-          }
+        if (loadPromises.length > 0) {
+          await Promise.all(loadPromises);
         }
       }
     } else if (connection.type === "mqtt" && connection.mqttConfig) {
@@ -1046,7 +1039,7 @@ const handleConnectionDblClick = async (connection) => {
         ElMessage({
           type: "error",
           message: t("query.mqttStartFailed", {
-            message: startError.response?.data?.message || startError.message,
+            message: getApiErrorMessage(startError, "MQTT 启动失败"),
           }),
           offset: 60,
           duration: 5000,
@@ -1059,7 +1052,7 @@ const handleConnectionDblClick = async (connection) => {
     ElMessage({
       type: "error",
       message: t("query.connectionTestFailed", {
-        message: error.response?.data?.message || error.message,
+        message: getApiErrorMessage(error, "连接测试失败"),
       }),
       offset: 60,
       duration: 5000,
@@ -1257,27 +1250,22 @@ const handleQueryExecute = async (tab) => {
       parameters,
     );
 
-    if (response.success) {
-      // 更新结果
-      tab.result = {
-        columns: response.data.columns || [],
-        rows: response.data.rows || [],
-        rowCount: response.data.rowCount || 0,
-        executionTime: response.executionTime || 0,
-      };
-      tab.resultPage = 1;
-      ElMessage({
-        type: "success",
-        message: t("query.executeSuccess", { count: tab.result.rowCount }),
-        offset: 60,
-        duration: 3000,
-      });
-    }
+    // 更新结果
+    tab.result = {
+      columns: response.data?.columns || [],
+      rows: response.data?.rows || [],
+      rowCount: response.data?.rowCount || 0,
+      executionTime: response.data?.executionTime || 0,
+    };
+    tab.resultPage = 1;
+    ElMessage({
+      type: "success",
+      message: t("query.executeSuccess", { count: tab.result.rowCount }),
+      offset: 60,
+      duration: 3000,
+    });
   } catch (error) {
-    const errorMsg =
-      error.response?.data?.message ||
-      error.message ||
-      t("query.executeFailed");
+    const errorMsg = getApiErrorMessage(error, "执行查询失败");
     ElMessage({
       type: "error",
       message: errorMsg,
@@ -1422,7 +1410,7 @@ const handleMqttSubscriptionDelete = async (connection, subscription) => {
     if (error !== "cancel") {
       ElMessage.error(
         t("subscription.deleteFailed", {
-          message: error.response?.data?.message || error.message,
+          message: getApiErrorMessage(error, "删除订阅失败"),
         }),
       );
     }
@@ -1510,7 +1498,7 @@ const handleDeleteQueryFromMenu = async (connection, query) => {
     if (error !== "cancel") {
       ElMessage.error(
         t("query.deleteQueryFailed", {
-          message: error.response?.data?.message || error.message,
+          message: getApiErrorMessage(error, "删除查询失败"),
         }),
       );
     }
@@ -1568,34 +1556,29 @@ const handleQuerySave = async (tab) => {
               },
             });
 
-            if (response.success) {
-              ElMessage({
-                type: "success",
-                message: t("query.saveSuccess"),
-                offset: 60,
-                duration: 3000,
-              });
-              tab.label = `${tab.connection.name} - ${queryName}`;
-              tab.labelKey = null;
-              tab.labelPrefix = null;
-              tab.labelParams = null;
-              tab.queryId = response.data.id;
-              tab.modified = false;
+            ElMessage({
+              type: "success",
+              message: t("query.saveSuccess"),
+              offset: 60,
+              duration: 3000,
+            });
+            tab.label = `${tab.connection.name} - ${queryName}`;
+            tab.labelKey = null;
+            tab.labelPrefix = null;
+            tab.labelParams = null;
+            tab.queryId = response.data?.id;
+            tab.modified = false;
 
-              // 刷新左侧查询列表
-              if (connectionListRef.value) {
-                await connectionListRef.value.loadQueries(tab.connectionId);
-              }
-
-              // 关闭对话框
-              done();
+            // 刷新左侧查询列表
+            if (connectionListRef.value) {
+              await connectionListRef.value.loadQueries(tab.connectionId);
             }
+
+            // 关闭对话框
+            done();
           } catch (error) {
             // 保存失败，显示错误但不关闭对话框
-            const errorMsg =
-              error.response?.data?.message ||
-              error.message ||
-              t("query.saveFailed");
+            const errorMsg = getApiErrorMessage(error, "保存查询失败");
             instance.editorErrorMessage = errorMsg;
           } finally {
             instance.confirmButtonLoading = false;

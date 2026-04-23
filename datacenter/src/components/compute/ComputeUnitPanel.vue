@@ -89,6 +89,7 @@ import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
 import { t } from "@/i18n/runtime";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   projectId: {
@@ -152,11 +153,7 @@ const handleCreate = async () => {
     outputText.value = JSON.stringify(response.data, null, 2);
     ElMessage.success(t("compute.createSuccess"));
   } catch (error) {
-    ElMessage.error(
-      error.response?.data?.message ||
-        error.message ||
-        t("compute.createFailed"),
-    );
+    ElMessage.error(getApiErrorMessage(error, t("compute.createFailed")));
   } finally {
     creating.value = false;
   }
@@ -176,9 +173,7 @@ const handleRun = async () => {
     outputText.value = JSON.stringify(response.data, null, 2);
     ElMessage.success(t("compute.runSuccess"));
   } catch (error) {
-    ElMessage.error(
-      error.response?.data?.message || error.message || t("compute.runFailed"),
-    );
+    ElMessage.error(getApiErrorMessage(error, t("compute.runFailed")));
   } finally {
     running.value = false;
   }
@@ -198,11 +193,7 @@ const handleDebug = async () => {
     outputText.value = JSON.stringify(response.data, null, 2);
     ElMessage.success(t("compute.debugSuccess"));
   } catch (error) {
-    ElMessage.error(
-      error.response?.data?.message ||
-        error.message ||
-        t("compute.debugFailed"),
-    );
+    ElMessage.error(getApiErrorMessage(error, t("compute.debugFailed")));
   } finally {
     debugging.value = false;
   }

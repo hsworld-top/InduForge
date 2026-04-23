@@ -481,6 +481,7 @@ import ConnectionItem from "./ConnectionItem.vue";
 import dataAPI from "@/api/data.api";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { t } from "@/i18n/runtime";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   connections: {
@@ -648,12 +649,10 @@ const loadTables = async (connectionId) => {
       props.projectId,
       connectionId,
     );
-    if (response.success) {
-      state.tables = response.data.tables || [];
-    }
+    state.tables = response.data?.tables || [];
   } catch (error) {
     ElMessage.error(
-      `${t("connection.loadingTables")} ${error.response?.data?.message || error.message}`,
+      `${t("connection.loadingTables")} ${getApiErrorMessage(error, "加载表列表失败")}`,
     );
   } finally {
     state.loading = false;
@@ -668,12 +667,10 @@ const loadQueries = async (connectionId) => {
     const response = await dataAPI.getQueries(props.projectId, {
       connectionId,
     });
-    if (response.success) {
-      state.queries = response.data.queries || [];
-    }
+    state.queries = response.data?.queries || [];
   } catch (error) {
     ElMessage.error(
-      `${t("connection.loadingQueries")} ${error.response?.data?.message || error.message}`,
+      `${t("connection.loadingQueries")} ${getApiErrorMessage(error, "加载查询失败")}`,
     );
   } finally {
     state.loadingQueries = false;
@@ -694,13 +691,11 @@ const loadMqttSubscriptions = async (connectionId) => {
       props.projectId,
       connectionId,
     );
-    if (response.success) {
-      state.mqttSubscriptions = response.data || [];
-    }
+    state.mqttSubscriptions = response.data || [];
   } catch (error) {
     ElMessage.error(
       t("subscription.loadFailed", {
-        message: error.response?.data?.message || error.message,
+        message: getApiErrorMessage(error, "加载订阅失败"),
       }),
     );
   } finally {
@@ -821,7 +816,7 @@ const handleDeleteQuery = async (connection, query) => {
     if (error !== "cancel") {
       ElMessage.error(
         t("query.deleteQueryFailed", {
-          message: error.response?.data?.message || error.message,
+          message: getApiErrorMessage(error, "删除查询失败"),
         }),
       );
     }

@@ -90,6 +90,7 @@ import IconTablerQuestionMark from "~icons/tabler/question-mark";
 import dataAPI from "@/api/data.api";
 import { Storage } from "@/utils/storage";
 import { t } from "@/i18n/runtime";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   modelValue: {
@@ -237,15 +238,13 @@ const handleSubmit = async () => {
       );
     }
 
-    if (response.success) {
-      ElMessage.success(
-        props.mode === "create"
-          ? t("subscription.createSuccess")
-          : t("subscription.updateSuccess"),
-      );
-      emit("success", response.data);
-      handleClose();
-    }
+    ElMessage.success(
+      props.mode === "create"
+        ? t("subscription.createSuccess")
+        : t("subscription.updateSuccess"),
+    );
+    emit("success", response.data);
+    handleClose();
   } catch (error) {
     if (error.errors) {
       // 表单验证错误
@@ -254,10 +253,10 @@ const handleSubmit = async () => {
     ElMessage.error(
       props.mode === "create"
         ? t("subscription.createFailed", {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, "创建订阅失败"),
           })
         : t("subscription.updateFailed", {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, "更新订阅失败"),
           }),
     );
   } finally {

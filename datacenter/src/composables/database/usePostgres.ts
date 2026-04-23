@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
+import { getApiErrorMessage } from "@/utils/request";
 
 /**
  * PostgreSQL 数据库操作 Composable
@@ -25,14 +26,12 @@ export function usePostgres(projectId, connectionId) {
         projectId.value,
         connectionId.value,
       );
-      if (response.success) {
-        tables.value = response.data.tables || [];
-      }
+      tables.value = response.data?.tables || [];
     } catch (error) {
       ElMessage({
         type: "error",
         message:
-          "加载表列表失败：" + (error.response?.data?.message || error.message),
+          "加载表列表失败：" + getApiErrorMessage(error, "加载表列表失败"),
         offset: 60,
         duration: 5000,
         showClose: true,

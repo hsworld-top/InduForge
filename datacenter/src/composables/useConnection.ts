@@ -7,6 +7,7 @@
 import { ref, computed } from "vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
+import { getApiErrorMessage } from "@/utils/request";
 
 export function useConnection(projectId) {
   const connections = ref([]);
@@ -34,16 +35,14 @@ export function useConnection(projectId) {
     loading.value = true;
     try {
       const response = await dataAPI.getConnections(projectId.value);
-      if (response.success) {
-        connections.value = response.data.connections || [];
-      }
+      connections.value = response.data?.connections || [];
     } catch (error) {
       console.error("加载连接列表失败:", error);
       ElMessage({
         type: "error",
         message:
           "加载连接列表失败：" +
-          (error.response?.data?.message || error.message),
+          getApiErrorMessage(error, "加载连接列表失败"),
         offset: 60,
         duration: 5000,
         showClose: true,
@@ -61,21 +60,18 @@ export function useConnection(projectId) {
 
     try {
       const response = await dataAPI.createConnection(projectId.value, data);
-      if (response.success) {
-        ElMessage({
-          type: "success",
-          message: "连接创建成功",
-          offset: 60,
-          duration: 3000,
-        });
-        await loadConnections();
-        return response.data;
-      }
+      ElMessage({
+        type: "success",
+        message: "连接创建成功",
+        offset: 60,
+        duration: 3000,
+      });
+      await loadConnections();
+      return response.data;
     } catch (error) {
       ElMessage({
         type: "error",
-        message:
-          "创建连接失败：" + (error.response?.data?.message || error.message),
+        message: "创建连接失败：" + getApiErrorMessage(error, "创建连接失败"),
         offset: 60,
         duration: 5000,
         showClose: true,
@@ -96,21 +92,18 @@ export function useConnection(projectId) {
         connectionId,
         data,
       );
-      if (response.success) {
-        ElMessage({
-          type: "success",
-          message: "连接更新成功",
-          offset: 60,
-          duration: 3000,
-        });
-        await loadConnections();
-        return response.data;
-      }
+      ElMessage({
+        type: "success",
+        message: "连接更新成功",
+        offset: 60,
+        duration: 3000,
+      });
+      await loadConnections();
+      return response.data;
     } catch (error) {
       ElMessage({
         type: "error",
-        message:
-          "更新连接失败：" + (error.response?.data?.message || error.message),
+        message: "更新连接失败：" + getApiErrorMessage(error, "更新连接失败"),
         offset: 60,
         duration: 5000,
         showClose: true,
@@ -126,30 +119,24 @@ export function useConnection(projectId) {
     if (!projectId.value) return false;
 
     try {
-      const response = await dataAPI.deleteConnection(
-        projectId.value,
-        connectionId,
-      );
-      if (response.success) {
-        ElMessage({
-          type: "success",
-          message: "连接删除成功",
-          offset: 60,
-          duration: 3000,
-        });
-        await loadConnections();
+      await dataAPI.deleteConnection(projectId.value, connectionId);
+      ElMessage({
+        type: "success",
+        message: "连接删除成功",
+        offset: 60,
+        duration: 3000,
+      });
+      await loadConnections();
 
-        // 如果删除的是当前选中的连接，清空选择
-        if (selectedConnectionId.value === connectionId) {
-          selectedConnectionId.value = null;
-        }
-        return true;
+      // 如果删除的是当前选中的连接，清空选择
+      if (selectedConnectionId.value === connectionId) {
+        selectedConnectionId.value = null;
       }
+      return true;
     } catch (error) {
       ElMessage({
         type: "error",
-        message:
-          "删除连接失败：" + (error.response?.data?.message || error.message),
+        message: "删除连接失败：" + getApiErrorMessage(error, "删除连接失败"),
         offset: 60,
         duration: 5000,
         showClose: true,
@@ -169,21 +156,17 @@ export function useConnection(projectId) {
         type,
         config,
       });
-      if (response.success) {
-        ElMessage({
-          type: "success",
-          message: response.message || "连接测试成功",
-          offset: 60,
-          duration: 3000,
-        });
-        return true;
-      }
-      return false;
+      ElMessage({
+        type: "success",
+        message: response.msg || "连接测试成功",
+        offset: 60,
+        duration: 3000,
+      });
+      return true;
     } catch (error) {
       ElMessage({
         type: "error",
-        message:
-          "连接测试失败：" + (error.response?.data?.message || error.message),
+        message: "连接测试失败：" + getApiErrorMessage(error, "连接测试失败"),
         offset: 60,
         duration: 5000,
         showClose: true,
@@ -204,16 +187,14 @@ export function useConnection(projectId) {
         connectionId,
         status,
       );
-      if (response.success) {
-        await loadConnections();
-        return response.data;
-      }
+      await loadConnections();
+      return response.data;
     } catch (error) {
       ElMessage({
         type: "error",
         message:
           "更新连接状态失败：" +
-          (error.response?.data?.message || error.message),
+          getApiErrorMessage(error, "更新连接状态失败"),
         offset: 60,
         duration: 5000,
         showClose: true,

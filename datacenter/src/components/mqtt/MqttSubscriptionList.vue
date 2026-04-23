@@ -161,6 +161,7 @@ import IconTablerInbox from "~icons/tabler/inbox";
 import MqttSubscriptionDialog from "./MqttSubscriptionDialog.vue";
 import dataAPI from "@/api/data.api";
 import { t } from "@/i18n/runtime";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   connectionId: {
@@ -196,13 +197,11 @@ const loadSubscriptions = async () => {
       props.projectId,
       props.connectionId,
     );
-    if (response.success) {
-      subscriptions.value = response.data || [];
-    }
+    subscriptions.value = response.data || [];
   } catch (error) {
     ElMessage.error(
       t("subscription.loadFailed", {
-        message: error.response?.data?.message || error.message,
+        message: getApiErrorMessage(error, "加载订阅失败"),
       }),
     );
   } finally {
@@ -272,7 +271,7 @@ const handleDelete = async (subscription) => {
     if (error !== "cancel") {
       ElMessage.error(
         t("subscription.deleteFailed", {
-          message: error.response?.data?.message || error.message,
+          message: getApiErrorMessage(error, "删除订阅失败"),
         }),
       );
     }

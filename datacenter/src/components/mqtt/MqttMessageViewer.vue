@@ -208,6 +208,7 @@ import IconTablerArrowUp from "~icons/tabler/arrow-up";
 import dataAPI from "@/api/data.api";
 import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   subscription: {
@@ -284,14 +285,12 @@ const loadMessages = async () => {
       props.projectId,
       props.subscription.id,
     );
-    if (response.success) {
-      messages.value = response.data || [];
-      isUserAtTop.value = true; // 加载后默认在顶部
-      await scrollToTop(); // 滚动到顶部显示最新消息
-    }
+    messages.value = response.data || [];
+    isUserAtTop.value = true; // 加载后默认在顶部
+    await scrollToTop(); // 滚动到顶部显示最新消息
   } catch (error) {
     ElMessage.error(
-      "加载消息失败：" + (error.response?.data?.message || error.message),
+      "加载消息失败：" + getApiErrorMessage(error, "加载消息失败"),
     );
   } finally {
     loading.value = false;
@@ -504,14 +503,10 @@ const handleToggleSubscription = async () => {
       props.subscription.id,
     );
 
-    if (response.success) {
-      subscriptionEnabled.value = response.data.isEnabled;
-      ElMessage.success(`订阅已${subscriptionEnabled.value ? "启用" : "禁用"}`);
-    }
+    subscriptionEnabled.value = Boolean(response.data?.isEnabled);
+    ElMessage.success(`订阅已${subscriptionEnabled.value ? "启用" : "禁用"}`);
   } catch (error) {
-    ElMessage.error(
-      "操作失败：" + (error.response?.data?.message || error.message),
-    );
+    ElMessage.error("操作失败：" + getApiErrorMessage(error, "操作失败"));
   }
 };
 

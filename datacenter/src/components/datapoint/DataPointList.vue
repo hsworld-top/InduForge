@@ -252,6 +252,7 @@ import {
   normalizeRuntimeGrantPayload,
   summarizeRuntimeGrant,
 } from "@/utils/runtime-permission-grants";
+import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
   projectId: {
@@ -297,13 +298,11 @@ const loadDataPoints = async () => {
       status: statusFilter.value || undefined,
       search: searchText.value || undefined,
     });
-    if (response.success) {
-      datapoints.value = response.data?.datapoints || [];
-    }
+    datapoints.value = response.data?.datapoints || [];
   } catch (error) {
     ElMessage.error(
       t("datapoints.loadFailed", {
-        message: error.response?.data?.message || error.message,
+        message: getApiErrorMessage(error, "加载数据点失败"),
       }),
     );
   } finally {
@@ -343,7 +342,7 @@ const handleDelete = async (datapoint) => {
     if (error !== "cancel") {
       ElMessage.error(
         t("datapoints.deleteFailed", {
-          message: error.response?.data?.message || error.message,
+          message: getApiErrorMessage(error, "删除数据点失败"),
         }),
       );
     }
@@ -389,7 +388,7 @@ const handleBatchDelete = async () => {
     if (error !== "cancel") {
       ElMessage.error(
         t("datapoints.batchDeleteFailed", {
-          message: error.response?.data?.message || error.message,
+          message: getApiErrorMessage(error, "批量删除数据点失败"),
         }),
       );
     }
@@ -475,7 +474,10 @@ const handlePermissionSave = async () => {
   } catch (error) {
     ElMessage.error(
       t("datapoints.runtimePermissionSaveFailed", {
-        message: error.response?.data?.message || error.message,
+        message: getApiErrorMessage(
+          error,
+          "保存运行态权限失败",
+        ),
       }),
     );
   } finally {
