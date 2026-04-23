@@ -51,8 +51,26 @@ func TestNewServer_UsesProductionRouter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read body failed: %v", err)
 	}
-	if string(body) != "healthy\n" {
-		t.Fatalf("expected healthy body, got %q", string(body))
+	var payload response.ApiResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode health response failed: %v", err)
+	}
+	if payload.Code != apperrors.SuccessCode {
+		t.Fatalf("expected code %d, got %d", apperrors.SuccessCode, payload.Code)
+	}
+	if payload.ReqID == "" {
+		t.Fatal("expected reqId to be set")
+	}
+	var data map[string]string
+	raw, err := json.Marshal(payload.Data)
+	if err != nil {
+		t.Fatalf("marshal health data failed: %v", err)
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("decode health data failed: %v", err)
+	}
+	if data["status"] != "healthy" {
+		t.Fatalf("expected status=healthy, got %q", data["status"])
 	}
 }
 

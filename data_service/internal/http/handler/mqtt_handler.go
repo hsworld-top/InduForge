@@ -66,7 +66,7 @@ func (h *MqttHandler) CreateConnection(w http.ResponseWriter, r *http.Request) e
 		SSLConfig:        request.SSLConfig,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -81,7 +81,7 @@ func (h *MqttHandler) StartConnection(w http.ResponseWriter, r *http.Request) er
 
 	status, err := h.service.StartConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), status)
@@ -96,7 +96,7 @@ func (h *MqttHandler) GetConnectionStatus(w http.ResponseWriter, r *http.Request
 
 	status, err := h.service.GetConnectionStatus(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), status)
@@ -120,7 +120,7 @@ func (h *MqttHandler) ListMessages(w http.ResponseWriter, r *http.Request) error
 
 	messages, err := h.service.ListMessages(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), limit)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), messages)

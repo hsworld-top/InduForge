@@ -50,7 +50,7 @@ func (h *ComputeHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		TimeoutMS:     request.TimeoutMS,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -75,7 +75,7 @@ func (h *ComputeHandler) Run(w http.ResponseWriter, r *http.Request) error {
 		Input: request.Input,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -100,7 +100,7 @@ func (h *ComputeHandler) Debug(w http.ResponseWriter, r *http.Request) error {
 		Input: request.Input,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)

@@ -48,7 +48,7 @@ func (h *ProtocolWave1Handler) CreateKafkaConfig(w http.ResponseWriter, r *http.
 		Options:       request.Options,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -63,7 +63,7 @@ func (h *ProtocolWave1Handler) PreviewKafkaTopic(w http.ResponseWriter, r *http.
 
 	rows, err := h.service.PreviewKafkaTopic(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), rows)
@@ -100,7 +100,7 @@ func (h *ProtocolWave1Handler) CreateHTTPConfig(w http.ResponseWriter, r *http.R
 		BodyTemplate: request.BodyTemplate,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -135,7 +135,7 @@ func (h *ProtocolWave1Handler) CreateWebSocketConfig(w http.ResponseWriter, r *h
 		HeartbeatIntervalMS: request.HeartbeatIntervalMS,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
@@ -176,7 +176,7 @@ func (h *ProtocolWave1Handler) CreateRedisConfig(w http.ResponseWriter, r *http.
 		Options:    request.Options,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)

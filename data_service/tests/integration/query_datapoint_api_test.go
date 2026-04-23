@@ -16,6 +16,7 @@ import (
 	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
 func TestExecuteQueryAndDataPointValue(t *testing.T) {
@@ -123,9 +124,9 @@ func TestExecuteQueryAndDataPointValue(t *testing.T) {
 			"sql": "SELECT 1",
 		},
 	})
-	disabledExecute := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/queries/"+disabledQuery.ID+"/execute", token, map[string]any{}, http.StatusBadRequest)
-	if disabledExecute.ErrorCode != "BAD_REQUEST" {
-		t.Fatalf("expected BAD_REQUEST for disabled query execute, got %q", disabledExecute.ErrorCode)
+	disabledExecute := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/queries/"+disabledQuery.ID+"/execute", token, map[string]any{}, http.StatusOK)
+	if disabledExecute.Code != apperrors.PublicCodeBadRequest {
+		t.Fatalf("expected code %d for disabled query execute, got %d", apperrors.PublicCodeBadRequest, disabledExecute.Code)
 	}
 
 	writeSQLQuery := mustCreateQuery(t, server.URL, token, projectID, map[string]any{
@@ -136,9 +137,9 @@ func TestExecuteQueryAndDataPointValue(t *testing.T) {
 			"sql": "UPDATE data_points SET status = 'invalid' WHERE 1 = 0",
 		},
 	})
-	writeSQLExecute := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/queries/"+writeSQLQuery.ID+"/execute", token, map[string]any{}, http.StatusBadRequest)
-	if writeSQLExecute.ErrorCode != "BAD_REQUEST" {
-		t.Fatalf("expected BAD_REQUEST for non-readonly sql execute, got %q", writeSQLExecute.ErrorCode)
+	writeSQLExecute := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/queries/"+writeSQLQuery.ID+"/execute", token, map[string]any{}, http.StatusOK)
+	if writeSQLExecute.Code != apperrors.PublicCodeBadRequest {
+		t.Fatalf("expected code %d for non-readonly sql execute, got %d", apperrors.PublicCodeBadRequest, writeSQLExecute.Code)
 	}
 }
 
@@ -188,9 +189,9 @@ func TestDataPointBatchDelete(t *testing.T) {
 	activeID := insertOneDataPoint(t, ctx, fixture, projectID, userID, "metrics.keep", "active")
 	errEnvelope := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/datapoints/delete-batch", token, map[string]any{
 		"ids": []string{activeID},
-	}, http.StatusBadRequest)
-	if errEnvelope.ErrorCode != "BAD_REQUEST" {
-		t.Fatalf("expected BAD_REQUEST, got %q", errEnvelope.ErrorCode)
+	}, http.StatusOK)
+	if errEnvelope.Code != apperrors.PublicCodeBadRequest {
+		t.Fatalf("expected code %d, got %d", apperrors.PublicCodeBadRequest, errEnvelope.Code)
 	}
 }
 
@@ -257,12 +258,12 @@ func TestQueryAndDataPointCRUD(t *testing.T) {
 	updateDenied := doJSONRequestWithStatus(t, http.MethodPut, server.URL+"/api/v1/data/queries/"+createdQuery.ID, readOnlyToken, map[string]any{
 		"name": "should-fail",
 	}, http.StatusForbidden)
-	if updateDenied.ErrorCode != "PERMISSION_INSUFFICIENT" {
-		t.Fatalf("expected PERMISSION_INSUFFICIENT for readonly update, got %q", updateDenied.ErrorCode)
+	if updateDenied.Code != apperrors.PublicCodePermissionInsufficient {
+		t.Fatalf("expected code %d for readonly update, got %d", apperrors.PublicCodePermissionInsufficient, updateDenied.Code)
 	}
 	deleteDenied := doJSONRequestWithStatus(t, http.MethodDelete, server.URL+"/api/v1/data/queries/"+createdQuery.ID, readOnlyToken, nil, http.StatusForbidden)
-	if deleteDenied.ErrorCode != "PERMISSION_INSUFFICIENT" {
-		t.Fatalf("expected PERMISSION_INSUFFICIENT for readonly delete, got %q", deleteDenied.ErrorCode)
+	if deleteDenied.Code != apperrors.PublicCodePermissionInsufficient {
+		t.Fatalf("expected code %d for readonly delete, got %d", apperrors.PublicCodePermissionInsufficient, deleteDenied.Code)
 	}
 
 	listAfterCreate := mustListQueries(t, server.URL, token, projectID)

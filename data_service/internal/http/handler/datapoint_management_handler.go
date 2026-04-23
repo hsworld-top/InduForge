@@ -29,7 +29,7 @@ func (h *DataPointHandler) BatchStatus(w http.ResponseWriter, r *http.Request) e
 
 	result, err := h.service.GetDataPointStatuses(r.Context(), r.PathValue("projectId"), ids, request.Paths)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
@@ -59,7 +59,7 @@ func (h *DataPointHandler) BatchValues(w http.ResponseWriter, r *http.Request) e
 
 	values, err := h.service.GetDataPointValuesByIDs(r.Context(), r.PathValue("projectId"), ids)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
@@ -84,7 +84,7 @@ func (h *DataPointHandler) WriteValue(w http.ResponseWriter, r *http.Request) er
 
 	result, err := h.service.WriteDataPointValue(r.Context(), r.PathValue("projectId"), r.PathValue("id"), claims.UserID, request.Value)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -99,7 +99,7 @@ func (h *DataPointHandler) Usages(w http.ResponseWriter, r *http.Request) error 
 
 	usages, err := h.service.GetDataPointUsages(r.Context(), r.PathValue("projectId"), r.PathValue("id"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{

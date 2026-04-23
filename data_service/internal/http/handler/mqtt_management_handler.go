@@ -29,7 +29,7 @@ func (h *MqttHandler) ListConnections(w http.ResponseWriter, r *http.Request) er
 
 	connections, total, err := h.service.ListMqttConnections(r.Context(), r.PathValue("projectId"), page, pageSize)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	totalPages := 0
@@ -57,7 +57,7 @@ func (h *MqttHandler) GetConnection(w http.ResponseWriter, r *http.Request) erro
 
 	result, err := h.service.GetMqttConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -110,7 +110,7 @@ func (h *MqttHandler) UpdateConnection(w http.ResponseWriter, r *http.Request) e
 		SSLConfig:        request.SSLConfig,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -123,7 +123,7 @@ func (h *MqttHandler) DeleteConnection(w http.ResponseWriter, r *http.Request) e
 		return err
 	}
 	if err := h.service.DeleteMqttConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId")); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
 	return nil
@@ -170,7 +170,7 @@ func (h *MqttHandler) TestConnectionConfig(w http.ResponseWriter, r *http.Reques
 		Will:             request.Will,
 		SSLConfig:        request.SSLConfig,
 	}); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"success": true})
 	return nil
@@ -183,7 +183,7 @@ func (h *MqttHandler) StopConnection(w http.ResponseWriter, r *http.Request) err
 	}
 	status, err := h.service.StopConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), status)
 	return nil
@@ -205,7 +205,7 @@ func (h *MqttHandler) ListSubscriptions(w http.ResponseWriter, r *http.Request) 
 
 	subscriptions, total, err := h.service.ListSubscriptions(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), page, pageSize)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	totalPages := 0
 	if total > 0 {
@@ -230,7 +230,7 @@ func (h *MqttHandler) GetSubscription(w http.ResponseWriter, r *http.Request) er
 	}
 	result, err := h.service.GetSubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -263,7 +263,7 @@ func (h *MqttHandler) CreateSubscription(w http.ResponseWriter, r *http.Request)
 		MessageRetention: request.MessageRetention,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -295,7 +295,7 @@ func (h *MqttHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request)
 		MessageRetention: request.MessageRetention,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -308,7 +308,7 @@ func (h *MqttHandler) DeleteSubscription(w http.ResponseWriter, r *http.Request)
 		return err
 	}
 	if err := h.service.DeleteSubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
 	return nil
@@ -322,7 +322,7 @@ func (h *MqttHandler) ToggleSubscription(w http.ResponseWriter, r *http.Request)
 	}
 	result, err := h.service.ToggleSubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -335,7 +335,7 @@ func (h *MqttHandler) ListTagGroups(w http.ResponseWriter, r *http.Request) erro
 	}
 	groups, err := h.service.ListTagGroups(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"groups": groups})
 	return nil
@@ -348,7 +348,7 @@ func (h *MqttHandler) GetTagGroup(w http.ResponseWriter, r *http.Request) error 
 	}
 	result, err := h.service.GetTagGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"group": result})
 	return nil
@@ -380,7 +380,7 @@ func (h *MqttHandler) CreateTagGroup(w http.ResponseWriter, r *http.Request) err
 		Order:       request.Order,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"group": result})
 	return nil
@@ -412,7 +412,7 @@ func (h *MqttHandler) UpdateTagGroup(w http.ResponseWriter, r *http.Request) err
 		Order:       request.Order,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"group": result})
 	return nil
@@ -424,7 +424,7 @@ func (h *MqttHandler) DeleteTagGroup(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 	if err := h.service.DeleteTagGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId")); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
 	return nil
@@ -453,7 +453,7 @@ func (h *MqttHandler) UpdateTagGroupsOrder(w http.ResponseWriter, r *http.Reques
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "groups 不能为空")
 	}
 	if err := h.service.UpdateTagGroupsOrder(r.Context(), r.PathValue("projectId"), claims.UserID, groups); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"updated": true})
 	return nil
@@ -478,7 +478,7 @@ func (h *MqttHandler) ListTagsBySubscription(w http.ResponseWriter, r *http.Requ
 	}
 	tags, total, err := h.service.ListTagsBySubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), page, pageSize, isEnabled)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	totalPages := 0
 	if total > 0 {
@@ -515,7 +515,7 @@ func (h *MqttHandler) ListTagsByProject(w http.ResponseWriter, r *http.Request) 
 	}
 	tags, total, err := h.service.ListTagsByProject(r.Context(), r.PathValue("projectId"), page, pageSize, r.URL.Query().Get("subscriptionId"), isEnabled)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	totalPages := 0
 	if total > 0 {
@@ -540,7 +540,7 @@ func (h *MqttHandler) GetTag(w http.ResponseWriter, r *http.Request) error {
 	}
 	result, err := h.service.GetTag(r.Context(), r.PathValue("projectId"), r.PathValue("tagId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -558,7 +558,7 @@ func (h *MqttHandler) CreateTag(w http.ResponseWriter, r *http.Request) error {
 	}
 	result, err := h.service.CreateTag(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID, tagInput)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -586,7 +586,7 @@ func (h *MqttHandler) CreateTagsBatch(w http.ResponseWriter, r *http.Request) er
 	}
 	result, err := h.service.CreateTagsBatch(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID, inputs)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"tags": result})
 	return nil
@@ -604,7 +604,7 @@ func (h *MqttHandler) UpdateTag(w http.ResponseWriter, r *http.Request) error {
 	}
 	result, err := h.service.UpdateTag(r.Context(), r.PathValue("projectId"), r.PathValue("tagId"), claims.UserID, tagInput)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -617,7 +617,7 @@ func (h *MqttHandler) DeleteTag(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if err := h.service.DeleteTag(r.Context(), r.PathValue("projectId"), r.PathValue("tagId"), claims.UserID); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
 	return nil
@@ -631,7 +631,7 @@ func (h *MqttHandler) ToggleTag(w http.ResponseWriter, r *http.Request) error {
 	}
 	result, err := h.service.ToggleTag(r.Context(), r.PathValue("projectId"), r.PathValue("tagId"), claims.UserID)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -653,7 +653,7 @@ func (h *MqttHandler) UpdateTagsOrder(w http.ResponseWriter, r *http.Request) er
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "tagIds 不能为空")
 	}
 	if err := h.service.UpdateTagsOrder(r.Context(), r.PathValue("projectId"), request.TagIDs, claims.UserID); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"updated": true})
 	return nil
@@ -666,7 +666,7 @@ func (h *MqttHandler) GetTagValue(w http.ResponseWriter, r *http.Request) error 
 	}
 	result, err := h.service.GetTagValue(r.Context(), r.PathValue("projectId"), r.PathValue("tagId"))
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
@@ -685,7 +685,7 @@ func (h *MqttHandler) GetTagValues(w http.ResponseWriter, r *http.Request) error
 	}
 	result, err := h.service.GetTagValues(r.Context(), r.PathValue("projectId"), request.TagIDs)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil

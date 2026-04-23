@@ -13,6 +13,7 @@ import (
 	"github.com/indu-forge/data_service/internal/app"
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/config"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
 func TestProtocolWave2PhaseBoundary(t *testing.T) {
@@ -53,44 +54,44 @@ func TestProtocolWave2PhaseBoundary(t *testing.T) {
 	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcua/configs", token, map[string]any{
 		"name":     "opcua-main",
 		"endpoint": "opc.tcp://127.0.0.1:4840",
-	}, http.StatusBadRequest), "OPC UA")
+	}, http.StatusOK), "OPC UA")
 
 	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/s7/configs", token, map[string]any{
 		"name": "s7-main",
 		"host": "192.168.0.10",
 		"rack": 0,
 		"slot": 1,
-	}, http.StatusBadRequest), "S7")
+	}, http.StatusOK), "S7")
 
 	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/modbus/configs", token, map[string]any{
 		"name": "modbus-main",
 		"mode": "tcp",
 		"host": "192.168.0.20",
 		"port": 502,
-	}, http.StatusBadRequest), "Modbus")
+	}, http.StatusOK), "Modbus")
 
 	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/tdengine/configs", token, map[string]any{
 		"name":     "td-main",
 		"dsn":      "taos://root:taosdata@127.0.0.1:6030",
 		"database": "factory",
-	}, http.StatusBadRequest), "TDengine")
+	}, http.StatusOK), "TDengine")
 
 	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcda/contracts/validate", token, map[string]any{
 		"itemPath":   "Channel1.Device1.TagA",
 		"samplingMs": 1000,
-	}, http.StatusBadRequest), "OPC DA")
+	}, http.StatusOK), "OPC DA")
 }
 
 func assertPhaseBoundaryError(t *testing.T, envelope apiEnvelope, protocolName string) {
 	t.Helper()
 
-	if envelope.Success {
+	if envelope.Code == apperrors.SuccessCode {
 		t.Fatalf("expected %s endpoint to be blocked by phase boundary", protocolName)
 	}
-	if envelope.ErrorCode != "BAD_REQUEST" {
-		t.Fatalf("expected BAD_REQUEST for %s phase boundary, got %q", protocolName, envelope.ErrorCode)
+	if envelope.Code != apperrors.PublicCodeBadRequest {
+		t.Fatalf("expected code %d for %s phase boundary, got %d", apperrors.PublicCodeBadRequest, protocolName, envelope.Code)
 	}
-	if !strings.Contains(envelope.Message, "Phase 1 正式范围") {
-		t.Fatalf("expected %s phase boundary message, got %q", protocolName, envelope.Message)
+	if !strings.Contains(envelope.Msg, "Phase 1 正式范围") {
+		t.Fatalf("expected %s phase boundary message, got %q", protocolName, envelope.Msg)
 	}
 }
