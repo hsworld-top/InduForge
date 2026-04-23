@@ -35,7 +35,7 @@ func (h *QueryHandler) List(w http.ResponseWriter, r *http.Request) error {
 
 	result, err := h.service.ListQueries(r.Context(), r.PathValue("projectId"), filter)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -80,7 +80,7 @@ func (h *QueryHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		CacheTtlSeconds: request.CacheTtlSeconds,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -105,7 +105,7 @@ func (h *QueryHandler) Execute(w http.ResponseWriter, r *http.Request) error {
 		Parameters: request.Parameters,
 	})
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -134,7 +134,7 @@ func (h *QueryHandler) Update(w http.ResponseWriter, r *http.Request) error {
 
 	result, err := h.service.UpdateQuery(r.Context(), claims, r.PathValue("id"), claims.UserID, input)
 	if err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
@@ -149,7 +149,7 @@ func (h *QueryHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := h.service.DeleteQuery(r.Context(), claims, r.PathValue("id")); err != nil {
-		return err
+		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})

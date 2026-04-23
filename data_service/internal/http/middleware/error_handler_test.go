@@ -12,9 +12,9 @@ import (
 	"github.com/indu-forge/data_service/internal/http/response"
 )
 
-func TestErrorHandler_WrapsAppErrorInUnifiedResponse(t *testing.T) {
+func TestErrorHandler_WrapsBusinessAppErrorWith2xxStatus(t *testing.T) {
 	handler := middleware.ErrorHandler(func(w http.ResponseWriter, r *http.Request) error {
-		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "参数错误")
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusOK, "参数错误")
 	})
 
 	rr := httptest.NewRecorder()
@@ -23,7 +23,7 @@ func TestErrorHandler_WrapsAppErrorInUnifiedResponse(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertApiErrorResponse(t, rr, http.StatusBadRequest, "req-app-error", apperrors.PublicCodeBadRequest, "参数错误")
+	assertApiErrorResponse(t, rr, http.StatusOK, "req-app-error", apperrors.PublicCodeBadRequest, "参数错误")
 }
 
 func TestErrorHandler_WrapsNormalErrorInUnifiedResponse(t *testing.T) {
@@ -38,6 +38,20 @@ func TestErrorHandler_WrapsNormalErrorInUnifiedResponse(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	assertApiErrorResponse(t, rr, http.StatusInternalServerError, "req-normal-error", apperrors.PublicCodeInternal, "系统内部错误")
+}
+
+func TestErrorHandler_PreservesTechnicalAppErrorStatus(t *testing.T) {
+	handler := middleware.ErrorHandler(func(w http.ResponseWriter, r *http.Request) error {
+		return apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 校验失败")
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(middleware.WithRequestID(req.Context(), "req-auth-error"))
+
+	handler.ServeHTTP(rr, req)
+
+	assertApiErrorResponse(t, rr, http.StatusUnauthorized, "req-auth-error", apperrors.PublicCodeAuthTokenInvalid, "JWT 校验失败")
 }
 
 func TestErrorHandler_FallsBackForInvalidStatusCode(t *testing.T) {
@@ -56,7 +70,7 @@ func TestErrorHandler_FallsBackForInvalidStatusCode(t *testing.T) {
 
 func TestErrorHandler_HandlesJoinedAppError(t *testing.T) {
 	handler := middleware.ErrorHandler(func(w http.ResponseWriter, r *http.Request) error {
-		return errors.Join(errors.New("outer"), apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "资源不存在"))
+		return errors.Join(errors.New("outer"), apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusOK, "资源不存在"))
 	})
 
 	rr := httptest.NewRecorder()
@@ -65,7 +79,7 @@ func TestErrorHandler_HandlesJoinedAppError(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertApiErrorResponse(t, rr, http.StatusNotFound, "req-joined-error", apperrors.PublicCodeNotFound, "资源不存在")
+	assertApiErrorResponse(t, rr, http.StatusOK, "req-joined-error", apperrors.PublicCodeNotFound, "资源不存在")
 }
 
 func TestErrorHandler_DoesNotDoubleWriteAfterCommittedResponse(t *testing.T) {
@@ -96,7 +110,7 @@ func TestErrorHandler_DoesNotDoubleWriteAfterCommittedResponse(t *testing.T) {
 func TestErrorHandler_RealMuxChainUsesUnifiedResponse(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/app-error", middleware.ErrorHandler(func(http.ResponseWriter, *http.Request) error {
-		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "参数错误")
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusOK, "参数错误")
 	}))
 	mux.Handle("/normal-error", middleware.ErrorHandler(func(http.ResponseWriter, *http.Request) error {
 		return errors.New("普通错误")
@@ -111,7 +125,7 @@ func TestErrorHandler_RealMuxChainUsesUnifiedResponse(t *testing.T) {
 		wantCode    int
 		wantMessage string
 	}{
-		{name: "app error", path: "/app-error", wantStatus: http.StatusBadRequest, wantCode: apperrors.PublicCodeBadRequest, wantMessage: "参数错误"},
+		{name: "app error", path: "/app-error", wantStatus: http.StatusOK, wantCode: apperrors.PublicCodeBadRequest, wantMessage: "参数错误"},
 		{name: "normal error", path: "/normal-error", wantStatus: http.StatusInternalServerError, wantCode: apperrors.PublicCodeInternal, wantMessage: "系统内部错误"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -26,7 +26,8 @@ func Authenticate(validator *auth.JWTValidator) func(http.Handler) http.Handler 
 
 			claims, err := validator.Validate(token)
 			if err != nil {
-				if appErr, ok := err.(*apperrors.AppError); ok {
+				var appErr *apperrors.AppError
+				if AsAppError(err, &appErr) {
 					writeAuthError(w, r, appErr)
 					return
 				}
@@ -63,7 +64,7 @@ func writeAuthError(w http.ResponseWriter, r *http.Request, appErr *apperrors.Ap
 	errorCode := apperrors.ErrorCodeInternal
 	message := "系统内部错误"
 	if appErr != nil {
-		statusCode = appErr.StatusCode
+		statusCode = normalizeTechnicalStatusCode(appErr.StatusCode)
 		errorCode = appErr.Code
 		message = appErr.Message
 	}
