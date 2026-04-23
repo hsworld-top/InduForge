@@ -1293,10 +1293,13 @@ export default {
         })
 
         const response = await projectAPI.getProjects(params)
+        const payload = response?.data || {}
+        const listPayload = payload?.list || payload
+        const paginationPayload = payload?.pagination || response?.pagination || {}
 
-        projectList.value = response.data.projects || []
-        pagination.total = response.pagination?.total || 0
-        pagination.totalPages = response.pagination?.totalPages || 0
+        projectList.value = listPayload?.projects || []
+        pagination.total = paginationPayload?.total || 0
+        pagination.totalPages = paginationPayload?.totalPages || 0
         await fetchProjectDeployState()
       } catch (error) {
         ElMessage.error(

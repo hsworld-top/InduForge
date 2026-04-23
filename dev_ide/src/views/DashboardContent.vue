@@ -233,19 +233,20 @@ export default {
         const recentActivitiesResult = resultMap.recentActivities
         const tenantsResult = resultMap.tenants
 
-        stats.value.users =
-          usersResult?.status === 'fulfilled' ? usersResult.value?.pagination?.total || 0 : 0
+        const getPaginationTotal = (result) =>
+          result?.data?.pagination?.total || result?.pagination?.total || 0
+
+        stats.value.users = usersResult?.status === 'fulfilled' ? getPaginationTotal(usersResult.value) : 0
         stats.value.projects =
-          projectsResult?.status === 'fulfilled' ? projectsResult.value?.pagination?.total || 0 : 0
-        stats.value.logs =
-          logsResult?.status === 'fulfilled' ? logsResult.value?.pagination?.total || 0 : 0
+          projectsResult?.status === 'fulfilled' ? getPaginationTotal(projectsResult.value) : 0
+        stats.value.logs = logsResult?.status === 'fulfilled' ? getPaginationTotal(logsResult.value) : 0
         stats.value.tenants =
           canLoadTenantStats.value && tenantsResult?.status === 'fulfilled'
-            ? tenantsResult.value?.pagination?.total || 0
+            ? getPaginationTotal(tenantsResult.value)
             : 0
 
         if (logsResult?.status === 'fulfilled') {
-          const logs = logsResult.value?.data?.logs || []
+          const logs = logsResult.value?.data?.list?.logs || logsResult.value?.data?.logs || []
           recentActivities.value = logs.slice(0, 5).map((log, index) => ({
             id: log.id || `${log.createdAt}-${index}`,
             description:
@@ -256,7 +257,10 @@ export default {
             time: log.createdAt || '',
           }))
         } else if (recentActivitiesResult?.status === 'fulfilled') {
-          const activities = recentActivitiesResult.value?.data?.activities || []
+          const activities =
+            recentActivitiesResult.value?.data?.list?.activities ||
+            recentActivitiesResult.value?.data?.activities ||
+            []
           recentActivities.value = activities.slice(0, 5).map((log, index) => ({
             id: log.id || `${log.createdAt}-${index}`,
             description:

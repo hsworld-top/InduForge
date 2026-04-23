@@ -676,10 +676,13 @@ export default {
         })
 
         const response = await userAPI.getUsers(params)
+        const payload = response?.data || {}
+        const listPayload = payload?.list || payload
+        const paginationPayload = payload?.pagination || response?.pagination || {}
 
-        userList.value = response.data.users || []
-        pagination.total = response.pagination?.total || 0
-        pagination.totalPages = response.pagination?.totalPages || 0
+        userList.value = listPayload?.users || []
+        pagination.total = paginationPayload?.total || 0
+        pagination.totalPages = paginationPayload?.totalPages || 0
       } catch (error) {
         ElMessage.error(
           t('userManagement.fetchUsersFailed', {

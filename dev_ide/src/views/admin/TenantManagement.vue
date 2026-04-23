@@ -388,9 +388,13 @@ const loadTenants = async () => {
       keyword: filters.search?.trim() || undefined,
       status: filters.status || undefined,
     })) as any
-    tenants.value = res.data.tenants
-    pagination.total = res.pagination.total
-    pagination.totalPages = res.pagination.totalPages
+    const payload = res?.data || {}
+    const listPayload = payload?.list || payload
+    const paginationPayload = payload?.pagination || res?.pagination || {}
+
+    tenants.value = listPayload?.tenants || []
+    pagination.total = paginationPayload?.total || 0
+    pagination.totalPages = paginationPayload?.totalPages || 0
   } catch (e) {
     console.error('加载租户列表失败:', e)
     ElMessage.error(t('tenantManagement.loadFailed'))

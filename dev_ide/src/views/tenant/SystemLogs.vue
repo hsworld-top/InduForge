@@ -410,9 +410,13 @@ export default {
       loadError.value = ''
       try {
         const response = await logAPI.getLogs(getQueryParams())
-        logs.value = response.data?.logs || []
-        pagination.total = response.pagination?.total || 0
-        pagination.totalPages = response.pagination?.totalPages || 0
+        const payload = response?.data || {}
+        const listPayload = payload?.list || payload
+        const paginationPayload = payload?.pagination || response?.pagination || {}
+
+        logs.value = listPayload?.logs || []
+        pagination.total = paginationPayload?.total || 0
+        pagination.totalPages = paginationPayload?.totalPages || 0
       } catch (error) {
         loadError.value = getApiErrorMessage(error, t('systemLogs.fetchFailedRetry'))
         ElMessage.error(
