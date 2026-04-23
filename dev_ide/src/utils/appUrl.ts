@@ -16,7 +16,9 @@ interface ProjectLike {
  */
 const resolveCurrentOrigin = (): string | null => {
   const locationLike = globalThis.window?.location ?? globalThis.location
-  return typeof locationLike?.origin === 'string' && locationLike.origin ? locationLike.origin : null
+  return typeof locationLike?.origin === 'string' && locationLike.origin
+    ? locationLike.origin
+    : null
 }
 
 /**
@@ -28,7 +30,7 @@ const resolveCurrentOrigin = (): string | null => {
  */
 export const buildAppEntry = (
   appType: SupportedAppType,
-  project: ProjectLike = {}
+  project: ProjectLike = {},
 ): { url: string; origin: string | null } => {
   const response = createBootstrapResponse(appType, {
     projectId: project?.id ?? project?.projectId ?? null,

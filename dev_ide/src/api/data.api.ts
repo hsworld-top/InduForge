@@ -16,7 +16,7 @@ export const getConnections = (projectId: ApiId, params: QueryParams = {}) => {
   return request({
     url: `/data/projects/${projectId}/connections`,
     method: 'get',
-    params
+    params,
   })
 }
 
@@ -29,7 +29,7 @@ export const createConnection = (projectId: ApiId, data: unknown) => {
   return request({
     url: `/data/projects/${projectId}/connections`,
     method: 'post',
-    data
+    data,
   })
 }
 
@@ -37,14 +37,14 @@ export const testConnection = (projectId: ApiId, data: unknown) => {
   return request({
     url: `/data/projects/${projectId}/connections/test`,
     method: 'post',
-    data
+    data,
   })
 }
 
 export const getConnectionTables = (projectId: ApiId, connectionId: ApiId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
-    method: 'get'
+    method: 'get',
   })
 }
 
@@ -52,12 +52,12 @@ export const getTableData = (
   projectId: ApiId,
   connectionId: ApiId,
   tableName: string,
-  params: QueryParams = {}
+  params: QueryParams = {},
 ) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/data`,
     method: 'get',
-    params
+    params,
   })
 }
 
@@ -70,7 +70,7 @@ export const updateConnection = (id: ApiId, data: unknown) => {
   return request({
     url: `/data/connections/${id}`,
     method: 'put',
-    data
+    data,
   })
 }
 
@@ -81,10 +81,9 @@ export const updateConnection = (id: ApiId, data: unknown) => {
 export const deleteConnection = (id: ApiId) => {
   return request({
     url: `/data/connections/${id}`,
-    method: 'delete'
+    method: 'delete',
   })
 }
-
 
 // ===========================================
 // 数据查询相关API
@@ -99,7 +98,7 @@ export const getQueries = (projectId: ApiId, params: QueryParams = {}) => {
   return request({
     url: `/data/projects/${projectId}/queries`,
     method: 'get',
-    params
+    params,
   })
 }
 
@@ -112,7 +111,7 @@ export const createQuery = (projectId: ApiId, data: unknown) => {
   return request({
     url: `/data/projects/${projectId}/queries`,
     method: 'post',
-    data
+    data,
   })
 }
 
@@ -125,7 +124,7 @@ export const updateQuery = (id: ApiId, data: unknown) => {
   return request({
     url: `/data/queries/${id}`,
     method: 'put',
-    data
+    data,
   })
 }
 
@@ -136,7 +135,7 @@ export const updateQuery = (id: ApiId, data: unknown) => {
 export const deleteQuery = (id: ApiId) => {
   return request({
     url: `/data/queries/${id}`,
-    method: 'delete'
+    method: 'delete',
   })
 }
 
@@ -149,7 +148,7 @@ export const executeQuery = (id: ApiId, parameters: QueryParams = {}) => {
   return request({
     url: `/data/queries/${id}/execute`,
     method: 'post',
-    data: { parameters }
+    data: { parameters },
   })
 }
 
@@ -164,12 +163,12 @@ export const executeSql = (
   projectId: ApiId,
   connectionId: ApiId,
   sql: string,
-  parameters: unknown[] = []
+  parameters: unknown[] = [],
 ) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/execute-sql`,
     method: 'post',
-    data: { sql, parameters }
+    data: { sql, parameters },
   })
 }
 
@@ -182,7 +181,7 @@ export const saveQuery = (id: ApiId, data: unknown) => {
   return request({
     url: `/data/queries/${id}`,
     method: 'put',
-    data
+    data,
   })
 }
 

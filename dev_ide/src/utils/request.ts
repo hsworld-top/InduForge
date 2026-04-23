@@ -1,4 +1,9 @@
-import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from 'axios'
 import { ElMessage } from 'element-plus'
 import { Storage } from '@/utils/storage'
 import { authAPI, type AuthTokenPayload } from '@/api/auth.api'
@@ -89,7 +94,7 @@ request.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error)
-  }
+  },
 )
 
 // 响应拦截器
@@ -141,30 +146,36 @@ request.interceptors.response.use(
           if (!isRefreshing) {
             isRefreshing = true
 
-            return authAPI.refreshToken(refreshToken)
-              .then((result: ApiResponse<AuthTokenPayload> | { data: ApiResponse<AuthTokenPayload> }) => {
-                const refreshResult = 'code' in result ? result : result.data
-                const accessToken = refreshResult.data?.accessToken || refreshResult.data?.token
-                const newRefreshToken = refreshResult.data?.refreshToken
+            return authAPI
+              .refreshToken(refreshToken)
+              .then(
+                (
+                  result: ApiResponse<AuthTokenPayload> | { data: ApiResponse<AuthTokenPayload> },
+                ) => {
+                  const refreshResult = 'code' in result ? result : result.data
+                  const accessToken = refreshResult.data?.accessToken || refreshResult.data?.token
+                  const newRefreshToken = refreshResult.data?.refreshToken
 
-                // 更新存储的token
-                if (!accessToken) {
-                  throw new Error('刷新令牌响应缺少 accessToken/token 字段')
-                }
-                Storage.setToken(accessToken)
-                if (newRefreshToken) {
-                  Storage.setRefreshToken(newRefreshToken)
-                }
+                  // 更新存储的token
+                  if (!accessToken) {
+                    throw new Error('刷新令牌响应缺少 accessToken/token 字段')
+                  }
+                  Storage.setToken(accessToken)
+                  if (newRefreshToken) {
+                    Storage.setRefreshToken(newRefreshToken)
+                  }
 
-                // 处理队列中的请求
-                processQueue(null, accessToken)
+                  // 处理队列中的请求
+                  processQueue(null, accessToken)
 
-                // 重新发起原始请求
-                config._retry = true
-                config.headers = config.headers || {}
-                ;(config.headers as Record<string, string>).Authorization = `Bearer ${accessToken}`
-                return request(config)
-              })
+                  // 重新发起原始请求
+                  config._retry = true
+                  config.headers = config.headers || {}
+                  ;(config.headers as Record<string, string>).Authorization =
+                    `Bearer ${accessToken}`
+                  return request(config)
+                },
+              )
               .catch((refreshError: unknown) => {
                 // 刷新失败，跳转到登录页
                 processQueue(refreshError, null)
@@ -183,7 +194,7 @@ request.interceptors.response.use(
                   ;(config.headers as Record<string, string>).Authorization = `Bearer ${token}`
                   resolve(request(config))
                 },
-                reject
+                reject,
               })
             })
           }
@@ -219,7 +230,7 @@ request.interceptors.response.use(
     }
 
     return Promise.reject(error)
-  }
+  },
 )
 
 export default request

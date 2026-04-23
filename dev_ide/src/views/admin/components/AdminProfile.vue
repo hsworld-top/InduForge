@@ -2,15 +2,28 @@
   <div class="p-2 w-full font-sans antialiased text-slate-700 dark:text-slate-300">
     <div class="flex flex-col gap-6">
       <!-- 头部资料区 (极简风) -->
-      <div class="flex items-center gap-5 p-5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
-        <el-avatar :size="64" :src="profile.avatarUrl" class="border-2 border-white dark:border-slate-700 shadow-sm bg-gradient-to-br from-slate-200 to-slate-100 dark:from-slate-700 dark:to-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xl">
+      <div
+        class="flex items-center gap-5 p-5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/60 dark:border-slate-700/60"
+      >
+        <el-avatar
+          :size="64"
+          :src="profile.avatarUrl"
+          class="border-2 border-white dark:border-slate-700 shadow-sm bg-gradient-to-br from-slate-200 to-slate-100 dark:from-slate-700 dark:to-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xl"
+        >
           {{ userInitials }}
         </el-avatar>
         <div class="flex-1">
-          <h2 class="text-xl font-bold text-slate-900 dark:text-white">{{ profile.username || '-' }}</h2>
+          <h2 class="text-xl font-bold text-slate-900 dark:text-white">
+            {{ profile.username || '-' }}
+          </h2>
           <div class="flex items-center gap-2 mt-1.5">
-            <span class="px-2 py-0.5 text-xs font-semibold text-slate-700 bg-slate-200/70 dark:bg-slate-700 dark:text-slate-300 rounded-md">{{ getRoleLabel(profile.role) }}</span>
-            <span class="text-xs text-slate-500 dark:text-slate-400">{{ getTenantLabel(profile.tenant) }}</span>
+            <span
+              class="px-2 py-0.5 text-xs font-semibold text-slate-700 bg-slate-200/70 dark:bg-slate-700 dark:text-slate-300 rounded-md"
+              >{{ getRoleLabel(profile.role) }}</span
+            >
+            <span class="text-xs text-slate-500 dark:text-slate-400">{{
+              getTenantLabel(profile.tenant)
+            }}</span>
           </div>
         </div>
         <div class="flex gap-2">
@@ -20,7 +33,10 @@
             :on-change="handleAvatarChange"
             accept="image/png,image/jpeg,image/webp"
           >
-            <button type="button" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700 transition-colors shadow-sm">
+            <button
+              type="button"
+              class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700 transition-colors shadow-sm"
+            >
               {{ t('profile.uploadAvatar') }}
             </button>
           </el-upload>
@@ -32,19 +48,29 @@
         <h3 class="text-sm font-bold text-slate-900 dark:text-white px-1">账号信息</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 px-1">{{ t('profile.username') }}</label>
-            <div class="w-full px-4 py-2.5 bg-slate-100/50 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-700/50 rounded-xl text-sm text-slate-600 dark:text-slate-400 cursor-not-allowed">
+            <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 px-1">{{
+              t('profile.username')
+            }}</label>
+            <div
+              class="w-full px-4 py-2.5 bg-slate-100/50 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-700/50 rounded-xl text-sm text-slate-600 dark:text-slate-400 cursor-not-allowed"
+            >
               {{ profile.username || '-' }}
             </div>
           </div>
           <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 px-1">{{ t('profile.role') }}</label>
-            <div class="w-full px-4 py-2.5 bg-slate-100/50 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-700/50 rounded-xl text-sm text-slate-600 dark:text-slate-400 cursor-not-allowed">
+            <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 px-1">{{
+              t('profile.role')
+            }}</label>
+            <div
+              class="w-full px-4 py-2.5 bg-slate-100/50 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-700/50 rounded-xl text-sm text-slate-600 dark:text-slate-400 cursor-not-allowed"
+            >
               {{ getRoleLabel(profile.role) }}
             </div>
           </div>
           <div class="space-y-1.5 sm:col-span-2">
-            <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 px-1">{{ t('profile.email') }}</label>
+            <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 px-1">{{
+              t('profile.email')
+            }}</label>
             <div class="flex items-center gap-2">
               <input
                 v-model="accountForm.email"
@@ -52,8 +78,8 @@
                 class="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900/50 border border-slate-300 dark:border-slate-600 rounded-xl text-sm focus:bg-white focus:border-slate-500 focus:ring-4 focus:ring-slate-500/10 transition-all outline-none text-slate-800 dark:text-slate-200"
                 :placeholder="t('profile.emailPlaceholder')"
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 class="px-4 py-2.5 text-sm font-medium text-white bg-slate-800 rounded-xl hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors shadow-sm disabled:opacity-50"
                 @click="handleSaveEmail"
                 :disabled="accountForm.email === profile.email"
@@ -69,8 +95,15 @@
 
       <!-- 修改密码区 -->
       <div class="space-y-4">
-        <h3 class="text-sm font-bold text-slate-900 dark:text-white px-1">{{ t('profile.changePassword') }}</h3>
-        <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-position="top">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white px-1">
+          {{ t('profile.changePassword') }}
+        </h3>
+        <el-form
+          ref="passwordFormRef"
+          :model="passwordForm"
+          :rules="passwordRules"
+          label-position="top"
+        >
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <el-form-item prop="oldPassword" class="mb-0">
               <el-input
@@ -104,19 +137,37 @@
             </el-form-item>
           </div>
           <div class="mt-4 flex justify-end">
-            <button 
-              type="button" 
+            <button
+              type="button"
               class="px-5 py-2.5 text-sm font-medium text-white bg-slate-800 rounded-xl hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 transition-all shadow-sm flex items-center gap-2 disabled:opacity-70"
               :disabled="savingPassword"
               @click="handleChangePassword"
             >
-              <svg v-if="savingPassword" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <svg
+                v-if="savingPassword"
+                class="animate-spin h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
               {{ t('profile.savePassword') }}
             </button>
           </div>
         </el-form>
       </div>
-
     </div>
   </div>
 </template>
@@ -138,7 +189,7 @@ export default {
   setup() {
     const { t } = useI18n()
     const authStore = useAuthStore()
-    
+
     const loading = ref(false)
     const savingPassword = ref(false)
     const passwordFormRef = ref<any>(null)
@@ -168,13 +219,27 @@ export default {
     })
 
     const passwordRules = {
-      oldPassword: [{ required: true, message: t('profile.requireOldPassword'), trigger: 'blur' }],
+      oldPassword: [
+        {
+          required: true,
+          message: t('profile.requireOldPassword'),
+          trigger: 'blur',
+        },
+      ],
       newPassword: [
-        { required: true, message: t('profile.requireNewPassword'), trigger: 'blur' },
+        {
+          required: true,
+          message: t('profile.requireNewPassword'),
+          trigger: 'blur',
+        },
         { min: 6, message: t('profile.passwordMinLength'), trigger: 'blur' },
       ],
       confirmPassword: [
-        { required: true, message: t('profile.requireConfirmPassword'), trigger: 'blur' },
+        {
+          required: true,
+          message: t('profile.requireConfirmPassword'),
+          trigger: 'blur',
+        },
         {
           validator: (rule, value, callback) => {
             if (value !== passwordForm.newPassword) {
@@ -285,7 +350,7 @@ export default {
         ElMessage.error(
           t('profile.accountUpdateFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       }
     }
@@ -341,7 +406,7 @@ export default {
         ElMessage.error(
           t('profile.passwordUpdateFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       } finally {
         savingPassword.value = false

@@ -1,5 +1,9 @@
 <template>
-  <div ref="editorContainerRef" class="monaco-editor-container" :style="{ height: height, width: '100%' }"></div>
+  <div
+    ref="editorContainerRef"
+    class="monaco-editor-container"
+    :style="{ height: height, width: '100%' }"
+  ></div>
 </template>
 
 <script setup lang="ts">
@@ -18,7 +22,7 @@ if (typeof window !== 'undefined' && !window.MonacoEnvironment) {
         const blob = new Blob([code], { type: 'application/javascript' })
         return new Worker(URL.createObjectURL(blob))
       }
-      
+
       // 返回一个简单的 worker，只处理基本消息
       return createInlineWorker(`
         self.onmessage = function(e) {
@@ -28,35 +32,35 @@ if (typeof window !== 'undefined' && !window.MonacoEnvironment) {
           }
         }
       `)
-    }
+    },
   }
 }
 
 const props = defineProps({
   modelValue: {
     type: String,
-    default: ''
+    default: '',
   },
   language: {
     type: String,
-    default: 'sql'
+    default: 'sql',
   },
   theme: {
     type: String,
-    default: 'vs-dark' // 'vs', 'vs-dark', 'hc-black'
+    default: 'vs-dark', // 'vs', 'vs-dark', 'hc-black'
   },
   height: {
     type: String,
-    default: '100%'
+    default: '100%',
   },
   options: {
     type: Object,
-    default: () => ({})
+    default: () => ({}),
   },
   readOnly: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -75,13 +79,13 @@ const getEditorOptions = () => {
     automaticLayout: true,
     fontSize: 14,
     minimap: {
-      enabled: true
+      enabled: true,
     },
     scrollBeyondLastLine: false,
     wordWrap: 'on',
     formatOnPaste: true,
     formatOnType: true,
-    ...props.options
+    ...props.options,
   }
 }
 
@@ -108,14 +112,14 @@ const initEditor = () => {
     // 强制设置 readOnly 为 false，确保编辑器可编辑
     options.readOnly = false
     editorInstance = monaco.editor.create(editorContainerRef.value, options)
-    
+
     console.log('Monaco Editor 创建成功', {
       container: editorContainerRef.value,
       containerHeight: editorContainerRef.value.offsetHeight,
       containerClientHeight: editorContainerRef.value.clientHeight,
       options: options,
       readOnly: editorInstance.getOption(monaco.editor.EditorOption.readOnly),
-      editorInstance: editorInstance
+      editorInstance: editorInstance,
     })
 
     // 监听内容变化
@@ -136,7 +140,7 @@ const initEditor = () => {
     if (props.modelValue) {
       editorInstance.setValue(props.modelValue)
     }
-    
+
     // 确保编辑器可聚焦
     setTimeout(() => {
       if (editorInstance) {
@@ -181,46 +185,58 @@ defineExpose({
       editorInstance.dispose()
       editorInstance = null
     }
-  }
+  },
 })
 
 // 监听 props 变化 - 使用标志防止循环更新
-watch(() => props.modelValue, (newValue) => {
-  if (editorInstance && !isInternalUpdate) {
-    const currentValue = editorInstance.getValue()
-    if (currentValue !== newValue) {
-      isInternalUpdate = true
-      editorInstance.setValue(newValue || '')
-      // 重置标志
-      setTimeout(() => {
-        isInternalUpdate = false
-      }, 0)
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (editorInstance && !isInternalUpdate) {
+      const currentValue = editorInstance.getValue()
+      if (currentValue !== newValue) {
+        isInternalUpdate = true
+        editorInstance.setValue(newValue || '')
+        // 重置标志
+        setTimeout(() => {
+          isInternalUpdate = false
+        }, 0)
+      }
     }
-  }
-})
+  },
+)
 
-watch(() => props.theme, () => {
-  updateTheme()
-})
+watch(
+  () => props.theme,
+  () => {
+    updateTheme()
+  },
+)
 
-watch(() => props.language, () => {
-  updateLanguage()
-})
+watch(
+  () => props.language,
+  () => {
+    updateLanguage()
+  },
+)
 
-watch(() => props.readOnly, (readOnly) => {
-  if (editorInstance) {
-    editorInstance.updateOptions({ readOnly })
-  }
-})
+watch(
+  () => props.readOnly,
+  (readOnly) => {
+    if (editorInstance) {
+      editorInstance.updateOptions({ readOnly })
+    }
+  },
+)
 
 // 组件挂载时初始化
 onMounted(() => {
   console.log('MonacoEditor onMounted 被调用', {
     containerRef: editorContainerRef.value,
     height: props.height,
-    containerExists: !!editorContainerRef.value
+    containerExists: !!editorContainerRef.value,
   })
-  
+
   // 使用多个 nextTick 确保 DOM 完全渲染
   nextTick(() => {
     nextTick(() => {
@@ -228,29 +244,29 @@ onMounted(() => {
         containerRef: editorContainerRef.value,
         containerHeight: editorContainerRef.value?.offsetHeight,
         containerClientHeight: editorContainerRef.value?.clientHeight,
-        containerExists: !!editorContainerRef.value
+        containerExists: !!editorContainerRef.value,
       })
-      
+
       const checkAndInit = (retryCount = 0) => {
         if (retryCount > 30) {
           console.error('Monaco Editor 初始化超时，已重试30次', {
             containerRef: editorContainerRef.value,
-            containerExists: !!editorContainerRef.value
+            containerExists: !!editorContainerRef.value,
           })
           return
         }
-        
+
         // 如果 ref 还没有绑定，等待一下
         if (!editorContainerRef.value) {
           console.warn(`Monaco Editor 容器元素不存在，等待... (${retryCount + 1}/30)`)
           setTimeout(() => checkAndInit(retryCount + 1), 100)
           return
         }
-        
+
         const container = editorContainerRef.value
         const containerHeight = container.offsetHeight
         const clientHeight = container.clientHeight
-        
+
         console.log(`Monaco Editor 检查初始化 (尝试 ${retryCount + 1})`, {
           containerHeight,
           clientHeight,
@@ -258,9 +274,9 @@ onMounted(() => {
           hasHeight: containerHeight > 0 || clientHeight > 0,
           container: container,
           containerTagName: container.tagName,
-          containerClassName: container.className
+          containerClassName: container.className,
         })
-        
+
         // 如果容器有高度，或者已经重试多次，就初始化
         if (containerHeight > 0 || clientHeight > 0 || retryCount > 10) {
           try {
@@ -269,9 +285,9 @@ onMounted(() => {
               containerHeight,
               clientHeight,
               height: props.height,
-              readOnly: getEditorOptions().readOnly
+              readOnly: getEditorOptions().readOnly,
             })
-            
+
             // 确保编辑器可以聚焦和编辑
             setTimeout(() => {
               if (editorInstance) {
@@ -326,7 +342,3 @@ onBeforeUnmount(() => {
   background-color: var(--vscode-editor-background, #ffffff);
 }
 </style>
-
-
-
-

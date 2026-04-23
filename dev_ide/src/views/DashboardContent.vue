@@ -11,10 +11,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <div
         v-if="canAccessUserManagement"
-        :class="[
-          'card transition-shadow duration-200',
-          'cursor-pointer hover:shadow-lg',
-        ]"
+        :class="['card transition-shadow duration-200', 'cursor-pointer hover:shadow-lg']"
         @click="openTab('user-management')"
       >
         <div class="flex items-center">
@@ -22,7 +19,9 @@
             <el-icon class="w-6 h-6 text-green-600 dark:text-green-400"><UserFilled /></el-icon>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.userCount') }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+              {{ t('dashboard.userCount') }}
+            </p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.users }}
             </p>
@@ -32,10 +31,7 @@
 
       <div
         v-if="canAccessProjectManagement"
-        :class="[
-          'card transition-shadow duration-200',
-          'cursor-pointer hover:shadow-lg',
-        ]"
+        :class="['card transition-shadow duration-200', 'cursor-pointer hover:shadow-lg']"
         @click="openTab('project-management')"
       >
         <div class="flex items-center">
@@ -43,7 +39,9 @@
             <el-icon class="w-6 h-6 text-blue-600 dark:text-blue-400"><FolderOpened /></el-icon>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.projectCount') }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+              {{ t('dashboard.projectCount') }}
+            </p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.projects }}
             </p>
@@ -58,10 +56,14 @@
       >
         <div class="flex items-center">
           <div class="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-900">
-            <el-icon class="w-6 h-6 text-yellow-600 dark:text-yellow-400"><OfficeBuilding /></el-icon>
+            <el-icon class="w-6 h-6 text-yellow-600 dark:text-yellow-400"
+              ><OfficeBuilding
+            /></el-icon>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.tenantCount') }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+              {{ t('dashboard.tenantCount') }}
+            </p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.tenants }}
             </p>
@@ -71,10 +73,7 @@
 
       <div
         v-if="canAccessSystemLogs"
-        :class="[
-          'card transition-shadow duration-200',
-          'cursor-pointer hover:shadow-lg',
-        ]"
+        :class="['card transition-shadow duration-200', 'cursor-pointer hover:shadow-lg']"
         @click="openTab('system-logs')"
       >
         <div class="flex items-center">
@@ -82,7 +81,9 @@
             <el-icon class="w-6 h-6 text-red-600 dark:text-red-400"><DocumentCopy /></el-icon>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">{{ t('dashboard.systemLogs') }}</p>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+              {{ t('dashboard.systemLogs') }}
+            </p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.logs }}
             </p>
@@ -94,8 +95,12 @@
     <!-- 最近活动 -->
     <div class="card">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('dashboard.recentActivity') }}</h3>
-        <el-button size="small" :loading="loading" @click="loadDashboardData">{{ t('common.refresh') }}</el-button>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+          {{ t('dashboard.recentActivity') }}
+        </h3>
+        <el-button size="small" :loading="loading" @click="loadDashboardData">{{
+          t('common.refresh')
+        }}</el-button>
       </div>
       <div
         v-if="loadError"
@@ -103,8 +108,13 @@
       >
         {{ loadError }}
       </div>
-      <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">{{ t('dashboard.loadingData') }}</div>
-      <div v-else-if="recentActivities.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
+      <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">
+        {{ t('dashboard.loadingData') }}
+      </div>
+      <div
+        v-else-if="recentActivities.length === 0"
+        class="text-sm text-gray-500 dark:text-gray-400"
+      >
         {{ t('dashboard.noActivity') }}
       </div>
       <div v-else class="space-y-4">
@@ -121,13 +131,21 @@
             </div>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-sm text-gray-900 dark:text-white">{{ activity.description }}</p>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDateTime(activity.time) }}</p>
+            <p class="text-sm text-gray-900 dark:text-white">
+              {{ activity.description }}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ formatDateTime(activity.time) }}
+            </p>
           </div>
         </div>
       </div>
       <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">
-        {{ t('dashboard.lastUpdated', { time: formatDateTime(lastUpdatedAt) || '-' }) }}
+        {{
+          t('dashboard.lastUpdated', {
+            time: formatDateTime(lastUpdatedAt) || '-',
+          })
+        }}
       </p>
     </div>
   </div>
@@ -160,7 +178,9 @@ export default {
     const role = computed(() => authStore.userInfo?.role)
     const canLoadTenantStats = computed(() => canRequestTenantStats(role.value))
     const canAccessUserManagement = computed(() => canAccessTab('user-management', role.value))
-    const canAccessProjectManagement = computed(() => canAccessTab('project-management', role.value))
+    const canAccessProjectManagement = computed(() =>
+      canAccessTab('project-management', role.value),
+    )
     const canAccessSystemLogs = computed(() => canAccessTab('system-logs', role.value))
     const loading = ref(false)
     const loadError = ref('')
@@ -216,9 +236,7 @@ export default {
         stats.value.users =
           usersResult?.status === 'fulfilled' ? usersResult.value?.pagination?.total || 0 : 0
         stats.value.projects =
-          projectsResult?.status === 'fulfilled'
-            ? projectsResult.value?.pagination?.total || 0
-            : 0
+          projectsResult?.status === 'fulfilled' ? projectsResult.value?.pagination?.total || 0 : 0
         stats.value.logs =
           logsResult?.status === 'fulfilled' ? logsResult.value?.pagination?.total || 0 : 0
         stats.value.tenants =
@@ -325,6 +343,3 @@ export default {
   @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6;
 }
 </style>
-
-
-

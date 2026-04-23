@@ -449,13 +449,25 @@ export default {
     const loginDisplayItems = computed(() => {
       const list = []
       if (loginDisplay.value.showCompanyName && loginDisplay.value.companyName) {
-        list.push({ key: 'companyName', label: `${t('auth.companyLabel')}: `, value: loginDisplay.value.companyName })
+        list.push({
+          key: 'companyName',
+          label: `${t('auth.companyLabel')}: `,
+          value: loginDisplay.value.companyName,
+        })
       }
       if (loginDisplay.value.showCompanyPhone && loginDisplay.value.companyPhone) {
-        list.push({ key: 'companyPhone', label: `${t('auth.phoneLabel')}: `, value: loginDisplay.value.companyPhone })
+        list.push({
+          key: 'companyPhone',
+          label: `${t('auth.phoneLabel')}: `,
+          value: loginDisplay.value.companyPhone,
+        })
       }
       if (loginDisplay.value.showCompanyAddress && loginDisplay.value.companyAddress) {
-        list.push({ key: 'companyAddress', label: `${t('auth.addressLabel')}: `, value: loginDisplay.value.companyAddress })
+        list.push({
+          key: 'companyAddress',
+          label: `${t('auth.addressLabel')}: `,
+          value: loginDisplay.value.companyAddress,
+        })
       }
       if (loginDisplay.value.showCompanyWebsite && loginDisplay.value.companyWebsite) {
         const website = String(loginDisplay.value.companyWebsite)
@@ -469,7 +481,11 @@ export default {
         })
       }
       if (loginDisplay.value.showIcp && loginDisplay.value.icpNumber) {
-        list.push({ key: 'icp', label: `${t('auth.icpLabel')}: `, value: loginDisplay.value.icpNumber })
+        list.push({
+          key: 'icp',
+          label: `${t('auth.icpLabel')}: `,
+          value: loginDisplay.value.icpNumber,
+        })
       }
       return list
     })
@@ -616,7 +632,7 @@ export default {
       }
 
       // 异步加载应用配置，不阻塞页面渲染
-      appStore.loadConfig(form.tenantCode || undefined).catch(error => {
+      appStore.loadConfig(form.tenantCode || undefined).catch((error) => {
         console.error('Failed to load config:', error)
         // 错误已在 loadConfig 中处理，这里只记录日志
       })
@@ -631,7 +647,7 @@ export default {
             console.error('Failed to load tenant config:', error)
           })
         }, 300)
-      }
+      },
     )
 
     return {
@@ -772,6 +788,3 @@ input:focus + .input-icon {
   background-color: rgba(20, 184, 166, 0.2);
 }
 </style>
-
-
-

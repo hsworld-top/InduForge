@@ -1,12 +1,15 @@
 <template>
-  <div class="h-full w-full flex-1 flex flex-col relative dashboard-tabs-area" :class="{ 'has-hamburger': sidebarCollapsed && !isTabMaximized }">
+  <div
+    class="h-full w-full flex-1 flex flex-col relative dashboard-tabs-area"
+    :class="{ 'has-hamburger': sidebarCollapsed && !isTabMaximized }"
+  >
     <!-- 汉堡菜单按钮 (绝对定位在 Tabs 左侧) -->
-    <div 
-      v-if="sidebarCollapsed && !isTabMaximized" 
+    <div
+      v-if="sidebarCollapsed && !isTabMaximized"
       class="absolute left-0 top-0 h-[32px] w-[44px] flex items-center justify-center z-10 border-r border-transparent"
     >
-      <button 
-        @click="openSidebar" 
+      <button
+        @click="openSidebar"
         class="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 transition-all cursor-pointer"
       >
         <el-icon class="text-[18px]">
@@ -15,10 +18,13 @@
       </button>
     </div>
 
-    <el-tabs 
-      v-model="internalActiveTab" 
+    <el-tabs
+      v-model="internalActiveTab"
       @tab-remove="handleCloseTab"
-      :class="['dashboard-tabs h-full flex-1 min-h-0', isTabMaximized ? 'dashboard-tabs-maximized' : '']"
+      :class="[
+        'dashboard-tabs h-full flex-1 min-h-0',
+        isTabMaximized ? 'dashboard-tabs-maximized' : '',
+      ]"
     >
       <el-tab-pane
         v-for="tab in tabs"
@@ -30,15 +36,31 @@
         <template #label>
           <div class="flex items-center space-x-2 tab-label-content">
             <span class="truncate max-w-[150px]">{{ getTabTitle(tab) }}</span>
-            <el-button v-if="tab.props?.appType" size="small" text circle class="!p-0 !w-5 !h-5 !ml-2 opacity-60 hover:opacity-100 transition-opacity"
-              @click.stop="$emit('open-external-tab', tab)">
+            <el-button
+              v-if="tab.props?.appType"
+              size="small"
+              text
+              circle
+              class="!p-0 !w-5 !h-5 !ml-2 opacity-60 hover:opacity-100 transition-opacity"
+              @click.stop="$emit('open-external-tab', tab)"
+            >
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M14 3h7v7m0-7L10 14m-4 7h11a2 2 0 002-2V8" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M14 3h7v7m0-7L10 14m-4 7h11a2 2 0 002-2V8"
+                />
               </svg>
             </el-button>
-            <el-button v-if="!isTabMaximized && tab.key !== 'dashboard'" size="small" text circle
-              class="!p-0 !w-5 !h-5 !ml-1 opacity-60 hover:opacity-100 transition-opacity" @click.stop="$emit('maximize-tab', tab.key)">
+            <el-button
+              v-if="!isTabMaximized && tab.key !== 'dashboard'"
+              size="small"
+              text
+              circle
+              class="!p-0 !w-5 !h-5 !ml-1 opacity-60 hover:opacity-100 transition-opacity"
+              @click.stop="$emit('maximize-tab', tab.key)"
+            >
               <el-icon class="text-xs">
                 <FullScreen />
               </el-icon>
@@ -59,19 +81,25 @@
     </el-tabs>
 
     <Transition name="drop-down">
-      <div
-        v-if="isTabMaximized && showMaximizeRestoreButton"
-        class="maximize-restore-anchor"
-      >
-        <el-button
-          class="maximize-restore-floating-button"
-          circle
-          @click="$emit('restore-tab')"
-        >
-          <el-icon>
-            <Close />
-          </el-icon>
-        </el-button>
+      <div v-if="isTabMaximized && showMaximizeRestoreButton" class="maximize-restore-anchor">
+        <el-tooltip content="退出全屏 (ESC)" placement="bottom" :show-after="300">
+          <el-button class="maximize-restore-floating-button" circle @click="$emit('restore-tab')">
+            <svg
+              class="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="4 14 10 14 10 20"></polyline>
+              <polyline points="20 10 14 10 14 4"></polyline>
+              <line x1="14" y1="10" x2="21" y2="3"></line>
+              <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+          </el-button>
+        </el-tooltip>
       </div>
     </Transition>
   </div>
@@ -80,33 +108,33 @@
 <script setup>
 import { computed } from 'vue'
 import { useAppStore } from '@/store'
-import { FullScreen, Close, Expand } from '@element-plus/icons-vue'
+import { FullScreen, Expand } from '@element-plus/icons-vue'
 
 const props = defineProps({
   tabs: {
     type: Array,
-    required: true
+    required: true,
   },
   activeTab: {
     type: String,
-    required: true
+    required: true,
   },
   isTabMaximized: {
     type: Boolean,
-    default: false
+    default: false,
   },
   showMaximizeRestoreButton: {
     type: Boolean,
-    default: false
+    default: false,
   },
   isTabVisible: {
     type: Function,
-    required: true
+    required: true,
   },
   getTabTitle: {
     type: Function,
-    required: true
-  }
+    required: true,
+  },
 })
 
 const emit = defineEmits([
@@ -117,7 +145,7 @@ const emit = defineEmits([
   'restore-tab',
   'open-tab',
   'embedded-register',
-  'embedded-unregister'
+  'embedded-unregister',
 ])
 
 const appStore = useAppStore()
@@ -125,7 +153,7 @@ const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 
 const internalActiveTab = computed({
   get: () => props.activeTab,
-  set: (val) => emit('update:activeTab', val)
+  set: (val) => emit('update:activeTab', val),
 })
 
 const openSidebar = () => {
@@ -202,7 +230,9 @@ const handleCloseTab = (targetName) => {
 .dashboard-tabs .el-tabs__item.is-active {
   background-color: var(--el-bg-color) !important;
   color: var(--el-color-primary) !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02) !important;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.02) !important;
   border-color: var(--el-border-color-lighter) !important;
 }
 
@@ -225,5 +255,72 @@ const handleCloseTab = (targetName) => {
 .dashboard-tabs .tab-label-content {
   display: inline-flex;
   align-items: center;
+}
+
+/* ===== 全屏最大化状态 ===== */
+/* 全屏时完全隐藏标签条 */
+.dashboard-tabs-maximized .el-tabs__header {
+  display: none !important;
+}
+
+/* 全屏时内容区撑满 */
+.dashboard-tabs-maximized .el-tabs__content {
+  height: 100% !important;
+}
+
+/* ===== 全屏恢复按钮 ===== */
+.maximize-restore-anchor {
+  position: fixed;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 1100;
+}
+
+.maximize-restore-floating-button {
+  pointer-events: auto;
+  z-index: 1100;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgb(31 41 55 / 45%);
+  background: rgb(17 24 39 / 88%);
+  color: #fff;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 28%);
+}
+
+.maximize-restore-floating-button:hover {
+  background: rgb(17 24 39 / 96%);
+  border-color: rgb(31 41 55 / 70%);
+}
+
+.maximize-restore-floating-button svg {
+  color: #fff;
+}
+
+html.dark .maximize-restore-floating-button,
+[data-theme='dark'] .maximize-restore-floating-button {
+  border-color: rgb(148 163 184 / 45%);
+  background: rgb(15 23 42 / 88%);
+}
+
+/* ===== 恢复按钮下拉动画 ===== */
+.drop-down-enter-active,
+.drop-down-leave-active {
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.drop-down-enter-from,
+.drop-down-leave-to {
+  transform: translate(-50%, -14px);
+  opacity: 0;
+}
+
+.drop-down-enter-to,
+.drop-down-leave-from {
+  transform: translate(-50%, 0);
+  opacity: 1;
 }
 </style>

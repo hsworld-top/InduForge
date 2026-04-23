@@ -118,7 +118,7 @@ const normalizeEmbeddedProps = (props: unknown): EmbeddedProps | null => {
 const buildStandardTab = (
   key: string,
   tabConfigMap: Record<string, Record<string, any>>,
-  translate: Translate
+  translate: Translate,
 ): DashboardTab | null => {
   const config = tabConfigMap?.[key]
   if (!config) return null
@@ -135,7 +135,9 @@ const buildStandardTab = (
     props: null,
   }
 
-  normalizedTab.title = titleKey ? resolveDashboardTabTitle(normalizedTab, translate) : normalizedTab.title
+  normalizedTab.title = titleKey
+    ? resolveDashboardTabTitle(normalizedTab, translate)
+    : normalizedTab.title
 
   return normalizedTab
 }
@@ -151,7 +153,7 @@ const buildStandardTab = (
 const buildEmbeddedTab = (
   record: Record<string, any>,
   embeddedComponent: unknown,
-  translate: Translate
+  translate: Translate,
 ): DashboardTab | null => {
   if (!isPlainObject(record) || !embeddedComponent) return null
 
@@ -167,7 +169,11 @@ const buildEmbeddedTab = (
     titleParams: normalizeTitleParams(record.titleParams),
     component: embeddedComponent,
     icon:
-      typeof record.icon === 'string' && record.icon ? record.icon : props.appType === 'designer' ? 'design' : 'database',
+      typeof record.icon === 'string' && record.icon
+        ? record.icon
+        : props.appType === 'designer'
+          ? 'design'
+          : 'database',
     props,
   }
 
@@ -249,7 +255,7 @@ export const restoreDashboardTabState = (
     hasTabPermission = () => true,
     embeddedComponent = null,
     translate = (key: string) => key,
-  }: RestoreOptions = {}
+  }: RestoreOptions = {},
 ): { tabs: DashboardTab[]; activeTab: string } | null => {
   if (!savedState || !Array.isArray(savedState.tabs)) return null
 
@@ -265,7 +271,10 @@ export const restoreDashboardTabState = (
 
     if (!isPlainObject(record)) continue
 
-    if ((record.type === 'standard' || (!record.type && tabConfigMap[record.key])) && typeof record.key === 'string') {
+    if (
+      (record.type === 'standard' || (!record.type && tabConfigMap[record.key])) &&
+      typeof record.key === 'string'
+    ) {
       if (!tabConfigMap[record.key] || !hasTabPermission(record.key)) continue
       const standardTab = buildStandardTab(record.key, tabConfigMap, translate)
       if (standardTab) restoredTabs.push(standardTab)

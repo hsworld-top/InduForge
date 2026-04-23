@@ -1,7 +1,11 @@
 <template>
   <el-dialog
     v-model="dialogVisible"
-    :title="t('projectManagement.runtimeAccess.dialogTitle', { name: project?.name || '' })"
+    :title="
+      t('projectManagement.runtimeAccess.dialogTitle', {
+        name: project?.name || '',
+      })
+    "
     width="min(1120px, 96vw)"
     append-to-body
   >
@@ -217,7 +221,10 @@
     append-to-body
   >
     <el-form label-width="120px">
-      <el-form-item v-if="userEditorMode === 'create'" :label="t('projectManagement.runtimeAccess.users.username')">
+      <el-form-item
+        v-if="userEditorMode === 'create'"
+        :label="t('projectManagement.runtimeAccess.users.username')"
+      >
         <el-input
           v-model="userForm.username"
           :placeholder="t('projectManagement.runtimeAccess.users.inputUsername')"
@@ -245,10 +252,14 @@
       </el-form-item>
       <template v-else>
         <el-form-item :label="t('projectManagement.runtimeAccess.users.username')">
-          <div class="runtime-access-readonly">{{ userForm.username || '--' }}</div>
+          <div class="runtime-access-readonly">
+            {{ userForm.username || '--' }}
+          </div>
         </el-form-item>
         <el-form-item :label="t('projectManagement.runtimeAccess.users.displayName')">
-          <div class="runtime-access-readonly">{{ userForm.displayName || '--' }}</div>
+          <div class="runtime-access-readonly">
+            {{ userForm.displayName || '--' }}
+          </div>
         </el-form-item>
       </template>
       <el-form-item :label="t('projectManagement.runtimeAccess.users.roles')">
@@ -318,10 +329,7 @@
         :label="t('projectManagement.runtimeAccess.roles.status')"
       >
         <el-select v-model="roleForm.status" style="width: 100%">
-          <el-option
-            :label="t('projectManagement.runtimeAccess.statusActive')"
-            value="active"
-          />
+          <el-option :label="t('projectManagement.runtimeAccess.statusActive')" value="active" />
           <el-option
             :label="t('projectManagement.runtimeAccess.statusDisabled')"
             value="disabled"

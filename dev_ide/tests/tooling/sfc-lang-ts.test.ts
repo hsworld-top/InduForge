@@ -53,7 +53,7 @@ describe('tooling: SFC 脚本语言护栏', () => {
 
     expect(
       invalidVueFiles,
-      `以下 Vue 文件未声明 <script lang="ts">：\n${invalidVueFiles.join('\n')}`
+      `以下 Vue 文件未声明 <script lang="ts">：\n${invalidVueFiles.join('\n')}`,
     ).toEqual([])
   })
 })

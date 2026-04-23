@@ -6,7 +6,9 @@ import { constants } from '@opentiny/tiny-engine-utils'
 const LOGIN_EXPIRED_CODE = 401
 const { BROADCAST_CHANNEL } = constants
 
-const { post: globalNotify } = useBroadcastChannel({ name: BROADCAST_CHANNEL.Notify })
+const { post: globalNotify } = useBroadcastChannel({
+  name: BROADCAST_CHANNEL.Notify,
+})
 
 const getVsCodeBridge = (): unknown => (window as Window & { vscodeBridge?: unknown }).vscodeBridge
 
@@ -29,7 +31,10 @@ interface ServiceResponseEnvelope<TData = unknown> {
 }
 
 type ServiceResponse<TData = unknown> = AxiosResponse<ServiceResponseEnvelope<TData> | TData>
-type ServiceResponseError = AxiosError<{ error?: ServiceErrorPayload; message?: string }>
+type ServiceResponseError = AxiosError<{
+  error?: ServiceErrorPayload
+  message?: string
+}>
 
 const preRequest = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
   const isDevelopEnv = import.meta.env.MODE?.includes('dev')

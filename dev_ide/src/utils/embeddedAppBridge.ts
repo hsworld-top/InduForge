@@ -218,9 +218,15 @@ const resolveAppBasePath = (appType: string): string => {
  * @param {string} [options.handoffId] - 外部注入的 handoff id
  * @returns {object} handoff 记录
  */
-export const createHandoffRecord = (hostState: HostState = {}, options: CreateRecordOptions = {}): HandoffRecord => {
+export const createHandoffRecord = (
+  hostState: HostState = {},
+  options: CreateRecordOptions = {},
+): HandoffRecord => {
   const now = options.now ?? Date.now()
-  const ttlMs = Number.isFinite(options.ttlMs) && (options.ttlMs as number) > 0 ? (options.ttlMs as number) : DEFAULT_HANDOFF_TTL_MS
+  const ttlMs =
+    Number.isFinite(options.ttlMs) && (options.ttlMs as number) > 0
+      ? (options.ttlMs as number)
+      : DEFAULT_HANDOFF_TTL_MS
   const handoffId = options.handoffId ?? createHandoffId()
 
   return {
@@ -261,7 +267,10 @@ export const saveHandoffRecord = (record: unknown): PersistedHandoffRecord => {
   }
 
   try {
-    localStorage.setItem(`${HANDOFF_STORAGE_PREFIX}${sanitizedRecord.handoffId}`, JSON.stringify(sanitizedRecord))
+    localStorage.setItem(
+      `${HANDOFF_STORAGE_PREFIX}${sanitizedRecord.handoffId}`,
+      JSON.stringify(sanitizedRecord),
+    )
     return sanitizedRecord
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -345,9 +354,13 @@ export const loadHandoffRecord = (handoffId?: string | null): PersistedHandoffRe
  * @param {string|object} handoff - handoff id 或已加载记录
  * @returns {object|null} 恢复载荷
  */
-export const resolveRestorePayload = (handoff: string | Record<string, unknown>): Record<string, unknown> | null => {
+export const resolveRestorePayload = (
+  handoff: string | Record<string, unknown>,
+): Record<string, unknown> | null => {
   const record =
-    typeof handoff === 'string' ? loadHandoffRecord(handoff) : normalizeHandoffRecordForRestore(handoff)
+    typeof handoff === 'string'
+      ? loadHandoffRecord(handoff)
+      : normalizeHandoffRecordForRestore(handoff)
   if (!record?.handoffId) {
     return null
   }
@@ -387,7 +400,7 @@ export const resolveRestorePayload = (handoff: string | Record<string, unknown>)
 export const createBootstrapResponse = (
   appType: string,
   hostState: Record<string, unknown> = {},
-  options: CreateRecordOptions = {}
+  options: CreateRecordOptions = {},
 ): BootstrapResponse => {
   const { pid, projectId: inputProjectId, ...restHostState } = hostState
   const bootstrapState: Record<string, unknown> = {

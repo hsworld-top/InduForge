@@ -20,7 +20,7 @@ describe('project-runtime-access-state', () => {
     const watchStub = (
       _source: unknown,
       callback: (value: [boolean, string], oldValue: [boolean, string] | undefined) => void,
-      options?: { immediate?: boolean }
+      options?: { immediate?: boolean },
     ) => {
       if (options?.immediate) {
         callback([visibleRef.value, String(projectRef.value?.id || '')], undefined)
@@ -46,7 +46,7 @@ describe('project-runtime-access-state', () => {
           prompt: vi.fn(),
           confirm: vi.fn(),
         },
-      })
+      }),
     ).not.toThrow()
   })
 })

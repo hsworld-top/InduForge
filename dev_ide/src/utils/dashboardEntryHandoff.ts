@@ -45,7 +45,9 @@ const normalizeQueryValue = (value: QueryValue): string | null => {
  * @param {object} to - Vue Router 的目标路由对象
  * @returns {{path: string, query: object}} 重定向位置
  */
-export const buildDashboardRedirectLocation = (to: { query?: DashboardQuery } = {}): {
+export const buildDashboardRedirectLocation = (
+  to: { query?: DashboardQuery } = {},
+): {
   path: string
   query: DashboardQuery
 } => ({

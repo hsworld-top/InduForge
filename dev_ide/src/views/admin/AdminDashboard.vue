@@ -8,7 +8,9 @@
         <!-- Logo 图片 -->
         <div class="flex items-center">
           <img :src="logoUrl" alt="Logo" class="h-7 w-auto mr-2" />
-          <h1 class="text-base font-semibold text-gray-800 dark:text-white hidden sm:block">{{ t('adminDashboard.title') }}</h1>
+          <h1 class="text-base font-semibold text-gray-800 dark:text-white hidden sm:block">
+            {{ t('adminDashboard.title') }}
+          </h1>
         </div>
         <div class="flex items-center space-x-2">
           <!-- 主题切换 -->
@@ -53,7 +55,9 @@
                   {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'A' }}
                 </span>
               </div>
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ userInfo?.username || t('adminDashboard.admin') }}</span>
+              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">{{
+                userInfo?.username || t('adminDashboard.admin')
+              }}</span>
             </button>
 
             <!-- 下拉菜单 -->
@@ -94,7 +98,15 @@
     </div>
 
     <!-- 个人资料弹窗 -->
-    <el-dialog v-model="showProfileDialog" width="600px" top="8vh" destroy-on-close append-to-body class="admin-profile-dialog" :title="t('adminDashboard.profile')">
+    <el-dialog
+      v-model="showProfileDialog"
+      width="600px"
+      top="8vh"
+      destroy-on-close
+      append-to-body
+      class="admin-profile-dialog"
+      :title="t('adminDashboard.profile')"
+    >
       <AdminProfile />
     </el-dialog>
   </div>
@@ -112,7 +124,7 @@ const AdminProfile = defineAsyncComponent(() => import('@/views/admin/components
 export default defineComponent({
   name: 'AdminDashboard',
   components: {
-    AdminProfile
+    AdminProfile,
   },
   setup() {
     const { t } = useI18n()
@@ -197,4 +209,3 @@ export default defineComponent({
   padding: 1rem 1.5rem 1.5rem;
 }
 </style>
-

@@ -1,23 +1,111 @@
 <template>
   <div class="ops-management h-full flex flex-col">
-    <!-- 页面标题和页头操作 -->
-    <div class="flex justify-between items-center mb-3">
-      <div class="flex items-center space-x-4">
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('opsManagement.title') }}</h1>
-        <el-tag border size="small" type="info" class="rounded-full">
+    <!-- 一体化操作栏 (Cockpit-style) -->
+    <div
+      class="flex flex-col md:flex-row md:items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-6 gap-3"
+    >
+      <!-- 左侧：标题、总数与搜索筛选 -->
+      <div class="flex items-center space-x-4 flex-wrap gap-y-2 md:flex-nowrap">
+        <!-- 页面标题 -->
+        <h1
+          class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 ml-2 whitespace-nowrap"
+        >
+          {{ t('opsManagement.title') }}
+        </h1>
+
+        <el-tag
+          size="small"
+          type="info"
+          class="rounded-full tracking-wide border-transparent bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+        >
           {{ t('opsManagement.totalNodes') }}: {{ nodePagination.total }}
         </el-tag>
+
+        <div class="h-5 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden md:block"></div>
+
+        <!-- 圆角搜索框 -->
+        <el-input
+          v-model="nodeSearch.keyword"
+          :placeholder="t('opsManagement.searchPlaceholder')"
+          clearable
+          class="!w-48 md:!w-64 rounded-full-input"
+          prefix-icon="Search"
+        />
+
+        <!-- 筛选栏 -->
+        <div class="flex items-center space-x-2">
+          <el-select
+            v-model="nodeSearch.projectName"
+            clearable
+            filterable
+            :placeholder="t('projectManagement.allProjects')"
+            class="!w-40"
+          >
+            <el-option
+              v-for="item in projectOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.name"
+            />
+          </el-select>
+          <el-select
+            v-model="nodeSearch.status"
+            :placeholder="t('opsManagement.allStatus')"
+            clearable
+            class="!w-32"
+          >
+            <el-option :label="t('opsManagement.online')" value="online" />
+            <el-option :label="t('opsManagement.offline')" value="offline" />
+            <el-option :label="t('opsManagement.abnormal')" value="error" />
+          </el-select>
+        </div>
       </div>
-      <div class="flex items-center space-x-2">
-        <el-radio-group v-model="activeView" size="small">
-          <el-radio-button value="dashboard">
-            <el-icon class="mr-1"><Grid /></el-icon> {{ t('opsManagement.dashboardView') }}
-          </el-radio-button>
-          <el-radio-button value="list">
-            <el-icon class="mr-1"><List /></el-icon> {{ t('opsManagement.listView') }}
-          </el-radio-button>
-        </el-radio-group>
-        <!-- 待审核申请通知图标 -->
+
+      <!-- 右侧：视图切换与全局操作 -->
+      <div class="flex items-center space-x-3 ml-auto md:ml-0">
+        <!-- 视图切换 -->
+        <div
+          class="flex items-center bg-gray-50 dark:bg-gray-900 rounded-full p-1 border border-gray-100 dark:border-gray-700"
+        >
+          <button
+            @click="activeView = 'dashboard'"
+            :class="[
+              'w-8 h-7 rounded-full flex items-center justify-center transition-colors',
+              activeView === 'dashboard'
+                ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm'
+                : 'text-gray-400 hover:text-gray-600',
+            ]"
+          >
+            <el-icon><Grid /></el-icon>
+          </button>
+          <button
+            @click="activeView = 'list'"
+            :class="[
+              'w-8 h-7 rounded-full flex items-center justify-center transition-colors',
+              activeView === 'list'
+                ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm'
+                : 'text-gray-400 hover:text-gray-600',
+            ]"
+          >
+            <svg
+              class="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
         <el-badge
           v-if="canApproveNode"
           :value="pendingCount"
@@ -25,65 +113,35 @@
           class="cursor-pointer"
           @click="showPendingDialog = true"
         >
-          <el-button :type="pendingCount > 0 ? 'warning' : 'default'" :plain="pendingCount === 0" circle>
+          <button
+            :class="[
+              'w-9 h-9 rounded-full flex items-center justify-center transition-colors shadow-sm',
+              pendingCount > 0
+                ? 'bg-orange-50 hover:bg-orange-100 text-orange-500 border border-orange-200'
+                : 'bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600',
+            ]"
+          >
             <el-icon><Bell /></el-icon>
-          </el-button>
+          </button>
         </el-badge>
-        <el-button @click="fetchNodes" :loading="nodeLoading" size="small">
-          <el-icon><Refresh /></el-icon>
-        </el-button>
-      </div>
-    </div>
 
-    <!-- 过滤器面板 -->
-    <div class="mb-6">
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
-        <el-form :inline="true" :model="nodeSearch" class="flex flex-wrap gap-4 -mb-4">
-          <el-form-item :label="t('projectManagement.projectName')">
-            <el-select
-              v-model="nodeSearch.projectName"
-              clearable
-              filterable
-              :placeholder="t('projectManagement.allProjects')"
-              style="width: 220px"
-            >
-              <el-option
-                v-for="item in projectOptions"
-                :key="item.id"
-                :label="item.name"
-                :value="item.name"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="t('opsManagement.nodeStatus')">
-            <el-select v-model="nodeSearch.status" :placeholder="t('opsManagement.allStatus')" clearable style="width: 120px">
-              <el-option :label="t('opsManagement.online')" value="online" />
-              <el-option :label="t('opsManagement.offline')" value="offline" />
-              <el-option :label="t('opsManagement.abnormal')" value="error" />
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="t('opsManagement.searchNode')">
-            <el-input
-              v-model="nodeSearch.keyword"
-              :placeholder="t('opsManagement.searchPlaceholder')"
-              clearable
-              :prefix-icon="Search"
-              style="width: 220px"
-            />
-          </el-form-item>
-        </el-form>
+        <el-tooltip :content="t('common.refresh')" placement="top">
+          <button
+            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
+            @click="fetchNodes"
+          >
+            <el-icon><RefreshRight /></el-icon>
+          </button>
+        </el-tooltip>
       </div>
     </div>
 
     <div v-if="nodeLoadError" class="mb-4">
-      <el-alert
-        :title="nodeLoadError"
-        type="error"
-        show-icon
-        :closable="false"
-      >
+      <el-alert :title="nodeLoadError" type="error" show-icon :closable="false">
         <template #default>
-          <el-button text type="primary" @click="fetchNodes">{{ t('opsManagement.reload') }}</el-button>
+          <el-button text type="primary" @click="fetchNodes">{{
+            t('opsManagement.reload')
+          }}</el-button>
         </template>
       </el-alert>
     </div>
@@ -97,7 +155,9 @@
           </div>
         </div>
         <div class="status-stat-card">
-          <div class="status-stat-label">{{ t('opsManagement.deploying') }}</div>
+          <div class="status-stat-label">
+            {{ t('opsManagement.deploying') }}
+          </div>
           <div class="status-stat-value text-status-warning">
             {{ deployStatusSummary.deploying }}
           </div>
@@ -120,102 +180,145 @@
     <!-- 视图：节点大盘 -->
     <div v-if="activeView === 'dashboard'" class="flex-1 min-h-0 flex flex-col">
       <div class="flex-1 min-h-0 overflow-y-auto pb-6">
-      <div
-        v-loading="nodeLoading"
-        :class="['grid grid-cols-1 md:grid-cols-2 gap-6', cardGridClass]"
-      >
-        <el-card
-          v-for="node in filteredNodeList"
-          :key="node.id"
-          shadow="hover"
-          class="node-card border-none ring-1 ring-gray-200 dark:ring-gray-700"
-          :body-style="{ padding: '0px' }"
+        <div
+          v-loading="nodeLoading"
+          :class="['grid grid-cols-1 md:grid-cols-2 gap-6', cardGridClass]"
         >
-          <!-- 卡片头部：状态与基本信息 -->
-          <div class="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-            <div class="flex justify-between items-start mb-2">
-              <div class="flex items-center">
-                <div 
-                  class="w-3 h-3 rounded-full mr-2" 
-                  :class="node.status === 'online' ? 'bg-green-500 animate-pulse' : (node.status === 'offline' ? 'bg-gray-400' : 'bg-red-500')"
-                ></div>
-                <h3 class="font-bold text-gray-800 dark:text-gray-200 truncate">{{ node.name }}</h3>
-              </div>
-              <el-dropdown trigger="click">
-                <el-button link><el-icon><MoreFilled /></el-icon></el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="deleteNode(node)" type="danger">{{ t('opsManagement.deleteRegistration') }}</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-            <div class="text-xs text-gray-500 flex justify-between">
-              <span>IP: {{ node.ipAddress || '-' }}</span>
-              <span>Port: {{ node.port }}</span>
-            </div>
-          </div>
-
-          <!-- 卡片中部：资源概览 -->
-          <div class="p-4 space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-              <!-- CPU & Memory Gauges -->
-              <div class="text-center">
-                <div class="text-[10px] text-gray-400 uppercase mb-1">{{ t('opsManagement.cpuUsage') }}</div>
-                <el-progress
-                  type="dashboard"
-                  :percentage="getMetricValue(node, 'cpu')"
-                  :width="60"
-                  :stroke-width="4"
-                  :color="getProgressColor"
-                />
-              </div>
-              <div class="text-center">
-                <div class="text-[10px] text-gray-400 uppercase mb-1">{{ t('opsManagement.memoryUsage') }}</div>
-                <el-progress
-                  type="dashboard"
-                  :percentage="getMetricValue(node, 'memory')"
-                  :width="60"
-                  :stroke-width="4"
-                  :color="getProgressColor"
-                />
-              </div>
-            </div>
-
-            <!-- Disk Bars -->
-            <div class="text-xs space-y-2">
-              <div class="flex justify-between items-center text-gray-600 dark:text-gray-400">
-                <span>{{ t('opsManagement.diskUsage') }} ({{ getDiskLabel(node) }})</span>
-                <span class="font-mono">{{ getMetricValue(node, 'disk') }}%</span>
-              </div>
-              <el-progress :percentage="getMetricValue(node, 'disk')" :show-text="false" :stroke-width="6" class="mb-3" />
-            </div>
-          </div>
-
-          <!-- 卡片尾部：运行中工程列表 -->
-          <div class="bg-gray-50/30 dark:bg-gray-900/20 p-2 border-t border-gray-100 dark:border-gray-700">
-            <div class="text-[10px] font-bold text-gray-400 uppercase px-2 py-1 mb-1 flex justify-between">
-              <span>{{ t('opsManagement.runningProjects') }} ({{ getVisibleDeployments(node).length }})</span>
-              <el-button link size="small" type="primary" class="text-[10px]" @click="openProjectManagement">
-                {{ t('projectManagement.publishAndDeploy') }}
-              </el-button>
-            </div>
-            
-            <div v-if="getVisibleDeployments(node).length > 0" class="space-y-1">
-              <div 
-                v-for="deploy in getVisibleDeployments(node)" 
-                :key="deploy.id"
-                class="bg-white dark:bg-gray-800 rounded p-2 text-xs ring-1 ring-gray-100 dark:ring-gray-700 flex justify-between items-center"
-              >
-                <div class="flex flex-col">
-                  <span class="font-semibold text-gray-700 dark:text-gray-300 truncate w-32">
-                    {{ deploy.project?.name }}
-                  </span>
-                  <div class="flex items-center space-x-2 text-[10px] text-gray-500">
-                    <span class="flex items-center"><el-icon class="mr-0.5"><User /></el-icon> {{ deploy.runtimeMetrics?.onlineUsers || 0 }}</span>
-                    <span class="flex items-center"><el-icon class="mr-0.5"><Clock /></el-icon> {{ deploy.runtimeMetrics?.concurrentUsers || 0 }}</span>
-                  </div>
+          <el-card
+            v-for="node in filteredNodeList"
+            :key="node.id"
+            shadow="hover"
+            class="node-card border-none rounded-2xl ring-1 ring-gray-200 dark:ring-gray-700 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300"
+            :body-style="{ padding: '0px' }"
+          >
+            <!-- 卡片头部：状态与基本信息 -->
+            <div
+              class="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
+            >
+              <div class="flex justify-between items-start mb-2">
+                <div class="flex items-center">
+                  <div
+                    class="w-3 h-3 rounded-full mr-2"
+                    :class="
+                      node.status === 'online'
+                        ? 'bg-green-500 animate-pulse'
+                        : node.status === 'offline'
+                          ? 'bg-gray-400'
+                          : 'bg-red-500'
+                    "
+                  ></div>
+                  <h3 class="font-bold text-gray-800 dark:text-gray-200 truncate">
+                    {{ node.name }}
+                  </h3>
                 </div>
+                <el-dropdown trigger="click">
+                  <el-button link
+                    ><el-icon><MoreFilled /></el-icon
+                  ></el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item @click="deleteNode(node)" type="danger">{{
+                        t('opsManagement.deleteRegistration')
+                      }}</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+              <div class="text-xs text-gray-500 flex justify-between">
+                <span>IP: {{ node.ipAddress || '-' }}</span>
+                <span>Port: {{ node.port }}</span>
+              </div>
+            </div>
+
+            <!-- 卡片中部：资源概览 -->
+            <div class="p-4 space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <!-- CPU & Memory Gauges -->
+                <div class="text-center">
+                  <div class="text-[10px] text-gray-400 uppercase mb-1">
+                    {{ t('opsManagement.cpuUsage') }}
+                  </div>
+                  <el-progress
+                    type="dashboard"
+                    :percentage="getMetricValue(node, 'cpu')"
+                    :width="60"
+                    :stroke-width="4"
+                    :color="getProgressColor"
+                  />
+                </div>
+                <div class="text-center">
+                  <div class="text-[10px] text-gray-400 uppercase mb-1">
+                    {{ t('opsManagement.memoryUsage') }}
+                  </div>
+                  <el-progress
+                    type="dashboard"
+                    :percentage="getMetricValue(node, 'memory')"
+                    :width="60"
+                    :stroke-width="4"
+                    :color="getProgressColor"
+                  />
+                </div>
+              </div>
+
+              <!-- Disk Bars -->
+              <div class="text-xs space-y-2">
+                <div class="flex justify-between items-center text-gray-600 dark:text-gray-400">
+                  <span>{{ t('opsManagement.diskUsage') }} ({{ getDiskLabel(node) }})</span>
+                  <span class="font-mono">{{ getMetricValue(node, 'disk') }}%</span>
+                </div>
+                <el-progress
+                  :percentage="getMetricValue(node, 'disk')"
+                  :show-text="false"
+                  :stroke-width="6"
+                  class="mb-3"
+                />
+              </div>
+            </div>
+
+            <!-- 卡片尾部：运行中工程列表 -->
+            <div
+              class="bg-gray-50/30 dark:bg-gray-900/20 p-2 border-t border-gray-100 dark:border-gray-700"
+            >
+              <div
+                class="text-[10px] font-bold text-gray-400 uppercase px-2 py-1 mb-1 flex justify-between"
+              >
+                <span
+                  >{{ t('opsManagement.runningProjects') }} ({{
+                    getVisibleDeployments(node).length
+                  }})</span
+                >
+                <el-button
+                  link
+                  size="small"
+                  type="primary"
+                  class="text-[10px]"
+                  @click="openProjectManagement"
+                >
+                  {{ t('projectManagement.publishAndDeploy') }}
+                </el-button>
+              </div>
+
+              <div v-if="getVisibleDeployments(node).length > 0" class="space-y-1">
+                <div
+                  v-for="deploy in getVisibleDeployments(node)"
+                  :key="deploy.id"
+                  class="bg-white dark:bg-gray-800 rounded p-2 text-xs ring-1 ring-gray-100 dark:ring-gray-700 flex justify-between items-center"
+                >
+                  <div class="flex flex-col">
+                    <span class="font-semibold text-gray-700 dark:text-gray-300 truncate w-32">
+                      {{ deploy.project?.name }}
+                    </span>
+                    <div class="flex items-center space-x-2 text-[10px] text-gray-500">
+                      <span class="flex items-center"
+                        ><el-icon class="mr-0.5"><User /></el-icon>
+                        {{ deploy.runtimeMetrics?.onlineUsers || 0 }}</span
+                      >
+                      <span class="flex items-center"
+                        ><el-icon class="mr-0.5"><Clock /></el-icon>
+                        {{ deploy.runtimeMetrics?.concurrentUsers || 0 }}</span
+                      >
+                    </div>
+                  </div>
                   <div class="flex items-center space-x-1">
                     <el-tag size="small" :type="getDeployStatusType(deploy.status)">
                       {{ getDeployDisplayLabel(deploy) }}
@@ -224,155 +327,221 @@
                       {{ getDeployModeLabel(deploy.mode) }}
                     </el-tag>
                     <el-dropdown trigger="hover">
-                    <el-button link><el-icon size="small"><Tools /></el-icon></el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item @click="handleStartProject(deploy)">
-                          <el-icon class="mr-1"><VideoPlay /></el-icon>{{ t('opsManagement.start') }}
-                        </el-dropdown-item>
-                        <el-dropdown-item @click="handleStopProject(deploy)">
-                          <el-icon class="mr-1"><VideoPause /></el-icon>{{ t('opsManagement.stop') }}
-                        </el-dropdown-item>
-                        <el-dropdown-item @click="handleRestartProject(deploy)">
-                          <el-icon class="mr-1"><RefreshRight /></el-icon>{{ t('opsManagement.restart') }}
-                        </el-dropdown-item>
-                        <el-dropdown-item @click="handleRollback(deploy)" :disabled="deploy.mode === 'DEV'">
-                          <el-icon class="mr-1"><RefreshLeft /></el-icon>{{ t('opsManagement.rollback') }}
-                        </el-dropdown-item>
-	                        <el-dropdown-item @click="handleViewLog(deploy)">
-	                          <el-icon class="mr-1"><Document /></el-icon>{{ t('opsManagement.viewLog') }}
-	                        </el-dropdown-item>
-	                        <el-dropdown-item v-if="isFailedDeploy(deploy)" @click="openFailureDetail(deploy)">
-	                          <el-icon class="mr-1"><Warning /></el-icon>{{ t('opsManagement.failureDetail') }}
-	                        </el-dropdown-item>
-	                        <el-dropdown-item divided @click="handleUndeploy(deploy)" type="danger">
-	                          <el-icon class="mr-1"><Remove /></el-icon>{{ t('opsManagement.undeploy') }}
-	                        </el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
+                      <el-button link
+                        ><el-icon size="small"><Tools /></el-icon
+                      ></el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item @click="handleStartProject(deploy)">
+                            <el-icon class="mr-1"><VideoPlay /></el-icon
+                            >{{ t('opsManagement.start') }}
+                          </el-dropdown-item>
+                          <el-dropdown-item @click="handleStopProject(deploy)">
+                            <el-icon class="mr-1"><VideoPause /></el-icon
+                            >{{ t('opsManagement.stop') }}
+                          </el-dropdown-item>
+                          <el-dropdown-item @click="handleRestartProject(deploy)">
+                            <el-icon class="mr-1"><RefreshRight /></el-icon
+                            >{{ t('opsManagement.restart') }}
+                          </el-dropdown-item>
+                          <el-dropdown-item
+                            @click="handleRollback(deploy)"
+                            :disabled="deploy.mode === 'DEV'"
+                          >
+                            <el-icon class="mr-1"><RefreshLeft /></el-icon
+                            >{{ t('opsManagement.rollback') }}
+                          </el-dropdown-item>
+                          <el-dropdown-item @click="handleViewLog(deploy)">
+                            <el-icon class="mr-1"><Document /></el-icon
+                            >{{ t('opsManagement.viewLog') }}
+                          </el-dropdown-item>
+                          <el-dropdown-item
+                            v-if="isFailedDeploy(deploy)"
+                            @click="openFailureDetail(deploy)"
+                          >
+                            <el-icon class="mr-1"><Warning /></el-icon
+                            >{{ t('opsManagement.failureDetail') }}
+                          </el-dropdown-item>
+                          <el-dropdown-item divided @click="handleUndeploy(deploy)" type="danger">
+                            <el-icon class="mr-1"><Remove /></el-icon
+                            >{{ t('opsManagement.undeploy') }}
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
                 </div>
               </div>
+              <div v-else class="text-center py-4 text-xs text-gray-400">
+                {{ t('opsManagement.noProjectsRunning') }}
+              </div>
             </div>
-            <div v-else class="text-center py-4 text-xs text-gray-400">
-              {{ t('opsManagement.noProjectsRunning') }}
-            </div>
-          </div>
-        </el-card>
-      </div>
-      
-      <!-- 无数据 -->
-      <el-empty v-if="!nodeLoading && filteredNodeList.length === 0" :description="t('opsManagement.noNodesOnline')" />
+          </el-card>
+        </div>
 
+        <!-- 无数据 -->
+        <el-empty
+          v-if="!nodeLoading && filteredNodeList.length === 0"
+          :description="t('opsManagement.noNodesOnline')"
+        />
       </div>
     </div>
 
     <!-- 视图：详细列表 -->
     <div v-else-if="activeView === 'list'" class="flex-1 min-h-0 flex flex-col">
       <div class="flex-1 min-h-0 overflow-y-auto pb-6">
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <el-table
-          :data="filteredNodeList"
-          style="width: 100%"
-          row-key="id"
-          :expand-row-keys="expandedNodeRowKeys"
-          @expand-change="handleExpandChange"
+        <div
+          class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden"
         >
-          <el-table-column type="expand">
-            <template #default="props">
-              <div class="p-4 bg-gray-50/50 dark:bg-gray-900/50">
-                <h4 class="text-sm font-bold mb-3">{{ t('opsManagement.runningProjects') }}</h4>
-                <el-table :data="getVisibleDeployments(props.row)" size="small" border>
-                  <el-table-column :label="t('opsManagement.projectName')" prop="project.name" />
-                  <el-table-column :label="t('opsManagement.runtimeVersion')" prop="version" width="100" />
-                  <el-table-column :label="t('opsManagement.runtimeStatus')" width="100">
-                    <template #default="scope">
-                      <el-tag size="small" :type="getDeployStatusType(scope.row.status)">{{ getDeployDisplayLabel(scope.row) }}</el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('opsManagement.onlineUsers')" width="100">
-                    <template #default="scope">
-                      {{ scope.row.runtimeMetrics?.onlineUsers || 0 }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('opsManagement.concurrentPeak')" width="100">
-                    <template #default="scope">
-                      {{ scope.row.runtimeMetrics?.concurrentUsers || 0 }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('opsManagement.actions')" width="420">
-                    <template #default="scope">
-                      <div class="flex flex-wrap gap-1">
-                        <el-button link type="success" size="small" @click="handleStartProject(scope.row)">
-                          {{ t('opsManagement.start') }}
-                        </el-button>
-                        <el-button link type="warning" size="small" @click="handleStopProject(scope.row)">
-                          {{ t('opsManagement.stop') }}
-                        </el-button>
-                        <el-button link type="primary" size="small" @click="handleRestartProject(scope.row)">
-                          {{ t('opsManagement.restart') }}
-                        </el-button>
-                        <el-button
-                          link
-                          type="primary"
-                          size="small"
-                          :disabled="scope.row.mode === 'DEV'"
-                          @click="handleRollback(scope.row)"
-                        >
-                          {{ t('opsManagement.rollback') }}
-                        </el-button>
-                        <el-button link type="primary" size="small" @click="handleViewLog(scope.row)">
-                          {{ t('opsManagement.viewLog') }}
-                        </el-button>
-                        <el-button
-                          v-if="isFailedDeploy(scope.row)"
-                          link
-                          type="danger"
-                          size="small"
-                          @click="openFailureDetail(scope.row)"
-                        >
-                          {{ t('opsManagement.failureDetail') }}
-                        </el-button>
-                        <el-button link type="danger" size="small" @click="handleUndeploy(scope.row)">
-                          {{ t('opsManagement.undeploy') }}
-                        </el-button>
-                      </div>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.nodeName')" prop="name" />
-          <el-table-column :label="t('opsManagement.ipAddress')" prop="ipAddress" />
-          <el-table-column :label="t('opsManagement.status')" width="120">
-            <template #default="scope">
-              <el-tag :type="getNodeStatusType(scope.row.status)">{{ getNodeStatusLabel(scope.row.status) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="CPU" width="100">
-            <template #default="scope">{{ getMetricValue(scope.row, 'cpu') }}%</template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.memory')" width="100">
-            <template #default="scope">{{ getMetricValue(scope.row, 'memory') }}%</template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.disk')" width="100">
-            <template #default="scope">{{ getMetricValue(scope.row, 'disk') }}%</template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.projectCount')" width="100">
-            <template #default="scope">{{ getVisibleDeployments(scope.row).length }}</template>
-          </el-table-column>
-          <el-table-column :label="t('opsManagement.lastHeartbeat')" prop="lastHeartbeatAt">
-            <template #default="scope">{{ formatTime(scope.row.lastHeartbeatAt) }}</template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <el-empty v-if="!nodeLoading && filteredNodeList.length === 0" :description="t('opsManagement.noNodes')" class="mt-6" />
+          <el-table
+            :data="filteredNodeList"
+            style="width: 100%"
+            row-key="id"
+            :expand-row-keys="expandedNodeRowKeys"
+            @expand-change="handleExpandChange"
+            :header-cell-style="{
+              background: '#f9fafb',
+              color: '#374151',
+              height: '48px',
+              borderBottom: '1px solid #e5e7eb',
+            }"
+          >
+            <el-table-column type="expand">
+              <template #default="props">
+                <div class="p-4 bg-gray-50/50 dark:bg-gray-900/50">
+                  <h4 class="text-sm font-bold mb-3">
+                    {{ t('opsManagement.runningProjects') }}
+                  </h4>
+                  <el-table :data="getVisibleDeployments(props.row)" size="small" border>
+                    <el-table-column :label="t('opsManagement.projectName')" prop="project.name" />
+                    <el-table-column
+                      :label="t('opsManagement.runtimeVersion')"
+                      prop="version"
+                      width="100"
+                    />
+                    <el-table-column :label="t('opsManagement.runtimeStatus')" width="100">
+                      <template #default="scope">
+                        <el-tag size="small" :type="getDeployStatusType(scope.row.status)">{{
+                          getDeployDisplayLabel(scope.row)
+                        }}</el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('opsManagement.onlineUsers')" width="100">
+                      <template #default="scope">
+                        {{ scope.row.runtimeMetrics?.onlineUsers || 0 }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('opsManagement.concurrentPeak')" width="100">
+                      <template #default="scope">
+                        {{ scope.row.runtimeMetrics?.concurrentUsers || 0 }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('opsManagement.actions')" width="420">
+                      <template #default="scope">
+                        <div class="flex flex-wrap gap-1">
+                          <el-button
+                            link
+                            type="success"
+                            size="small"
+                            @click="handleStartProject(scope.row)"
+                          >
+                            {{ t('opsManagement.start') }}
+                          </el-button>
+                          <el-button
+                            link
+                            type="warning"
+                            size="small"
+                            @click="handleStopProject(scope.row)"
+                          >
+                            {{ t('opsManagement.stop') }}
+                          </el-button>
+                          <el-button
+                            link
+                            type="primary"
+                            size="small"
+                            @click="handleRestartProject(scope.row)"
+                          >
+                            {{ t('opsManagement.restart') }}
+                          </el-button>
+                          <el-button
+                            link
+                            type="primary"
+                            size="small"
+                            :disabled="scope.row.mode === 'DEV'"
+                            @click="handleRollback(scope.row)"
+                          >
+                            {{ t('opsManagement.rollback') }}
+                          </el-button>
+                          <el-button
+                            link
+                            type="primary"
+                            size="small"
+                            @click="handleViewLog(scope.row)"
+                          >
+                            {{ t('opsManagement.viewLog') }}
+                          </el-button>
+                          <el-button
+                            v-if="isFailedDeploy(scope.row)"
+                            link
+                            type="danger"
+                            size="small"
+                            @click="openFailureDetail(scope.row)"
+                          >
+                            {{ t('opsManagement.failureDetail') }}
+                          </el-button>
+                          <el-button
+                            link
+                            type="danger"
+                            size="small"
+                            @click="handleUndeploy(scope.row)"
+                          >
+                            {{ t('opsManagement.undeploy') }}
+                          </el-button>
+                        </div>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('opsManagement.nodeName')" prop="name" />
+            <el-table-column :label="t('opsManagement.ipAddress')" prop="ipAddress" />
+            <el-table-column :label="t('opsManagement.status')" width="120">
+              <template #default="scope">
+                <el-tag :type="getNodeStatusType(scope.row.status)">{{
+                  getNodeStatusLabel(scope.row.status)
+                }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="CPU" width="100">
+              <template #default="scope">{{ getMetricValue(scope.row, 'cpu') }}%</template>
+            </el-table-column>
+            <el-table-column :label="t('opsManagement.memory')" width="100">
+              <template #default="scope">{{ getMetricValue(scope.row, 'memory') }}%</template>
+            </el-table-column>
+            <el-table-column :label="t('opsManagement.disk')" width="100">
+              <template #default="scope">{{ getMetricValue(scope.row, 'disk') }}%</template>
+            </el-table-column>
+            <el-table-column :label="t('opsManagement.projectCount')" width="100">
+              <template #default="scope">{{ getVisibleDeployments(scope.row).length }}</template>
+            </el-table-column>
+            <el-table-column :label="t('opsManagement.lastHeartbeat')" prop="lastHeartbeatAt">
+              <template #default="scope">{{ formatTime(scope.row.lastHeartbeatAt) }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <el-empty
+          v-if="!nodeLoading && filteredNodeList.length === 0"
+          :description="t('opsManagement.noNodes')"
+          class="mt-6"
+        />
       </div>
     </div>
 
     <!-- 固定分页区 -->
-    <div class="pagination-bar flex justify-end items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
+    <div
+      class="pagination-bar flex justify-end items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700"
+    >
       <el-pagination
         v-model:current-page="nodePagination.page"
         v-model:page-size="nodePagination.pageSize"
@@ -386,14 +555,20 @@
     </div>
 
     <!-- 弹窗：待审核申请列表 -->
-    <el-dialog v-model="showPendingDialog" :title="t('opsManagement.pendingRequests')" width="900px">
+    <el-dialog
+      v-model="showPendingDialog"
+      :title="t('opsManagement.pendingRequests')"
+      width="900px"
+    >
       <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden">
         <el-table v-loading="nodeLoading" :data="pendingList" style="width: 100%">
           <el-table-column :label="t('opsManagement.requestedNodeName')" min-width="180">
             <template #default="scope">
               <div class="flex flex-col">
                 <span class="font-bold text-gray-800 dark:text-gray-200">{{ scope.row.name }}</span>
-                <span class="text-xs text-gray-500">{{ scope.row.description || t('opsManagement.noDescription') }}</span>
+                <span class="text-xs text-gray-500">{{
+                  scope.row.description || t('opsManagement.noDescription')
+                }}</span>
               </div>
             </template>
           </el-table-column>
@@ -412,7 +587,11 @@
           <el-table-column :label="t('opsManagement.nodeMode')" width="100">
             <template #default="scope">
               <el-tag size="small" :type="scope.row.mode === 'online' ? 'success' : 'info'">
-                {{ scope.row.mode === 'online' ? t('opsManagement.online') : t('opsManagement.offline') }}
+                {{
+                  scope.row.mode === 'online'
+                    ? t('opsManagement.online')
+                    : t('opsManagement.offline')
+                }}
               </el-tag>
             </template>
           </el-table-column>
@@ -424,7 +603,11 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column :label="t('opsManagement.agentVersion')" prop="agentVersion" width="100" />
+          <el-table-column
+            :label="t('opsManagement.agentVersion')"
+            prop="agentVersion"
+            width="100"
+          />
           <el-table-column :label="t('opsManagement.requestTime')" width="160">
             <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
           </el-table-column>
@@ -432,10 +615,12 @@
             <template #default="scope">
               <div v-if="canApproveNode" class="flex space-x-2">
                 <el-button type="success" size="small" @click="handleApprove(scope.row)">
-                  <el-icon class="mr-1"><Check /></el-icon> {{ t('opsManagement.approve') }}
+                  <el-icon class="mr-1"><Check /></el-icon>
+                  {{ t('opsManagement.approve') }}
                 </el-button>
                 <el-button type="danger" size="small" plain @click="handleReject(scope.row)">
-                  <el-icon class="mr-1"><Close /></el-icon> {{ t('opsManagement.reject') }}
+                  <el-icon class="mr-1"><Close /></el-icon>
+                  {{ t('opsManagement.reject') }}
                 </el-button>
               </div>
               <div v-else class="text-xs text-gray-500">
@@ -451,16 +636,28 @@
     </el-dialog>
 
     <!-- 弹窗：详细日志 -->
-    <el-dialog v-model="showLogDialog" :title="t('opsManagement.runtimeLogTitle', { name: currentDeployment?.project?.name || '' })" width="700px">
+    <el-dialog
+      v-model="showLogDialog"
+      :title="
+        t('opsManagement.runtimeLogTitle', {
+          name: currentDeployment?.project?.name || '',
+        })
+      "
+      width="700px"
+    >
       <div class="bg-black text-green-500 p-4 rounded-lg h-80 overflow-y-auto font-mono text-xs">
         <div v-for="(log, idx) in logContent" :key="idx" class="mb-1">
           <span class="text-gray-500">[{{ log.time }}]</span>
           <span class="ml-2">{{ log.message }}</span>
         </div>
-        <div v-if="logContent.length === 0" class="text-gray-500 text-center mt-20">{{ t('opsManagement.noRealtimeLog') }}</div>
+        <div v-if="logContent.length === 0" class="text-gray-500 text-center mt-20">
+          {{ t('opsManagement.noRealtimeLog') }}
+        </div>
       </div>
       <div class="mt-4">
-        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">{{ t('opsManagement.commandTimeline') }}</div>
+        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          {{ t('opsManagement.commandTimeline') }}
+        </div>
         <el-table :data="commandTimeline" size="small" border max-height="220">
           <el-table-column prop="type" :label="t('opsManagement.commandType')" width="120" />
           <el-table-column :label="t('opsManagement.status')" width="140">
@@ -473,17 +670,32 @@
           <el-table-column prop="attempts" :label="t('opsManagement.retryCount')" width="100" />
           <el-table-column :label="t('opsManagement.lastUpdated')" min-width="180">
             <template #default="scope">
-              {{ formatTime(scope.row.updatedAt || scope.row.completedAt || scope.row.issuedAt || scope.row.requestedAt) }}
+              {{
+                formatTime(
+                  scope.row.updatedAt ||
+                    scope.row.completedAt ||
+                    scope.row.issuedAt ||
+                    scope.row.requestedAt,
+                )
+              }}
             </template>
           </el-table-column>
-          <el-table-column prop="lastError" :label="t('opsManagement.failureReason')" min-width="220" />
+          <el-table-column
+            prop="lastError"
+            :label="t('opsManagement.failureReason')"
+            min-width="220"
+          />
         </el-table>
       </div>
     </el-dialog>
 
     <el-dialog
       v-model="showRollbackDialog"
-      :title="t('opsManagement.rollbackSelectTitle', { name: rollbackSourceDeploy?.project?.name || '-' })"
+      :title="
+        t('opsManagement.rollbackSelectTitle', {
+          name: rollbackSourceDeploy?.project?.name || '-',
+        })
+      "
       width="640px"
       append-to-body
     >
@@ -492,7 +704,11 @@
         :closable="false"
         show-icon
         class="mb-3"
-        :title="t('opsManagement.rollbackCurrentVersion', { version: rollbackSourceDeploy?.version || '-' })"
+        :title="
+          t('opsManagement.rollbackCurrentVersion', {
+            version: rollbackSourceDeploy?.version || '-',
+          })
+        "
       />
       <el-select
         v-model="rollbackTargetDeploymentId"
@@ -525,7 +741,15 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="showFailureDrawer" :title="t('opsManagement.failureDrawerTitle', { name: failedDeployment?.project?.name || '-' })" size="520px">
+    <el-drawer
+      v-model="showFailureDrawer"
+      :title="
+        t('opsManagement.failureDrawerTitle', {
+          name: failedDeployment?.project?.name || '-',
+        })
+      "
+      size="520px"
+    >
       <el-descriptions :column="1" border>
         <el-descriptions-item :label="t('opsManagement.nodeName')">
           {{ failedDeployment?.node?.name || failedDeployment?.nodeName || '-' }}
@@ -547,14 +771,18 @@
       </el-descriptions>
 
       <div class="mt-4">
-        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">{{ t('opsManagement.recentLogs') }}</div>
+        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+          {{ t('opsManagement.recentLogs') }}
+        </div>
         <div class="bg-black text-green-400 rounded p-3 h-56 overflow-y-auto text-xs font-mono">
           <template v-if="failedDeployLogs.length > 0">
             <div v-for="(line, idx) in failedDeployLogs" :key="idx" class="mb-1">
               [{{ line.time || '-' }}] {{ line.message || line }}
             </div>
           </template>
-          <div v-else class="text-gray-500 text-center mt-20">{{ t('opsManagement.noFailureLogs') }}</div>
+          <div v-else class="text-gray-500 text-center mt-20">
+            {{ t('opsManagement.noFailureLogs') }}
+          </div>
         </div>
       </div>
     </el-drawer>
@@ -567,8 +795,18 @@ import { ref, reactive, onMounted, computed, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Grid, List, Refresh, Search, MoreFilled,
-  User, Clock, Tools, Check, Close, Bell, Warning
+  Grid,
+  List,
+  Refresh,
+  Search,
+  MoreFilled,
+  User,
+  Clock,
+  Tools,
+  Check,
+  Close,
+  Bell,
+  Warning,
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
@@ -591,7 +829,9 @@ import {
 const emit = defineEmits(['open-tab'])
 const authStore = useAuthStore()
 const { t } = useI18n()
-const currentUserRole = computed(() => authStore.userInfo?.role || Storage.getUserInfo()?.role || '')
+const currentUserRole = computed(
+  () => authStore.userInfo?.role || Storage.getUserInfo()?.role || '',
+)
 const OPS_VIEW_MODE_STORAGE_KEY = 'ops_management_view_mode'
 
 // 计算是否有审批权限
@@ -665,7 +905,9 @@ const getVisibleDeployments = (node) => {
   if (!nodeSearch.projectName) {
     return deployments
   }
-  return deployments.filter((deploy) => (deploy.project?.name || deploy.projectId) === nodeSearch.projectName)
+  return deployments.filter(
+    (deploy) => (deploy.project?.name || deploy.projectId) === nodeSearch.projectName,
+  )
 }
 
 const filteredNodeList = computed(() => {
@@ -706,7 +948,9 @@ const fetchNodes = async () => {
         expandedNodeRowKeys.value = currentNodeIds
       } else {
         const currentNodeIdSet = new Set(currentNodeIds)
-        expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) => currentNodeIdSet.has(id))
+        expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) =>
+          currentNodeIdSet.has(id),
+        )
       }
     }
   } catch (error) {
@@ -765,15 +1009,15 @@ const handleReject = (node) => {
   ElMessageBox.confirm(t('opsManagement.rejectConfirm'), t('opsManagement.rejectConfirmTitle'), {
     confirmButtonText: t('opsManagement.rejectConfirmBtn'),
     cancelButtonText: t('opsManagement.cancel'),
-    type: 'warning'
+    type: 'warning',
   }).then(async () => {
     try {
       const res = await request.put(`/nodes/${node.id}/reject`)
-    if (res.success) {
-      ElMessage.warning(t('opsManagement.rejectedTip'))
-      showPendingDialog.value = false
-      fetchNodes()
-      fetchPendingList()
+      if (res.success) {
+        ElMessage.warning(t('opsManagement.rejectedTip'))
+        showPendingDialog.value = false
+        fetchNodes()
+        fetchPendingList()
         updateCounts()
       }
     } catch {
@@ -789,8 +1033,12 @@ const updateCounts = async () => {
   }
   try {
     const [resApproved, resPending] = await Promise.all([
-      request.get('/nodes', { params: { pageSize: 1, approvalStatus: 'approved' } }),
-      request.get('/nodes', { params: { pageSize: 1, approvalStatus: 'pending' } })
+      request.get('/nodes', {
+        params: { pageSize: 1, approvalStatus: 'approved' },
+      }),
+      request.get('/nodes', {
+        params: { pageSize: 1, approvalStatus: 'pending' },
+      }),
     ])
     approvedCount.value = resApproved.data.total
     pendingCount.value = resPending.data.total
@@ -803,10 +1051,14 @@ const updateCounts = async () => {
 const getMetricValue = (node, type) => {
   if (!node.metrics) return 0
   switch (type) {
-    case 'cpu': return Math.round((node.metrics.cpu || 0) * 100)
-    case 'memory': return Math.round((node.metrics.memory || 0) * 100)
-    case 'disk': return Math.round((node.metrics.disk || 0) * 100)
-    default: return 0
+    case 'cpu':
+      return Math.round((node.metrics.cpu || 0) * 100)
+    case 'memory':
+      return Math.round((node.metrics.memory || 0) * 100)
+    case 'disk':
+      return Math.round((node.metrics.disk || 0) * 100)
+    default:
+      return 0
   }
 }
 
@@ -815,7 +1067,7 @@ const getDiskLabel = (node) => {
   return node.metrics.disk_label
 }
 
-const formatTime = (time) => time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-'
+const formatTime = (time) => (time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-')
 
 // 角色标签映射
 const getRoleTagType = (role) => {
@@ -834,7 +1086,8 @@ const getRoleLabel = (role) => {
 }
 
 // 运维操作
-const restartNode = (node) => ElMessage.info(t('opsManagement.restartingAgent', { name: node.name }))
+const restartNode = (node) =>
+  ElMessage.info(t('opsManagement.restartingAgent', { name: node.name }))
 const viewNodeDetail = (node) => {
   ElMessageBox.alert(
     t('opsManagement.nodeDetailBody', {
@@ -844,7 +1097,7 @@ const viewNodeDetail = (node) => {
       status: getNodeStatusLabel(node?.status),
     }),
     t('opsManagement.nodeDetailTitle'),
-    { confirmButtonText: t('opsManagement.close') }
+    { confirmButtonText: t('opsManagement.close') },
   )
 }
 const deleteNode = async (node) => {
@@ -852,7 +1105,7 @@ const deleteNode = async (node) => {
     await ElMessageBox.confirm(
       t('opsManagement.nodeDeleteConfirm', { name: node.name }),
       t('opsManagement.warning'),
-      { type: 'warning' }
+      { type: 'warning' },
     )
     await request.delete(`/nodes/${node.id}`, { skipPermissionToast: true })
     ElMessage.success(t('opsManagement.nodeDeleted'))
@@ -894,7 +1147,7 @@ const sortCommandTimeline = (commands = []) => {
 const getInFlightCommandType = (deploy) => {
   const commands = Array.isArray(deploy?.commands) ? deploy.commands : []
   const activeCommands = commands.filter((item) =>
-    ['pending', 'issued', 'acknowledged'].includes(item?.status)
+    ['pending', 'issued', 'acknowledged'].includes(item?.status),
   )
   if (activeCommands.length === 0) return ''
   const latest = sortCommandTimeline(activeCommands)[0]
@@ -930,13 +1183,14 @@ const handleStopProject = async (deploy) => {
     await ElMessageBox.confirm(
       t('opsManagement.stopConfirm', { name: deploy.project?.name }),
       t('opsManagement.stopConfirmTitle'),
-      { type: 'warning' }
+      { type: 'warning' },
     )
     await request.post(`/deployments/node-deployment/${deploy.id}/stop`)
     ElMessage.success(t('opsManagement.stopIssued'))
     fetchNodes()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error.response?.data?.message || t('opsManagement.stopFailed'))
+    if (error !== 'cancel')
+      ElMessage.error(error.response?.data?.message || t('opsManagement.stopFailed'))
   }
 }
 
@@ -989,13 +1243,14 @@ const handleRestartProject = async (deploy) => {
     await ElMessageBox.confirm(
       t('opsManagement.restartConfirm', { name: deploy.project?.name }),
       t('opsManagement.restartConfirmTitle'),
-      { type: 'warning' }
+      { type: 'warning' },
     )
     await request.post(`/deployments/node-deployment/${deploy.id}/restart`)
     ElMessage.success(t('opsManagement.restartIssued'))
     fetchNodes()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error.response?.data?.message || t('opsManagement.restartFailed'))
+    if (error !== 'cancel')
+      ElMessage.error(error.response?.data?.message || t('opsManagement.restartFailed'))
   }
 }
 
@@ -1040,7 +1295,9 @@ const handleRollback = async (deploy) => {
       rollbackTargetDeploymentId.value = candidates[0].id
     }
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || error.message || t('opsManagement.rollbackLoadFailed'))
+    ElMessage.error(
+      error.response?.data?.message || error.message || t('opsManagement.rollbackLoadFailed'),
+    )
     showRollbackDialog.value = false
   } finally {
     rollbackDialogLoading.value = false
@@ -1064,7 +1321,7 @@ const confirmRollback = async () => {
     await ElMessageBox.confirm(
       t('opsManagement.rollbackConfirmSelected'),
       t('opsManagement.rollbackConfirmTitle'),
-      { type: 'warning' }
+      { type: 'warning' },
     )
 
     rollbackSubmitLoading.value = true
@@ -1093,14 +1350,15 @@ const handleUndeploy = async (deploy) => {
     await ElMessageBox.confirm(
       t(confirmMessageKey, { name: deploy.project?.name }),
       t('opsManagement.undeployConfirmTitle'),
-      { type: 'warning' }
+      { type: 'warning' },
     )
 
     await request.delete(`/deployments/node-deployment/${deploy.id}`)
     ElMessage.success(t('opsManagement.undeploySuccess'))
     fetchNodes()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error.response?.data?.message || t('opsManagement.undeployFailed'))
+    if (error !== 'cancel')
+      ElMessage.error(error.response?.data?.message || t('opsManagement.undeployFailed'))
   }
 }
 
@@ -1111,7 +1369,7 @@ const setupRealtimeUpdates = () => {
 
   // 监听节点指标更新
   socket.on('ops:node:metrics', (data) => {
-    const node = nodeList.value.find(n => n.id === data.nodeId)
+    const node = nodeList.value.find((n) => n.id === data.nodeId)
     if (node) {
       node.metrics = data.metrics
       node.lastHeartbeatAt = data.timestamp
@@ -1120,7 +1378,7 @@ const setupRealtimeUpdates = () => {
 
   // 监听节点状态变化
   socket.on('ops:node:status', (data) => {
-    const node = nodeList.value.find(n => n.id === data.nodeId)
+    const node = nodeList.value.find((n) => n.id === data.nodeId)
     if (node) {
       node.status = data.status
       node.lastHeartbeatAt = data.timestamp
@@ -1129,9 +1387,9 @@ const setupRealtimeUpdates = () => {
 
   // 监听工程指标更新
   socket.on('ops:project:metrics', (data) => {
-    const node = nodeList.value.find(n => n.id === data.nodeId)
+    const node = nodeList.value.find((n) => n.id === data.nodeId)
     if (node) {
-      const deploy = node.deployments?.find(d => d.projectId === data.projectId)
+      const deploy = node.deployments?.find((d) => d.projectId === data.projectId)
       if (deploy) {
         deploy.runtimeMetrics = data.metrics
       }
@@ -1261,7 +1519,7 @@ watch(
   () => {
     nodePagination.page = 1
     fetchNodes()
-  }
+  },
 )
 
 watch(
@@ -1274,7 +1532,7 @@ watch(
       nodePagination.page = 1
       fetchNodes()
     }, 800)
-  }
+  },
 )
 
 watch(
@@ -1286,7 +1544,7 @@ watch(
         expandedNodeRowKeys.value = filteredNodeList.value.map((node) => node.id)
       }
     }
-  }
+  },
 )
 </script>
 
@@ -1331,6 +1589,3 @@ watch(
   padding: 12px 16px;
 }
 </style>
-
-
-

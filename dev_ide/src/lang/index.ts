@@ -674,13 +674,17 @@ export const messages = {
       updateSuccess: '工程更新成功',
       updateFailed: '更新工程失败：{message}',
       deleteConfirm: '确定要删除工程 "{name}" 吗？此操作不可恢复。',
-      deleteConfirmWithImpact: '确定要删除工程 "{name}" 吗？将清理相关数据（部署记录 {deploymentCount} 条），此操作不可恢复。',
+      deleteConfirmWithImpact:
+        '确定要删除工程 "{name}" 吗？将清理相关数据（部署记录 {deploymentCount} 条），此操作不可恢复。',
       deleteConfirmTitle: '确认删除',
       deleteConfirmButton: '确定删除',
-      deleteBlockedByActiveDeployments: '当前工程存在 {count} 个运行中部署，请先到运维中心下线后再删除',
+      deleteBlockedByActiveDeployments:
+        '当前工程存在 {count} 个运行中部署，请先到运维中心下线后再删除',
       forceDeleteTitle: '强制删除确认',
-      forceDeleteConfirm: '工程“{name}”仍有 {count} 个运行中部署。强制删除将先撤销全部部署并释放节点资源，是否继续？',
-      forceDeleteConfirmWithImpact: '工程“{name}”仍有 {deploymentCount} 个活跃部署，涉及 {nodeCount} 个节点。强制删除将先撤销全部部署并释放节点资源，是否继续？',
+      forceDeleteConfirm:
+        '工程“{name}”仍有 {count} 个运行中部署。强制删除将先撤销全部部署并释放节点资源，是否继续？',
+      forceDeleteConfirmWithImpact:
+        '工程“{name}”仍有 {deploymentCount} 个活跃部署，涉及 {nodeCount} 个节点。强制删除将先撤销全部部署并释放节点资源，是否继续？',
       forceDeleteButton: '强制删除',
       forceDeleteSuccess: '工程强制删除成功',
       forceDeleteFailed: '工程强制删除失败：{message}',
@@ -791,7 +795,8 @@ export const messages = {
           updateSuccess: '运行态用户更新成功',
           rolesUpdateSuccess: '用户角色绑定已更新',
           partialSuccessRoleBindingFailed: '运行态用户已创建，但角色绑定失败：{message}',
-          partialSuccessMissingUserId: '运行态用户已创建，但未能确认新账号，未执行角色绑定，请刷新后检查。',
+          partialSuccessMissingUserId:
+            '运行态用户已创建，但未能确认新账号，未执行角色绑定，请刷新后检查。',
           saveFailed: '保存运行态用户失败：{message}',
           loadFailed: '加载运行态用户失败：{message}',
           toggleStatusSuccess: '用户状态已更新为“{status}”',
@@ -931,7 +936,8 @@ export const messages = {
       loadingData: 'Loading data...',
       noActivity: 'No recent activity',
       lastUpdated: 'Last updated: {time}',
-      partialLoadFailed: 'Partial data load failed ({failed}/{total}): {sources}. Available data is shown.',
+      partialLoadFailed:
+        'Partial data load failed ({failed}/{total}): {sources}. Available data is shown.',
       loadFailed: 'Failed to load dashboard data, please try again later.',
       menuTenant: 'Tenant Management',
       menuUser: 'User Management',
@@ -1040,7 +1046,8 @@ export const messages = {
       deleteUserSuccess: 'User deleted successfully',
       deleteUserFailed: 'Failed to delete user: {message}',
       deleteConfirmTitle: 'Confirm Deletion',
-      deleteConfirmText: 'Are you sure you want to delete user "{username}"? This action cannot be undone.',
+      deleteConfirmText:
+        'Are you sure you want to delete user "{username}"? This action cannot be undone.',
       deleteConfirmButton: 'Delete',
       totalRange: 'Showing {start} to {end}, total {total} records',
       roleSystemAdmin: 'System Admin',
@@ -1125,7 +1132,8 @@ export const messages = {
     systemSettings: {
       title: 'System Settings',
       refresh: 'Refresh',
-      infoAlert: 'This page is for SYSTEM_ADMIN level settings only, and changes take effect immediately in this browser.',
+      infoAlert:
+        'This page is for SYSTEM_ADMIN level settings only, and changes take effect immediately in this browser.',
       systemInfo: 'System Information',
       systemName: 'System Name',
       version: 'Version',
@@ -1313,7 +1321,8 @@ export const messages = {
       ipPlaceholder: 'Private/Public IP',
       createAndToken: 'Create & Generate Token',
       approveSuccessTitle: 'Node token issued',
-      approveSuccessSubtitle: 'Please configure the following info in NodeAgent installer or config file',
+      approveSuccessSubtitle:
+        'Please configure the following info in NodeAgent installer or config file',
       copyAndClose: 'Copy & Close',
       runtimeLogTitle: 'Runtime Log - {name}',
       noRealtimeLog: 'No realtime logs',
@@ -1373,7 +1382,8 @@ export const messages = {
       rollbackSelectTitle: 'Rollback Version - {name}',
       rollbackCurrentVersion: 'Current runtime version: v{version}',
       rollbackSelectPlaceholder: 'Select target rollback version',
-      rollbackHint: 'Only deployable successful RELEASE versions are listed, excluding the current one.',
+      rollbackHint:
+        'Only deployable successful RELEASE versions are listed, excluding the current one.',
       rollbackExecute: 'Execute Rollback',
       rollbackLoadFailed: 'Failed to load rollback versions',
       rollbackNoCandidates: 'No rollback candidate versions',
@@ -1382,7 +1392,8 @@ export const messages = {
       rollbackNodeMissing: 'Missing node info, cannot execute rollback',
       rollbackConfirmSelected: 'Rollback to selected version? This will enqueue redeploy task.',
       undeployConfirm: 'Undeploy {name} from node?',
-      undeployConfirmRunning: 'Undeploy {name} from node? This will stop runtime and release resources.',
+      undeployConfirmRunning:
+        'Undeploy {name} from node? This will stop runtime and release resources.',
       undeployConfirmStopped: 'Undeploy {name} from node? This will release resources.',
       undeployConfirmTitle: 'Confirm Undeploy',
       undeploySuccess: 'Undeploy successful',
@@ -1503,13 +1514,17 @@ export const messages = {
       updateSuccess: 'Project updated successfully',
       updateFailed: 'Failed to update project: {message}',
       deleteConfirm: 'Delete project "{name}"? This cannot be undone.',
-      deleteConfirmWithImpact: 'Delete project "{name}"? Related data will be removed ({deploymentCount} deployment records). This cannot be undone.',
+      deleteConfirmWithImpact:
+        'Delete project "{name}"? Related data will be removed ({deploymentCount} deployment records). This cannot be undone.',
       deleteConfirmTitle: 'Confirm Delete',
       deleteConfirmButton: 'Delete',
-      deleteBlockedByActiveDeployments: 'This project still has {count} active deployments. Please undeploy in Ops Center first.',
+      deleteBlockedByActiveDeployments:
+        'This project still has {count} active deployments. Please undeploy in Ops Center first.',
       forceDeleteTitle: 'Force Delete Confirmation',
-      forceDeleteConfirm: 'Project "{name}" still has {count} active deployments. Force delete will undeploy all and release node resources. Continue?',
-      forceDeleteConfirmWithImpact: 'Project "{name}" still has {deploymentCount} active deployments across {nodeCount} nodes. Force delete will undeploy all and release resources. Continue?',
+      forceDeleteConfirm:
+        'Project "{name}" still has {count} active deployments. Force delete will undeploy all and release node resources. Continue?',
+      forceDeleteConfirmWithImpact:
+        'Project "{name}" still has {deploymentCount} active deployments across {nodeCount} nodes. Force delete will undeploy all and release resources. Continue?',
       forceDeleteButton: 'Force Delete',
       forceDeleteSuccess: 'Project force-deleted successfully',
       forceDeleteFailed: 'Failed to force-delete project: {message}',
@@ -1572,22 +1587,28 @@ export const messages = {
       selectTargetNodes: 'Please select target nodes',
       selectSingleTargetNode: 'Only one target node can be selected per deployment',
       selectVersion: 'Please select or input version',
-      versionNotReady: 'Version {version} exists but is not ready. Please select a deployable version.',
-      versionRetryFromFailed: 'Version {version} previously failed and is republished with the same version.',
+      versionNotReady:
+        'Version {version} exists but is not ready. Please select a deployable version.',
+      versionRetryFromFailed:
+        'Version {version} previously failed and is republished with the same version.',
       publishByDeployDialog: 'Published from deploy dialog',
       publishFailed: 'Publish failed',
-      switchConfirm: 'This will stop Development instances on {count} selected nodes and switch to Production mode',
+      switchConfirm:
+        'This will stop Development instances on {count} selected nodes and switch to Production mode',
       switchConfirmTitle: 'Confirm Switch',
       deploySuccess: 'Deploy success: {count} nodes succeeded',
-      deployFailedAndVersionRolledBack: 'Deployment failed. The newly created version has been rolled back.',
+      deployFailedAndVersionRolledBack:
+        'Deployment failed. The newly created version has been rolled back.',
       deployFailedVersionKept: 'Deployment failed. Version record is kept because rollback failed.',
-      releaseConflict: 'Selected nodes contain Production deployments. Undeploy first before switching to Development.',
+      releaseConflict:
+        'Selected nodes contain Production deployments. Undeploy first before switching to Development.',
       devAlreadyDeployed: 'Selected nodes are already in DEV mode. Redeploy is not required.',
       noReleaseVersion: 'No available release versions',
       devDeploySuccess: 'DEV deploy success: {count} nodes succeeded',
       runtimeAccess: {
         dialogTitle: 'Members & Access - {name}',
-        publishTip: 'Runtime member and role changes take effect on nodes only after republish and redeploy.',
+        publishTip:
+          'Runtime member and role changes take effect on nodes only after republish and redeploy.',
         tabs: {
           users: 'User Management',
           roles: 'Role Management',
@@ -1670,7 +1691,10 @@ const resolveInitialLocale = (): SupportedLocale => {
     const rawLocale = localStorage.getItem('language')
     const parsedLocale = rawLocale ? JSON.parse(rawLocale) : 'zh'
 
-    if (typeof parsedLocale === 'string' && Object.prototype.hasOwnProperty.call(messages, parsedLocale)) {
+    if (
+      typeof parsedLocale === 'string' &&
+      Object.prototype.hasOwnProperty.call(messages, parsedLocale)
+    ) {
       return parsedLocale as SupportedLocale
     }
 

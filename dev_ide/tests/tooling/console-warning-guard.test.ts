@@ -27,7 +27,7 @@ describe('tooling: 控制台告警回归护栏', () => {
     const systemLogsView = readSource('views/tenant/SystemLogs.vue')
 
     expect(systemLogsView).toMatch(
-      /<el-date-picker[\s\S]*:name="\['system-log-time-range-start', 'system-log-time-range-end'\]"/
+      /<el-date-picker[\s\S]*:name="\['system-log-time-range-start', 'system-log-time-range-end'\]"/,
     )
   })
 })

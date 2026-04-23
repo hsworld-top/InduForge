@@ -146,7 +146,7 @@ export const useAuthStore = defineStore('auth', {
     getUsername: (state): string => state.userInfo?.username ?? '',
     isAdmin: (state): boolean =>
       ['SUPER_ADMIN', 'SYSTEM_ADMIN', 'PROJECT_ADMIN', 'OPS_ADMIN', 'USER_ADMIN'].includes(
-        state.userInfo?.role ?? ''
+        state.userInfo?.role ?? '',
       ),
   },
 
@@ -299,8 +299,10 @@ export const useTenantStore = defineStore('tenant', {
   }),
 
   getters: {
-    getTenantById: (state) => (id: TenantId): TenantRecord | undefined =>
-      state.tenants.find((tenant) => tenant.id === id),
+    getTenantById:
+      (state) =>
+      (id: TenantId): TenantRecord | undefined =>
+        state.tenants.find((tenant) => tenant.id === id),
     activeTenants: (state): TenantRecord[] =>
       state.tenants.filter((tenant) => tenant.status === 'active'),
   },
@@ -334,10 +336,7 @@ export const useTenantStore = defineStore('tenant', {
       return newTenant
     },
 
-    async updateTenant(
-      id: TenantId,
-      tenantData: Record<string, unknown>
-    ): Promise<TenantRecord> {
+    async updateTenant(id: TenantId, tenantData: Record<string, unknown>): Promise<TenantRecord> {
       const index = this.tenants.findIndex((tenant) => tenant.id === id)
       const targetTenant = index !== -1 ? this.tenants[index] : null
       if (!targetTenant) {
@@ -348,7 +347,8 @@ export const useTenantStore = defineStore('tenant', {
       const tenantCode = typeof targetTenant.code === 'string' ? targetTenant.code : String(id)
       const response = await tenantAPI.updateTenant(tenantCode, tenantData)
       const responseData = (response as { data?: TenantRecord & { tenant?: TenantRecord } }).data
-      const updatedTenant = responseData?.tenant || responseData || { ...targetTenant, ...tenantData }
+      const updatedTenant = responseData?.tenant ||
+        responseData || { ...targetTenant, ...tenantData }
 
       this.tenants[index] = updatedTenant
       return updatedTenant

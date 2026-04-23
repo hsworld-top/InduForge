@@ -47,7 +47,9 @@ declare module '@opentiny/tiny-engine-meta-register' {
 }
 
 declare module '@vueuse/core' {
-  export function useBroadcastChannel<T = unknown>(options: { name: string }): {
+  export function useBroadcastChannel<T = unknown>(options: {
+    name: string
+  }): {
     post: (value: T) => void
   }
 }

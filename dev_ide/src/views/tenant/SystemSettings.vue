@@ -1,19 +1,16 @@
 <template>
   <div class="system-settings">
     <div class="flex justify-between items-center mb-3">
-      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('systemSettings.title') }}</h1>
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+        {{ t('systemSettings.title') }}
+      </h1>
       <el-button @click="loadSystemConfig" :loading="loading" size="small">
         <el-icon><Refresh /></el-icon>
         {{ t('systemSettings.refresh') }}
       </el-button>
     </div>
 
-    <el-alert
-      :title="t('systemSettings.infoAlert')"
-      type="info"
-      :closable="false"
-      class="mb-6"
-    />
+    <el-alert :title="t('systemSettings.infoAlert')" type="info" :closable="false" class="mb-6" />
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div class="panel">
@@ -33,7 +30,9 @@
           </el-descriptions-item>
           <el-descriptions-item :label="t('systemSettings.multiTenantMode')">
             <el-tag :type="systemInfo.multiTenant ? 'success' : 'info'" size="small">
-              {{ systemInfo.multiTenant ? t('systemSettings.enabled') : t('systemSettings.disabled') }}
+              {{
+                systemInfo.multiTenant ? t('systemSettings.enabled') : t('systemSettings.disabled')
+              }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item :label="t('systemSettings.activeTenantsCount')">
@@ -72,15 +71,24 @@
           </el-form-item>
           <el-form-item>
             <el-space wrap>
-              <el-button type="primary" @click="saveSettings" :loading="saving" :disabled="!isDirty">
+              <el-button
+                type="primary"
+                @click="saveSettings"
+                :loading="saving"
+                :disabled="!isDirty"
+              >
                 {{ t('systemSettings.saveSettings') }}
               </el-button>
-              <el-button @click="resetToLastSaved" :disabled="!isDirty">{{ t('systemSettings.undoChanges') }}</el-button>
+              <el-button @click="resetToLastSaved" :disabled="!isDirty">{{
+                t('systemSettings.undoChanges')
+              }}</el-button>
               <el-button @click="resetToDefault">{{ t('systemSettings.resetDefault') }}</el-button>
             </el-space>
           </el-form-item>
           <el-form-item v-if="isDirty">
-            <span class="text-sm text-orange-600 dark:text-orange-300">{{ t('systemSettings.unsavedHint') }}</span>
+            <span class="text-sm text-orange-600 dark:text-orange-300">{{
+              t('systemSettings.unsavedHint')
+            }}</span>
           </el-form-item>
         </el-form>
       </div>
@@ -137,7 +145,7 @@ export default {
       () =>
         settingsForm.theme !== lastSavedSettings.value.theme ||
         settingsForm.language !== lastSavedSettings.value.language ||
-        settingsForm.logPageSize !== lastSavedSettings.value.logPageSize
+        settingsForm.logPageSize !== lastSavedSettings.value.logPageSize,
     )
 
     const formattedBuildTime = computed(() => {
@@ -164,7 +172,7 @@ export default {
         ElMessage.error(
           t('systemSettings.loadFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       } finally {
         loading.value = false
@@ -257,6 +265,3 @@ export default {
   @apply text-lg font-semibold text-gray-900 dark:text-white mb-4;
 }
 </style>
-
-
-

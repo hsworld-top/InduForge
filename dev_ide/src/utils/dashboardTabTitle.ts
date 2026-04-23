@@ -19,13 +19,14 @@ interface DashboardTabTitleLike {
  */
 export const resolveDashboardTabTitle = (
   tab: DashboardTabTitleLike | null | undefined,
-  translate: Translate
+  translate: Translate,
 ): string => {
   if (!tab || typeof translate !== 'function') return ''
 
   const titleKey = typeof tab.titleKey === 'string' ? tab.titleKey : ''
-  const titleParams = tab?.titleParams && typeof tab.titleParams === 'object' ? tab.titleParams : undefined
-  const translatedTitle = titleKey ? translate(titleKey, titleParams) : (tab.title || '')
+  const titleParams =
+    tab?.titleParams && typeof tab.titleParams === 'object' ? tab.titleParams : undefined
+  const translatedTitle = titleKey ? translate(titleKey, titleParams) : tab.title || ''
   const prefix = typeof tab.titlePrefix === 'string' ? tab.titlePrefix.trim() : ''
 
   if (!translatedTitle) {

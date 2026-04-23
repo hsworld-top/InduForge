@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createBootstrapResponse, loadHandoffRecord } from '@/utils/embeddedAppBridge'
-import { createEmbeddedRegistryEntry, handleEmbeddedWindowMessage } from '@/utils/embeddedIframeSync'
+import {
+  createEmbeddedRegistryEntry,
+  handleEmbeddedWindowMessage,
+} from '@/utils/embeddedIframeSync'
 
 const createMockStorage = (): globalThis.Storage => {
   const bucket = new Map<string, string>()
@@ -77,7 +80,10 @@ describe('embedded bridge', () => {
     const registry = new Map()
     const sourceWindow = { label: 'designer-window' }
     const unmatchedWindow = { label: 'unknown-window' }
-    const responses: Array<{ target: unknown; message: Record<string, unknown> }> = []
+    const responses: Array<{
+      target: unknown
+      message: Record<string, unknown>
+    }> = []
 
     const entry = createEmbeddedRegistryEntry({
       iframe: {
@@ -95,7 +101,10 @@ describe('embedded bridge', () => {
 
     const handled = handleEmbeddedWindowMessage({
       event: {
-        data: { type: 'APP_BOOTSTRAP_REQUEST', payload: { requestId: 'req-1' } },
+        data: {
+          type: 'APP_BOOTSTRAP_REQUEST',
+          payload: { requestId: 'req-1' },
+        },
         source: sourceWindow,
         origin: 'https://designer.example.com',
       },

@@ -138,7 +138,10 @@ export class FormValidator {
    * @param data 表单数据
    * @returns 验证结果 { isValid: boolean, errors: object }
    */
-  validate(data: Record<string, unknown>): { isValid: boolean; errors: Record<string, string> } {
+  validate(data: Record<string, unknown>): {
+    isValid: boolean
+    errors: Record<string, string>
+  } {
     const errors: Record<string, string> = {}
     let isValid = true
 

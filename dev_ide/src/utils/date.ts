@@ -13,7 +13,10 @@ type DateInput = Date | string | number | Dayjs
  * @param format 格式化字符串
  * @returns 格式化后的日期字符串
  */
-export function formatDate(date: DateInput | null | undefined, format: string = TIME_FORMAT): string {
+export function formatDate(
+  date: DateInput | null | undefined,
+  format: string = TIME_FORMAT,
+): string {
   if (!date) return ''
   const parsed = dayjs(date)
   return parsed.isValid() ? parsed.format(format) : ''

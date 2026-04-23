@@ -1,71 +1,156 @@
 <template>
-  <div class="system-logs">
-    <div class="flex justify-between items-center mb-3">
-      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('systemLogs.title') }}</h1>
-      <el-button @click="handleRefresh" :loading="loading" size="small">
-        <el-icon><Refresh /></el-icon>
-        {{ t('systemLogs.refresh') }}
-      </el-button>
+  <div class="system-logs h-full flex flex-col pt-2">
+    <!-- 一体化控制顶栏 (Cockpit-style) -->
+    <div
+      class="flex flex-col md:flex-row md:items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-4 gap-3"
+    >
+      <div class="flex items-center space-x-4 flex-wrap gap-y-2 md:flex-nowrap">
+        <h1
+          class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 ml-2 whitespace-nowrap"
+        >
+          {{ t('systemLogs.title') }}
+        </h1>
+        <div class="h-5 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden md:block"></div>
+        <!-- 视图选择器 -->
+        <el-select
+          v-model="selectedViewId"
+          :placeholder="t('systemLogs.selectSavedView')"
+          clearable
+          class="!w-48"
+          @change="handleApplySavedView"
+        >
+          <el-option
+            v-for="view in sortedSavedViews"
+            :key="view.id"
+            :label="view.name"
+            :value="view.id"
+          />
+        </el-select>
+        <div class="flex items-center space-x-2">
+          <el-tooltip :content="t('systemLogs.saveCurrentFilter')" placement="top">
+            <button
+              class="w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors shadow-sm"
+              @click="saveCurrentView"
+            >
+              <el-icon><Star /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip
+            :content="t('systemLogs.deleteSelectedView')"
+            placement="top"
+            v-if="selectedViewId"
+          >
+            <button
+              class="w-8 h-8 rounded-full bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center transition-colors shadow-sm"
+              @click="removeSelectedView"
+            >
+              <el-icon><Delete /></el-icon>
+            </button>
+          </el-tooltip>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3 ml-auto md:ml-0">
+        <el-tooltip :content="t('systemLogs.exportCurrentResult')" placement="top">
+          <button
+            class="w-9 h-9 rounded-full bg-green-50 hover:bg-green-100 text-green-600 border border-green-200 flex items-center justify-center transition-colors shadow-sm"
+            @click="handleExportCurrent"
+          >
+            <el-icon><Download /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip :content="t('common.refresh')" placement="top">
+          <button
+            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
+            @click="handleRefresh"
+          >
+            <el-icon><RefreshRight /></el-icon>
+          </button>
+        </el-tooltip>
+      </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
-      <div class="stat-card">
-        <div class="stat-line">
-          <span class="stat-label">{{ t('systemLogs.levelError') }}</span>
-          <span class="stat-value text-red-600 dark:text-red-400">{{ levelStats.error || 0 }}</span>
-        </div>
+    <!-- 统计卡片 -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      <div
+        class="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-700 py-3 px-4 flex items-center justify-between hover:-translate-y-0.5 transition-transform duration-300"
+      >
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{
+          t('systemLogs.levelError')
+        }}</span>
+        <span class="text-lg font-bold text-red-600 dark:text-red-400">{{
+          levelStats.error || 0
+        }}</span>
       </div>
-      <div class="stat-card">
-        <div class="stat-line">
-          <span class="stat-label">{{ t('systemLogs.levelWarning') }}</span>
-          <span class="stat-value text-orange-600 dark:text-orange-400">
-          {{ levelStats.warning || 0 }}
-          </span>
-        </div>
+      <div
+        class="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-700 py-3 px-4 flex items-center justify-between hover:-translate-y-0.5 transition-transform duration-300"
+      >
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{
+          t('systemLogs.levelWarning')
+        }}</span>
+        <span class="text-lg font-bold text-orange-600 dark:text-orange-400">{{
+          levelStats.warning || 0
+        }}</span>
       </div>
-      <div class="stat-card">
-        <div class="stat-line">
-          <span class="stat-label">{{ t('systemLogs.levelInfo') }}</span>
-          <span class="stat-value text-blue-600 dark:text-blue-400">{{ levelStats.info || 0 }}</span>
-        </div>
+      <div
+        class="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-700 py-3 px-4 flex items-center justify-between hover:-translate-y-0.5 transition-transform duration-300"
+      >
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{
+          t('systemLogs.levelInfo')
+        }}</span>
+        <span class="text-lg font-bold text-blue-600 dark:text-blue-400">{{
+          levelStats.info || 0
+        }}</span>
       </div>
-      <div class="stat-card">
-        <div class="stat-line">
-          <span class="stat-label">{{ t('systemLogs.levelDebug') }}</span>
-          <span class="stat-value text-gray-700 dark:text-gray-300">{{ levelStats.debug || 0 }}</span>
-        </div>
+      <div
+        class="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-700 py-3 px-4 flex items-center justify-between hover:-translate-y-0.5 transition-transform duration-300"
+      >
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{
+          t('systemLogs.levelDebug')
+        }}</span>
+        <span class="text-lg font-bold text-gray-700 dark:text-gray-300">{{
+          levelStats.debug || 0
+        }}</span>
       </div>
     </div>
 
-    <div class="panel mb-6">
-      <el-form :inline="true" :model="filters" class="flex flex-wrap gap-3">
-        <el-form-item :label="t('systemLogs.level')">
-          <el-select v-model="filters.level" :placeholder="t('systemLogs.allLevel')" clearable style="width: 140px">
+    <!-- 过滤器面板 -->
+    <div
+      class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 mb-4"
+    >
+      <el-form :inline="true" :model="filters" class="flex flex-wrap items-center gap-3 -mb-4">
+        <el-form-item>
+          <el-select
+            v-model="filters.level"
+            :placeholder="t('systemLogs.allLevel')"
+            clearable
+            class="!w-32"
+          >
             <el-option :label="t('systemLogs.levelError')" value="error" />
             <el-option :label="t('systemLogs.levelWarning')" value="warning" />
             <el-option :label="t('systemLogs.levelInfo')" value="info" />
             <el-option :label="t('systemLogs.levelDebug')" value="debug" />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('systemLogs.action')">
+        <el-form-item>
           <el-input
             v-model="filters.action"
             :placeholder="t('systemLogs.actionPlaceholder')"
             clearable
-            style="width: 180px"
+            class="!w-40 rounded-full-input"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
-        <el-form-item :label="t('systemLogs.resource')">
+        <el-form-item>
           <el-input
             v-model="filters.resource"
             :placeholder="t('systemLogs.resourcePlaceholder')"
             clearable
-            style="width: 180px"
+            class="!w-40 rounded-full-input"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
-        <el-form-item :label="t('systemLogs.timeRange')">
+        <el-form-item>
           <el-date-picker
             v-model="filters.dateRange"
             type="datetimerange"
@@ -74,84 +159,111 @@
             :range-separator="t('systemLogs.rangeTo')"
             :start-placeholder="t('systemLogs.startTime')"
             :end-placeholder="t('systemLogs.endTime')"
-            style="width: 360px"
+            class="!w-[340px]"
           />
         </el-form-item>
         <el-form-item>
-          <el-button text @click="applyQuickRange('today')">{{ t('systemLogs.today') }}</el-button>
-          <el-button text @click="applyQuickRange('last7')">{{ t('systemLogs.last7Days') }}</el-button>
-          <el-button text @click="applyQuickRange('last30')">{{ t('systemLogs.last30Days') }}</el-button>
+          <div class="flex items-center space-x-1">
+            <el-button text size="small" @click="applyQuickRange('today')">{{
+              t('systemLogs.today')
+            }}</el-button>
+            <el-button text size="small" @click="applyQuickRange('last7')">{{
+              t('systemLogs.last7Days')
+            }}</el-button>
+            <el-button text size="small" @click="applyQuickRange('last30')">{{
+              t('systemLogs.last30Days')
+            }}</el-button>
+          </div>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">{{ t('systemLogs.query') }}</el-button>
-          <el-button @click="resetFilters">{{ t('systemLogs.reset') }}</el-button>
-        </el-form-item>
-        <el-form-item :label="t('systemLogs.filterView')">
-          <el-select
-            v-model="selectedViewId"
-            :placeholder="t('systemLogs.selectSavedView')"
-            clearable
-            style="width: 220px"
-            @change="handleApplySavedView"
-          >
-            <el-option
-              v-for="view in sortedSavedViews"
-              :key="view.id"
-              :label="view.name"
-              :value="view.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="success" plain @click="saveCurrentView">{{ t('systemLogs.saveCurrentFilter') }}</el-button>
-          <el-button type="danger" plain :disabled="!selectedViewId" @click="removeSelectedView">
-            {{ t('systemLogs.deleteSelectedView') }}
-          </el-button>
-          <el-button type="primary" plain @click="handleExportCurrent">{{ t('systemLogs.exportCurrentResult') }}</el-button>
+          <el-button type="primary" round @click="handleSearch">{{
+            t('systemLogs.query')
+          }}</el-button>
+          <el-button round @click="resetFilters">{{ t('systemLogs.reset') }}</el-button>
         </el-form-item>
       </el-form>
     </div>
 
-    <div class="panel logs-panel">
+    <!-- 日志列表 -->
+    <div
+      class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col flex-1 min-h-0 overflow-hidden"
+    >
       <div v-if="loadError" class="px-4 pt-4">
         <el-alert :title="loadError" type="error" show-icon :closable="false">
           <template #default>
-            <el-button text type="primary" @click="handleRefresh">{{ t('systemLogs.reload') }}</el-button>
+            <el-button text type="primary" @click="handleRefresh">{{
+              t('systemLogs.reload')
+            }}</el-button>
           </template>
         </el-alert>
       </div>
-      <div class="logs-table-wrap">
+      <div class="flex-1 min-h-0 overflow-auto">
         <el-table
           :data="logs"
           v-loading="loading"
-          :max-height="'calc(100vh - 430px)'"
           style="width: 100%"
-          :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
+          :header-cell-style="{
+            background: '#f9fafb',
+            color: '#374151',
+            height: '48px',
+            borderBottom: '1px solid #e5e7eb',
+          }"
         >
           <el-table-column prop="createdAt" :label="t('systemLogs.time')" width="180">
             <template #default="scope">
-              {{ formatDateTime(scope.row.createdAt) }}
+              <span class="text-gray-500 font-mono text-sm tracking-wide">{{
+                formatDateTime(scope.row.createdAt)
+              }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="level" :label="t('systemLogs.level')" width="90">
             <template #default="scope">
-              <el-tag :type="getLevelTagType(scope.row.level)" size="small">
+              <el-tag
+                :type="getLevelTagType(scope.row.level)"
+                size="small"
+                effect="light"
+                class="rounded-full px-3 border-transparent"
+                :class="getLevelTagType(scope.row.level) ? '' : 'bg-gray-100 text-gray-600'"
+              >
                 {{ getLevelLabel(scope.row.level) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="action" :label="t('systemLogs.action')" width="180" show-overflow-tooltip>
+          <el-table-column
+            prop="action"
+            :label="t('systemLogs.action')"
+            width="180"
+            show-overflow-tooltip
+          >
             <template #default="scope">
               {{ getActionLabel(scope.row.action) }}
             </template>
           </el-table-column>
-          <el-table-column prop="resource" :label="t('systemLogs.resource')" width="180" show-overflow-tooltip>
+          <el-table-column
+            prop="resource"
+            :label="t('systemLogs.resource')"
+            width="180"
+            show-overflow-tooltip
+          >
             <template #default="scope">
               {{ getResourceLabel(scope.row.resource, scope.row.action) }}
             </template>
           </el-table-column>
-          <el-table-column prop="message" :label="t('systemLogs.logContent')" min-width="280" show-overflow-tooltip />
-          <el-table-column prop="ip" :label="t('systemLogs.ip')" width="140" />
+          <el-table-column
+            prop="message"
+            :label="t('systemLogs.logContent')"
+            min-width="280"
+            show-overflow-tooltip
+          >
+            <template #default="scope">
+              <span class="font-mono text-sm">{{ scope.row.message }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="ip" :label="t('systemLogs.ip')" width="140">
+            <template #default="scope">
+              <span class="font-mono text-sm text-gray-500">{{ scope.row.ip }}</span>
+            </template>
+          </el-table-column>
           <el-table-column :label="t('systemLogs.user')" width="140">
             <template #default="scope">
               {{ scope.row.user?.fullName || scope.row.user?.username || '-' }}
@@ -160,7 +272,19 @@
         </el-table>
       </div>
 
-      <div class="pagination-bar logs-pagination flex justify-end items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
+      <!-- 分页 -->
+      <div
+        class="flex justify-between items-center py-3 px-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
+      >
+        <div class="text-xs text-gray-500 dark:text-gray-400 tracking-wide">
+          {{
+            t('userManagement.totalRange', {
+              start: (pagination.page - 1) * pagination.limit + 1,
+              end: Math.min(pagination.page * pagination.limit, pagination.total),
+              total: pagination.total,
+            })
+          }}
+        </div>
         <el-pagination
           size="small"
           v-model:current-page="pagination.page"
@@ -175,7 +299,6 @@
     </div>
   </div>
 </template>
-
 <script lang="ts">
 // @ts-nocheck
 import { ref, reactive, onMounted, computed } from 'vue'
@@ -205,9 +328,7 @@ export default {
     const savedViews = ref(Storage.get(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, []))
     const selectedViewId = ref('')
     const sortedSavedViews = computed(() =>
-      [...savedViews.value].sort(
-        (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)
-      )
+      [...savedViews.value].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)),
     )
 
     const pagination = reactive({
@@ -216,7 +337,6 @@ export default {
       total: 0,
       totalPages: 0,
     })
-
 
     const actionLabelMap = {
       create: 'systemLogs.actionCreate',
@@ -297,7 +417,7 @@ export default {
         ElMessage.error(
           t('systemLogs.fetchFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       } finally {
         loading.value = false
@@ -378,7 +498,7 @@ export default {
         ElMessage.error(
           t('systemLogs.exportFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       }
     }
@@ -390,9 +510,9 @@ export default {
         {
           confirmButtonText: t('systemLogs.save'),
           cancelButtonText: t('systemLogs.cancel'),
-        inputPattern: /^.{1,20}$/,
+          inputPattern: /^.{1,20}$/,
           inputErrorMessage: t('systemLogs.nameLengthError'),
-        }
+        },
       ).catch(() => ({ value: '' }))
 
       if (!name) return
@@ -426,7 +546,9 @@ export default {
 
       Storage.set(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, savedViews.value)
       selectedViewId.value = newView.id
-      ElMessage.success(existingIndex > -1 ? t('systemLogs.viewUpdated') : t('systemLogs.viewSaved'))
+      ElMessage.success(
+        existingIndex > -1 ? t('systemLogs.viewUpdated') : t('systemLogs.viewSaved'),
+      )
     }
 
     const handleApplySavedView = async (viewId, silent = false) => {
@@ -467,10 +589,10 @@ export default {
           t('systemLogs.removeViewConfirm', { name: targetView.name }),
           t('systemLogs.removeViewTitle'),
           {
-          confirmButtonText: t('systemLogs.remove'),
-          cancelButtonText: t('systemLogs.cancel'),
-          type: 'warning',
-          }
+            confirmButtonText: t('systemLogs.remove'),
+            cancelButtonText: t('systemLogs.cancel'),
+            type: 'warning',
+          },
         )
 
         savedViews.value = savedViews.value.filter((item) => item.id !== selectedViewId.value)
@@ -517,10 +639,11 @@ export default {
       return map[level] || level || '-'
     }
 
-
     const normalizeLogToken = (value) => {
       if (!value) return ''
-      return String(value).toLowerCase().replace(/[-\s]+/g, '_')
+      return String(value)
+        .toLowerCase()
+        .replace(/[-\s]+/g, '_')
     }
 
     const getActionSegment = (action) => {
@@ -662,9 +785,3 @@ export default {
   flex-shrink: 0;
 }
 </style>
-
-
-
-
-
-

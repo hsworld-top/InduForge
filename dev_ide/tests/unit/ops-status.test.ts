@@ -56,4 +56,3 @@ describe('views/tenant/utils/ops-status', () => {
     expect(getDeployFailureReason(undefined)).toBe('未提供失败原因')
   })
 })
-

@@ -1,65 +1,118 @@
 <template>
   <div class="user-management">
-    <!-- 页面标题和操作栏 -->
-    <div class="flex justify-between items-center mb-3">
-      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('userManagement.title') }}</h1>
-      <el-button v-if="canManageUsers" type="primary" @click="showCreateDialog = true" size="small"
-        class="bg-blue-600 hover:bg-blue-700">
-        <el-icon class="mr-2">
-          <Plus />
-        </el-icon>
-        {{ t('userManagement.addUser') }}
-      </el-button>
-    </div>
+    <!-- 顶部操作栏 (Cockpit-style) -->
+    <div
+      class="flex items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-6"
+    >
+      <!-- 左侧：标题与搜索、筛选 -->
+      <div class="flex items-center space-x-4">
+        <!-- 页面标题 -->
+        <h1
+          class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 ml-2 whitespace-nowrap"
+        >
+          {{ t('userManagement.title') }}
+        </h1>
 
-    <!-- 搜索和筛选栏 -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
-      <el-form :inline="true" :model="searchForm" class="flex flex-wrap gap-4">
-        <el-form-item :label="t('userManagement.username')">
-          <el-input v-model="searchForm.username" :placeholder="t('userManagement.searchUsername')" clearable
-            style="width: 200px" @input="handleSearch" />
-        </el-form-item>
-        <el-form-item :label="t('userManagement.role')">
-          <el-select v-model="searchForm.role" :placeholder="t('userManagement.selectRole')" clearable
-            style="width: 150px" @change="handleSearch">
-            <el-option v-for="role in roleOptions" :key="role.value" :label="role.label" :value="role.value" />
+        <div class="h-5 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
+
+        <!-- 圆角搜索框 -->
+        <el-input
+          v-model="searchForm.username"
+          :placeholder="t('userManagement.searchUsername')"
+          clearable
+          class="!w-64 rounded-full-input"
+          prefix-icon="Search"
+          @input="handleSearch"
+        />
+
+        <!-- 筛选栏 -->
+        <div class="flex items-center space-x-2">
+          <el-select
+            v-model="searchForm.role"
+            :placeholder="t('userManagement.role')"
+            clearable
+            class="!w-36"
+            @change="handleSearch"
+          >
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.value"
+              :label="role.label"
+              :value="role.value"
+            />
           </el-select>
-        </el-form-item>
-        <el-form-item :label="t('userManagement.status')">
-          <el-select v-model="searchForm.status" :placeholder="t('userManagement.selectStatus')" clearable
-            style="width: 150px" @change="handleSearch">
-            <el-option v-for="status in statusOptions" :key="status.value" :label="status.label"
-              :value="status.value" />
+          <el-select
+            v-model="searchForm.status"
+            :placeholder="t('userManagement.status')"
+            clearable
+            class="!w-36"
+            @change="handleSearch"
+          >
+            <el-option
+              v-for="status in statusOptions"
+              :key="status.value"
+              :label="status.label"
+              :value="status.value"
+            />
           </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button @click="resetSearch" type="default">
-            <el-icon>
-              <Refresh />
-            </el-icon>
-            {{ t('userManagement.reset') }}
-          </el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
+
+      <!-- 右侧：全局操作按钮组 -->
+      <div class="flex items-center space-x-3">
+        <el-tooltip :content="t('userManagement.addUser')" placement="top" v-if="canManageUsers">
+          <button
+            class="w-9 h-9 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors shadow-sm"
+            @click="showCreateDialog = true"
+          >
+            <el-icon><Plus /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip :content="t('common.refresh')" placement="top">
+          <button
+            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
+            @click="resetSearch"
+          >
+            <el-icon><RefreshRight /></el-icon>
+          </button>
+        </el-tooltip>
+      </div>
     </div>
 
     <!-- 用户列表 -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-      <el-table :data="userList" v-loading="loading" style="width: 100%"
-        :header-cell-style="{ background: '#f9fafb', color: '#374151' }">
-        <el-table-column prop="username" :label="t('userManagement.username')" width="120" />
-        <el-table-column prop="fullName" :label="t('userManagement.fullName')" width="120" />
-        <el-table-column prop="email" :label="t('userManagement.email')" width="300" />
-        <el-table-column prop="role" :label="t('userManagement.role')" min-width="200">
+    <div
+      class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
+    >
+      <el-table
+        :data="userList"
+        v-loading="loading"
+        style="width: 100%"
+        :header-cell-style="{
+          background: '#f9fafb',
+          color: '#374151',
+          height: '48px',
+          borderBottom: '1px solid #e5e7eb',
+        }"
+      >
+        <el-table-column prop="username" :label="t('userManagement.username')" min-width="120" />
+        <el-table-column prop="fullName" :label="t('userManagement.fullName')" min-width="120" />
+        <el-table-column prop="email" :label="t('userManagement.email')" min-width="200" />
+        <el-table-column prop="role" :label="t('userManagement.role')" min-width="160">
           <template #default="scope">
-            <el-tag :type="getRoleTagType(scope.row.role)">
+            <el-tag
+              :type="getRoleTagType(scope.row.role)"
+              size="small"
+              effect="light"
+              class="rounded-full px-3 border-transparent"
+              :class="getRoleTagType(scope.row.role) ? '' : 'bg-gray-100 text-gray-600'"
+            >
               {{ getRoleLabel(scope.row.role) }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" :label="t('userManagement.status')" width="100">
           <template #default="scope">
-            <el-tag :type="getStatusTagType(scope.row.status)">
+            <el-tag :type="getStatusTagType(scope.row.status)" size="small" class="rounded-full">
               {{ getStatusLabel(scope.row.status) }}
             </el-tag>
           </template>
@@ -69,37 +122,67 @@
             {{ getTenantLabel(scope.row.tenant) }}
           </template>
         </el-table-column>
-        <el-table-column prop="lastLoginAt" :label="t('userManagement.lastLogin')" width="200">
+        <el-table-column prop="lastLoginAt" :label="t('userManagement.lastLogin')" width="180">
           <template #default="scope">
-            {{ formatDateTime(scope.row.lastLoginAt) }}
+            <span class="text-gray-500 text-sm font-mono tracking-wide">{{
+              formatDateTime(scope.row.lastLoginAt)
+            }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" :label="t('userManagement.createdAt')" width="200">
+        <el-table-column prop="createdAt" :label="t('userManagement.createdAt')" width="180">
           <template #default="scope">
-            {{ formatDateTime(scope.row.createdAt) }}
+            <span class="text-gray-500 text-sm font-mono tracking-wide">{{
+              formatDateTime(scope.row.createdAt)
+            }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('userManagement.actions')" width="300" fixed="right" v-if="canManageUsers">
+        <el-table-column
+          :label="t('userManagement.actions')"
+          width="140"
+          fixed="right"
+          align="center"
+          v-if="canManageUsers"
+        >
           <template #default="scope">
-            <div class="user-actions">
-              <el-button type="primary" size="small" @click="editUser(scope.row)">
-                {{ t('userManagement.edit') }}
-              </el-button>
-              <el-button type="warning" size="small" @click="resetPassword(scope.row)">
-                {{ t('userManagement.resetPassword') }}
-              </el-button>
-              <el-button type="danger" size="small" @click="deleteUser(scope.row)"
-                v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole">
-                {{ t('userManagement.delete') }}
-              </el-button>
+            <div class="flex items-center justify-center gap-1.5">
+              <el-tooltip :content="t('userManagement.edit')" placement="top">
+                <button
+                  class="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/30 dark:hover:text-blue-400 transition-colors"
+                  @click="editUser(scope.row)"
+                >
+                  <el-icon class="text-sm"><Edit /></el-icon>
+                </button>
+              </el-tooltip>
+              <el-tooltip :content="t('userManagement.resetPassword')" placement="top">
+                <button
+                  class="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-900/30 dark:hover:text-orange-400 transition-colors"
+                  @click="resetPassword(scope.row)"
+                >
+                  <el-icon class="text-sm"><Key /></el-icon>
+                </button>
+              </el-tooltip>
+              <el-tooltip
+                :content="t('userManagement.delete')"
+                placement="top"
+                v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole"
+              >
+                <button
+                  class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"
+                  @click="deleteUser(scope.row)"
+                >
+                  <el-icon class="text-sm"><Delete /></el-icon>
+                </button>
+              </el-tooltip>
             </div>
           </template>
         </el-table-column>
       </el-table>
 
       <!-- 分页 -->
-      <div class="pagination-bar flex justify-between items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700">
-        <div class="text-xs text-gray-500 dark:text-gray-400">
+      <div
+        class="flex justify-between items-center py-3 px-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
+      >
+        <div class="text-xs text-gray-500 dark:text-gray-400 tracking-wide">
           {{
             t('userManagement.totalRange', {
               start: (pagination.page - 1) * pagination.limit + 1,
@@ -108,36 +191,70 @@
             })
           }}
         </div>
-        <el-pagination size="small" v-model:current-page="pagination.page" v-model:page-size="pagination.limit"
-          :page-sizes="[10, 20, 50, 100]" :total="pagination.total" layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange" @current-change="handleCurrentChange" />
+        <el-pagination
+          size="small"
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.limit"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
       </div>
     </div>
 
     <!-- 创建用户对话框 -->
-    <el-dialog v-model="showCreateDialog" :title="t('userManagement.createUser')" width="500px"
-      :close-on-click-modal="false">
+    <el-dialog
+      v-model="showCreateDialog"
+      :title="t('userManagement.createUser')"
+      width="500px"
+      :close-on-click-modal="false"
+    >
       <el-form ref="createFormRef" :model="createForm" :rules="createFormRules" label-width="100px">
         <el-form-item :label="t('userManagement.username')" prop="username">
-          <el-input v-model="createForm.username" :placeholder="t('userManagement.inputUsername')" />
+          <el-input
+            v-model="createForm.username"
+            :placeholder="t('userManagement.inputUsername')"
+          />
         </el-form-item>
         <el-form-item :label="t('auth.password')" prop="password">
-          <el-input v-model="createForm.password" type="password" :placeholder="t('userManagement.inputPassword')"
-            show-password />
+          <el-input
+            v-model="createForm.password"
+            type="password"
+            :placeholder="t('userManagement.inputPassword')"
+            show-password
+          />
         </el-form-item>
         <el-form-item :label="t('profile.confirmPassword')" prop="confirmPassword">
-          <el-input v-model="createForm.confirmPassword" type="password"
-            :placeholder="t('userManagement.inputConfirmPassword')" show-password />
+          <el-input
+            v-model="createForm.confirmPassword"
+            type="password"
+            :placeholder="t('userManagement.inputConfirmPassword')"
+            show-password
+          />
         </el-form-item>
         <el-form-item :label="t('userManagement.email')" prop="email">
           <el-input v-model="createForm.email" :placeholder="t('userManagement.inputEmail')" />
         </el-form-item>
         <el-form-item :label="t('userManagement.fullName')" prop="fullName">
-          <el-input v-model="createForm.fullName" :placeholder="t('userManagement.inputFullName')" />
+          <el-input
+            v-model="createForm.fullName"
+            :placeholder="t('userManagement.inputFullName')"
+          />
         </el-form-item>
         <el-form-item :label="t('userManagement.role')" prop="role">
-          <el-select v-model="createForm.role" :placeholder="t('userManagement.chooseRole')" style="width: 100%">
-            <el-option v-for="role in roleOptions" :key="role.value" :label="role.label" :value="role.value" />
+          <el-select
+            v-model="createForm.role"
+            :placeholder="t('userManagement.chooseRole')"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.value"
+              :label="role.label"
+              :value="role.value"
+            />
           </el-select>
         </el-form-item>
       </el-form>
@@ -150,8 +267,12 @@
     </el-dialog>
 
     <!-- 编辑用户对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('userManagement.editUser')" width="500px"
-      :close-on-click-modal="false">
+    <el-dialog
+      v-model="showEditDialog"
+      :title="t('userManagement.editUser')"
+      width="500px"
+      :close-on-click-modal="false"
+    >
       <el-form ref="editFormRef" :model="editForm" :rules="editFormRules" label-width="100px">
         <el-form-item :label="t('userManagement.username')">
           <el-input v-model="editForm.username" disabled />
@@ -163,15 +284,32 @@
           <el-input v-model="editForm.fullName" :placeholder="t('userManagement.inputFullName')" />
         </el-form-item>
         <el-form-item :label="t('userManagement.role')" prop="role">
-          <el-select v-model="editForm.role" :placeholder="t('userManagement.chooseRole')" style="width: 100%"
-            :disabled="!canEditRole">
-            <el-option v-for="role in roleOptions" :key="role.value" :label="role.label" :value="role.value" />
+          <el-select
+            v-model="editForm.role"
+            :placeholder="t('userManagement.chooseRole')"
+            style="width: 100%"
+            :disabled="!canEditRole"
+          >
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.value"
+              :label="role.label"
+              :value="role.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('userManagement.status')" prop="status">
-          <el-select v-model="editForm.status" :placeholder="t('userManagement.chooseStatus')" style="width: 100%">
-            <el-option v-for="status in statusOptions" :key="status.value" :label="status.label"
-              :value="status.value" />
+          <el-select
+            v-model="editForm.status"
+            :placeholder="t('userManagement.chooseStatus')"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="status in statusOptions"
+              :key="status.value"
+              :label="status.label"
+              :value="status.value"
+            />
           </el-select>
         </el-form-item>
       </el-form>
@@ -184,16 +322,33 @@
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog v-model="showPasswordDialog" :title="t('userManagement.resetPassword')" width="400px"
-      :close-on-click-modal="false">
-      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordFormRules" label-width="100px">
+    <el-dialog
+      v-model="showPasswordDialog"
+      :title="t('userManagement.resetPassword')"
+      width="400px"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="passwordFormRef"
+        :model="passwordForm"
+        :rules="passwordFormRules"
+        label-width="100px"
+      >
         <el-form-item :label="t('profile.newPassword')" prop="newPassword">
-          <el-input v-model="passwordForm.newPassword" type="password"
-            :placeholder="t('userManagement.inputNewPassword')" show-password />
+          <el-input
+            v-model="passwordForm.newPassword"
+            type="password"
+            :placeholder="t('userManagement.inputNewPassword')"
+            show-password
+          />
         </el-form-item>
         <el-form-item :label="t('profile.confirmPassword')" prop="confirmPassword">
-          <el-input v-model="passwordForm.confirmPassword" type="password"
-            :placeholder="t('userManagement.inputConfirmPassword')" show-password />
+          <el-input
+            v-model="passwordForm.confirmPassword"
+            type="password"
+            :placeholder="t('userManagement.inputConfirmPassword')"
+            show-password
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -257,8 +412,14 @@ export default {
 
     // 角色选项
     const roleOptions = [
-      { value: RoleEnum.SYSTEM_ADMIN, label: t('userManagement.roleSystemAdmin') },
-      { value: RoleEnum.PROJECT_ADMIN, label: t('userManagement.roleProjectAdmin') },
+      {
+        value: RoleEnum.SYSTEM_ADMIN,
+        label: t('userManagement.roleSystemAdmin'),
+      },
+      {
+        value: RoleEnum.PROJECT_ADMIN,
+        label: t('userManagement.roleProjectAdmin'),
+      },
       { value: RoleEnum.OPS_ADMIN, label: t('userManagement.roleOpsAdmin') },
       { value: RoleEnum.USER_ADMIN, label: t('userManagement.roleUserAdmin') },
     ]
@@ -266,8 +427,14 @@ export default {
     // 状态选项
     const statusOptions = [
       { value: UserStatusEnum.ACTIVE, label: t('userManagement.statusActive') },
-      { value: UserStatusEnum.INACTIVE, label: t('userManagement.statusInactive') },
-      { value: UserStatusEnum.SUSPENDED, label: t('userManagement.statusSuspended') },
+      {
+        value: UserStatusEnum.INACTIVE,
+        label: t('userManagement.statusInactive'),
+      },
+      {
+        value: UserStatusEnum.SUSPENDED,
+        label: t('userManagement.statusSuspended'),
+      },
     ]
 
     // 创建用户表单
@@ -283,15 +450,36 @@ export default {
     // 创建表单验证规则
     const createFormRules = {
       username: [
-        { required: true, message: t('userManagement.inputUsername'), trigger: 'blur' },
-        { min: 3, max: 50, message: t('userManagement.usernameLength'), trigger: 'blur' },
+        {
+          required: true,
+          message: t('userManagement.inputUsername'),
+          trigger: 'blur',
+        },
+        {
+          min: 3,
+          max: 50,
+          message: t('userManagement.usernameLength'),
+          trigger: 'blur',
+        },
       ],
       password: [
-        { required: true, message: t('userManagement.inputPassword'), trigger: 'blur' },
-        { min: 6, message: t('userManagement.passwordMinLength'), trigger: 'blur' },
+        {
+          required: true,
+          message: t('userManagement.inputPassword'),
+          trigger: 'blur',
+        },
+        {
+          min: 6,
+          message: t('userManagement.passwordMinLength'),
+          trigger: 'blur',
+        },
       ],
       confirmPassword: [
-        { required: true, message: t('userManagement.inputConfirmPassword'), trigger: 'blur' },
+        {
+          required: true,
+          message: t('userManagement.inputConfirmPassword'),
+          trigger: 'blur',
+        },
         {
           validator: (rule, value, callback) => {
             if (value !== createForm.password) {
@@ -303,9 +491,27 @@ export default {
           trigger: 'blur',
         },
       ],
-      email: [{ type: 'email', message: t('userManagement.invalidEmail'), trigger: 'blur' }],
-      fullName: [{ required: true, message: t('userManagement.inputFullName'), trigger: 'blur' }],
-      role: [{ required: true, message: t('userManagement.chooseRole'), trigger: 'change' }],
+      email: [
+        {
+          type: 'email',
+          message: t('userManagement.invalidEmail'),
+          trigger: 'blur',
+        },
+      ],
+      fullName: [
+        {
+          required: true,
+          message: t('userManagement.inputFullName'),
+          trigger: 'blur',
+        },
+      ],
+      role: [
+        {
+          required: true,
+          message: t('userManagement.chooseRole'),
+          trigger: 'change',
+        },
+      ],
     }
 
     // 编辑用户表单
@@ -320,10 +526,34 @@ export default {
 
     // 编辑表单验证规则
     const editFormRules = {
-      email: [{ type: 'email', message: t('userManagement.invalidEmail'), trigger: 'blur' }],
-      fullName: [{ required: true, message: t('userManagement.inputFullName'), trigger: 'blur' }],
-      role: [{ required: true, message: t('userManagement.chooseRole'), trigger: 'change' }],
-      status: [{ required: true, message: t('userManagement.chooseStatus'), trigger: 'change' }],
+      email: [
+        {
+          type: 'email',
+          message: t('userManagement.invalidEmail'),
+          trigger: 'blur',
+        },
+      ],
+      fullName: [
+        {
+          required: true,
+          message: t('userManagement.inputFullName'),
+          trigger: 'blur',
+        },
+      ],
+      role: [
+        {
+          required: true,
+          message: t('userManagement.chooseRole'),
+          trigger: 'change',
+        },
+      ],
+      status: [
+        {
+          required: true,
+          message: t('userManagement.chooseStatus'),
+          trigger: 'change',
+        },
+      ],
     }
 
     // 密码表单
@@ -336,11 +566,23 @@ export default {
     // 密码表单验证规则
     const passwordFormRules = {
       newPassword: [
-        { required: true, message: t('userManagement.inputNewPassword'), trigger: 'blur' },
-        { min: 6, message: t('userManagement.passwordMinLength'), trigger: 'blur' },
+        {
+          required: true,
+          message: t('userManagement.inputNewPassword'),
+          trigger: 'blur',
+        },
+        {
+          min: 6,
+          message: t('userManagement.passwordMinLength'),
+          trigger: 'blur',
+        },
       ],
       confirmPassword: [
-        { required: true, message: t('userManagement.inputConfirmPassword'), trigger: 'blur' },
+        {
+          required: true,
+          message: t('userManagement.inputConfirmPassword'),
+          trigger: 'blur',
+        },
         {
           validator: (rule, value, callback) => {
             if (value !== passwordForm.newPassword) {
@@ -441,7 +683,7 @@ export default {
         ElMessage.error(
           t('userManagement.fetchUsersFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       } finally {
         loading.value = false
@@ -519,7 +761,7 @@ export default {
         ElMessage.error(
           t('userManagement.createUserFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       } finally {
         createLoading.value = false
@@ -582,7 +824,7 @@ export default {
         ElMessage.error(
           t('userManagement.updateUserFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       } finally {
         editLoading.value = false
@@ -617,7 +859,7 @@ export default {
         ElMessage.error(
           t('userManagement.resetPasswordFailed', {
             message: error.response?.data?.message || error.message,
-          })
+          }),
         )
       } finally {
         passwordLoading.value = false
@@ -634,7 +876,7 @@ export default {
             confirmButtonText: t('userManagement.deleteConfirmButton'),
             cancelButtonText: t('userManagement.cancel'),
             type: 'warning',
-          }
+          },
         )
 
         await userAPI.deleteUser(user.id)
@@ -645,7 +887,7 @@ export default {
           ElMessage.error(
             t('userManagement.deleteUserFailed', {
               message: error.response?.data?.message || error.message,
-            })
+            }),
           )
         }
       }
@@ -802,6 +1044,3 @@ html.dark :deep(.el-dialog__header),
   width: 100%;
 }
 </style>
-
-
-

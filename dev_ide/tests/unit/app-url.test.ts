@@ -70,7 +70,10 @@ describe('appUrl', () => {
   })
 
   it('buildAppEntry 返回宿主 origin，供 iframe 注册链路使用', () => {
-    const entry = buildAppEntry('designer', { id: 'p-origin', tenantId: 't-origin' })
+    const entry = buildAppEntry('designer', {
+      id: 'p-origin',
+      tenantId: 't-origin',
+    })
 
     expect(entry.url.startsWith('/designer/?handoffId=')).toBe(true)
     expect(entry.origin).toBe(window.location.origin)

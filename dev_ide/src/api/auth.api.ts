@@ -132,9 +132,6 @@ export const authAPI = {
    * @returns {Promise} 修改结果
    */
   changePassword(passwordData: PasswordData) {
-    return request.put<ApiResponse<AuthChangePasswordPayload>>(
-      '/auth/password',
-      passwordData
-    )
+    return request.put<ApiResponse<AuthChangePasswordPayload>>('/auth/password', passwordData)
   },
 }

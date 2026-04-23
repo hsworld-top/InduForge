@@ -27,7 +27,7 @@ const props = withDefaults(
   }>(),
   {
     tabKey: '',
-  }
+  },
 )
 
 const emit = defineEmits<{
@@ -39,7 +39,7 @@ const emit = defineEmits<{
       appType: EmbeddedAppType
       project: EmbeddedProjectContext
       tabKey: string
-    }
+    },
   ): void
   (event: 'embedded-unregister', payload: { iframe: HTMLIFrameElement }): void
 }>()
@@ -89,4 +89,3 @@ onBeforeUnmount(() => {
   border: none;
 }
 </style>
-

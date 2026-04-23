@@ -5,8 +5,9 @@
     @mousemove="handleMaximizedMouseMove"
     @mouseleave="handleMaximizedMouseLeave"
   >
-    <!-- 全新的侧边栏抽屉组件 -->
-    <DashboardSidebar 
+    <!-- 全新的侧边栏抽屉组件（全屏时隐藏） -->
+    <DashboardSidebar
+      v-show="!isTabMaximized"
       :active-tab="activeTab"
       @open-tab="openTab"
       @open-profile="openProfileDialog"
@@ -33,13 +34,25 @@
     </div>
 
     <!-- 对话框 -->
-    <el-dialog v-model="showProfileDialog" width="860px" top="8vh" destroy-on-close append-to-body class="profile-dialog"
-      :title="t('profile.title')">
+    <el-dialog
+      v-model="showProfileDialog"
+      width="860px"
+      top="8vh"
+      destroy-on-close
+      append-to-body
+      class="profile-dialog"
+      :title="t('profile.title')"
+    >
       <Profile :embedded="true" />
     </el-dialog>
 
-    <el-dialog v-model="showSystemSettingsDialog" width="960px" destroy-on-close append-to-body
-      :title="t('dashboard.menuSettings')">
+    <el-dialog
+      v-model="showSystemSettingsDialog"
+      width="960px"
+      destroy-on-close
+      append-to-body
+      :title="t('dashboard.menuSettings')"
+    >
       <SystemSettings />
     </el-dialog>
   </div>
@@ -78,12 +91,22 @@ import request from '@/utils/request'
 
 // 标签页组件懒加载，提升首次加载速度
 const DashboardContent = markRaw(defineAsyncComponent(() => import('@/views/DashboardContent.vue')))
-const TenantManagement = markRaw(defineAsyncComponent(() => import('@/views/admin/TenantManagement.vue')))
-const UserManagement = markRaw(defineAsyncComponent(() => import('@/views/tenant/UserManagement.vue')))
-const ProjectManagement = markRaw(defineAsyncComponent(() => import('@/views/tenant/ProjectManagement.vue')))
-const OpsManagement = markRaw(defineAsyncComponent(() => import('@/views/tenant/OpsManagement.vue')))
+const TenantManagement = markRaw(
+  defineAsyncComponent(() => import('@/views/admin/TenantManagement.vue')),
+)
+const UserManagement = markRaw(
+  defineAsyncComponent(() => import('@/views/tenant/UserManagement.vue')),
+)
+const ProjectManagement = markRaw(
+  defineAsyncComponent(() => import('@/views/tenant/ProjectManagement.vue')),
+)
+const OpsManagement = markRaw(
+  defineAsyncComponent(() => import('@/views/tenant/OpsManagement.vue')),
+)
 const SystemLogs = markRaw(defineAsyncComponent(() => import('@/views/tenant/SystemLogs.vue')))
-const SystemSettings = markRaw(defineAsyncComponent(() => import('@/views/tenant/SystemSettings.vue')))
+const SystemSettings = markRaw(
+  defineAsyncComponent(() => import('@/views/tenant/SystemSettings.vue')),
+)
 const Profile = markRaw(defineAsyncComponent(() => import('@/views/profile/Profile.vue')))
 const EmbeddedApp = markRaw(defineAsyncComponent(() => import('@/components/EmbeddedApp.vue')))
 
@@ -212,7 +235,7 @@ export default {
     const syncEmbeddedTheme = (theme) => {
       broadcastToEmbeddedIframes(
         embeddedRegistry.values(),
-        createEmbeddedUpdateMessage('THEME_UPDATE', 'theme', theme)
+        createEmbeddedUpdateMessage('THEME_UPDATE', 'theme', theme),
       )
     }
 
@@ -372,9 +395,10 @@ export default {
       if (isObject && customComponent) {
         // 自定义标签页配置
         // 如果组件是函数（可能是动态导入），使用 defineAsyncComponent 包装以确保正确处理
-        const component = typeof customComponent === 'function'
-          ? markRaw(defineAsyncComponent(customComponent))
-          : markRaw(customComponent)
+        const component =
+          typeof customComponent === 'function'
+            ? markRaw(defineAsyncComponent(customComponent))
+            : markRaw(customComponent)
         config = {
           title: customTitle,
           component: component,
@@ -454,7 +478,10 @@ export default {
       let notificationRef = null
       notificationRef = ElNotification({
         title: t('dashboard.pendingNodeTitle'),
-        message: t('dashboard.pendingNodeMessage', { nodeName, applicant: applicantName }),
+        message: t('dashboard.pendingNodeMessage', {
+          nodeName,
+          applicant: applicantName,
+        }),
         type: 'warning',
         duration: 0,
         showClose: true,
@@ -533,13 +560,20 @@ export default {
 
       const pollPendingCount = async (notifyOnIncrease = false) => {
         try {
-          const res = await request.get('/nodes', { params: { pageSize: 1, approvalStatus: 'pending' } })
+          const res = await request.get('/nodes', {
+            params: { pageSize: 1, approvalStatus: 'pending' },
+          })
           const total = Number(res?.data?.total || 0)
           if (notifyOnIncrease && total > lastPendingCount.value) {
-            console.log(`[OpsPending][Polling] 检测到待审核新增: ${lastPendingCount.value} -> ${total}`)
+            console.log(
+              `[OpsPending][Polling] 检测到待审核新增: ${lastPendingCount.value} -> ${total}`,
+            )
             ElNotification({
               title: t('dashboard.pendingNodeTitle'),
-              message: t('dashboard.pendingNodeMessage', { nodeName: '-', applicant: '-' }),
+              message: t('dashboard.pendingNodeMessage', {
+                nodeName: '-',
+                applicant: '-',
+              }),
               type: 'warning',
               duration: 5000,
               onClick: () => {
@@ -626,7 +660,7 @@ export default {
           activeTab: activeTab.value,
           tabConfigMap: getTabConfigMap(),
           hasTabPermission,
-        })
+        }),
       )
     }
 
@@ -725,6 +759,7 @@ export default {
       // 添加全局点击事件监听
       document.addEventListener('click', handleClickOutside)
       window.addEventListener('message', handleEmbeddedMessage)
+      window.addEventListener('keydown', handleKeyDown)
 
       // 优先恢复历史标签状态，未恢复成功时按角色打开默认标签
       const restored = restoreTabState()
@@ -760,6 +795,7 @@ export default {
     onUnmounted(() => {
       document.removeEventListener('click', handleClickOutside)
       window.removeEventListener('message', handleEmbeddedMessage)
+      window.removeEventListener('keydown', handleKeyDown)
       embeddedRegistry.clear()
       const socket = getSocket()
       if (socket) {
@@ -787,12 +823,14 @@ export default {
       isTabMaximized.value = true
       activeTab.value = tabKey
       showMaximizeRestoreButton.value = true
+      // 全屏后自动收起侧边栏
+      appStore.setSidebarCollapsed(true)
       if (maximizeRestoreHideTimer.value) {
         window.clearTimeout(maximizeRestoreHideTimer.value)
       }
       maximizeRestoreHideTimer.value = window.setTimeout(() => {
         showMaximizeRestoreButton.value = false
-      }, 1200)
+      }, 2000)
     }
 
     // 还原标签页
@@ -802,6 +840,13 @@ export default {
       if (maximizeRestoreHideTimer.value) {
         window.clearTimeout(maximizeRestoreHideTimer.value)
         maximizeRestoreHideTimer.value = null
+      }
+    }
+
+    // ESC 退出全屏
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && isTabMaximized.value) {
+        restoreTab()
       }
     }
 
@@ -875,7 +920,7 @@ export default {
       () => {
         persistTabState()
       },
-      { deep: true }
+      { deep: true },
     )
 
     return {
@@ -988,7 +1033,7 @@ export default {
 }
 
 html.dark .dashboard-tabs :deep(.el-tabs__nav),
-[data-theme="dark"] .dashboard-tabs :deep(.el-tabs__nav) {
+[data-theme='dark'] .dashboard-tabs :deep(.el-tabs__nav) {
   border-bottom-color: rgb(55 65 81);
 }
 
@@ -1017,18 +1062,18 @@ html.dark .dashboard-tabs :deep(.el-tabs__nav),
 }
 
 html.dark .dashboard-tabs :deep(.el-tabs__item),
-[data-theme="dark"] .dashboard-tabs :deep(.el-tabs__item) {
+[data-theme='dark'] .dashboard-tabs :deep(.el-tabs__item) {
   color: rgb(209 213 219);
 }
 
 html.dark .dashboard-tabs :deep(.el-tabs__item:hover),
-[data-theme="dark"] .dashboard-tabs :deep(.el-tabs__item:hover) {
+[data-theme='dark'] .dashboard-tabs :deep(.el-tabs__item:hover) {
   color: rgb(147 197 253);
   background-color: rgb(31 41 55);
 }
 
 html.dark .dashboard-tabs :deep(.el-tabs__item.is-active),
-[data-theme="dark"] .dashboard-tabs :deep(.el-tabs__item.is-active) {
+[data-theme='dark'] .dashboard-tabs :deep(.el-tabs__item.is-active) {
   color: rgb(191 219 254);
   background-color: rgb(30 58 138 / 0.28);
   border-bottom-color: rgb(30 58 138 / 0.28);
@@ -1054,68 +1099,4 @@ html.dark .dashboard-tabs :deep(.el-tabs__item.is-active),
   bottom: 0;
   z-index: 1000;
 }
-
-.dashboard-tabs-maximized :deep(.el-tabs__header) {
-  display: none;
-}
-
-.dashboard-tabs-maximized :deep(.el-tabs__content) {
-  height: 100%;
-}
-
-.maximize-restore-floating-button {
-  pointer-events: auto;
-  z-index: 1100;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgb(31 41 55 / 45%);
-  background: rgb(17 24 39 / 88%);
-  color: #fff;
-  box-shadow: 0 6px 16px rgb(0 0 0 / 28%);
-}
-
-.maximize-restore-floating-button:hover {
-  background: rgb(17 24 39 / 96%);
-  border-color: rgb(31 41 55 / 70%);
-}
-
-.maximize-restore-floating-button :deep(.el-icon) {
-  font-size: 16px;
-  color: #fff;
-}
-
-.maximize-restore-anchor {
-  position: fixed;
-  top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: 1100;
-}
-
-html.dark .maximize-restore-floating-button,
-[data-theme="dark"] .maximize-restore-floating-button {
-  border-color: rgb(148 163 184 / 45%);
-  background: rgb(15 23 42 / 88%);
-}
-
-.drop-down-enter-active,
-.drop-down-leave-active {
-  transition: transform 0.18s ease, opacity 0.18s ease;
-}
-
-.drop-down-enter-from,
-.drop-down-leave-to {
-  transform: translate(-50%, -14px);
-  opacity: 0;
-}
-
-.drop-down-enter-to,
-.drop-down-leave-from {
-  transform: translate(-50%, 0);
-  opacity: 1;
-}
 </style>
-
-
-

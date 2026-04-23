@@ -27,4 +27,3 @@ const elementLocale = computed(() => {
   min-height: 100vh;
 }
 </style>
-

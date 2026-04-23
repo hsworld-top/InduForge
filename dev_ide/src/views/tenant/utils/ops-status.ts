@@ -15,7 +15,11 @@ export const getNodeStatusType = (status: StatusLike): string =>
   status === 'online' ? 'success' : status === 'offline' ? 'info' : 'danger'
 
 export const getNodeStatusLabel = (status: StatusLike): string => {
-  const map: Record<string, string> = { online: '在线', offline: '离线', error: '监控异常' }
+  const map: Record<string, string> = {
+    online: '在线',
+    offline: '离线',
+    error: '监控异常',
+  }
   return (status && map[status]) || status || ''
 }
 
@@ -50,7 +54,7 @@ export const getDeployFailureReason = (deploy: DeployLike | null | undefined): s
   deploy?.errorMessage || deploy?.lastError || deploy?.message || '未提供失败原因'
 
 export const buildDeployStatusSummary = (
-  nodes: Array<NodeLike | null | undefined> = []
+  nodes: Array<NodeLike | null | undefined> = [],
 ): { running: number; deploying: number; stopped: number; failed: number } => {
   const summary = { running: 0, deploying: 0, stopped: 0, failed: 0 }
   nodes.forEach((node) => {
