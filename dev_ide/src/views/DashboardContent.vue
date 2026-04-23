@@ -431,10 +431,6 @@ export default {
 <style scoped>
 .dashboard-content {
   padding: 20px;
-  background-color: #f8fafc;
-}
-.dark .dashboard-content {
-  background-color: #0f172a;
 }
 
 /* 统计卡片 */

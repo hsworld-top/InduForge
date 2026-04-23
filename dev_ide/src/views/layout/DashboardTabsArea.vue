@@ -67,7 +67,7 @@
             </el-button>
           </div>
         </template>
-        <div class="h-full overflow-hidden">
+        <div class="dashboard-tab-panel-shell h-full overflow-hidden">
           <component
             :is="tab.component"
             :tab-key="tab.key"
@@ -255,6 +255,43 @@ const handleCloseTab = (targetName) => {
 .dashboard-tabs .tab-label-content {
   display: inline-flex;
   align-items: center;
+}
+
+/* 标签内容区背景：复刻 cockpit-tools-main 主体区域的浅色极光背景 */
+.dashboard-tab-panel-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(29, 78, 216, 0.12), transparent 45%),
+    radial-gradient(circle at 90% 5%, rgba(14, 165, 165, 0.12), transparent 40%),
+    linear-gradient(180deg, #f8f7f4 0%, #eef1f6 100%);
+}
+
+.dashboard-tab-panel-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0) 34%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dashboard-tab-panel-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+html.dark .dashboard-tab-panel-shell,
+[data-theme='dark'] .dashboard-tab-panel-shell {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(59, 130, 246, 0.15), transparent 45%),
+    radial-gradient(circle at 90% 5%, rgba(20, 184, 166, 0.12), transparent 40%),
+    linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+}
+
+html.dark .dashboard-tab-panel-shell::before,
+[data-theme='dark'] .dashboard-tab-panel-shell::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 34%);
 }
 
 /* ===== 全屏最大化状态 ===== */
