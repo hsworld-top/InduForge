@@ -25,7 +25,7 @@ const (
 	// PublicCodeAuthTokenInvalid 表示 JWT 无效的公开错误码。
 	PublicCodeAuthTokenInvalid = 10002
 	// PublicCodeAuthSecretRequired 表示服务端 JWT 配置缺失的公开错误码。
-	PublicCodeAuthSecretRequired = 30002
+	PublicCodeAuthSecretRequired = 30004
 	// PublicCodePermissionInsufficient 表示权限不足的公开错误码。
 	PublicCodePermissionInsufficient = 11002
 	// PublicCodePermissionProjectMismatch 表示项目范围不匹配的公开错误码。
