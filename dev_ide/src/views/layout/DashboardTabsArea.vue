@@ -3,7 +3,7 @@
     <!-- 汉堡菜单按钮 (绝对定位在 Tabs 左侧) -->
     <div 
       v-if="sidebarCollapsed && !isTabMaximized" 
-      class="absolute left-0 top-0 h-[40px] w-[52px] flex items-center justify-center z-10 border-r border-transparent"
+      class="absolute left-0 top-0 h-[32px] w-[44px] flex items-center justify-center z-10 border-r border-transparent"
     >
       <button 
         @click="openSidebar" 
@@ -142,13 +142,13 @@ const handleCloseTab = (targetName) => {
 
 /* 为汉堡菜单预留空间 */
 .dashboard-tabs-area.has-hamburger .dashboard-tabs .el-tabs__header {
-  padding-left: 52px;
+  padding-left: 44px;
 }
 
 /* 顶部标签区域背景：轻微降低层级感，高度更紧凑 */
 .dashboard-tabs .el-tabs__header {
   margin-bottom: 0 !important;
-  padding: 4px 8px;
+  padding: 2px 6px;
   background-color: var(--el-bg-color-page);
   border-bottom: 1px solid var(--el-border-color-light) !important;
 }
@@ -181,13 +181,13 @@ const handleCloseTab = (targetName) => {
 
 /* 默认状态：透明无边框的圆角按钮 */
 .dashboard-tabs .el-tabs__item {
-  height: 32px !important;
-  line-height: 32px !important;
-  padding: 0 12px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  padding: 0 10px !important;
   border-radius: 6px !important;
   color: var(--el-text-color-regular) !important;
   font-weight: 500 !important;
-  font-size: 13px !important;
+  font-size: 12px !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   border: 1px solid transparent !important;
 }
@@ -208,11 +208,11 @@ const handleCloseTab = (targetName) => {
 
 /* 内置组件：调整关闭按钮样式 */
 .dashboard-tabs .el-tabs__item .is-icon-close {
-  width: 16px !important;
-  height: 16px !important;
-  line-height: 16px !important;
-  margin-left: 8px !important;
-  margin-right: -4px !important;
+  width: 14px !important;
+  height: 14px !important;
+  line-height: 14px !important;
+  margin-left: 6px !important;
+  margin-right: -2px !important;
   transition: all 0.2s;
   border-radius: 4px;
 }
