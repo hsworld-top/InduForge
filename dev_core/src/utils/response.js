@@ -2,6 +2,39 @@ const ErrorCodes = require('../constants/errorCodes');
 const { getErrorMessage, getSuccessMessage } = require('./i18n');
 
 /**
+ * 统一提取语言与请求 ID，确保四字段契约中的 reqId 始终存在（允许为 null）。
+ *
+ * @param {object} res
+ * @returns {{language: string, reqId: string|null}}
+ */
+function resolveResponseContext(res) {
+  const request = res.req || {};
+  const locals = res.locals || {};
+  const language = locals.language || request.language || 'zh-CN';
+  const reqId = locals.requestId || request.requestId || null;
+
+  res.locals = locals;
+  res.locals.language = language;
+  res.locals.requestId = reqId;
+  res.setHeader('Content-Language', language);
+
+  return { language, reqId };
+}
+
+/**
+ * 构造统一输出契约，仅允许 code/msg/data/reqId 四个字段。
+ *
+ * @param {number} code
+ * @param {string} msg
+ * @param {any} data
+ * @param {string|null} reqId
+ * @returns {{code: number, msg: string, data: any, reqId: string|null}}
+ */
+function buildContractPayload(code, msg, data, reqId) {
+  return { code, msg, data, reqId };
+}
+
+/**
  * 统一响应格式
  */
 class ApiResponse {
@@ -14,29 +47,19 @@ class ApiResponse {
    * @param {number} statusCode - HTTP 状态码（默认 200）
    */
   static success(res, data = null, messageKey = null, options = {}, statusCode = 200) {
-    // 自动从 req 或 res.locals 获取 language 和 requestId
-    const language = res.locals.language || res.req.language || 'zh-CN';
-    const requestId = res.locals.requestId || res.req.requestId;
-    
-    // 确保 res.locals 中有这些值
-    res.locals.language = language;
-    res.locals.requestId = requestId;
-    
-    // 设置响应头中的语言信息
-    res.setHeader('Content-Language', language);
-    
-    const response = {
-      success: true,
-      errorCode: ErrorCodes.SUCCESS,
-      message: messageKey ? getSuccessMessage(language, messageKey, options) : getSuccessMessage(language, 'operation_success'),
-      requestId,
-    };
+    const { language, reqId } = resolveResponseContext(res);
+    const message = messageKey
+      ? getSuccessMessage(language, messageKey, options)
+      : getSuccessMessage(language, 'operation_success');
 
-    if (data !== null) {
-      response.data = data;
-    }
-
-    return res.status(statusCode).json(response);
+    return res.status(statusCode).json(
+      buildContractPayload(
+        ErrorCodes.toPublicCode(ErrorCodes.SUCCESS),
+        message,
+        data,
+        reqId
+      )
+    );
   }
 
   /**
@@ -47,28 +70,19 @@ class ApiResponse {
    * @param {number} statusCode - HTTP 状态码（默认 400）
    */
   static error(res, errorCode, options = {}, statusCode = 400) {
-    // 自动从 req 或 res.locals 获取 language 和 requestId
-    const language = res.locals.language || res.req.language || 'zh-CN';
-    const requestId = res.locals.requestId || res.req.requestId;
-    
-    // 确保 res.locals 中有这些值
-    res.locals.language = language;
-    res.locals.requestId = requestId;
-    
-    // 设置响应头中的语言信息
-    res.setHeader('Content-Language', language);
-    
-    // 如果 options 中提供了 message，直接使用；否则从国际化文件中获取
-    const message = options.message || getErrorMessage(language, errorCode, options);
-    
-    const response = {
-      success: false,
-      errorCode,
-      message,
-      requestId,
-    };
+    const normalizedOptions = options && typeof options === 'object' ? options : {};
+    const { language, reqId } = resolveResponseContext(res);
+    const message = normalizedOptions.message
+      || getErrorMessage(language, ErrorCodes.toI18nCode(errorCode), normalizedOptions);
 
-    return res.status(statusCode).json(response);
+    return res.status(statusCode).json(
+      buildContractPayload(
+        ErrorCodes.toPublicCode(errorCode),
+        message,
+        null,
+        reqId
+      )
+    );
   }
 
   /**
@@ -79,27 +93,22 @@ class ApiResponse {
    * @param {string} messageKey - 消息键（可选）
    */
   static paginated(res, data, pagination, messageKey = null) {
-    // 自动从 req 或 res.locals 获取 language 和 requestId
-    const language = res.locals.language || res.req.language || 'zh-CN';
-    const requestId = res.locals.requestId || res.req.requestId;
-    
-    // 确保 res.locals 中有这些值
-    res.locals.language = language;
-    res.locals.requestId = requestId;
-    
-    // 设置响应头中的语言信息
-    res.setHeader('Content-Language', language);
-    
-    const response = {
-      success: true,
-      errorCode: ErrorCodes.SUCCESS,
-      message: messageKey ? getSuccessMessage(language, messageKey) : getSuccessMessage(language, 'operation_success'),
-      data,
-      pagination,
-      requestId,
-    };
+    const { language, reqId } = resolveResponseContext(res);
+    const message = messageKey
+      ? getSuccessMessage(language, messageKey)
+      : getSuccessMessage(language, 'operation_success');
 
-    return res.status(200).json(response);
+    return res.status(200).json(
+      buildContractPayload(
+        ErrorCodes.toPublicCode(ErrorCodes.SUCCESS),
+        message,
+        {
+          list: data,
+          pagination,
+        },
+        reqId
+      )
+    );
   }
 }
 

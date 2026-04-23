@@ -47,3 +47,11 @@ func (e *AppError) Unwrap() error {
 	}
 	return e.Err
 }
+
+// PublicCode 返回业务错误对应的对外整数错误码。
+func (e *AppError) PublicCode() int {
+	if e == nil {
+		return PublicCodeUnknown
+	}
+	return e.Code.PublicCode()
+}

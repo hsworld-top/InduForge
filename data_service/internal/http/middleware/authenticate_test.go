@@ -67,7 +67,7 @@ func TestAuthenticate_RejectsExpiredToken(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, apperrors.PublicCodeAuthTokenInvalid)
 }
 
 func TestAuthenticate_RejectsNbfNotYetValid(t *testing.T) {
@@ -85,7 +85,7 @@ func TestAuthenticate_RejectsNbfNotYetValid(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, apperrors.PublicCodeAuthTokenInvalid)
 }
 
 func TestAuthenticate_RejectsIatFutureToken(t *testing.T) {
@@ -103,7 +103,7 @@ func TestAuthenticate_RejectsIatFutureToken(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, apperrors.PublicCodeAuthTokenInvalid)
 }
 
 func TestAuthenticate_RejectsInvalidBearerJWT(t *testing.T) {
@@ -122,7 +122,7 @@ func TestAuthenticate_RejectsInvalidBearerJWT(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenInvalid))
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, apperrors.PublicCodeAuthTokenInvalid)
 }
 
 func TestAuthenticate_RejectsMissingBearerPrefix(t *testing.T) {
@@ -137,7 +137,7 @@ func TestAuthenticate_RejectsMissingBearerPrefix(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, string(apperrors.ErrorCodeAuthTokenRequired))
+	assertAuthErrorResponse(t, rr, http.StatusUnauthorized, apperrors.PublicCodeAuthTokenRequired)
 }
 
 func TestAuthenticate_RejectsEmptySecretAtConstruction(t *testing.T) {
@@ -161,7 +161,7 @@ func TestAuthenticate_RejectsNilValidatorWithInternalError(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertAuthErrorResponse(t, rr, http.StatusInternalServerError, string(apperrors.ErrorCodeAuthSecretRequired))
+	assertAuthErrorResponse(t, rr, http.StatusInternalServerError, apperrors.PublicCodeAuthSecretRequired)
 }
 
 func mustNewJWTValidator(t *testing.T, secret string) *auth.JWTValidator {
@@ -204,7 +204,7 @@ func mustSignJWT(t *testing.T, secret string, claims *auth.Claims, exp, nbf, iat
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(signature)
 }
 
-func assertAuthErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, expectedStatus int, expectedErrorCode string) {
+func assertAuthErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, expectedStatus int, expectedCode int) {
 	t.Helper()
 
 	if rr.Code != expectedStatus {
@@ -216,13 +216,13 @@ func assertAuthErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, expect
 		t.Fatalf("decode response failed: %v", err)
 	}
 
-	if payload.Success {
-		t.Fatal("expected success to be false")
+	if payload.Code != expectedCode {
+		t.Fatalf("expected code %d, got %d", expectedCode, payload.Code)
 	}
-	if payload.ErrorCode != expectedErrorCode {
-		t.Fatalf("expected errorCode %q, got %q", expectedErrorCode, payload.ErrorCode)
+	if payload.Data != nil {
+		t.Fatalf("expected error data to be nil, got %#v", payload.Data)
 	}
-	if payload.Message == "" {
-		t.Fatal("expected error message to be set")
+	if payload.Msg == "" {
+		t.Fatal("expected msg to be set")
 	}
 }

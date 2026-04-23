@@ -304,21 +304,12 @@ function buildApp() {
       stack: err.stack
     });
 
-    // 设置响应头中的语言信息
-    res.setHeader('Content-Language', language);
-
-    const response = {
-      success: false,
+    return ApiResponse.error(
+      res,
       errorCode,
-      message: getErrorMessage(language, errorCode),
-      requestId: req.requestId,
-    };
-
-    if (NODE_ENV !== 'production' && err.stack) {
-      response.stack = err.stack;
-    }
-
-    res.status(statusCode).json(response);
+      { message: getErrorMessage(language, ErrorCodes.toI18nCode(errorCode)) },
+      statusCode
+    );
   });
 
   return app;

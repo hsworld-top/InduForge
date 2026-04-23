@@ -23,7 +23,7 @@ func TestErrorHandler_WrapsAppErrorInUnifiedResponse(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertApiErrorResponse(t, rr, http.StatusBadRequest, "req-app-error", "BAD_REQUEST", "参数错误")
+	assertApiErrorResponse(t, rr, http.StatusBadRequest, "req-app-error", apperrors.PublicCodeBadRequest, "参数错误")
 }
 
 func TestErrorHandler_WrapsNormalErrorInUnifiedResponse(t *testing.T) {
@@ -37,7 +37,7 @@ func TestErrorHandler_WrapsNormalErrorInUnifiedResponse(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertApiErrorResponse(t, rr, http.StatusInternalServerError, "req-normal-error", "INTERNAL_ERROR", "系统内部错误")
+	assertApiErrorResponse(t, rr, http.StatusInternalServerError, "req-normal-error", apperrors.PublicCodeInternal, "系统内部错误")
 }
 
 func TestErrorHandler_FallsBackForInvalidStatusCode(t *testing.T) {
@@ -51,7 +51,7 @@ func TestErrorHandler_FallsBackForInvalidStatusCode(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertApiErrorResponse(t, rr, http.StatusInternalServerError, "req-bad-status", "BAD_REQUEST", "状态码非法")
+	assertApiErrorResponse(t, rr, http.StatusInternalServerError, "req-bad-status", apperrors.PublicCodeBadRequest, "状态码非法")
 }
 
 func TestErrorHandler_HandlesJoinedAppError(t *testing.T) {
@@ -65,7 +65,7 @@ func TestErrorHandler_HandlesJoinedAppError(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	assertApiErrorResponse(t, rr, http.StatusNotFound, "req-joined-error", "NOT_FOUND", "资源不存在")
+	assertApiErrorResponse(t, rr, http.StatusNotFound, "req-joined-error", apperrors.PublicCodeNotFound, "资源不存在")
 }
 
 func TestErrorHandler_DoesNotDoubleWriteAfterCommittedResponse(t *testing.T) {
@@ -103,58 +103,55 @@ func TestErrorHandler_RealMuxChainUsesUnifiedResponse(t *testing.T) {
 	}))
 
 	handler := middleware.RequestIDMiddleware(mux)
-	ts := httptest.NewServer(handler)
-	t.Cleanup(ts.Close)
 
 	for _, tc := range []struct {
 		name        string
 		path        string
 		wantStatus  int
-		wantCode    string
+		wantCode    int
 		wantMessage string
 	}{
-		{name: "app error", path: "/app-error", wantStatus: http.StatusBadRequest, wantCode: "BAD_REQUEST", wantMessage: "参数错误"},
-		{name: "normal error", path: "/normal-error", wantStatus: http.StatusInternalServerError, wantCode: "INTERNAL_ERROR", wantMessage: "系统内部错误"},
+		{name: "app error", path: "/app-error", wantStatus: http.StatusBadRequest, wantCode: apperrors.PublicCodeBadRequest, wantMessage: "参数错误"},
+		{name: "normal error", path: "/normal-error", wantStatus: http.StatusInternalServerError, wantCode: apperrors.PublicCodeInternal, wantMessage: "系统内部错误"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := ts.Client().Get(ts.URL + tc.path)
-			if err != nil {
-				t.Fatalf("request failed: %v", err)
-			}
-			defer resp.Body.Close()
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 
-			if resp.StatusCode != tc.wantStatus {
-				t.Fatalf("expected status %d, got %d", tc.wantStatus, resp.StatusCode)
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tc.wantStatus {
+				t.Fatalf("expected status %d, got %d", tc.wantStatus, rr.Code)
 			}
-			if got := resp.Header.Get("X-Request-ID"); got == "" {
+			if got := rr.Header().Get("X-Request-ID"); got == "" {
 				t.Fatal("expected X-Request-ID header to be set")
 			}
 
 			var payload response.ApiResponse
-			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 				t.Fatalf("decode response failed: %v", err)
 			}
 
-			if payload.Success {
-				t.Fatal("expected success to be false")
+			if payload.Code != tc.wantCode {
+				t.Fatalf("expected code %d, got %d", tc.wantCode, payload.Code)
 			}
-			if payload.ErrorCode != tc.wantCode {
-				t.Fatalf("expected errorCode %q, got %q", tc.wantCode, payload.ErrorCode)
+			if payload.Msg != tc.wantMessage {
+				t.Fatalf("expected msg %q, got %q", tc.wantMessage, payload.Msg)
 			}
-			if payload.Message != tc.wantMessage {
-				t.Fatalf("expected message %q, got %q", tc.wantMessage, payload.Message)
+			if payload.Data != nil {
+				t.Fatalf("expected error data to be nil, got %#v", payload.Data)
 			}
-			if payload.RequestID == "" {
-				t.Fatal("expected requestId to be set")
+			if payload.ReqID == "" {
+				t.Fatal("expected reqId to be set")
 			}
-			if payload.RequestID != resp.Header.Get("X-Request-ID") {
-				t.Fatalf("expected response body requestId %q to match header %q", payload.RequestID, resp.Header.Get("X-Request-ID"))
+			if payload.ReqID != rr.Header().Get("X-Request-ID") {
+				t.Fatalf("expected response body reqId %q to match header %q", payload.ReqID, rr.Header().Get("X-Request-ID"))
 			}
 		})
 	}
 }
 
-func assertApiErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, expectedStatus int, expectedRequestID, expectedErrorCode, expectedMessage string) {
+func assertApiErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, expectedStatus int, expectedRequestID string, expectedCode int, expectedMessage string) {
 	t.Helper()
 
 	if rr.Code != expectedStatus {
@@ -166,16 +163,16 @@ func assertApiErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, expecte
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
 
-	if payload.Success {
-		t.Fatal("expected success to be false")
+	if payload.Code != expectedCode {
+		t.Fatalf("expected code %d, got %d", expectedCode, payload.Code)
 	}
-	if payload.ErrorCode != expectedErrorCode {
-		t.Fatalf("expected errorCode %q, got %q", expectedErrorCode, payload.ErrorCode)
+	if payload.Msg != expectedMessage {
+		t.Fatalf("expected msg %q, got %q", expectedMessage, payload.Msg)
 	}
-	if payload.Message != expectedMessage {
-		t.Fatalf("expected message %q, got %q", expectedMessage, payload.Message)
+	if payload.Data != nil {
+		t.Fatalf("expected error data to be nil, got %#v", payload.Data)
 	}
-	if payload.RequestID != expectedRequestID {
-		t.Fatalf("expected requestId %q, got %q", expectedRequestID, payload.RequestID)
+	if payload.ReqID != expectedRequestID {
+		t.Fatalf("expected reqId %q, got %q", expectedRequestID, payload.ReqID)
 	}
 }

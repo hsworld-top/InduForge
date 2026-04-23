@@ -26,7 +26,7 @@ func ErrorHandler(next ErrorHandlerFunc) http.Handler {
 			requestID := RequestID(r.Context())
 			appErr := normalizeError(err)
 			statusCode := normalizeStatusCode(appErr.StatusCode)
-			response.WriteError(rw, statusCode, requestID, string(appErr.Code), appErr.Message)
+			response.WriteAppError(rw, statusCode, requestID, appErr.Code, appErr.Message)
 		}
 	})
 }

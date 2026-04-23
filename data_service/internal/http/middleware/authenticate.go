@@ -68,5 +68,5 @@ func writeAuthError(w http.ResponseWriter, r *http.Request, appErr *apperrors.Ap
 		message = appErr.Message
 	}
 
-	response.WriteError(w, statusCode, RequestID(r.Context()), string(errorCode), message)
+	response.WriteAppError(w, statusCode, RequestID(r.Context()), errorCode, message)
 }

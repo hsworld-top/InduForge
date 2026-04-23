@@ -189,7 +189,7 @@ func TestCapturingResponseWriter_FlushWithoutFlusherDoesNotCommit(t *testing.T) 
 	if got := underlying.body.String(); got == "" {
 		t.Fatal("expected unified error body to be written after flush fallback")
 	}
-	if got := underlying.body.String(); !strings.Contains(got, "\"success\":false") {
+	if got := underlying.body.String(); !strings.Contains(got, "\"code\":30001") {
 		t.Fatalf("expected unified error response body, got %q", got)
 	}
 }

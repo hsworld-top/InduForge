@@ -87,17 +87,17 @@ func TestServer_ProductionAssemblyKeepsUnifiedErrorResponse(t *testing.T) {
 		t.Fatalf("decode response failed: %v", err)
 	}
 
-	if payload.Success {
-		t.Fatal("expected success to be false")
+	if payload.Code != apperrors.PublicCodeInternal {
+		t.Fatalf("expected code %d, got %d", apperrors.PublicCodeInternal, payload.Code)
 	}
-	if payload.ErrorCode != string(apperrors.ErrorCodeInternal) {
-		t.Fatalf("expected errorCode %q, got %q", apperrors.ErrorCodeInternal, payload.ErrorCode)
+	if payload.Msg != "系统内部错误" {
+		t.Fatalf("expected msg %q, got %q", "系统内部错误", payload.Msg)
 	}
-	if payload.Message != "系统内部错误" {
-		t.Fatalf("expected message %q, got %q", "系统内部错误", payload.Message)
+	if payload.Data != nil {
+		t.Fatalf("expected data to be nil in error response, got %#v", payload.Data)
 	}
-	if payload.RequestID != requestID {
-		t.Fatalf("expected requestId %q to match header %q", payload.RequestID, requestID)
+	if payload.ReqID != requestID {
+		t.Fatalf("expected reqId %q to match header %q", payload.ReqID, requestID)
 	}
 }
 
