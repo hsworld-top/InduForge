@@ -5,7 +5,8 @@ import { createPageForStore } from "./page-create-actions";
 describe("page-create-actions", () => {
   it("createPageForStore 会透传 path 并在有 schema 时执行页面保存", async () => {
     const createPage = vi.fn().mockResolvedValue({
-      success: true,
+      code: 0,
+      msg: "ok",
       data: { id: "page-1" },
     });
     const updatePage = vi.fn().mockResolvedValue(undefined);

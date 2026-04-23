@@ -9,7 +9,8 @@ import {
 describe("home-page-actions", () => {
   function buildContext(overrides: Partial<CreateHomePageContext> = {}) {
     const createPage = vi.fn().mockResolvedValue({
-      success: true,
+      code: 0,
+      msg: "ok",
       data: { id: "page-1" },
     });
     const updatePage = vi.fn().mockResolvedValue(undefined);
@@ -48,7 +49,8 @@ describe("home-page-actions", () => {
     createPage.mockImplementation(async () => {
       active = false;
       return {
-        success: true,
+        code: 0,
+        msg: "ok",
         data: { id: "page-1" },
       };
     });

@@ -6,6 +6,11 @@
 import type { Socket } from "socket.io-client";
 import { io } from "socket.io-client";
 import { EventEmitter } from "../editor-core/utils/EventEmitter.ts";
+import {
+  ApiRequestError,
+  normalizeApiEnvelope,
+  type ApiEnvelope,
+} from "./types.ts";
 
 /** 与 data/types.js 文档对齐 */
 export interface DataServiceOptions {
@@ -37,6 +42,36 @@ const TRAILING_SLASH_RE = /\/$/;
 interface PendingRequest {
   resolve: (result: unknown) => void;
   reject: (error: unknown) => void;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function parseLegacySuccessEnvelope<T>(payload: unknown): {
+  success: boolean;
+  msg: string;
+  data: T | undefined;
+  reqId: string | undefined;
+} | null {
+  if (!isRecord(payload) || typeof payload.success !== "boolean") {
+    return null;
+  }
+
+  const msg =
+    typeof payload.message === "string"
+      ? payload.message
+      : typeof payload.msg === "string"
+        ? payload.msg
+        : "";
+  const reqId = typeof payload.reqId === "string" ? payload.reqId : undefined;
+
+  return {
+    success: payload.success,
+    msg,
+    data: payload.data as T,
+    reqId,
+  };
 }
 
 /**
@@ -412,69 +447,129 @@ export class DataService extends EventEmitter {
   // ==================== API 请求 ====================
 
   /**
+   * 统一解析 fetch 响应：
+   * 1. 2xx + code===0 => 成功
+   * 2. 2xx + code!==0 => 业务失败（保留 code/msg/reqId）
+   * 3. 非 2xx => 技术失败（保留 HTTP status 与 msg）
+   */
+  private async _requestApiEnvelope<T>(
+    input: RequestInfo | URL,
+    init: RequestInit | undefined,
+    fallbackMessage: string,
+  ): Promise<ApiEnvelope<T>> {
+    const response = await fetch(input, init);
+    let payload: unknown = null;
+
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+
+    const envelope = normalizeApiEnvelope<T>(payload);
+
+    if (!response.ok) {
+      throw new ApiRequestError({
+        code: envelope?.code,
+        msg: envelope?.msg || `HTTP ${response.status}`,
+        reqId: envelope?.reqId,
+        status: response.status,
+        data: envelope?.data,
+        isBusinessError: false,
+      });
+    }
+
+    if (envelope) {
+      if (envelope.code !== 0) {
+        throw new ApiRequestError({
+          code: envelope.code,
+          msg: envelope.msg || fallbackMessage,
+          reqId: envelope.reqId,
+          status: response.status,
+          data: envelope.data,
+          isBusinessError: true,
+        });
+      }
+
+      return envelope;
+    }
+
+    const legacyEnvelope = parseLegacySuccessEnvelope<T>(payload);
+    if (legacyEnvelope) {
+      if (!legacyEnvelope.success) {
+        throw new ApiRequestError({
+          msg: legacyEnvelope.msg || fallbackMessage,
+          reqId: legacyEnvelope.reqId,
+          status: response.status,
+          data: legacyEnvelope.data,
+          isBusinessError: true,
+        });
+      }
+
+      return {
+        code: 0,
+        msg: legacyEnvelope.msg,
+        ...(legacyEnvelope.data !== undefined ? { data: legacyEnvelope.data } : {}),
+        ...(legacyEnvelope.reqId ? { reqId: legacyEnvelope.reqId } : {}),
+      };
+    }
+
+    // 2xx 响应若既不是新包络，也不是可识别旧包络，按异常处理，避免误判为成功。
+    throw new ApiRequestError({
+      msg: `${fallbackMessage}: 响应格式不受支持`,
+      status: response.status,
+      data: payload,
+      isBusinessError: false,
+    });
+  }
+
+  /**
    * 获取数据点当前值（HTTP API）
    */
   async fetchValue(path: string): Promise<unknown> {
-    const response = await fetch(
+    const response = await this._requestApiEnvelope<{ value?: unknown }>(
       `${this._baseUrl}/api/v1/datapoints/${encodeURIComponent(path)}/value`,
+      undefined,
+      "Failed to fetch value",
     );
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const result = (await response.json()) as {
-      success?: boolean;
-      data?: { value?: unknown };
-      message?: string;
-    };
-    if (result.success) {
-      // 更新缓存
-      this._valueCache.set(path, result.data?.value);
-      return result.data?.value;
-    }
-
-    throw new Error(result.message || "Failed to fetch value");
+    const value = response.data?.value;
+    this._valueCache.set(path, value);
+    return value;
   }
 
   /**
    * 批量获取数据点当前值（HTTP API）
    */
   async fetchValues(paths: string[]): Promise<Map<string, unknown>> {
-    const response = await fetch(`${this._baseUrl}/api/v1/datapoints/values`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await this._requestApiEnvelope<Array<{ path: string; value: unknown }>>(
+      `${this._baseUrl}/api/v1/datapoints/values`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ paths }),
       },
-      body: JSON.stringify({ paths }),
-    });
+      "Failed to fetch values",
+    );
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const values = new Map<string, unknown>();
+    const items = Array.isArray(response.data) ? response.data : [];
+
+    for (const item of items) {
+      values.set(item.path, item.value);
+      this._valueCache.set(item.path, item.value);
     }
 
-    const result = (await response.json()) as {
-      success?: boolean;
-      data?: Array<{ path: string; value: unknown }>;
-      message?: string;
-    };
-    if (result.success && result.data) {
-      const values = new Map<string, unknown>();
-      for (const item of result.data) {
-        values.set(item.path, item.value);
-        this._valueCache.set(item.path, item.value);
-      }
-      return values;
-    }
-
-    throw new Error(result.message || "Failed to fetch values");
+    return values;
   }
 
   /**
    * 写入数据点值
    */
   async writeValue(path: string, value: unknown): Promise<void> {
-    const response = await fetch(
+    await this._requestApiEnvelope<unknown>(
       `${this._baseUrl}/api/v1/datapoints/${encodeURIComponent(path)}/value`,
       {
         method: "PUT",
@@ -483,16 +578,8 @@ export class DataService extends EventEmitter {
         },
         body: JSON.stringify({ value }),
       },
+      "Failed to write value",
     );
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const result = (await response.json()) as { success?: boolean; message?: string };
-    if (!result.success) {
-      throw new Error(result.message || "Failed to write value");
-    }
   }
 
   // ==================== Socket 请求 ====================

@@ -1,24 +1,15 @@
 /**
- * 统一 API 响应：包络形态为 `{ success: boolean, data: T, message? }`
- * axios 拦截器已对成功包络解包；此处供仍收到完整包络或需类型断言的调用方使用。
+ * 统一 API 响应：包络形态为 `{ code, msg, data, reqId }`
+ * 其中仅 code===0 视为成功，其他 code 代表业务失败。
  */
 
-export interface ApiSuccessBody<T = unknown> {
-  success: true;
-  data: T;
-  message?: string;
-  code?: number | string;
-}
-
-export interface ApiFailureBody {
-  success: false;
-  message?: string;
-  code?: number | string;
+export interface ApiResponse<T = unknown> {
+  code: number;
+  msg: string;
+  data?: T;
+  reqId?: string;
   errors?: Record<string, unknown>;
-  data?: unknown;
 }
-
-export type ApiResponse<T> = ApiSuccessBody<T> | ApiFailureBody;
 
 export interface AssetFolder {
   id: string;
@@ -77,16 +68,29 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object";
 }
 
+const DIGITS_ONLY_RE = /^\d+$/;
+
+function toNumericCode(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && DIGITS_ONLY_RE.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10);
+  }
+  return undefined;
+}
+
 /**
  * 从包络或未包络的 payload 中取出业务数据。
- * - `{ success: false, data?, message? }` → 抛错
- * - `{ success: true, data: T }` 或其它含 `success`+`data` 的成功包络 → `T`
+ * - `{ code!=0, msg }` → 抛错
+ * - `{ code===0, data }` → 返回 data
  * - 其它原样返回
  */
 export function unwrapApiData<T = unknown>(payload: unknown): T {
-  if (isRecord(payload) && "success" in payload && "data" in payload) {
-    if (payload.success === false) {
-      const msg = typeof payload.message === "string" ? payload.message : "请求失败";
+  if (isRecord(payload) && "code" in payload && ("msg" in payload || "data" in payload)) {
+    const code = toNumericCode(payload.code);
+    if (code !== undefined && code !== 0) {
+      const msg = typeof payload.msg === "string" ? payload.msg : "请求失败";
       throw new Error(msg);
     }
     return payload.data as T;

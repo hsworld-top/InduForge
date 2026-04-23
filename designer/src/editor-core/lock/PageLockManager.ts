@@ -11,23 +11,27 @@
 
 import type { LockResult, PageLockState } from "../document/types.ts";
 import { EventEmitter } from "../utils/EventEmitter";
+import {
+  getApiErrorCode,
+  getApiErrorData,
+  isApiBusinessError,
+} from "@/utils/request";
 
 const PAGE_LOCK_URL_RE = /\/pages\/(.+)\/lock/;
+const PAGE_LOCKED_BUSINESS_CODE = 25003;
+const DIGITS_ONLY_RE = /^\d+$/;
 
 export interface PageLockApi {
-  get: (path: string) => Promise<{ data?: unknown; success?: boolean }>;
-  post: (path: string, body?: unknown) => Promise<LockAcquireResponse>;
+  get: (path: string) => Promise<unknown>;
+  post: (path: string, body?: unknown) => Promise<unknown>;
   delete: (path: string) => Promise<unknown>;
 }
 
-interface LockAcquireResponse {
-  success: boolean;
-  data?: {
-    locked?: boolean;
-    lockedBy?: string;
-    lockedByName?: string;
-    lockedAt?: number;
-  };
+interface LockPayload {
+  locked?: boolean | undefined;
+  lockedBy?: string | undefined;
+  lockedByName?: string | undefined;
+  lockedAt?: number | undefined;
 }
 
 export interface PageLockSocket {
@@ -48,6 +52,266 @@ interface LockEventPayload {
   lockedBy?: string;
   pageName?: string;
   reason?: string;
+}
+
+interface LockBusinessError extends Error {
+  code: number | undefined;
+  reqId: string | undefined;
+  data: unknown;
+  isBusinessError?: boolean;
+}
+
+interface LegacyEnvelope {
+  success: boolean;
+  msg: string;
+  data: unknown;
+  reqId: string | undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function toNumericCode(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && DIGITS_ONLY_RE.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10);
+  }
+  return undefined;
+}
+
+/**
+ * PageLock 接口在迁移期可能出现以下形态：
+ * - 统一包络：{ code, msg, data }
+ * - 旧包络：{ success, data }
+ * - 直接业务体：{ locked, lockedBy, ... }
+ * 这里做单点收敛，避免各调用处反复兼容判断。
+ */
+function extractLockPayload(response: unknown): LockPayload {
+  if (!response || typeof response !== "object") {
+    return {};
+  }
+
+  const record = response as Record<string, unknown>;
+  const nested = record.data;
+  const raw = nested && typeof nested === "object" ? (nested as Record<string, unknown>) : record;
+
+  return {
+    locked: typeof raw.locked === "boolean" ? raw.locked : undefined,
+    lockedBy: typeof raw.lockedBy === "string" ? raw.lockedBy : undefined,
+    lockedByName: typeof raw.lockedByName === "string" ? raw.lockedByName : undefined,
+    lockedAt: typeof raw.lockedAt === "number" ? raw.lockedAt : undefined,
+  };
+}
+
+function extractApiCode(response: unknown): number | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+  return toNumericCode(response.code);
+}
+
+function extractApiMessage(response: unknown): string {
+  if (!isRecord(response)) {
+    return "";
+  }
+  if (typeof response.msg === "string") {
+    return response.msg;
+  }
+  if (typeof response.message === "string") {
+    return response.message;
+  }
+  return "";
+}
+
+function extractApiReqId(response: unknown): string | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+  if (typeof response.reqId === "string") {
+    return response.reqId;
+  }
+  return undefined;
+}
+
+function extractLegacyEnvelope(response: unknown): LegacyEnvelope | null {
+  if (!isRecord(response) || typeof response.success !== "boolean") {
+    return null;
+  }
+
+  const msg =
+    typeof response.message === "string"
+      ? response.message
+      : typeof response.msg === "string"
+        ? response.msg
+        : "";
+  const reqId = extractApiReqId(response);
+
+  return {
+    success: response.success,
+    msg,
+    data: response.data,
+    reqId,
+  };
+}
+
+function resolveLockFailureByPayload(
+  pageId: string,
+  payload: LockPayload,
+  currentUserId: string,
+): LockResult | null {
+  if (!isLockedByOtherUser(payload, currentUserId)) {
+    return null;
+  }
+
+  return {
+    success: false,
+    reason: "locked",
+    lockedByName: payload.lockedByName,
+  };
+}
+
+function applyLockedState(
+  pageId: string,
+  payload: LockPayload,
+): PageLockState {
+  return {
+    pageId,
+    locked: true,
+    lockedBy: payload.lockedBy,
+    lockedByName: payload.lockedByName,
+    lockedAt: payload.lockedAt,
+    isOwner: false,
+  };
+}
+
+function resolveLockFailureResult(
+  pageId: string,
+  code: number | undefined,
+  msg: string,
+  data: unknown,
+  reqId: string | undefined,
+  currentUserId: string,
+): {
+  lockState: PageLockState | null;
+  result: LockResult;
+} {
+  const payload = extractLockPayload(data);
+  const lockedResult = resolveLockFailureByPayload(pageId, payload, currentUserId);
+  if (lockedResult) {
+    return {
+      lockState: applyLockedState(pageId, payload),
+      result: lockedResult,
+    };
+  }
+
+  return {
+    lockState: null,
+    result: {
+      success: false,
+      reason: "error",
+      error: buildBusinessError(code, msg, data, reqId),
+    },
+  };
+}
+
+function ensureNoEnvelopeFailure(
+  pageId: string,
+  response: unknown,
+  currentUserId: string,
+): {
+  lockState: PageLockState | null;
+  result: LockResult;
+} | null {
+  const code = extractApiCode(response);
+  if (code !== undefined) {
+    if (code === 0) {
+      return null;
+    }
+    return resolveLockFailureResult(
+      pageId,
+      code,
+      extractApiMessage(response),
+      response,
+      extractApiReqId(response),
+      currentUserId,
+    );
+  }
+
+  const legacyEnvelope = extractLegacyEnvelope(response);
+  if (!legacyEnvelope || legacyEnvelope.success) {
+    return null;
+  }
+  return resolveLockFailureResult(
+    pageId,
+    undefined,
+    legacyEnvelope.msg || "获取页面锁失败",
+    legacyEnvelope.data,
+    legacyEnvelope.reqId,
+    currentUserId,
+  );
+}
+
+function ensureNoQueryFailure(response: unknown): void {
+  const code = extractApiCode(response);
+  if (code !== undefined) {
+    if (code !== 0) {
+      throw buildBusinessError(
+        code,
+        extractApiMessage(response),
+        response,
+        extractApiReqId(response),
+      );
+    }
+    return;
+  }
+
+  const legacyEnvelope = extractLegacyEnvelope(response);
+  if (!legacyEnvelope || legacyEnvelope.success) {
+    return;
+  }
+
+  throw buildBusinessError(
+    undefined,
+    legacyEnvelope.msg || "查询页面锁状态失败",
+    legacyEnvelope.data,
+    legacyEnvelope.reqId,
+  );
+}
+
+function buildBusinessError(
+  code: number | undefined,
+  msg: string,
+  data: unknown,
+  reqId: string | undefined,
+): LockBusinessError {
+  const error = new Error(msg || "获取页面锁失败") as LockBusinessError;
+  error.name = "PageLockBusinessError";
+  error.code = code;
+  error.reqId = reqId;
+  error.data = data;
+  error.isBusinessError = true;
+  return error;
+}
+
+function toLockPayloadSource(response: unknown): unknown {
+  const legacyEnvelope = extractLegacyEnvelope(response);
+  if (legacyEnvelope?.success) {
+    return legacyEnvelope.data;
+  }
+  return response;
+}
+
+function isLockedByOtherUser(payload: LockPayload, currentUserId: string): boolean {
+  if (payload.locked !== true) {
+    return false;
+  }
+  if (typeof payload.lockedBy !== "string" || payload.lockedBy.length === 0) {
+    return true;
+  }
+  return payload.lockedBy !== currentUserId;
 }
 
 /**
@@ -163,18 +427,23 @@ export class PageLockManager extends EventEmitter {
     }
 
     try {
-      const response: LockAcquireResponse = await this._api.post(`/pages/${pageId}/lock`);
+      const response = await this._api.post(`/pages/${pageId}/lock`);
+      const envelopeFailure = ensureNoEnvelopeFailure(pageId, response, this._currentUserId);
+      if (envelopeFailure) {
+        this._lockState = envelopeFailure.lockState;
+        return envelopeFailure.result;
+      }
 
-      if (response.success) {
-        const d = response.data ?? {};
+      const lockPayload = extractLockPayload(toLockPayloadSource(response));
+      if (!isLockedByOtherUser(lockPayload, this._currentUserId)) {
         this._lockVersion += 1;
         this._currentPageId = pageId;
         this._lockState = {
           pageId,
           locked: true,
-          lockedBy: d.lockedBy,
-          lockedByName: d.lockedByName,
-          lockedAt: d.lockedAt,
+          lockedBy: lockPayload.lockedBy,
+          lockedByName: lockPayload.lockedByName,
+          lockedAt: lockPayload.lockedAt,
           isOwner: true,
         };
         this.startHeartbeat();
@@ -183,23 +452,50 @@ export class PageLockManager extends EventEmitter {
 
         return { success: true };
       } else {
-        // 锁被其他人持有
-        this._lockState = {
-          pageId,
-          locked: true,
-          lockedBy: response.data?.lockedBy,
-          lockedByName: response.data?.lockedByName,
-          lockedAt: response.data?.lockedAt,
-          isOwner: false,
-        };
+        this._lockState = applyLockedState(pageId, lockPayload);
 
         return {
           success: false,
           reason: "locked",
-          lockedByName: response.data?.lockedByName,
+          lockedByName: lockPayload.lockedByName,
         };
       }
     } catch (error) {
+      if (isApiBusinessError(error)) {
+        const businessCode = getApiErrorCode(error);
+        const businessData = getApiErrorData(error);
+        const businessPayload = extractLockPayload(businessData);
+        if (
+          businessCode === PAGE_LOCKED_BUSINESS_CODE ||
+          isLockedByOtherUser(businessPayload, this._currentUserId)
+        ) {
+          this._lockState = {
+            pageId,
+            locked: true,
+            lockedBy: businessPayload.lockedBy,
+            lockedByName: businessPayload.lockedByName,
+            lockedAt: businessPayload.lockedAt,
+            isOwner: false,
+          };
+          return {
+            success: false,
+            reason: "locked",
+            lockedByName: businessPayload.lockedByName,
+          };
+        }
+
+        return {
+          success: false,
+          reason: "error",
+          error: buildBusinessError(
+            businessCode,
+            error instanceof Error ? error.message : "获取页面锁失败",
+            businessData,
+            undefined,
+          ),
+        };
+      }
+
       console.error("获取页面锁失败:", error);
       return { success: false, reason: "error", error };
     }
@@ -251,14 +547,15 @@ export class PageLockManager extends EventEmitter {
 
     try {
       const response = await this._api.get(`/pages/${pageId}/lock`);
-      const data = (response.data ?? response) as Record<string, unknown>;
+      ensureNoQueryFailure(response);
+      const data = extractLockPayload(toLockPayloadSource(response));
 
       return {
         pageId,
         locked: Boolean(data.locked),
-        lockedBy: data.lockedBy as string | undefined,
-        lockedByName: data.lockedByName as string | undefined,
-        lockedAt: data.lockedAt as number | undefined,
+        lockedBy: data.lockedBy,
+        lockedByName: data.lockedByName,
+        lockedAt: data.lockedAt,
         isOwner: data.lockedBy === this._currentUserId,
       };
     } catch (error) {
@@ -504,7 +801,7 @@ export class PageLockManager extends EventEmitter {
  * @returns {object}
  */
 export function createMockApiClient(): PageLockApi {
-  const locks = new Map<string, Record<string, unknown>>();
+  const locks = new Map<string, LockPayload>();
 
   return {
     async get(url: string) {
@@ -513,14 +810,15 @@ export function createMockApiClient(): PageLockApi {
       if (pageId) {
         const lock = locks.get(pageId);
         return {
-          success: true,
+          code: 0,
+          msg: "ok",
           data: lock || { locked: false },
         };
       }
       throw new Error("Unknown endpoint");
     },
 
-    async post(url: string): Promise<LockAcquireResponse> {
+    async post(url: string): Promise<unknown> {
       const match = url.match(PAGE_LOCK_URL_RE);
       const pageId = match?.[1];
       if (pageId) {
@@ -528,12 +826,13 @@ export function createMockApiClient(): PageLockApi {
 
         if (existingLock && existingLock.locked) {
           return {
-            success: false,
-            data: existingLock as NonNullable<LockAcquireResponse["data"]>,
+            code: PAGE_LOCKED_BUSINESS_CODE,
+            msg: "页面已被其他用户锁定",
+            data: existingLock as LockPayload,
           };
         }
 
-        const lock: NonNullable<LockAcquireResponse["data"]> = {
+        const lock: LockPayload = {
           locked: true,
           lockedBy: "test-user",
           lockedByName: "测试用户",
@@ -542,7 +841,8 @@ export function createMockApiClient(): PageLockApi {
         locks.set(pageId, lock);
 
         return {
-          success: true,
+          code: 0,
+          msg: "ok",
           data: lock,
         };
       }
@@ -554,7 +854,7 @@ export function createMockApiClient(): PageLockApi {
       const pageId = match?.[1];
       if (pageId) {
         locks.delete(pageId);
-        return { success: true };
+        return { code: 0, msg: "ok", data: null };
       }
       throw new Error("Unknown endpoint");
     },

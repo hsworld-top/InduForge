@@ -1,10 +1,13 @@
 /**
- * HTTP 请求封装
+ * HTTP 请求封装（designer）
  *
- * 响应拦截器返回 `response.data`，故方法泛型 `T` 表示解包后的业务数据类型。
+ * 统一响应契约：
+ * - 成功/业务失败均为 HTTP 2xx，包络为 { code, msg, data, reqId }
+ * - 仅 code===0 视为成功，其余 code 统一抛业务异常
  */
 
 import type {
+  AxiosError,
   AxiosInstance,
   AxiosRequestConfig,
   AxiosResponse,
@@ -16,12 +19,31 @@ import { STORAGE_KEYS } from "@/constants";
 import { postMessageToHost } from "@/runtime/host-bootstrap";
 import { Storage } from "@/utils/storage";
 
-/** Element Plus 的 ElMessage 选项类型在部分 TS 配置下过窄，此处收窄为运行时实际用法 */
-function notifyRequestError(message: string): void {
-  (ElMessage as unknown as (opts: { type: "error"; message: string }) => void)({
-    type: "error",
-    message,
-  });
+const DEFAULT_BUSINESS_ERROR_CODE = 30000;
+const DIGITS_ONLY_RE = /^\d+$/;
+
+type ErrorResponseData = {
+  code?: number | string;
+  msg?: string;
+  reqId?: string;
+  errors?: Record<string, string[]>;
+  data?: unknown;
+  [key: string]: unknown;
+};
+
+export interface ApiResponsePayload<T = unknown> {
+  code: number;
+  msg: string;
+  data?: T;
+  reqId?: string;
+}
+
+export interface ApiErrorMeta {
+  code?: number | undefined;
+  msg: string;
+  reqId?: string | undefined;
+  status?: number | undefined;
+  data?: unknown;
 }
 
 export interface UnwrappedHttpClient {
@@ -38,6 +60,162 @@ interface QueueItem {
   resolve: (token: string | null) => void;
   reject: (err: unknown) => void;
 }
+
+/** Element Plus 的 ElMessage 选项类型在部分 TS 配置下过窄，此处收窄为运行时实际用法 */
+function notifyRequestError(message: string): void {
+  (ElMessage as unknown as (opts: { type: "error"; message: string }) => void)({
+    type: "error",
+    message,
+  });
+}
+
+function hasOwn(target: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(target, key);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function toNumericCode(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && DIGITS_ONLY_RE.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10);
+  }
+  return undefined;
+}
+
+/**
+ * 包络识别规则：
+ * 1. 必须能解析出 code；
+ * 2. 且包含 msg 或包络标识字段（data/reqId/msg 任一显式存在）。
+ */
+function isApiResponsePayload(
+  value: unknown,
+): value is Partial<ApiResponsePayload<unknown>> & Record<string, unknown> {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const code = toNumericCode(payload.code);
+  if (code === undefined) {
+    return false;
+  }
+
+  const hasStringMsg = typeof payload.msg === "string";
+  const hasEnvelopeMarker =
+    hasOwn(payload, "msg") || hasOwn(payload, "data") || hasOwn(payload, "reqId");
+
+  return hasStringMsg || hasEnvelopeMarker;
+}
+
+function normalizeApiResponsePayload<T = unknown>(value: unknown): ApiResponsePayload<T> | null {
+  if (!isApiResponsePayload(value)) {
+    return null;
+  }
+
+  const normalizedCode = toNumericCode(value.code) ?? DEFAULT_BUSINESS_ERROR_CODE;
+  const normalizedMsg = typeof value.msg === "string" ? value.msg : "";
+  const normalizedReqId = typeof value.reqId === "string" ? value.reqId : undefined;
+
+  return {
+    code: normalizedCode,
+    msg: normalizedMsg,
+    data: value.data as T,
+    ...(normalizedReqId ? { reqId: normalizedReqId } : {}),
+  };
+}
+
+export class ApiBusinessError extends Error {
+  code: number;
+  reqId: string | undefined;
+  data: unknown;
+  status: number | undefined;
+  isBusinessError = true;
+
+  constructor(payload: ApiResponsePayload<unknown>, status?: number) {
+    super(payload.msg || "请求失败");
+    this.name = "ApiBusinessError";
+    this.code = payload.code;
+    this.reqId = payload.reqId;
+    this.data = payload.data;
+    this.status = status;
+  }
+}
+
+export const isApiBusinessError = (error: unknown): error is ApiBusinessError => {
+  return error instanceof ApiBusinessError || (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { isBusinessError?: unknown }).isBusinessError === true
+  );
+};
+
+const pickAxiosErrorData = (error: unknown): ErrorResponseData | undefined => {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return undefined;
+  }
+  return (error as { response?: { data?: ErrorResponseData } }).response?.data;
+};
+
+const pickAxiosStatus = (error: unknown): number | undefined => {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return undefined;
+  }
+  const status = (error as { response?: { status?: number } }).response?.status;
+  return typeof status === "number" ? status : undefined;
+};
+
+/**
+ * 统一提取 API 错误：
+ * - 业务失败（2xx + code!=0）返回业务 code/msg/reqId/data
+ * - 技术失败（4xx/5xx）返回 status 与响应 msg（若有）
+ */
+export const resolveApiError = (error: unknown, fallback = "请求失败"): ApiErrorMeta => {
+  if (isApiBusinessError(error)) {
+    return {
+      code: error.code,
+      msg: error.message || fallback,
+      reqId: error.reqId,
+      status: error.status,
+      data: error.data,
+    };
+  }
+
+  const data = pickAxiosErrorData(error);
+  const status = pickAxiosStatus(error);
+  const responseCode = toNumericCode(data?.code);
+  const responseMsg = typeof data?.msg === "string" ? data.msg : "";
+  const responseReqId = typeof data?.reqId === "string" ? data.reqId : undefined;
+  const nativeMessage = error instanceof Error ? error.message : "";
+
+  return {
+    code: responseCode,
+    msg: responseMsg || nativeMessage || fallback,
+    reqId: responseReqId,
+    status,
+    data: data?.data,
+  };
+};
+
+export const getApiErrorMessage = (error: unknown, fallback = "请求失败"): string => {
+  return resolveApiError(error, fallback).msg;
+};
+
+export const getApiErrorCode = (error: unknown): number | undefined => {
+  return resolveApiError(error).code;
+};
+
+export const getApiErrorReqId = (error: unknown): string | undefined => {
+  return resolveApiError(error).reqId;
+};
+
+export const getApiErrorData = (error: unknown): unknown => {
+  return resolveApiError(error).data;
+};
 
 const requestCore = axios.create({
   baseURL: "/api/v1",
@@ -63,6 +241,41 @@ function processQueue(error: unknown, token: string | null = null): void {
 
 function refreshAccessToken(refreshToken: string) {
   return axios.post("/api/v1/auth/refresh", { refreshToken });
+}
+
+function extractRefreshTokens(result: AxiosResponse<unknown>): {
+  accessToken: string | undefined;
+  refreshToken: string | undefined;
+} {
+  const normalized = normalizeApiResponsePayload<Record<string, unknown>>(result?.data);
+  if (normalized) {
+    if (normalized.code !== 0) {
+      throw new ApiBusinessError(normalized, result.status);
+    }
+    const payload = asRecord(normalized.data) || {};
+    return {
+      accessToken:
+        typeof payload.accessToken === "string"
+          ? payload.accessToken
+          : typeof payload.token === "string"
+            ? payload.token
+            : undefined,
+      refreshToken: typeof payload.refreshToken === "string" ? payload.refreshToken : undefined,
+    };
+  }
+
+  // 兼容兜底：若刷新接口仍返回旧格式，继续尝试 data/body 取 token，避免中断登录态续期。
+  const body = asRecord(result?.data) || {};
+  const payload = asRecord(body.data) || body;
+  return {
+    accessToken:
+      typeof payload.accessToken === "string"
+        ? payload.accessToken
+        : typeof payload.token === "string"
+          ? payload.token
+          : undefined,
+    refreshToken: typeof payload.refreshToken === "string" ? payload.refreshToken : undefined,
+  };
 }
 
 function handleLogout(): void {
@@ -91,16 +304,27 @@ requestCore.interceptors.request.use(
 );
 
 requestCore.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
-    const { response, config } = error;
+  (response) => {
+    const normalizedPayload = normalizeApiResponsePayload(response.data);
+    if (normalizedPayload) {
+      if (normalizedPayload.code !== 0) {
+        return Promise.reject(new ApiBusinessError(normalizedPayload, response.status));
+      }
+      return normalizedPayload;
+    }
+    return response.data;
+  },
+  (error: AxiosError<ErrorResponseData>) => {
+    const response = error.response;
+    const config = error.config;
+    const requestUrl = config?.url || "";
 
     if (response) {
       const { status, data } = response;
 
       switch (status) {
         case 401: {
-          if (config?.url?.includes("/auth/refresh")) {
+          if (requestUrl.includes("/auth/refresh")) {
             handleLogout();
             return Promise.reject(error);
           }
@@ -110,45 +334,41 @@ requestCore.interceptors.response.use(
             handleLogout();
             return Promise.reject(error);
           }
+          if (!config) {
+            handleLogout();
+            return Promise.reject(error);
+          }
 
           if (!isRefreshing) {
             isRefreshing = true;
 
             return refreshAccessToken(refreshToken)
-              .then(
-                (
-                  result: AxiosResponse<{ data?: Record<string, string> } & Record<string, string>>,
-                ) => {
-                  const body = result?.data as { data?: Record<string, string> } & Record<
-                    string,
-                    string
-                  >;
-                  const payload = body?.data || body || {};
-                  const accessToken = payload.accessToken as string | undefined;
-                  const newRefreshToken = payload.refreshToken as string | undefined;
+              .then((result) => {
+                const { accessToken, refreshToken: newRefreshToken } = extractRefreshTokens(result);
+                if (!accessToken) {
+                  throw new Error("刷新令牌响应缺少 accessToken/token 字段");
+                }
 
-                  if (accessToken) Storage.setToken(accessToken);
-                  if (newRefreshToken) Storage.setRefreshToken(newRefreshToken);
+                Storage.setToken(accessToken);
+                if (newRefreshToken) {
+                  Storage.setRefreshToken(newRefreshToken);
+                }
 
-                  if (accessToken) {
-                    postMessageToHost({
-                      type: "AUTH_REFRESHED",
-                      payload: {
-                        token: accessToken,
-                        accessToken,
-                        refreshToken: newRefreshToken,
-                      },
-                    });
-                  }
+                postMessageToHost({
+                  type: "AUTH_REFRESHED",
+                  payload: {
+                    token: accessToken,
+                    accessToken,
+                    refreshToken: newRefreshToken ?? refreshToken,
+                  },
+                });
 
-                  processQueue(null, accessToken ?? null);
+                processQueue(null, accessToken);
 
-                  if (config?.headers && accessToken) {
-                    config.headers.Authorization = `Bearer ${accessToken}`;
-                  }
-                  return requestCore(config!);
-                },
-              )
+                config.headers = config.headers || {};
+                config.headers.Authorization = `Bearer ${accessToken}`;
+                return requestCore(config);
+              })
               .catch((refreshError: unknown) => {
                 processQueue(refreshError, null);
                 handleLogout();
@@ -162,32 +382,36 @@ requestCore.interceptors.response.use(
           return new Promise((resolve, reject) => {
             failedQueue.push({
               resolve: (token) => {
-                if (config?.headers && token) {
-                  config.headers.Authorization = `Bearer ${token}`;
+                if (!token) {
+                  reject(new Error("刷新令牌后未获取到 access token"));
+                  return;
                 }
-                resolve(requestCore(config!));
+                config.headers = config.headers || {};
+                config.headers.Authorization = `Bearer ${token}`;
+                resolve(requestCore(config));
               },
               reject,
             });
           });
         }
         case 403:
-          notifyRequestError("没有权限访问此资源");
+          notifyRequestError(typeof data?.msg === "string" ? data.msg : "没有权限访问此资源");
           break;
         case 404:
-          notifyRequestError("请求的资源不存在");
+          notifyRequestError(typeof data?.msg === "string" ? data.msg : "请求的资源不存在");
           break;
-        case 422: {
-          const body = data as { errors?: Record<string, string[]>; message?: string };
-          if (body?.errors) {
-            const errorMessages = Object.values(body.errors).flat();
+        case 422:
+          if (data?.errors) {
+            const errorMessages = Object.values(data.errors).flat();
             notifyRequestError(errorMessages.join("; "));
           } else {
-            notifyRequestError(body?.message || "请求参数错误");
+            notifyRequestError(typeof data?.msg === "string" ? data.msg : "请求参数错误");
           }
           break;
-        }
         default:
+          if (typeof data?.msg === "string" && data.msg) {
+            notifyRequestError(data.msg);
+          }
           break;
       }
     } else {
