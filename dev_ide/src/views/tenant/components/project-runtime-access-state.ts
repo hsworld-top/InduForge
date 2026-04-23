@@ -268,7 +268,7 @@ const normalizeRuntimeUserRecord = (user = {}) => {
 
 const getErrorMessage = (error, fallback) => {
   const responseMessage =
-    error?.response?.data?.message ||
+    error?.response?.data?.msg ||
     error?.response?.data?.error ||
     error?.message
 

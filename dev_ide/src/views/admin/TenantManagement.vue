@@ -588,6 +588,7 @@ import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 import { tenantAPI } from "@/api";
+import { getApiErrorMessage } from "@/utils/request";
 import { TIME_FORMAT } from "@/constants";
 import defaultLogoUrl from "@/assets/images/default-logo.svg";
 import defaultLoginBgUrl from "@/assets/images/default-login-bg.svg";
@@ -807,7 +808,7 @@ export default {
       } catch (e) {
         console.error(e);
         ElMessage.error(
-          e.response?.data?.message || t("tenantManagement.saveFailed"),
+          getApiErrorMessage(e, t("tenantManagement.saveFailed")),
         );
       } finally {
         saving.value = false;
@@ -896,7 +897,7 @@ export default {
         return true;
       } catch (err) {
         ElMessage.error(
-          err.response?.data?.message || t("tenantManagement.logoUploadFailed"),
+          getApiErrorMessage(err, t("tenantManagement.logoUploadFailed")),
         );
         options.onError?.(err);
         return false;
@@ -926,8 +927,7 @@ export default {
         return true;
       } catch (err) {
         ElMessage.error(
-          err.response?.data?.message ||
-            t("tenantManagement.backgroundUploadFailed"),
+          getApiErrorMessage(err, t("tenantManagement.backgroundUploadFailed")),
         );
         options.onError?.(err);
         return false;

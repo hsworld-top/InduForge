@@ -185,6 +185,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
 import { Storage } from '@/utils/storage'
+import { getApiErrorMessage } from '@/utils/request'
 import { STORAGE_KEYS, SYSTEM_LOG_PAGE_SIZE_OPTIONS } from '@/constants'
 
 export default {
@@ -293,10 +294,10 @@ export default {
         pagination.total = response.pagination?.total || 0
         pagination.totalPages = response.pagination?.totalPages || 0
       } catch (error) {
-        loadError.value = error.response?.data?.message || t('systemLogs.fetchFailedRetry')
+        loadError.value = getApiErrorMessage(error, t('systemLogs.fetchFailedRetry'))
         ElMessage.error(
           t('systemLogs.fetchFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           })
         )
       } finally {
@@ -377,7 +378,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('systemLogs.exportFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           })
         )
       }

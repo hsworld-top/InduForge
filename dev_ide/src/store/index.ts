@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { Storage } from '@/utils'
 import type { Role, UserInfo } from '@/types/auth'
 import type { AuthConfigPayload, AuthLoginPayload } from '@/api/auth.api'
+import { getApiErrorMessage } from '@/utils/request'
 import defaultLogoUrl from '@/assets/images/default-logo.svg'
 import defaultLoginBgUrl from '@/assets/images/default-login-bg.svg'
 
@@ -73,16 +74,7 @@ const normalizeStoredUserInfo = (): UserInfo | null => {
 }
 
 const resolveErrorMessage = (error: unknown): string => {
-  const responseMessage =
-    typeof error === 'object' && error !== null && 'response' in error
-      ? ((error as { response?: { data?: { message?: string } } }).response?.data?.message ?? '')
-      : ''
-
-  if (typeof responseMessage === 'string' && responseMessage.trim().length > 0) {
-    return responseMessage
-  }
-
-  return error instanceof Error ? error.message : '未知错误'
+  return getApiErrorMessage(error, '未知错误')
 }
 
 const buildDefaultAppConfig = (): AppConfig => ({

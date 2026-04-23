@@ -99,6 +99,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { authAPI } from '@/api'
 import { useAppStore } from '@/store'
 import { Storage } from '@/utils/storage'
+import { getApiErrorMessage } from '@/utils/request'
 import { SYSTEM_LOG_PAGE_SIZE_OPTIONS } from '@/constants'
 
 export default {
@@ -163,7 +164,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('systemSettings.loadFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           })
         )
       } finally {

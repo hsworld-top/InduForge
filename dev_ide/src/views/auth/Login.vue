@@ -407,8 +407,11 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { ROLES, ROUTE_NAMES } from '@/constants'
 import { Storage } from '@/utils/storage'
+import { getApiErrorCode, getApiErrorMessage } from '@/utils/request'
 import defaultLogoUrl from '@/assets/images/default-logo.svg'
 import defaultLoginBgUrl from '@/assets/images/default-login-bg.svg'
+
+const AUTH_INVALID_CAPTCHA_CODE = 10010
 
 export default {
   name: 'Login',
@@ -571,28 +574,28 @@ export default {
         }
       } catch (error) {
         console.error('登录失败:', error)
+        const errorStatus = error?.response?.status
+        const errorCode = getApiErrorCode(error)
+        const isCaptchaError = errorCode === AUTH_INVALID_CAPTCHA_CODE
+        const isAuthBusinessError = typeof errorCode === 'number' && errorCode >= 10000 && errorCode < 11000
 
-        // 根据错误类型显示不同消息
-        if (error.response?.status === 401) {
-          const errorCode = error.response.data.errorCode
-          const isCaptchaError = errorCode === 'A0010' // AUTH_INVALID_CAPTCHA
-
-          ElMessage.error(error.response.data.message || t('auth.invalidCredentials'))
-
-          // 登录失败后显示验证码
-          if (!showCaptcha.value) {
-            showCaptcha.value = true
-            await refreshCaptcha()
-          } else if (isCaptchaError) {
-            // 验证码错误时，刷新验证码
-            await refreshCaptcha()
-          }
-        } else if (error.response?.status === 429) {
+        if (errorStatus === 429) {
           ElMessage.error(t('auth.tooManyRequests'))
-        } else if (error.response?.data?.message) {
-          ElMessage.error(error.response.data.message)
         } else {
-          ElMessage.error(t('auth.retry'))
+          const fallbackMessage = errorStatus === 401 || isAuthBusinessError
+            ? t('auth.invalidCredentials')
+            : t('auth.retry')
+          ElMessage.error(getApiErrorMessage(error, fallbackMessage))
+
+          // 登录失败后需要展示验证码；验证码错误时刷新验证码图片。
+          if (errorStatus === 401 || isAuthBusinessError || isCaptchaError) {
+            if (!showCaptcha.value) {
+              showCaptcha.value = true
+              await refreshCaptcha()
+            } else if (isCaptchaError) {
+              await refreshCaptcha()
+            }
+          }
         }
       } finally {
         loading.value = false

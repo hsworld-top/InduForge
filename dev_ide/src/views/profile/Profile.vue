@@ -141,6 +141,7 @@ import { ElMessage } from 'element-plus'
 import { authAPI, userAPI } from '@/api'
 import { useAuthStore, useAppStore } from '@/store'
 import { Storage } from '@/utils/storage'
+import { getApiErrorMessage } from '@/utils/request'
 import { RoleEnum } from '@/enums'
 
 const AVATAR_KEY_PREFIX = 'profile_avatar_'
@@ -348,7 +349,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('profile.accountUpdateFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           })
         )
         return false
@@ -404,7 +405,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('profile.preferencesUpdateFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           })
         )
       } finally {
@@ -466,7 +467,7 @@ export default {
       } catch (error) {
         ElMessage.error(
           t('profile.passwordUpdateFailed', {
-            message: error.response?.data?.message || error.message,
+            message: getApiErrorMessage(error, t('auth.retry')),
           })
         )
       } finally {

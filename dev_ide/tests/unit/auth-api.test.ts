@@ -29,7 +29,12 @@ describe('authAPI', () => {
       tenantCode: 'tenant-a',
     }
 
-    postMock.mockResolvedValueOnce({ success: true })
+    postMock.mockResolvedValueOnce({
+      code: 0,
+      msg: 'ok',
+      data: { token: 'token' },
+      reqId: 'req_1',
+    })
 
     const result = await authAPI.login(credentials)
 
@@ -41,7 +46,12 @@ describe('authAPI', () => {
       captchaKey: 'captcha-key',
       captchaCode: '1234',
     })
-    expect(result).toEqual({ success: true })
+    expect(result).toEqual({
+      code: 0,
+      msg: 'ok',
+      data: { token: 'token' },
+      reqId: 'req_1',
+    })
   })
 
   it('getConfig 传入 undefined 时不应下发 params', async () => {
