@@ -9,10 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/indu-forge/data_service/internal/auth"
-	"github.com/indu-forge/data_service/internal/db/postgres"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/repository"
 )
@@ -118,8 +116,8 @@ type QueryService struct {
 }
 
 // NewQueryService 创建查询服务。
-// 第三个参数保留是为了兼容现有装配签名，当前不直接复用服务元数据库连接池执行 SQL。
-func NewQueryService(repo *repository.QueryRepository, connectionRepo *repository.ConnectionRepository, _ *pgxpool.Pool) *QueryService {
+// 第三个参数保留是为了兼容现有装配签名。
+func NewQueryService(repo *repository.QueryRepository, connectionRepo *repository.ConnectionRepository, _ any) *QueryService {
 	return &QueryService{
 		repository:  repo,
 		connections: connectionRepo,
@@ -443,13 +441,13 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
 	defer cancel()
 
-	execPool, release, err := s.executionPoolForRecord(execCtx, record)
+	runtime, err := s.executionRuntimeForRecord(execCtx, record)
 	if err != nil {
 		return nil, err
 	}
-	defer release()
+	defer runtime.Close()
 
-	tx, err := execPool.BeginTx(execCtx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	tx, err := runtime.BeginReadOnlyTx(execCtx)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建只读执行会话失败", err)
 	}
@@ -467,7 +465,10 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 	}
 	defer rows.Close()
 
-	columns := rows.FieldDescriptions()
+	columnNames, err := rows.Columns()
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取查询字段元信息失败", err)
+	}
 	resultRows := make([]map[string]any, 0)
 	for rows.Next() {
 		values, err := rows.Values()
@@ -476,8 +477,8 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 		}
 
 		row := make(map[string]any, len(values))
-		for i, field := range columns {
-			row[string(field.Name)] = normalizeQueryValue(values[i])
+		for i, field := range columnNames {
+			row[field] = normalizeQueryValue(values[i])
 		}
 		resultRows = append(resultRows, row)
 	}
@@ -493,62 +494,17 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 	}, nil
 }
 
-// executionPoolForRecord 根据 query 关联的连接配置返回执行 SQL 的目标连接池。
-// 查询路径说明：
-// 1. 先按 project_id + connection_id 读取连接（命中 data_connections 主键路径）。
-// 2. 再从 connection metadata 中读取 databaseUrl/searchPath 生成目标池。
-// 性能风险：当前为“每次执行临时建池”，简单但开销偏高；后续可引入连接池缓存。
-func (s *QueryService) executionPoolForRecord(ctx context.Context, record repository.QueryRecord) (*pgxpool.Pool, func(), error) {
+// executionRuntimeForRecord 根据 query 关联的连接配置返回执行 SQL 的目标运行时。
+// 当前保持“每次执行临时建连接”的简单策略，待真实流量确认后再考虑按 dbType 做连接缓存。
+func (s *QueryService) executionRuntimeForRecord(ctx context.Context, record repository.QueryRecord) (*relationalRuntime, error) {
 	connection, err := s.connections.GetByProjectAndID(ctx, record.ProjectID, record.ConnectionID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if connection.Type != "relational" {
-		return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接执行 SQL")
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接执行 SQL")
 	}
-
-	databaseURL, searchPath := extractExecutionDatabaseConfig(connection.Config)
-	if databaseURL == "" {
-		return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接配置缺少 databaseUrl，无法执行查询")
-	}
-
-	pool, err := postgres.NewPool(ctx, postgres.PoolConfig{
-		DatabaseURL: databaseURL,
-		SearchPath:  searchPath,
-	})
-	if err != nil {
-		return nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建执行目标连接池失败", err)
-	}
-
-	return pool, pool.Close, nil
-}
-
-func extractExecutionDatabaseConfig(config map[string]any) (string, string) {
-	if config == nil {
-		return "", ""
-	}
-
-	findString := func(keys ...string) string {
-		for _, key := range keys {
-			raw, ok := config[key]
-			if !ok {
-				continue
-			}
-			text, ok := raw.(string)
-			if !ok {
-				continue
-			}
-			text = strings.TrimSpace(text)
-			if text != "" {
-				return text
-			}
-		}
-		return ""
-	}
-
-	databaseURL := findString("databaseUrl", "databaseURL", "dsn")
-	searchPath := findString("searchPath", "schema")
-	return databaseURL, searchPath
+	return connectRelationalRuntime(ctx, connection.Config)
 }
 
 // loadQueryForClaims 读取查询并校验当前 claims 的项目边界。
