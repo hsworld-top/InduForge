@@ -1,8 +1,8 @@
 <template>
-  <div class="admin-dashboard">
+  <div class="admin-dashboard h-screen flex flex-col bg-gray-50 dark:bg-[#121212]">
     <!-- 页面头部 -->
     <div
-      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 h-12 px-4"
+      class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 h-12 px-4 flex-none z-10"
     >
       <div class="flex items-center justify-between h-full">
         <!-- Logo 图片 -->
@@ -14,7 +14,7 @@
           <!-- 主题切换 -->
           <button
             @click="toggleTheme"
-            class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            class="h-8 w-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
             <svg
               v-if="isDark"
@@ -46,103 +46,81 @@
           <div class="relative">
             <button
               @click="showUserMenu = !showUserMenu"
-              class="flex items-center gap-2 h-8 px-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              class="flex items-center gap-2 h-8 px-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
               <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                 <span class="text-white text-xs font-medium">
                   {{ userInfo?.username?.charAt(0)?.toUpperCase() || 'A' }}
                 </span>
               </div>
-              <span class="text-xs text-gray-600 dark:text-gray-400">{{ userInfo?.username || t('adminDashboard.admin') }}</span>
+              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ userInfo?.username || t('adminDashboard.admin') }}</span>
             </button>
 
             <!-- 下拉菜单 -->
-            <div
-              v-if="showUserMenu"
-              class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
+            <transition
+              enter-active-class="transition ease-out duration-100"
+              enter-from-class="transform opacity-0 scale-95"
+              enter-to-class="transform opacity-100 scale-100"
+              leave-active-class="transition ease-in duration-75"
+              leave-from-class="transform opacity-100 scale-100"
+              leave-to-class="transform opacity-0 scale-95"
             >
-              <router-link
-                to="/profile"
-                class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              <div
+                v-if="showUserMenu"
+                class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 overflow-hidden"
               >
-                {{ t('adminDashboard.profile') }}
-              </router-link>
-              <button
-                @click="handleLogout"
-                class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                {{ t('auth.logout') }}
-              </button>
-            </div>
+                <button
+                  @click="openProfileDialog"
+                  class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  {{ t('adminDashboard.profile') }}
+                </button>
+                <button
+                  @click="handleLogout"
+                  class="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                >
+                  {{ t('auth.logout') }}
+                </button>
+              </div>
+            </transition>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 主要内容区域 -->
-    <div class="flex flex-1">
-      <!-- 左侧菜单栏 -->
-      <div
-        :class="[
-          'border-r w-14',
-          isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200',
-        ]"
-      >
-        <div class="p-2">
-          <nav class="space-y-2">
-            <el-tooltip :content="t('adminDashboard.tenantManagement')" placement="right" :show-after="500">
-              <router-link
-                to="/admin/tenants"
-                class="w-full h-11 flex items-center justify-center"
-              >
-                <span
-                  :class="[
-                    'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                    $route.path === '/admin/tenants'
-                      ? 'bg-blue-600 text-white'
-                      : isDark
-                        ? 'text-gray-400/80 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100',
-                  ]"
-                >
-                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                </span>
-              </router-link>
-            </el-tooltip>
-          </nav>
-        </div>
-      </div>
-
-      <!-- 右侧内容区域 -->
-      <div class="flex-1 p-6">
-        <router-view />
-      </div>
+    <div class="flex-1 overflow-auto w-full relative">
+      <router-view />
     </div>
+
+    <!-- 个人资料弹窗 -->
+    <el-dialog v-model="showProfileDialog" width="600px" top="8vh" destroy-on-close append-to-body class="admin-profile-dialog" :title="t('adminDashboard.profile')">
+      <AdminProfile />
+    </el-dialog>
   </div>
 </template>
 
 <script lang="ts">
-import { ref, computed, onMounted, onUnmounted, defineComponent } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineComponent, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/store'
 import defaultLogoUrl from '@/assets/images/default-logo.svg'
 
+const AdminProfile = defineAsyncComponent(() => import('@/views/admin/components/AdminProfile.vue'))
+
 export default defineComponent({
   name: 'AdminDashboard',
+  components: {
+    AdminProfile
+  },
   setup() {
     const { t } = useI18n()
     const router = useRouter()
     const authStore = useAuthStore()
     const appStore = useAppStore()
     const showUserMenu = ref(false)
+    const showProfileDialog = ref(false)
 
     const userInfo = computed(() => authStore.userInfo)
     const isDark = computed(() => appStore.isDark)
@@ -150,6 +128,11 @@ export default defineComponent({
 
     const toggleTheme = () => {
       appStore.setTheme(isDark.value ? 'light' : 'dark')
+    }
+
+    const openProfileDialog = () => {
+      showUserMenu.value = false
+      showProfileDialog.value = true
     }
 
     const handleLogout = async () => {
@@ -179,6 +162,8 @@ export default defineComponent({
 
     return {
       showUserMenu,
+      showProfileDialog,
+      openProfileDialog,
       t,
       userInfo,
       isDark,
@@ -195,6 +180,21 @@ export default defineComponent({
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+:deep(.admin-profile-dialog) {
+  border-radius: 1.5rem;
+  overflow: hidden;
+}
+
+:deep(.admin-profile-dialog .el-dialog__header) {
+  margin-right: 0;
+  padding: 1.25rem 1.5rem 0.5rem;
+  font-weight: 700;
+}
+
+:deep(.admin-profile-dialog .el-dialog__body) {
+  padding: 1rem 1.5rem 1.5rem;
 }
 </style>
 

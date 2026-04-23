@@ -33,7 +33,7 @@
     </div>
 
     <!-- 对话框 -->
-    <el-dialog v-model="showProfileDialog" width="760px" destroy-on-close append-to-body class="profile-dialog"
+    <el-dialog v-model="showProfileDialog" width="860px" top="8vh" destroy-on-close append-to-body class="profile-dialog"
       :title="t('profile.title')">
       <Profile :embedded="true" />
     </el-dialog>
