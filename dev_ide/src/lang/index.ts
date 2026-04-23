@@ -104,6 +104,7 @@ export const messages = {
       lastUpdated: '最近更新时间：{time}',
       partialLoadFailed: '部分数据加载失败（{failed}/{total}）：{sources}，已展示可用数据。',
       loadFailed: '仪表盘数据加载失败，请稍后重试。',
+      clickToView: '点击查看详情',
       menuTenant: '租户管理',
       menuUser: '用户管理',
       menuProject: '工程管理',
@@ -939,6 +940,7 @@ export const messages = {
       partialLoadFailed:
         'Partial data load failed ({failed}/{total}): {sources}. Available data is shown.',
       loadFailed: 'Failed to load dashboard data, please try again later.',
+      clickToView: 'Click to view details',
       menuTenant: 'Tenant Management',
       menuUser: 'User Management',
       menuProject: 'Project Management',

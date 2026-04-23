@@ -7,7 +7,7 @@
   >
     <!-- 全新的侧边栏抽屉组件（全屏时隐藏） -->
     <DashboardSidebar
-      v-show="!isTabMaximized"
+      v-if="!isTabMaximized"
       :active-tab="activeTab"
       @open-tab="openTab"
       @open-profile="openProfileDialog"

@@ -23,6 +23,13 @@ describe('tooling: 控制台告警回归护栏', () => {
     expect(dashboardView).toMatch(/const\s+DashboardContent\s*=\s*markRaw\(defineAsyncComponent\(/)
   })
 
+  test('Dashboard 侧边栏在全屏切换时不应对多根组件使用 v-show', () => {
+    const dashboardView = readSource('views/Dashboard.vue')
+
+    expect(dashboardView).toMatch(/<DashboardSidebar[\s\S]*v-if="!isTabMaximized"/)
+    expect(dashboardView).not.toMatch(/<DashboardSidebar[\s\S]*v-show=/)
+  })
+
   test('系统日志时间范围筛选控件应声明 name，避免浏览器表单可访问性告警', () => {
     const systemLogsView = readSource('views/tenant/SystemLogs.vue')
 

@@ -1,152 +1,221 @@
 <template>
-  <div class="dashboard-content p-6">
-    <!-- 欢迎信息 -->
-    <div class="mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
-        {{ t('dashboard.welcomeBack', { username }) }}
-      </h1>
+  <div class="dashboard-content h-full flex flex-col">
+    <!-- 一体化操作栏 (Cockpit-style) -->
+    <div
+      class="flex items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-6"
+    >
+      <!-- 左侧：标题与欢迎语 -->
+      <div class="flex items-center space-x-4">
+        <h1
+          class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 ml-2 whitespace-nowrap"
+        >
+          {{ t('dashboard.title') }}
+        </h1>
+        <div class="h-5 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden md:block"></div>
+        <span class="text-sm text-gray-500 dark:text-gray-400 hidden md:inline">
+          {{ t('dashboard.welcomeBack', { username }) }}
+        </span>
+      </div>
+
+      <!-- 右侧：刷新 -->
+      <div class="flex items-center space-x-3">
+        <el-tooltip :content="t('common.refresh')" placement="top">
+          <button
+            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
+            :disabled="loading"
+            @click="loadDashboardData"
+          >
+            <el-icon :class="{ 'animate-spin': loading }"><RefreshRight /></el-icon>
+          </button>
+        </el-tooltip>
+      </div>
+    </div>
+
+    <!-- 错误提示 -->
+    <div v-if="loadError" class="mb-4">
+      <el-alert :title="loadError" type="warning" show-icon :closable="true" />
     </div>
 
     <!-- 统计卡片 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+      <!-- 用户统计 -->
       <div
         v-if="canAccessUserManagement"
-        :class="['card transition-shadow duration-200', 'cursor-pointer hover:shadow-lg']"
+        class="stat-card group cursor-pointer"
         @click="openTab('user-management')"
       >
-        <div class="flex items-center">
-          <div class="p-3 rounded-lg bg-green-100 dark:bg-green-900">
-            <el-icon class="w-6 h-6 text-green-600 dark:text-green-400"><UserFilled /></el-icon>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
               {{ t('dashboard.userCount') }}
             </p>
-            <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.users }}
             </p>
           </div>
+          <div
+            class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-110 transition-transform duration-300"
+          >
+            <el-icon class="w-6 h-6 text-white"><UserFilled /></el-icon>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center text-xs text-gray-400 dark:text-gray-500">
+          <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+          {{ t('dashboard.clickToView') }}
         </div>
       </div>
 
+      <!-- 工程统计 -->
       <div
         v-if="canAccessProjectManagement"
-        :class="['card transition-shadow duration-200', 'cursor-pointer hover:shadow-lg']"
+        class="stat-card group cursor-pointer"
         @click="openTab('project-management')"
       >
-        <div class="flex items-center">
-          <div class="p-3 rounded-lg bg-blue-100 dark:bg-blue-900">
-            <el-icon class="w-6 h-6 text-blue-600 dark:text-blue-400"><FolderOpened /></el-icon>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
               {{ t('dashboard.projectCount') }}
             </p>
-            <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.projects }}
             </p>
           </div>
+          <div
+            class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300"
+          >
+            <el-icon class="w-6 h-6 text-white"><FolderOpened /></el-icon>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center text-xs text-gray-400 dark:text-gray-500">
+          <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+          {{ t('dashboard.clickToView') }}
         </div>
       </div>
 
+      <!-- 租户统计 -->
       <div
         v-if="canLoadTenantStats"
-        class="card cursor-pointer hover:shadow-lg transition-shadow duration-200"
+        class="stat-card group cursor-pointer"
         @click="openTab('tenant-management')"
       >
-        <div class="flex items-center">
-          <div class="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-900">
-            <el-icon class="w-6 h-6 text-yellow-600 dark:text-yellow-400"
-              ><OfficeBuilding
-            /></el-icon>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
               {{ t('dashboard.tenantCount') }}
             </p>
-            <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.tenants }}
             </p>
           </div>
+          <div
+            class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:scale-110 transition-transform duration-300"
+          >
+            <el-icon class="w-6 h-6 text-white"><OfficeBuilding /></el-icon>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center text-xs text-gray-400 dark:text-gray-500">
+          <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+          {{ t('dashboard.clickToView') }}
         </div>
       </div>
 
+      <!-- 系统日志统计 -->
       <div
         v-if="canAccessSystemLogs"
-        :class="['card transition-shadow duration-200', 'cursor-pointer hover:shadow-lg']"
+        class="stat-card group cursor-pointer"
         @click="openTab('system-logs')"
       >
-        <div class="flex items-center">
-          <div class="p-3 rounded-lg bg-red-100 dark:bg-red-900">
-            <el-icon class="w-6 h-6 text-red-600 dark:text-red-400"><DocumentCopy /></el-icon>
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
               {{ t('dashboard.systemLogs') }}
             </p>
-            <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">
               {{ loading ? '--' : stats.logs }}
             </p>
           </div>
+          <div
+            class="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center shadow-lg shadow-rose-500/20 group-hover:scale-110 transition-transform duration-300"
+          >
+            <el-icon class="w-6 h-6 text-white"><DocumentCopy /></el-icon>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center text-xs text-gray-400 dark:text-gray-500">
+          <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+          {{ t('dashboard.clickToView') }}
         </div>
       </div>
     </div>
 
     <!-- 最近活动 -->
-    <div class="card">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-          {{ t('dashboard.recentActivity') }}
-        </h3>
-        <el-button size="small" :loading="loading" @click="loadDashboardData">{{
-          t('common.refresh')
-        }}</el-button>
-      </div>
+    <div class="flex-1 min-h-0">
       <div
-        v-if="loadError"
-        class="mb-4 text-sm px-3 py-2 rounded border border-red-200 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300"
+        class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 h-full flex flex-col"
       >
-        {{ loadError }}
-      </div>
-      <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">
-        {{ t('dashboard.loadingData') }}
-      </div>
-      <div
-        v-else-if="recentActivities.length === 0"
-        class="text-sm text-gray-500 dark:text-gray-400"
-      >
-        {{ t('dashboard.noActivity') }}
-      </div>
-      <div v-else class="space-y-4">
-        <div
-          v-for="activity in recentActivities"
-          :key="activity.id"
-          class="flex items-start space-x-3"
-        >
-          <div class="flex-shrink-0">
-            <div
-              class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center"
-            >
-              <el-icon class="w-4 h-4 text-blue-600 dark:text-blue-400"><InfoFilled /></el-icon>
-            </div>
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-[15px] font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+            <div class="w-1.5 h-5 bg-blue-500 rounded-full"></div>
+            {{ t('dashboard.recentActivity') }}
+          </h3>
+          <span class="text-[11px] text-gray-400 dark:text-gray-500 font-mono">
+            {{ t('dashboard.lastUpdated', { time: formatDateTime(lastUpdatedAt) || '-' }) }}
+          </span>
+        </div>
+
+        <div v-if="loading" class="flex-1 flex items-center justify-center">
+          <div class="text-sm text-gray-400 dark:text-gray-500 flex items-center gap-2">
+            <el-icon class="animate-spin"><RefreshRight /></el-icon>
+            {{ t('dashboard.loadingData') }}
           </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm text-gray-900 dark:text-white">
-              {{ activity.description }}
-            </p>
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-              {{ formatDateTime(activity.time) }}
-            </p>
+        </div>
+
+        <div
+          v-else-if="recentActivities.length === 0"
+          class="flex-1 flex items-center justify-center"
+        >
+          <div class="text-center">
+            <div class="w-16 h-16 mx-auto mb-3 bg-gray-100 dark:bg-gray-700 rounded-2xl flex items-center justify-center">
+              <svg class="w-8 h-8 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+              </svg>
+            </div>
+            <p class="text-sm text-gray-400 dark:text-gray-500">{{ t('dashboard.noActivity') }}</p>
+          </div>
+        </div>
+
+        <div v-else class="flex-1 overflow-y-auto space-y-3">
+          <div
+            v-for="(activity, index) in recentActivities"
+            :key="activity.id"
+            class="flex items-start gap-3 p-3 rounded-xl bg-gray-50/60 dark:bg-gray-900/30 border border-gray-100/80 dark:border-gray-800/60 hover:border-gray-200 dark:hover:border-gray-700 transition-colors"
+          >
+            <div class="flex-shrink-0 relative">
+              <div
+                class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold"
+                :class="getActivityIconClass(index)"
+              >
+                {{ index + 1 }}
+              </div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-[13px] text-gray-700 dark:text-gray-300 leading-relaxed line-clamp-2">
+                {{ activity.description }}
+              </p>
+              <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-1 font-mono">
+                {{ formatDateTime(activity.time) }}
+              </p>
+            </div>
           </div>
         </div>
       </div>
-      <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">
-        {{
-          t('dashboard.lastUpdated', {
-            time: formatDateTime(lastUpdatedAt) || '-',
-          })
-        }}
-      </p>
     </div>
   </div>
 </template>
@@ -161,6 +230,7 @@ import {
   OfficeBuilding,
   DocumentCopy,
   InfoFilled,
+  RefreshRight,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store'
 import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
@@ -193,6 +263,20 @@ export default {
     })
 
     const recentActivities = ref([])
+
+    /**
+     * 活动条目图标颜色，按序号循环使用不同颜色。
+     */
+    const getActivityIconClass = (index) => {
+      const colors = [
+        'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400',
+        'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400',
+        'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400',
+        'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400',
+        'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-400',
+      ]
+      return colors[index % colors.length]
+    }
 
     const loadDashboardData = async () => {
       loading.value = true
@@ -334,16 +418,27 @@ export default {
       OfficeBuilding,
       DocumentCopy,
       InfoFilled,
+      RefreshRight,
       openTab,
       loadDashboardData,
       formatDateTime,
+      getActivityIconClass,
     }
   },
 }
 </script>
 
 <style scoped>
-.card {
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6;
+.dashboard-content {
+  padding: 20px;
+  background-color: #f8fafc;
+}
+.dark .dashboard-content {
+  background-color: #0f172a;
+}
+
+/* 统计卡片 */
+.stat-card {
+  @apply bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200/80 dark:border-gray-700 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300;
 }
 </style>
