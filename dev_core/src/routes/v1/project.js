@@ -213,7 +213,8 @@ const buildSnapshotFromArtifact = (artifact = {}) => {
 
 const respondRouteError = (res, error, fallbackCode, fallbackStatus) => {
   if (error?.errorCode && error?.statusCode) {
-    return ApiResponse.error(res, error.errorCode, error.options || {}, error.statusCode);
+    const normalizedStatus = error.statusCode >= 500 ? error.statusCode : 200;
+    return ApiResponse.error(res, error.errorCode, error.options || {}, normalizedStatus);
   }
 
   return ApiResponse.error(res, fallbackCode, {}, fallbackStatus);
@@ -228,18 +229,18 @@ const requireRuntimeProjectManagement = async (req, res, next) => {
     const { role, tenantId } = req.user || {};
 
     if (!RUNTIME_ACCESS_ALLOWED_ROLES.includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     const project = await Project.findByPk(id, {
       attributes: ['id', 'tenantId'],
     });
     if (!project) {
-      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 200);
     }
 
     if (role !== 'SYSTEM_ADMIN' && project.tenantId !== tenantId) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     req.runtimeManagedProject = project;
@@ -362,11 +363,11 @@ router.get('/:id/export', authenticateToken, requireResourceOwnership('project')
     const { id } = req.params;
     const { role } = req.user;
     if (!['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
     const project = await Project.findByPk(id);
     if (!project) {
-      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 200);
     }
 
     const pages = await DesignPage.findAll({
@@ -532,7 +533,7 @@ router.post('/import', authenticateToken, validate(Joi.object({
     const { tenantId, role, id: userId } = req.user;
 
     if (!['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     const projectInfo = payload.project || {};
@@ -704,7 +705,7 @@ router.post('/', authenticateToken, validate(Joi.object({
 
     // 检查权限：只有系统管理员和工程管理员可以创建工程
     if (!['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     // 创建工程
@@ -1024,13 +1025,13 @@ router.put('/:id', authenticateToken, requireResourceOwnership('project'), valid
 
     const project = await Project.findByPk(id);
     if (!project) {
-      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 200);
     }
 
     // 检查权限：只有系统管理员和工程管理员可以更新工程
     const allowedRoles = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
     if (!allowedRoles.includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     // 更新工程
@@ -1087,20 +1088,20 @@ router.delete('/:id', authenticateToken, requireResourceOwnership('project'), va
 
     // 检查权限：只有系统管理员和工程管理员可以删除工程
     if (!['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
     if (forceDelete && role !== 'SYSTEM_ADMIN') {
       return ApiResponse.error(
         res,
         ErrorCodes.PERMISSION_INSUFFICIENT,
         { message: '仅系统管理员可执行强制删除' },
-        403
+        200
       );
     }
 
     const project = await Project.findByPk(id);
     if (!project) {
-      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 200);
     }
 
     const activeStatuses = ['pending', 'deploying', 'running'];
@@ -1124,7 +1125,7 @@ router.delete('/:id', authenticateToken, requireResourceOwnership('project'), va
             activeDeploymentCount: activeDeployments.length,
             canForceDelete: role === 'SYSTEM_ADMIN',
           },
-          400
+          200
         );
       }
     }
@@ -1178,14 +1179,14 @@ router.get('/:id/delete-impact', authenticateToken, requireResourceOwnership('pr
     const { id } = req.params;
     const { role } = req.user;
     if (!['SYSTEM_ADMIN', 'PROJECT_ADMIN'].includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     const project = await Project.findByPk(id, {
       attributes: ['id', 'name'],
     });
     if (!project) {
-      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 200);
     }
 
     const allDeployments = await NodeDeployment.findAll({
@@ -1247,12 +1248,12 @@ router.post('/:id/operations/:operation', authenticateToken, requireResourceOwne
 
     // 检查权限：具备 runtime:operate 能力方可执行运维操作
     if (!hasCapability(role, 'runtime:operate')) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 403);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
     const project = await Project.findByPk(id);
     if (!project) {
-      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 200);
     }
 
     // 执行运维操作（这里是模拟，实际项目中需要调用具体的运维接口）

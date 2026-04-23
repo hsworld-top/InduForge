@@ -114,7 +114,7 @@ router.post('/login',
       if (captchaKey && captchaCode && captchaKey.trim() && captchaCode.trim()) {
         const isValidCaptcha = await Captcha.verifyCaptcha(captchaKey.trim(), captchaCode.trim());
         if (!isValidCaptcha) {
-          return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CAPTCHA, {}, 401);
+          return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CAPTCHA, {}, 200);
         }
       }
 
@@ -183,7 +183,7 @@ router.post('/login',
         // 多租户模式
         const tenant = await Tenant.findOne({ where: { code: tenantCode, status: 'active' } });
         if (!tenant) {
-          return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_CODE_INVALID, {}, 401);
+          return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_CODE_INVALID, {}, 200);
         }
 
         user = await User.findOne({
@@ -201,12 +201,12 @@ router.post('/login',
             include: [{ model: Tenant, as: 'tenant' }]
           });
         } else {
-          return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_CODE_REQUIRED, {}, 400);
+          return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_CODE_REQUIRED, {}, 200);
         }
       }
 
       if (!user || !(await bcrypt.compare(password, user.password))) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 401);
+        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 200);
       }
 
       // 更新最后登录时间
@@ -319,7 +319,7 @@ router.post('/refresh',
       // 验证 Refresh Token
       const tokenData = await TokenManager.verifyRefreshToken(refreshToken);
       if (!tokenData) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
       }
 
       // 获取用户信息
@@ -328,7 +328,7 @@ router.post('/refresh',
       });
 
       if (!user || user.status !== 'active') {
-        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 404);
+        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200);
       }
 
       // 生成新的 Access Token
@@ -341,7 +341,7 @@ router.post('/refresh',
 
       const result = await TokenManager.refreshAccessToken(refreshToken, payload);
       if (!result) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
       }
 
       return ApiResponse.success(res, {
@@ -446,28 +446,28 @@ router.put('/password',
     try {
       const token = req.headers.authorization?.split(' ')[1];
       if (!token) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 401);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200);
       }
 
       const isBlacklisted = await TokenManager.isAccessTokenBlacklisted(token);
       if (isBlacklisted) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
       }
 
       const decoded = TokenManager.verifyAccessToken(token);
       if (!decoded) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
       }
 
       const user = await User.findByPk(decoded.userId);
       if (!user) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 404);
+        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200);
       }
 
       const { oldPassword, newPassword } = req.body;
       const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
       if (!isOldPasswordValid) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 401);
+        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 200);
       }
 
       await user.update({ password: newPassword });
@@ -495,19 +495,19 @@ router.get('/me', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200);
     }
 
     // 检查是否在黑名单中
     const isBlacklisted = await TokenManager.isAccessTokenBlacklisted(token);
     if (isBlacklisted) {
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
     }
 
     // 验证 Access Token
     const decoded = TokenManager.verifyAccessToken(token);
     if (!decoded) {
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 401);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
     }
 
     const user = await User.findByPk(decoded.userId, {
@@ -515,7 +515,7 @@ router.get('/me', async (req, res) => {
     });
 
     if (!user) {
-      return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 404);
+      return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200);
     }
 
     return ApiResponse.success(res, {

@@ -99,6 +99,18 @@ const parseCorsOrigins = (origins) => {
     .filter(Boolean);
 };
 
+/**
+ * 业务失败统一按 2xx 返回，技术异常保留 5xx。
+ * 约定：<500 的业务状态码统一映射到 200。
+ */
+const normalizeBusinessErrorStatus = (statusCode) => {
+  const normalized = Number(statusCode);
+  if (Number.isFinite(normalized) && normalized >= 500) {
+    return normalized;
+  }
+  return 200;
+};
+
 function buildApp() {
   const app = express();
   const { PORT, NODE_ENV, ENABLE_SWAGGER } = getAppConfig();
@@ -169,39 +181,44 @@ function buildApp() {
 
   // ==================== 健康检查 ====================
   app.get('/health', async (req, res) => {
-    const { checkConnection, getDbStatus, isDbDegraded } = require('./config/database');
-    const { isConnected, getStatus: getRedisStatus, isDegraded: isRedisDegraded } = require('./utils/redis');
+    try {
+      const { checkConnection, getDbStatus, isDbDegraded } = require('./config/database');
+      const { isConnected, getStatus: getRedisStatus, isDegraded: isRedisDegraded } = require('./utils/redis');
 
-    const timestamp = dayjs().format(TIME_FORMAT);
-    const dbConnected = await checkConnection();
-    const redisConnected = await isConnected();
-    const dbStatus = getDbStatus();
-    const redisStatus = getRedisStatus();
+      const timestamp = dayjs().format(TIME_FORMAT);
+      const dbConnected = await checkConnection();
+      const redisConnected = await isConnected();
+      const dbStatus = getDbStatus();
+      const redisStatus = getRedisStatus();
 
-    // 判断整体健康状态
-    const isHealthy = dbConnected && redisConnected;
-    const isDegraded = isDbDegraded() || isRedisDegraded();
+      // 判断整体健康状态
+      const isHealthy = dbConnected && redisConnected;
+      const isDegraded = isDbDegraded() || isRedisDegraded();
 
-    const healthStatus = {
-      status: isHealthy ? 'healthy' : (isDegraded ? 'degraded' : 'unhealthy'),
-      timestamp,
-      services: {
-        database: {
-          connected: dbConnected,
-          degraded: isDbDegraded(),
-          status: dbStatus,
-          pool: dbStatus.pool
-        },
-        redis: {
-          connected: redisConnected,
-          degraded: isRedisDegraded(),
-          status: redisStatus
+      const healthStatus = {
+        status: isHealthy ? 'healthy' : (isDegraded ? 'degraded' : 'unhealthy'),
+        timestamp,
+        services: {
+          database: {
+            connected: dbConnected,
+            degraded: isDbDegraded(),
+            status: dbStatus,
+            pool: dbStatus.pool
+          },
+          redis: {
+            connected: redisConnected,
+            degraded: isRedisDegraded(),
+            status: redisStatus
+          }
         }
-      }
-    };
+      };
 
-    const statusCode = isHealthy ? 200 : (isDegraded ? 200 : 503);
-    res.status(statusCode).json(healthStatus);
+      const statusCode = isHealthy ? 200 : (isDegraded ? 200 : 503);
+      return ApiResponse.success(res, healthStatus, null, {}, statusCode);
+    } catch (error) {
+      logger.error('Health check error', { error: error.message, requestId: req.requestId });
+      return ApiResponse.error(res, ErrorCodes.EXTERNAL_SERVICE_ERROR, {}, 503);
+    }
   });
 
   // 定义主前端（IDE）路由的静态资源路径（部署时的构建产物目录 ide_views）
@@ -284,13 +301,18 @@ function buildApp() {
         statusCode: err.statusCode,
         options: err.options
       });
-      return ApiResponse.error(res, err.errorCode, err.options, err.statusCode);
+      return ApiResponse.error(
+        res,
+        err.errorCode,
+        err.options,
+        normalizeBusinessErrorStatus(err.statusCode)
+      );
     }
 
     // Joi 验证错误
     if (err.isJoi) {
       logger.error('Validation error', { requestId: req.requestId, details: err.details });
-      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { details: err.details }, 400);
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { details: err.details }, 200);
     }
 
     // 其他错误
