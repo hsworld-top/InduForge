@@ -26,6 +26,8 @@ export interface AuthLoginPayload extends AuthTokenPayload {
 }
 
 export interface AuthConfigPayload extends ApiRecord {
+  name?: string
+  title?: string
   tenantCode?: string
   tenantName?: string
   appName?: string
@@ -41,6 +43,12 @@ export interface AuthUserPayload extends ApiRecord {
   email?: string
   role?: string
   tenantId?: string | number
+  tenant?: {
+    id?: string | number
+    code?: string
+    name?: string
+    logoUrl?: string
+  }
 }
 
 export type AuthChangePasswordPayload = ApiRecord

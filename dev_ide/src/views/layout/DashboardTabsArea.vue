@@ -281,6 +281,11 @@ const handleCloseTab = (targetName) => {
   z-index: 1;
 }
 
+/* 非工程管理页面进入标签页时，统一使用工程管理的轻微上浮淡入效果。 */
+.dashboard-tab-panel-shell > :not(.project-management) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
 html.dark .dashboard-tab-panel-shell,
 [data-theme='dark'] .dashboard-tab-panel-shell {
   background:

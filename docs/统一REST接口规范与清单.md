@@ -113,15 +113,78 @@
 | 方法 | 路径 | 功能概要 |
 | --- | --- | --- |
 | `GET` | `/api/v1/tenants/assets` | 读取租户 Logo/背景图文件流 |
+| `GET` | `/api/v1/tenants/current/dashboard-notes` | 获取当前租户仪表盘共享便签列表 |
+| `POST` | `/api/v1/tenants/current/dashboard-notes` | 新增当前租户仪表盘共享便签 |
+| `PUT` | `/api/v1/tenants/current/dashboard-notes/:noteId` | 更新当前租户仪表盘共享便签 |
+| `DELETE` | `/api/v1/tenants/current/dashboard-notes/:noteId` | 删除当前租户仪表盘共享便签 |
 | `GET` | `/api/v1/tenants` | 获取租户列表 |
 | `POST` | `/api/v1/tenants` | 创建租户及默认管理员 |
 | `PUT` | `/api/v1/tenants/:id` | 更新租户信息 |
 | `DELETE` | `/api/v1/tenants/:id` | 删除租户 |
 | `POST` | `/api/v1/tenants/:id/upload` | 上传租户 Logo/背景图 |
 
+#### 当前租户仪表盘共享便签
+
+`GET /api/v1/tenants/current/dashboard-notes`
+
+- 鉴权：必须登录。
+- 租户范围：只读取当前登录用户所属租户。
+- 成功响应 `data.notes`：
+
+```json
+[
+  {
+    "id": "b7e2aaf8-67ff-42df-90f7-57cc66fcb2f8",
+    "content": "便签正文",
+    "createdAt": "2026-04-24T12:00:00.000Z",
+    "createdBy": "550e8400-e29b-41d4-a716-446655440002",
+    "createdByName": "系统管理员",
+    "updatedAt": "2026-04-24T12:00:00.000Z",
+    "updatedBy": "550e8400-e29b-41d4-a716-446655440002",
+    "updatedByName": "系统管理员"
+  }
+]
+```
+
+`POST /api/v1/tenants/current/dashboard-notes`
+
+- 鉴权：必须登录。
+- 租户范围：只写入当前登录用户所属租户。
+- 请求体：
+
+```json
+{
+  "content": "便签正文，最多 2000 个字符"
+}
+```
+
+- 成功响应 `data.note` 返回新增便签。
+
+`PUT /api/v1/tenants/current/dashboard-notes/:noteId`
+
+- 鉴权：必须登录。
+- 租户范围：只更新当前登录用户所属租户下指定便签。
+- 请求体：
+
+```json
+{
+  "content": "便签正文，最多 2000 个字符"
+}
+```
+
+- 成功响应 `data.note` 返回更新后的便签。
+- 写入语义：只覆盖指定单条便签内容，后提交内容覆盖前一版本。
+
+`DELETE /api/v1/tenants/current/dashboard-notes/:noteId`
+
+- 鉴权：必须登录。
+- 租户范围：只删除当前登录用户所属租户下指定便签。
+- 成功响应 `data.deletedId` 返回被删除的便签 ID。
+
 典型业务失败：
 
 - `20001` 业务参数非法
+- `11004` 租户不匹配或缺少当前租户上下文
 - `22001` 租户不存在
 - `22002` 租户编码重复
 

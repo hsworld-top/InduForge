@@ -402,7 +402,7 @@
 // @ts-nocheck
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore, useAppStore } from '@/store'
+import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { ROLES, ROUTE_NAMES } from '@/constants'
@@ -419,6 +419,7 @@ export default {
     const router = useRouter()
     const authStore = useAuthStore()
     const appStore = useAppStore()
+    const tenantStore = useTenantStore()
     const { locale, t } = useI18n()
 
     const form = reactive({
@@ -565,7 +566,11 @@ export default {
           username: user.username,
           role: user.role,
           tenantId: user.tenant?.id,
+          tenant: user.tenant,
         })
+        if (user.tenant) {
+          tenantStore.setCurrentTenant(user.tenant)
+        }
 
         // 保存记住的凭据（如果勾选了记住我）
         Storage.setRememberMeCredentials({

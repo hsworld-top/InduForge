@@ -1,78 +1,91 @@
 <template>
-  <div class="user-management">
+  <div class="user-management ck-workbench-page">
     <!-- 顶部操作栏 (Cockpit-style) -->
-    <div
-      class="flex items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-6"
-    >
+    <div class="ck-workbench-toolbar">
       <!-- 左侧：标题与搜索、筛选 -->
-      <div class="flex items-center space-x-4">
-        <!-- 页面标题 -->
-        <h1
-          class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 ml-2 whitespace-nowrap"
-        >
-          {{ t('userManagement.title') }}
-        </h1>
-
-        <div class="h-5 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
-
+      <div class="ck-toolbar-left">
         <!-- 圆角搜索框 -->
         <el-input
           v-model="searchForm.username"
+          size="small"
           :placeholder="t('userManagement.searchUsername')"
           clearable
-          class="!w-64 rounded-full-input"
+          class="ck-toolbar-search rounded-full-input"
           prefix-icon="Search"
           @input="handleSearch"
         />
 
         <!-- 筛选栏 -->
-        <div class="flex items-center space-x-2">
-          <el-select
-            v-model="searchForm.role"
-            :placeholder="t('userManagement.role')"
-            clearable
-            class="!w-36"
-            @change="handleSearch"
-          >
-            <el-option
-              v-for="role in roleOptions"
-              :key="role.value"
-              :label="role.label"
-              :value="role.value"
-            />
-          </el-select>
-          <el-select
-            v-model="searchForm.status"
-            :placeholder="t('userManagement.status')"
-            clearable
-            class="!w-36"
-            @change="handleSearch"
-          >
-            <el-option
-              v-for="status in statusOptions"
-              :key="status.value"
-              :label="status.label"
-              :value="status.value"
-            />
-          </el-select>
+        <div class="ck-toolbar-filters">
+          <el-popover placement="bottom-start" :width="170" trigger="click">
+            <template #reference>
+              <button type="button" class="ck-toolbar-pill-btn">
+                <el-icon><User /></el-icon>
+                {{ selectedRoleFilterLabel }}
+              </button>
+            </template>
+            <div class="sort-popover-menu">
+              <button
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': !searchForm.role }"
+                @click="setRoleFilter('')"
+              >
+                {{ t('userManagement.role') }}
+              </button>
+              <button
+                v-for="role in roleOptions"
+                :key="role.value"
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': searchForm.role === role.value }"
+                @click="setRoleFilter(role.value)"
+              >
+                {{ role.label }}
+              </button>
+            </div>
+          </el-popover>
+
+          <el-popover placement="bottom-start" :width="160" trigger="click">
+            <template #reference>
+              <button type="button" class="ck-toolbar-pill-btn">
+                <el-icon><CircleCheck /></el-icon>
+                {{ selectedStatusFilterLabel }}
+              </button>
+            </template>
+            <div class="sort-popover-menu">
+              <button
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': !searchForm.status }"
+                @click="setStatusFilter('')"
+              >
+                {{ t('userManagement.status') }}
+              </button>
+              <button
+                v-for="status in statusOptions"
+                :key="status.value"
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': searchForm.status === status.value }"
+                @click="setStatusFilter(status.value)"
+              >
+                {{ status.label }}
+              </button>
+            </div>
+          </el-popover>
         </div>
       </div>
 
       <!-- 右侧：全局操作按钮组 -->
-      <div class="flex items-center space-x-3">
+      <div class="ck-toolbar-right">
         <el-tooltip :content="t('userManagement.addUser')" placement="top" v-if="canManageUsers">
-          <button
-            class="w-9 h-9 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors shadow-sm"
-            @click="showCreateDialog = true"
-          >
+          <button class="ck-icon-button ck-icon-button--primary" @click="showCreateDialog = true">
             <el-icon><Plus /></el-icon>
           </button>
         </el-tooltip>
         <el-tooltip :content="t('common.refresh')" placement="top">
-          <button
-            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
-            @click="resetSearch"
-          >
+          <button class="ck-icon-button" @click="resetSearch">
             <el-icon><RefreshRight /></el-icon>
           </button>
         </el-tooltip>
@@ -80,126 +93,125 @@
     </div>
 
     <!-- 用户列表 -->
-    <div
-      class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
-    >
-      <el-table
-        :data="userList"
-        v-loading="loading"
-        style="width: 100%"
-        :header-cell-style="{
-          background: '#f9fafb',
-          color: '#374151',
-          height: '48px',
-          borderBottom: '1px solid #e5e7eb',
-        }"
-      >
-        <el-table-column prop="username" :label="t('userManagement.username')" min-width="120" />
-        <el-table-column prop="fullName" :label="t('userManagement.fullName')" min-width="120" />
-        <el-table-column prop="email" :label="t('userManagement.email')" min-width="200" />
-        <el-table-column prop="role" :label="t('userManagement.role')" min-width="160">
-          <template #default="scope">
-            <el-tag
-              :type="getRoleTagType(scope.row.role)"
-              size="small"
-              effect="light"
-              class="rounded-full px-3 border-transparent"
-              :class="getRoleTagType(scope.row.role) ? '' : 'bg-gray-100 text-gray-600'"
+    <div class="ck-content-area">
+      <div class="ck-content-scroll">
+        <div class="ck-table-shell">
+          <el-table :data="userList" v-loading="loading" style="width: 100%">
+            <el-table-column
+              prop="username"
+              :label="t('userManagement.username')"
+              min-width="120"
+            />
+            <el-table-column
+              prop="fullName"
+              :label="t('userManagement.fullName')"
+              min-width="120"
+            />
+            <el-table-column prop="email" :label="t('userManagement.email')" min-width="200" />
+            <el-table-column prop="role" :label="t('userManagement.role')" min-width="160">
+              <template #default="scope">
+                <el-tag
+                  :type="getRoleTagType(scope.row.role)"
+                  size="small"
+                  effect="light"
+                  class="rounded-full px-3 border-transparent"
+                  :class="getRoleTagType(scope.row.role) ? '' : 'bg-gray-100 text-gray-600'"
+                >
+                  {{ getRoleLabel(scope.row.role) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" :label="t('userManagement.status')" width="100">
+              <template #default="scope">
+                <el-tag
+                  :type="getStatusTagType(scope.row.status)"
+                  size="small"
+                  class="rounded-full"
+                >
+                  {{ getStatusLabel(scope.row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('userManagement.tenant')" width="140">
+              <template #default="scope">
+                {{ getTenantLabel(scope.row.tenant) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="lastLoginAt" :label="t('userManagement.lastLogin')" width="180">
+              <template #default="scope">
+                <span class="ck-time-text">{{ formatDateTime(scope.row.lastLoginAt) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="createdAt" :label="t('userManagement.createdAt')" width="180">
+              <template #default="scope">
+                <span class="ck-time-text">{{ formatDateTime(scope.row.createdAt) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column
+              :label="t('userManagement.actions')"
+              width="116"
+              fixed="right"
+              align="center"
+              v-if="canManageUsers"
             >
-              {{ getRoleLabel(scope.row.role) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" :label="t('userManagement.status')" width="100">
-          <template #default="scope">
-            <el-tag :type="getStatusTagType(scope.row.status)" size="small" class="rounded-full">
-              {{ getStatusLabel(scope.row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('userManagement.tenant')" width="140">
-          <template #default="scope">
-            {{ getTenantLabel(scope.row.tenant) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="lastLoginAt" :label="t('userManagement.lastLogin')" width="180">
-          <template #default="scope">
-            <span class="text-gray-500 text-sm font-mono tracking-wide">{{
-              formatDateTime(scope.row.lastLoginAt)
-            }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createdAt" :label="t('userManagement.createdAt')" width="180">
-          <template #default="scope">
-            <span class="text-gray-500 text-sm font-mono tracking-wide">{{
-              formatDateTime(scope.row.createdAt)
-            }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column
-          :label="t('userManagement.actions')"
-          width="140"
-          fixed="right"
-          align="center"
-          v-if="canManageUsers"
-        >
-          <template #default="scope">
-            <div class="flex items-center justify-center gap-1.5">
-              <el-tooltip :content="t('userManagement.edit')" placement="top">
-                <button
-                  class="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/30 dark:hover:text-blue-400 transition-colors"
-                  @click="editUser(scope.row)"
-                >
-                  <el-icon class="text-sm"><Edit /></el-icon>
-                </button>
-              </el-tooltip>
-              <el-tooltip :content="t('userManagement.resetPassword')" placement="top">
-                <button
-                  class="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-900/30 dark:hover:text-orange-400 transition-colors"
-                  @click="resetPassword(scope.row)"
-                >
-                  <el-icon class="text-sm"><Key /></el-icon>
-                </button>
-              </el-tooltip>
-              <el-tooltip
-                :content="t('userManagement.delete')"
-                placement="top"
-                v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole"
-              >
-                <button
-                  class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"
-                  @click="deleteUser(scope.row)"
-                >
-                  <el-icon class="text-sm"><Delete /></el-icon>
-                </button>
-              </el-tooltip>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
+              <template #default="scope">
+                <div class="ck-table-actions">
+                  <el-tooltip :content="t('userManagement.edit')" placement="top">
+                    <el-button
+                      size="small"
+                      text
+                      circle
+                      class="ck-table-action ck-table-action--primary"
+                      @click="editUser(scope.row)"
+                    >
+                      <el-icon><Edit /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip :content="t('userManagement.resetPassword')" placement="top">
+                    <el-button
+                      size="small"
+                      text
+                      circle
+                      class="ck-table-action ck-table-action--warning"
+                      @click="resetPassword(scope.row)"
+                    >
+                      <el-icon><Key /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip
+                    :content="t('userManagement.delete')"
+                    placement="top"
+                    v-if="scope.row.id !== currentUser?.id && scope.row.role !== superAdminRole"
+                  >
+                    <el-button
+                      size="small"
+                      text
+                      circle
+                      class="ck-table-action ck-table-action--danger"
+                      @click="deleteUser(scope.row)"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
 
       <!-- 分页 -->
-      <div
-        class="flex justify-between items-center py-3 px-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
-      >
-        <div class="text-xs text-gray-500 dark:text-gray-400 tracking-wide">
-          {{
-            t('userManagement.totalRange', {
-              start: (pagination.page - 1) * pagination.limit + 1,
-              end: Math.min(pagination.page * pagination.limit, pagination.total),
-              total: pagination.total,
-            })
-          }}
-        </div>
-        <el-pagination
-          size="small"
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.limit"
-          :page-sizes="[10, 20, 50, 100]"
+      <div class="ck-pagination-bar">
+        <WorkbenchPagination
+          :page="pagination.page"
+          :limit="pagination.limit"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
+          :total-pages="pagination.totalPages"
+          :summary="userPaginationSummary"
+          :page-size-label="t('projectManagement.pageSizeLabel')"
+          :page-indicator="userPaginationPageIndicator"
+          :limit-options="[10, 20, 50, 100]"
+          @change="handlePaginationChange"
         />
       </div>
     </div>
@@ -366,6 +378,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { CircleCheck, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store'
 import { userAPI } from '@/api/user.api'
 import { RoleEnum, UserStatusEnum } from '@/enums'
@@ -373,9 +386,15 @@ import { formatDateTime } from '@/utils/date'
 import { getApiErrorMessage } from '@/utils/request'
 import { canManageUsers } from '@/permissions'
 import { ROLES } from '@/constants'
+import WorkbenchPagination from '@/components/WorkbenchPagination.vue'
 
 export default {
   name: 'TenantUserManagement',
+  components: {
+    WorkbenchPagination,
+    CircleCheck,
+    User,
+  },
   setup() {
     const { t } = useI18n()
     const authStore = useAuthStore()
@@ -660,6 +679,33 @@ export default {
     // 检查是否可以管理用户（创建、编辑、删除）
     const canManageUsersAction = computed(() => canManageUsers(currentUser.value?.role))
 
+    const userPaginationSummary = computed(() =>
+      t('userManagement.totalRange', {
+        start: pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1,
+        end: Math.min(pagination.page * pagination.limit, pagination.total),
+        total: pagination.total,
+      }),
+    )
+
+    const userPaginationPageIndicator = computed(() =>
+      t('projectManagement.pageIndicator', {
+        page: pagination.totalPages > 0 ? pagination.page : 0,
+        totalPages: pagination.totalPages,
+      }),
+    )
+
+    const selectedRoleFilterLabel = computed(
+      () =>
+        roleOptions.find((option) => option.value === searchForm.role)?.label ||
+        t('userManagement.role'),
+    )
+
+    const selectedStatusFilterLabel = computed(
+      () =>
+        statusOptions.find((option) => option.value === searchForm.status)?.label ||
+        t('userManagement.status'),
+    )
+
     // 获取用户列表
     const fetchUsers = async () => {
       loading.value = true
@@ -710,6 +756,16 @@ export default {
       }, 300)
     }
 
+    const setRoleFilter = (value) => {
+      searchForm.role = value
+      handleSearch()
+    }
+
+    const setStatusFilter = (value) => {
+      searchForm.status = value
+      handleSearch()
+    }
+
     // 重置搜索
     const resetSearch = () => {
       if (searchTimer.value) {
@@ -722,16 +778,9 @@ export default {
       fetchUsers()
     }
 
-    // 分页大小改变
-    const handleSizeChange = (size) => {
-      pagination.limit = size
-      pagination.page = 1
-      fetchUsers()
-    }
-
-    // 页码改变
-    const handleCurrentChange = (page) => {
+    const handlePaginationChange = ({ page, limit }) => {
       pagination.page = page
+      pagination.limit = limit
       fetchUsers()
     }
 
@@ -921,6 +970,10 @@ export default {
       // 数据
       userList,
       pagination,
+      userPaginationSummary,
+      userPaginationPageIndicator,
+      selectedRoleFilterLabel,
+      selectedStatusFilterLabel,
       searchForm,
       roleOptions,
       statusOptions,
@@ -951,9 +1004,10 @@ export default {
       canManageUsers: canManageUsersAction,
       fetchUsers,
       handleSearch,
+      setRoleFilter,
+      setStatusFilter,
       resetSearch,
-      handleSizeChange,
-      handleCurrentChange,
+      handlePaginationChange,
       handleCreateUser,
       editUser,
       handleUpdateUser,
@@ -968,29 +1022,29 @@ export default {
 
 <style scoped>
 .user-management {
-  padding: 20px;
-}
-
-.user-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
+  background: transparent;
 }
 
 /* 表格样式 */
 :deep(.el-table) {
-  border-radius: 8px;
+  border-radius: var(--ck-radius-md);
+  background: var(--ck-bg-secondary);
 }
 
 :deep(.el-table th) {
-  background-color: #f9fafb !important;
-  color: #374151 !important;
+  height: 48px;
+  background-color: #f4f6f9 !important;
+  color: var(--ck-text-secondary) !important;
   font-weight: 600;
+  border-bottom: 1px solid var(--ck-border-light) !important;
 }
 
 :deep(.el-table td) {
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--ck-border-light);
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--ck-bg-hover);
 }
 
 /* 对话框样式 */
@@ -1017,12 +1071,7 @@ html.dark :deep(.el-dialog__header),
 
 :deep(.el-dialog__footer) {
   padding: 20px;
-  border-top: 1px solid #e5e7eb;
-}
-
-/* 分页样式 */
-:deep(.el-pagination) {
-  justify-content: center;
+  border-top: 1px solid var(--ck-border-light);
 }
 
 /* 标签样式 */

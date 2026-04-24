@@ -30,6 +30,7 @@ export interface UserTenant {
   id?: string | number
   code?: string
   name?: string
+  logoUrl?: string
 }
 
 /**

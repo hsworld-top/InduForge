@@ -62,6 +62,7 @@ export const STORAGE_KEYS = {
   THEME: 'theme',
   LANGUAGE: 'language',
   TENANT_ID: 'tenant_id',
+  TENANT_BRAND: 'tenant_brand',
   REMEMBER_ME: 'remember_me',
   SIDEBAR_COLLAPSED: 'sidebar_collapsed',
   DASHBOARD_TAB_STATE: 'dashboard_tab_state',

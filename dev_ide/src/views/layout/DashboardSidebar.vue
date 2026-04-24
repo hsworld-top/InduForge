@@ -24,11 +24,11 @@
       <div class="flex items-center overflow-hidden">
         <img
           :src="tenantLogoUrl"
-          :alt="currentTenant?.name || 'Logo'"
+          :alt="tenantName"
           class="h-7 w-auto mr-2 shrink-0"
         />
         <h1 class="text-base font-semibold text-gray-800 dark:text-white truncate">
-          {{ currentTenant?.name || 'InduForge' }}
+          {{ tenantName }}
         </h1>
       </div>
       <button
@@ -417,7 +417,7 @@ import { UserFilled, Fold } from '@element-plus/icons-vue'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { canAccessTab } from '@/permissions'
 import { ROLES } from '@/constants'
-import defaultLogo from '@/assets/images/default-logo.svg'
+import { resolveTenantBrandLogo, resolveTenantBrandName } from '@/utils/tenantBrand'
 
 const props = defineProps({
   activeTab: {
@@ -459,12 +459,11 @@ const isSystemAdmin = computed(() => authStore.userInfo?.role === ROLES.SYSTEM_A
 
 // 租户信息
 const currentTenant = computed(() => tenantStore.currentTenant)
+const tenantName = computed(() =>
+  resolveTenantBrandName(currentTenant.value || { name: appStore.config?.name }),
+)
 const tenantLogoUrl = computed(() => {
-  const tenantLogo = currentTenant.value?.logoUrl
-  if (tenantLogo) {
-    return tenantLogo.startsWith('http') ? tenantLogo : tenantLogo
-  }
-  return defaultLogo
+  return resolveTenantBrandLogo(currentTenant.value || { logoUrl: appStore.config?.logoUrl })
 })
 
 // 权限检查

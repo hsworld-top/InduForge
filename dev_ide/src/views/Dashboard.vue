@@ -84,6 +84,7 @@ import {
 } from '@/utils/embeddedIframeSync'
 import { resolveDashboardTabTitle } from '@/utils/dashboardTabTitle'
 import { restoreDashboardTabState, serializeDashboardTabState } from '@/utils/dashboardTabState'
+import { resolveTenantBrandLogo } from '@/utils/tenantBrand'
 import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
 import { initSocket, getSocket } from '@/utils/socket'
@@ -109,9 +110,6 @@ const SystemSettings = markRaw(
 )
 const Profile = markRaw(defineAsyncComponent(() => import('@/views/profile/Profile.vue')))
 const EmbeddedApp = markRaw(defineAsyncComponent(() => import('@/components/EmbeddedApp.vue')))
-
-// 导入默认Logo图片
-import defaultLogo from '@/assets/images/default-logo.svg'
 
 import DashboardSidebar from './layout/DashboardSidebar.vue'
 import DashboardTabsArea from './layout/DashboardTabsArea.vue'
@@ -250,13 +248,7 @@ export default {
     // 租户相关计算属性
     const currentTenant = computed(() => tenantStore.currentTenant)
     const tenantLogoUrl = computed(() => {
-      // 优先使用租户的logo，然后使用平台默认logo
-      const tenantLogo = currentTenant.value?.logoUrl
-      if (tenantLogo) {
-        // 如果是完整URL，直接使用；如果是相对路径，拼接public路径
-        return tenantLogo.startsWith('http') ? tenantLogo : tenantLogo
-      }
-      return defaultLogo
+      return resolveTenantBrandLogo(currentTenant.value)
     })
 
     const toggleTheme = () => {
@@ -776,15 +768,10 @@ export default {
       setupOpsPendingSubscription()
       notifyExistingPendingRequests()
 
-      // 仅超级管理员按需获取租户详情，避免非超级管理员触发租户接口请求
-      if (isSuperAdmin.value && authStore.userInfo?.tenantId) {
+      // 当前租户品牌用于菜单栏和浏览器标签，所有登录角色都需要读取。
+      if (authStore.userInfo?.tenantId) {
         try {
-          const { tenantAPI } = await import('@/api')
-          const response = await tenantAPI.getTenantById(authStore.userInfo.tenantId)
-          const currentTenantData = response?.data?.tenant || response?.data || null
-          if (currentTenantData) {
-            tenantStore.setCurrentTenant(currentTenantData)
-          }
+          await tenantStore.fetchCurrentTenant()
         } catch (error) {
           console.error('Failed to fetch current tenant:', error)
         }

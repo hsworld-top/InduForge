@@ -10,10 +10,12 @@ import App from './App.vue'
 import './assets/styles/main.css'
 import './assets/styles/cockpit-design-tokens.css'
 import { Storage } from './utils/storage'
+import { applyTenantBrowserBrand } from './utils/tenantBrand'
 
 const initialTheme = Storage.getTheme()
 document.documentElement.classList.toggle('dark', initialTheme === 'dark')
 document.documentElement.setAttribute('data-theme', initialTheme)
+applyTenantBrowserBrand()
 
 const app = createApp(App)
 

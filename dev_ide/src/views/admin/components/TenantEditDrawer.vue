@@ -84,6 +84,15 @@
                   class="fm-input"
                   :placeholder="t('tenantManagement.tenantName')"
                 />
+                <p
+                  v-if="isAdd"
+                  class="mt-2 flex items-start gap-1.5 text-xs font-medium leading-5 text-slate-500 dark:text-slate-400"
+                >
+                  <span
+                    class="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500/70"
+                  ></span>
+                  <span>{{ t('tenantManagement.tenantNameUsageHint') }}</span>
+                </p>
               </div>
               <div>
                 <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">

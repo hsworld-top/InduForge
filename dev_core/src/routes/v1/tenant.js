@@ -194,6 +194,233 @@ router.get('/assets', validate(Joi.object({
 });
 
 /**
+ * 获取当前用户所属租户，便签读写都严格落在当前租户范围内。
+ * @param {object} req Express 请求
+ * @param {object} res Express 响应
+ * @param {string[]} attributes 需要读取的租户字段
+ * @returns {Promise<object|null>} 当前租户记录
+ */
+async function resolveCurrentTenant(req, res, attributes = ['id', 'settings']) {
+  const tenantId = req.user?.tenantId;
+  if (!tenantId) {
+    ApiResponse.error(res, ErrorCodes.PERMISSION_TENANT_MISMATCH, {}, 200);
+    return null;
+  }
+
+  const tenant = await Tenant.findByPk(tenantId, {
+    attributes,
+  });
+  if (!tenant) {
+    ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200);
+    return null;
+  }
+  return tenant;
+}
+
+/**
+ * 获取当前登录用户所属租户的品牌信息。
+ * 浏览器标题、favicon 和菜单栏品牌只需要这些轻量字段，不依赖租户管理权限。
+ */
+router.get('/current', authenticateToken, async (req, res) => {
+  try {
+    const tenant = await resolveCurrentTenant(req, res, [
+      'id',
+      'name',
+      'code',
+      'logoUrl',
+      'loginBackgroundUrl',
+    ]);
+    if (!tenant) return null;
+
+    return ApiResponse.success(res, { tenant });
+  } catch (error) {
+    logger.error('Get current tenant error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+/**
+ * 规范化租户仪表盘便签列表。
+ * @param {object|null} settings 租户 settings
+ * @returns {Array<object>} 便签列表
+ */
+function normalizeDashboardNotes(settings) {
+  const rawNotes = Array.isArray(settings?.dashboardNotes) ? settings.dashboardNotes : [];
+  return rawNotes
+    .filter((note) => note && typeof note === 'object' && typeof note.content === 'string')
+    .map((note) => ({
+      id: note.id || randomUUID(),
+      content: note.content,
+      createdAt: note.createdAt || note.updatedAt || new Date().toISOString(),
+      createdBy: note.createdBy || note.updatedBy || null,
+      createdByName: note.createdByName || note.updatedByName || null,
+      updatedAt: note.updatedAt || note.createdAt || null,
+      updatedBy: note.updatedBy || note.createdBy || null,
+      updatedByName: note.updatedByName || note.createdByName || null,
+    }))
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+}
+
+/**
+ * 根据当前用户构建便签作者信息。
+ * @param {object} req Express 请求
+ * @returns {{userId: string|number|null, userName: string|null}}
+ */
+function resolveNoteAuthor(req) {
+  return {
+    userId: req.user?.id || null,
+    userName: req.user?.fullName || req.user?.username || null,
+  };
+}
+
+/**
+ * @swagger
+ * /api/v1/tenants/current/dashboard-notes:
+ *   get:
+ *     summary: 获取当前租户仪表盘共享便签列表
+ *     tags: [租户管理]
+ */
+router.get('/current/dashboard-notes', authenticateToken, async (req, res) => {
+  try {
+    const tenant = await resolveCurrentTenant(req, res);
+    if (!tenant) return null;
+
+    return ApiResponse.success(res, {
+      notes: normalizeDashboardNotes(tenant.settings),
+    });
+  } catch (error) {
+    logger.error('Get tenant dashboard notes error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/tenants/current/dashboard-notes:
+ *   post:
+ *     summary: 新增当前租户仪表盘共享便签
+ *     tags: [租户管理]
+ */
+router.post('/current/dashboard-notes', authenticateToken, validate(Joi.object({
+  body: Joi.object({
+    content: Joi.string().trim().min(1).max(2000).required(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const tenant = await resolveCurrentTenant(req, res);
+    if (!tenant) return null;
+
+    const now = new Date().toISOString();
+    const { userId, userName } = resolveNoteAuthor(req);
+    const notes = normalizeDashboardNotes(tenant.settings);
+    const note = {
+      id: randomUUID(),
+      content: req.body.content,
+      createdAt: now,
+      createdBy: userId,
+      createdByName: userName,
+      updatedAt: now,
+      updatedBy: userId,
+      updatedByName: userName,
+    };
+    const settings = {
+      ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
+      dashboardNotes: [note, ...notes],
+    };
+
+    await tenant.update({ settings });
+    return ApiResponse.success(res, { note }, 'operation_success', {}, 201);
+  } catch (error) {
+    logger.error('Create tenant dashboard note error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/tenants/current/dashboard-notes/{noteId}:
+ *   put:
+ *     summary: 更新当前租户仪表盘共享便签
+ *     tags: [租户管理]
+ */
+router.put('/current/dashboard-notes/:noteId', authenticateToken, validate(Joi.object({
+  params: Joi.object({
+    noteId: Joi.string().required(),
+  }),
+  body: Joi.object({
+    content: Joi.string().trim().min(1).max(2000).required(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    const tenant = await resolveCurrentTenant(req, res);
+    if (!tenant) return null;
+
+    const notes = normalizeDashboardNotes(tenant.settings);
+    const targetIndex = notes.findIndex((note) => note.id === req.params.noteId);
+    if (targetIndex < 0) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 200);
+    }
+
+    const now = new Date().toISOString();
+    const { userId, userName } = resolveNoteAuthor(req);
+    const updatedNote = {
+      ...notes[targetIndex],
+      content: req.body.content,
+      updatedAt: now,
+      updatedBy: userId,
+      updatedByName: userName,
+    };
+    notes[targetIndex] = updatedNote;
+
+    const settings = {
+      ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
+      dashboardNotes: notes,
+    };
+    await tenant.update({ settings });
+
+    return ApiResponse.success(res, { note: updatedNote }, 'update_success');
+  } catch (error) {
+    logger.error('Update tenant dashboard note error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/tenants/current/dashboard-notes/{noteId}:
+ *   delete:
+ *     summary: 删除当前租户仪表盘共享便签
+ *     tags: [租户管理]
+ */
+router.delete('/current/dashboard-notes/:noteId', authenticateToken, validate(Joi.object({
+  params: Joi.object({
+    noteId: Joi.string().required(),
+  }),
+})), async (req, res) => {
+  try {
+    const tenant = await resolveCurrentTenant(req, res);
+    if (!tenant) return null;
+
+    const notes = normalizeDashboardNotes(tenant.settings);
+    const nextNotes = notes.filter((note) => note.id !== req.params.noteId);
+    if (nextNotes.length === notes.length) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 200);
+    }
+
+    const settings = {
+      ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
+      dashboardNotes: nextNotes,
+    };
+    await tenant.update({ settings });
+
+    return ApiResponse.success(res, { deletedId: req.params.noteId }, 'delete_success');
+  } catch (error) {
+    logger.error('Delete tenant dashboard note error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+/**
  * @swagger
  * /api/v1/tenants:
  *   get:

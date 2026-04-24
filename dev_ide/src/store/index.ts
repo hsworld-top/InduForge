@@ -3,6 +3,7 @@ import { Storage } from '@/utils'
 import type { Role, UserInfo } from '@/types/auth'
 import type { AuthConfigPayload, AuthLoginPayload } from '@/api/auth.api'
 import { getApiErrorMessage } from '@/utils/request'
+import { applyTenantBrowserBrand } from '@/utils/tenantBrand'
 import defaultLogoUrl from '@/assets/images/default-logo.svg'
 import defaultLoginBgUrl from '@/assets/images/default-login-bg.svg'
 
@@ -24,6 +25,8 @@ type LoginResult = {
 type TenantRecord = Record<string, unknown> & {
   id?: TenantId
   code?: string
+  name?: string
+  logoUrl?: string
   status?: string
 }
 
@@ -166,6 +169,7 @@ export const useAuthStore = defineStore('auth', {
           email: user.email,
           role: user.role as Role,
           tenantId: nestedTenantId ?? user.tenantId ?? null,
+          tenant: user.tenant,
         })
 
         return { success: true }
@@ -268,15 +272,25 @@ export const useAppStore = defineStore('app', {
         const mergedConfig: AppConfig = {
           ...buildDefaultAppConfig(),
           ...(config ?? {}),
+          name: config?.tenantName || config?.appName || config?.name || 'InduForge',
           logoUrl: config?.logoUrl || defaultLogoUrl,
           loginBackgroundUrl: config?.loginBackgroundUrl || defaultLoginBgUrl,
           multiTenant: config?.multiTenant || false,
         }
 
         this.setConfig(mergedConfig)
+        applyTenantBrowserBrand({
+          name: mergedConfig.name,
+          logoUrl: mergedConfig.logoUrl,
+        })
       } catch (error) {
         console.error('Failed to load config:', error)
-        this.setConfig(buildDefaultAppConfig())
+        const fallbackConfig = buildDefaultAppConfig()
+        this.setConfig(fallbackConfig)
+        applyTenantBrowserBrand({
+          name: fallbackConfig.name,
+          logoUrl: fallbackConfig.logoUrl,
+        })
       }
     },
   },
@@ -300,6 +314,17 @@ export const useTenantStore = defineStore('tenant', {
   },
 
   actions: {
+    async fetchCurrentTenant(): Promise<TenantRecord | null> {
+      const { tenantAPI } = await import('@/api')
+      const response = await tenantAPI.getCurrentTenant()
+      const responseData = (response as { data?: { tenant?: TenantRecord } }).data
+      const tenant = responseData?.tenant ?? null
+      if (tenant) {
+        this.setCurrentTenant(tenant)
+      }
+      return tenant
+    },
+
     async fetchTenants(): Promise<void> {
       this.loading = true
       try {
@@ -357,6 +382,7 @@ export const useTenantStore = defineStore('tenant', {
       if (tenant?.id !== null && tenant?.id !== undefined) {
         Storage.setTenantId(String(tenant.id))
       }
+      applyTenantBrowserBrand(tenant)
     },
   },
 })

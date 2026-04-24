@@ -2,9 +2,29 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/src/assets/images/default-logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>多租户管理系统</title>
+    <title>InduForge</title>
+    <script>
+      ;(() => {
+        try {
+          const rawBrand = localStorage.getItem('tenant_brand')
+          if (!rawBrand) return
+          const brand = JSON.parse(rawBrand)
+          if (brand && typeof brand.name === 'string' && brand.name.trim()) {
+            document.title = brand.name.trim()
+          }
+          if (brand && typeof brand.logoUrl === 'string' && brand.logoUrl.trim()) {
+            const iconLink = document.querySelector('link[rel="icon"]')
+            if (iconLink) {
+              iconLink.href = brand.logoUrl.trim()
+            }
+          }
+        } catch {
+          // 忽略本地品牌缓存解析异常，后续由应用启动流程重新校正。
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

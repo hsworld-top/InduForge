@@ -597,20 +597,24 @@ router.get('/config', validate(Joi.object({
     const activeTenantsCount = await Tenant.count({ where: { status: 'active' } });
     let tenantBranding = null;
 
-    if (tenantCode && String(tenantCode).trim()) {
-      tenantBranding = await Tenant.findOne({
-        where: { code: String(tenantCode).trim(), status: 'active' },
-        attributes: [
-          'logoUrl',
-          'loginBackgroundUrl',
-          'companyName',
-          'companyPhone',
-          'companyAddress',
-          'companyWebsite',
-          'settings',
-        ],
-      });
-    }
+    const tenantWhere = tenantCode && String(tenantCode).trim()
+      ? { code: String(tenantCode).trim(), status: 'active' }
+      : { id: appConfig.defaultTenant.id, status: 'active' };
+    tenantBranding = await Tenant.findOne({
+      where: tenantWhere,
+      attributes: [
+        'id',
+        'name',
+        'code',
+        'logoUrl',
+        'loginBackgroundUrl',
+        'companyName',
+        'companyPhone',
+        'companyAddress',
+        'companyWebsite',
+        'settings',
+      ],
+    });
 
     const loginDisplayConfig = tenantBranding?.settings?.loginDisplay || {};
     const loginDisplay = {
@@ -627,7 +631,11 @@ router.get('/config', validate(Joi.object({
     };
 
     const config = {
-      title: packageInfo.name || '管理系统',
+      title: tenantBranding?.name || appConfig.defaultTenant.name,
+      name: tenantBranding?.name || appConfig.defaultTenant.name,
+      tenantName: tenantBranding?.name || appConfig.defaultTenant.name,
+      tenantCode: tenantBranding?.code || appConfig.defaultTenant.code,
+      appName: tenantBranding?.name || appConfig.defaultTenant.name,
       version: packageInfo.version || '1.0.0',
       description: packageInfo.description || '',
       author: packageInfo.author || '',

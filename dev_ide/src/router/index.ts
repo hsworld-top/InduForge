@@ -4,7 +4,6 @@ import type { Role, UserInfo } from '@/types/auth'
 import { Storage } from '@/utils/storage'
 import { buildDashboardRedirectLocation } from '@/utils/dashboardEntryHandoff'
 import { hasRole } from '@/permissions'
-import i18n from '@/lang'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -171,11 +170,6 @@ const getCurrentUserRole = (): Role | null => {
 
 // 路由守卫
 router.beforeEach((to, from, next) => {
-  // 设置页面标题
-  const translatedTitle = to.meta.titleKey ? i18n.global.t(to.meta.titleKey) : null
-  const title = String(translatedTitle || to.meta.title || 'InduForge')
-  document.title = `${title} - ProjectIDE`
-
   // 检查认证
   const token = Storage.getToken()
   const isAuthenticated = !!token

@@ -31,6 +31,50 @@ export const tenantAPI = {
   },
 
   /**
+   * 获取当前登录用户所属租户品牌信息。
+   * @returns {Promise} 当前租户信息
+   */
+  getCurrentTenant() {
+    return request.get('/tenants/current')
+  },
+
+  /**
+   * 获取当前租户仪表盘共享便签列表。
+   * @returns {Promise} 当前租户共享便签列表
+   */
+  getDashboardNotes() {
+    return request.get('/tenants/current/dashboard-notes')
+  },
+
+  /**
+   * 新增当前租户仪表盘共享便签。
+   * @param {string} content - 便签正文，最多 2000 个字符
+   * @returns {Promise} 新增后的共享便签
+   */
+  createDashboardNote(content: string) {
+    return request.post('/tenants/current/dashboard-notes', { content })
+  },
+
+  /**
+   * 更新当前租户仪表盘共享便签。
+   * @param {string} noteId - 便签 ID
+   * @param {string} content - 便签正文，最多 2000 个字符
+   * @returns {Promise} 更新后的共享便签
+   */
+  updateDashboardNote(noteId: string, content: string) {
+    return request.put(`/tenants/current/dashboard-notes/${noteId}`, { content })
+  },
+
+  /**
+   * 删除当前租户仪表盘共享便签。
+   * @param {string} noteId - 便签 ID
+   * @returns {Promise} 删除结果
+   */
+  deleteDashboardNote(noteId: string) {
+    return request.delete(`/tenants/current/dashboard-notes/${noteId}`)
+  },
+
+  /**
    * 创建租户
    * @param {object} tenantData - 租户数据
    * @param {string} tenantData.name - 租户名称

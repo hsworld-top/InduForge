@@ -1,91 +1,90 @@
 <template>
-  <div class="ops-management h-full flex flex-col">
+  <div class="ops-management ck-workbench-page">
     <!-- 一体化操作栏 (Cockpit-style) -->
-    <div
-      class="flex flex-col md:flex-row md:items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-6 gap-3"
-    >
+    <div class="ck-workbench-toolbar">
       <!-- 左侧：标题、总数与搜索筛选 -->
-      <div class="flex items-center space-x-4 flex-wrap gap-y-2 md:flex-nowrap">
-        <!-- 页面标题 -->
-        <h1
-          class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 ml-2 whitespace-nowrap"
-        >
-          {{ t('opsManagement.title') }}
-        </h1>
-
-        <el-tag
-          size="small"
-          type="info"
-          class="rounded-full tracking-wide border-transparent bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-        >
+      <div class="ck-toolbar-left">
+        <span class="ck-toolbar-count">
           {{ t('opsManagement.totalNodes') }}: {{ nodePagination.total }}
-        </el-tag>
-
-        <div class="h-5 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden md:block"></div>
+        </span>
 
         <!-- 圆角搜索框 -->
         <el-input
           v-model="nodeSearch.keyword"
+          size="small"
           :placeholder="t('opsManagement.searchPlaceholder')"
           clearable
-          class="!w-48 md:!w-64 rounded-full-input"
+          class="ck-toolbar-search rounded-full-input"
           prefix-icon="Search"
         />
 
         <!-- 筛选栏 -->
-        <div class="flex items-center space-x-2">
-          <el-select
-            v-model="nodeSearch.projectName"
-            clearable
-            filterable
-            :placeholder="t('projectManagement.allProjects')"
-            class="!w-40"
-          >
-            <el-option
-              v-for="item in projectOptions"
-              :key="item.id"
-              :label="item.name"
-              :value="item.name"
-            />
-          </el-select>
-          <el-select
-            v-model="nodeSearch.status"
-            :placeholder="t('opsManagement.allStatus')"
-            clearable
-            class="!w-32"
-          >
-            <el-option :label="t('opsManagement.online')" value="online" />
-            <el-option :label="t('opsManagement.offline')" value="offline" />
-            <el-option :label="t('opsManagement.abnormal')" value="error" />
-          </el-select>
+        <div class="ck-toolbar-filters">
+          <el-popover placement="bottom-start" :width="180" trigger="click">
+            <template #reference>
+              <button type="button" class="ck-toolbar-pill-btn">
+                <el-icon><FolderOpened /></el-icon>
+                {{ selectedProjectFilterLabel }}
+              </button>
+            </template>
+            <div class="sort-popover-menu">
+              <button
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': !nodeSearch.projectName }"
+                @click="setNodeProjectFilter('')"
+              >
+                {{ t('projectManagement.allProjects') }}
+              </button>
+              <button
+                v-for="item in projectOptions"
+                :key="item.id"
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': nodeSearch.projectName === item.name }"
+                @click="setNodeProjectFilter(item.name)"
+              >
+                {{ item.name }}
+              </button>
+            </div>
+          </el-popover>
+
+          <el-popover placement="bottom-start" :width="160" trigger="click">
+            <template #reference>
+              <button type="button" class="ck-toolbar-pill-btn">
+                <el-icon><Connection /></el-icon>
+                {{ selectedNodeStatusLabel }}
+              </button>
+            </template>
+            <div class="sort-popover-menu">
+              <button
+                v-for="option in nodeStatusFilterOptions"
+                :key="option.value || 'all'"
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': nodeSearch.status === option.value }"
+                @click="setNodeStatusFilter(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </el-popover>
         </div>
       </div>
 
       <!-- 右侧：视图切换与全局操作 -->
-      <div class="flex items-center space-x-3 ml-auto md:ml-0">
+      <div class="ck-toolbar-right">
         <!-- 视图切换 -->
-        <div
-          class="flex items-center bg-gray-50 dark:bg-gray-900 rounded-full p-1 border border-gray-100 dark:border-gray-700"
-        >
+        <div class="ck-view-toggle">
           <button
             @click="activeView = 'dashboard'"
-            :class="[
-              'w-8 h-7 rounded-full flex items-center justify-center transition-colors',
-              activeView === 'dashboard'
-                ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm'
-                : 'text-gray-400 hover:text-gray-600',
-            ]"
+            :class="['ck-view-toggle__button', activeView === 'dashboard' ? 'is-active' : '']"
           >
             <el-icon><Grid /></el-icon>
           </button>
           <button
             @click="activeView = 'list'"
-            :class="[
-              'w-8 h-7 rounded-full flex items-center justify-center transition-colors',
-              activeView === 'list'
-                ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm'
-                : 'text-gray-400 hover:text-gray-600',
-            ]"
+            :class="['ck-view-toggle__button', activeView === 'list' ? 'is-active' : '']"
           >
             <svg
               class="w-4 h-4"
@@ -113,30 +112,20 @@
           class="cursor-pointer"
           @click="showPendingDialog = true"
         >
-          <button
-            :class="[
-              'w-9 h-9 rounded-full flex items-center justify-center transition-colors shadow-sm',
-              pendingCount > 0
-                ? 'bg-orange-50 hover:bg-orange-100 text-orange-500 border border-orange-200'
-                : 'bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600',
-            ]"
-          >
+          <button :class="['ck-icon-button', pendingCount > 0 ? 'ck-icon-button--warning' : '']">
             <el-icon><Bell /></el-icon>
           </button>
         </el-badge>
 
         <el-tooltip :content="t('common.refresh')" placement="top">
-          <button
-            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
-            @click="fetchNodes"
-          >
+          <button class="ck-icon-button" @click="fetchNodes">
             <el-icon><RefreshRight /></el-icon>
           </button>
         </el-tooltip>
       </div>
     </div>
 
-    <div v-if="nodeLoadError" class="mb-4">
+    <div v-if="nodeLoadError">
       <el-alert :title="nodeLoadError" type="error" show-icon :closable="false">
         <template #default>
           <el-button text type="primary" @click="fetchNodes">{{
@@ -146,40 +135,38 @@
       </el-alert>
     </div>
 
-    <div class="mb-4">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div class="status-stat-card">
-          <div class="status-stat-label">{{ t('opsManagement.running') }}</div>
-          <div class="status-stat-value text-status-success">
-            {{ deployStatusSummary.running }}
-          </div>
+    <div class="ck-stat-grid">
+      <div class="ck-stat-card">
+        <div class="ck-stat-card__label">{{ t('opsManagement.running') }}</div>
+        <div class="ck-stat-card__value text-status-success">
+          {{ deployStatusSummary.running }}
         </div>
-        <div class="status-stat-card">
-          <div class="status-stat-label">
-            {{ t('opsManagement.deploying') }}
-          </div>
-          <div class="status-stat-value text-status-warning">
-            {{ deployStatusSummary.deploying }}
-          </div>
+      </div>
+      <div class="ck-stat-card">
+        <div class="ck-stat-card__label">
+          {{ t('opsManagement.deploying') }}
         </div>
-        <div class="status-stat-card">
-          <div class="status-stat-label">{{ t('opsManagement.stopped') }}</div>
-          <div class="status-stat-value text-gray-700 dark:text-gray-300">
-            {{ deployStatusSummary.stopped }}
-          </div>
+        <div class="ck-stat-card__value text-status-warning">
+          {{ deployStatusSummary.deploying }}
         </div>
-        <div class="status-stat-card">
-          <div class="status-stat-label">{{ t('opsManagement.abnormal') }}</div>
-          <div class="status-stat-value text-status-danger">
-            {{ deployStatusSummary.failed }}
-          </div>
+      </div>
+      <div class="ck-stat-card">
+        <div class="ck-stat-card__label">{{ t('opsManagement.stopped') }}</div>
+        <div class="ck-stat-card__value text-gray-700 dark:text-gray-300">
+          {{ deployStatusSummary.stopped }}
+        </div>
+      </div>
+      <div class="ck-stat-card">
+        <div class="ck-stat-card__label">{{ t('opsManagement.abnormal') }}</div>
+        <div class="ck-stat-card__value text-status-danger">
+          {{ deployStatusSummary.failed }}
         </div>
       </div>
     </div>
 
-    <!-- 视图：节点大盘 -->
-    <div v-if="activeView === 'dashboard'" class="flex-1 min-h-0 flex flex-col">
-      <div class="flex-1 min-h-0 overflow-y-auto pb-6">
+    <div class="ck-content-area">
+      <!-- 视图：节点大盘 -->
+      <div v-if="activeView === 'dashboard'" class="ck-content-scroll">
         <div
           v-loading="nodeLoading"
           :class="['grid grid-cols-1 md:grid-cols-2 gap-6', cardGridClass]"
@@ -385,26 +372,16 @@
           :description="t('opsManagement.noNodesOnline')"
         />
       </div>
-    </div>
 
-    <!-- 视图：详细列表 -->
-    <div v-else-if="activeView === 'list'" class="flex-1 min-h-0 flex flex-col">
-      <div class="flex-1 min-h-0 overflow-y-auto pb-6">
-        <div
-          class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden"
-        >
+      <!-- 视图：详细列表 -->
+      <div v-else-if="activeView === 'list'" class="ck-content-scroll">
+        <div class="ck-table-shell">
           <el-table
             :data="filteredNodeList"
             style="width: 100%"
             row-key="id"
             :expand-row-keys="expandedNodeRowKeys"
             @expand-change="handleExpandChange"
-            :header-cell-style="{
-              background: '#f9fafb',
-              color: '#374151',
-              height: '48px',
-              borderBottom: '1px solid #e5e7eb',
-            }"
           >
             <el-table-column type="expand">
               <template #default="props">
@@ -536,22 +513,21 @@
           class="mt-6"
         />
       </div>
-    </div>
 
-    <!-- 固定分页区 -->
-    <div
-      class="pagination-bar flex justify-end items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700"
-    >
-      <el-pagination
-        v-model:current-page="nodePagination.page"
-        v-model:page-size="nodePagination.pageSize"
-        :total="nodePagination.total"
-        :page-sizes="[12, 24, 48]"
-        size="small"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="fetchNodes"
-        @current-change="fetchNodes"
-      />
+      <!-- 固定分页区 -->
+      <div class="ck-pagination-bar ops-pagination-bar">
+        <WorkbenchPagination
+          :page="nodePagination.page"
+          :limit="nodePagination.pageSize"
+          :total="nodePagination.total"
+          :total-pages="nodePaginationTotalPages"
+          :summary="nodePaginationSummary"
+          :page-size-label="t('projectManagement.pageSizeLabel')"
+          :page-indicator="nodePaginationPageIndicator"
+          :limit-options="[12, 24, 48]"
+          @change="handleNodePaginationChange"
+        />
+      </div>
     </div>
 
     <!-- 弹窗：待审核申请列表 -->
@@ -807,6 +783,8 @@ import {
   Close,
   Bell,
   Warning,
+  FolderOpened,
+  Connection,
 } from '@element-plus/icons-vue'
 import request, { getApiErrorMessage } from '@/utils/request'
 import dayjs from 'dayjs'
@@ -815,6 +793,7 @@ import { Storage } from '@/utils/storage'
 import { canApproveNodes } from '@/permissions'
 import { useAuthStore } from '@/store'
 import { RoleEnum, ENUM_LABELS } from '@/enums'
+import WorkbenchPagination from '@/components/WorkbenchPagination.vue'
 import {
   getNodeStatusType,
   getNodeStatusLabel,
@@ -900,6 +879,33 @@ const projectOptions = computed(() => {
   return Array.from(projectMap.values())
 })
 
+const nodeStatusFilterOptions = computed(() => [
+  { label: t('opsManagement.allStatus'), value: '' },
+  { label: t('opsManagement.online'), value: 'online' },
+  { label: t('opsManagement.offline'), value: 'offline' },
+  { label: t('opsManagement.abnormal'), value: 'error' },
+])
+
+const selectedProjectFilterLabel = computed(() => {
+  return nodeSearch.projectName || t('projectManagement.allProjects')
+})
+
+const selectedNodeStatusLabel = computed(() => {
+  return (
+    nodeStatusFilterOptions.value.find((option) => option.value === nodeSearch.status)?.label ||
+    t('opsManagement.allStatus')
+  )
+})
+
+const setNodeProjectFilter = (value) => {
+  nodeSearch.projectName = value
+  nodePagination.page = 1
+}
+
+const setNodeStatusFilter = (value) => {
+  nodeSearch.status = value
+}
+
 const getVisibleDeployments = (node) => {
   const deployments = Array.isArray(node?.deployments) ? node.deployments : []
   if (!nodeSearch.projectName) {
@@ -923,6 +929,35 @@ const cardGridClass = computed(() => {
   }
   return 'lg:grid-cols-3 xl:grid-cols-4'
 })
+
+const nodePaginationTotalPages = computed(() => {
+  if (nodePagination.total <= 0) {
+    return 0
+  }
+  return Math.ceil(nodePagination.total / nodePagination.pageSize)
+})
+
+const nodePaginationSummary = computed(() => {
+  if (nodePagination.total <= 0) {
+    return `${t('opsManagement.totalNodes')}: 0`
+  }
+  const start = (nodePagination.page - 1) * nodePagination.pageSize + 1
+  const end = Math.min(nodePagination.page * nodePagination.pageSize, nodePagination.total)
+  return `${start}-${end} / ${t('opsManagement.totalNodes')}: ${nodePagination.total}`
+})
+
+const nodePaginationPageIndicator = computed(() =>
+  t('projectManagement.pageIndicator', {
+    page: nodePaginationTotalPages.value > 0 ? nodePagination.page : 0,
+    totalPages: nodePaginationTotalPages.value,
+  }),
+)
+
+const handleNodePaginationChange = ({ page, limit }) => {
+  nodePagination.page = page
+  nodePagination.pageSize = limit
+  fetchNodes()
+}
 
 // 获取节点数据
 const fetchNodes = async () => {
@@ -948,9 +983,7 @@ const fetchNodes = async () => {
       expandedNodeRowKeys.value = currentNodeIds
     } else {
       const currentNodeIdSet = new Set(currentNodeIds)
-      expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) =>
-        currentNodeIdSet.has(id),
-      )
+      expandedNodeRowKeys.value = expandedNodeRowKeys.value.filter((id) => currentNodeIdSet.has(id))
     }
   } catch (error) {
     console.error('获取节点失败:', error)
@@ -1541,41 +1574,46 @@ watch(
 
 <style scoped>
 .ops-management {
-  padding: 20px;
-  background-color: #f8fafc;
+  background: transparent;
 }
-.dark .ops-management {
-  background-color: #0f172a;
-}
+
 .node-card {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .node-card:hover {
   transform: translateY(-4px);
 }
 
-.status-stat-card {
-  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.ops-pagination-bar {
+  justify-content: flex-end;
 }
 
-.status-stat-label {
-  @apply text-xs text-gray-500 dark:text-gray-400;
-  line-height: 1.2;
-  white-space: nowrap;
+:deep(.el-table) {
+  border-radius: var(--ck-radius-md);
+  background: var(--ck-bg-secondary);
 }
 
-.status-stat-value {
-  @apply text-base font-semibold;
-  line-height: 1.2;
-  white-space: nowrap;
+:deep(.el-table th) {
+  height: 48px;
+  background-color: #f4f6f9 !important;
+  color: var(--ck-text-secondary) !important;
+  font-weight: 600;
+  border-bottom: 1px solid var(--ck-border-light) !important;
 }
+
+:deep(.el-table td) {
+  border-bottom: 1px solid var(--ck-border-light);
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--ck-bg-hover);
+}
+
 :deep(.el-progress-circle) {
   margin: 0 auto;
 }
+
 :deep(.el-card__header) {
   padding: 12px 16px;
 }

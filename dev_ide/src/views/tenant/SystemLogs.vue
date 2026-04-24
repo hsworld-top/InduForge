@@ -1,37 +1,41 @@
 <template>
-  <div class="system-logs h-full flex flex-col pt-2">
+  <div class="system-logs ck-workbench-page">
     <!-- 一体化控制顶栏 (Cockpit-style) -->
-    <div
-      class="flex flex-col md:flex-row md:items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-4 gap-3"
-    >
-      <div class="flex items-center space-x-4 flex-wrap gap-y-2 md:flex-nowrap">
-        <h1
-          class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 ml-2 whitespace-nowrap"
-        >
-          {{ t('systemLogs.title') }}
-        </h1>
-        <div class="h-5 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden md:block"></div>
+    <div class="ck-workbench-toolbar">
+      <div class="ck-toolbar-left">
         <!-- 视图选择器 -->
-        <el-select
-          v-model="selectedViewId"
-          :placeholder="t('systemLogs.selectSavedView')"
-          clearable
-          class="!w-48"
-          @change="handleApplySavedView"
-        >
-          <el-option
-            v-for="view in sortedSavedViews"
-            :key="view.id"
-            :label="view.name"
-            :value="view.id"
-          />
-        </el-select>
-        <div class="flex items-center space-x-2">
-          <el-tooltip :content="t('systemLogs.saveCurrentFilter')" placement="top">
+        <el-popover placement="bottom-start" :width="180" trigger="click">
+          <template #reference>
+            <button type="button" class="ck-toolbar-pill-btn">
+              <el-icon><Star /></el-icon>
+              {{ selectedViewLabel }}
+            </button>
+          </template>
+          <div class="sort-popover-menu">
             <button
-              class="w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors shadow-sm"
-              @click="saveCurrentView"
+              type="button"
+              class="sort-popover-item"
+              :class="{ 'is-active': !selectedViewId }"
+              @click="selectSavedView('')"
             >
+              {{ t('systemLogs.selectSavedView') }}
+            </button>
+            <button
+              v-for="view in sortedSavedViews"
+              :key="view.id"
+              type="button"
+              class="sort-popover-item"
+              :class="{ 'is-active': selectedViewId === view.id }"
+              @click="selectSavedView(view.id)"
+            >
+              {{ view.name }}
+            </button>
+          </div>
+        </el-popover>
+
+        <div class="ck-toolbar-filters">
+          <el-tooltip :content="t('systemLogs.saveCurrentFilter')" placement="top">
+            <button class="ck-icon-button" @click="saveCurrentView">
               <el-icon><Star /></el-icon>
             </button>
           </el-tooltip>
@@ -41,7 +45,7 @@
             v-if="selectedViewId"
           >
             <button
-              class="w-8 h-8 rounded-full bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center transition-colors shadow-sm"
+              class="ck-icon-button text-red-500 dark:text-red-300"
               @click="removeSelectedView"
             >
               <el-icon><Delete /></el-icon>
@@ -50,20 +54,17 @@
         </div>
       </div>
 
-      <div class="flex items-center space-x-3 ml-auto md:ml-0">
+      <div class="ck-toolbar-right">
         <el-tooltip :content="t('systemLogs.exportCurrentResult')" placement="top">
           <button
-            class="w-9 h-9 rounded-full bg-green-50 hover:bg-green-100 text-green-600 border border-green-200 flex items-center justify-center transition-colors shadow-sm"
+            class="ck-icon-button text-emerald-600 dark:text-emerald-300"
             @click="handleExportCurrent"
           >
             <el-icon><Download /></el-icon>
           </button>
         </el-tooltip>
         <el-tooltip :content="t('common.refresh')" placement="top">
-          <button
-            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
-            @click="handleRefresh"
-          >
+          <button class="ck-icon-button" @click="handleRefresh">
             <el-icon><RefreshRight /></el-icon>
           </button>
         </el-tooltip>
@@ -71,82 +72,75 @@
     </div>
 
     <!-- 统计卡片 -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-      <div
-        class="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-700 py-3 px-4 flex items-center justify-between hover:-translate-y-0.5 transition-transform duration-300"
-      >
-        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{
-          t('systemLogs.levelError')
-        }}</span>
-        <span class="text-lg font-bold text-red-600 dark:text-red-400">{{
+    <div class="ck-stat-grid">
+      <div class="ck-stat-card">
+        <span class="ck-stat-card__label">{{ t('systemLogs.levelError') }}</span>
+        <span class="ck-stat-card__value text-red-600 dark:text-red-400">{{
           levelStats.error || 0
         }}</span>
       </div>
-      <div
-        class="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-700 py-3 px-4 flex items-center justify-between hover:-translate-y-0.5 transition-transform duration-300"
-      >
-        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{
-          t('systemLogs.levelWarning')
-        }}</span>
-        <span class="text-lg font-bold text-orange-600 dark:text-orange-400">{{
+      <div class="ck-stat-card">
+        <span class="ck-stat-card__label">{{ t('systemLogs.levelWarning') }}</span>
+        <span class="ck-stat-card__value text-orange-600 dark:text-orange-400">{{
           levelStats.warning || 0
         }}</span>
       </div>
-      <div
-        class="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-700 py-3 px-4 flex items-center justify-between hover:-translate-y-0.5 transition-transform duration-300"
-      >
-        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{
-          t('systemLogs.levelInfo')
-        }}</span>
-        <span class="text-lg font-bold text-blue-600 dark:text-blue-400">{{
+      <div class="ck-stat-card">
+        <span class="ck-stat-card__label">{{ t('systemLogs.levelInfo') }}</span>
+        <span class="ck-stat-card__value text-blue-600 dark:text-blue-400">{{
           levelStats.info || 0
         }}</span>
       </div>
-      <div
-        class="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-700 py-3 px-4 flex items-center justify-between hover:-translate-y-0.5 transition-transform duration-300"
-      >
-        <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{
-          t('systemLogs.levelDebug')
-        }}</span>
-        <span class="text-lg font-bold text-gray-700 dark:text-gray-300">{{
+      <div class="ck-stat-card">
+        <span class="ck-stat-card__label">{{ t('systemLogs.levelDebug') }}</span>
+        <span class="ck-stat-card__value text-gray-700 dark:text-gray-300">{{
           levelStats.debug || 0
         }}</span>
       </div>
     </div>
 
     <!-- 过滤器面板 -->
-    <div
-      class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 mb-4"
-    >
-      <el-form :inline="true" :model="filters" class="flex flex-wrap items-center gap-3 -mb-4">
+    <div class="system-log-filter-panel">
+      <el-form :inline="true" :model="filters" class="system-log-filter-form">
         <el-form-item>
-          <el-select
-            v-model="filters.level"
-            :placeholder="t('systemLogs.allLevel')"
-            clearable
-            class="!w-32"
-          >
-            <el-option :label="t('systemLogs.levelError')" value="error" />
-            <el-option :label="t('systemLogs.levelWarning')" value="warning" />
-            <el-option :label="t('systemLogs.levelInfo')" value="info" />
-            <el-option :label="t('systemLogs.levelDebug')" value="debug" />
-          </el-select>
+          <el-popover placement="bottom-start" :width="160" trigger="click">
+            <template #reference>
+              <button type="button" class="ck-toolbar-pill-btn">
+                <el-icon><Warning /></el-icon>
+                {{ selectedLevelLabel }}
+              </button>
+            </template>
+            <div class="sort-popover-menu">
+              <button
+                v-for="option in levelFilterOptions"
+                :key="option.value || 'all'"
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': filters.level === option.value }"
+                @click="setLevelFilter(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </el-popover>
         </el-form-item>
         <el-form-item>
           <el-input
             v-model="filters.action"
+            size="small"
             :placeholder="t('systemLogs.actionPlaceholder')"
             clearable
-            class="!w-40 rounded-full-input"
+            class="system-log-filter-input rounded-full-input"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
         <el-form-item>
           <el-input
             v-model="filters.resource"
+            size="small"
             :placeholder="t('systemLogs.resourcePlaceholder')"
             clearable
-            class="!w-40 rounded-full-input"
+            class="system-log-filter-input rounded-full-input"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
@@ -160,34 +154,48 @@
             :start-placeholder="t('systemLogs.startTime')"
             :end-placeholder="t('systemLogs.endTime')"
             class="!w-[340px]"
+            @change="handleDateRangeChange"
           />
         </el-form-item>
         <el-form-item>
-          <div class="flex items-center space-x-1">
-            <el-button text size="small" @click="applyQuickRange('today')">{{
-              t('systemLogs.today')
-            }}</el-button>
-            <el-button text size="small" @click="applyQuickRange('last7')">{{
-              t('systemLogs.last7Days')
-            }}</el-button>
-            <el-button text size="small" @click="applyQuickRange('last30')">{{
-              t('systemLogs.last30Days')
-            }}</el-button>
-          </div>
+          <el-popover placement="bottom-start" :width="160" trigger="click">
+            <template #reference>
+              <button type="button" class="ck-toolbar-pill-btn">
+                <el-icon><Filter /></el-icon>
+                {{ selectedTimeRangeLabel }}
+              </button>
+            </template>
+            <div class="sort-popover-menu">
+              <button
+                v-for="option in timeRangeFilterOptions"
+                :key="option.value"
+                type="button"
+                class="sort-popover-item"
+                :class="{ 'is-active': selectedTimeRange === option.value }"
+                @click="applyQuickRange(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </el-popover>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" round @click="handleSearch">{{
-            t('systemLogs.query')
-          }}</el-button>
-          <el-button round @click="resetFilters">{{ t('systemLogs.reset') }}</el-button>
+          <button
+            type="button"
+            class="ck-toolbar-pill-btn system-log-query-btn"
+            @click="handleSearch"
+          >
+            {{ t('systemLogs.query') }}
+          </button>
+          <button type="button" class="ck-toolbar-pill-btn" @click="resetFilters">
+            {{ t('systemLogs.reset') }}
+          </button>
         </el-form-item>
       </el-form>
     </div>
 
     <!-- 日志列表 -->
-    <div
-      class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col flex-1 min-h-0 overflow-hidden"
-    >
+    <div class="ck-content-area">
       <div v-if="loadError" class="px-4 pt-4">
         <el-alert :title="loadError" type="error" show-icon :closable="false">
           <template #default>
@@ -197,103 +205,85 @@
           </template>
         </el-alert>
       </div>
-      <div class="flex-1 min-h-0 overflow-auto">
-        <el-table
-          :data="logs"
-          v-loading="loading"
-          style="width: 100%"
-          :header-cell-style="{
-            background: '#f9fafb',
-            color: '#374151',
-            height: '48px',
-            borderBottom: '1px solid #e5e7eb',
-          }"
-        >
-          <el-table-column prop="createdAt" :label="t('systemLogs.time')" width="180">
-            <template #default="scope">
-              <span class="text-gray-500 font-mono text-sm tracking-wide">{{
-                formatDateTime(scope.row.createdAt)
-              }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="level" :label="t('systemLogs.level')" width="90">
-            <template #default="scope">
-              <el-tag
-                :type="getLevelTagType(scope.row.level)"
-                size="small"
-                effect="light"
-                class="rounded-full px-3 border-transparent"
-                :class="getLevelTagType(scope.row.level) ? '' : 'bg-gray-100 text-gray-600'"
-              >
-                {{ getLevelLabel(scope.row.level) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="action"
-            :label="t('systemLogs.action')"
-            width="180"
-            show-overflow-tooltip
-          >
-            <template #default="scope">
-              {{ getActionLabel(scope.row.action) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="resource"
-            :label="t('systemLogs.resource')"
-            width="180"
-            show-overflow-tooltip
-          >
-            <template #default="scope">
-              {{ getResourceLabel(scope.row.resource, scope.row.action) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="message"
-            :label="t('systemLogs.logContent')"
-            min-width="280"
-            show-overflow-tooltip
-          >
-            <template #default="scope">
-              <span class="font-mono text-sm">{{ scope.row.message }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="ip" :label="t('systemLogs.ip')" width="140">
-            <template #default="scope">
-              <span class="font-mono text-sm text-gray-500">{{ scope.row.ip }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('systemLogs.user')" width="140">
-            <template #default="scope">
-              {{ scope.row.user?.fullName || scope.row.user?.username || '-' }}
-            </template>
-          </el-table-column>
-        </el-table>
+      <div class="ck-content-scroll system-log-table-scroll">
+        <div class="ck-table-shell">
+          <el-table :data="logs" v-loading="loading" style="width: 100%">
+            <el-table-column prop="createdAt" :label="t('systemLogs.time')" width="180">
+              <template #default="scope">
+                <span class="text-gray-500 font-mono text-sm tracking-wide">{{
+                  formatDateTime(scope.row.createdAt)
+                }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="level" :label="t('systemLogs.level')" width="90">
+              <template #default="scope">
+                <el-tag
+                  :type="getLevelTagType(scope.row.level)"
+                  size="small"
+                  effect="light"
+                  class="rounded-full px-3 border-transparent"
+                  :class="getLevelTagType(scope.row.level) ? '' : 'bg-gray-100 text-gray-600'"
+                >
+                  {{ getLevelLabel(scope.row.level) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="action"
+              :label="t('systemLogs.action')"
+              width="180"
+              show-overflow-tooltip
+            >
+              <template #default="scope">
+                {{ getActionLabel(scope.row.action) }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="resource"
+              :label="t('systemLogs.resource')"
+              width="180"
+              show-overflow-tooltip
+            >
+              <template #default="scope">
+                {{ getResourceLabel(scope.row.resource, scope.row.action) }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="message"
+              :label="t('systemLogs.logContent')"
+              min-width="280"
+              show-overflow-tooltip
+            >
+              <template #default="scope">
+                <span class="font-mono text-sm">{{ scope.row.message }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="ip" :label="t('systemLogs.ip')" width="140">
+              <template #default="scope">
+                <span class="font-mono text-sm text-gray-500">{{ scope.row.ip }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('systemLogs.user')" width="140">
+              <template #default="scope">
+                {{ scope.row.user?.fullName || scope.row.user?.username || '-' }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </div>
 
       <!-- 分页 -->
-      <div
-        class="flex justify-between items-center py-3 px-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
-      >
-        <div class="text-xs text-gray-500 dark:text-gray-400 tracking-wide">
-          {{
-            t('userManagement.totalRange', {
-              start: (pagination.page - 1) * pagination.limit + 1,
-              end: Math.min(pagination.page * pagination.limit, pagination.total),
-              total: pagination.total,
-            })
-          }}
-        </div>
-        <el-pagination
-          size="small"
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.limit"
-          :page-sizes="systemLogPageSizeOptions"
+      <div class="ck-pagination-bar">
+        <WorkbenchPagination
+          :page="pagination.page"
+          :limit="pagination.limit"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
+          :total-pages="pagination.totalPages"
+          :summary="systemLogPaginationSummary"
+          :page-size-label="t('projectManagement.pageSizeLabel')"
+          :page-indicator="systemLogPageIndicator"
+          :limit-options="systemLogPageSizeOptions"
+          @change="handlePaginationChange"
         />
       </div>
     </div>
@@ -305,14 +295,25 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, Download, Filter, RefreshRight, Star, Warning } from '@element-plus/icons-vue'
 import { logAPI } from '@/api'
 import { formatDateTime } from '@/utils/date'
 import { getApiErrorMessage } from '@/utils/request'
 import { Storage } from '@/utils/storage'
 import { STORAGE_KEYS, SYSTEM_LOG_PAGE_SIZE_OPTIONS } from '@/constants'
+import WorkbenchPagination from '@/components/WorkbenchPagination.vue'
 
 export default {
   name: 'SystemLogs',
+  components: {
+    WorkbenchPagination,
+    Delete,
+    Download,
+    Filter,
+    RefreshRight,
+    Star,
+    Warning,
+  },
   setup() {
     const { t } = useI18n()
     const loading = ref(false)
@@ -328,8 +329,14 @@ export default {
     })
     const savedViews = ref(Storage.get(STORAGE_KEYS.SYSTEM_LOG_SAVED_VIEWS, []))
     const selectedViewId = ref('')
+    const selectedTimeRange = ref('all')
     const sortedSavedViews = computed(() =>
       [...savedViews.value].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)),
+    )
+    const selectedViewLabel = computed(
+      () =>
+        sortedSavedViews.value.find((view) => view.id === selectedViewId.value)?.name ||
+        t('systemLogs.selectSavedView'),
     )
 
     const pagination = reactive({
@@ -388,6 +395,53 @@ export default {
       nodes: 'systemLogs.resourceNode',
       ops: 'systemLogs.resourceOps',
     }
+
+    const levelFilterOptions = computed(() => [
+      { label: t('systemLogs.allLevel'), value: '' },
+      { label: t('systemLogs.levelError'), value: 'error' },
+      { label: t('systemLogs.levelWarning'), value: 'warning' },
+      { label: t('systemLogs.levelInfo'), value: 'info' },
+      { label: t('systemLogs.levelDebug'), value: 'debug' },
+    ])
+
+    const selectedLevelLabel = computed(
+      () =>
+        levelFilterOptions.value.find((option) => option.value === filters.level)?.label ||
+        t('systemLogs.allLevel'),
+    )
+
+    const timeRangeFilterOptions = computed(() => [
+      { label: t('systemLogs.allTimeRange'), value: 'all' },
+      { label: t('systemLogs.today'), value: 'today' },
+      { label: t('systemLogs.last7Days'), value: 'last7' },
+      { label: t('systemLogs.last30Days'), value: 'last30' },
+    ])
+
+    const selectedTimeRangeLabel = computed(() => {
+      if (selectedTimeRange.value === 'custom') {
+        return t('systemLogs.customTimeRange')
+      }
+      return (
+        timeRangeFilterOptions.value.find((option) => option.value === selectedTimeRange.value)
+          ?.label || t('systemLogs.allTimeRange')
+      )
+    })
+
+    const systemLogPaginationSummary = computed(() =>
+      t('userManagement.totalRange', {
+        start: pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1,
+        end: Math.min(pagination.page * pagination.limit, pagination.total),
+        total: pagination.total,
+      }),
+    )
+
+    const systemLogPageIndicator = computed(() =>
+      t('projectManagement.pageIndicator', {
+        page: pagination.totalPages > 0 ? pagination.page : 0,
+        totalPages: pagination.totalPages,
+      }),
+    )
+
     const getQueryParams = () => {
       const [startDate, endDate] = Array.isArray(filters.dateRange) ? filters.dateRange : []
       const params = {
@@ -452,6 +506,7 @@ export default {
       filters.action = ''
       filters.resource = ''
       filters.dateRange = []
+      selectedTimeRange.value = 'all'
       pagination.page = 1
       await Promise.all([fetchLogs(), fetchStats()])
     }
@@ -460,9 +515,28 @@ export default {
       await Promise.all([fetchLogs(), fetchStats()])
     }
 
+    const selectSavedView = async (viewId) => {
+      selectedViewId.value = viewId
+      await handleApplySavedView(viewId)
+    }
+
+    const setLevelFilter = async (level) => {
+      filters.level = level
+      pagination.page = 1
+      await Promise.all([fetchLogs(), fetchStats()])
+    }
+
+    const handleDateRangeChange = async (value) => {
+      selectedTimeRange.value = Array.isArray(value) && value.length > 0 ? 'custom' : 'all'
+      await handleSearch()
+    }
+
     const applyQuickRange = async (type) => {
       const now = dayjs()
-      if (type === 'today') {
+      selectedTimeRange.value = type
+      if (type === 'all') {
+        filters.dateRange = []
+      } else if (type === 'today') {
         filters.dateRange = [
           now.startOf('day').format('YYYY-MM-DD HH:mm:ss'),
           now.endOf('day').format('YYYY-MM-DD HH:mm:ss'),
@@ -571,6 +645,7 @@ export default {
       filters.dateRange = Array.isArray(targetView.filters.dateRange)
         ? [...targetView.filters.dateRange]
         : []
+      selectedTimeRange.value = filters.dateRange.length > 0 ? 'custom' : 'all'
       savedViews.value[targetViewIndex] = {
         ...targetView,
         updatedAt: new Date().toISOString(),
@@ -621,6 +696,13 @@ export default {
 
     const handleCurrentChange = async (page) => {
       pagination.page = page
+      await fetchLogs()
+    }
+
+    const handlePaginationChange = async ({ page, limit }) => {
+      pagination.page = page
+      pagination.limit = limit
+      Storage.set('system_log_page_size', limit)
       await fetchLogs()
     }
 
@@ -715,10 +797,21 @@ export default {
       filters,
       pagination,
       levelStats,
+      selectedViewLabel,
+      selectedLevelLabel,
+      levelFilterOptions,
+      selectedTimeRange,
+      selectedTimeRangeLabel,
+      timeRangeFilterOptions,
+      systemLogPaginationSummary,
+      systemLogPageIndicator,
       fetchLogs,
       handleSearch,
       resetFilters,
       handleRefresh,
+      selectSavedView,
+      setLevelFilter,
+      handleDateRangeChange,
       applyQuickRange,
       handleExportCurrent,
       saveCurrentView,
@@ -726,6 +819,7 @@ export default {
       removeSelectedView,
       handleSizeChange,
       handleCurrentChange,
+      handlePaginationChange,
       getLevelTagType,
       getLevelLabel,
       getActionLabel,
@@ -742,51 +836,81 @@ export default {
 
 <style scoped>
 .system-logs {
-  padding: 20px;
+  background: transparent;
 }
 
-.panel {
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700;
-}
-
-.stat-card {
-  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 py-2 px-3;
-}
-
-.stat-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 24px;
-}
-
-.stat-label {
-  @apply text-xs text-gray-500 dark:text-gray-400;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.stat-value {
-  @apply text-base font-semibold;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.logs-panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.logs-table-wrap {
-  overflow: hidden;
-}
-
-.logs-pagination {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  background: var(--if-color-surface);
+.system-log-filter-panel {
   flex-shrink: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--ck-border);
+  border-radius: var(--ck-radius-lg);
+  background: var(--ck-bg-card);
+  box-shadow: var(--ck-shadow-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+}
+
+.system-log-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: -18px;
+}
+
+.system-log-filter-input {
+  width: 160px;
+}
+
+.system-log-query-btn {
+  color: #fff;
+  background: var(--ck-primary);
+}
+
+.system-log-query-btn:hover {
+  color: #fff;
+  background: var(--ck-primary-hover);
+}
+
+.system-log-table-scroll {
+  padding: 16px;
+}
+
+:deep(.el-table) {
+  border-radius: var(--ck-radius-md);
+  background: var(--ck-bg-secondary);
+}
+
+:deep(.el-table th) {
+  height: 48px;
+  background-color: #f4f6f9 !important;
+  color: var(--ck-text-secondary) !important;
+  font-weight: 600;
+  border-bottom: 1px solid var(--ck-border-light) !important;
+}
+
+:deep(.el-table td) {
+  border-bottom: 1px solid var(--ck-border-light);
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--ck-bg-hover);
+}
+
+:deep(.el-form-item) {
+  margin-right: 0;
+}
+
+:deep(.el-input__wrapper) {
+  border-radius: var(--ck-radius-md);
+  border: 1px solid var(--ck-border);
+  background: var(--ck-bg-tertiary);
+  box-shadow: none;
+}
+
+:deep(.el-input__wrapper:focus-within) {
+  border-color: var(--ck-primary);
+  box-shadow: 0 0 0 3px var(--ck-primary-light);
 }
 </style>

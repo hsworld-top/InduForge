@@ -16,9 +16,9 @@ const appConfig = {
   // 默认租户配置
   defaultTenant: {
     id: process.env.DEFAULT_TENANT_ID || '550e8400-e29b-41d4-a716-446655440000',
-    name: process.env.DEFAULT_TENANT_NAME || '默认租户',
+    name: process.env.DEFAULT_TENANT_NAME || 'InduForge',
     code: process.env.DEFAULT_TENANT_CODE || 'default',
-    description: process.env.DEFAULT_TENANT_DESCRIPTION || '系统默认租户',
+    description: process.env.DEFAULT_TENANT_DESCRIPTION || 'InduForge 默认租户',
     contactEmail: process.env.DEFAULT_TENANT_CONTACT_EMAIL || 'admin@example.com',
     maxUsers: Number(process.env.DEFAULT_TENANT_MAX_USERS || 100),
     maxProjects: Number(process.env.DEFAULT_TENANT_MAX_PROJECTS || 50),
