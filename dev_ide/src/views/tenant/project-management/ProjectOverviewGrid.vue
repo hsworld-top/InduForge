@@ -20,14 +20,15 @@
 
     <el-empty v-else-if="projects.length === 0" :description="resolvedEmptyDescription" />
 
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+    <div v-else class="project-overview-grid__list">
       <article
         v-for="project in projects"
         :key="project.id"
-        class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 flex flex-col shadow-sm hover:shadow-md transition-shadow"
+        class="project-overview-grid__card"
+        :class="{ 'is-selected': isSelected(project.id) }"
       >
-        <header class="flex items-start justify-between gap-2">
-          <div class="flex items-center gap-2 min-w-0">
+        <header class="project-overview-grid__card-header">
+          <div class="project-overview-grid__title-row">
             <el-checkbox
               v-if="showSelection"
               :model-value="isSelected(project.id)"
@@ -35,7 +36,7 @@
             />
             <button
               type="button"
-              class="text-left min-w-0 text-sm font-semibold text-gray-800 dark:text-gray-100 truncate hover:text-blue-600"
+              class="project-overview-grid__title"
               :title="project.name"
               @click="emit('open-project', project)"
             >
@@ -47,11 +48,11 @@
           </el-tag>
         </header>
 
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-3 line-clamp-2 min-h-[32px]">
+        <p class="project-overview-grid__description">
           {{ project.description || t('projectManagement.noDescription') }}
         </p>
 
-        <div class="mt-3 flex flex-wrap gap-1.5 min-h-[22px]">
+        <div class="project-overview-grid__tags">
           <el-tag
             v-for="tag in project.tags"
             :key="tag.id"
@@ -71,13 +72,13 @@
         </div>
 
         <div
-          class="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2"
+          class="project-overview-grid__footer"
         >
-          <span class="text-[11px] text-gray-400 dark:text-gray-500">
+          <span class="project-overview-grid__time">
             {{ resolveDisplayTime(project) }}
           </span>
 
-          <div class="flex items-center gap-1">
+          <div class="project-overview-grid__actions">
             <slot name="actions" :project="project">
               <el-tooltip v-if="showMemberAction" :content="t('projectManagement.memberAndPermission')" placement="top">
                 <el-button
@@ -240,3 +241,177 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
   })
 }
 </script>
+
+<style scoped>
+.project-overview-grid {
+  padding: 18px;
+}
+
+.project-overview-grid__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  gap: 18px;
+}
+
+.project-overview-grid__card {
+  display: flex;
+  min-height: 238px;
+  flex-direction: column;
+  border: 1px solid #dbe3ed;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.project-overview-grid__card:hover {
+  border-color: #9bbcff;
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.project-overview-grid__card.is-selected {
+  border-color: #2f67ff;
+  box-shadow:
+    0 0 0 1px rgba(47, 103, 255, 0.2),
+    0 16px 32px rgba(37, 99, 235, 0.18);
+}
+
+.project-overview-grid__card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.project-overview-grid__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-overview-grid__title {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #111827;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.project-overview-grid__title:hover {
+  color: #1d4ed8;
+}
+
+.project-overview-grid__description {
+  min-height: 56px;
+  margin: 18px 0 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f7f9fc 0%, #eef2f7 100%);
+  padding: 14px;
+  color: #526173;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.project-overview-grid__tags {
+  display: flex;
+  min-height: 30px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.project-overview-grid__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px dashed #d9e0ea;
+}
+
+.project-overview-grid__time {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #f3f5f8;
+  padding: 7px 12px;
+  color: #7b8798;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+}
+
+.project-overview-grid__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 4px 8px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+html.dark .project-overview-grid__card,
+[data-theme='dark'] .project-overview-grid__card {
+  border-color: #374151;
+  background: #111827;
+  box-shadow: none;
+}
+
+html.dark .project-overview-grid__title,
+[data-theme='dark'] .project-overview-grid__title {
+  color: #e5e7eb;
+}
+
+html.dark .project-overview-grid__description,
+[data-theme='dark'] .project-overview-grid__description {
+  background: #1f2937;
+  color: #cbd5e1;
+}
+
+html.dark .project-overview-grid__footer,
+[data-theme='dark'] .project-overview-grid__footer {
+  border-top-color: #374151;
+}
+
+html.dark .project-overview-grid__time,
+html.dark .project-overview-grid__actions,
+[data-theme='dark'] .project-overview-grid__time,
+[data-theme='dark'] .project-overview-grid__actions {
+  border-color: #374151;
+  background: #1f2937;
+}
+
+@media (max-width: 720px) {
+  .project-overview-grid {
+    padding: 12px;
+  }
+
+  .project-overview-grid__list {
+    grid-template-columns: 1fr;
+  }
+
+  .project-overview-grid__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>
