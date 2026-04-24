@@ -1,0 +1,165 @@
+/* ============================================
+   Cockpit Design Tokens
+   对标 cockpit-tools-main 浮动仪表盘设计语言
+   ============================================ */
+
+:root {
+  /* ─── 品牌色 ─── */
+  --ck-primary: #1d4ed8;
+  --ck-primary-hover: #1e40af;
+  --ck-primary-light: rgba(29, 78, 216, 0.12);
+  --ck-accent: #0ea5a5;
+
+  /* ─── 状态色 ─── */
+  --ck-success: #22c55e;
+  --ck-warning: #f59e0b;
+  --ck-danger: #ef4444;
+
+  /* ─── 背景色 ─── */
+  --ck-bg-primary: #f6f5f2;
+  --ck-bg-secondary: #ffffff;
+  --ck-bg-tertiary: #eef2f7;
+  --ck-bg-card: rgba(255, 255, 255, 0.75);
+  --ck-bg-hover: rgba(15, 23, 42, 0.06);
+
+  /* ─── 文字色 ─── */
+  --ck-text-primary: #0f172a;
+  --ck-text-secondary: #475569;
+  --ck-text-muted: #94a3b8;
+
+  /* ─── 边框色 ─── */
+  --ck-border: rgba(15, 23, 42, 0.12);
+  --ck-border-light: rgba(15, 23, 42, 0.08);
+
+  /* ─── 阴影 ─── */
+  --ck-shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.08);
+  --ck-shadow-md: 0 12px 24px rgba(15, 23, 42, 0.12);
+  --ck-shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.18);
+
+  /* ─── 渐变 ─── */
+  --ck-gradient-primary: linear-gradient(135deg, #1d4ed8 0%, #0ea5a5 100%);
+
+  /* ─── 圆角 ─── */
+  --ck-radius-sm: 8px;
+  --ck-radius-md: 12px;
+  --ck-radius-lg: 18px;
+  --ck-radius-xl: 24px;
+  --ck-radius-full: 9999px;
+}
+
+/* ─── 暗色模式 ─── */
+html.dark,
+[data-theme='dark'] {
+  --ck-primary: #3b82f6;
+  --ck-primary-hover: #2563eb;
+  --ck-primary-light: rgba(59, 130, 246, 0.15);
+  --ck-accent: #14b8a6;
+
+  --ck-bg-primary: #0f172a;
+  --ck-bg-secondary: #1e293b;
+  --ck-bg-tertiary: #334155;
+  --ck-bg-card: rgba(30, 41, 59, 0.85);
+  --ck-bg-hover: rgba(255, 255, 255, 0.08);
+
+  --ck-text-primary: #f1f5f9;
+  --ck-text-secondary: #94a3b8;
+  --ck-text-muted: #64748b;
+
+  --ck-border: rgba(255, 255, 255, 0.12);
+  --ck-border-light: rgba(255, 255, 255, 0.06);
+
+  --ck-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.25);
+  --ck-shadow-md: 0 12px 24px rgba(0, 0, 0, 0.35);
+  --ck-shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* ─── 入场动画 ─── */
+@keyframes ck-fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ck-floatIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─── 排序弹出菜单（全局，因为 popover 是 teleport 渲染） ─── */
+.sort-popover-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: -6px -8px;
+}
+
+.sort-popover-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--ck-text-secondary, #475569);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.sort-popover-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--ck-text-primary, #0f172a);
+}
+
+.sort-popover-item.is-active {
+  color: var(--ck-primary, #1d4ed8);
+  font-weight: 500;
+  background: var(--ck-primary-light, rgba(29, 78, 216, 0.12));
+}
+
+/* ─── 分页条数弹出菜单 ─── */
+.pagination-size-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: -6px -8px;
+}
+
+.pagination-size-item {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ck-text-secondary, #475569);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.pagination-size-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--ck-text-primary, #0f172a);
+}
+
+.pagination-size-item.is-active {
+  color: var(--ck-primary, #1d4ed8);
+  font-weight: 500;
+  background: var(--ck-primary-light, rgba(29, 78, 216, 0.12));
+}

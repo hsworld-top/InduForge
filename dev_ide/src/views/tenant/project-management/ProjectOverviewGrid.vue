@@ -21,6 +21,77 @@
     <el-empty v-else-if="projects.length === 0" :description="resolvedEmptyDescription" />
 
     <div v-else class="project-overview-grid__list">
+      <!-- 分组文件夹卡片（混排在网格头部） -->
+      <div
+        v-for="group in groupCards"
+        :key="`folder-${group.id}`"
+        class="project-overview-grid__card folder-inline-card"
+        @click="emit('group-select', { groupId: group.id, groupName: group.name })"
+      >
+        <div class="folder-inline-header">
+          <div class="folder-inline-icon">
+            <el-icon :size="24"><FolderOpened /></el-icon>
+          </div>
+          <div class="folder-inline-info">
+            <span class="folder-inline-name">{{ group.name }}</span>
+            <span class="folder-inline-count">
+              {{ t('projectManagement.groupProjectCount', { count: group.projectCount }) }}
+            </span>
+          </div>
+          <el-tooltip :content="t('projectManagement.addProjectToGroup')" placement="top">
+            <button
+              type="button"
+              class="folder-icon-btn"
+              @click.stop="emit('group-add-project', group)"
+            >
+              <el-icon :size="14"><Plus /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="t('projectManagement.editGroup')" placement="top">
+            <button
+              type="button"
+              class="folder-icon-btn"
+              @click.stop="emit('group-edit', group)"
+            >
+              <el-icon :size="14"><Edit /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="t('projectManagement.deleteGroup')" placement="top">
+            <button
+              type="button"
+              class="folder-icon-btn folder-delete-btn"
+              @click.stop="emit('group-delete', group)"
+            >
+              <el-icon :size="14"><Delete /></el-icon>
+            </button>
+          </el-tooltip>
+        </div>
+        <div v-if="group.projects && group.projects.length > 0" class="folder-inline-preview">
+          <div
+            v-for="project in group.projects.slice(0, 5)"
+            :key="project.id"
+            class="folder-preview-item"
+          >
+            <span class="folder-preview-name">{{ project.name }}</span>
+            <button
+              type="button"
+              class="folder-preview-remove-btn"
+              :title="t('projectManagement.removeProjectFromGroup')"
+              @click.stop="emit('group-remove-project', { groupId: group.id, projectId: project.id })"
+            >
+              <el-icon :size="12"><Close /></el-icon>
+            </button>
+          </div>
+          <div v-if="group.projects.length > 5" class="folder-preview-more">
+            +{{ group.projects.length - 5 }} ...
+          </div>
+        </div>
+        <div v-else class="folder-inline-empty">
+          {{ t('projectManagement.emptyProjects') }}
+        </div>
+      </div>
+
+      <!-- 工程卡片 -->
       <article
         v-for="project in projects"
         :key="project.id"
@@ -138,10 +209,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import dayjs from 'dayjs'
-import { Delete, Download, UploadFilled, User } from '@element-plus/icons-vue'
+import { Close, Delete, Download, Edit, FolderOpened, Plus, UploadFilled, User } from '@element-plus/icons-vue'
 import type { TagProps } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import type { ProjectOverviewItem } from './project-overview.types'
+import type { ProjectOverviewItem, ProjectGroupCardViewModel } from './project-overview.types'
 
 const props = withDefaults(
   defineProps<{
@@ -154,6 +225,8 @@ const props = withDefaults(
     showDeployAction?: boolean
     showExportAction?: boolean
     showDeleteAction?: boolean
+    /** 分组卡片数据，混排在工程卡片前面 */
+    groupCards?: ProjectGroupCardViewModel[]
   }>(),
   {
     projects: () => [],
@@ -165,6 +238,7 @@ const props = withDefaults(
     showDeployAction: true,
     showExportAction: true,
     showDeleteAction: true,
+    groupCards: () => [],
   },
 )
 
@@ -181,6 +255,11 @@ const emit = defineEmits<{
   (event: 'deploy', payload: ProjectOverviewItem): void
   (event: 'export', payload: ProjectOverviewItem): void
   (event: 'delete', payload: ProjectOverviewItem): void
+  (event: 'group-select', payload: { groupId: string; groupName: string }): void
+  (event: 'group-add-project', group: ProjectGroupCardViewModel): void
+  (event: 'group-edit', group: ProjectGroupCardViewModel): void
+  (event: 'group-delete', group: ProjectGroupCardViewModel): void
+  (event: 'group-remove-project', payload: { groupId: string; projectId: string }): void
 }>()
 
 const selectedIdSet = computed(() => new Set(props.selectedIds))
@@ -243,56 +322,61 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
 </script>
 
 <style scoped>
+/* ─── 网格容器 ─── */
 .project-overview-grid {
-  padding: 18px;
+  padding: 4px 0;
 }
 
 .project-overview-grid__list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+/* ─── 卡片：轻量紧凑风格 ─── */
 .project-overview-grid__card {
+  position: relative;
   display: flex;
-  min-height: 238px;
+  min-height: 200px;
   flex-direction: column;
-  border: 1px solid #dbe3ed;
-  border-radius: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: var(--ck-radius-md);
   background: #ffffff;
-  padding: 18px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
+  padding: 14px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 4px 16px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  overflow: visible;
 }
 
 .project-overview-grid__card:hover {
-  border-color: #9bbcff;
-  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.06),
+    0 12px 24px rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .project-overview-grid__card.is-selected {
-  border-color: #2f67ff;
-  box-shadow:
-    0 0 0 1px rgba(47, 103, 255, 0.2),
-    0 16px 32px rgba(37, 99, 235, 0.18);
+  border-color: var(--ck-primary);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.08);
 }
 
+/* ─── 卡片头部 ─── */
 .project-overview-grid__card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .project-overview-grid__title-row {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .project-overview-grid__title {
@@ -300,111 +384,123 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
   border: 0;
   background: transparent;
   padding: 0;
-  color: #111827;
+  color: var(--ck-text-primary);
   cursor: pointer;
   overflow: hidden;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .project-overview-grid__title:hover {
-  color: #1d4ed8;
+  color: var(--ck-primary);
 }
 
+/* ─── 描述区：降低视觉权重 ─── */
 .project-overview-grid__description {
-  min-height: 56px;
-  margin: 18px 0 0;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f7f9fc 0%, #eef2f7 100%);
-  padding: 14px;
-  color: #526173;
-  font-size: 13px;
-  line-height: 1.55;
+  min-height: 44px;
+  margin: 10px 0 0;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  padding: 10px;
+  color: var(--ck-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
+/* ─── 标签行 ─── */
 .project-overview-grid__tags {
   display: flex;
-  min-height: 30px;
+  min-height: 24px;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
+/* ─── 底部：时间 + 操作始终保持一行 ─── */
 .project-overview-grid__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 6px;
   margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px dashed #d9e0ea;
+  padding-top: 10px;
+  border-top: 1px solid var(--ck-border-light);
+  min-width: 0;
 }
 
 .project-overview-grid__time {
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: #f3f5f8;
-  padding: 7px 12px;
-  color: #7b8798;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ck-text-muted);
+  font-size: 10px;
+  opacity: 0.7;
 }
 
+/* ─── 操作按钮组：极简透明风格，不换行不压缩 ─── */
 .project-overview-grid__actions {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-width: 100%;
-  min-height: 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  background: #ffffff;
-  padding: 4px 8px;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  flex-shrink: 0;
+  gap: 1px;
+  background: transparent;
+  padding: 0;
+  border: none;
+  box-shadow: none;
 }
 
+/* ─── 暗色模式 ─── */
 html.dark .project-overview-grid__card,
 [data-theme='dark'] .project-overview-grid__card {
-  border-color: #374151;
-  background: #111827;
-  box-shadow: none;
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+html.dark .project-overview-grid__card:hover,
+[data-theme='dark'] .project-overview-grid__card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
 html.dark .project-overview-grid__title,
 [data-theme='dark'] .project-overview-grid__title {
-  color: #e5e7eb;
+  color: var(--ck-text-primary);
 }
 
 html.dark .project-overview-grid__description,
 [data-theme='dark'] .project-overview-grid__description {
-  background: #1f2937;
-  color: #cbd5e1;
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.05);
+  color: var(--ck-text-secondary);
 }
 
 html.dark .project-overview-grid__footer,
 [data-theme='dark'] .project-overview-grid__footer {
-  border-top-color: #374151;
+  border-top-color: rgba(255, 255, 255, 0.06);
 }
 
-html.dark .project-overview-grid__time,
-html.dark .project-overview-grid__actions,
-[data-theme='dark'] .project-overview-grid__time,
-[data-theme='dark'] .project-overview-grid__actions {
-  border-color: #374151;
-  background: #1f2937;
-}
+/* ─── stagger 入场动画 ─── */
+.project-overview-grid__card:nth-child(1) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 40ms both; }
+.project-overview-grid__card:nth-child(2) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both; }
+.project-overview-grid__card:nth-child(3) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both; }
+.project-overview-grid__card:nth-child(4) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 160ms both; }
+.project-overview-grid__card:nth-child(5) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 200ms both; }
+.project-overview-grid__card:nth-child(6) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 240ms both; }
+.project-overview-grid__card:nth-child(7) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 280ms both; }
+.project-overview-grid__card:nth-child(8) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 320ms both; }
 
 @media (max-width: 720px) {
-  .project-overview-grid {
-    padding: 12px;
-  }
-
   .project-overview-grid__list {
     grid-template-columns: 1fr;
   }
@@ -413,5 +509,165 @@ html.dark .project-overview-grid__actions,
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+/* ═══ 分组文件夹卡片（混排在网格中） ═══ */
+.folder-inline-card {
+  cursor: pointer;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e8f4f8 100%) !important;
+  border: 1.5px dashed rgba(29, 78, 216, 0.25) !important;
+  box-shadow: none !important;
+}
+
+.folder-inline-card:hover {
+  border-color: var(--ck-primary) !important;
+  background: linear-gradient(135deg, #e8f0fe 0%, #dbeafe 100%) !important;
+  box-shadow: 0 8px 24px rgba(29, 78, 216, 0.12) !important;
+}
+
+.folder-inline-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.folder-inline-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--ck-gradient-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.folder-inline-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.folder-inline-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ck-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-inline-count {
+  font-size: 11px;
+  color: var(--ck-text-muted);
+}
+
+.folder-icon-btn {
+  background: none;
+  border: none;
+  color: var(--ck-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.folder-icon-btn:hover {
+  color: var(--ck-primary);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.folder-delete-btn:hover {
+  color: var(--ck-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.folder-inline-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  margin-top: 10px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.folder-preview-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.folder-preview-name {
+  font-size: 12px;
+  color: var(--ck-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.folder-preview-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ck-text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.folder-preview-remove-btn:hover {
+  color: var(--ck-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.folder-preview-more {
+  text-align: center;
+  color: var(--ck-text-muted);
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.folder-inline-empty {
+  margin-top: 8px;
+  color: var(--ck-text-muted);
+  font-size: 12px;
+}
+
+/* ─── 暗色模式分组卡片 ─── */
+html.dark .folder-inline-card,
+[data-theme='dark'] .folder-inline-card {
+  background: linear-gradient(135deg, #1a2744 0%, #1e293b 100%) !important;
+  border-color: rgba(96, 165, 250, 0.2) !important;
+}
+
+html.dark .folder-inline-card:hover,
+[data-theme='dark'] .folder-inline-card:hover {
+  background: linear-gradient(135deg, #1e3a5f 0%, #1e3050 100%) !important;
+  border-color: rgba(96, 165, 250, 0.4) !important;
+}
+
+html.dark .folder-inline-preview,
+[data-theme='dark'] .folder-inline-preview {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.05);
 }
 </style>

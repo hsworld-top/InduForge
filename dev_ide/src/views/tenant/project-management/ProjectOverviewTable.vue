@@ -23,13 +23,32 @@
       <template #default="{ row }">
         <div
           v-if="isGroupRow(row)"
-          class="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-200"
+          class="flex items-center justify-between w-full"
         >
-          <el-icon><FolderOpened /></el-icon>
-          <span>{{ row.groupName }}</span>
-          <el-tag size="small" effect="plain" type="info">
-            {{ t('projectManagement.projectCountUnit', { count: row.projectCount }) }}
-          </el-tag>
+          <div class="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-200">
+            <el-icon><FolderOpened /></el-icon>
+            <span>{{ row.groupName }}</span>
+            <el-tag size="small" effect="plain" type="info">
+              {{ t('projectManagement.projectCountUnit', { count: row.projectCount }) }}
+            </el-tag>
+          </div>
+          <div class="flex items-center gap-1" @click.stop>
+            <el-tooltip :content="t('projectManagement.addProjectToGroup')" placement="top">
+              <el-button size="small" text circle class="!w-6 !h-6" @click="emit('group-add-project', row)">
+                <el-icon :size="14"><Plus /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('projectManagement.editGroup')" placement="top">
+              <el-button size="small" text circle class="!w-6 !h-6" @click="emit('group-edit', row)">
+                <el-icon :size="14"><Edit /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('projectManagement.deleteGroup')" placement="top">
+              <el-button size="small" text circle class="!w-6 !h-6 !text-red-400" @click="emit('group-delete', row)">
+                <el-icon :size="14"><Delete /></el-icon>
+              </el-button>
+            </el-tooltip>
+          </div>
         </div>
         <button
           v-else
@@ -147,7 +166,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import dayjs from 'dayjs'
-import { Delete, Download, FolderOpened, UploadFilled, User } from '@element-plus/icons-vue'
+import { Delete, Download, Edit, FolderOpened, Plus, UploadFilled, User } from '@element-plus/icons-vue'
 import type { TableColumnCtx, TagProps } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import type { ProjectOverviewItem } from './project-overview.types'
@@ -216,6 +235,9 @@ const emit = defineEmits<{
   (event: 'deploy', payload: ProjectOverviewItem): void
   (event: 'export', payload: ProjectOverviewItem): void
   (event: 'delete', payload: ProjectOverviewItem): void
+  (event: 'group-add-project', payload: ProjectGroupRow): void
+  (event: 'group-edit', payload: ProjectGroupRow): void
+  (event: 'group-delete', payload: ProjectGroupRow): void
 }>()
 
 const UNGROUPED_ID = '__ungrouped__'

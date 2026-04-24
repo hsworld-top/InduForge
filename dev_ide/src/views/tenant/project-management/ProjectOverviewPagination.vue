@@ -1,35 +1,54 @@
 <template>
   <div
-    class="project-overview-pagination flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2"
+    class="project-overview-pagination"
   >
-    <p class="text-xs text-gray-500 dark:text-gray-400">{{ summaryText }}</p>
+    <p class="pagination-summary">{{ summaryText }}</p>
 
-    <div class="flex items-center gap-2">
-      <span class="text-xs text-gray-500 dark:text-gray-400">
+    <div class="pagination-controls">
+      <span class="pagination-label">
         {{ t('projectManagement.pageSizeLabel') }}
       </span>
-      <el-select
-        :model-value="limit"
-        size="small"
-        class="!w-20"
-        @update:model-value="handleLimitChange"
-      >
-        <el-option
-          v-for="sizeOption in limitOptions"
-          :key="sizeOption"
-          :label="String(sizeOption)"
-          :value="sizeOption"
-        />
-      </el-select>
+      <el-popover placement="top" :width="100" trigger="click">
+        <template #reference>
+          <button type="button" class="pagination-pill-btn">
+            {{ limit }}
+            <el-icon class="text-[10px] ml-0.5"><ArrowDown /></el-icon>
+          </button>
+        </template>
+        <div class="pagination-size-menu">
+          <button
+            v-for="sizeOption in limitOptions"
+            :key="sizeOption"
+            type="button"
+            class="pagination-size-item"
+            :class="{ 'is-active': limit === sizeOption }"
+            @click="handleLimitChange(sizeOption)"
+          >
+            {{ sizeOption }}
+          </button>
+        </div>
+      </el-popover>
 
-      <el-button size="small" text :disabled="!canPrev" @click="handlePrev">
-        <el-icon><ArrowLeft /></el-icon>
-      </el-button>
-      <el-button size="small" text :disabled="!canNext" @click="handleNext">
-        <el-icon><ArrowRight /></el-icon>
-      </el-button>
+      <div class="pagination-nav-group">
+        <button
+          type="button"
+          class="pagination-nav-btn"
+          :disabled="!canPrev"
+          @click="handlePrev"
+        >
+          <el-icon><ArrowLeft /></el-icon>
+        </button>
+        <button
+          type="button"
+          class="pagination-nav-btn"
+          :disabled="!canNext"
+          @click="handleNext"
+        >
+          <el-icon><ArrowRight /></el-icon>
+        </button>
+      </div>
 
-      <span class="text-xs text-gray-500 dark:text-gray-400 min-w-[74px] text-right">
+      <span class="pagination-page-info">
         {{ pageSummaryText }}
       </span>
     </div>
@@ -38,7 +57,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { buildProjectPaginationSummary } from './use-project-overview'
 
@@ -149,3 +168,117 @@ const handleLimitChange = (value: number | string) => {
   emitChange(1, nextLimit)
 }
 </script>
+
+<style scoped>
+.project-overview-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 4px;
+}
+
+.pagination-summary {
+  font-size: 12px;
+  color: var(--ck-text-muted, #94a3b8);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-label {
+  font-size: 12px;
+  color: var(--ck-text-muted, #94a3b8);
+  white-space: nowrap;
+}
+
+/* pill 按钮：每页条数选择器 */
+.pagination-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  height: 28px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--ck-text-secondary, #475569);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.pagination-pill-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--ck-text-primary, #0f172a);
+}
+
+html.dark .pagination-pill-btn,
+[data-theme='dark'] .pagination-pill-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ck-text-secondary);
+}
+
+html.dark .pagination-pill-btn:hover,
+[data-theme='dark'] .pagination-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 导航按钮组：前后羻页 */
+.pagination-nav-group {
+  display: flex;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
+  padding: 2px;
+}
+
+html.dark .pagination-nav-group,
+[data-theme='dark'] .pagination-nav-group {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pagination-nav-btn {
+  width: 28px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--ck-text-secondary, #475569);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.pagination-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ck-text-primary, #0f172a);
+}
+
+.pagination-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+html.dark .pagination-nav-btn:hover:not(:disabled),
+[data-theme='dark'] .pagination-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 页码信息 */
+.pagination-page-info {
+  font-size: 12px;
+  color: var(--ck-text-muted, #94a3b8);
+  min-width: 64px;
+  text-align: right;
+  white-space: nowrap;
+}
+</style>

@@ -8,6 +8,7 @@ import router from './router'
 import i18n from './lang'
 import App from './App.vue'
 import './assets/styles/main.css'
+import './assets/styles/cockpit-design-tokens.css'
 import { Storage } from './utils/storage'
 
 const initialTheme = Storage.getTheme()
