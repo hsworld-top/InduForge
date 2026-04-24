@@ -23,6 +23,11 @@
 - 端口配置以根目录 `.env` 为本机实际值来源；`.env_example` 与 `README.md` 只维护统一默认端口，不记录临时本机端口。
 - Node 相关模块统一使用 `pnpm`；Go 模块遵循各自 `Makefile` 或 `go` 命令。
 - 后端 API 前缀统一为 `/api/v1`，健康检查为 `/health`。
+- 对外 JSON 接口响应统一使用 `code`、`msg`、`data`、`reqId` 四字段；`code = 0` 是唯一成功码，禁止再返回 `success`、`errorCode`、`message`、`requestId` 作为正式 HTTP 契约。
+- 业务成功失败统一看业务码：`HTTP 2xx + code = 0` 表示成功，`HTTP 2xx + code != 0` 表示业务失败；技术异常统一使用 `HTTP 4xx/5xx + code != 0`。
+- 分页接口统一将分页信息放入 `data.pagination`，列表主体放入 `data.list` 或 `data.list.<业务字段>`，前后端都不得继续依赖顶层 `pagination`。
+- 文件流、下载流、图片流接口允许成功时直接返回二进制内容，但一旦返回错误，仍必须回到统一 JSON 包络。
+- 新增错误码必须先复用现有统一错误码规则；若确需新增，必须同步更新 `docs/统一错误码枚举表.md` 与相关接口文档，不得在模块内私自扩展另一套对外错误码。
 - `dev_core`、`dev_ide`、`datacenter`、`designer` 统一使用 `dayjs`，字符串时间格式为 `YYYY-MM-DD HH:mm:ss`。
 - `dev_core` 数据库初始化统一使用 `dev_core/scripts/init-database.js`，禁止使用 `sequelize.sync()`。
 - 新增或重构代码时补充详细代码注释，至少说明模块目的、关键流程、边界条件和异常分支；避免只重复字面含义的空洞注释。
