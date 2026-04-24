@@ -1,31 +1,81 @@
 <template>
-  <div class="data-center h-full flex overflow-hidden">
-    <!-- 左侧连接面板 -->
-    <ConnectionList
-      ref="connectionListRef"
-      :connections="connections"
-      :selected-connection-id="selectedConnectionId"
+  <DataCenterShell
+    v-model:active-module="activeModule"
+    :modules="datacenterModules"
+  >
+    <template #actions="{ activeModule: currentModule }">
+      <div class="flex flex-wrap justify-end gap-2">
+        <el-button size="small" @click="showDataContractCheckDialog = true">
+          <IconTablerShieldCheck class="mr-1 h-4 w-4" />
+          数据契约检查
+        </el-button>
+        <template v-if="currentModule === 'access-sources'">
+          <el-button
+            v-if="showAccessSourceLegacyWorkbench"
+            size="small"
+            @click="showAccessSourceLegacyWorkbench = false"
+          >
+            接入源概览
+          </el-button>
+          <el-button size="small" @click="loadConnections">
+            {{ t("actions.refresh") }}
+          </el-button>
+          <el-button
+            type="primary"
+            size="small"
+            @click="openCreateConnectionDialog"
+          >
+            <IconTablerPlus class="mr-1 h-4 w-4" />
+            {{ t("actions.createConnection") }}
+          </el-button>
+        </template>
+      </div>
+    </template>
+
+    <DataPointWorkspace
+      v-if="activeModule === 'datapoints' && projectId"
       :project-id="projectId"
-      @select="handleSelectConnection"
-      @dblclick="handleConnectionDblClick"
-      @contextmenu="handleConnectionContextMenu"
-      @create="openCreateConnectionDialog"
-      @refresh="loadConnections"
-      @table-dblclick="handleTableDblClick"
-      @table-contextmenu="handleTableContextMenu"
-      @view-table-list="handleViewTableList"
-      @query-dblclick="handleQueryDblClick"
-      @query-contextmenu="handleQueryContextMenu"
-      @query-deleted="handleQueryDeleted"
-      @mqtt-subscription-dblclick="handleMqttSubscriptionDblClick"
-      @mqtt-subscription-view="handleMqttSubscriptionView"
-      @mqtt-subscription-manage="handleMqttSubscriptionManage"
-      @mqtt-subscription-edit="handleMqttSubscriptionEdit"
-      @mqtt-subscription-delete="handleMqttSubscriptionDelete"
-      @datapoint-open="handleOpenDataPointList"
-      @calcunit-open="handleOpenCalcUnitList"
-      @alarmunit-open="handleOpenAlarmUnitList"
     />
+
+    <template v-else-if="activeModule === 'access-sources'">
+      <AccessSourceWorkspace
+        v-if="!showAccessSourceLegacyWorkbench && projectId"
+        :connections="connections"
+        :selected-connection-id="selectedConnectionId"
+        :project-id="projectId"
+        @create="openCreateConnectionDialog"
+        @refresh="loadConnections"
+        @open="handleAccessSourceOpen"
+      />
+
+      <!-- 旧连接树与统一标签页仍完整保留；从新工作区打开连接后进入这里。 -->
+      <div v-else class="data-center h-full flex overflow-hidden">
+        <!-- 左侧连接面板 -->
+        <ConnectionList
+          ref="connectionListRef"
+          :connections="connections"
+          :selected-connection-id="selectedConnectionId"
+          :project-id="projectId"
+          @select="handleSelectConnection"
+          @dblclick="handleConnectionDblClick"
+          @contextmenu="handleConnectionContextMenu"
+          @create="openCreateConnectionDialog"
+          @refresh="loadConnections"
+          @table-dblclick="handleTableDblClick"
+          @table-contextmenu="handleTableContextMenu"
+          @view-table-list="handleViewTableList"
+          @query-dblclick="handleQueryDblClick"
+          @query-contextmenu="handleQueryContextMenu"
+          @query-deleted="handleQueryDeleted"
+          @mqtt-subscription-dblclick="handleMqttSubscriptionDblClick"
+          @mqtt-subscription-view="handleMqttSubscriptionView"
+          @mqtt-subscription-manage="handleMqttSubscriptionManage"
+          @mqtt-subscription-edit="handleMqttSubscriptionEdit"
+          @mqtt-subscription-delete="handleMqttSubscriptionDelete"
+          @datapoint-open="handleOpenDataPointList"
+          @calcunit-open="handleOpenCalcUnitList"
+          @alarmunit-open="handleOpenAlarmUnitList"
+        />
 
     <!-- 右侧内容区域 - 统一标签页系统 -->
     <div
@@ -138,9 +188,9 @@
             <!-- 报警单元 -->
             <div
               v-else-if="tab.type === 'alarm-units'"
-              class="flex-1 flex items-center justify-center text-gray-500"
+              class="module-card flex-1 overflow-hidden p-5"
             >
-              {{ t("states.alarmUnitsWip") }}
+              <AlarmWorkspace v-if="projectId" :project-id="projectId" />
             </div>
 
             <!-- SQL 查询编辑器 -->
@@ -242,7 +292,30 @@
       </div>
     </div>
 
-    <!-- 连接右键菜单 -->
+      </div>
+    </template>
+
+    <div
+      v-else-if="activeModule === 'compute-units'"
+      class="module-card h-full overflow-hidden p-5"
+    >
+      <ComputeWorkspace v-if="projectId" :project-id="projectId" />
+    </div>
+
+    <div
+      v-else-if="activeModule === 'alarm-units'"
+      class="module-card h-full overflow-hidden p-5"
+    >
+      <AlarmWorkspace v-if="projectId" :project-id="projectId" />
+    </div>
+  </DataCenterShell>
+
+  <DataContractCheckDialog
+    v-model="showDataContractCheckDialog"
+    :project-id="projectId"
+  />
+
+  <!-- 连接右键菜单 -->
     <ConnectionContextMenu
       v-model:visible="showContextMenu"
       :position="contextMenuPosition"
@@ -297,7 +370,6 @@
       :connection-id="currentTableConnectionId"
       :table-name="currentTableName"
     />
-  </div>
 </template>
 
 <script setup lang="ts">
@@ -318,6 +390,7 @@ import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerAlertCircle from "~icons/tabler/alert-circle";
 import IconTablerCalculator from "~icons/tabler/calculator";
 import IconTablerBell from "~icons/tabler/bell";
+import IconTablerShieldCheck from "~icons/tabler/shield-check";
 import ConnectionList from "@/components/connection/ConnectionList.vue";
 import ConnectionContextMenu from "@/components/connection/ConnectionContextMenu.vue";
 import TableContextMenu from "@/components/connection/TableContextMenu.vue";
@@ -335,11 +408,21 @@ import MqttSubscriptionList from "@/components/mqtt/MqttSubscriptionList.vue";
 import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
 import MqttTagList from "@/components/mqtt/MqttTagList.vue";
 import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
+import AccessSourceWorkspace from "@/components/access-source/AccessSourceWorkspace.vue";
 import DataPointList from "@/components/datapoint/DataPointList.vue";
+import DataPointWorkspace from "@/components/datapoint/DataPointWorkspace.vue";
+import AlarmWorkspace from "@/components/alarm/AlarmWorkspace.vue";
 import ComputeUnitPanel from "@/components/compute/ComputeUnitPanel.vue";
+import ComputeWorkspace from "@/components/compute/ComputeWorkspace.vue";
+import DataContractCheckDialog from "@/components/contract/DataContractCheckDialog.vue";
+import DataCenterShell from "@/components/layout/DataCenterShell.vue";
 import { useConnection } from "@/composables/useConnection";
 import { usePreviewSession } from "@/composables/usePreviewSession";
 import { useMqttSocket } from "@/composables/useMqttSocket";
+import {
+  datacenterModules,
+  type DatacenterModuleId,
+} from "@/config/datacenterModules";
 import { datacenterLocale, t } from "@/i18n/runtime";
 import dataAPI from "@/api/data.api";
 import dayjs from "dayjs";
@@ -349,6 +432,8 @@ import { getApiErrorMessage } from "@/utils/request";
 
 // 从路由获取 project 信息
 const route = useRoute();
+const activeModule = ref<DatacenterModuleId>("datapoints");
+const showAccessSourceLegacyWorkbench = ref(false);
 const project = computed(() => {
   const projectId =
     route.query.pid || route.query.id || route.meta?.project?.id;
@@ -428,6 +513,7 @@ const setDataPointListRef = (tabId, el) => {
 };
 
 // 对话框状态
+const showDataContractCheckDialog = ref(false);
 const showConnectionDialog = ref(false);
 const showDetailsDialog = ref(false);
 const showTableStructureDialog = ref(false);
@@ -928,6 +1014,21 @@ onBeforeUnmount(() => {
  */
 const handleSelectConnection = (connection) => {
   selectConnection(connection.id);
+};
+
+/**
+ * 新接入源工作区进入旧工作台。
+ * 旧连接树依然负责加载表、查询和 MQTT 订阅，因此先切回旧布局再复用原双击流程。
+ */
+const handleAccessSourceOpen = async (connection) => {
+  showAccessSourceLegacyWorkbench.value = true;
+  selectConnection(connection.id);
+  await nextTick();
+  await handleConnectionDblClick(connection);
+
+  if (connection.type === "relational") {
+    openTableListTab(connection);
+  }
 };
 
 /**
@@ -1610,6 +1711,17 @@ watch(datacenterLocale, () => {
 <style scoped>
 .data-center {
   min-height: 400px;
+  border: 1px solid var(--dc-line, #d6cebf);
+  border-radius: 8px;
+  background: rgba(255, 253, 247, 0.94);
+  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
+}
+
+.module-card {
+  border: 1px solid var(--dc-line, #d6cebf);
+  border-radius: 8px;
+  background: rgba(255, 253, 247, 0.94);
+  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
 }
 
 .query-tabs :deep(.el-tabs__header) {

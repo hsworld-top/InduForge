@@ -1,6 +1,7 @@
 <template>
   <div class="datapoint-list h-full flex flex-col">
     <div
+      v-if="showToolbar"
       class="toolbar flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
     >
       <div class="text-base font-semibold text-gray-800 dark:text-gray-100">
@@ -94,6 +95,7 @@
             stripe
             row-key="id"
             class="group-table"
+            @row-click="(row) => emit('select', row)"
             @selection-change="
               group.allowClean ? handleInvalidSelection($event) : null
             "
@@ -143,7 +145,7 @@
                   link
                   size="small"
                   class="permission-entry"
-                  @click="openPermissionDialog(row)"
+                  @click.stop="openPermissionDialog(row)"
                 >
                   {{ summarizeRuntimeGrant(getWriteRuntimeGrant(row)) }}
                 </el-button>
@@ -259,7 +261,25 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  sourceType: {
+    type: String,
+    default: undefined,
+  },
+  status: {
+    type: String,
+    default: undefined,
+  },
+  search: {
+    type: String,
+    default: undefined,
+  },
+  showToolbar: {
+    type: Boolean,
+    default: true,
+  },
 });
+
+const emit = defineEmits(["select"]);
 
 const loading = ref(false);
 const datapoints = ref([]);
@@ -284,6 +304,32 @@ const typeLabels = {
 };
 
 /**
+ * 外部工作区和列表内置工具栏共用同一个请求构造逻辑。
+ * 仅把有值筛选写入 params，避免向旧后端传入 undefined 或空数组。
+ */
+const buildDataPointQueryParams = () => {
+  const selectedSourceType = props.sourceType ?? typeFilter.value;
+  const selectedStatus = props.status ?? statusFilter.value;
+  const selectedSearch = props.search ?? searchText.value;
+  const params: Record<string, unknown> = {
+    page: 1,
+    pageSize: 200,
+  };
+
+  if (selectedSourceType) {
+    params.type = selectedSourceType;
+  }
+  if (selectedStatus) {
+    params.status = selectedStatus;
+  }
+  if (selectedSearch) {
+    params.search = selectedSearch;
+  }
+
+  return params;
+};
+
+/**
  * 加载数据点列表
  * @returns {Promise<void>}
  */
@@ -292,11 +338,7 @@ const loadDataPoints = async () => {
   loading.value = true;
   try {
     const response = await dataAPI.getDataPoints(props.projectId, {
-      page: 1,
-      pageSize: 200,
-      type: typeFilter.value || undefined,
-      status: statusFilter.value || undefined,
-      search: searchText.value || undefined,
+      ...buildDataPointQueryParams(),
     });
     datapoints.value = response.data?.datapoints || [];
   } catch (error) {
@@ -508,6 +550,7 @@ const getUpdatedAt = (row) => {
 
 const groupedDataPoints = computed(() => {
   const items = datapoints.value || [];
+  const selectedStatus = props.status ?? statusFilter.value;
   const invalidItems = items.filter((item) => item.status === "invalid");
   const activeItems = items.filter((item) => item.status !== "invalid");
 
@@ -528,7 +571,7 @@ const groupedDataPoints = computed(() => {
     allowClean: false,
   }));
 
-  if (statusFilter.value !== "active") {
+  if (selectedStatus !== "active") {
     if (invalidItems.length > 0) {
       result.push({
         key: "invalid",
@@ -550,6 +593,18 @@ watch([searchText, typeFilter, statusFilter], () => {
     loadDataPoints();
   }, 300);
 });
+
+watch(
+  () => [props.sourceType, props.status, props.search],
+  () => {
+    if (debounceTimer.value) {
+      window.clearTimeout(debounceTimer.value);
+    }
+    debounceTimer.value = setTimeout(() => {
+      loadDataPoints();
+    }, 300);
+  },
+);
 
 onMounted(() => {
   loadDataPoints();

@@ -4,8 +4,10 @@ import assert from "node:assert/strict";
 
 import { resolveDatacenterDebugProjectMeta } from "../src/router/debug-project";
 
-const requestGetMock = vi.fn();
-const storageGetTokenMock = vi.fn();
+const { requestGetMock, storageGetTokenMock } = vi.hoisted(() => ({
+  requestGetMock: vi.fn(),
+  storageGetTokenMock: vi.fn(),
+}));
 
 vi.mock("../src/utils/request", () => ({
   default: {
@@ -52,6 +54,30 @@ test("debug 入口未带 pid 时默认解析名称为 test 的工程", async () 
     ["projectId", "project-test"],
     ["tenantId", "tenant-test"],
   ]);
+});
+
+test("debug 默认工程解析失败时回退到本地调试工程", async () => {
+  const writes = [];
+  const project = await resolveDatacenterDebugProjectMeta({
+    targetUrl: "http://datacenter.example/datacenter/debug",
+    resolveDefaultDebugProject: async () => {
+      throw new Error("访问令牌无效");
+    },
+    getStoredProjectId: () => null,
+    getStoredTenantId: () => null,
+    setProjectId: (value) => {
+      writes.push(["projectId", value]);
+    },
+    setTenantId: (value) => {
+      writes.push(["tenantId", value]);
+    },
+  });
+
+  assert.deepEqual(project, {
+    id: "test-project",
+    tenantId: null,
+  });
+  assert.deepEqual(writes, [["projectId", "test-project"]]);
 });
 
 test("默认工程解析兼容 projects 接口的 data.list.projects 包络", async () => {

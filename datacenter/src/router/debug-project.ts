@@ -2,6 +2,8 @@
 const asNonEmptyString = (value) =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
+const DEFAULT_DEBUG_PROJECT_ID = "test-project";
+
 /**
  * 解析数据中心 debug 路由的工程上下文。
  *
@@ -9,6 +11,7 @@ const asNonEmptyString = (value) =>
  * 1. URL 明确传入的 pid / id
  * 2. 默认调试工程（名称精确匹配 `test`）
  * 3. 当前本地缓存的工程上下文兜底
+ * 4. 本地调试占位工程，保证独立调试入口不因认证态失效直接白屏
  */
 export async function resolveDatacenterDebugProjectMeta({
   targetUrl,
@@ -36,7 +39,13 @@ export async function resolveDatacenterDebugProjectMeta({
     };
   }
 
-  const defaultDebugProject = await resolveDefaultDebugProject();
+  let defaultDebugProject = null;
+  try {
+    defaultDebugProject = await resolveDefaultDebugProject();
+  } catch (error) {
+    console.warn("解析默认调试工程失败，回退到本地调试工程:", error);
+  }
+
   if (defaultDebugProject?.id) {
     setProjectId(defaultDebugProject.id);
     if (defaultDebugProject.tenantId) {
@@ -49,8 +58,16 @@ export async function resolveDatacenterDebugProjectMeta({
     };
   }
 
+  const storedProjectId = getStoredProjectId();
+  const storedTenantId = getStoredTenantId();
+  const fallbackProjectId = storedProjectId || DEFAULT_DEBUG_PROJECT_ID;
+
+  if (!storedProjectId) {
+    setProjectId(fallbackProjectId);
+  }
+
   return {
-    id: getStoredProjectId(),
-    tenantId: getStoredTenantId(),
+    id: fallbackProjectId,
+    tenantId: storedTenantId,
   };
 }
