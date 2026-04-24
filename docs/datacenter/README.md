@@ -70,5 +70,6 @@
 - [查询说明](./queries.md)
 - [MQTT 自动发现](./mqtt-auto-discovery.md)
 - [数据点设计](./datapoint-design.md)
+- [数据中心 UI 初版设计](./ui-initial-design.md)
 - [Compute/Alarm 设计](./compute-alarm-design.md)
 - [IDE 管理端概览](../dev_ide/README.md)
