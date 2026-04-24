@@ -1,405 +1,207 @@
 <template>
   <div class="project-management">
-    <!-- 顶部操作栏 (Cockpit-style) -->
-    <div
-      class="flex items-center justify-between bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 mb-6"
+    <ProjectOverviewToolbar
+      data-testid="project-overview-toolbar"
+      :search="filters.search"
+      :search-placeholder="t('projectManagement.searchPlaceholder')"
+      :view-mode="viewMode"
+      :sort-by="filters.sortBy"
+      :sort-order="filters.sortOrder"
+      :composite-filters="filters.composite"
+      :tag-ids="filters.tagIds"
+      :tag-options="projectTagOptions"
+      :runtime-mode-options="runtimeModeOptions"
+      :deploy-status-options="deployStatusOptions"
+      :sort-field-options="sortFieldOptions"
+      :sort-order-options="sortOrderOptions"
+      @update:search="handleOverviewSearchInput"
+      @update:view-mode="handleViewModeChange"
+      @update:sort-by="handleSortByChange"
+      @update:sort-order="handleSortOrderChange"
+      @update:composite-filters="handleCompositeFiltersChange"
+      @update:tag-ids="handleTagIdsChange"
     >
-      <!-- 左侧：搜索与视图切换 -->
-      <div class="flex items-center space-x-3">
-        <!-- 圆角搜索框 -->
-        <el-input
-          v-model="searchForm.name"
-          :placeholder="t('projectManagement.searchPlaceholder')"
-          clearable
-          class="!w-64 rounded-full-input"
-          prefix-icon="Search"
-          @input="handleSearch"
-        />
-
-        <!-- 视图切换 -->
-        <div
-          class="flex items-center bg-gray-50 dark:bg-gray-900 rounded-full p-1 border border-gray-100 dark:border-gray-700"
-        >
-          <button
-            @click="viewMode = 'card'"
-            :class="[
-              'w-8 h-7 rounded-full flex items-center justify-center transition-colors',
-              viewMode === 'card'
-                ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm'
-                : 'text-gray-400 hover:text-gray-600',
-            ]"
+      <template #actions>
+        <div class="flex items-center space-x-3">
+          <el-tooltip
+            :content="t('projectManagement.addProject')"
+            placement="top"
+            v-if="canManageProjects"
           >
-            <el-icon><Grid /></el-icon>
-          </button>
-          <button
-            @click="viewMode = 'list'"
-            :class="[
-              'w-8 h-7 rounded-full flex items-center justify-center transition-colors',
-              viewMode === 'list'
-                ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm'
-                : 'text-gray-400 hover:text-gray-600',
-            ]"
-          >
-            <svg
-              class="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+            <button
+              data-testid="project-add-trigger"
+              class="w-9 h-9 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors shadow-sm"
+              @click="showCreateDialog = true"
             >
-              <line x1="8" y1="6" x2="21" y2="6"></line>
-              <line x1="8" y1="12" x2="21" y2="12"></line>
-              <line x1="8" y1="18" x2="21" y2="18"></line>
-              <line x1="3" y1="6" x2="3.01" y2="6"></line>
-              <line x1="3" y1="12" x2="3.01" y2="12"></line>
-              <line x1="3" y1="18" x2="3.01" y2="18"></line>
-            </svg>
-          </button>
+              <el-icon><Plus /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip
+            :content="t('projectManagement.importProject')"
+            placement="top"
+            v-if="canManageProjects"
+          >
+            <button
+              data-testid="project-import-trigger"
+              class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
+              @click="handleImportProject"
+            >
+              <el-icon><Upload /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="t('common.refresh')" placement="top">
+            <button
+              class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
+              @click="resetSearch"
+            >
+              <el-icon><RefreshRight /></el-icon>
+            </button>
+          </el-tooltip>
         </div>
+      </template>
+    </ProjectOverviewToolbar>
 
-        <!-- 批量操作 (有选中时显示) -->
-        <div
-          v-if="selectedProjects.length > 0"
-          class="flex items-center space-x-2 pl-3 border-l border-gray-200 dark:border-gray-700"
-        >
-          <el-button
-            v-if="canExportProjects"
-            type="success"
-            size="small"
-            round
-            @click="batchExportProjects"
-            :disabled="selectedProjects.length === 0"
-            :loading="batchOperationLoading"
-          >
-            <el-icon class="mr-1"><Download /></el-icon>
-            {{ t('projectManagement.batchExport') }} ({{ selectedProjects.length }})
-          </el-button>
-          <el-button
-            v-if="canDeleteProjects"
-            type="danger"
-            size="small"
-            round
-            @click="batchDeleteProjects"
-            :disabled="selectedProjects.length === 0"
-            :loading="batchOperationLoading"
-          >
-            <el-icon class="mr-1"><Delete /></el-icon>
-            {{ t('projectManagement.batchDelete') }} ({{ selectedProjects.length }})
-          </el-button>
-        </div>
-      </div>
-
-      <!-- 右侧：全局操作按钮组 -->
-      <div class="flex items-center space-x-3">
-        <el-tooltip
-          :content="t('projectManagement.addProject')"
-          placement="top"
-          v-if="canManageProjects"
-        >
-          <button
-            class="w-9 h-9 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors shadow-sm"
-            @click="showCreateDialog = true"
-          >
-            <el-icon><Plus /></el-icon>
-          </button>
-        </el-tooltip>
-        <el-tooltip
-          :content="t('projectManagement.importProject')"
-          placement="top"
-          v-if="canManageProjects"
-        >
-          <button
-            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
-            @click="handleImportProject"
-          >
-            <el-icon><Upload /></el-icon>
-          </button>
-        </el-tooltip>
-        <el-tooltip :content="t('common.refresh')" placement="top">
-          <button
-            class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
-            @click="resetSearch"
-          >
-            <el-icon><RefreshRight /></el-icon>
-          </button>
-        </el-tooltip>
-      </div>
+    <div
+      v-if="selectedProjects.length > 0"
+      class="flex items-center space-x-2 mt-3 px-3 py-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700"
+    >
+      <el-button
+        v-if="canExportProjects"
+        type="success"
+        size="small"
+        round
+        @click="batchExportProjects"
+        :disabled="selectedProjects.length === 0"
+        :loading="batchOperationLoading"
+      >
+        <el-icon class="mr-1"><Download /></el-icon>
+        {{ t('projectManagement.batchExport') }} ({{ selectedProjects.length }})
+      </el-button>
+      <el-button
+        v-if="canDeleteProjects"
+        type="danger"
+        size="small"
+        round
+        @click="batchDeleteProjects"
+        :disabled="selectedProjects.length === 0"
+        :loading="batchOperationLoading"
+      >
+        <el-icon class="mr-1"><Delete /></el-icon>
+        {{ t('projectManagement.batchDelete') }} ({{ selectedProjects.length }})
+      </el-button>
     </div>
 
-    <!-- 工程列表 -->
+    <ProjectGroupCards
+      v-if="viewMode === 'card'"
+      class="mt-4"
+      :groups="projectGroupCards"
+      :active-group-id="groupContext.groupId"
+      :all-projects-label="t('projectManagement.allProjects')"
+      :all-projects-count="pagination.total"
+      @select="handleGroupCardSelect"
+    />
+
     <div
-      :class="
-        viewMode === 'list'
-          ? 'bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden'
-          : ''
-      "
+      class="mt-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
+      data-testid="project-overview-shell"
     >
-      <!-- 卡片视图 (Cockpit-style) -->
-      <div v-if="viewMode === 'card'" class="py-2">
-        <div v-if="projectList.length === 0 && !loading" class="text-center py-12">
-          <el-empty :description="t('projectManagement.emptyProjects')" />
-        </div>
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-          <div
-            v-for="project in projectList"
-            :key="project.id"
-            class="project-card relative bg-white dark:bg-gray-800 rounded-2xl p-5 transition-all duration-300 cursor-pointer flex flex-col border border-gray-200/80 dark:border-gray-700 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5"
-            :class="{
-              'ring-2 ring-blue-500 border-blue-500': selectedProjects.includes(project.id),
-              'opacity-60': selectionMode && !selectedProjects.includes(project.id),
-            }"
-            @click="handleCardClick(project)"
-          >
-            <!-- 卡片头部 (标题 + Tag) -->
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-2.5 overflow-hidden flex-1">
-                <el-checkbox
-                  :model-value="selectedProjects.includes(project.id)"
-                  @change="(val) => toggleProjectSelection(project.id, val)"
-                  size="large"
-                  @click.stop
-                  class="!mr-0"
-                />
-                <h3
-                  class="text-[16px] font-semibold text-gray-800 dark:text-gray-100 truncate flex-1"
-                  :title="project.name"
-                >
-                  {{ project.name }}
-                </h3>
-              </div>
-              <div class="flex gap-2 shrink-0 ml-2">
-                <!-- 状态Tag -->
-                <div
-                  v-if="project.colorTag"
-                  class="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white shadow-sm flex items-center"
-                  :style="{ backgroundColor: project.colorTag }"
-                >
-                  {{ t('projectManagement.color') }}
-                </div>
-                <div
-                  class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 flex items-center tracking-wide"
-                >
-                  {{ getProjectModeDisplay(project) }}
-                </div>
-              </div>
-            </div>
+      <ProjectOverviewGrid
+        v-if="viewMode === 'card'"
+        :projects="projectList"
+        :loading="loading"
+        :empty-description="t('projectManagement.emptyProjects')"
+        :selected-ids="selectedProjects"
+        :show-selection="true"
+        :show-member-action="canManageProjects"
+        :show-deploy-action="canPerformOps"
+        :show-export-action="canExportProjects"
+        :show-delete-action="canDeleteProjects"
+        @open-project="handleOpenProject"
+        @selection-change="handleProjectSelectionChange"
+        @open-runtime-access="openRuntimeAccessDialog"
+        @deploy="openDeployDialog"
+        @export="handleExportProject"
+        @delete="deleteProject"
+      >
+        <template #actions="{ project }">
+          <el-tooltip v-if="canManageProjects" :content="t('projectManagement.memberAndPermission')" placement="top">
+            <el-button data-testid="project-runtime-access-action" size="small" text circle class="!w-7 !h-7" @click.stop="openRuntimeAccessDialog(project)">
+              <el-icon><User /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip v-if="canPerformOps" :content="t('projectManagement.publishAndDeploy')" placement="top">
+            <el-button data-testid="project-deploy-action" size="small" text circle class="!w-7 !h-7" @click.stop="openDeployDialog(project)">
+              <el-icon><UploadFilled /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip v-if="canExportProjects" :content="t('projectManagement.export')" placement="top">
+            <el-button data-testid="project-export-action" size="small" text circle class="!w-7 !h-7" @click.stop="handleExportProject(project)">
+              <el-icon><Download /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.delete')" placement="top">
+            <el-button data-testid="project-delete-action" size="small" text circle class="!w-7 !h-7 !text-red-500" @click.stop="deleteProject(project)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </el-tooltip>
+        </template>
+      </ProjectOverviewGrid>
 
-            <!-- 卡片主体内容 (灰底框) -->
-            <div
-              class="bg-gray-50/80 dark:bg-gray-900/40 rounded-xl p-4 flex-1 mb-4 border border-gray-100 dark:border-gray-800"
-            >
-              <p
-                class="text-[13px] text-gray-500 dark:text-gray-400 mb-3 line-clamp-2 min-h-[38px] leading-relaxed"
-              >
-                {{ project.description || t('projectManagement.noDescription') }}
-              </p>
-              <div
-                class="flex justify-between items-center text-[13px] border-t border-gray-200/60 dark:border-gray-700/60 pt-3 mt-3"
-              >
-                <span class="text-gray-400">{{ t('projectManagement.creator') }}:</span>
-                <span class="font-medium text-gray-700 dark:text-gray-300">{{
-                  getProjectCreatorDisplay(project)
-                }}</span>
-              </div>
-            </div>
+      <ProjectOverviewTable
+        v-else
+        :projects="projectList"
+        :loading="loading"
+        :grouped="true"
+        :empty-description="t('projectManagement.emptyProjects')"
+        :selected-ids="selectedProjects"
+        :show-selection="true"
+        :show-member-action="canManageProjects"
+        :show-deploy-action="canPerformOps"
+        :show-export-action="canExportProjects"
+        :show-delete-action="canDeleteProjects"
+        @open-project="handleOpenProject"
+        @selection-change="handleProjectSelectionChange"
+        @open-runtime-access="openRuntimeAccessDialog"
+        @deploy="openDeployDialog"
+        @export="handleExportProject"
+        @delete="deleteProject"
+      >
+        <template #actions="{ project }">
+          <el-tooltip v-if="canManageProjects" :content="t('projectManagement.memberAndPermission')" placement="top">
+            <el-button data-testid="project-runtime-access-action" size="small" text circle class="!w-7 !h-7" @click.stop="openRuntimeAccessDialog(project)">
+              <el-icon><User /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip v-if="canPerformOps" :content="t('projectManagement.publishAndDeploy')" placement="top">
+            <el-button data-testid="project-deploy-action" size="small" text circle class="!w-7 !h-7" @click.stop="openDeployDialog(project)">
+              <el-icon><UploadFilled /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip v-if="canExportProjects" :content="t('projectManagement.export')" placement="top">
+            <el-button data-testid="project-export-action" size="small" text circle class="!w-7 !h-7" @click.stop="handleExportProject(project)">
+              <el-icon><Download /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.delete')" placement="top">
+            <el-button data-testid="project-delete-action" size="small" text circle class="!w-7 !h-7 !text-red-500" @click.stop="deleteProject(project)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </el-tooltip>
+        </template>
+      </ProjectOverviewTable>
 
-            <!-- 底部操作区 (时间戳 + 圆形图标按钮组) -->
-            <div class="flex items-center justify-between pt-1">
-              <div
-                class="text-[11px] text-gray-400 font-mono bg-gray-50 dark:bg-gray-800/80 px-2 py-1 rounded border border-gray-100 dark:border-gray-700/50"
-              >
-                {{ formatDate(project.createdAt) }}
-              </div>
-              <div class="flex items-center gap-1">
-                <el-tooltip :content="t('projectManagement.memberAndPermission')" placement="top">
-                  <button
-                    v-if="canManageProjects"
-                    class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors"
-                    @click.stop="openRuntimeAccessDialog(project)"
-                  >
-                    <el-icon class="text-sm"><User /></el-icon>
-                  </button>
-                </el-tooltip>
-                <el-tooltip :content="t('projectManagement.publishAndDeploy')" placement="top">
-                  <button
-                    v-if="canPerformOps"
-                    class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/30 dark:hover:text-blue-400 transition-colors"
-                    @click.stop="openDeployDialog(project)"
-                  >
-                    <el-icon class="text-sm"><UploadFilled /></el-icon>
-                  </button>
-                </el-tooltip>
-                <el-tooltip
-                  :content="t('opsManagement.title')"
-                  placement="top"
-                  v-if="canPerformOps && isProjectDeployed(project)"
-                >
-                  <button
-                    class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/30 dark:hover:text-green-400 transition-colors"
-                    @click.stop="openOpsManagement(project)"
-                  >
-                    <el-icon class="text-sm"><Odometer /></el-icon>
-                  </button>
-                </el-tooltip>
-                <el-tooltip :content="t('projectManagement.export')" placement="top">
-                  <button
-                    v-if="canExportProjects"
-                    class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors"
-                    @click.stop="handleExportProject(project)"
-                  >
-                    <el-icon class="text-sm"><Download /></el-icon>
-                  </button>
-                </el-tooltip>
-                <el-tooltip :content="t('projectManagement.delete')" placement="top">
-                  <button
-                    v-if="canDeleteProjects"
-                    class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"
-                    @click.stop="deleteProject(project)"
-                  >
-                    <el-icon class="text-sm"><Delete /></el-icon>
-                  </button>
-                </el-tooltip>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 列表视图 -->
-      <div v-else>
-        <el-table
-          :data="projectList"
-          v-loading="loading"
-          style="width: 100%"
-          :header-cell-style="{ background: '#f9fafb', color: '#374151' }"
-          @selection-change="handleSelectionChange"
-        >
-          <!-- 选择列 -->
-          <el-table-column type="selection" width="55" fixed="left" />
-          <el-table-column :label="t('projectManagement.color')" width="80">
-            <template #default="scope">
-              <div
-                class="w-6 h-6 rounded-full border-2 border-white shadow-sm"
-                :style="{ backgroundColor: scope.row.colorTag || '#3b82f6' }"
-              ></div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="name" :label="t('projectManagement.projectName')" width="200">
-            <template #default="scope">
-              <span
-                class="cursor-pointer text-blue-600 hover:text-blue-800 underline"
-                @click="handleProjectNameClick(scope.row)"
-              >
-                {{ scope.row.name }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="description"
-            :label="t('projectManagement.description')"
-            width="200"
-          />
-          <el-table-column :label="t('projectManagement.createdBy')" width="200">
-            <template #default="scope">
-              {{ getProjectCreatorDisplay(scope.row) }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="createdAt" :label="t('projectManagement.createdAt')" width="200">
-            <template #default="scope">
-              {{ formatDateTime(scope.row.createdAt) }}
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('projectManagement.runtimeMode')" width="120" align="center">
-            <template #default="scope">
-              <el-tag :type="getProjectModeTagType(scope.row)" size="small">
-                {{ getProjectModeDisplay(scope.row) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('projectManagement.actions')"
-            min-width="420"
-            fixed="right"
-            v-if="canManageProjects || canPerformOps"
-          >
-            <template #default="scope">
-              <el-button
-                v-if="canManageProjects"
-                type="warning"
-                size="small"
-                @click="openRuntimeAccessDialog(scope.row)"
-                class="mr-2"
-              >
-                {{ t('projectManagement.memberAndPermission') }}
-              </el-button>
-              <el-button
-                v-if="canPerformOps"
-                type="primary"
-                size="small"
-                @click="openDeployDialog(scope.row)"
-                class="mr-2"
-              >
-                {{ t('projectManagement.publishAndDeploy') }}
-              </el-button>
-              <el-button
-                v-if="canPerformOps && isProjectDeployed(scope.row)"
-                type="info"
-                size="small"
-                @click="openOpsManagement(scope.row)"
-                class="mr-2"
-              >
-                {{ t('opsManagement.title') }}
-              </el-button>
-              <el-button
-                v-if="canExportProjects"
-                type="success"
-                size="small"
-                @click="handleExportProject(scope.row)"
-                class="mr-2"
-              >
-                <el-icon class="mr-1">
-                  <Download />
-                </el-icon>
-                {{ t('projectManagement.export') }}
-              </el-button>
-              <el-button
-                v-if="canDeleteProjects"
-                type="danger"
-                size="small"
-                @click="deleteProject(scope.row)"
-              >
-                {{ t('projectManagement.delete') }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-
-      <!-- 分页 -->
       <div
         v-if="pagination.total > 0"
-        class="pagination-bar flex justify-between items-center py-2 px-3 border-t border-gray-200 dark:border-gray-700"
+        class="pagination-bar border-t border-gray-200 dark:border-gray-700 p-3"
+        data-testid="project-overview-pagination"
       >
-        <div class="text-xs text-gray-500 dark:text-gray-400">
-          {{
-            t('projectManagement.pageSummary', {
-              start: (pagination.page - 1) * pagination.limit + 1,
-              end: Math.min(pagination.page * pagination.limit, pagination.total),
-              total: pagination.total,
-            })
-          }}
-        </div>
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.limit"
-          size="small"
-          :page-sizes="[10, 20, 50, 100]"
+        <ProjectOverviewPagination
+          :page="pagination.page"
+          :limit="pagination.limit"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
+          :total-pages="pagination.totalPages"
+          :summary="pagination.summary"
+          @change="handleOverviewPaginationChange"
         />
       </div>
     </div>
@@ -425,25 +227,6 @@
             :placeholder="t('projectManagement.inputProjectDescription')"
             :rows="3"
           />
-        </el-form-item>
-        <el-form-item :label="t('projectManagement.colorTag')">
-          <el-select
-            v-model="createForm.colorTag"
-            :placeholder="t('projectManagement.selectColorTag')"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="color in colorTagOptions"
-              :key="color.value"
-              :label="color.label"
-              :value="color.value"
-            >
-              <div class="flex items-center">
-                <div class="w-4 h-4 rounded mr-2" :style="{ backgroundColor: color.value }"></div>
-                {{ color.label }}
-              </div>
-            </el-option>
-          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -482,25 +265,6 @@
             :rows="3"
           />
         </el-form-item>
-        <el-form-item :label="t('projectManagement.colorTag')">
-          <el-select
-            v-model="editForm.colorTag"
-            :placeholder="t('projectManagement.selectColorTag')"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="color in colorTagOptions"
-              :key="color.value"
-              :label="color.label"
-              :value="color.value"
-            >
-              <div class="flex items-center">
-                <div class="w-4 h-4 rounded mr-2" :style="{ backgroundColor: color.value }"></div>
-                {{ color.label }}
-              </div>
-            </el-option>
-          </el-select>
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">{{ t('projectManagement.cancel') }}</el-button>
@@ -508,81 +272,6 @@
           {{ t('projectManagement.save') }}
         </el-button>
       </template>
-    </el-dialog>
-
-    <!-- 运维操作对话框 -->
-    <el-dialog
-      v-model="showOperationDialog"
-      :title="
-        t('projectManagement.operationDialog', {
-          name: currentProject?.name || '',
-        })
-      "
-      width="400px"
-      :close-on-click-modal="false"
-    >
-      <div class="space-y-3">
-        <el-button
-          type="success"
-          plain
-          block
-          @click="performOperation('start')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2">
-            <VideoPlay />
-          </el-icon>
-          {{ t('projectManagement.startProject') }}
-        </el-button>
-        <el-button
-          type="warning"
-          plain
-          block
-          @click="performOperation('stop')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2">
-            <VideoPause />
-          </el-icon>
-          {{ t('projectManagement.stopProject') }}
-        </el-button>
-        <el-button
-          type="info"
-          plain
-          block
-          @click="performOperation('restart')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2">
-            <RefreshRight />
-          </el-icon>
-          {{ t('projectManagement.restartProject') }}
-        </el-button>
-        <el-button
-          type="primary"
-          plain
-          block
-          @click="performOperation('deploy')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2">
-            <Upload />
-          </el-icon>
-          {{ t('projectManagement.deployProject') }}
-        </el-button>
-        <el-button
-          type="danger"
-          plain
-          block
-          @click="performOperation('backup')"
-          :loading="operationLoading"
-        >
-          <el-icon class="mr-2">
-            <CopyDocument />
-          </el-icon>
-          {{ t('projectManagement.backupProject') }}
-        </el-button>
-      </div>
     </el-dialog>
 
     <!-- 部署对话框 -->
@@ -1026,57 +715,83 @@ import { ref, reactive, computed, onMounted, onUnmounted, getCurrentInstance } f
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import JSZip from 'jszip'
-import { useAuthStore, useAppStore } from '@/store'
+import { useAuthStore } from '@/store'
 import { can } from '@/permissions'
 import request, { getApiErrorMessage as resolveApiErrorMessage } from '@/utils/request'
 import { projectAPI } from '@/api/project.api'
-import { ColorTagEnum } from '@/enums'
 import { formatDateTime, formatDate, formatCurrency } from '@/utils'
 import { initSocket, getSocket } from '@/utils/socket'
 import { Storage } from '@/utils/storage'
 import ProjectRuntimeAccessDialog from './components/ProjectRuntimeAccessDialog.vue'
+import ProjectOverviewToolbar from './project-management/ProjectOverviewToolbar.vue'
+import ProjectOverviewGrid from './project-management/ProjectOverviewGrid.vue'
+import ProjectOverviewTable from './project-management/ProjectOverviewTable.vue'
+import ProjectOverviewPagination from './project-management/ProjectOverviewPagination.vue'
+import ProjectGroupCards from './project-management/ProjectGroupCards.vue'
+import { useProjectOverviewState } from './project-management/use-project-overview'
 
 export default {
   name: 'ProjectManagement',
   components: {
     ProjectRuntimeAccessDialog,
+    ProjectOverviewToolbar,
+    ProjectOverviewGrid,
+    ProjectOverviewTable,
+    ProjectOverviewPagination,
+    ProjectGroupCards,
   },
   setup() {
     const { t } = useI18n()
     const { emit } = getCurrentInstance()
     const authStore = useAuthStore()
-    const appStore = useAppStore()
-    const isDark = computed(() => appStore.isDark)
 
     // 当前用户信息
     const currentUser = computed(() => authStore.userInfo)
 
+    const {
+      projects: projectList,
+      loading,
+      filters,
+      pagination,
+      groupContext,
+      viewMode,
+      patchFilters,
+      setSort,
+      setGroupContext,
+      clearGroupContext,
+      setPage,
+      setLimit,
+      fetchProjects: fetchProjectOverview,
+    } = useProjectOverviewState({
+      initialPagination: {
+        page: 1,
+        limit: 10,
+      },
+      summaryFormatter: ({ start, end, total }) =>
+        t('projectManagement.pageSummary', { start, end, total }),
+    })
+
     // 状态
-    const loading = ref(false)
     const createLoading = ref(false)
     const editLoading = ref(false)
-    const operationLoading = ref(false)
     const batchOperationLoading = ref(false)
 
     // 对话框显示状态
     const showCreateDialog = ref(false)
     const showEditDialog = ref(false)
-    const showOperationDialog = ref(false)
     const showDeployDialog = ref(false)
     const showVersionManageDialog = ref(false)
     const projectDialogVisible = ref(false)
     const runtimeAccessDialogVisible = ref(false)
 
-    // 视图模式
-    const viewMode = ref('card') // 'card' 或 'list'
-
-    // 选择模式状态
-    const selectionMode = ref(false)
+    // 选择状态
     const selectedProjects = ref([]) // 选中的工程ID列表
     const deployStateRefreshTimer = ref(null)
+    const searchTimer = ref(null)
+    const projectTagOptions = ref([])
+    const projectGroupCards = ref([])
 
     // 当前操作的工程
-    const currentProject = ref(null)
     const selectedProject = ref(null)
     const runtimeAccessProject = ref(null)
 
@@ -1101,7 +816,6 @@ export default {
     const canAddReleaseVersion = computed(() => generatedReleaseVersions.value.length === 0)
     const availableNodes = ref([])
     const nodeModes = reactive({}) // { nodeId: 'DEV' | 'RELEASE' | null }
-    const projectDeployState = reactive({}) // { projectId: { deployed: boolean, mode: 'DEV'|'RELEASE'|null } }
     const nodeKeyword = ref('')
     const filteredAvailableNodes = computed(() => {
       const keyword = nodeKeyword.value.trim().toLowerCase()
@@ -1121,37 +835,33 @@ export default {
       },
     })
 
-    // 工程列表和分页
-    const projectList = ref([])
-    const pagination = reactive({
-      page: 1,
-      limit: 10,
-      total: 0,
-      totalPages: 0,
-    })
-
-    // 搜索表单
-    const searchForm = reactive({
-      name: '',
-    })
-    const searchTimer = ref(null)
-
-    // 颜色标签选项
-    const colorTagOptions = [
-      { value: ColorTagEnum.BLUE, label: t('projectManagement.colorBlue') },
-      { value: ColorTagEnum.RED, label: t('projectManagement.colorRed') },
-      { value: ColorTagEnum.GREEN, label: t('projectManagement.colorGreen') },
-      { value: ColorTagEnum.YELLOW, label: t('projectManagement.colorYellow') },
-      { value: ColorTagEnum.PURPLE, label: t('projectManagement.colorPurple') },
-      { value: ColorTagEnum.PINK, label: t('projectManagement.colorPink') },
-      { value: ColorTagEnum.GRAY, label: t('projectManagement.colorGray') },
-    ]
+    const runtimeModeOptions = computed(() => [
+      { label: t('projectManagement.modeDisplayDev'), value: 'DEV' },
+      { label: t('projectManagement.modeDisplayRelease'), value: 'RELEASE' },
+    ])
+    const deployStatusOptions = computed(() => [
+      { label: t('projectManagement.deployStatusPending'), value: 'pending' },
+      { label: t('projectManagement.deployStatusDeploying'), value: 'deploying' },
+      { label: t('projectManagement.deployStatusRunning'), value: 'running' },
+      { label: t('projectManagement.deployStatusStopped'), value: 'stopped' },
+      { label: t('projectManagement.deployStatusError'), value: 'error' },
+      { label: t('projectManagement.deployStatusRollback'), value: 'rollback' },
+    ])
+    const sortFieldOptions = computed(() => [
+      { label: t('projectManagement.sortFieldCreatedAt'), value: 'createdAt' },
+      { label: t('projectManagement.sortFieldUpdatedAt'), value: 'updatedAt' },
+      { label: t('projectManagement.sortFieldLastDeployedAt'), value: 'lastDeployedAt' },
+      { label: t('projectManagement.sortFieldRuntimeStatus'), value: 'runtimeStatus' },
+    ])
+    const sortOrderOptions = computed(() => [
+      { label: t('projectManagement.sortOrderDesc'), value: 'DESC' },
+      { label: t('projectManagement.sortOrderAsc'), value: 'ASC' },
+    ])
 
     // 创建工程表单
     const createForm = reactive({
       name: '',
       description: '',
-      colorTag: ColorTagEnum.BLUE,
     })
 
     // 创建表单验证规则
@@ -1176,7 +886,6 @@ export default {
       id: '',
       name: '',
       description: '',
-      colorTag: ColorTagEnum.BLUE,
     })
 
     // 编辑表单验证规则
@@ -1233,93 +942,132 @@ export default {
       return resolveApiErrorMessage(error, fallback)
     }
 
-    /**
-     * 将 HEX 颜色转为 RGB 对象。
-     * @param {string} hex - HEX 颜色值
-     * @returns {{r:number,g:number,b:number}|null}
-     */
-    const hexToRgb = (hex) => {
-      if (!hex || typeof hex !== 'string') return null
-      const normalized = hex.replace('#', '')
-      if (![3, 6].includes(normalized.length)) return null
-      const fullHex =
-        normalized.length === 3
-          ? normalized
-              .split('')
-              .map((c) => c + c)
-              .join('')
-          : normalized
-      const num = Number.parseInt(fullHex, 16)
-      if (Number.isNaN(num)) return null
-      return {
-        r: (num >> 16) & 255,
-        g: (num >> 8) & 255,
-        b: num & 255,
+    const asRecord = (value) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return value
       }
+      return {}
     }
 
-    /**
-     * 根据主题生成工程卡片背景样式。
-     * @param {object} project - 工程对象
-     * @returns {Record<string,string>} 行内样式
-     */
-    const getProjectCardStyle = (project) => {
-      const baseColor = project?.colorTag || '#3b82f6'
-      const rgb = hexToRgb(baseColor)
-      if (!rgb) return { backgroundColor: baseColor }
-      if (isDark.value) {
-        return {
-          background: `linear-gradient(135deg, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.34) 0%, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.56) 100%)`,
+    const extractCollectionItems = (response, candidateKeys = []) => {
+      const root = asRecord(response)
+      const payload = asRecord(root.data)
+      const business = Object.keys(payload).length > 0 ? payload : root
+      const list = asRecord(business.list)
+
+      const candidates = [
+        ...candidateKeys.map((key) => list[key]).filter(Array.isArray),
+        ...candidateKeys.map((key) => business[key]).filter(Array.isArray),
+        list.items,
+        business.items,
+        Array.isArray(business.list) ? business.list : null,
+      ]
+
+      for (const candidate of candidates) {
+        if (Array.isArray(candidate)) {
+          return candidate
         }
       }
-      return {
-        background: `linear-gradient(135deg, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.88) 0%, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.96) 100%)`,
-      }
+
+      return []
     }
 
-    // 获取工程列表
-    const fetchProjects = async () => {
-      loading.value = true
-      try {
-        const params = {
-          page: pagination.page,
-          limit: pagination.limit,
-          ...searchForm,
-        }
+    const normalizeSelectionIds = (values = []) => {
+      return [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))]
+    }
 
-        // 移除空值
-        Object.keys(params).forEach((key) => {
-          if (!params[key]) delete params[key]
+    const syncSelectionWithProjectList = () => {
+      const currentIdSet = new Set(projectList.value.map((project) => String(project?.id || '')))
+      selectedProjects.value = selectedProjects.value.filter((id) => currentIdSet.has(String(id)))
+    }
+
+    const fetchProjectTagOptions = async () => {
+      const response = await projectAPI.listProjectTags()
+      const rawTags = extractCollectionItems(response, ['tags'])
+      projectTagOptions.value = rawTags
+        .map((item) => {
+          const tag = asRecord(item)
+          const id = String(tag.id || '').trim()
+          if (!id) {
+            return null
+          }
+          return {
+            id,
+            name: String(tag.name || '').trim() || id,
+            description: String(tag.description || '').trim() || null,
+            sortOrder: Number.parseInt(String(tag.sortOrder || 0), 10) || 0,
+          }
         })
+        .filter(Boolean)
+    }
 
-        const response = await projectAPI.getProjects(params)
-        const payload = response?.data || {}
-        const listPayload = payload?.list || payload
-        const paginationPayload = payload?.pagination || response?.pagination || {}
+    const fetchProjectGroupCards = async () => {
+      const response = await projectAPI.listProjectGroups()
+      const rawGroups = extractCollectionItems(response, ['groups'])
+      projectGroupCards.value = rawGroups
+        .map((item) => {
+          const group = asRecord(item)
+          const id = String(group.id || '').trim()
+          if (!id) {
+            return null
+          }
+          const countCandidates = [group.projectCount, group.totalProjects, group.count]
+          let projectCount = 0
+          for (const candidate of countCandidates) {
+            const parsed = Number.parseInt(String(candidate ?? ''), 10)
+            if (Number.isInteger(parsed) && parsed >= 0) {
+              projectCount = parsed
+              break
+            }
+          }
+          return {
+            id,
+            name: String(group.name || '').trim() || t('projectManagement.unknownGroup'),
+            description: String(group.description || '').trim() || '',
+            sortOrder: Number.parseInt(String(group.sortOrder || 0), 10) || 0,
+            projectCount,
+          }
+        })
+        .filter(Boolean)
+    }
 
-        projectList.value = listPayload?.projects || []
-        pagination.total = paginationPayload?.total || 0
-        pagination.totalPages = paginationPayload?.totalPages || 0
-        await fetchProjectDeployState()
+    const fetchProjectOverviewMeta = async () => {
+      const [tagResult, groupResult] = await Promise.allSettled([
+        fetchProjectTagOptions(),
+        fetchProjectGroupCards(),
+      ])
+
+      if (tagResult.status === 'rejected') {
+        console.warn('获取工程标签筛选项失败:', tagResult.reason)
+      }
+      if (groupResult.status === 'rejected') {
+        console.warn('获取工程分组入口失败:', groupResult.reason)
+      }
+    }
+
+    // 获取工程列表（统一通过状态层构建查询参数）。
+    const fetchProjects = async () => {
+      try {
+        await fetchProjectOverview()
+        syncSelectionWithProjectList()
       } catch (error) {
         ElMessage.error(
-            t('projectManagement.fetchFailed', {
+          t('projectManagement.fetchFailed', {
             message: getApiErrorMessage(error, t('projectManagement.fetchFailed')),
           }),
         )
-      } finally {
-        loading.value = false
       }
     }
 
-    // 执行搜索
     const executeSearch = () => {
-      pagination.page = 1
+      setPage(1)
       fetchProjects()
     }
 
-    // 搜索处理（防抖）
-    const handleSearch = () => {
+    const handleOverviewSearchInput = (value) => {
+      patchFilters({
+        search: String(value || ''),
+      })
       if (searchTimer.value) {
         window.clearTimeout(searchTimer.value)
       }
@@ -1328,29 +1076,71 @@ export default {
       }, 300)
     }
 
-    // 重置搜索
+    const handleViewModeChange = (mode) => {
+      viewMode.value = mode === 'list' ? 'list' : 'card'
+    }
+
+    const handleSortByChange = (sortBy) => {
+      setSort(sortBy, filters.sortOrder)
+      fetchProjects()
+    }
+
+    const handleSortOrderChange = (sortOrder) => {
+      setSort(filters.sortBy, sortOrder)
+      fetchProjects()
+    }
+
+    const handleCompositeFiltersChange = (compositeFilters) => {
+      patchFilters({ composite: compositeFilters })
+      fetchProjects()
+    }
+
+    const handleTagIdsChange = (tagIds) => {
+      patchFilters({ tagIds: normalizeSelectionIds(tagIds) })
+      fetchProjects()
+    }
+
+    const handleGroupCardSelect = ({ groupId, groupName }) => {
+      if (groupId) {
+        setGroupContext({
+          groupId: String(groupId),
+          groupName: String(groupName || ''),
+        })
+      } else {
+        clearGroupContext()
+      }
+      fetchProjects()
+    }
+
     const resetSearch = () => {
       if (searchTimer.value) {
         window.clearTimeout(searchTimer.value)
       }
-      Object.keys(searchForm).forEach((key) => {
-        searchForm[key] = ''
+      patchFilters({
+        search: '',
+        composite: {
+          runtimeModes: [],
+          deployStatuses: [],
+          createdBy: '',
+        },
+        tagIds: [],
       })
-      pagination.page = 1
+      clearGroupContext()
       fetchProjects()
     }
 
-    // 分页大小改变
-    const handleSizeChange = (size) => {
-      pagination.limit = size
-      pagination.page = 1
+    const handleOverviewPaginationChange = ({ page, limit }) => {
+      if (Number.parseInt(String(limit), 10) !== pagination.limit) {
+        setLimit(limit)
+        setPage(page)
+      } else {
+        setPage(page)
+      }
       fetchProjects()
     }
 
-    // 页码改变
-    const handleCurrentChange = (page) => {
-      pagination.page = page
-      fetchProjects()
+    const handleProjectSelectionChange = ({ projectId, selected }) => {
+      toggleProjectSelection(projectId, selected)
     }
 
     // 创建工程
@@ -1368,7 +1158,6 @@ export default {
         const projectData = {
           name: createForm.name,
           description: createForm.description || '',
-          colorTag: createForm.colorTag,
         }
 
         await projectAPI.createProject(projectData)
@@ -1376,7 +1165,8 @@ export default {
         ElMessage.success(t('projectManagement.createSuccess'))
         showCreateDialog.value = false
         resetCreateForm()
-        fetchProjects()
+        await fetchProjects()
+        await fetchProjectGroupCards()
       } catch (error) {
         ElMessage.error(
             t('projectManagement.createFailed', {
@@ -1391,11 +1181,7 @@ export default {
     // 重置创建表单
     const resetCreateForm = () => {
       Object.keys(createForm).forEach((key) => {
-        if (key === 'colorTag') {
-          createForm[key] = ColorTagEnum.BLUE
-        } else {
-          createForm[key] = ''
-        }
+        createForm[key] = ''
       })
       if (createFormRef.value) {
         createFormRef.value.clearValidate()
@@ -1418,7 +1204,6 @@ export default {
       editForm.id = project.id
       editForm.name = project.name
       editForm.description = project.description
-      editForm.colorTag = project.colorTag || ColorTagEnum.BLUE
       showEditDialog.value = true
     }
 
@@ -1437,7 +1222,6 @@ export default {
         const projectData = {
           name: editForm.name,
           description: editForm.description || '',
-          colorTag: editForm.colorTag,
         }
 
         await projectAPI.updateProject(editForm.id, projectData)
@@ -1456,21 +1240,27 @@ export default {
       }
     }
 
-    // 删除工程
-    const deleteProject = async (project) => {
-      if (!canDeleteProjects.value) {
-        ElMessage.warning(t('projectManagement.noPermission'))
-        return
+    // 单删与批删共用同一删除决策路径，保持影响评估、强删保护与成功/失败处理一致。
+    const executeProjectDelete = async (
+      project,
+      options = {
+        skipDefaultConfirm: false,
+        showSuccessMessage: true,
+      },
+    ) => {
+      if (!project?.id) {
+        return { status: 'skipped' }
       }
-      try {
-        let impactData = null
-        try {
-          const impactRes = await projectAPI.getDeleteImpact(project.id)
-          impactData = impactRes?.data ?? impactRes
-        } catch (impactError) {
-          ElMessage.warning(t('projectManagement.deleteImpactLoadFailed'))
-        }
 
+      let impactData = null
+      try {
+        const impactRes = await projectAPI.getDeleteImpact(project.id)
+        impactData = impactRes?.data ?? impactRes
+      } catch {
+        ElMessage.warning(t('projectManagement.deleteImpactLoadFailed'))
+      }
+
+      try {
         if (impactData?.hasActiveDeployments) {
           if (!canForceDeleteProject.value) {
             ElMessage.warning(
@@ -1478,8 +1268,9 @@ export default {
                 count: impactData?.activeDeploymentCount || 0,
               }),
             )
-            return
+            return { status: 'blocked' }
           }
+
           await ElMessageBox.confirm(
             t('projectManagement.forceDeleteConfirmWithImpact', {
               name: project.name,
@@ -1493,36 +1284,58 @@ export default {
               type: 'warning',
             },
           )
+
           await projectAPI.deleteProject(project.id, { force: true })
-          ElMessage.success(t('projectManagement.forceDeleteSuccess'))
-          fetchProjects()
-          return
+          if (options.showSuccessMessage) {
+            ElMessage.success(t('projectManagement.forceDeleteSuccess'))
+          }
+          return { status: 'success', forced: true }
         }
 
-        await ElMessageBox.confirm(
-          t('projectManagement.deleteConfirmWithImpact', {
-            name: project.name,
-            deploymentCount: impactData?.totalDeploymentCount || 0,
-          }),
-          t('projectManagement.deleteConfirmTitle'),
-          {
-            confirmButtonText: t('projectManagement.deleteConfirmButton'),
-            cancelButtonText: t('projectManagement.cancel'),
-            type: 'warning',
-          },
-        )
-
-        await projectAPI.deleteProject(project.id)
-        ElMessage.success(t('projectManagement.deleteSuccess'))
-        fetchProjects()
-      } catch (error) {
-        if (error !== 'cancel') {
-          ElMessage.error(
-              t('projectManagement.deleteFailed', {
-                message: getApiErrorMessage(error, t('projectManagement.deleteFailed')),
+        if (!options.skipDefaultConfirm) {
+          await ElMessageBox.confirm(
+            t('projectManagement.deleteConfirmWithImpact', {
+              name: project.name,
+              deploymentCount: impactData?.totalDeploymentCount || 0,
             }),
+            t('projectManagement.deleteConfirmTitle'),
+            {
+              confirmButtonText: t('projectManagement.deleteConfirmButton'),
+              cancelButtonText: t('projectManagement.cancel'),
+              type: 'warning',
+            },
           )
         }
+
+        await projectAPI.deleteProject(project.id)
+        if (options.showSuccessMessage) {
+          ElMessage.success(t('projectManagement.deleteSuccess'))
+        }
+        return { status: 'success', forced: false }
+      } catch (error) {
+        if (error === 'cancel') {
+          return { status: 'cancelled' }
+        }
+        ElMessage.error(
+          t('projectManagement.deleteFailed', {
+            message: getApiErrorMessage(error, t('projectManagement.deleteFailed')),
+          }),
+        )
+        return { status: 'failed' }
+      }
+    }
+
+    // 删除工程
+    const deleteProject = async (project) => {
+      if (!canDeleteProjects.value) {
+        ElMessage.warning(t('projectManagement.noPermission'))
+        return
+      }
+
+      const result = await executeProjectDelete(project)
+      if (result.status === 'success') {
+        await fetchProjects()
+        await fetchProjectGroupCards()
       }
     }
 
@@ -1635,7 +1448,8 @@ export default {
           }
           await projectAPI.importProject({ payload })
           ElMessage.success(t('projectManagement.importSuccess'))
-          fetchProjects()
+          await fetchProjects()
+          await fetchProjectGroupCards()
         } catch (error) {
           ElMessage.error(
               t('projectManagement.importFailed', {
@@ -1647,94 +1461,23 @@ export default {
       input.click()
     }
 
-    // 显示运维操作对话框
-    const openOperationDialog = (project) => {
-      currentProject.value = project
-      showOperationDialog.value = true
-    }
-
-    // 执行运维操作
-    const performOperation = async (operation) => {
-      if (!currentProject.value) return
-
-      operationLoading.value = true
-      try {
-        await projectAPI.performOperation(currentProject.value.id, operation)
-
-        ElMessage.success(
-          t('projectManagement.operationSuccess', {
-            action:
-              operation === 'start'
-                ? t('projectManagement.actionStart')
-                : operation === 'stop'
-                  ? t('projectManagement.actionStop')
-                  : operation === 'restart'
-                    ? t('projectManagement.actionRestart')
-                    : operation === 'deploy'
-                      ? t('projectManagement.actionDeploy')
-                      : t('projectManagement.actionBackup'),
-          }),
-        )
-
-        showOperationDialog.value = false
-        currentProject.value = null
-      } catch (error) {
-        ElMessage.error(
-          t('projectManagement.operationFailed', {
-            message: getApiErrorMessage(error, t('projectManagement.operationFailed')),
-          }),
-        )
-      } finally {
-        operationLoading.value = false
+    // Grid/Table 统一 open-project 入口，避免页面层分叉处理。
+    const handleOpenProject = (project) => {
+      if (!canAccessProjectDetail.value) {
+        ElMessage.warning(t('projectManagement.noPermission'))
+        return
       }
-    }
-
-    // 切换选择模式
-    const toggleSelectionMode = () => {
-      selectionMode.value = !selectionMode.value
-      if (!selectionMode.value) {
-        // 退出选择模式时清除选择
-        selectedProjects.value = []
-      }
-    }
-
-    // 卡片点击处理
-    const handleCardClick = (project) => {
-      if (selectionMode.value) {
-        // 在选择模式下点击切换选中状态
-        toggleProjectSelection(project.id)
-      } else {
-        if (!canAccessProjectDetail.value) {
-          ElMessage.warning(t('projectManagement.noPermission'))
-          return
-        }
-        // 非选择模式下打开工程详情
-        openProjectDialog(project)
-      }
-    }
-
-    // 工程名称点击处理（列表视图）
-    const handleProjectNameClick = (project) => {
-      if (selectionMode.value) {
-        // 在选择模式下点击切换选中状态
-        toggleProjectSelection(project.id)
-      } else {
-        if (!canAccessProjectDetail.value) {
-          ElMessage.warning(t('projectManagement.noPermission'))
-          return
-        }
-        // 非选择模式下打开工程详情
-        openProjectDialog(project)
-      }
+      openProjectDialog(project)
     }
 
     // 切换工程选中状态
     const toggleProjectSelection = (projectId, value = null) => {
-      const index = selectedProjects.value.indexOf(projectId)
+      const normalizedId = String(projectId || '')
+      const index = selectedProjects.value.indexOf(normalizedId)
       if (value === true || (value === null && index === -1)) {
         // 选中
         if (index === -1) {
-          selectedProjects.value.push(projectId)
+          selectedProjects.value.push(normalizedId)
         }
       } else if (value === false || (value === null && index !== -1)) {
         // 取消选中
@@ -1742,11 +1485,6 @@ export default {
           selectedProjects.value.splice(index, 1)
         }
       }
-    }
-
-    // 处理表格选择变化
-    const handleSelectionChange = (selection) => {
-      selectedProjects.value = selection.map((p) => p.id)
     }
 
     // 批量导出工程
@@ -1823,6 +1561,10 @@ export default {
 
     // 批量删除工程
     const batchDeleteProjects = async () => {
+      if (!canDeleteProjects.value) {
+        ElMessage.warning(t('projectManagement.noPermission'))
+        return
+      }
       if (selectedProjects.value.length === 0) {
         return ElMessage.warning(t('projectManagement.selectForDelete'))
       }
@@ -1840,13 +1582,25 @@ export default {
           },
         )
 
-        // 逐个删除工程
+        // 批量删除沿用单删同一条决策路径，但批量总确认只保留一次。
         let successCount = 0
         let failCount = 0
         for (const projectId of selectedProjects.value) {
+          const targetProject = projectList.value.find((item) => item.id === projectId)
+          if (!targetProject) {
+            failCount++
+            continue
+          }
           try {
-            await projectAPI.deleteProject(projectId)
-            successCount++
+            const result = await executeProjectDelete(targetProject, {
+              skipDefaultConfirm: true,
+              showSuccessMessage: false,
+            })
+            if (result.status === 'success') {
+              successCount++
+            } else if (result.status !== 'cancelled') {
+              failCount++
+            }
           } catch (error) {
             console.error(`删除工程 ${projectId} 失败:`, error)
             failCount++
@@ -1870,7 +1624,8 @@ export default {
 
         // 清除选择并刷新列表
         selectedProjects.value = []
-        fetchProjects()
+        await fetchProjects()
+        await fetchProjectGroupCards()
       } catch (error) {
         if (error !== 'cancel') {
           ElMessage.error(
@@ -1940,63 +1695,6 @@ export default {
       })
     }
 
-    // 打开运维管理并按工程过滤，运行态操作统一在运维管理执行。
-    const openOpsManagement = (project) => {
-      if (!isProjectDeployed(project)) {
-        ElMessage.warning(`${t('projectManagement.notDeployed')}，请先完成发布并部署`)
-        return
-      }
-      emit('open-tab', 'ops-management')
-      // 从工程列表跳转运维管理时，不再自动按工程过滤；同时清空可能残留的筛选条件。
-      window.setTimeout(() => {
-        window.dispatchEvent(
-          new window.CustomEvent('ops:set-project-filter', {
-            detail: { projectId: '', projectName: '' },
-          }),
-        )
-      }, 80)
-    }
-
-    // 同步工程部署状态，用于工程列表的运行模式展示与入口控制。
-    const fetchProjectDeployState = async () => {
-      Object.keys(projectDeployState).forEach((key) => {
-        delete projectDeployState[key]
-      })
-
-      try {
-        const res = await request.get('/nodes', {
-          params: {
-            page: 1,
-            pageSize: 500,
-            approvalStatus: 'approved',
-          },
-        })
-        const payload = res?.data ?? res
-        const nodes = payload?.data?.items || payload?.items || []
-        nodes.forEach((node) => {
-          const deployments = Array.isArray(node?.deployments) ? node.deployments : []
-          deployments.forEach((deploy) => {
-            const projectId = deploy?.projectId
-            if (!projectId) return
-            if (!projectDeployState[projectId]) {
-              projectDeployState[projectId] = {
-                deployed: true,
-                mode: deploy.mode || null,
-              }
-            } else if (!projectDeployState[projectId].mode && deploy.mode) {
-              projectDeployState[projectId].mode = deploy.mode
-            }
-          })
-        })
-      } catch (error) {
-        console.error('获取工程部署状态失败:', error)
-      }
-    }
-
-    const isProjectDeployed = (project) => {
-      return Boolean(projectDeployState[project?.id]?.deployed)
-    }
-
     // 获取节点当前模式
     const getNodeMode = (nodeId) => {
       return nodeModes[nodeId] || null
@@ -2013,20 +1711,6 @@ export default {
       if (mode === 'DEV') return t('projectManagement.modeDisplayDev')
       if (mode === 'RELEASE') return t('projectManagement.modeDisplayRelease')
       return t('projectManagement.notDeployed')
-    }
-
-    // 获取工程运行模式显示
-    const getProjectModeDisplay = (project) => {
-      const mode = projectDeployState[project?.id]?.mode
-      if (mode === 'DEV') return t('projectManagement.modeDisplayDev')
-      if (mode === 'RELEASE') return t('projectManagement.modeDisplayRelease')
-      return t('projectManagement.notDeployed')
-    }
-
-    // 获取工程模式标签类型
-    const getProjectModeTagType = (project) => {
-      const mode = projectDeployState[project?.id]?.mode || null
-      return getModeTagType(mode)
     }
 
     const addReleaseVersionOption = () => {
@@ -2180,7 +1864,13 @@ export default {
     // 创建者展示统一使用用户名，避免显示角色/姓名造成歧义。
     const getProjectCreatorDisplay = (project) => {
       const creator = project?.creator || {}
-      return creator.username || creator.fullName || t('projectManagement.unknown')
+      return (
+        project?.createdByName ||
+        creator.username ||
+        creator.fullName ||
+        project?.createdBy ||
+        t('projectManagement.unknown')
+      )
     }
 
     const scheduleDeployStateRefresh = () => {
@@ -2188,7 +1878,7 @@ export default {
         window.clearTimeout(deployStateRefreshTimer.value)
       }
       deployStateRefreshTimer.value = window.setTimeout(() => {
-        fetchProjectDeployState()
+        fetchProjects()
       }, 120)
     }
 
@@ -2477,6 +2167,7 @@ export default {
     // 组件挂载时获取数据
     onMounted(() => {
       fetchProjects()
+      fetchProjectOverviewMeta()
       setupRealtimeUpdates()
     })
 
@@ -2499,31 +2190,33 @@ export default {
       loading,
       createLoading,
       editLoading,
-      operationLoading,
       batchOperationLoading,
       showCreateDialog,
       showEditDialog,
-      showOperationDialog,
       showDeployDialog,
       showVersionManageDialog,
       projectDialogVisible,
       runtimeAccessDialogVisible,
 
-      // 视图
+      // 视图与筛选状态
       viewMode,
+      filters,
+      groupContext,
+      runtimeModeOptions,
+      deployStatusOptions,
+      sortFieldOptions,
+      sortOrderOptions,
 
-      // 选择模式
-      selectionMode,
+      // 选择状态
       selectedProjects,
-      currentProject,
       selectedProject,
       runtimeAccessProject,
 
       // 数据
       projectList,
       pagination,
-      searchForm,
-      colorTagOptions,
+      projectTagOptions,
+      projectGroupCards,
       currentUser,
 
       // 部署相关
@@ -2560,30 +2253,29 @@ export default {
       canPerformOps,
       canForceDeleteProject,
       fetchProjects,
-      handleSearch,
+      handleOverviewSearchInput,
+      handleViewModeChange,
+      handleSortByChange,
+      handleSortOrderChange,
+      handleCompositeFiltersChange,
+      handleTagIdsChange,
+      handleGroupCardSelect,
       resetSearch,
-      handleSizeChange,
-      handleCurrentChange,
+      handleOverviewPaginationChange,
       handleCreateProject,
-      toggleSelectionMode,
-      handleCardClick,
-      handleProjectNameClick,
+      handleOpenProject,
+      handleProjectSelectionChange,
       toggleProjectSelection,
-      handleSelectionChange,
       importProject,
       editProject,
       handleUpdateProject,
       deleteProject,
       handleExportProject,
       handleImportProject,
-      openOperationDialog,
-      performOperation,
       openProjectDialog,
       openRuntimeAccessDialog,
       openDesignCenter,
       openDataCenter,
-      isProjectDeployed,
-      openOpsManagement,
       openDeployDialog,
       openVersionManageDialog,
       canDeleteVersion,
@@ -2597,9 +2289,6 @@ export default {
       getNodeMode,
       getModeTagType,
       getModeDisplayLabel,
-      getProjectCardStyle,
-      getProjectModeDisplay,
-      getProjectModeTagType,
       getProjectCreatorDisplay,
       formatDateTime,
       formatDate,

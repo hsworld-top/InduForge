@@ -16,11 +16,13 @@ describe('tooling: 控制台告警回归护栏', () => {
 
   test('Dashboard 不应给 ElTabs 传入函数型 closable，且动态组件需标记为非响应式', () => {
     const dashboardView = readSource('views/Dashboard.vue')
+    const dashboardTabsAreaView = readSource('views/layout/DashboardTabsArea.vue')
 
     expect(dashboardView).not.toMatch(/<el-tabs[\s\S]*:closable="\s*\(tab\)\s*=>/)
-    expect(dashboardView).toMatch(/<el-tab-pane[\s\S]*:closable="tab\.key !== 'dashboard'"/)
     expect(dashboardView).toMatch(/import\s+\{[^}]*\bmarkRaw\b[^}]*\}\s+from 'vue'/)
     expect(dashboardView).toMatch(/const\s+DashboardContent\s*=\s*markRaw\(defineAsyncComponent\(/)
+    expect(dashboardTabsAreaView).not.toMatch(/<el-tabs[\s\S]*:closable="\s*\(tab\)\s*=>/)
+    expect(dashboardTabsAreaView).toMatch(/<el-tab-pane[\s\S]*:closable="tab\.key !== 'dashboard'"/)
   })
 
   test('Dashboard 侧边栏在全屏切换时不应对多根组件使用 v-show', () => {

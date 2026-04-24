@@ -4,6 +4,10 @@ const { sequelize } = require("../config/database");
 const Tenant = require("./Tenant");
 const User = require("./User");
 const Project = require("./Project");
+const ProjectTagFn = require("./ProjectTag");
+const ProjectTagBindingFn = require("./ProjectTagBinding");
+const ProjectGroupFn = require("./ProjectGroup");
+const ProjectGroupMemberFn = require("./ProjectGroupMember");
 const ProjectRuntimeUserFn = require("./ProjectRuntimeUser");
 const ProjectRoleFn = require("./ProjectRole");
 const ProjectUserRoleBindingFn = require("./ProjectUserRoleBinding");
@@ -23,6 +27,10 @@ const Node = NodeFn(sequelize, Sequelize.DataTypes);
 const NodeDeployment = NodeDeploymentFn(sequelize, Sequelize.DataTypes);
 const Deployment = DeploymentFn(sequelize, Sequelize.DataTypes);
 const NodeCommand = NodeCommandFn(sequelize, Sequelize.DataTypes);
+const ProjectTag = ProjectTagFn(sequelize, Sequelize.DataTypes);
+const ProjectTagBinding = ProjectTagBindingFn(sequelize, Sequelize.DataTypes);
+const ProjectGroup = ProjectGroupFn(sequelize, Sequelize.DataTypes);
+const ProjectGroupMember = ProjectGroupMemberFn(sequelize, Sequelize.DataTypes);
 const ProjectRuntimeUser = ProjectRuntimeUserFn(sequelize, Sequelize.DataTypes);
 const ProjectRole = ProjectRoleFn(sequelize, Sequelize.DataTypes);
 const ProjectUserRoleBinding = ProjectUserRoleBindingFn(
@@ -67,6 +75,65 @@ Project.belongsTo(User, {
 Project.belongsTo(User, {
   foreignKey: "updatedBy",
   as: "updater",
+});
+
+// 工程标签/分组模型：租户级主数据与工程关系绑定。
+Tenant.hasMany(ProjectTag, {
+  foreignKey: "tenantId",
+  as: "projectTags",
+  onDelete: "CASCADE",
+});
+ProjectTag.belongsTo(Tenant, {
+  foreignKey: "tenantId",
+  as: "tenant",
+});
+
+Tenant.hasMany(ProjectGroup, {
+  foreignKey: "tenantId",
+  as: "projectGroups",
+  onDelete: "CASCADE",
+});
+ProjectGroup.belongsTo(Tenant, {
+  foreignKey: "tenantId",
+  as: "tenant",
+});
+
+Project.hasMany(ProjectTagBinding, {
+  foreignKey: "projectId",
+  as: "tagBindings",
+  onDelete: "CASCADE",
+});
+ProjectTagBinding.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+ProjectTag.hasMany(ProjectTagBinding, {
+  foreignKey: "tagId",
+  as: "bindings",
+  onDelete: "CASCADE",
+});
+ProjectTagBinding.belongsTo(ProjectTag, {
+  foreignKey: "tagId",
+  as: "tag",
+});
+
+Project.hasOne(ProjectGroupMember, {
+  foreignKey: "projectId",
+  as: "groupMember",
+  onDelete: "CASCADE",
+});
+ProjectGroupMember.belongsTo(Project, {
+  foreignKey: "projectId",
+  as: "project",
+});
+ProjectGroup.hasMany(ProjectGroupMember, {
+  foreignKey: "groupId",
+  as: "members",
+  onDelete: "CASCADE",
+});
+ProjectGroupMember.belongsTo(ProjectGroup, {
+  foreignKey: "groupId",
+  as: "group",
 });
 
 // 运行态授权模型：工程内的运行态用户、角色与授权关系。
@@ -455,6 +522,10 @@ module.exports = {
   Tenant,
   User,
   Project,
+  ProjectTag,
+  ProjectTagBinding,
+  ProjectGroup,
+  ProjectGroupMember,
   Log,
   ProjectRuntimeUser,
   ProjectRole,

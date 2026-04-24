@@ -6,6 +6,64 @@ type DeleteOptions = {
   force?: boolean
 }
 
+export type ProjectOverviewSortField = 'createdAt' | 'updatedAt' | 'lastDeployedAt' | 'runtimeStatus'
+export type ProjectOverviewSortOrder = 'ASC' | 'DESC' | 'asc' | 'desc'
+export type ProjectRuntimeMode = 'DEV' | 'RELEASE'
+export type ProjectDeployStatus =
+  | 'pending'
+  | 'deploying'
+  | 'running'
+  | 'stopped'
+  | 'error'
+  | 'rollback'
+
+export type ProjectListQueryParams = QueryParams & {
+  page?: number
+  limit?: number
+  name?: string
+  group?: string
+  groupId?: string
+  tag?: string | string[]
+  tagId?: string | string[]
+  tags?: string | string[]
+  runtimeMode?: ProjectRuntimeMode | ProjectRuntimeMode[]
+  deployStatus?: ProjectDeployStatus | ProjectDeployStatus[]
+  createdBy?: string
+  createdByName?: string
+  sortBy?: ProjectOverviewSortField
+  sortField?: ProjectOverviewSortField
+  sortOrder?: ProjectOverviewSortOrder
+  order?: ProjectOverviewSortOrder
+}
+
+export type ProjectLabelQueryParams = {
+  keyword?: string
+}
+
+export type ProjectTagPayload = {
+  name: string
+  description?: string
+  sortOrder?: number
+}
+
+export type ProjectTagUpdatePayload = Partial<ProjectTagPayload>
+
+export type ProjectGroupPayload = {
+  name: string
+  description?: string
+  sortOrder?: number
+}
+
+export type ProjectGroupUpdatePayload = Partial<ProjectGroupPayload>
+
+export type ProjectTagBindingPayload = {
+  tagIds: string[]
+}
+
+export type ProjectGroupBindingPayload = {
+  groupId: string | null
+}
+
 /**
  * 工程管理 API
  */
@@ -20,8 +78,104 @@ export const projectAPI = {
    * @param {string} params.priority - 优先级筛选
    * @returns {Promise} 工程列表
    */
-  getProjects(params: QueryParams = {}) {
+  getProjects(params: ProjectListQueryParams = {}) {
     return request.get('/projects', { params })
+  },
+
+  /**
+   * 获取工程标签列表
+   * @param {object} params - 查询参数
+   * @param {string} params.keyword - 标签名称关键词
+   * @returns {Promise} 标签列表
+   */
+  listProjectTags(params: ProjectLabelQueryParams = {}) {
+    return request.get('/projects/tags', { params })
+  },
+
+  /**
+   * 创建工程标签
+   * @param {object} payload - 标签数据
+   * @returns {Promise} 创建结果
+   */
+  createProjectTag(payload: ProjectTagPayload) {
+    return request.post('/projects/tags', payload)
+  },
+
+  /**
+   * 更新工程标签
+   * @param {string} tagId - 标签 ID
+   * @param {object} payload - 标签更新数据
+   * @returns {Promise} 更新结果
+   */
+  updateProjectTag(tagId: ApiId, payload: ProjectTagUpdatePayload) {
+    return request.put(`/projects/tags/${tagId}`, payload)
+  },
+
+  /**
+   * 删除工程标签
+   * @param {string} tagId - 标签 ID
+   * @returns {Promise} 删除结果
+   */
+  deleteProjectTag(tagId: ApiId) {
+    return request.delete(`/projects/tags/${tagId}`)
+  },
+
+  /**
+   * 获取工程分组列表
+   * @param {object} params - 查询参数
+   * @param {string} params.keyword - 分组名称关键词
+   * @returns {Promise} 分组列表
+   */
+  listProjectGroups(params: ProjectLabelQueryParams = {}) {
+    return request.get('/projects/groups', { params })
+  },
+
+  /**
+   * 创建工程分组
+   * @param {object} payload - 分组数据
+   * @returns {Promise} 创建结果
+   */
+  createProjectGroup(payload: ProjectGroupPayload) {
+    return request.post('/projects/groups', payload)
+  },
+
+  /**
+   * 更新工程分组
+   * @param {string} groupId - 分组 ID
+   * @param {object} payload - 分组更新数据
+   * @returns {Promise} 更新结果
+   */
+  updateProjectGroup(groupId: ApiId, payload: ProjectGroupUpdatePayload) {
+    return request.put(`/projects/groups/${groupId}`, payload)
+  },
+
+  /**
+   * 删除工程分组
+   * @param {string} groupId - 分组 ID
+   * @returns {Promise} 删除结果
+   */
+  deleteProjectGroup(groupId: ApiId) {
+    return request.delete(`/projects/groups/${groupId}`)
+  },
+
+  /**
+   * 绑定工程标签集合（全量替换）
+   * @param {string} id - 工程 ID
+   * @param {object} payload - 标签绑定数据
+   * @returns {Promise} 绑定结果
+   */
+  bindProjectTags(id: ApiId, payload: ProjectTagBindingPayload) {
+    return request.put(`/projects/${id}/tags`, payload)
+  },
+
+  /**
+   * 绑定工程分组（可传 null 清空分组）
+   * @param {string} id - 工程 ID
+   * @param {object} payload - 分组绑定数据
+   * @returns {Promise} 绑定结果
+   */
+  bindProjectGroup(id: ApiId, payload: ProjectGroupBindingPayload) {
+    return request.put(`/projects/${id}/group`, payload)
   },
 
   /**
@@ -108,7 +262,7 @@ export const projectAPI = {
    * @param {string} id - 工程 ID
    * @returns {Promise} 用户列表
    */
-  listRuntimeUsers(id) {
+  listRuntimeUsers(id: ApiId) {
     return request.get(`/projects/${id}/runtime-users`)
   },
 
@@ -118,7 +272,7 @@ export const projectAPI = {
    * @param {object} payload - 用户数据
    * @returns {Promise} 创建结果
    */
-  createRuntimeUser(id, payload) {
+  createRuntimeUser(id: ApiId, payload: Record<string, unknown>) {
     return request.post(`/projects/${id}/runtime-users`, payload)
   },
 
@@ -129,7 +283,7 @@ export const projectAPI = {
    * @param {object} payload - 状态数据
    * @returns {Promise} 更新结果
    */
-  updateRuntimeUserStatus(id, userId, payload) {
+  updateRuntimeUserStatus(id: ApiId, userId: ApiId, payload: Record<string, unknown>) {
     return request.patch(`/projects/${id}/runtime-users/${userId}/status`, payload)
   },
 
@@ -140,7 +294,7 @@ export const projectAPI = {
    * @param {object} payload - 角色绑定数据
    * @returns {Promise} 更新结果
    */
-  updateRuntimeUserRoles(id, userId, payload) {
+  updateRuntimeUserRoles(id: ApiId, userId: ApiId, payload: Record<string, unknown>) {
     return request.put(`/projects/${id}/runtime-users/${userId}/roles`, payload)
   },
 
@@ -151,7 +305,7 @@ export const projectAPI = {
    * @param {object} payload - 新密码数据
    * @returns {Promise} 重置结果
    */
-  resetRuntimeUserPassword(id, userId, payload) {
+  resetRuntimeUserPassword(id: ApiId, userId: ApiId, payload: Record<string, unknown>) {
     return request.post(`/projects/${id}/runtime-users/${userId}/reset-password`, payload)
   },
 
@@ -160,7 +314,7 @@ export const projectAPI = {
    * @param {string} id - 工程 ID
    * @returns {Promise} 角色列表
    */
-  listRuntimeRoles(id) {
+  listRuntimeRoles(id: ApiId) {
     return request.get(`/projects/${id}/runtime-roles`)
   },
 
@@ -170,7 +324,7 @@ export const projectAPI = {
    * @param {object} payload - 角色数据
    * @returns {Promise} 创建结果
    */
-  createRuntimeRole(id, payload) {
+  createRuntimeRole(id: ApiId, payload: Record<string, unknown>) {
     return request.post(`/projects/${id}/runtime-roles`, payload)
   },
 
@@ -181,7 +335,7 @@ export const projectAPI = {
    * @param {object} payload - 角色数据
    * @returns {Promise} 更新结果
    */
-  updateRuntimeRole(id, roleId, payload) {
+  updateRuntimeRole(id: ApiId, roleId: ApiId, payload: Record<string, unknown>) {
     return request.put(`/projects/${id}/runtime-roles/${roleId}`, payload)
   },
 
@@ -191,7 +345,7 @@ export const projectAPI = {
    * @param {string} roleId - 角色 ID
    * @returns {Promise} 删除结果
    */
-  deleteRuntimeRole(id, roleId) {
+  deleteRuntimeRole(id: ApiId, roleId: ApiId) {
     return request.delete(`/projects/${id}/runtime-roles/${roleId}`)
   },
 }

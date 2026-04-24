@@ -1,5 +1,5 @@
-const express = require("express");
-const request = require("supertest");
+const ErrorCodes = require("../../../constants/errorCodes");
+const { invokeRoute } = require("../test-utils/route-test-helpers");
 
 const mockTransaction = { id: "tx-project-create" };
 const mockProject = {
@@ -106,13 +106,6 @@ jest.mock("../../../services/designAssetService", () => ({
 
 const router = require("../project");
 
-const createApp = () => {
-  const app = express();
-  app.use(express.json());
-  app.use("/projects", router);
-  return app;
-};
-
 describe("project runtime access router", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -133,7 +126,9 @@ describe("project runtime access router", () => {
     mockProject.create.mockResolvedValue({ id: "project-1", tenantId: "tenant-1" });
     mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
 
-    const response = await request(createApp()).post("/projects").send({ name: "新工程" });
+    const response = await invokeRoute(router, "/", "post", {
+      body: { name: "新工程" },
+    });
 
     expect(response.status).toBe(201);
     expect(mockProject.sequelize.transaction).toHaveBeenCalledTimes(1);
@@ -167,7 +162,9 @@ describe("project runtime access router", () => {
     mockProject.create.mockResolvedValue({ id: "project-1", tenantId: "tenant-1" });
     mockService.ensureRuntimeAdminBootstrap.mockRejectedValue(new Error("bootstrap failed"));
 
-    const response = await request(createApp()).post("/projects").send({ name: "新工程" });
+    const response = await invokeRoute(router, "/", "post", {
+      body: { name: "新工程" },
+    });
 
     expect(response.status).toBe(500);
     expect(mockProject.sequelize.transaction).toHaveBeenCalledTimes(1);
@@ -183,7 +180,9 @@ describe("project runtime access router", () => {
     mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
     mockUpsertProjectSettings.mockRejectedValue(new Error("settings failed"));
 
-    const response = await request(createApp()).post("/projects").send({ name: "新工程" });
+    const response = await invokeRoute(router, "/", "post", {
+      body: { name: "新工程" },
+    });
 
     expect(response.status).toBe(500);
     expect(destroy).toHaveBeenCalledTimes(1);
@@ -201,9 +200,8 @@ describe("project runtime access router", () => {
     mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
     mockDesignPage.create.mockResolvedValue(undefined);
 
-    const response = await request(createApp())
-      .post("/projects/import")
-      .send({
+    const response = await invokeRoute(router, "/import", "post", {
+      body: {
         name: "导入工程",
         payload: {
           project: {
@@ -212,7 +210,8 @@ describe("project runtime access router", () => {
           pages: [],
           datacenter: {},
         },
-      });
+      },
+    });
 
     expect(response.status).toBe(201);
     expect(mockService.ensureRuntimeAdminBootstrap).toHaveBeenCalledWith(
@@ -244,16 +243,16 @@ describe("project runtime access router", () => {
     mockDesignPage.create.mockResolvedValue(undefined);
     mockReplaceProjectSnapshot.mockRejectedValue(new Error("snapshot failed"));
 
-    const response = await request(createApp())
-      .post("/projects/import")
-      .send({
+    const response = await invokeRoute(router, "/import", "post", {
+      body: {
         name: "导入工程",
         payload: {
           project: { name: "旧工程" },
           pages: [],
           datacenter: {},
         },
-      });
+      },
+    });
 
     expect(response.status).toBe(500);
     expect(destroy).toHaveBeenCalledTimes(1);
@@ -264,7 +263,9 @@ describe("project runtime access router", () => {
       { id: "runtime-user-1", username: "operator", roleIds: ["role-1"] },
     ]);
 
-    const response = await request(createApp()).get("/projects/project-1/runtime-users");
+    const response = await invokeRoute(router, "/:id/runtime-users", "get", {
+      params: { id: "project-1" },
+    });
 
     expect(response.status).toBe(200);
     expect(response.body.data.runtimeUsers).toEqual([
@@ -286,14 +287,15 @@ describe("project runtime access router", () => {
       ],
     });
 
-    const response = await request(createApp())
-      .post("/projects/project-1/runtime-users")
-      .send({
+    const response = await invokeRoute(router, "/:id/runtime-users", "post", {
+      params: { id: "project-1" },
+      body: {
         username: "operator",
         displayName: "值班员",
         initialPassword: "Initial#123",
         roleIds: ["role-1", "role-2"],
-      });
+      },
+    });
 
     expect(response.status).toBe(201);
     expect(mockService.createRuntimeUser).toHaveBeenCalledWith(
@@ -322,9 +324,10 @@ describe("project runtime access router", () => {
       roleIds: [],
     });
 
-    const response = await request(createApp())
-      .patch("/projects/project-1/runtime-users/runtime-user-1/status")
-      .send({ status: "disabled" });
+    const response = await invokeRoute(router, "/:id/runtime-users/:runtimeUserId/status", "patch", {
+      params: { id: "project-1", runtimeUserId: "runtime-user-1" },
+      body: { status: "disabled" },
+    });
 
     expect(response.status).toBe(200);
     expect(response.body.data.runtimeUser).toEqual(
@@ -337,16 +340,23 @@ describe("project runtime access router", () => {
   test("OPS_ADMIN 无权调用运行态管理写接口", async () => {
     mockCurrentUserRole = "OPS_ADMIN";
 
-    const response = await request(createApp())
-      .post("/projects/project-1/runtime-users")
-      .send({
+    const response = await invokeRoute(router, "/:id/runtime-users", "post", {
+      params: { id: "project-1" },
+      body: {
         username: "operator",
         displayName: "值班员",
         initialPassword: "Initial#123",
         roleIds: [],
-      });
+      },
+    });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      code: ErrorCodes.toPublicCode(ErrorCodes.PERMISSION_INSUFFICIENT),
+      msg: expect.any(String),
+      data: null,
+      reqId: "req-route-test",
+    });
     expect(mockService.createRuntimeUser).not.toHaveBeenCalled();
   });
 
@@ -355,7 +365,9 @@ describe("project runtime access router", () => {
       { id: "role-1", code: "OPERATOR", name: "值班员", bindingCount: 2, grantCount: 3 },
     ]);
 
-    const response = await request(createApp()).get("/projects/project-1/runtime-roles");
+    const response = await invokeRoute(router, "/:id/runtime-roles", "get", {
+      params: { id: "project-1" },
+    });
 
     expect(response.status).toBe(200);
     expect(response.body.data.runtimeRoles).toEqual([
@@ -372,15 +384,18 @@ describe("project runtime access router", () => {
       }),
     );
 
-    const response = await request(createApp()).delete("/projects/project-1/runtime-roles/role-admin");
+    const response = await invokeRoute(router, "/:id/runtime-roles/:roleId", "delete", {
+      params: { id: "project-1", roleId: "role-admin" },
+    });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(200);
     expect(response.body).toEqual(
-      expect.objectContaining({
-        success: false,
-        errorCode: "B0001",
-        message: "系统内置角色不能删除",
-      }),
+      {
+        code: ErrorCodes.toPublicCode("B0001"),
+        msg: "系统内置角色不能删除",
+        data: null,
+        reqId: "req-route-test",
+      },
     );
   });
 
@@ -392,9 +407,10 @@ describe("project runtime access router", () => {
       roleIds: [],
     });
 
-    const response = await request(createApp())
-      .patch("/projects/project-1/runtime-users/runtime-user-1/status")
-      .send({ status: "disabled" });
+    const response = await invokeRoute(router, "/:id/runtime-users/:runtimeUserId/status", "patch", {
+      params: { id: "project-1", runtimeUserId: "runtime-user-1" },
+      body: { status: "disabled" },
+    });
 
     expect(response.status).toBe(200);
     expect(mockService.updateRuntimeUserStatus).toHaveBeenCalledWith(
