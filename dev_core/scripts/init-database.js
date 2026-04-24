@@ -212,18 +212,140 @@ async function insertInitialData(client) {
 }
 
 function splitSqlStatements(sqlContent) {
-  const lines = sqlContent
-    .split("\n")
-    .filter((line) => {
-      const trimmedLine = line.trim();
-      return !trimmedLine.startsWith("--");
-    });
+  const statements = [];
+  let current = "";
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inLineComment = false;
+  let blockCommentDepth = 0;
+  let dollarTag = null;
 
-  return lines
-    .join("\n")
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
+  /**
+   * 按字符扫描 SQL，确保仅在“真实语句边界”的分号处分割：
+   * - 兼容单引号/双引号内容
+   * - 兼容 -- 行注释与块注释
+   * - 兼容 PostgreSQL 的 DO $$ ... $$ / $tag$ ... $tag$ 结构
+   */
+  for (let index = 0; index < sqlContent.length; index += 1) {
+    const char = sqlContent[index];
+    const nextChar = sqlContent[index + 1];
+    const rest = sqlContent.slice(index);
+
+    if (inLineComment) {
+      current += char;
+      if (char === "\n") {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (blockCommentDepth > 0) {
+      current += char;
+      if (char === "/" && nextChar === "*") {
+        current += nextChar;
+        blockCommentDepth += 1;
+        index += 1;
+        continue;
+      }
+      if (char === "*" && nextChar === "/") {
+        current += nextChar;
+        blockCommentDepth -= 1;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (dollarTag) {
+      if (rest.startsWith(dollarTag)) {
+        current += dollarTag;
+        index += dollarTag.length - 1;
+        dollarTag = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+
+    if (inSingleQuote) {
+      current += char;
+      if (char === "'" && nextChar === "'") {
+        current += nextChar;
+        index += 1;
+        continue;
+      }
+      if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      current += char;
+      if (char === '"' && nextChar === '"') {
+        current += nextChar;
+        index += 1;
+        continue;
+      }
+      if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (char === "-" && nextChar === "-") {
+      current += "--";
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === "/" && nextChar === "*") {
+      current += "/*";
+      blockCommentDepth = 1;
+      index += 1;
+      continue;
+    }
+
+    if (char === "'") {
+      current += char;
+      inSingleQuote = true;
+      continue;
+    }
+
+    if (char === '"') {
+      current += char;
+      inDoubleQuote = true;
+      continue;
+    }
+
+    if (char === "$") {
+      const dollarMatch = rest.match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+      if (dollarMatch) {
+        dollarTag = dollarMatch[0];
+        current += dollarTag;
+        index += dollarTag.length - 1;
+        continue;
+      }
+    }
+
+    if (char === ";") {
+      const statement = current.trim();
+      if (statement) {
+        statements.push(statement);
+      }
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  const tail = current.trim();
+  if (tail) {
+    statements.push(tail);
+  }
+
+  return statements;
 }
 
 async function ensureDatabaseExists(reset = false) {
