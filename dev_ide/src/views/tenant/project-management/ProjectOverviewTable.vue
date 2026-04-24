@@ -86,7 +86,7 @@
       </template>
     </el-table-column>
 
-    <el-table-column v-if="showActionColumn" :label="t('projectManagement.actions')" width="170" fixed="right">
+    <el-table-column v-if="showActionColumn" :label="t('projectManagement.actions')" width="240" fixed="right">
       <template #default="{ row }">
         <div v-if="isItemRow(row)" class="flex items-center justify-end gap-1">
           <slot name="actions" :project="row.project">
@@ -400,5 +400,15 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
 
 :deep(.project-overview-table__group-row:hover > td) {
   background-color: var(--el-fill-color-light);
+}
+
+:deep(.el-table__row td) {
+  padding: 18px 0;
+}
+
+:deep(.el-table__header th) {
+  background: #f4f6f9;
+  color: #475569;
+  font-weight: 700;
 }
 </style>

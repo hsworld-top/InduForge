@@ -96,14 +96,103 @@
     </div>
 
     <div class="project-overview-toolbar__right flex items-center gap-2">
-      <slot name="actions" />
+      <template v-if="selectedCount > 0">
+        <el-tooltip v-if="canExportProjects" :content="t('projectManagement.batchExport')" placement="top">
+          <button
+            type="button"
+            data-testid="project-batch-export-trigger"
+            :aria-label="t('projectManagement.batchExport')"
+            class="project-overview-toolbar__icon-button text-emerald-600 dark:text-emerald-300"
+            @click="emit('batch-export')"
+          >
+            <el-icon><Download /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.batchDelete')" placement="top">
+          <button
+            type="button"
+            data-testid="project-batch-delete-trigger"
+            :aria-label="t('projectManagement.batchDelete')"
+            class="project-overview-toolbar__icon-button text-red-500 dark:text-red-300"
+            @click="emit('batch-delete')"
+          >
+            <el-icon><Delete /></el-icon>
+          </button>
+        </el-tooltip>
+      </template>
+
+      <el-tooltip v-if="canManageProjects" :content="t('projectManagement.addProject')" placement="top">
+        <button
+          type="button"
+          data-testid="project-add-trigger"
+          :aria-label="t('projectManagement.addProject')"
+          class="project-overview-toolbar__primary-button"
+          @click="emit('create-project')"
+        >
+          <el-icon><Plus /></el-icon>
+        </button>
+      </el-tooltip>
+      <el-tooltip :content="t('common.refresh')" placement="top">
+        <button
+          type="button"
+          data-testid="project-refresh-trigger"
+          :aria-label="t('common.refresh')"
+          class="project-overview-toolbar__icon-button"
+          @click="emit('refresh')"
+        >
+          <el-icon><RefreshRight /></el-icon>
+        </button>
+      </el-tooltip>
+      <el-tooltip v-if="canManageProjects" :content="t('projectManagement.groupManagement')" placement="top">
+        <button
+          type="button"
+          data-testid="project-group-manage-trigger"
+          :aria-label="t('projectManagement.groupManagement')"
+          class="project-overview-toolbar__icon-button"
+          @click="emit('open-group-manager')"
+        >
+          <el-icon><FolderOpened /></el-icon>
+        </button>
+      </el-tooltip>
+      <el-tooltip v-if="canManageProjects" :content="t('projectManagement.importProject')" placement="top">
+        <button
+          type="button"
+          data-testid="project-import-trigger"
+          :aria-label="t('projectManagement.importProject')"
+          class="project-overview-toolbar__icon-button"
+          @click="emit('import-project')"
+        >
+          <el-icon><Upload /></el-icon>
+        </button>
+      </el-tooltip>
+      <el-tooltip :content="t('projectManagement.settings')" placement="top">
+        <button
+          type="button"
+          data-testid="project-settings-trigger"
+          :aria-label="t('projectManagement.settings')"
+          class="project-overview-toolbar__icon-button"
+          @click="emit('open-settings')"
+        >
+          <el-icon><Setting /></el-icon>
+        </button>
+      </el-tooltip>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Grid, Search } from '@element-plus/icons-vue'
+import {
+  Delete,
+  Download,
+  FolderOpened,
+  Grid,
+  Plus,
+  RefreshRight,
+  Search,
+  Setting,
+  Upload,
+} from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import type {
   ProjectDeployStatus,
@@ -153,6 +242,10 @@ const props = withDefaults(
     deployStatusOptions?: DeployStatusOption[]
     sortFieldOptions?: SortFieldOption[]
     sortOrderOptions?: SortOrderOption[]
+    selectedCount?: number
+    canManageProjects?: boolean
+    canExportProjects?: boolean
+    canDeleteProjects?: boolean
   }>(),
   {
     search: '',
@@ -171,6 +264,10 @@ const props = withDefaults(
     deployStatusOptions: () => [],
     sortFieldOptions: () => [],
     sortOrderOptions: () => [],
+    selectedCount: 0,
+    canManageProjects: true,
+    canExportProjects: true,
+    canDeleteProjects: true,
   },
 )
 
@@ -181,6 +278,13 @@ const emit = defineEmits<{
   (event: 'update:sortOrder', value: 'ASC' | 'DESC'): void
   (event: 'update:compositeFilters', value: ProjectOverviewCompositeFilters): void
   (event: 'update:tagIds', value: string[]): void
+  (event: 'create-project'): void
+  (event: 'refresh'): void
+  (event: 'open-group-manager'): void
+  (event: 'import-project'): void
+  (event: 'batch-export'): void
+  (event: 'batch-delete'): void
+  (event: 'open-settings'): void
 }>()
 
 const { t } = useI18n()
@@ -239,3 +343,55 @@ const tagIdsModel = computed<string[]>({
   set: (value) => emit('update:tagIds', value),
 })
 </script>
+
+<style scoped>
+.project-overview-toolbar__primary-button,
+.project-overview-toolbar__icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.project-overview-toolbar__primary-button {
+  border: 1px solid #2563eb;
+  background: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+}
+
+.project-overview-toolbar__primary-button:hover {
+  background: #2563eb;
+}
+
+.project-overview-toolbar__icon-button {
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #4b5563;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.project-overview-toolbar__icon-button:hover {
+  background: #ffffff;
+  color: #2563eb;
+}
+
+html.dark .project-overview-toolbar__icon-button,
+[data-theme='dark'] .project-overview-toolbar__icon-button {
+  border-color: #4b5563;
+  background: #374151;
+  color: #d1d5db;
+}
+
+html.dark .project-overview-toolbar__icon-button:hover,
+[data-theme='dark'] .project-overview-toolbar__icon-button:hover {
+  background: #4b5563;
+  color: #93c5fd;
+}
+</style>

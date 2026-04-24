@@ -1,11 +1,109 @@
 import { describe, expect, test, vi } from 'vitest'
 import { buildProjectOverviewQueryParams } from '@/views/tenant/project-management/use-project-filters'
 import {
+  buildProjectGroupCardItems,
+  resolveProjectStatusMetric,
+} from '@/views/tenant/project-management/project-group-utils'
+import {
   buildProjectPaginationSummary,
   useProjectOverviewState,
 } from '@/views/tenant/project-management/use-project-overview'
+import type { ProjectOverviewRuntimeSummary } from '@/views/tenant/project-management/project-overview.types'
+
+const createRuntimeSummary = (): ProjectOverviewRuntimeSummary => ({
+  runtimeStatus: 'running',
+  deploymentCount: 1,
+  runningCount: 1,
+  statusCounts: {
+    pending: 0,
+    deploying: 0,
+    running: 1,
+    stopped: 0,
+    error: 0,
+    rollback: 0,
+  },
+  modeCounts: {
+    DEV: 1,
+    RELEASE: 0,
+  },
+  lastDeployedAt: null,
+})
 
 describe('project-overview-state', () => {
+  test('buildProjectGroupCardItems 会合并接口分组和当前工程列表中的工程名预览', () => {
+    const groupItems = buildProjectGroupCardItems(
+      [
+        { id: ' group-b ', name: ' 乙组 ', sortOrder: 2, projectCount: 8 },
+        { id: 'group-a', name: '甲组', sortOrder: 1 },
+        { id: '', name: '无效分组' },
+      ],
+      [
+        {
+          id: ' project-1 ',
+          name: ' 工程一 ',
+          group: { id: ' group-a ', name: '甲组' },
+          tags: [],
+          runtimeSummary: createRuntimeSummary(),
+        },
+        {
+          id: 2002,
+          name: '工程二',
+          group: { id: 'group-a', name: '甲组' },
+          tags: [],
+          runtimeSummary: createRuntimeSummary(),
+        },
+        {
+          id: 'project-3',
+          name: '工程三',
+          group: { id: 'group-b', name: '乙组' },
+          tags: [],
+          runtimeSummary: createRuntimeSummary(),
+        },
+        { projectId: 'legacy-project', groupId: 'group-a', name: '兼容工程' },
+        { id: '', group: { id: 'group-a' }, name: '无效工程' },
+        { projectId: 'project-4', groupId: '', name: '无分组工程' },
+        { id: 'project-5', group: { id: 'group-a' }, name: '   ' },
+      ],
+    )
+
+    expect(groupItems).toEqual([
+      expect.objectContaining({
+        id: 'group-a',
+        name: '甲组',
+        projectCount: 3,
+        projects: [
+          { id: 'project-1', name: '工程一' },
+          { id: '2002', name: '工程二' },
+          { id: 'legacy-project', name: '兼容工程' },
+        ],
+      }),
+      expect.objectContaining({
+        id: 'group-b',
+        name: '乙组',
+        projectCount: 8,
+        projects: [{ id: 'project-3', name: '工程三' }],
+      }),
+    ])
+  })
+
+  test('resolveProjectStatusMetric 会把 running/error/unknown 映射为稳定进度和颜色等级', () => {
+    expect(resolveProjectStatusMetric('running')).toEqual({
+      labelKey: 'projectManagement.deployStatusRunning',
+      percent: 100,
+      level: 'good',
+    })
+    expect(resolveProjectStatusMetric('error')).toEqual({
+      labelKey: 'projectManagement.deployStatusError',
+      percent: 20,
+      level: 'bad',
+    })
+    expect(resolveProjectStatusMetric('unknown')).toEqual({
+      labelKey: 'projectManagement.deployStatusUnknown',
+      percent: 0,
+      level: 'muted',
+    })
+  })
+
   test('查询参数构造会完成筛选归一与去空', () => {
     const query = buildProjectOverviewQueryParams({
       filters: {

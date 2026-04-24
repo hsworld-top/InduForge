@@ -14,92 +14,53 @@
       :deploy-status-options="deployStatusOptions"
       :sort-field-options="sortFieldOptions"
       :sort-order-options="sortOrderOptions"
+      :selected-count="selectedProjects.length"
+      :can-manage-projects="canManageProjects"
+      :can-export-projects="canExportProjects"
+      :can-delete-projects="canDeleteProjects"
       @update:search="handleOverviewSearchInput"
       @update:view-mode="handleViewModeChange"
       @update:sort-by="handleSortByChange"
       @update:sort-order="handleSortOrderChange"
       @update:composite-filters="handleCompositeFiltersChange"
       @update:tag-ids="handleTagIdsChange"
-    >
-      <template #actions>
-        <div class="flex items-center space-x-3">
-          <el-tooltip
-            :content="t('projectManagement.addProject')"
-            placement="top"
-            v-if="canManageProjects"
-          >
-            <button
-              data-testid="project-add-trigger"
-              class="w-9 h-9 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors shadow-sm"
-              @click="showCreateDialog = true"
-            >
-              <el-icon><Plus /></el-icon>
-            </button>
-          </el-tooltip>
-          <el-tooltip
-            :content="t('projectManagement.importProject')"
-            placement="top"
-            v-if="canManageProjects"
-          >
-            <button
-              data-testid="project-import-trigger"
-              class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
-              @click="handleImportProject"
-            >
-              <el-icon><Upload /></el-icon>
-            </button>
-          </el-tooltip>
-          <el-tooltip :content="t('common.refresh')" placement="top">
-            <button
-              class="w-9 h-9 rounded-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors shadow-sm"
-              @click="resetSearch"
-            >
-              <el-icon><RefreshRight /></el-icon>
-            </button>
-          </el-tooltip>
-        </div>
-      </template>
-    </ProjectOverviewToolbar>
-
-    <div
-      v-if="selectedProjects.length > 0"
-      class="flex items-center space-x-2 mt-3 px-3 py-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700"
-    >
-      <el-button
-        v-if="canExportProjects"
-        type="success"
-        size="small"
-        round
-        @click="batchExportProjects"
-        :disabled="selectedProjects.length === 0"
-        :loading="batchOperationLoading"
-      >
-        <el-icon class="mr-1"><Download /></el-icon>
-        {{ t('projectManagement.batchExport') }} ({{ selectedProjects.length }})
-      </el-button>
-      <el-button
-        v-if="canDeleteProjects"
-        type="danger"
-        size="small"
-        round
-        @click="batchDeleteProjects"
-        :disabled="selectedProjects.length === 0"
-        :loading="batchOperationLoading"
-      >
-        <el-icon class="mr-1"><Delete /></el-icon>
-        {{ t('projectManagement.batchDelete') }} ({{ selectedProjects.length }})
-      </el-button>
-    </div>
+      @create-project="showCreateDialog = true"
+      @refresh="resetSearch"
+      @open-group-manager="showGroupManageDialog = true"
+      @import-project="handleImportProject"
+      @batch-export="batchExportProjects"
+      @batch-delete="batchDeleteProjects"
+      @open-settings="handleReservedSettings"
+    />
 
     <ProjectGroupCards
-      v-if="viewMode === 'card'"
+      v-if="viewMode === 'card' && hasProjectGroups"
       class="mt-4"
-      :groups="projectGroupCards"
+      :groups="resolvedProjectGroupCards"
       :active-group-id="groupContext.groupId"
-      :all-projects-label="t('projectManagement.allProjects')"
-      :all-projects-count="pagination.total"
       @select="handleGroupCardSelect"
+      @add-project="openGroupProjectPicker"
+      @edit="editProjectGroup"
+      @delete="deleteProjectGroup"
+      @remove-project="removeProjectFromGroup"
     />
+
+    <div
+      v-if="groupContext.groupId"
+      class="project-group-breadcrumb mt-4"
+      data-testid="project-group-breadcrumb"
+    >
+      <button
+        type="button"
+        class="project-group-breadcrumb__link"
+        data-testid="project-group-breadcrumb-all"
+        @click="handleGroupBreadcrumbAll"
+      >
+        {{ t('projectManagement.groupBreadcrumbAll') }}
+      </button>
+      <span class="project-group-breadcrumb__separator">/</span>
+      <span class="project-group-breadcrumb__current">{{ groupContext.groupName }}</span>
+    </div>
 
     <div
       class="mt-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
@@ -124,23 +85,33 @@
         @delete="deleteProject"
       >
         <template #actions="{ project }">
+          <el-tooltip :content="t('projectManagement.viewDetail')" placement="top">
+            <el-button data-testid="project-detail-action" size="small" text circle class="project-action-button" @click.stop="handleOpenProject(project)">
+              <el-icon><View /></el-icon>
+            </el-button>
+          </el-tooltip>
           <el-tooltip v-if="canManageProjects" :content="t('projectManagement.memberAndPermission')" placement="top">
-            <el-button data-testid="project-runtime-access-action" size="small" text circle class="!w-7 !h-7" @click.stop="openRuntimeAccessDialog(project)">
+            <el-button data-testid="project-runtime-access-action" size="small" text circle class="project-action-button" @click.stop="openRuntimeAccessDialog(project)">
               <el-icon><User /></el-icon>
             </el-button>
           </el-tooltip>
+          <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editTags')" placement="top">
+            <el-button data-testid="project-edit-tags-action" size="small" text circle class="project-action-button" @click.stop="openProjectTagDialog(project)">
+              <el-icon><PriceTag /></el-icon>
+            </el-button>
+          </el-tooltip>
           <el-tooltip v-if="canPerformOps" :content="t('projectManagement.publishAndDeploy')" placement="top">
-            <el-button data-testid="project-deploy-action" size="small" text circle class="!w-7 !h-7" @click.stop="openDeployDialog(project)">
+            <el-button data-testid="project-deploy-action" size="small" text circle class="project-action-button" @click.stop="openDeployDialog(project)">
               <el-icon><UploadFilled /></el-icon>
             </el-button>
           </el-tooltip>
           <el-tooltip v-if="canExportProjects" :content="t('projectManagement.export')" placement="top">
-            <el-button data-testid="project-export-action" size="small" text circle class="!w-7 !h-7" @click.stop="handleExportProject(project)">
+            <el-button data-testid="project-export-action" size="small" text circle class="project-action-button" @click.stop="handleExportProject(project)">
               <el-icon><Download /></el-icon>
             </el-button>
           </el-tooltip>
           <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.delete')" placement="top">
-            <el-button data-testid="project-delete-action" size="small" text circle class="!w-7 !h-7 !text-red-500" @click.stop="deleteProject(project)">
+            <el-button data-testid="project-delete-action" size="small" text circle class="project-action-button project-action-button--danger" @click.stop="deleteProject(project)">
               <el-icon><Delete /></el-icon>
             </el-button>
           </el-tooltip>
@@ -167,23 +138,33 @@
         @delete="deleteProject"
       >
         <template #actions="{ project }">
+          <el-tooltip :content="t('projectManagement.viewDetail')" placement="top">
+            <el-button data-testid="project-detail-action" size="small" text circle class="project-action-button" @click.stop="handleOpenProject(project)">
+              <el-icon><View /></el-icon>
+            </el-button>
+          </el-tooltip>
           <el-tooltip v-if="canManageProjects" :content="t('projectManagement.memberAndPermission')" placement="top">
-            <el-button data-testid="project-runtime-access-action" size="small" text circle class="!w-7 !h-7" @click.stop="openRuntimeAccessDialog(project)">
+            <el-button data-testid="project-runtime-access-action" size="small" text circle class="project-action-button" @click.stop="openRuntimeAccessDialog(project)">
               <el-icon><User /></el-icon>
             </el-button>
           </el-tooltip>
+          <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editTags')" placement="top">
+            <el-button data-testid="project-edit-tags-action" size="small" text circle class="project-action-button" @click.stop="openProjectTagDialog(project)">
+              <el-icon><PriceTag /></el-icon>
+            </el-button>
+          </el-tooltip>
           <el-tooltip v-if="canPerformOps" :content="t('projectManagement.publishAndDeploy')" placement="top">
-            <el-button data-testid="project-deploy-action" size="small" text circle class="!w-7 !h-7" @click.stop="openDeployDialog(project)">
+            <el-button data-testid="project-deploy-action" size="small" text circle class="project-action-button" @click.stop="openDeployDialog(project)">
               <el-icon><UploadFilled /></el-icon>
             </el-button>
           </el-tooltip>
           <el-tooltip v-if="canExportProjects" :content="t('projectManagement.export')" placement="top">
-            <el-button data-testid="project-export-action" size="small" text circle class="!w-7 !h-7" @click.stop="handleExportProject(project)">
+            <el-button data-testid="project-export-action" size="small" text circle class="project-action-button" @click.stop="handleExportProject(project)">
               <el-icon><Download /></el-icon>
             </el-button>
           </el-tooltip>
           <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.delete')" placement="top">
-            <el-button data-testid="project-delete-action" size="small" text circle class="!w-7 !h-7 !text-red-500" @click.stop="deleteProject(project)">
+            <el-button data-testid="project-delete-action" size="small" text circle class="project-action-button project-action-button--danger" @click.stop="deleteProject(project)">
               <el-icon><Delete /></el-icon>
             </el-button>
           </el-tooltip>
@@ -269,6 +250,45 @@
       <template #footer>
         <el-button @click="showEditDialog = false">{{ t('projectManagement.cancel') }}</el-button>
         <el-button type="primary" @click="handleUpdateProject" :loading="editLoading">
+          {{ t('projectManagement.save') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑工程标签对话框 -->
+    <el-dialog
+      v-model="showTagEditDialog"
+      :title="`${t('projectManagement.editTags')} - ${tagEditProject?.name || ''}`"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="96px">
+        <el-form-item :label="t('projectManagement.tagFilter')">
+          <el-select
+            v-model="tagEditIds"
+            multiple
+            filterable
+            clearable
+            collapse-tags
+            collapse-tags-tooltip
+            :placeholder="t('projectManagement.tagSearchPlaceholder')"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="tag in projectTagOptions"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag.id"
+            />
+          </el-select>
+          <div v-if="projectTagOptions.length === 0" class="text-xs text-gray-400 mt-2">
+            {{ t('projectManagement.noTagOptions') }}
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showTagEditDialog = false">{{ t('projectManagement.cancel') }}</el-button>
+        <el-button type="primary" :loading="tagEditLoading" @click="handleUpdateProjectTags">
           {{ t('projectManagement.save') }}
         </el-button>
       </template>
@@ -706,6 +726,22 @@
       v-model:visible="runtimeAccessDialogVisible"
       :project="runtimeAccessProject"
     />
+
+    <ProjectGroupManageDialog
+      v-model:visible="showGroupManageDialog"
+      :groups="resolvedProjectGroupCards"
+      @create="createProjectGroup"
+      @edit="editProjectGroup"
+      @delete="deleteProjectGroup"
+    />
+
+    <ProjectGroupProjectPickerDialog
+      v-model:visible="groupProjectPickerVisible"
+      :group-id="targetGroupForProjectPicker?.id || ''"
+      :group-name="targetGroupForProjectPicker?.name || ''"
+      :projects="groupProjectCandidates"
+      @select="addProjectToGroup"
+    />
   </div>
 </template>
 
@@ -728,6 +764,10 @@ import ProjectOverviewGrid from './project-management/ProjectOverviewGrid.vue'
 import ProjectOverviewTable from './project-management/ProjectOverviewTable.vue'
 import ProjectOverviewPagination from './project-management/ProjectOverviewPagination.vue'
 import ProjectGroupCards from './project-management/ProjectGroupCards.vue'
+import ProjectGroupManageDialog from './project-management/ProjectGroupManageDialog.vue'
+import ProjectGroupProjectPickerDialog from './project-management/ProjectGroupProjectPickerDialog.vue'
+import { buildProjectGroupCardItems } from './project-management/project-group-utils'
+import { buildProjectOverviewQueryParams } from './project-management/use-project-filters'
 import { useProjectOverviewState } from './project-management/use-project-overview'
 
 export default {
@@ -739,6 +779,8 @@ export default {
     ProjectOverviewTable,
     ProjectOverviewPagination,
     ProjectGroupCards,
+    ProjectGroupManageDialog,
+    ProjectGroupProjectPickerDialog,
   },
   setup() {
     const { t } = useI18n()
@@ -781,6 +823,9 @@ export default {
     const showEditDialog = ref(false)
     const showDeployDialog = ref(false)
     const showVersionManageDialog = ref(false)
+    const showGroupManageDialog = ref(false)
+    const groupProjectPickerVisible = ref(false)
+    const showTagEditDialog = ref(false)
     const projectDialogVisible = ref(false)
     const runtimeAccessDialogVisible = ref(false)
 
@@ -790,10 +835,19 @@ export default {
     const searchTimer = ref(null)
     const projectTagOptions = ref([])
     const projectGroupCards = ref([])
+    const groupProjectCandidates = ref([])
+    const resolvedProjectGroupCards = computed(() =>
+      buildProjectGroupCardItems(projectGroupCards.value, projectList.value),
+    )
+    const hasProjectGroups = computed(() => resolvedProjectGroupCards.value.length > 0)
 
     // 当前操作的工程
     const selectedProject = ref(null)
     const runtimeAccessProject = ref(null)
+    const targetGroupForProjectPicker = ref(null)
+    const tagEditProject = ref(null)
+    const tagEditIds = ref([])
+    const tagEditLoading = ref(false)
 
     // 部署相关状态
     const deployLoading = ref(false)
@@ -1112,6 +1166,160 @@ export default {
       fetchProjects()
     }
 
+    const handleGroupBreadcrumbAll = () => {
+      clearGroupContext()
+      fetchProjects()
+    }
+
+    const fetchGroupProjectCandidates = async () => {
+      const query = buildProjectOverviewQueryParams({
+        filters,
+        pagination: {
+          page: 1,
+          limit: 1000,
+        },
+        groupContext: null,
+      })
+      const response = await projectAPI.getProjects(query)
+      groupProjectCandidates.value = extractCollectionItems(response, ['projects'])
+    }
+
+    const openGroupProjectPicker = async (group) => {
+      const groupId = String(group?.id || '').trim()
+      if (!groupId) {
+        return
+      }
+      targetGroupForProjectPicker.value = {
+        ...group,
+        id: groupId,
+        name: String(group?.name || groupId),
+      }
+      try {
+        await fetchGroupProjectCandidates()
+      } catch (error) {
+        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+      }
+      groupProjectPickerVisible.value = true
+    }
+
+    const addProjectToGroup = async (projectId) => {
+      const normalizedProjectId = String(projectId || '').trim()
+      const targetGroupId = String(targetGroupForProjectPicker.value?.id || '').trim()
+      if (!normalizedProjectId || !targetGroupId) {
+        return
+      }
+
+      try {
+        await projectAPI.bindProjectGroup(normalizedProjectId, { groupId: targetGroupId })
+      } catch (error) {
+        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+      }
+
+      ElMessage.success(t('projectManagement.groupBindSuccess'))
+      groupProjectPickerVisible.value = false
+      await fetchProjects()
+      await refreshProjectGroupsAfterMutation()
+    }
+
+    const removeProjectFromGroup = async ({ projectId }) => {
+      const normalizedProjectId = String(projectId || '').trim()
+      if (!normalizedProjectId) {
+        return
+      }
+
+      try {
+        await projectAPI.bindProjectGroup(normalizedProjectId, { groupId: null })
+      } catch (error) {
+        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+      }
+
+      ElMessage.success(t('projectManagement.groupUnbindSuccess'))
+      await fetchProjects()
+      await refreshProjectGroupsAfterMutation()
+    }
+
+    const refreshProjectGroupsAfterMutation = async () => {
+      try {
+        await fetchProjectGroupCards()
+      } catch (error) {
+        console.warn('刷新工程分组列表失败:', error)
+      }
+    }
+
+    const createProjectGroup = async ({ name }) => {
+      const trimmedName = String(name || '').trim()
+      if (!trimmedName) {
+        return ElMessage.warning(t('projectManagement.groupNameRequired'))
+      }
+
+      try {
+        await projectAPI.createProjectGroup({ name: trimmedName })
+      } catch (error) {
+        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+      }
+
+      ElMessage.success(t('projectManagement.groupCreateSuccess'))
+      await refreshProjectGroupsAfterMutation()
+    }
+
+    const editProjectGroup = async (group) => {
+      const groupId = String(group?.id || '').trim()
+      if (!groupId) {
+        return
+      }
+
+      const inputName = window.prompt(t('projectManagement.inputGroupName'), group?.name || '')
+      const trimmedName = String(inputName || '').trim()
+      if (!trimmedName) {
+        return
+      }
+
+      try {
+        await projectAPI.updateProjectGroup(groupId, { name: trimmedName })
+      } catch (error) {
+        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+      }
+
+      ElMessage.success(t('projectManagement.groupUpdateSuccess'))
+      await refreshProjectGroupsAfterMutation()
+    }
+
+    const deleteProjectGroup = async (group) => {
+      const groupId = String(group?.id || '').trim()
+      if (!groupId) {
+        return
+      }
+
+      try {
+        await ElMessageBox.confirm(
+          `${t('projectManagement.deleteGroup')}：${group?.name || groupId}`,
+          t('projectManagement.deleteConfirmTitle'),
+          {
+            type: 'warning',
+            confirmButtonText: t('projectManagement.deleteConfirmButton'),
+            cancelButtonText: t('projectManagement.cancel'),
+          },
+        )
+        await projectAPI.deleteProjectGroup(groupId)
+      } catch (error) {
+        if (error !== 'cancel') {
+          ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+        }
+        return
+      }
+
+      ElMessage.success(t('projectManagement.groupDeleteSuccess'))
+      if (String(groupContext.groupId || '') === groupId) {
+        clearGroupContext()
+        try {
+          await fetchProjects()
+        } catch (error) {
+          console.warn('刷新工程列表失败:', error)
+        }
+      }
+      await refreshProjectGroupsAfterMutation()
+    }
+
     const resetSearch = () => {
       if (searchTimer.value) {
         window.clearTimeout(searchTimer.value)
@@ -1127,6 +1335,10 @@ export default {
       })
       clearGroupContext()
       fetchProjects()
+    }
+
+    const handleReservedSettings = () => {
+      ElMessage.info(t('projectManagement.settings'))
     }
 
     const handleOverviewPaginationChange = ({ page, limit }) => {
@@ -1653,6 +1865,40 @@ export default {
     const openRuntimeAccessDialog = (project) => {
       runtimeAccessProject.value = project
       runtimeAccessDialogVisible.value = true
+    }
+
+    const openProjectTagDialog = (project) => {
+      tagEditProject.value = project
+      tagEditIds.value = Array.isArray(project?.tags)
+        ? project.tags.map((tag) => String(tag?.id || '')).filter(Boolean)
+        : []
+      showTagEditDialog.value = true
+    }
+
+    const handleUpdateProjectTags = async () => {
+      const projectId = String(tagEditProject.value?.id || '').trim()
+      if (!projectId) {
+        return
+      }
+
+      tagEditLoading.value = true
+      try {
+        await projectAPI.bindProjectTags(projectId, {
+          tagIds: tagEditIds.value.map((id) => String(id)).filter(Boolean),
+        })
+      } catch (error) {
+        tagEditLoading.value = false
+        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+      }
+
+      ElMessage.success(t('projectManagement.updateSuccess'))
+      showTagEditDialog.value = false
+      const refreshResults = await Promise.allSettled([fetchProjects(), fetchProjectGroupCards()])
+      const failedRefreshes = refreshResults.filter((result) => result.status === 'rejected')
+      if (failedRefreshes.length > 0) {
+        console.warn('工程标签更新后刷新列表失败:', failedRefreshes)
+      }
+      tagEditLoading.value = false
     }
 
     // 打开设计中心
@@ -2195,6 +2441,9 @@ export default {
       showEditDialog,
       showDeployDialog,
       showVersionManageDialog,
+      showGroupManageDialog,
+      groupProjectPickerVisible,
+      showTagEditDialog,
       projectDialogVisible,
       runtimeAccessDialogVisible,
 
@@ -2211,12 +2460,19 @@ export default {
       selectedProjects,
       selectedProject,
       runtimeAccessProject,
+      targetGroupForProjectPicker,
+      tagEditProject,
+      tagEditIds,
+      tagEditLoading,
 
       // 数据
       projectList,
       pagination,
       projectTagOptions,
       projectGroupCards,
+      groupProjectCandidates,
+      resolvedProjectGroupCards,
+      hasProjectGroups,
       currentUser,
 
       // 部署相关
@@ -2260,7 +2516,15 @@ export default {
       handleCompositeFiltersChange,
       handleTagIdsChange,
       handleGroupCardSelect,
+      handleGroupBreadcrumbAll,
+      openGroupProjectPicker,
+      addProjectToGroup,
+      removeProjectFromGroup,
+      createProjectGroup,
+      editProjectGroup,
+      deleteProjectGroup,
       resetSearch,
+      handleReservedSettings,
       handleOverviewPaginationChange,
       handleCreateProject,
       handleOpenProject,
@@ -2269,6 +2533,8 @@ export default {
       importProject,
       editProject,
       handleUpdateProject,
+      openProjectTagDialog,
+      handleUpdateProjectTags,
       deleteProject,
       handleExportProject,
       handleImportProject,
@@ -2300,7 +2566,73 @@ export default {
 
 <style scoped>
 .project-management {
-  padding: 20px;
+  min-height: calc(100vh - 72px);
+  padding: 20px 20px 92px;
+}
+
+.pagination-bar {
+  position: fixed;
+  right: 20px;
+  bottom: 0;
+  left: 20px;
+  z-index: 30;
+  border-top: 1px solid #dfe6ef;
+  background: rgba(248, 251, 255, 0.96);
+  box-shadow: 0 -10px 28px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.project-group-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.project-group-breadcrumb__link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+}
+
+.project-group-breadcrumb__link:hover {
+  color: #1d4ed8;
+}
+
+.project-group-breadcrumb__current {
+  color: #111827;
+  font-weight: 500;
+}
+
+.project-action-button {
+  width: 28px !important;
+  height: 28px !important;
+  color: #42526a;
+}
+
+.project-action-button:hover {
+  color: #1d4ed8;
+  background: #eef5ff;
+}
+
+.project-action-button--danger:hover {
+  color: #dc2626 !important;
+  background: #fff1f2;
+}
+
+html.dark .project-group-breadcrumb__current,
+[data-theme='dark'] .project-group-breadcrumb__current {
+  color: #e5e7eb;
+}
+
+html.dark .pagination-bar,
+[data-theme='dark'] .pagination-bar {
+  border-top-color: #374151;
+  background: rgba(17, 24, 39, 0.96);
 }
 
 /* 卡片视图样式 */
@@ -2602,6 +2934,15 @@ html.dark .deploy-node-ip,
 }
 
 @media (max-width: 640px) {
+  .project-management {
+    padding: 12px 12px 96px;
+  }
+
+  .pagination-bar {
+    right: 12px;
+    left: 12px;
+  }
+
   .deploy-node-toolbar {
     flex-direction: column;
   }

@@ -23,6 +23,24 @@ export interface ProjectOverviewGroup {
   projectCount?: number
 }
 
+export interface ProjectGroupProjectPreview {
+  id: string
+  name: string
+}
+
+export interface ProjectGroupCardViewModel extends ProjectOverviewGroup {
+  projectCount: number
+  projects: ProjectGroupProjectPreview[]
+}
+
+export type ProjectStatusMetricLevel = 'good' | 'warn' | 'bad' | 'muted'
+
+export interface ProjectStatusMetric {
+  labelKey: string
+  percent: number
+  level: ProjectStatusMetricLevel
+}
+
 export interface ProjectOverviewRuntimeStatusCounts {
   pending: number
   deploying: number

@@ -134,6 +134,7 @@ type EmissionBag = {
   viewMode: string[]
   sortBy: string[]
   sortOrder: string[]
+  openGroupManager: number
   compositeFilters: Array<{
     runtimeModes: string[]
     deployStatuses: string[]
@@ -172,12 +173,13 @@ const registerElementStubs = (app: App) => {
   app.component('el-checkbox', ElCheckboxStub)
 }
 
-const mountToolbar = (): MountResult => {
+const mountToolbar = (extraProps: Record<string, unknown> = {}): MountResult => {
   const emissions: EmissionBag = {
     search: [],
     viewMode: [],
     sortBy: [],
     sortOrder: [],
+    openGroupManager: 0,
     compositeFilters: [],
   }
 
@@ -193,10 +195,14 @@ const mountToolbar = (): MountResult => {
           sortBy: 'createdAt',
           sortOrder: 'DESC',
           tagOptions: [{ id: 'tag-1', name: '核心' }],
+          ...extraProps,
           'onUpdate:search': (value: string) => emissions.search.push(value),
           'onUpdate:viewMode': (value: string) => emissions.viewMode.push(value),
           'onUpdate:sortBy': (value: string) => emissions.sortBy.push(value),
           'onUpdate:sortOrder': (value: string) => emissions.sortOrder.push(value),
+          onOpenGroupManager: () => {
+            emissions.openGroupManager += 1
+          },
           'onUpdate:compositeFilters': (value: {
             runtimeModes: string[]
             deployStatuses: string[]
@@ -294,5 +300,64 @@ describe('project-overview-toolbar', () => {
         createdBy: '张三',
       }),
     )
+  })
+
+  test('右侧固定图标按顺序展示，未选中时不展示批量操作入口', () => {
+    const { container } = mountToolbar()
+    const rightToolbar = container.querySelector('.project-overview-toolbar__right')
+    expect(rightToolbar).not.toBeNull()
+
+    const triggers = [...rightToolbar!.querySelectorAll('[data-testid]')].map((element) =>
+      element.getAttribute('data-testid'),
+    )
+
+    expect(triggers).toEqual([
+      'project-add-trigger',
+      'project-refresh-trigger',
+      'project-group-manage-trigger',
+      'project-import-trigger',
+      'project-settings-trigger',
+    ])
+    expect(container.querySelector('[data-testid="project-batch-export-trigger"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-batch-delete-trigger"]')).toBeNull()
+  })
+
+  test('选中工程后展示批量导出和批量删除入口', () => {
+    const { container } = mountToolbar({ selectedCount: 2 })
+
+    expect(container.querySelector('[data-testid="project-batch-export-trigger"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="project-batch-delete-trigger"]')).not.toBeNull()
+  })
+
+  test('点击分组管理会触发 open-group-manager emit', async () => {
+    const { container, emissions } = mountToolbar()
+
+    const groupManageButton = container.querySelector(
+      '[data-testid="project-group-manage-trigger"]',
+    ) as HTMLButtonElement
+    groupManageButton.click()
+    await nextTick()
+
+    expect(emissions.openGroupManager).toBe(1)
+  })
+
+  test('右侧纯图标按钮提供稳定的 accessible name', () => {
+    const { container } = mountToolbar({ selectedCount: 1 })
+
+    const expectedLabels = {
+      'project-batch-export-trigger': i18n.global.t('projectManagement.batchExport'),
+      'project-batch-delete-trigger': i18n.global.t('projectManagement.batchDelete'),
+      'project-add-trigger': i18n.global.t('projectManagement.addProject'),
+      'project-refresh-trigger': i18n.global.t('common.refresh'),
+      'project-group-manage-trigger': i18n.global.t('projectManagement.groupManagement'),
+      'project-import-trigger': i18n.global.t('projectManagement.importProject'),
+      'project-settings-trigger': i18n.global.t('projectManagement.settings'),
+    }
+
+    Object.entries(expectedLabels).forEach(([testId, label]) => {
+      expect(container.querySelector(`[data-testid="${testId}"]`)?.getAttribute('aria-label')).toBe(
+        label,
+      )
+    })
   })
 })
