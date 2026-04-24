@@ -12,6 +12,7 @@ const appConfig = require('../../config/app');
 const designAssetService = require('../../services/designAssetService');
 const { dataDomainClient } = require('../../services/dataDomainClient');
 const deploymentService = require('../../services/deploymentService');
+const projectOverviewService = require('../../services/projectOverviewService');
 const {
   getProjectSettingsRow,
   upsertProjectSettings,
@@ -36,6 +37,10 @@ const {
   Project,
   Tenant,
   User,
+  ProjectTag,
+  ProjectTagBinding,
+  ProjectGroup,
+  ProjectGroupMember,
   DesignPage,
   NodeDeployment,
 } = require('../../models');
@@ -222,6 +227,22 @@ const respondRouteError = (res, error, fallbackCode, fallbackStatus) => {
 
 const buildInitialRuntimePassword = () => randomBytes(16).toString('hex');
 const RUNTIME_ACCESS_ALLOWED_ROLES = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
+const PROJECT_OVERVIEW_SORT_FIELDS = ['createdAt', 'updatedAt', 'lastDeployedAt', 'runtimeStatus'];
+const PROJECT_OVERVIEW_SORT_ORDERS = ['ASC', 'DESC'];
+const PROJECT_LABEL_MANAGE_ROLES = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
+
+const ensureProjectLabelManagePermission = (req, res) => {
+  const role = req.user?.role;
+  if (!PROJECT_LABEL_MANAGE_ROLES.includes(role)) {
+    ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
+    return false;
+  }
+  return true;
+};
+
+const buildProjectTagGroupScope = (req) => {
+  return buildTenantWhere({}, req);
+};
 
 const requireRuntimeProjectManagement = async (req, res, next) => {
   try {
@@ -298,42 +319,452 @@ router.get('/', authenticateToken, validate(Joi.object({
   query: Joi.object({
     page: Joi.number().integer().min(1).default(appConfig.pagination.defaultPage),
     limit: Joi.number().integer().min(1).max(appConfig.pagination.maxLimit).default(appConfig.pagination.defaultLimit),
-    name: Joi.string().optional()
+    name: Joi.string().optional(),
+    group: Joi.string().optional(),
+    groupId: Joi.string().optional(),
+    tag: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).optional(),
+    tagId: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).optional(),
+    tags: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).optional(),
+    runtimeMode: Joi.alternatives().try(Joi.string().valid('DEV', 'RELEASE'), Joi.array().items(Joi.string().valid('DEV', 'RELEASE'))).optional(),
+    deployStatus: Joi.alternatives().try(
+      Joi.string().valid('pending', 'deploying', 'running', 'stopped', 'error', 'rollback'),
+      Joi.array().items(Joi.string().valid('pending', 'deploying', 'running', 'stopped', 'error', 'rollback')),
+    ).optional(),
+    createdBy: Joi.string().optional(),
+    createdByName: Joi.string().optional(),
+    sortBy: Joi.string().valid(...PROJECT_OVERVIEW_SORT_FIELDS).optional(),
+    sortField: Joi.string().valid(...PROJECT_OVERVIEW_SORT_FIELDS).optional(),
+    sortOrder: Joi.string().valid(...PROJECT_OVERVIEW_SORT_ORDERS, 'asc', 'desc').optional(),
+    order: Joi.string().valid(...PROJECT_OVERVIEW_SORT_ORDERS, 'asc', 'desc').optional(),
   })
 })), async (req, res) => {
   try {
-    const { page, limit, name } = req.query;
-
-    // 转换分页参数为数字
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
-
-    let where = buildTenantWhere({}, req);
-
-    if (name) where.name = { [Op.like]: `%${name}%` };
-
-    const offset = (pageNum - 1) * limitNum;
-
-    const { count, rows } = await Project.findAndCountAll({
-      where,
-      include: [
-        { model: Tenant, as: 'tenant' },
-        { model: User, as: 'creator', attributes: ['id', 'username', 'fullName'] },
-        { model: User, as: 'updater', attributes: ['id', 'username', 'fullName'] }
-      ],
-      limit: limitNum,
-      offset,
-      order: [['createdAt', 'DESC']],
+    const result = await projectOverviewService.listProjectOverviews({
+      req,
+      query: req.query,
     });
 
-    return ApiResponse.paginated(res, { projects: rows }, {
-      total: count,
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(count / limitNum),
+    return ApiResponse.paginated(res, { projects: result.projects }, {
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      totalPages: result.totalPages,
     });
   } catch (error) {
     logger.error('Get projects error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.get('/tags', authenticateToken, validate(Joi.object({
+  query: Joi.object({
+    keyword: Joi.string().allow('').optional(),
+  }),
+})), async (req, res) => {
+  try {
+    const where = buildProjectTagGroupScope(req);
+    const keyword = String(req.query.keyword || '').trim();
+    if (keyword) {
+      where.name = { [Op.like]: `%${keyword}%` };
+    }
+
+    const tags = await ProjectTag.findAll({
+      where,
+      order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']],
+    });
+
+    return ApiResponse.success(res, { tags });
+  } catch (error) {
+    logger.error('Get project tags error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.post('/tags', authenticateToken, validate(Joi.object({
+  body: Joi.object({
+    name: Joi.string().trim().min(1).max(100).required(),
+    description: Joi.string().allow('').optional(),
+    sortOrder: Joi.number().integer().default(0),
+  }).required(),
+})), async (req, res) => {
+  try {
+    if (!ensureProjectLabelManagePermission(req, res)) return;
+
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '租户上下文缺失' }, 200);
+    }
+
+    const name = req.body.name.trim();
+    const existing = await ProjectTag.findOne({
+      where: {
+        tenantId,
+        name,
+      },
+    });
+    if (existing) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_ALREADY_EXISTS, { message: '标签名称已存在' }, 200);
+    }
+
+    const tag = await ProjectTag.create({
+      tenantId,
+      name,
+      description: req.body.description || null,
+      sortOrder: req.body.sortOrder ?? 0,
+      createdBy: req.user.id,
+      updatedBy: req.user.id,
+    });
+    return ApiResponse.success(res, { tag }, 'create_success', {}, 201);
+  } catch (error) {
+    logger.error('Create project tag error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.put('/tags/:tagId', authenticateToken, validate(Joi.object({
+  params: Joi.object({
+    tagId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    name: Joi.string().trim().min(1).max(100).optional(),
+    description: Joi.string().allow('').optional(),
+    sortOrder: Joi.number().integer().optional(),
+  }).min(1).required(),
+})), async (req, res) => {
+  try {
+    if (!ensureProjectLabelManagePermission(req, res)) return;
+
+    const where = buildProjectTagGroupScope(req);
+    where.id = req.params.tagId;
+    const tag = await ProjectTag.findOne({ where });
+    if (!tag) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: '标签不存在' }, 200);
+    }
+
+    if (req.body.name && req.body.name.trim() !== tag.name) {
+      const duplicate = await ProjectTag.findOne({
+        where: {
+          tenantId: tag.tenantId,
+          name: req.body.name.trim(),
+          id: { [Op.ne]: tag.id },
+        },
+      });
+      if (duplicate) {
+        return ApiResponse.error(res, ErrorCodes.RESOURCE_ALREADY_EXISTS, { message: '标签名称已存在' }, 200);
+      }
+    }
+
+    await tag.update({
+      ...(req.body.name ? { name: req.body.name.trim() } : {}),
+      ...(Object.prototype.hasOwnProperty.call(req.body, 'description') ? { description: req.body.description || null } : {}),
+      ...(Object.prototype.hasOwnProperty.call(req.body, 'sortOrder') ? { sortOrder: req.body.sortOrder } : {}),
+      updatedBy: req.user.id,
+    });
+
+    return ApiResponse.success(res, { tag }, 'update_success');
+  } catch (error) {
+    logger.error('Update project tag error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.delete('/tags/:tagId', authenticateToken, validate(Joi.object({
+  params: Joi.object({
+    tagId: Joi.string().uuid().required(),
+  }),
+})), async (req, res) => {
+  try {
+    if (!ensureProjectLabelManagePermission(req, res)) return;
+
+    const where = buildProjectTagGroupScope(req);
+    where.id = req.params.tagId;
+    const tag = await ProjectTag.findOne({ where });
+    if (!tag) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: '标签不存在' }, 200);
+    }
+
+    await tag.destroy();
+    return ApiResponse.success(res, null, 'delete_success');
+  } catch (error) {
+    logger.error('Delete project tag error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.get('/groups', authenticateToken, validate(Joi.object({
+  query: Joi.object({
+    keyword: Joi.string().allow('').optional(),
+  }),
+})), async (req, res) => {
+  try {
+    const where = buildProjectTagGroupScope(req);
+    const keyword = String(req.query.keyword || '').trim();
+    if (keyword) {
+      where.name = { [Op.like]: `%${keyword}%` };
+    }
+
+    const groups = await ProjectGroup.findAll({
+      where,
+      order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']],
+    });
+
+    const groupIds = groups.map((group) => group.id).filter(Boolean);
+    const projectCountByGroupId = new Map();
+    if (groupIds.length > 0) {
+      const members = await ProjectGroupMember.findAll({
+        where: {
+          ...buildProjectTagGroupScope(req),
+          groupId: { [Op.in]: groupIds },
+        },
+        attributes: ['groupId', 'projectId'],
+      });
+
+      for (const member of members) {
+        const groupId = member.groupId;
+        if (!groupId) continue;
+        projectCountByGroupId.set(groupId, (projectCountByGroupId.get(groupId) || 0) + 1);
+      }
+    }
+
+    const groupsWithCount = groups.map((group) => {
+      const payload = typeof group.toJSON === 'function' ? group.toJSON() : { ...group };
+      return {
+        ...payload,
+        projectCount: projectCountByGroupId.get(group.id) || 0,
+      };
+    });
+
+    return ApiResponse.success(res, { groups: groupsWithCount });
+  } catch (error) {
+    logger.error('Get project groups error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.post('/groups', authenticateToken, validate(Joi.object({
+  body: Joi.object({
+    name: Joi.string().trim().min(1).max(100).required(),
+    description: Joi.string().allow('').optional(),
+    sortOrder: Joi.number().integer().default(0),
+  }).required(),
+})), async (req, res) => {
+  try {
+    if (!ensureProjectLabelManagePermission(req, res)) return;
+
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '租户上下文缺失' }, 200);
+    }
+
+    const name = req.body.name.trim();
+    const existing = await ProjectGroup.findOne({
+      where: {
+        tenantId,
+        name,
+      },
+    });
+    if (existing) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_ALREADY_EXISTS, { message: '分组名称已存在' }, 200);
+    }
+
+    const group = await ProjectGroup.create({
+      tenantId,
+      name,
+      description: req.body.description || null,
+      sortOrder: req.body.sortOrder ?? 0,
+      createdBy: req.user.id,
+      updatedBy: req.user.id,
+    });
+    return ApiResponse.success(res, { group }, 'create_success', {}, 201);
+  } catch (error) {
+    logger.error('Create project group error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.put('/groups/:groupId', authenticateToken, validate(Joi.object({
+  params: Joi.object({
+    groupId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    name: Joi.string().trim().min(1).max(100).optional(),
+    description: Joi.string().allow('').optional(),
+    sortOrder: Joi.number().integer().optional(),
+  }).min(1).required(),
+})), async (req, res) => {
+  try {
+    if (!ensureProjectLabelManagePermission(req, res)) return;
+
+    const where = buildProjectTagGroupScope(req);
+    where.id = req.params.groupId;
+    const group = await ProjectGroup.findOne({ where });
+    if (!group) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: '分组不存在' }, 200);
+    }
+
+    if (req.body.name && req.body.name.trim() !== group.name) {
+      const duplicate = await ProjectGroup.findOne({
+        where: {
+          tenantId: group.tenantId,
+          name: req.body.name.trim(),
+          id: { [Op.ne]: group.id },
+        },
+      });
+      if (duplicate) {
+        return ApiResponse.error(res, ErrorCodes.RESOURCE_ALREADY_EXISTS, { message: '分组名称已存在' }, 200);
+      }
+    }
+
+    await group.update({
+      ...(req.body.name ? { name: req.body.name.trim() } : {}),
+      ...(Object.prototype.hasOwnProperty.call(req.body, 'description') ? { description: req.body.description || null } : {}),
+      ...(Object.prototype.hasOwnProperty.call(req.body, 'sortOrder') ? { sortOrder: req.body.sortOrder } : {}),
+      updatedBy: req.user.id,
+    });
+
+    return ApiResponse.success(res, { group }, 'update_success');
+  } catch (error) {
+    logger.error('Update project group error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.delete('/groups/:groupId', authenticateToken, validate(Joi.object({
+  params: Joi.object({
+    groupId: Joi.string().uuid().required(),
+  }),
+})), async (req, res) => {
+  try {
+    if (!ensureProjectLabelManagePermission(req, res)) return;
+
+    const where = buildProjectTagGroupScope(req);
+    where.id = req.params.groupId;
+    const group = await ProjectGroup.findOne({ where });
+    if (!group) {
+      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, { message: '分组不存在' }, 200);
+    }
+
+    await group.destroy();
+    return ApiResponse.success(res, null, 'delete_success');
+  } catch (error) {
+    logger.error('Delete project group error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.put('/:id/tags', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    tagIds: Joi.array().items(Joi.string().uuid()).required(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    if (!ensureProjectLabelManagePermission(req, res)) return;
+    if (
+      !Object.prototype.hasOwnProperty.call(req.body || {}, 'tagIds')
+      || !Array.isArray(req.body.tagIds)
+    ) {
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: 'tagIds 必须显式传入数组' }, 200);
+    }
+
+    const project = await Project.findByPk(req.params.id, {
+      attributes: ['id', 'tenantId'],
+    });
+    if (!project) {
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 200);
+    }
+
+    const tagIds = [...new Set((Array.isArray(req.body.tagIds) ? req.body.tagIds : []).map((item) => String(item)))];
+    const tags = tagIds.length
+      ? await ProjectTag.findAll({
+        where: {
+          tenantId: project.tenantId,
+          id: { [Op.in]: tagIds },
+        },
+        attributes: ['id'],
+      })
+      : [];
+    if (tags.length !== tagIds.length) {
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '存在无效标签或跨租户标签' }, 200);
+    }
+
+    await Project.sequelize.transaction(async (transaction) => {
+      await ProjectTagBinding.destroy({
+        where: {
+          projectId: project.id,
+        },
+        transaction,
+      });
+
+      if (!tagIds.length) return;
+
+      await ProjectTagBinding.bulkCreate(
+        tagIds.map((tagId) => ({
+          tenantId: project.tenantId,
+          projectId: project.id,
+          tagId,
+          createdBy: req.user.id,
+        })),
+        { transaction },
+      );
+    });
+
+    return ApiResponse.success(res, { projectId: project.id, tagIds });
+  } catch (error) {
+    logger.error('Bind project tags error', { error: error.message, requestId: req.requestId });
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+  }
+});
+
+router.put('/:id/group', authenticateToken, requireResourceOwnership('project'), validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    groupId: Joi.string().uuid().allow(null).required(),
+  }).required(),
+})), async (req, res) => {
+  try {
+    if (!ensureProjectLabelManagePermission(req, res)) return;
+
+    const project = await Project.findByPk(req.params.id, {
+      attributes: ['id', 'tenantId'],
+    });
+    if (!project) {
+      return ApiResponse.error(res, ErrorCodes.PROJECT_NOT_FOUND, {}, 200);
+    }
+
+    const groupId = req.body.groupId || null;
+    if (!groupId) {
+      await ProjectGroupMember.destroy({
+        where: { projectId: project.id },
+      });
+      return ApiResponse.success(res, { projectId: project.id, groupId: null }, 'update_success');
+    }
+
+    const group = await ProjectGroup.findOne({
+      where: {
+        id: groupId,
+        tenantId: project.tenantId,
+      },
+      attributes: ['id'],
+    });
+    if (!group) {
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '分组不存在或不属于当前租户' }, 200);
+    }
+
+    await ProjectGroupMember.upsert({
+      tenantId: project.tenantId,
+      projectId: project.id,
+      groupId,
+      createdBy: req.user.id,
+    });
+
+    return ApiResponse.success(res, { projectId: project.id, groupId }, 'update_success');
+  } catch (error) {
+    logger.error('Bind project group error', { error: error.message, requestId: req.requestId });
     return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
   }
 });

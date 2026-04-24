@@ -1,7 +1,5 @@
-const express = require("express");
-const request = require("supertest");
-
 const buildMockRoute = (name) => {
+  const express = require("express");
   const router = express.Router();
   router.get("/ping", (req, res) => {
     res.status(200).json({ route: name });
@@ -33,16 +31,19 @@ jest.mock("../../../middlewares/operationAuditLog", () => ({
 
 const { buildV1Router } = require("../index");
 
+function hasMountedPrefix(router, url) {
+  return router.stack.some(
+    (layer) =>
+      Array.isArray(layer.matchers) &&
+      layer.matchers.some((matcher) => Boolean(matcher(url)))
+  );
+}
+
 describe("v1 router data route removal", () => {
-  test("不再挂载 /data 历史数据域路由", async () => {
-    const app = express();
-    app.use(buildV1Router());
+  test("不再挂载 /data 历史数据域路由", () => {
+    const router = buildV1Router();
 
-    const projectResponse = await request(app).get("/projects/ping");
-    const dataResponse = await request(app).get("/data/ping");
-
-    expect(projectResponse.status).toBe(200);
-    expect(projectResponse.body).toEqual({ route: "project" });
-    expect(dataResponse.status).toBe(404);
+    expect(hasMountedPrefix(router, "/projects/ping")).toBe(true);
+    expect(hasMountedPrefix(router, "/data/ping")).toBe(false);
   });
 });

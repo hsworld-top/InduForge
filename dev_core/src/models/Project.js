@@ -35,19 +35,6 @@ const Project = sequelize.define(
       defaultValue: {},
       comment: "入口配置：homePageId, loginPageId, logoutPageId 等",
     },
-    colorTag: {
-      type: DataTypes.ENUM(
-        "#3b82f6",
-        "#ef4444",
-        "#10b981",
-        "#f59e0b",
-        "#8b5cf6",
-        "#ec4899",
-        "#6b7280"
-      ),
-      defaultValue: "#3b82f6",
-      comment: "颜色标签",
-    },
     icon: {
       type: DataTypes.STRING(100),
       allowNull: true,
@@ -126,5 +113,43 @@ const Project = sequelize.define(
     ],
   }
 );
+
+/**
+ * 仅用于工程总览/列表场景的局部序列化。
+ * 说明：
+ * 1. 不覆写全局 toJSON，避免影响既有接口响应。
+ * 2. 优先使用显式 tags/group；缺失时再从绑定关系推导。
+ * 3. 对外始终输出稳定的 tags/group 字段。
+ */
+Project.prototype.toOverviewPayload = function toOverviewPayload() {
+  const values = { ...this.get({ plain: true }) };
+  const tagBindings = Array.isArray(values.tagBindings) ? values.tagBindings : [];
+
+  let tags = [];
+  if (Array.isArray(values.tags)) {
+    tags = values.tags;
+  } else if (tagBindings.length > 0) {
+    tags = tagBindings
+      .map((binding) => binding?.tag)
+      .filter(Boolean);
+  }
+
+  let group = null;
+  if (typeof values.group !== "undefined") {
+    group = values.group;
+  } else if (values.groupMember?.group) {
+    group = values.groupMember.group;
+  } else if (values.groupMember) {
+    group = values.groupMember;
+  }
+
+  const { tagBindings: _ignoredTagBindings, groupMember: _ignoredGroupMember, ...rest } = values;
+
+  return {
+    ...rest,
+    tags,
+    group: group ?? null,
+  };
+};
 
 module.exports = Project;

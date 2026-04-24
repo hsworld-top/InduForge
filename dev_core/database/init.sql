@@ -124,9 +124,6 @@ CREATE TABLE IF NOT EXISTS projects (
   "description" text,
   "projectVariables" jsonb,
   "entryConfig" jsonb DEFAULT '{}'::jsonb,
-  "colorTag" text NOT NULL DEFAULT '#3b82f6' CHECK (
-    "colorTag" IN ('#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280')
-  ),
   "icon" text,
   "status" text NOT NULL DEFAULT 'active' CHECK ("status" IN ('active', 'archived', 'deleted')),
   "visibility" text NOT NULL DEFAULT 'private' CHECK ("visibility" IN ('private', 'internal', 'public')),
@@ -139,6 +136,8 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE INDEX IF NOT EXISTS projects_tenant_idx ON projects ("tenantId");
 CREATE INDEX IF NOT EXISTS projects_status_idx ON projects ("status");
+CREATE UNIQUE INDEX IF NOT EXISTS projects_id_tenant_uq
+  ON projects ("id", "tenantId");
 CREATE UNIQUE INDEX IF NOT EXISTS projects_tenant_code_uq
   ON projects ("tenantId", "code")
   WHERE "code" IS NOT NULL;
@@ -151,7 +150,6 @@ COMMENT ON COLUMN projects."code" IS '工程代码';
 COMMENT ON COLUMN projects."description" IS '工程描述';
 COMMENT ON COLUMN projects."projectVariables" IS '工程级全局变量定义';
 COMMENT ON COLUMN projects."entryConfig" IS '工程入口配置';
-COMMENT ON COLUMN projects."colorTag" IS '颜色标签';
 COMMENT ON COLUMN projects."icon" IS '工程图标';
 COMMENT ON COLUMN projects."status" IS '工程状态';
 COMMENT ON COLUMN projects."visibility" IS '可见性';
@@ -162,7 +160,215 @@ COMMENT ON COLUMN projects."createdAt" IS '创建时间';
 COMMENT ON COLUMN projects."updatedAt" IS '更新时间';
 
 -- ============================================
--- 1.1 运行态授权表
+-- 1.1 工程标签/分组表
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS project_tags (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "tenantId" uuid NOT NULL REFERENCES tenants ("id") ON DELETE CASCADE,
+  "name" text NOT NULL,
+  "description" text,
+  "sortOrder" integer NOT NULL DEFAULT 0,
+  "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "updatedBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS project_tags_tenant_name_uq
+  ON project_tags ("tenantId", "name");
+CREATE UNIQUE INDEX IF NOT EXISTS project_tags_id_tenant_uq
+  ON project_tags ("id", "tenantId");
+CREATE INDEX IF NOT EXISTS project_tags_tenant_sort_idx
+  ON project_tags ("tenantId", "sortOrder");
+CREATE INDEX IF NOT EXISTS project_tags_created_by_idx
+  ON project_tags ("createdBy");
+CREATE INDEX IF NOT EXISTS project_tags_updated_by_idx
+  ON project_tags ("updatedBy");
+
+COMMENT ON TABLE project_tags IS '工程标签表';
+COMMENT ON COLUMN project_tags."id" IS '标签ID';
+COMMENT ON COLUMN project_tags."tenantId" IS '所属租户ID';
+COMMENT ON COLUMN project_tags."name" IS '标签名称';
+COMMENT ON COLUMN project_tags."description" IS '标签描述';
+COMMENT ON COLUMN project_tags."sortOrder" IS '排序顺序';
+COMMENT ON COLUMN project_tags."createdBy" IS '创建者ID';
+COMMENT ON COLUMN project_tags."updatedBy" IS '更新者ID';
+COMMENT ON COLUMN project_tags."createdAt" IS '创建时间';
+COMMENT ON COLUMN project_tags."updatedAt" IS '更新时间';
+
+CREATE TABLE IF NOT EXISTS project_tag_bindings (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "tenantId" uuid NOT NULL REFERENCES tenants ("id") ON DELETE CASCADE,
+  "projectId" uuid NOT NULL,
+  "tagId" uuid NOT NULL,
+  "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT project_tag_bindings_project_tenant_fk
+    FOREIGN KEY ("projectId", "tenantId")
+    REFERENCES projects ("id", "tenantId")
+    ON DELETE CASCADE,
+  CONSTRAINT project_tag_bindings_tag_tenant_fk
+    FOREIGN KEY ("tagId", "tenantId")
+    REFERENCES project_tags ("id", "tenantId")
+    ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS project_tag_bindings_project_tag_uq
+  ON project_tag_bindings ("projectId", "tagId");
+CREATE INDEX IF NOT EXISTS project_tag_bindings_tenant_tag_idx
+  ON project_tag_bindings ("tenantId", "tagId");
+CREATE INDEX IF NOT EXISTS project_tag_bindings_project_tenant_idx
+  ON project_tag_bindings ("projectId", "tenantId");
+CREATE INDEX IF NOT EXISTS project_tag_bindings_tag_tenant_idx
+  ON project_tag_bindings ("tagId", "tenantId");
+CREATE INDEX IF NOT EXISTS project_tag_bindings_project_idx
+  ON project_tag_bindings ("projectId");
+CREATE INDEX IF NOT EXISTS project_tag_bindings_tag_idx
+  ON project_tag_bindings ("tagId");
+CREATE INDEX IF NOT EXISTS project_tag_bindings_created_by_idx
+  ON project_tag_bindings ("createdBy");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'project_tag_bindings_project_tenant_fk'
+  ) THEN
+    ALTER TABLE project_tag_bindings
+      ADD CONSTRAINT project_tag_bindings_project_tenant_fk
+      FOREIGN KEY ("projectId", "tenantId")
+      REFERENCES projects ("id", "tenantId")
+      ON DELETE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'project_tag_bindings_tag_tenant_fk'
+  ) THEN
+    ALTER TABLE project_tag_bindings
+      ADD CONSTRAINT project_tag_bindings_tag_tenant_fk
+      FOREIGN KEY ("tagId", "tenantId")
+      REFERENCES project_tags ("id", "tenantId")
+      ON DELETE CASCADE;
+  END IF;
+END $$;
+
+COMMENT ON TABLE project_tag_bindings IS '工程标签绑定表';
+COMMENT ON COLUMN project_tag_bindings."id" IS '绑定ID';
+COMMENT ON COLUMN project_tag_bindings."tenantId" IS '所属租户ID';
+COMMENT ON COLUMN project_tag_bindings."projectId" IS '工程ID';
+COMMENT ON COLUMN project_tag_bindings."tagId" IS '标签ID';
+COMMENT ON COLUMN project_tag_bindings."createdBy" IS '创建者ID';
+COMMENT ON COLUMN project_tag_bindings."createdAt" IS '创建时间';
+COMMENT ON COLUMN project_tag_bindings."updatedAt" IS '更新时间';
+
+CREATE TABLE IF NOT EXISTS project_groups (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "tenantId" uuid NOT NULL REFERENCES tenants ("id") ON DELETE CASCADE,
+  "name" text NOT NULL,
+  "description" text,
+  "sortOrder" integer NOT NULL DEFAULT 0,
+  "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "updatedBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS project_groups_tenant_name_uq
+  ON project_groups ("tenantId", "name");
+CREATE UNIQUE INDEX IF NOT EXISTS project_groups_id_tenant_uq
+  ON project_groups ("id", "tenantId");
+CREATE INDEX IF NOT EXISTS project_groups_tenant_sort_idx
+  ON project_groups ("tenantId", "sortOrder");
+CREATE INDEX IF NOT EXISTS project_groups_created_by_idx
+  ON project_groups ("createdBy");
+CREATE INDEX IF NOT EXISTS project_groups_updated_by_idx
+  ON project_groups ("updatedBy");
+
+COMMENT ON TABLE project_groups IS '工程分组表';
+COMMENT ON COLUMN project_groups."id" IS '分组ID';
+COMMENT ON COLUMN project_groups."tenantId" IS '所属租户ID';
+COMMENT ON COLUMN project_groups."name" IS '分组名称';
+COMMENT ON COLUMN project_groups."description" IS '分组描述';
+COMMENT ON COLUMN project_groups."sortOrder" IS '排序顺序';
+COMMENT ON COLUMN project_groups."createdBy" IS '创建者ID';
+COMMENT ON COLUMN project_groups."updatedBy" IS '更新者ID';
+COMMENT ON COLUMN project_groups."createdAt" IS '创建时间';
+COMMENT ON COLUMN project_groups."updatedAt" IS '更新时间';
+
+CREATE TABLE IF NOT EXISTS project_group_members (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "tenantId" uuid NOT NULL REFERENCES tenants ("id") ON DELETE CASCADE,
+  "projectId" uuid NOT NULL,
+  "groupId" uuid NOT NULL,
+  "createdBy" uuid REFERENCES users ("id") ON DELETE SET NULL,
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT project_group_members_project_tenant_fk
+    FOREIGN KEY ("projectId", "tenantId")
+    REFERENCES projects ("id", "tenantId")
+    ON DELETE CASCADE,
+  CONSTRAINT project_group_members_group_tenant_fk
+    FOREIGN KEY ("groupId", "tenantId")
+    REFERENCES project_groups ("id", "tenantId")
+    ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS project_group_members_project_uq
+  ON project_group_members ("projectId");
+CREATE INDEX IF NOT EXISTS project_group_members_tenant_group_idx
+  ON project_group_members ("tenantId", "groupId");
+CREATE INDEX IF NOT EXISTS project_group_members_project_tenant_idx
+  ON project_group_members ("projectId", "tenantId");
+CREATE INDEX IF NOT EXISTS project_group_members_group_tenant_idx
+  ON project_group_members ("groupId", "tenantId");
+CREATE INDEX IF NOT EXISTS project_group_members_group_idx
+  ON project_group_members ("groupId");
+CREATE INDEX IF NOT EXISTS project_group_members_created_by_idx
+  ON project_group_members ("createdBy");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'project_group_members_project_tenant_fk'
+  ) THEN
+    ALTER TABLE project_group_members
+      ADD CONSTRAINT project_group_members_project_tenant_fk
+      FOREIGN KEY ("projectId", "tenantId")
+      REFERENCES projects ("id", "tenantId")
+      ON DELETE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'project_group_members_group_tenant_fk'
+  ) THEN
+    ALTER TABLE project_group_members
+      ADD CONSTRAINT project_group_members_group_tenant_fk
+      FOREIGN KEY ("groupId", "tenantId")
+      REFERENCES project_groups ("id", "tenantId")
+      ON DELETE CASCADE;
+  END IF;
+END $$;
+
+COMMENT ON TABLE project_group_members IS '工程分组成员表';
+COMMENT ON COLUMN project_group_members."id" IS '成员关系ID';
+COMMENT ON COLUMN project_group_members."tenantId" IS '所属租户ID';
+COMMENT ON COLUMN project_group_members."projectId" IS '工程ID（唯一）';
+COMMENT ON COLUMN project_group_members."groupId" IS '分组ID';
+COMMENT ON COLUMN project_group_members."createdBy" IS '创建者ID';
+COMMENT ON COLUMN project_group_members."createdAt" IS '创建时间';
+COMMENT ON COLUMN project_group_members."updatedAt" IS '更新时间';
+
+-- ============================================
+-- 1.2 运行态授权表
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS project_runtime_users (
