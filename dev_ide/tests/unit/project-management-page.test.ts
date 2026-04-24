@@ -7,6 +7,7 @@ const {
   mockGetProjects,
   mockListProjectTags,
   mockListProjectGroups,
+  mockCreateProjectTag,
   mockCreateProjectGroup,
   mockUpdateProjectGroup,
   mockDeleteProjectGroup,
@@ -29,6 +30,7 @@ const {
   mockGetProjects: vi.fn(),
   mockListProjectTags: vi.fn(),
   mockListProjectGroups: vi.fn(),
+  mockCreateProjectTag: vi.fn(),
   mockCreateProjectGroup: vi.fn(),
   mockUpdateProjectGroup: vi.fn(),
   mockDeleteProjectGroup: vi.fn(),
@@ -69,6 +71,7 @@ vi.mock('@/api/project.api', () => ({
     getProjects: mockGetProjects,
     listProjectTags: mockListProjectTags,
     listProjectGroups: mockListProjectGroups,
+    createProjectTag: mockCreateProjectTag,
     createProjectGroup: mockCreateProjectGroup,
     updateProjectGroup: mockUpdateProjectGroup,
     deleteProjectGroup: mockDeleteProjectGroup,
@@ -123,12 +126,84 @@ vi.mock('@/views/tenant/project-management/ProjectOverviewGrid.vue', () => ({
         type: Array,
         default: () => [],
       },
+      groupCards: {
+        type: Array,
+        default: () => [],
+      },
     },
-    emits: ['open-project', 'selection-change', 'open-runtime-access', 'deploy', 'export', 'delete'],
+    emits: [
+      'open-project',
+      'selection-change',
+      'open-runtime-access',
+      'deploy',
+      'export',
+      'delete',
+      'group-select',
+      'group-add-project',
+      'group-edit',
+      'group-delete',
+      'group-remove-project',
+    ],
     setup(props, { emit, slots }) {
       return () => {
         const project = (props.projects as Array<Record<string, unknown>>)[0]
+        const groupCards = props.groupCards as Array<Record<string, unknown>>
         return h('section', { 'data-testid': 'mock-overview-grid' }, [
+          h('section', { 'data-testid': 'mock-group-cards' }, [
+            h('span', `groups:${groupCards.length}`),
+            groupCards.length > 0
+              ? h(
+                  'button',
+                  {
+                    'data-testid': 'mock-group-select-first',
+                    onClick: () => {
+                      const [group] = groupCards
+                      emit('group-select', { groupId: group.id, groupName: group.name })
+                    },
+                  },
+                  'select-first-group',
+                )
+              : null,
+            groupCards.length > 0
+              ? h(
+                  'button',
+                  {
+                    'data-testid': 'project-group-add-project',
+                    onClick: () => {
+                      const [group] = groupCards
+                      emit('group-add-project', group)
+                    },
+                  },
+                  'add-project',
+                )
+              : null,
+            groupCards.length > 0
+              ? h(
+                  'button',
+                  {
+                    'data-testid': 'project-group-edit-trigger',
+                    onClick: () => {
+                      const [group] = groupCards
+                      emit('group-edit', group)
+                    },
+                  },
+                  'edit-group',
+                )
+              : null,
+            groupCards.length > 0
+              ? h(
+                  'button',
+                  {
+                    'data-testid': 'project-group-remove-project',
+                    onClick: () => {
+                      const [group] = groupCards
+                      emit('group-remove-project', { groupId: group.id, projectId: 'project-1' })
+                    },
+                  },
+                  'remove-project',
+                )
+              : null,
+          ]),
           h('span', project?.name || 'empty-grid'),
           project
             ? h('button', {
@@ -157,13 +232,38 @@ vi.mock('@/views/tenant/project-management/ProjectOverviewTable.vue', () => ({
         type: Array,
         default: () => [],
       },
+      groupCards: {
+        type: Array,
+        default: () => [],
+      },
+      grouped: {
+        type: Boolean,
+        default: true,
+      },
+      showGroupedProjectItems: {
+        type: Boolean,
+        default: true,
+      },
+      showTagColumn: {
+        type: Boolean,
+        default: true,
+      },
     },
     emits: ['open-project', 'selection-change', 'open-runtime-access', 'deploy', 'export', 'delete'],
     setup(props, { emit, slots }) {
       return () => {
         const project = (props.projects as Array<Record<string, unknown>>)[0]
+        const groupCards = props.groupCards as Array<Record<string, unknown>>
         return h('section', { 'data-testid': 'mock-overview-table' }, [
           h('span', project?.name || 'empty-table'),
+          h('span', { 'data-testid': 'mock-table-tag-column-state' }, `tag-column:${props.showTagColumn}`),
+          h('span', { 'data-testid': 'mock-table-group-card-state' }, `groups:${groupCards.length}`),
+          h('span', { 'data-testid': 'mock-table-grouped-state' }, `grouped:${props.grouped}`),
+          h(
+            'span',
+            { 'data-testid': 'mock-table-grouped-items-state' },
+            `show-grouped-items:${props.showGroupedProjectItems}`,
+          ),
           project
             ? h('button', {
                 'data-testid': 'mock-table-open',
@@ -221,6 +321,19 @@ vi.mock('@/views/tenant/project-management/ProjectGroupCards.vue', () => ({
             ? h(
                 'button',
                 {
+                  'data-testid': 'project-group-edit-trigger',
+                  onClick: () => {
+                    const [group] = props.groups as Array<Record<string, unknown>>
+                    emit('edit', group)
+                  },
+                },
+                'edit-group',
+              )
+            : null,
+          (props.groups as Array<Record<string, unknown>>).length > 0
+            ? h(
+                'button',
+                {
                   'data-testid': 'project-group-remove-project',
                   onClick: () => {
                     const [group] = props.groups as Array<Record<string, unknown>>
@@ -259,8 +372,16 @@ vi.mock('@/views/tenant/project-management/ProjectGroupProjectPickerDialog.vue',
         type: String,
         default: '',
       },
+      tagOptions: {
+        type: Array,
+        default: () => [],
+      },
+      loading: {
+        type: Boolean,
+        default: false,
+      },
     },
-    emits: ['update:visible', 'select'],
+    emits: ['update:visible', 'select', 'query-change'],
     setup(props, { emit }) {
       return () => {
         if (!props.visible) {
@@ -282,6 +403,16 @@ vi.mock('@/views/tenant/project-management/ProjectGroupProjectPickerDialog.vue',
               String(project.name || project.id),
             ),
           ),
+          availableProjects.length > 1
+            ? h(
+                'button',
+                {
+                  'data-testid': 'project-group-picker-batch-item',
+                  onClick: () => emit('select', availableProjects.map((project) => project.id)),
+                },
+                'batch-add',
+              )
+            : null,
         ])
       }
     },
@@ -517,8 +648,22 @@ const registerElementStubs = (app: App) => {
   app.component('el-icon', ElIconStub)
   app.component('ElDialog', ElDialogStub)
   app.component('el-dialog', ElDialogStub)
-  app.component('ElPopover', ElementContainerStub)
-  app.component('el-popover', ElementContainerStub)
+  app.component(
+    'ElPopover',
+    defineComponent({
+      setup(_, { slots, attrs }) {
+        return () => h('div', attrs, [slots.reference?.(), slots.default?.()])
+      },
+    }),
+  )
+  app.component(
+    'el-popover',
+    defineComponent({
+      setup(_, { slots, attrs }) {
+        return () => h('div', attrs, [slots.reference?.(), slots.default?.()])
+      },
+    }),
+  )
   app.component('ElScrollbar', ElementContainerStub)
   app.component('el-scrollbar', ElementContainerStub)
   app.component('ElCheckboxGroup', ElementContainerStub)
@@ -559,6 +704,8 @@ const registerElementStubs = (app: App) => {
     'CopyDocument',
     'FolderOpened',
     'Setting',
+    'ArrowRight',
+    'ArrowDown',
   ].forEach((name) => {
     app.component(name, IconGlyphStub)
   })
@@ -626,6 +773,14 @@ const primePageMocks = ({
   })
   mockDeleteProject.mockResolvedValue({})
   mockCreateProjectGroup.mockResolvedValue({})
+  mockCreateProjectTag.mockResolvedValue({
+    code: 0,
+    msg: 'ok',
+    data: {
+      tag: { id: 'tag-new', name: '新标签' },
+    },
+    reqId: 'req-test',
+  })
   mockUpdateProjectGroup.mockResolvedValue({})
   mockDeleteProjectGroup.mockResolvedValue({})
   mockBindProjectGroup.mockResolvedValue({})
@@ -754,6 +909,18 @@ describe('project-management-page', () => {
 
     expect(container.querySelector('[data-testid="mock-overview-table"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="mock-group-cards"]')).toBeNull()
+    expect(container.querySelector('[data-testid="mock-table-tag-column-state"]')?.textContent).toBe(
+      'tag-column:false',
+    )
+    expect(container.querySelector('[data-testid="mock-table-group-card-state"]')?.textContent).toBe(
+      'groups:1',
+    )
+    expect(container.querySelector('[data-testid="mock-table-grouped-state"]')?.textContent).toBe(
+      'grouped:true',
+    )
+    expect(container.querySelector('[data-testid="mock-table-grouped-items-state"]')?.textContent).toBe(
+      'show-grouped-items:false',
+    )
 
     const deployButton = container.querySelector('[data-testid="project-deploy-action"]') as HTMLButtonElement
     deployButton.click()
@@ -834,6 +1001,84 @@ describe('project-management-page', () => {
 
     expect(mockCreateProjectGroup).toHaveBeenCalledWith({ name: '新分组' })
     expect(mockListProjectGroups.mock.calls.length).toBeGreaterThan(callsAfterMount)
+  })
+
+  test('点击分组编辑先打开编辑弹窗，保存后才提交更新', async () => {
+    primePageMocks()
+    const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => {
+      throw new Error('不应调用 prompt')
+    })
+
+    try {
+      const { container } = await mountPage()
+      const manageButton = container.querySelector(
+        '[data-testid="project-group-manage-trigger"]',
+      ) as HTMLButtonElement
+      manageButton.click()
+      await nextTick()
+
+      const editButton = container.querySelector(
+        '[data-testid="project-group-edit-trigger"]',
+      ) as HTMLButtonElement
+      editButton.click()
+      await nextTick()
+
+      expect(promptSpy).not.toHaveBeenCalled()
+      expect(mockUpdateProjectGroup).not.toHaveBeenCalled()
+      expect(container.textContent || '').toContain('编辑分组')
+
+      const input = container.querySelector(
+        '[data-testid="project-group-edit-dialog-name-input"]',
+      ) as HTMLInputElement
+      input.value = '重点分组改名'
+      input.dispatchEvent(new Event('input'))
+      await nextTick()
+
+      const saveButton = container.querySelector(
+        '[data-testid="project-group-edit-dialog-save"]',
+      ) as HTMLButtonElement
+      saveButton.click()
+      await flushPromises()
+
+      expect(promptSpy).not.toHaveBeenCalled()
+      expect(mockUpdateProjectGroup).toHaveBeenCalledWith('group-a', { name: '重点分组改名' })
+    } finally {
+      promptSpy.mockRestore()
+    }
+  })
+
+  test('标签弹窗可创建新标签并自动加入当前工程标签绑定', async () => {
+    primePageMocks()
+    const { container } = await mountPage()
+
+    const tagButton = container.querySelector(
+      '[data-testid="project-edit-tags-action"]',
+    ) as HTMLButtonElement
+    tagButton.click()
+    await nextTick()
+
+    const tagInput = container.querySelector('[data-testid="project-tag-name-input"]') as HTMLInputElement
+    tagInput.value = '新标签'
+    tagInput.dispatchEvent(new Event('input'))
+    await nextTick()
+
+    const createTagButton = container.querySelector(
+      '[data-testid="project-tag-create-trigger"]',
+    ) as HTMLButtonElement
+    createTagButton.click()
+    await flushPromises()
+
+    expect(mockCreateProjectTag).toHaveBeenCalledWith({ name: '新标签' })
+
+    const saveButton = [...container.querySelectorAll('button')].find((button) =>
+      (button.textContent || '').includes('保存'),
+    ) as HTMLButtonElement
+    saveButton.click()
+    await flushPromises()
+
+    expect(mockBindProjectTags).toHaveBeenCalledWith('project-1', {
+      tagIds: ['tag-new'],
+    })
   })
 
   test('创建分组成功后刷新分组列表失败只记录警告不覆盖成功提示', async () => {
@@ -917,6 +1162,16 @@ describe('project-management-page', () => {
       expect.objectContaining({
         groupId: 'group-a',
       }),
+    )
+
+    const listViewButton = container.querySelector('[data-testid="overview-view-list"]') as HTMLButtonElement
+    listViewButton.click()
+    await nextTick()
+    expect(container.querySelector('[data-testid="mock-table-group-card-state"]')?.textContent).toBe(
+      'groups:0',
+    )
+    expect(container.querySelector('[data-testid="mock-table-grouped-state"]')?.textContent).toBe(
+      'grouped:false',
     )
 
     const breadcrumbAllButton = container.querySelector(
@@ -1030,7 +1285,7 @@ describe('project-management-page', () => {
     )
     const pickerQuery = mockGetProjects.mock.calls
       .map((call) => call[0] as Record<string, unknown>)
-      .find((query) => query?.limit === 1000 && !Object.prototype.hasOwnProperty.call(query, 'groupId'))
+      .find((query) => query?.limit === 100 && !Object.prototype.hasOwnProperty.call(query, 'groupId'))
     expect(pickerQuery).toBeDefined()
 
     const pickerItem = container.querySelector(
@@ -1041,5 +1296,91 @@ describe('project-management-page', () => {
 
     expect(mockBindProjectGroup).toHaveBeenCalledWith('project-2', { groupId: 'group-a' })
     expect(mockMessageSuccess).toHaveBeenCalledWith('工程已添加到分组')
+  })
+
+  test('添加工程弹窗多选提交时会逐个绑定到当前分组', async () => {
+    primePageMocks()
+    mockGetProjects.mockImplementation((params: Record<string, unknown> = {}) => {
+      const projects = params.groupId
+        ? [
+            {
+              id: 'project-1',
+              name: '示例工程',
+              runtimeSummary: {
+                deploymentCount: 1,
+              },
+              tags: [],
+              group: {
+                id: 'group-a',
+                name: '重点分组',
+              },
+            },
+          ]
+        : [
+            {
+              id: 'project-1',
+              name: '示例工程',
+              runtimeSummary: {
+                deploymentCount: 1,
+              },
+              tags: [],
+              group: {
+                id: 'group-a',
+                name: '重点分组',
+              },
+            },
+            {
+              id: 'project-2',
+              name: '候选工程 A',
+              runtimeSummary: {
+                deploymentCount: 0,
+              },
+              tags: [],
+              group: null,
+            },
+            {
+              id: 'project-3',
+              name: '候选工程 B',
+              runtimeSummary: {
+                deploymentCount: 0,
+              },
+              tags: [],
+              group: null,
+            },
+          ]
+
+      return Promise.resolve({
+        code: 0,
+        msg: 'ok',
+        data: {
+          list: {
+            projects,
+          },
+          pagination: {
+            total: projects.length,
+            page: 1,
+            limit: 10,
+            totalPages: 1,
+          },
+        },
+      })
+    })
+    const { container } = await mountPage()
+
+    const addButton = container.querySelector(
+      '[data-testid="project-group-add-project"]',
+    ) as HTMLButtonElement
+    addButton.click()
+    await flushPromises()
+
+    const batchButton = container.querySelector(
+      '[data-testid="project-group-picker-batch-item"]',
+    ) as HTMLButtonElement
+    batchButton.click()
+    await flushPromises()
+
+    expect(mockBindProjectGroup).toHaveBeenCalledWith('project-2', { groupId: 'group-a' })
+    expect(mockBindProjectGroup).toHaveBeenCalledWith('project-3', { groupId: 'group-a' })
+    expect(mockMessageSuccess).toHaveBeenCalledWith('已添加 2 个工程到分组')
   })
 })

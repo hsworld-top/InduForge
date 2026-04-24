@@ -1,4 +1,6 @@
 const Joi = require('joi');
+const ErrorCodes = require('../constants/errorCodes');
+const ApiResponse = require('../utils/response');
 
 function validate(schema) {
   return (req, res, next) => {
@@ -14,12 +16,7 @@ function validate(schema) {
     };
     const { error, value } = schema.validate(toValidate, options);
     if (error) {
-      const details = error.details.map(d => ({ message: d.message, path: d.path }));
-      return res.status(400).json({
-        success: false,
-        error: { message: 'Validation failed', details },
-        requestId: req.requestId
-      });
+      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: 'Validation failed' }, 400);
     }
     req.params = value.params || req.params;
     req.query = value.query || req.query;

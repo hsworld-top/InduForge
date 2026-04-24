@@ -11,6 +11,7 @@ jest.mock('../../models', () => ({
   ProjectGroupMember: {},
   ProjectGroup: {},
   NodeDeployment: {},
+  Node: {},
 }));
 
 jest.mock('../../config/app', () => ({
@@ -24,7 +25,10 @@ jest.mock('../../config/app', () => ({
 const { listProjectOverviews } = require('../projectOverviewService');
 
 const makeProjectModel = (payload) => ({
-  toOverviewPayload: jest.fn(() => payload),
+  toOverviewPayload: jest.fn(() => ({
+    visibility: 'internal',
+    ...payload,
+  })),
 });
 
 describe('projectOverviewService', () => {
@@ -52,6 +56,13 @@ describe('projectOverviewService', () => {
           id: 'nd-1',
           status: 'running',
           mode: 'RELEASE',
+          nodeId: 'node-1',
+          node: {
+            id: 'node-1',
+            name: '边缘节点-1',
+            ipAddress: '10.0.0.1',
+            status: 'online',
+          },
           deployedAt: '2026-04-20T08:00:00.000Z',
           updatedAt: '2026-04-20T08:00:00.000Z',
         },
@@ -90,9 +101,20 @@ describe('projectOverviewService', () => {
         lastDeployedAt: '2026-04-20T08:00:00.000Z',
         runtimeSummary: expect.objectContaining({
           runtimeStatus: 'RUNNING',
+          runtimeMode: 'RELEASE',
           deploymentCount: 2,
           runningCount: 1,
           modeCounts: { DEV: 1, RELEASE: 1 },
+          nodes: [
+            {
+              id: 'node-1',
+              name: '边缘节点-1',
+              ipAddress: '10.0.0.1',
+              nodeStatus: 'online',
+              deployStatus: 'running',
+              mode: 'RELEASE',
+            },
+          ],
         }),
       }),
     );
@@ -236,5 +258,68 @@ describe('projectOverviewService', () => {
 
     expect(result.projects).toHaveLength(1);
     expect(result.projects[0].id).toBe('project-uuid-match');
+  });
+
+  test('私有工程仅创建者可见，共享工程对工程管理角色可见', async () => {
+    const privateProject = makeProjectModel({
+      id: 'project-private',
+      name: '私有工程',
+      createdBy: 'creator-1',
+      visibility: 'private',
+      nodeDeployments: [],
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-01T00:00:00.000Z',
+    });
+    const sharedProject = makeProjectModel({
+      id: 'project-shared',
+      name: '共享工程',
+      createdBy: 'creator-2',
+      visibility: 'internal',
+      nodeDeployments: [],
+      createdAt: '2026-04-02T00:00:00.000Z',
+      updatedAt: '2026-04-02T00:00:00.000Z',
+    });
+    mockProjectFindAll.mockResolvedValue([privateProject, sharedProject]);
+
+    const result = await listProjectOverviews({
+      req: { user: { id: 'creator-1', role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
+      query: { sortBy: 'createdAt', sortOrder: 'ASC' },
+    });
+
+    expect(result.projects.map((item) => item.id)).toEqual(['project-private', 'project-shared']);
+
+    const otherUserResult = await listProjectOverviews({
+      req: { user: { id: 'other-user', role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
+      query: { sortBy: 'createdAt', sortOrder: 'ASC' },
+    });
+
+    expect(otherUserResult.projects.map((item) => item.id)).toEqual(['project-shared']);
+  });
+
+  test('未部署工程默认返回开发运行模式，避免前端把运行模式显示为未部署', async () => {
+    const project = makeProjectModel({
+      id: 'project-not-deployed',
+      name: '未部署工程',
+      createdBy: 'creator-1',
+      nodeDeployments: [],
+      deployments: [],
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-01T00:00:00.000Z',
+    });
+    mockProjectFindAll.mockResolvedValue([project]);
+
+    const result = await listProjectOverviews({
+      req: { user: { id: 'creator-1', role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
+      query: { runtimeMode: 'DEV' },
+    });
+
+    expect(result.projects).toHaveLength(1);
+    expect(result.projects[0].runtimeSummary).toEqual(
+      expect.objectContaining({
+        runtimeStatus: 'NOT_DEPLOYED',
+        runtimeMode: 'DEV',
+        deploymentCount: 0,
+      }),
+    );
   });
 });

@@ -60,7 +60,14 @@
         :deploy-status-options="deployStatusOptions"
       />
 
-      <ProjectTagFilterPopover v-model="tagIdsModel" :options="tagOptions" />
+      <ProjectTagFilterPopover
+        v-model="tagIdsModel"
+        :options="tagOptions"
+        :deletable="canManageProjects"
+        :max-selected="tagMaxSelected"
+        @delete-tag="emit('delete-tag', $event)"
+        @limit="emit('tag-limit', $event)"
+      />
 
       <!-- 排序字段：pill 按钮 + popover 菜单 -->
       <el-popover
@@ -75,7 +82,6 @@
             data-testid="overview-sort-field"
           >
             <span>{{ currentSortFieldLabel }}</span>
-            <el-icon class="text-[10px] ml-1"><ArrowDown /></el-icon>
           </button>
         </template>
         <div class="sort-popover-menu">
@@ -99,11 +105,11 @@
         data-testid="overview-sort-order"
         @click="toggleSortOrder"
       >
-        <span>{{ currentSortOrderLabel }}</span>
-        <el-icon class="text-[10px] ml-1">
+        <el-icon class="project-overview-toolbar__sort-icon">
           <SortDown v-if="sortOrderModel === 'DESC'" />
           <SortUp v-else />
         </el-icon>
+        <span>{{ currentSortOrderLabel }}</span>
       </button>
     </div>
 
@@ -117,7 +123,7 @@
             class="project-overview-toolbar__icon-button text-emerald-600 dark:text-emerald-300"
             @click="emit('batch-export')"
           >
-            <el-icon><Download /></el-icon>
+            <el-icon><Upload /></el-icon>
           </button>
         </el-tooltip>
         <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.batchDelete')" placement="top">
@@ -174,7 +180,7 @@
           class="project-overview-toolbar__icon-button"
           @click="emit('import-project')"
         >
-          <el-icon><Upload /></el-icon>
+          <el-icon><Download /></el-icon>
         </button>
       </el-tooltip>
       <el-tooltip :content="t('projectManagement.settings')" placement="top">
@@ -260,6 +266,7 @@ const props = withDefaults(
     canManageProjects?: boolean
     canExportProjects?: boolean
     canDeleteProjects?: boolean
+    tagMaxSelected?: number
   }>(),
   {
     search: '',
@@ -270,6 +277,7 @@ const props = withDefaults(
     compositeFilters: () => ({
       runtimeModes: [],
       deployStatuses: [],
+      visibility: [],
       createdBy: '',
     }),
     tagIds: () => [],
@@ -282,6 +290,7 @@ const props = withDefaults(
     canManageProjects: true,
     canExportProjects: true,
     canDeleteProjects: true,
+    tagMaxSelected: 10,
   },
 )
 
@@ -299,6 +308,8 @@ const emit = defineEmits<{
   (event: 'batch-export'): void
   (event: 'batch-delete'): void
   (event: 'open-settings'): void
+  (event: 'delete-tag', value: ProjectOverviewTag): void
+  (event: 'tag-limit', value: number): void
 }>()
 
 const { t } = useI18n()
@@ -625,6 +636,11 @@ html.dark .project-overview-toolbar :deep(.el-button:hover),
 .project-overview-toolbar__pill-btn:hover {
   background: rgba(0, 0, 0, 0.08);
   color: var(--ck-text-primary);
+}
+
+.project-overview-toolbar__sort-icon {
+  margin-right: 2px;
+  font-size: 14px;
 }
 
 html.dark .project-overview-toolbar__pill-btn,

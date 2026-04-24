@@ -1,88 +1,75 @@
 <template>
-  <el-popover
-    v-model:visible="visible"
-    placement="bottom-start"
-    :width="320"
-    trigger="click"
-    :disabled="disabled"
-    @update:visible="handleVisibleChange"
-  >
-    <template #reference>
-      <el-button
-        size="small"
-        :disabled="disabled"
-        class="!h-8 !px-3"
-        data-testid="overview-tag-filter"
-      >
-        <el-icon><CollectionTag /></el-icon>
-        <span>{{ triggerLabel }}</span>
-      </el-button>
-    </template>
+  <div ref="rootRef" class="project-tag-filter">
+    <button
+      type="button"
+      :disabled="disabled"
+      class="project-tag-filter__trigger"
+      :class="{ 'is-active': visible || selectedIdSet.size > 0 }"
+      data-testid="overview-tag-filter"
+      @click.stop="toggleVisible"
+    >
+      <el-icon><CollectionTag /></el-icon>
+      <span>{{ triggerLabel }}</span>
+    </button>
 
-    <div class="space-y-3">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ label }}</span>
-        <el-button
-          text
-          size="small"
-          :disabled="draftSelection.length === 0"
-          @click="handleClear"
-        >
-          {{ t('projectManagement.clear') }}
-        </el-button>
-      </div>
-
-      <el-input
-        v-if="searchable"
-        v-model="keyword"
-        size="small"
-        clearable
-        :placeholder="resolvedPlaceholder"
+    <Transition name="project-tag-filter">
+      <div
+        v-if="visible && !disabled"
+        class="project-tag-filter__panel"
+        @click.stop
       >
-        <template #prefix>
+        <div v-if="searchable" class="project-tag-filter__search">
           <el-icon><Search /></el-icon>
-        </template>
-      </el-input>
+          <input
+            v-model="keyword"
+            type="text"
+            :placeholder="resolvedPlaceholder"
+          />
+        </div>
 
-      <el-scrollbar max-height="220px">
-        <el-checkbox-group v-model="draftSelection" class="flex flex-col gap-2">
-          <el-checkbox
+        <div class="project-tag-filter__list">
+          <label
             v-for="tag in filteredOptions"
             :key="tag.id"
-            :label="tag.id"
-            class="!h-auto !mr-0"
+            class="project-tag-filter__item"
           >
-            <div class="flex flex-col">
-              <span class="text-sm text-gray-700 dark:text-gray-200">{{ tag.name }}</span>
-              <span
-                v-if="tag.description"
-                class="text-xs text-gray-400 dark:text-gray-500 leading-4 mt-0.5"
-              >
-                {{ tag.description }}
-              </span>
-            </div>
-          </el-checkbox>
-        </el-checkbox-group>
-      </el-scrollbar>
+            <input
+              type="checkbox"
+              :checked="selectedIdSet.has(tag.id)"
+              @change="toggleTag(tag.id)"
+            />
+            <span class="project-tag-filter__name">{{ tag.name }}</span>
+            <button
+              v-if="deletable"
+              type="button"
+              class="project-tag-filter__delete"
+              :aria-label="`${t('projectManagement.deleteTag')} ${tag.name}`"
+              @click.stop.prevent="requestDeleteTag(tag)"
+            >
+              <el-icon><Delete /></el-icon>
+            </button>
+          </label>
+        </div>
 
-      <p
-        v-if="filteredOptions.length === 0"
-        class="text-xs text-gray-400 dark:text-gray-500 text-center py-2"
-      >
-        {{ t('projectManagement.noTagOptions') }}
-      </p>
+        <p
+          v-if="filteredOptions.length === 0"
+          class="project-tag-filter__empty"
+        >
+          {{ t('projectManagement.noTagOptions') }}
+        </p>
 
-      <div class="flex items-center justify-end gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
-        <el-button size="small" @click="handleCancel">{{ t('common.cancel') }}</el-button>
-        <el-button size="small" type="primary" @click="handleConfirm">{{ t('common.confirm') }}</el-button>
+        <label class="project-tag-filter__group-row">
+          <input v-model="groupByTags" type="checkbox" />
+          <span>{{ t('projectManagement.groupByTag') }}</span>
+        </label>
       </div>
-    </div>
-  </el-popover>
+    </Transition>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { CollectionTag, Search } from '@element-plus/icons-vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { CollectionTag, Delete, Search } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import type { ProjectOverviewTag } from './project-overview.types'
 
@@ -97,6 +84,8 @@ const props = withDefaults(
     placeholder?: string
     searchable?: boolean
     disabled?: boolean
+    deletable?: boolean
+    maxSelected?: number
   }>(),
   {
     modelValue: () => [],
@@ -105,6 +94,8 @@ const props = withDefaults(
     placeholder: '',
     searchable: true,
     disabled: false,
+    deletable: false,
+    maxSelected: 10,
   },
 )
 
@@ -113,12 +104,14 @@ const { t } = useI18n()
 const emit = defineEmits<{
   (event: 'update:modelValue', value: string[]): void
   (event: 'change', value: string[]): void
+  (event: 'delete-tag', value: TagOption): void
+  (event: 'limit', value: number): void
 }>()
 
 const visible = ref(false)
 const keyword = ref('')
-const draftSelection = ref<string[]>([])
-const committedSelection = ref<string[]>([])
+const groupByTags = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
 
 const sortedOptions = computed<TagOption[]>(() =>
   [...props.options].sort((left, right) => {
@@ -158,26 +151,7 @@ const normalizeSelection = (selection: string[]) => [
   ...new Set(selection.map((item) => item.trim()).filter(Boolean)),
 ]
 
-const syncCommittedFromModel = () => {
-  committedSelection.value = normalizeSelection(props.modelValue)
-}
-
-const syncDraftFromCommitted = () => {
-  draftSelection.value = [...committedSelection.value]
-}
-
-const handleVisibleChange = (nextVisible: boolean) => {
-  visible.value = nextVisible
-  if (nextVisible) {
-    syncCommittedFromModel()
-    syncDraftFromCommitted()
-    keyword.value = ''
-    return
-  }
-
-  syncDraftFromCommitted()
-  keyword.value = ''
-}
+const selectedIdSet = computed(() => new Set(normalizeSelection(props.modelValue)))
 
 const commitSelection = (selection: string[]) => {
   const normalized = normalizeSelection(selection)
@@ -185,31 +159,234 @@ const commitSelection = (selection: string[]) => {
   emit('change', normalized)
 }
 
-const handleConfirm = () => {
-  const normalized = normalizeSelection(draftSelection.value)
-  committedSelection.value = normalized
-  commitSelection(normalized)
-  visible.value = false
+const toggleVisible = () => {
+  if (props.disabled) {
+    return
+  }
+  visible.value = !visible.value
+  if (visible.value) {
+    keyword.value = ''
+  }
 }
 
-const handleCancel = () => {
-  syncDraftFromCommitted()
-  keyword.value = ''
-  visible.value = false
+const toggleTag = (tagId: string) => {
+  const next = new Set(selectedIdSet.value)
+  if (next.has(tagId)) {
+    next.delete(tagId)
+  } else {
+    if (props.maxSelected > 0 && next.size >= props.maxSelected) {
+      emit('limit', props.maxSelected)
+      return
+    }
+    next.add(tagId)
+  }
+  commitSelection([...next])
 }
 
-const handleClear = () => {
-  draftSelection.value = []
+const requestDeleteTag = (tag: TagOption) => {
+  emit('delete-tag', tag)
+}
+
+const handleDocumentClick = (event: MouseEvent) => {
+  if (!visible.value) {
+    return
+  }
+  const target = event.target as Node | null
+  if (target && rootRef.value?.contains(target)) {
+    return
+  }
+  visible.value = false
 }
 
 watch(
-  () => props.modelValue,
+  () => visible.value,
   () => {
-    if (!visible.value) {
-      syncCommittedFromModel()
-      syncDraftFromCommitted()
+    if (visible.value) {
+      document.addEventListener('click', handleDocumentClick)
+    } else {
+      document.removeEventListener('click', handleDocumentClick)
     }
   },
-  { deep: true, immediate: true },
 )
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
+})
 </script>
+
+<style scoped>
+.project-tag-filter {
+  position: relative;
+  display: inline-flex;
+}
+
+.project-tag-filter__trigger {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 0 12px;
+  color: var(--ck-text-secondary);
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 400;
+  transition: all 0.2s ease;
+}
+
+.project-tag-filter__trigger:hover,
+.project-tag-filter__trigger.is-active {
+  border-color: transparent;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--ck-text-primary);
+  box-shadow: none;
+}
+
+.project-tag-filter__trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.project-tag-filter__panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 80;
+  width: 280px;
+  border: 1px solid #d9e0e8;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+  padding: 12px 14px;
+}
+
+.project-tag-filter__search {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 9px;
+  color: #94a3b8;
+}
+
+.project-tag-filter__search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: #334155;
+  font-size: 13px;
+}
+
+.project-tag-filter__list {
+  display: flex;
+  max-height: 220px;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.project-tag-filter__item,
+.project-tag-filter__group-row {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 12px;
+  color: #475569;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.project-tag-filter__item input,
+.project-tag-filter__group-row input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--el-color-primary);
+}
+
+.project-tag-filter__name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-tag-filter__delete {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.project-tag-filter__delete:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.project-tag-filter__empty {
+  margin: 8px 0;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: center;
+}
+
+.project-tag-filter__group-row {
+  margin-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+  font-size: 14px;
+}
+
+.project-tag-filter-enter-active,
+.project-tag-filter-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.project-tag-filter-enter-from,
+.project-tag-filter-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+html.dark .project-tag-filter__trigger,
+[data-theme='dark'] .project-tag-filter__trigger {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ck-text-secondary);
+}
+
+html.dark .project-tag-filter__trigger:hover,
+html.dark .project-tag-filter__trigger.is-active,
+[data-theme='dark'] .project-tag-filter__trigger:hover,
+[data-theme='dark'] .project-tag-filter__trigger.is-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ck-text-primary);
+}
+
+html.dark .project-tag-filter__panel,
+[data-theme='dark'] .project-tag-filter__panel {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #1e293b;
+}
+
+html.dark .project-tag-filter__item,
+html.dark .project-tag-filter__group-row,
+[data-theme='dark'] .project-tag-filter__item,
+[data-theme='dark'] .project-tag-filter__group-row {
+  color: #cbd5e1;
+}
+</style>

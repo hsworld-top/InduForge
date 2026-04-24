@@ -3,6 +3,7 @@ import type {
   ProjectOverviewSortField,
   ProjectOverviewSortOrder,
   ProjectRuntimeMode,
+  ProjectVisibility,
 } from '@/api/project.api'
 import type {
   ProjectOverviewFiltersState,
@@ -23,6 +24,7 @@ const SORT_FIELD_SET = new Set<ProjectOverviewSortField>([
   'runtimeStatus',
 ])
 const RUNTIME_MODE_SET = new Set<ProjectRuntimeMode>(['DEV', 'RELEASE'])
+const VISIBILITY_SET = new Set<ProjectVisibility>(['private', 'internal'])
 const DEPLOY_STATUS_SET = new Set<ProjectDeployStatus>([
   'pending',
   'deploying',
@@ -85,11 +87,20 @@ const normalizeDeployStatuses = (values: unknown): ProjectDeployStatus[] => {
   return [...new Set(normalized)]
 }
 
+const normalizeVisibility = (values: unknown): ProjectVisibility[] => {
+  const normalized = uniqueStringList(values)
+    .map((item) => item.toLowerCase())
+    .filter((item): item is ProjectVisibility => VISIBILITY_SET.has(item as ProjectVisibility))
+
+  return [...new Set(normalized)]
+}
+
 export const createDefaultProjectOverviewFilters = (): ProjectOverviewFiltersState => ({
   search: '',
   composite: {
     runtimeModes: [],
     deployStatuses: [],
+    visibility: [],
     createdBy: '',
   },
   tagIds: [],
@@ -119,6 +130,7 @@ export const normalizeProjectOverviewFilters = (
     composite: {
       runtimeModes: normalizeRuntimeModes(composite.runtimeModes),
       deployStatuses: normalizeDeployStatuses(composite.deployStatuses),
+      visibility: normalizeVisibility(composite.visibility),
       createdBy: normalizeTextValue(composite.createdBy),
     },
     tagIds: uniqueStringList(candidate.tagIds),
@@ -162,6 +174,10 @@ export const buildProjectOverviewQueryParams = ({
 
   if (normalizedFilters.composite.deployStatuses.length > 0) {
     query.deployStatus = normalizedFilters.composite.deployStatuses
+  }
+
+  if (normalizedFilters.composite.visibility.length > 0) {
+    query.visibility = normalizedFilters.composite.visibility
   }
 
   if (normalizedFilters.composite.createdBy) {

@@ -129,6 +129,8 @@ export const resolveProjectStatusMetric = (status: unknown): ProjectStatusMetric
       return { labelKey: 'projectManagement.deployStatusRollback', percent: 28, level: 'bad' }
     case 'error':
       return { labelKey: 'projectManagement.deployStatusError', percent: 20, level: 'bad' }
+    case 'not_deployed':
+      return { labelKey: 'projectManagement.notDeployed', percent: 0, level: 'muted' }
     default:
       return { labelKey: 'projectManagement.deployStatusUnknown', percent: 0, level: 'muted' }
   }

@@ -50,6 +50,17 @@ const EMPTY_MODE_COUNTS = {
   RELEASE: 0,
 }
 
+const normalizeRuntimeModeValue = (value: unknown): 'DEV' | 'RELEASE' | '' => {
+  const normalized = normalizeTextValue(value).toUpperCase()
+  if (normalized === 'DEV' || normalized === 'DEVELOPMENT') {
+    return 'DEV'
+  }
+  if (normalized === 'RELEASE' || normalized === 'PROD' || normalized === 'PRODUCTION') {
+    return 'RELEASE'
+  }
+  return ''
+}
+
 const normalizeTextValue = (value: unknown): string => {
   if (typeof value === 'string') {
     return value.trim()
@@ -158,9 +169,11 @@ const normalizeRuntimeSummary = (value: unknown): ProjectOverviewRuntimeSummary 
   const record = asRecord(value)
   const statusCounts = asRecord(record.statusCounts)
   const modeCounts = asRecord(record.modeCounts)
+  const runtimeMode = normalizeRuntimeModeValue(record.runtimeMode) || 'DEV'
 
   return {
     runtimeStatus: normalizeTextValue(record.runtimeStatus) || 'UNKNOWN',
+    runtimeMode,
     deploymentCount: toNonNegativeInteger(record.deploymentCount, 0),
     runningCount: toNonNegativeInteger(record.runningCount, 0),
     statusCounts: {

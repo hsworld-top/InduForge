@@ -3,7 +3,7 @@
     v-model="dialogVisible"
     :title="t('projectManagement.groupManagement')"
     width="520px"
-    :close-on-click-modal="false"
+    :close-on-click-modal="true"
     class="project-group-manage-dialog"
   >
     <div class="project-group-manager">
@@ -38,7 +38,12 @@
             </div>
           </div>
           <div class="project-group-manager__actions">
-            <el-button text size="small" @click="emit('edit', group)">
+            <el-button
+              text
+              size="small"
+              data-testid="project-group-edit-trigger"
+              @click="emit('edit', group)"
+            >
               {{ t('projectManagement.editGroup') }}
             </el-button>
             <el-button text size="small" type="danger" @click="emit('delete', group)">
@@ -180,6 +185,7 @@ watch(
 }
 
 .project-group-manager__item-main {
+  flex: 1;
   min-width: 0;
 }
 

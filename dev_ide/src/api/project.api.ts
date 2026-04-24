@@ -16,6 +16,7 @@ export type ProjectDeployStatus =
   | 'stopped'
   | 'error'
   | 'rollback'
+export type ProjectVisibility = 'private' | 'internal'
 
 export type ProjectListQueryParams = QueryParams & {
   page?: number
@@ -28,6 +29,7 @@ export type ProjectListQueryParams = QueryParams & {
   tags?: string | string[]
   runtimeMode?: ProjectRuntimeMode | ProjectRuntimeMode[]
   deployStatus?: ProjectDeployStatus | ProjectDeployStatus[]
+  visibility?: ProjectVisibility | ProjectVisibility[]
   createdBy?: string
   createdByName?: string
   sortBy?: ProjectOverviewSortField
@@ -64,6 +66,12 @@ export type ProjectGroupBindingPayload = {
   groupId: string | null
 }
 
+export type ProjectUpdatePayload = {
+  name?: string
+  description?: string
+  visibility?: ProjectVisibility
+}
+
 /**
  * 工程管理 API
  */
@@ -79,7 +87,12 @@ export const projectAPI = {
    * @returns {Promise} 工程列表
    */
   getProjects(params: ProjectListQueryParams = {}) {
-    return request.get('/projects', { params })
+    return request.get('/projects', {
+      params,
+      paramsSerializer: {
+        indexes: null,
+      },
+    })
   },
 
   /**
@@ -199,7 +212,7 @@ export const projectAPI = {
    * @param {string} projectData.colorTag - 颜色标签
    * @returns {Promise} 更新结果
    */
-  updateProject(id: ApiId, projectData: Record<string, unknown>) {
+  updateProject(id: ApiId, projectData: ProjectUpdatePayload & Record<string, unknown>) {
     return request.put(`/projects/${id}`, projectData)
   },
 

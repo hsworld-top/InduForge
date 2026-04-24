@@ -4,6 +4,7 @@ import type {
   ProjectOverviewSortField,
   ProjectOverviewSortOrder,
   ProjectRuntimeMode,
+  ProjectVisibility,
 } from '@/api/project.api'
 
 export type ProjectOverviewViewMode = 'card' | 'list'
@@ -55,12 +56,23 @@ export interface ProjectOverviewRuntimeModeCounts {
   RELEASE: number
 }
 
+export interface ProjectOverviewRuntimeNode {
+  id: string
+  name: string
+  ipAddress?: string | null
+  nodeStatus?: string | null
+  deployStatus?: string | null
+  mode?: string | null
+}
+
 export interface ProjectOverviewRuntimeSummary {
   runtimeStatus: string
+  runtimeMode?: ProjectRuntimeMode | string | null
   deploymentCount: number
   runningCount: number
   statusCounts: ProjectOverviewRuntimeStatusCounts
   modeCounts: ProjectOverviewRuntimeModeCounts
+  nodes?: ProjectOverviewRuntimeNode[]
   lastDeployedAt: string | null
 }
 
@@ -69,6 +81,7 @@ export interface ProjectOverviewItem {
   name: string
   description?: string | null
   colorTag?: string | null
+  visibility?: ProjectVisibility | string | null
   createdBy?: string
   updatedBy?: string
   createdByName?: string | null
@@ -85,6 +98,7 @@ export interface ProjectOverviewItem {
 export interface ProjectOverviewCompositeFilters {
   runtimeModes: ProjectRuntimeMode[]
   deployStatuses: ProjectDeployStatus[]
+  visibility: ProjectVisibility[]
   createdBy: string
 }
 

@@ -14,6 +14,7 @@ const mockProject = {
   sequelize: {
     transaction: jest.fn(async (callback) => callback(mockTransaction)),
   },
+  findAll: jest.fn(),
   findByPk: jest.fn(),
   create: jest.fn(),
 };
@@ -21,6 +22,7 @@ const mockProject = {
 const mockProjectTag = {
   findAll: jest.fn(),
   findOne: jest.fn(),
+  count: jest.fn(),
   create: jest.fn(),
 };
 
@@ -38,6 +40,7 @@ const mockProjectGroup = {
 const mockProjectGroupMember = {
   destroy: jest.fn(),
   findAll: jest.fn(),
+  create: jest.fn(),
   upsert: jest.fn(),
 };
 
@@ -131,7 +134,9 @@ describe('project tags/groups router', () => {
       fullName: '工程管理员',
     });
     mockProject.sequelize.transaction.mockImplementation(async (callback) => callback(mockTransaction));
+    mockProject.findAll.mockResolvedValue([]);
     mockProjectTag.findAll.mockResolvedValue([]);
+    mockProjectTag.count.mockResolvedValue(0);
     mockProjectGroup.findAll.mockResolvedValue([]);
     mockProjectGroupMember.findAll.mockResolvedValue([]);
   });
@@ -147,7 +152,15 @@ describe('project tags/groups router', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.data.tags).toEqual([
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        code: 0,
+        msg: expect.any(String),
+        reqId: 'req-route-test',
+      }),
+    );
+    expect(response.body.data).not.toHaveProperty('tags');
+    expect(response.body.data.list.tags).toEqual([
       expect.objectContaining({ id: 'tag-1', name: '核心' }),
       expect.objectContaining({ id: 'tag-2', name: '生产' }),
     ]);
@@ -169,12 +182,24 @@ describe('project tags/groups router', () => {
       { groupId: 'group-1', projectId: 'project-1' },
       { groupId: 'group-1', projectId: 'project-2' },
     ]);
+    mockProject.findAll.mockResolvedValue([
+      { id: 'project-1', createdBy: 'other-user', visibility: 'internal' },
+      { id: 'project-2', createdBy: 'other-user', visibility: 'private' },
+    ]);
 
     const response = await invokeRoute(router, '/groups', 'get');
 
     expect(response.status).toBe(200);
-    expect(response.body.data.groups).toEqual([
-      expect.objectContaining({ id: 'group-1', name: '重点项目', projectCount: 2 }),
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        code: 0,
+        msg: expect.any(String),
+        reqId: 'req-route-test',
+      }),
+    );
+    expect(response.body.data).not.toHaveProperty('groups');
+    expect(response.body.data.list.groups).toEqual([
+      expect.objectContaining({ id: 'group-1', name: '重点项目', projectCount: 1 }),
     ]);
     expect(mockProjectGroup.findAll).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -188,6 +213,15 @@ describe('project tags/groups router', () => {
           groupId: expect.any(Object),
         }),
         attributes: ['groupId', 'projectId'],
+      }),
+    );
+    expect(mockProject.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId: 'tenant-1',
+          id: expect.any(Object),
+        }),
+        attributes: ['id', 'createdBy', 'visibility'],
       }),
     );
   });
@@ -326,6 +360,49 @@ describe('project tags/groups router', () => {
     expect(mockProjectGroupMember.destroy).toHaveBeenCalledWith({
       where: { projectId: 'project-2' },
     });
+    expect(mockProjectGroupMember.create).not.toHaveBeenCalled();
+    expect(mockProjectGroupMember.upsert).not.toHaveBeenCalled();
+  });
+
+  test('PUT /projects/:id/group 绑定分组时会事务替换旧分组记录', async () => {
+    mockProject.findByPk.mockResolvedValue({
+      id: 'project-3',
+      tenantId: 'tenant-1',
+    });
+    mockProjectGroup.findOne.mockResolvedValue({ id: 'group-1' });
+    mockProjectGroupMember.destroy.mockResolvedValue(1);
+    mockProjectGroupMember.create.mockResolvedValue({
+      projectId: 'project-3',
+      groupId: 'group-1',
+    });
+
+    const response = await invokeRoute(router, '/:id/group', 'put', {
+      params: { id: 'project-3' },
+      body: { groupId: 'group-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual(
+      expect.objectContaining({
+        projectId: 'project-3',
+        groupId: 'group-1',
+      }),
+    );
+    expect(mockProject.sequelize.transaction).toHaveBeenCalledTimes(1);
+    expect(mockProjectGroupMember.destroy).toHaveBeenCalledWith({
+      where: { projectId: 'project-3' },
+      transaction: mockTransaction,
+    });
+    expect(mockProjectGroupMember.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        projectId: 'project-3',
+        groupId: 'group-1',
+        createdBy: 'user-1',
+      }),
+      { transaction: mockTransaction },
+    );
+    expect(mockProjectGroupMember.upsert).not.toHaveBeenCalled();
   });
 
   test('PUT /projects/:id/group 会拒绝跨租户分组写入', async () => {
@@ -342,6 +419,8 @@ describe('project tags/groups router', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.code).toBe(ErrorCodes.toPublicCode(ErrorCodes.VALIDATION_FAILED));
+    expect(mockProjectGroupMember.destroy).not.toHaveBeenCalled();
+    expect(mockProjectGroupMember.create).not.toHaveBeenCalled();
     expect(mockProjectGroupMember.upsert).not.toHaveBeenCalled();
   });
 

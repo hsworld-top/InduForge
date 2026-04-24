@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const appConfig = require('../config/app');
+const { hasCapability } = require('../utils/authz');
 const { buildTenantWhere } = require('../utils/scope');
 const {
   Project,
@@ -10,6 +11,8 @@ const {
   ProjectGroupMember,
   ProjectGroup,
   NodeDeployment,
+  Node,
+  Deployment,
 } = require('../models');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -108,6 +111,7 @@ const resolveNormalizedQuery = (query = {}) => {
     tagQueries: normalizeArrayQuery(query.tag || query.tagId || query.tags),
     runtimeModes: resolveRuntimeModes(query),
     deployStatuses: resolveDeployStatuses(query),
+    visibilityQueries: normalizeArrayQuery(query.visibility),
     createdByQuery: trimText(query.createdBy || query.createdByName),
     sortBy: resolveSortField(query),
     sortOrder: resolveSortOrder(query),
@@ -118,8 +122,32 @@ const resolveNormalizedQuery = (query = {}) => {
  * 汇总工程的部署记录，统一生成列表侧边栏可复用的运行态摘要。
  * 这里会显式输出 runtimeStatus 与 lastDeployedAt，供筛选/排序与卡片展示共用。
  */
-const buildRuntimeSummary = (deployments = []) => {
-  const normalized = Array.isArray(deployments) ? deployments : [];
+const normalizeRuntimeModeValue = (value) => {
+  const normalized = trimText(value).toUpperCase();
+  if (normalized === 'DEV' || normalized === 'DEVELOPMENT') return 'DEV';
+  if (normalized === 'RELEASE' || normalized === 'PROD' || normalized === 'PRODUCTION') return 'RELEASE';
+  return '';
+};
+
+const pickLatestRuntimeMode = (records = []) => {
+  let latest = null;
+  let latestMode = '';
+  (Array.isArray(records) ? records : []).forEach((record) => {
+    const mode = normalizeRuntimeModeValue(record?.mode);
+    if (!mode) return;
+    const timeline = toSafeDateValue(record?.deployedAt || record?.updatedAt || record?.createdAt);
+    if (!latestMode || (timeline && (!latest || timeline > latest))) {
+      latestMode = mode;
+      latest = timeline;
+    }
+  });
+  return latestMode;
+};
+
+const buildRuntimeSummary = (nodeDeployments = [], versionDeployments = []) => {
+  const normalized = Array.isArray(nodeDeployments) ? nodeDeployments : [];
+  const normalizedVersions = Array.isArray(versionDeployments) ? versionDeployments : [];
+  const nodesByKey = new Map();
   const statusCounts = {
     pending: 0,
     deploying: 0,
@@ -133,8 +161,10 @@ const buildRuntimeSummary = (deployments = []) => {
 
   normalized.forEach((deployment) => {
     const status = trimText(deployment?.status).toLowerCase();
-    const mode = trimText(deployment?.mode).toUpperCase();
+    const mode = normalizeRuntimeModeValue(deployment?.mode);
     const timeline = toSafeDateValue(deployment?.deployedAt || deployment?.updatedAt || deployment?.createdAt);
+    const nodeId = trimText(deployment?.node?.id || deployment?.nodeId);
+    const nodeName = trimText(deployment?.node?.name) || nodeId;
 
     if (Object.prototype.hasOwnProperty.call(statusCounts, status)) {
       statusCounts[status] += 1;
@@ -144,6 +174,17 @@ const buildRuntimeSummary = (deployments = []) => {
     }
     if (timeline && (!latest || timeline > latest)) {
       latest = timeline;
+    }
+    if (nodeId || nodeName) {
+      const nodeKey = nodeId || nodeName;
+      nodesByKey.set(nodeKey, {
+        id: nodeId || nodeKey,
+        name: nodeName || nodeKey,
+        ipAddress: trimText(deployment?.node?.ipAddress) || null,
+        nodeStatus: trimText(deployment?.node?.status) || null,
+        deployStatus: status || null,
+        mode: mode || null,
+      });
     }
   });
 
@@ -163,12 +204,18 @@ const buildRuntimeSummary = (deployments = []) => {
     runtimeStatus = 'UNKNOWN';
   }
 
+  const runtimeMode = pickLatestRuntimeMode(normalized)
+    || pickLatestRuntimeMode(normalizedVersions)
+    || 'DEV';
+
   return {
     runtimeStatus,
+    runtimeMode,
     deploymentCount,
     runningCount: statusCounts.running,
     statusCounts,
     modeCounts,
+    nodes: Array.from(nodesByKey.values()),
     lastDeployedAt: latest ? latest.toISOString() : null,
   };
 };
@@ -183,10 +230,14 @@ const toProjectOverview = (project) => {
   }
 
   const payload = project.toOverviewPayload();
-  const runtimeSummary = buildRuntimeSummary(payload.nodeDeployments);
+  const runtimeSummary = buildRuntimeSummary(payload.nodeDeployments, payload.deployments);
   const createdByName = pickUserName(payload.creator);
   const updatedByName = pickUserName(payload.updater);
-  const { nodeDeployments: _ignoredNodeDeployments, ...rest } = payload;
+  const {
+    nodeDeployments: _ignoredNodeDeployments,
+    deployments: _ignoredDeployments,
+    ...rest
+  } = payload;
 
   return {
     ...rest,
@@ -232,7 +283,8 @@ const matchTags = (project, tagQueries = []) => {
 const matchRuntimeMode = (project, runtimeModes = []) => {
   if (!runtimeModes.length) return true;
   const modeCounts = project.runtimeSummary?.modeCounts || {};
-  return runtimeModes.some((mode) => Number(modeCounts[mode] || 0) > 0);
+  const runtimeMode = normalizeRuntimeModeValue(project.runtimeSummary?.runtimeMode);
+  return runtimeModes.some((mode) => Number(modeCounts[mode] || 0) > 0 || runtimeMode === mode);
 };
 
 const matchDeployStatus = (project, deployStatuses = []) => {
@@ -250,6 +302,31 @@ const matchCreator = (project, createdByQuery) => {
     isMatchByKeyword(project.createdByName, createdByQuery)
     || isMatchByKeyword(project.creator?.username, createdByQuery)
   );
+};
+
+const matchVisibility = (project, visibilityQueries = []) => {
+  if (!visibilityQueries.length) return true;
+  const visibility = trimText(project.visibility || 'private').toLowerCase();
+  return visibilityQueries
+    .map((query) => trimText(query).toLowerCase())
+    .some((query) => query === visibility);
+};
+
+const canSeeProjectByVisibility = (project, user = {}) => {
+  const actorId = trimText(user.id);
+  const isCreator = actorId && trimText(project.createdBy) === actorId;
+  if (isCreator) return true;
+
+  const visibility = trimText(project.visibility || 'private').toLowerCase();
+  if (visibility === 'private') {
+    return false;
+  }
+
+  if (visibility === 'internal') {
+    return hasCapability(user.role, 'project:write');
+  }
+
+  return visibility === 'public' && hasCapability(user.role, 'project:read');
 };
 
 const compareDateField = (left, right, field, sortOrder) => {
@@ -340,7 +417,21 @@ const buildProjectInclude = () => ([
     model: NodeDeployment,
     as: 'nodeDeployments',
     required: false,
-    attributes: ['id', 'projectId', 'status', 'mode', 'deployedAt', 'updatedAt', 'createdAt'],
+    attributes: ['id', 'nodeId', 'projectId', 'status', 'mode', 'deployedAt', 'updatedAt', 'createdAt'],
+    include: [
+      {
+        model: Node,
+        as: 'node',
+        required: false,
+        attributes: ['id', 'name', 'ipAddress', 'status'],
+      },
+    ],
+  },
+  {
+    model: Deployment,
+    as: 'deployments',
+    required: false,
+    attributes: ['id', 'projectId', 'mode', 'status', 'createdAt', 'updatedAt'],
   },
 ]);
 
@@ -351,9 +442,16 @@ const applyOverviewFilters = (projects = [], normalizedQuery = {}) => {
       && matchTags(project, normalizedQuery.tagQueries)
       && matchRuntimeMode(project, normalizedQuery.runtimeModes)
       && matchDeployStatus(project, normalizedQuery.deployStatuses)
+      && matchVisibility(project, normalizedQuery.visibilityQueries)
       && matchCreator(project, normalizedQuery.createdByQuery)
     );
   });
+};
+
+const applyVisibilityFilters = (projects = [], user = {}) => {
+  return (Array.isArray(projects) ? projects : []).filter((project) =>
+    canSeeProjectByVisibility(project, user),
+  );
 };
 
 async function listProjectOverviews({ req, query = {} } = {}) {
@@ -373,7 +471,8 @@ async function listProjectOverviews({ req, query = {} } = {}) {
   });
 
   const overviews = projects.map((project) => toProjectOverview(project));
-  const filtered = applyOverviewFilters(overviews, normalizedQuery);
+  const visibleOverviews = applyVisibilityFilters(overviews, req?.user || {});
+  const filtered = applyOverviewFilters(visibleOverviews, normalizedQuery);
   const sorted = sortProjectOverviews(filtered, normalizedQuery.sortBy, normalizedQuery.sortOrder);
 
   const total = sorted.length;

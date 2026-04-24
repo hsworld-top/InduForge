@@ -229,6 +229,7 @@ const buildInitialRuntimePassword = () => randomBytes(16).toString('hex');
 const RUNTIME_ACCESS_ALLOWED_ROLES = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
 const PROJECT_OVERVIEW_SORT_FIELDS = ['createdAt', 'updatedAt', 'lastDeployedAt', 'runtimeStatus'];
 const PROJECT_OVERVIEW_SORT_ORDERS = ['ASC', 'DESC'];
+const PROJECT_TAG_LIMIT = 10;
 const PROJECT_LABEL_MANAGE_ROLES = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
 
 const ensureProjectLabelManagePermission = (req, res) => {
@@ -330,6 +331,10 @@ router.get('/', authenticateToken, validate(Joi.object({
       Joi.string().valid('pending', 'deploying', 'running', 'stopped', 'error', 'rollback'),
       Joi.array().items(Joi.string().valid('pending', 'deploying', 'running', 'stopped', 'error', 'rollback')),
     ).optional(),
+    visibility: Joi.alternatives().try(
+      Joi.string().valid('private', 'internal'),
+      Joi.array().items(Joi.string().valid('private', 'internal')),
+    ).optional(),
     createdBy: Joi.string().optional(),
     createdByName: Joi.string().optional(),
     sortBy: Joi.string().valid(...PROJECT_OVERVIEW_SORT_FIELDS).optional(),
@@ -373,7 +378,7 @@ router.get('/tags', authenticateToken, validate(Joi.object({
       order: [['sortOrder', 'ASC'], ['createdAt', 'ASC']],
     });
 
-    return ApiResponse.success(res, { tags });
+    return ApiResponse.success(res, { list: { tags } });
   } catch (error) {
     logger.error('Get project tags error', { error: error.message, requestId: req.requestId });
     return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
@@ -404,6 +409,20 @@ router.post('/tags', authenticateToken, validate(Joi.object({
     });
     if (existing) {
       return ApiResponse.error(res, ErrorCodes.RESOURCE_ALREADY_EXISTS, { message: '标签名称已存在' }, 200);
+    }
+
+    const tagCount = await ProjectTag.count({
+      where: {
+        tenantId,
+      },
+    });
+    if (tagCount >= PROJECT_TAG_LIMIT) {
+      return ApiResponse.error(
+        res,
+        ErrorCodes.VALIDATION_FAILED,
+        { message: `标签最多限制 ${PROJECT_TAG_LIMIT} 个` },
+        200,
+      );
     }
 
     const tag = await ProjectTag.create({
@@ -518,10 +537,34 @@ router.get('/groups', authenticateToken, validate(Joi.object({
         },
         attributes: ['groupId', 'projectId'],
       });
+      const projectIds = [...new Set(members.map((member) => member.projectId).filter(Boolean))];
+      const visibleProjectIdSet = new Set();
+      if (projectIds.length > 0) {
+        const projects = await Project.findAll({
+          where: {
+            ...buildProjectTagGroupScope(req),
+            id: { [Op.in]: projectIds },
+          },
+          attributes: ['id', 'createdBy', 'visibility'],
+        });
+        const canSeeSharedProject = hasCapability(req.user?.role, 'project:write');
+        const canSeePublicProject = hasCapability(req.user?.role, 'project:read');
+        for (const project of projects) {
+          const visibility = String(project.visibility || 'private').toLowerCase();
+          const isCreator = String(project.createdBy) === String(req.user?.id);
+          if (
+            isCreator
+            || (visibility === 'internal' && canSeeSharedProject)
+            || (visibility === 'public' && canSeePublicProject)
+          ) {
+            visibleProjectIdSet.add(project.id);
+          }
+        }
+      }
 
       for (const member of members) {
         const groupId = member.groupId;
-        if (!groupId) continue;
+        if (!groupId || !visibleProjectIdSet.has(member.projectId)) continue;
         projectCountByGroupId.set(groupId, (projectCountByGroupId.get(groupId) || 0) + 1);
       }
     }
@@ -534,7 +577,7 @@ router.get('/groups', authenticateToken, validate(Joi.object({
       };
     });
 
-    return ApiResponse.success(res, { groups: groupsWithCount });
+    return ApiResponse.success(res, { list: { groups: groupsWithCount } });
   } catch (error) {
     logger.error('Get project groups error', { error: error.message, requestId: req.requestId });
     return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
@@ -657,7 +700,7 @@ router.put('/:id/tags', authenticateToken, requireResourceOwnership('project'), 
     id: Joi.string().uuid().required(),
   }),
   body: Joi.object({
-    tagIds: Joi.array().items(Joi.string().uuid()).required(),
+    tagIds: Joi.array().items(Joi.string().uuid()).max(PROJECT_TAG_LIMIT).required(),
   }).required(),
 })), async (req, res) => {
   try {
@@ -755,11 +798,17 @@ router.put('/:id/group', authenticateToken, requireResourceOwnership('project'),
       return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '分组不存在或不属于当前租户' }, 200);
     }
 
-    await ProjectGroupMember.upsert({
-      tenantId: project.tenantId,
-      projectId: project.id,
-      groupId,
-      createdBy: req.user.id,
+    await Project.sequelize.transaction(async (transaction) => {
+      await ProjectGroupMember.destroy({
+        where: { projectId: project.id },
+        transaction,
+      });
+      await ProjectGroupMember.create({
+        tenantId: project.tenantId,
+        projectId: project.id,
+        groupId,
+        createdBy: req.user.id,
+      }, { transaction });
     });
 
     return ApiResponse.success(res, { projectId: project.id, groupId }, 'update_success');
@@ -1447,6 +1496,7 @@ router.put('/:id', authenticateToken, requireResourceOwnership('project'), valid
     name: Joi.string().optional(),
     description: Joi.string().allow('').optional(),
     colorTag: Joi.string().valid('#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280').optional(),
+    visibility: Joi.string().valid('private', 'internal').optional(),
   }).min(1)
 })), async (req, res) => {
   try {
@@ -1462,6 +1512,12 @@ router.put('/:id', authenticateToken, requireResourceOwnership('project'), valid
     // 检查权限：只有系统管理员和工程管理员可以更新工程
     const allowedRoles = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
     if (!allowedRoles.includes(role)) {
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(updateData, 'visibility')
+      && String(project.createdBy) !== String(userId)
+    ) {
       return ApiResponse.error(res, ErrorCodes.PERMISSION_INSUFFICIENT, {}, 200);
     }
 
