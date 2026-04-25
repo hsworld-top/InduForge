@@ -18,7 +18,7 @@
       </el-skeleton>
     </div>
 
-    <el-empty v-else-if="projects.length === 0 && groupCards.length === 0" :description="resolvedEmptyDescription" />
+    <el-empty v-else-if="visibleProjects.length === 0 && groupCards.length === 0" :description="resolvedEmptyDescription" />
 
     <div v-else class="project-overview-grid__list">
       <!-- 分组文件夹卡片（混排在网格头部） -->
@@ -100,7 +100,7 @@
 
       <!-- 工程卡片 -->
       <article
-        v-for="project in projects"
+        v-for="project in visibleProjects"
         :key="project.id"
         class="project-overview-grid__card"
         :class="{ 'is-selected': isSelected(project.id) }"
@@ -278,6 +278,8 @@ const props = withDefaults(
     showDeleteAction?: boolean
     canToggleVisibility?: boolean
     currentUserId?: string | number | null
+    grouped?: boolean
+    showGroupedProjectItems?: boolean
     /** 分组卡片数据，混排在工程卡片前面 */
     groupCards?: ProjectGroupCardViewModel[]
   }>(),
@@ -293,6 +295,8 @@ const props = withDefaults(
     showDeleteAction: true,
     canToggleVisibility: false,
     currentUserId: '',
+    grouped: false,
+    showGroupedProjectItems: true,
     groupCards: () => [],
   },
 )
@@ -302,6 +306,13 @@ const { t } = useI18n()
 const resolvedEmptyDescription = computed(
   () => props.emptyDescription || t('projectManagement.emptyProjects'),
 )
+
+const visibleProjects = computed(() => {
+  if (!props.grouped || props.showGroupedProjectItems) {
+    return props.projects
+  }
+  return props.projects.filter((project) => !project.group?.id)
+})
 
 const emit = defineEmits<{
   (event: 'open-project', payload: ProjectOverviewItem): void

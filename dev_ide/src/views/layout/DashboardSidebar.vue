@@ -3,7 +3,7 @@
   <Transition name="fade">
     <div
       v-if="!sidebarCollapsed"
-      class="fixed inset-0 bg-gray-900/50 dark:bg-black/50 z-40 backdrop-blur-sm transition-opacity"
+      class="fixed inset-0 bg-gray-900/50 dark:bg-black/50 z-40 transition-opacity"
       @click="closeSidebar"
     ></div>
   </Transition>
@@ -11,7 +11,7 @@
   <!-- 侧边栏抽屉 -->
   <div
     :class="[
-      'fixed inset-y-0 left-0 z-50 w-60 flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] shadow-2xl',
+      'fixed inset-y-0 left-0 z-50 w-60 flex flex-col transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] shadow-lg',
       isDark ? 'bg-gray-900 border-r border-gray-800' : 'bg-white border-r border-gray-200',
       sidebarCollapsed ? '-translate-x-full' : 'translate-x-0',
     ]"

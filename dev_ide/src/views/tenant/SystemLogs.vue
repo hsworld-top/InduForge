@@ -846,9 +846,6 @@ export default {
   border-radius: var(--ck-radius-lg);
   background: var(--ck-bg-card);
   box-shadow: var(--ck-shadow-sm);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
 }
 
 .system-log-filter-form {

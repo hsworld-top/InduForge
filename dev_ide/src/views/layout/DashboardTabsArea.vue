@@ -30,7 +30,7 @@
         v-for="tab in tabs"
         :key="tab.key"
         :name="tab.key"
-        :v-show="isTabVisible(tab.key)"
+        lazy
         :closable="tab.key !== 'dashboard'"
       >
         <template #label>
@@ -160,7 +160,7 @@ const openSidebar = () => {
   appStore.setSidebarCollapsed(false)
 }
 
-const handleCloseTab = (targetName) => {
+const handleCloseTab = (targetName: string) => {
   emit('close-tab', targetName)
 }
 </script>
@@ -216,7 +216,11 @@ const handleCloseTab = (targetName) => {
   color: var(--el-text-color-regular) !important;
   font-weight: 500 !important;
   font-size: 12px !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition:
+    color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   border: 1px solid transparent !important;
 }
 
@@ -243,7 +247,9 @@ const handleCloseTab = (targetName) => {
   line-height: 14px !important;
   margin-left: 6px !important;
   margin-right: -2px !important;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
   border-radius: 4px;
 }
 .dashboard-tabs .el-tabs__item .is-icon-close:hover {
@@ -261,19 +267,11 @@ const handleCloseTab = (targetName) => {
 .dashboard-tab-panel-shell {
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(circle at 12% 10%, rgba(29, 78, 216, 0.12), transparent 45%),
-    radial-gradient(circle at 90% 5%, rgba(14, 165, 165, 0.12), transparent 40%),
-    linear-gradient(180deg, #f8f7f4 0%, #eef1f6 100%);
+  background: linear-gradient(180deg, #f8f7f4 0%, #eef1f6 100%);
 }
 
 .dashboard-tab-panel-shell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0) 34%);
-  pointer-events: none;
-  z-index: 0;
+  display: none;
 }
 
 .dashboard-tab-panel-shell > * {
@@ -282,16 +280,9 @@ const handleCloseTab = (targetName) => {
 }
 
 /* 非工程管理页面进入标签页时，统一使用工程管理的轻微上浮淡入效果。 */
-.dashboard-tab-panel-shell > :not(.project-management) {
-  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
 html.dark .dashboard-tab-panel-shell,
 [data-theme='dark'] .dashboard-tab-panel-shell {
-  background:
-    radial-gradient(circle at 12% 10%, rgba(59, 130, 246, 0.15), transparent 45%),
-    radial-gradient(circle at 90% 5%, rgba(20, 184, 166, 0.12), transparent 40%),
-    linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
 }
 
 html.dark .dashboard-tab-panel-shell::before,

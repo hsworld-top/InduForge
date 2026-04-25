@@ -88,6 +88,8 @@
           :can-toggle-visibility="canManageProjects"
           :current-user-id="currentUser?.id || ''"
           :group-cards="!groupContext.groupId && viewMode === 'card' ? resolvedProjectGroupCards : []"
+          :grouped="!groupContext.groupId"
+          :show-grouped-project-items="false"
           @open-project="handleOpenProject"
           @selection-change="handleProjectSelectionChange"
           @open-runtime-access="openRuntimeAccessDialog"
@@ -604,7 +606,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- 设计中心卡片 -->
           <div
-            class="function-card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-2 border-blue-200 dark:border-blue-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300 hover:scale-105"
+            class="function-card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-2 border-blue-200 dark:border-blue-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-shadow duration-200"
             @click="openDesignCenter(selectedProject)"
           >
             <div class="text-center">
@@ -680,7 +682,7 @@
 
           <!-- 数据中心卡片 -->
           <div
-            class="function-card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-2 border-green-200 dark:border-green-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-green-300 dark:hover:border-green-600 transition-all duration-300 hover:scale-105"
+            class="function-card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-2 border-green-200 dark:border-green-700 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:border-green-300 dark:hover:border-green-600 transition-shadow duration-200"
             @click="openDataCenter(selectedProject)"
           >
             <div class="text-center">
@@ -2976,8 +2978,6 @@ export default {
   border: 1px solid var(--ck-border);
   background: var(--ck-bg-card);
   box-shadow: var(--ck-shadow-sm);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   overflow: hidden;
 }
 
@@ -2993,8 +2993,6 @@ export default {
   border-top: 1px solid var(--ck-border-light);
   background: var(--ck-bg-card);
   padding: 10px 16px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
 /* ─── 面包屑：cockpit 风格 ─── */
