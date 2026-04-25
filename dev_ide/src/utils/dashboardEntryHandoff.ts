@@ -61,7 +61,7 @@ export const buildDashboardRedirectLocation = (
  * @returns {string|null} handoffId
  */
 export const extractDashboardHandoffId = (query: DashboardQuery = {}): string | null =>
-  normalizeQueryValue(query?.handoffId)
+  normalizeQueryValue(query?.handoffId) ?? normalizeQueryValue(query?.handoff)
 
 /**
  * 删除已经消费过的 handoffId，避免刷新或重复导航时再次触发恢复。
@@ -71,6 +71,7 @@ export const extractDashboardHandoffId = (query: DashboardQuery = {}): string | 
 export const stripDashboardHandoffQuery = (query: DashboardQuery = {}): DashboardQuery => {
   const nextQuery = { ...(query || {}) }
   delete nextQuery.handoffId
+  delete nextQuery.handoff
   return nextQuery
 }
 

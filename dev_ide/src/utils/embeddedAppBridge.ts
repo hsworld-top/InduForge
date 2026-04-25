@@ -248,6 +248,7 @@ export const buildEmbeddedAppUrl = (appType: string, handoffId?: string | null):
   const params = new URLSearchParams()
   if (handoffId) {
     params.set('handoffId', handoffId)
+    params.set('handoff', handoffId)
   }
 
   const basePath = resolveAppBasePath(appType)

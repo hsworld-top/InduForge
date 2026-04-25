@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { buildAppEntry } from '@/utils/appUrl'
 import type { EmbeddedAppType, EmbeddedProjectContext } from '@/types/embedded'
 
@@ -48,21 +48,37 @@ const iframeRef = ref<HTMLIFrameElement | null>(null)
 const appEntry = computed(() => buildAppEntry(props.appType, props.project))
 const appUrl = computed(() => appEntry.value.url)
 
-/**
- * iframe 完成加载后，把宿主后续匹配所需的节点与上下文一起上报。
- * Dashboard 会据此登记 source/origin/appType/project 等信息，不能再从相对 src 猜 origin。
- */
-const handleIframeLoad = () => {
-  if (!iframeRef.value) return
+const registerEmbeddedApp = async () => {
+  await nextTick()
+
+  const iframe = iframeRef.value
+  if (!iframe) return
 
   emit('embedded-register', {
-    iframe: iframeRef.value,
+    iframe,
     origin: appEntry.value.origin || window.location.origin,
     appType: props.appType,
     project: props.project,
     tabKey: props.tabKey,
   })
 }
+
+/**
+ * iframe src is known before the child app finishes loading. Register as soon as
+ * Vue attaches the iframe ref so early bootstrap messages are not dropped; the
+ * load event refreshes the same registry entry after navigations/reloads.
+ */
+const handleIframeLoad = () => {
+  void registerEmbeddedApp()
+}
+
+watch(
+  appEntry,
+  () => {
+    void registerEmbeddedApp()
+  },
+  { immediate: true },
+)
 
 onBeforeUnmount(() => {
   if (!iframeRef.value) return

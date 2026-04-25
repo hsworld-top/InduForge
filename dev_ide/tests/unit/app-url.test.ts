@@ -54,6 +54,7 @@ describe('appUrl', () => {
 
     expect(parsed.pathname).toBe('/designer/')
     expect(handoffId).toBeTruthy()
+    expect(parsed.searchParams.get('handoff')).toBe(handoffId)
     expect(parsed.searchParams.get('pid')).toBeNull()
     expect(parsed.searchParams.get('projectId')).toBeNull()
     expect(parsed.searchParams.get('token')).toBeNull()
@@ -76,6 +77,23 @@ describe('appUrl', () => {
     })
 
     expect(entry.url.startsWith('/designer/?handoffId=')).toBe(true)
+    expect(new URL(entry.url, window.location.origin).searchParams.get('handoff')).toBeTruthy()
     expect(entry.origin).toBe(window.location.origin)
   })
+
+  it('datacenter ???????? handoff ??', () => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: createMockStorage(),
+    })
+
+    const url = buildAppUrl('datacenter', { id: 'p-data', tenantId: 't-data' })
+    const parsed = new URL(url, 'http://localhost')
+    const handoffId = parsed.searchParams.get('handoffId')
+
+    expect(parsed.pathname).toBe('/datacenter/')
+    expect(handoffId).toBeTruthy()
+    expect(parsed.searchParams.get('handoff')).toBe(handoffId)
+  })
+
 })

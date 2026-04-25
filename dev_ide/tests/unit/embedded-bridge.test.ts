@@ -57,6 +57,7 @@ describe('embedded bridge', () => {
     })
 
     expect(response.url).toContain('handoffId=')
+    expect(response.url).toContain('handoff=')
     expect(response.url).not.toContain('token=')
     expect(response.url).not.toContain('refreshToken=')
     expect(response.url).not.toContain('projectId=')
