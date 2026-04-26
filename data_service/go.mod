@@ -4,7 +4,9 @@ go 1.25.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
+	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/eclipse/paho.mqtt.golang v1.5.1
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
 	github.com/ismhdez/socket.io-golang/v4 v4.0.11
 	github.com/jackc/pgx/v5 v5.9.1
@@ -28,7 +30,6 @@ require (
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/denisenkom/go-mssqldb v0.12.3 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
@@ -39,7 +40,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/gofiber/fiber/v2 v2.52.9 // indirect
 	github.com/gofiber/websocket/v2 v2.2.1 // indirect
 	github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe // indirect
