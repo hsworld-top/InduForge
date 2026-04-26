@@ -108,6 +108,8 @@ type ProjectSnapshot struct {
 	MqttTagGroups     []SnapshotMqttTagGroupRecord     `json:"mqttTagGroups"`
 	MqttTags          []SnapshotMqttTagRecord          `json:"mqttTags"`
 	DataPoints        []DataPointRecord                `json:"datapoints"`
+	ComputeUnits      []ComputeUnitRecord              `json:"computeUnits"`
+	AlarmRules        []AlarmRuleRecord                `json:"alarmRules"`
 }
 
 // ProjectArtifactVersionV1 表示 Phase 1 产物契约版本号。
@@ -152,6 +154,35 @@ type ArtifactDataPointRecord struct {
 	Unit               *string                     `json:"unit,omitempty"`
 	DefaultValue       *string                     `json:"defaultValue,omitempty"`
 	Tags               []any                       `json:"tags"`
+}
+
+// ArtifactComputeUnitRecord 表示产物层计算单元对象。
+type ArtifactComputeUnitRecord struct {
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	Language       string         `json:"language"`
+	ScriptCode     string         `json:"scriptCode"`
+	TriggerType    string         `json:"triggerType"`
+	TriggerConfig  map[string]any `json:"triggerConfig"`
+	InputBindings  map[string]any `json:"inputBindings"`
+	OutputBindings map[string]any `json:"outputBindings"`
+	TimeoutMS      int            `json:"timeoutMs"`
+	IsEnabled      bool           `json:"isEnabled"`
+}
+
+// ArtifactAlarmRuleRecord 表示产物层报警规则对象。
+type ArtifactAlarmRuleRecord struct {
+	ID                string         `json:"id"`
+	Name              string         `json:"name"`
+	TargetDataPointID *string        `json:"targetDatapointId,omitempty"`
+	TargetPath        string         `json:"targetPath"`
+	RuleType          string         `json:"ruleType"`
+	Condition         map[string]any `json:"condition"`
+	Severity          string         `json:"severity"`
+	Hysteresis        *float64       `json:"hysteresis,omitempty"`
+	SampleWindowMS    *int           `json:"sampleWindowMs,omitempty"`
+	Contract          map[string]any `json:"contract"`
+	IsEnabled         bool           `json:"isEnabled"`
 }
 
 // ArtifactMqttConnectionRecord 表示产物层 MQTT 连接对象。
@@ -202,14 +233,16 @@ type ArtifactProtocolsPayload struct {
 
 // ProjectArtifactV1 表示 Phase 1 项目级数据产物。
 type ProjectArtifactV1 struct {
-	Version     string                     `json:"version"`
-	ProjectID   string                     `json:"projectId"`
-	GeneratedAt time.Time                  `json:"generatedAt"`
-	Connections []ArtifactConnectionRecord `json:"connections"`
-	Queries     []ArtifactQueryRecord      `json:"queries"`
-	DataPoints  []ArtifactDataPointRecord  `json:"datapoints"`
-	Mqtt        ArtifactMqttPayload        `json:"mqtt"`
-	Protocols   ArtifactProtocolsPayload   `json:"protocols"`
+	Version     string                      `json:"version"`
+	ProjectID   string                      `json:"projectId"`
+	GeneratedAt time.Time                   `json:"generatedAt"`
+	Connections []ArtifactConnectionRecord  `json:"connections"`
+	Queries     []ArtifactQueryRecord       `json:"queries"`
+	DataPoints  []ArtifactDataPointRecord   `json:"datapoints"`
+	Compute     []ArtifactComputeUnitRecord `json:"compute"`
+	Alarms      []ArtifactAlarmRuleRecord   `json:"alarms"`
+	Mqtt        ArtifactMqttPayload         `json:"mqtt"`
+	Protocols   ArtifactProtocolsPayload    `json:"protocols"`
 }
 
 // ProjectSnapshotRepository 负责项目级数据域快照读写。
@@ -252,6 +285,14 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
+	computeUnits, err := r.listComputeUnits(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	alarmRules, err := r.listAlarmRules(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &ProjectSnapshot{
 		Connections:       connections,
@@ -262,6 +303,8 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 		MqttTagGroups:     mqttTagGroups,
 		MqttTags:          mqttTags,
 		DataPoints:        datapoints,
+		ComputeUnits:      computeUnits,
+		AlarmRules:        alarmRules,
 	}, nil
 }
 
@@ -297,6 +340,12 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 		return err
 	}
 	if err := r.insertDataPoints(ctx, tx, projectID, actorID, snapshot.DataPoints); err != nil {
+		return err
+	}
+	if err := r.insertComputeUnits(ctx, tx, projectID, actorID, snapshot.ComputeUnits); err != nil {
+		return err
+	}
+	if err := r.insertAlarmRules(ctx, tx, projectID, actorID, snapshot.AlarmRules); err != nil {
 		return err
 	}
 
@@ -364,6 +413,39 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		})
 	}
 
+	computeUnits := make([]ArtifactComputeUnitRecord, 0, len(snapshot.ComputeUnits))
+	for _, unit := range snapshot.ComputeUnits {
+		computeUnits = append(computeUnits, ArtifactComputeUnitRecord{
+			ID:             unit.ID,
+			Name:           unit.Name,
+			Language:       unit.Language,
+			ScriptCode:     unit.ScriptCode,
+			TriggerType:    unit.TriggerType,
+			TriggerConfig:  cloneSnapshotObject(unit.TriggerConfig),
+			InputBindings:  cloneSnapshotObject(unit.InputBindings),
+			OutputBindings: cloneSnapshotObject(unit.OutputBinding),
+			TimeoutMS:      unit.TimeoutMS,
+			IsEnabled:      unit.IsEnabled,
+		})
+	}
+
+	alarmRules := make([]ArtifactAlarmRuleRecord, 0, len(snapshot.AlarmRules))
+	for _, rule := range snapshot.AlarmRules {
+		alarmRules = append(alarmRules, ArtifactAlarmRuleRecord{
+			ID:                rule.ID,
+			Name:              rule.Name,
+			TargetDataPointID: rule.TargetDataPointID,
+			TargetPath:        rule.TargetPath,
+			RuleType:          rule.RuleType,
+			Condition:         cloneSnapshotObject(rule.Condition),
+			Severity:          rule.Severity,
+			Hysteresis:        rule.Hysteresis,
+			SampleWindowMS:    rule.SampleWindowMS,
+			Contract:          cloneSnapshotObject(rule.Contract),
+			IsEnabled:         rule.IsEnabled,
+		})
+	}
+
 	mqttConnections := make([]ArtifactMqttConnectionRecord, 0, len(snapshot.MqttConfigs))
 	for _, mqttConfig := range snapshot.MqttConfigs {
 		connection := connectionIndex[mqttConfig.ConnectionID]
@@ -421,6 +503,8 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		Connections: connections,
 		Queries:     queries,
 		DataPoints:  dataPoints,
+		Compute:     computeUnits,
+		Alarms:      alarmRules,
 		Mqtt: ArtifactMqttPayload{
 			Connections:   mqttConnections,
 			Subscriptions: append([]SnapshotMqttSubscriptionRecord{}, snapshot.MqttSubscriptions...),
@@ -433,7 +517,7 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 
 func (r *ProjectSnapshotRepository) listConnections(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, type, status, metadata, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1
         ORDER BY created_at ASC
@@ -508,6 +592,60 @@ func (r *ProjectSnapshotRepository) listDataPoints(ctx context.Context, projectI
 	}
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照数据点失败", err)
+	}
+	return result, nil
+}
+
+func (r *ProjectSnapshotRepository) listComputeUnits(ctx context.Context, projectID string) ([]ComputeUnitRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+        SELECT id, project_id, name, language, script_code, trigger_type, trigger_config,
+               input_bindings, output_bindings, timeout_ms, is_enabled, created_at, updated_at
+        FROM data_compute_units
+        WHERE project_id = $1
+        ORDER BY created_at ASC
+    `, projectID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询快照计算单元失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]ComputeUnitRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanComputeUnit(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照计算单元失败", err)
+	}
+	return result, nil
+}
+
+func (r *ProjectSnapshotRepository) listAlarmRules(ctx context.Context, projectID string) ([]AlarmRuleRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+        SELECT id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
+               severity, hysteresis, sample_window_ms, contract, is_enabled, created_at, updated_at
+        FROM data_alarm_rules
+        WHERE project_id = $1
+        ORDER BY created_at ASC
+    `, projectID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询快照报警规则失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]AlarmRuleRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanAlarmRule(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照报警规则失败", err)
 	}
 	return result, nil
 }
@@ -697,6 +835,8 @@ func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, projectID 
 
 func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, tx pgx.Tx, projectID string) error {
 	for _, sqlText := range []string{
+		`DELETE FROM data_alarm_rules WHERE project_id = $1`,
+		`DELETE FROM data_compute_units WHERE project_id = $1`,
 		`DELETE FROM data_mqtt_tags WHERE project_id = $1`,
 		`DELETE FROM data_mqtt_tag_groups WHERE project_id = $1`,
 		`DELETE FROM data_mqtt_subscriptions WHERE project_id = $1`,
@@ -856,6 +996,62 @@ func (r *ProjectSnapshotRepository) insertDataPoints(ctx context.Context, tx pgx
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24, $25)
         `, datapoint.ID, projectID, datapoint.Path, datapoint.Name, datapoint.Description, datapoint.SourceType, datapoint.SourceID, string(sourceConfigBytes), datapoint.DataType, datapoint.Unit, datapoint.PrecisionNum, datapoint.DefaultValue, datapoint.MinValue, datapoint.MaxValue, datapoint.AlarmLow, datapoint.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), datapoint.RefreshMode, datapoint.RefreshIntervalMS, datapoint.Status, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照数据点失败", err)
+		}
+	}
+	return nil
+}
+
+func (r *ProjectSnapshotRepository) insertComputeUnits(ctx context.Context, tx pgx.Tx, projectID, actorID string, units []ComputeUnitRecord) error {
+	for _, unit := range units {
+		triggerConfigBytes, err := marshalSnapshotObject(unit.TriggerConfig)
+		if err != nil {
+			return err
+		}
+		inputBindingsBytes, err := marshalSnapshotObject(unit.InputBindings)
+		if err != nil {
+			return err
+		}
+		outputBindingsBytes, err := marshalSnapshotObject(unit.OutputBinding)
+		if err != nil {
+			return err
+		}
+		createdAt := coalesceTime(unit.CreatedAt)
+		updatedAt := coalesceTime(unit.UpdatedAt)
+		if _, err := tx.Exec(ctx, `
+            INSERT INTO data_compute_units (
+                id, project_id, name, language, script_code, trigger_type, trigger_config,
+                input_bindings, output_bindings, timeout_ms, is_enabled, created_by, updated_by, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, $12, $13, $14, $15)
+        `, unit.ID, projectID, unit.Name, unit.Language, unit.ScriptCode, unit.TriggerType, string(triggerConfigBytes),
+			string(inputBindingsBytes), string(outputBindingsBytes), unit.TimeoutMS, unit.IsEnabled, actorID, actorID, createdAt, updatedAt); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照计算单元失败", err)
+		}
+	}
+	return nil
+}
+
+func (r *ProjectSnapshotRepository) insertAlarmRules(ctx context.Context, tx pgx.Tx, projectID, actorID string, rules []AlarmRuleRecord) error {
+	for _, rule := range rules {
+		conditionBytes, err := marshalSnapshotObject(rule.Condition)
+		if err != nil {
+			return err
+		}
+		contractBytes, err := marshalSnapshotObject(rule.Contract)
+		if err != nil {
+			return err
+		}
+		createdAt := coalesceTime(rule.CreatedAt)
+		updatedAt := coalesceTime(rule.UpdatedAt)
+		if _, err := tx.Exec(ctx, `
+            INSERT INTO data_alarm_rules (
+                id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
+                severity, hysteresis, sample_window_ms, contract, is_enabled, created_by, updated_by, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12::jsonb, $13, $14, $15, $16, $17)
+        `, rule.ID, projectID, rule.Name, rule.Description, rule.TargetDataPointID, rule.TargetPath, rule.RuleType, string(conditionBytes),
+			rule.Severity, rule.Hysteresis, rule.SampleWindowMS, string(contractBytes), rule.IsEnabled, actorID, actorID, createdAt, updatedAt); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照报警规则失败", err)
 		}
 	}
 	return nil

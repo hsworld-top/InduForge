@@ -1,0 +1,209 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	enginecompute "github.com/indu-forge/data_service/internal/engine/compute"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
+	"github.com/indu-forge/data_service/internal/repository"
+)
+
+// prepareComputeSDKContext 将计算单元声明的 inputBindings 转换成脚本内可访问的 ctx。
+// 当前阶段采用“声明式预取”：脚本只能读取已经声明的数据点或查询结果，避免调试态脚本绕过项目边界。
+func (s *ComputeService) prepareComputeSDKContext(ctx context.Context, unit repository.ComputeUnitRecord, runtimeInput map[string]any) (enginecompute.SDKContext, error) {
+	sdk := enginecompute.SDKContext{
+		Datapoints: map[string]enginecompute.SDKDataPointValue{},
+		SQL:        map[string]any{},
+		Metadata: map[string]any{
+			"projectId":     unit.ProjectID,
+			"computeUnitId": unit.ID,
+			"computeName":   unit.Name,
+			"runtimeInput":  cloneMap(runtimeInput),
+		},
+	}
+	if s == nil {
+		return sdk, nil
+	}
+
+	for _, path := range extractComputeDatapointBindings(unit.InputBindings) {
+		value, err := s.readComputeSDKDatapoint(ctx, unit.ProjectID, path)
+		if err != nil {
+			return sdk, err
+		}
+		sdk.Datapoints[path] = value
+	}
+
+	for key, binding := range extractComputeSQLBindings(unit.InputBindings) {
+		result, err := s.executeComputeSDKQuery(ctx, unit.ProjectID, binding)
+		if err != nil {
+			return sdk, err
+		}
+		sdk.SQL[key] = result
+	}
+	return sdk, nil
+}
+
+type computeSQLBinding struct {
+	Key        string
+	QueryID    string
+	Parameters map[string]any
+}
+
+func (s *ComputeService) readComputeSDKDatapoint(ctx context.Context, projectID, path string) (enginecompute.SDKDataPointValue, error) {
+	if s.datapoints == nil {
+		return enginecompute.SDKDataPointValue{}, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "compute SDK 数据点仓储未初始化")
+	}
+	record, err := s.datapoints.GetByProjectAndPath(ctx, projectID, path)
+	if err != nil {
+		return enginecompute.SDKDataPointValue{}, err
+	}
+	if record.Status != "active" {
+		return enginecompute.SDKDataPointValue{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "compute SDK 数据点不是 active 状态: "+path)
+	}
+	value := dataPointDefaultValue(*record)
+	if record.SourceType == "db.query" && record.SourceID != nil && s.queries != nil {
+		result, err := s.queries.ExecuteQueryForProject(ctx, projectID, *record.SourceID, ExecuteQueryInput{})
+		if err != nil {
+			return enginecompute.SDKDataPointValue{}, err
+		}
+		value = result.Data
+	}
+	return enginecompute.SDKDataPointValue{
+		Path:      record.Path,
+		Value:     value,
+		Quality:   "good",
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Status:    record.Status,
+	}, nil
+}
+
+func (s *ComputeService) executeComputeSDKQuery(ctx context.Context, projectID string, binding computeSQLBinding) (any, error) {
+	if s.queries == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "compute SDK 查询服务未初始化")
+	}
+	if strings.TrimSpace(binding.QueryID) == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "compute SDK queryId 不能为空")
+	}
+	result, err := s.queries.ExecuteQueryForProject(ctx, projectID, binding.QueryID, ExecuteQueryInput{Parameters: binding.Parameters})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"data":          result.Data,
+		"rowCount":      result.RowCount,
+		"executionTime": result.ExecutionTime,
+	}, nil
+}
+
+func extractComputeDatapointBindings(input map[string]any) []string {
+	paths := make([]string, 0)
+	var walk func(any)
+	walk = func(value any) {
+		switch typed := value.(type) {
+		case string:
+			if looksLikeDatapointPath(typed) {
+				paths = append(paths, strings.TrimSpace(typed))
+			}
+		case []any:
+			for _, item := range typed {
+				walk(item)
+			}
+		case map[string]any:
+			if path := strings.TrimSpace(firstString(typed, "path", "datapoint", "datapointPath")); path != "" {
+				paths = append(paths, path)
+			}
+			for key, item := range typed {
+				if key == "queries" || key == "sql" {
+					continue
+				}
+				walk(item)
+			}
+		}
+	}
+	walk(input)
+	return uniqueContractCheckStrings(paths)
+}
+
+func extractComputeSQLBindings(input map[string]any) map[string]computeSQLBinding {
+	bindings := map[string]computeSQLBinding{}
+	for _, sectionKey := range []string{"queries", "sql"} {
+		raw, ok := input[sectionKey]
+		if !ok {
+			continue
+		}
+		switch typed := raw.(type) {
+		case []any:
+			for _, item := range typed {
+				if mapped, ok := item.(map[string]any); ok {
+					binding := sqlBindingFromMap(mapped)
+					if binding.Key != "" {
+						bindings[binding.Key] = binding
+					}
+				}
+			}
+		case map[string]any:
+			for key, item := range typed {
+				switch value := item.(type) {
+				case string:
+					bindings[key] = computeSQLBinding{Key: key, QueryID: strings.TrimSpace(value)}
+				case map[string]any:
+					binding := sqlBindingFromMap(value)
+					if binding.Key == "" {
+						binding.Key = key
+					}
+					bindings[binding.Key] = binding
+				}
+			}
+		}
+	}
+	return bindings
+}
+
+func sqlBindingFromMap(input map[string]any) computeSQLBinding {
+	key := strings.TrimSpace(firstString(input, "key", "name", "alias"))
+	queryID := strings.TrimSpace(firstString(input, "queryId", "id"))
+	parameters := map[string]any{}
+	if rawParams, ok := input["parameters"].(map[string]any); ok {
+		parameters = cloneMap(rawParams)
+	}
+	return computeSQLBinding{Key: key, QueryID: queryID, Parameters: parameters}
+}
+
+func looksLikeDatapointPath(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.Contains(value, " ") {
+		return false
+	}
+	return strings.Contains(value, ".")
+}
+
+func dataPointDefaultValue(record repository.DataPointRecord) any {
+	if record.DefaultValue == nil {
+		return nil
+	}
+	raw := strings.TrimSpace(*record.DefaultValue)
+	switch record.DataType {
+	case "number", "float", "double":
+		var value float64
+		if _, err := fmt.Sscan(raw, &value); err == nil {
+			return value
+		}
+	case "integer", "int":
+		var value int64
+		if _, err := fmt.Sscan(raw, &value); err == nil {
+			return value
+		}
+	case "boolean", "bool":
+		switch strings.ToLower(raw) {
+		case "true", "1":
+			return true
+		case "false", "0":
+			return false
+		}
+	}
+	return raw
+}

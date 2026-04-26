@@ -10,7 +10,9 @@ import (
 
 type options struct {
 	accessSourceHandler    *handler.AccessSourceHandler
+	alarmRuleHandler       *handler.AlarmRuleHandler
 	connectionHandler      *handler.ConnectionHandler
+	contractCheckHandler   *handler.ContractCheckHandler
 	queryHandler           *handler.QueryHandler
 	dataPointHandler       *handler.DataPointHandler
 	mqttHandler            *handler.MqttHandler
@@ -25,6 +27,22 @@ type options struct {
 
 // Option defines route wiring dependencies.
 type Option func(*options)
+
+// WithAlarmRuleRoutes wires alarm rule routes.
+func WithAlarmRuleRoutes(alarmRuleHandler *handler.AlarmRuleHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.alarmRuleHandler = alarmRuleHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+// WithContractCheckRoutes wires contract check routes.
+func WithContractCheckRoutes(contractCheckHandler *handler.ContractCheckHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.contractCheckHandler = contractCheckHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
 
 // WithAccessSourceRoutes wires access source routes.
 func WithAccessSourceRoutes(accessSourceHandler *handler.AccessSourceHandler, jwtValidator *auth.JWTValidator) Option {
@@ -119,7 +137,9 @@ func NewRouter(routeOptions ...Option) http.Handler {
 		return nil
 	}))
 
+	mountAlarmRuleRoutes(mux, opts)
 	mountAccessSourceRoutes(mux, opts)
+	mountContractCheckRoutes(mux, opts)
 	mountConnectionRoutes(mux, opts)
 	mountDataRoutes(mux, opts)
 	mountMqttRoutes(mux, opts)
@@ -130,6 +150,77 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountComputeRoutes(mux, opts)
 	mountProjectSnapshotRoutes(mux, opts)
 	return mux
+}
+
+func mountAlarmRuleRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.alarmRuleHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/alarm-rules",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.List),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/alarm-rules",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.Create),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/alarm-rules/{id}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.Get),
+			),
+		),
+	)
+	mux.Handle(
+		"PUT /api/v1/data/projects/{projectId}/alarm-rules/{id}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.Update),
+			),
+		),
+	)
+	mux.Handle(
+		"DELETE /api/v1/data/projects/{projectId}/alarm-rules/{id}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.Delete),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/alarm-rules/{id}/validate-target",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.ValidateTarget),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/alarm-rules/{id}/test",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.Test),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/alarm-rules/{id}/contract",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.Contract),
+			),
+		),
+	)
 }
 
 func mountAccessSourceRoutes(mux *http.ServeMux, opts options) {
@@ -158,6 +249,37 @@ func mountAccessSourceRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.accessSourceHandler.Records),
+			),
+		),
+	)
+}
+
+func mountContractCheckRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.contractCheckHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/contract-checks/run",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.contractCheckHandler.Run),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/contract-checks/latest",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.contractCheckHandler.Latest),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/contract-checks/runs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.contractCheckHandler.Runs),
 			),
 		),
 	)
@@ -840,10 +962,58 @@ func mountComputeRoutes(mux *http.ServeMux, opts options) {
 	}
 
 	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/compute-units",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.computeHandler.List),
+			),
+		),
+	)
+	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/compute-units",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
 				middleware.ErrorHandler(opts.computeHandler.Create),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/compute-units/{id}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.computeHandler.Get),
+			),
+		),
+	)
+	mux.Handle(
+		"PUT /api/v1/data/projects/{projectId}/compute-units/{id}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.Update),
+			),
+		),
+	)
+	mux.Handle(
+		"DELETE /api/v1/data/projects/{projectId}/compute-units/{id}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.Delete),
+			),
+		),
+	)
+	mux.Handle(
+		"PATCH /api/v1/data/projects/{projectId}/compute-units/{id}/enabled",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.ToggleEnabled),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/compute-units/{id}/runs",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.computeHandler.Runs),
 			),
 		),
 	)

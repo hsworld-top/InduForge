@@ -505,9 +505,43 @@
 
 | 方法 | 路径 | 功能概要 |
 | --- | --- | --- |
+| `GET` | `/api/v1/data/projects/{projectId}/compute-units` | 查询计算单元列表 |
 | `POST` | `/api/v1/data/projects/{projectId}/compute-units` | 创建计算单元 |
+| `GET` | `/api/v1/data/projects/{projectId}/compute-units/{id}` | 查询计算单元详情 |
+| `PUT` | `/api/v1/data/projects/{projectId}/compute-units/{id}` | 更新计算单元并同步输出数据点 |
+| `DELETE` | `/api/v1/data/projects/{projectId}/compute-units/{id}` | 删除计算单元并失效输出数据点 |
+| `PATCH` | `/api/v1/data/projects/{projectId}/compute-units/{id}/enabled` | 切换计算单元启用状态 |
+| `GET` | `/api/v1/data/projects/{projectId}/compute-units/{id}/runs` | 查询计算单元运行记录 |
 | `POST` | `/api/v1/data/projects/{projectId}/compute-units/{id}/run` | 运行计算单元 |
 | `POST` | `/api/v1/data/projects/{projectId}/compute-units/{id}/debug` | 调试计算单元 |
+
+计算脚本支持开发态 `ctx` SDK。后端会根据 `inputBindings` 预取已声明的数据点和 SQL 查询结果，脚本内可使用 `ctx.datapoint.get(path)`、`ctx.datapoint.meta(path)`、`ctx.sql.query(key)`；未命中预取结果时，`ctx.sql.query(key, params)` 可按已声明别名或项目内查询 ID 动态回调后端执行，JavaScript 脚本需要 `await ctx.sql.query(...)`。`ctx.mqtt.publish(source, topic, payload)` 仅在计算单元显式开启 `sideEffects.mqttPublish.enabled=true` 且命中 `sources/sourceIds` 与 `topics` 白名单时真实发布，否则只返回未接受的 side effect。
+
+#### 报警规则
+
+| 方法 | 路径 | 功能概要 |
+| --- | --- | --- |
+| `GET` | `/api/v1/data/projects/{projectId}/alarm-rules` | 查询报警规则列表 |
+| `POST` | `/api/v1/data/projects/{projectId}/alarm-rules` | 创建报警规则 |
+| `GET` | `/api/v1/data/projects/{projectId}/alarm-rules/{id}` | 查询报警规则详情 |
+| `PUT` | `/api/v1/data/projects/{projectId}/alarm-rules/{id}` | 更新报警规则 |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-rules/{id}` | 删除报警规则 |
+| `POST` | `/api/v1/data/projects/{projectId}/alarm-rules/{id}/validate-target` | 校验规则目标数据点 |
+| `POST` | `/api/v1/data/projects/{projectId}/alarm-rules/{id}/test` | 使用样本值试算报警规则 |
+| `GET` | `/api/v1/data/projects/{projectId}/alarm-rules/{id}/contract` | 预览运行态报警契约 |
+
+报警规则支持 `threshold`、`range`、`expression`。`expression` 当前为开发态受控子集，支持 `value > 10`、`value <= 20`、`value == "ON"` 以及 `&&` / `||` 组合。
+
+#### 契约检查
+
+| 方法 | 路径 | 功能概要 |
+| --- | --- | --- |
+| `POST` | `/api/v1/data/projects/{projectId}/contract-checks/run` | 实时执行项目数据域契约检查 |
+| `GET` | `/api/v1/data/projects/{projectId}/contract-checks/latest` | 获取最近/实时契约检查结果 |
+| `GET` | `/api/v1/data/projects/{projectId}/contract-checks/runs` | 分页获取契约检查历史记录 |
+
+项目 artifact v1 已包含连接、查询、数据点、MQTT、Phase 1 协议、计算单元和报警规则区块；snapshot replace 会同步写回计算单元和报警规则。
+契约检查 `run` 请求体可传 `scope`、`objectType`、`objectId`，用于收窄检查结果范围；检查项覆盖数据点状态、计算输入/输出、计算 SQL 绑定查询、报警目标数据点。每次 `run` 会写入 `data_contract_check_runs`，`latest` 优先返回最近一次历史结果，`runs` 使用 `data.list` 与 `data.pagination` 返回历史分页。
 
 ## 6. 开发约束
 

@@ -97,7 +97,7 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	if len(currentSnapshot.Queries) != 1 || currentSnapshot.Queries[0].ID != query.ID {
 		t.Fatalf("expected snapshot queries include %q", query.ID)
 	}
-	if len(currentSnapshot.DataPoints) != 1 || currentSnapshot.DataPoints[0].Path != "metrics.main.temp" {
+	if !snapshotHasDataPointPath(currentSnapshot.DataPoints, "metrics.main.temp") {
 		t.Fatal("expected snapshot datapoints include metrics.main.temp")
 	}
 	if len(currentSnapshot.MqttConfigs) != 1 || currentSnapshot.MqttConfigs[0].ConnectionID != mqttConnection.ID {
@@ -219,18 +219,19 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 		},
 		DataPoints: []repository.DataPointRecord{
 			{
-				ID:                uuid.NewString(),
-				ProjectID:         projectID,
-				Path:              "metrics.replaced.temp",
-				Name:              "metrics.replaced.temp",
-				SourceType:        "query",
-				SourceID:          &replacementSourceID,
-				SourceConfig:      map[string]any{"column": "value"},
-				DataType:          "number",
-				Tags:              []any{"temperature"},
-				RefreshMode:       "interval",
-				RefreshIntervalMS: &refreshInterval,
-				Status:            "active",
+				ID:                 uuid.NewString(),
+				ProjectID:          projectID,
+				Path:               "metrics.replaced.temp",
+				Name:               "metrics.replaced.temp",
+				SourceType:         "query",
+				SourceID:           &replacementSourceID,
+				SourceConfig:       map[string]any{"column": "value"},
+				DataType:           "number",
+				Tags:               []any{"temperature"},
+				RuntimePermissions: repository.DefaultDataPointRuntimePermissions(),
+				RefreshMode:        "auto",
+				RefreshIntervalMS:  &refreshInterval,
+				Status:             "active",
 			},
 		},
 	}
@@ -501,6 +502,15 @@ func mustGetProjectSnapshot(t *testing.T, baseURL, token, projectID string) repo
 func snapshotHasConnection(connections []repository.ConnectionRecord, id, name string) bool {
 	for _, connection := range connections {
 		if connection.ID == id && connection.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func snapshotHasDataPointPath(datapoints []repository.DataPointRecord, path string) bool {
+	for _, datapoint := range datapoints {
+		if datapoint.Path == path {
 			return true
 		}
 	}

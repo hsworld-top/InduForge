@@ -180,6 +180,57 @@ func (r *DataPointRepository) UpsertBySource(ctx context.Context, params CreateD
 	return r.Create(ctx, params)
 }
 
+// UpsertByPath 按项目路径创建或更新数据点，适合一个来源生成多个输出点的场景。
+func (r *DataPointRepository) UpsertByPath(ctx context.Context, params CreateDataPointParams) (*DataPointRecord, error) {
+	sourceConfigBytes, err := marshalJSONObject(params.SourceConfig)
+	if err != nil {
+		return nil, err
+	}
+	tagsBytes, err := marshalJSONArray(params.Tags)
+	if err != nil {
+		return nil, err
+	}
+
+	row := r.pool.QueryRow(ctx, `
+        UPDATE data_points
+        SET name = $3,
+            description = $4,
+            source_type = $5,
+            source_id = $6,
+            source_config = $7::jsonb,
+            data_type = $8,
+            unit = $9,
+            precision_num = $10,
+            default_value = $11,
+            min_value = $12,
+            max_value = $13,
+            alarm_low = $14,
+            alarm_high = $15,
+            tags = $16::jsonb,
+            refresh_mode = $17,
+            refresh_interval_ms = $18,
+            status = $19,
+            updated_by = COALESCE($20, updated_by),
+            updated_at = now()
+        WHERE project_id = $1
+          AND path = $2
+        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+
+	record, err := scanDataPointRecord(row)
+	if err == nil {
+		return &record, nil
+	}
+	var appErr *apperrors.AppError
+	if !errors.Is(err, pgx.ErrNoRows) && !(errors.As(err, &appErr) && appErr.Code == apperrors.ErrorCodeNotFound) {
+		return nil, translateDataPointWriteError(err)
+	}
+
+	return r.Create(ctx, params)
+}
+
 // MarkInvalidBySource 按来源标记数据点失效。
 func (r *DataPointRepository) MarkInvalidBySource(ctx context.Context, projectID, sourceType, sourceID string, userID *string) (int64, error) {
 	commandTag, err := r.pool.Exec(ctx, `

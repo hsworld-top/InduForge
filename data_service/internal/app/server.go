@@ -145,6 +145,8 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 
 	connectionRepository := repository.NewConnectionRepository(pool)
 	accessSourceRepository := repository.NewAccessSourceRepository(pool)
+	alarmRuleRepository := repository.NewAlarmRuleRepository(pool)
+	contractCheckRepository := repository.NewContractCheckRepository(pool)
 	queryRepository := repository.NewQueryRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
@@ -154,6 +156,8 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	computeRepository := repository.NewComputeRepository(pool)
 
 	accessSourceService := service.NewAccessSourceService(connectionRepository, mqttRepository, accessSourceRepository)
+	alarmRuleService := service.NewAlarmRuleService(alarmRuleRepository, dataPointRepository)
+	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmRuleRepository, queryRepository, contractCheckRepository)
 	connectionService := service.NewConnectionService(connectionRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, dataPointRepository)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository)
@@ -166,9 +170,14 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		enginecompute.NewNodeRunner("", ""),
 		enginecompute.NewPythonRunner("", ""),
 		enginecompute.NewScheduler(),
+		dataPointRepository,
+		queryService,
+		mqttRepository,
 	)
 
 	accessSourceHandler := handler.NewAccessSourceHandler(accessSourceService)
+	alarmRuleHandler := handler.NewAlarmRuleHandler(alarmRuleService)
+	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
@@ -179,7 +188,9 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	computeHandler := handler.NewComputeHandler(computeService)
 
 	routeOptions := []router.Option{
+		router.WithAlarmRuleRoutes(alarmRuleHandler, jwtValidator),
 		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
+		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),

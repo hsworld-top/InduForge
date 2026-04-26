@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -269,7 +270,8 @@ func doJSONRequest(t *testing.T, method, url, token string, payload any) apiEnve
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("期望状态码为 200，实际为 %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("期望状态码为 200，实际为 %d，响应体=%s", resp.StatusCode, string(body))
 	}
 
 	var envelope apiEnvelope
