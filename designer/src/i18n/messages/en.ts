@@ -59,7 +59,6 @@ export const enMessages = {
     data: "Data",
     i18n: "i18n",
     script: "Scripts",
-    role: "Roles",
     props: "Properties",
     advanced: "Advanced",
     variables: "Variables",

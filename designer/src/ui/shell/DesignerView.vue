@@ -41,13 +41,12 @@ import IconLucideLanguages from "~icons/lucide/languages";
 import IconLucideList from "~icons/lucide/list";
 import IconLucideSettings from "~icons/lucide/settings";
 import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
-import IconLucideUsers from "~icons/lucide/users";
 import { VIEW_PRESETS } from "@/constants";
 import { useEditorStore } from "@/stores/editor-store";
 import { CanvasContainer } from "@/ui/editors/page/canvas";
 import SelectionToolbar from "@/ui/editors/page/canvas/SelectionToolbar.vue";
 import { MaterialPanel, OutlineTree } from "@/ui/editors/page/sidebar-panels/left";
-import { I18nPanel, RolePanel } from "@/ui/shared/tool-panels";
+import { I18nPanel } from "@/ui/shared/tool-panels";
 import { DockPanel } from "@/ui/shell/DockPanel";
 import { ToolRail } from "@/ui/shell/ToolRail";
 import { TopToolbar } from "@/ui/shell/TopToolbar";
@@ -374,7 +373,6 @@ const leftRailItems = computed<ToolRailItem[]>(() => [
   { key: "data", label: t("shell.data"), icon: IconLucideDatabase },
   { key: "i18n", label: t("shell.i18n"), icon: IconLucideLanguages },
   { key: "script", label: t("shell.script"), icon: IconLucideFileCode },
-  { key: "role", label: t("shell.role"), icon: IconLucideUsers, placement: "bottom" },
 ]);
 
 const rightRailItems = computed<ToolRailItem[]>(() => [
@@ -397,8 +395,6 @@ const leftPanelComponent = computed(() => {
       return I18nPanel;
     case "script":
       return ScriptVarsPanel;
-    case "role":
-      return RolePanel;
     default:
       return PageTree;
   }

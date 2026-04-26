@@ -59,7 +59,6 @@ export const zhMessages = {
     data: "数据",
     i18n: "国际",
     script: "脚本",
-    role: "角色",
     props: "属性",
     advanced: "高级",
     variables: "变量",
