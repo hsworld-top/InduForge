@@ -47,6 +47,7 @@ func (h *DataPointHandler) BatchValues(w http.ResponseWriter, r *http.Request) e
 	var request struct {
 		IDs          []string `json:"ids"`
 		DatapointIDs []string `json:"datapointIds"`
+		Paths        []string `json:"paths"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -57,7 +58,7 @@ func (h *DataPointHandler) BatchValues(w http.ResponseWriter, r *http.Request) e
 		ids = request.DatapointIDs
 	}
 
-	values, err := h.service.GetDataPointValuesByIDs(r.Context(), r.PathValue("projectId"), ids)
+	values, err := h.service.GetDataPointValues(r.Context(), r.PathValue("projectId"), ids, request.Paths)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

@@ -2,7 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"net/http"
+
+	"github.com/jackc/pgx/v5"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
@@ -120,6 +123,61 @@ func (r *DataPointRepository) Create(ctx context.Context, params CreateDataPoint
 	}
 
 	return &record, nil
+}
+
+// UpsertBySource 按来源创建或更新数据点定义，适合查询、MQTT Tag、计算输出等自动同步场景。
+func (r *DataPointRepository) UpsertBySource(ctx context.Context, params CreateDataPointParams) (*DataPointRecord, error) {
+	if params.SourceID == nil || *params.SourceID == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "sourceId 不能为空")
+	}
+
+	sourceConfigBytes, err := marshalJSONObject(params.SourceConfig)
+	if err != nil {
+		return nil, err
+	}
+	tagsBytes, err := marshalJSONArray(params.Tags)
+	if err != nil {
+		return nil, err
+	}
+
+	row := r.pool.QueryRow(ctx, `
+        UPDATE data_points
+        SET path = $4,
+            name = $5,
+            description = $6,
+            source_config = $7::jsonb,
+            data_type = $8,
+            unit = $9,
+            precision_num = $10,
+            default_value = $11,
+            min_value = $12,
+            max_value = $13,
+            alarm_low = $14,
+            alarm_high = $15,
+            tags = $16::jsonb,
+            refresh_mode = $17,
+            refresh_interval_ms = $18,
+            status = $19,
+            updated_by = COALESCE($20, updated_by),
+            updated_at = now()
+        WHERE project_id = $1
+          AND source_type = $2
+          AND source_id = $3
+        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+    `, params.ProjectID, params.SourceType, *params.SourceID, params.Path, params.Name, params.Description, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+
+	record, err := scanDataPointRecord(row)
+	if err == nil {
+		return &record, nil
+	}
+	var appErr *apperrors.AppError
+	if !errors.Is(err, pgx.ErrNoRows) && !(errors.As(err, &appErr) && appErr.Code == apperrors.ErrorCodeNotFound) {
+		return nil, translateDataPointWriteError(err)
+	}
+
+	return r.Create(ctx, params)
 }
 
 // MarkInvalidBySource 按来源标记数据点失效。

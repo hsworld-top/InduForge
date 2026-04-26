@@ -370,6 +370,16 @@
 
 ### 5.3 连接管理 `/api/v1/data/projects/{projectId}/connections`
 
+#### 接入源 `/api/v1/data/projects/{projectId}/access-sources`
+
+| 方法 | 路径 | 功能概要 |
+| --- | --- | --- |
+| `GET` | `/api/v1/data/projects/{projectId}/access-sources` | 获取统一接入源列表 |
+| `GET` | `/api/v1/data/projects/{projectId}/access-sources/{sourceId}` | 获取接入源详情 |
+| `GET` | `/api/v1/data/projects/{projectId}/access-sources/{sourceId}/records` | 获取接入源最近记录 |
+
+#### 原始连接 `/api/v1/data/projects/{projectId}/connections`
+
 | 方法 | 路径 | 功能概要 |
 | --- | --- | --- |
 | `GET` | `/api/v1/data/projects/{projectId}/connections` | 获取连接列表 |
@@ -486,6 +496,7 @@
 | 方法 | 路径 | 功能概要 |
 | --- | --- | --- |
 | `POST` | `/api/v1/data/projects/{projectId}/preview/sessions` | 创建预览会话 |
+| `GET` | `/api/v1/data/projects/{projectId}/preview/diagnostics` | 获取预览链路诊断信息 |
 | `POST` | `/api/v1/data/preview/sessions/{sessionId}/heartbeat` | 预览会话心跳 |
 | `DELETE` | `/api/v1/data/preview/sessions/{sessionId}` | 关闭预览会话 |
 | `GET/POST` | `/socket.io` | 预览 Socket 通道 |

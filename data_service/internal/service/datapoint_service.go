@@ -47,6 +47,12 @@ type DataPoint struct {
 	RefreshMode        string                                 `json:"refreshMode"`
 	RefreshIntervalMS  *int                                   `json:"refreshIntervalMs"`
 	Status             string                                 `json:"status"`
+	LastValue          any                                    `json:"lastValue,omitempty"`
+	Quality            string                                 `json:"quality"`
+	LastUpdatedAt      *time.Time                             `json:"lastUpdatedAt,omitempty"`
+	SourceStatus       string                                 `json:"sourceStatus"`
+	SourceError        *string                                `json:"sourceError,omitempty"`
+	ConsumeMode        string                                 `json:"consumeMode"`
 	CreatedAt          time.Time                              `json:"createdAt"`
 	UpdatedAt          time.Time                              `json:"updatedAt"`
 }
@@ -148,7 +154,9 @@ func (s *DataPointService) ListDataPoints(ctx context.Context, projectID string,
 
 	items := make([]DataPoint, 0, len(records))
 	for _, record := range records {
-		items = append(items, toDataPoint(record))
+		item := toDataPoint(record)
+		s.enrichDataPointPreview(ctx, projectID, record, &item)
+		items = append(items, item)
 	}
 
 	page, pageSize := normalizePageAndSize(normalizedFilter.Page, normalizedFilter.PageSize, 50, 200)
@@ -183,6 +191,7 @@ func (s *DataPointService) GetDataPoint(ctx context.Context, projectID, id strin
 	}
 
 	dataPoint := toDataPoint(*record)
+	s.enrichDataPointPreview(ctx, projectID, *record, &dataPoint)
 	return &dataPoint, nil
 }
 
@@ -512,8 +521,68 @@ func toDataPoint(record repository.DataPointRecord) DataPoint {
 		RefreshMode:        record.RefreshMode,
 		RefreshIntervalMS:  cloneOptionalInt(record.RefreshIntervalMS),
 		Status:             record.Status,
+		Quality:            "unknown",
+		SourceStatus:       deriveDataPointSourceStatus(record),
+		ConsumeMode:        deriveDataPointConsumeMode(record),
 		CreatedAt:          record.CreatedAt,
 		UpdatedAt:          record.UpdatedAt,
+	}
+}
+
+func (s *DataPointService) enrichDataPointPreview(ctx context.Context, projectID string, record repository.DataPointRecord, target *DataPoint) {
+	if target == nil {
+		return
+	}
+	if record.Status == "invalid" {
+		target.Quality = "bad"
+		target.SourceStatus = "invalid"
+		reason := "数据点已失效"
+		target.SourceError = &reason
+		return
+	}
+
+	value, err := s.buildValueFromRecord(ctx, projectID, record)
+	if err != nil {
+		target.Quality = "bad"
+		target.SourceStatus = "error"
+		message := err.Error()
+		target.SourceError = &message
+		return
+	}
+	target.LastValue = value.Value
+	target.Quality = value.Quality
+	target.LastUpdatedAt = &value.Timestamp
+	if value.Quality == "good" {
+		target.SourceStatus = "ready"
+	}
+}
+
+func deriveDataPointSourceStatus(record repository.DataPointRecord) string {
+	switch record.Status {
+	case "active":
+		return "ready"
+	case "inactive":
+		return "inactive"
+	case "invalid":
+		return "invalid"
+	default:
+		return "unknown"
+	}
+}
+
+func deriveDataPointConsumeMode(record repository.DataPointRecord) string {
+	switch record.RefreshMode {
+	case "subscription":
+		return "subscribe"
+	case "manual":
+		return "query"
+	default:
+		switch record.SourceType {
+		case "mqtt.tag", "mqtt.subscription":
+			return "subscribe"
+		default:
+			return "query"
+		}
 	}
 }
 

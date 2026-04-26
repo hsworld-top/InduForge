@@ -82,27 +82,50 @@ func (s *DataPointService) GetDataPointStatuses(ctx context.Context, projectID s
 
 // GetDataPointValuesByIDs 按数据点主键批量返回当前值。
 func (s *DataPointService) GetDataPointValuesByIDs(ctx context.Context, projectID string, ids []string) (map[string]any, error) {
+	return s.GetDataPointValues(ctx, projectID, ids, nil)
+}
+
+// GetDataPointValues 按 id 或 path 批量返回当前值，返回 key 与调用方传入标识保持一致。
+func (s *DataPointService) GetDataPointValues(ctx context.Context, projectID string, ids, paths []string) (map[string]any, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
 
 	uniqueIDs := uniqueStrings(ids)
-	if len(uniqueIDs) == 0 {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "datapointIds 不能为空")
+	uniquePaths := uniqueStrings(paths)
+	if len(uniqueIDs) == 0 && len(uniquePaths) == 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "datapointIds 或 paths 不能为空")
 	}
 
-	records, err := s.repository.GetByProjectAndIDs(ctx, projectID, uniqueIDs)
-	if err != nil {
-		return nil, err
+	records := make([]repository.DataPointRecord, 0, len(uniqueIDs)+len(uniquePaths))
+	if len(uniqueIDs) > 0 {
+		loaded, err := s.repository.GetByProjectAndIDs(ctx, projectID, uniqueIDs)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, loaded...)
+	}
+	if len(uniquePaths) > 0 {
+		loaded, err := s.repository.ListByProjectAndPaths(ctx, projectID, uniquePaths)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, loaded...)
 	}
 
 	values := make(map[string]any, len(records))
+	seen := make(map[string]struct{}, len(records))
 	for _, record := range records {
+		if _, ok := seen[record.ID]; ok {
+			continue
+		}
+		seen[record.ID] = struct{}{}
 		value, err := s.buildValueFromRecord(ctx, projectID, record)
 		if err != nil {
 			return nil, err
 		}
 		values[record.ID] = value.Value
+		values[record.Path] = value.Value
 	}
 	return values, nil
 }

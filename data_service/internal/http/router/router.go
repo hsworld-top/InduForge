@@ -9,6 +9,7 @@ import (
 )
 
 type options struct {
+	accessSourceHandler    *handler.AccessSourceHandler
 	connectionHandler      *handler.ConnectionHandler
 	queryHandler           *handler.QueryHandler
 	dataPointHandler       *handler.DataPointHandler
@@ -24,6 +25,14 @@ type options struct {
 
 // Option defines route wiring dependencies.
 type Option func(*options)
+
+// WithAccessSourceRoutes wires access source routes.
+func WithAccessSourceRoutes(accessSourceHandler *handler.AccessSourceHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.accessSourceHandler = accessSourceHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
 
 // WithConnectionRoutes wires connection routes.
 func WithConnectionRoutes(connectionHandler *handler.ConnectionHandler, jwtValidator *auth.JWTValidator) Option {
@@ -110,6 +119,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 		return nil
 	}))
 
+	mountAccessSourceRoutes(mux, opts)
 	mountConnectionRoutes(mux, opts)
 	mountDataRoutes(mux, opts)
 	mountMqttRoutes(mux, opts)
@@ -120,6 +130,37 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountComputeRoutes(mux, opts)
 	mountProjectSnapshotRoutes(mux, opts)
 	return mux
+}
+
+func mountAccessSourceRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.accessSourceHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/access-sources",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.accessSourceHandler.List),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/access-sources/{sourceId}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.accessSourceHandler.Get),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/access-sources/{sourceId}/records",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.accessSourceHandler.Records),
+			),
+		),
+	)
 }
 
 func mountConnectionRoutes(mux *http.ServeMux, opts options) {
@@ -755,6 +796,14 @@ func mountPreviewRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
 				middleware.ErrorHandler(opts.previewHandler.Create),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/preview/diagnostics",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.previewHandler.Diagnose),
 			),
 		),
 	)

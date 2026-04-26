@@ -113,14 +113,17 @@ type ExecuteQueryInput struct {
 type QueryService struct {
 	repository  *repository.QueryRepository
 	connections *repository.ConnectionRepository
+	datapoints  *repository.DataPointRepository
 }
 
 // NewQueryService 创建查询服务。
-// 第三个参数保留是为了兼容现有装配签名。
-func NewQueryService(repo *repository.QueryRepository, connectionRepo *repository.ConnectionRepository, _ any) *QueryService {
+// 第三个参数可传入 DataPointRepository，用于同步 db.query 数据点；保留 any 是为了兼容既有测试装配。
+func NewQueryService(repo *repository.QueryRepository, connectionRepo *repository.ConnectionRepository, dataPointRepo any) *QueryService {
+	datapoints, _ := dataPointRepo.(*repository.DataPointRepository)
 	return &QueryService{
 		repository:  repo,
 		connections: connectionRepo,
+		datapoints:  datapoints,
 	}
 }
 
@@ -234,6 +237,9 @@ func (s *QueryService) CreateQuery(ctx context.Context, projectID, userID string
 	if err != nil {
 		return nil, err
 	}
+	if err := s.syncQueryDataPoint(ctx, *record, userID); err != nil {
+		return nil, err
+	}
 
 	query := toQuery(*record)
 	return &query, nil
@@ -283,6 +289,13 @@ func (s *QueryService) UpdateQuery(ctx context.Context, claims *auth.Claims, que
 	if err != nil {
 		return nil, err
 	}
+	if updated.QueryType == "sql" {
+		if err := s.syncQueryDataPoint(ctx, *updated, userID); err != nil {
+			return nil, err
+		}
+	} else if s.datapoints != nil {
+		_, _ = s.datapoints.MarkInvalidBySource(ctx, updated.ProjectID, "db.query", updated.ID, &userID)
+	}
 
 	query := toQuery(*updated)
 	return &query, nil
@@ -295,7 +308,13 @@ func (s *QueryService) DeleteQuery(ctx context.Context, claims *auth.Claims, que
 		return err
 	}
 
-	return s.repository.Delete(ctx, record.ProjectID, queryID)
+	if err := s.repository.Delete(ctx, record.ProjectID, queryID); err != nil {
+		return err
+	}
+	if s.datapoints != nil {
+		_, _ = s.datapoints.MarkInvalidBySource(ctx, record.ProjectID, "db.query", queryID, nil)
+	}
+	return nil
 }
 
 // updateRecord 负责把更新输入与现有记录合并后持久化。
@@ -505,6 +524,50 @@ func (s *QueryService) executionRuntimeForRecord(ctx context.Context, record rep
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接执行 SQL")
 	}
 	return connectRelationalRuntime(ctx, connection.Config)
+}
+
+func (s *QueryService) syncQueryDataPoint(ctx context.Context, record repository.QueryRecord, userID string) error {
+	if s == nil || s.datapoints == nil || record.QueryType != "sql" {
+		return nil
+	}
+	connection, err := s.connections.GetByProjectAndID(ctx, record.ProjectID, record.ConnectionID)
+	if err != nil {
+		return err
+	}
+	if connection.Type != "relational" {
+		return nil
+	}
+
+	path := "db." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(record.Name)
+	sourceConfig := map[string]any{
+		"mode": "query",
+	}
+	if parameters, ok := record.Config["parameters"]; ok {
+		sourceConfig["parameters"] = parameters
+	}
+	return s.upsertQueryDataPoint(ctx, repository.CreateDataPointParams{
+		ProjectID:    record.ProjectID,
+		UserID:       &userID,
+		Path:         path,
+		Name:         record.Name,
+		Description:  cloneOptionalString(record.Description),
+		SourceType:   "db.query",
+		SourceID:     &record.ID,
+		SourceConfig: sourceConfig,
+		DataType:     "object",
+		Tags:         []any{},
+		RefreshMode:  "manual",
+		Status:       "active",
+	})
+}
+
+func (s *QueryService) upsertQueryDataPoint(ctx context.Context, input repository.CreateDataPointParams) error {
+	existing, err := s.datapoints.GetByProjectAndPath(ctx, input.ProjectID, input.Path)
+	if err == nil && existing != nil && (existing.SourceID == nil || *existing.SourceID != *input.SourceID || existing.SourceType != input.SourceType) {
+		input.Path = input.Path + "_" + (*input.SourceID)[:8]
+	}
+	_, err = s.datapoints.UpsertBySource(ctx, input)
+	return err
 }
 
 // loadQueryForClaims 读取查询并校验当前 claims 的项目边界。

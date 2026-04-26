@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +25,22 @@ type PreviewSession struct {
 	LastActiveAt time.Time      `json:"lastActiveAt"`
 	ExpiredAt    time.Time      `json:"expiredAt"`
 	Meta         map[string]any `json:"meta"`
+}
+
+// PreviewDiagnostic 表示开发态预览联调使用的诊断结果。
+type PreviewDiagnostic struct {
+	ProjectID        string          `json:"projectId"`
+	UserID           string          `json:"userId"`
+	TenantID         string          `json:"tenantId"`
+	AuthOK           bool            `json:"authOk"`
+	ProjectAccessOK  bool            `json:"projectAccessOk"`
+	RedisReady       bool            `json:"redisReady"`
+	SocketEnabled    bool            `json:"socketEnabled"`
+	SessionID        string          `json:"sessionId,omitempty"`
+	Session          *PreviewSession `json:"session,omitempty"`
+	SessionActiveOK  bool            `json:"sessionActiveOk"`
+	FailureReason    string          `json:"failureReason,omitempty"`
+	RecommendedEvent string          `json:"recommendedEvent,omitempty"`
 }
 
 // CreatePreviewSessionInput 描述创建 preview 会话时允许外部传入的附加数据。
@@ -183,6 +200,58 @@ func (s *PreviewSessionService) AuthorizeSession(ctx context.Context, claims *au
 	return &session, nil
 }
 
+// DiagnosePreview 对开发态预览链路做只读诊断，方便 debug 页面定位 403/会话过期等问题。
+func (s *PreviewSessionService) DiagnosePreview(ctx context.Context, claims *auth.Claims, projectID, sessionID string) (*PreviewDiagnostic, error) {
+	result := &PreviewDiagnostic{
+		ProjectID:     strings.TrimSpace(projectID),
+		RedisReady:    s != nil && s.redis != nil,
+		SocketEnabled: s != nil && s.redis != nil && s.repository != nil,
+	}
+	if claims != nil {
+		result.UserID = strings.TrimSpace(claims.UserID)
+		result.TenantID = strings.TrimSpace(claims.TenantID)
+		result.AuthOK = true
+		result.ProjectAccessOK = claims.HasProjectAccess(projectID)
+	}
+
+	if err := s.validateDependencies(); err != nil {
+		result.FailureReason = "preview 会话依赖未就绪"
+		result.RecommendedEvent = "检查 data_service Redis 配置与启动日志"
+		return result, nil
+	}
+	if claims == nil {
+		result.FailureReason = "缺少认证令牌"
+		result.RecommendedEvent = "传入 Authorization Bearer token"
+		return result, nil
+	}
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if !claims.HasProjectAccess(projectID) {
+		result.FailureReason = "当前令牌没有项目访问权限"
+		result.RecommendedEvent = "确认 token 内的项目范围与 projectId 一致"
+		return result, nil
+	}
+
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		result.SessionActiveOK = false
+		result.RecommendedEvent = "先创建 preview session，再建立 Socket.IO 连接"
+		return result, nil
+	}
+
+	result.SessionID = sessionID
+	session, err := s.AuthorizeSession(ctx, claims, projectID, sessionID)
+	if err != nil {
+		result.FailureReason = socketFriendlyPreviewFailure(err)
+		result.RecommendedEvent = "重新创建 preview session 或检查 Socket.IO 握手参数"
+		return result, nil
+	}
+	result.Session = session
+	result.SessionActiveOK = true
+	return result, nil
+}
+
 // GetSession 返回当前 preview 会话快照，供 socket 清理协程探测状态。
 func (s *PreviewSessionService) GetSession(ctx context.Context, sessionID string) (*PreviewSession, error) {
 	if err := s.validateDependencies(); err != nil {
@@ -195,6 +264,17 @@ func (s *PreviewSessionService) GetSession(ctx context.Context, sessionID string
 	}
 	session := toPreviewSession(*current)
 	return &session, nil
+}
+
+func socketFriendlyPreviewFailure(err error) string {
+	if err == nil {
+		return ""
+	}
+	var appErr *apperrors.AppError
+	if ok := errors.As(err, &appErr); ok && appErr.Message != "" {
+		return appErr.Message
+	}
+	return err.Error()
 }
 
 func (s *PreviewSessionService) validateDependencies() error {

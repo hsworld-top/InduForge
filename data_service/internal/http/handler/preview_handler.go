@@ -67,6 +67,21 @@ func (h *PreviewHandler) Heartbeat(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
+// Diagnose 返回预览链路诊断信息，用于开发态 debug 页面定位握手失败原因。
+func (h *PreviewHandler) Diagnose(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	result, err := h.service.DiagnosePreview(r.Context(), claims, r.PathValue("projectId"), r.URL.Query().Get("sessionId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // Delete 关闭预览会话并清理 Redis 临时状态。
 func (h *PreviewHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)

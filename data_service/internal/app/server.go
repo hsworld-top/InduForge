@@ -144,6 +144,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	cleanupFns := []func(){pool.Close}
 
 	connectionRepository := repository.NewConnectionRepository(pool)
+	accessSourceRepository := repository.NewAccessSourceRepository(pool)
 	queryRepository := repository.NewQueryRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
@@ -152,8 +153,9 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
 	computeRepository := repository.NewComputeRepository(pool)
 
+	accessSourceService := service.NewAccessSourceService(connectionRepository, mqttRepository, accessSourceRepository)
 	connectionService := service.NewConnectionService(connectionRepository)
-	queryService := service.NewQueryService(queryRepository, connectionRepository, pool)
+	queryService := service.NewQueryService(queryRepository, connectionRepository, dataPointRepository)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
@@ -166,6 +168,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		enginecompute.NewScheduler(),
 	)
 
+	accessSourceHandler := handler.NewAccessSourceHandler(accessSourceService)
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
@@ -176,6 +179,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	computeHandler := handler.NewComputeHandler(computeService)
 
 	routeOptions := []router.Option{
+		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
@@ -186,6 +190,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	}
 	routeSummaryParts := []string{
 		"connections=enabled",
+		"accessSources=enabled",
 		"data=enabled",
 		"mqtt=enabled",
 		"projectSnapshot=enabled",
