@@ -330,7 +330,6 @@ export const enMessages = {
       style: "Style",
       features: "Features",
       props: "Properties",
-      security: "Security Policy",
     },
     labels: {
       regionPreset: "Region Preset",
@@ -354,8 +353,6 @@ export const enMessages = {
       tabPosition: "Tab Position",
       stretch: "Stretch Width",
       tabs: "Tabs",
-      safetyControl: "Enable Permission Control",
-      safetyDesc: "Permission Description",
       width: "Width",
       height: "Height",
     },
@@ -391,7 +388,6 @@ export const enMessages = {
     },
     placeholders: {
       icon: "e.g. el-icon-search",
-      safetyDesc: "Enter permission description",
     },
   },
   resourcePanel: {

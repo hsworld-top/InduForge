@@ -30,6 +30,23 @@ export interface ProjectRuntimeRolesPayload {
   runtimeRoles?: ProjectRuntimeRoleItem[];
 }
 
+export interface ProjectRuntimeUserRoleItem extends ProjectRuntimeRoleItem {
+  isSystem?: boolean;
+}
+
+export interface ProjectRuntimeUserItem {
+  id?: string;
+  username?: string;
+  displayName?: string | null;
+  status?: string;
+  roleIds?: string[];
+  roles?: ProjectRuntimeUserRoleItem[];
+}
+
+export interface ProjectRuntimeUsersPayload {
+  runtimeUsers?: ProjectRuntimeUserItem[];
+}
+
 export const projectApi = {
   getPages(projectId: string) {
     return request.get<PagesListPayload>(`/design/projects/${projectId}/pages`);
@@ -85,6 +102,10 @@ export const projectApi = {
 
   getRuntimeRoles(projectId: string) {
     return request.get<ProjectRuntimeRolesPayload>(`/projects/${projectId}/runtime-roles`);
+  },
+
+  getRuntimeUsers(projectId: string) {
+    return request.get<ProjectRuntimeUsersPayload>(`/projects/${projectId}/runtime-users`);
   },
 
   updateProjectSettings(projectId: string, settings: unknown) {

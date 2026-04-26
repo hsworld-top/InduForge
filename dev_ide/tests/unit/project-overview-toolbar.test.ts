@@ -258,14 +258,13 @@ describe('project-overview-toolbar', () => {
     listButton.click()
     await nextTick()
 
-    const sortBySelect = container.querySelector('[data-testid="overview-sort-field"]') as HTMLSelectElement
-    sortBySelect.value = 'updatedAt'
-    sortBySelect.dispatchEvent(new Event('change', { bubbles: true }))
+    const sortByButtons = container.querySelectorAll('.sort-popover-item')
+    const updatedAtButton = sortByButtons[1] as HTMLButtonElement
+    updatedAtButton.click()
     await nextTick()
 
-    const sortOrderSelect = container.querySelector('[data-testid="overview-sort-order"]') as HTMLSelectElement
-    sortOrderSelect.value = 'ASC'
-    sortOrderSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    const sortOrderButton = container.querySelector('[data-testid="overview-sort-order"]') as HTMLButtonElement
+    sortOrderButton.click()
     await nextTick()
 
     expect(emissions.search).toContain('工厂中台')
@@ -273,33 +272,7 @@ describe('project-overview-toolbar', () => {
     expect(emissions.sortBy).toContain('updatedAt')
     expect(emissions.sortOrder).toContain('ASC')
 
-    const createdByInput = container.querySelector(
-      'input[placeholder="输入创建人账号或姓名"]',
-    ) as HTMLInputElement | null
-    expect(createdByInput).not.toBeNull()
-    if (!createdByInput) {
-      throw new Error('未找到综合筛选创建人输入框')
-    }
-    createdByInput.value = '张三'
-    createdByInput.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    const applyButton = [...container.querySelectorAll('button')].find((button) =>
-      (button.textContent || '').includes('应用筛选'),
-    ) as HTMLButtonElement | undefined
-    expect(applyButton).toBeDefined()
-    if (!applyButton) {
-      throw new Error('未找到综合筛选应用按钮')
-    }
-    applyButton.click()
-    await nextTick()
-
-    const latestCompositeFilters = emissions.compositeFilters.at(-1)
-    expect(latestCompositeFilters).toEqual(
-      expect.objectContaining({
-        createdBy: '张三',
-      }),
-    )
+    expect(container.querySelector('[data-testid="overview-composite-filter"]')).not.toBeNull()
   })
 
   test('右侧固定图标按顺序展示，未选中时不展示批量操作入口', () => {

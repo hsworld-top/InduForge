@@ -33,6 +33,13 @@ interface ViewPresetProp {
   height: number;
 }
 
+interface RuntimeUserProp {
+  id: string;
+  username: string;
+  displayName?: string;
+  status?: string;
+}
+
 const props = withDefaults(
   defineProps<{
     pageName?: string;
@@ -54,6 +61,8 @@ const props = withDefaults(
     saveSettings?: ToolbarSaveSettings;
     hasSelection?: boolean;
     hasClipboard?: boolean;
+    runtimeUsers?: readonly RuntimeUserProp[];
+    selectedPreviewRuntimeUserId?: string;
   }>(),
   {
     pageName: "",
@@ -75,6 +84,8 @@ const props = withDefaults(
     saveSettings: () => ({ autoSave: false, intervalMinutes: 5 }),
     hasSelection: false,
     hasClipboard: false,
+    runtimeUsers: () => [],
+    selectedPreviewRuntimeUserId: "",
   },
 );
 
@@ -109,6 +120,7 @@ const emit = defineEmits<{
   copy: [];
   paste: [];
   deleteSelected: [];
+  previewUserChange: [runtimeUserId: string];
 }>();
 
 const MIN_CANVAS_WIDTH = 120;
@@ -147,6 +159,20 @@ const saveIntervalOptions = computed(() => [
   { value: 15, label: t("toolbar.saveIntervalOption", { value: 15 }) as string },
 ]);
 
+const previewUserOptions = computed(() =>
+  props.runtimeUsers
+    .filter((user) => user.status !== "disabled")
+    .map((user) => ({
+      value: user.id,
+      label: user.username,
+    })),
+);
+
+const selectedPreviewUser = computed<string>({
+  get: () => props.selectedPreviewRuntimeUserId || "",
+  set: (value) => emit("previewUserChange", value),
+});
+
 const localSaveSettings = ref({
   autoSave: false,
   intervalMinutes: 5,
@@ -156,6 +182,7 @@ const localCustomSize = ref({
   height: props.canvasHeight,
 });
 const saveDropdownRef = ref<{ handleClose?: () => void } | null>(null);
+const previewDropdownRef = ref<{ handleClose?: () => void } | null>(null);
 
 watch(
   () => props.saveSettings,
@@ -194,10 +221,12 @@ const handleDeleteSelected = () => emit("deleteSelected");
 function handlePreviewCommand(command: string) {
   if (command === "pagePreview") {
     emit("preview");
+    previewDropdownRef.value?.handleClose?.();
     return;
   }
   if (command === "appPreview") {
     emit("previewApp");
+    previewDropdownRef.value?.handleClose?.();
   }
 }
 
@@ -420,11 +449,13 @@ function handleMoreCommand(command: string) {
       <div class="toolbar-group toolbar-group--primary">
         <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
         <el-dropdown
+          ref="previewDropdownRef"
           class="preview-action"
           trigger="click"
           placement="bottom-end"
           popper-class="preview-menu-popper"
           split-button
+          :hide-on-click="false"
           @click="handlePreview"
           @command="handlePreviewCommand"
         >
@@ -434,6 +465,24 @@ function handleMoreCommand(command: string) {
           </span>
           <template #dropdown>
             <el-dropdown-menu>
+              <div class="preview-identity-panel" @click.stop>
+                <div class="preview-identity-panel__label">预览身份</div>
+                <el-select
+                  v-model="selectedPreviewUser"
+                  size="small"
+                  clearable
+                  filterable
+                  :teleported="false"
+                  placeholder="未选择用户"
+                >
+                  <el-option
+                    v-for="item in previewUserOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </div>
               <el-dropdown-item command="pagePreview">{{ t("toolbar.pagePreview") }}</el-dropdown-item>
               <el-dropdown-item command="appPreview">{{ t("toolbar.appPreview") }}</el-dropdown-item>
             </el-dropdown-menu>
@@ -903,6 +952,24 @@ function handleMoreCommand(command: string) {
 
 :global(.preview-menu-popper .el-dropdown-menu) {
   padding: 4px;
+}
+
+.preview-identity-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 220px;
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--designer-border-soft);
+}
+
+.preview-identity-panel__label {
+  color: var(--designer-text-secondary);
+  font-size: var(--designer-font-xs);
+}
+
+.preview-identity-panel :deep(.el-select) {
+  width: 100%;
 }
 
 :global(.designer-size-popper.el-popper) {

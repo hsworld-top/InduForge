@@ -3,6 +3,8 @@ export const RUNTIME_ACCESS_TABS = {
   ROLES: 'roles',
 }
 
+export const RUNTIME_ROLE_CODE_PREFIX = 'PROJECT_'
+
 const RUNTIME_STATUS_META = {
   active: {
     value: 'active',
@@ -19,6 +21,18 @@ const RUNTIME_STATUS_META = {
 const trimText = (value) => (typeof value === 'string' ? value.trim() : '')
 
 const normalizeCode = (value) => trimText(value).replace(/\s+/g, '_').toUpperCase()
+
+export const stripRuntimeRoleCodePrefix = (value) => {
+  const normalizedCode = normalizeCode(value)
+  return normalizedCode.startsWith(RUNTIME_ROLE_CODE_PREFIX)
+    ? normalizedCode.slice(RUNTIME_ROLE_CODE_PREFIX.length)
+    : normalizedCode
+}
+
+export const normalizeRuntimeRoleCode = (value) => {
+  const suffix = stripRuntimeRoleCodePrefix(value)
+  return suffix ? `${RUNTIME_ROLE_CODE_PREFIX}${suffix}` : ''
+}
 
 const normalizeIdList = (values) => {
   if (!Array.isArray(values)) {
@@ -63,7 +77,7 @@ export const buildRuntimeRolePayload = (form = {}, options = {}) => {
   const { includeStatus = true } = options
   const payload = {
     name: trimText(form.name),
-    code: normalizeCode(form.code),
+    code: normalizeRuntimeRoleCode(form.code),
     description: trimText(form.description),
   }
 
@@ -285,7 +299,7 @@ const applyUserForm = (target, user) => {
 const applyRoleForm = (target, role) => {
   Object.assign(target, createEmptyRoleForm(), {
     id: role?.id || '',
-    code: role?.code || '',
+    code: stripRuntimeRoleCodePrefix(role?.code || ''),
     name: role?.name || '',
     description: role?.description || '',
     status: resolveRuntimeAccessStatusMeta(role?.status).value,

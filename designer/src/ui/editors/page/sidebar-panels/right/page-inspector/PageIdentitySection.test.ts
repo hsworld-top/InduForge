@@ -34,7 +34,6 @@ function createForm(): PageInspectorFormState {
     popupCenter: true,
     popupMaskClosable: true,
     permissionSummary: "未配置",
-    pageViewPermission: undefined,
     cacheMode: "default",
     preloadMode: "lazy",
   };

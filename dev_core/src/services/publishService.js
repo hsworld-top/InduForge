@@ -24,6 +24,7 @@ const ErrorCodes = require("../constants/errorCodes");
 // 制品存储目录
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, "../../artifacts");
 const RUNTIME_SECURITY_FILE_NAME = "runtime-security.json";
+const RUNTIME_PERMISSIONS_FILE_NAME = "runtime-permissions.json";
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -122,7 +123,7 @@ const collectPlainRows = async (model, where) =>
     raw: true,
   });
 
-const buildManifestWithRuntimeSecurity = (manifest, runtimeSecuritySnapshot) => {
+const buildManifestWithRuntimeSecurity = (manifest, runtimeSecuritySnapshot, runtimePermissionsIndex) => {
   const snapshot = runtimeSecuritySnapshot || {
     version: new Date().toISOString(),
     users: [],
@@ -140,7 +141,137 @@ const buildManifestWithRuntimeSecurity = (manifest, runtimeSecuritySnapshot) => 
         fileName: RUNTIME_SECURITY_FILE_NAME,
         version: snapshot.version,
       },
+      runtimePermissions: runtimePermissionsIndex
+        ? {
+            included: true,
+            fileName: RUNTIME_PERMISSIONS_FILE_NAME,
+            version: runtimePermissionsIndex.version,
+            generatedAt: runtimePermissionsIndex.generatedAt,
+          }
+        : manifest.security?.runtimePermissions || undefined,
     },
+  };
+};
+
+const normalizeId = (value) => String(value ?? "").trim();
+
+const collectSchemaNodes = (schemaContent = {}) => {
+  if (schemaContent?.nodesById && typeof schemaContent.nodesById === "object") {
+    return Object.values(schemaContent.nodesById).filter(Boolean);
+  }
+  const result = [];
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    result.push(node);
+    asArray(node.children).forEach(visit);
+  };
+  asArray(schemaContent.components || schemaContent.componentTree).forEach(visit);
+  return result;
+};
+
+const resolveSchemaPage = (pageRecord) => {
+  const schemaContent = pageRecord?.schemaContent || {};
+  if (schemaContent.page && typeof schemaContent.page === "object") {
+    return schemaContent.page;
+  }
+  const pagesById = schemaContent.pagesById;
+  if (pagesById && typeof pagesById === "object") {
+    return pagesById[pageRecord.id] || Object.values(pagesById)[0] || {};
+  }
+  return {};
+};
+
+const normalizeRoleRefsForIndex = (roleRefs, roleById, errors, context) => {
+  const roleIds = [];
+  const roleCodes = [];
+  for (const ref of asArray(roleRefs)) {
+    const roleId = normalizeId(ref?.roleId || ref?.id);
+    if (!roleId) continue;
+    const role = roleById.get(roleId);
+    if (!role) {
+      errors.push(`${context} 引用了不存在的运行态角色 ${roleId}`);
+      continue;
+    }
+    roleIds.push(roleId);
+    roleCodes.push(role.code);
+  }
+  return {
+    roleIds: [...new Set(roleIds)],
+    roleCodes: [...new Set(roleCodes.filter(Boolean))],
+  };
+};
+
+const buildRuntimePermissionsIndex = (pages, runtimeSecuritySnapshot) => {
+  const roles = asArray(runtimeSecuritySnapshot?.roles);
+  const roleById = new Map(roles.map((role) => [role.id, role]));
+  const errors = [];
+  const pageEntries = {};
+
+  asArray(pages)
+    .filter((page) => page?.type !== "folder")
+    .forEach((pageRecord) => {
+      const schemaPage = resolveSchemaPage(pageRecord);
+      const pageConfig = schemaPage?.config || pageRecord.pageConfig || {};
+      const access = pageConfig.runtimeAccess || {};
+      const schemes = {};
+      const schemeIds = new Set();
+
+      asArray(access.schemes).forEach((scheme) => {
+        const schemeId = normalizeId(scheme?.id);
+        if (!schemeId) return;
+        schemeIds.add(schemeId);
+        schemes[schemeId] = {
+          name: normalizeId(scheme?.name),
+          ...normalizeRoleRefsForIndex(
+            scheme?.roleRefs,
+            roleById,
+            errors,
+            `页面 ${pageRecord.id} 的权限方案 ${schemeId}`,
+          ),
+        };
+      });
+
+      const components = {};
+      collectSchemaNodes(pageRecord.schemaContent).forEach((node) => {
+        const runtimeAccess = node?.permissions?.runtimeAccess;
+        if (!runtimeAccess || typeof runtimeAccess !== "object") return;
+        const visibleSchemeId = normalizeId(runtimeAccess.visibleSchemeId);
+        const operableSchemeId = normalizeId(runtimeAccess.operableSchemeId);
+        [visibleSchemeId, operableSchemeId].filter(Boolean).forEach((schemeId) => {
+          if (!schemeIds.has(schemeId)) {
+            errors.push(`页面 ${pageRecord.id} 的组件 ${node.id} 引用了不存在的权限方案 ${schemeId}`);
+          }
+        });
+        components[node.id] = {
+          ...(visibleSchemeId ? { visibleSchemeId } : {}),
+          ...(operableSchemeId ? { operableSchemeId } : {}),
+        };
+      });
+
+      pageEntries[pageRecord.id] = {
+        enabled: Boolean(access.enabled),
+        allowedRoles: normalizeRoleRefsForIndex(
+          access.allowedRoles,
+          roleById,
+          errors,
+          `页面 ${pageRecord.id} 的访问角色`,
+        ),
+        schemes,
+        components,
+      };
+    });
+
+  if (errors.length > 0) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: `运行态权限配置校验失败: ${errors.join("; ")}`,
+      errors,
+    });
+  }
+
+  return {
+    version: "1.0",
+    generatedAt: new Date().toISOString(),
+    pages: pageEntries,
   };
 };
 
@@ -243,6 +374,7 @@ class PublishService {
       const manifestWithRuntimeSecurity = buildManifestWithRuntimeSecurity(
         manifest,
         projectData.runtimeSecuritySnapshot,
+        projectData.runtimePermissionsIndex,
       );
 
       // 4. 打包 IFP
@@ -358,6 +490,7 @@ class PublishService {
       this.collectRuntimeSecuritySnapshot(projectId),
     ]);
     const protocols = normalizeArtifactProtocols(artifact?.protocols);
+    const runtimePermissionsIndex = buildRuntimePermissionsIndex(pages, runtimeSecuritySnapshot);
 
     return {
       pages,
@@ -373,6 +506,7 @@ class PublishService {
       dataPoints: asArray(artifact?.datapoints),
       protocols,
       runtimeSecuritySnapshot,
+      runtimePermissionsIndex,
     };
   }
 
@@ -460,6 +594,7 @@ class PublishService {
     const manifestWithSecurity = buildManifestWithRuntimeSecurity(
       manifest,
       runtimeSecuritySnapshot,
+      projectData.runtimePermissionsIndex,
     );
 
     return new Promise((resolve, reject) => {
@@ -557,6 +692,18 @@ class PublishService {
       archive.append(JSON.stringify(runtimeSecuritySnapshot, null, 2), {
         name: RUNTIME_SECURITY_FILE_NAME,
       });
+      archive.append(
+        JSON.stringify(
+          projectData.runtimePermissionsIndex || {
+            version: "1.0",
+            generatedAt: new Date().toISOString(),
+            pages: {},
+          },
+          null,
+          2,
+        ),
+        { name: RUNTIME_PERMISSIONS_FILE_NAME },
+      );
 
       // TODO: 添加 assets 目录（如果有资源文件）
 

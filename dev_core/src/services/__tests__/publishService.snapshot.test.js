@@ -273,6 +273,147 @@ describe("publishService snapshot integration", () => {
     );
   });
 
+  test("collectProjectData builds runtime permission index from page schemes", async () => {
+    const runtimeRole = {
+      id: "role-1",
+      code: "viewer",
+      name: "Viewer",
+      status: "active",
+    };
+
+    mockDesignPage.findAll.mockResolvedValue([
+      {
+        id: "page-1",
+        name: "Home",
+        type: "page",
+        sortOrder: 1,
+        schemaContent: {
+          page: {
+            config: {
+              runtimeAccess: {
+                enabled: true,
+                allowedRoles: [{ roleId: "role-1", roleCode: "viewer", roleName: "Viewer" }],
+                schemes: [
+                  {
+                    id: "viewer-scheme",
+                    name: "Viewer scheme",
+                    roleRefs: [{ roleId: "role-1", roleCode: "viewer", roleName: "Viewer" }],
+                  },
+                ],
+              },
+            },
+          },
+          nodesById: {
+            "button-1": {
+              id: "button-1",
+              permissions: {
+                runtimeAccess: {
+                  visibleSchemeId: "viewer-scheme",
+                  operableSchemeId: "viewer-scheme",
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+    mockDataDomainClient.getProjectArtifact.mockResolvedValue({
+      connections: [],
+      queries: [],
+      datapoints: [],
+      mqtt: {},
+      protocols: {},
+    });
+    mockProjectRuntimeUser.findAll.mockResolvedValue([]);
+    mockProjectRole.findAll.mockResolvedValue([runtimeRole]);
+    mockProjectUserRoleBinding.findAll.mockResolvedValue([]);
+    mockProjectRoleGrant.findAll.mockResolvedValue([]);
+
+    const result = await publishService.collectProjectData("project-permission", "Bearer token");
+
+    expect(result.runtimePermissionsIndex).toEqual(
+      expect.objectContaining({
+        version: "1.0",
+        generatedAt: expect.any(String),
+        pages: {
+          "page-1": {
+            enabled: true,
+            allowedRoles: {
+              roleIds: ["role-1"],
+              roleCodes: ["viewer"],
+            },
+            schemes: {
+              "viewer-scheme": {
+                name: "Viewer scheme",
+                roleIds: ["role-1"],
+                roleCodes: ["viewer"],
+              },
+            },
+            components: {
+              "button-1": {
+                visibleSchemeId: "viewer-scheme",
+                operableSchemeId: "viewer-scheme",
+              },
+            },
+          },
+        },
+      }),
+    );
+  });
+
+  test("collectProjectData rejects component references to missing runtime permission schemes", async () => {
+    mockDesignPage.findAll.mockResolvedValue([
+      {
+        id: "page-1",
+        name: "Home",
+        type: "page",
+        sortOrder: 1,
+        schemaContent: {
+          page: {
+            config: {
+              runtimeAccess: {
+                enabled: true,
+                allowedRoles: [],
+                schemes: [],
+              },
+            },
+          },
+          nodesById: {
+            "button-1": {
+              id: "button-1",
+              permissions: {
+                runtimeAccess: {
+                  operableSchemeId: "deleted-scheme",
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+    mockDataDomainClient.getProjectArtifact.mockResolvedValue({
+      connections: [],
+      queries: [],
+      datapoints: [],
+      mqtt: {},
+      protocols: {},
+    });
+    mockProjectRuntimeUser.findAll.mockResolvedValue([]);
+    mockProjectRole.findAll.mockResolvedValue([]);
+    mockProjectUserRoleBinding.findAll.mockResolvedValue([]);
+    mockProjectRoleGrant.findAll.mockResolvedValue([]);
+
+    await expect(
+      publishService.collectProjectData("project-invalid-permission", "Bearer token"),
+    ).rejects.toMatchObject({
+      name: "AppError",
+      statusCode: 400,
+      options: expect.objectContaining({
+        errors: expect.arrayContaining([expect.stringContaining("deleted-scheme")]),
+      }),
+    });
+  });
+
   test("bundleIFP 会把运行态安全快照写入最终产物", async () => {
     const runtimeSecuritySnapshot = {
       version: "2026-04-21 10:00:00",
@@ -305,6 +446,21 @@ describe("publishService snapshot integration", () => {
           effect: "allow",
         },
       ],
+    };
+    const runtimePermissionsIndex = {
+      version: "1.0",
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      pages: {
+        "page-1": {
+          enabled: true,
+          allowedRoles: {
+            roleIds: ["role-1"],
+            roleCodes: ["viewer"],
+          },
+          schemes: {},
+          components: {},
+        },
+      },
     };
 
     const ifpResult = await publishService.bundleIFP(
@@ -339,14 +495,17 @@ describe("publishService snapshot integration", () => {
         dataPoints: [],
         protocols: {},
         runtimeSecuritySnapshot,
+        runtimePermissionsIndex,
       },
     );
 
     try {
       const runtimeSecurityJson = await readIfpEntry(ifpResult.ifpPath, "runtime-security.json");
+      const runtimePermissionsJson = await readIfpEntry(ifpResult.ifpPath, "runtime-permissions.json");
       const manifestJson = await readIfpEntry(ifpResult.ifpPath, "manifest.json");
 
       expect(JSON.parse(runtimeSecurityJson)).toEqual(runtimeSecuritySnapshot);
+      expect(JSON.parse(runtimePermissionsJson)).toEqual(runtimePermissionsIndex);
       expect(JSON.parse(manifestJson)).toEqual(
         expect.objectContaining({
           security: expect.objectContaining({
@@ -354,6 +513,12 @@ describe("publishService snapshot integration", () => {
               included: true,
               fileName: "runtime-security.json",
               version: runtimeSecuritySnapshot.version,
+            }),
+            runtimePermissions: expect.objectContaining({
+              included: true,
+              fileName: "runtime-permissions.json",
+              version: runtimePermissionsIndex.version,
+              generatedAt: runtimePermissionsIndex.generatedAt,
             }),
           }),
         }),

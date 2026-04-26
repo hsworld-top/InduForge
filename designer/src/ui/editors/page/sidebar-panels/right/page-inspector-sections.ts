@@ -4,7 +4,13 @@
 
 import { i18n } from "@/i18n";
 
-export type PageInspectorSectionKey = "identity" | "route" | "viewport" | "visual" | "runtime";
+export type PageInspectorSectionKey =
+  | "identity"
+  | "route"
+  | "viewport"
+  | "visual"
+  | "runtime"
+  | "runtimeAccess";
 
 export interface PageInspectorSection {
   key: PageInspectorSectionKey;
@@ -53,7 +59,12 @@ function buildPageInspectorSections(): PageInspectorSection[] {
     {
       key: "runtime",
       title: i18n.global.t("pageInspector.sections.runtime"),
-      fields: ["openMode", "popup", "permission", "cacheMode", "preloadMode"],
+      fields: ["openMode", "popup", "cacheMode", "preloadMode"],
+    },
+    {
+      key: "runtimeAccess",
+      title: "运行态权限控制",
+      fields: ["runtimeAccessEnabled", "runtimeAccessAllowedRoles", "runtimePermissionSchemes"],
     },
   ];
 }

@@ -79,21 +79,6 @@ export const manifest: ComponentManifest = {
       defaultValue: "",
       placeholder: "如: el-icon-search",
     },
-    {
-      name: "safetyControl",
-      type: "boolean",
-      label: "是否添加权限控制",
-      group: "安全策略",
-      defaultValue: false,
-    },
-    {
-      name: "safetyDesc",
-      type: "string",
-      label: "权限描述",
-      group: "安全策略",
-      defaultValue: "",
-      placeholder: "请输入权限描述",
-    },
   ],
 };
 

@@ -890,7 +890,7 @@ describe('project-management-page', () => {
 
     expect(container.querySelector('[data-testid="mock-overview-grid"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="mock-group-cards"]')).not.toBeNull()
-    expect(container.querySelectorAll('[data-testid="project-detail-action"]').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('[data-testid="project-edit-action"]').length).toBeGreaterThan(0)
     expect(container.querySelectorAll('[data-testid="project-runtime-access-action"]').length).toBeGreaterThan(0)
     expect(container.querySelectorAll('[data-testid="project-edit-tags-action"]').length).toBeGreaterThan(0)
     expect(container.querySelectorAll('[data-testid="project-deploy-action"]').length).toBeGreaterThan(0)

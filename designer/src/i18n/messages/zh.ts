@@ -330,7 +330,6 @@ export const zhMessages = {
       style: "样式",
       features: "功能",
       props: "属性",
-      security: "安全策略",
     },
     labels: {
       regionPreset: "区域预设",
@@ -354,8 +353,6 @@ export const zhMessages = {
       tabPosition: "标签位置",
       stretch: "宽度自撑",
       tabs: "标签页",
-      safetyControl: "是否添加权限控制",
-      safetyDesc: "权限描述",
       width: "宽度",
       height: "高度",
     },
@@ -391,7 +388,6 @@ export const zhMessages = {
     },
     placeholders: {
       icon: "如: el-icon-search",
-      safetyDesc: "请输入权限描述",
     },
   },
   resourcePanel: {

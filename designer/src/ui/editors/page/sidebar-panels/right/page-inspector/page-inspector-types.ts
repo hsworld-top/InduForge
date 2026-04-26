@@ -1,4 +1,7 @@
-import type { RolePermission } from "@/editor-core/document/types";
+import type {
+  PagePermissionScheme,
+  RuntimeRoleRef,
+} from "@/editor-core/document/types";
 
 /**
  * 页面属性面板的 UI 层类型定义
@@ -51,7 +54,9 @@ export interface PageInspectorFormState {
   popupCenter: boolean;
   popupMaskClosable: boolean;
   permissionSummary: string;
-  pageViewPermission: RolePermission | undefined;
+  runtimeAccessEnabled?: boolean;
+  runtimeAccessAllowedRoles?: RuntimeRoleRef[];
+  runtimePermissionSchemes?: PagePermissionScheme[];
   cacheMode: CacheMode;
   preloadMode: PreloadMode;
 }

@@ -17,8 +17,12 @@ import { useRoute, useRouter } from "vue-router";
 import { VIEW_PRESETS } from "@/constants";
 
 import { useEditorStore } from "@/stores/editor-store";
-import { canvasZoomKey } from "@/ui/editors/page/canvas/injection-keys";
+import {
+  canvasZoomKey,
+  runtimeAccessContextKey,
+} from "@/ui/editors/page/canvas/injection-keys";
 import NodeRenderer from "@/ui/editors/page/canvas/NodeRenderer.vue";
+import { createRuntimeAccessContext } from "@/ui/editors/page/canvas/runtime-access";
 import { clearPreviewRuntime, initPreviewRuntime } from "./previewRuntime";
 
 /** 预览宿主读取的页面配置视图：优先 grouped 配置，兼容旧平铺字段。 */
@@ -211,8 +215,17 @@ function resolvePreviewBackground(config: PreviewCanvasPageConfig): PreviewResol
 const router = useRouter();
 const route = useRoute();
 const editorStore = useEditorStore();
-const { currentPage, currentPageId, doc, docVersion, projectVariables, globalScripts, projectId } =
-  storeToRefs(editorStore);
+const {
+  currentPage,
+  currentPageId,
+  doc,
+  docVersion,
+  projectVariables,
+  globalScripts,
+  projectId,
+  runtimeUsers,
+  selectedPreviewRuntimeUserId,
+} = storeToRefs(editorStore);
 provide(canvasZoomKey, ref(1));
 
 const viewKey = ref<string>("page");
@@ -220,6 +233,38 @@ const viewPresets: readonly ViewPreset[] = VIEW_PRESETS;
 const previewOptions = computed(() => [{ key: "page", label: "页面实际尺寸" }, ...viewPresets]);
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
+const routePreviewUserId = computed(() => {
+  const raw = route.query.previewUserId;
+  return String(Array.isArray(raw) ? raw[0] || "" : raw || "").trim();
+});
+const previewRuntimeUser = computed(() => {
+  const selectedId = routePreviewUserId.value || selectedPreviewRuntimeUserId?.value || "";
+  if (!selectedId) return null;
+  return (runtimeUsers?.value || []).find((user) => user.id === selectedId) || null;
+});
+const runtimeAccessSnapshot = computed(() =>
+  createRuntimeAccessContext({
+    config: currentPage.value?.config?.runtimeAccess || null,
+    user: previewRuntimeUser.value,
+  }),
+);
+provide(runtimeAccessContextKey, {
+  get enabled() {
+    return runtimeAccessSnapshot.value.enabled;
+  },
+  get schemes() {
+    return runtimeAccessSnapshot.value.schemes;
+  },
+  get user() {
+    return runtimeAccessSnapshot.value.user;
+  },
+  get canViewPage() {
+    return runtimeAccessSnapshot.value.canViewPage;
+  },
+  evaluateScheme: (schemeId?: string) => runtimeAccessSnapshot.value.evaluateScheme(schemeId),
+  isNodeVisible: (node: Record<string, any>) => runtimeAccessSnapshot.value.isNodeVisible(node),
+  isNodeOperable: (node: Record<string, any>) => runtimeAccessSnapshot.value.isNodeOperable(node),
+});
 const previewPageConfig = computed(() =>
   resolvePreviewViewport(currentPage.value?.config || ({} as PreviewCanvasPageConfig)),
 );
@@ -320,6 +365,9 @@ async function loadProject() {
     return;
   }
   await editorStore.loadProject(pid);
+  if (routePreviewUserId.value) {
+    editorStore.setSelectedPreviewRuntimeUserId(routePreviewUserId.value);
+  }
 }
 
 function queryPageIdFromRoute(): string | undefined {
@@ -439,7 +487,11 @@ onBeforeUnmount(() => {
         class="preview-frame bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden transition-all duration-300"
         :style="frameStyle"
       >
-        <div class="preview-canvas" :style="canvasStyle">
+        <div v-if="!runtimeAccessSnapshot.canViewPage" class="preview-denied">
+          <div class="preview-denied__title">无页面访问权限</div>
+          <div class="preview-denied__desc">当前预览身份不在页面允许访问角色内。</div>
+        </div>
+        <div v-else class="preview-canvas" :style="canvasStyle">
           <NodeRenderer v-if="rootNodeId" :node-id="rootNodeId" :is-root="true" :readonly="true" />
         </div>
       </div>
@@ -472,6 +524,30 @@ onBeforeUnmount(() => {
 
 .preview-summary__item {
   flex: 0 0 auto;
+}
+
+.preview-denied {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 320px;
+  min-height: 200px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #fff;
+  color: #334155;
+}
+
+.preview-denied__title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.preview-denied__desc {
+  color: #64748b;
+  font-size: 13px;
 }
 
 .preview-frame::-webkit-scrollbar {

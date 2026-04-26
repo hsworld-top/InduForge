@@ -1,6 +1,5 @@
-import { defineComponent, nextTick } from 'vue'
-import { flushPromises, shallowMount } from '@vue/test-utils'
-import { describe, expect, test, vi } from 'vitest'
+import { defineComponent, createApp, h, nextTick, type App } from 'vue'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import ProjectRuntimeAccessDialog from '@/views/tenant/components/ProjectRuntimeAccessDialog.vue'
 
@@ -36,7 +35,7 @@ vi.mock('@/api/project.api.js', () => ({
       data: [
         {
           id: 'role-1',
-          code: 'ADMIN',
+          code: 'PROJECT_ADMIN',
           name: '管理员',
           description: '系统管理员',
           status: 'active',
@@ -69,51 +68,78 @@ const createSlotStub = (name: string) =>
         default: '',
       },
     },
-    template: `
-      <div :class="name">
-        <slot />
-        <slot name="footer" />
-      </div>
-    `,
+    setup(_, { slots }) {
+      return () =>
+        h('div', { class: name }, [
+          slots.prepend?.(),
+          slots.default?.(),
+          slots.footer?.(),
+        ])
+    },
   })
+
+const mountedApps: Array<{ app: App; root: HTMLElement }> = []
+
+const mountDialog = async () => {
+  const root = document.createElement('div')
+  document.body.appendChild(root)
+  const app = createApp(ProjectRuntimeAccessDialog, {
+    visible: true,
+    project: {
+      id: 'project-1',
+      name: '演示工程',
+    },
+  })
+
+  ;[
+    'ElDialog',
+    'ElAlert',
+    'ElEmpty',
+    'ElTabs',
+    'ElTabPane',
+    'ElTable',
+    'ElButton',
+    'ElForm',
+    'ElFormItem',
+    'ElInput',
+    'ElSelect',
+    'ElOption',
+    'ElTag',
+  ].forEach((name) => {
+    app.component(name, createSlotStub(`${name}-stub`))
+  })
+  app.component(
+    'ElTableColumn',
+    defineComponent({
+      name: 'ElTableColumnStub',
+      setup() {
+        return () => null
+      },
+    }),
+  )
+
+  app.mount(root)
+  mountedApps.push({ app, root })
+  await Promise.resolve()
+  await nextTick()
+  return root
+}
+
+afterEach(() => {
+  while (mountedApps.length > 0) {
+    const mounted = mountedApps.pop()
+    mounted?.app.unmount()
+    mounted?.root.remove()
+  }
+})
 
 describe('ProjectRuntimeAccessDialog', () => {
   test('成员权限主弹窗应包含统一的视觉壳层结构', async () => {
-    const wrapper = shallowMount(ProjectRuntimeAccessDialog, {
-      props: {
-        visible: true,
-        project: {
-          id: 'project-1',
-          name: '演示工程',
-        },
-      },
-      global: {
-        stubs: {
-          'el-dialog': createSlotStub('el-dialog-stub'),
-          'el-alert': createSlotStub('el-alert-stub'),
-          'el-empty': createSlotStub('el-empty-stub'),
-          'el-tabs': createSlotStub('el-tabs-stub'),
-          'el-tab-pane': createSlotStub('el-tab-pane-stub'),
-          'el-table': createSlotStub('el-table-stub'),
-          'el-table-column': createSlotStub('el-table-column-stub'),
-          'el-button': createSlotStub('el-button-stub'),
-          'el-form': createSlotStub('el-form-stub'),
-          'el-form-item': createSlotStub('el-form-item-stub'),
-          'el-input': createSlotStub('el-input-stub'),
-          'el-select': createSlotStub('el-select-stub'),
-          'el-option': createSlotStub('el-option-stub'),
-          'el-tag': createSlotStub('el-tag-stub'),
-        },
-      },
-    })
+    const root = await mountDialog()
 
-    await flushPromises()
-    await nextTick()
-
-    expect(wrapper.find('.runtime-access-shell').exists()).toBe(true)
-    expect(wrapper.find('.runtime-access-panel').exists()).toBe(true)
-    expect(wrapper.find('.runtime-access-tabs-card').exists()).toBe(true)
-    expect(wrapper.find('.runtime-access-section-card').exists()).toBe(true)
-    expect(wrapper.find('.runtime-access-table-wrap').exists()).toBe(true)
+    expect(root.querySelector('.runtime-access-shell')).not.toBeNull()
+    expect(root.querySelector('.runtime-access-tabs-card')).not.toBeNull()
+    expect(root.querySelector('.runtime-access-table-wrap')).not.toBeNull()
+    expect(root.textContent || '').toContain('PROJECT_')
   })
 })

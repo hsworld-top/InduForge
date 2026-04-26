@@ -1,8 +1,48 @@
 import { computed, reactive, ref } from 'vue'
 import { describe, expect, test, vi } from 'vitest'
-import { useProjectRuntimeAccessState } from '@/views/tenant/components/project-runtime-access-state.ts'
+import {
+  buildRuntimeRolePayload,
+  normalizeRuntimeRoleCode,
+  stripRuntimeRoleCodePrefix,
+  useProjectRuntimeAccessState,
+} from '@/views/tenant/components/project-runtime-access-state.ts'
 
 describe('project-runtime-access-state', () => {
+  test('运行态角色编码会统一规范化为 PROJECT_ 前缀', () => {
+    expect(normalizeRuntimeRoleCode('operator role')).toBe('PROJECT_OPERATOR_ROLE')
+    expect(normalizeRuntimeRoleCode('project_viewer')).toBe('PROJECT_VIEWER')
+    expect(stripRuntimeRoleCodePrefix('PROJECT_ADMIN')).toBe('ADMIN')
+  })
+
+  test('buildRuntimeRolePayload 会把输入后缀拼成完整角色编码', () => {
+    expect(
+      buildRuntimeRolePayload({
+        code: 'operator',
+        name: '值班员',
+        description: '运行态值班角色',
+        status: 'active',
+      }),
+    ).toEqual({
+      code: 'PROJECT_OPERATOR',
+      name: '值班员',
+      description: '运行态值班角色',
+      status: 'active',
+    })
+
+    expect(
+      buildRuntimeRolePayload({
+        code: 'PROJECT_viewer role',
+        name: '观察员',
+      }, {
+        includeStatus: false,
+      }),
+    ).toEqual({
+      code: 'PROJECT_VIEWER_ROLE',
+      name: '观察员',
+      description: '',
+    })
+  })
+
   test('watch immediate 首次执行时 oldValue 缺失不应抛出异常', () => {
     const visibleRef = ref(true)
     const projectRef = ref({ id: 'project-1' })

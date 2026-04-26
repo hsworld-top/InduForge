@@ -9,7 +9,7 @@
  * - 页面运行态权限继续挂在 runtime 小节，避免再单独开一条全局权限面板链路
  */
 
-import type { PageNode, RolePermission } from "@/editor-core/document/types";
+import type { PageNode } from "@/editor-core/document/types";
 import type { PageRole, RouteMode, ViewportPreset } from "./page-inspector/page-inspector-types";
 import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
@@ -18,6 +18,7 @@ import { useI18n } from "vue-i18n";
 import { useEditorStore } from "@/stores/editor-store";
 import PageIdentitySection from "./page-inspector/PageIdentitySection.vue";
 import PageRouteSection from "./page-inspector/PageRouteSection.vue";
+import PageRuntimeAccessSection from "./page-inspector/PageRuntimeAccessSection.vue";
 import PageRuntimeSection from "./page-inspector/PageRuntimeSection.vue";
 import PageViewportSection from "./page-inspector/PageViewportSection.vue";
 import PageVisualSection from "./page-inspector/PageVisualSection.vue";
@@ -33,7 +34,6 @@ import {
   getPageInspectorSections,
   type PageInspectorSectionKey,
 } from "./page-inspector-sections";
-import { summarizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 
 interface EntryConfigLike {
   homePageId?: string | null;
@@ -63,7 +63,7 @@ const PRESET_VIEWPORT_SIZES: Record<
 const editorStore = useEditorStore();
 const editorRefs = storeToRefs(editorStore);
 const { currentPage, currentPageId, pages, doc } = editorRefs;
-const rawRuntimeRoleCodes = (editorRefs as unknown as { runtimeRoleCodes?: { value: string[] } }).runtimeRoleCodes;
+const rawRuntimeRoles = (editorRefs as unknown as { runtimeRoles?: { value: any[] } }).runtimeRoles;
 const { t, locale } = useI18n();
 
 const form = reactive(createDefaultPageInspectorFormState());
@@ -160,8 +160,8 @@ const pageRole = computed<PageRole>(
 );
 const isSystemPage = computed(() => pageRole.value !== "normal");
 const canEditConstraintOptions = computed(() => canEditRuntimeConstraint(form.autoFit));
-const availableRuntimeRoles = computed<string[]>(() => {
-  const value = rawRuntimeRoleCodes?.value;
+const availableRuntimeRoles = computed<any[]>(() => {
+  const value = rawRuntimeRoles?.value;
   return Array.isArray(value) ? value : [];
 });
 
@@ -202,7 +202,7 @@ function syncForm(page: PageRecordLike | null | undefined): void {
 
   Object.assign(form, nextForm, resolvedRoute, {
     openMode: role === "normal" ? nextForm.openMode : "replace",
-    permissionSummary: summarizeRoleGrant(nextForm.pageViewPermission),
+    permissionSummary: nextForm.permissionSummary,
   });
 }
 
@@ -260,7 +260,9 @@ function updateCurrentPageConfig(): void {
     popupCenter: form.popupCenter,
     popupMaskClosable: form.popupMaskClosable,
     permissionSummary: form.permissionSummary,
-    pageViewPermission: form.pageViewPermission,
+    runtimeAccessEnabled: Boolean(form.runtimeAccessEnabled),
+    runtimeAccessAllowedRoles: form.runtimeAccessAllowedRoles || [],
+    runtimePermissionSchemes: form.runtimePermissionSchemes || [],
     cacheMode: form.cacheMode,
     preloadMode: form.preloadMode,
   });
@@ -272,9 +274,7 @@ function updateCurrentPageConfig(): void {
   if (isSystemPage.value) {
     form.openMode = "replace";
   }
-  const nextConfig = mergePageConfigPatch(currentPage.value.config, configPatch, {
-    clearPageViewPermission: !form.pageViewPermission,
-  });
+  const nextConfig = mergePageConfigPatch(currentPage.value.config, configPatch);
   editorStore.updateCurrentPage({
     path: form.routePath,
     config: nextConfig,
@@ -397,11 +397,6 @@ function handleConfigUpdate(): void {
   updateCurrentPageConfig();
 }
 
-function handlePagePermissionChange(permission: RolePermission | undefined): void {
-  form.pageViewPermission = permission;
-  form.permissionSummary = summarizeRoleGrant(permission);
-  updateCurrentPageConfig();
-}
 </script>
 
 <template>
@@ -447,11 +442,17 @@ function handlePagePermissionChange(permission: RolePermission | undefined): voi
       <div class="section-title">{{ getSectionTitle("runtime") }}</div>
       <PageRuntimeSection
         :form="form"
-        :permission-enabled="true"
         :is-system-page="isSystemPage"
-        :role-options="availableRuntimeRoles"
         @update-config="handleConfigUpdate"
-        @permission-config="handlePagePermissionChange"
+      />
+    </div>
+
+    <div class="page-group">
+      <div class="section-title">{{ getSectionTitle("runtimeAccess") }}</div>
+      <PageRuntimeAccessSection
+        :form="form"
+        :runtime-roles="availableRuntimeRoles"
+        @update-config="handleConfigUpdate"
       />
     </div>
   </div>

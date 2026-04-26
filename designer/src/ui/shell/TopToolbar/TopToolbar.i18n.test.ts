@@ -13,7 +13,8 @@ const sharedStubs = {
     template: "<button type=\"button\"><slot /></button>",
   },
   "el-dropdown": {
-    template: "<div><slot /><slot name=\"dropdown\" /></div>",
+    props: ["hideOnClick"],
+    template: "<div class=\"dropdown-stub\" :data-hide-on-click=\"String(hideOnClick)\"><slot /><slot name=\"dropdown\" /></div>",
   },
   "el-dropdown-menu": {
     template: "<div><slot /></div>",
@@ -28,10 +29,12 @@ const sharedStubs = {
     template: "<input />",
   },
   "el-select": {
-    template: "<select><slot /></select>",
+    props: ["teleported"],
+    template: "<select :data-teleported=\"String(teleported)\"><slot /></select>",
   },
   "el-option": {
-    template: "<option><slot /></option>",
+    props: ["label", "value"],
+    template: "<option :value=\"value\">{{ label }}<slot /></option>",
   },
   "el-checkbox": {
     template: "<input type=\"checkbox\" />",
@@ -81,5 +84,40 @@ describe("TopToolbar i18n", () => {
     expect(wrapper.text()).not.toContain("Language");
     expect(wrapper.text()).toContain("Preset Size");
     expect(wrapper.text()).toContain("Auto Save");
+  });
+
+  it("预览身份只展示登录账号，并保持内层选择器不传送", () => {
+    const wrapper = mount(TopToolbar, {
+      global: {
+        plugins: [i18n],
+        stubs: sharedStubs,
+      },
+      props: {
+        viewPresets: [
+          { key: "pc", label: "PC", width: 1366, height: 768 },
+        ],
+        saveSettings: {
+          autoSave: true,
+          intervalMinutes: 5,
+        },
+        runtimeUsers: [
+          {
+            id: "runtime-user-1",
+            username: "operator",
+            displayName: "值班员",
+            status: "active",
+          },
+        ],
+      },
+    });
+
+    expect(wrapper.text()).toContain("operator");
+    expect(wrapper.text()).not.toContain("值班员");
+    expect(
+      wrapper.findAll(".dropdown-stub").some((item) => item.attributes("data-hide-on-click") === "false"),
+    ).toBe(true);
+    expect(
+      wrapper.findAll("select").some((item) => item.attributes("data-teleported") === "false"),
+    ).toBe(true);
   });
 });

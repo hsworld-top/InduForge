@@ -156,7 +156,6 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {boolean} [enableSnap] - 启用吸附
  * @property {boolean} [autoFit] - 预览自适应
  * @property {BackgroundConfig} [background] - 背景配置
- * @property {PageRuntimePermissions} [runtimePermissions] - 页面运行态权限配置
  */
 
 /**
@@ -286,28 +285,10 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * 绑定（联合类型）
  */
 
-// ==================== 权限配置 ====================
-
-/**
- * @typedef {object} RolePermission
- * 角色权限
- * @property {string[]} [allowRoles] - 允许的角色
- * @property {string[]} [denyRoles] - 拒绝的角色
- * @property {boolean} [inherit] - 是否继承上级角色限制
- */
-
-/**
- * @typedef {object} PageRuntimePermissions
- * 页面运行态权限
- * @property {RolePermission} [pageView] - 页面访问权限
- */
-
 /**
  * @typedef {object} PermissionConfig
  * 权限配置
- * @property {RolePermission} [visible] - 可见性权限
- * @property {RolePermission} [enable] - 可用性权限
- * @property {RolePermission} [readonly] - 只读权限
+ * @property {ComponentRuntimeAccessConfig} [runtimeAccess] - 组件运行态权限方案引用
  */
 
 // ==================== 动作系统 ====================
@@ -322,7 +303,6 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * 动作定义
  * @property {ActionType} type - 动作类型
  * @property {object} config - 动作配置
- * @property {RolePermission} [permissions] - 动作权限
  */
 
 // ==================== 动画系统 ====================
@@ -916,6 +896,24 @@ export interface PageRuntimeConfig {
   preloadMode?: "lazy" | "eager";
 }
 
+export interface RuntimeRoleRef {
+  roleId: string;
+  roleCode: string;
+  roleName: string;
+}
+
+export interface PagePermissionScheme {
+  id: string;
+  name: string;
+  roleRefs: RuntimeRoleRef[];
+}
+
+export interface PageRuntimeAccessConfig {
+  enabled: boolean;
+  allowedRoles: RuntimeRoleRef[];
+  schemes: PagePermissionScheme[];
+}
+
 export interface PageConfig {
   meta?: PageMetaConfig;
   route?: PageRouteConfig;
@@ -939,23 +937,21 @@ export interface PageConfig {
   enableMinSize?: boolean;
   windowStyle?: "replace" | "cover" | "popup" | "normal";
   permissionDesc?: string;
-  runtimePermissions?: PageRuntimePermissions;
+  runtimeAccess?: PageRuntimeAccessConfig;
 }
 
-export interface RolePermission {
-  allowRoles?: string[];
-  denyRoles?: string[];
-  inherit?: boolean;
+export interface ComponentRuntimeAccessConfig {
+  visibleSchemeId?: string;
+  operableSchemeId?: string;
 }
 
-export interface PageRuntimePermissions {
-  pageView?: RolePermission;
+export interface PermissionConfig {
+  runtimeAccess?: ComponentRuntimeAccessConfig;
 }
 
 export interface Action {
   type: ActionType;
   config: Record<string, unknown>;
-  permissions?: RolePermission;
 }
 
 export interface LifecycleConfig {
@@ -1053,12 +1049,6 @@ export interface ExprBinding {
 }
 
 export type Binding = DatapointBinding | VarBinding | ExprBinding;
-
-export interface PermissionConfig {
-  visible?: RolePermission;
-  enable?: RolePermission;
-  readonly?: RolePermission;
-}
 
 export type GraphicType =
   | "Canvas.Line"

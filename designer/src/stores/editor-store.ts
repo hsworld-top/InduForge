@@ -133,6 +133,8 @@ import {
 import {
   applyRuntimeRoleCodesToSchema,
   loadProjectRuntimeRoleCodesForStore,
+  type RuntimeRoleRecord,
+  type RuntimeUserRecord,
 } from "./editor/project-runtime-role-actions";
 
 const UUID_DASH_REGEX = /-/g;
@@ -209,6 +211,9 @@ export const useEditorStore = defineStore("editor", () => {
   const projectVariableGroups = ref<unknown[]>([]);
   const globalScripts = ref(getDefaultGlobalScripts());
   const runtimeRoleCodes = ref<string[]>([]);
+  const runtimeRoles = ref<RuntimeRoleRecord[]>([]);
+  const runtimeUsers = ref<RuntimeUserRecord[]>([]);
+  const selectedPreviewRuntimeUserId = ref("");
   const runtimeRoleLoadState = ref<"idle" | "loading" | "ready" | "error">("idle");
   const runtimeRoleLoadError = ref("");
   const runtimeRoleRequestSerial = ref(0);
@@ -457,6 +462,8 @@ export const useEditorStore = defineStore("editor", () => {
     const result = await loadProjectRuntimeRoleCodesForStore(targetProjectId, projectApi, {
       activeProjectId: projectId,
       runtimeRoleCodes,
+      runtimeRoles,
+      runtimeUsers,
       runtimeRoleLoadState,
       runtimeRoleLoadError,
       runtimeRoleRequestSerial,
@@ -478,6 +485,10 @@ export const useEditorStore = defineStore("editor", () => {
    */
   const applyCurrentRuntimeRoleCodes = (schema: ProjectSchema) => {
     return applyRuntimeRoleCodesToSchema(schema, runtimeRoleCodes.value);
+  };
+
+  const setSelectedPreviewRuntimeUserId = (runtimeUserId: string) => {
+    selectedPreviewRuntimeUserId.value = String(runtimeUserId || "").trim();
   };
 
   const createBaseSchemaWithRuntimeRoles = (targetProjectId: string) => {
@@ -2376,6 +2387,9 @@ export const useEditorStore = defineStore("editor", () => {
     projectVariableGroups,
     globalScripts,
     runtimeRoleCodes,
+    runtimeRoles,
+    runtimeUsers,
+    selectedPreviewRuntimeUserId,
     runtimeRoleLoadState,
     runtimeRoleLoadError,
     currentPageId,
@@ -2396,6 +2410,7 @@ export const useEditorStore = defineStore("editor", () => {
     initEditor,
     loadProject,
     saveProjectSettings,
+    setSelectedPreviewRuntimeUserId,
     loadProjectSettings,
     loadPage,
     setCurrentPage,

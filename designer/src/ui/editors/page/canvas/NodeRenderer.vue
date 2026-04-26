@@ -49,7 +49,7 @@ import { useNodeRendererTypeFlags } from "./composables/use-node-renderer-type-f
 import { useNodeResize } from "./composables/use-node-resize";
 import { createNodeStyleHelpers } from "./composables/use-node-style";
 import { usePreview } from "./composables/use-preview";
-import { canvasZoomKey } from "./injection-keys";
+import { canvasZoomKey, runtimeAccessContextKey } from "./injection-keys";
 import { createDragDropManager } from "./interaction/DragDropManager";
 
 interface NodeRendererProps {
@@ -85,6 +85,7 @@ const {
   error,
 } = storeToRefs(editorStore);
 const showContextMenu = inject<ShowContextMenuLike>("showContextMenu", null);
+const runtimeAccessContext = inject(runtimeAccessContextKey, null);
 const nodeStyleHelpers = createNodeStyleHelpers({ doc, currentPage, props } as any) as any;
 const resolveLayoutStyle = nodeStyleHelpers.resolveLayoutStyle;
 
@@ -146,6 +147,17 @@ const previewRuntime: any = usePreview({
 } as any);
 const { runPreviewScript, isRunningDetailConfig: isRunningDetailConfigFn } = previewRuntime;
 
+const isRuntimeOperable = computed(() => {
+  void docVersion.value;
+  if (!node.value || !runtimeAccessContext) return true;
+  return runtimeAccessContext.isNodeOperable(node.value as any);
+});
+
+function runOperablePreviewScript(eventName: string, payload: any): unknown {
+  if (!isRuntimeOperable.value) return undefined;
+  return runPreviewScript(eventName, payload);
+}
+
 // 使用 useNodeInteraction composable
 const nodeInteraction: any = useNodeInteraction({
   node: node as any,
@@ -157,7 +169,7 @@ const nodeInteraction: any = useNodeInteraction({
   isChildResizableByDescriptor: isChildResizableByDescriptor as any,
   nodeRef,
   createSelectableElement: createSelectableElement as any,
-  runPreviewScript: runPreviewScript as any,
+  runPreviewScript: runOperablePreviewScript as any,
   handleSelect,
   showContextMenu,
 } as any);
@@ -392,7 +404,14 @@ const collapseItemsList = computed<any[]>(() => (collapseItems.value || []) as a
 const stepsItemsList = computed<any[]>(() => (stepsItems.value || []) as any[]);
 const carouselItemsList = computed<any[]>(() => (carouselItems.value || []) as any[]);
 
-const filteredProps = filteredPropsFromComposable;
+const filteredProps = computed<Record<string, any>>(() => {
+  const base = { ...(filteredPropsFromComposable.value || {}) };
+  if (props.readonly && !isRuntimeOperable.value) {
+    base.disabled = true;
+    base.readonly = true;
+  }
+  return base;
+});
 
 const tabHeaderWidth = ref(0);
 
@@ -564,6 +583,7 @@ const isNodeVisible = computed(() => {
   void docVersion.value;
   if (!node.value) return false;
   if (node.value.hidden) return false;
+  if (runtimeAccessContext && !runtimeAccessContext.isNodeVisible(node.value as any)) return false;
   const visibleConfig = node.value.conditions?.visible;
   if (typeof visibleConfig === "boolean") return visibleConfig;
   if (typeof visibleConfig !== "string" || !visibleConfig.trim()) return true;
@@ -804,6 +824,7 @@ const supportsModelValue = computed<boolean>(() => modelValueTypes.has(node.valu
  */
 function handleModelValueUpdate(value: any): void {
   if (!node.value) return;
+  if (props.readonly && !isRuntimeOperable.value) return;
   if (props.readonly) {
     applyPreviewPatch({ props: { modelValue: value } });
     return;
@@ -826,7 +847,7 @@ const componentEventListeners = computed<EventListenerMap>(() => {
     if (!eventItem?.name || eventItem.name === "click") return;
     listeners[eventItem.name] = (...args: any[]) => {
       const payload = args.length > 1 ? args : args[0];
-      void runPreviewScript(eventItem.name, payload);
+      void runOperablePreviewScript(eventItem.name, payload);
     };
   });
   return listeners;

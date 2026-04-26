@@ -1,7 +1,13 @@
 /**
  * 页面属性面板配置构建工具
  */
-import type { BackgroundConfig, PageConfig, PageNode, RolePermission } from "@/editor-core/document/types";
+import type {
+  BackgroundConfig,
+  PageConfig,
+  PageNode,
+  PagePermissionScheme,
+  RuntimeRoleRef,
+} from "@/editor-core/document/types";
 import type {
   BackgroundRepeat,
   BackgroundSize,
@@ -15,7 +21,6 @@ import type {
   TransitionType,
   ViewportPreset,
 } from "./page-inspector/page-inspector-types";
-import { sanitizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 
 export type WindowStyle = "popup" | "cover" | "replace";
 export type BackgroundKind = BackgroundConfig["kind"];
@@ -47,7 +52,9 @@ export interface PageInspectorConfigInput {
   popupCenter: boolean;
   popupMaskClosable: boolean;
   permissionSummary: string;
-  pageViewPermission: RolePermission | undefined;
+  runtimeAccessEnabled?: boolean;
+  runtimeAccessAllowedRoles?: RuntimeRoleRef[];
+  runtimePermissionSchemes?: PagePermissionScheme[];
   cacheMode: CacheMode;
   preloadMode: PreloadMode;
 }
@@ -94,6 +101,7 @@ export interface PageInspectorConfigPatch extends Partial<PageNode["config"]> {
   enableMinSize?: boolean;
   windowStyle?: WindowStyle;
   permissionDesc?: string;
+  runtimeAccess?: NonNullable<PageConfig["runtimeAccess"]>;
 }
 
 const DEFAULT_WIDTH = 1920;
@@ -225,6 +233,53 @@ function normalizeOpenMode(value: unknown): OpenMode {
   return "cover";
 }
 
+function normalizeRuntimeRoleRef(value: unknown): RuntimeRoleRef | null {
+  if (!value || typeof value !== "object") return null;
+  const role = value as Partial<RuntimeRoleRef> & {
+    id?: unknown;
+    code?: unknown;
+    name?: unknown;
+  };
+  const roleId = String(role.roleId ?? role.id ?? "").trim();
+  const roleCode = String(role.roleCode ?? role.code ?? "").trim();
+  const roleName = String(role.roleName ?? role.name ?? roleCode ?? roleId).trim();
+  if (!roleId || !roleCode) return null;
+  return { roleId, roleCode, roleName };
+}
+
+function normalizeRoleRefs(values: unknown): RuntimeRoleRef[] {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set<string>();
+  const result: RuntimeRoleRef[] = [];
+  for (const value of values) {
+    const ref = normalizeRuntimeRoleRef(value);
+    if (!ref || seen.has(ref.roleId)) continue;
+    seen.add(ref.roleId);
+    result.push(ref);
+  }
+  return result;
+}
+
+function normalizePermissionSchemes(values: unknown): PagePermissionScheme[] {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set<string>();
+  return values
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const scheme = item as Partial<PagePermissionScheme>;
+      const id = String(scheme.id || "").trim();
+      const name = String(scheme.name || "").trim();
+      if (!id || !name || seen.has(id)) return null;
+      seen.add(id);
+      return {
+        id,
+        name,
+        roleRefs: normalizeRoleRefs(scheme.roleRefs),
+      };
+    })
+    .filter(Boolean) as PagePermissionScheme[];
+}
+
 /**
  * 归一化数字输入
  * @param {unknown} value - 原始数值
@@ -266,7 +321,9 @@ export function createDefaultPageInspectorFormState(): PageInspectorFormState {
     popupCenter: true,
     popupMaskClosable: true,
     permissionSummary: DEFAULT_PERMISSION_DESC,
-    pageViewPermission: undefined,
+    runtimeAccessEnabled: false,
+    runtimeAccessAllowedRoles: [],
+    runtimePermissionSchemes: [],
     cacheMode: "default",
     preloadMode: "lazy",
   };
@@ -298,7 +355,9 @@ export function hydratePageInspectorForm(input: {
   const height = normalizeNumber(viewport.height ?? config.height, DEFAULT_HEIGHT);
   const autoFit = Boolean(viewport.autoFit ?? config.autoFit ?? base.autoFit);
   const lockAspectRatio = Boolean(viewport.lockAspectRatio ?? config.lockAspectRatio ?? false);
-  const pageViewPermission = sanitizeRoleGrant(config.runtimePermissions?.pageView);
+  const runtimeAccess = (config.runtimeAccess || {}) as Partial<
+    NonNullable<PageConfig["runtimeAccess"]>
+  >;
 
   return {
     ...base,
@@ -333,10 +392,10 @@ export function hydratePageInspectorForm(input: {
     popupHeight: normalizeNumber(popup.height, DEFAULT_POPUP_HEIGHT),
     popupCenter: popup.center ?? true,
     popupMaskClosable: popup.maskClosable ?? true,
-    permissionSummary: pageViewPermission
-      ? "已配置页面访问权限"
-      : String(permission.summary ?? config.permissionDesc ?? DEFAULT_PERMISSION_DESC),
-    pageViewPermission,
+    permissionSummary: String(permission.summary ?? config.permissionDesc ?? DEFAULT_PERMISSION_DESC),
+    runtimeAccessEnabled: Boolean(runtimeAccess.enabled),
+    runtimeAccessAllowedRoles: normalizeRoleRefs(runtimeAccess.allowedRoles),
+    runtimePermissionSchemes: normalizePermissionSchemes(runtimeAccess.schemes),
     cacheMode: normalizeCacheMode(runtime.cacheMode),
     preloadMode: normalizePreloadMode(runtime.preloadMode),
   };
@@ -352,7 +411,6 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
   const normalizedWindowStyle = normalizeWindowStyle(input.openMode);
   const normalizedPermissionSummary = String(input.permissionSummary || DEFAULT_PERMISSION_DESC);
   const backgroundKind = normalizeBackgroundKind(input.backgroundType);
-  const pageViewPermission = sanitizeRoleGrant(input.pageViewPermission);
   const patch: PageInspectorConfigPatch = {
     meta: {
       title: String(input.title || ""),
@@ -382,7 +440,7 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
         maskClosable: Boolean(input.popupMaskClosable),
       },
       permission: {
-        summary: pageViewPermission ? "已配置页面访问权限" : normalizedPermissionSummary,
+        summary: normalizedPermissionSummary,
       },
       cacheMode: normalizeCacheMode(input.cacheMode),
       preloadMode: normalizePreloadMode(input.preloadMode),
@@ -399,7 +457,12 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
       autoFit
       && (normalizeOptionalNumber(input.minWidth) > 0 || normalizeOptionalNumber(input.minHeight) > 0),
     windowStyle: normalizedWindowStyle,
-    permissionDesc: pageViewPermission ? "已配置页面访问权限" : normalizedPermissionSummary,
+    permissionDesc: normalizedPermissionSummary,
+    runtimeAccess: {
+      enabled: Boolean(input.runtimeAccessEnabled),
+      allowedRoles: normalizeRoleRefs(input.runtimeAccessAllowedRoles),
+      schemes: normalizePermissionSchemes(input.runtimePermissionSchemes),
+    },
     background: {
       kind: backgroundKind,
       value: String(input.backgroundValue || DEFAULT_BACKGROUND_COLOR),
@@ -408,13 +471,6 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
       repeat: normalizeBackgroundRepeat(input.backgroundRepeat),
     },
   };
-
-  if (pageViewPermission) {
-    patch.runtimePermissions = {
-      ...(patch.runtimePermissions || {}),
-      pageView: pageViewPermission,
-    };
-  }
 
   return patch;
 }
@@ -428,9 +484,6 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
 export function mergePageConfigPatch(
   baseConfig: PageConfig | undefined,
   patch: PageInspectorConfigPatch,
-  options: {
-    clearPageViewPermission?: boolean;
-  } = {},
 ): PageConfig {
   const nextConfig = {
     ...(baseConfig || {}),
@@ -467,32 +520,12 @@ export function mergePageConfigPatch(
       ...(baseConfig?.background || {}),
       ...(patch.background || {}),
     },
+    runtimeAccess: {
+      enabled: Boolean(patch.runtimeAccess?.enabled),
+      allowedRoles: normalizeRoleRefs(patch.runtimeAccess?.allowedRoles),
+      schemes: normalizePermissionSchemes(patch.runtimeAccess?.schemes),
+    },
   } as PageConfig;
-
-  if ("runtimePermissions" in patch) {
-    if (patch.runtimePermissions?.pageView) {
-      nextConfig.runtimePermissions = {
-        ...(baseConfig?.runtimePermissions || {}),
-        ...patch.runtimePermissions,
-      };
-    } else {
-      const remainingPermissions = { ...(baseConfig?.runtimePermissions || {}) };
-      delete remainingPermissions.pageView;
-      if (Object.keys(remainingPermissions).length > 0) {
-        nextConfig.runtimePermissions = remainingPermissions;
-      } else {
-        delete nextConfig.runtimePermissions;
-      }
-    }
-  } else if (options.clearPageViewPermission) {
-    const remainingPermissions = { ...(baseConfig?.runtimePermissions || {}) };
-    delete remainingPermissions.pageView;
-    if (Object.keys(remainingPermissions).length > 0) {
-      nextConfig.runtimePermissions = remainingPermissions;
-    } else {
-      delete nextConfig.runtimePermissions;
-    }
-  }
 
   return nextConfig;
 }

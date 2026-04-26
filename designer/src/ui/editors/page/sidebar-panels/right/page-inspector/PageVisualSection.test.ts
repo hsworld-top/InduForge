@@ -42,7 +42,6 @@ function createForm(backgroundType: PageInspectorFormState["backgroundType"]): P
     popupCenter: true,
     popupMaskClosable: true,
     permissionSummary: "未配置",
-    pageViewPermission: undefined,
     cacheMode: "default",
     preloadMode: "lazy",
   });

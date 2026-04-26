@@ -45,6 +45,7 @@ jest.mock("../../models", () => ({
 
 const {
   DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+  DEFAULT_RUNTIME_ADMIN_NAME,
   ensureRuntimeAdminBootstrap,
   buildEffectiveRoleGrantMap,
   listRuntimeUsers,
@@ -56,6 +57,7 @@ const {
   createRuntimeRole,
   updateRuntimeRole,
   deleteRuntimeRole,
+  normalizeRuntimeRoleCode,
 } = require("../projectRuntimeAccessService");
 
 const createUniqueConstraintError = () =>
@@ -67,6 +69,12 @@ describe("projectRuntimeAccessService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockProjectTransaction.mockImplementation(async (callback) => callback({ id: "tx-service" }));
+  });
+
+  test("normalizeRuntimeRoleCode 会统一补齐 PROJECT_ 前缀", () => {
+    expect(normalizeRuntimeRoleCode("operator role")).toBe("PROJECT_OPERATOR_ROLE");
+    expect(normalizeRuntimeRoleCode("project_viewer")).toBe("PROJECT_VIEWER");
+    expect(normalizeRuntimeRoleCode("")).toBe("");
   });
 
   test("ensureRuntimeAdminBootstrap 缺少 initialPassword 时应失败", async () => {
@@ -128,6 +136,7 @@ describe("projectRuntimeAccessService", () => {
         defaults: expect.objectContaining({
           projectId: "project-1",
           code: DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+          name: DEFAULT_RUNTIME_ADMIN_NAME,
           createdBy: creator.id,
           updatedBy: creator.id,
         }),
@@ -160,6 +169,7 @@ describe("projectRuntimeAccessService", () => {
       await bcrypt.compare("Initial#123", createdUserCall.defaults.passwordHash),
     ).toBe(true);
     expect(result.role.code).toBe(DEFAULT_RUNTIME_ADMIN_ROLE_CODE);
+    expect(result.role.name).toBe(DEFAULT_RUNTIME_ADMIN_NAME);
     expect(result.runtimeUser.username).toBe(creator.username);
     expect(result.runtimeUser.passwordHash).toBeUndefined();
   });
@@ -554,7 +564,7 @@ describe("projectRuntimeAccessService", () => {
   test("buildEffectiveRoleGrantMap 的 allowRoles 和 denyRoles 是最终生效集合", () => {
     const grantMap = buildEffectiveRoleGrantMap([
       {
-        roleCode: "PROJECT_RUNTIME_ADMIN",
+        roleCode: "PROJECT_ADMIN",
         resourceType: "project",
         resourceId: "*",
         action: "deploy",
@@ -592,15 +602,15 @@ describe("projectRuntimeAccessService", () => {
 
     expect(grantMap.project["*"].deploy).toEqual(
       expect.objectContaining({
-        allowRoles: ["PROJECT_RUNTIME_ADMIN"],
+        allowRoles: ["PROJECT_ADMIN"],
         denyRoles: [],
-        localAllowRoles: ["PROJECT_RUNTIME_ADMIN"],
+        localAllowRoles: ["PROJECT_ADMIN"],
         localDenyRoles: [],
       }),
     );
     expect(grantMap.project["project-1"].deploy).toEqual(
       expect.objectContaining({
-        allowRoles: ["PROJECT_RUNTIME_ADMIN"],
+        allowRoles: ["PROJECT_ADMIN"],
         denyRoles: ["PROJECT_RUNTIME_OPERATOR"],
         localAllowRoles: [],
         localDenyRoles: ["PROJECT_RUNTIME_OPERATOR"],
@@ -608,7 +618,7 @@ describe("projectRuntimeAccessService", () => {
     );
     expect(grantMap.project["project-2"].deploy).toEqual(
       expect.objectContaining({
-        allowRoles: ["PROJECT_RUNTIME_ADMIN", "PROJECT_RUNTIME_VIEWER"],
+        allowRoles: ["PROJECT_ADMIN", "PROJECT_RUNTIME_VIEWER"],
         denyRoles: ["PROJECT_RUNTIME_DENY"],
         localAllowRoles: ["PROJECT_RUNTIME_VIEWER"],
         localDenyRoles: ["PROJECT_RUNTIME_DENY"],
@@ -1041,6 +1051,98 @@ describe("projectRuntimeAccessService", () => {
       }),
     ]);
     expect(result[0].userCount).toBeUndefined();
+  });
+
+  test("createRuntimeRole 会规范化角色编码后再保存", async () => {
+    mockProjectRole.findOne.mockResolvedValue(null);
+    mockProjectRole.create.mockResolvedValue({
+      id: "role-operator",
+      projectId: "project-1",
+      code: "PROJECT_OPERATOR_ROLE",
+      name: "值班员",
+      description: null,
+      isSystem: false,
+      status: "active",
+      userBindings: [],
+      grants: [],
+    });
+
+    const result = await createRuntimeRole({
+      projectId: "project-1",
+      actorId: "user-1",
+      code: "operator role",
+      name: "值班员",
+    });
+
+    expect(mockProjectRole.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          projectId: "project-1",
+          code: "PROJECT_OPERATOR_ROLE",
+        }),
+      }),
+    );
+    expect(mockProjectRole.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        code: "PROJECT_OPERATOR_ROLE",
+        name: "值班员",
+        createdBy: "user-1",
+        updatedBy: "user-1",
+      }),
+    );
+    expect(result).toEqual(expect.objectContaining({ code: "PROJECT_OPERATOR_ROLE" }));
+  });
+
+  test("updateRuntimeRole 会规范化角色编码并检查重复", async () => {
+    const roleRecord = {
+      id: "role-operator",
+      projectId: "project-1",
+      code: "PROJECT_OPERATOR",
+      isSystem: false,
+      status: "active",
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    mockProjectRole.findOne
+      .mockResolvedValueOnce(roleRecord)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "role-operator",
+        projectId: "project-1",
+        code: "PROJECT_VIEWER",
+        name: "观察员",
+        description: null,
+        isSystem: false,
+        status: "active",
+        userBindings: [],
+        grants: [],
+      });
+
+    const result = await updateRuntimeRole({
+      projectId: "project-1",
+      roleId: "role-operator",
+      actorId: "user-1",
+      code: "viewer",
+      name: "观察员",
+    });
+
+    expect(mockProjectRole.findOne).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          projectId: "project-1",
+          code: "PROJECT_VIEWER",
+        }),
+      }),
+    );
+    expect(roleRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "PROJECT_VIEWER",
+        name: "观察员",
+        updatedBy: "user-1",
+      }),
+    );
+    expect(result).toEqual(expect.objectContaining({ code: "PROJECT_VIEWER" }));
   });
 
   test("deleteRuntimeRole 会拒绝删除系统内置角色", async () => {

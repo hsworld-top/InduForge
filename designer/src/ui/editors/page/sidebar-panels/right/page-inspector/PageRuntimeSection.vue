@@ -2,19 +2,14 @@
 import type { OpenMode, PageInspectorFormState } from "./page-inspector-types";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import RoleGrantEditor from "@/ui/shared/permissions/RoleGrantEditor.vue";
-import { summarizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 
 const props = defineProps<{
   form: PageInspectorFormState;
-  permissionEnabled: boolean;
   isSystemPage: boolean;
-  roleOptions?: string[];
 }>();
 
 defineEmits<{
   updateConfig: [];
-  permissionConfig: [value: PageInspectorFormState["pageViewPermission"]];
 }>();
 
 const { t } = useI18n();
@@ -37,7 +32,6 @@ const preloadOptions = computed(() => [
 ]);
 
 const showPopupOptions = computed(() => props.form.openMode === "popup");
-const pagePermissionSummary = computed(() => summarizeRoleGrant(props.form.pageViewPermission));
 </script>
 
 <template>
@@ -109,23 +103,6 @@ const pagePermissionSummary = computed(() => summarizeRoleGrant(props.form.pageV
         </div>
       </div>
     </template>
-
-    <div class="page-prop-item">
-      <div class="page-prop-label">
-        <span>{{ t("pageInspector.labels.permissionConfig") }}</span>
-        <el-tooltip :content="t('pageInspector.tooltips.permissionReserved')" placement="top">
-          <span class="label-tip">?</span>
-        </el-tooltip>
-      </div>
-      <div class="page-prop-editor page-prop-editor-stacked">
-        <span class="permission-summary-text">{{ pagePermissionSummary }}</span>
-        <RoleGrantEditor
-          :model-value="form.pageViewPermission"
-          :role-options="roleOptions || []"
-          @update:model-value="$emit('permissionConfig', $event)"
-        />
-      </div>
-    </div>
 
     <div class="page-prop-item">
       <div class="page-prop-label">
@@ -238,8 +215,4 @@ const pagePermissionSummary = computed(() => summarizeRoleGrant(props.form.pageV
   width: 100%;
 }
 
-.permission-summary-text {
-  font-size: 12px;
-  color: var(--designer-text-secondary);
-}
 </style>

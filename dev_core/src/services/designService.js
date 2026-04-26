@@ -3,7 +3,7 @@
  * 处理设计页面的 CRUD 操作
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6
  */
-const { DesignPage, Project } = require("../models");
+const { DesignPage, Project, ProjectRole } = require("../models");
 const { sequelize } = require("../config/database");
 const { validatePageSchema } = require("../dsl/validators");
 const AppError = require("../utils/AppError");
@@ -16,6 +16,80 @@ const {
 
 const LOCK_TIMEOUT_MS = 30 * 60 * 1000;
 const ENTRY_PAGE_KEYS = ["homePageId", "loginPageId", "logoutPageId"];
+const asArray = (value) => (Array.isArray(value) ? value : []);
+const normalizeId = (value) => String(value ?? "").trim();
+
+const resolveSchemaPageForRuntimeAccess = (schema, pageId) => {
+  if (!schema || typeof schema !== "object") return {};
+  if (schema.page && typeof schema.page === "object") return schema.page;
+  if (schema.pagesById && typeof schema.pagesById === "object") {
+    return schema.pagesById[pageId] || Object.values(schema.pagesById)[0] || {};
+  }
+  return {};
+};
+
+const collectSchemaNodesForRuntimeAccess = (schema) => {
+  if (!schema || typeof schema !== "object") return [];
+  if (schema.nodesById && typeof schema.nodesById === "object") {
+    return Object.values(schema.nodesById).filter(Boolean);
+  }
+  return [];
+};
+
+async function validateRuntimeAccessSchema(projectId, pageId, schema) {
+  const schemaPage = resolveSchemaPageForRuntimeAccess(schema, pageId);
+  const access = schemaPage?.config?.runtimeAccess || {};
+  const usedRoleIds = new Set();
+  const schemeIds = new Set();
+  const errors = [];
+
+  asArray(access.allowedRoles).forEach((roleRef) => {
+    const roleId = normalizeId(roleRef?.roleId || roleRef?.id);
+    if (roleId) usedRoleIds.add(roleId);
+  });
+  asArray(access.schemes).forEach((scheme) => {
+    const schemeId = normalizeId(scheme?.id);
+    if (!schemeId) return;
+    schemeIds.add(schemeId);
+    asArray(scheme.roleRefs).forEach((roleRef) => {
+      const roleId = normalizeId(roleRef?.roleId || roleRef?.id);
+      if (roleId) usedRoleIds.add(roleId);
+    });
+  });
+  collectSchemaNodesForRuntimeAccess(schema).forEach((node) => {
+    const runtimeAccess = node?.permissions?.runtimeAccess;
+    if (!runtimeAccess || typeof runtimeAccess !== "object") return;
+    [runtimeAccess.visibleSchemeId, runtimeAccess.operableSchemeId]
+      .map(normalizeId)
+      .filter(Boolean)
+      .forEach((schemeId) => {
+        if (!schemeIds.has(schemeId)) {
+          errors.push(`组件 ${node.id} 引用了不存在的权限方案 ${schemeId}`);
+        }
+      });
+  });
+
+  if (usedRoleIds.size > 0) {
+    const roles = await ProjectRole.findAll({
+      where: { projectId, id: Array.from(usedRoleIds) },
+      attributes: ["id"],
+      raw: true,
+    });
+    const existing = new Set(roles.map((role) => role.id));
+    Array.from(usedRoleIds).forEach((roleId) => {
+      if (!existing.has(roleId)) {
+        errors.push(`引用了不存在的运行态角色 ${roleId}`);
+      }
+    });
+  }
+
+  if (errors.length > 0) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: `运行态权限配置校验失败: ${errors.join("; ")}`,
+      errors,
+    });
+  }
+}
 
 const DEFAULT_GLOBAL_SCRIPTS = {
   system: {
@@ -478,6 +552,8 @@ class DesignService {
     // }
 
     // 更新页面
+    await validateRuntimeAccessSchema(page.projectId, page.id, schema);
+
     const nextPath = resolvePathFromSchemaContent(schema);
     const updatePayload = {
       schemaContent: schema,

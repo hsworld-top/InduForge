@@ -14,6 +14,7 @@ describe("page-inspector-sections", () => {
       "viewport",
       "visual",
       "runtime",
+      "runtimeAccess",
     ]);
     expect(getPageInspectorSections().map((section) => section.title)).toEqual([
       "页面身份",
@@ -21,6 +22,7 @@ describe("page-inspector-sections", () => {
       "布局与适配",
       "视觉",
       "运行控制",
+      "运行态权限控制",
     ]);
 
     i18n.global.locale.value = "en";
@@ -31,6 +33,7 @@ describe("page-inspector-sections", () => {
       "Layout & Adaptation",
       "Visual",
       "Runtime",
+      "运行态权限控制",
     ]);
   });
 
@@ -39,7 +42,6 @@ describe("page-inspector-sections", () => {
     expect(runtimeSection?.fields).toEqual([
       "openMode",
       "popup",
-      "permission",
       "cacheMode",
       "preloadMode",
     ]);

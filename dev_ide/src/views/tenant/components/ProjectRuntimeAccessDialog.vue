@@ -346,7 +346,11 @@
             v-model="roleForm.code"
             :disabled="roleEditorMode === 'edit' && roleForm.isSystem"
             :placeholder="t('projectManagement.runtimeAccess.roles.inputCode')"
-          />
+          >
+            <template #prepend>
+              {{ RUNTIME_ROLE_CODE_PREFIX }}
+            </template>
+          </el-input>
         </el-form-item>
         <el-form-item :label="t('projectManagement.runtimeAccess.roles.name')">
           <el-input
@@ -396,6 +400,7 @@ import { useI18n } from 'vue-i18n'
 import { projectAPI } from '../../../api/project.api.js'
 import {
   RUNTIME_ACCESS_TABS,
+  RUNTIME_ROLE_CODE_PREFIX,
   useProjectRuntimeAccessState,
 } from './project-runtime-access-state'
 

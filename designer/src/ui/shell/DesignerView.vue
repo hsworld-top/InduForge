@@ -118,6 +118,8 @@ interface EditorShellStoreRefs {
   pageTabState: Ref<{ tabs?: DesignerPageTab[]; activeId?: string } | undefined>;
   canvasMousePos: Ref<{ x: number; y: number } | null>;
   hoveredNodeType: Ref<string>;
+  runtimeUsers: Ref<Array<{ id: string; username: string; displayName?: string; status?: string }>>;
+  selectedPreviewRuntimeUserId: Ref<string>;
 }
 
 const editorStore = useEditorStore();
@@ -135,6 +137,8 @@ const {
   pageTabState,
   canvasMousePos,
   hoveredNodeType,
+  runtimeUsers,
+  selectedPreviewRuntimeUserId,
 } = storeToRefs(editorStore) as unknown as EditorShellStoreRefs;
 
 const leftActiveKey = ref("pages");
@@ -537,11 +541,51 @@ function handleRedo() {
 /**
  * 预览
  */
+function getPreviewRuntimeUserStorageKey(projectId: string): string {
+  return `designer.previewRuntimeUser.${projectId}`;
+}
+
+function persistPreviewRuntimeUser(projectId: string, runtimeUserId: string): void {
+  if (!projectId || typeof window === "undefined") return;
+  try {
+    const key = getPreviewRuntimeUserStorageKey(projectId);
+    if (runtimeUserId) {
+      window.localStorage.setItem(key, runtimeUserId);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // 本地持久化失败不影响预览。
+  }
+}
+
+function restorePreviewRuntimeUser(projectId: string): void {
+  if (!projectId || selectedPreviewRuntimeUserId.value || typeof window === "undefined") return;
+  try {
+    const stored = window.localStorage.getItem(getPreviewRuntimeUserStorageKey(projectId)) || "";
+    if (stored) {
+      editorStore.setSelectedPreviewRuntimeUserId(stored);
+    }
+  } catch {
+    // 本地持久化读取失败不影响预览。
+  }
+}
+
+function handlePreviewUserChange(runtimeUserId: string): void {
+  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id || editorStore.projectId;
+  editorStore.setSelectedPreviewRuntimeUserId(runtimeUserId);
+  persistPreviewRuntimeUser(projectId, runtimeUserId);
+}
+
 function handlePreview() {
   const projectId = (route.meta as DesignerRouteProjectMeta).project?.id;
   router.push({
     path: "/preview",
-    query: { pid: projectId, pageId: currentPageId.value || "" },
+    query: {
+      pid: projectId,
+      pageId: currentPageId.value || "",
+      previewUserId: selectedPreviewRuntimeUserId.value || undefined,
+    },
   });
 }
 
@@ -986,6 +1030,7 @@ async function loadProject() {
   const project = (route.meta as DesignerRouteProjectMeta).project;
   if (!project?.id) return;
   if (editorStore.projectId === project.id && editorStore.doc) {
+    restorePreviewRuntimeUser(project.id);
     return;
   }
   const result = await editorStore.loadProject(project.id);
@@ -993,6 +1038,7 @@ async function loadProject() {
     ElMessage.error(result.error?.message || t("message.loadProjectFailed"));
     return;
   }
+  restorePreviewRuntimeUser(project.id);
   const targetPageId = String(route.query.pageId || "");
   if (targetPageId) {
     await editorStore.setCurrentPage(targetPageId);
@@ -1047,6 +1093,8 @@ onBeforeUnmount(() => {
       :save-settings="saveSettings"
       :has-selection="hasSelection"
       :has-clipboard="hasClipboard"
+      :runtime-users="runtimeUsers"
+      :selected-preview-runtime-user-id="selectedPreviewRuntimeUserId"
       @update:active-view-key="handleViewChange"
       @undo="handleUndo"
       @redo="handleRedo"
@@ -1075,6 +1123,7 @@ onBeforeUnmount(() => {
       @copy="handleCopy"
       @paste="handlePaste"
       @delete-selected="handleDeleteSelected"
+      @preview-user-change="handlePreviewUserChange"
     />
 
     <SelectionToolbar v-if="hasSelection && hasPages" />

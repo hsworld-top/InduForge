@@ -70,7 +70,6 @@ const manifestLiteralKeyMap: Record<string, string> = {
   样式: "componentManifest.groups.style",
   功能: "componentManifest.groups.features",
   属性: "componentManifest.groups.props",
-  安全策略: "componentManifest.groups.security",
   区域预设: "componentManifest.labels.regionPreset",
   Header区域: "componentManifest.labels.showHeader",
   Aside区域: "componentManifest.labels.showAside",
@@ -92,8 +91,6 @@ const manifestLiteralKeyMap: Record<string, string> = {
   标签位置: "componentManifest.labels.tabPosition",
   宽度自撑: "componentManifest.labels.stretch",
   标签页: "componentManifest.labels.tabs",
-  是否添加权限控制: "componentManifest.labels.safetyControl",
-  权限描述: "componentManifest.labels.safetyDesc",
   起始: "componentManifest.options.start",
   居中: "componentManifest.options.center",
   末尾: "componentManifest.options.end",
@@ -123,7 +120,6 @@ const manifestLiteralKeyMap: Record<string, string> = {
   信息: "componentManifest.options.info",
   文本: "componentManifest.options.text",
   "如: el-icon-search": "componentManifest.placeholders.icon",
-  请输入权限描述: "componentManifest.placeholders.safetyDesc",
 };
 
 function translateManifestLiteral(value: string | undefined): string {

@@ -51,9 +51,6 @@ import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { getManifest } from "@/materials/manifests";
 import assetApi from "@/services/assetApi";
 import { useEditorStore } from "@/stores/editor-store";
-import type { Action, RolePermission } from "@/editor-core/document/types";
-import RoleGrantEditor from "@/ui/shared/permissions/RoleGrantEditor.vue";
-import { summarizeRoleGrant } from "@/ui/shared/permissions/role-grant-summary";
 import { usePanelState } from "../composables/use-panel-state";
 import MultiInspectorPanel from "./MultiInspectorPanel.vue";
 import PageInspectorPanel from "./PageInspectorPanel.vue";
@@ -69,7 +66,6 @@ import {
   normalizeMenuItems,
   resolveMenuConfigFromContent,
 } from "./property-panel-menu-dsl";
-import { updateNodeActionPermission } from "./property-panel-action-permissions";
 import {
   buildRegionSizeState,
   clampRegionSize as clampRegionSizeValue,
@@ -122,15 +118,6 @@ interface PresetGroupLike {
   style?: PresetFactoryLike;
 }
 
-interface ActionPermissionRow {
-  key: string;
-  eventName: string;
-  index: number;
-  action: Action;
-  title: string;
-  summary: string;
-}
-
 const ElAside: any = _ElAside;
 const ElCalendar: any = _ElCalendar;
 const ElCard: any = _ElCard;
@@ -181,7 +168,6 @@ const {
   projectVariables,
   projectVariableGroups,
   globalScripts,
-  runtimeRoleCodes,
 } = storeToRefs(editorStore as any) as any;
 
 const projectId = computed<string>(
@@ -4968,23 +4954,28 @@ const bindingDialogDescription = computed<string>(() => {
     ? t("propertyPanel.bindingDialog.descriptionWithProp", { elementName, propLabel })
     : t("propertyPanel.bindingDialog.description", { elementName });
 });
-const availableRoles = computed<string[]>(() => {
-  return Array.isArray(runtimeRoleCodes.value) ? runtimeRoleCodes.value : [];
+const runtimePermissionSchemeOptions = computed<AnyArray>(() => {
+  const schemes = currentPage.value?.config?.runtimeAccess?.schemes;
+  if (!Array.isArray(schemes)) return [];
+  return schemes.map((scheme: AnyRecord) => ({
+    label: String(scheme.name || scheme.id),
+    value: String(scheme.id),
+  }));
 });
-const actionPermissionRows = computed<ActionPermissionRow[]>(() => {
-  const node = selectedNode.value;
-  if (!node) return [];
 
-  return Object.entries(node.events || {}).flatMap(([eventName, actions]) =>
-    (Array.isArray(actions) ? actions : []).map((action, index) => ({
-      key: `${eventName}:${index}`,
-      eventName,
-      index,
-      action: action as Action,
-      title: `${eventName} / ${String((action as Action)?.type || "unknown")}`,
-      summary: summarizeRoleGrant((action as Action)?.permissions),
-    })),
-  );
+const selectedNodeRuntimeAccess = computed<AnyRecord>(() => {
+  const access = selectedNode.value?.permissions?.runtimeAccess;
+  return access && typeof access === "object" ? access : {};
+});
+
+const visibleSchemeId = computed<string>({
+  get: () => String(selectedNodeRuntimeAccess.value.visibleSchemeId || ""),
+  set: (value) => updateNodeRuntimeAccess("visibleSchemeId", value),
+});
+
+const operableSchemeId = computed<string>({
+  get: () => String(selectedNodeRuntimeAccess.value.operableSchemeId || ""),
+  set: (value) => updateNodeRuntimeAccess("operableSchemeId", value),
 });
 
 const isElContainer = computed<boolean>(() => elementType.value === "ElContainer");
@@ -6378,21 +6369,28 @@ function handlePropChange(propName: string, value: any): void {
 }
 
 /**
- * 更新动作的轻量角色授权，保持变更局限在当前节点事件配置内。
- * @param {string} eventName - 事件名
- * @param {number} actionIndex - 动作索引
- * @param {RolePermission | undefined} permission - 新权限
+ * 更新组件运行态权限方案引用；空值表示该维度始终允许。
  */
-function handleActionPermissionChange(
-  eventName: string,
-  actionIndex: number,
-  permission: RolePermission | undefined,
-): void {
+function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", value: string): void {
   const node = selectedNode.value;
   if (!node) return;
-  const nextEvents = updateNodeActionPermission(node.events || {}, eventName, actionIndex, permission);
-
-  const patch: AnyRecord = { events: nextEvents };
+  const nextRuntimeAccess: AnyRecord = {
+    ...(node.permissions?.runtimeAccess || {}),
+    [key]: String(value || "").trim() || undefined,
+  };
+  Object.keys(nextRuntimeAccess).forEach((itemKey) => {
+    if (!nextRuntimeAccess[itemKey]) {
+      delete nextRuntimeAccess[itemKey];
+    }
+  });
+  const nextPermissions: AnyRecord = {
+    ...(node.permissions || {}),
+    runtimeAccess: Object.keys(nextRuntimeAccess).length > 0 ? nextRuntimeAccess : undefined,
+  };
+  if (!nextPermissions.runtimeAccess) {
+    delete nextPermissions.runtimeAccess;
+  }
+  const patch: AnyRecord = { permissions: nextPermissions };
   const ok = editorStore.updateNode(node.id, patch);
   if (!ok) {
     applyNodePatch(node.id, patch);
@@ -6433,29 +6431,34 @@ function handleActionPermissionChange(
         />
       </template>
 
-      <div v-if="actionPermissionRows.length > 0" class="prop-section">
+      <div class="prop-section">
         <div class="prop-section-header is-static">
           <span class="prop-section-heading">
-            <span class="prop-section-title">动作授权</span>
+            <span class="prop-section-title">权限控制</span>
           </span>
         </div>
-        <div class="prop-section-body">
-          <div
-            v-for="row in actionPermissionRows"
-            :key="row.key"
-            class="action-permission-item"
-          >
-            <div class="action-permission-item__header">
-              <span class="action-permission-item__title">{{ row.title }}</span>
-              <span class="action-permission-item__summary">{{ row.summary }}</span>
-            </div>
-            <RoleGrantEditor
-              :model-value="row.action.permissions"
-              :role-options="availableRoles"
-              @update:model-value="
-                (value) => handleActionPermissionChange(row.eventName, row.index, value)
-              "
-            />
+        <div class="prop-section-body runtime-access-controls">
+          <div class="runtime-access-row">
+            <span class="runtime-access-row__label">可见方案</span>
+            <el-select v-model="visibleSchemeId" size="small" clearable placeholder="始终可见">
+              <el-option
+                v-for="item in runtimePermissionSchemeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
+          <div class="runtime-access-row">
+            <span class="runtime-access-row__label">可操作方案</span>
+            <el-select v-model="operableSchemeId" size="small" clearable placeholder="始终可操作">
+              <el-option
+                v-for="item in runtimePermissionSchemeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
           </div>
         </div>
       </div>
@@ -7053,33 +7056,26 @@ function handleActionPermissionChange(
   margin-left: auto;
 }
 
-.action-permission-item {
+.runtime-access-controls {
   display: flex;
   flex-direction: column;
   gap: var(--designer-gap-xs);
-  padding: 6px 4px;
-  border-radius: var(--designer-radius-sm);
 }
 
-.action-permission-item + .action-permission-item {
-  border-top: 1px solid var(--designer-border-soft);
-}
-
-.action-permission-item__header {
-  display: flex;
-  justify-content: space-between;
+.runtime-access-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
   gap: var(--designer-gap-sm);
 }
 
-.action-permission-item__title {
+.runtime-access-row__label {
+  color: var(--designer-text-secondary);
   font-size: var(--designer-font-sm);
-  font-weight: 600;
-  color: var(--designer-text-primary);
 }
 
-.action-permission-item__summary {
-  font-size: 12px;
-  color: var(--designer-text-secondary);
+.runtime-access-row :deep(.el-select) {
+  width: 100%;
 }
 
 .prop-label {

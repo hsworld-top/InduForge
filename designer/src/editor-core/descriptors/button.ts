@@ -28,7 +28,7 @@ export const descriptor: ComponentDescriptor = {
 
   /** 过滤/转换传给 renderTag 的 props */
   propsFilter: (resolvedProps) => {
-    const { text: _t, safetyControl: _sc, safetyDesc: _sd, ...elProps } = resolvedProps ?? {};
+    const { text: _t, ...elProps } = resolvedProps ?? {};
     return elProps;
   },
 
