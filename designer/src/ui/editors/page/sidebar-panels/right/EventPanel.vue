@@ -784,7 +784,7 @@ function confirmEnumInsert(): void {
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid #e4e7ed;
-  background: #ffffff;
+  background: var(--designer-shell-surface);
 }
 
 .event-row {
@@ -931,12 +931,12 @@ function confirmEnumInsert(): void {
 }
 
 .node-icon {
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   flex-shrink: 0;
 }
 
 .node-item .node-icon.icon-custom {
-  color: #10b981;
+  color: var(--designer-success-text);
 }
 
 .node-variable .node-icon.icon-variable {

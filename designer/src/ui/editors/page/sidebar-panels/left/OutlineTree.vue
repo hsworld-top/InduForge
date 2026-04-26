@@ -467,11 +467,11 @@ function handleDelete(): void {
 }
 
 .delete-btn {
-  color: #f56c6c;
+  color: var(--designer-danger-text);
 }
 
 .delete-btn:hover {
-  color: #f56c6c;
+  color: var(--designer-danger-text);
   opacity: 1;
 }
 

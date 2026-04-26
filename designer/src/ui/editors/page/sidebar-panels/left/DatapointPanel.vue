@@ -1669,7 +1669,7 @@ onUnmounted(() => {
 }
 
 .node-variable .node-icon {
-  color: #10b981;
+  color: var(--designer-success-text);
 }
 
 .node-icon.is-mapped {

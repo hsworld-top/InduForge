@@ -121,7 +121,7 @@ function selectedRoleIds(scheme: PagePermissionScheme): string[] {
 .scheme-empty {
   padding: 8px 6px;
   color: var(--designer-text-secondary);
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
 }
 
 .scheme-item {

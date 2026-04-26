@@ -1078,7 +1078,7 @@ watch(projectId, (value) => {
 }
 
 .context-item.danger {
-  color: #f56c6c;
+  color: var(--designer-danger-text);
 }
 
 .context-item.disabled {

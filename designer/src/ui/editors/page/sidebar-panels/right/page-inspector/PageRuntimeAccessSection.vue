@@ -130,7 +130,7 @@ const selectedRoleIds = computed<string[]>({
 .page-prop-label {
   width: 92px;
   min-width: 92px;
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   color: var(--designer-text-regular);
 }
 
@@ -161,6 +161,6 @@ const selectedRoleIds = computed<string[]>({
 
 .permission-scheme-entry__count {
   color: var(--designer-text-secondary);
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
 }
 </style>

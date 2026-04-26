@@ -665,7 +665,7 @@ watch(currentPageId, () => {
 .toolbar-button {
   background: #f5f7fa;
   border: 1px solid #e4e7ed;
-  color: #606266;
+  color: var(--designer-text-secondary);
 }
 
 .toolbar-button:hover {

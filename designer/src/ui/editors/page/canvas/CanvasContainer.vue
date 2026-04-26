@@ -249,7 +249,7 @@ useCanvasViewportPlacement({
 const workbenchStyle = computed((): Record<string, string> => {
   const alpha = props.showRuler ? 0.04 : 0.03;
   const style: Record<string, string> = {
-    backgroundColor: "#eef2f7",
+    backgroundColor: "var(--designer-group-surface)",
     backgroundImage: "none",
   };
   if (!showWorkbenchGrid.value) return style;
@@ -270,7 +270,7 @@ const canvasStyle = computed((): Record<string, string> => {
     transform: `translate(${translateX.value + rulerInset.value}px, ${
       translateY.value + rulerInset.value
     }px) scale(${zoom.value})`,
-    backgroundColor: "#ffffff",
+    backgroundColor: "var(--designer-shell-surface)",
     border: "1px solid rgba(148, 163, 184, 0.45)",
     boxShadow: "0 0 0 1px rgba(255,255,255,0.85) inset, 0 10px 26px rgba(15, 23, 42, 0.08)",
   };

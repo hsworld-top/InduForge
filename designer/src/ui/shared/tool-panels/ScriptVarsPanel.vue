@@ -1915,11 +1915,11 @@ onUnmounted(() => {
 }
 
 .node-item .node-icon {
-  color: #10b981;
+  color: var(--designer-success-text);
 }
 
 .node-item .node-icon.icon-timer {
-  color: #f59e0b;
+  color: var(--designer-warning-text);
 }
 
 .node-item .node-icon.icon-change {
@@ -1927,7 +1927,7 @@ onUnmounted(() => {
 }
 
 .node-item .node-icon.icon-custom {
-  color: #10b981;
+  color: var(--designer-success-text);
 }
 
 .node-variable .node-icon.icon-variable {
@@ -2029,11 +2029,11 @@ onUnmounted(() => {
 }
 
 .context-menu-item--danger {
-  color: #f56c6c;
+  color: var(--designer-danger-text);
 }
 
 .context-menu-item--danger:hover {
-  background-color: #fef0f0;
+  background-color: var(--designer-danger-surface);
 }
 
 .context-submenu {

@@ -131,7 +131,7 @@ const routePathDisabled = computed(
   gap: 6px;
   width: 92px;
   min-width: 92px;
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   color: var(--designer-text-regular);
 }
 

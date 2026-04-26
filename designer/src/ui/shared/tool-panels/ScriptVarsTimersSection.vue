@@ -144,7 +144,7 @@ const { t } = useI18n();
 }
 
 .node-item .node-icon.icon-timer {
-  color: #f59e0b;
+  color: var(--designer-warning-text);
 }
 
 .tree-node:hover {

@@ -149,11 +149,11 @@ const { t } = useI18n();
 }
 
 .context-menu-item--danger {
-  color: #f56c6c;
+  color: var(--designer-danger-text);
 }
 
 .context-menu-item--danger:hover {
-  background-color: #fef0f0;
+  background-color: var(--designer-danger-surface);
 }
 
 .context-submenu {

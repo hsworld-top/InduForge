@@ -146,7 +146,7 @@ function handleParentIdUpdate(value: string | null) {
   align-items: flex-start;
   gap: 10px;
   padding: 10px 11px;
-  border: 1px solid var(--designer-border-color, #e6e6e6);
+  border: 1px solid var(--designer-border-color, #d7dde7);
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
@@ -158,7 +158,7 @@ function handleParentIdUpdate(value: string | null) {
 
 .type-option:hover {
   border-color: rgba(37, 99, 235, 0.16);
-  background-color: var(--designer-hover-surface, #f5f5f5);
+  background-color: var(--designer-hover-surface, #f6f5f2);
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.04);
 }
 
@@ -185,12 +185,12 @@ function handleParentIdUpdate(value: string | null) {
 .type-icon {
   width: 24px;
   height: 24px;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
   flex-shrink: 0;
 }
 
 .type-option.is-active .type-icon {
-  color: var(--designer-primary-text, #2563eb);
+  color: var(--designer-primary-text, #1d4ed8);
 }
 
 .type-info {
@@ -201,7 +201,7 @@ function handleParentIdUpdate(value: string | null) {
 .type-name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--designer-text-primary, #191919);
+  color: var(--designer-text-primary, #0f172a);
   margin-bottom: 2px;
 }
 
@@ -211,7 +211,7 @@ function handleParentIdUpdate(value: string | null) {
 
 .type-desc {
   font-size: 11px;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
   line-height: 1.4;
 }
 

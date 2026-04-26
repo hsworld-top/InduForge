@@ -144,7 +144,7 @@ const { t } = useI18n();
 }
 
 .node-item .node-icon.icon-custom {
-  color: #10b981;
+  color: var(--designer-success-text);
 }
 
 .tree-node:hover {

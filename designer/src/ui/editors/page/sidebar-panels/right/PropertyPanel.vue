@@ -6950,7 +6950,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 }
 
 .panel-section-title {
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   font-weight: 600;
   color: var(--designer-text-secondary);
 }
@@ -6999,7 +6999,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 }
 
 .prop-section-title {
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   font-weight: 600;
   color: var(--designer-text-secondary);
   letter-spacing: 0.02em;
@@ -7071,7 +7071,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 
 .runtime-access-row__label {
   color: var(--designer-text-secondary);
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
 }
 
 .runtime-access-row :deep(.el-select) {
@@ -7087,7 +7087,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
   min-width: 72px;
   max-width: 88px;
   gap: 4px;
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   color: var(--designer-text-regular);
 }
 
@@ -7144,12 +7144,12 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 }
 
 .region-size-text {
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   color: var(--designer-text-secondary);
 }
 
 .region-size-limit {
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   color: var(--designer-text-secondary);
 }
 
@@ -7198,7 +7198,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 }
 
 .config-label {
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   color: var(--designer-text-secondary);
 }
 
@@ -7237,7 +7237,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 }
 
 .config-assets-header {
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   font-weight: 600;
   color: var(--designer-text-secondary);
 }
@@ -7270,7 +7270,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 }
 
 .meta-desc {
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   color: var(--designer-text-secondary);
 }
 
@@ -7322,7 +7322,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 }
 
 .sidebar-title {
-  font-size: var(--designer-font-sm);
+  font-size: var(--designer-font-label);
   font-weight: 600;
   color: var(--designer-text-secondary);
 }

@@ -28,55 +28,81 @@
     --designer-panel-icon: 14px;
     --designer-gap-2xs: 4px;
     --designer-gap-xs: 4px;
-    --designer-gap-sm: 6px;
-    --designer-gap-md: 10px;
+    --designer-gap-sm: 8px;
+    --designer-gap-md: 12px;
     --designer-gap-lg: 16px;
-    --designer-radius-sm: 4px;
-    --designer-radius-md: 6px;
-    --designer-radius-lg: 8px;
-    --designer-font-xs: 12px;
-    --designer-font-sm: 12px;
-    --designer-font-md: 12px;
-    --designer-font-lg: 14px;
-    --designer-font-title: 14px;
+    --designer-gap-xl: 24px;
+    --designer-radius-sm: 8px;
+    --designer-radius-md: 12px;
+    --designer-radius-lg: 18px;
+    /* 字体系统 - 按照 DESIGN.md typography hierarchy */
+    --designer-font-headline: 20px;
+    --designer-font-title: 16px;
+    --designer-font-body: 14px;
+    --designer-font-label: 13px;
+    --designer-font-meta: 12px;
+    --designer-font-mono: 12px;
     --designer-nav-font: 12px;
     --designer-panel-font: 12px;
     --designer-panel-title-font: 12px;
-    --designer-shell-bg: #f5f5f5;
+
+    /* 背景与表面 */
+    --designer-shell-bg: #f6f5f2;
     --designer-shell-surface: #ffffff;
     --designer-surface-elevated: #ffffff;
-    --designer-group-surface: #fafafa;
-    --designer-chip-surface: #fafafa;
-    --designer-border-color: #e6e6e6;
-    --designer-border-soft: #f0f0f0;
-    --designer-border-strong: #d9d9d9;
-    --designer-text-primary: #191919;
-    --designer-text-regular: #191919;
-    --designer-text-secondary: #595959;
-    --designer-text-muted: #8c8c8c;
-    --designer-hover-surface: #f5f5f5;
-    --designer-active-surface: #f0f7ff;
-    --designer-primary: #2563eb;
-    --designer-primary-border: #1677ff;
-    --designer-primary-text: #2563eb;
-    --designer-primary-soft: #f0f7ff;
-    --designer-success-surface: #fafafa;
-    --designer-success-text: #8c8c8c;
-    --designer-warning-surface: #fff9f0;
-    --designer-warning-text: #ad6800;
-    --designer-info-surface: #f7fbff;
-    --designer-info-text: #4c88ff;
-    --designer-shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.06);
-    --designer-shadow-popover: 0 10px 28px rgba(0, 0, 0, 0.08);
+    --designer-group-surface: #eef2f7;
+    --designer-chip-surface: #eef2f7;
+
+    /* 边框 */
+    --designer-border-color: #d7dde7;
+    --designer-border-soft: #eef2f7;
+    --designer-border-strong: #b8c0d0;
+
+    /* 文本 */
+    --designer-text-primary: #0f172a;
+    --designer-text-regular: #0f172a;
+    --designer-text-secondary: #475569;
+    --designer-text-muted: #94a3b8;
+
+    /* 交互状态 */
+    --designer-hover-surface: #f6f5f2;
+    --designer-active-surface: #eef2f7;
+
+    /* 主色 */
+    --designer-primary: #1d4ed8;
+    --designer-primary-hover: #1e40af;
+    --designer-primary-border: #1d4ed8;
+    --designer-primary-text: #1d4ed8;
+    --designer-primary-soft: #eef2f7;
+
+    /* 状态色 */
+    --designer-accent: #0ea5a5;
+    --designer-success-surface: #f0fdf4;
+    --designer-success-text: #22c55e;
+    --designer-success-border: #bbf7d0;
+    --designer-warning-surface: #fffbeb;
+    --designer-warning-text: #f59e0b;
+    --designer-warning-border: #fde68a;
+    --designer-info-surface: #eff6ff;
+    --designer-info-text: #0ea5a5;
+    --designer-info-border: #bfdbfe;
+    --designer-danger: #ef4444;
+    --designer-danger-surface: #fef2f2;
+    --designer-danger-text: #ef4444;
+    --designer-danger-border: #fecaca;
+
+    /* 阴影 */
+    --designer-shadow-panel: 0 2px 6px rgba(15, 23, 42, 0.08);
+    --designer-shadow-popover: 0 12px 24px rgba(15, 23, 42, 0.12);
   }
 
   html {
-    font-family: "Inter", system-ui, sans-serif;
+    font-family: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
   }
 
   body {
     @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
-    font-family: "Inter", system-ui, sans-serif;
+    font-family: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
   }
 
   /* 全局滚动条（原生） */
@@ -133,19 +159,28 @@
     --designer-text-secondary: #cbd5e1;
     --designer-text-muted: #94a3b8;
     --designer-hover-surface: #1e293b;
-    --designer-active-surface: rgba(37, 99, 235, 0.18);
+    --designer-active-surface: rgba(29, 78, 216, 0.18);
     --designer-primary: #60a5fa;
+    --designer-primary-hover: #93c5fd;
     --designer-primary-border: #3b82f6;
     --designer-primary-text: #93c5fd;
     --designer-primary-soft: rgba(59, 130, 246, 0.14);
+    --designer-accent: #2dd4bf;
     --designer-success-surface: rgba(34, 197, 94, 0.1);
     --designer-success-text: #86efac;
+    --designer-success-border: rgba(34, 197, 94, 0.3);
     --designer-warning-surface: rgba(245, 158, 11, 0.12);
     --designer-warning-text: #fcd34d;
+    --designer-warning-border: rgba(245, 158, 11, 0.3);
     --designer-info-surface: rgba(59, 130, 246, 0.12);
     --designer-info-text: #93c5fd;
-    --designer-shadow-panel: 0 12px 28px rgba(2, 6, 23, 0.42);
-    --designer-shadow-popover: 0 14px 32px rgba(2, 6, 23, 0.52);
+    --designer-info-border: rgba(59, 130, 246, 0.3);
+    --designer-danger: #f87171;
+    --designer-danger-surface: rgba(239, 68, 68, 0.12);
+    --designer-danger-text: #f87171;
+    --designer-danger-border: rgba(239, 68, 68, 0.3);
+    --designer-shadow-panel: 0 8px 18px rgba(2, 6, 23, 0.32);
+    --designer-shadow-popover: 0 16px 32px rgba(2, 6, 23, 0.42);
   }
 
   /* Element Plus 滚动条 */

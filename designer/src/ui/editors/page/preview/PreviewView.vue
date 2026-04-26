@@ -517,7 +517,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-width: 0;
   margin-left: 8px;
-  color: #64748b;
+  color: var(--designer-text-secondary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -537,7 +537,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 8px;
   background: #fff;
-  color: #334155;
+  color: var(--designer-border-strong);
 }
 
 .preview-denied__title {
@@ -546,7 +546,7 @@ onBeforeUnmount(() => {
 }
 
 .preview-denied__desc {
-  color: #64748b;
+  color: var(--designer-text-secondary);
   font-size: 13px;
 }
 

@@ -1273,7 +1273,7 @@ watch(
 .binding-section {
   border: 1px solid #e4e7ed;
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--designer-shell-surface);
 }
 
 .section-header {
@@ -1458,12 +1458,12 @@ watch(
 }
 
 .node-icon {
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   flex-shrink: 0;
 }
 
 .node-item .node-icon.icon-custom {
-  color: #10b981;
+  color: var(--designer-success-text);
 }
 
 .node-variable .node-icon.icon-variable {

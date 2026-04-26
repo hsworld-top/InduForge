@@ -158,7 +158,7 @@ const crosshairStyle = computed(() => {
 /* Flex 容器：插入线 */
 .insert-line {
   position: absolute;
-  background: #3b82f6;
+  background: var(--designer-primary);
   pointer-events: none;
   z-index: 9999;
   transition: all 0.1s ease;
@@ -180,7 +180,7 @@ const crosshairStyle = computed(() => {
 .grid-cell-highlight {
   position: absolute;
   background-color: rgba(59, 130, 246, 0.2);
-  border: 2px solid #3b82f6;
+  border: 2px solid var(--designer-primary);
   pointer-events: none;
   z-index: 9998;
   transition: all 0.1s ease;
@@ -201,7 +201,7 @@ const crosshairStyle = computed(() => {
   right: -50vw;
   top: 0;
   height: 1px;
-  background: #3b82f6;
+  background: var(--designer-primary);
   opacity: 0.6;
 }
 
@@ -211,7 +211,7 @@ const crosshairStyle = computed(() => {
   bottom: -50vh;
   left: 0;
   width: 1px;
-  background: #3b82f6;
+  background: var(--designer-primary);
   opacity: 0.6;
 }
 
@@ -221,8 +221,8 @@ const crosshairStyle = computed(() => {
   top: -3px;
   width: 6px;
   height: 6px;
-  background: #3b82f6;
-  border: 2px solid #ffffff;
+  background: var(--designer-primary);
+  border: 2px solid var(--designer-shell-surface);
   border-radius: 50%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }

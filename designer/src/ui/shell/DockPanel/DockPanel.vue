@@ -196,10 +196,10 @@ onBeforeUnmount(() => {
 }
 
 .dock-panel__resize-handle:hover {
-  background: rgba(37, 99, 235, 0.12);
+  background: rgba(var(--designer-primary-rgb, 29, 78, 216), 0.12);
 }
 
 .dock-panel.is-resizing .dock-panel__resize-handle {
-  background: rgba(37, 99, 235, 0.18);
+  background: rgba(var(--designer-primary-rgb, 29, 78, 216), 0.18);
 }
 </style>

@@ -1370,7 +1370,7 @@ onBeforeUnmount(() => {
 .designer-bottom-toolbar {
   flex-shrink: 0;
   height: 34px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--designer-border-soft);
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   display: flex;
   align-items: stretch;
@@ -1379,7 +1379,7 @@ onBeforeUnmount(() => {
 
 .dark .designer-bottom-toolbar {
   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  border-top-color: #334155;
+  border-top-color: var(--designer-border-strong);
 }
 
 .designer-bottom-toolbar .page-tabs-bar {
@@ -1427,7 +1427,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   background: transparent;
   z-index: 2;
   transition: color 0.15s;
@@ -1435,7 +1435,7 @@ onBeforeUnmount(() => {
 
 .page-tabs-bar :deep(.el-tabs__nav-prev:hover),
 .page-tabs-bar :deep(.el-tabs__nav-next:hover) {
-  color: #3b82f6;
+  color: var(--designer-primary);
 }
 
 .page-tabs-bar :deep(.el-tabs__nav-prev .el-icon),
@@ -1470,27 +1470,27 @@ onBeforeUnmount(() => {
 }
 
 .page-tabs-bar :deep(.el-tabs__item.is-active) {
-  background: #ffffff;
+  background: var(--designer-shell-surface);
   color: #1e293b;
-  border-color: #e2e8f0 !important;
+  border-color: var(--designer-border-soft) !important;
   border-bottom-color: transparent !important;
   font-weight: 500;
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .page-tabs-bar :deep(.el-tabs__item:not(.is-active):hover) {
-  color: #475569;
+  color: var(--designer-text-secondary);
   background: rgba(148, 163, 184, 0.12);
 }
 
 .dark .page-tabs-bar :deep(.el-tabs__item) {
-  color: #94a3b8;
+  color: var(--designer-text-muted);
 }
 
 .dark .page-tabs-bar :deep(.el-tabs__item.is-active) {
   background: #1e293b;
   color: #e2e8f0;
-  border-color: #334155 !important;
+  border-color: var(--designer-border-strong) !important;
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.2);
 }
 
@@ -1509,12 +1509,12 @@ onBeforeUnmount(() => {
 .page-tab-label .tab-icon {
   width: 13px;
   height: 13px;
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   flex-shrink: 0;
 }
 
 .page-tabs-bar :deep(.el-tabs__item.is-active) .page-tab-label .tab-icon {
-  color: #3b82f6;
+  color: var(--designer-primary);
 }
 
 .page-tab-label .tab-name {
@@ -1538,7 +1538,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 0;
   padding: 0 12px;
-  border-left: 1px solid #e2e8f0;
+  border-left: 1px solid var(--designer-border-soft);
   height: 100%;
   white-space: nowrap;
   font-size: 11px;
@@ -1549,8 +1549,8 @@ onBeforeUnmount(() => {
 }
 
 .dark .status-info-bar {
-  border-left-color: #334155;
-  color: #94a3b8;
+  border-left-color: var(--designer-border-strong);
+  color: var(--designer-text-muted);
 }
 
 .status-info-bar .status-item {
@@ -1576,7 +1576,7 @@ onBeforeUnmount(() => {
 }
 
 .status-info-bar .status-hover {
-  color: #3b82f6;
+  color: var(--designer-primary);
   font-weight: 500;
 }
 
@@ -1601,15 +1601,15 @@ onBeforeUnmount(() => {
   border: 1px dashed #cbd5e1;
   border-radius: 5px;
   background: transparent;
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   padding: 0;
   transition: all 0.15s ease;
 }
 
 .page-tabs-add-btn:hover {
-  border-color: #3b82f6;
+  border-color: var(--designer-primary);
   border-style: solid;
-  color: #3b82f6;
+  color: var(--designer-primary);
   background: rgba(59, 130, 246, 0.06);
 }
 
@@ -1618,7 +1618,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   font-size: 12px;
   padding: 0 8px;
 }
@@ -1630,15 +1630,15 @@ onBeforeUnmount(() => {
   line-height: 20px;
   border-radius: 5px;
   border: 1px dashed #cbd5e1;
-  color: #94a3b8;
+  color: var(--designer-text-muted);
   background: transparent;
   transition: all 0.15s ease;
 }
 
 .page-tabs-bar :deep(.el-tabs__new-tab:hover) {
-  border-color: #3b82f6;
+  border-color: var(--designer-primary);
   border-style: solid;
-  color: #3b82f6;
+  color: var(--designer-primary);
   background: rgba(59, 130, 246, 0.06);
 }
 

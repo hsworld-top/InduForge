@@ -35,7 +35,7 @@ defineProps<{
 <style scoped>
 .canvas-insert-line {
   position: absolute;
-  background: #409EFF;
+  background: var(--designer-primary);
   pointer-events: none;
   z-index: 9999;
   transition: all 0.1s ease;

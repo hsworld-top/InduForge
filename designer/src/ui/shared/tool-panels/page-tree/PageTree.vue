@@ -1648,7 +1648,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   --page-tree-folder-bg: rgba(15, 23, 42, 0.018);
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid var(--designer-border-soft, #f0f0f0);
+  border-top: 1px solid var(--designer-border-soft, #eef2f7);
 }
 
 .page-tree-content :deep(.page-section:first-child) {
@@ -1669,7 +1669,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: var(--designer-text-primary, #191919);
+  color: var(--designer-text-primary, #0f172a);
 }
 
 .page-tree-content :deep(.page-section__meta) {
@@ -1683,7 +1683,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   padding: 0 6px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.08);
-  color: var(--designer-primary-text, #2563eb);
+  color: var(--designer-primary-text, #1d4ed8);
   font-size: 11px;
   line-height: 18px;
   text-align: center;
@@ -1691,7 +1691,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
 
 .page-tree-content :deep(.page-section__hint) {
   font-size: 11px;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
 }
 
 .page-tree-content :deep(.page-section__body) {
@@ -1703,7 +1703,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
 .page-tree-content :deep(.page-section__empty) {
   padding: 6px 10px;
   font-size: 11px;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
 }
 
 .page-tree-content :deep(.tree-node) {
@@ -1782,7 +1782,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   border: 1px dashed rgba(15, 23, 42, 0.12);
   border-radius: 6px;
   font-size: 11px;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
   background: rgba(15, 23, 42, 0.015);
 }
 
@@ -1833,12 +1833,12 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   width: 12px;
   height: 12px;
   flex-shrink: 0;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
   cursor: pointer;
 }
 
 .page-tree-content :deep(.node-arrow:hover) {
-  color: var(--designer-text-primary, #191919);
+  color: var(--designer-text-primary, #0f172a);
 }
 
 .page-tree-content :deep(.node-icon) {
@@ -1857,7 +1857,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
 
 .page-tree-content :deep(.tree-node.is-active .node-icon.page),
 .page-tree-content :deep(.tree-node.is-active .node-icon.folder) {
-  color: var(--designer-primary-text, #2563eb);
+  color: var(--designer-primary-text, #1d4ed8);
 }
 
 .page-tree-content :deep(.node-main) {
@@ -1881,7 +1881,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   white-space: nowrap;
   font-size: 12px;
   line-height: 1.3;
-  color: var(--designer-text-primary, #191919);
+  color: var(--designer-text-primary, #0f172a);
 }
 
 .page-tree-content :deep(.tree-node.is-active .node-label) {
@@ -1893,7 +1893,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   padding: 0 6px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.1);
-  color: var(--designer-primary-text, #2563eb);
+  color: var(--designer-primary-text, #1d4ed8);
   font-size: 10px;
   line-height: 18px;
 }
@@ -1909,7 +1909,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   white-space: nowrap;
   font-size: 11px;
   line-height: 1.25;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
 }
 
 .page-tree-content :deep(.node-side) {
@@ -1924,7 +1924,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   padding: 0 6px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.08);
-  color: var(--designer-text-secondary, #595959);
+  color: var(--designer-text-secondary, #475569);
   font-size: 10px;
   line-height: 18px;
 }
@@ -1940,7 +1940,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   padding: 0 6px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.05);
-  color: var(--designer-text-secondary, #595959);
+  color: var(--designer-text-secondary, #475569);
   font-size: 10px;
   line-height: 18px;
   text-align: center;
@@ -1951,7 +1951,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
   height: 20px;
   padding: 0;
   border-radius: 5px;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
   opacity: 0;
   transition:
     opacity 0.15s ease,
@@ -1966,7 +1966,7 @@ function getMoveTargets(node: any): MoveTargetLike[] {
 }
 
 .page-tree-content :deep(.node-action-btn:hover) {
-  color: var(--designer-text-primary, #191919);
+  color: var(--designer-text-primary, #0f172a);
   background: rgba(15, 23, 42, 0.05);
 }
 
@@ -1996,12 +1996,12 @@ function getMoveTargets(node: any): MoveTargetLike[] {
 .empty-text {
   margin: 0 0 2px;
   font-size: 12px;
-  color: var(--designer-text-secondary, #595959);
+  color: var(--designer-text-secondary, #475569);
 }
 
 .empty-hint {
   margin: 0;
   font-size: 11px;
-  color: var(--designer-text-muted, #8c8c8c);
+  color: var(--designer-text-muted, #94a3b8);
 }
 </style>

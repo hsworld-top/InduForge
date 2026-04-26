@@ -1551,7 +1551,7 @@ function handleDragLeave(): void {
 
 .insert-line {
   position: absolute;
-  background: #ef4444;
+  background: var(--designer-danger);
   pointer-events: none;
   z-index: 9999;
   transition: all 0.1s ease;
@@ -1616,7 +1616,7 @@ function handleDragLeave(): void {
   position: absolute;
   width: 8px;
   height: 8px;
-  background: #ffffff;
+  background: var(--designer-shell-surface);
   border: 1px solid #3b82f6;
   box-sizing: border-box;
   border-radius: 2px;
