@@ -49,7 +49,7 @@ import { useNodeRendererTypeFlags } from "./composables/use-node-renderer-type-f
 import { useNodeResize } from "./composables/use-node-resize";
 import { createNodeStyleHelpers } from "./composables/use-node-style";
 import { usePreview } from "./composables/use-preview";
-import { canvasZoomKey, runtimeAccessContextKey } from "./injection-keys";
+import { canvasSnapEnabledKey, canvasZoomKey, runtimeAccessContextKey } from "./injection-keys";
 import { createDragDropManager } from "./interaction/DragDropManager";
 
 interface NodeRendererProps {
@@ -186,6 +186,7 @@ const {
   getRegionResizeConfig: getRegionResizeConfigFromComposable,
 } = nodeInteraction;
 const canvasZoom = inject<any>(canvasZoomKey, ref(1));
+const canvasSnapEnabled = inject<any>(canvasSnapEnabledKey, ref(true));
 const dragState = useDragState();
 function notifyInsertFailure(fallbackMessage?: string): void {
   const message = error.value || fallbackMessage || "插入失败：当前不可编辑";
@@ -232,7 +233,9 @@ const radioOptionsList = computed<any[]>(() => (radioOptions.value || []) as any
 const checkboxOptionsList = computed<any[]>(() => (checkboxOptions.value || []) as any[]);
 const dropdownItemsList = computed<any[]>(() => (dropdownItems.value || []) as any[]);
 const tabsListItems = computed<any[]>(() => (tabsList.value || []) as any[]);
-const collapseItemsListFromContent = computed<any[]>(() => (collapseItemsFromContent.value || []) as any[]);
+const collapseItemsListFromContent = computed<any[]>(
+  () => (collapseItemsFromContent.value || []) as any[],
+);
 const {
   isSelectType,
   isRadioType,
@@ -617,6 +620,7 @@ const nodePointer = useNodePointer({
   isContainer,
   selection: selection as any,
   canvasZoom,
+  enableSnap: canvasSnapEnabled,
   history: history as any,
   editorStore: editorStore as any,
   currentPage: currentPage as any,
@@ -1479,7 +1483,7 @@ function handleDragLeave(): void {
 }
 
 .designer-node.drag-over {
-  outline: 2px dashed #409EFF;
+  outline: 2px dashed #409eff;
   background-color: rgba(64, 158, 255, 0.1);
 }
 

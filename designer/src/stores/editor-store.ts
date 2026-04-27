@@ -133,9 +133,11 @@ import {
 import {
   applyRuntimeRoleCodesToSchema,
   loadProjectRuntimeRoleCodesForStore,
+  normalizeProjectRuntimeUsers,
   type RuntimeRoleRecord,
   type RuntimeUserRecord,
 } from "./editor/project-runtime-role-actions";
+import { unwrapApiData } from "@/types/api";
 
 const UUID_DASH_REGEX = /-/g;
 const EL_CONTAINER_REGION_PRESET_TOP_MAIN = "top-main";
@@ -217,6 +219,7 @@ export const useEditorStore = defineStore("editor", () => {
   const runtimeRoleLoadState = ref<"idle" | "loading" | "ready" | "error">("idle");
   const runtimeRoleLoadError = ref("");
   const runtimeRoleRequestSerial = ref(0);
+  const runtimeUserRequestSerial = ref(0);
   const projectLoadRequestSerial = ref(0);
   const projectLoadInvalidatorProjectIds = ref<Record<number, string>>({});
   const projectName = ref("");
@@ -227,6 +230,7 @@ export const useEditorStore = defineStore("editor", () => {
   const isSaving = ref(false);
   const canUndo = ref(false);
   const canRedo = ref(false);
+  const isDirty = ref(false);
   const error = ref("");
   const canvasMousePos = ref<{ x: number; y: number } | null>(null);
   const hoveredNodeType = ref("");
@@ -244,6 +248,16 @@ export const useEditorStore = defineStore("editor", () => {
   let lockUnsubscribe: (() => void) | null = null;
   let docUnsubscribe: (() => void) | null = null;
   let selectionUnsubscribe: (() => void) | null = null;
+
+  /**
+   * 同步历史栈与保存状态，dirty 独立于撤销能力，保存后仍保留撤销栈。
+   * @param {History | null | undefined} targetHistory - 历史管理器
+   */
+  const syncHistoryState = (targetHistory: History | null | undefined) => {
+    canUndo.value = Boolean(targetHistory?.canUndo?.());
+    canRedo.value = Boolean(targetHistory?.canRedo?.());
+    isDirty.value = Boolean(targetHistory?.isDirty?.());
+  };
 
   /**
    * 同步锁状态
@@ -351,10 +365,8 @@ export const useEditorStore = defineStore("editor", () => {
       selectionUnsubscribe = null;
     }
 
-    historyUnsubscribe = nextHistory.on("change", (payload: unknown) => {
-      const p = payload as { canUndo: boolean; canRedo: boolean };
-      canUndo.value = p.canUndo;
-      canRedo.value = p.canRedo;
+    historyUnsubscribe = nextHistory.on("change", () => {
+      syncHistoryState(nextHistory);
     });
     docVersion.value = 0;
     selectionVersion.value = 0;
@@ -375,8 +387,8 @@ export const useEditorStore = defineStore("editor", () => {
     if (!pages.value.length) {
       pages.value = nextDoc.getAllPages();
     }
-    canUndo.value = nextHistory.canUndo();
-    canRedo.value = nextHistory.canRedo();
+    nextHistory.markSaved();
+    syncHistoryState(nextHistory);
   };
 
   /**
@@ -477,6 +489,41 @@ export const useEditorStore = defineStore("editor", () => {
     applyRuntimeRoleCodesToSchema(doc.value.schema, result.runtimeRoleCodes);
     docVersion.value += 1;
     return result;
+  };
+
+  /**
+   * 仅刷新工程运行态用户。
+   * 预览身份选择只依赖用户清单，不应额外拉取角色，避免打开预览菜单产生无关请求。
+   */
+  const loadProjectRuntimeUsers = async (targetProjectId: string) => {
+    const requestSerial = runtimeUserRequestSerial.value + 1;
+    runtimeUserRequestSerial.value = requestSerial;
+    if (!targetProjectId) {
+      runtimeUsers.value = [];
+      return { accepted: false, runtimeUsers: [] as RuntimeUserRecord[] };
+    }
+
+    try {
+      const response = await projectApi.getRuntimeUsers(targetProjectId);
+      const users = normalizeProjectRuntimeUsers(unwrapApiData(response));
+      const isLatestRequest = runtimeUserRequestSerial.value === requestSerial;
+      const isActiveProject = projectId.value === targetProjectId;
+      if (!isLatestRequest || !isActiveProject) {
+        return { accepted: false, runtimeUsers: users };
+      }
+      runtimeUsers.value = users;
+      return { accepted: true, runtimeUsers: users };
+    } catch {
+      const isLatestRequest = runtimeUserRequestSerial.value === requestSerial;
+      const isActiveProject = projectId.value === targetProjectId;
+      if (isLatestRequest && isActiveProject) {
+        runtimeUsers.value = [];
+      }
+      return {
+        accepted: isLatestRequest && isActiveProject,
+        runtimeUsers: [] as RuntimeUserRecord[],
+      };
+    }
   };
 
   /**
@@ -773,6 +820,8 @@ export const useEditorStore = defineStore("editor", () => {
         pageDrafts,
         projectApi,
       });
+      history.value?.markSaved?.();
+      syncHistoryState(history.value);
     } finally {
       isSaving.value = false;
     }
@@ -2400,6 +2449,7 @@ export const useEditorStore = defineStore("editor", () => {
     isSaving,
     canUndo,
     canRedo,
+    isDirty,
     error,
     canvasMousePos,
     hoveredNodeType,
@@ -2409,6 +2459,8 @@ export const useEditorStore = defineStore("editor", () => {
     isLockOwner,
     initEditor,
     loadProject,
+    loadProjectRuntimeRoles,
+    loadProjectRuntimeUsers,
     saveProjectSettings,
     setSelectedPreviewRuntimeUserId,
     loadProjectSettings,

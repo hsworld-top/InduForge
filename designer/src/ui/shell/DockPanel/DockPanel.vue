@@ -39,7 +39,7 @@ const resizing = ref(false);
 const panelStyle = computed<Record<string, string>>(() => ({
   width: `${props.width}px`,
 }));
-const showResizeHandle = computed(() => props.resizable && !props.floating);
+const showResizeHandle = computed(() => props.resizable);
 
 let pointerMoveHandler: ((event: PointerEvent) => void) | null = null;
 let pointerUpHandler: ((event: PointerEvent) => void) | null = null;
@@ -171,8 +171,24 @@ onBeforeUnmount(() => {
   height: var(--designer-panel-icon);
 }
 
-.dock-panel {
+.dock-panel:not(.is-floating) {
   position: relative;
+}
+
+.dock-panel.is-floating {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-shadow: var(--designer-shadow-panel);
+  z-index: 20;
+}
+
+.dock-panel--left.is-floating {
+  left: 0;
+}
+
+.dock-panel--right.is-floating {
+  right: 0;
 }
 
 .dock-panel__resize-handle {

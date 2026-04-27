@@ -45,12 +45,14 @@ jest.mock("../../models", () => ({
 
 const {
   DEFAULT_RUNTIME_ADMIN_ROLE_CODE,
+  DEFAULT_RUNTIME_ADMIN_USERNAME,
   DEFAULT_RUNTIME_ADMIN_NAME,
   ensureRuntimeAdminBootstrap,
   buildEffectiveRoleGrantMap,
   listRuntimeUsers,
   createRuntimeUser,
   updateRuntimeUserStatus,
+  deleteRuntimeUser,
   resetRuntimeUserPassword,
   bindRuntimeUserRoles,
   listRuntimeRoles,
@@ -147,7 +149,8 @@ describe("projectRuntimeAccessService", () => {
       expect.objectContaining({
         defaults: expect.objectContaining({
           projectId: "project-1",
-          username: creator.username,
+          username: DEFAULT_RUNTIME_ADMIN_USERNAME,
+          displayName: DEFAULT_RUNTIME_ADMIN_NAME,
           createdBy: creator.id,
           updatedBy: creator.id,
         }),
@@ -170,11 +173,11 @@ describe("projectRuntimeAccessService", () => {
     ).toBe(true);
     expect(result.role.code).toBe(DEFAULT_RUNTIME_ADMIN_ROLE_CODE);
     expect(result.role.name).toBe(DEFAULT_RUNTIME_ADMIN_NAME);
-    expect(result.runtimeUser.username).toBe(creator.username);
+    expect(result.runtimeUser.username).toBe(DEFAULT_RUNTIME_ADMIN_USERNAME);
     expect(result.runtimeUser.passwordHash).toBeUndefined();
   });
 
-  test("ensureRuntimeAdminBootstrap 只提供 project.creator 时也能继承默认账号和显示名", async () => {
+  test("ensureRuntimeAdminBootstrap 只提供 project.creator 时也使用固定内置账号和显示名", async () => {
     const transaction = { id: "tx-1b" };
     const projectCreator = {
       id: "user-project-creator-1",
@@ -223,16 +226,16 @@ describe("projectRuntimeAccessService", () => {
     expect(mockProjectRuntimeUser.findOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         defaults: expect.objectContaining({
-          username: projectCreator.username,
-          displayName: projectCreator.fullName,
+          username: DEFAULT_RUNTIME_ADMIN_USERNAME,
+          displayName: DEFAULT_RUNTIME_ADMIN_NAME,
           createdBy: projectCreator.id,
           updatedBy: projectCreator.id,
         }),
       }),
     );
     expect(await bcrypt.compare("Initial#123", createdUserCall.defaults.passwordHash)).toBe(true);
-    expect(result.runtimeUser.username).toBe(projectCreator.username);
-    expect(result.runtimeUser.displayName).toBe(projectCreator.fullName);
+    expect(result.runtimeUser.username).toBe(DEFAULT_RUNTIME_ADMIN_USERNAME);
+    expect(result.runtimeUser.displayName).toBe(DEFAULT_RUNTIME_ADMIN_NAME);
   });
 
   test("同一创建者改名后再次 bootstrap 会复用原账号而不是新建账号", async () => {
@@ -905,6 +908,33 @@ describe("projectRuntimeAccessService", () => {
     expect(runtimeUserRecord.update).not.toHaveBeenCalled();
   });
 
+  test("updateRuntimeUserStatus 不允许停用内置 admin 用户", async () => {
+    const runtimeUserRecord = {
+      id: "runtime-user-admin",
+      projectId: "project-1",
+      username: DEFAULT_RUNTIME_ADMIN_USERNAME,
+      status: "active",
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    mockProjectRuntimeUser.findOne.mockResolvedValue(runtimeUserRecord);
+
+    await expect(
+      updateRuntimeUserStatus({
+        projectId: "project-1",
+        runtimeUserId: "runtime-user-admin",
+        status: "disabled",
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "内置 admin 用户不允许停用",
+      }),
+    });
+    expect(runtimeUserRecord.update).not.toHaveBeenCalled();
+  });
+
   test("updateRuntimeUserStatus 在还有其他 active 管理员时允许禁用当前管理员", async () => {
     const runtimeUserRecord = {
       id: "runtime-user-1",
@@ -951,6 +981,60 @@ describe("projectRuntimeAccessService", () => {
       updatedBy: "user-1",
     });
     expect(result.status).toBe("disabled");
+  });
+
+  test("deleteRuntimeUser 会删除普通运行态用户和角色绑定", async () => {
+    const destroy = jest.fn().mockResolvedValue(undefined);
+    mockProjectRuntimeUser.findOne.mockResolvedValue({
+      id: "runtime-user-1",
+      projectId: "project-1",
+      username: "operator",
+      status: "inactive",
+      destroy,
+    });
+    mockProjectUserRoleBinding.destroy.mockResolvedValue(1);
+
+    const result = await deleteRuntimeUser({
+      projectId: "project-1",
+      runtimeUserId: "runtime-user-1",
+    });
+
+    expect(mockProjectUserRoleBinding.destroy).toHaveBeenCalledWith({
+      where: { projectId: "project-1", runtimeUserId: "runtime-user-1" },
+      transaction: { id: "tx-service" },
+    });
+    expect(destroy).toHaveBeenCalledWith({ transaction: { id: "tx-service" } });
+    expect(result).toEqual({
+      id: "runtime-user-1",
+      projectId: "project-1",
+      deleted: true,
+    });
+  });
+
+  test("deleteRuntimeUser 不允许删除内置 admin 用户", async () => {
+    const destroy = jest.fn().mockResolvedValue(undefined);
+    mockProjectRuntimeUser.findOne.mockResolvedValue({
+      id: "runtime-user-admin",
+      projectId: "project-1",
+      username: DEFAULT_RUNTIME_ADMIN_USERNAME,
+      status: "active",
+      destroy,
+    });
+
+    await expect(
+      deleteRuntimeUser({
+        projectId: "project-1",
+        runtimeUserId: "runtime-user-admin",
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "B0001",
+      statusCode: 400,
+      options: expect.objectContaining({
+        message: "内置 admin 用户不允许删除",
+      }),
+    });
+    expect(mockProjectUserRoleBinding.destroy).not.toHaveBeenCalled();
+    expect(destroy).not.toHaveBeenCalled();
   });
 
   test("bindRuntimeUserRoles 不允许把工程里的最后一个管理员解绑干净", async () => {

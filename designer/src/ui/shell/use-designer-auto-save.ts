@@ -22,8 +22,18 @@ export function useDesignerAutoSave(options: {
   currentPageId: Ref<string>;
   readonlyState: Ref<{ readonly?: boolean } | undefined>;
   isSaving: Ref<boolean>;
+  isDirty: Ref<boolean>;
+  onAutoSaveSuccess?: () => void;
 }) {
-  const { editorStore, pageTabs, currentPageId, readonlyState, isSaving } = options;
+  const {
+    editorStore,
+    pageTabs,
+    currentPageId,
+    readonlyState,
+    isSaving,
+    isDirty,
+    onAutoSaveSuccess,
+  } = options;
 
   const saveSettings = ref({
     autoSave: false,
@@ -36,6 +46,7 @@ export function useDesignerAutoSave(options: {
     if (!saveSettings.value.autoSave) return;
     if (readonlyState.value?.readonly) return;
     if (!currentPageId.value || autoSaving.value || isSaving.value) return;
+    if (!isDirty.value) return;
     try {
       autoSaving.value = true;
       await editorStore.saveCurrentPage();
@@ -43,6 +54,7 @@ export function useDesignerAutoSave(options: {
       if (tab) {
         tab.isDirty = false;
       }
+      onAutoSaveSuccess?.();
     } catch (error) {
       console.warn("自动保存失败:", error);
     } finally {

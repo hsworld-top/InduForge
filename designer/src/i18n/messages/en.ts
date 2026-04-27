@@ -5,6 +5,9 @@ export const enMessages = {
     preview: "Preview",
     pagePreview: "Page Preview",
     appPreview: "App Preview",
+    previewIdentity: "Preview Identity",
+    previewUser: "User",
+    previewUserEmpty: "No available users",
     save: "Save",
     saveSettings: "Save Settings",
     saveStatus: {
@@ -180,6 +183,7 @@ export const enMessages = {
       viewport: "Layout & Adaptation",
       visual: "Visual",
       runtime: "Runtime",
+      runtimeAccess: "Runtime Access",
     },
     labels: {
       name: "Name",
@@ -297,17 +301,37 @@ export const enMessages = {
       routePathInvalid: "Route path must start with /",
       routeSlugRequired: "Route slug is required",
       copyFailed: "Failed to copy page ID",
-      permissionConfigComingSoon: "Permission capability will be connected after user and role support lands",
+      permissionConfigComingSoon:
+        "Permission capability will be connected after user and role support lands",
     },
     tooltips: {
       runtimeTitle:
         "Used as the runtime display title. It may sync to the browser title for the active main page, while cover and popup flows should prefer container titles.",
-      roleReadonly: "The page role is decided by the page tree or project entry configuration and is read-only here.",
-      routeModeReadonly: "System entry pages keep fixed routes, so route mode cannot be changed here.",
-      openModeReadonly: "System entry pages always open in replace mode to avoid ambiguous entry behavior.",
-      permissionReserved: "Permission capability will be connected after user and role support are available. The entry and summary stay here for now.",
+      roleReadonly:
+        "The page role is decided by the page tree or project entry configuration and is read-only here.",
+      routeModeReadonly:
+        "System entry pages keep fixed routes, so route mode cannot be changed here.",
+      openModeReadonly:
+        "System entry pages always open in replace mode to avoid ambiguous entry behavior.",
+      permissionReserved:
+        "Permission capability will be connected after user and role support are available. The entry and summary stay here for now.",
       cacheMode: "Controls whether the page instance and state are kept when navigating away.",
-      preloadMode: "Controls whether page resources are prepared ahead of time to reduce first-open latency.",
+      preloadMode:
+        "Controls whether page resources are prepared ahead of time to reduce first-open latency.",
+    },
+    runtimeAccess: {
+      enabled: "Enable",
+      allowedRoles: "Allowed Roles",
+      allowedRolesPlaceholder: "No limit when empty",
+      permissionSchemes: "Permission Schemes",
+      schemeCount: "{count}",
+      configureSchemes: "Configure",
+      emptySchemes: "No permission schemes",
+      schemeNamePlaceholder: "Scheme name",
+      defaultSchemeName: "Scheme {index}",
+      selectRoles: "Select roles",
+      deleteScheme: "Delete",
+      addScheme: "Add Scheme",
     },
   },
   componentManifest: {
@@ -539,9 +563,9 @@ export const enMessages = {
     variableFallback: "Variable",
     groupNameRequired: "Group name is required",
     copiedCount: "Copied {count} variables",
-    deleteVariableNamed: "Delete variable \"{name}\"?",
+    deleteVariableNamed: 'Delete variable "{name}"?',
     deleteSelectedCount: "Delete the selected {count} items?",
-    deleteGroupNamed: "Delete group \"{name}\"? Items inside will be moved to the parent.",
+    deleteGroupNamed: 'Delete group "{name}"? Items inside will be moved to the parent.',
     noDatapoints: "No datapoints were fetched. Check the data source or permissions.",
     invalidDatapointsPayload: "Invalid datapoint payload",
     importFinished: "Import finished. Added {added}, skipped {skipped}.",
@@ -687,9 +711,9 @@ export const enMessages = {
       moveToChildGroupBlocked: "Cannot move into a child group",
       mixedDeleteBlocked: "Groups and items cannot be deleted together",
       deleteTitle: "Delete Confirmation",
-      deleteScriptNamed: "Delete \"{name}\"?",
+      deleteScriptNamed: 'Delete "{name}"?',
       deleteSelectedCount: "Delete the selected {count} items?",
-      deleteGroupNamed: "Delete group \"{name}\"? Items inside will be moved to the parent.",
+      deleteGroupNamed: 'Delete group "{name}"? Items inside will be moved to the parent.',
       copiedCount: "Copied {count} scripts",
       saveModifiedPrompt: "The script has changed. Save it?",
       promptTitle: "Prompt",
@@ -714,6 +738,7 @@ export const enMessages = {
     noUndo: "Nothing to undo",
     noRedo: "Nothing to redo",
     saveSuccess: "Saved",
+    autoSaveSuccess: "Auto saved",
     saveFailed: "Save failed: {message}",
     unknownError: "Unknown error",
     loadProjectFailed: "Failed to load project",

@@ -56,7 +56,7 @@ function exitCanvasMode() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3 material-panel">
+  <div class="material-panel">
     <!-- 页面编辑模式：组件 + 绘图区 + 资源 -->
     <template v-if="editMode === 'page'">
       <el-tabs v-model="activeTab">
@@ -92,6 +92,7 @@ function exitCanvasMode() {
 .material-panel {
   height: 100%;
   overflow: hidden;
+  background: transparent;
 }
 
 .material-panel :deep(.el-tabs) {
@@ -104,6 +105,34 @@ function exitCanvasMode() {
 .material-panel :deep(.el-tabs__content) {
   flex: 1;
   min-height: 0;
+}
+
+.material-panel :deep(.el-tabs__header) {
+  margin: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--designer-border-color);
+  background: var(--designer-shell-surface);
+}
+
+.material-panel :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.material-panel :deep(.el-tabs__item) {
+  height: 42px;
+  padding: 0 12px;
+  color: var(--designer-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.material-panel :deep(.el-tabs__item.is-active) {
+  color: var(--designer-primary-text);
+}
+
+.material-panel :deep(.el-tabs__active-bar) {
+  height: 2px;
+  background-color: var(--designer-primary);
 }
 
 .material-panel :deep(.el-tab-pane) {
@@ -123,7 +152,7 @@ function exitCanvasMode() {
   justify-content: space-between;
   padding: 8px 12px;
   border-bottom: 1px solid var(--designer-border-color);
-  background: var(--designer-shell-surface);
+  background: transparent;
   color: var(--designer-text-primary);
 }
 </style>

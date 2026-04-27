@@ -15,6 +15,7 @@ import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
 import { computed, reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { VIEW_PRESETS } from "@/constants";
 import { useEditorStore } from "@/stores/editor-store";
 import PageIdentitySection from "./page-inspector/PageIdentitySection.vue";
 import PageRouteSection from "./page-inspector/PageRouteSection.vue";
@@ -52,13 +53,16 @@ const PAGE_NAME_FORBIDDEN_RE = /[/?#\\%]/;
 const PRESET_VIEWPORT_SIZES: Record<
   Exclude<ViewportPreset, "custom">,
   { width: number; height: number }
-> = {
-  bigscreen: { width: 1920, height: 1080 },
-  pc: { width: 1366, height: 768 },
-  tablet: { width: 1024, height: 768 },
-  phoneLandscape: { width: 812, height: 375 },
-  phonePortrait: { width: 375, height: 812 },
-};
+> = VIEW_PRESETS.reduce(
+  (acc, preset) => {
+    acc[preset.key as Exclude<ViewportPreset, "custom">] = {
+      width: preset.width,
+      height: preset.height,
+    };
+    return acc;
+  },
+  {} as Record<Exclude<ViewportPreset, "custom">, { width: number; height: number }>,
+);
 
 const editorStore = useEditorStore();
 const editorRefs = storeToRefs(editorStore);
@@ -156,7 +160,9 @@ function getFixedRole(page: PageRecordLike | null | undefined): PageRole | null 
 }
 
 const pageRole = computed<PageRole>(
-  () => getFixedRole(getCurrentPageRecord() || (currentPage.value as PageRecordLike | null)) || "normal",
+  () =>
+    getFixedRole(getCurrentPageRecord() || (currentPage.value as PageRecordLike | null)) ||
+    "normal",
 );
 const isSystemPage = computed(() => pageRole.value !== "normal");
 const canEditConstraintOptions = computed(() => canEditRuntimeConstraint(form.autoFit));
@@ -181,7 +187,8 @@ function syncForm(page: PageRecordLike | null | undefined): void {
   }
 
   const role = getFixedRole(displayPage) || "normal";
-  const name = role === "normal" ? pageFromList?.name || page?.name || "" : getSystemRoleLabel(role);
+  const name =
+    role === "normal" ? pageFromList?.name || page?.name || "" : getSystemRoleLabel(role);
   const parentRoutePath = getParentRoutePath(displayPage);
   const nextForm = hydratePageInspectorForm({
     name,
@@ -190,6 +197,7 @@ function syncForm(page: PageRecordLike | null | undefined): void {
     parentRoutePath,
     config: page?.config ?? null,
   });
+  nextForm.viewportPreset = resolveViewportPresetBySize(nextForm.width, nextForm.height);
 
   const resolvedRoute = resolveRouteByRole({
     role: nextForm.role,
@@ -204,6 +212,11 @@ function syncForm(page: PageRecordLike | null | undefined): void {
     openMode: role === "normal" ? nextForm.openMode : "replace",
     permissionSummary: nextForm.permissionSummary,
   });
+}
+
+function resolveViewportPresetBySize(width: number, height: number): ViewportPreset {
+  const matched = VIEW_PRESETS.find((preset) => preset.width === width && preset.height === height);
+  return (matched?.key as ViewportPreset | undefined) || "custom";
 }
 
 watch(
@@ -394,9 +407,9 @@ function handlePresetChange(nextPreset: ViewportPreset): void {
 }
 
 function handleConfigUpdate(): void {
+  form.viewportPreset = resolveViewportPresetBySize(form.width, form.height);
   updateCurrentPageConfig();
 }
-
 </script>
 
 <template>

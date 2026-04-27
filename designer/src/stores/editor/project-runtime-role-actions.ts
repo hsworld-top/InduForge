@@ -19,9 +19,17 @@ export interface RuntimeRoleRecord extends RuntimeRoleRef {
 
 export interface RuntimeUserRecord {
   id: string;
+  userId?: string;
+  sourceUserId?: string;
+  platformUserId?: string;
+  createdBy?: string;
   username: string;
   displayName: string;
   status: string;
+  isProjectCreator?: boolean;
+  isCreator?: boolean;
+  isInitialCreator?: boolean;
+  isOwner?: boolean;
   roleIds: string[];
   roles: RuntimeRoleRecord[];
 }
@@ -63,6 +71,12 @@ function normalizeRoleCodes(codes: unknown[]): string[] {
 function normalizeStatus(value: unknown): string {
   const status = normalizeText(value);
   return status || "active";
+}
+
+function normalizeBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  const text = normalizeText(value).toLowerCase();
+  return text === "true" || text === "1" || text === "yes";
 }
 
 function normalizeRuntimeRole(value: unknown): RuntimeRoleRecord | null {
@@ -134,9 +148,17 @@ export function normalizeProjectRuntimeUsers(payload: unknown): RuntimeUserRecor
       ]);
       return {
         id,
+        userId: normalizeText(user.userId) || undefined,
+        sourceUserId: normalizeText(user.sourceUserId) || undefined,
+        platformUserId: normalizeText(user.platformUserId) || undefined,
+        createdBy: normalizeText(user.createdBy) || undefined,
         username,
         displayName: normalizeText(user.displayName) || username,
         status: normalizeStatus(user.status),
+        isProjectCreator: normalizeBoolean(user.isProjectCreator),
+        isCreator: normalizeBoolean(user.isCreator),
+        isInitialCreator: normalizeBoolean(user.isInitialCreator),
+        isOwner: normalizeBoolean(user.isOwner),
         roleIds,
         roles,
       };
@@ -204,8 +226,7 @@ export async function loadProjectRuntimeAccessForStore(
     if (out.runtimeRoles) out.runtimeRoles.value = [];
     if (out.runtimeUsers) out.runtimeUsers.value = [];
     out.runtimeRoleLoadState.value = "error";
-    out.runtimeRoleLoadError.value =
-      error instanceof Error ? error.message : "加载运行态身份失败";
+    out.runtimeRoleLoadError.value = error instanceof Error ? error.message : "加载运行态身份失败";
     return { accepted: true, runtimeRoleCodes: [], runtimeRoles: [], runtimeUsers: [] };
   }
 }

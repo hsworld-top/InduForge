@@ -36,9 +36,17 @@ export interface ProjectRuntimeUserRoleItem extends ProjectRuntimeRoleItem {
 
 export interface ProjectRuntimeUserItem {
   id?: string;
+  userId?: string;
+  sourceUserId?: string;
+  platformUserId?: string;
+  createdBy?: string;
   username?: string;
   displayName?: string | null;
   status?: string;
+  isProjectCreator?: boolean;
+  isCreator?: boolean;
+  isInitialCreator?: boolean;
+  isOwner?: boolean;
   roleIds?: string[];
   roles?: ProjectRuntimeUserRoleItem[];
 }

@@ -344,7 +344,7 @@ function handleBack() {
   const pid = Array.isArray(qPid) ? qPid[0] : qPid;
   const qPage = route.query.pageId;
   const pageId = (Array.isArray(qPage) ? qPage[0] : qPage) || "";
-  router.push({ path: "/", query: { pid: pid ?? "", pageId } });
+  router.replace({ path: "/", query: { pid: pid ?? "", pageId } });
 }
 
 /**

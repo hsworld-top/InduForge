@@ -865,13 +865,7 @@ export interface PageRouteConfig {
 }
 
 export interface PageViewportConfig {
-  preset?:
-    | "bigscreen"
-    | "pc"
-    | "tablet"
-    | "phoneLandscape"
-    | "phonePortrait"
-    | "custom";
+  preset?: "bigscreen" | "pc" | "tablet" | "phoneLandscape" | "phonePortrait" | "custom";
   width: number;
   height: number;
   autoFit?: boolean;
@@ -1297,7 +1291,7 @@ export function createPageNode(options: Partial<PageNode> = {}): PageNode {
       width: 1920,
       height: 1080,
       fitMode: "contain",
-      showGrid: false,
+      showGrid: true,
       enableSnap: true,
       autoFit: true,
       background: {

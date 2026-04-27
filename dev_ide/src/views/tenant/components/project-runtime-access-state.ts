@@ -22,6 +22,9 @@ const trimText = (value) => (typeof value === 'string' ? value.trim() : '')
 
 const normalizeCode = (value) => trimText(value).replace(/\s+/g, '_').toUpperCase()
 
+export const isDefaultRuntimeAdminUser = (user) =>
+  trimText(user?.username).toLowerCase() === 'admin'
+
 export const stripRuntimeRoleCodePrefix = (value) => {
   const normalizedCode = normalizeCode(value)
   return normalizedCode.startsWith(RUNTIME_ROLE_CODE_PREFIX)
@@ -675,6 +678,10 @@ export const useProjectRuntimeAccessState = ({
     }
 
     const nextStatus = user.status === 'active' ? 'disabled' : 'active'
+    if (nextStatus === 'disabled' && isDefaultRuntimeAdminUser(user)) {
+      message.warning(t('projectManagement.runtimeAccess.users.adminStatusBlocked'))
+      return
+    }
 
     try {
       await api.updateRuntimeUserStatus(projectId.value, user.id, {
@@ -689,6 +696,40 @@ export const useProjectRuntimeAccessState = ({
     } catch (error) {
       message.error(
         t('projectManagement.runtimeAccess.users.toggleStatusFailed', {
+          message: getErrorMessage(error, t('common.error')),
+        }),
+      )
+    }
+  }
+
+  const deleteRuntimeUser = async (user) => {
+    if (!projectId.value || !user?.id) {
+      return
+    }
+
+    if (isDefaultRuntimeAdminUser(user)) {
+      message.warning(t('projectManagement.runtimeAccess.users.adminDeleteBlocked'))
+      return
+    }
+
+    try {
+      await messageBox.confirm(
+        t('projectManagement.runtimeAccess.users.deleteConfirmText', {
+          username: user.username || user.displayName || user.id,
+        }),
+        t('projectManagement.runtimeAccess.users.deleteConfirmTitle'),
+        { type: 'warning' },
+      )
+      await api.deleteRuntimeUser(projectId.value, user.id)
+      message.success(t('projectManagement.runtimeAccess.users.deleteSuccess'))
+      await Promise.all([loadRuntimeUsers(), loadRuntimeRoles()])
+    } catch (error) {
+      if (isRuntimeAccessDialogCancelled(error)) {
+        return
+      }
+
+      message.error(
+        t('projectManagement.runtimeAccess.users.deleteFailed', {
           message: getErrorMessage(error, t('common.error')),
         }),
       )
@@ -869,6 +910,7 @@ export const useProjectRuntimeAccessState = ({
     closeUserEditor,
     submitUserForm,
     toggleRuntimeUserStatus,
+    deleteRuntimeUser,
     resetRuntimeUserPassword,
     openCreateRoleEditor,
     openEditRoleEditor,
@@ -877,6 +919,7 @@ export const useProjectRuntimeAccessState = ({
     deleteRuntimeRole,
     resolveUserRoleNames,
     resolveRuntimeAccessStatusMeta,
+    isDefaultRuntimeAdminUser,
     normalizeRuntimeRoleRecord,
     normalizeRuntimeUserRecord,
     upsertRuntimeUser,

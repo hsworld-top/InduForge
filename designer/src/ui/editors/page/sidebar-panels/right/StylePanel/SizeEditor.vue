@@ -167,27 +167,24 @@ function handleHeightUnitChange(unit: "auto" | "px" | "%") {
         <el-input
           :model-value="widthInput"
           size="small"
-          placeholder="auto"
-          class="size-input-with-unit"
+          placeholder="数值"
+          class="size-value-input"
           @update:model-value="handleWidthInput"
           @change="handleWidthChange"
           @blur="handleWidthChange"
+        />
+        <el-select
+          :model-value="widthUnit"
+          size="small"
+          class="size-unit-select"
+          teleported
+          popper-class="size-editor-unit-popper"
+          @update:model-value="handleWidthUnitChange"
         >
-          <template #append>
-            <el-select
-              :model-value="widthUnit"
-              size="small"
-              class="size-unit-select"
-              teleported
-              popper-class="size-editor-unit-popper"
-              @update:model-value="handleWidthUnitChange"
-            >
-              <el-option label="px" value="px" />
-              <el-option label="%" value="%" />
-              <el-option label="auto" value="auto" />
-            </el-select>
-          </template>
-        </el-input>
+          <el-option label="px" value="px" />
+          <el-option label="%" value="%" />
+          <el-option label="auto" value="auto" />
+        </el-select>
       </div>
     </div>
     <div class="size-row">
@@ -196,27 +193,24 @@ function handleHeightUnitChange(unit: "auto" | "px" | "%") {
         <el-input
           :model-value="heightInput"
           size="small"
-          placeholder="auto"
-          class="size-input-with-unit"
+          placeholder="数值"
+          class="size-value-input"
           @update:model-value="handleHeightInput"
           @change="handleHeightChange"
           @blur="handleHeightChange"
+        />
+        <el-select
+          :model-value="heightUnit"
+          size="small"
+          class="size-unit-select"
+          teleported
+          popper-class="size-editor-unit-popper"
+          @update:model-value="handleHeightUnitChange"
         >
-          <template #append>
-            <el-select
-              :model-value="heightUnit"
-              size="small"
-              class="size-unit-select"
-              teleported
-              popper-class="size-editor-unit-popper"
-              @update:model-value="handleHeightUnitChange"
-            >
-              <el-option label="px" value="px" />
-              <el-option label="%" value="%" />
-              <el-option label="auto" value="auto" />
-            </el-select>
-          </template>
-        </el-input>
+          <el-option label="px" value="px" />
+          <el-option label="%" value="%" />
+          <el-option label="auto" value="auto" />
+        </el-select>
       </div>
     </div>
   </div>
@@ -244,10 +238,11 @@ function handleHeightUnitChange(unit: "auto" | "px" | "%") {
 }
 
 .size-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(44px, 56px) minmax(0, 1fr);
   align-items: center;
-  gap: var(--designer-gap-sm);
-  min-height: 30px;
+  gap: 8px;
+  min-height: 32px;
   padding: 2px 6px;
   border-radius: var(--designer-radius-sm);
   transition: background-color 0.15s ease;
@@ -258,32 +253,47 @@ function handleHeightUnitChange(unit: "auto" | "px" | "%") {
 }
 
 .size-label {
-  width: 88px;
-  min-width: 72px;
-  max-width: 88px;
   font-size: var(--designer-font-sm);
   color: var(--designer-text-regular);
+  white-space: nowrap;
 }
 
 .size-control {
-  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 62px;
+  gap: 6px;
   min-width: 0;
 }
 
-.size-control :deep(.el-input) {
+.size-control :deep(.el-input),
+.size-control :deep(.el-select) {
   width: 100%;
 }
 
-/* 保证 append 区域和单位下拉可见，不被 flex 挤没 */
-.size-control :deep(.size-input-with-unit .el-input-group__append) {
-  padding: 0;
-  min-width: 64px;
-  flex-shrink: 0;
+.size-control :deep(.el-input__wrapper),
+.size-control :deep(.el-select__wrapper) {
+  min-height: 28px;
+  border-radius: var(--designer-radius-md);
+  box-shadow: inset 0 0 0 1px var(--designer-border-strong);
+  background: var(--designer-group-surface);
+}
+
+.size-control :deep(.el-input__inner),
+.size-control :deep(.el-select__selected-item) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--designer-font-label);
 }
 
 .size-unit-select {
-  width: 64px;
-  min-width: 64px;
+  width: 62px;
+  min-width: 62px;
+}
+
+.size-unit-select :deep(.el-select__wrapper) {
+  padding: 0 6px;
 }
 </style>
 
@@ -291,5 +301,6 @@ function handleHeightUnitChange(unit: "auto" | "px" | "%") {
 <style>
 .size-editor-unit-popper {
   z-index: 4000 !important;
+  min-width: 86px !important;
 }
 </style>

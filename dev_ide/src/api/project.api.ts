@@ -301,6 +301,16 @@ export const projectAPI = {
   },
 
   /**
+   * 删除工程运行态用户
+   * @param {string} id - 工程 ID
+   * @param {string} userId - 运行态用户 ID
+   * @returns {Promise} 删除结果
+   */
+  deleteRuntimeUser(id: ApiId, userId: ApiId) {
+    return request.delete(`/projects/${id}/runtime-users/${userId}`)
+  },
+
+  /**
    * 更新工程运行态用户角色绑定
    * @param {string} id - 工程 ID
    * @param {string} userId - 运行态用户 ID

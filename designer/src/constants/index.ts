@@ -36,5 +36,5 @@ export type ViewPreset = (typeof VIEW_PRESETS)[number];
 export const GRID_CONFIG = {
   size: 10,
   enabled: true,
-  showGrid: false,
+  showGrid: true,
 } as const;

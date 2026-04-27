@@ -259,6 +259,7 @@ export interface UseNodePointerDeps {
   isContainer: ComputedRef<boolean>;
   selection: MaybeRef<CanvasSelectionManager | null | undefined>;
   canvasZoom: MaybeRef<number | null | undefined>;
+  enableSnap?: MaybeRef<boolean | null | undefined>;
   history: MaybeRef<HistoryLike | null | undefined>;
   editorStore: CanvasEditorStoreLike;
   currentPage: ComputedRef<{ rootNodeId?: string | null } | null | undefined>;

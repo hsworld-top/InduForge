@@ -22,6 +22,7 @@ const {
   listRuntimeUsers,
   createRuntimeUser,
   updateRuntimeUserStatus,
+  deleteRuntimeUser,
   resetRuntimeUserPassword,
   bindRuntimeUserRoles,
   listRuntimeRoles,
@@ -45,7 +46,7 @@ const {
   NodeDeployment,
 } = require('../../models');
 const { authenticateToken, requireResourceOwnership, hasCapability } = require('../../middlewares/auth');
-const { randomUUID, randomBytes } = require('crypto');
+const { randomUUID } = require('crypto');
 
 const DEFAULT_GLOBAL_SCRIPTS = {
   system: {
@@ -225,7 +226,7 @@ const respondRouteError = (res, error, fallbackCode, fallbackStatus) => {
   return ApiResponse.error(res, fallbackCode, {}, fallbackStatus);
 };
 
-const buildInitialRuntimePassword = () => randomBytes(16).toString('hex');
+const buildInitialRuntimePassword = () => 'admin';
 const RUNTIME_ACCESS_ALLOWED_ROLES = ['SYSTEM_ADMIN', 'PROJECT_ADMIN'];
 const PROJECT_OVERVIEW_SORT_FIELDS = ['createdAt', 'updatedAt', 'lastDeployedAt', 'runtimeStatus'];
 const PROJECT_OVERVIEW_SORT_ORDERS = ['ASC', 'DESC'];
@@ -1321,6 +1322,26 @@ router.patch('/:id/runtime-users/:runtimeUserId/status', authenticateToken, requ
     return ApiResponse.success(res, { runtimeUser });
   } catch (error) {
     logger.error('Update runtime user status error', { error: error.message, requestId: req.requestId });
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+  }
+});
+
+router.delete('/:id/runtime-users/:runtimeUserId', authenticateToken, requireRuntimeProjectManagement, validate(Joi.object({
+  params: Joi.object({
+    id: Joi.string().uuid().required(),
+    runtimeUserId: Joi.string().uuid().required(),
+  }),
+})), async (req, res) => {
+  try {
+    const { id, runtimeUserId } = req.params;
+    const result = await deleteRuntimeUser({
+      projectId: id,
+      runtimeUserId,
+      actorId: req.user.id,
+    });
+    return ApiResponse.success(res, { runtimeUser: result });
+  } catch (error) {
+    logger.error('Delete runtime user error', { error: error.message, requestId: req.requestId });
     return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
   }
 });

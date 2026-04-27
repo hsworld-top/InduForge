@@ -109,6 +109,28 @@ function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function asFirstNonEmptyString(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    return asFirstNonEmptyString(value[0]);
+  }
+  return asNonEmptyString(value);
+}
+
+function applyProjectContextFromRouteQuery(targetRoute: RouteLocationNormalized): void {
+  const projectId =
+    asFirstNonEmptyString(targetRoute.query.pid) ?? asFirstNonEmptyString(targetRoute.query.id);
+  const tenantId = asFirstNonEmptyString(targetRoute.query.tenant);
+
+  // 预览返回设计态时 iframe 内可能只剩 URL 上的工程标识。
+  // 先恢复工程上下文，避免正式入口兜底把 iframe 重定向回 IDE，造成 IDE 标签栏递归嵌套。
+  if (projectId) {
+    Storage.setProjectId(projectId);
+  }
+  if (tenantId) {
+    Storage.setTenantId(tenantId);
+  }
+}
+
 async function resolveDesignerDebugProjectMeta(
   targetUrl: string,
   resolveDefaultDebugProject: ResolveDefaultDebugProject,
@@ -254,6 +276,10 @@ export function registerDesignerBeforeEachGuard(
 
     if (entrypointPlan.isDebugRoute) {
       to.meta.project = await resolveDesignerDebugProjectMeta(targetUrl, resolveDefaultDebugProject);
+    }
+
+    if (!entrypointPlan.isDebugRoute && (to.name === "Designer" || to.name === "Preview")) {
+      applyProjectContextFromRouteQuery(to);
     }
 
     if (!token && to.meta.requiresAuth) {

@@ -18,6 +18,7 @@ const mockService = {
   listRuntimeUsers: jest.fn(),
   createRuntimeUser: jest.fn(),
   updateRuntimeUserStatus: jest.fn(),
+  deleteRuntimeUser: jest.fn(),
   resetRuntimeUserPassword: jest.fn(),
   bindRuntimeUserRoles: jest.fn(),
   listRuntimeRoles: jest.fn(),
@@ -45,7 +46,6 @@ jest.mock("crypto", () => {
   const actualCrypto = jest.requireActual("crypto");
   return {
     ...actualCrypto,
-    randomBytes: jest.fn(() => Buffer.from("0123456789abcdef0123456789abcdef", "hex")),
     randomUUID: jest.fn(() => "uuid-1"),
   };
 });
@@ -122,7 +122,7 @@ describe("project runtime access router", () => {
     });
   });
 
-  test("创建工程后会在事务内初始化默认工程管理员账号并传入随机 initialPassword", async () => {
+  test("创建工程后会在事务内初始化默认工程管理员账号并传入固定 initialPassword", async () => {
     mockProject.create.mockResolvedValue({ id: "project-1", tenantId: "tenant-1" });
     mockService.ensureRuntimeAdminBootstrap.mockResolvedValue({});
 
@@ -151,11 +151,11 @@ describe("project runtime access router", () => {
           fullName: "工程创建者",
         }),
         transaction: mockTransaction,
-        initialPassword: "0123456789abcdef0123456789abcdef",
+        initialPassword: "admin",
       }),
     );
     expect(mockUpsertProjectSettings).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(response.body)).not.toContain("0123456789abcdef0123456789abcdef");
+    expect(JSON.stringify(response.body)).not.toContain("admin");
   });
 
   test("创建工程时如果 bootstrap 失败则返回 500，且不会继续查询工程详情", async () => {
@@ -188,7 +188,7 @@ describe("project runtime access router", () => {
     expect(destroy).toHaveBeenCalledTimes(1);
   });
 
-  test("导入工程后也会初始化默认工程管理员账号并传入随机 initialPassword", async () => {
+  test("导入工程后也会初始化默认工程管理员账号并传入固定 initialPassword", async () => {
     const projectUpdate = jest.fn().mockResolvedValue(undefined);
     const destroy = jest.fn().mockResolvedValue(undefined);
     mockProject.create.mockResolvedValue({
@@ -222,10 +222,10 @@ describe("project runtime access router", () => {
           username: "owner",
           fullName: "工程创建者",
         }),
-        initialPassword: "0123456789abcdef0123456789abcdef",
+        initialPassword: "admin",
       }),
     );
-    expect(JSON.stringify(response.body)).not.toContain("0123456789abcdef0123456789abcdef");
+    expect(JSON.stringify(response.body)).not.toContain("admin");
   });
 
   test("导入工程在 snapshot 初始化失败时会补偿删除工程并返回 500", async () => {
@@ -333,6 +333,33 @@ describe("project runtime access router", () => {
     expect(response.body.data.runtimeUser).toEqual(
       expect.objectContaining({
         status: "disabled",
+      }),
+    );
+  });
+
+  test("DELETE /projects/:id/runtime-users/:runtimeUserId 会删除运行态用户", async () => {
+    mockService.deleteRuntimeUser.mockResolvedValue({
+      id: "runtime-user-1",
+      projectId: "project-1",
+      deleted: true,
+    });
+
+    const response = await invokeRoute(router, "/:id/runtime-users/:runtimeUserId", "delete", {
+      params: { id: "project-1", runtimeUserId: "runtime-user-1" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockService.deleteRuntimeUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        runtimeUserId: "runtime-user-1",
+        actorId: "user-1",
+      }),
+    );
+    expect(response.body.data.runtimeUser).toEqual(
+      expect.objectContaining({
+        id: "runtime-user-1",
+        deleted: true,
       }),
     );
   });

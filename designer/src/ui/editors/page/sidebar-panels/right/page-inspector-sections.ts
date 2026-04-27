@@ -63,7 +63,7 @@ function buildPageInspectorSections(): PageInspectorSection[] {
     },
     {
       key: "runtimeAccess",
-      title: "运行态权限控制",
+      title: i18n.global.t("pageInspector.sections.runtimeAccess"),
       fields: ["runtimeAccessEnabled", "runtimeAccessAllowedRoles", "runtimePermissionSchemes"],
     },
   ];

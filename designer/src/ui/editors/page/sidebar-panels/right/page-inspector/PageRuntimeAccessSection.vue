@@ -2,6 +2,7 @@
 import type { PageInspectorFormState } from "./page-inspector-types";
 import type { RuntimeRoleRecord } from "@/stores/editor/project-runtime-role-actions";
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import PagePermissionSchemesSection from "./PagePermissionSchemesSection.vue";
 
 const props = defineProps<{
@@ -13,6 +14,7 @@ const emit = defineEmits<{
   updateConfig: [];
 }>();
 
+const { t } = useI18n();
 const schemeDialogVisible = ref(false);
 
 const roleOptions = computed(() =>
@@ -52,14 +54,14 @@ const selectedRoleIds = computed<string[]>({
 <template>
   <div class="page-section-fields">
     <div class="page-prop-item page-prop-item--switch">
-      <div class="page-prop-label">启用控制</div>
+      <div class="page-prop-label">{{ t("pageInspector.runtimeAccess.enabled") }}</div>
       <div class="page-prop-editor page-prop-editor-switch">
         <el-switch v-model="form.runtimeAccessEnabled" @change="$emit('updateConfig')" />
       </div>
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">访问角色</div>
+      <div class="page-prop-label">{{ t("pageInspector.runtimeAccess.allowedRoles") }}</div>
       <div class="page-prop-editor">
         <el-select
           v-model="selectedRoleIds"
@@ -69,7 +71,7 @@ const selectedRoleIds = computed<string[]>({
           collapse-tags-tooltip
           clearable
           :disabled="!form.runtimeAccessEnabled"
-          placeholder="不选则不限制"
+          :placeholder="t('pageInspector.runtimeAccess.allowedRolesPlaceholder')"
         >
           <el-option
             v-for="item in roleOptions"
@@ -82,22 +84,24 @@ const selectedRoleIds = computed<string[]>({
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">权限方案</div>
+      <div class="page-prop-label">{{ t("pageInspector.runtimeAccess.permissionSchemes") }}</div>
       <div class="page-prop-editor permission-scheme-entry">
-        <span class="permission-scheme-entry__count">{{ schemeCount }} 个</span>
+        <span class="permission-scheme-entry__count">
+          {{ t("pageInspector.runtimeAccess.schemeCount", { count: schemeCount }) }}
+        </span>
         <el-button
           size="small"
           :disabled="!form.runtimeAccessEnabled"
           @click="openSchemeDialog"
         >
-          配置方案
+          {{ t("pageInspector.runtimeAccess.configureSchemes") }}
         </el-button>
       </div>
     </div>
 
     <el-dialog
       v-model="schemeDialogVisible"
-      title="权限方案"
+      :title="t('pageInspector.runtimeAccess.permissionSchemes')"
       width="560px"
       append-to-body
       class="runtime-permission-scheme-dialog"
@@ -160,7 +164,14 @@ const selectedRoleIds = computed<string[]>({
 }
 
 .permission-scheme-entry__count {
+  flex: 0 0 auto;
   color: var(--designer-text-secondary);
   font-size: var(--designer-font-label);
+  white-space: nowrap;
+}
+
+.permission-scheme-entry :deep(.el-button) {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 </style>

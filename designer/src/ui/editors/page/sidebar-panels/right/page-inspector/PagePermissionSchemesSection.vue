@@ -3,6 +3,7 @@ import type { PagePermissionScheme } from "@/editor-core/document/types";
 import type { RuntimeRoleRecord } from "@/stores/editor/project-runtime-role-actions";
 import type { PageInspectorFormState } from "./page-inspector-types";
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 const props = defineProps<{
   form: PageInspectorFormState;
@@ -12,6 +13,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   updateConfig: [];
 }>();
+
+const { t } = useI18n();
 
 const roleOptions = computed(() =>
   props.runtimeRoles
@@ -33,7 +36,7 @@ function addScheme(): void {
     ...schemes,
     {
       id: createSchemeId(),
-      name: `方案 ${schemes.length + 1}`,
+      name: t("pageInspector.runtimeAccess.defaultSchemeName", { index: schemes.length + 1 }),
       roleRefs: [],
     },
   ];
@@ -67,7 +70,7 @@ function selectedRoleIds(scheme: PagePermissionScheme): string[] {
 <template>
   <div class="scheme-section">
     <div v-if="(form.runtimePermissionSchemes || []).length === 0" class="scheme-empty">
-      暂无权限方案
+      {{ t("pageInspector.runtimeAccess.emptySchemes") }}
     </div>
 
     <div
@@ -79,11 +82,11 @@ function selectedRoleIds(scheme: PagePermissionScheme): string[] {
         <el-input
           v-model="scheme.name"
           size="small"
-          placeholder="方案名称"
+          :placeholder="t('pageInspector.runtimeAccess.schemeNamePlaceholder')"
           @change="$emit('updateConfig')"
         />
         <el-button size="small" text type="danger" @click="removeScheme(scheme.id)">
-          删除
+          {{ t("pageInspector.runtimeAccess.deleteScheme") }}
         </el-button>
       </div>
       <el-select
@@ -93,7 +96,7 @@ function selectedRoleIds(scheme: PagePermissionScheme): string[] {
         collapse-tags
         collapse-tags-tooltip
         clearable
-        placeholder="选择角色"
+        :placeholder="t('pageInspector.runtimeAccess.selectRoles')"
         @update:model-value="(value: unknown) => updateSchemeRoleRefs(scheme, value)"
       >
         <el-option
@@ -106,7 +109,7 @@ function selectedRoleIds(scheme: PagePermissionScheme): string[] {
     </div>
 
     <el-button class="scheme-add" size="small" @click="addScheme">
-      新增方案
+      {{ t("pageInspector.runtimeAccess.addScheme") }}
     </el-button>
   </div>
 </template>

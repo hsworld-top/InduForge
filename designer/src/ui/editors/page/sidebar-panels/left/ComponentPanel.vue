@@ -42,7 +42,8 @@ function filterItemsByCategory(category: string): ComponentItemLike[] {
     if (!allowedTypes.includes(item.type)) return false;
     if (!keywordValue) return true;
     return (
-      item.type.toLowerCase().includes(keywordValue) || item.name.toLowerCase().includes(keywordValue)
+      item.type.toLowerCase().includes(keywordValue) ||
+      item.name.toLowerCase().includes(keywordValue)
     );
   });
 
@@ -111,8 +112,7 @@ function getPreviewIcon(type: string): string {
       '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:4px;padding:4px;"><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
     ElContainer:
       '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:3px;padding:4px;"><div style="height:5px;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;display:flex;gap:3px;"><div style="width:10px;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#e4e7ed;border-radius:2px;"></div></div><div style="height:5px;background:#3b6cff;border-radius:2px;"></div></div>',
-    Tabs:
-      '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;"><div style="height:9px;background:#3b6cff;"></div><div style="height:16px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
+    Tabs: '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;"><div style="height:9px;background:#3b6cff;"></div><div style="height:16px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
     Collapse:
       '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;"><div style="height:9px;background:#3b6cff;"></div><div style="height:14px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
   };
@@ -160,8 +160,13 @@ function handleDragEnd(): void {
 </script>
 
 <template>
-    <div class="component-panel">
-    <el-input v-model="keyword" size="small" :placeholder="t('componentPanel.searchPlaceholder')" clearable />
+  <div class="component-panel">
+    <el-input
+      v-model="keyword"
+      size="small"
+      :placeholder="t('componentPanel.searchPlaceholder')"
+      clearable
+    />
     <div class="component-list">
       <el-collapse v-model="activeSections" class="component-collapse">
         <el-collapse-item name="layout">
@@ -219,59 +224,85 @@ function handleDragEnd(): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
   overflow: hidden;
+  background: transparent;
 }
 
 .component-list {
   flex: 1;
   overflow: auto;
-  padding-right: 4px;
+  padding: 0 8px 10px;
+}
+
+.component-panel > .el-input {
+  padding: 8px;
+  background: var(--designer-shell-surface);
+  border-bottom: 1px solid var(--designer-border-color);
+}
+
+.component-panel > .el-input .el-input__wrapper {
+  border-radius: 999px;
+  background: var(--designer-group-surface);
+  box-shadow: none;
 }
 
 .component-collapse {
   border: none;
+  background: transparent;
 }
 
 .component-collapse .el-collapse-item__header {
-  background: var(--designer-primary-soft);
+  background: transparent;
   border: none;
-  border-radius: 6px;
-  padding: 0 10px;
-  margin-bottom: 6px;
-  height: 34px;
+  border-bottom: 1px solid var(--designer-border-color);
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  height: 38px;
   font-size: 13px;
   color: var(--designer-text-primary);
 }
 
+.component-collapse .el-collapse-item__wrap {
+  border: none;
+  background: transparent;
+}
+
 .component-collapse .el-collapse-item__content {
-  padding-bottom: 12px;
+  padding: 8px 0 14px;
 }
 
 .component-section-title {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .component-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: 6px;
 }
 
 .component-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--designer-border-color);
-  border-radius: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 70px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   overflow: hidden;
   cursor: grab;
-  transition: all 0.2s;
-  background: var(--designer-shell-surface);
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
+  background: transparent;
 }
 
 .component-card:hover {
-  border-color: var(--designer-primary-border);
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+  border-color: var(--designer-border-color);
+  background: var(--designer-hover-surface);
 }
 
 .component-card:active {
@@ -279,21 +310,26 @@ function handleDragEnd(): void {
 }
 
 .card-preview {
-  height: 60px;
+  height: 40px;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--designer-group-surface);
-  padding: 10px 8px 6px;
+  background: transparent;
+  padding: 6px 4px 2px;
 }
 
 .card-name {
-  padding: 8px;
+  width: 100%;
+  padding: 2px 4px 7px;
   text-align: center;
   font-size: 12px;
   font-weight: 500;
-  border-top: 1px solid var(--designer-border-color);
-  color: var(--designer-text-primary);
+  line-height: 1.25;
+  color: var(--designer-text-regular);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-tip {
@@ -304,27 +340,27 @@ function handleDragEnd(): void {
 }
 
 .preview-button {
-  width: 58px;
-  height: 26px;
-  border: 1px solid #3b6cff;
+  width: 40px;
+  height: 20px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #3b6cff;
-  background: var(--designer-shell-surface);
+  color: var(--designer-material-icon-color, #888d92);
+  background: transparent;
 }
 
 .preview-flex {
-  width: 58px;
-  height: 36px;
-  border: 1px solid #3b6cff;
+  width: 40px;
+  height: 28px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--designer-shell-surface);
+  gap: 3px;
+  padding: 3px;
+  background: transparent;
 }
 
 .preview-flex-column {
@@ -333,56 +369,56 @@ function handleDragEnd(): void {
 
 .preview-block {
   flex: 1;
-  background: #3b6cff;
+  background: var(--designer-material-icon-color, #888d92);
   border-radius: 2px;
 }
 
 .preview-form {
-  width: 58px;
-  height: 36px;
-  border: 1px solid #3b6cff;
-  border-radius: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 4px;
-  background: var(--designer-shell-surface);
-}
-
-.preview-form-item {
-  height: 6px;
-  border: 1px solid #3b6cff;
-  border-radius: 2px;
-}
-
-.preview-el-container {
-  width: 58px;
-  height: 36px;
-  border: 1px solid #3b6cff;
+  width: 40px;
+  height: 28px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 4px;
-  background: var(--designer-shell-surface);
+  padding: 3px;
+  background: transparent;
+}
+
+.preview-form-item {
+  height: 5px;
+  border: 1px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+}
+
+.preview-el-container {
+  width: 40px;
+  height: 28px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  background: transparent;
 }
 
 .preview-el-header,
 .preview-el-footer {
-  height: 5px;
-  background: #3b6cff;
+  height: 4px;
+  background: var(--designer-material-icon-color, #888d92);
   border-radius: 2px;
 }
 
 .preview-el-body {
   flex: 1;
   display: flex;
-  gap: 3px;
+  gap: 2px;
 }
 
 .preview-el-aside {
-  width: 10px;
-  background: #3b6cff;
+  width: 8px;
+  background: var(--designer-material-icon-color, #888d92);
   border-radius: 2px;
 }
 
@@ -393,45 +429,45 @@ function handleDragEnd(): void {
 }
 
 .preview-tabs {
-  width: 58px;
-  height: 36px;
-  border: 1px solid #3b6cff;
+  width: 40px;
+  height: 28px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
-  padding: 4px;
-  background: var(--designer-shell-surface);
+  padding: 3px;
+  background: transparent;
 }
 
 .preview-tabs-header {
-  height: 8px;
-  background: #3b6cff;
+  height: 6px;
+  background: var(--designer-material-icon-color, #888d92);
   border-radius: 2px;
 }
 
 .preview-tabs-body {
-  margin-top: 4px;
-  height: 16px;
-  border: 1px solid #3b6cff;
+  margin-top: 3px;
+  height: 13px;
+  border: 1px solid var(--designer-material-icon-color, #888d92);
   border-radius: 2px;
 }
 
 .preview-collapse {
-  width: 58px;
-  height: 36px;
-  border: 1px solid #3b6cff;
+  width: 40px;
+  height: 28px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
-  background: var(--designer-shell-surface);
+  background: transparent;
 }
 
 .preview-collapse-header {
-  height: 8px;
-  background: #3b6cff;
+  height: 6px;
+  background: var(--designer-material-icon-color, #888d92);
   border-radius: 4px 4px 0 0;
 }
 
 .preview-collapse-body {
-  height: 14px;
-  margin: 5px;
-  border: 1px solid #3b6cff;
+  height: 12px;
+  margin: 4px;
+  border: 1px solid var(--designer-material-icon-color, #888d92);
   border-radius: 2px;
 }
 
@@ -440,4 +476,3 @@ function handleDragEnd(): void {
   color: var(--designer-text-muted);
 }
 </style>
-

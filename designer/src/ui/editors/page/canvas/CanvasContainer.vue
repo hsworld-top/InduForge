@@ -37,7 +37,7 @@ import { useCanvasViewportPlacement } from "./composables/use-canvas-viewport-pl
 import { useCanvasZoomWheel } from "./composables/use-canvas-zoom-wheel";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
-import { canvasZoomKey } from "./injection-keys";
+import { canvasSnapEnabledKey, canvasZoomKey } from "./injection-keys";
 import {
   CANVAS_OUTSIDE_MARQUEE_START_EVENT,
   type OutsideMarqueeStartDetail,
@@ -66,6 +66,14 @@ const props = defineProps({
     default: 1,
   },
   showRuler: {
+    type: Boolean,
+    default: true,
+  },
+  showGrid: {
+    type: Boolean,
+    default: true,
+  },
+  enableSnap: {
     type: Boolean,
     default: true,
   },
@@ -202,13 +210,15 @@ function handleWrapperPointerDownCapture(event: PointerEvent): void {
 
 // 向子组件提供当前缩放比例，用于拖拽落点换算（InjectionKey 便于 TS/Volar 推断）
 provide(canvasZoomKey, zoom);
+// 向节点拖拽逻辑提供吸附开关，保持顶部工具栏与画布行为一致。
+provide(canvasSnapEnabledKey, toRef(props, "enableSnap"));
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
 const currentPageSnapshot = computed(() => {
   const page = pages.value.find((item) => item.id === currentPageId.value);
   return page || currentPage.value || null;
 });
-const showWorkbenchGrid = computed(() => Boolean(currentPageSnapshot.value?.config?.showGrid));
+const showWorkbenchGrid = computed(() => props.showGrid);
 const pointerXOnRuler = computed(() => Math.max(0, pointerX.value - rulerInset.value));
 const pointerYOnRuler = computed(() => Math.max(0, pointerY.value - rulerInset.value));
 
@@ -263,7 +273,7 @@ const canvasStyle = computed((): Record<string, string> => {
   void docVersion.value;
   const config = (currentPageSnapshot.value?.config || {}) as DesignCanvasPageConfig;
   const background = config.background || null;
-  const showGrid = Boolean(config.showGrid);
+  const showGrid = props.showGrid;
   const style: Record<string, string> = {
     width: `${width.value}px`,
     height: `${height.value}px`,

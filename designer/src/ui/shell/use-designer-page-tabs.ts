@@ -25,10 +25,10 @@ export function useDesignerPageTabs(options: {
   editorStore: DesignerPageTabsStore;
   pageTabState: Ref<DesignerPageTabStateSnapshot | undefined>;
   currentPageId: Ref<string>;
-  canUndo: Ref<boolean>;
+  isDirty: Ref<boolean>;
   leftActiveKey: Ref<string>;
 }) {
-  const { editorStore, pageTabState, currentPageId, canUndo, leftActiveKey } = options;
+  const { editorStore, pageTabState, currentPageId, isDirty, leftActiveKey } = options;
 
   const pageTabs = ref<DesignerPageTab[]>([]);
   const activePageTabId = ref("");
@@ -117,7 +117,7 @@ export function useDesignerPageTabs(options: {
   function updateTabDirtyState() {
     const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
     if (tab) {
-      tab.isDirty = canUndo.value;
+      tab.isDirty = isDirty.value;
     }
   }
 
@@ -145,7 +145,7 @@ export function useDesignerPageTabs(options: {
     }
   }
 
-  watch(canUndo, updateTabDirtyState);
+  watch(isDirty, updateTabDirtyState);
 
   watch(
     [() => editorStore.pages, currentPageId],
@@ -160,7 +160,7 @@ export function useDesignerPageTabs(options: {
     activePageTabId,
     async (newTabId, oldTabId) => {
       if (newTabId && newTabId !== oldTabId) {
-        if (canUndo.value && currentPageId.value) {
+        if (isDirty.value && currentPageId.value) {
           editorStore.saveCurrentPageDraft();
         }
         await editorStore.setCurrentPage(newTabId);

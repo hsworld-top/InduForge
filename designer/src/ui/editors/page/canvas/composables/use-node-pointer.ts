@@ -29,6 +29,8 @@ import {
 /** 与 use-node-drop 保持一致的插入线边缘阈值（px） */
 const rowInsertEdgeThreshold = 8;
 const colInsertEdgeThreshold = 8;
+/** 元素对齐吸附的画布坐标阈值 */
+const alignmentSnapThreshold = 6;
 
 interface AbsoluteLayoutLike {
   h: number;
@@ -36,6 +38,146 @@ interface AbsoluteLayoutLike {
   x: number;
   y: number;
   z: number;
+}
+
+interface AlignmentSnapTarget extends AbsoluteLayoutLike {
+  id: string;
+}
+
+interface AlignmentSnapOptions {
+  doc: any;
+  movingNode: ComponentNode;
+  dragNodeIds: Set<string>;
+  nextRect: AbsoluteLayoutLike;
+  zoomValue: number;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function resolveNodeAbsoluteLayout(
+  targetNode: ComponentNode | null | undefined,
+): AbsoluteLayoutLike | null {
+  if (!targetNode) return null;
+  if (targetNode.positioning === "flow") return null;
+  const abs = targetNode.absolutePos;
+  const legacyAbs = targetNode.layoutItem?.free?.abs;
+  if (
+    abs &&
+    (targetNode.positioning === "absolute" || isFiniteNumber(abs.x) || isFiniteNumber(abs.y))
+  ) {
+    return {
+      x: isFiniteNumber(abs.x) ? abs.x : 0,
+      y: isFiniteNumber(abs.y) ? abs.y : 0,
+      w: isFiniteNumber(abs.w) ? abs.w : 100,
+      h: isFiniteNumber(abs.h) ? abs.h : 100,
+      z: isFiniteNumber(abs.z) ? abs.z : 1,
+    };
+  }
+  if (legacyAbs) {
+    return {
+      x: isFiniteNumber(legacyAbs.x) ? legacyAbs.x : 0,
+      y: isFiniteNumber(legacyAbs.y) ? legacyAbs.y : 0,
+      w: isFiniteNumber(legacyAbs.w) ? legacyAbs.w : 100,
+      h: isFiniteNumber(legacyAbs.h) ? legacyAbs.h : 100,
+      z: isFiniteNumber(legacyAbs.z) ? legacyAbs.z : 1,
+    };
+  }
+  return null;
+}
+
+function escapeNodeIdForSelector(nodeId: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(nodeId);
+  }
+  return nodeId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function queryNodeElement(nodeId: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-node-id="${escapeNodeIdForSelector(nodeId)}"]`);
+}
+
+function resolveNodeRenderedSize(
+  nodeId: string,
+  layout: AbsoluteLayoutLike,
+  zoomValue: number,
+): { h: number; w: number } {
+  const rect = queryNodeElement(nodeId)?.getBoundingClientRect?.();
+  if (!rect || rect.width <= 0 || rect.height <= 0) {
+    return { w: layout.w, h: layout.h };
+  }
+  return {
+    w: Math.round(rect.width / zoomValue),
+    h: Math.round(rect.height / zoomValue),
+  };
+}
+
+function collectAlignmentSnapTargets(options: AlignmentSnapOptions): AlignmentSnapTarget[] {
+  const { doc, movingNode, dragNodeIds, zoomValue } = options;
+  if (!doc) return [];
+  const movingParentId = doc.getParent?.(movingNode.id)?.id || null;
+  const nodesById = doc.nodesById;
+  const rawNodes: unknown[] =
+    nodesById instanceof Map ? Array.from(nodesById.values()) : Object.values(nodesById || {});
+  const targets: AlignmentSnapTarget[] = [];
+  for (const item of rawNodes) {
+    const targetNode = item as ComponentNode | null | undefined;
+    if (!targetNode?.id) continue;
+    if (targetNode.hidden) continue;
+    if (dragNodeIds.has(targetNode.id)) continue;
+    const targetParentId = doc.getParent?.(targetNode.id)?.id || null;
+    if (targetParentId !== movingParentId) continue;
+    const layout = resolveNodeAbsoluteLayout(targetNode);
+    if (!layout) continue;
+    const renderedSize = resolveNodeRenderedSize(targetNode.id, layout, zoomValue);
+    targets.push({
+      id: targetNode.id,
+      x: layout.x,
+      y: layout.y,
+      w: renderedSize.w,
+      h: renderedSize.h,
+      z: layout.z,
+    });
+  }
+  return targets;
+}
+
+function resolveNearestLineDelta(
+  sourceLines: number[],
+  targetLines: number[],
+  threshold = alignmentSnapThreshold,
+): number | null {
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestDelta = 0;
+  for (const sourceLine of sourceLines) {
+    for (const targetLine of targetLines) {
+      const delta = targetLine - sourceLine;
+      const distance = Math.abs(delta);
+      if (distance <= threshold && distance < bestDistance) {
+        bestDistance = distance;
+        bestDelta = delta;
+      }
+    }
+  }
+  return bestDistance <= threshold ? bestDelta : null;
+}
+
+function resolveAlignmentSnap(options: AlignmentSnapOptions): AbsoluteLayoutLike {
+  const { nextRect } = options;
+  const targets = collectAlignmentSnapTargets(options);
+  if (!targets.length) return nextRect;
+  const xLines = [nextRect.x, nextRect.x + nextRect.w / 2, nextRect.x + nextRect.w];
+  const yLines = [nextRect.y, nextRect.y + nextRect.h / 2, nextRect.y + nextRect.h];
+  const targetXLines = targets.flatMap((item) => [item.x, item.x + item.w / 2, item.x + item.w]);
+  const targetYLines = targets.flatMap((item) => [item.y, item.y + item.h / 2, item.y + item.h]);
+  const snapDeltaX = resolveNearestLineDelta(xLines, targetXLines);
+  const snapDeltaY = resolveNearestLineDelta(yLines, targetYLines);
+  return {
+    ...nextRect,
+    x: snapDeltaX === null ? nextRect.x : nextRect.x + snapDeltaX,
+    y: snapDeltaY === null ? nextRect.y : nextRect.y + snapDeltaY,
+  };
 }
 
 /**
@@ -55,6 +197,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
     isContainer,
     selection,
     canvasZoom,
+    enableSnap,
     history,
     editorStore,
     currentPage,
@@ -883,6 +1026,24 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           primaryNextAbs.w = Math.max(primaryNextAbs.w, layoutMin.width);
         }
       }
+      if (
+        hasMoved &&
+        enableSnap?.value !== false &&
+        !preferOuterDropByAlt &&
+        !isFlowChildInDescContainer
+      ) {
+        const snappedAbs = resolveAlignmentSnap({
+          doc: doc.value,
+          movingNode: node.value,
+          dragNodeIds: new Set(dragNodeIds),
+          nextRect: primaryNextAbs,
+          zoomValue,
+        });
+        primaryNextAbs.x = Math.round(snappedAbs.x);
+        primaryNextAbs.y = Math.round(snappedAbs.y);
+      }
+      const movementDeltaX = primaryNextAbs.x - primaryBase.x;
+      const movementDeltaY = primaryNextAbs.y - primaryBase.y;
       if (nodeRef.value) {
         nodeRef.value.style.position = "absolute";
         nodeRef.value.style.left = `${primaryNextAbs.x}px`;
@@ -897,8 +1058,8 @@ export function useNodePointer(deps: UseNodePointerDeps): {
         if (!dragNode) continue;
         if (!dragBase) continue;
         const nextAbs = {
-          x: Math.round(dragBase.x + deltaX),
-          y: Math.round(dragBase.y + deltaY),
+          x: Math.round(dragBase.x + movementDeltaX),
+          y: Math.round(dragBase.y + movementDeltaY),
           w: dragBase.w,
           h: dragBase.h,
           z: dragBase.z,
@@ -1414,87 +1575,87 @@ export function useNodePointer(deps: UseNodePointerDeps): {
             }
           }
         }
-      if (
-        hasMoved &&
-        (isRegionParent || allowRegionMoveOut) &&
-        originContainer?.type === "ElContainer" &&
-        rootNodeId &&
-        upEvent &&
-        !restrictToContainer
-      ) {
-        const containerEl = document.querySelector(`[data-node-id="${originContainer.id}"]`);
-        const containerRect = containerEl?.getBoundingClientRect?.();
-        const isInsideContainer = containerRect
-          ? upEvent.clientX >= containerRect.left &&
-            upEvent.clientX <= containerRect.right &&
-            upEvent.clientY >= containerRect.top &&
-            upEvent.clientY <= containerRect.bottom
-          : (() => {
-              const hit = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
-              return Boolean(containerEl && hit && containerEl.contains(hit));
-            })();
-        if (!isInsideContainer) {
-          const rootEl = document.querySelector(`[data-node-id="${rootNodeId}"]`);
-          const rootRect = rootEl?.getBoundingClientRect?.();
-          const nextX = rootRect ? (upEvent.clientX - rootRect.left) / zoomValue : 0;
-          const nextY = rootRect ? (upEvent.clientY - rootRect.top) / zoomValue : 0;
-          const nextAbs = {
-            x: Math.round(nextX),
-            y: Math.round(nextY),
-            w: baseLayout.w,
-            h: baseLayout.h,
-            z: baseLayout.z,
-          };
-          if (currentNode.type === "ElLayout") {
-            const layoutMin = getDefaultSize("ElLayout");
-            if (layoutMin?.width) {
-              nextAbs.w = Math.max(nextAbs.w, layoutMin.width);
-            }
-          }
-          if (currentNode.type === "ElContainer") {
-            const minSize = resolveElContainerMinSize(currentNode, doc.value ?? null);
-            if (minSize) {
-              if (Number.isFinite(minSize.width) && nextAbs.w < minSize.width) {
-                nextAbs.w = minSize.width;
-              }
-              if (Number.isFinite(minSize.height) && nextAbs.h < minSize.height) {
-                nextAbs.h = minSize.height;
+        if (
+          hasMoved &&
+          (isRegionParent || allowRegionMoveOut) &&
+          originContainer?.type === "ElContainer" &&
+          rootNodeId &&
+          upEvent &&
+          !restrictToContainer
+        ) {
+          const containerEl = document.querySelector(`[data-node-id="${originContainer.id}"]`);
+          const containerRect = containerEl?.getBoundingClientRect?.();
+          const isInsideContainer = containerRect
+            ? upEvent.clientX >= containerRect.left &&
+              upEvent.clientX <= containerRect.right &&
+              upEvent.clientY >= containerRect.top &&
+              upEvent.clientY <= containerRect.bottom
+            : (() => {
+                const hit = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+                return Boolean(containerEl && hit && containerEl.contains(hit));
+              })();
+          if (!isInsideContainer) {
+            const rootEl = document.querySelector(`[data-node-id="${rootNodeId}"]`);
+            const rootRect = rootEl?.getBoundingClientRect?.();
+            const nextX = rootRect ? (upEvent.clientX - rootRect.left) / zoomValue : 0;
+            const nextY = rootRect ? (upEvent.clientY - rootRect.top) / zoomValue : 0;
+            const nextAbs = {
+              x: Math.round(nextX),
+              y: Math.round(nextY),
+              w: baseLayout.w,
+              h: baseLayout.h,
+              z: baseLayout.z,
+            };
+            if (currentNode.type === "ElLayout") {
+              const layoutMin = getDefaultSize("ElLayout");
+              if (layoutMin?.width) {
+                nextAbs.w = Math.max(nextAbs.w, layoutMin.width);
               }
             }
-          }
-          const nextLayoutItem = {
-            ...(currentNode.layoutItem || {}),
-            free: {
-              mode: "abs" as const,
-              abs: { ...nextAbs },
-            },
-          };
-          const rootNode = doc.value?.getNode?.(rootNodeId);
-          const insertIndex = rootNode?.children?.length ?? 0;
-          const moveCommand = new MoveNodeCommand(currentNode.id, rootNodeId, insertIndex);
-          const updateCommand = createUpdateCommand(currentNode.id, {
-            positioning: "absolute",
-            absolutePos: nextAbs,
-            layoutItem: nextLayoutItem,
-            props: resolveScopedSlotProps(currentNode.props || {}, null),
-          });
-          if (history.value?.isInTransaction?.()) {
-            history.value.executeInTransaction?.(moveCommand);
-            history.value.executeInTransaction?.(updateCommand);
-          } else if (history.value?.execute) {
-            history.value.execute(moveCommand);
-            history.value.execute(updateCommand);
-          } else if (doc.value?._moveNode && doc.value?._updateNode) {
-            doc.value._moveNode(currentNode.id, rootNodeId, insertIndex);
-            doc.value._updateNode(currentNode.id, {
+            if (currentNode.type === "ElContainer") {
+              const minSize = resolveElContainerMinSize(currentNode, doc.value ?? null);
+              if (minSize) {
+                if (Number.isFinite(minSize.width) && nextAbs.w < minSize.width) {
+                  nextAbs.w = minSize.width;
+                }
+                if (Number.isFinite(minSize.height) && nextAbs.h < minSize.height) {
+                  nextAbs.h = minSize.height;
+                }
+              }
+            }
+            const nextLayoutItem = {
+              ...(currentNode.layoutItem || {}),
+              free: {
+                mode: "abs" as const,
+                abs: { ...nextAbs },
+              },
+            };
+            const rootNode = doc.value?.getNode?.(rootNodeId);
+            const insertIndex = rootNode?.children?.length ?? 0;
+            const moveCommand = new MoveNodeCommand(currentNode.id, rootNodeId, insertIndex);
+            const updateCommand = createUpdateCommand(currentNode.id, {
               positioning: "absolute",
               absolutePos: nextAbs,
               layoutItem: nextLayoutItem,
               props: resolveScopedSlotProps(currentNode.props || {}, null),
             });
+            if (history.value?.isInTransaction?.()) {
+              history.value.executeInTransaction?.(moveCommand);
+              history.value.executeInTransaction?.(updateCommand);
+            } else if (history.value?.execute) {
+              history.value.execute(moveCommand);
+              history.value.execute(updateCommand);
+            } else if (doc.value?._moveNode && doc.value?._updateNode) {
+              doc.value._moveNode(currentNode.id, rootNodeId, insertIndex);
+              doc.value._updateNode(currentNode.id, {
+                positioning: "absolute",
+                absolutePos: nextAbs,
+                layoutItem: nextLayoutItem,
+                props: resolveScopedSlotProps(currentNode.props || {}, null),
+              });
+            }
           }
         }
-      }
       } finally {
         endDrag();
         clearDropTarget();

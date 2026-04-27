@@ -12,13 +12,15 @@ const {
 
 const DEFAULT_RUNTIME_ROLE_CODE_PREFIX = "PROJECT_";
 const DEFAULT_RUNTIME_ADMIN_ROLE_CODE = "PROJECT_ADMIN";
-const DEFAULT_RUNTIME_ADMIN_USERNAME = "runtime_admin";
+const DEFAULT_RUNTIME_ADMIN_USERNAME = "admin";
 const DEFAULT_RUNTIME_ADMIN_NAME = "管理员";
 const BCRYPT_SALT_ROUNDS = 12;
 
 const normalizeGrantCollection = (grants = []) => (Array.isArray(grants) ? grants : []);
 const normalizeText = (value) => String(value ?? "").trim();
 const isUniqueConstraintError = (error) => error?.name === "SequelizeUniqueConstraintError";
+const isDefaultRuntimeAdminUsername = (username) =>
+  normalizeText(username).toLowerCase() === DEFAULT_RUNTIME_ADMIN_USERNAME;
 
 const normalizeRuntimeRoleCode = (value) => {
   const normalizedCode = normalizeText(value).replace(/\s+/g, "_").toUpperCase();
@@ -42,17 +44,11 @@ const extractActorId = (context = {}) =>
     context.creator?.id || context.createdBy || context.project?.createdBy || context.project?.creator?.id,
   );
 
-const buildBootstrapUsername = (creator = {}, context = {}) =>
-  normalizeText(creator.username || context.username) || DEFAULT_RUNTIME_ADMIN_USERNAME;
+const buildBootstrapUsername = (context = {}) =>
+  normalizeText(context.username) || DEFAULT_RUNTIME_ADMIN_USERNAME;
 
-const buildBootstrapDisplayName = (creator = {}, context = {}) => {
-  return (
-    normalizeText(context.displayName) ||
-    normalizeText(creator.fullName) ||
-    normalizeText(creator.username) ||
-    DEFAULT_RUNTIME_ADMIN_NAME
-  );
-};
+const buildBootstrapDisplayName = (context = {}) =>
+  normalizeText(context.displayName) || DEFAULT_RUNTIME_ADMIN_NAME;
 
 const assertBootstrapOwnerOrThrow = (existingUser, actorId, username) => {
   if (!existingUser) {
@@ -372,12 +368,12 @@ async function ensureRuntimeAdminBootstrap(input = {}, legacyOptions = {}) {
   }
 
   const roleCode = normalizeRuntimeRoleCode(context.roleCode || DEFAULT_RUNTIME_ADMIN_ROLE_CODE);
-  const username = buildBootstrapUsername(creator, context);
+  const username = buildBootstrapUsername(context);
   const roleName = normalizeText(context.roleName) || DEFAULT_RUNTIME_ADMIN_NAME;
   const roleDescription =
     normalizeText(context.roleDescription) ||
     "工程运行态默认管理员角色，用于初始化首个可管理账号";
-  const displayName = buildBootstrapDisplayName(creator, context);
+  const displayName = buildBootstrapDisplayName(context);
   const actorId = extractActorId(context);
   const roleAttributes = {
     projectId: resolvedProjectId,
@@ -593,6 +589,12 @@ async function updateRuntimeUserStatus({
     });
   }
 
+  if (normalizedStatus === "inactive" && isDefaultRuntimeAdminUsername(runtimeUser.username)) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+      message: "内置 admin 用户不允许停用",
+    });
+  }
+
   if (normalizedStatus === "inactive" && normalizeText(runtimeUser.status) === "active") {
     await assertAnotherActiveRuntimeAdminExists({ projectId, runtimeUserId });
   }
@@ -603,6 +605,50 @@ async function updateRuntimeUserStatus({
   });
 
   return loadRuntimeUserSummary({ projectId, runtimeUserId });
+}
+
+async function deleteRuntimeUser({
+  projectId,
+  runtimeUserId,
+} = {}) {
+  if (!projectId || !runtimeUserId) {
+    throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, { message: "参数不完整" });
+  }
+
+  return Project.sequelize.transaction(async (transaction) => {
+    const runtimeUser = await ProjectRuntimeUser.findOne({
+      where: { projectId, id: runtimeUserId },
+      transaction,
+    });
+
+    if (!runtimeUser) {
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
+        message: "运行态用户不存在",
+      });
+    }
+
+    if (isDefaultRuntimeAdminUsername(runtimeUser.username)) {
+      throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+        message: "内置 admin 用户不允许删除",
+      });
+    }
+
+    if (normalizeText(runtimeUser.status) === "active") {
+      await assertAnotherActiveRuntimeAdminExists({ projectId, runtimeUserId, transaction });
+    }
+
+    await ProjectUserRoleBinding.destroy({
+      where: { projectId, runtimeUserId },
+      transaction,
+    });
+    await runtimeUser.destroy({ transaction });
+
+    return {
+      id: runtimeUserId,
+      projectId,
+      deleted: true,
+    };
+  });
 }
 
 async function resetRuntimeUserPassword({
@@ -978,6 +1024,7 @@ module.exports = {
   listRuntimeUsers,
   createRuntimeUser,
   updateRuntimeUserStatus,
+  deleteRuntimeUser,
   resetRuntimeUserPassword,
   bindRuntimeUserRoles,
   listRuntimeRoles,

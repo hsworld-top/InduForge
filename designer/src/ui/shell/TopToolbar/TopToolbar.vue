@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import IconEpArrowDownBold from "~icons/ep/arrow-down-bold";
 import IconLucideBot from "~icons/lucide/bot";
 import IconLucideClipboardPaste from "~icons/lucide/clipboard-paste";
 import IconLucideCopy from "~icons/lucide/copy";
@@ -9,6 +8,7 @@ import IconLucideDownload from "~icons/lucide/download";
 import IconLucideEllipsis from "~icons/lucide/ellipsis";
 import IconLucideLock from "~icons/lucide/lock";
 import IconLucideLockOpen from "~icons/lucide/lock-open";
+import IconLucideMonitor from "~icons/lucide/monitor";
 import IconLucidePlay from "~icons/lucide/play";
 import IconLucideRedo2 from "~icons/lucide/redo-2";
 import IconLucideSave from "~icons/lucide/save";
@@ -99,7 +99,6 @@ const emit = defineEmits<{
   undo: [];
   redo: [];
   preview: [];
-  previewApp: [];
   save: [];
   openAi: [];
   moveUp: [];
@@ -121,6 +120,7 @@ const emit = defineEmits<{
   paste: [];
   deleteSelected: [];
   previewUserChange: [runtimeUserId: string];
+  refreshPreviewUsers: [];
 }>();
 
 const MIN_CANVAS_WIDTH = 120;
@@ -137,7 +137,9 @@ const viewItems = computed(() =>
   })),
 );
 
-const currentCanvasSizeText = computed(() => `${Math.round(props.canvasWidth)}px`);
+const currentCanvasSizeText = computed(
+  () => `${Math.round(props.canvasWidth)} x ${Math.round(props.canvasHeight)}`,
+);
 
 const saveStatusText = computed(() => {
   if (props.isSaving) return t("toolbar.saveStatus.saving");
@@ -165,6 +167,7 @@ const previewUserOptions = computed(() =>
     .map((user) => ({
       value: user.id,
       label: user.username,
+      description: user.displayName && user.displayName !== user.username ? user.displayName : "",
     })),
 );
 
@@ -181,8 +184,6 @@ const localCustomSize = ref({
   width: props.canvasWidth,
   height: props.canvasHeight,
 });
-const saveDropdownRef = ref<{ handleClose?: () => void } | null>(null);
-const previewDropdownRef = ref<{ handleClose?: () => void } | null>(null);
 
 watch(
   () => props.saveSettings,
@@ -211,24 +212,17 @@ const handleToggleLock = () => emit("toggleLock");
 const handleUndo = () => emit("undo");
 const handleRedo = () => emit("redo");
 const handlePreview = () => emit("preview");
+const handlePreviewDropdownVisibleChange = (visible: boolean) => {
+  if (visible) {
+    emit("refreshPreviewUsers");
+  }
+};
 const handleSave = () => emit("save");
 const handleZoomIn = () => emit("zoomIn");
 const handleZoomOut = () => emit("zoomOut");
 const handleCopy = () => emit("copy");
 const handlePaste = () => emit("paste");
 const handleDeleteSelected = () => emit("deleteSelected");
-
-function handlePreviewCommand(command: string) {
-  if (command === "pagePreview") {
-    emit("preview");
-    previewDropdownRef.value?.handleClose?.();
-    return;
-  }
-  if (command === "appPreview") {
-    emit("previewApp");
-    previewDropdownRef.value?.handleClose?.();
-  }
-}
 
 function handleViewMenuCommand(command: string) {
   if (command === "resetZoom") {
@@ -266,10 +260,8 @@ function handleApplyCustomSize() {
   emit("applyCustomSize", { width, height });
 }
 
-function handleSaveSettingsSubmit() {
+function handleSaveSettingsChange() {
   emit("saveSettingsChange", { ...localSaveSettings.value });
-  emit("save");
-  saveDropdownRef.value?.handleClose?.();
 }
 
 function handleMoreCommand(command: string) {
@@ -333,7 +325,7 @@ function handleMoreCommand(command: string) {
             </el-button>
           </el-tooltip>
         </div>
-        <div class="toolbar-group toolbar-group--canvas toolbar-center-left">
+        <div class="toolbar-group toolbar-group--canvas toolbar-center-middle">
           <el-popover
             trigger="click"
             placement="bottom"
@@ -342,6 +334,7 @@ function handleMoreCommand(command: string) {
           >
             <template #reference>
               <el-button class="view-btn view-btn--selector">
+                <IconLucideMonitor class="view-selector__icon" />
                 <span class="view-selector__size">{{ currentCanvasSizeText }}</span>
               </el-button>
             </template>
@@ -375,6 +368,7 @@ function handleMoreCommand(command: string) {
                       :max="7680"
                       :step="10"
                       controls-position="right"
+                      @change="handleApplyCustomSize"
                     />
                   </label>
                   <label class="custom-size-field">
@@ -385,24 +379,28 @@ function handleMoreCommand(command: string) {
                       :max="4320"
                       :step="10"
                       controls-position="right"
+                      @change="handleApplyCustomSize"
                     />
                   </label>
                 </div>
-                <el-button class="size-panel__submit" type="primary" @click="handleApplyCustomSize">
-                  {{ t("toolbar.applyCustomSize") }}
-                </el-button>
               </div>
             </div>
           </el-popover>
           <div class="zoom-group">
             <el-tooltip :content="t('toolbar.zoomOut')" placement="bottom">
-              <el-button class="icon-btn icon-btn--subtle" @click="handleZoomOut">
+              <el-button
+                class="icon-btn icon-btn--subtle zoom-btn zoom-btn--out"
+                @click="handleZoomOut"
+              >
                 <IconLucideZoomOut />
               </el-button>
             </el-tooltip>
             <span class="zoom-pill">{{ Math.round(zoom * 100) }}%</span>
             <el-tooltip :content="t('toolbar.zoomIn')" placement="bottom">
-              <el-button class="icon-btn icon-btn--subtle" @click="handleZoomIn">
+              <el-button
+                class="icon-btn icon-btn--subtle zoom-btn zoom-btn--in"
+                @click="handleZoomIn"
+              >
                 <IconLucideZoomIn />
               </el-button>
             </el-tooltip>
@@ -411,11 +409,12 @@ function handleMoreCommand(command: string) {
             <el-button class="view-btn">
               <IconLucideSettings2 />
               <span class="view-btn__text">{{ t("toolbar.view") }}</span>
-              <IconEpArrowDownBold class="caret-icon" />
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="resetZoom">{{ t("toolbar.resetZoom") }}</el-dropdown-item>
+                <el-dropdown-item command="resetZoom">{{
+                  t("toolbar.resetZoom")
+                }}</el-dropdown-item>
                 <el-dropdown-item command="toggleRuler">
                   {{ showRuler ? t("toolbar.hideRuler") : t("toolbar.showRuler") }}
                 </el-dropdown-item>
@@ -449,7 +448,6 @@ function handleMoreCommand(command: string) {
       <div class="toolbar-group toolbar-group--primary">
         <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
         <el-dropdown
-          ref="previewDropdownRef"
           class="preview-action"
           trigger="click"
           placement="bottom-end"
@@ -457,39 +455,45 @@ function handleMoreCommand(command: string) {
           split-button
           :hide-on-click="false"
           @click="handlePreview"
-          @command="handlePreviewCommand"
+          @visible-change="handlePreviewDropdownVisibleChange"
         >
           <span class="split-action__text">
             <IconLucidePlay />
             <span>{{ t("toolbar.preview") }}</span>
           </span>
           <template #dropdown>
-            <el-dropdown-menu>
-              <div class="preview-identity-panel" @click.stop>
-                <div class="preview-identity-panel__label">预览身份</div>
+            <div class="preview-settings-panel" @click.stop>
+              <div class="preview-settings-panel__title">{{ t("toolbar.previewIdentity") }}</div>
+              <div class="preview-settings-panel__row">
+                <span class="preview-settings-panel__label">{{ t("toolbar.previewUser") }}</span>
                 <el-select
                   v-model="selectedPreviewUser"
+                  class="preview-settings-panel__select"
                   size="small"
-                  clearable
                   filterable
-                  :teleported="false"
+                  popper-class="preview-user-select-popper"
+                  :empty-text="t('toolbar.previewUserEmpty')"
                   placeholder="未选择用户"
                 >
                   <el-option
                     v-for="item in previewUserOptions"
                     :key="item.value"
-                    :label="item.label"
+                    :label="item.description ? `${item.label} ${item.description}` : item.label"
                     :value="item.value"
-                  />
+                  >
+                    <div class="preview-user-option">
+                      <span class="preview-user-option__name">{{ item.label }}</span>
+                      <span v-if="item.description" class="preview-user-option__desc">
+                        {{ item.description }}
+                      </span>
+                    </div>
+                  </el-option>
                 </el-select>
               </div>
-              <el-dropdown-item command="pagePreview">{{ t("toolbar.pagePreview") }}</el-dropdown-item>
-              <el-dropdown-item command="appPreview">{{ t("toolbar.appPreview") }}</el-dropdown-item>
-            </el-dropdown-menu>
+            </div>
           </template>
         </el-dropdown>
         <el-dropdown
-          ref="saveDropdownRef"
           class="save-action"
           trigger="click"
           placement="bottom-end"
@@ -505,7 +509,10 @@ function handleMoreCommand(command: string) {
             <div class="save-settings-panel" @click.stop>
               <div class="save-settings-panel__title">{{ t("toolbar.saveSettings") }}</div>
               <div class="save-settings-panel__row save-settings-panel__row--check">
-                <el-checkbox v-model="localSaveSettings.autoSave" />
+                <el-checkbox
+                  v-model="localSaveSettings.autoSave"
+                  @change="handleSaveSettingsChange"
+                />
                 <span class="save-settings-panel__label">{{ t("toolbar.autoSave") }}</span>
               </div>
               <div class="save-settings-panel__row">
@@ -514,6 +521,7 @@ function handleMoreCommand(command: string) {
                   v-model="localSaveSettings.intervalMinutes"
                   class="save-settings-panel__select"
                   :disabled="!localSaveSettings.autoSave"
+                  @change="handleSaveSettingsChange"
                 >
                   <el-option
                     v-for="item in saveIntervalOptions"
@@ -523,9 +531,6 @@ function handleMoreCommand(command: string) {
                   />
                 </el-select>
               </div>
-              <el-button class="save-settings-panel__submit" @click="handleSaveSettingsSubmit">
-                {{ t("toolbar.setAndSave") }}
-              </el-button>
             </div>
           </template>
         </el-dropdown>
@@ -547,8 +552,12 @@ function handleMoreCommand(command: string) {
                 <IconLucideTrash2 class="menu-icon" />
                 {{ t("toolbar.clearCanvas") }}
               </el-dropdown-item>
-              <el-dropdown-item command="collaboration">{{ t("toolbar.collaboration") }}</el-dropdown-item>
-              <el-dropdown-item command="refresh">{{ t("toolbar.refreshCanvas") }}</el-dropdown-item>
+              <el-dropdown-item command="collaboration">{{
+                t("toolbar.collaboration")
+              }}</el-dropdown-item>
+              <el-dropdown-item command="refresh">{{
+                t("toolbar.refreshCanvas")
+              }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -563,7 +572,7 @@ function handleMoreCommand(command: string) {
   display: grid;
   grid-template-columns: max-content 1fr max-content;
   align-items: center;
-  gap: var(--designer-gap-sm);
+  gap: 6px;
   padding: 0 var(--designer-shell-padding);
 }
 
@@ -580,8 +589,12 @@ function handleMoreCommand(command: string) {
 
 .toolbar-center {
   position: absolute;
-  left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
-  right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+  left: calc(
+    var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+  );
+  right: calc(
+    var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+  );
   top: 0;
   bottom: 0;
   display: flex;
@@ -594,15 +607,19 @@ function handleMoreCommand(command: string) {
 .toolbar-right {
   justify-content: flex-end;
   justify-self: end;
+  position: relative;
+  z-index: 2;
 }
 
 .toolbar-center-shell {
   display: grid;
-  grid-template-columns: max-content max-content minmax(56px, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
+  gap: 8px;
   width: 100%;
+  max-width: 100%;
   min-width: 0;
-  padding: 0 6px;
+  padding: 0;
   pointer-events: auto;
 }
 
@@ -620,17 +637,27 @@ function handleMoreCommand(command: string) {
 }
 
 .toolbar-group--clipboard {
-  padding-right: 6px;
-  border-right: 1px solid var(--designer-border-color);
-  margin-right: 2px;
+  padding-left: 8px;
+  border-left: 1px solid var(--designer-border-color);
+  margin-left: 0;
 }
 
-.toolbar-center-left {
+.toolbar-group--edit {
+  padding-right: 10px;
+  border-right: 1px solid var(--designer-border-color);
+}
+
+.toolbar-center-middle {
+  justify-self: center;
+}
+
+.toolbar-group--clipboard {
   justify-self: start;
 }
 
 .toolbar-center-right {
   justify-self: end;
+  margin-right: 12px;
 }
 
 .page-chip {
@@ -677,30 +704,51 @@ function handleMoreCommand(command: string) {
 .zoom-group {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  height: var(--designer-control-height);
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-md);
+  background: var(--designer-group-surface);
 }
 
 .zoom-pill {
-  min-width: 54px;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: var(--designer-radius-md);
+  min-width: 50px;
+  height: 100%;
+  padding: 0 8px;
+  border-right: 1px solid var(--designer-border-color);
+  border-left: 1px solid var(--designer-border-color);
+  border-radius: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  background: var(--designer-shell-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.view-selector__icon {
+  width: var(--designer-nav-icon);
+  height: var(--designer-nav-icon);
+  flex-shrink: 0;
 }
 
 .save-status {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 52px;
-  height: 20px;
-  padding: 0 6px;
+  min-width: 48px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: 999px;
   white-space: nowrap;
   border: 1px solid transparent;
   font-size: 11px;
+}
+
+.toolbar-group--primary {
+  gap: 6px;
+  padding-left: 8px;
+  background: var(--designer-shell-surface);
 }
 
 .save-status.is-saved {
@@ -726,8 +774,7 @@ function handleMoreCommand(command: string) {
   letter-spacing: 0;
 }
 
-.menu-icon,
-.caret-icon {
+.menu-icon {
   width: var(--designer-nav-icon);
   height: var(--designer-nav-icon);
   flex-shrink: 0;
@@ -829,18 +876,6 @@ function handleMoreCommand(command: string) {
   color: var(--designer-text-secondary);
 }
 
-.size-panel__submit {
-  width: 100%;
-  height: 32px;
-  margin-top: 2px;
-  border-radius: var(--designer-radius-md);
-  border: none;
-  font-size: var(--designer-font-label);
-  font-weight: 500;
-  color: var(--designer-surface-elevated);
-  background: var(--designer-primary);
-}
-
 :deep(.custom-size-field .el-input-number) {
   width: 100%;
 }
@@ -859,8 +894,15 @@ function handleMoreCommand(command: string) {
 
 :deep(.view-btn--selector) {
   min-width: auto;
-  padding: 0 2px;
+  padding: 0 8px;
   justify-content: center;
+  gap: 6px;
+}
+
+:deep(.zoom-btn) {
+  width: 26px;
+  height: 100%;
+  border-radius: 0;
 }
 
 :deep(.icon-btn) {
@@ -912,7 +954,7 @@ function handleMoreCommand(command: string) {
 }
 
 :deep(.preview-action .el-button-group > .el-dropdown__caret-button:last-child) {
-  width: 28px;
+  width: 26px;
   padding: 0;
   border-top-right-radius: var(--designer-radius-lg);
   border-bottom-right-radius: var(--designer-radius-lg);
@@ -938,7 +980,7 @@ function handleMoreCommand(command: string) {
 }
 
 :deep(.save-action .el-button-group > .el-dropdown__caret-button:last-child) {
-  width: 28px;
+  width: 26px;
   padding: 0;
   border-top-right-radius: var(--designer-radius-lg);
   border-bottom-right-radius: var(--designer-radius-lg);
@@ -949,28 +991,6 @@ function handleMoreCommand(command: string) {
 :deep(.preview-action .el-button-group > .el-dropdown__caret-button .el-icon),
 :deep(.save-action .el-button-group > .el-dropdown__caret-button .el-icon) {
   margin-left: 0;
-}
-
-:global(.preview-menu-popper .el-dropdown-menu) {
-  padding: 0;
-}
-
-.preview-identity-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 220px;
-  padding: 6px 8px 8px;
-  border-bottom: 1px solid var(--designer-border-soft);
-}
-
-.preview-identity-panel__label {
-  color: var(--designer-text-secondary);
-  font-size: var(--designer-font-meta);
-}
-
-.preview-identity-panel :deep(.el-select) {
-  width: 100%;
 }
 
 :global(.designer-size-popper.el-popper) {
@@ -1005,6 +1025,103 @@ function handleMoreCommand(command: string) {
   box-shadow: var(--designer-shadow-panel);
   box-sizing: border-box;
   font-size: var(--designer-font-label);
+}
+
+:global(.preview-menu-popper .preview-settings-panel) {
+  width: 220px;
+  padding: 10px;
+  border-radius: var(--designer-radius-lg);
+  background: var(--designer-surface-elevated);
+  box-shadow: var(--designer-shadow-panel);
+  box-sizing: border-box;
+  font-size: var(--designer-font-label);
+}
+
+:global(.preview-menu-popper .el-dropdown-menu) {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+:global(.preview-menu-popper.el-popper) {
+  padding: 0;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-lg);
+  box-shadow: var(--designer-shadow-panel);
+  overflow: hidden;
+}
+
+:global(.preview-menu-popper .preview-settings-panel__title) {
+  font-size: var(--designer-font-title);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--designer-text-primary);
+  margin-bottom: var(--designer-gap-sm);
+}
+
+:global(.preview-menu-popper .preview-settings-panel__row) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 0;
+}
+
+:global(.preview-menu-popper .preview-settings-panel__label) {
+  font-size: var(--designer-font-label);
+  line-height: 1.4;
+  color: var(--designer-text-regular);
+}
+
+:global(.preview-menu-popper .preview-settings-panel__select) {
+  width: 138px;
+  margin-left: auto;
+}
+
+:global(.preview-menu-popper .preview-settings-panel__select .el-input__wrapper) {
+  min-height: 32px;
+  border-radius: var(--designer-radius-md);
+  box-shadow: inset 0 0 0 1px var(--designer-border-strong);
+  background: var(--designer-group-surface);
+}
+
+:global(.preview-menu-popper .preview-settings-panel__select .el-input__inner) {
+  font-size: var(--designer-font-label);
+  color: var(--designer-text-regular);
+}
+
+:global(.preview-user-select-popper) {
+  width: 180px;
+}
+
+:global(.preview-user-select-popper .el-select-dropdown__item) {
+  height: auto;
+  min-height: 32px;
+  padding: 5px 10px;
+}
+
+:global(.preview-user-select-popper .preview-user-option) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.25;
+}
+
+:global(.preview-user-select-popper .preview-user-option__name),
+:global(.preview-user-select-popper .preview-user-option__desc) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.preview-user-select-popper .preview-user-option__name) {
+  font-size: var(--designer-font-label);
+  color: var(--designer-text-primary);
+}
+
+:global(.preview-user-select-popper .preview-user-option__desc) {
+  font-size: 11px;
+  color: var(--designer-text-secondary);
 }
 
 :global(.save-settings-popper .el-dropdown-menu) {
@@ -1073,27 +1190,18 @@ function handleMoreCommand(command: string) {
   border-radius: 4px;
 }
 
-:global(.save-settings-popper .save-settings-panel__submit) {
-  width: 100%;
-  height: 32px;
-  margin: 4px auto 0;
-  display: block;
-  border-radius: var(--designer-radius-md);
-  border: none;
-  font-size: var(--designer-font-label);
-  font-weight: 500;
-  color: var(--designer-surface-elevated);
-  background: var(--designer-primary);
-}
-
 @media (max-width: 1360px) {
   .toolbar-center {
-    left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
-    right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+    left: calc(
+      var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+    );
+    right: calc(
+      var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+    );
   }
 
   .toolbar-center-shell {
-    grid-template-columns: max-content minmax(32px, 1fr) max-content;
+    gap: 6px;
   }
 }
 
@@ -1103,12 +1211,16 @@ function handleMoreCommand(command: string) {
   }
 
   .toolbar-center {
-    left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
-    right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+    left: calc(
+      var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+    );
+    right: calc(
+      var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+    );
   }
 
   .toolbar-center-shell {
-    grid-template-columns: max-content minmax(16px, 1fr) max-content;
+    gap: 4px;
   }
 
   .page-chip__label,
@@ -1133,7 +1245,6 @@ function handleMoreCommand(command: string) {
 
   .toolbar-center-shell {
     width: auto;
-    grid-template-columns: max-content;
   }
 
   .toolbar-center-right {

@@ -56,18 +56,24 @@ import { useDesignerAutoSave } from "./use-designer-auto-save";
 import { useDesignerPageTabs } from "./use-designer-page-tabs";
 
 /** 重型面板异步加载，减轻 DesignerView 首 chunk */
-const DataPanel = defineAsyncComponent(() => import("@/ui/editors/page/sidebar-panels/left/DataPanel.vue"));
+const DataPanel = defineAsyncComponent(
+  () => import("@/ui/editors/page/sidebar-panels/left/DataPanel.vue"),
+);
 const AdvancedPanel = defineAsyncComponent(
   () => import("@/ui/editors/page/sidebar-panels/right/AdvancedPanel.vue"),
 );
 const PropertyPanel = defineAsyncComponent(
   () => import("@/ui/editors/page/sidebar-panels/right/PropertyPanel.vue"),
 );
-const PageTree = defineAsyncComponent(() => import("@/ui/shared/tool-panels/page-tree/PageTree.vue"));
+const PageTree = defineAsyncComponent(
+  () => import("@/ui/shared/tool-panels/page-tree/PageTree.vue"),
+);
 const ScriptVarsPanel = defineAsyncComponent(
   () => import("@/ui/shared/tool-panels/ScriptVarsPanel.vue"),
 );
-const VariablesPanel = defineAsyncComponent(() => import("@/ui/shared/tool-panels/VariablesPanel.vue"));
+const VariablesPanel = defineAsyncComponent(
+  () => import("@/ui/shared/tool-panels/VariablesPanel.vue"),
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -77,11 +83,35 @@ function mergePageConfig(
   base: DesignerStorePageRow["config"] | undefined,
   patch: Partial<PageConfig>,
 ): PageConfig {
+  const baseConfig = (base ?? {}) as Partial<PageConfig>;
   return {
     ...DESIGNER_DEFAULT_PAGE_CONFIG_DIMS,
-    ...(base ?? {}),
+    ...baseConfig,
     ...patch,
+    viewport: {
+      ...(baseConfig.viewport ?? {}),
+      ...(patch.viewport ?? {}),
+    },
   } as PageConfig;
+}
+
+function getCurrentPageConfig(): Partial<PageConfig> {
+  return (currentPageSnapshot.value?.config ?? {}) as Partial<PageConfig>;
+}
+
+interface PreviewRuntimeUserOption {
+  id: string;
+  userId?: string;
+  sourceUserId?: string;
+  platformUserId?: string;
+  createdBy?: string;
+  username: string;
+  displayName?: string;
+  status?: string;
+  isProjectCreator?: boolean;
+  isCreator?: boolean;
+  isInitialCreator?: boolean;
+  isOwner?: boolean;
 }
 
 /** storeToRefs 会把部分 ref 标成可能 undefined，此处收窄为壳层实际用到的形状 */
@@ -113,11 +143,12 @@ interface EditorShellStoreRefs {
   currentPageId: Ref<string>;
   currentPage: Ref<DesignerStorePageRow | null | undefined>;
   isLocked: Ref<boolean>;
+  isDirty: Ref<boolean>;
   readonlyState: Ref<{ readonly?: boolean } | undefined>;
   pageTabState: Ref<{ tabs?: DesignerPageTab[]; activeId?: string } | undefined>;
   canvasMousePos: Ref<{ x: number; y: number } | null>;
   hoveredNodeType: Ref<string>;
-  runtimeUsers: Ref<Array<{ id: string; username: string; displayName?: string; status?: string }>>;
+  runtimeUsers: Ref<PreviewRuntimeUserOption[]>;
   selectedPreviewRuntimeUserId: Ref<string>;
 }
 
@@ -126,6 +157,7 @@ const {
   canUndo,
   canRedo,
   isSaving,
+  isDirty: storeIsDirty,
   selection,
   doc,
   pages,
@@ -162,7 +194,7 @@ const { pageTabs, activePageTabId, openPageTab, handleClosePageTab } = useDesign
   editorStore: editorStore as unknown as DesignerPageTabsStore,
   pageTabState,
   currentPageId,
-  canUndo,
+  isDirty: storeIsDirty,
   leftActiveKey,
 });
 
@@ -172,6 +204,10 @@ const { saveSettings, handleSaveSettingsChange } = useDesignerAutoSave({
   currentPageId,
   readonlyState,
   isSaving,
+  isDirty: storeIsDirty,
+  onAutoSaveSuccess: () => {
+    ElMessage.success(t("message.autoSaveSuccess"));
+  },
 });
 
 provide("openPageTab", openPageTab);
@@ -300,8 +336,9 @@ const hasClipboard = computed(() => editorStore.hasClipboard);
 const rightActiveKey = ref("props");
 const leftFloating = ref(false);
 const rightFloating = ref(false);
-const DEFAULT_DOCK_PANEL_WIDTH = 272;
-const MIN_DOCK_PANEL_WIDTH = 220;
+const DEFAULT_DOCK_PANEL_WIDTH = 320;
+const LEFT_MIN_DOCK_PANEL_WIDTH = 156;
+const RIGHT_MIN_DOCK_PANEL_WIDTH = 240;
 const MAX_DOCK_PANEL_WIDTH = 520;
 const DOCK_PANEL_WIDTH_STORAGE_KEY = "designer:dock-panel-width:v1";
 const leftPanelWidth = ref(DEFAULT_DOCK_PANEL_WIDTH);
@@ -322,7 +359,7 @@ const pageName = computed(() => {
   return page?.name || "";
 });
 
-const isDirty = computed(() => canUndo.value);
+const isDirty = computed(() => storeIsDirty.value);
 
 const currentPageSnapshot = computed(() => {
   const page = pages.value.find((item: DesignerStorePageRow) => item.id === currentPageId.value);
@@ -338,11 +375,14 @@ function normalizeCanvasDimension(value: unknown, fallback: number): number {
   return Number.isFinite(next) && next > 0 ? Math.round(next) : fallback;
 }
 const resolvedPageWidth = computed(() =>
-  normalizeCanvasDimension(currentPageSnapshot.value?.config?.width, defaultViewPreset.value.width),
+  normalizeCanvasDimension(
+    getCurrentPageConfig().viewport?.width ?? getCurrentPageConfig().width,
+    defaultViewPreset.value.width,
+  ),
 );
 const resolvedPageHeight = computed(() =>
   normalizeCanvasDimension(
-    currentPageSnapshot.value?.config?.height,
+    getCurrentPageConfig().viewport?.height ?? getCurrentPageConfig().height,
     defaultViewPreset.value.height,
   ),
 );
@@ -354,16 +394,22 @@ const matchedViewPreset = computed(
     ) || null,
 );
 const canvasWidth = computed(() =>
-  normalizeCanvasDimension(currentPageSnapshot.value?.config?.width, defaultViewPreset.value.width),
+  normalizeCanvasDimension(
+    getCurrentPageConfig().viewport?.width ?? getCurrentPageConfig().width,
+    defaultViewPreset.value.width,
+  ),
 );
 const canvasHeight = computed(() =>
   normalizeCanvasDimension(
-    currentPageSnapshot.value?.config?.height,
+    getCurrentPageConfig().viewport?.height ?? getCurrentPageConfig().height,
     defaultViewPreset.value.height,
   ),
 );
+const canvasContainerKey = computed(
+  () => `${route.fullPath}:${editorStore.projectId || "project"}:${currentPageId.value || "page"}`,
+);
 const isCustomView = computed(() => !matchedViewPreset.value);
-const showGrid = computed(() => Boolean(currentPageSnapshot.value?.config?.showGrid));
+const showGrid = computed(() => currentPageSnapshot.value?.config?.showGrid ?? true);
 const enableSnap = computed(() => currentPageSnapshot.value?.config?.enableSnap ?? true);
 
 const leftRailItems = computed<ToolRailItem[]>(() => [
@@ -433,7 +479,9 @@ const rightPanelTitle = computed(() => {
 /**
  * 左侧停靠面板当前占用宽度（关闭或悬浮时不占位）。
  */
-const leftDockWidth = computed(() => (leftActiveKey.value && !leftFloating.value ? leftPanelWidth.value : 0));
+const leftDockWidth = computed(() =>
+  leftActiveKey.value && !leftFloating.value ? leftPanelWidth.value : 0,
+);
 
 /**
  * 右侧停靠面板当前占用宽度（关闭或悬浮时不占位）。
@@ -455,10 +503,10 @@ const layoutStyleVars = computed(() => ({
  * @param {number} width - 目标宽度
  * @returns {number}
  */
-function clampPanelWidth(width: number): number {
+function clampPanelWidth(width: number, minWidth: number): number {
   const next = Number(width);
   if (!Number.isFinite(next)) return DEFAULT_DOCK_PANEL_WIDTH;
-  return Math.min(MAX_DOCK_PANEL_WIDTH, Math.max(MIN_DOCK_PANEL_WIDTH, Math.round(next)));
+  return Math.min(MAX_DOCK_PANEL_WIDTH, Math.max(minWidth, Math.round(next)));
 }
 
 /**
@@ -466,7 +514,7 @@ function clampPanelWidth(width: number): number {
  * @param {number} width - 目标宽度
  */
 function handleLeftPanelResize(width: number): void {
-  leftPanelWidth.value = clampPanelWidth(width);
+  leftPanelWidth.value = clampPanelWidth(width, LEFT_MIN_DOCK_PANEL_WIDTH);
 }
 
 /**
@@ -474,7 +522,7 @@ function handleLeftPanelResize(width: number): void {
  * @param {number} width - 目标宽度
  */
 function handleRightPanelResize(width: number): void {
-  rightPanelWidth.value = clampPanelWidth(width);
+  rightPanelWidth.value = clampPanelWidth(width, RIGHT_MIN_DOCK_PANEL_WIDTH);
 }
 
 /**
@@ -488,10 +536,10 @@ function restoreDockPanelWidths(): void {
     const parsed = JSON.parse(raw) as { left?: number; right?: number } | null;
     if (!parsed || typeof parsed !== "object") return;
     if (parsed.left !== undefined) {
-      leftPanelWidth.value = clampPanelWidth(parsed.left);
+      leftPanelWidth.value = clampPanelWidth(parsed.left, LEFT_MIN_DOCK_PANEL_WIDTH);
     }
     if (parsed.right !== undefined) {
-      rightPanelWidth.value = clampPanelWidth(parsed.right);
+      rightPanelWidth.value = clampPanelWidth(parsed.right, RIGHT_MIN_DOCK_PANEL_WIDTH);
     }
   } catch {
     // 本地数据异常时忽略，保持默认宽度
@@ -537,6 +585,14 @@ function handleRedo() {
 /**
  * 预览
  */
+function getActivePreviewUsers(): PreviewRuntimeUserOption[] {
+  return runtimeUsers.value.filter((user) => user.status !== "disabled");
+}
+
+function normalizePreviewMetaId(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function getPreviewRuntimeUserStorageKey(projectId: string): string {
   return `designer.previewRuntimeUser.${projectId}`;
 }
@@ -556,7 +612,7 @@ function persistPreviewRuntimeUser(projectId: string, runtimeUserId: string): vo
 }
 
 function restorePreviewRuntimeUser(projectId: string): void {
-  if (!projectId || selectedPreviewRuntimeUserId.value || typeof window === "undefined") return;
+  if (!projectId || typeof window === "undefined") return;
   try {
     const stored = window.localStorage.getItem(getPreviewRuntimeUserStorageKey(projectId)) || "";
     if (stored) {
@@ -567,10 +623,77 @@ function restorePreviewRuntimeUser(projectId: string): void {
   }
 }
 
+/**
+ * 优先使用工程初始化创建者对应的运行态用户；接口未显式标记时退回到可用用户的第一个。
+ * 这里同时兼容若干后端可能返回的创建者字段，避免壳层依赖单一命名。
+ */
+function resolveDefaultPreviewRuntimeUserId(
+  users: PreviewRuntimeUserOption[],
+  projectMeta: Record<string, unknown> | undefined,
+): string {
+  const adminUser = users.find(
+    (user) => normalizePreviewMetaId(user.username).toLowerCase() === "admin",
+  );
+  if (adminUser) return adminUser.id;
+
+  const creatorMarkedUser = users.find(
+    (user) => user.isProjectCreator || user.isCreator || user.isInitialCreator || user.isOwner,
+  );
+  if (creatorMarkedUser) return creatorMarkedUser.id;
+
+  const creatorId = normalizePreviewMetaId(
+    projectMeta?.creatorRuntimeUserId ??
+      projectMeta?.runtimeCreatorUserId ??
+      projectMeta?.creatorUserId ??
+      projectMeta?.createdBy ??
+      projectMeta?.ownerId,
+  );
+  if (creatorId) {
+    const matchedUser = users.find((user) =>
+      [user.id, user.userId, user.sourceUserId, user.platformUserId, user.createdBy]
+        .map(normalizePreviewMetaId)
+        .includes(creatorId),
+    );
+    if (matchedUser) return matchedUser.id;
+  }
+
+  return users[0]?.id || "";
+}
+
+function ensureDefaultPreviewRuntimeUser(): void {
+  const projectMeta = (route.meta as DesignerRouteProjectMeta).project as
+    | (DesignerRouteProjectMeta["project"] & Record<string, unknown>)
+    | undefined;
+  const projectId = projectMeta?.id || editorStore.projectId;
+  if (!projectId) return;
+  const activeUsers = getActivePreviewUsers();
+  if (activeUsers.length === 0) return;
+  const selectedId = selectedPreviewRuntimeUserId.value;
+  if (selectedId && activeUsers.some((user) => user.id === selectedId)) {
+    return;
+  }
+  const defaultUserId = resolveDefaultPreviewRuntimeUserId(activeUsers, projectMeta);
+  if (defaultUserId) {
+    editorStore.setSelectedPreviewRuntimeUserId(defaultUserId);
+    persistPreviewRuntimeUser(projectId, defaultUserId);
+  }
+}
+
 function handlePreviewUserChange(runtimeUserId: string): void {
   const projectId = (route.meta as DesignerRouteProjectMeta).project?.id || editorStore.projectId;
   editorStore.setSelectedPreviewRuntimeUserId(runtimeUserId);
   persistPreviewRuntimeUser(projectId, runtimeUserId);
+}
+
+async function handleRefreshPreviewUsers(): Promise<void> {
+  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id || editorStore.projectId;
+  if (!projectId) return;
+  try {
+    await editorStore.loadProjectRuntimeUsers(projectId);
+    ensureDefaultPreviewRuntimeUser();
+  } catch {
+    // 预览身份刷新失败时保持当前缓存，避免打开下拉时打断编辑流程。
+  }
 }
 
 function handlePreview() {
@@ -583,13 +706,6 @@ function handlePreview() {
       previewUserId: selectedPreviewRuntimeUserId.value || undefined,
     },
   });
-}
-
-/**
- * 应用预览（占位）
- */
-function handlePreviewApp() {
-  ElMessage.info(t("message.appPreviewWip"));
 }
 
 /**
@@ -620,10 +736,21 @@ function handleViewChange(key: string) {
   activeViewKey.value = key;
   const targetView = viewPresets.find((preset) => preset.key === key);
   if (!targetView || !currentPage.value) return;
+  const currentConfig = (currentPage.value.config ?? {}) as Partial<PageConfig>;
+  const presetKey = targetView.key as Exclude<
+    NonNullable<PageConfig["viewport"]>["preset"],
+    undefined
+  >;
   const nextConfig = {
-    ...currentPage.value.config,
+    ...currentConfig,
     width: targetView.width,
     height: targetView.height,
+    viewport: {
+      ...(currentConfig.viewport ?? {}),
+      preset: presetKey,
+      width: targetView.width,
+      height: targetView.height,
+    },
   };
   editorStore.updateCurrentPage({ config: nextConfig });
 }
@@ -631,9 +758,16 @@ function handleViewChange(key: string) {
 function handleApplyCustomSize({ width, height }: { width: number; height: number }) {
   const page = currentPageSnapshot.value;
   if (!page) return;
+  const pageConfig = (page.config ?? {}) as Partial<PageConfig>;
   const nextConfig = mergePageConfig(page.config, {
     width: Math.round(width),
     height: Math.round(height),
+    viewport: {
+      ...(pageConfig.viewport ?? {}),
+      preset: "custom",
+      width: Math.round(width),
+      height: Math.round(height),
+    },
   });
   activeViewKey.value = "custom";
   editorStore.updateCurrentPage({ config: nextConfig });
@@ -647,7 +781,8 @@ async function handleToggleLock() {
   if (!result) return;
 
   if (result.success) {
-    const message = result.action === "release" ? t("message.pageUnlocked") : t("message.pageLocked");
+    const message =
+      result.action === "release" ? t("message.pageUnlocked") : t("message.pageLocked");
     ElMessage.success(message);
     return;
   }
@@ -747,8 +882,8 @@ function handleFitCanvas() {
 }
 
 /**
- * 计算适配当前工作区的推荐缩放比例
- * 规则与参考页保持一致：能 100% 展示时保持 100%，不足时自动缩放到刚好适配
+ * 计算适配当前工作区的推荐缩放比例。
+ * 使用整体等比 fit：min(scaleX, scaleY)，保证横向不溢出且画布不变形。
  * @returns {number}
  */
 function getRecommendedZoom() {
@@ -760,7 +895,6 @@ function getRecommendedZoom() {
   const availableWidth = Math.max(1, rect.width - AUTO_FIT_PADDING);
   const availableHeight = Math.max(1, rect.height - AUTO_FIT_PADDING);
   const fitZoom = Math.min(
-    1,
     availableWidth / canvasWidth.value,
     availableHeight / canvasHeight.value,
   );
@@ -1002,6 +1136,8 @@ function handleClearCanvas() {
 watch(
   [
     currentPageId,
+    () => getCurrentPageConfig().viewport?.width,
+    () => getCurrentPageConfig().viewport?.height,
     () => currentPageSnapshot.value?.config?.width,
     () => currentPageSnapshot.value?.config?.height,
   ],
@@ -1019,6 +1155,14 @@ watch([leftPanelWidth, rightPanelWidth], () => {
   persistDockPanelWidths();
 });
 
+watch(
+  [runtimeUsers, selectedPreviewRuntimeUserId],
+  () => {
+    ensureDefaultPreviewRuntimeUser();
+  },
+  { immediate: true, deep: true },
+);
+
 /**
  * 加载工程数据
  */
@@ -1026,7 +1170,9 @@ async function loadProject() {
   const project = (route.meta as DesignerRouteProjectMeta).project;
   if (!project?.id) return;
   if (editorStore.projectId === project.id && editorStore.doc) {
+    await handleRefreshPreviewUsers();
     restorePreviewRuntimeUser(project.id);
+    ensureDefaultPreviewRuntimeUser();
     return;
   }
   const result = await editorStore.loadProject(project.id);
@@ -1035,6 +1181,7 @@ async function loadProject() {
     return;
   }
   restorePreviewRuntimeUser(project.id);
+  ensureDefaultPreviewRuntimeUser();
   const targetPageId = String(route.query.pageId || "");
   if (targetPageId) {
     await editorStore.setCurrentPage(targetPageId);
@@ -1095,7 +1242,6 @@ onBeforeUnmount(() => {
       @undo="handleUndo"
       @redo="handleRedo"
       @preview="handlePreview"
-      @preview-app="handlePreviewApp"
       @save="handleSave"
       @export="handleExport"
       @toggle-lock="handleToggleLock"
@@ -1120,6 +1266,7 @@ onBeforeUnmount(() => {
       @paste="handlePaste"
       @delete-selected="handleDeleteSelected"
       @preview-user-change="handlePreviewUserChange"
+      @refresh-preview-users="handleRefreshPreviewUsers"
     />
 
     <SelectionToolbar v-if="hasSelection && hasPages" />
@@ -1141,7 +1288,7 @@ onBeforeUnmount(() => {
             :title="leftPanelTitle"
             :floating="leftFloating"
             :width="leftPanelWidth"
-            :min-width="MIN_DOCK_PANEL_WIDTH"
+            :min-width="LEFT_MIN_DOCK_PANEL_WIDTH"
             :max-width="MAX_DOCK_PANEL_WIDTH"
             @close="handleLeftClose"
             @toggle-floating="toggleLeftFloating"
@@ -1172,10 +1319,13 @@ onBeforeUnmount(() => {
             <!-- 画布容器 -->
             <template v-if="hasPages">
               <CanvasContainer
+                :key="canvasContainerKey"
                 :width="canvasWidth"
                 :height="canvasHeight"
                 :zoom="zoom"
                 :show-ruler="showRuler"
+                :show-grid="showGrid"
+                :enable-snap="enableSnap"
                 :view-reset-token="viewResetToken"
                 @zoom-change="handleZoomChange"
               />
@@ -1193,54 +1343,6 @@ onBeforeUnmount(() => {
                 </el-button>
               </div>
             </div>
-
-            <DockPanel
-              v-if="leftActiveKey && leftFloating"
-              side="left"
-              :title="leftPanelTitle"
-              :floating="leftFloating"
-              :width="leftPanelWidth"
-              :min-width="MIN_DOCK_PANEL_WIDTH"
-              :max-width="MAX_DOCK_PANEL_WIDTH"
-              @close="handleLeftClose"
-              @toggle-floating="toggleLeftFloating"
-              @resize="handleLeftPanelResize"
-            >
-              <template #actions>
-                <el-tooltip v-if="leftActiveKey === 'pages'" :content="t('shell.newPage')">
-                  <el-button size="small" text @click="handlePageCreate">
-                    <IconEpPlus />
-                  </el-button>
-                </el-tooltip>
-                <el-tooltip v-if="leftActiveKey === 'pages'" :content="t('shell.importPage')">
-                  <el-button size="small" text @click="handlePageImport">
-                    <IconEpUpload />
-                  </el-button>
-                </el-tooltip>
-              </template>
-              <component
-                :is="leftPanelComponent"
-                :key="`left-floating-panel-${leftActiveKey}`"
-                v-bind="leftPanelProps"
-                ref="leftPanelRef"
-                @update:drawing-tool="setDrawingTool"
-              />
-            </DockPanel>
-
-            <DockPanel
-              v-if="rightActiveKey && rightFloating"
-              side="right"
-              :title="rightPanelTitle"
-              :floating="rightFloating"
-              :width="rightPanelWidth"
-              :min-width="MIN_DOCK_PANEL_WIDTH"
-              :max-width="MAX_DOCK_PANEL_WIDTH"
-              @close="handleRightClose"
-              @toggle-floating="toggleRightFloating"
-              @resize="handleRightPanelResize"
-            >
-              <component :is="rightPanelComponent" />
-            </DockPanel>
           </div>
 
           <DockPanel
@@ -1249,7 +1351,55 @@ onBeforeUnmount(() => {
             :title="rightPanelTitle"
             :floating="rightFloating"
             :width="rightPanelWidth"
-            :min-width="MIN_DOCK_PANEL_WIDTH"
+            :min-width="RIGHT_MIN_DOCK_PANEL_WIDTH"
+            :max-width="MAX_DOCK_PANEL_WIDTH"
+            @close="handleRightClose"
+            @toggle-floating="toggleRightFloating"
+            @resize="handleRightPanelResize"
+          >
+            <component :is="rightPanelComponent" />
+          </DockPanel>
+
+          <DockPanel
+            v-if="leftActiveKey && leftFloating"
+            side="left"
+            :title="leftPanelTitle"
+            :floating="leftFloating"
+            :width="leftPanelWidth"
+            :min-width="LEFT_MIN_DOCK_PANEL_WIDTH"
+            :max-width="MAX_DOCK_PANEL_WIDTH"
+            @close="handleLeftClose"
+            @toggle-floating="toggleLeftFloating"
+            @resize="handleLeftPanelResize"
+          >
+            <template #actions>
+              <el-tooltip v-if="leftActiveKey === 'pages'" :content="t('shell.newPage')">
+                <el-button size="small" text @click="handlePageCreate">
+                  <IconEpPlus />
+                </el-button>
+              </el-tooltip>
+              <el-tooltip v-if="leftActiveKey === 'pages'" :content="t('shell.importPage')">
+                <el-button size="small" text @click="handlePageImport">
+                  <IconEpUpload />
+                </el-button>
+              </el-tooltip>
+            </template>
+            <component
+              :is="leftPanelComponent"
+              :key="`left-floating-panel-${leftActiveKey}`"
+              v-bind="leftPanelProps"
+              ref="leftPanelRef"
+              @update:drawing-tool="setDrawingTool"
+            />
+          </DockPanel>
+
+          <DockPanel
+            v-if="rightActiveKey && rightFloating"
+            side="right"
+            :title="rightPanelTitle"
+            :floating="rightFloating"
+            :width="rightPanelWidth"
+            :min-width="RIGHT_MIN_DOCK_PANEL_WIDTH"
             :max-width="MAX_DOCK_PANEL_WIDTH"
             @close="handleRightClose"
             @toggle-floating="toggleRightFloating"
@@ -1322,7 +1472,9 @@ onBeforeUnmount(() => {
               </span>
               <span class="status-sep">|</span>
             </template>
-            <span class="status-item">{{ t("shell.selectedCount", { count: selectionCount }) }}</span>
+            <span class="status-item">{{
+              t("shell.selectedCount", { count: selectionCount })
+            }}</span>
             <span class="status-sep">|</span>
             <span class="status-item">{{ t("shell.totalCount", { count: totalNodeCount }) }}</span>
             <template v-if="hoveredNodeType">
@@ -1355,30 +1507,31 @@ onBeforeUnmount(() => {
 
 .designer-workspace-main {
   display: flex;
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #eef1f5;
+  background: var(--designer-workspace-bg);
 }
 
 .designer-canvas {
-  background: #f5f7fb;
+  background: var(--designer-canvas-bg);
 }
 
 /* ====== 底部工具栏容器 ====== */
 .designer-bottom-toolbar {
   flex-shrink: 0;
-  height: 34px;
-  border-top: 1px solid var(--designer-border-soft);
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  height: 32px;
+  border-top: 1px solid var(--designer-border-color);
+  background: var(--designer-shell-surface);
   display: flex;
   align-items: stretch;
   overflow: hidden;
 }
 
 .dark .designer-bottom-toolbar {
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  background: var(--designer-shell-surface);
   border-top-color: var(--designer-border-strong);
 }
 
@@ -1397,6 +1550,15 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+.page-tabs-bar :deep(.el-tabs) {
+  height: 100%;
+  overflow: hidden;
+}
+
+.page-tabs-bar :deep(.el-tabs__content) {
+  display: none;
+}
+
 .dark .page-tabs-bar {
   background: transparent;
 }
@@ -1408,7 +1570,8 @@ onBeforeUnmount(() => {
 }
 
 .page-tabs-bar :deep(.el-tabs__nav-wrap) {
-  padding: 0 2px 0 0;
+  height: 100%;
+  padding: 0 4px;
 }
 
 .page-tabs-bar :deep(.el-tabs__nav-wrap::after) {
@@ -1451,36 +1614,54 @@ onBeforeUnmount(() => {
   border: none;
   height: 100%;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  gap: 2px;
 }
 
 .page-tabs-bar :deep(.el-tabs__item) {
-  height: 28px;
-  line-height: 28px;
+  height: 24px;
+  line-height: 24px;
   font-size: 12px;
   border: 1px solid transparent !important;
-  border-bottom: none !important;
   background: transparent;
-  color: #64748b;
-  padding: 0 14px !important;
-  border-radius: 6px 6px 0 0;
-  margin-right: 2px;
-  transition: all 0.18s ease;
+  color: var(--designer-text-secondary);
+  padding: 0 10px !important;
+  border-radius: var(--designer-radius-md);
+  margin: 0;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
   position: relative;
 }
 
 .page-tabs-bar :deep(.el-tabs__item.is-active) {
-  background: var(--designer-shell-surface);
-  color: #1e293b;
-  border-color: var(--designer-border-soft) !important;
-  border-bottom-color: transparent !important;
+  background: var(--designer-active-surface);
+  color: var(--designer-primary-text);
+  border-color: var(--designer-primary-border) !important;
   font-weight: 500;
-  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
 }
 
 .page-tabs-bar :deep(.el-tabs__item:not(.is-active):hover) {
-  color: var(--designer-text-secondary);
-  background: rgba(148, 163, 184, 0.12);
+  color: var(--designer-text-primary);
+  background: var(--designer-hover-surface);
+}
+
+.page-tabs-bar :deep(.el-tabs__item .is-icon-close) {
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: var(--designer-radius-sm);
+  color: var(--designer-text-muted);
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.page-tabs-bar :deep(.el-tabs__item .is-icon-close:hover) {
+  background: var(--designer-danger-surface);
+  color: var(--designer-danger-text);
 }
 
 .dark .page-tabs-bar :deep(.el-tabs__item) {
@@ -1488,10 +1669,10 @@ onBeforeUnmount(() => {
 }
 
 .dark .page-tabs-bar :deep(.el-tabs__item.is-active) {
-  background: #1e293b;
-  color: #e2e8f0;
-  border-color: var(--designer-border-strong) !important;
-  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.2);
+  background: var(--designer-active-surface);
+  color: var(--designer-primary-text);
+  border-color: var(--designer-primary-border) !important;
+  box-shadow: none;
 }
 
 .dark .page-tabs-bar :deep(.el-tabs__item:not(.is-active):hover) {
@@ -1503,7 +1684,8 @@ onBeforeUnmount(() => {
 .page-tab-label {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .page-tab-label .tab-icon {
@@ -1518,7 +1700,7 @@ onBeforeUnmount(() => {
 }
 
 .page-tab-label .tab-name {
-  max-width: 120px;
+  max-width: 112px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1596,10 +1778,10 @@ onBeforeUnmount(() => {
 
 /* ====== 新增页面按钮 / 空状态 ====== */
 .page-tabs-add-btn {
-  width: 22px;
-  height: 22px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 5px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--designer-radius-md);
   background: transparent;
   color: var(--designer-text-muted);
   padding: 0;
@@ -1608,9 +1790,8 @@ onBeforeUnmount(() => {
 
 .page-tabs-add-btn:hover {
   border-color: var(--designer-primary);
-  border-style: solid;
   color: var(--designer-primary);
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--designer-hover-surface);
 }
 
 .page-tabs-empty {
@@ -1620,26 +1801,29 @@ onBeforeUnmount(() => {
   gap: 8px;
   color: var(--designer-text-muted);
   font-size: 12px;
-  padding: 0 8px;
+  padding: 0 10px;
 }
 
 .page-tabs-bar :deep(.el-tabs__new-tab) {
-  margin: 0 4px 0 2px;
-  width: 22px;
-  height: 22px;
-  line-height: 20px;
-  border-radius: 5px;
-  border: 1px dashed #cbd5e1;
+  align-self: center;
+  margin: 0 4px;
+  width: 24px;
+  height: 24px;
+  line-height: 22px;
+  border-radius: var(--designer-radius-md);
+  border: 1px solid transparent;
   color: var(--designer-text-muted);
   background: transparent;
-  transition: all 0.15s ease;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 
 .page-tabs-bar :deep(.el-tabs__new-tab:hover) {
   border-color: var(--designer-primary);
-  border-style: solid;
   color: var(--designer-primary);
-  background: rgba(59, 130, 246, 0.06);
+  background: var(--designer-hover-surface);
 }
 
 /* 空页面提示 */

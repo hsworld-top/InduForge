@@ -55,12 +55,7 @@
                 >
                   {{ t('projectManagement.runtimeAccess.users.create') }}
                 </el-button>
-                <el-button
-                  v-else
-                  type="primary"
-                  round
-                  @click="openCreateRoleEditor"
-                >
+                <el-button v-else type="primary" round @click="openCreateRoleEditor">
                   {{ t('projectManagement.runtimeAccess.roles.create') }}
                 </el-button>
                 <el-button round @click="refreshAll">
@@ -69,10 +64,7 @@
               </div>
             </div>
 
-            <section
-              v-if="activeTab === RUNTIME_ACCESS_TABS.USERS"
-              class="runtime-access-section"
-            >
+            <section v-if="activeTab === RUNTIME_ACCESS_TABS.USERS" class="runtime-access-section">
               <div class="runtime-access-table-wrap">
                 <el-table
                   :data="runtimeUsers"
@@ -95,10 +87,7 @@
                     min-width="220"
                   >
                     <template #default="{ row }">
-                      <div
-                        v-if="resolveUserRoleNames(row).length > 0"
-                        class="runtime-access-tags"
-                      >
+                      <div v-if="resolveUserRoleNames(row).length > 0" class="runtime-access-tags">
                         <el-tag
                           v-for="roleName in resolveUserRoleNames(row)"
                           :key="roleName"
@@ -123,16 +112,8 @@
                     </template>
                   </el-table-column>
                   <el-table-column
-                    :label="t('projectManagement.runtimeAccess.users.lastLoginAt')"
-                    min-width="180"
-                  >
-                    <template #default="{ row }">
-                      {{ formatLastLogin(row.lastLoginAt) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
                     :label="t('projectManagement.runtimeAccess.users.actions')"
-                    min-width="300"
+                    min-width="360"
                     fixed="right"
                   >
                     <template #default="{ row }">
@@ -140,15 +121,31 @@
                         <el-button size="small" @click="openEditUserEditor(row)">
                           {{ t('projectManagement.runtimeAccess.users.bindRoles') }}
                         </el-button>
-                        <el-button size="small" @click="toggleRuntimeUserStatus(row)">
+                        <el-button
+                          size="small"
+                          :disabled="isDefaultRuntimeAdminUser(row)"
+                          @click="toggleRuntimeUserStatus(row)"
+                        >
                           {{
                             row.status === 'active'
                               ? t('projectManagement.runtimeAccess.users.disable')
                               : t('projectManagement.runtimeAccess.users.enable')
                           }}
                         </el-button>
-                        <el-button size="small" type="warning" @click="resetRuntimeUserPassword(row)">
+                        <el-button
+                          size="small"
+                          type="warning"
+                          @click="resetRuntimeUserPassword(row)"
+                        >
                           {{ t('projectManagement.runtimeAccess.users.resetPassword') }}
+                        </el-button>
+                        <el-button
+                          size="small"
+                          type="danger"
+                          :disabled="isDefaultRuntimeAdminUser(row)"
+                          @click="deleteRuntimeUser(row)"
+                        >
+                          {{ t('projectManagement.runtimeAccess.users.delete') }}
                         </el-button>
                       </div>
                     </template>
@@ -157,10 +154,7 @@
               </div>
             </section>
 
-            <section
-              v-else
-              class="runtime-access-section"
-            >
+            <section v-else class="runtime-access-section">
               <div class="runtime-access-table-wrap">
                 <el-table
                   :data="runtimeRoles"
@@ -208,11 +202,6 @@
                     width="110"
                   />
                   <el-table-column
-                    prop="grantCount"
-                    :label="t('projectManagement.runtimeAccess.roles.grantCount')"
-                    width="110"
-                  />
-                  <el-table-column
                     :label="t('projectManagement.runtimeAccess.roles.actions')"
                     min-width="220"
                     fixed="right"
@@ -240,7 +229,6 @@
         </template>
       </div>
     </div>
-
   </el-dialog>
 
   <el-dialog
@@ -444,6 +432,7 @@ const {
   closeUserEditor,
   submitUserForm,
   toggleRuntimeUserStatus,
+  deleteRuntimeUser,
   resetRuntimeUserPassword,
   openCreateRoleEditor,
   openEditRoleEditor,
@@ -452,6 +441,7 @@ const {
   deleteRuntimeRole,
   resolveUserRoleNames,
   resolveRuntimeAccessStatusMeta,
+  isDefaultRuntimeAdminUser,
 } = useProjectRuntimeAccessState({
   visibleRef: dialogVisible,
   projectRef: toRef(props, 'project'),
@@ -464,8 +454,6 @@ const {
   message: ElMessage,
   messageBox: ElMessageBox,
 })
-
-const formatLastLogin = (value: string | null | undefined) => value || '--'
 </script>
 
 <style scoped>
