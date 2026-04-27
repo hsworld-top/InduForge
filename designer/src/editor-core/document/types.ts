@@ -919,6 +919,8 @@ export interface PageConfig {
   enableSnap?: boolean;
   autoFit?: boolean;
   background?: BackgroundConfig;
+  /** 页面级 CSS 样式配置，编辑态和预览态都会注入到页面画布中。 */
+  styleConfig?: string;
   transition?: {
     type?: "none" | "fade" | "slide" | "zoom";
   };

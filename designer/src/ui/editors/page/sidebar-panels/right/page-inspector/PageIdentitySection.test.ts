@@ -27,6 +27,7 @@ function createForm(): PageInspectorFormState {
     backgroundSize: "cover",
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
+    styleConfig: "",
     transitionType: "none",
     openMode: "replace",
     popupWidth: 800,

@@ -17,6 +17,7 @@ import {
 } from "@/editor-core/descriptors/registry";
 import { componentRegistry } from "@/editor-core";
 import { normalizeStyleObject, resolveTextPropStyle } from "@/editor-core/utils/style-utils";
+import { elevateStyleConfigPriority, replaceStyleConfigPlaceholders } from "../style-config-css";
 
 type StyleValue = CSSProperties[keyof CSSProperties] | any;
 type StyleMap = Record<string, StyleValue>;
@@ -25,6 +26,8 @@ type LooseRecord = Record<string, any>;
 const EL_CONTAINER_REGION_PRESET_TOP_MAIN = "top-main";
 const EL_CONTAINER_REGION_PRESET_ASIDE_FULL_HEIGHT = "aside-full-height";
 const EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN = "aside-between";
+const PANEL_CONTAINER_TYPES = new Set(["Tabs", "Collapse"]);
+const AUTO_SIZE_PANEL_LAYOUT_TYPES = new Set(["HorizontalLayout", "VerticalLayout"]);
 
 interface NodeStyleProps {
   readonly?: boolean;
@@ -64,6 +67,60 @@ function resolveElContainerRegionPreset(
     return value;
   }
   return EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN;
+}
+
+/**
+ * 是否明确的数值尺寸。
+ * 面板内布局只有手动设置为数值或 px 时才固定高度，百分比/auto 仍按内容自适应。
+ */
+function isExplicitNumericSize(value: unknown): boolean {
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return /^-?\d+(\.\d+)?(px)?$/i.test(text);
+}
+
+function isAutoSizeValue(value: unknown): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "auto";
+}
+
+/**
+ * 折叠面板/选项卡内的水平、垂直布局默认跟随内容高度，避免旧数据中的 100% 高度撑出空白。
+ */
+function shouldAutoSizePanelLayout(
+  currentNode: ComponentNode | null | undefined,
+  parentNode: ComponentNode | null | undefined,
+): boolean {
+  return Boolean(
+    currentNode?.type &&
+    parentNode?.type &&
+    AUTO_SIZE_PANEL_LAYOUT_TYPES.has(currentNode.type) &&
+    PANEL_CONTAINER_TYPES.has(parentNode.type),
+  );
+}
+
+function applyPanelLayoutAutoSize(style: StyleMap, customStyle: StyleMap): void {
+  const hasFixedWidth = isExplicitNumericSize(customStyle.width);
+  const hasFixedHeight = isExplicitNumericSize(customStyle.height);
+  const hasFixedMinHeight = isExplicitNumericSize(customStyle.minHeight);
+  if (!hasFixedWidth) {
+    style.width = "100%";
+    style.maxWidth = "100%";
+  }
+  style.boxSizing = "border-box";
+  style.alignSelf = "stretch";
+  style.flex = "0 0 auto";
+  if (!hasFixedMinHeight) {
+    style.minHeight = "0";
+  }
+  if (!hasFixedHeight) {
+    style.height = "auto";
+  }
+  if (!style.display) {
+    style.display = "block";
+  }
 }
 
 /**
@@ -173,11 +230,37 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
         const parentDescriptor = getDescriptor(parentNode.type);
         const fl = parentDescriptor?.childFlowLayout as LooseRecord | null | undefined;
         const currentFlow = currentNode.flowLayout as LooseRecord | null | undefined;
+        const customStyle = normalizeStyleObject(currentNode.style || {}) as StyleMap;
+        const flexDirection = parentDescriptor?.flexDirection;
+        const fixedMainSize =
+          flexDirection === "row"
+            ? customStyle.width
+            : flexDirection === "column"
+              ? customStyle.height
+              : undefined;
+        const fixedCrossSize =
+          flexDirection === "row"
+            ? customStyle.height
+            : flexDirection === "column"
+              ? customStyle.width
+              : undefined;
+        const hasFixedMainSize = isExplicitNumericSize(fixedMainSize);
+        const hasFixedCrossSize = isExplicitNumericSize(fixedCrossSize);
         style.position = "relative";
-        style.flexGrow = currentFlow?.grow ?? fl?.grow ?? 1;
-        style.flexShrink = currentFlow?.shrink ?? fl?.shrink ?? 1;
-        style.flexBasis = currentFlow?.basis ?? fl?.basis ?? "0%";
-        style.alignSelf = style.alignSelf ?? "stretch";
+        if (hasFixedMainSize) {
+          style.flexGrow = 0;
+          style.flexShrink = 0;
+          style.flexBasis = fixedMainSize;
+        } else {
+          style.flexGrow = currentFlow?.grow ?? fl?.grow ?? 1;
+          style.flexShrink = currentFlow?.shrink ?? fl?.shrink ?? 1;
+          style.flexBasis = currentFlow?.basis ?? fl?.basis ?? "0%";
+        }
+        if (hasFixedCrossSize && !currentFlow?.alignSelf) {
+          style.alignSelf = "flex-start";
+        } else {
+          style.alignSelf = style.alignSelf ?? "stretch";
+        }
         style.minWidth = style.minWidth ?? "0";
         style.minHeight = style.minHeight ?? "0";
         return style;
@@ -630,15 +713,23 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
           style.display = "block";
         }
       }
+      const isAutoPanelLayout = shouldAutoSizePanelLayout(nodeRef.value, parentNode);
       if (parentNode?.type === "Tabs") {
-        style.width = "100%";
-        style.height = "100%";
-        style.minHeight = "100%";
-        style.alignSelf = "stretch";
-        style.flex = "1 1 auto";
-        if (!style.display) {
-          style.display = "block";
+        if (isAutoPanelLayout) {
+          applyPanelLayoutAutoSize(style, customStyle);
+        } else {
+          style.width = "100%";
+          style.height = "100%";
+          style.minHeight = "100%";
+          style.alignSelf = "stretch";
+          style.flex = "1 1 auto";
+          if (!style.display) {
+            style.display = "block";
+          }
         }
+      }
+      if (parentNode?.type === "Collapse" && isAutoPanelLayout) {
+        applyPanelLayoutAutoSize(style, customStyle);
       }
       if (parentNode?.type === "ElCol" && isMovableRef.value) {
         style.width = "100%";
@@ -726,8 +817,12 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
         const parentDescriptor = getDescriptor(parentNode.type);
         if (parentDescriptor?.childStyle) {
           const childStyle = (parentDescriptor.childStyle(parentNode.type) || {}) as LooseRecord;
-          if (childStyle.width && !style.width) style.width = childStyle.width;
-          if (childStyle.height && !style.height) style.height = childStyle.height;
+          if (childStyle.width && (!style.width || isAutoSizeValue(style.width))) {
+            style.width = childStyle.width;
+          }
+          if (childStyle.height && (!style.height || isAutoSizeValue(style.height))) {
+            style.height = childStyle.height;
+          }
           if (childStyle.minWidth && !style.minWidth) {
             style.minWidth = childStyle.minWidth;
           }
@@ -924,7 +1019,11 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
     const syncStyleElement = () => {
       if (typeof document === "undefined") return;
       const nodeId = nodeRef.value?.id;
-      const cssText = styleConfigCssRef.value;
+      const cssText = elevateStyleConfigPriority(
+        replaceStyleConfigPlaceholders(styleConfigCssRef.value, {
+          nodeId: nodeId || null,
+        }),
+      );
 
       if (!nodeId || !cssText) {
         if (styleElementRef.value?.parentNode) {

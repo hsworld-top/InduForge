@@ -32,6 +32,7 @@ describe("page-inspector-config", () => {
       backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundRepeat: "no-repeat",
+      styleConfig: ".page-title { color: red; }",
       transitionType: "fade",
       openMode: "popup",
       popupWidth: 800,
@@ -99,6 +100,7 @@ describe("page-inspector-config", () => {
         kind: "gradient",
         value: "linear-gradient(#fff,#000)",
       },
+      styleConfig: ".page-title { color: red; }",
       runtimeAccess: {
         enabled: true,
         allowedRoles: [{ roleId: "role-1", roleCode: "PROJECT_ADMIN", roleName: "管理员" }],
@@ -141,6 +143,7 @@ describe("page-inspector-config", () => {
       backgroundSize: "cover",
       backgroundPosition: "",
       backgroundRepeat: "no-repeat",
+      styleConfig: "",
       transitionType: "none",
       openMode: "normal",
       popupWidth: 0,

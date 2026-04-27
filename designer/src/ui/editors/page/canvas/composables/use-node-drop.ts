@@ -312,10 +312,11 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   const applyScopedKeyForInsertedNode = (
     inserted: ComponentNode | null,
     targetNode: ComponentNode | null | undefined,
+    scopedKey?: string | null,
   ) => {
     if (!inserted || !targetNode) return;
     if (targetNode.type === "Tabs") {
-      const tabKey = resolveActiveTabKey();
+      const tabKey = String(scopedKey || resolveActiveTabKey() || "").trim();
       if (tabKey) {
         editorStore.updateNode(inserted.id, {
           props: { ...(inserted.props || {}), tabKey: String(tabKey) },
@@ -324,7 +325,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       return;
     }
     if (targetNode.type === "Collapse") {
-      const collapseKey = resolveActiveCollapseKey();
+      const collapseKey = String(scopedKey || resolveActiveCollapseKey() || "").trim();
       if (collapseKey) {
         editorStore.updateNode(inserted.id, {
           props: { ...(inserted.props || {}), collapseKey: String(collapseKey) },
@@ -380,7 +381,11 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
   const colInsertEdgeThreshold = 8;
 
   const insertLineBox = computed(
-    () => rowInsertInfo.value?.lineBox || layoutInsertInfo.value?.lineBox || genericInsertLineBox.value || null,
+    () =>
+      rowInsertInfo.value?.lineBox ||
+      layoutInsertInfo.value?.lineBox ||
+      genericInsertLineBox.value ||
+      null,
   );
   const altKeyPressed = ref(false);
 
@@ -1316,8 +1321,10 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
       const skipFlexInsertForLayout =
         targetNode?.type === "ElLayout" && (layoutInsertSnapshot || layoutResolvedByPoint);
+      let scopedDropKey: string | null = null;
       if (targetNode?.type === "Tabs" || targetNode?.type === "Collapse") {
         const scopedMeta = resolveScopedSlotMeta(targetNode, event);
+        scopedDropKey = scopedMeta?.key || null;
         if (scopedMeta?.hostElement) {
           targetElement = scopedMeta.hostElement;
           if (scopedMeta.childIds.length > 0) {
@@ -1444,7 +1451,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       if (!inserted) {
         notifyInsertFailure();
       }
-      applyScopedKeyForInsertedNode(inserted, targetNode);
+      applyScopedKeyForInsertedNode(inserted, targetNode, scopedDropKey);
       endDrag();
     } catch {
       let type = assetComponentType || fallbackType;
@@ -1683,8 +1690,10 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
       const skipFlexInsertForLayout =
         targetNode?.type === "ElLayout" && (layoutInsertSnapshot || layoutResolvedByPoint);
+      let scopedDropKey: string | null = null;
       if (targetNode?.type === "Tabs" || targetNode?.type === "Collapse") {
         const scopedMeta = resolveScopedSlotMeta(targetNode, event);
+        scopedDropKey = scopedMeta?.key || null;
         if (scopedMeta?.hostElement) {
           targetElement = scopedMeta.hostElement;
           if (scopedMeta.childIds.length > 0) {
@@ -1809,7 +1818,7 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
       if (!inserted) {
         notifyInsertFailure();
       }
-      applyScopedKeyForInsertedNode(inserted, targetNode);
+      applyScopedKeyForInsertedNode(inserted, targetNode, scopedDropKey);
       endDrag();
     }
   };
@@ -1833,4 +1842,3 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 }
 
 export default { useNodeDrop };
-

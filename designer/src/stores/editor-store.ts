@@ -1526,6 +1526,7 @@ export const useEditorStore = defineStore("editor", () => {
     const isTabsContainer = parentNode.type === "Tabs";
     const isCollapseContainer = parentNode.type === "Collapse";
     const isTabbedLikeContainer = isTabsContainer || isCollapseContainer;
+    const isAutoSizePanelLayout = type === "HorizontalLayout" || type === "VerticalLayout";
     if (isRegionContainer) {
       // 区域容器内默认填满
       if (parentNode.type === "ElCol") {
@@ -1549,12 +1550,18 @@ export const useEditorStore = defineStore("editor", () => {
       }
     }
     if (isTabbedLikeContainer) {
-      const shouldFillContainer = Boolean(isLayoutContainer || manifest?.isContainer);
-      nodeStyle = {
-        ...nodeStyle,
-        ...(shouldFillContainer ? { width: "100%", height: "100%" } : { height: "auto" }),
-      };
-      if (shouldFillContainer && isLayoutContainer) {
+      const shouldFillContainer = Boolean(manifest?.isContainer);
+      nodeStyle = isAutoSizePanelLayout
+        ? {
+            ...nodeStyle,
+            width: "100%",
+            height: "auto",
+          }
+        : {
+            ...nodeStyle,
+            ...(shouldFillContainer ? { width: "100%", height: "100%" } : { height: "auto" }),
+          };
+      if (isLayoutContainer) {
         delete nodeStyle.minHeight;
         delete nodeStyle.minWidth;
       }

@@ -15,6 +15,7 @@ import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker"
  * 封装 monaco-editor，支持 v-model、主题切换、自定义补全、错误标记
  */
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import "monaco-editor/min/vs/editor/editor.main.css";
 import "monaco-editor/esm/vs/basic-languages/css/css.contribution";
 import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution";
@@ -57,9 +58,12 @@ const emit = defineEmits<{
   (event: "markers", markers: unknown[]): void;
 }>();
 
+const { t } = useI18n();
 const monacoCompatLanguages = monaco.languages as typeof monaco.languages & Record<string, any>;
 
 const editorContainerRef = ref<HTMLElement | null>(null);
+const editorSurfaceRef = ref<HTMLElement | null>(null);
+const contextMenuRef = ref<HTMLElement | null>(null);
 let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 let isInternalUpdate = false;
 let jsFormatterRegistered = false;
@@ -96,6 +100,11 @@ let latestMarkers: Array<{
   message: string;
 }> = [];
 let extraLibDisposable: monaco.IDisposable | null = null;
+const contextMenuState = ref({
+  visible: false,
+  left: 0,
+  top: 0,
+});
 interface PrettierModuleLike {
   format: (code: string, options?: unknown) => Promise<string>;
   plugins: unknown[];
@@ -142,6 +151,210 @@ async function runEditorAction(id: string) {
   } catch {
     return false;
   }
+}
+
+async function runFormatCommand(): Promise<void> {
+  const ok = await runEditorAction("editor.action.formatDocument");
+  if (!ok) void applyFormatEdits();
+}
+
+function hideEditorContextMenu(): void {
+  contextMenuState.value.visible = false;
+}
+
+function showEditorContextMenu(clientX: number, clientY: number): void {
+  const menuWidth = 212;
+  const menuHeight = 286;
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+  const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+  contextMenuState.value = {
+    visible: true,
+    left: Math.min(Math.max(8, clientX), Math.max(8, viewportWidth - menuWidth - 8)),
+    top:
+      clientY + menuHeight + 8 > viewportHeight
+        ? Math.max(8, clientY - menuHeight)
+        : Math.max(8, clientY),
+  };
+  requestAnimationFrame(() => {
+    const menu = contextMenuRef.value;
+    if (!menu || !contextMenuState.value.visible) return;
+    const rect = menu.getBoundingClientRect();
+    contextMenuState.value = {
+      ...contextMenuState.value,
+      left: Math.min(
+        Math.max(8, contextMenuState.value.left),
+        Math.max(8, viewportWidth - rect.width - 8),
+      ),
+      top:
+        clientY + rect.height + 8 > viewportHeight
+          ? Math.max(8, clientY - rect.height)
+          : Math.min(
+              Math.max(8, contextMenuState.value.top),
+              Math.max(8, viewportHeight - rect.height - 8),
+            ),
+    };
+  });
+}
+
+function getSelectedText(): string {
+  const model = editorInstance?.getModel();
+  const selection = editorInstance?.getSelection();
+  if (!model || !selection || selection.isEmpty()) return "";
+  return model.getValueInRange(selection);
+}
+
+function deleteSelection(): boolean {
+  const selection = editorInstance?.getSelection();
+  if (!editorInstance || !selection || selection.isEmpty()) return false;
+  editorInstance.pushUndoStop();
+  editorInstance.executeEdits("clipboard", [
+    { range: selection, text: "", forceMoveMarkers: true },
+  ]);
+  editorInstance.pushUndoStop();
+  return true;
+}
+
+async function writeClipboardText(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.top = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const ok = document.execCommand("copy");
+    textarea.remove();
+    if (ok) return true;
+  } catch {
+    // execCommand 在少数浏览器环境可能失败，继续尝试 Clipboard API。
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // 浏览器拒绝 Clipboard API 时视为复制失败。
+  }
+  return false;
+}
+
+async function runClipboardAction(actionId: string): Promise<boolean> {
+  editorInstance?.focus();
+  const selectedText = getSelectedText();
+  const isCut = actionId.includes("Cut");
+  if (selectedText && (await writeClipboardText(selectedText))) {
+    if (isCut) deleteSelection();
+    editorInstance?.focus();
+    return true;
+  }
+  if (await runEditorAction(actionId)) {
+    editorInstance?.focus();
+    return true;
+  }
+  return false;
+}
+
+async function runPasteAction(): Promise<boolean> {
+  editorInstance?.focus();
+  try {
+    const text = await navigator.clipboard?.readText?.();
+    if (text) {
+      insertTextAtSelection(text);
+      return true;
+    }
+  } catch {
+    // 右键按钮粘贴需要浏览器授权；若被拒绝，仍保持编辑器焦点，便于用户使用 Ctrl+V。
+  }
+  editorInstance?.focus();
+  return false;
+}
+
+function insertTextAtSelection(text: string): void {
+  if (!editorInstance || !text) return;
+  const selection = editorInstance.getSelection();
+  const position = editorInstance.getPosition();
+  if (!position) return;
+  const range =
+    selection ||
+    new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column);
+  editorInstance.pushUndoStop();
+  editorInstance.executeEdits("insert", [{ range, text, forceMoveMarkers: true }]);
+  editorInstance.pushUndoStop();
+  editorInstance.focus();
+}
+
+const editorContextMenuItems = [
+  {
+    key: "definition",
+    labelKey: "monacoEditor.contextMenu.definition",
+    shortcut: "Ctrl+F12",
+    action: () => runEditorAction("editor.action.revealDefinition"),
+  },
+  {
+    key: "references",
+    labelKey: "monacoEditor.contextMenu.references",
+    shortcut: "Shift+F12",
+    action: () => runEditorAction("editor.action.goToReferences"),
+  },
+  {
+    key: "symbol",
+    labelKey: "monacoEditor.contextMenu.symbol",
+    shortcut: "Ctrl+Shift+O",
+    action: () => runEditorAction("editor.action.quickOutline"),
+  },
+  {
+    key: "peek",
+    labelKey: "monacoEditor.contextMenu.peekDefinition",
+    shortcut: "",
+    action: () => runEditorAction("editor.action.peekDefinition"),
+  },
+  {
+    key: "rename",
+    labelKey: "monacoEditor.contextMenu.rename",
+    shortcut: "F2",
+    separatorBefore: true,
+    action: () => runEditorAction("editor.action.rename"),
+  },
+  {
+    key: "changeAll",
+    labelKey: "monacoEditor.contextMenu.changeAll",
+    shortcut: "Ctrl+F2",
+    action: () => runEditorAction("editor.action.changeAll"),
+  },
+  {
+    key: "format",
+    labelKey: "monacoEditor.contextMenu.format",
+    shortcut: "Shift+Alt+F",
+    action: () => runFormatCommand(),
+  },
+  {
+    key: "cut",
+    labelKey: "monacoEditor.contextMenu.cut",
+    shortcut: "",
+    separatorBefore: true,
+    action: () => runClipboardAction("editor.action.clipboardCutAction"),
+  },
+  {
+    key: "copy",
+    labelKey: "monacoEditor.contextMenu.copy",
+    shortcut: "",
+    action: () => runClipboardAction("editor.action.clipboardCopyAction"),
+  },
+  {
+    key: "paste",
+    labelKey: "monacoEditor.contextMenu.paste",
+    shortcut: "",
+    action: () => runPasteAction(),
+  },
+];
+
+async function handleEditorContextMenuAction(item: (typeof editorContextMenuItems)[number]) {
+  hideEditorContextMenu();
+  await item.action();
 }
 
 const mediaQuery =
@@ -225,6 +438,7 @@ function baseOptions(): monaco.editor.IStandaloneEditorConstructionOptions {
     tabCompletion: "on",
     snippetSuggestions: "inline",
     suggestSelection: "first",
+    contextmenu: false,
     parameterHints: { enabled: true },
     lightbulb: { enabled: monaco.editor.ShowLightbulbIconMode.On },
     autoClosingBrackets: "always",
@@ -502,19 +716,22 @@ async function applyFormatEdits(): Promise<boolean> {
 }
 
 function initEditor() {
-  if (!editorContainerRef.value) return;
+  if (!editorSurfaceRef.value) return;
   if (editorInstance) editorInstance.dispose();
 
   if (props.language === "css") {
-    monacoCompatLanguages.cssDefaults.setOptions({
-      validate: true,
-      lint: {
-        important: "warning",
-        duplicateProperties: "warning",
-        emptyRules: "warning",
-        unknownProperties: "error",
-      },
-    });
+    const cssDefaults = monacoCompatLanguages.cssDefaults;
+    if (cssDefaults?.setOptions) {
+      cssDefaults.setOptions({
+        validate: true,
+        lint: {
+          important: "warning",
+          duplicateProperties: "warning",
+          emptyRules: "warning",
+          unknownProperties: "error",
+        },
+      });
+    }
   }
   if (props.language === "javascript" || props.language === "typescript") {
     const ignoreDiagnostics = [1003, 1108, 1308, 1375, 1378, 1379, 2391, 80007, 80008];
@@ -553,17 +770,22 @@ function initEditor() {
     ensureJsFormatter();
   }
 
-  editorInstance = monaco.editor.create(editorContainerRef.value, baseOptions());
+  const editorSurface = editorSurfaceRef.value;
+  editorInstance = monaco.editor.create(editorSurface, baseOptions());
   applyTheme(props.theme);
   registerCompletionProvider();
-  const runFormatCommand = () => {
-    void runEditorAction("editor.action.formatDocument").then((ok) => {
-      if (!ok) void applyFormatEdits();
-    });
-  };
+  editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+    void runClipboardAction("editor.action.clipboardCopyAction");
+  });
+  editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+    void runClipboardAction("editor.action.clipboardCutAction");
+  });
+  editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+    void runPasteAction();
+  });
   editorInstance.addAction({
     id: "format-document",
-    label: "��ʽ���ĵ�",
+    label: t("monacoEditor.contextMenu.format"),
     keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
     run: () => runFormatCommand(),
   });
@@ -618,9 +840,27 @@ function initEditor() {
   });
   const mouseLeaveListener = editorInstance.onMouseLeave(() => hideMarkerTooltip());
   const scrollListener = editorInstance.onDidScrollChange(() => hideMarkerTooltip());
+  const contextMenuListener = editorInstance.onContextMenu((event) => {
+    const browserEvent = event.event.browserEvent as MouseEvent | undefined;
+    if (!browserEvent) return;
+    browserEvent.preventDefault();
+    browserEvent.stopPropagation();
+    showEditorContextMenu(browserEvent.clientX, browserEvent.clientY);
+  });
+  const keyDownListener = editorInstance.onKeyDown(() => hideEditorContextMenu());
+  const mouseDownListener = editorInstance.onMouseDown(() => hideEditorContextMenu());
+  const documentMouseDownListener = () => hideEditorContextMenu();
+  const windowResizeListener = () => hideEditorContextMenu();
+  document.addEventListener("mousedown", documentMouseDownListener);
+  window.addEventListener("resize", windowResizeListener);
   cleanupFns.push(() => mouseMoveListener.dispose());
   cleanupFns.push(() => mouseLeaveListener.dispose());
   cleanupFns.push(() => scrollListener.dispose());
+  cleanupFns.push(() => contextMenuListener.dispose());
+  cleanupFns.push(() => keyDownListener.dispose());
+  cleanupFns.push(() => mouseDownListener.dispose());
+  cleanupFns.push(() => document.removeEventListener("mousedown", documentMouseDownListener));
+  cleanupFns.push(() => window.removeEventListener("resize", windowResizeListener));
 }
 
 watch(
@@ -730,27 +970,45 @@ defineExpose({
     requestAnimationFrame(() => (isInternalUpdate = false));
   },
   insertText: (text: string) => {
-    if (!editorInstance || !text) return;
-    const selection = editorInstance.getSelection();
-    const position = editorInstance.getPosition();
-    if (!position) return;
-    const range =
-      selection ||
-      new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column);
-    editorInstance.pushUndoStop();
-    editorInstance.executeEdits("insert", [{ range, text, forceMoveMarkers: true }]);
-    editorInstance.pushUndoStop();
-    editorInstance.focus();
+    insertTextAtSelection(text);
   },
 });
 </script>
 
 <template>
-  <div ref="editorContainerRef" class="monaco-editor-container" :style="{ height }"></div>
+  <div ref="editorContainerRef" class="monaco-editor-container" :style="{ height }">
+    <div ref="editorSurfaceRef" class="monaco-editor-surface"></div>
+    <Teleport to="body">
+      <div
+        v-if="contextMenuState.visible"
+        ref="contextMenuRef"
+        class="monaco-editor-context-menu"
+        :style="{ left: `${contextMenuState.left}px`, top: `${contextMenuState.top}px` }"
+        @mousedown.prevent.stop
+        @contextmenu.prevent.stop
+      >
+        <button
+          v-for="item in editorContextMenuItems"
+          :key="item.key"
+          type="button"
+          class="monaco-editor-context-menu__item"
+          :class="{ 'has-separator': item.separatorBefore }"
+          @mousedown.prevent.stop
+          @click="handleEditorContextMenuAction(item)"
+        >
+          <span class="monaco-editor-context-menu__label">{{ t(item.labelKey) }}</span>
+          <span v-if="item.shortcut" class="monaco-editor-context-menu__shortcut">
+            {{ item.shortcut }}
+          </span>
+        </button>
+      </div>
+    </Teleport>
+  </div>
 </template>
 
 <style scoped>
 .monaco-editor-container {
+  position: relative;
   width: 100%;
   min-height: 0;
   border: 1px solid #e4e7ed;
@@ -758,8 +1016,70 @@ defineExpose({
   overflow: hidden;
 }
 
+.monaco-editor-surface {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 .monaco-editor-container :deep(.monaco-editor) {
   width: 100% !important;
   height: 100% !important;
+}
+
+.monaco-editor-context-menu {
+  position: fixed;
+  z-index: 3000;
+  width: 212px;
+  padding: 4px 0;
+  border: 1px solid var(--designer-border-color, #dcdfe6);
+  border-radius: 6px;
+  background: var(--designer-shell-surface, #fff);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+  color: var(--designer-text-primary, #303133);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.monaco-editor-context-menu__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.monaco-editor-context-menu__item.has-separator {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--designer-border-color, #dcdfe6);
+}
+
+.monaco-editor-context-menu__item:hover {
+  background: var(--designer-primary, #1677ff);
+  color: #fff;
+}
+
+.monaco-editor-context-menu__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monaco-editor-context-menu__shortcut {
+  flex: 0 0 auto;
+  color: var(--designer-text-placeholder, #909399);
+}
+
+.monaco-editor-context-menu__item:hover .monaco-editor-context-menu__shortcut {
+  color: rgba(255, 255, 255, 0.86);
 }
 </style>

@@ -46,21 +46,14 @@ import IconEpFolder from "~icons/ep/folder";
 import IconEpGrid from "~icons/ep/grid";
 import IconEpLink from "~icons/ep/link";
 import IconEpList from "~icons/ep/list";
-import IconEpPictureFilled from "~icons/ep/picture-filled";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { getManifest } from "@/materials/manifests";
-import assetApi from "@/services/assetApi";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePanelState } from "../composables/use-panel-state";
 import MultiInspectorPanel from "./MultiInspectorPanel.vue";
 import PageInspectorPanel from "./PageInspectorPanel.vue";
 import PropEditor from "./PropEditor.vue";
-import {
-  buildConfigAssetTree,
-  filterConfigAssetNode,
-  resolveConfigAssetUrl,
-  unwrapApiData,
-} from "./property-panel-config-assets";
+import StyleConfigEditorDialog from "./style-config/StyleConfigEditorDialog.vue";
 import {
   buildMenuDslContent,
   normalizeMenuItems,
@@ -356,10 +349,6 @@ const configDraft = ref<string>("");
 const configEditorRef = ref<any>(null);
 const selectedPresetId = ref<string>("");
 const presetSearch = ref<string>("");
-const configAssetFolders = ref<AnyArray>([]);
-const configAssets = ref<AnyArray>([]);
-const configAssetSearch = ref<string>("");
-const configAssetTreeRef = ref<any>(null);
 let detailDraftTimer: ReturnType<typeof setTimeout> | null = null;
 function emitDetailConfig(nodeId: string, code: string) {
   if (!nodeId || !code) return;
@@ -370,37 +359,6 @@ function emitDetailConfig(nodeId: string, code: string) {
   );
 }
 
-const configAssetTree = computed<AnyArray>(() =>
-  buildConfigAssetTree(configAssetFolders.value, configAssets.value),
-);
-
-function handleConfigAssetNodeDblClick(data: SidebarNodeLike) {
-  if (!data || data.type !== "asset") return;
-  const url = resolveConfigAssetUrl(data.raw as any);
-  if (!url) return;
-  const snippet = `url(\"${url}\")`;
-  configEditorRef.value?.insertText?.(snippet);
-}
-
-async function loadConfigAssetFolders() {
-  if (!projectId.value) return;
-  const response = await assetApi.getFolders(projectId.value);
-  const data = unwrapApiData(response) as AnyRecord | null;
-  const rawFolders = data?.folders;
-  configAssetFolders.value = Array.isArray(rawFolders) ? rawFolders : [];
-}
-
-async function loadConfigAssets() {
-  if (!projectId.value) return;
-  const response = await assetApi.getAssets(projectId.value);
-  const data = unwrapApiData(response) as AnyRecord | null;
-  const rawAssets = data?.assets;
-  configAssets.value = Array.isArray(rawAssets) ? rawAssets : [];
-}
-
-watch(configAssetSearch, () => {
-  configAssetTreeRef.value?.filter?.(configAssetSearch.value);
-});
 const bindingDialogVisible = ref(false);
 const bindingEditorCode = ref<string>("");
 const bindingEditorRef = ref<any>(null);
@@ -4677,11 +4635,13 @@ function resolveElementPlusDetailPresets(type: string): AnyArray {
       }));
   }
   return [
-    localizePropertyPanelPreset(normalizeDslPreset(type, {
-      id: buildPresetId(type, "basic"),
-      label: "DSL 模板",
-      content: buildDslTemplate(methodName, '  id: "component",\n  props: {},'),
-    })),
+    localizePropertyPanelPreset(
+      normalizeDslPreset(type, {
+        id: buildPresetId(type, "basic"),
+        label: "DSL 模板",
+        content: buildDslTemplate(methodName, '  id: "component",\n  props: {},'),
+      }),
+    ),
   ];
 }
 
@@ -4871,6 +4831,9 @@ const configDialogTitle = computed<string>(() =>
 const configEditorLanguage = computed<string>(() =>
   configDialogType.value === "detail" ? "javascript" : "css",
 );
+const currentStyleConfigContent = computed<string>(() =>
+  String(currentElement.value?.styleConfig || ""),
+);
 const presetLabel = computed<string>(() =>
   configDialogType.value === "detail"
     ? t("propertyPanel.configDialog.detailPreset")
@@ -4879,7 +4842,8 @@ const presetLabel = computed<string>(() =>
 const currentPresetOptions = computed<AnyArray>(() => {
   const type = currentElement.value?.type;
   if (configDialogType.value === "detail") {
-    if (type === "EChart") return echartDetailPresets.map((preset: AnyRecord) => localizePropertyPanelPreset(preset));
+    if (type === "EChart")
+      return echartDetailPresets.map((preset: AnyRecord) => localizePropertyPanelPreset(preset));
     if (type === "Button") {
       return buttonDetailPresets
         .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
@@ -5053,7 +5017,9 @@ const getGroupSectionKey = (group: AnyRecord) => `group:${String(group?.name || 
 
 function resolveGroupTitle(group: AnyRecord) {
   const name = String(group?.name || "").trim();
-  return !name || name === "?" ? localizePropertyPanelLiteral("属性") : localizePropertyPanelLiteral(name);
+  return !name || name === "?"
+    ? localizePropertyPanelLiteral("属性")
+    : localizePropertyPanelLiteral(name);
 }
 
 function getVisibleGroupProps(group: AnyRecord): AnyArray {
@@ -5154,7 +5120,12 @@ const bindingProjectVariableRows = computed<AnyArray>(() => {
 });
 
 const bindingPageGroupTree = computed<AnyArray>(() => [
-  { id: "page-root", label: t("propertyPanel.bindingVarEnum.pageRoot"), type: "group", children: [] },
+  {
+    id: "page-root",
+    label: t("propertyPanel.bindingVarEnum.pageRoot"),
+    type: "group",
+    children: [],
+  },
 ]);
 
 const bindingPageVariableRows = computed<AnyArray>(() => {
@@ -5849,11 +5820,6 @@ function openConfigDialog(type: "style" | "detail") {
   }
   selectedPresetId.value = "";
   presetSearch.value = "";
-  if (configDialogType.value === "style") {
-    configAssetSearch.value = "";
-    loadConfigAssetFolders();
-    loadConfigAssets();
-  }
   configDialogVisible.value = true;
 }
 
@@ -5896,7 +5862,7 @@ function saveConfigDialog(): void {
       if (elementTypeName(node.type) === "Menu") {
         const config = resolveMenuConfigFromContent(content);
         if (!config) {
-    ElMessage.error({ message: t("propertyPanel.configDialog.menuDslInvalid") });
+          ElMessage.error({ message: t("propertyPanel.configDialog.menuDslInvalid") });
           return;
         }
         applyMenuDetailConfig(node, config);
@@ -5924,6 +5890,15 @@ function saveConfigDialog(): void {
   } else {
     editorStore.updateNode(node.id, { styleConfig: content });
   }
+  configDialogVisible.value = false;
+}
+
+function saveStyleConfigDialog(content: string): void {
+  const node = selectedNode.value;
+  if (!node) return;
+  const normalized = formatStyleConfigOutput(String(content || ""));
+  const scoped = prefixStyleConfigScope(normalized);
+  editorStore.updateNode(node.id, { styleConfig: scoped });
   configDialogVisible.value = false;
 }
 
@@ -6598,7 +6573,30 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
     </div>
   </div>
 
+  <StyleConfigEditorDialog
+    v-if="configDialogType === 'style'"
+    v-model="configDialogVisible"
+    :content="currentStyleConfigContent"
+    :title="t('propertyPanel.configDialog.styleTitle')"
+    :presets="currentPresetOptions"
+    :project-id="projectId || ''"
+    :selector-label="t('propertyPanel.configDialog.selectorHint')"
+    :selector-tokens="['#domId']"
+    :selector-help="t('propertyPanel.configDialog.selectorHelp')"
+    :template-label="t('propertyPanel.configDialog.stylePreset')"
+    :template-placeholder="t('propertyPanel.configDialog.selectPlaceholder')"
+    :filter-label="t('propertyPanel.configDialog.filterLabel')"
+    :search-template="t('propertyPanel.configDialog.searchPreset')"
+    :asset-library="t('propertyPanel.configDialog.assetLibrary')"
+    :search-assets="t('propertyPanel.configDialog.searchAssets')"
+    :clear-text="t('propertyPanel.configDialog.clear')"
+    :cancel-text="t('propertyPanel.configDialog.cancel')"
+    :save-text="t('propertyPanel.configDialog.save')"
+    @save="saveStyleConfigDialog"
+  />
+
   <el-dialog
+    v-if="configDialogType === 'detail'"
     v-model="configDialogVisible"
     :title="configDialogTitle"
     width="980px"
@@ -6718,48 +6716,15 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
           </div>
         </div>
       </div>
-      <div v-if="configDialogType === 'style'" class="config-assets">
-        <div class="config-assets-header">
-          <span>{{ t("propertyPanel.configDialog.assetLibrary") }}</span>
-        </div>
-        <ElInput
-          v-model="configAssetSearch"
-          size="small"
-          :placeholder="t('propertyPanel.configDialog.searchAssets')"
-          clearable
-        />
-        <div class="config-assets-body">
-          <el-scrollbar>
-            <el-tree
-              ref="configAssetTreeRef"
-              :data="configAssetTree"
-              node-key="id"
-              default-expand-all
-              :expand-on-click-node="false"
-              :filter-node-method="filterConfigAssetNode"
-            >
-              <template #default="{ data }">
-                <div
-                  class="tree-node"
-                  :class="`node-${data.type}`"
-                  @dblclick.stop="handleConfigAssetNodeDblClick(data)"
-                >
-                  <el-icon class="node-icon">
-                    <IconEpFolder v-if="data.type === 'folder'" />
-                    <IconEpPictureFilled v-else />
-                  </el-icon>
-                  <span class="node-label">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </el-scrollbar>
-        </div>
-      </div>
     </div>
     <template #footer>
       <el-button @click="clearConfigDialog">{{ t("propertyPanel.configDialog.clear") }}</el-button>
-      <el-button @click="configDialogVisible = false">{{ t("propertyPanel.configDialog.cancel") }}</el-button>
-      <el-button type="primary" @click="saveConfigDialog()">{{ t("propertyPanel.configDialog.save") }}</el-button>
+      <el-button @click="configDialogVisible = false">{{
+        t("propertyPanel.configDialog.cancel")
+      }}</el-button>
+      <el-button type="primary" @click="saveConfigDialog()">{{
+        t("propertyPanel.configDialog.save")
+      }}</el-button>
     </template>
   </el-dialog>
 
@@ -6863,8 +6828,12 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
       </div>
     </div>
     <template #footer>
-      <el-button @click="bindingDialogVisible = false">{{ t("propertyPanel.bindingDialog.cancel") }}</el-button>
-      <el-button type="primary" @click="saveBinding">{{ t("propertyPanel.bindingDialog.save") }}</el-button>
+      <el-button @click="bindingDialogVisible = false">{{
+        t("propertyPanel.bindingDialog.cancel")
+      }}</el-button>
+      <el-button type="primary" @click="saveBinding">{{
+        t("propertyPanel.bindingDialog.save")
+      }}</el-button>
     </template>
   </el-dialog>
 

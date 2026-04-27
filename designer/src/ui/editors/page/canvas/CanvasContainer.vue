@@ -38,6 +38,8 @@ import { useCanvasZoomWheel } from "./composables/use-canvas-zoom-wheel";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
 import { canvasSnapEnabledKey, canvasZoomKey } from "./injection-keys";
+import PageStyleInjector from "./PageStyleInjector";
+import { buildDesignerPageDomId } from "./style-config-css";
 import {
   CANVAS_OUTSIDE_MARQUEE_START_EVENT,
   type OutsideMarqueeStartDetail,
@@ -218,6 +220,12 @@ const currentPageSnapshot = computed(() => {
   const page = pages.value.find((item) => item.id === currentPageId.value);
   return page || currentPage.value || null;
 });
+const pageStyleConfig = computed(() =>
+  String(currentPageSnapshot.value?.config?.styleConfig || ""),
+);
+const pageDomId = computed(() =>
+  currentPageId.value ? buildDesignerPageDomId(currentPageId.value) : undefined,
+);
 const showWorkbenchGrid = computed(() => props.showGrid);
 const pointerXOnRuler = computed(() => Math.max(0, pointerX.value - rulerInset.value));
 const pointerYOnRuler = computed(() => Math.max(0, pointerY.value - rulerInset.value));
@@ -1306,10 +1314,14 @@ onBeforeUnmount(() => {
         <div
           ref="canvasRef"
           class="canvas"
+          :id="pageDomId"
           :style="canvasStyle"
+          :data-page-style-root="currentPageId || undefined"
+          :data-page-dom-id="pageDomId"
           @dragover="handleDragOver"
           @drop="handleDrop"
         >
+          <PageStyleInjector :css="pageStyleConfig" :page-id="currentPageId || ''" />
           <CanvasInsertLineOverlay
             :show="showInsertLine"
             :line-style="insertLineStyle"

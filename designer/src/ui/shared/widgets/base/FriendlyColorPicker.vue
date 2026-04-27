@@ -15,6 +15,8 @@ interface FriendlyColorPickerProps {
   clearable?: boolean;
   placeholder?: string;
   predefine?: string[];
+  showRecent?: boolean;
+  layout?: "inline" | "block";
 }
 
 const props = withDefaults(defineProps<FriendlyColorPickerProps>(), {
@@ -24,6 +26,8 @@ const props = withDefaults(defineProps<FriendlyColorPickerProps>(), {
   clearable: true,
   placeholder: "请输入颜色值",
   predefine: () => [],
+  showRecent: true,
+  layout: "inline",
 });
 const emit = defineEmits<{
   (event: "update:modelValue", value: string): void;
@@ -202,7 +206,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="friendly-color-picker" :class="{ 'is-disabled': disabled }">
+  <div
+    class="friendly-color-picker"
+    :class="[`friendly-color-picker--${layout}`, { 'is-disabled': disabled }]"
+  >
     <div class="color-main-row">
       <el-color-picker
         :model-value="modelValue"
@@ -229,7 +236,7 @@ onMounted(() => {
       </el-input>
     </div>
 
-    <div v-if="recentColors.length" class="recent-row">
+    <div v-if="showRecent && recentColors.length" class="recent-row">
       <span class="recent-label">最近</span>
       <button
         v-for="color in displayRecentColors"
@@ -265,6 +272,51 @@ onMounted(() => {
 .color-input {
   flex: 1;
   min-width: 0;
+}
+
+.friendly-color-picker--block {
+  gap: 6px;
+}
+
+.friendly-color-picker--block .color-main-row {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.friendly-color-picker--block :deep(.el-color-picker) {
+  display: block;
+  width: 100%;
+  height: 28px;
+}
+
+.friendly-color-picker--block :deep(.el-color-picker__trigger) {
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--designer-border-color, var(--el-border-color));
+  border-radius: var(--designer-radius-sm, 4px);
+  box-shadow: none;
+}
+
+.friendly-color-picker--block :deep(.el-color-picker__color) {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.friendly-color-picker--block :deep(.el-color-picker__color-inner) {
+  border-radius: var(--designer-radius-sm, 4px);
+}
+
+.friendly-color-picker--block :deep(.el-color-picker__icon) {
+  display: none;
+}
+
+.friendly-color-picker--block .color-input {
+  width: 100%;
+  flex: none;
 }
 
 .clear-icon {

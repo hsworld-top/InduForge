@@ -3,7 +3,7 @@ import { mount } from "@vue/test-utils";
 import PreviewView from "./PreviewView.vue";
 
 const mocks = vi.hoisted(() => {
-  const createRef = <T,>(value: T) => {
+  const createRef = <T>(value: T) => {
     const ref = { value } as { value: T; __v_isRef: true };
     Object.defineProperty(ref, "__v_isRef", {
       value: true,
@@ -300,6 +300,42 @@ describe("PreviewView", () => {
     expect(frame.style.overflow).toBe("scroll");
     expect(canvas.style.width).toBe("640px");
     expect(canvas.style.height).toBe("400px");
+
+    wrapper.unmount();
+  });
+
+  it("uses page transition config as preview page transition", async () => {
+    mocks.currentPage.value = {
+      id: "page-transition",
+      name: "动画页面",
+      rootNodeId: "root-transition",
+      config: {
+        viewport: {
+          width: 1366,
+          height: 768,
+          autoFit: false,
+        },
+        background: {
+          kind: "color",
+          value: "#ffffff",
+        },
+        transition: {
+          type: "slide",
+        },
+      },
+    };
+    mocks.editorStoreMock.currentPage = mocks.currentPage.value;
+
+    const wrapper = mount(PreviewView, {
+      global: {
+        stubs: globalStubs,
+      },
+    });
+
+    await flushPromises();
+
+    expect(wrapper.get(".preview-frame").attributes("data-page-transition")).toBe("slide");
+    expect(wrapper.get(".preview-canvas").attributes("data-page-style-root")).toBe("page-1");
 
     wrapper.unmount();
   });

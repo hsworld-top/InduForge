@@ -53,6 +53,7 @@ function buildPageInspectorSections(): PageInspectorSection[] {
         "backgroundSize",
         "backgroundPosition",
         "backgroundRepeat",
+        "styleConfig",
         "transitionType",
       ],
     },

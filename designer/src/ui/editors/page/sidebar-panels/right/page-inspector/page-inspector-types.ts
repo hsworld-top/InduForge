@@ -1,7 +1,4 @@
-import type {
-  PagePermissionScheme,
-  RuntimeRoleRef,
-} from "@/editor-core/document/types";
+import type { PagePermissionScheme, RuntimeRoleRef } from "@/editor-core/document/types";
 
 /**
  * 页面属性面板的 UI 层类型定义
@@ -47,6 +44,7 @@ export interface PageInspectorFormState {
   backgroundSize: BackgroundSize;
   backgroundPosition: string;
   backgroundRepeat: BackgroundRepeat;
+  styleConfig: string;
   transitionType: TransitionType;
   openMode: OpenMode;
   popupWidth: number;

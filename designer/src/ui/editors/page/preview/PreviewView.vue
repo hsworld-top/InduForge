@@ -17,11 +17,10 @@ import { useRoute, useRouter } from "vue-router";
 import { VIEW_PRESETS } from "@/constants";
 
 import { useEditorStore } from "@/stores/editor-store";
-import {
-  canvasZoomKey,
-  runtimeAccessContextKey,
-} from "@/ui/editors/page/canvas/injection-keys";
+import { canvasZoomKey, runtimeAccessContextKey } from "@/ui/editors/page/canvas/injection-keys";
 import NodeRenderer from "@/ui/editors/page/canvas/NodeRenderer.vue";
+import PageStyleInjector from "@/ui/editors/page/canvas/PageStyleInjector";
+import { buildDesignerPageDomId } from "@/ui/editors/page/canvas/style-config-css";
 import { createRuntimeAccessContext } from "@/ui/editors/page/canvas/runtime-access";
 import { clearPreviewRuntime, initPreviewRuntime } from "./previewRuntime";
 
@@ -29,6 +28,7 @@ import { clearPreviewRuntime, initPreviewRuntime } from "./previewRuntime";
 type PreviewCanvasPageConfig = Partial<PageConfig> & {
   viewport?: PreviewViewportConfig;
   background?: PreviewBackgroundConfig | null;
+  transition?: PreviewTransitionConfig | null;
   backgroundColor?: string;
   backgroundImage?: string;
   backgroundSize?: string;
@@ -52,6 +52,12 @@ interface PreviewBackgroundConfig {
   size?: string;
   position?: string;
   repeat?: string;
+}
+
+type PreviewTransitionType = "none" | "fade" | "slide" | "zoom";
+
+interface PreviewTransitionConfig {
+  type?: PreviewTransitionType | string;
 }
 
 interface PreviewResolvedPageViewport {
@@ -93,12 +99,14 @@ function resolvePreviewViewport(config: PreviewCanvasPageConfig): PreviewResolve
     height: Number.isFinite(height) && height > 0 ? height : 768,
     autoFit: Boolean(viewport?.autoFit ?? config.autoFit),
     lockAspectRatio: Boolean(viewport?.lockAspectRatio ?? config.lockAspectRatio),
-    minWidth: Number.isFinite(Number(viewport?.minWidth)) && Number(viewport?.minWidth) > 0
-      ? Number(viewport?.minWidth)
-      : 0,
-    minHeight: Number.isFinite(Number(viewport?.minHeight)) && Number(viewport?.minHeight) > 0
-      ? Number(viewport?.minHeight)
-      : 0,
+    minWidth:
+      Number.isFinite(Number(viewport?.minWidth)) && Number(viewport?.minWidth) > 0
+        ? Number(viewport?.minWidth)
+        : 0,
+    minHeight:
+      Number.isFinite(Number(viewport?.minHeight)) && Number(viewport?.minHeight) > 0
+        ? Number(viewport?.minHeight)
+        : 0,
     overflowMode:
       viewport?.overflowMode === "hidden" || viewport?.overflowMode === "scroll"
         ? viewport.overflowMode
@@ -172,7 +180,9 @@ function resolvePreviewCanvasLayout(
 }
 
 /** 归一化预览背景样式：grouped background 优先，旧 backgroundColor/backgroundImage 作为回退。 */
-function resolvePreviewBackground(config: PreviewCanvasPageConfig): PreviewResolvedCanvasBackground {
+function resolvePreviewBackground(
+  config: PreviewCanvasPageConfig,
+): PreviewResolvedCanvasBackground {
   const background = (config.background || null) as PreviewBackgroundConfig | null;
   const fallbackColor = config.backgroundColor || "#ffffff";
   if (background?.kind === "color") {
@@ -210,6 +220,14 @@ function resolvePreviewBackground(config: PreviewCanvasPageConfig): PreviewResol
   return {
     backgroundColor: fallbackColor,
   };
+}
+
+function resolvePreviewTransitionType(config: PreviewCanvasPageConfig): PreviewTransitionType {
+  const type = String(config.transition?.type || "").trim();
+  if (type === "fade" || type === "slide" || type === "zoom") {
+    return type;
+  }
+  return "none";
 }
 
 const router = useRouter();
@@ -273,6 +291,18 @@ const previewContainerSize = computed(() =>
 );
 const previewCanvasLayout = computed(() =>
   resolvePreviewCanvasLayout(previewPageConfig.value, previewContainerSize.value),
+);
+const pageStyleConfig = computed(() => String(currentPage.value?.config?.styleConfig || ""));
+const pageDomId = computed(() =>
+  currentPageId.value ? buildDesignerPageDomId(currentPageId.value) : undefined,
+);
+const previewTransitionType = computed(() =>
+  resolvePreviewTransitionType(currentPage.value?.config || ({} as PreviewCanvasPageConfig)),
+);
+const previewTransitionName = computed(() =>
+  previewTransitionType.value === "none"
+    ? "preview-page-none"
+    : `preview-page-${previewTransitionType.value}`,
 );
 const previewOverflowLabel = computed(() => {
   switch (previewPageConfig.value.overflowMode) {
@@ -463,11 +493,7 @@ onBeforeUnmount(() => {
           </el-radio-button>
         </el-radio-group>
         <div class="preview-summary" data-testid="preview-summary">
-          <span
-            v-for="item in previewSummaryItems"
-            :key="item"
-            class="preview-summary__item"
-          >
+          <span v-for="item in previewSummaryItems" :key="item" class="preview-summary__item">
             {{ item }}
           </span>
         </div>
@@ -486,14 +512,35 @@ onBeforeUnmount(() => {
       <div
         class="preview-frame bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden transition-all duration-300"
         :style="frameStyle"
+        :data-page-transition="previewTransitionType"
       >
-        <div v-if="!runtimeAccessSnapshot.canViewPage" class="preview-denied">
-          <div class="preview-denied__title">无页面访问权限</div>
-          <div class="preview-denied__desc">当前预览身份不在页面允许访问角色内。</div>
-        </div>
-        <div v-else class="preview-canvas" :style="canvasStyle">
-          <NodeRenderer v-if="rootNodeId" :node-id="rootNodeId" :is-root="true" :readonly="true" />
-        </div>
+        <Transition :name="previewTransitionName" mode="out-in" appear>
+          <div
+            v-if="!runtimeAccessSnapshot.canViewPage"
+            :key="`denied-${currentPageId || 'empty'}`"
+            class="preview-denied preview-page-shell"
+          >
+            <div class="preview-denied__title">无页面访问权限</div>
+            <div class="preview-denied__desc">当前预览身份不在页面允许访问角色内。</div>
+          </div>
+          <div
+            v-else
+            :key="`page-${currentPageId || 'empty'}`"
+            class="preview-canvas preview-page-shell"
+            :id="pageDomId"
+            :style="canvasStyle"
+            :data-page-style-root="currentPageId || undefined"
+            :data-page-dom-id="pageDomId"
+          >
+            <PageStyleInjector :css="pageStyleConfig" :page-id="currentPageId || ''" />
+            <NodeRenderer
+              v-if="rootNodeId"
+              :node-id="rootNodeId"
+              :is-root="true"
+              :readonly="true"
+            />
+          </div>
+        </Transition>
       </div>
     </main>
   </div>
@@ -509,6 +556,48 @@ onBeforeUnmount(() => {
 
 .preview-canvas {
   flex-shrink: 0;
+}
+
+.preview-page-shell {
+  transform-origin: center center;
+  will-change: opacity, transform;
+}
+
+.preview-page-none-enter-active,
+.preview-page-none-leave-active {
+  transition: none;
+}
+
+.preview-page-fade-enter-active,
+.preview-page-fade-leave-active,
+.preview-page-slide-enter-active,
+.preview-page-slide-leave-active,
+.preview-page-zoom-enter-active,
+.preview-page-zoom-leave-active {
+  transition:
+    opacity 0.24s ease,
+    transform 0.24s ease;
+}
+
+.preview-page-fade-enter-from,
+.preview-page-fade-leave-to {
+  opacity: 0;
+}
+
+.preview-page-slide-enter-from {
+  opacity: 0;
+  transform: translateX(24px);
+}
+
+.preview-page-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+
+.preview-page-zoom-enter-from,
+.preview-page-zoom-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
 }
 
 .preview-summary {

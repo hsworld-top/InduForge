@@ -45,6 +45,7 @@ export interface PageInspectorConfigInput {
   backgroundSize: BackgroundSize;
   backgroundPosition: string;
   backgroundRepeat: BackgroundRepeat;
+  styleConfig: string;
   transitionType: TransitionType;
   openMode: OpenMode;
   popupWidth: number;
@@ -146,12 +147,12 @@ function normalizeRouteMode(value: unknown): RouteMode {
 
 function normalizeViewportPreset(value: unknown): ViewportPreset {
   if (
-    value === "bigscreen"
-    || value === "pc"
-    || value === "tablet"
-    || value === "phoneLandscape"
-    || value === "phonePortrait"
-    || value === "custom"
+    value === "bigscreen" ||
+    value === "pc" ||
+    value === "tablet" ||
+    value === "phoneLandscape" ||
+    value === "phonePortrait" ||
+    value === "custom"
   ) {
     return value;
   }
@@ -314,6 +315,7 @@ export function createDefaultPageInspectorFormState(): PageInspectorFormState {
     backgroundSize: "cover",
     backgroundPosition: DEFAULT_BACKGROUND_POSITION,
     backgroundRepeat: "no-repeat",
+    styleConfig: "",
     transitionType: "none",
     openMode: "cover",
     popupWidth: DEFAULT_POPUP_WIDTH,
@@ -341,12 +343,15 @@ export function hydratePageInspectorForm(input: {
   const viewport = (config.viewport || {}) as Partial<NonNullable<PageNode["config"]["viewport"]>>;
   const route = (config.route || {}) as Partial<NonNullable<PageNode["config"]["route"]>>;
   const runtime = (config.runtime || {}) as Partial<NonNullable<PageNode["config"]["runtime"]>>;
-  const popup =
-    (runtime.popup || {}) as Partial<NonNullable<NonNullable<PageNode["config"]["runtime"]>["popup"]>>;
+  const popup = (runtime.popup || {}) as Partial<
+    NonNullable<NonNullable<PageNode["config"]["runtime"]>["popup"]>
+  >;
   const permission = (runtime.permission || {}) as Partial<
     NonNullable<NonNullable<PageNode["config"]["runtime"]>["permission"]>
   >;
-  const background = (config.background || {}) as Partial<NonNullable<PageNode["config"]["background"]>>;
+  const background = (config.background || {}) as Partial<
+    NonNullable<PageNode["config"]["background"]>
+  >;
   const transition = (config.transition || {}) as Partial<
     NonNullable<PageNode["config"]["transition"]>
   >;
@@ -386,13 +391,16 @@ export function hydratePageInspectorForm(input: {
     backgroundSize: normalizeBackgroundSize(background.size),
     backgroundPosition: normalizeBackgroundPosition(background.position),
     backgroundRepeat: normalizeBackgroundRepeat(background.repeat),
+    styleConfig: String(config.styleConfig || ""),
     transitionType: normalizeTransitionType(transition.type),
     openMode: normalizeOpenMode(runtime.openMode ?? config.windowStyle),
     popupWidth: normalizeNumber(popup.width, DEFAULT_POPUP_WIDTH),
     popupHeight: normalizeNumber(popup.height, DEFAULT_POPUP_HEIGHT),
     popupCenter: popup.center ?? true,
     popupMaskClosable: popup.maskClosable ?? true,
-    permissionSummary: String(permission.summary ?? config.permissionDesc ?? DEFAULT_PERMISSION_DESC),
+    permissionSummary: String(
+      permission.summary ?? config.permissionDesc ?? DEFAULT_PERMISSION_DESC,
+    ),
     runtimeAccessEnabled: Boolean(runtimeAccess.enabled),
     runtimeAccessAllowedRoles: normalizeRoleRefs(runtimeAccess.allowedRoles),
     runtimePermissionSchemes: normalizePermissionSchemes(runtimeAccess.schemes),
@@ -454,8 +462,8 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
     autoFit,
     lockAspectRatio: autoFit && Boolean(input.lockAspectRatio),
     enableMinSize:
-      autoFit
-      && (normalizeOptionalNumber(input.minWidth) > 0 || normalizeOptionalNumber(input.minHeight) > 0),
+      autoFit &&
+      (normalizeOptionalNumber(input.minWidth) > 0 || normalizeOptionalNumber(input.minHeight) > 0),
     windowStyle: normalizedWindowStyle,
     permissionDesc: normalizedPermissionSummary,
     runtimeAccess: {
@@ -470,6 +478,7 @@ export function buildPageConfigPatch(input: PageInspectorConfigInput): PageInspe
       position: normalizeBackgroundPosition(input.backgroundPosition),
       repeat: normalizeBackgroundRepeat(input.backgroundRepeat),
     },
+    styleConfig: String(input.styleConfig || ""),
   };
 
   return patch;

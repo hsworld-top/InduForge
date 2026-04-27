@@ -1143,7 +1143,6 @@ export function useBuildRefInfo({
         if (node.value?.type !== "Tabs" || !config || typeof config !== "object") {
           return;
         }
-        if (config.type && String(config.type) !== "Tabs") return;
         const nextPatch: LooseRecord = {};
         if (Object.hasOwn(config, "label") && !isRunningDetailConfigFn?.()) {
           nextPatch.label = String(config.label ?? "");
@@ -1156,11 +1155,35 @@ export function useBuildRefInfo({
         if (config.className && String(config.className).trim()) {
           propsPatch.class = String(config.className).trim();
         }
+        if (Object.hasOwn(config, "type")) {
+          propsPatch.type = String(config.type ?? "");
+        }
+        if (Object.hasOwn(config, "tabPosition")) {
+          propsPatch.tabPosition = String(config.tabPosition ?? "top");
+        }
+        if (Object.hasOwn(config, "stretch")) {
+          propsPatch.stretch = Boolean(config.stretch);
+        }
+        if (Object.hasOwn(config, "closable")) {
+          propsPatch.closable = Boolean(config.closable);
+        }
+        if (Object.hasOwn(config, "editable")) {
+          propsPatch.editable = Boolean(config.editable);
+        }
+        if (Object.hasOwn(config, "addable")) {
+          propsPatch.addable = Boolean(config.addable);
+        }
+        if (Array.isArray(config.tabs) && config.tabs.length > 0) {
+          propsPatch.tabs = config.tabs;
+        }
         if (config.props && typeof config.props === "object") {
           const rawProps = { ...(config.props as LooseRecord) };
           if (Array.isArray(rawProps.items) && !Array.isArray(rawProps.tabs)) {
             rawProps.tabs = rawProps.items;
             delete rawProps.items;
+          }
+          if (Array.isArray(rawProps.tabs) && rawProps.tabs.length === 0) {
+            delete rawProps.tabs;
           }
           Object.assign(propsPatch, rawProps);
         }

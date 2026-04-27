@@ -11,8 +11,15 @@ import { computed, ref, watch } from "vue";
 
 const MENU_DSL_CALL_RE = /this\s*\.\s*menu\s*\(/g;
 
-function normalizeOptions<T>(source: unknown, fallback: T[] | undefined): T[] {
-  if (Array.isArray(source)) return source as T[];
+function normalizeOptions<T>(
+  source: unknown,
+  fallback: T[] | undefined,
+  options: { fallbackWhenEmpty?: boolean } = {},
+): T[] {
+  if (Array.isArray(source)) {
+    if (source.length > 0 || !options.fallbackWhenEmpty) return source as T[];
+    return fallback || [];
+  }
   return fallback || [];
 }
 
@@ -92,6 +99,18 @@ function applyTabsModelValue(
 ): Record<string, unknown> {
   if (!node.value || node.value.type !== "Tabs") return resolvedProps;
   const nextProps = { ...resolvedProps };
+  const tabs = normalizeOptions(node.value.props?.tabs, fallbackTabs, { fallbackWhenEmpty: true });
+  const tabKeys = new Set(
+    tabs
+      .map((tab) => String((tab as any)?.name ?? (tab as any)?.label ?? "").trim())
+      .filter(Boolean),
+  );
+  const firstKey = String((tabs[0] as any)?.name ?? (tabs[0] as any)?.label ?? "").trim();
+  const resolveUsableKey = (value: unknown): string => {
+    const normalized = String(value ?? "").trim();
+    if (normalized && tabKeys.has(normalized)) return normalized;
+    return firstKey;
+  };
   const hasModelValue =
     Object.hasOwn(nextProps, "modelValue") &&
     nextProps.modelValue !== undefined &&
@@ -102,11 +121,17 @@ function applyTabsModelValue(
     nextProps.activeName !== undefined &&
     nextProps.activeName !== null &&
     String(nextProps.activeName).trim();
+  if (hasActiveName) {
+    nextProps.activeName = resolveUsableKey(nextProps.activeName);
+  }
   if (!hasModelValue && hasActiveName) {
     nextProps.modelValue = nextProps.activeName;
   }
   if (!hasModelValue && !hasActiveName && activeTabName.value) {
-    nextProps.modelValue = activeTabName.value;
+    nextProps.modelValue = resolveUsableKey(activeTabName.value);
+  }
+  if (hasModelValue) {
+    nextProps.modelValue = resolveUsableKey(nextProps.modelValue);
   }
   return nextProps;
 }
@@ -158,12 +183,14 @@ export function useNodeContent({ node, resolvedNodeProps, docVersion }: UseNodeC
 
   const tabsList = computed(() => {
     void docVersion.value;
-    return normalizeOptions(node.value?.props?.tabs, fallbackTabs);
+    return normalizeOptions(node.value?.props?.tabs, fallbackTabs, { fallbackWhenEmpty: true });
   });
 
   const collapseItems = computed(() => {
     void docVersion.value;
-    return normalizeOptions(node.value?.props?.items, fallbackCollapseItems);
+    return normalizeOptions(node.value?.props?.items, fallbackCollapseItems, {
+      fallbackWhenEmpty: true,
+    });
   });
 
   const syncActiveTabName = (): void => {
@@ -175,7 +202,11 @@ export function useNodeContent({ node, resolvedNodeProps, docVersion }: UseNodeC
       node.value?.props?.activeName;
     if (rawActiveName !== undefined && rawActiveName !== null) {
       const normalized = String(rawActiveName).trim();
-      if (normalized) {
+      const exists = tabsList.value.some((tab) => {
+        const key = String((tab as any)?.name ?? (tab as any)?.label ?? "").trim();
+        return key === normalized;
+      });
+      if (normalized && exists) {
         activeTabName.value = normalized;
         return;
       }

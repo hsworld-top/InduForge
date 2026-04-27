@@ -15,9 +15,9 @@ export const descriptor: ComponentDescriptor = {
     const props = node.props ?? {};
     const gap = Number(props.itemGap);
     return {
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "stretch",
+      display: "grid",
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      alignItems: "start",
       position: "relative",
       boxSizing: "border-box",
       width: "100%",
@@ -26,10 +26,9 @@ export const descriptor: ComponentDescriptor = {
     };
   },
   childStyle: () => ({
-    width: "100%",
     minWidth: "0",
+    width: "100%",
   }),
 };
 
 export default descriptor;
-

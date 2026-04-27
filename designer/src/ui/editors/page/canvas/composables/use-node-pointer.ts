@@ -244,10 +244,11 @@ export function useNodePointer(deps: UseNodePointerDeps): {
   const resolveScopedSlotProps = (
     sourceProps: Record<string, unknown> | undefined,
     targetType: string | null | undefined,
+    scopedKey?: string | null,
   ): Record<string, unknown> => {
     const nextProps = { ...(sourceProps || {}) };
     if (targetType === "Tabs") {
-      const tabKey = resolveActiveTabKey();
+      const tabKey = String(scopedKey || resolveActiveTabKey() || "").trim();
       if (tabKey) {
         nextProps.tabKey = tabKey;
       }
@@ -257,7 +258,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       return nextProps;
     }
     if (targetType === "Collapse") {
-      const collapseKey = resolveActiveCollapseKey();
+      const collapseKey = String(scopedKey || resolveActiveCollapseKey() || "").trim();
       if (collapseKey) {
         nextProps.collapseKey = collapseKey;
       }
@@ -275,17 +276,41 @@ export function useNodePointer(deps: UseNodePointerDeps): {
     return nextProps;
   };
 
+  const resolveScopedSlotKeyFromPoint = (
+    targetNode: ComponentNode,
+    pointEvent?: MouseEvent | PointerEvent | null,
+  ): string => {
+    const isTabs = targetNode.type === "Tabs";
+    const attrName = isTabs ? "data-tab-key" : "data-collapse-key";
+    const fallbackKey = isTabs ? resolveActiveTabKey() : resolveActiveCollapseKey();
+    if (pointEvent && typeof document.elementsFromPoint === "function") {
+      const hits = document.elementsFromPoint(pointEvent.clientX, pointEvent.clientY);
+      const nodeSelector = `[data-node-id="${escapeNodeIdForSelector(targetNode.id)}"][${attrName}]`;
+      for (const hit of hits) {
+        const scopedElement = hit.closest?.(nodeSelector);
+        if (scopedElement) {
+          const key = String(scopedElement.getAttribute(attrName) || "").trim();
+          if (key) return key;
+        }
+      }
+    }
+    return String(fallbackKey || "").trim();
+  };
+
   /**
    * 解析 Tabs/Collapse 的活动内容区宿主元素与子节点集合
    * @param {import('@/editor-core').ComponentNode | null | undefined} targetNode - 目标容器
    * @returns {{ hostElement: Element | null, childIds: string[] } | null}
    */
-  const resolveScopedSlotHostMeta = (targetNode: ComponentNode | null | undefined) => {
+  const resolveScopedSlotHostMeta = (
+    targetNode: ComponentNode | null | undefined,
+    pointEvent?: MouseEvent | PointerEvent | null,
+  ) => {
     if (!targetNode || (targetNode.type !== "Tabs" && targetNode.type !== "Collapse")) {
       return null;
     }
     const isTabs = targetNode.type === "Tabs";
-    const key = isTabs ? resolveActiveTabKey() : resolveActiveCollapseKey();
+    const key = resolveScopedSlotKeyFromPoint(targetNode, pointEvent);
     const attrName = isTabs ? "data-tab-key" : "data-collapse-key";
     const keyProp = isTabs ? "tabKey" : "collapseKey";
     const escapedKey =
@@ -299,7 +324,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
       if (!slotKey) return Boolean(key);
       return String(slotKey) === key;
     });
-    return { hostElement, childIds };
+    return { childIds, hostElement, key, keyProp };
   };
 
   /**
@@ -851,7 +876,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
         genericInsertLineBox.value = null;
         return false;
       }
-      const scopedMeta = resolveScopedSlotHostMeta(dropRegion);
+      const scopedMeta = resolveScopedSlotHostMeta(dropRegion, pointEvent);
       if (scopedMeta) {
         if (!scopedMeta.childIds.length || !scopedMeta.hostElement) {
           showInsertLine.value = false;
@@ -1137,16 +1162,39 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           genericInsertLineBox.value = null;
 
           const dropRegion = resolveDropRegion(upEvent, preferOuterDropByAlt);
+          const scopedMeta = resolveScopedSlotHostMeta(dropRegion, upEvent);
+          const scopedKey = scopedMeta?.key || null;
+          const currentScopedKey = scopedMeta?.keyProp
+            ? String(currentNode.props?.[scopedMeta.keyProp] || "")
+            : "";
+          const isSameScopedContainerMove = Boolean(
+            dropRegion &&
+            dropRegion.id === originParent.id &&
+            scopedKey &&
+            currentScopedKey !== scopedKey,
+          );
           const hasValidDrop =
             dropRegion &&
-            dropRegion.id !== originParent.id &&
+            (dropRegion.id !== originParent.id || isSameScopedContainerMove) &&
             canAcceptChild(dropRegion, node.value.type) &&
             !isSelfOrDescendant(dropRegion.id);
 
           if (hasValidDrop) {
             // 拖入其他容器
             const targetId = dropRegion.id;
-            const insertIdx = (dropRegion.children || []).length;
+            let insertIdx = (dropRegion.children || []).length;
+            if (scopedMeta?.hostElement && scopedMeta.childIds.length > 0) {
+              const scopedInsert = dragDropManager.calculateFlexInsertPosition(
+                scopedMeta.hostElement,
+                upEvent,
+                "column",
+              );
+              const scopedIndex =
+                typeof scopedInsert.index === "number"
+                  ? scopedInsert.index
+                  : scopedMeta.childIds.length;
+              insertIdx = mapScopedInsertIndex(dropRegion, scopedMeta.childIds, scopedIndex);
+            }
             const moveCmd = new MoveNodeCommand(currentNode.id, targetId, insertIdx);
             const parentDesc = getDescriptor(dropRegion.type);
             const isFlowTarget = parentDesc?.childPositioning === "flow";
@@ -1178,7 +1226,11 @@ export function useNodePointer(deps: UseNodePointerDeps): {
                     ? { ...parentDesc.childFlowLayout }
                     : undefined,
                   layoutItem: undefined,
-                  props: resolveScopedSlotProps(currentNode.props || {}, dropRegion.type),
+                  props: resolveScopedSlotProps(
+                    currentNode.props || {},
+                    dropRegion.type,
+                    scopedKey,
+                  ),
                   style: {
                     ...(buildFlowResetStyle(currentNode.style) || {}),
                     ...(parentDesc.childStyle ? parentDesc.childStyle(dropRegion.type) : {}),
@@ -1191,7 +1243,11 @@ export function useNodePointer(deps: UseNodePointerDeps): {
                     ...(currentNode.layoutItem || {}),
                     free: { mode: "abs" as const, abs: { ...absPosForTarget } },
                   },
-                  props: resolveScopedSlotProps(currentNode.props || {}, dropRegion.type),
+                  props: resolveScopedSlotProps(
+                    currentNode.props || {},
+                    dropRegion.type,
+                    scopedKey,
+                  ),
                 };
             const updateCmd = createUpdateCommand(currentNode.id, updatePatch);
             if (history.value?.isInTransaction?.()) {
@@ -1388,15 +1444,25 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           clearDropTarget();
           return;
         }
+        const scopedMeta = resolveScopedSlotHostMeta(dropRegion, upEvent);
+        const scopedKey = scopedMeta?.key || null;
+        const currentScopedKey = scopedMeta?.keyProp
+          ? String(currentNode.props?.[scopedMeta.keyProp] || "")
+          : "";
+        const isSameScopedContainerMove = Boolean(
+          dropRegion &&
+          dropRegion.id === originParent?.id &&
+          scopedKey &&
+          currentScopedKey !== scopedKey,
+        );
         if (
           dropRegion &&
           dropRegion.id &&
-          dropRegion.id !== originParent?.id &&
+          (dropRegion.id !== originParent?.id || isSameScopedContainerMove) &&
           canAcceptChild(dropRegion, currentNode.type) &&
           !isSelfOrDescendant(dropRegion.id)
         ) {
           let insertIndex = (dropRegion.children || []).length;
-          const scopedMeta = resolveScopedSlotHostMeta(dropRegion);
           if (scopedMeta?.hostElement) {
             if (scopedMeta.childIds.length > 0) {
               const scopedInsert = dragDropManager.calculateFlexInsertPosition(
@@ -1487,19 +1553,27 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               width: "100%",
               height: isContainer.value ? "100%" : "auto",
             };
-            updatePatch.props = resolveScopedSlotProps(currentNode.props || {}, "Tabs");
+            updatePatch.props = resolveScopedSlotProps(currentNode.props || {}, "Tabs", scopedKey);
           } else if (dropRegion?.type === "Collapse") {
             updatePatch.style = {
               ...(buildFlowResetStyle(currentNode.style) || {}),
               width: "100%",
               height: isContainer.value ? "100%" : "auto",
             };
-            updatePatch.props = resolveScopedSlotProps(currentNode.props || {}, "Collapse");
+            updatePatch.props = resolveScopedSlotProps(
+              currentNode.props || {},
+              "Collapse",
+              scopedKey,
+            );
           } else if (shouldResetSize) {
             updatePatch.style = buildFlowResetStyle(currentNode.style);
           }
           if (!updatePatch.props) {
-            updatePatch.props = resolveScopedSlotProps(currentNode.props || {}, dropRegion?.type);
+            updatePatch.props = resolveScopedSlotProps(
+              currentNode.props || {},
+              dropRegion?.type,
+              scopedKey,
+            );
           }
           const updateCommand = createUpdateCommand(currentNode.id, updatePatch);
           if (history.value?.isInTransaction?.()) {
@@ -1510,9 +1584,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
             history.value.execute(updateCommand);
           } else if (doc.value?._moveNode && doc.value?._updateNode) {
             doc.value._moveNode(currentNode.id, dropRegion.id, insertIndex);
-            doc.value._updateNode(currentNode.id, {
-              positioning: "flow",
-            });
+            doc.value._updateNode(currentNode.id, updatePatch);
           }
         }
         if (restrictToContainer && dragContainer && rootNodeId) {

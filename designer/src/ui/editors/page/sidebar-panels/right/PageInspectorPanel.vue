@@ -266,6 +266,7 @@ function updateCurrentPageConfig(): void {
     backgroundSize: form.backgroundSize,
     backgroundPosition: form.backgroundPosition,
     backgroundRepeat: form.backgroundRepeat,
+    styleConfig: form.styleConfig,
     transitionType: form.transitionType,
     openMode: isSystemPage.value ? "replace" : form.openMode,
     popupWidth: form.popupWidth,

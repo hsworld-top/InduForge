@@ -51,6 +51,7 @@ import { createNodeStyleHelpers } from "./composables/use-node-style";
 import { usePreview } from "./composables/use-preview";
 import { canvasSnapEnabledKey, canvasZoomKey, runtimeAccessContextKey } from "./injection-keys";
 import { createDragDropManager } from "./interaction/DragDropManager";
+import { buildDesignerNodeDomId } from "./style-config-css";
 
 interface NodeRendererProps {
   nodeId: string;
@@ -375,8 +376,8 @@ const {
   collapseItems,
   carouselItems,
   dropdownLabel,
-  activeTabChildIds,
-  activeCollapseChildIds,
+  getTabChildIds,
+  getCollapseChildIds,
   regionHintText,
   useComponentWrapper,
   renderKey,
@@ -742,11 +743,13 @@ const styleConfigText = computed<string>(() => {
 const hasStyleConfigSelector = computed(() => styleConfigText.value.includes("{"));
 const nodeDomId = computed<string>(() => {
   if (!node.value) return "";
-  const customId = typeof node.value.props?.id === "string" ? node.value.props.id.trim() : "";
-  if (customId) return customId;
   if (!node.value.id) return "";
-  return `dom-${node.value.id}`;
+  return buildDesignerNodeDomId(node.value.id);
 });
+const selectorStyleConfig = computed<string>(() =>
+  hasStyleConfigSelector.value ? styleConfigText.value : "",
+);
+nodeStyleHelpers.createStyleElementSync(node as any, selectorStyleConfig as any);
 const inlineStyleConfig = computed<string>(() => {
   if (hasStyleConfigSelector.value) return "";
   return styleConfigText.value ? styleConfigText.value : "";
@@ -905,13 +908,14 @@ function handleDragLeave(): void {
   <component
     :is="outerTag"
     v-if="node && isNodeVisible"
+    v-bind="useComponentWrapper ? filteredProps : {}"
     :id="useComponentWrapper ? nodeDomId : null"
     :ref="setNodeRef"
     :class="nodeClass"
     :style="outerStyle"
     :data-node-id="node.id"
     :data-node-type="node.type"
-    v-bind="useComponentWrapper ? filteredProps : {}"
+    :data-node-dom-id="nodeDomId"
     v-on="useComponentWrapper ? mergedEventListeners : {}"
     @click.stop="handleClick"
     @dblclick.stop="handleDoubleClick"
@@ -925,9 +929,9 @@ function handleDragLeave(): void {
     <component
       :is="renderTag"
       v-if="!useComponentWrapper"
+      v-bind="filteredProps"
       :id="!useComponentWrapper ? nodeDomId : null"
       :key="renderKey"
-      v-bind="filteredProps"
       ref="contentRef"
       :style="contentStyleWithConfig"
       v-on="mergedEventListeners"
@@ -1022,31 +1026,24 @@ function handleDragLeave(): void {
             @dragleave="handleDragLeave"
             @drop.prevent="handleDrop"
           >
-            <template v-if="isActiveTab(tab)">
-              <template v-if="isContainer && activeTabChildIds.length === 0 && !props.isRoot">
-                <div class="empty-container-hint">
-                  <span v-if="isDropActive">释放以添加组件</span>
-                  <span v-else>拖拽组件到此处</span>
-                </div>
-              </template>
-              <span
-                v-if="activeTabChildIds.length === 0 && tab.content"
-                class="tabs-pane-placeholder"
-              >
-                {{ tab.content }}
-              </span>
-              <NodeRenderer
-                v-for="childId in activeTabChildIds"
-                :key="childId"
-                :node-id="childId"
-                :readonly="props.readonly"
-              />
+            <template v-if="isContainer && getTabChildIds(tab).length === 0 && !props.isRoot">
+              <div class="empty-container-hint">
+                <span v-if="isDropActive">释放以添加组件</span>
+                <span v-else>拖拽组件到此处</span>
+              </div>
             </template>
-            <template v-else>
-              <span class="tabs-pane-placeholder">
-                {{ tab.content }}
-              </span>
-            </template>
+            <span
+              v-if="getTabChildIds(tab).length === 0 && tab.content"
+              class="tabs-pane-placeholder"
+            >
+              {{ tab.content }}
+            </span>
+            <NodeRenderer
+              v-for="childId in getTabChildIds(tab)"
+              :key="childId"
+              :node-id="childId"
+              :readonly="props.readonly"
+            />
           </div>
         </el-tab-pane>
       </template>
@@ -1068,31 +1065,24 @@ function handleDragLeave(): void {
             @dragleave="handleDragLeave"
             @drop.prevent="handleDrop"
           >
-            <template v-if="isActiveCollapseItem(item)">
-              <template v-if="isContainer && activeCollapseChildIds.length === 0 && !props.isRoot">
-                <div class="empty-container-hint">
-                  <span v-if="isDropActive">释放以添加组件</span>
-                  <span v-else>拖拽组件到此处</span>
-                </div>
-              </template>
-              <span
-                v-if="activeCollapseChildIds.length === 0 && item.content"
-                class="collapse-pane-placeholder"
-              >
-                {{ item.content }}
-              </span>
-              <NodeRenderer
-                v-for="childId in activeCollapseChildIds"
-                :key="childId"
-                :node-id="childId"
-                :readonly="props.readonly"
-              />
+            <template v-if="isContainer && getCollapseChildIds(item).length === 0 && !props.isRoot">
+              <div class="empty-container-hint">
+                <span v-if="isDropActive">释放以添加组件</span>
+                <span v-else>拖拽组件到此处</span>
+              </div>
             </template>
-            <template v-else>
-              <span class="collapse-pane-placeholder">
-                {{ item.content }}
-              </span>
-            </template>
+            <span
+              v-if="getCollapseChildIds(item).length === 0 && item.content"
+              class="collapse-pane-placeholder"
+            >
+              {{ item.content }}
+            </span>
+            <NodeRenderer
+              v-for="childId in getCollapseChildIds(item)"
+              :key="childId"
+              :node-id="childId"
+              :readonly="props.readonly"
+            />
           </div>
         </el-collapse-item>
       </template>

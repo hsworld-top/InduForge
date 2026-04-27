@@ -59,8 +59,15 @@ const fullWidthCommaPattern = /，/g;
 const fullWidthSemicolonPattern = /；/g;
 const fullWidthColonPattern = /：/g;
 
-function normalizeOptions<T>(source: unknown, fallback: T[]): T[] {
-  if (Array.isArray(source)) return source;
+function normalizeOptions<T>(
+  source: unknown,
+  fallback: T[],
+  options: { fallbackWhenEmpty?: boolean } = {},
+): T[] {
+  if (Array.isArray(source)) {
+    if (source.length > 0 || !options.fallbackWhenEmpty) return source;
+    return fallback;
+  }
   return fallback;
 }
 
@@ -199,7 +206,9 @@ export function useNodeRendererDerivations({
   });
 
   const collapseItems = computed(() => {
-    return normalizeOptions(node.value?.props?.items, fallbackCollapseItems);
+    return normalizeOptions(node.value?.props?.items, fallbackCollapseItems, {
+      fallbackWhenEmpty: true,
+    });
   });
 
   const carouselItems = computed(() => {
@@ -211,34 +220,54 @@ export function useNodeRendererDerivations({
     return node.value.props?.label || node.value.label || "下拉菜单";
   });
 
-  const activeTabChildIds = computed(() => {
+  const resolveScopedChildIds = (
+    keyProp: "tabKey" | "collapseKey",
+    currentKey: string,
+    firstKey: string,
+  ): string[] => {
     void docVersion.value;
-    if (!node.value || node.value.type !== "Tabs" || !doc.value) return [];
-    const current = activeTabName.value;
+    if (!node.value || !doc.value) return [];
     return (node.value.children || []).filter((childId) => {
       const childNode = doc.value?.getNode?.(childId);
       if (!childNode) return false;
-      const tabKey = childNode.props?.tabKey;
-      if (!tabKey) {
-        return Boolean(current);
+      const slotKey = childNode.props?.[keyProp];
+      if (!slotKey) {
+        return Boolean(currentKey) && currentKey === firstKey;
       }
-      return String(tabKey) === String(current);
+      return String(slotKey) === currentKey;
     });
+  };
+
+  const resolveTabKey = (tab: Record<string, unknown> | null | undefined): string => {
+    const raw = tab?.name ?? tab?.label ?? "";
+    return String(raw || "").trim();
+  };
+
+  const resolveCollapseKey = (item: Record<string, unknown> | null | undefined): string => {
+    const raw = item?.name ?? item?.title ?? item?.label ?? "";
+    return String(raw || "").trim();
+  };
+
+  const getTabChildIds = (tab: Record<string, unknown> | null | undefined): string[] => {
+    if (!node.value || node.value.type !== "Tabs") return [];
+    const current = resolveTabKey(tab);
+    const first = resolveTabKey(_tabsList.value?.[0]);
+    return resolveScopedChildIds("tabKey", current, first);
+  };
+
+  const getCollapseChildIds = (item: Record<string, unknown> | null | undefined): string[] => {
+    if (!node.value || node.value.type !== "Collapse") return [];
+    const current = resolveCollapseKey(item);
+    const first = resolveCollapseKey(_collapseItems.value?.[0]);
+    return resolveScopedChildIds("collapseKey", current, first);
+  };
+
+  const activeTabChildIds = computed(() => {
+    return getTabChildIds({ name: activeTabName.value });
   });
 
   const activeCollapseChildIds = computed(() => {
-    void docVersion.value;
-    if (!node.value || node.value.type !== "Collapse" || !doc.value) return [];
-    const current = String(activeCollapseName.value || "").trim();
-    return (node.value.children || []).filter((childId) => {
-      const childNode = doc.value?.getNode?.(childId);
-      if (!childNode) return false;
-      const collapseKey = childNode.props?.collapseKey;
-      if (!collapseKey) {
-        return Boolean(current);
-      }
-      return String(collapseKey) === current;
-    });
+    return getCollapseChildIds({ name: activeCollapseName.value });
   });
 
   const regionHintText = computed(() => {
@@ -300,6 +329,8 @@ export function useNodeRendererDerivations({
     dropdownLabel,
     activeTabChildIds,
     activeCollapseChildIds,
+    getTabChildIds,
+    getCollapseChildIds,
     regionHintText,
     useComponentWrapper,
     renderKey,
