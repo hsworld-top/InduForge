@@ -11,6 +11,7 @@ export const AUTH_EXPIRED = "AUTH_EXPIRED";
 export const APP_BOOTSTRAP_TIMEOUT_MS = 3000;
 
 const DEBUG_BASE_PATH = "/datacenter/debug";
+const HANDOFF_STORAGE_PREFIX = "embedded_app_handoff:";
 const DEFAULT_DEBUG_ROUTE_ENABLED =
   typeof __DATACENTER_DEBUG_ROUTE_ENABLED__ !== "undefined"
     ? __DATACENTER_DEBUG_ROUTE_ENABLED__
@@ -46,6 +47,71 @@ const resolveHandoffValue = (handoff) => {
   }
 
   return asNonEmptyString(handoff.handoff);
+};
+
+const readTopLevelHandoffRecord = (handoff) => {
+  const handoffValue = resolveHandoffValue(handoff);
+  if (!handoffValue) {
+    return null;
+  }
+
+  try {
+    const rawValue = resolveWindowLike()?.localStorage?.getItem(
+      `${HANDOFF_STORAGE_PREFIX}${handoffValue}`,
+    );
+    if (!rawValue) {
+      return null;
+    }
+
+    const record = JSON.parse(rawValue);
+    if (!record || typeof record !== "object") {
+      return null;
+    }
+
+    if (
+      record.handoffId !== handoffValue ||
+      record.appType !== DATACENTER_APP ||
+      typeof record.expiresAt !== "number" ||
+      record.expiresAt <= Date.now()
+    ) {
+      return null;
+    }
+
+    return record;
+  } catch (error) {
+    console.warn("读取 datacenter handoff 票据失败:", error);
+    return null;
+  }
+};
+
+export const restoreTopLevelHandoffRecord = (handoff) => {
+  const record = readTopLevelHandoffRecord(handoff);
+  if (!record) {
+    return false;
+  }
+
+  const nextProjectId = asNonEmptyString(record.projectId);
+  const nextTenantId = asNonEmptyString(record.tenantId);
+  const nextTheme = asNonEmptyString(record.theme);
+  const nextLocale = asNonEmptyString(record.locale);
+
+  if (!nextProjectId) {
+    return false;
+  }
+
+  Storage.setProjectId(nextProjectId);
+  if (nextTenantId) {
+    Storage.setTenantId(nextTenantId);
+  }
+  if (nextTheme) {
+    Storage.setTheme(nextTheme);
+    applyThemeToDocument(nextTheme);
+  }
+  if (nextLocale) {
+    Storage.setLanguage(nextLocale);
+  }
+
+  return true;
 };
 
 const resolveMessagePayload = (value) => {
@@ -357,12 +423,14 @@ export function initializeHostBootstrap({
   const topLevelWindow =
     isTopLevelWindow ??
     resolveWindowLike()?.parent === (selfWindow ?? resolveWindowLike());
+  const restoredTopLevelHandoff =
+    topLevelWindow && Boolean(handoff) && restoreTopLevelHandoffRecord(handoff);
   const trustedReferrer = referrer ?? resolveDocumentLike()?.referrer ?? "";
   const shouldRedirectToIde = shouldRedirectTopLevelToIde(
     resolvedUrl.pathname,
     topLevelWindow,
     hasReusableTopLevelSession({
-      handoff,
+      handoff: restoredTopLevelHandoff ? null : handoff,
     }),
   );
   const shouldForceBootstrapByHandoff = Boolean(handoff) && !topLevelWindow;
@@ -399,6 +467,7 @@ export function initializeHostBootstrap({
     plan: {
       handoff,
       ideRedirectUrl: restoreUrl,
+      restoredTopLevelHandoff,
       shouldRedirectToIde,
       shouldWaitForBootstrap,
       trustedHostOrigin: trustedOrigin,

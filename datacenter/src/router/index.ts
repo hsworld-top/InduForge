@@ -15,6 +15,7 @@ import {
   buildIdeRestoreUrl,
   hasReusableTopLevelSession,
   resolveIdeOriginFromRuntime,
+  restoreTopLevelHandoffRecord,
   shouldRedirectTopLevelToIde,
   shouldUseDebugMode,
   waitForHostBootstrap,
@@ -82,12 +83,18 @@ export function registerDatacenterBeforeEachGuard(
     const handoff = runtimeUrl.searchParams.get("handoff");
     const isDebugRoute =
       shouldUseDebugMode(runtimeUrl.pathname) || to.meta.requiresAuth === false;
+    const isTopLevel = isTopLevelWindow();
+    const restoredTopLevelHandoff =
+      isTopLevel && Boolean(handoff) && restoreTopLevelHandoffRecord(handoff);
+    const allowReusableSession = hasReusableTopLevelSession({
+      handoff: restoredTopLevelHandoff ? null : handoff,
+    });
 
     if (
       shouldRedirectTopLevelToIde(
         runtimeUrl.pathname,
-        isTopLevelWindow(),
-        hasReusableTopLevelSession(),
+        isTopLevel,
+        allowReusableSession,
       )
     ) {
       navigateToUrl(buildIdeRestoreUrl(handoff, ideOrigin));
@@ -109,10 +116,12 @@ export function registerDatacenterBeforeEachGuard(
 
     let token = Storage.getToken();
     let bootstrapReady = true;
-    if (handoff) {
+    if (handoff && !isTopLevel) {
       /**
        * handoff 表示宿主要求恢复新的工程上下文。
        * 等待 bootstrap 前先清掉旧工程与租户，避免超时时继续读到上一工程残留。
+       * 顶层独立打开时，main.ts 已经尝试从同源 handoff 票据恢复工程上下文，
+       * 这里不能再清理，否则会再次触发回 IDE 恢复。
        */
       Storage.removeProjectId();
       Storage.remove(STORAGE_KEYS.TENANT_ID);
