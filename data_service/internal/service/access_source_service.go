@@ -299,9 +299,9 @@ func accessSourceCapabilities(connectionType string) []string {
 	case "mqtt":
 		return []string{"subscriptions", "messages", "tags", "preview", "datapoints"}
 	case "kafka":
-		return []string{"config", "mockPreview", "artifact"}
+		return []string{"config", "preview", "artifact"}
 	case "http", "websocket", "redis":
-		return []string{"config", "artifact"}
+		return []string{"config", "preview", "artifact"}
 	default:
 		return []string{"config"}
 	}
@@ -324,6 +324,11 @@ func accessSourceTabs(connection repository.ConnectionRecord) []AccessSourceTabA
 		tabs = append(tabs,
 			AccessSourceTabAvailability{Key: "mapping", Enabled: true, EntryPath: "mqtt/tags"},
 			AccessSourceTabAvailability{Key: "preview", Enabled: true, EntryPath: "mqtt/messages"},
+		)
+	case "kafka", "http", "websocket", "redis":
+		tabs = append(tabs,
+			AccessSourceTabAvailability{Key: "mapping", Enabled: false, Reason: "该协议当前仅提供样本预览与后续映射入口"},
+			AccessSourceTabAvailability{Key: "preview", Enabled: true, EntryPath: "protocols/preview"},
 		)
 	default:
 		tabs = append(tabs,

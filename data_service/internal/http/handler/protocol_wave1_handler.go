@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 
+	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/response"
 	"github.com/indu-forge/data_service/internal/service"
@@ -10,12 +13,21 @@ import (
 
 // ProtocolWave1Handler 负责第一波协议（kafka/http/ws/redis）接口。
 type ProtocolWave1Handler struct {
-	service *service.ProtocolWave1Service
+	service        *service.ProtocolWave1Service
+	previewService protocolPreviewService
+}
+
+type protocolPreviewService interface {
+	Preview(ctx context.Context, projectID, connectionID string, input service.ProtocolPreviewInput) (*service.ProtocolPreviewResult, error)
 }
 
 // NewProtocolWave1Handler 创建第一波协议处理器。
-func NewProtocolWave1Handler(protocolService *service.ProtocolWave1Service) *ProtocolWave1Handler {
-	return &ProtocolWave1Handler{service: protocolService}
+func NewProtocolWave1Handler(protocolService *service.ProtocolWave1Service, previewServices ...protocolPreviewService) *ProtocolWave1Handler {
+	handler := &ProtocolWave1Handler{service: protocolService}
+	if len(previewServices) > 0 {
+		handler.previewService = previewServices[0]
+	}
+	return handler
 }
 
 // CreateKafkaConfig 创建 Kafka Source 配置。
@@ -61,12 +73,50 @@ func (h *ProtocolWave1Handler) PreviewKafkaTopic(w http.ResponseWriter, r *http.
 		return err
 	}
 
+	if h.previewService != nil {
+		result, err := h.previewService.Preview(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), service.ProtocolPreviewInput{})
+		if err != nil {
+			return normalizeRepresentativeHandlerError(err)
+		}
+		rows := make([]service.KafkaPreview, 0, len(result.Samples))
+		for _, sample := range result.Samples {
+			rows = append(rows, service.KafkaPreview{
+				Topic:   toStringForHandler(result.Diagnostics["topic"]),
+				Payload: toStringForHandler(sample),
+			})
+		}
+		response.WriteSuccess(w, middleware.RequestID(r.Context()), rows)
+		return nil
+	}
+
 	rows, err := h.service.PreviewKafkaTopic(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), rows)
+	return nil
+}
+
+// PreviewProtocol 统一执行 Phase 1 协议短时真实抓样。
+func (h *ProtocolWave1Handler) PreviewProtocol(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	if h.previewService == nil {
+		return normalizeRepresentativeHandlerError(apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "协议预览服务未初始化"))
+	}
+
+	var request service.ProtocolPreviewInput
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.previewService.Preview(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
 
@@ -181,4 +231,19 @@ func (h *ProtocolWave1Handler) CreateRedisConfig(w http.ResponseWriter, r *http.
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
 	return nil
+}
+
+func toStringForHandler(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case nil:
+		return ""
+	default:
+		payload, err := json.Marshal(typed)
+		if err != nil {
+			return ""
+		}
+		return string(payload)
+	}
 }

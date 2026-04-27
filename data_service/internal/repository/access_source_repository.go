@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -86,19 +87,38 @@ func (r *AccessSourceRepository) CountDataPointsByConnections(ctx context.Contex
 // ListRecentRecords 返回项目内每个接入源最近一条开发态记录。
 func (r *AccessSourceRepository) ListRecentRecords(ctx context.Context, projectID string) (map[string]AccessSourceRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT DISTINCT ON (sub.connection_id)
-            sub.connection_id::text,
-            'mqtt.message' AS record_type,
-            '收到 MQTT 消息' AS title,
-            'ok' AS status,
-            msg.topic,
-            msg.received_at
-        FROM data_mqtt_messages msg
-        JOIN data_mqtt_subscriptions sub
-          ON sub.id = msg.subscription_id
-         AND sub.project_id = msg.project_id
-        WHERE msg.project_id = $1
-        ORDER BY sub.connection_id, msg.received_at DESC
+        SELECT DISTINCT ON (records.connection_id)
+            records.connection_id,
+            records.record_type,
+            records.title,
+            records.status,
+            records.detail,
+            records.created_at
+        FROM (
+            SELECT
+                sub.connection_id::text AS connection_id,
+                'mqtt.message' AS record_type,
+                '收到 MQTT 消息' AS title,
+                'ok' AS status,
+                jsonb_build_object('topic', msg.topic) AS detail,
+                msg.received_at AS created_at
+            FROM data_mqtt_messages msg
+            JOIN data_mqtt_subscriptions sub
+              ON sub.id = msg.subscription_id
+             AND sub.project_id = msg.project_id
+            WHERE msg.project_id = $1
+            UNION ALL
+            SELECT
+                connection_id::text,
+                record_type,
+                title,
+                status,
+                detail,
+                created_at
+            FROM data_access_source_records
+            WHERE project_id = $1
+        ) records
+        ORDER BY records.connection_id, records.created_at DESC
     `, projectID)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询接入源最近记录失败", err)
@@ -108,13 +128,13 @@ func (r *AccessSourceRepository) ListRecentRecords(ctx context.Context, projectI
 	result := make(map[string]AccessSourceRecord)
 	for rows.Next() {
 		var (
-			item  AccessSourceRecord
-			topic string
+			item        AccessSourceRecord
+			detailBytes []byte
 		)
-		if err := rows.Scan(&item.ConnectionID, &item.RecordType, &item.Title, &item.Status, &topic, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ConnectionID, &item.RecordType, &item.Title, &item.Status, &detailBytes, &item.CreatedAt); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取接入源最近记录失败", err)
 		}
-		item.Detail = map[string]any{"topic": topic}
+		item.Detail = unmarshalAccessSourceRecordDetail(detailBytes)
 		result[item.ConnectionID] = item
 	}
 	if err := rows.Err(); err != nil {
@@ -134,19 +154,39 @@ func (r *AccessSourceRepository) ListRecordsByConnection(ctx context.Context, pr
 
 	rows, err := r.pool.Query(ctx, `
         SELECT
-            sub.connection_id::text,
-            'mqtt.message' AS record_type,
-            '收到 MQTT 消息' AS title,
-            'ok' AS status,
-            msg.topic,
-            msg.received_at
-        FROM data_mqtt_messages msg
-        JOIN data_mqtt_subscriptions sub
-          ON sub.id = msg.subscription_id
-         AND sub.project_id = msg.project_id
-        WHERE msg.project_id = $1
-          AND sub.connection_id = $2
-        ORDER BY msg.received_at DESC
+            records.connection_id,
+            records.record_type,
+            records.title,
+            records.status,
+            records.detail,
+            records.created_at
+        FROM (
+            SELECT
+                sub.connection_id::text AS connection_id,
+                'mqtt.message' AS record_type,
+                '收到 MQTT 消息' AS title,
+                'ok' AS status,
+                jsonb_build_object('topic', msg.topic) AS detail,
+                msg.received_at AS created_at
+            FROM data_mqtt_messages msg
+            JOIN data_mqtt_subscriptions sub
+              ON sub.id = msg.subscription_id
+             AND sub.project_id = msg.project_id
+            WHERE msg.project_id = $1
+              AND sub.connection_id = $2
+            UNION ALL
+            SELECT
+                connection_id::text,
+                record_type,
+                title,
+                status,
+                detail,
+                created_at
+            FROM data_access_source_records
+            WHERE project_id = $1
+              AND connection_id = $2
+        ) records
+        ORDER BY records.created_at DESC
         LIMIT $3
     `, projectID, connectionID, limit)
 	if err != nil {
@@ -157,17 +197,28 @@ func (r *AccessSourceRepository) ListRecordsByConnection(ctx context.Context, pr
 	records := make([]AccessSourceRecord, 0)
 	for rows.Next() {
 		var (
-			item  AccessSourceRecord
-			topic string
+			item        AccessSourceRecord
+			detailBytes []byte
 		)
-		if err := rows.Scan(&item.ConnectionID, &item.RecordType, &item.Title, &item.Status, &topic, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ConnectionID, &item.RecordType, &item.Title, &item.Status, &detailBytes, &item.CreatedAt); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取接入源记录失败", err)
 		}
-		item.Detail = map[string]any{"topic": topic}
+		item.Detail = unmarshalAccessSourceRecordDetail(detailBytes)
 		records = append(records, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历接入源记录失败", err)
 	}
 	return records, nil
+}
+
+func unmarshalAccessSourceRecordDetail(payload []byte) map[string]any {
+	if len(payload) == 0 {
+		return map[string]any{}
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(payload, &detail); err != nil || detail == nil {
+		return map[string]any{}
+	}
+	return detail
 }

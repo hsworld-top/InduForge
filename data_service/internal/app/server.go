@@ -164,6 +164,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
+	protocolPreviewService := service.NewProtocolPreviewService(protocolWave1Repository, service.NewDefaultProtocolPreviewAdapters())
 	protocolWave2Service := service.NewProtocolWave2Service(protocolWave2Repository)
 	computeService := service.NewComputeService(
 		computeRepository,
@@ -183,7 +184,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
-	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service)
+	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service, protocolPreviewService)
 	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
 	computeHandler := handler.NewComputeHandler(computeService)
 

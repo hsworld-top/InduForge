@@ -836,6 +836,14 @@ func mountProtocolWave1Routes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/protocols/{connectionId}/preview",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.protocolWave1Handler.PreviewProtocol),
+			),
+		),
+	)
+	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/http/configs",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(

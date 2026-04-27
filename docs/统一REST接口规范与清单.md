@@ -478,6 +478,35 @@
 | `POST` | `/api/v1/data/projects/{projectId}/http/configs` | 创建 HTTP 配置 |
 | `POST` | `/api/v1/data/projects/{projectId}/websocket/configs` | 创建 WebSocket 配置 |
 | `POST` | `/api/v1/data/projects/{projectId}/redis/configs` | 创建 Redis 配置 |
+| `POST` | `/api/v1/data/projects/{projectId}/protocols/{connectionId}/preview` | 统一短时真实抓样 |
+
+统一协议 preview 请求体：
+
+```json
+{
+  "limit": 10,
+  "timeoutMs": 5000,
+  "options": {}
+}
+```
+
+统一协议 preview 响应 `data` 字段：
+
+```json
+{
+  "protocol": "http",
+  "connectionId": "uuid",
+  "status": "ok",
+  "schema": {},
+  "samples": [],
+  "rawPayload": "",
+  "diagnostics": {},
+  "durationMs": 12,
+  "truncated": false
+}
+```
+
+`limit` 默认 10、最大 100；`timeoutMs` 默认 5000、最大 30000。服务端只持久化接入源预览摘要，不保存 `samples/rawPayload` 原始数据。
 
 #### 协议 Wave 2
 

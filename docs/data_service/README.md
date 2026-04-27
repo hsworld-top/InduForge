@@ -20,10 +20,10 @@
 
 - `relational`：正式支持配置、查询预览、数据点映射与 artifact 输出。
 - `mqtt`：Phase 1 样板协议，正式支持配置、短时 preview、消息样本、Tag/Subscription 管理与 artifact 输出。
-- `kafka`：正式纳入 Phase 1，当前提供配置能力、artifact 输出，以及 `mock` 级 topic preview 样本。
-- `http`：正式纳入 Phase 1，当前提供配置能力与 artifact 输出，不提供独立 preview/runtime 采集能力。
-- `websocket`：正式纳入 Phase 1，当前提供配置能力与 artifact 输出，不提供独立 preview/runtime 采集能力。
-- `redis`：正式纳入 Phase 1，当前提供配置能力与 artifact 输出，不提供独立 preview/runtime 采集能力。
+- `kafka`：正式纳入 Phase 1，提供配置能力、artifact 输出与基于临时 reader 的真实 topic 短时 preview。
+- `http`：正式纳入 Phase 1，提供配置能力、artifact 输出与一次性 HTTP 请求 preview。
+- `websocket`：正式纳入 Phase 1，提供配置能力、artifact 输出与短连接 WebSocket 消息 preview。
+- `redis`：正式纳入 Phase 1，提供配置能力、artifact 输出与有限 key/value preview。
 
 ### 非 Phase 1 正式范围
 
@@ -38,8 +38,8 @@
 ### 产物与 preview 边界
 
 - `artifact v1` 的正式协议区块只包含 `mqtt` 与 `protocols.kafka/http/websocket/redis`。
-- `preview socket` 与短时会话只服务开发态调试，不承担长期采集。
-- Kafka preview 当前返回 `mock` 样本，目的是给 `datacenter` 和联调链路提供稳定调试口径，而不是承诺完整运行态消费栈。
+- `preview socket`、预览会话与统一协议 preview 只服务开发态调试，不承担长期采集。
+- `kafka/http/websocket/redis` 的统一协议 preview 是一次性短任务，请求结束即释放连接，不创建节点侧运行任务。
 
 ## 正式边界
 
