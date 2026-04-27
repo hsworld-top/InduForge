@@ -109,25 +109,24 @@ const passedCount = computed(
 }
 
 .contract-dialog__eyebrow {
-  color: #a16207;
+  color: var(--dc-primary);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .contract-dialog__header h2 {
   margin: 6px 0 6px;
-  color: #1c1917;
-  font-size: 24px;
-  font-weight: 850;
-  letter-spacing: -0.04em;
+  color: var(--dc-text);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .contract-dialog__header p {
   max-width: 620px;
   margin: 0;
-  color: #57534e;
+  color: var(--dc-text-secondary);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -135,21 +134,21 @@ const passedCount = computed(
 .contract-dialog__score {
   min-width: 98px;
   padding: 12px 14px;
-  border: 1px solid #cfe1dc;
-  border-radius: 8px;
-  background: #e8f0ed;
+  border: 1px solid rgba(29, 78, 216, 0.2);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-primary-soft);
   text-align: center;
 }
 
 .contract-dialog__score strong {
   display: block;
-  color: #245b60;
+  color: var(--dc-primary);
   font-size: 22px;
   line-height: 1;
 }
 
 .contract-dialog__score span {
-  color: #255b5f;
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
@@ -162,9 +161,9 @@ const passedCount = computed(
 
 .contract-dialog__overview > div {
   padding: 12px 14px;
-  border: 1px solid #d6cebf;
-  border-radius: 8px;
-  background: #fbfaf4;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-subtle);
 }
 
 .contract-dialog__overview span,
@@ -173,13 +172,13 @@ const passedCount = computed(
 }
 
 .contract-dialog__overview span {
-  color: #78716c;
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
 .contract-dialog__overview strong {
   margin-top: 4px;
-  color: #292524;
+  color: var(--dc-text);
   font-size: 14px;
 }
 
@@ -197,19 +196,19 @@ const passedCount = computed(
   gap: 14px;
   align-items: stretch;
   padding: 14px;
-  border: 1px solid #d6cebf;
-  border-radius: 8px;
-  background: #fffdf7;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
 }
 
 .contract-check-card__status {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: var(--dc-radius-sm);
   color: #fff;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   writing-mode: vertical-rl;
   letter-spacing: 0.08em;
 }
@@ -234,23 +233,23 @@ const passedCount = computed(
 
 .contract-check-card h3 {
   margin: 0;
-  color: #1c1917;
+  color: var(--dc-text);
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .contract-check-card p {
   margin: 7px 0;
-  color: #44403c;
+  color: var(--dc-text-secondary);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .contract-check-card__checkpoint {
   padding: 9px 10px;
-  border-radius: 5px;
-  background: #f1eee5;
-  color: #57534e;
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -259,8 +258,8 @@ const passedCount = computed(
   display: flex;
   align-items: center;
   justify-content: center;
-  border-left: 1px dashed rgba(120, 113, 108, 0.24);
-  color: #78716c;
+  border-left: 1px dashed rgba(71, 85, 105, 0.24);
+  color: var(--dc-text-muted);
   font-size: 12px;
   text-align: center;
 }
@@ -270,10 +269,10 @@ const passedCount = computed(
   gap: 8px;
   margin-top: 14px;
   padding: 12px 14px;
-  border: 1px dashed #bdd9d2;
-  border-radius: 8px;
-  background: #e8f0ed;
-  color: #255b5f;
+  border: 1px dashed rgba(14, 165, 165, 0.38);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-accent-soft);
+  color: #0f766e;
   font-size: 13px;
 }
 
@@ -285,15 +284,15 @@ const passedCount = computed(
 }
 
 .contract-dialog__footer span {
-  color: #78716c;
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
 .contract-dialog__footer :deep(.el-button--primary) {
-  --el-button-bg-color: #197278;
-  --el-button-border-color: #197278;
-  --el-button-hover-bg-color: #255b5f;
-  --el-button-hover-border-color: #255b5f;
+  --el-button-bg-color: var(--dc-primary);
+  --el-button-border-color: var(--dc-primary);
+  --el-button-hover-bg-color: var(--dc-primary-hover);
+  --el-button-hover-border-color: var(--dc-primary-hover);
 }
 
 @media (max-width: 768px) {
@@ -315,7 +314,7 @@ const passedCount = computed(
   .contract-check-card__owner {
     justify-content: flex-start;
     border-left: 0;
-    border-top: 1px dashed rgba(120, 113, 108, 0.24);
+    border-top: 1px dashed rgba(71, 85, 105, 0.24);
     padding-top: 10px;
   }
 }

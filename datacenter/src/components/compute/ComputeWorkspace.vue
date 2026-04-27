@@ -142,13 +142,13 @@ const selectedTrigger = computed(() =>
 
 <style scoped>
 .compute-workspace {
-  --compute-paper: #fffdf7;
-  --compute-canvas: #f4f1ea;
-  --compute-line: #ded5c6;
-  --compute-ink: #20231f;
-  --compute-muted: #687066;
-  --compute-accent: #197278;
-  --compute-soft: #e8f0ed;
+  --compute-paper: var(--dc-surface-raised);
+  --compute-canvas: var(--dc-surface-subtle);
+  --compute-line: var(--dc-border);
+  --compute-ink: var(--dc-text);
+  --compute-muted: var(--dc-text-secondary);
+  --compute-accent: var(--dc-primary);
+  --compute-soft: var(--dc-primary-soft);
 
   height: 100%;
   display: grid;
@@ -162,10 +162,10 @@ const selectedTrigger = computed(() =>
 .compute-workspace__detail {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--dc-line, #d6cebf);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.92);
-  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .compute-workspace__side,
@@ -177,15 +177,14 @@ const selectedTrigger = computed(() =>
 .compute-workspace__main {
   display: flex;
   flex-direction: column;
-  background:
-    var(--compute-canvas);
+  background: var(--compute-canvas);
 }
 
 .compute-workspace__section-title {
   margin-bottom: 12px;
   color: var(--compute-ink);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .compute-workspace__section-title.is-spaced {
@@ -195,9 +194,9 @@ const selectedTrigger = computed(() =>
 .compute-workspace__mode,
 .compute-workspace__trigger {
   width: 100%;
-  border: 1px solid #ded5c6;
-  background: #f1eee5;
-  color: #44403c;
+  border: 1px solid var(--dc-border);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
   text-align: left;
 }
 
@@ -206,8 +205,8 @@ const selectedTrigger = computed(() =>
   grid-template-columns: 1fr auto;
   gap: 10px;
   margin-bottom: 8px;
-  padding: 12px;
-  border-radius: 7px;
+  padding: 10px;
+  border-radius: var(--dc-radius-sm);
 }
 
 .compute-workspace__mode strong,
@@ -229,7 +228,7 @@ const selectedTrigger = computed(() =>
 .compute-workspace__mode-card span {
   border-radius: 4px;
   background: var(--compute-soft);
-  color: #245b60;
+  color: var(--dc-primary);
   font-size: 11px;
   font-style: normal;
   font-weight: 800;
@@ -245,8 +244,8 @@ const selectedTrigger = computed(() =>
 .compute-workspace__trigger.is-active,
 .compute-workspace__mode-card.is-active {
   border-color: var(--compute-accent);
-  background: #fbfffb;
-  font-weight: 900;
+  background: var(--dc-primary-soft);
+  font-weight: 700;
 }
 
 .compute-workspace__trigger {
@@ -255,8 +254,8 @@ const selectedTrigger = computed(() =>
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
-  padding: 10px 12px;
-  border-radius: 7px;
+  padding: 9px 10px;
+  border-radius: var(--dc-radius-sm);
   font-size: 13px;
   font-weight: 700;
 }
@@ -270,14 +269,14 @@ const selectedTrigger = computed(() =>
   justify-content: space-between;
   gap: 18px;
   padding: 16px 18px 14px;
-  border-bottom: 1px solid rgba(214, 206, 191, 0.8);
+  border-bottom: 1px solid var(--dc-border);
   background: var(--compute-paper);
 }
 
 .compute-workspace__eyebrow {
-  color: #8a5b17;
+  color: var(--dc-primary);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .compute-workspace__hero h2 {
@@ -310,8 +309,8 @@ const selectedTrigger = computed(() =>
   min-height: 94px;
   padding: 12px;
   border: 1px solid var(--compute-line);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.92);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
 }
 
 .compute-workspace__mode-card div {
@@ -340,7 +339,7 @@ const selectedTrigger = computed(() =>
   flex: 1;
   flex-direction: column;
   border: 1px solid var(--compute-line);
-  border-radius: 8px;
+  border-radius: var(--dc-radius-md);
   background: var(--compute-paper);
 }
 
@@ -349,8 +348,8 @@ const selectedTrigger = computed(() =>
   justify-content: space-between;
   gap: 14px;
   padding: 14px 16px;
-  border-bottom: 1px solid #eee7da;
-  background: #f6f2e8;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
 }
 
 .compute-workspace__script-head strong {
@@ -379,9 +378,9 @@ const selectedTrigger = computed(() =>
 
 .compute-workspace__capability,
 .compute-workspace__panel {
-  border: 1px solid #e2d9ca;
-  border-radius: 8px;
-  background: #fbfaf4;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-subtle);
 }
 
 .compute-workspace__capability {
@@ -399,7 +398,7 @@ const selectedTrigger = computed(() =>
 
 .compute-workspace__capability code {
   margin-top: 4px;
-  color: #245b60;
+  color: var(--dc-primary);
   font-size: 11px;
   white-space: normal;
   word-break: break-all;

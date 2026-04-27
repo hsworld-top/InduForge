@@ -9,7 +9,7 @@
     <section class="datacenter-shell__surface">
       <header class="datacenter-shell__header">
         <div>
-          <div class="datacenter-shell__eyebrow">InduForge Data Center</div>
+          <div class="datacenter-shell__eyebrow">数据中心工作台</div>
           <h1 class="datacenter-shell__title">{{ activeMeta?.label }}</h1>
           <p class="datacenter-shell__description">
             {{ activeMeta?.description }}
@@ -51,24 +51,12 @@ const activeMeta = computed(() =>
 
 <style scoped>
 .datacenter-shell {
-  --dc-bg: #f4f1ea;
-  --dc-paper: #fffdf7;
-  --dc-ink: #20231f;
-  --dc-muted: #687066;
-  --dc-line: #d6cebf;
-  --dc-deep: #26322e;
-  --dc-accent: #197278;
-  --dc-soft: #e8f0ed;
-  --dc-shadow: 0 14px 34px rgba(48, 42, 32, 0.11);
-
   height: 100%;
   min-height: 480px;
   display: flex;
   overflow: hidden;
-  background:
-    linear-gradient(125deg, rgba(25, 114, 120, 0.1), transparent 34%),
-    linear-gradient(315deg, rgba(184, 121, 36, 0.09), transparent 42%),
-    var(--dc-bg);
+  background: var(--dc-bg);
+  color: var(--dc-text);
 }
 
 .datacenter-shell__surface {
@@ -76,45 +64,44 @@ const activeMeta = computed(() =>
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 12px;
   gap: 12px;
 }
 
 .datacenter-shell__header {
-  min-height: 76px;
+  min-height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 13px 16px;
-  border: 1px solid var(--dc-line);
+  padding: 10px 14px;
+  border: 1px solid var(--dc-border);
   border-radius: 8px;
-  background: rgba(255, 253, 247, 0.94);
-  box-shadow: var(--dc-shadow);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .datacenter-shell__eyebrow {
-  color: var(--dc-accent);
+  color: var(--dc-primary);
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .datacenter-shell__title {
-  margin: 4px 0 2px;
-  color: var(--dc-ink);
-  font-size: 23px;
-  font-weight: 900;
-  letter-spacing: -0.02em;
+  margin: 2px 0 1px;
+  color: var(--dc-text);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .datacenter-shell__description {
   margin: 0;
   max-width: 74ch;
-  color: var(--dc-muted);
+  color: var(--dc-text-secondary);
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.45;
 }
 
 .datacenter-shell__actions {
@@ -128,42 +115,44 @@ const activeMeta = computed(() =>
 }
 
 .datacenter-shell :deep(.el-button--primary) {
-  --el-button-bg-color: var(--dc-accent);
-  --el-button-border-color: var(--dc-accent);
-  --el-button-hover-bg-color: #255b5f;
-  --el-button-hover-border-color: #255b5f;
-  --el-button-active-bg-color: #174f54;
-  --el-button-active-border-color: #174f54;
+  --el-button-bg-color: var(--dc-primary);
+  --el-button-border-color: var(--dc-primary);
+  --el-button-hover-bg-color: var(--dc-primary-hover);
+  --el-button-hover-border-color: var(--dc-primary-hover);
+  --el-button-active-bg-color: var(--dc-primary-hover);
+  --el-button-active-border-color: var(--dc-primary-hover);
 }
 
 .datacenter-shell :deep(.el-button) {
-  border-radius: 5px;
-  font-weight: 800;
+  border-radius: var(--dc-radius-sm);
+  font-weight: 600;
 }
 
 .datacenter-shell :deep(.el-input__wrapper),
 .datacenter-shell :deep(.el-textarea__inner),
 .datacenter-shell :deep(.el-select__wrapper) {
-  border-radius: 5px;
-  background: #faf8f0;
-  box-shadow: 0 0 0 1px #d8cfbd inset;
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  box-shadow: 0 0 0 1px var(--dc-border) inset;
 }
 
 .datacenter-shell :deep(.el-input__wrapper.is-focus),
 .datacenter-shell :deep(.el-textarea__inner:focus),
 .datacenter-shell :deep(.el-select__wrapper.is-focused) {
-  box-shadow: 0 0 0 1px var(--dc-accent) inset;
+  box-shadow:
+    0 0 0 1px var(--dc-primary) inset,
+    0 0 0 3px rgba(29, 78, 216, 0.12);
 }
 
 .datacenter-shell :deep(.el-segmented) {
-  --el-segmented-bg-color: #f1eee5;
-  --el-segmented-item-selected-color: #fffdf7;
-  --el-segmented-item-selected-bg-color: var(--dc-accent);
-  border-radius: 5px;
+  --el-segmented-bg-color: var(--dc-surface-muted);
+  --el-segmented-item-selected-color: var(--dc-primary);
+  --el-segmented-item-selected-bg-color: var(--dc-surface-raised);
+  border-radius: var(--dc-radius-sm);
 }
 
 .datacenter-shell :deep(.el-tag) {
-  border-radius: 4px;
+  border-radius: var(--dc-radius-xs);
 }
 
 @media (max-width: 768px) {

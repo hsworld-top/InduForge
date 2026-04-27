@@ -51,15 +51,15 @@ const moduleIcons = {
 
 <style scoped>
 .datacenter-nav-rail {
-  width: 76px;
-  flex: 0 0 76px;
+  width: 68px;
+  flex: 0 0 68px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
-  padding: 12px 9px;
-  background: #26322e;
-  color: rgba(255, 255, 255, 0.76);
+  gap: 14px;
+  padding: 10px 8px;
+  background: #162033;
+  color: rgba(248, 250, 252, 0.76);
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -76,16 +76,16 @@ const moduleIcons = {
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fffdf7;
+  border-radius: var(--dc-radius-sm);
+  background: rgba(29, 78, 216, 0.26);
+  color: #f8fafc;
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
 .datacenter-nav-rail__caption {
-  color: rgba(255, 253, 247, 0.54);
+  color: rgba(226, 232, 240, 0.58);
   font-size: 10px;
   letter-spacing: 0.22em;
   writing-mode: vertical-rl;
@@ -95,21 +95,21 @@ const moduleIcons = {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .datacenter-nav-rail__item {
-  width: 56px;
-  min-height: 50px;
+  width: 52px;
+  min-height: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.74);
+  border-radius: var(--dc-radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(226, 232, 240, 0.76);
   font-size: 11px;
   line-height: 1;
   transition:
@@ -120,16 +120,16 @@ const moduleIcons = {
 }
 
 .datacenter-nav-rail__item:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fffdf7;
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
   transform: translateY(-1px);
 }
 
 .datacenter-nav-rail__item.is-active {
-  border-color: #f3f0e7;
-  background: #f3f0e7;
-  color: #26322e;
+  border-color: rgba(125, 168, 255, 0.9);
+  background: #e7efff;
+  color: var(--dc-primary);
   box-shadow: none;
-  font-weight: 900;
+  font-weight: 700;
 }
 </style>

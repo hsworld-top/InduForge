@@ -221,37 +221,37 @@ const currentTabLabel = computed(
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--dc-line, #d6cebf);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.94);
-  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .access-source-detail__hero {
   margin: 12px;
   padding: 14px;
-  border-radius: 8px;
-  background: #26322e;
-  color: #fffdf7;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text);
 }
 
 .access-source-detail__eyebrow {
-  color: rgba(255, 253, 247, 0.62);
+  color: var(--dc-primary);
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .access-source-detail__hero h3 {
   margin: 8px 0 4px;
-  font-size: 18px;
-  font-weight: 850;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .access-source-detail__hero p {
   margin: 0 0 14px;
-  color: rgba(255, 253, 247, 0.72);
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
@@ -265,17 +265,17 @@ const currentTabLabel = computed(
 
 .access-source-detail__tabs :deep(.el-tabs__item) {
   padding: 0 8px;
-  color: var(--dc-muted, #687066);
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
 .access-source-detail__tabs :deep(.el-tabs__item.is-active) {
-  color: var(--dc-accent, #197278);
-  font-weight: 800;
+  color: var(--dc-primary);
+  font-weight: 700;
 }
 
 .access-source-detail__tabs :deep(.el-tabs__active-bar) {
-  background: var(--dc-accent, #197278);
+  background: var(--dc-primary);
 }
 
 .access-source-detail__body {
@@ -294,20 +294,20 @@ const currentTabLabel = computed(
   justify-content: space-between;
   gap: 14px;
   padding: 12px 0;
-  border-bottom: 1px solid #e5ddcf;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .access-source-detail__list dt {
-  color: var(--dc-muted, #687066);
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
 .access-source-detail__list dd {
   min-width: 0;
   margin: 0;
-  color: var(--dc-ink, #20231f);
+  color: var(--dc-text);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   text-align: right;
   word-break: break-all;
 }
@@ -320,13 +320,13 @@ const currentTabLabel = computed(
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--dc-muted, #687066);
+  color: var(--dc-text-secondary);
   text-align: center;
 }
 
 .access-source-detail__placeholder strong,
 .access-source-detail__empty strong {
-  color: var(--dc-ink, #20231f);
+  color: var(--dc-text);
 }
 
 .access-source-detail__placeholder span,
@@ -339,9 +339,8 @@ const currentTabLabel = computed(
 .access-source-detail__empty-orb {
   width: 58px;
   height: 58px;
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(25, 114, 120, 0.18), transparent 48%),
-    #26322e;
+  border: 1px solid rgba(29, 78, 216, 0.2);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-primary-soft);
 }
 </style>

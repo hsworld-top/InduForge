@@ -133,16 +133,16 @@ const statusOptions = [
 .datapoint-workspace__detail {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--dc-line, #d6cebf);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.94);
-  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .datapoint-workspace__filters,
 .datapoint-workspace__detail {
   padding: 12px;
-  background: #fbfaf4;
+  background: var(--dc-surface);
 }
 
 .datapoint-workspace__list {
@@ -155,21 +155,21 @@ const statusOptions = [
   align-items: center;
   justify-content: space-between;
   padding: 13px 14px 11px;
-  border-bottom: 1px solid var(--dc-line, #d6cebf);
-  background: var(--dc-paper, #fffdf7);
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
 }
 
 .datapoint-workspace__list-head p {
   margin: 2px 0 0;
-  color: var(--dc-muted, #687066);
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
 .datapoint-workspace__panel-title {
   margin-bottom: 12px;
-  color: var(--dc-ink, #20231f);
+  color: var(--dc-text);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .datapoint-workspace__filter-block {
@@ -178,9 +178,9 @@ const statusOptions = [
 
 .datapoint-workspace__filter-label {
   margin-bottom: 8px;
-  color: var(--dc-muted, #687066);
+  color: var(--dc-text-secondary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .datapoint-workspace__filter-item {
@@ -190,24 +190,24 @@ const statusOptions = [
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
-  padding: 10px 12px;
-  border: 1px solid #ded5c6;
-  border-radius: 7px;
-  background: #f1eee5;
-  color: #465047;
+  padding: 9px 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
   text-align: left;
 }
 
 .datapoint-workspace__filter-item small {
-  color: #7c8078;
+  color: var(--dc-text-muted);
   font-size: 11px;
 }
 
 .datapoint-workspace__filter-item.is-active {
-  border-color: #cfe1dc;
-  background: var(--dc-soft, #e8f0ed);
-  color: #245b60;
-  font-weight: 900;
+  border-color: rgba(29, 78, 216, 0.34);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-weight: 700;
 }
 
 .datapoint-workspace__detail {
@@ -217,9 +217,10 @@ const statusOptions = [
 
 .datapoint-workspace__detail-card {
   padding: 14px;
-  border-radius: 8px;
-  background: #26322e;
-  color: #fffdf7;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text);
 }
 
 .datapoint-workspace__detail-name {
@@ -229,7 +230,7 @@ const statusOptions = [
 
 .datapoint-workspace__detail-path {
   margin-top: 8px;
-  color: rgba(255, 253, 247, 0.72);
+  color: var(--dc-text-secondary);
   font-size: 12px;
   word-break: break-all;
 }
@@ -243,17 +244,17 @@ const statusOptions = [
   justify-content: space-between;
   gap: 14px;
   padding: 12px 0;
-  border-bottom: 1px solid #e5ddcf;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .datapoint-workspace__detail-list dt {
-  color: var(--dc-muted, #687066);
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
 .datapoint-workspace__detail-list dd {
   margin: 0;
-  color: var(--dc-ink, #20231f);
+  color: var(--dc-text);
   font-size: 12px;
   font-weight: 700;
   text-align: right;
@@ -266,12 +267,12 @@ const statusOptions = [
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--dc-muted, #687066);
+  color: var(--dc-text-secondary);
   text-align: center;
 }
 
 .datapoint-workspace__empty-detail strong {
-  color: var(--dc-ink, #20231f);
+  color: var(--dc-text);
 }
 
 .datapoint-workspace__empty-detail span {
@@ -283,10 +284,9 @@ const statusOptions = [
 .datapoint-workspace__empty-orb {
   width: 58px;
   height: 58px;
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(25, 114, 120, 0.18), transparent 48%),
-    #26322e;
+  border: 1px solid rgba(29, 78, 216, 0.2);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-primary-soft);
 }
 
 @media (max-width: 1100px) {

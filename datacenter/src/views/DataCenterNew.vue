@@ -1711,45 +1711,45 @@ watch(datacenterLocale, () => {
 <style scoped>
 .data-center {
   min-height: 400px;
-  border: 1px solid var(--dc-line, #d6cebf);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.94);
-  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .module-card {
-  border: 1px solid var(--dc-line, #d6cebf);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.94);
-  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .query-tabs :deep(.el-tabs__header) {
   margin: 0;
   flex-shrink: 0;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--dc-surface-subtle);
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .query-tabs :deep(.el-tabs__nav-wrap::after) {
   height: 1px;
-  background-color: #e5e7eb;
+  background-color: var(--dc-border);
 }
 
 .query-tabs :deep(.el-tabs__item) {
   border: none;
   background: transparent;
-  color: #6b7280;
+  color: var(--dc-text-secondary);
 }
 
 .query-tabs :deep(.el-tabs__item.is-active) {
-  color: #111827;
+  color: var(--dc-primary);
   font-weight: 600;
 }
 
 .query-tabs :deep(.el-tabs__active-bar) {
   height: 2px;
-  background-color: #3b82f6;
+  background-color: var(--dc-primary);
 }
 
 .query-tabs :deep(.el-tabs__nav) {

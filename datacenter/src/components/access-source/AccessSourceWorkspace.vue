@@ -189,22 +189,22 @@ const resolveCategory = (connection: AccessSourceConnection) => {
 .access-source-workspace__list-panel {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--dc-line, #d6cebf);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.94);
-  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .access-source-workspace__filters {
   padding: 12px;
-  background: #fbfaf4;
+  background: var(--dc-surface);
 }
 
 .access-source-workspace__panel-title {
   margin-bottom: 12px;
-  color: var(--dc-ink, #20231f);
+  color: var(--dc-text);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .access-source-workspace__category {
@@ -214,33 +214,33 @@ const resolveCategory = (connection: AccessSourceConnection) => {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
-  padding: 10px 12px;
-  border: 1px solid #ded5c6;
-  border-radius: 7px;
-  background: #f1eee5;
-  color: #465047;
+  padding: 9px 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
   text-align: left;
 }
 
 .access-source-workspace__category small {
-  color: #7c8078;
+  color: var(--dc-text-muted);
   font-size: 11px;
 }
 
 .access-source-workspace__category.is-active {
-  border-color: #cfe1dc;
-  background: var(--dc-soft, #e8f0ed);
-  color: #245b60;
-  font-weight: 900;
+  border-color: rgba(29, 78, 216, 0.34);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-weight: 700;
 }
 
 .access-source-workspace__create,
 .access-source-workspace__ghost {
   width: 100%;
   margin-top: 14px;
-  border-radius: 7px;
+  border-radius: var(--dc-radius-sm);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .access-source-workspace__create {
@@ -248,11 +248,10 @@ const resolveCategory = (connection: AccessSourceConnection) => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px;
-  border: 0;
-  border: 1px solid var(--dc-accent, #197278);
-  background: var(--dc-accent, #197278);
-  color: #fffdf7;
+  padding: 10px;
+  border: 1px solid var(--dc-primary);
+  background: var(--dc-primary);
+  color: var(--dc-surface-raised);
 }
 
 .access-source-workspace__create-icon {
@@ -262,9 +261,9 @@ const resolveCategory = (connection: AccessSourceConnection) => {
 
 .access-source-workspace__ghost {
   padding: 11px;
-  border: 1px solid #bdd9d2;
-  background: var(--dc-soft, #e8f0ed);
-  color: #31565a;
+  border: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
 }
 
 .access-source-workspace__list-panel {
@@ -278,13 +277,13 @@ const resolveCategory = (connection: AccessSourceConnection) => {
   justify-content: space-between;
   gap: 14px;
   padding: 13px 14px 11px;
-  border-bottom: 1px solid var(--dc-line, #d6cebf);
-  background: var(--dc-paper, #fffdf7);
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
 }
 
 .access-source-workspace__list-head p {
   margin: 2px 0 0;
-  color: var(--dc-muted, #687066);
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 

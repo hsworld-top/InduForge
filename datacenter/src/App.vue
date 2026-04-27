@@ -66,7 +66,7 @@ onBeforeUnmount(() => {
 
 <style>
 #app {
-  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--dc-font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
@@ -77,11 +77,7 @@ onBeforeUnmount(() => {
 .app-loading {
   position: fixed;
   inset: 0;
-  background: radial-gradient(
-    circle at 30% 20%,
-    rgba(14, 165, 233, 0.12),
-    rgba(15, 23, 42, 0.2)
-  );
+  background: rgba(15, 23, 42, 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -94,9 +90,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 16px;
   padding: 18px 22px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #ffffff, #f0f9ff);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.2);
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-popover);
 }
 
 .loading-mark {
@@ -109,8 +106,8 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 3px solid rgba(14, 165, 233, 0.2);
-  border-top-color: #0ea5e9;
+  border: 3px solid rgba(29, 78, 216, 0.16);
+  border-top-color: var(--dc-primary);
   animation: loading-spin 0.9s linear infinite;
 }
 
@@ -119,7 +116,7 @@ onBeforeUnmount(() => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #0ea5e9;
+  background: var(--dc-primary);
   top: 2px;
   left: 50%;
   transform: translateX(-50%);
@@ -135,12 +132,12 @@ onBeforeUnmount(() => {
 .loading-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--dc-text);
 }
 
 .loading-subtitle {
   font-size: 12px;
-  color: #64748b;
+  color: var(--dc-text-secondary);
 }
 
 @keyframes loading-spin {

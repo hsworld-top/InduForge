@@ -266,14 +266,14 @@ watch(activeGroup, (group) => {
 
 <style scoped>
 .alarm-workspace {
-  --alarm-paper: #fffdf7;
-  --alarm-canvas: #f4efe5;
-  --alarm-line: #e1d6c6;
-  --alarm-ink: #20231f;
-  --alarm-muted: #6f6a60;
-  --alarm-accent: #b84e2f;
-  --alarm-accent-dark: #7f2f1d;
-  --alarm-soft: #f5dfd2;
+  --alarm-paper: var(--dc-surface-raised);
+  --alarm-canvas: var(--dc-surface-subtle);
+  --alarm-line: var(--dc-border);
+  --alarm-ink: var(--dc-text);
+  --alarm-muted: var(--dc-text-secondary);
+  --alarm-accent: var(--dc-primary);
+  --alarm-accent-dark: var(--dc-primary);
+  --alarm-soft: var(--dc-primary-soft);
 
   height: 100%;
   display: grid;
@@ -287,10 +287,10 @@ watch(activeGroup, (group) => {
 .alarm-workspace__detail {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--dc-line, #d6cebf);
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.94);
-  box-shadow: var(--dc-shadow, 0 14px 34px rgba(48, 42, 32, 0.11));
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .alarm-workspace__side,
@@ -302,15 +302,14 @@ watch(activeGroup, (group) => {
 .alarm-workspace__main {
   display: flex;
   flex-direction: column;
-  background:
-    linear-gradient(135deg, rgba(255, 253, 247, 0.95), rgba(244, 239, 229, 0.9));
+  background: var(--alarm-canvas);
 }
 
 .alarm-workspace__section-title {
   margin-bottom: 12px;
   color: var(--alarm-ink);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .alarm-workspace__section-title.is-spaced {
@@ -321,16 +320,16 @@ watch(activeGroup, (group) => {
 .alarm-workspace__type,
 .alarm-workspace__rule-row,
 .alarm-workspace__toolbar-actions button {
-  border: 1px solid #ded5c6;
-  background: #f1eee5;
-  color: #44403c;
+  border: 1px solid var(--dc-border);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
 }
 
 .alarm-workspace__group,
 .alarm-workspace__type {
   width: 100%;
   margin-bottom: 8px;
-  border-radius: 7px;
+  border-radius: var(--dc-radius-sm);
   text-align: left;
 }
 
@@ -352,7 +351,7 @@ watch(activeGroup, (group) => {
   color: var(--alarm-accent-dark);
   font-size: 11px;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .alarm-workspace__group em,
@@ -396,8 +395,8 @@ watch(activeGroup, (group) => {
 .alarm-workspace__type.is-active,
 .alarm-workspace__rule-row.is-active {
   border-color: var(--alarm-accent);
-  background: #fffaf6;
-  font-weight: 900;
+  background: var(--alarm-soft);
+  font-weight: 700;
 }
 
 .alarm-workspace__hero {
@@ -405,7 +404,7 @@ watch(activeGroup, (group) => {
   justify-content: space-between;
   gap: 18px;
   padding: 16px 18px 14px;
-  border-bottom: 1px solid rgba(214, 206, 191, 0.8);
+  border-bottom: 1px solid var(--dc-border);
   background: var(--alarm-paper);
 }
 
@@ -454,15 +453,15 @@ watch(activeGroup, (group) => {
 
 .alarm-workspace__toolbar-actions button {
   padding: 8px 12px;
-  border-radius: 5px;
+  border-radius: var(--dc-radius-sm);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .alarm-workspace__toolbar-actions button.is-primary {
   border-color: var(--alarm-accent);
   background: var(--alarm-accent);
-  color: #fffaf6;
+  color: var(--dc-surface-raised);
 }
 
 .alarm-workspace__builder {
@@ -478,7 +477,7 @@ watch(activeGroup, (group) => {
 .alarm-workspace__rule-list,
 .alarm-workspace__panel {
   border: 1px solid var(--alarm-line);
-  border-radius: 8px;
+  border-radius: var(--dc-radius-md);
   background: var(--alarm-paper);
 }
 
@@ -494,10 +493,10 @@ watch(activeGroup, (group) => {
   justify-content: space-between;
   gap: 10px;
   padding: 14px 16px;
-  border-bottom: 1px solid #eee7da;
-  background: #f7efe7;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .alarm-workspace__form-grid {
@@ -527,9 +526,9 @@ watch(activeGroup, (group) => {
 .alarm-workspace__field select,
 .alarm-workspace__field textarea {
   width: 100%;
-  border: 1px solid #e2d9ca;
-  border-radius: 5px;
-  background: #fffaf6;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
   color: var(--alarm-ink);
   font-size: 13px;
   outline: none;
@@ -587,8 +586,8 @@ watch(activeGroup, (group) => {
   overflow-x: auto;
   border: 1px solid var(--alarm-line);
   border-radius: 8px;
-  background: #211f1a;
-  color: #f8ead7;
+  background: #111827;
+  color: #e5e7eb;
   font-size: 11px;
   line-height: 1.55;
 }
@@ -600,7 +599,7 @@ watch(activeGroup, (group) => {
 
 .alarm-workspace__contract-row {
   padding: 10px 0;
-  border-top: 1px solid #eee7da;
+  border-top: 1px solid var(--dc-border);
 }
 
 .alarm-workspace__contract-row:first-of-type {
@@ -624,7 +623,7 @@ watch(activeGroup, (group) => {
 }
 
 .alarm-workspace__panel.is-boundary {
-  background: #fff7ed;
+  background: var(--dc-accent-soft);
 }
 
 @media (max-width: 1280px) {

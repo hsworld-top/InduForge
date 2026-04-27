@@ -2,33 +2,93 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 自定义样式 */
+/* datacenter 继承 InduForge 产品工作台视觉语言，变量命名保持模块局部化。 */
 @layer base {
+  :root {
+    --dc-font-sans: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei",
+      "Helvetica Neue", Arial, sans-serif;
+    --dc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    --dc-bg: #f3f5f8;
+    --dc-surface: #fbfcfe;
+    --dc-surface-raised: #ffffff;
+    --dc-surface-muted: #eef2f7;
+    --dc-surface-subtle: #f7f9fc;
+    --dc-text: #0f172a;
+    --dc-text-secondary: #475569;
+    --dc-text-muted: #7b8797;
+    --dc-border: #d7dde7;
+    --dc-border-strong: #b9c3d2;
+    --dc-primary: #1d4ed8;
+    --dc-primary-hover: #1e40af;
+    --dc-primary-soft: #e7efff;
+    --dc-accent: #0ea5a5;
+    --dc-accent-soft: #e4f7f6;
+    --dc-success: #16a34a;
+    --dc-success-soft: #e8f7ee;
+    --dc-warning: #d97706;
+    --dc-warning-soft: #fff4dc;
+    --dc-danger: #dc2626;
+    --dc-danger-soft: #feecec;
+    --dc-radius-xs: 4px;
+    --dc-radius-sm: 6px;
+    --dc-radius-md: 8px;
+    --dc-shadow-surface: 0 2px 6px rgba(15, 23, 42, 0.08);
+    --dc-shadow-popover: 0 12px 24px rgba(15, 23, 42, 0.12);
+    --dc-control-height: 32px;
+  }
+
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--dc-font-sans);
   }
 
   body {
-    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
-    font-family: 'Inter', system-ui, sans-serif;
+    margin: 0;
+    background: var(--dc-bg);
+    color: var(--dc-text);
+    font-family: var(--dc-font-sans);
+    letter-spacing: 0;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+    height: var(--dc-control-height);
+    border-radius: var(--dc-radius-sm);
+    background: var(--dc-primary);
+    color: var(--dc-surface-raised);
+    font-weight: 600;
+    transition: background-color 0.18s ease;
   }
 
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+    height: var(--dc-control-height);
+    border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--dc-surface-raised);
+    color: var(--dc-text-secondary);
+    font-weight: 600;
+    transition:
+      border-color 0.18s ease,
+      color 0.18s ease;
   }
 
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6;
+    border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius-md);
+    background: var(--dc-surface-raised);
+    box-shadow: var(--dc-shadow-surface);
   }
 
   .input-field {
-    @apply border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200;
+    height: var(--dc-control-height);
+    border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--dc-surface-muted);
+    color: var(--dc-text);
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
   }
 }
 

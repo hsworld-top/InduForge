@@ -143,10 +143,10 @@ const resolveStatusText = (status?: string) =>
   display: block;
   margin-bottom: 10px;
   padding: 12px;
-  border: 1px solid #d9d0bf;
-  border-radius: 8px;
-  background: #fffdf7;
-  color: #20231f;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text);
   text-align: left;
   cursor: pointer;
   transition:
@@ -158,12 +158,12 @@ const resolveStatusText = (status?: string) =>
 .access-source-card:hover,
 .access-source-card.is-active {
   transform: translateY(-1px);
-  border-color: #197278;
-  box-shadow: 0 10px 22px rgba(48, 42, 32, 0.1);
+  border-color: rgba(29, 78, 216, 0.42);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .access-source-card.is-active {
-  background: #fbfffb;
+  background: var(--dc-primary-soft);
 }
 
 .access-source-card__top,
@@ -175,15 +175,15 @@ const resolveStatusText = (status?: string) =>
 }
 
 .access-source-card__name {
-  color: #20231f;
+  color: var(--dc-text);
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .access-source-card__type,
 .access-source-card__meta,
 .access-source-card__bottom {
-  color: #687066;
+  color: var(--dc-text-secondary);
   font-size: 12px;
 }
 
@@ -191,36 +191,36 @@ const resolveStatusText = (status?: string) =>
   margin-top: 12px;
   padding: 9px 10px;
   overflow: hidden;
-  border-radius: 5px;
-  background: #f1eee5;
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .access-source-card__bottom {
   margin-top: 12px;
-  color: #197278;
-  font-weight: 700;
+  color: var(--dc-primary);
+  font-weight: 600;
 }
 
 .access-source-card__status {
   flex: 0 0 auto;
   padding: 3px 8px;
-  border-radius: 4px;
-  background: #f0eee5;
-  color: #566058;
+  border-radius: var(--dc-radius-xs);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .access-source-card__status.is-connected {
-  background: #e7f0e6;
-  color: #35613b;
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
 }
 
 .access-source-card__status.is-error {
-  background: #f5ddd7;
-  color: #9b3329;
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .access-source-list__empty {
@@ -230,12 +230,12 @@ const resolveStatusText = (status?: string) =>
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #687066;
+  color: var(--dc-text-secondary);
   text-align: center;
 }
 
 .access-source-list__empty strong {
-  color: #20231f;
+  color: var(--dc-text);
 }
 
 .access-source-list__empty span {
@@ -247,9 +247,8 @@ const resolveStatusText = (status?: string) =>
 .access-source-list__empty-mark {
   width: 62px;
   height: 62px;
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(25, 114, 120, 0.18), transparent 48%),
-    #26322e;
+  border: 1px solid rgba(29, 78, 216, 0.2);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-primary-soft);
 }
 </style>
