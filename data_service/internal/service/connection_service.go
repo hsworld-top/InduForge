@@ -16,8 +16,8 @@ import (
 	"github.com/indu-forge/data_service/internal/repository"
 )
 
-// publicConnectionTypeCategoryMap 只保留通用连接接口在 Phase 1 允许新建/改型的类型。
-// 说明：kafka/http/websocket/redis 走各自协议接口；opcua/modbus/s7/tdengine 已降级为 Phase 2 预留。
+// publicConnectionTypeCategoryMap 只保留通用连接接口允许新建/改型的类型。
+// 说明：kafka/http/websocket/redis 与 opcua/modbus/s7/tdengine 均走各自协议专用配置接口。
 var publicConnectionTypeCategoryMap = map[string]string{
 	"relational": "database",
 	"mqtt":       "message",
@@ -25,7 +25,7 @@ var publicConnectionTypeCategoryMap = map[string]string{
 	"http":       "api",
 }
 
-// reservedPhase2ConnectionTypes 用于把“暂不支持”与“尚未纳入 Phase 1 正式范围”区分开。
+// reservedPhase2ConnectionTypes 用于阻止工业协议从通用连接入口写入，避免只生成 metadata 而缺失专用配置表。
 var reservedPhase2ConnectionTypes = map[string]string{
 	"opcua":    "OPC UA",
 	"modbus":   "Modbus",

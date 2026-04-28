@@ -28,7 +28,7 @@ func (s *ProjectSnapshotService) Get(ctx context.Context, projectID string) (*re
 	return s.repository.GetByProject(ctx, projectID)
 }
 
-// GetArtifact 基于项目快照生成 Phase 1 产物。
+// GetArtifact 基于项目快照生成数据域发布产物。
 func (s *ProjectSnapshotService) GetArtifact(ctx context.Context, projectID string) (*repository.ProjectArtifactV1, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func (s *ProjectSnapshotService) GetArtifact(ctx context.Context, projectID stri
 }
 
 // Replace 用快照内容覆盖项目数据域数据。
-// 说明：Phase 1 在 snapshot 层只接受正式协议范围，避免通过导入入口重新把 Phase 2 预留协议写回库内。
+// 说明：snapshot/artifact 现在承载平台侧配置契约；工业协议仍只落配置，不在 data_service 内启动采集会话。
 func (s *ProjectSnapshotService) Replace(ctx context.Context, projectID, actorID string, snapshot repository.ProjectSnapshot) error {
 	if err := validateProjectID(projectID); err != nil {
 		return err
@@ -82,16 +82,8 @@ func normalizeProjectSnapshot(snapshot repository.ProjectSnapshot) repository.Pr
 
 func validateSnapshotConnectionType(connectionType string) error {
 	switch strings.TrimSpace(strings.ToLower(connectionType)) {
-	case "relational", "mqtt", "kafka", "http", "websocket", "redis":
+	case "relational", "mqtt", "kafka", "http", "websocket", "redis", "opcua", "modbus", "s7", "tdengine":
 		return nil
-	case "opcua":
-		return newPhaseBoundaryProtocolError("OPC UA")
-	case "modbus":
-		return newPhaseBoundaryProtocolError("Modbus")
-	case "s7":
-		return newPhaseBoundaryProtocolError("S7")
-	case "tdengine":
-		return newPhaseBoundaryProtocolError("TDengine")
 	case "opcda":
 		return newPhaseBoundaryProtocolError("OPC DA")
 	default:

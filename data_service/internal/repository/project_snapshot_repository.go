@@ -229,6 +229,10 @@ type ArtifactProtocolsPayload struct {
 	HTTP      []ArtifactProtocolRecord `json:"http"`
 	Websocket []ArtifactProtocolRecord `json:"websocket"`
 	Redis     []ArtifactProtocolRecord `json:"redis"`
+	OPCUA     []ArtifactProtocolRecord `json:"opcua"`
+	S7        []ArtifactProtocolRecord `json:"s7"`
+	Modbus    []ArtifactProtocolRecord `json:"modbus"`
+	TDengine  []ArtifactProtocolRecord `json:"tdengine"`
 }
 
 // ProjectArtifactV1 表示 Phase 1 项目级数据产物。
@@ -475,6 +479,10 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		HTTP:      make([]ArtifactProtocolRecord, 0),
 		Websocket: make([]ArtifactProtocolRecord, 0),
 		Redis:     make([]ArtifactProtocolRecord, 0),
+		OPCUA:     make([]ArtifactProtocolRecord, 0),
+		S7:        make([]ArtifactProtocolRecord, 0),
+		Modbus:    make([]ArtifactProtocolRecord, 0),
+		TDengine:  make([]ArtifactProtocolRecord, 0),
 	}
 	for _, connection := range snapshot.Connections {
 		protocolRecord := ArtifactProtocolRecord{
@@ -493,6 +501,14 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			protocols.Websocket = append(protocols.Websocket, protocolRecord)
 		case "redis":
 			protocols.Redis = append(protocols.Redis, protocolRecord)
+		case "opcua":
+			protocols.OPCUA = append(protocols.OPCUA, protocolRecord)
+		case "s7":
+			protocols.S7 = append(protocols.S7, protocolRecord)
+		case "modbus":
+			protocols.Modbus = append(protocols.Modbus, protocolRecord)
+		case "tdengine":
+			protocols.TDengine = append(protocols.TDengine, protocolRecord)
 		}
 	}
 
