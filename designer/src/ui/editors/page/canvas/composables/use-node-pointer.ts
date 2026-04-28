@@ -89,6 +89,32 @@ function resolveNodeAbsoluteLayout(
   return null;
 }
 
+function isPlainRegionContentType(childType: string | null | undefined): boolean {
+  return Boolean(childType && childType !== "FreeContainer" && !isContainerType(childType));
+}
+
+function resolveRegionContentHost(
+  targetNode: ComponentNode,
+  doc: { getNode?: (id: string) => ComponentNode | null | undefined } | null | undefined,
+): ComponentNode | null {
+  if (!doc) return null;
+  const hostId = (targetNode.children || []).find((childId) => {
+    const childNode = doc.getNode?.(childId);
+    return childNode?.type === "FreeContainer";
+  });
+  return hostId ? doc.getNode?.(hostId) || null : null;
+}
+
+function resolveRegionContentHostFromFreeContainer(
+  targetNode: ComponentNode,
+  doc: { getParent?: (id: string) => ComponentNode | null | undefined } | null | undefined,
+): ComponentNode | null {
+  if (!doc) return null;
+  if (targetNode.type !== "FreeContainer") return null;
+  const parentNode = doc.getParent?.(targetNode.id);
+  return parentNode && isRegionType(parentNode.type) ? targetNode : null;
+}
+
 function escapeNodeIdForSelector(nodeId: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
     return CSS.escape(nodeId);
@@ -679,7 +705,14 @@ export function useNodePointer(deps: UseNodePointerDeps): {
         if (restrictToContainer && !isInsideElContainer(targetNode)) {
           continue;
         }
+        const regionContentHost = resolveRegionContentHostFromFreeContainer(targetNode, doc.value);
+        if (regionContentHost && childType && isPlainRegionContentType(childType)) {
+          return regionContentHost;
+        }
         if (isRegionType(targetNode.type)) {
+          if (childType && isPlainRegionContentType(childType)) {
+            return resolveRegionContentHost(targetNode, doc.value) || targetNode;
+          }
           if (childType && !canAcceptChild(targetNode, childType)) continue;
           return targetNode;
         }
@@ -911,6 +944,51 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               height: contentRect.height,
             }
           : null;
+        rowInsertInfo.value = null;
+        layoutInsertInfo.value = null;
+        return true;
+      }
+      const regionContentHost = resolveRegionContentHostFromFreeContainer(dropRegion, doc.value);
+      const regionContentTarget =
+        regionContentHost && isPlainRegionContentType(node.value?.type)
+          ? regionContentHost
+          : isRegionType(dropRegion.type) && isPlainRegionContentType(node.value?.type)
+            ? resolveRegionContentHost(dropRegion, doc.value) || dropRegion
+            : null;
+      if (regionContentTarget) {
+        const contentElement = document.querySelector(`[data-node-id="${regionContentTarget.id}"]`);
+        const contentRect = contentElement?.getBoundingClientRect?.();
+        if (!contentElement || !contentRect) {
+          showInsertLine.value = false;
+          insertLineStyle.value = null;
+          genericInsertLineBox.value = null;
+          return false;
+        }
+        if ((regionContentTarget.children || []).length === 0) {
+          showInsertLine.value = false;
+          insertLineStyle.value = null;
+          genericInsertLineBox.value = null;
+          return false;
+        }
+        const insertInfo = dragDropManager.calculateFlexInsertPosition(
+          contentElement,
+          pointEvent,
+          "column",
+        );
+        if (!insertInfo.insertLine) {
+          showInsertLine.value = false;
+          insertLineStyle.value = null;
+          genericInsertLineBox.value = null;
+          return false;
+        }
+        showInsertLine.value = true;
+        insertLineStyle.value = insertInfo.insertLine;
+        genericInsertLineBox.value = {
+          left: contentRect.left,
+          top: contentRect.top,
+          width: contentRect.width,
+          height: contentRect.height,
+        };
         rowInsertInfo.value = null;
         layoutInsertInfo.value = null;
         return true;
@@ -1181,13 +1259,17 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           const hasValidDrop =
             dropRegion &&
             (dropRegion.id !== originParent.id || isSameScopedContainerMove) &&
-            canAcceptChild(dropRegion, node.value.type) &&
+            (canAcceptChild(dropRegion, node.value.type) ||
+              (isRegionType(dropRegion.type) && isPlainRegionContentType(node.value.type))) &&
             !isSelfOrDescendant(dropRegion.id);
 
           if (hasValidDrop) {
             // 拖入其他容器
             const targetId = dropRegion.id;
             let insertIdx = (dropRegion.children || []).length;
+            const isRegionContentHostTarget = Boolean(
+              resolveRegionContentHostFromFreeContainer(dropRegion, doc.value),
+            );
             if (scopedMeta?.hostElement && scopedMeta.childIds.length > 0) {
               const scopedInsert = dragDropManager.calculateFlexInsertPosition(
                 scopedMeta.hostElement,
@@ -1199,10 +1281,23 @@ export function useNodePointer(deps: UseNodePointerDeps): {
                   ? scopedInsert.index
                   : scopedMeta.childIds.length;
               insertIdx = mapScopedInsertIndex(dropRegion, scopedMeta.childIds, scopedIndex);
+            } else if (isRegionContentHostTarget) {
+              const contentElement = document.querySelector(`[data-node-id="${dropRegion.id}"]`);
+              if (contentElement && (dropRegion.children || []).length > 0) {
+                const insertInfo = dragDropManager.calculateFlexInsertPosition(
+                  contentElement,
+                  upEvent,
+                  "column",
+                );
+                insertIdx =
+                  typeof insertInfo.index === "number"
+                    ? insertInfo.index
+                    : (dropRegion.children || []).length;
+              }
             }
             const moveCmd = new MoveNodeCommand(currentNode.id, targetId, insertIdx);
             const parentDesc = getDescriptor(dropRegion.type);
-            const isFlowTarget = parentDesc?.childPositioning === "flow";
+            const isFlowTarget = parentDesc?.childPositioning === "flow" || isRegionContentHostTarget;
             // 从流式容器拖出后落入绝对定位容器时，baseLayout 是原父坐标系，不能直接用；用鼠标释放位置相对目标容器计算落点
             let absPosForTarget = baseLayout;
             if (!isFlowTarget && isFlowChildInDescContainer) {
@@ -1227,8 +1322,10 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               ? {
                   positioning: "flow",
                   absolutePos: undefined,
-                  flowLayout: parentDesc.childFlowLayout
+                  flowLayout: parentDesc?.childFlowLayout
                     ? { ...parentDesc.childFlowLayout }
+                    : isRegionContentHostTarget
+                      ? { grow: 0, shrink: 0, basis: "auto" }
                     : undefined,
                   layoutItem: undefined,
                   props: resolveScopedSlotProps(
@@ -1238,7 +1335,8 @@ export function useNodePointer(deps: UseNodePointerDeps): {
                   ),
                   style: {
                     ...(buildFlowResetStyle(currentNode.style) || {}),
-                    ...(parentDesc.childStyle ? parentDesc.childStyle(dropRegion.type) : {}),
+                    ...(parentDesc?.childStyle ? parentDesc.childStyle(dropRegion.type) : {}),
+                    ...(isRegionContentHostTarget ? { width: "auto", height: "auto" } : {}),
                   },
                 }
               : {
@@ -1464,10 +1562,14 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           dropRegion &&
           dropRegion.id &&
           (dropRegion.id !== originParent?.id || isSameScopedContainerMove) &&
-          canAcceptChild(dropRegion, currentNode.type) &&
+          (canAcceptChild(dropRegion, currentNode.type) ||
+            (isRegionType(dropRegion.type) && isPlainRegionContentType(currentNode.type))) &&
           !isSelfOrDescendant(dropRegion.id)
         ) {
           let insertIndex = (dropRegion.children || []).length;
+          const isRegionContentHostTarget = Boolean(
+            resolveRegionContentHostFromFreeContainer(dropRegion, doc.value),
+          );
           if (scopedMeta?.hostElement) {
             if (scopedMeta.childIds.length > 0) {
               const scopedInsert = dragDropManager.calculateFlexInsertPosition(
@@ -1482,6 +1584,19 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               insertIndex = mapScopedInsertIndex(dropRegion, scopedMeta.childIds, scopedIndex);
             } else {
               insertIndex = (dropRegion.children || []).length;
+            }
+          } else if (isRegionContentHostTarget) {
+            const contentElement = document.querySelector(`[data-node-id="${dropRegion.id}"]`);
+            if (contentElement && (dropRegion.children || []).length > 0) {
+              const insertInfo = dragDropManager.calculateFlexInsertPosition(
+                contentElement,
+                upEvent,
+                "column",
+              );
+              insertIndex =
+                typeof insertInfo.index === "number"
+                  ? insertInfo.index
+                  : (dropRegion.children || []).length;
             }
           } else if (dropRegion.type && isFlexContainer(dropRegion.type)) {
             const outerElement = document.querySelector(`[data-node-id="${dropRegion.id}"]`);
@@ -1500,7 +1615,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           const moveCommand = new MoveNodeCommand(currentNode.id, dropRegion.id, insertIndex);
           const shouldResetSize =
             currentNode.positioning === "absolute" || currentNode.layoutItem?.free;
-          if (dropRegion?.type === "FreeContainer") {
+          if (dropRegion?.type === "FreeContainer" && !isRegionContentHostTarget) {
             const containerEl = document.querySelector(`[data-node-id="${dropRegion.id}"]`);
             const containerRect = containerEl?.getBoundingClientRect?.();
             const nextX = containerRect ? (upEvent.clientX - containerRect.left) / zoomValue : 0;
@@ -1543,7 +1658,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           const updatePatch: NodePatchLike = {
             positioning: "flow",
             absolutePos: undefined,
-            flowLayout: undefined,
+            flowLayout: isRegionContentHostTarget ? { grow: 0, shrink: 0, basis: "auto" } : undefined,
             layoutItem: undefined,
           };
           if (dropRegion?.type === "ElCol") {
@@ -1570,6 +1685,12 @@ export function useNodePointer(deps: UseNodePointerDeps): {
               "Collapse",
               scopedKey,
             );
+          } else if (isRegionContentHostTarget) {
+            updatePatch.style = {
+              ...(buildFlowResetStyle(currentNode.style) || {}),
+              width: "auto",
+              height: "auto",
+            };
           } else if (shouldResetSize) {
             updatePatch.style = buildFlowResetStyle(currentNode.style);
           }

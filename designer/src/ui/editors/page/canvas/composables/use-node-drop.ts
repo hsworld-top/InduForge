@@ -21,6 +21,7 @@ import {
   getDefaultSize,
   getDescriptor,
   isContainerType,
+  isLayoutContainerType,
   isRegionType,
 } from "@/editor-core/descriptors/registry";
 import { resolveElContainerMain } from "@/editor-core/utils/layout-utils";
@@ -78,6 +79,95 @@ function isFlowDropContainer(targetNode: ComponentNode | null | undefined): bool
   return Boolean(descriptor?.isContainer && descriptor.childPositioning === "flow");
 }
 
+/** 区域布局自动生成内容区前，先按区域本身计算普通组件的自由落点。 */
+function resolvePlainRegionDropPosition(
+  event: DragEvent,
+  targetNode: ComponentNode | null | undefined,
+  targetElement: Element | null | undefined,
+  childType: string,
+  zoom: number,
+) {
+  if (
+    !targetNode ||
+    !isRegionType(targetNode.type) ||
+    targetNode.type === "ElCol" ||
+    childType === "FreeContainer" ||
+    isLayoutContainerType(childType) ||
+    isContainerType(childType)
+  ) {
+    return null;
+  }
+  const targetHost = targetElement instanceof HTMLElement ? targetElement : null;
+  if (!targetHost) return null;
+  const rawPosition = eventToCanvasPosition(event, targetHost, zoom);
+  const defaultSize = getDefaultSize(childType) ?? { width: 120, height: 40 };
+  return clampPositionInContainer(rawPosition, targetHost, defaultSize, zoom);
+}
+
+function isPlainRegionContentType(childType: string): boolean {
+  return (
+    Boolean(childType) &&
+    childType !== "FreeContainer" &&
+    !isLayoutContainerType(childType) &&
+    !isContainerType(childType)
+  );
+}
+
+function resolveRegionContentHost(
+  targetNode: ComponentNode,
+  doc: CanvasDocLike,
+): { node: ComponentNode; element: Element | null } | null {
+  const hostId = (targetNode.children || []).find((childId) => {
+    const childNode = doc.getNode?.(childId);
+    return childNode?.type === "FreeContainer";
+  });
+  const hostNode = hostId ? doc.getNode?.(hostId) : null;
+  if (!hostNode) return null;
+  const hostElement = document.querySelector(`[data-node-id="${CSS.escape(hostNode.id)}"]`);
+  return { node: hostNode, element: hostElement };
+}
+
+function resolveRegionContentHostFromFreeContainer(
+  targetNode: ComponentNode,
+  doc: CanvasDocLike,
+): { node: ComponentNode; element: Element | null } | null {
+  if (targetNode.type !== "FreeContainer") return null;
+  const parentNode = doc.getParent?.(targetNode.id);
+  if (!parentNode || !isRegionType(parentNode.type)) return null;
+  const hostElement = document.querySelector(`[data-node-id="${CSS.escape(targetNode.id)}"]`);
+  return { node: targetNode, element: hostElement };
+}
+
+function resolvePlainRegionContentTarget(
+  targetNode: ComponentNode | null | undefined,
+  targetElement: Element | null | undefined,
+  childType: string,
+  doc: CanvasDocLike | null | undefined,
+): { node: ComponentNode; element: Element | null | undefined } | null {
+  if (
+    !targetNode ||
+    !doc ||
+    !isRegionType(targetNode.type) ||
+    !isPlainRegionContentType(childType)
+  ) {
+    return null;
+  }
+  return resolveRegionContentHost(targetNode, doc) || { node: targetNode, element: targetElement };
+}
+
+function resolvePlainRegionInsertVisualTarget(
+  targetNode: ComponentNode | null | undefined,
+  targetElement: Element | null | undefined,
+  childType: string,
+  doc: CanvasDocLike | null | undefined,
+): { node: ComponentNode; element: Element | null | undefined } | null {
+  if (!targetNode || !doc || !isPlainRegionContentType(childType)) return null;
+  const existingHost = resolveRegionContentHostFromFreeContainer(targetNode, doc);
+  if (existingHost) return existingHost;
+  if (!isRegionType(targetNode.type) || targetNode.type === "ElCol") return null;
+  return resolveRegionContentHost(targetNode, doc) || { node: targetNode, element: targetElement };
+}
+
 /**
  * 浠庨紶鏍囦綅缃В鏋愬彲鏀剧疆瀹瑰櫒
  * @param {DragEvent} event - 鎷栨嫿浜嬩欢
@@ -123,7 +213,12 @@ function resolveDropContainer(
       continue;
     }
     if (isRegionType(targetNode.type)) {
-      if (childType && !canAcceptChild(targetNode, childType)) continue;
+      const isPlainRegionContent = isPlainRegionContentType(childType);
+      if (isPlainRegionContent) {
+        const hostTarget = resolveRegionContentHost(targetNode, doc);
+        if (hostTarget) return hostTarget;
+      }
+      if (childType && !canAcceptChild(targetNode, childType) && !isPlainRegionContent) continue;
       return { node: targetNode, element: nodeElement };
     }
     if (targetNode.type === "ElContainer") {
@@ -739,6 +834,57 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
 
     // ElCol 渚ц竟鎻掑叆鎻愮ず鐢变笂闈㈢殑 resolveRowInsertFromPath 澶勭悊
 
+    const regionVisualTarget = resolvePlainRegionInsertVisualTarget(
+      node.value,
+      event.currentTarget instanceof Element ? event.currentTarget : null,
+      dragType,
+      doc.value,
+    );
+    if (regionVisualTarget) {
+      rowInsertInfo.value = null;
+      layoutInsertInfo.value = null;
+      const hostElement =
+        regionVisualTarget.element instanceof HTMLElement
+          ? regionVisualTarget.element
+          : document.querySelector(`[data-node-id="${CSS.escape(regionVisualTarget.node.id)}"]`);
+      if (!hostElement) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return;
+      }
+      const hostRect = hostElement.getBoundingClientRect?.();
+      if (!hostRect) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return;
+      }
+      const childIds = regionVisualTarget.node.children || [];
+      if (childIds.length === 0) {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+        return;
+      }
+      const insertInfo = dragDropManager.calculateFlexInsertPosition(hostElement, event, "column");
+      if (insertInfo.insertLine) {
+        showInsertLine.value = true;
+        insertLineStyle.value = insertInfo.insertLine;
+        genericInsertLineBox.value = {
+          left: hostRect.left,
+          top: hostRect.top,
+          width: hostRect.width,
+          height: hostRect.height,
+        };
+      } else {
+        showInsertLine.value = false;
+        insertLineStyle.value = null;
+        genericInsertLineBox.value = null;
+      }
+      return;
+    }
+
     if (node.value?.type === "Tabs" || node.value?.type === "Collapse") {
       rowInsertInfo.value = null;
       layoutInsertInfo.value = null;
@@ -1285,12 +1431,25 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         targetNode = layoutResolvedByPoint.layoutNode;
         targetElement = layoutResolvedByPoint.layoutElement || targetElement;
       }
+      const plainRegionContentTarget = resolvePlainRegionContentTarget(
+        targetNode,
+        targetElement,
+        resolvedType,
+        doc.value,
+      );
+      if (plainRegionContentTarget) {
+        targetNode = plainRegionContentTarget.node;
+        targetElement = plainRegionContentTarget.element || targetElement;
+      }
       const allowRowAutoInsert = targetNode?.type === "ElLayoutRow" && resolvedType !== "ElCol";
       const allowLayoutAutoInsert =
         targetNode?.type === "ElLayout" && resolvedType !== "ElLayoutRow";
+      const allowPlainRegionContentDrop =
+        Boolean(targetNode && isRegionType(targetNode.type) && isPlainRegionContentType(resolvedType));
       if (
         !allowRowAutoInsert &&
         !allowLayoutAutoInsert &&
+        !allowPlainRegionContentDrop &&
         !canAcceptChild(targetNode, resolvedType)
       ) {
         return;
@@ -1368,6 +1527,15 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
           height: 40,
         };
         dropPosition = clampPositionInContainer(rawPosition, targetHost, defaultSize, zoomValue);
+      } else {
+        const zoomValue = Number(canvasZoom?.value) || 1;
+        dropPosition = resolvePlainRegionDropPosition(
+          event,
+          targetNode,
+          targetElement,
+          resolvedType,
+          zoomValue,
+        );
       }
 
       // ElLayout 鍐呮嫋鍏ョ粍浠讹細鑷姩鏂板涓€琛屽苟灏嗙粍浠舵斁鍏ヨ琛岀殑鍒?
@@ -1657,9 +1825,26 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         targetNode = layoutResolvedByPoint.layoutNode;
         targetElement = layoutResolvedByPoint.layoutElement || targetElement;
       }
+      const plainRegionContentTarget = resolvePlainRegionContentTarget(
+        targetNode,
+        targetElement,
+        type,
+        doc.value,
+      );
+      if (plainRegionContentTarget) {
+        targetNode = plainRegionContentTarget.node;
+        targetElement = plainRegionContentTarget.element || targetElement;
+      }
       const allowRowAutoInsert = targetNode?.type === "ElLayoutRow" && type !== "ElCol";
       const allowLayoutAutoInsert = targetNode?.type === "ElLayout" && type !== "ElLayoutRow";
-      if (!allowRowAutoInsert && !allowLayoutAutoInsert && !canAcceptChild(targetNode, type)) {
+      const allowPlainRegionContentDrop =
+        Boolean(targetNode && isRegionType(targetNode.type) && isPlainRegionContentType(type));
+      if (
+        !allowRowAutoInsert &&
+        !allowLayoutAutoInsert &&
+        !allowPlainRegionContentDrop &&
+        !canAcceptChild(targetNode, type)
+      ) {
         return;
       }
 
@@ -1735,6 +1920,15 @@ export function useNodeDrop(deps: UseNodeDropDeps) {
         const rawPosition = eventToCanvasPosition(event, targetHost, zoomValue);
         const defaultSize = getDefaultSize(type) ?? { width: 120, height: 40 };
         dropPosition = clampPositionInContainer(rawPosition, targetHost, defaultSize, zoomValue);
+      } else {
+        const zoomValue = Number(canvasZoom?.value) || 1;
+        dropPosition = resolvePlainRegionDropPosition(
+          event,
+          targetNode,
+          targetElement,
+          type,
+          zoomValue,
+        );
       }
 
       // ElLayout 鍐呮嫋鍏ョ粍浠讹細鑷姩鏂板涓€琛屽苟灏嗙粍浠舵斁鍏ヨ琛岀殑鍒?

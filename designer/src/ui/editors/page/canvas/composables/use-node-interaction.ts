@@ -11,7 +11,7 @@
 import type { RegionResizeConfig, ResizeHandle, UseNodeInteractionDeps } from "./types";
 import type { ComponentNode } from "@/editor-core/document/types";
 import { computed } from "vue";
-import { isContainerType, isLayoutType, isRegionType } from "@/editor-core/descriptors/registry";
+import { isContainerType, isRegionType } from "@/editor-core/descriptors/registry";
 
 /**
  * 获取区域 resize 配置
@@ -165,6 +165,14 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
    */
   const resolveClickSelectionTarget = (event?: MouseEvent): ComponentNode | null => {
     if (!node.value) return null;
+    if (node.value.type === "FreeContainer") {
+      const parentNode = doc.value?.getParent?.(node.value.id);
+      const containerNode = parentNode ? doc.value?.getParent?.(parentNode.id) : null;
+      if (parentNode && isRegionType(parentNode.type) && containerNode?.type === "ElContainer") {
+        if (event?.altKey || containerNode.locked) return node.value;
+        return containerNode;
+      }
+    }
     if (!isRegionContainer.value) return node.value;
     if (event?.altKey) return node.value;
     const parentNode = doc.value?.getParent?.(node.value.id);
@@ -306,23 +314,6 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
         targetNode = layoutRoot;
       }
     }
-    if (targetNode === node.value && !isRegionContainer.value && !event?.altKey) {
-      const parentNode = doc.value?.getParent?.(node.value.id);
-      if (
-        parentNode &&
-        (parentNode.type === "ElHeader" ||
-          parentNode.type === "ElAside" ||
-          parentNode.type === "ElMain" ||
-          parentNode.type === "ElFooter")
-      ) {
-        if (!isLayoutType(node.value.type)) {
-          const containerNode = doc.value?.getParent?.(parentNode.id);
-          if (containerNode?.type === "ElContainer" && !containerNode.locked) {
-            targetNode = containerNode;
-          }
-        }
-      }
-    }
     if (!targetNode) return;
     const element = createSelectableElement("node", targetNode.id);
     if (event.shiftKey) {
@@ -397,7 +388,7 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
     // 如果当前节点未被选中，先选中它
     if (!node.value || !selection.value) return;
 
-    const currentNode = node.value;
+    const currentNode = resolveClickSelectionTarget(event) || node.value;
     const currentNodeId = currentNode.id;
     const selectedElements = selection.value.getSelectedElements?.() || [];
     const isSelected = selectedElements.some((el) => el.id === currentNodeId && el.kind === "node");

@@ -25,7 +25,12 @@ import IconEpRefreshRight from "~icons/ep/refresh-right";
 import IconEpTop from "~icons/ep/top";
 import IconLucidePin from "~icons/lucide/pin";
 import IconLucidePinOff from "~icons/lucide/pin-off";
-import { isContainerType } from "@/editor-core/descriptors/registry";
+import {
+  getDefaultSize,
+  isContainerType,
+  isLayoutContainerType,
+  isRegionType,
+} from "@/editor-core/descriptors/registry";
 import { createSelectableElement } from "@/editor-core/document/types";
 import { resolvePlacement } from "@/editor-core/utils/placement-resolver";
 import { useEditorStore } from "@/stores/editor-store";
@@ -370,6 +375,43 @@ const hasSelection = computed(() => {
   return (selection.value?.getSelectedElements?.() ?? []).length > 0;
 });
 
+/** 区域布局里拖入普通组件时，提前按区域坐标计算落点，供自动内容区使用。 */
+function resolvePlainRegionDropPosition(
+  event: DragEvent,
+  parentId: string,
+  childType: string,
+): { x: number; y: number } | null {
+  const parentNode = doc.value?.getNode?.(parentId);
+  if (
+    !parentNode ||
+    !isRegionType(parentNode.type) ||
+    parentNode.type === "ElCol" ||
+    childType === "FreeContainer" ||
+    isLayoutContainerType(childType) ||
+    isContainerType(childType)
+  ) {
+    return null;
+  }
+
+  const targetElement = document.querySelector(
+    `[data-node-id="${CSS.escape(parentId)}"]`,
+  ) as HTMLElement | null;
+  if (!targetElement) return null;
+
+  const zoomValue = Number(canvasZoom?.value) || 1;
+  const rect = targetElement.getBoundingClientRect();
+  const defaultSize = getDefaultSize(childType) ?? { width: 120, height: 40 };
+  const rawX = (event.clientX - rect.left) / zoomValue;
+  const rawY = (event.clientY - rect.top) / zoomValue;
+  const maxX = Math.max(0, rect.width / zoomValue - defaultSize.width);
+  const maxY = Math.max(0, rect.height / zoomValue - defaultSize.height);
+
+  return {
+    x: Math.round(Math.min(Math.max(rawX, 0), maxX)),
+    y: Math.round(Math.min(Math.max(rawY, 0), maxY)),
+  };
+}
+
 const selectedLockTargets = computed(() => {
   void selectionVersion.value;
   void docVersion.value;
@@ -549,6 +591,11 @@ function handleCanvasDrop(event: DragEvent): void {
         x: Math.max(0, Math.round(dropPosition.x)),
         y: Math.max(0, Math.round(dropPosition.y)),
       };
+    } else {
+      const regionDropPosition = resolvePlainRegionDropPosition(event, parentId, componentType);
+      if (regionDropPosition) {
+        insertOptions.dropPosition = regionDropPosition;
+      }
     }
 
     const inserted = editorStore.insertNode(componentType, parentId, validIndex, insertOptions);

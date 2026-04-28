@@ -154,6 +154,36 @@ const SNIPPET_OPTION_PLACEHOLDER = "$" + "{1:option}";
 const SNIPPET_BOOL_PLACEHOLDER = "$" + "{2:false}";
 const SNIPPET_METHOD_PLACEHOLDER = "$" + '{1:"setOption"}';
 const SNIPPET_OPTION_ARG_PLACEHOLDER = "$" + "{2:option}";
+const EL_CONTAINER_MANAGED_PROPS = new Set([
+  "regionPreset",
+  "showHeader",
+  "showAside",
+  "showMain",
+  "showFooter",
+  "headerHeight",
+  "asideWidth",
+  "footerHeight",
+]);
+const EL_CONTAINER_PRESET_OPTIONS = [
+  {
+    value: "aside-between",
+    label: "标准区域",
+    description: "上中下 + 左侧",
+    grid: ["header header", "aside main", "footer footer"],
+  },
+  {
+    value: "top-main",
+    label: "上下结构",
+    description: "顶部 + 主内容",
+    grid: ["header", "main"],
+  },
+  {
+    value: "aside-full-height",
+    label: "侧栏通高",
+    description: "左侧贯穿全高",
+    grid: ["aside header", "aside main", "aside footer"],
+  },
+];
 
 const editorStore = useEditorStore() as any;
 const {
@@ -1140,6 +1170,38 @@ const customStylePresetMap: AnyRecord = {
       "shadow-inner",
       "内阴影",
       "#domId {\n  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.16);\n}",
+    ),
+  ],
+  ElContainer: [
+    buildStylePreset(
+      "ElContainer",
+      "region-colors",
+      "设置区域颜色",
+      "#domId [data-node-type=\"ElHeader\"] {\n  background: #f3f4f6;\n}\n#domId [data-node-type=\"ElAside\"] {\n  background: #eef6ff;\n}\n#domId [data-node-type=\"ElMain\"] {\n  background: #ffffff;\n}\n#domId [data-node-type=\"ElFooter\"] {\n  background: #f9fafb;\n}",
+    ),
+    buildStylePreset(
+      "ElContainer",
+      "header-color",
+      "设置顶部区域颜色",
+      "#domId [data-node-type=\"ElHeader\"] {\n  background: #e8f3ff;\n  color: #1f2937;\n}",
+    ),
+    buildStylePreset(
+      "ElContainer",
+      "aside-color",
+      "设置左侧区域颜色",
+      "#domId [data-node-type=\"ElAside\"] {\n  background: #f0f9ff;\n  color: #1f2937;\n}",
+    ),
+    buildStylePreset(
+      "ElContainer",
+      "main-color",
+      "设置主内容区颜色",
+      "#domId [data-node-type=\"ElMain\"] {\n  background: #ffffff;\n  color: #1f2937;\n}",
+    ),
+    buildStylePreset(
+      "ElContainer",
+      "footer-color",
+      "设置底部区域颜色",
+      "#domId [data-node-type=\"ElFooter\"] {\n  background: #f8fafc;\n  color: #475569;\n}",
     ),
   ],
   FormLayout: [
@@ -2598,12 +2660,18 @@ const customDetailPresetMap: AnyRecord = {
     {
       id: buildPresetId("FormLayout", "basic"),
       label: "基础表单",
-      content: buildDslTemplate("formLayout", "  itemGap: 12,\n  showBorder: false,"),
+      content: buildDslTemplate(
+        "formLayout",
+        "  columns: 2,\n  columnGap: 12,\n  rowGap: 12,\n  showBorder: false,",
+      ),
     },
     {
       id: buildPresetId("FormLayout", "border"),
       label: "带边框表单",
-      content: buildDslTemplate("formLayout", "  itemGap: 16,\n  showBorder: true,"),
+      content: buildDslTemplate(
+        "formLayout",
+        "  columns: 2,\n  columnGap: 16,\n  rowGap: 16,\n  showBorder: true,",
+      ),
     },
   ],
 };
@@ -5401,7 +5469,11 @@ const currentPresetOptions = computed<AnyArray>(() => {
         }));
     }
     if (customDetailPresetMap[type]) {
-      return withCommonDetailPresets(type, customDetailPresetMap[type] as AnyArray)
+      const sourcePresets =
+        type === "FormLayout"
+          ? (customDetailPresetMap[type] as AnyArray)
+          : withCommonDetailPresets(type, customDetailPresetMap[type] as AnyArray);
+      return sourcePresets
         .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
         .map((preset: AnyRecord) => localizePropertyPanelPreset(preset))
         .map((preset: AnyRecord) => ({
@@ -5513,29 +5585,45 @@ const tabsChildNodes = computed<AnyArray>(() => {
 const regionPropRows = computed<AnyArray>(() => [
   {
     key: "header",
-    label: "el-header",
+    label: "顶部区域",
     toggleProp: "showHeader",
     sizeProp: "headerHeight",
+    sizeLabel: "高度",
   },
   {
     key: "aside",
-    label: "el-aside",
+    label: "左侧区域",
     toggleProp: "showAside",
     sizeProp: "asideWidth",
+    sizeLabel: "宽度",
   },
   {
     key: "main",
-    label: "el-main",
+    label: "主内容区",
     toggleProp: "showMain",
     sizeProp: null,
+    sizeLabel: "",
   },
   {
     key: "footer",
-    label: "el-footer",
+    label: "底部区域",
     toggleProp: "showFooter",
     sizeProp: "footerHeight",
+    sizeLabel: "高度",
   },
 ]);
+
+const visibleRegionSizeRows = computed<AnyArray>(() =>
+  regionPropRows.value.filter((item) => item.sizeProp && isRegionEnabled(item)),
+);
+
+const activeRegionPreset = computed<string>(() =>
+  String(getPropValue("regionPreset") || "aside-between"),
+);
+
+function regionPresetGridAreas(option: AnyRecord): string {
+  return (option.grid || []).map((row: string) => `"${row}"`).join(" ");
+}
 
 /**
  * 判断是否为区域分组
@@ -5565,10 +5653,18 @@ const groupedProps = computed<AnyArray>(() => {
 });
 
 const displayPropGroups = computed<AnyArray>(() => {
-  const groups = groupedProps.value;
+  const groups = groupedProps.value
+    .map((group) => ({ ...group, props: getVisibleGroupProps(group) }))
+    .filter((group) => group.props.length > 0);
   if (groups.length > 0) return groups;
   if (effectiveManifest.value?.props?.length) {
-    return [{ name: localizePropertyPanelLiteral("属性"), props: effectiveManifest.value.props }];
+    const visibleProps = getVisibleGroupProps({
+      name: localizePropertyPanelLiteral("属性"),
+      props: effectiveManifest.value.props,
+    });
+    return visibleProps.length
+      ? [{ name: localizePropertyPanelLiteral("属性"), props: visibleProps }]
+      : [];
   }
   return [];
 });
@@ -6294,6 +6390,7 @@ function shouldHideProp(propDef: AnyRecord): boolean {
   const nodeType = elementTypeName(selectedNode.value?.type);
   if (nodeType === "Tabs" && propDef.name === "tabs") return true;
   if (nodeType === "Menu" && propDef.name === "items") return true;
+  if (nodeType === "ElContainer" && EL_CONTAINER_MANAGED_PROPS.has(propDef.name)) return true;
 
   return false;
 }
@@ -7158,6 +7255,118 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
       </template>
       <template v-else-if="effectiveManifest && effectiveManifest.props.length > 0">
         <div class="prop-sections">
+          <div v-if="isElContainer" class="prop-section region-config-section">
+            <div class="prop-section-header is-static">
+              <span class="prop-section-heading">
+                <IconEpGrid class="section-icon" />
+                <span class="prop-section-title">区域配置</span>
+              </span>
+            </div>
+            <div class="prop-section-body region-config-body">
+              <div class="region-config-block">
+                <div class="region-config-label">布局样式</div>
+                <div class="region-preset-grid">
+                  <button
+                    v-for="option in EL_CONTAINER_PRESET_OPTIONS"
+                    :key="option.value"
+                    class="region-preset-card"
+                    :class="{ 'is-active': activeRegionPreset === option.value }"
+                    type="button"
+                    @click="handlePropChange('regionPreset', option.value)"
+                  >
+                    <span
+                      class="region-preset-preview"
+                      :style="{ gridTemplateAreas: regionPresetGridAreas(option) }"
+                    >
+                      <span
+                        v-show="String(option.grid).includes('header')"
+                        class="region-preview-part region-preview-header"
+                      />
+                      <span
+                        v-show="String(option.grid).includes('aside')"
+                        class="region-preview-part region-preview-aside"
+                      />
+                      <span
+                        v-show="String(option.grid).includes('main')"
+                        class="region-preview-part region-preview-main"
+                      />
+                      <span
+                        v-show="String(option.grid).includes('footer')"
+                        class="region-preview-part region-preview-footer"
+                      />
+                    </span>
+                    <span class="region-preset-copy">
+                      <span class="region-preset-title">{{ option.label }}</span>
+                      <span class="region-preset-desc">{{ option.description }}</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="region-config-block">
+                <div class="region-config-label">显示区域</div>
+                <div class="region-toggle-grid">
+                  <button
+                    v-for="item in regionPropRows"
+                    :key="item.key"
+                    class="region-toggle-card"
+                    :class="{ 'is-active': isRegionEnabled(item) }"
+                    type="button"
+                    @click="handlePropChange(item.toggleProp, !isRegionEnabled(item))"
+                  >
+                    <span>{{ item.label }}</span>
+                    <ElSwitch
+                      class="region-toggle"
+                      :model-value="isRegionEnabled(item)"
+                      size="small"
+                      @click.stop
+                      @update:model-value="
+                        (val: any) => handlePropChange(item.toggleProp, Boolean(val))
+                      "
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="visibleRegionSizeRows.length" class="region-config-block">
+                <div class="region-config-label">区域尺寸</div>
+                <div
+                  v-for="item in visibleRegionSizeRows"
+                  :key="item.key"
+                  class="region-size-row"
+                >
+                  <div class="region-size-row-label">
+                    <span>{{ item.label }}{{ item.sizeLabel ? ` ${item.sizeLabel}` : "" }}</span>
+                    <span v-if="getRegionMaxLabel(item.sizeProp)" class="region-size-limit">
+                      {{ getRegionMaxLabel(item.sizeProp) }}
+                    </span>
+                  </div>
+                  <div class="region-prop-controls">
+                    <ElInput
+                      class="region-size-input"
+                      :model-value="getSizeValue(item.sizeProp)"
+                      size="small"
+                      placeholder="auto"
+                      @update:model-value="
+                        (val: any) => handleSizeValueChange(item.sizeProp, val)
+                      "
+                    />
+                    <ElSelect
+                      :model-value="getSizeUnit(item.sizeProp)"
+                      size="small"
+                      class="region-unit-select"
+                      @update:model-value="(val: any) => handleSizeUnitChange(item.sizeProp, val)"
+                      @change="(val: any) => handleSizeUnitChange(item.sizeProp, val)"
+                    >
+                      <el-option label="px" value="px" />
+                      <el-option label="%" value="%" />
+                      <el-option label="auto" value="auto" />
+                    </ElSelect>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           <template v-for="group in displayPropGroups" :key="group.name">
             <div
               class="prop-section"
@@ -7810,6 +8019,193 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 .bind-icon {
   width: 13px;
   height: 13px;
+}
+
+.region-config-section {
+  overflow: hidden;
+}
+
+.section-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--designer-text-muted);
+}
+
+.region-config-body {
+  gap: 8px;
+  padding: 8px;
+}
+
+.region-config-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.region-config-label {
+  font-size: var(--designer-font-label);
+  font-weight: 600;
+  color: var(--designer-text-secondary);
+}
+
+.region-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.region-preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  min-height: 86px;
+  padding: 5px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-sm);
+  background: var(--designer-shell-surface);
+  color: var(--designer-text-regular);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.region-preset-card:hover {
+  border-color: var(--designer-primary-border);
+  background: var(--designer-hover-surface);
+}
+
+.region-preset-card.is-active {
+  border-color: var(--designer-primary-border);
+  background: var(--designer-primary-soft);
+  box-shadow: inset 0 0 0 1px var(--designer-primary-border);
+}
+
+.region-preset-preview {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  grid-template-rows: 12px 20px 12px;
+  gap: 2px;
+  width: 100%;
+  height: 42px;
+  padding: 3px;
+  border: 1px solid var(--designer-border-soft);
+  border-radius: 4px;
+  background: var(--designer-group-surface);
+  box-sizing: border-box;
+}
+
+.region-preview-part {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px;
+}
+
+.region-preview-header {
+  grid-area: header;
+  background: #dbeafe;
+}
+
+.region-preview-aside {
+  grid-area: aside;
+  background: #d1fae5;
+}
+
+.region-preview-main {
+  grid-area: main;
+  background: #fef3c7;
+}
+
+.region-preview-footer {
+  grid-area: footer;
+  background: #e5e7eb;
+}
+
+.region-preset-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+}
+
+.region-preset-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--designer-font-sm);
+  font-weight: 600;
+  color: var(--designer-text-regular);
+}
+
+.region-preset-desc {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--designer-font-label);
+  color: var(--designer-text-secondary);
+}
+
+.region-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.region-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: var(--designer-radius-sm);
+  background: var(--designer-shell-surface);
+  color: var(--designer-text-regular);
+  cursor: pointer;
+  font-size: var(--designer-font-label);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.region-toggle-card:hover {
+  border-color: var(--designer-primary-border);
+  background: var(--designer-hover-surface);
+}
+
+.region-toggle-card.is-active {
+  border-color: var(--designer-primary-border);
+  background: var(--designer-primary-soft);
+}
+
+.region-size-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--designer-border-soft);
+  border-radius: var(--designer-radius-sm);
+  background: var(--designer-group-surface);
+}
+
+.region-size-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--designer-font-label);
+  color: var(--designer-text-regular);
 }
 
 .region-prop-row .prop-label {

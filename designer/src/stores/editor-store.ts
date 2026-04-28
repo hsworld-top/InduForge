@@ -60,6 +60,7 @@ import { History } from "@/editor-core/commands/History";
 import {
   DuplicateNodeCommand,
   InsertNodeCommand,
+  MoveNodeCommand,
   RemoveNodeCommand,
   SetNodeStyleCommand,
   ToggleNodeLockCommand,
@@ -943,23 +944,26 @@ export const useEditorStore = defineStore("editor", () => {
       }
     }
 
+    const getLiveChildren = () => [...(d.getNode(containerId)?.children || [])];
+    const getLiveSectionMap = () => {
+      const liveSectionMap = new Map<string, string>();
+      for (const childId of getLiveChildren()) {
+        const childNode = d.getNode(childId);
+        if (childNode && sectionOrder.includes(childNode.type)) {
+          liveSectionMap.set(childNode.type, childId);
+        }
+      }
+      return liveSectionMap;
+    };
+
     const refreshedNode = d.getNode(containerId);
     if (!refreshedNode) return;
-    const refreshedChildren = [...(refreshedNode.children || [])];
-
-    const refreshedSectionMap = new Map();
-    for (const childId of refreshedChildren) {
-      const childNode = d.getNode(childId);
-      if (childNode && sectionOrder.includes(childNode.type)) {
-        refreshedSectionMap.set(childNode.type, childId);
-      }
-    }
 
     type SectionSizeKey = keyof typeof sectionSizeMap;
     const applySectionSize = (sectionType: SectionSizeKey) => {
       const config = sectionSizeMap[sectionType];
       if (!config) return;
-      const sectionId = refreshedSectionMap.get(sectionType);
+      const sectionId = getLiveSectionMap().get(sectionType);
       if (!sectionId) return;
       const sectionNode = d.getNode(sectionId);
       if (!sectionNode) return;
@@ -974,9 +978,10 @@ export const useEditorStore = defineStore("editor", () => {
 
     const resolveInsertIndex = (type: string) => {
       const orderIndex = getOrderIndex(type);
-      let insertIndex = refreshedChildren.length;
-      for (let i = 0; i < refreshedChildren.length; i += 1) {
-        const childId = refreshedChildren[i]!;
+      const liveChildren = getLiveChildren();
+      let insertIndex = liveChildren.length;
+      for (let i = 0; i < liveChildren.length; i += 1) {
+        const childId = liveChildren[i]!;
         const childNode = d.getNode(childId);
         const childOrder = childNode ? getOrderIndex(childNode.type) : -1;
         if (childOrder !== -1 && childOrder > orderIndex) {
@@ -984,10 +989,24 @@ export const useEditorStore = defineStore("editor", () => {
           break;
         }
       }
-      if (type === "ElHeader" && insertIndex === refreshedChildren.length) {
+      if (type === "ElHeader" && insertIndex === liveChildren.length) {
         return 0;
       }
       return insertIndex;
+    };
+
+    const ensureSectionOrder = () => {
+      let targetIndex = 0;
+      for (const sectionType of sectionOrder) {
+        const sectionId = getLiveSectionMap().get(sectionType);
+        if (!sectionId) continue;
+        const liveChildren = getLiveChildren();
+        const currentIndex = liveChildren.indexOf(sectionId);
+        if (currentIndex !== -1 && currentIndex !== targetIndex) {
+          executeCommand(new MoveNodeCommand(sectionId, containerId, targetIndex));
+        }
+        targetIndex += 1;
+      }
     };
 
     const buildUniqueLabel = (baseLabel: string) => {
@@ -1003,7 +1022,7 @@ export const useEditorStore = defineStore("editor", () => {
 
     for (const section of sectionDefs) {
       if (!nextProps?.[section.prop]) continue;
-      if (refreshedSectionMap.has(section.type)) continue;
+      if (getLiveSectionMap().has(section.type)) continue;
 
       const manifest = componentRegistry.get(section.type);
       const sizeConfig = sectionSizeMap[section.type as SectionSizeKey];
@@ -1026,9 +1045,10 @@ export const useEditorStore = defineStore("editor", () => {
     }
 
     (Object.keys(sectionSizeMap) as SectionSizeKey[]).forEach((sectionType) => {
-      if (!refreshedSectionMap.has(sectionType)) return;
+      if (!getLiveSectionMap().has(sectionType)) return;
       applySectionSize(sectionType);
     });
+    ensureSectionOrder();
   };
 
   /**
@@ -1293,7 +1313,8 @@ export const useEditorStore = defineStore("editor", () => {
     const hasContainerPresetPatch =
       node?.type === "ElContainer" &&
       hasPropPatch &&
-      Object.hasOwn(nextPatch.props || {}, "regionPreset");
+      Object.hasOwn(nextPatch.props || {}, "regionPreset") &&
+      nextPatch.props?.regionPreset !== node.props?.regionPreset;
     const mergedPropsBase = hasPropPatch
       ? { ...(node.props || {}), ...(nextPatch.props || {}) }
       : { ...(node.props || {}) };
@@ -1579,11 +1600,83 @@ export const useEditorStore = defineStore("editor", () => {
     }
 
     const manifest = componentRegistry.get(type);
+    const isLayoutContainer = isLayoutContainerType(type);
+    let regionContentHostToCreate: ComponentNode | null = null;
+    let regionContentHostParentId = "";
+    let regionContentHostInsertIndex = 0;
+    let regionContentChildrenToMove: string[] = [];
+    let regionContentChildrenToFlow: string[] = [];
+    let regionContentHostToNormalize = "";
+    const isPlainRegionContentDrop =
+      isRegionType(parentNode.type) &&
+      parentNode.type !== "ElCol" &&
+      type !== "FreeContainer" &&
+      !isLayoutContainer &&
+      manifest?.isContainer !== true;
+    if (isPlainRegionContentDrop) {
+      const existingHostId = (parentNode.children || []).find((childId) => {
+        const childNode = d.getNode(childId);
+        return childNode?.type === "FreeContainer";
+      });
+      const existingHost = existingHostId ? d.getNode(existingHostId) : null;
+      const directChildren = [...(parentNode.children || [])];
+      const directChildrenArePlainContent = directChildren.every((childId) => {
+        const childNode = d.getNode(childId);
+        if (!childNode) return false;
+        const childManifest = componentRegistry.get(childNode.type);
+        return (
+          childNode.type !== "FreeContainer" &&
+          !isRegionType(childNode.type) &&
+          !isLayoutContainerType(childNode.type) &&
+          childManifest?.isContainer !== true
+        );
+      });
+      if (existingHost) {
+        parentNode = existingHost;
+        resolvedParentId = existingHost.id;
+        regionContentChildrenToFlow = [...(existingHost.children || [])];
+        regionContentHostToNormalize = existingHost.id;
+      } else if (directChildren.length === 0 || directChildrenArePlainContent) {
+        const hostNode = createComponentNode("FreeContainer", {
+          label: buildUniqueNodeLabel(doc.value, resolveCurrentRootNodeId(), "内容区"),
+          props: {},
+          style: {
+            width: "100%",
+            height: "100%",
+            padding: "0",
+            minHeight: "0",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            gap: "0",
+          },
+          layoutItem: buildFlexLayoutItem(),
+        });
+        hostNode.positioning = "flow";
+        hostNode.flowLayout = { grow: 1, shrink: 1, basis: "0%" };
+        regionContentHostToCreate = hostNode;
+        regionContentHostParentId = parentNode.id;
+        regionContentHostInsertIndex = directChildren.length;
+        regionContentChildrenToMove = directChildren;
+        regionContentChildrenToFlow = directChildren;
+        parentNode = hostNode;
+        resolvedParentId = hostNode.id;
+      }
+    }
     const defaultSize = resolveDefaultSize(type, manifest);
     const insertIndex =
       typeof index === "number" && Number.isInteger(index)
         ? index
         : (parentNode.children?.length ?? 0);
+    const resolvedInsertIndex =
+      regionContentHostToCreate &&
+      regionContentChildrenToMove.length > 0 &&
+      !(typeof index === "number" && Number.isInteger(index))
+        ? regionContentChildrenToMove.length
+        : insertIndex;
+    const isRegionContentHostParent =
+      parentNode.type === "FreeContainer" &&
+      (Boolean(regionContentHostToCreate) || isRegionType(d.getParent(parentNode.id)?.type || ""));
 
     const dropPosition = options.dropPosition || { x: 0, y: 0 };
     const dropInfo = {
@@ -1593,16 +1686,14 @@ export const useEditorStore = defineStore("editor", () => {
       height: defaultSize.height,
     };
 
-    const isLayoutContainer = isLayoutContainerType(type);
     let layoutItem: LayoutItem | null = null;
     let nodeStyle = { ...(manifest?.defaultStyle || {}) };
 
-    if (isLayoutContainer) {
+    if (isLayoutContainer || isRegionContentHostParent) {
       layoutItem = buildFlexLayoutItem();
       nodeStyle = {
         ...nodeStyle,
-        width: "100%",
-        minHeight: "120px",
+        ...(isLayoutContainer ? { width: "100%", minHeight: "120px" } : {}),
       };
     } else {
       layoutItem = buildLayoutItem(parentNode, dropInfo);
@@ -1614,20 +1705,22 @@ export const useEditorStore = defineStore("editor", () => {
     const isTabbedLikeContainer = isTabsContainer || isCollapseContainer;
     const isAutoSizePanelLayout = type === "HorizontalLayout" || type === "VerticalLayout";
     if (isRegionContainer) {
-      // 区域容器内默认填满
+      // 区域容器内：布局/容器负责承载区域时填满；普通组件保持自然尺寸，避免按钮被拉满。
+      const shouldFillRegion = isLayoutContainer || manifest?.isContainer === true;
       if (parentNode.type === "ElCol") {
         nodeStyle = {
           ...nodeStyle,
           width: "100%",
         };
-        if (isLayoutContainer || manifest?.isContainer) {
+        if (shouldFillRegion) {
           nodeStyle.height = "100%";
         }
       } else {
         nodeStyle = {
           ...nodeStyle,
-          width: "100%",
-          height: "100%",
+          ...(shouldFillRegion
+            ? { width: "100%", height: "100%" }
+            : { width: "auto", height: "auto" }),
         };
       }
       if (isLayoutContainer) {
@@ -1695,7 +1788,7 @@ export const useEditorStore = defineStore("editor", () => {
       node.props = { ...(node.props || {}), columns: normalizedColumns };
     }
     const isRootCanvas = parentNode.id === currentPage.value?.rootNodeId;
-    if (parentNode.type === "FreeContainer" || isRootCanvas) {
+    if ((parentNode.type === "FreeContainer" && !isRegionContentHostParent) || isRootCanvas) {
       node.positioning = "absolute";
       node.absolutePos = {
         x: Math.round(dropInfo.x),
@@ -1719,7 +1812,8 @@ export const useEditorStore = defineStore("editor", () => {
       parentNode.type === "ElAside" ||
       parentNode.type === "ElMain" ||
       parentNode.type === "ElFooter" ||
-      parentNode.type === "ElCol"
+      parentNode.type === "ElCol" ||
+      isRegionContentHostParent
     ) {
       node.positioning = "flow";
       // 优先从 descriptor 读取子项策略
@@ -1748,7 +1842,12 @@ export const useEditorStore = defineStore("editor", () => {
     }
 
     const shouldWrapTransaction =
-      (type === "ElContainer" || type === "ElLayout" || type === "ElLayoutRow") &&
+      (type === "ElContainer" ||
+        type === "ElLayout" ||
+        type === "ElLayoutRow" ||
+        Boolean(regionContentHostToCreate) ||
+        Boolean(regionContentHostToNormalize) ||
+        regionContentChildrenToFlow.length > 0) &&
       !h.isInTransaction?.();
     if (shouldWrapTransaction) {
       h.beginTransaction();
@@ -1770,6 +1869,26 @@ export const useEditorStore = defineStore("editor", () => {
       if (shouldCommit) {
         h.beginTransaction();
       }
+      const executeInsertCommand = (
+        targetParentId: string,
+        targetIndex: number,
+        targetNode: ComponentNode,
+      ) => {
+        const command = new InsertNodeCommand(targetParentId, targetIndex, targetNode);
+        if (h.isInTransaction?.()) {
+          h.executeInTransaction(command);
+          return;
+        }
+        h.execute(command);
+      };
+      const executeUpdateCommand = (targetNodeId: string, patch: Partial<ComponentNode>) => {
+        const command = new UpdateNodeCommand(targetNodeId, patch);
+        if (h.isInTransaction?.()) {
+          h.executeInTransaction(command);
+          return;
+        }
+        h.execute(command);
+      };
       if (shouldReplaceRegionChildren) {
         const existingChildren = [...(parentNode.children || [])];
         for (const childId of existingChildren) {
@@ -1779,7 +1898,59 @@ export const useEditorStore = defineStore("editor", () => {
           }
         }
       }
-      h.execute(new InsertNodeCommand(resolvedParentId, insertIndex, node));
+      if (regionContentHostToCreate && regionContentHostParentId) {
+        const hostParent = d.getNode(regionContentHostParentId);
+        executeInsertCommand(
+          regionContentHostParentId,
+          hostParent ? Math.min(regionContentHostInsertIndex, hostParent.children?.length ?? 0) : 0,
+          regionContentHostToCreate,
+        );
+        regionContentChildrenToMove.forEach((childId, childIndex) => {
+          const command = new MoveNodeCommand(childId, regionContentHostToCreate!.id, childIndex);
+          if (h.isInTransaction?.()) {
+            h.executeInTransaction(command);
+            return;
+          }
+          h.execute(command);
+        });
+      }
+      if (regionContentHostToNormalize) {
+        const hostNode = d.getNode(regionContentHostToNormalize);
+        if (hostNode) {
+          executeUpdateCommand(hostNode.id, {
+            positioning: "flow",
+            flowLayout: { grow: 1, shrink: 1, basis: "0%" },
+            style: {
+              ...(hostNode.style || {}),
+              width: "100%",
+              height: "100%",
+              padding: "0",
+              minHeight: "0",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: "0",
+            },
+          });
+        }
+      }
+      regionContentChildrenToFlow.forEach((childId) => {
+        const childNode = d.getNode(childId);
+        if (!childNode) return;
+        const nextStyle = { ...(childNode.style || {}) };
+        if (nextStyle.width === "100%") {
+          nextStyle.width = "auto";
+        }
+        if (nextStyle.height === "100%") {
+          nextStyle.height = "auto";
+        }
+        executeUpdateCommand(childId, {
+          positioning: "flow",
+          flowLayout: { grow: 0, shrink: 0, basis: "auto" },
+          style: nextStyle,
+        });
+      });
+      executeInsertCommand(resolvedParentId, resolvedInsertIndex, node);
       if (shouldCommit) {
         h.commitTransaction("更新Main区域");
       }

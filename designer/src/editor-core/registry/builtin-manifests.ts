@@ -32,7 +32,7 @@ function getDefaultStyle(type: string): Record<string, string | number> {
     minHeight: "40px",
   };
 
-  if (type === "HorizontalLayout" || type === "VerticalLayout") {
+  if (type === "HorizontalLayout" || type === "VerticalLayout" || type === "FormLayout") {
     return {
       ...baseStyle,
       width: "100%",
@@ -44,7 +44,7 @@ function getDefaultStyle(type: string): Record<string, string | number> {
     return {
       ...baseStyle,
       width: "100%",
-      padding: "8px",
+      padding: "0",
     };
   }
 
@@ -52,7 +52,7 @@ function getDefaultStyle(type: string): Record<string, string | number> {
     return {
       ...baseStyle,
       width: "200px",
-      padding: "8px",
+      padding: "0",
     };
   }
 
@@ -60,8 +60,16 @@ function getDefaultStyle(type: string): Record<string, string | number> {
     return {
       ...baseStyle,
       width: "100%",
-      padding: "8px",
+      padding: "0",
       flex: "1 1 auto",
+    };
+  }
+
+  if (type === "ElContainer") {
+    return {
+      ...baseStyle,
+      width: "100%",
+      padding: "0",
     };
   }
 

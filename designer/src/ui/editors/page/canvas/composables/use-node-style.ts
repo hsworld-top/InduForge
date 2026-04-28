@@ -28,6 +28,7 @@ const EL_CONTAINER_REGION_PRESET_ASIDE_FULL_HEIGHT = "aside-full-height";
 const EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN = "aside-between";
 const PANEL_CONTAINER_TYPES = new Set(["Tabs", "Collapse"]);
 const AUTO_SIZE_PANEL_LAYOUT_TYPES = new Set(["HorizontalLayout", "VerticalLayout"]);
+const EL_CONTAINER_SECTION_TYPES = new Set(["ElHeader", "ElAside", "ElMain", "ElFooter"]);
 
 interface NodeStyleProps {
   readonly?: boolean;
@@ -111,6 +112,10 @@ function shouldAutoSizePanelLayout(
     AUTO_SIZE_PANEL_LAYOUT_TYPES.has(currentNode.type) &&
     PANEL_CONTAINER_TYPES.has(parentNode.type),
   );
+}
+
+function isElContainerSectionType(type: string | null | undefined): boolean {
+  return Boolean(type && EL_CONTAINER_SECTION_TYPES.has(type));
 }
 
 function applyPanelLayoutAutoSize(
@@ -201,20 +206,17 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
 
     const style: StyleMap = {};
     const parentNode = getDoc()?.getParent?.(currentNode.id);
-    if (
-      parentNode?.type === "ElHeader" ||
-      parentNode?.type === "ElAside" ||
-      parentNode?.type === "ElMain" ||
-      parentNode?.type === "ElFooter"
-    ) {
+    if (isElContainerSectionType(parentNode?.type)) {
+      const shouldFillRegion = isContainerType(currentNode.type);
       return {
         position: "relative",
-        width: "100%",
-        height: "100%",
-        flexGrow: 1,
-        flexShrink: 1,
-        alignSelf: "stretch",
-        justifySelf: "stretch",
+        width: shouldFillRegion ? "100%" : "auto",
+        height: shouldFillRegion ? "100%" : "auto",
+        flexGrow: shouldFillRegion ? 1 : 0,
+        flexShrink: shouldFillRegion ? 1 : 0,
+        flexBasis: shouldFillRegion ? "0%" : "auto",
+        alignSelf: shouldFillRegion ? "stretch" : "flex-start",
+        justifySelf: shouldFillRegion ? "stretch" : "start",
       };
     }
 
@@ -232,17 +234,18 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
     if (currentNode.positioning === "flow") {
       if (currentNode.flowLayout) {
         const flow = currentNode.flowLayout as LooseRecord;
+        const useExplicitGridPlacement = parentNode?.type !== "FormLayout";
         if (flow.grow !== undefined || flow.shrink !== undefined || flow.basis !== undefined) {
           style.flexGrow = flow.grow ?? 0;
           style.flexShrink = flow.shrink ?? 1;
           style.flexBasis = flow.basis ?? "auto";
           if (flow.alignSelf) style.alignSelf = flow.alignSelf;
         }
-        if (flow.row !== undefined) {
+        if (useExplicitGridPlacement && flow.row !== undefined) {
           const rowSpan = flow.rowSpan || 1;
           style.gridRow = `${flow.row} / span ${rowSpan}`;
         }
-        if (flow.col !== undefined) {
+        if (useExplicitGridPlacement && flow.col !== undefined) {
           const colSpan = flow.colSpan || 1;
           style.gridColumn = `${flow.col} / span ${colSpan}`;
         }
@@ -277,7 +280,10 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
           style.flexShrink = currentFlow?.shrink ?? fl?.shrink ?? 1;
           style.flexBasis = currentFlow?.basis ?? fl?.basis ?? "0%";
         }
-        if (hasFixedCrossSize && !currentFlow?.alignSelf) {
+        const configuredAlignSelf = currentFlow?.alignSelf ?? fl?.alignSelf;
+        if (configuredAlignSelf) {
+          style.alignSelf = configuredAlignSelf;
+        } else if (hasFixedCrossSize) {
           style.alignSelf = "flex-start";
         } else {
           style.alignSelf = style.alignSelf ?? "stretch";
@@ -301,16 +307,14 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
         style.height = "100%";
         style.alignSelf = "stretch";
         style.justifySelf = "stretch";
-      } else if (
-        parentNode?.type === "ElHeader" ||
-        parentNode?.type === "ElAside" ||
-        parentNode?.type === "ElMain" ||
-        parentNode?.type === "ElFooter"
-      ) {
-        style.width = "100%";
-        style.height = "100%";
-        style.flexGrow = 1;
-        style.flexShrink = 1;
+      } else if (isElContainerSectionType(parentNode?.type)) {
+        const shouldFillRegion = isContainerType(currentNode.type);
+        style.width = shouldFillRegion ? "100%" : "auto";
+        style.height = shouldFillRegion ? "100%" : "auto";
+        style.flexGrow = shouldFillRegion ? 1 : 0;
+        style.flexShrink = shouldFillRegion ? 1 : 0;
+        style.flexBasis = shouldFillRegion ? "0%" : "auto";
+        style.alignSelf = shouldFillRegion ? "stretch" : "flex-start";
       }
       return style;
     }
@@ -346,10 +350,12 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
     }
     if (currentNode.layoutItem?.grid) {
       const grid = currentNode.layoutItem.grid;
-      if (grid.row !== undefined) {
+      const parentNode = getDoc()?.getParent?.(currentNode.id);
+      const useExplicitGridPlacement = parentNode?.type !== "FormLayout";
+      if (useExplicitGridPlacement && grid.row !== undefined) {
         style.gridRow = `${grid.row} / span ${grid.rowSpan || 1}`;
       }
-      if (grid.col !== undefined) {
+      if (useExplicitGridPlacement && grid.col !== undefined) {
         style.gridColumn = `${grid.col} / span ${grid.colSpan || 1}`;
       }
     }
@@ -714,12 +720,7 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
         }
         delete style.minHeight;
       }
-      if (
-        parentNode?.type === "ElHeader" ||
-        parentNode?.type === "ElAside" ||
-        parentNode?.type === "ElMain" ||
-        parentNode?.type === "ElFooter"
-      ) {
+      if (isElContainerSectionType(parentNode?.type)) {
         style.overflow = "hidden";
       }
       if (nodeRef.value.type === "ElCol" && parentNode?.type === "ElLayoutRow") {
@@ -813,23 +814,11 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
           style.height = "100%";
         }
       }
-      if (
-        !style.width &&
-        (parentNode?.type === "ElHeader" ||
-          parentNode?.type === "ElAside" ||
-          parentNode?.type === "ElMain" ||
-          parentNode?.type === "ElFooter")
-      ) {
-        style.width = "100%";
+      if (!style.width && isElContainerSectionType(parentNode?.type)) {
+        style.width = isContainerRef.value ? "100%" : "auto";
       }
-      if (
-        !style.height &&
-        (parentNode?.type === "ElHeader" ||
-          parentNode?.type === "ElAside" ||
-          parentNode?.type === "ElMain" ||
-          parentNode?.type === "ElFooter")
-      ) {
-        style.height = "100%";
+      if (!style.height && isElContainerSectionType(parentNode?.type)) {
+        style.height = isContainerRef.value ? "100%" : "auto";
       }
       // 绝对定位时外层框由 absolutePos 定尺寸（选择框），内层内容需填满框体，避免「框比按钮大」的空白
       if (props.isRoot || layoutStyleRef.value.position === "absolute") {
