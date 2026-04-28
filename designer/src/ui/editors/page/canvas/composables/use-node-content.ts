@@ -40,9 +40,8 @@ const fallbackDropdownItems = [
   { label: "操作二", value: "action2" },
 ];
 const fallbackTabs = [
-  { name: "tab1", label: "标签一", content: "" },
-  { name: "tab2", label: "标签二", content: "" },
-  { name: "tab3", label: "标签三", content: "" },
+  { name: "tab1", label: "标签1", content: "" },
+  { name: "tab2", label: "标签2", content: "" },
 ];
 const fallbackCollapseItems = [
   { name: "1", title: "面板1", content: "内容1" },
@@ -99,6 +98,9 @@ function applyTabsModelValue(
 ): Record<string, unknown> {
   if (!node.value || node.value.type !== "Tabs") return resolvedProps;
   const nextProps = { ...resolvedProps };
+  if (!["", "card", "border-card"].includes(String(nextProps.type ?? ""))) {
+    delete nextProps.type;
+  }
   const tabs = normalizeOptions(node.value.props?.tabs, fallbackTabs, { fallbackWhenEmpty: true });
   const tabKeys = new Set(
     tabs
@@ -133,6 +135,11 @@ function applyTabsModelValue(
   if (hasModelValue) {
     nextProps.modelValue = resolveUsableKey(nextProps.modelValue);
   }
+  if (activeTabName.value) {
+    const activeName = resolveUsableKey(activeTabName.value);
+    nextProps.modelValue = activeName;
+    nextProps.activeName = activeName;
+  }
   return nextProps;
 }
 
@@ -146,6 +153,11 @@ function applyCollapseModelValue(
   const hasModelValue = Object.hasOwn(nextProps, "modelValue");
   if (!hasModelValue && activeCollapseName.value) {
     nextProps.modelValue = [activeCollapseName.value];
+  }
+  if (activeCollapseName.value) {
+    nextProps.modelValue = nextProps.accordion
+      ? activeCollapseName.value
+      : [activeCollapseName.value];
   }
   return nextProps;
 }

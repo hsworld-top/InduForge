@@ -84,6 +84,7 @@ const manifestLiteralKeyMap: Record<string, string> = {
   垂直排列: "componentManifest.labels.verticalJustify",
   水平对齐: "componentManifest.labels.horizontalAlign",
   表单项间距: "componentManifest.labels.itemGap",
+  显示边框: "componentManifest.labels.showBorder",
   面板: "componentManifest.labels.panels",
   默认激活: "componentManifest.labels.defaultActive",
   风格: "componentManifest.labels.variant",

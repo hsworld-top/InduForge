@@ -396,7 +396,6 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
 
     // 如果当前节点未被选中，先选中它
     if (!node.value || !selection.value) return;
-    if (node.value.locked) return;
 
     const currentNode = node.value;
     const currentNodeId = currentNode.id;

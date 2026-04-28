@@ -1132,6 +1132,10 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
       if (customStyle.height && !style.height) {
         style.height = customStyle.height;
       }
+      // 图层操作写入 style.zIndex，必须作用在外层节点上，避免流式布局因调整 children 顺序而改变位置。
+      if (customStyle.zIndex !== undefined && customStyle.zIndex !== null) {
+        style.zIndex = customStyle.zIndex;
+      }
       const parentNode = docRef.value?.getParent?.(nodeRef.value.id);
       const hasCustomWidth = Boolean(customStyle.width);
       const hasCustomHeight = Boolean(customStyle.height);
@@ -1147,11 +1151,15 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
         }
       }
       if (parentNode?.type === "Tabs") {
-        style.width = "100%";
-        style.height = "100%";
-        if (style.position === "absolute") {
-          style.left = "0";
-          style.top = "0";
+        const wasAbsolute = style.position === "absolute";
+        const shouldStretchPanelChild = Boolean(isContainerRef.value);
+        style.position = "relative";
+        style.width = hasCustomWidth ? style.width : shouldStretchPanelChild ? "100%" : "auto";
+        style.height = hasCustomHeight ? style.height : "auto";
+        style.flex = "0 0 auto";
+        if (wasAbsolute) {
+          delete style.left;
+          delete style.top;
         }
       }
       if (isContainerRef.value && isMovableRef.value) {

@@ -3,9 +3,9 @@
   展示当前页面的组件层级结构，支持选中、显隐、锁定、上下移动、删除
 -->
 <script setup lang="ts">
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 import { storeToRefs } from "pinia";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import IconEpArrowDown from "~icons/ep/arrow-down";
 import IconEpArrowUp from "~icons/ep/arrow-up";
 import IconEpDelete from "~icons/ep/delete";
@@ -44,10 +44,14 @@ const editorStore = useEditorStore();
 const { doc, currentPageId, selection, docVersion } = storeToRefs(editorStore);
 
 const selectedNodeId = ref("");
+const treeRef = ref<any>(null);
+const expandedNodeIds = ref<string[]>([]);
+const treeRenderVersion = ref(0);
 const contextMenuVisible = ref(false);
 const contextMenuNode = ref<OutlineNodeLike | null>(null);
 const contextMenuPoint = ref({ x: 0, y: 0 });
 let unsubscribeSelection: (() => void) | null = null;
+let isRestoringTreeExpansion = false;
 
 const contextMenuVirtualRef = {
   getBoundingClientRect: () => {
@@ -105,6 +109,100 @@ const outlineData = computed(() => {
   if (!page) return [];
   return buildOutlineTree(doc.value, page.rootNodeId);
 });
+
+const expandedNodeIdSet = computed(() => new Set(expandedNodeIds.value));
+
+/**
+ * 收集当前树中仍然存在的节点 ID，节点被删除后用于清理旧展开状态。
+ * @param {OutlineNodeLike[]} nodes - 大纲节点
+ * @returns {Set<string>} 当前页面存在的节点 ID
+ */
+function collectExistingNodeIds(nodes: OutlineNodeLike[]): Set<string> {
+  const ids = new Set<string>();
+  const visit = (items: OutlineNodeLike[]) => {
+    items.forEach((item) => {
+      ids.add(item.id);
+      if (item.children?.length) {
+        visit(item.children);
+      }
+    });
+  };
+  visit(nodes);
+  return ids;
+}
+
+/**
+ * 恢复用户手动展开的大纲节点。Element Plus Tree 在数据对象重建后会丢失内部展开状态，
+ * 因此这里用节点 ID 作为稳定来源回填展开状态。
+ */
+async function restoreExpandedNodes(): Promise<void> {
+  const tree = treeRef.value;
+  try {
+    if (!tree) return;
+    await nextTick();
+    expandedNodeIds.value.forEach((nodeId) => {
+      const treeNode = tree.getNode?.(nodeId);
+      if (!treeNode || treeNode.expanded) return;
+      if (typeof treeNode.expand === "function") {
+        treeNode.expand();
+      } else {
+        treeNode.expanded = true;
+      }
+    });
+  } finally {
+    await nextTick();
+    isRestoringTreeExpansion = false;
+  }
+}
+
+/**
+ * 记录用户展开的节点。
+ * @param {OutlineNodeLike} node - 展开的节点数据
+ */
+function handleNodeExpand(node: OutlineNodeLike): void {
+  if (!node?.id || expandedNodeIdSet.value.has(node.id)) return;
+  expandedNodeIds.value = [...expandedNodeIds.value, node.id];
+}
+
+/**
+ * 记录用户折叠的节点。
+ * @param {OutlineNodeLike} node - 折叠的节点数据
+ */
+function handleNodeCollapse(node: OutlineNodeLike): void {
+  if (isRestoringTreeExpansion) return;
+  if (!node?.id) return;
+  expandedNodeIds.value = expandedNodeIds.value.filter((id) => id !== node.id);
+}
+
+watch(
+  outlineData,
+  (nodes) => {
+    const existingIds = collectExistingNodeIds(nodes);
+    expandedNodeIds.value = expandedNodeIds.value.filter((id) => existingIds.has(id));
+    if (expandedNodeIds.value.length) {
+      treeRenderVersion.value += 1;
+    }
+    void restoreExpandedNodes();
+  },
+  { flush: "post" },
+);
+
+watch(
+  () => docVersion.value,
+  () => {
+    isRestoringTreeExpansion = true;
+  },
+  { flush: "sync" },
+);
+
+watch(
+  () => currentPageId.value,
+  () => {
+    expandedNodeIds.value = [];
+    treeRenderVersion.value += 1;
+    isRestoringTreeExpansion = false;
+  },
+);
 
 /**
  * 选中节点
@@ -298,24 +396,11 @@ function handleMoveToBottom(): void {
 function deleteNode(nodeId: string): void {
   if (!nodeId) return;
 
-  const node = doc.value?.getNode(nodeId);
-  const nodeName = node?.label || node?.type || "节点";
-
-  ElMessageBox.confirm(`确定要删除"${nodeName}"吗？此操作不可撤销。`, "删除确认", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    type: "warning",
-  })
-    .then(() => {
-      if (editorStore.removeNode(nodeId)) {
-        showSuccessMessage("删除成功");
-      } else {
-        showErrorMessage("删除失败");
-      }
-    })
-    .catch(() => {
-      // 用户取消
-    });
+  if (editorStore.removeNode(nodeId)) {
+    showSuccessMessage("删除成功");
+  } else {
+    showErrorMessage("删除失败");
+  }
 }
 
 /**
@@ -332,12 +417,17 @@ function handleDelete(): void {
   <div class="flex flex-col gap-2 outline-tree-root">
     <el-tree
       v-if="outlineData.length"
+      :key="`${currentPageId || 'page'}-${treeRenderVersion}`"
+      ref="treeRef"
       :data="outlineData"
       node-key="id"
       highlight-current
       :current-node-key="selectedNodeId"
+      :default-expanded-keys="expandedNodeIds"
       @node-click="handleSelectNode"
       @node-contextmenu="handleContextMenu"
+      @node-expand="handleNodeExpand"
+      @node-collapse="handleNodeCollapse"
     >
       <template #default="{ data }">
         <div class="outline-node" :class="{ 'is-hidden': data.hidden, 'is-locked': data.locked }">

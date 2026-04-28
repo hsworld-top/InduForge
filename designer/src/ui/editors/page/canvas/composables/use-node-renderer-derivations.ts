@@ -290,6 +290,7 @@ export function useNodeRendererDerivations({
 
   const nodeClass = computed(() => {
     void selectionVersion.value;
+    void docVersion.value;
     if (!node.value) return "";
     const classes: string[] = ["designer-node"];
     if (props.isRoot) classes.push("is-root");

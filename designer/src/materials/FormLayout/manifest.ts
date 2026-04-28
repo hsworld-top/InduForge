@@ -17,9 +17,16 @@ export const manifest: ComponentManifest = {
       type: "number",
       label: "表单项间距",
       group: "布局",
-      defaultValue: 12,
+      defaultValue: 0,
       min: 0,
       max: 100,
+    },
+    {
+      name: "showBorder",
+      type: "boolean",
+      label: "显示边框",
+      group: "样式",
+      defaultValue: false,
     },
   ],
 };

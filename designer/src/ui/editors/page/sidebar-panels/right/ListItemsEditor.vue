@@ -13,6 +13,7 @@ interface ListItemLike {
 const props = defineProps<{
   items: ListItemLike[];
   selectedKey: string;
+  title?: string;
 }>();
 
 const emit = defineEmits<{
@@ -35,7 +36,7 @@ function isSelected(item: ListItemLike): boolean {
 <template>
   <div class="list-items-editor">
     <div class="list-items-editor__toolbar">
-      <span class="list-items-editor__title">面板项</span>
+      <span class="list-items-editor__title">{{ props.title || "面板项" }}</span>
       <el-button size="small" type="primary" @click="emit('add')">新增</el-button>
     </div>
 

@@ -13,6 +13,13 @@ export const manifest: ComponentManifest = {
   defaultSize: { width: 360, height: 200 },
   props: [
     {
+      name: "modelValue",
+      type: "string",
+      label: "当前激活",
+      group: "状态",
+      defaultValue: "tab1",
+    },
+    {
       name: "activeName",
       type: "string",
       label: "默认激活",
@@ -63,6 +70,10 @@ export const manifest: ComponentManifest = {
       type: "array",
       label: "标签页",
       group: "数据",
+      defaultValue: [
+        { name: "tab1", label: "标签1", disabled: false, content: "" },
+        { name: "tab2", label: "标签2", disabled: false, content: "" },
+      ],
     },
   ],
 };

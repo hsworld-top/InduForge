@@ -12,12 +12,16 @@ import type { ViewPreset } from "@/constants";
 import type { PageConfig } from "@/editor-core/document/types";
 import type { EditorRouteProjectMeta } from "@/stores/editor-store.types";
 import { storeToRefs } from "pinia";
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, provide, ref, toRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { VIEW_PRESETS } from "@/constants";
 
 import { useEditorStore } from "@/stores/editor-store";
-import { canvasZoomKey, runtimeAccessContextKey } from "@/ui/editors/page/canvas/injection-keys";
+import {
+  canvasZoomKey,
+  previewRenderBoundsKey,
+  runtimeAccessContextKey,
+} from "@/ui/editors/page/canvas/injection-keys";
 import NodeRenderer from "@/ui/editors/page/canvas/NodeRenderer.vue";
 import PageStyleInjector from "@/ui/editors/page/canvas/PageStyleInjector";
 import { buildDesignerPageDomId } from "@/ui/editors/page/canvas/style-config-css";
@@ -55,6 +59,7 @@ interface PreviewBackgroundConfig {
 }
 
 type PreviewTransitionType = "none" | "fade" | "slide" | "zoom";
+type PreviewViewMode = "runtime" | "fit";
 
 interface PreviewTransitionConfig {
   type?: PreviewTransitionType | string;
@@ -146,12 +151,25 @@ function resolvePreviewContainerSize(
 function resolvePreviewCanvasLayout(
   viewport: PreviewResolvedPageViewport,
   container: PreviewContainerSize,
+  mode: PreviewViewMode,
 ): PreviewResolvedCanvasLayout {
+  if (mode === "fit") {
+    const scale = Math.min(
+      container.width / Math.max(1, viewport.width),
+      container.height / Math.max(1, viewport.height),
+    );
+    return {
+      width: Math.max(1, Math.round(viewport.width * scale)),
+      height: Math.max(1, Math.round(viewport.height * scale)),
+      modeLabel: "缩略适配",
+    };
+  }
+
   if (!viewport.autoFit) {
     return {
       width: viewport.width,
       height: viewport.height,
-      modeLabel: "固定尺寸",
+      modeLabel: "运行效果-固定尺寸",
     };
   }
 
@@ -164,18 +182,18 @@ function resolvePreviewCanvasLayout(
       viewport.minWidth > 0 ? viewport.minWidth / Math.max(1, viewport.width) : 0,
       viewport.minHeight > 0 ? viewport.minHeight / Math.max(1, viewport.height) : 0,
     );
-    const scale = Math.max(fitScale, minScale, 0);
+    const scale = Math.max(fitScale, minScale, 1);
     return {
       width: Math.max(1, Math.round(viewport.width * scale)),
       height: Math.max(1, Math.round(viewport.height * scale)),
-      modeLabel: "自适应-等比",
+      modeLabel: "运行效果-等比",
     };
   }
 
   return {
-    width: Math.max(container.width, viewport.minWidth || 0),
-    height: Math.max(container.height, viewport.minHeight || 0),
-    modeLabel: "自适应-拉伸",
+    width: Math.max(container.width, viewport.width, viewport.minWidth || 0),
+    height: Math.max(container.height, viewport.height, viewport.minHeight || 0),
+    modeLabel: "运行效果-拉伸",
   };
 }
 
@@ -247,10 +265,26 @@ const {
 provide(canvasZoomKey, ref(1));
 
 const viewKey = ref<string>("page");
+const viewMode = ref<PreviewViewMode>("runtime");
 const viewPresets: readonly ViewPreset[] = VIEW_PRESETS;
 const previewOptions = computed(() => [{ key: "page", label: "页面实际尺寸" }, ...viewPresets]);
+const viewModeOptions: Array<{ value: PreviewViewMode; label: string }> = [
+  { value: "runtime", label: "运行效果" },
+  { value: "fit", label: "缩略适配" },
+];
 
 const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
+function normalizeRouteDimension(value: unknown): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const next = Number(raw);
+  return Number.isFinite(next) && next > 0 ? Math.round(next) : null;
+}
+
+const routeDesignViewport = computed(() => {
+  const width = normalizeRouteDimension(route.query.designWidth);
+  const height = normalizeRouteDimension(route.query.designHeight);
+  return width && height ? { width, height } : null;
+});
 const routePreviewUserId = computed(() => {
   const raw = route.query.previewUserId;
   return String(Array.isArray(raw) ? raw[0] || "" : raw || "").trim();
@@ -283,15 +317,33 @@ provide(runtimeAccessContextKey, {
   isNodeVisible: (node: Record<string, any>) => runtimeAccessSnapshot.value.isNodeVisible(node),
   isNodeOperable: (node: Record<string, any>) => runtimeAccessSnapshot.value.isNodeOperable(node),
 });
-const previewPageConfig = computed(() =>
-  resolvePreviewViewport(currentPage.value?.config || ({} as PreviewCanvasPageConfig)),
-);
+const previewPageConfig = computed(() => {
+  const resolved = resolvePreviewViewport(
+    currentPage.value?.config || ({} as PreviewCanvasPageConfig),
+  );
+  const designViewport = routeDesignViewport.value;
+  return designViewport
+    ? {
+        ...resolved,
+        width: designViewport.width,
+        height: designViewport.height,
+      }
+    : resolved;
+});
+provide(previewRenderBoundsKey, {
+  width: toRef(() => previewPageConfig.value.width),
+  height: toRef(() => previewPageConfig.value.height),
+});
 const previewContainerSize = computed(() =>
   resolvePreviewContainerSize(viewKey.value, previewPageConfig.value, viewPresets),
 );
 const previewCanvasLayout = computed(() =>
-  resolvePreviewCanvasLayout(previewPageConfig.value, previewContainerSize.value),
+  resolvePreviewCanvasLayout(previewPageConfig.value, previewContainerSize.value, viewMode.value),
 );
+const previewCanvasScale = computed(() => ({
+  x: previewCanvasLayout.value.width / Math.max(1, previewPageConfig.value.width),
+  y: previewCanvasLayout.value.height / Math.max(1, previewPageConfig.value.height),
+}));
 const pageStyleConfig = computed(() => String(currentPage.value?.config?.styleConfig || ""));
 const pageDomId = computed(() =>
   currentPageId.value ? buildDesignerPageDomId(currentPageId.value) : undefined,
@@ -324,7 +376,7 @@ const previewMinSizeLabel = computed(() => {
 const previewSummaryItems = computed(() => [
   `设计尺寸：${previewPageConfig.value.width} × ${previewPageConfig.value.height}`,
   `容器：${previewContainerSize.value.width} × ${previewContainerSize.value.height}`,
-  `适配：${previewCanvasLayout.value.modeLabel}`,
+  `查看：${previewCanvasLayout.value.modeLabel}`,
   `最小尺寸：${previewMinSizeLabel.value}`,
   `滚动：${previewOverflowLabel.value}`,
 ]);
@@ -336,20 +388,23 @@ const frameStyle = computed((): Record<string, string> => {
     height: `${previewContainerSize.value.height}px`,
     maxWidth: "100%",
     maxHeight: "100%",
-    overflow: previewPageConfig.value.overflowMode,
+    overflow: viewMode.value === "fit" ? "hidden" : previewPageConfig.value.overflowMode,
   };
 });
 
 const canvasStyle = computed((): Record<string, string> => {
   void docVersion.value;
   const config = currentPage.value?.config || ({} as PreviewCanvasPageConfig);
-  const viewport = resolvePreviewViewport(config);
   const background = resolvePreviewBackground(config);
   const style: Record<string, string> = {
-    width: `${previewCanvasLayout.value.width}px`,
-    height: `${previewCanvasLayout.value.height}px`,
+    width: `${previewPageConfig.value.width}px`,
+    height: `${previewPageConfig.value.height}px`,
     backgroundColor: background.backgroundColor,
     position: "relative",
+    // 先在设计坐标系裁剪，再由外层缩放到预览容器；页外工作区素材不进入运行态画面。
+    overflow: "hidden",
+    transform: `scale(${previewCanvasScale.value.x}, ${previewCanvasScale.value.y})`,
+    transformOrigin: "left top",
   };
   if (background.backgroundImage) {
     style.backgroundImage = background.backgroundImage;
@@ -365,6 +420,14 @@ const canvasStyle = computed((): Record<string, string> => {
   }
   return style;
 });
+
+const canvasViewportStyle = computed((): Record<string, string> => ({
+  width: `${previewCanvasLayout.value.width}px`,
+  height: `${previewCanvasLayout.value.height}px`,
+  flex: "0 0 auto",
+  overflow: "hidden",
+  position: "relative",
+}));
 
 /**
  * 返回编辑
@@ -520,6 +583,12 @@ onBeforeUnmount(() => {
             {{ preset.label }}
           </el-radio-button>
         </el-radio-group>
+        <el-divider direction="vertical" />
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button v-for="mode in viewModeOptions" :key="mode.value" :value="mode.value">
+            {{ mode.label }}
+          </el-radio-button>
+        </el-radio-group>
         <div class="preview-summary" data-testid="preview-summary">
           <span v-for="item in previewSummaryItems" :key="item" class="preview-summary__item">
             {{ item }}
@@ -554,19 +623,24 @@ onBeforeUnmount(() => {
           <div
             v-else
             :key="`page-${currentPageId || 'empty'}`"
-            class="preview-canvas preview-page-shell"
-            :id="pageDomId"
-            :style="canvasStyle"
-            :data-page-style-root="currentPageId || undefined"
-            :data-page-dom-id="pageDomId"
+            class="preview-canvas-viewport preview-page-shell"
+            :style="canvasViewportStyle"
           >
-            <PageStyleInjector :css="pageStyleConfig" :page-id="currentPageId || ''" />
-            <NodeRenderer
-              v-if="rootNodeId"
-              :node-id="rootNodeId"
-              :is-root="true"
-              :readonly="true"
-            />
+            <div
+              class="preview-canvas"
+              :id="pageDomId"
+              :style="canvasStyle"
+              :data-page-style-root="currentPageId || undefined"
+              :data-page-dom-id="pageDomId"
+            >
+              <PageStyleInjector :css="pageStyleConfig" :page-id="currentPageId || ''" />
+              <NodeRenderer
+                v-if="rootNodeId"
+                :node-id="rootNodeId"
+                :is-root="true"
+                :readonly="true"
+              />
+            </div>
           </div>
         </Transition>
       </div>

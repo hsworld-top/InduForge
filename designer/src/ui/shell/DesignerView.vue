@@ -123,6 +123,7 @@ interface EditorShellStoreRefs {
     | {
         getSelectionCount?: () => number;
         getPrimaryElement: () => { kind: string; id: string } | null;
+        getSelectedElements?: () => Array<{ kind: string; id: string }>;
       }
     | undefined
   >;
@@ -132,6 +133,7 @@ interface EditorShellStoreRefs {
         getNode?: (id: string) => {
           absolutePos?: { x: number; y: number };
           label?: string;
+          locked?: boolean;
           type?: string;
           props?: { width?: number; height?: number };
           style?: { width?: number; height?: number };
@@ -332,6 +334,24 @@ const hasSelection = computed(() => {
   void editorStore.selectionVersion;
   return (selection.value?.getSelectionCount?.() || 0) >= 1;
 });
+const selectedLockTargets = computed(() => {
+  void editorStore.selectionVersion;
+  void editorStore.docVersion;
+  const rootNodeId = currentPage.value?.rootNodeId;
+  const selected = selection.value?.getSelectedElements?.() || [];
+  return selected
+    .filter((item: { kind: string; id: string }) => item.kind === "node" && item.id !== rootNodeId)
+    .map((item: { id: string }) => doc.value?.getNode?.(item.id))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+});
+const canToggleNodeLock = computed(
+  () => !readonlyState.value?.readonly && selectedLockTargets.value.length > 0,
+);
+const selectedNodeLocked = computed(
+  () =>
+    selectedLockTargets.value.length > 0 &&
+    selectedLockTargets.value.every((node) => Boolean(node.locked)),
+);
 const hasClipboard = computed(() => editorStore.hasClipboard);
 const rightActiveKey = ref("props");
 const leftFloating = ref(false);
@@ -705,6 +725,8 @@ async function handlePreview() {
     query: {
       pid: projectId,
       pageId: currentPageId.value || "",
+      designWidth: String(canvasWidth.value),
+      designHeight: String(canvasHeight.value),
       previewUserId: selectedPreviewRuntimeUserId.value || undefined,
     },
   });
@@ -1106,6 +1128,7 @@ function handleCopy() {
 }
 const handlePaste = () => editorStore.pasteNodes();
 const handleDeleteSelected = () => editorStore.removeSelectedNodes();
+const handleToggleNodeLock = () => editorStore.toggleSelectedNodesLock();
 
 /**
  * 更多设置：多人协作（占位）
@@ -1243,6 +1266,8 @@ onBeforeUnmount(() => {
       :is-saving="isSaving"
       :save-settings="saveSettings"
       :has-selection="hasSelection"
+      :can-toggle-node-lock="canToggleNodeLock"
+      :selected-node-locked="selectedNodeLocked"
       :has-clipboard="hasClipboard"
       :runtime-users="runtimeUsers"
       :selected-preview-runtime-user-id="selectedPreviewRuntimeUserId"
@@ -1273,6 +1298,7 @@ onBeforeUnmount(() => {
       @copy="handleCopy"
       @paste="handlePaste"
       @delete-selected="handleDeleteSelected"
+      @toggle-node-lock="handleToggleNodeLock"
       @preview-user-change="handlePreviewUserChange"
       @refresh-preview-users="handleRefreshPreviewUsers"
     />

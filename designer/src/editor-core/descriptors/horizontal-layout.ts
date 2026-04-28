@@ -38,6 +38,10 @@ export const descriptor: ComponentDescriptor = {
     if (props.gap !== undefined) {
       style.gap = `${props.gap}px`;
     }
+    if (props.showBorder === true) {
+      style.border = "1px solid #dcdfe6";
+      style.borderRadius = "4px";
+    }
     return style;
   },
 

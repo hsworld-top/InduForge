@@ -28,7 +28,7 @@ defineProps<{
 
 const emit = defineEmits<{
   (event: "update:currentStyle", value: ConfigStripStyleLike): void;
-  (event: "openConfig", tab: "detail" | "style"): void;
+  (event: "open-config", tab: "detail" | "style"): void;
 }>();
 const { t } = useI18n();
 
@@ -56,7 +56,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
           class="config-entry"
           :class="{ 'has-config': hasDetailConfig }"
           type="button"
-          @click="emit('openConfig', 'detail')"
+          @click="emit('open-config', 'detail')"
         >
           <IconEpDocument class="config-entry-icon" />
           <span>{{ t("propertyPanel.configStrip.detail") }}</span>
@@ -65,7 +65,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
           class="config-entry"
           :class="{ 'has-config': hasStyleConfig }"
           type="button"
-          @click="emit('openConfig', 'style')"
+          @click="emit('open-config', 'style')"
         >
           <IconEpEditPen class="config-entry-icon" />
           <span>{{ t("propertyPanel.configStrip.style") }}</span>

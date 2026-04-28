@@ -61,7 +61,7 @@ import {
   DuplicateNodeCommand,
   InsertNodeCommand,
   RemoveNodeCommand,
-  ReorderNodeCommand,
+  SetNodeStyleCommand,
   ToggleNodeLockCommand,
   ToggleNodeVisibilityCommand,
   UpdateNodeCommand,
@@ -1443,6 +1443,92 @@ export const useEditorStore = defineStore("editor", () => {
     resolveLayerTargetFromSelection(selection.value, nodeId);
 
   /**
+   * 读取节点图层层级。旧数据可能没有 zIndex，此时按 0 处理。
+   * @param {ComponentNode | null | undefined} node - 组件节点
+   * @returns {number} 可排序的层级值
+   */
+  const getNodeLayerZIndex = (node: ComponentNode | null | undefined): number => {
+    const rawValue = node?.style?.zIndex;
+    if (typeof rawValue === "number" && Number.isFinite(rawValue)) return rawValue;
+    if (typeof rawValue === "string") {
+      const parsed = Number(rawValue.trim());
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return 0;
+  };
+
+  /**
+   * 调整同级节点的空间层级，不改父子关系和 children 顺序，避免流式布局中的元素位置被改动。
+   * @param {string | undefined} nodeId - 节点 ID
+   * @param {"up" | "down" | "top" | "bottom"} direction - 调整方向
+   * @returns {boolean} 是否成功执行
+   */
+  const reorderNodeLayer = (
+    nodeId: string | undefined,
+    direction: "up" | "down" | "top" | "bottom",
+  ) => {
+    if (!doc.value || !history.value) return false;
+    if (!ensureEditable()) return false;
+
+    const targetId = resolveLayerTarget(nodeId);
+    if (!targetId) return false;
+    if (targetId === currentPage.value?.rootNodeId) return false;
+
+    const parent = doc.value.getParent(targetId);
+    if (!parent?.children?.length) return false;
+
+    const siblings = parent.children
+      .map((id, sourceIndex) => {
+        const node = doc.value?.getNode(id);
+        if (!node) return null;
+        return {
+          id,
+          sourceIndex,
+          zIndex: getNodeLayerZIndex(node),
+        };
+      })
+      .filter(
+        (item): item is { id: string; sourceIndex: number; zIndex: number } => item !== null,
+      )
+      .sort((a, b) => {
+        if (a.zIndex !== b.zIndex) return a.zIndex - b.zIndex;
+        return a.sourceIndex - b.sourceIndex;
+      });
+    const currentIndex = siblings.findIndex((item) => item.id === targetId);
+    if (currentIndex < 0) return false;
+
+    let nextIndex = currentIndex;
+    if (direction === "up") nextIndex = Math.min(siblings.length - 1, currentIndex + 1);
+    if (direction === "down") nextIndex = Math.max(0, currentIndex - 1);
+    if (direction === "top") nextIndex = siblings.length - 1;
+    if (direction === "bottom") nextIndex = 0;
+    if (nextIndex === currentIndex) return false;
+
+    const nextOrder = [...siblings];
+    const [target] = nextOrder.splice(currentIndex, 1);
+    if (!target) return false;
+    nextOrder.splice(nextIndex, 0, target);
+
+    const commands = nextOrder
+      .map((item, index) => {
+        const node = doc.value?.getNode(item.id);
+        if (!node || getNodeLayerZIndex(node) === index) return null;
+        return new SetNodeStyleCommand(item.id, { zIndex: index });
+      })
+      .filter((command): command is SetNodeStyleCommand => command !== null);
+    if (!commands.length) return false;
+
+    const descriptionMap = {
+      up: "上移图层",
+      down: "下移图层",
+      top: "置顶",
+      bottom: "置底",
+    };
+    history.value.execute(new BatchCommand(commands, descriptionMap[direction]));
+    return true;
+  };
+
+  /**
    * 切换当前页面
    * @param {string} pageId - 页面 ID
    * @returns {Promise<{ok: boolean, error?: Error}>}
@@ -2031,15 +2117,7 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {boolean}
    */
   const moveNodeUp = (nodeId?: string) => {
-    if (!doc.value || !history.value) return false;
-    if (!ensureEditable()) return false;
-
-    const targetId = resolveLayerTarget(nodeId);
-    if (!targetId) return false;
-    if (targetId === currentPage.value?.rootNodeId) return false;
-
-    history.value.execute(new ReorderNodeCommand(targetId, "up"));
-    return true;
+    return reorderNodeLayer(nodeId, "up");
   };
 
   /**
@@ -2048,15 +2126,7 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {boolean}
    */
   const moveNodeDown = (nodeId?: string) => {
-    if (!doc.value || !history.value) return false;
-    if (!ensureEditable()) return false;
-
-    const targetId = resolveLayerTarget(nodeId);
-    if (!targetId) return false;
-    if (targetId === currentPage.value?.rootNodeId) return false;
-
-    history.value.execute(new ReorderNodeCommand(targetId, "down"));
-    return true;
+    return reorderNodeLayer(nodeId, "down");
   };
 
   /**
@@ -2065,15 +2135,7 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {boolean}
    */
   const moveNodeToTop = (nodeId?: string) => {
-    if (!doc.value || !history.value) return false;
-    if (!ensureEditable()) return false;
-
-    const targetId = resolveLayerTarget(nodeId);
-    if (!targetId) return false;
-    if (targetId === currentPage.value?.rootNodeId) return false;
-
-    history.value.execute(new ReorderNodeCommand(targetId, "top"));
-    return true;
+    return reorderNodeLayer(nodeId, "top");
   };
 
   /**
@@ -2082,15 +2144,7 @@ export const useEditorStore = defineStore("editor", () => {
    * @returns {boolean}
    */
   const moveNodeToBottom = (nodeId?: string) => {
-    if (!doc.value || !history.value) return false;
-    if (!ensureEditable()) return false;
-
-    const targetId = resolveLayerTarget(nodeId);
-    if (!targetId) return false;
-    if (targetId === currentPage.value?.rootNodeId) return false;
-
-    history.value.execute(new ReorderNodeCommand(targetId, "bottom"));
-    return true;
+    return reorderNodeLayer(nodeId, "bottom");
   };
 
   /**
@@ -2111,11 +2165,37 @@ export const useEditorStore = defineStore("editor", () => {
    * @param {string} nodeId - 节点 ID
    * @returns {boolean}
    */
-  const toggleNodeLock = (nodeId: string) => {
+  const toggleNodeLock = (nodeId: string, locked?: boolean) => {
     if (!doc.value || !history.value || !nodeId) return false;
     if (!ensureEditable()) return false;
+    if (nodeId === currentPage.value?.rootNodeId) return false;
 
-    history.value.execute(new ToggleNodeLockCommand(nodeId));
+    history.value.execute(new ToggleNodeLockCommand(nodeId, locked));
+    return true;
+  };
+
+  /**
+   * 切换当前选中节点的位置锁定状态。
+   * 多选时跳过页面根节点；存在未锁定节点则统一锁定，否则统一解锁。
+   * @returns {boolean} 是否成功执行
+   */
+  const toggleSelectedNodesLock = () => {
+    if (!doc.value || !history.value || !selection.value) return false;
+    if (!ensureEditable()) return false;
+    const rootId = currentPage.value?.rootNodeId;
+    const selectedNodes = (selection.value.getSelectedElements?.() || [])
+      .filter((el) => el.kind === "node" && el.id !== rootId)
+      .map((el) => doc.value?.getNode(el.id))
+      .filter((node): node is ComponentNode => Boolean(node));
+    if (!selectedNodes.length) return false;
+
+    const nextLocked = selectedNodes.some((node) => !node.locked);
+    const commands = selectedNodes
+      .filter((node) => Boolean(node.locked) !== nextLocked)
+      .map((node) => new ToggleNodeLockCommand(node.id, nextLocked));
+    if (!commands.length) return false;
+
+    history.value.execute(new BatchCommand(commands, nextLocked ? "锁定选中组件" : "解锁选中组件"));
     return true;
   };
 
@@ -2182,7 +2262,7 @@ export const useEditorStore = defineStore("editor", () => {
     const commands = [];
     for (const el of nodeElements) {
       const node = doc.value.getNode(el.id);
-      if (!node || node.positioning === "flow") continue;
+      if (!node || node.locked || node.positioning === "flow") continue;
 
       const absolutePos = node.absolutePos;
       const freeAbsLayout = node.layoutItem?.free?.abs;
@@ -2507,6 +2587,7 @@ export const useEditorStore = defineStore("editor", () => {
     moveNodeToBottom,
     toggleNodeVisibility,
     toggleNodeLock,
+    toggleSelectedNodesLock,
     undo,
     redo,
     acquirePageLock,

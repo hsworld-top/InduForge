@@ -64,9 +64,14 @@ const monacoCompatLanguages = monaco.languages as typeof monaco.languages & Reco
 const editorContainerRef = ref<HTMLElement | null>(null);
 const editorSurfaceRef = ref<HTMLElement | null>(null);
 const contextMenuRef = ref<HTMLElement | null>(null);
+const fallbackValue = ref<string>(props.modelValue || "");
+const editorReady = ref(false);
 let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 let isInternalUpdate = false;
 let jsFormatterRegistered = false;
+let initRetryFrame: number | null = null;
+let initRetryCount = 0;
+const MAX_INIT_RETRY_COUNT = 60;
 function normalizeCompletionItems(items?: unknown[] | null): MonacoCompletionItemLike[] {
   if (!Array.isArray(items)) return [];
   return items.flatMap((item) => {
@@ -715,9 +720,21 @@ async function applyFormatEdits(): Promise<boolean> {
   return true;
 }
 
+function getJavaScriptDefaults() {
+  const languages = monacoCompatLanguages as Record<string, any>;
+  return (
+    languages.javascriptDefaults ||
+    languages.typescript?.javascriptDefaults ||
+    null
+  );
+}
+
 function initEditor() {
   if (!editorSurfaceRef.value) return;
-  if (editorInstance) editorInstance.dispose();
+  if (editorInstance) {
+    editorInstance.dispose();
+    editorReady.value = false;
+  }
 
   if (props.language === "css") {
     const cssDefaults = monacoCompatLanguages.cssDefaults;
@@ -747,31 +764,35 @@ function initEditor() {
       noEmit: true,
       checkJs: true,
     };
-    monacoCompatLanguages.javascriptDefaults.setCompilerOptions(compilerOptions);
-    monacoCompatLanguages.javascriptDefaults.setDiagnosticsOptions({
+    const javascriptDefaults = getJavaScriptDefaults();
+    javascriptDefaults?.setCompilerOptions?.(compilerOptions);
+    javascriptDefaults?.setDiagnosticsOptions?.({
       noSemanticValidation: false,
       noSyntaxValidation: false,
       onlyVisible: false,
       diagnosticCodesToIgnore: ignoreDiagnostics,
     });
-    monacoCompatLanguages.javascriptDefaults.setEagerModelSync(true);
+    javascriptDefaults?.setEagerModelSync?.(true);
     if (extraLibDisposable) {
       extraLibDisposable.dispose();
       extraLibDisposable = null;
     }
-    extraLibDisposable = monacoCompatLanguages.javascriptDefaults.addExtraLib(
-      "declare const $global: Record<string, any>;\n" +
-        "declare const $vars: Record<string, any>;\n" +
-        "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
-        "declare const components: Record<string, any>;\n" +
-        "declare const $event: any;\n",
-      "ts:global-scripts.d.ts",
-    );
+    if (javascriptDefaults?.addExtraLib) {
+      extraLibDisposable = javascriptDefaults.addExtraLib(
+        "declare const $global: Record<string, any>;\n" +
+          "declare const $vars: Record<string, any>;\n" +
+          "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
+          "declare const components: Record<string, any>;\n" +
+          "declare const $event: any;\n",
+        "ts:global-scripts.d.ts",
+      );
+    }
     ensureJsFormatter();
   }
 
   const editorSurface = editorSurfaceRef.value;
   editorInstance = monaco.editor.create(editorSurface, baseOptions());
+  editorReady.value = true;
   applyTheme(props.theme);
   registerCompletionProvider();
   editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
@@ -863,9 +884,52 @@ function initEditor() {
   cleanupFns.push(() => window.removeEventListener("resize", windowResizeListener));
 }
 
+function cancelInitRetry() {
+  if (initRetryFrame === null) return;
+  window.cancelAnimationFrame(initRetryFrame);
+  initRetryFrame = null;
+}
+
+/**
+ * Monaco 在 Dialog/Teleport 内可能早于可见 DOM 完成挂载。
+ * 用帧重试等待挂载面稳定，避免只初始化一次后留下空白编辑器。
+ */
+function scheduleEditorInit() {
+  if (editorInstance || initRetryFrame !== null) return;
+  initRetryFrame = window.requestAnimationFrame(() => {
+    initRetryFrame = null;
+    const surface = editorSurfaceRef.value;
+    const rect = surface?.getBoundingClientRect();
+    const isReady =
+      !!surface &&
+      surface.isConnected &&
+      !!rect &&
+      rect.width > 0 &&
+      rect.height > 0;
+    if (!isReady) {
+      if (initRetryCount < MAX_INIT_RETRY_COUNT) {
+        initRetryCount += 1;
+        scheduleEditorInit();
+      }
+      return;
+    }
+    try {
+      initEditor();
+      initRetryCount = 0;
+    } catch (error) {
+      console.error("[Designer] Monaco editor init failed:", error);
+      if (initRetryCount < MAX_INIT_RETRY_COUNT) {
+        initRetryCount += 1;
+        scheduleEditorInit();
+      }
+    }
+  });
+}
+
 watch(
   () => props.modelValue,
   (val) => {
+    if (val !== fallbackValue.value) fallbackValue.value = val || "";
     if (!editorInstance) return;
     if (val === editorInstance.getValue()) return;
     isInternalUpdate = true;
@@ -873,6 +937,13 @@ watch(
     requestAnimationFrame(() => (isInternalUpdate = false));
   },
 );
+
+function handleFallbackInput(event: Event) {
+  const value = (event.target as HTMLTextAreaElement | null)?.value || "";
+  fallbackValue.value = value;
+  emit("update:modelValue", value);
+  emit("change", value);
+}
 
 watch(
   () => props.language,
@@ -928,16 +999,18 @@ function setupThemeListeners() {
 
 onMounted(() => {
   nextTick(() => {
-    initEditor();
+    scheduleEditorInit();
     setupThemeListeners();
   });
 });
 
 onBeforeUnmount(() => {
+  cancelInitRetry();
   if (editorInstance) {
     editorInstance.dispose();
     editorInstance = null;
   }
+  editorReady.value = false;
   if (completionProvider) {
     completionProvider.dispose();
     completionProvider = null;
@@ -978,6 +1051,13 @@ defineExpose({
 <template>
   <div ref="editorContainerRef" class="monaco-editor-container" :style="{ height }">
     <div ref="editorSurfaceRef" class="monaco-editor-surface"></div>
+    <textarea
+      v-if="!editorReady"
+      class="monaco-editor-fallback"
+      :value="fallbackValue"
+      spellcheck="false"
+      @input="handleFallbackInput"
+    ></textarea>
     <Teleport to="body">
       <div
         v-if="contextMenuState.visible"
@@ -1020,6 +1100,26 @@ defineExpose({
   width: 100%;
   height: 100%;
   min-height: 0;
+}
+
+.monaco-editor-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  padding: 12px 14px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: #fff;
+  color: #1f2937;
+  font-family:
+    "Cascadia Code", "Fira Code", Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+  white-space: pre;
 }
 
 .monaco-editor-container :deep(.monaco-editor) {

@@ -14,7 +14,7 @@ export const descriptor: ComponentDescriptor = {
   containerStyle: (node: DescriptorNode) => {
     const props = node.props ?? {};
     const gap = Number(props.itemGap);
-    return {
+    const style: Record<string, string | number> = {
       display: "grid",
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
       alignItems: "start",
@@ -22,8 +22,13 @@ export const descriptor: ComponentDescriptor = {
       boxSizing: "border-box",
       width: "100%",
       minHeight: "120px",
-      gap: `${Number.isFinite(gap) ? Math.max(0, gap) : 12}px`,
+      gap: `${Number.isFinite(gap) ? Math.max(0, gap) : 0}px`,
     };
+    if (props.showBorder === true) {
+      style.border = "1px solid #dcdfe6";
+      style.borderRadius = "4px";
+    }
+    return style;
   },
   childStyle: () => ({
     minWidth: "0",

@@ -53,6 +53,16 @@ interface ButtonDslConfig extends LooseRecord {
   style?: unknown;
   className?: unknown;
   onClick?: unknown;
+  click?: unknown;
+  show?: unknown;
+  if?: unknown;
+  nativeType?: unknown;
+  block?: unknown;
+  width?: unknown;
+  debounce?: unknown;
+  throttle?: unknown;
+  perms?: unknown;
+  confirm?: unknown;
   plugin?: unknown;
 }
 interface ButtonDslPatch {
@@ -250,8 +260,17 @@ export function useBuildRefInfo({
     } else if (typeof safeConfig.visible === "string" && safeConfig.visible.trim()) {
       conditionsPatch.visible = safeConfig.visible.trim();
     }
+    const showValue = safeConfig.show ?? safeConfig.if;
+    if (typeof showValue === "boolean") {
+      hidden = !showValue;
+    } else if (typeof showValue === "string" && showValue.trim()) {
+      conditionsPatch.visible = showValue.trim();
+    }
     if (typeof safeConfig.permission === "string" && safeConfig.permission.trim()) {
       propsPatch.permission = safeConfig.permission.trim();
+    }
+    if (typeof safeConfig.perms === "string" && safeConfig.perms.trim()) {
+      propsPatch.permission = safeConfig.perms.trim();
     }
     if (typeof safeConfig.type === "string" && safeConfig.type.trim()) {
       propsPatch.type = safeConfig.type.trim();
@@ -267,6 +286,15 @@ export function useBuildRefInfo({
     if (typeof safeConfig.icon === "string" && safeConfig.icon.trim()) {
       propsPatch.icon = safeConfig.icon.trim();
     }
+    if (typeof safeConfig.nativeType === "string" && safeConfig.nativeType.trim()) {
+      propsPatch.nativeType = safeConfig.nativeType.trim();
+    }
+    if (typeof safeConfig.block === "boolean") propsPatch.block = safeConfig.block;
+    if (safeConfig.width !== undefined && safeConfig.width !== null && safeConfig.width !== "") {
+      propsPatch.width = safeConfig.width;
+    }
+    if (typeof safeConfig.debounce === "number") propsPatch.debounce = safeConfig.debounce;
+    if (typeof safeConfig.throttle === "number") propsPatch.throttle = safeConfig.throttle;
     if (safeConfig.style && typeof safeConfig.style === "object") {
       Object.entries(safeConfig.style).forEach(([key, value]) => {
         if (typeof value === "string") {
@@ -277,8 +305,16 @@ export function useBuildRefInfo({
     if (typeof safeConfig.className === "string" && safeConfig.className.trim()) {
       propsPatch.class = safeConfig.className.trim();
     }
-    if (safeConfig.onClick) {
-      const code = buildButtonClickScript(safeConfig.onClick);
+    const clickConfig =
+      safeConfig.onClick !== undefined && safeConfig.onClick !== null
+        ? safeConfig.onClick
+        : safeConfig.click;
+    if (clickConfig) {
+      let code = buildButtonClickScript(clickConfig);
+      if (code && typeof safeConfig.confirm === "string" && safeConfig.confirm.trim()) {
+        const confirmText = JSON.stringify(safeConfig.confirm.trim());
+        code = `if (confirm(${confirmText})) {\n  ${code}\n}`;
+      }
       if (code) {
         eventsPatch.click = [{ type: "script", code, enabled: true }];
       }
@@ -327,6 +363,8 @@ export function useBuildRefInfo({
       Calendar: "calendar",
       WebContainer: "webContainer",
       Text: "text",
+      HorizontalLayout: "horizontalLayout",
+      VerticalLayout: "verticalLayout",
       ElContainer: "elContainer",
       ElMain: "elMain",
       ElLayout: "elLayout",
@@ -2237,6 +2275,63 @@ export function useBuildRefInfo({
         applyCommonDslConfig(config);
       };
     }
+    const createDslFactoryNode = (type: string, config: AnyValue = {}) => {
+      const safeConfig = config && typeof config === "object" ? (config as LooseRecord) : {};
+      const reservedKeys = new Set([
+        "id",
+        "label",
+        "props",
+        "style",
+        "className",
+        "events",
+        "bindings",
+        "conditions",
+      ]);
+      const propsPatch: LooseRecord =
+        safeConfig.props && typeof safeConfig.props === "object"
+          ? { ...(safeConfig.props as LooseRecord) }
+          : {};
+      Object.entries(safeConfig).forEach(([key, value]) => {
+        if (reservedKeys.has(key)) return;
+        if (propsPatch[key] === undefined) propsPatch[key] = value;
+      });
+      if (typeof safeConfig.id === "string" && safeConfig.id.trim()) {
+        propsPatch.id = safeConfig.id.trim();
+      }
+      if (typeof safeConfig.className === "string" && safeConfig.className.trim()) {
+        propsPatch.class = safeConfig.className.trim();
+      }
+      return {
+        type,
+        props: propsPatch,
+        style:
+          safeConfig.style && typeof safeConfig.style === "object" ? safeConfig.style : undefined,
+        events:
+          safeConfig.events && typeof safeConfig.events === "object"
+            ? safeConfig.events
+            : undefined,
+        bindings:
+          safeConfig.bindings && typeof safeConfig.bindings === "object"
+            ? safeConfig.bindings
+            : undefined,
+        conditions:
+          safeConfig.conditions && typeof safeConfig.conditions === "object"
+            ? safeConfig.conditions
+            : undefined,
+      };
+    };
+    const factoryMethodMap: Record<string, string> = {
+      text: "Text",
+      card: "Card",
+      button: "Button",
+      horizontalLayout: "HorizontalLayout",
+      verticalLayout: "VerticalLayout",
+      collapse: "Collapse",
+    };
+    Object.entries(factoryMethodMap).forEach(([methodName, type]) => {
+      if (Object.hasOwn(refInfo, methodName)) return;
+      refInfo[methodName] = (config: AnyValue) => createDslFactoryNode(type, config);
+    });
     return refInfo;
   }
 

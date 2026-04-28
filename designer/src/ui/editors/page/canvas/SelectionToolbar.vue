@@ -20,6 +20,8 @@ import IconMoveUp from "~icons/lucide/chevron-up";
 import IconMoveToBottom from "~icons/lucide/chevrons-down";
 import IconMoveToTop from "~icons/lucide/chevrons-up";
 import IconEqualBoth from "~icons/lucide/maximize-2";
+import IconPin from "~icons/lucide/pin";
+import IconPinOff from "~icons/lucide/pin-off";
 import IconEqualWidth from "~icons/lucide/unfold-horizontal";
 import IconEqualHeight from "~icons/lucide/unfold-vertical";
 import { useEditorStore } from "@/stores/editor-store";
@@ -39,7 +41,7 @@ type SelectionToolbarDistributeType = "horizontal" | "vertical";
 type SelectionToolbarMatchSizeType = "width" | "height" | "both";
 
 const editorStore = useEditorStore();
-const { selection, selectionVersion, currentPage } = storeToRefs(editorStore);
+const { doc, selection, selectionVersion, currentPage, docVersion } = storeToRefs(editorStore);
 
 const TOOLBAR_GAP = 8;
 const SELECTION_TOOLBAR_Z_INDEX = 1500;
@@ -51,6 +53,22 @@ const selectionCount = computed(() => {
   void selectionVersion.value;
   return (selection.value as SelectionLike | null)?.getSelectionCount?.() || 0;
 });
+
+const selectedLockTargets = computed(() => {
+  void selectionVersion.value;
+  void docVersion.value;
+  const rootId = currentPage.value?.rootNodeId;
+  return ((selection.value as SelectionLike | null)?.getSelectedElements?.() || [])
+    .filter((item) => item.id !== rootId)
+    .map((item) => doc.value?.getNode?.(item.id))
+    .filter((item) => Boolean(item));
+});
+
+const canToggleLock = computed(() => selectedLockTargets.value.length > 0);
+
+const allTargetsLocked = computed(
+  () => canToggleLock.value && selectedLockTargets.value.every((item: any) => Boolean(item.locked)),
+);
 
 /**
  * 合并选中元素的 DOM 包围盒
@@ -95,7 +113,7 @@ function updatePosition() {
     return;
   }
 
-  const toolbarWidth = selectionCount.value >= 2 ? 480 : 140;
+  const toolbarWidth = selectionCount.value >= 2 ? 520 : 176;
   const toolbarHeight = 36;
   const centerX = (rect.left + rect.right) / 2;
 
@@ -159,6 +177,7 @@ const handleMoveUp = () => editorStore.moveNodeUp();
 const handleMoveDown = () => editorStore.moveNodeDown();
 const handleMoveToTop = () => editorStore.moveNodeToTop();
 const handleMoveToBottom = () => editorStore.moveNodeToBottom();
+const handleToggleLock = () => editorStore.toggleSelectedNodesLock();
 </script>
 
 <template>
@@ -242,6 +261,20 @@ const handleMoveToBottom = () => editorStore.moveNodeToBottom();
 
         <!-- 排序组：选中 >= 1 -->
         <div class="sel-toolbar__group">
+          <el-tooltip
+            :content="allTargetsLocked ? '解锁位置 (Ctrl+L)' : '锁定位置 (Ctrl+L)'"
+            placement="top"
+          >
+            <button
+              class="sel-toolbar__btn"
+              :class="{ 'is-active': allTargetsLocked }"
+              :disabled="!canToggleLock"
+              @click="handleToggleLock"
+            >
+              <IconPinOff v-if="allTargetsLocked" />
+              <IconPin v-else />
+            </button>
+          </el-tooltip>
           <el-tooltip content="上移一层 (Ctrl+])" placement="top">
             <button class="sel-toolbar__btn" @click="handleMoveUp">
               <IconMoveUp />

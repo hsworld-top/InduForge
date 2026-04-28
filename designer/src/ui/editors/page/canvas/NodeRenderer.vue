@@ -49,7 +49,12 @@ import { useNodeRendererTypeFlags } from "./composables/use-node-renderer-type-f
 import { useNodeResize } from "./composables/use-node-resize";
 import { createNodeStyleHelpers } from "./composables/use-node-style";
 import { usePreview } from "./composables/use-preview";
-import { canvasSnapEnabledKey, canvasZoomKey, runtimeAccessContextKey } from "./injection-keys";
+import {
+  canvasSnapEnabledKey,
+  canvasZoomKey,
+  previewRenderBoundsKey,
+  runtimeAccessContextKey,
+} from "./injection-keys";
 import { createDragDropManager } from "./interaction/DragDropManager";
 import { buildDesignerNodeDomId } from "./style-config-css";
 
@@ -87,6 +92,7 @@ const {
 } = storeToRefs(editorStore);
 const showContextMenu = inject<ShowContextMenuLike>("showContextMenu", null);
 const runtimeAccessContext = inject(runtimeAccessContextKey, null);
+const previewRenderBounds = inject(previewRenderBoundsKey, null);
 const nodeStyleHelpers = createNodeStyleHelpers({ doc, currentPage, props } as any) as any;
 const resolveLayoutStyle = nodeStyleHelpers.resolveLayoutStyle;
 
@@ -115,7 +121,6 @@ function setNodeRef(el: any): void {
  */
 function handleSelect(event: any): void {
   if (!node.value || !selection.value) return;
-  if (node.value.locked) return;
   const element = createSelectableElement("node", node.value.id);
   if (event.shiftKey) {
     selection.value.selectRange(element);
@@ -310,6 +315,7 @@ function resolveFlexDirection(type: any, element: any): string {
 }
 
 const isMovable = computed(() => {
+  void docVersion.value;
   if (!node.value || props.isRoot || node.value.locked) return false;
   return isNodeDesignerMovable(node.value.type);
 });
@@ -410,6 +416,9 @@ const carouselItemsList = computed<any[]>(() => (carouselItems.value || []) as a
 
 const filteredProps = computed<Record<string, any>>(() => {
   const base = { ...(filteredPropsFromComposable.value || {}) };
+  if (isTabsType.value || isCollapseType.value) {
+    Object.assign(base, resolvedProps.value || {});
+  }
   if (props.readonly && !isRuntimeOperable.value) {
     base.disabled = true;
     base.readonly = true;
@@ -475,6 +484,42 @@ function handleTabsClick(pane: TabsPaneLike): void {
 function handleTabsChange(name: string | number): void {
   if (!name) return;
   activeTabName.value = String(name);
+}
+
+const isHoverSelectEnabled = computed<boolean>(() => {
+  if (!isTabsType.value && !isCollapseType.value) return false;
+  return Boolean(resolvedNodeProps.value?.hoverSelect ?? node.value?.props?.hoverSelect);
+});
+
+function resolveElementFromMouseEvent(event: MouseEvent): Element | null {
+  const target = event.target;
+  return target instanceof Element ? target : null;
+}
+
+function handleTabsHeaderMouseOver(event: MouseEvent): boolean {
+  if (!isTabsType.value) return false;
+  const target = resolveElementFromMouseEvent(event);
+  const tabEl = target?.closest?.(".el-tabs__item") as HTMLElement | null;
+  if (!tabEl || tabEl.classList.contains("is-disabled")) return false;
+  const rawId = tabEl.getAttribute("id") || "";
+  const rawControls = tabEl.getAttribute("aria-controls") || "";
+  const nameFromId = rawId.startsWith("tab-") ? rawId.slice(4) : "";
+  const nameFromControls = rawControls.startsWith("pane-") ? rawControls.slice(5) : "";
+  const label = (tabEl.textContent || "").trim();
+  const matched = tabsListItems.value.find((tab) => {
+    const key = String(tab?.name ?? "").trim();
+    const text = String(tab?.label ?? "").trim();
+    return (
+      key === nameFromId ||
+      key === nameFromControls ||
+      text === label ||
+      key === label
+    );
+  });
+  const name = String(matched?.name ?? nameFromId ?? nameFromControls ?? "").trim();
+  if (!name || name === activeTabName.value) return true;
+  activeTabName.value = name;
+  return true;
 }
 
 /**
@@ -616,6 +661,30 @@ function handleCollapseHeaderClick(item: any): void {
   const key = resolveCollapseItemKey(item);
   if (!key) return;
   activeCollapseName.value = key;
+}
+
+function handleCollapseHeaderMouseOver(event: MouseEvent): boolean {
+  if (!isCollapseType.value) return false;
+  const target = resolveElementFromMouseEvent(event);
+  const headerEl = target?.closest?.(".el-collapse-item__header") as HTMLElement | null;
+  if (!headerEl || headerEl.classList.contains("is-disabled")) return false;
+  const rootEl = (nodeRef.value as any)?.$el || nodeRef.value;
+  const headers =
+    rootEl instanceof Element
+      ? Array.from(rootEl.querySelectorAll(".el-collapse-item__header"))
+      : [];
+  const index = headers.indexOf(headerEl);
+  const item = index >= 0 ? collapseItemsList.value[index] : null;
+  const key = resolveCollapseItemKey(item);
+  if (!key || key === activeCollapseName.value) return true;
+  activeCollapseName.value = key;
+  return true;
+}
+
+function handleNodeMouseOver(event: MouseEvent): void {
+  if (!isHoverSelectEnabled.value) return;
+  if (handleTabsHeaderMouseOver(event)) return;
+  handleCollapseHeaderMouseOver(event);
 }
 
 const isContainer = isContainerFromComposable;
@@ -844,7 +913,25 @@ const childNodeIds = computed<string[]>(() => {
   void docVersion.value;
   if (!node.value || isTabsType.value || isCollapseType.value) return [];
   const children = Array.isArray(node.value.children) ? node.value.children : [];
-  return [...children];
+  if (!props.isRoot || !props.readonly || !previewRenderBounds) {
+    return [...children];
+  }
+  const pageWidth = Number(previewRenderBounds.width.value);
+  const pageHeight = Number(previewRenderBounds.height.value);
+  if (!Number.isFinite(pageWidth) || pageWidth <= 0 || !Number.isFinite(pageHeight) || pageHeight <= 0) {
+    return [...children];
+  }
+  return children.filter((childId) => {
+    const childNode = doc.value?.getNode?.(childId);
+    if (!childNode) return false;
+    const absolutePos = childNode.absolutePos || childNode.layoutItem?.free?.abs;
+    if (!absolutePos) return true;
+    const x = Number.isFinite(Number(absolutePos.x)) ? Number(absolutePos.x) : 0;
+    const y = Number.isFinite(Number(absolutePos.y)) ? Number(absolutePos.y) : 0;
+    const w = Number.isFinite(Number(absolutePos.w)) ? Number(absolutePos.w) : 0;
+    const h = Number.isFinite(Number(absolutePos.h)) ? Number(absolutePos.h) : 0;
+    return x < pageWidth && y < pageHeight && x + w > 0 && y + h > 0;
+  });
 });
 
 const modelValueTypes = new Set([
@@ -956,6 +1043,7 @@ function handleDragLeave(): void {
     v-on="useComponentWrapper ? mergedEventListeners : {}"
     @click.stop="handleClick"
     @dblclick.stop="handleDoubleClick"
+    @mouseover.capture="handleNodeMouseOver"
     @pointerdown.capture="handlePointerDown"
     @dragover.prevent="handleDragOver"
     @dragstart.prevent
@@ -972,6 +1060,7 @@ function handleDragLeave(): void {
       ref="contentRef"
       :style="contentStyleWithConfig"
       v-on="mergedEventListeners"
+      @mouseover.capture="handleNodeMouseOver"
     >
       <template v-if="displayContent !== null">{{ displayContent }}</template>
       <component
@@ -1052,6 +1141,7 @@ function handleDragLeave(): void {
           :key="tab.name ?? tab.label"
           :label="tab.label"
           :name="tab.name"
+          :disabled="Boolean(tab.disabled)"
         >
           <div
             class="tabs-pane-body"
@@ -1077,7 +1167,7 @@ function handleDragLeave(): void {
               </div>
             </template>
             <span
-              v-if="getTabChildIds(tab).length === 0 && tab.content"
+              v-if="getTabChildIds(tab).length === 0 && typeof tab.content === 'string' && tab.content"
               class="tabs-pane-placeholder"
             >
               {{ tab.content }}
@@ -1093,12 +1183,13 @@ function handleDragLeave(): void {
       </template>
       <template v-if="isCollapseType">
         <el-collapse-item
-          v-for="item in collapseItemsList"
-          :key="item.name ?? item.title"
-          :name="item.name"
-          :title="item.title"
-          @click="handleCollapseHeaderClick(item)"
-        >
+            v-for="item in collapseItemsList"
+            :key="item.name ?? item.title"
+            :name="item.name"
+            :title="item.title"
+            :disabled="Boolean(item.disabled)"
+            @click="handleCollapseHeaderClick(item)"
+          >
           <div
             class="collapse-pane-body"
             :class="{
@@ -1414,14 +1505,21 @@ function handleDragLeave(): void {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: flex-start;
+  gap: 0;
   height: 100%;
   min-height: 40px;
   overflow: visible;
 }
 
 .tabs-pane-body .designer-node {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.tabs-pane-body > .designer-node.is-container[data-node-type="HorizontalLayout"],
+.tabs-pane-body > .designer-node.is-container[data-node-type="VerticalLayout"] {
+  align-self: stretch;
 }
 
 .tabs-pane-body > .designer-node.is-container[data-node-type="HorizontalLayout"],
@@ -1542,7 +1640,6 @@ function handleDragLeave(): void {
 
 .designer-node.is-locked {
   opacity: 0.6;
-  pointer-events: none;
 }
 
 .designer-node.drag-over {

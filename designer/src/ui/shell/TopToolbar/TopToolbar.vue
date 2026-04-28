@@ -10,6 +10,8 @@ import IconLucideLock from "~icons/lucide/lock";
 import IconLucideLockOpen from "~icons/lucide/lock-open";
 import IconLucideMonitor from "~icons/lucide/monitor";
 import IconLucidePlay from "~icons/lucide/play";
+import IconLucidePin from "~icons/lucide/pin";
+import IconLucidePinOff from "~icons/lucide/pin-off";
 import IconLucideRedo2 from "~icons/lucide/redo-2";
 import IconLucideSave from "~icons/lucide/save";
 import IconLucideSettings2 from "~icons/lucide/settings-2";
@@ -60,6 +62,8 @@ const props = withDefaults(
     isSaving?: boolean;
     saveSettings?: ToolbarSaveSettings;
     hasSelection?: boolean;
+    canToggleNodeLock?: boolean;
+    selectedNodeLocked?: boolean;
     hasClipboard?: boolean;
     runtimeUsers?: readonly RuntimeUserProp[];
     selectedPreviewRuntimeUserId?: string;
@@ -83,6 +87,8 @@ const props = withDefaults(
     isSaving: false,
     saveSettings: () => ({ autoSave: false, intervalMinutes: 5 }),
     hasSelection: false,
+    canToggleNodeLock: false,
+    selectedNodeLocked: false,
     hasClipboard: false,
     runtimeUsers: () => [],
     selectedPreviewRuntimeUserId: "",
@@ -119,6 +125,7 @@ const emit = defineEmits<{
   copy: [];
   paste: [];
   deleteSelected: [];
+  toggleNodeLock: [];
   previewUserChange: [runtimeUserId: string];
   refreshPreviewUsers: [];
 }>();
@@ -223,6 +230,7 @@ const handleZoomOut = () => emit("zoomOut");
 const handleCopy = () => emit("copy");
 const handlePaste = () => emit("paste");
 const handleDeleteSelected = () => emit("deleteSelected");
+const handleToggleNodeLock = () => emit("toggleNodeLock");
 
 function handleViewMenuCommand(command: string) {
   if (command === "resetZoom") {
@@ -317,6 +325,22 @@ function handleMoreCommand(command: string) {
           <el-tooltip :content="`${t('toolbar.paste')} (Ctrl+V)`" placement="bottom">
             <el-button class="icon-btn" :disabled="!hasClipboard" @click="handlePaste">
               <IconLucideClipboardPaste />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip
+            :content="
+              selectedNodeLocked ? t('toolbar.unlockNodePosition') : t('toolbar.lockNodePosition')
+            "
+            placement="bottom"
+          >
+            <el-button
+              class="icon-btn"
+              :class="{ 'is-active': selectedNodeLocked }"
+              :disabled="!canToggleNodeLock"
+              @click="handleToggleNodeLock"
+            >
+              <IconLucidePinOff v-if="selectedNodeLocked" />
+              <IconLucidePin v-else />
             </el-button>
           </el-tooltip>
           <el-tooltip :content="`${t('toolbar.delete')} (Del)`" placement="bottom">
@@ -919,6 +943,11 @@ function handleMoreCommand(command: string) {
 :deep(.icon-btn:hover),
 :deep(.view-btn:hover) {
   background: var(--designer-hover-surface);
+}
+
+:deep(.icon-btn.is-active) {
+  color: var(--designer-primary, #2563eb);
+  background: var(--designer-active-surface, rgba(37, 99, 235, 0.12));
 }
 
 :deep(.icon-btn .el-icon),

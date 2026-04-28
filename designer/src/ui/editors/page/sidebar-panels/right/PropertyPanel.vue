@@ -49,12 +49,14 @@ import IconEpList from "~icons/ep/list";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { getManifest } from "@/materials/manifests";
 import { useEditorStore } from "@/stores/editor-store";
+import { getMenuDefaultProps } from "@/stores/editor/normalize-settings";
 import { usePanelState } from "../composables/use-panel-state";
 import CollapseItemsEditor from "./CollapseItemsEditor.vue";
 import MultiInspectorPanel from "./MultiInspectorPanel.vue";
 import PageInspectorPanel from "./PageInspectorPanel.vue";
 import PropEditor from "./PropEditor.vue";
 import StyleConfigEditorDialog from "./style-config/StyleConfigEditorDialog.vue";
+import TabsItemsEditor from "./TabsItemsEditor.vue";
 import {
   buildMenuDslContent,
   normalizeMenuItems,
@@ -293,6 +295,11 @@ const propertyPanelPresetLabelMap: Record<string, string> = {
   "text-multi-prefix": "Multi-Text Group Prefix",
   "text-multi-price": "Multi-Text Group Price",
   "text-full-dsl": "Full Config Template",
+  "style-border": "Set Border",
+  "style-background": "Set Background",
+  "style-radius": "Set Border Radius",
+  "style-shadow": "Set Shadow",
+  "style-opacity": "Set Opacity",
 };
 const propertyPanelLiteralLabelMap: Record<string, string> = {
   属性: "Properties",
@@ -400,6 +407,15 @@ function applyLocalNodePatch(node: AnyRecord, patch: AnyRecord) {
   if (patch.style) {
     node.style = { ...(node.style || {}), ...patch.style };
   }
+  if (patch.events) {
+    node.events = { ...(node.events || {}), ...patch.events };
+  }
+  if (patch.bindings) {
+    node.bindings = { ...(node.bindings || {}), ...patch.bindings };
+  }
+  if (patch.conditions) {
+    node.conditions = { ...(node.conditions || {}), ...patch.conditions };
+  }
   if (patch.detailConfig !== undefined) {
     node.detailConfig = patch.detailConfig;
   }
@@ -469,6 +485,120 @@ function applyMenuDetailConfig(node: AnyRecord, config: AnyRecord) {
   }
 }
 
+function resolveDetailConfigProps(config: AnyRecord) {
+  const reservedKeys = new Set([
+    "id",
+    "label",
+    "type",
+    "props",
+    "style",
+    "className",
+    "events",
+    "bindings",
+    "conditions",
+    "visible",
+    "click",
+    "onClick",
+    "confirm",
+    "confirmTitle",
+    "confirmType",
+    "permission",
+    "perms",
+    "if",
+    "show",
+  ]);
+  const propsPatch: AnyRecord =
+    config.props && typeof config.props === "object" ? { ...(config.props || {}) } : {};
+  if (Object.hasOwn(config, "id") && String(config.id || "").trim()) {
+    propsPatch.id = String(config.id).trim();
+  }
+  const permissionCode = config.permission ?? config.perms;
+  if (typeof permissionCode === "string" && permissionCode.trim()) {
+    propsPatch.permission = permissionCode.trim();
+  }
+  Object.entries(config).forEach(([key, value]) => {
+    if (reservedKeys.has(key)) return;
+    if (propsPatch[key] === undefined) propsPatch[key] = value;
+  });
+  if (config.className && String(config.className).trim()) {
+    propsPatch.class = String(config.className).trim();
+  }
+  return propsPatch;
+}
+
+function buildDetailConfigPatch(node: AnyRecord, config: AnyRecord) {
+  if (!node || !config || typeof config !== "object") return null;
+  const patch: AnyRecord = {};
+  const propsPatch = resolveDetailConfigProps(config);
+  if (propsPatch.type === node.type) {
+    delete propsPatch.type;
+  }
+  if (Object.keys(propsPatch).length > 0) {
+    patch.props = { ...(node.props || {}), ...propsPatch };
+  }
+  if (config.style && typeof config.style === "object") {
+    patch.style = { ...(node.style || {}), ...(config.style || {}) };
+  }
+  if (config.events && typeof config.events === "object") {
+    patch.events = { ...(node.events || {}), ...(config.events || {}) };
+  }
+  if (config.bindings && typeof config.bindings === "object") {
+    patch.bindings = { ...(node.bindings || {}), ...(config.bindings || {}) };
+  }
+  if (config.conditions && typeof config.conditions === "object") {
+    patch.conditions = { ...(node.conditions || {}), ...(config.conditions || {}) };
+  }
+  let clickCode = String(config.click ?? config.onClick ?? "").trim();
+  if (clickCode && typeof config.confirm === "string" && config.confirm.trim()) {
+    const confirmText = JSON.stringify(config.confirm.trim());
+    clickCode = `if (confirm(${confirmText})) {\n  ${clickCode}\n}`;
+  }
+  if (clickCode) {
+    patch.events = {
+      ...(patch.events || node.events || {}),
+      click: [{ type: "script", code: clickCode, enabled: true }],
+    };
+  }
+  const visibleExpr = config.if ?? config.show;
+  if (typeof visibleExpr === "boolean") {
+    patch.hidden = !visibleExpr;
+  } else if (typeof visibleExpr === "string" && visibleExpr.trim()) {
+    patch.conditions = {
+      ...(patch.conditions || node.conditions || {}),
+      visible: visibleExpr.trim(),
+    };
+  }
+  if (typeof config.visible === "boolean") {
+    patch.hidden = !config.visible;
+  }
+  if (config.label !== undefined && String(config.label).trim()) {
+    patch.label = String(config.label).trim();
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
+function applyGenericDetailConfig(node: AnyRecord, config: AnyRecord) {
+  const patch = buildDetailConfigPatch(node, config);
+  if (!patch) return;
+  const ok = editorStore.updateNode(node.id, patch);
+  if (!ok) {
+    applyLocalNodePatch(node, patch);
+  }
+}
+
+function createDslFactory(type: string) {
+  return (config: AnyRecord = {}) => ({
+    type,
+    props: resolveDetailConfigProps(config),
+    style: config?.style && typeof config.style === "object" ? config.style : undefined,
+    events: config?.events && typeof config.events === "object" ? config.events : undefined,
+    bindings:
+      config?.bindings && typeof config.bindings === "object" ? config.bindings : undefined,
+    conditions:
+      config?.conditions && typeof config.conditions === "object" ? config.conditions : undefined,
+  });
+}
+
 /**
  * 设计态执行详细配置脚本
  * @param {import('@/editor-core').ComponentNode} node - 节点
@@ -490,7 +620,40 @@ function runDetailConfigLocal(node: AnyRecord, content: string) {
       lastMenuConfig = config;
       applyMenuDetailConfig(node, config);
     },
-  };
+    button: (config: AnyRecord) => {
+      if (normalizedType === "Button") {
+        applyGenericDetailConfig(node, config);
+        return;
+      }
+      return createDslFactory("Button")(config);
+    },
+    text: createDslFactory("Text"),
+    card: createDslFactory("Card"),
+    horizontalLayout: (config: AnyRecord) => {
+      if (normalizedType === "HorizontalLayout") {
+        applyGenericDetailConfig(node, config);
+        return;
+      }
+      return createDslFactory("HorizontalLayout")(config);
+    },
+    verticalLayout: (config: AnyRecord) => {
+      if (normalizedType === "VerticalLayout") {
+        applyGenericDetailConfig(node, config);
+        return;
+      }
+      return createDslFactory("VerticalLayout")(config);
+    },
+    collapse: (config: AnyRecord) => {
+      if (normalizedType === "Collapse") {
+        applyGenericDetailConfig(node, config);
+        return;
+      }
+      return createDslFactory("Collapse")(config);
+    },
+  } as AnyRecord;
+  if (!Object.hasOwn(context, methodName)) {
+    context[methodName] = (config: AnyRecord) => applyGenericDetailConfig(node, config);
+  }
   try {
     runner.call(context);
     if (lastMenuConfig) {
@@ -501,6 +664,42 @@ function runDetailConfigLocal(node: AnyRecord, content: string) {
   }
 }
 
+const commonStylePresets: AnyArray = [
+  {
+    id: "style-border",
+    label: "设置边框",
+    content: "#domId {\n  border: 1px solid #dcdfe6;\n}",
+  },
+  {
+    id: "style-background",
+    label: "设置背景",
+    content: "#domId {\n  background: #ffffff;\n}",
+  },
+  {
+    id: "style-radius",
+    label: "设置边框圆角",
+    content: "#domId {\n  border-radius: 8px;\n  overflow: hidden;\n}",
+  },
+  {
+    id: "style-shadow",
+    label: "设置阴影",
+    content: "#domId {\n  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);\n}",
+  },
+  {
+    id: "style-opacity",
+    label: "设置透明",
+    content: "#domId {\n  opacity: 0.85;\n}",
+  },
+];
+
+function withCommonStylePresets(presets: AnyArray): AnyArray {
+  const existing = new Set((presets || []).map((item: AnyRecord) => String(item?.id || "")));
+  return [
+    ...commonStylePresets.filter((item: AnyRecord) => !existing.has(String(item.id || ""))),
+    ...(presets || []),
+  ];
+}
+
 const stylePresets: AnyArray = [
   { id: "empty", label: "空模板", content: "" },
   {
@@ -508,6 +707,7 @@ const stylePresets: AnyArray = [
     label: "居中布局",
     content: "display: flex;\nalign-items: center;\njustify-content: center;",
   },
+  ...commonStylePresets,
 ];
 const buttonStylePresets: AnyArray = [
   {
@@ -578,7 +778,7 @@ const buttonStylePresets: AnyArray = [
   },
   {
     id: "btn-bg-image-hover",
-    label: "Hover 切换背景鍥",
+    label: "Hover 切换背景图",
     content:
       '#domId .el-button--primary {\n  background: url("/static/images/btn_normal.png") no-repeat;\n  background-size: 100% 100%;\n}\n\n#domId .el-button--primary:hover {\n  background: url("/static/images/btn_hover.png") no-repeat;\n  background-size: 100% 100%;\n}',
   },
@@ -594,7 +794,7 @@ const buttonStylePresets: AnyArray = [
   },
   {
     id: "btn-size-block",
-    label: "块级按钮00%",
+    label: "块级按钮 100%",
     content: "#domId .el-button {\n  width: 100%;\n  display: block;\n}",
   },
   {
@@ -604,29 +804,29 @@ const buttonStylePresets: AnyArray = [
   },
   {
     id: "btn-icon-gap",
-    label: "图标与文字间璺",
+    label: "图标与文字间距",
     content: "#domId .el-button i { margin-right: 8px; }",
   },
   {
     id: "btn-icon-only",
-    label: "纯图标按閽",
+    label: "纯图标按钮",
     content: "#domId .el-button.is-circle {\n  width: 48px;\n  height: 48px;\n  padding: 0;\n}",
   },
   {
     id: "btn-disabled",
-    label: "禁用但可瑙",
+    label: "禁用但可见",
     content:
       "#domId .el-button.is-disabled {\n  background-color: #ddd;\n  border-color: #ddd;\n  color: #999;\n  cursor: not-allowed;\n}",
   },
   {
     id: "btn-disabled-keep",
-    label: "禁用不变鐏",
+    label: "禁用保持主色",
     content:
       "#domId .el-button.is-disabled,\n#domId .el-button.is-disabled:hover {\n  background: #409EFF;\n  border-color: #409EFF;\n  color: #fff;\n  opacity: 0.5;\n}",
   },
   {
     id: "btn-text-hover",
-    label: "text 按钮 hover 无背鏅",
+    label: "text 按钮 hover 无背景",
     content: "#domId .el-button--text:hover {\n  background: transparent;\n  color: #66b1ff;\n}",
   },
   {
@@ -636,7 +836,7 @@ const buttonStylePresets: AnyArray = [
   },
   {
     id: "btn-group-radius",
-    label: "按钮组去",
+    label: "按钮组去圆角",
     content: "#domId .el-button-group .el-button {\n  border-radius: 0;\n}",
   },
   {
@@ -656,6 +856,15 @@ const buttonStylePresets: AnyArray = [
     content: "#domId .el-button:active {\n  transform: scale(0.97);\n}",
   },
 ];
+
+function withButtonRootSelectorSupport(preset: AnyRecord): AnyRecord {
+  const content = String(preset?.content || "").replace(
+    /#domId\s+(\.el-button[^,{]*)/g,
+    "#domId$1,\n#domId $1",
+  );
+  return { ...preset, content };
+}
+
 const textStylePresets: AnyArray = [
   {
     id: "text-font",
@@ -723,7 +932,7 @@ const textStylePresets: AnyArray = [
   },
   {
     id: "text-bg-image-hover",
-    label: "Hover 切换背景鍥",
+    label: "Hover 切换背景图",
     content:
       '#domId {\n  background: url("/static/images/btn_normal.png") no-repeat;\n  background-size: 100% 100%;\n}\n\n#domId:hover {\n  background: url("/static/images/btn_hover.png") no-repeat;\n  background-size: 100% 100%;\n}',
   },
@@ -739,7 +948,7 @@ const textStylePresets: AnyArray = [
   },
   {
     id: "text-size-block",
-    label: "块级00%",
+    label: "块级 100%",
     content: "#domId {\n  width: 100%;\n  display: block;\n}",
   },
   {
@@ -749,7 +958,7 @@ const textStylePresets: AnyArray = [
   },
   {
     id: "text-icon-gap",
-    label: "图标与文字间璺",
+    label: "图标与文字间距",
     content: "#domId i { margin-right: 8px; }",
   },
   {
@@ -759,19 +968,19 @@ const textStylePresets: AnyArray = [
   },
   {
     id: "text-disabled",
-    label: "禁用但可瑙",
+    label: "禁用但可见",
     content:
       "#domId.is-disabled {\n  background-color: #ddd;\n  border-color: #ddd;\n  color: #999;\n  cursor: not-allowed;\n}",
   },
   {
     id: "text-disabled-keep",
-    label: "禁用不变鐏",
+    label: "禁用不变色",
     content:
       "#domId.is-disabled,\n#domId.is-disabled:hover {\n  background: #409EFF;\n  border-color: #409EFF;\n  color: #fff;\n  opacity: 0.5;\n}",
   },
   {
     id: "text-hover-clear",
-    label: "Hover 无背鏅",
+    label: "Hover 无背景",
     content: "#domId:hover {\n  background: transparent;\n  color: #66b1ff;\n}",
   },
   {
@@ -781,7 +990,7 @@ const textStylePresets: AnyArray = [
   },
   {
     id: "text-group-radius",
-    label: "去圆瑙",
+    label: "去圆角",
     content: "#domId { border-radius: 0; }",
   },
   {
@@ -809,6 +1018,194 @@ function buildStylePreset(type: string, id: string, label: string, content: stri
   };
 }
 const customStylePresetMap: AnyRecord = {
+  HorizontalLayout: [
+    buildStylePreset(
+      "HorizontalLayout",
+      "gap",
+      "紧凑横排",
+      "#domId {\n  gap: 8px;\n  align-items: center;\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "space-between",
+      "两端对齐",
+      "#domId {\n  justify-content: space-between;\n  align-items: center;\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "toolbar",
+      "工具栏容器",
+      "#domId {\n  gap: 10px;\n  align-items: center;\n  min-height: 44px;\n  padding: 0 8px;\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "border-default",
+      "默认边框",
+      "#domId {\n  border: 1px solid #dcdfe6;\n  border-radius: 4px;\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "border-color",
+      "边框颜色",
+      "#domId {\n  border: 1px solid #409eff;\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "border-radius",
+      "圆角容器",
+      "#domId {\n  border-radius: 8px;\n  overflow: hidden;\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "card-border",
+      "卡片边框",
+      "#domId {\n  border: 1px solid #e5e7eb;\n  border-radius: 8px;\n  padding: 12px;\n  background: #ffffff;\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "shadow-soft",
+      "柔和阴影",
+      "#domId {\n  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "shadow-card",
+      "卡片阴影",
+      "#domId {\n  border: 1px solid #e5e7eb;\n  border-radius: 8px;\n  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);\n}",
+    ),
+    buildStylePreset(
+      "HorizontalLayout",
+      "shadow-inner",
+      "内阴影",
+      "#domId {\n  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.16);\n}",
+    ),
+  ],
+  VerticalLayout: [
+    buildStylePreset(
+      "VerticalLayout",
+      "gap",
+      "紧凑纵排",
+      "#domId {\n  gap: 8px;\n  align-items: stretch;\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "center",
+      "居中纵排",
+      "#domId {\n  justify-content: center;\n  align-items: center;\n  gap: 12px;\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "panel",
+      "面板容器",
+      "#domId {\n  gap: 12px;\n  padding: 12px;\n  background: #f7f8fa;\n  border: 1px solid #e5e7eb;\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "border-default",
+      "默认边框",
+      "#domId {\n  border: 1px solid #dcdfe6;\n  border-radius: 4px;\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "border-color",
+      "边框颜色",
+      "#domId {\n  border: 1px solid #409eff;\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "border-radius",
+      "圆角容器",
+      "#domId {\n  border-radius: 8px;\n  overflow: hidden;\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "card-border",
+      "卡片边框",
+      "#domId {\n  border: 1px solid #e5e7eb;\n  border-radius: 8px;\n  padding: 12px;\n  background: #ffffff;\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "shadow-soft",
+      "柔和阴影",
+      "#domId {\n  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "shadow-card",
+      "卡片阴影",
+      "#domId {\n  border: 1px solid #e5e7eb;\n  border-radius: 8px;\n  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);\n}",
+    ),
+    buildStylePreset(
+      "VerticalLayout",
+      "shadow-inner",
+      "内阴影",
+      "#domId {\n  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.16);\n}",
+    ),
+  ],
+  FormLayout: [
+    buildStylePreset(
+      "FormLayout",
+      "border-default",
+      "默认边框",
+      "#domId {\n  border: 1px solid #dcdfe6;\n  border-radius: 4px;\n}",
+    ),
+    buildStylePreset(
+      "FormLayout",
+      "border-color",
+      "边框颜色",
+      "#domId {\n  border: 1px solid #409eff;\n}",
+    ),
+    buildStylePreset(
+      "FormLayout",
+      "border-radius",
+      "圆角表单",
+      "#domId {\n  border-radius: 8px;\n  overflow: hidden;\n}",
+    ),
+    buildStylePreset(
+      "FormLayout",
+      "form-card",
+      "表单卡片",
+      "#domId {\n  border: 1px solid #e5e7eb;\n  border-radius: 8px;\n  padding: 16px;\n  background: #ffffff;\n}",
+    ),
+    buildStylePreset(
+      "FormLayout",
+      "shadow-soft",
+      "柔和阴影",
+      "#domId {\n  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);\n}",
+    ),
+    buildStylePreset(
+      "FormLayout",
+      "shadow-card",
+      "卡片阴影",
+      "#domId {\n  border: 1px solid #e5e7eb;\n  border-radius: 8px;\n  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);\n}",
+    ),
+    buildStylePreset(
+      "FormLayout",
+      "shadow-inner",
+      "内阴影",
+      "#domId {\n  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.16);\n}",
+    ),
+  ],
+  Collapse: [
+    buildStylePreset(
+      "Collapse",
+      "compact",
+      "紧凑面板",
+      "#domId .el-collapse-item__header {\n  height: 36px;\n  line-height: 36px;\n}\n#domId .el-collapse-item__content {\n  padding-bottom: 0;\n}",
+    ),
+    buildStylePreset(
+      "Collapse",
+      "header",
+      "标题强调",
+      "#domId .el-collapse-item__header {\n  font-weight: 600;\n  color: #1f2937;\n}",
+    ),
+    buildStylePreset(
+      "Collapse",
+      "borderless",
+      "弱化边框",
+      "#domId,\n#domId .el-collapse-item__wrap,\n#domId .el-collapse-item__header {\n  border-color: transparent;\n}",
+    ),
+  ],
   Image: [
     buildStylePreset(
       "Image",
@@ -1338,20 +1735,6 @@ const customStylePresetMap: AnyRecord = {
       "state",
       "Active / Hover",
       "#domId .el-pagination .el-pager li.active{ background:#409EFF; color:#fff; }\n#domId .el-pagination .el-pager li:hover{ color:#409EFF; }",
-    ),
-  ],
-  Collapse: [
-    buildStylePreset(
-      "Collapse",
-      "base",
-      "容器/圆角",
-      "#domId .el-collapse{ border-radius:12px; overflow:hidden; }\n#domId .el-collapse-item__header{ background:#fafafa; font-weight:600; }",
-    ),
-    buildStylePreset(
-      "Collapse",
-      "content",
-      "Hover / 内容区",
-      "#domId .el-collapse-item__header:hover{ background:#ecf5ff; }\n#domId .el-collapse-item__content{ padding:12px 16px; }",
     ),
   ],
   BigDataTable: [
@@ -1973,10 +2356,62 @@ function buildDslTemplate(methodName: string, body: string) {
   return `this.${methodName}({\n${body}\n});`;
 }
 
+function buildCommonDetailPresets(type: string | undefined): AnyArray {
+  const normalizedType = elementTypeName(type) || "component";
+  const methodName = getDslMethodName(normalizedType);
+  const presets: AnyArray = [
+    {
+      id: buildPresetId(normalizedType, "hover-select"),
+      label: "鼠标移入选中",
+      content: buildDslTemplate(
+        methodName,
+        "  hoverSelect: true,",
+      ),
+    },
+  ];
+
+  presets.push(
+    {
+      id: buildPresetId(normalizedType, "add-menu"),
+      label: "添加菜单",
+      content:
+        "this.menu({\n  mode: 'horizontal',\n  defaultActive: 'home',\n  items: [\n    { label: '首页', index: 'home' },\n    { label: '数据', index: 'data' },\n    { label: '设置', index: 'settings' },\n  ],\n});",
+    },
+    {
+      id: buildPresetId(normalizedType, "header"),
+      label: "头部设置",
+      content: buildDslTemplate(
+        methodName,
+        "  height: '64px',\n  style: {\n    backgroundColor: '#ffffff',\n    borderBottom: '1px solid #e5e7eb',\n    display: 'flex',\n    alignItems: 'center',\n    padding: '0 16px',\n  },",
+      ),
+    },
+    {
+      id: buildPresetId(normalizedType, "panel-title"),
+      label: "修改面板标题",
+      content: buildDslTemplate(
+        "collapse",
+        "  modelValue: 'panel1',\n  items: [\n    { name: 'panel1', title: '基础信息', content: '' },\n    { name: 'panel2', title: '更多设置', content: '' },\n  ],",
+      ),
+    },
+  );
+
+  return presets;
+}
+
+function withCommonDetailPresets(type: string | undefined, presets: AnyArray): AnyArray {
+  const existing = new Set((presets || []).map((item: AnyRecord) => String(item?.id || "")));
+  return [
+    ...buildCommonDetailPresets(type).filter(
+      (item: AnyRecord) => !existing.has(String(item.id || "")),
+    ),
+    ...(presets || []),
+  ];
+}
+
 const textDetailPresets: AnyArray = [
   {
     id: "text-basic",
-    label: "最文本",
+    label: "基础文本",
     content: buildDslTemplate("text", "  value: '这是一段文本',"),
   },
   {
@@ -2017,7 +2452,7 @@ const textDetailPresets: AnyArray = [
   },
   {
     id: "text-dict",
-    label: "状态文本映灏",
+    label: "状态文本映射",
     content: buildDslTemplate(
       "text",
       "  text: 'status',\n  dict: {\n    0: '禁用',\n    1: '启用',\n  },",
@@ -2059,7 +2494,7 @@ const textDetailPresets: AnyArray = [
   },
   {
     id: "text-format-money",
-    label: "金额格式鍖",
+    label: "金额格式化",
     content: buildDslTemplate(
       "text",
       "  text: 'price',\n  format: 'money',\n  precision: 2,\n  unit: '元',",
@@ -2067,7 +2502,7 @@ const textDetailPresets: AnyArray = [
   },
   {
     id: "text-format-datetime",
-    label: "时间格式鍖",
+    label: "时间格式化",
     content: buildDslTemplate(
       "text",
       "  text: 'createTime',\n  format: 'datetime',\n  valueFormat: 'YYYY-MM-DD HH:mm:ss',",
@@ -2088,12 +2523,12 @@ const textDetailPresets: AnyArray = [
   },
   {
     id: "text-multi-prefix",
-    label: "多文本组鍚前缀",
+    label: "多文本组合前缀",
     content: buildDslTemplate("text", "  value: '￥',\n  color: '#f56c6c',"),
   },
   {
     id: "text-multi-price",
-    label: "多文本组鍚金额",
+    label: "多文本组合金额",
     content: buildDslTemplate("text", "  text: 'price',\n  color: '#f56c6c',\n  weight: 'bold',"),
   },
   {
@@ -2105,6 +2540,73 @@ const textDetailPresets: AnyArray = [
     ),
   },
 ];
+
+const customDetailPresetMap: AnyRecord = {
+  HorizontalLayout: [
+    {
+      id: buildPresetId("HorizontalLayout", "basic"),
+      label: "基础横排",
+      content: buildDslTemplate(
+        "horizontalLayout",
+        "  justify: 'flex-start',\n  align: 'center',\n  gap: 10,\n  showBorder: false,",
+      ),
+    },
+    {
+      id: buildPresetId("HorizontalLayout", "space-between"),
+      label: "两端对齐",
+      content: buildDslTemplate(
+        "horizontalLayout",
+        "  justify: 'space-between',\n  align: 'center',\n  gap: 12,\n  showBorder: false,",
+      ),
+    },
+    {
+      id: buildPresetId("HorizontalLayout", "toolbar"),
+      label: "工具栏",
+      content: buildDslTemplate(
+        "horizontalLayout",
+        "  justify: 'flex-start',\n  align: 'center',\n  gap: 8,\n  wrap: false,\n  showBorder: false,",
+      ),
+    },
+  ],
+  VerticalLayout: [
+    {
+      id: buildPresetId("VerticalLayout", "basic"),
+      label: "基础纵排",
+      content: buildDslTemplate(
+        "verticalLayout",
+        "  justify: 'flex-start',\n  align: 'stretch',\n  gap: 10,\n  showBorder: false,",
+      ),
+    },
+    {
+      id: buildPresetId("VerticalLayout", "center"),
+      label: "居中纵排",
+      content: buildDslTemplate(
+        "verticalLayout",
+        "  justify: 'center',\n  align: 'center',\n  gap: 12,\n  showBorder: false,",
+      ),
+    },
+    {
+      id: buildPresetId("VerticalLayout", "form-stack"),
+      label: "表单纵排",
+      content: buildDslTemplate(
+        "verticalLayout",
+        "  justify: 'flex-start',\n  align: 'stretch',\n  gap: 16,\n  showBorder: true,",
+      ),
+    },
+  ],
+  FormLayout: [
+    {
+      id: buildPresetId("FormLayout", "basic"),
+      label: "基础表单",
+      content: buildDslTemplate("formLayout", "  itemGap: 12,\n  showBorder: false,"),
+    },
+    {
+      id: buildPresetId("FormLayout", "border"),
+      label: "带边框表单",
+      content: buildDslTemplate("formLayout", "  itemGap: 16,\n  showBorder: true,"),
+    },
+  ],
+};
 
 /**
  * 格式化 DSL 值
@@ -2133,6 +2635,57 @@ function getManifestDefaultValue(type: string, propName: string): any {
   const manifest = getManifest(type);
   if (!manifest?.props?.length) return undefined;
   return manifest.props.find((prop) => prop.name === propName)?.defaultValue;
+}
+
+function clonePanelValue<T>(value: T): T {
+  if (value === undefined || value === null) return value;
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * 详细配置清空后恢复组件默认配置。
+ * 只回滚详细配置会写入的 props/style/events/bindings/conditions，保留画布位置、尺寸和子节点。
+ */
+function buildDefaultDetailResetPatch(node: AnyRecord): AnyRecord {
+  const type = elementTypeName(node?.type);
+  const manifest = type ? getManifest(type) : null;
+  const defaultProps: AnyRecord = {};
+  Object.keys(node?.props || {}).forEach((key) => {
+    defaultProps[key] = undefined;
+  });
+  (manifest?.props || []).forEach((prop: AnyRecord) => {
+    if (!prop?.name) return;
+    if (prop.defaultValue !== undefined) {
+      defaultProps[prop.name] = clonePanelValue(prop.defaultValue);
+    }
+  });
+  if (type === "Menu") {
+    Object.assign(defaultProps, getMenuDefaultProps());
+  }
+  return {
+    detailConfig: "",
+    props: defaultProps,
+    style: { ...(manifest?.defaultStyle || {}) },
+    events: {},
+    bindings: {},
+    conditions: {},
+    hidden: false,
+  };
+}
+
+function resetNodeDetailToDefault(node: AnyRecord): void {
+  if (!node?.id) return;
+  const patch = buildDefaultDetailResetPatch(node);
+  const ok = editorStore.updateNode(node.id, patch);
+  if (!ok) {
+    applyLocalNodePatch(node, patch);
+  }
+  emitDetailConfig(node.id, "");
+  editorStore.saveCurrentPageDraft?.();
 }
 
 /**
@@ -2448,7 +3001,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
             },
             {
               id: buildPresetId(type, "lazy"),
-              label: "懒加杞",
+              label: "懒加载",
               content: buildDslTemplate(
                 methodName,
                 "  text:'area',\n  props:{ lazy:true, lazyLoad:'lazyLoadCascader', value:'value', label:'label', children:'children' },",
@@ -2470,7 +3023,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "通用模板",
               content: buildDslTemplate(
                 methodName,
-                "  text: 'activeTab',\n  type: '',\n  tabPosition: 'top',\n  stretch: false,\n  closable: false,\n  editable: false,\n  addable: false,\n\n  tabs: [\n    // {name,label,disabled,content:[...], lazy:false}\n  ],\n\n  tabClick: 'onTabClick',\n  tabRemove: 'onTabRemove',\n  tabAdd: 'onTabAdd',\n  edit: 'onTabEdit',",
+                "  modelValue: 'tab1',\n  activeName: 'tab1',\n  type: '',\n  tabPosition: 'top',\n  stretch: false,\n  closable: false,\n\n  tabs: [\n    { name: 'tab1', label: '标签1' },\n    { name: 'tab2', label: '标签2' },\n  ],\n\n  tabClick: 'onTabClick',\n  tabRemove: 'onTabRemove',\n  tabAdd: 'onTabAdd',\n  edit: 'onTabEdit',",
               ),
             },
             {
@@ -2478,7 +3031,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "Tabs",
               content: buildDslTemplate(
                 methodName,
-                "  text:'activeTab',\n  tabs:[\n    { name:'base', label:'基本', content:[ this.text({value:'内容1'}) ] },\n    { name:'conf', label:'配置', content:[ this.text({value:'内容2'}) ] },\n  ],",
+                "  modelValue: 'tab1',\n  activeName: 'tab1',\n  tabs: [\n    { name: 'tab1', label: '标签1' },\n    { name: 'tab2', label: '标签2' },\n  ],",
               ),
             },
             {
@@ -2486,7 +3039,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "Card / Border Card",
               content: buildDslTemplate(
                 methodName,
-                "  text:'activeTab',\n  type:'card',\n  tabs:'tabList',",
+                "  modelValue: 'tab1',\n  activeName: 'tab1',\n  type: 'card',\n  tabs: [\n    { name: 'tab1', label: '标签1' },\n    { name: 'tab2', label: '标签2' },\n  ],",
               ),
             },
             {
@@ -2499,7 +3052,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
             },
             {
               id: buildPresetId(type, "editable"),
-              label: "可新澧关闭",
+              label: "可新增关闭",
               content: buildDslTemplate(
                 methodName,
                 "  text:'activeTab',\n  editable:true,\n  tabs:'tabList',\n  edit:'onTabEdit',",
@@ -2507,7 +3060,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
             },
             {
               id: buildPresetId(type, "lazy"),
-              label: "懒加杞",
+              label: "懒加载",
               content: buildDslTemplate(
                 methodName,
                 "  text:'activeTab',\n  tabs:[{name:'a',label:'A',lazy:true,content:'renderA'}],",
@@ -2593,7 +3146,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
             },
             {
               id: buildPresetId(type, "dict"),
-              label: "状态映灏",
+              label: "状态映射",
               content: buildDslTemplate(
                 methodName,
                 "  text:'status',\n  dict:{ 0:{label:'\u7981\u7528',type:'info'}, 1:{label:'\u542F\u7528',type:'success'}, 2:{label:'\u8B66\u544A',type:'warning'} },",
@@ -2945,7 +3498,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "通用模板",
               content: buildDslTemplate(
                 methodName,
-                "  text: 'activeNames',\n  accordion: false,\n  items: [\n    // {name,title,disabled,content:[dsl]}\n  ],\n  change: 'onCollapseChange',",
+                "  modelValue: ['1'],\n  accordion: false,\n  items: [\n    { name: '1', title: '面板1' },\n    { name: '2', title: '面板2' },\n  ],\n  change: 'onCollapseChange',",
               ),
             },
             {
@@ -2953,7 +3506,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "多开",
               content: buildDslTemplate(
                 methodName,
-                "  text:'activeNames',\n  items:[\n    { name:'a', title:'面板A', content:[ this.text({value:'?A'}) ] },\n    { name:'b', title:'面板B', content:[ this.text({value:'?B'}) ] },\n  ],",
+                "  modelValue: ['1', '2'],\n  accordion: false,\n  items: [\n    { name: '1', title: '面板1' },\n    { name: '2', title: '面板2' },\n    { name: '3', title: '面板3' },\n  ],",
               ),
             },
             {
@@ -2961,7 +3514,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "手风琴",
               content: buildDslTemplate(
                 methodName,
-                "  text:'activeName',\n  accordion:true,\n  items:'collapseItems',",
+                "  modelValue: '1',\n  accordion: true,\n  items: [\n    { name: '1', title: '面板1' },\n    { name: '2', title: '面板2' },\n  ],",
               ),
             },
             {
@@ -2969,7 +3522,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "默认展开 + 禁用项",
               content: buildDslTemplate(
                 methodName,
-                "  text:'activeNames',\n  items:[\n    { name:'a', title:'A', content:[ this.text({value:'...'}) ] },\n    { name:'b', title:'B', disabled:true, content:[ this.text({value:'...'}) ] },\n  ],",
+                "  modelValue: ['1'],\n  accordion: false,\n  items: [\n    { name: '1', title: '面板1' },\n    { name: '2', title: '面板2', disabled: true },\n  ],",
               ),
             },
           ];
@@ -3257,7 +3810,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "完整 DSL 模板",
               content: buildDslTemplate(
                 methodName,
-                '  /** ?? */\n  id: "inputField",\n  value: 0,\n  placeholder: "请输入",\n  controls: true,\n  step: 1,\n\n  /** ?? */\n  disabled: false,\n  min: 0,\n  max: 100,\n  precision: 0,\n\n  /** 样式 */\n  style: {\n    width: "220px",\n  },\n  className: "custom-input-number",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.inputNumberValue",\n  },',
+                '  /** 基础配置 */\n  id: "inputField",\n  value: 0,\n  placeholder: "请输入",\n  controls: true,\n  step: 1,\n\n  /** 基础配置 */\n  disabled: false,\n  min: 0,\n  max: 100,\n  precision: 0,\n\n  /** 样式 */\n  style: {\n    width: "220px",\n  },\n  className: "custom-input-number",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.inputNumberValue",\n  },',
               ),
             },
           ]
@@ -3640,7 +4193,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "完整 DSL 模板",
               content: buildDslTemplate(
                 methodName,
-                '  /** ?? */\n  id: "selectField",\n  value: "",\n  placeholder: "请选择",\n  clearable: true,\n  options: [\n    { label: "选项A", value: "A" },\n    { label: "选项B", value: "B" },\n  ],\n\n  /** ?? */\n  disabled: false,\n\n  /** 样式 */\n  style: {\n    width: "220px",\n  },\n  className: "custom-select",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.selectValue",\n  },',
+                '  /** 基础配置 */\n  id: "selectField",\n  value: "",\n  placeholder: "请选择",\n  clearable: true,\n  options: [\n    { label: "选项A", value: "A" },\n    { label: "选项B", value: "B" },\n  ],\n\n  /** 基础配置 */\n  disabled: false,\n\n  /** 样式 */\n  style: {\n    width: "220px",\n  },\n  className: "custom-select",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.selectValue",\n  },',
               ),
             },
           ]),
@@ -3705,7 +4258,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "choiceField",\n  value: "",\n  options: [\n    { label: "选项A", value: "A" },\n    { label: "选项B", value: "B" },\n  ],\n\n  /** ?? */\n  disabled: false,\n\n  /** 样式 */\n  className: "custom-choice",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.choiceValue",\n  },',
+          '  /** 基础配置 */\n  id: "choiceField",\n  value: "",\n  options: [\n    { label: "选项A", value: "A" },\n    { label: "选项B", value: "B" },\n  ],\n\n  /** 基础配置 */\n  disabled: false,\n\n  /** 样式 */\n  className: "custom-choice",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.choiceValue",\n  },',
         ),
       },
     ],
@@ -3858,7 +4411,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
           label: "完整 DSL 模板",
           content: buildDslTemplate(
             methodName,
-            `  /** ?? */\n  id: "tableList",\n  data: ${formatDslValue(
+            `  /** 基础配置 */\n  id: "tableList",\n  data: ${formatDslValue(
               dataDefault,
               2,
             )},\n  columns: ${formatDslValue(columnsDefault, 2)},
@@ -3937,7 +4490,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
       },
       {
         id: buildPresetId(type, "lazy"),
-        label: "懒加杞",
+        label: "懒加载",
         content: buildDslTemplate(
           methodName,
           "  lazy:true,\n  'node-key':'id',\n  load:'loadTreeNode',\n  props:{ label:'name', children:'children', isLeaf:'leaf' },",
@@ -4090,7 +4643,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
               label: "完整 DSL 模板",
               content: buildDslTemplate(
                 methodName,
-                '  /** ?? */\n  id: "menuNav",\n  items: [\n    { label: "编辑", command: "edit" },\n    { label: "删除", command: "delete" },\n  ],\n\n  /** ?? */\n  disabled: false,\n\n  /** 样式 */\n  className: "custom-menu",\n\n  /** 事件 */\n  onCommand: {\n    action: "setVar",\n    target: "$vars.menuCommand",\n  },',
+                '  /** 基础配置 */\n  id: "menuNav",\n  items: [\n    { label: "编辑", command: "edit" },\n    { label: "删除", command: "delete" },\n  ],\n\n  /** 基础配置 */\n  disabled: false,\n\n  /** 样式 */\n  className: "custom-menu",\n\n  /** 事件 */\n  onCommand: {\n    action: "setVar",\n    target: "$vars.menuCommand",\n  },',
               ),
             },
           ]
@@ -4123,7 +4676,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "Tabs/折叠配置",
         content: buildDslTemplate(
           methodName,
-          '  /* Tabs/\u6298\u53E0\u914D\u7F6E */\n  id: "tabsPanel",\n  label: "Tabs/\u6298\u53E0\u914D\u7F6E",\n  type: "Tabs",\n  props: {\n    activeName: "tab1",\n    items: [\n      { name: "tab1", label: "\u6807\u7B7E\u4E00" },\n      { name: "tab2", label: "\u6807\u7B7E\u4E8C" },\n      { name: "tab3", label: "\u6807\u7B7E\u4E09" },\n    ],\n  },',
+          '  /* Tabs/\u6298\u53E0\u914D\u7F6E */\n  id: "tabsPanel",\n  label: "Tabs/\u6298\u53E0\u914D\u7F6E",\n  props: {\n    modelValue: "tab1",\n    activeName: "tab1",\n    tabs: [\n      { name: "tab1", label: "\u6807\u7B7E1" },\n      { name: "tab2", label: "\u6807\u7B7E2" },\n      { name: "tab3", label: "\u6807\u7B7E3" },\n    ],\n  },',
         ),
       },
       {
@@ -4136,7 +4689,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** \u57FA\u7840 */\n  id: "tabsPanel",\n  activeName: "tab1",\n  items: [\n    { name: "tab1", label: "\u6807\u7B7E\u4E00" },\n    { name: "tab2", label: "\u6807\u7B7E\u4E8C" },\n  ],\n\n  /** \u5C5E\u6027 */\n  type: "card",\n  stretch: true,\n\n  /** \u6837\u5F0F */\n  className: "custom-tabs",\n\n  /** \u4E8B\u4EF6 */\n  onTabClick: {\n    action: "setVar",\n    target: "$vars.activeTab",\n  },',
+          '  /** \u57FA\u7840 */\n  id: "tabsPanel",\n  modelValue: "tab1",\n  activeName: "tab1",\n  tabs: [\n    { name: "tab1", label: "\u6807\u7B7E1" },\n    { name: "tab2", label: "\u6807\u7B7E2" },\n  ],\n\n  /** \u5C5E\u6027 */\n  type: "card",\n  stretch: true,\n\n  /** \u6837\u5F0F */\n  className: "custom-tabs",\n\n  /** \u4E8B\u4EF6 */\n  onTabClick: {\n    action: "setVar",\n    target: "$vars.activeTab",\n  },',
         ),
       },
     ],
@@ -4222,7 +4775,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "tagStatus",\n  text: "标签",\n  type: "success",\n  effect: "light",\n\n  /** ?? */\n  closable: true,\n\n  /** 样式 */\n  className: "custom-tag",\n\n  /** 事件 */\n  onClose: {\n    action: "setVar",\n    target: "$vars.tagClosed",\n  },',
+          '  /** 基础配置 */\n  id: "tagStatus",\n  text: "标签",\n  type: "success",\n  effect: "light",\n\n  /** 基础配置 */\n  closable: true,\n\n  /** 样式 */\n  className: "custom-tag",\n\n  /** 事件 */\n  onClose: {\n    action: "setVar",\n    target: "$vars.tagClosed",\n  },',
         ),
       },
     ],
@@ -4266,7 +4819,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "sliderValue",\n  value: 30,\n  min: 0,\n  max: 100,\n  step: 1,\n\n  /** 属性 */\n  range: false,\n  showStops: false,\n\n  /** 样式 */\n  className: "custom-slider",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.sliderValue",\n  },',
+          '  /** 基础配置 */\n  id: "sliderValue",\n  value: 30,\n  min: 0,\n  max: 100,\n  step: 1,\n\n  /** 属性 */\n  range: false,\n  showStops: false,\n\n  /** 样式 */\n  className: "custom-slider",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.sliderValue",\n  },',
         ),
       },
     ],
@@ -4297,7 +4850,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "卡片配置",
         content: buildDslTemplate(
           methodName,
-          '  id: "cardInfo",\n  header: "?",\n  shadow: "hover",',
+          '  id: "cardInfo",\n  header: "卡片标题",\n  shadow: "hover",',
         ),
       },
       {
@@ -4310,7 +4863,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "cardInfo",\n  header: "?",\n  shadow: "hover",\n\n  /** 样式 */\n  className: "custom-card",\n  style: {\n    padding: "12px",\n  },',
+          '  /** 基础配置 */\n  id: "cardInfo",\n  header: "卡片标题",\n  shadow: "hover",\n\n  /** 样式 */\n  className: "custom-card",\n  style: {\n    padding: "12px",\n  },',
         ),
       },
     ],
@@ -4357,7 +4910,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "transferData",\n  data: [\n    { key: "A", label: "选项A" },\n    { key: "B", label: "选项B" },\n  ],\n  value: [],\n\n  /** 属性 */\n  filterable: true,\n  filterPlaceholder: "请输入关键字",\n\n  /** 样式 */\n  className: "custom-transfer",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.transferValue",\n  },',
+          '  /** 基础配置 */\n  id: "transferData",\n  data: [\n    { key: "A", label: "选项A" },\n    { key: "B", label: "选项B" },\n  ],\n  value: [],\n\n  /** 属性 */\n  filterable: true,\n  filterPlaceholder: "请输入关键字",\n\n  /** 样式 */\n  className: "custom-transfer",\n\n  /** 事件 */\n  onChange: {\n    action: "setVar",\n    target: "$vars.transferValue",\n  },',
         ),
       },
     ],
@@ -4401,7 +4954,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "timeline",\n  items: [\n    { timestamp: "2024-01-01", content: "创建" },\n    { timestamp: "2024-01-02", content: "完成" },\n  ],\n\n  /** 属性 */\n  placement: "top",\n  reverse: false,\n\n  /** 样式 */\n  className: "custom-timeline",',
+          '  /** 基础配置 */\n  id: "timeline",\n  items: [\n    { timestamp: "2024-01-01", content: "创建" },\n    { timestamp: "2024-01-02", content: "完成" },\n  ],\n\n  /** 属性 */\n  placement: "top",\n  reverse: false,\n\n  /** 样式 */\n  className: "custom-timeline",',
         ),
       },
     ],
@@ -4448,7 +5001,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "steps",\n  active: 1,\n  items: [\n    { title: "开始" },\n    { title: "处理" },\n    { title: "完成" },\n  ],\n\n  /** 属性 */\n  direction: "horizontal",\n  finishStatus: "success",\n\n  /** 样式 */\n  className: "custom-steps",',
+          '  /** 基础配置 */\n  id: "steps",\n  active: 1,\n  items: [\n    { title: "开始" },\n    { title: "处理" },\n    { title: "完成" },\n  ],\n\n  /** 属性 */\n  direction: "horizontal",\n  finishStatus: "success",\n\n  /** 样式 */\n  className: "custom-steps",',
         ),
       },
     ],
@@ -4495,7 +5048,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "carousel",\n  height: "240px",\n  items: [\n    { src: "https://", title: "图片1" },\n    { src: "https://", title: "图片2" },\n  ],\n\n  /** 属性 */\n  autoplay: true,\n  interval: 3000,\n  arrow: "hover",\n\n  /** 样式 */\n  className: "custom-carousel",',
+          '  /** 基础配置 */\n  id: "carousel",\n  height: "240px",\n  items: [\n    { src: "https://", title: "图片1" },\n    { src: "https://", title: "图片2" },\n  ],\n\n  /** 属性 */\n  autoplay: true,\n  interval: 3000,\n  arrow: "hover",\n\n  /** 样式 */\n  className: "custom-carousel",',
         ),
       },
     ],
@@ -4536,7 +5089,7 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "calendar",\n  value: new Date(),\n\n  /** 属性 */\n  range: null,\n\n  /** 样式 */\n  className: "custom-calendar",',
+          '  /** 基础配置 */\n  id: "calendar",\n  value: new Date(),\n\n  /** 属性 */\n  range: null,\n\n  /** 样式 */\n  className: "custom-calendar",',
         ),
       },
     ],
@@ -4592,14 +5145,14 @@ const elementPlusPresetGroups: PresetGroupLike[] = [
         label: "完整 DSL 模板",
         content: buildDslTemplate(
           methodName,
-          '  /** ?? */\n  id: "layout",\n  direction: "horizontal",\n  gutter: 12,\n\n  /** ?? */\n  span: 12,\n  offset: 0,\n  height: "100%",\n  width: "100%",\n\n  /** 样式 */\n  className: "custom-layout",',
+          '  /** 基础配置 */\n  id: "layout",\n  direction: "horizontal",\n  gutter: 12,\n\n  /** 基础配置 */\n  span: 12,\n  offset: 0,\n  height: "100%",\n  width: "100%",\n\n  /** 样式 */\n  className: "custom-layout",',
         ),
       },
     ],
     style: (type) => [
       {
         id: buildPresetId(type, "padding"),
-        label: "容器内边璺",
+        label: "容器内边距",
         content: "#domId { padding: 12px; }",
       },
       {
@@ -4625,8 +5178,7 @@ function resolveElementPlusDetailPresets(type: string): AnyArray {
   const group = elementPlusPresetGroups.find((item: AnyRecord) => item.types.includes(type));
   const methodName = getDslMethodName(type);
   if (group?.detail) {
-    return group
-      .detail(methodName, type)
+    return withCommonDetailPresets(type, group.detail(methodName, type))
       .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
       .map((preset: AnyRecord) => localizePropertyPanelPreset(preset))
       .map((preset: AnyRecord) => ({
@@ -4654,7 +5206,7 @@ function resolveElementPlusDetailPresets(type: string): AnyArray {
 function resolveElementPlusStylePresets(type: string): AnyArray {
   const customPresets = customStylePresetMap[type] as AnyArray | undefined;
   if (customPresets) {
-    return customPresets.map((preset: AnyRecord) => ({
+    return withCommonStylePresets(customPresets).map((preset: AnyRecord) => ({
       ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", "custom"],
       keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
@@ -4662,7 +5214,7 @@ function resolveElementPlusStylePresets(type: string): AnyArray {
   }
   const group = elementPlusPresetGroups.find((item: AnyRecord) => item.types.includes(type));
   if (group?.style) {
-    return group.style(type).map((preset: AnyRecord) => ({
+    return withCommonStylePresets(group.style(type)).map((preset: AnyRecord) => ({
       ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", group.name],
       keywords: preset.keywords || [preset.label, type, group.name].filter(Boolean).join(" "),
@@ -4755,24 +5307,6 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => currentElement.value?.id,
-  () => {
-    const node = currentElement.value;
-    if (!node || !isElementPlusType(node.type)) return;
-    if (node.type === "Collapse") return;
-    const rawDetail = String(node.detailConfig || "").trim();
-    if (rawDetail) return;
-    const presets = resolveElementPlusDetailPresets(node.type);
-    const basicId = buildPresetId(node.type, "basic");
-    const preset = presets.find((item) => item.id === basicId) || presets[0];
-    const nextContent = preset?.content || "";
-    if (!nextContent) return;
-    editorStore.updateNode(node.id, { detailConfig: nextContent });
-  },
-  { immediate: true },
-);
-
 /**
  * 直接应用节点补丁（兜底处理编辑器状态异常）
  * @param {string} nodeId - 节点 ID
@@ -4847,7 +5381,7 @@ const currentPresetOptions = computed<AnyArray>(() => {
     if (type === "EChart")
       return echartDetailPresets.map((preset: AnyRecord) => localizePropertyPanelPreset(preset));
     if (type === "Button") {
-      return buttonDetailPresets
+      return withCommonDetailPresets(type, buttonDetailPresets)
         .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
         .map((preset: AnyRecord) => localizePropertyPanelPreset(preset))
         .map((preset: AnyRecord) => ({
@@ -4857,7 +5391,7 @@ const currentPresetOptions = computed<AnyArray>(() => {
         }));
     }
     if (type === "Text") {
-      return textDetailPresets
+      return withCommonDetailPresets(type, textDetailPresets)
         .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
         .map((preset: AnyRecord) => localizePropertyPanelPreset(preset))
         .map((preset: AnyRecord) => ({
@@ -4866,25 +5400,37 @@ const currentPresetOptions = computed<AnyArray>(() => {
           keywords: preset.keywords || [preset.label, type, "text"].filter(Boolean).join(" "),
         }));
     }
+    if (customDetailPresetMap[type]) {
+      return withCommonDetailPresets(type, customDetailPresetMap[type] as AnyArray)
+        .map((preset: AnyRecord) => normalizeDslPreset(type, preset))
+        .map((preset: AnyRecord) => localizePropertyPanelPreset(preset))
+        .map((preset: AnyRecord) => ({
+          ...preset,
+          tags: preset.tags || [type, "detail", "custom"],
+          keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
+        }));
+    }
     if (isElementPlusType(type)) return resolveElementPlusDetailPresets(type);
-    return detailPresets.map((preset: AnyRecord) => localizePropertyPanelPreset(preset));
+    return withCommonDetailPresets(type, detailPresets).map((preset: AnyRecord) =>
+      localizePropertyPanelPreset(preset),
+    );
   }
   if (type === "Button") {
-    return buttonStylePresets.map((preset: AnyRecord) => ({
+    return withCommonStylePresets(buttonStylePresets.map(withButtonRootSelectorSupport)).map((preset: AnyRecord) => ({
       ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", "button"],
       keywords: preset.keywords || [preset.label, type, "button"].filter(Boolean).join(" "),
     }));
   }
   if (type === "Text") {
-    return textStylePresets.map((preset: AnyRecord) => ({
+    return withCommonStylePresets(textStylePresets).map((preset: AnyRecord) => ({
       ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", "text"],
       keywords: preset.keywords || [preset.label, type, "text"].filter(Boolean).join(" "),
     }));
   }
   if (customStylePresetMap[type]) {
-    return (customStylePresetMap[type] as AnyArray).map((preset: AnyRecord) => ({
+    return withCommonStylePresets(customStylePresetMap[type] as AnyArray).map((preset: AnyRecord) => ({
       ...localizePropertyPanelPreset(preset),
       tags: preset.tags || [type, "style", "custom"],
       keywords: preset.keywords || [preset.label, type, "custom"].filter(Boolean).join(" "),
@@ -4947,7 +5493,16 @@ const operableSchemeId = computed<string>({
 const isElContainer = computed<boolean>(() => elementType.value === "ElContainer");
 const isEChart = computed<boolean>(() => elementType.value === "EChart");
 const isCollapseNode = computed<boolean>(() => elementType.value === "Collapse" && !!selectedNode.value);
+const isTabsNode = computed<boolean>(() => elementType.value === "Tabs" && !!selectedNode.value);
 const collapseChildNodes = computed<AnyArray>(() => {
+  const node = selectedNode.value;
+  if (!node?.id || !doc.value?.getChildren) return [];
+  return doc.value.getChildren(node.id).map((child: AnyRecord) => ({
+    id: child.id,
+    props: { ...(child.props || {}) },
+  }));
+});
+const tabsChildNodes = computed<AnyArray>(() => {
   const node = selectedNode.value;
   if (!node?.id || !doc.value?.getChildren) return [];
   return doc.value.getChildren(node.id).map((child: AnyRecord) => ({
@@ -5770,6 +6325,89 @@ const currentStyle = computed<AnyRecord>(() => {
   return selectedNode.value.style || {};
 });
 
+function resolveCanvasDomPosition(nodeId: string): { left: number; top: number } | null {
+  const rootId = currentPage.value?.rootNodeId;
+  if (!rootId || typeof document === "undefined") return null;
+  const rootEl = document.querySelector<HTMLElement>(`[data-node-id="${rootId}"]`);
+  const nodeEl = document.querySelector<HTMLElement>(`[data-node-id="${nodeId}"]`);
+  if (!rootEl || !nodeEl) return null;
+  const rootRect = rootEl.getBoundingClientRect();
+  const nodeRect = nodeEl.getBoundingClientRect();
+  const scale = rootEl.offsetWidth > 0 ? rootRect.width / rootEl.offsetWidth : 1;
+  const zoomValue = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  return {
+    left: Math.round((nodeRect.left - rootRect.left) / zoomValue),
+    top: Math.round((nodeRect.top - rootRect.top) / zoomValue),
+  };
+}
+
+/**
+ * 基础信息区展示的实际位置。
+ * 绝对定位节点读模型坐标；flow 节点读实际 DOM 坐标，和底部状态栏保持一致。
+ */
+const currentPositionStyle = computed<AnyRecord>(() => {
+  void docVersion.value;
+  void currentPage.value?.rootNodeId;
+  const node = selectedNode.value as AnyRecord | null;
+  if (node) {
+    const style = node.style || {};
+    if (node.positioning === "flow") {
+      const domPosition = node.id ? resolveCanvasDomPosition(node.id) : null;
+      if (domPosition) {
+        return {
+          ...style,
+          left: domPosition.left,
+          top: domPosition.top,
+        };
+      }
+    }
+
+    const absolutePos = node.absolutePos;
+    if (
+      absolutePos &&
+      (Number.isFinite(absolutePos.x) || Number.isFinite(absolutePos.y))
+    ) {
+      return {
+        ...style,
+        left: Number.isFinite(absolutePos.x) ? absolutePos.x : style.left,
+        top: Number.isFinite(absolutePos.y) ? absolutePos.y : style.top,
+      };
+    }
+
+    const free = node.layoutItem?.free;
+    const abs = free?.abs;
+    if (abs) {
+      return {
+        ...style,
+        left: Number.isFinite(abs.x) ? abs.x : style.left,
+        top: Number.isFinite(abs.y) ? abs.y : style.top,
+      };
+    }
+
+    const constraints = free?.constraints;
+    if (constraints) {
+      return {
+        ...style,
+        left: constraints.left ?? style.left,
+        top: constraints.top ?? style.top,
+      };
+    }
+
+    const domPosition = node.id ? resolveCanvasDomPosition(node.id) : null;
+    return domPosition ? { ...style, left: domPosition.left, top: domPosition.top } : style;
+  }
+
+  const graphic = selectedGraphic.value as AnyRecord | null;
+  if (graphic) {
+    return {
+      ...(graphic.style || {}),
+      left: graphic.x,
+      top: graphic.y,
+    };
+  }
+  return {};
+});
+
 /**
  * 处理样式变更
  * @param {Object} newStyle - 新样式
@@ -5806,11 +6444,40 @@ function handleCollapsePropsChange(propsPatch: AnyRecord) {
   editorStore.saveCurrentPageDraft?.();
 }
 
+function handleTabsPropsChange(propsPatch: AnyRecord) {
+  const node = selectedNode.value;
+  if (!node || elementType.value !== "Tabs") return;
+  const nextProps = { ...(node.props || {}), ...(propsPatch || {}) };
+  if (nextProps.type === "Tabs") {
+    delete nextProps.type;
+  }
+  // Tabs 结构由可视化表单接管；清空旧 detailConfig，避免预览/刷新时重放旧 DSL 覆盖 props。
+  const patch = { props: nextProps, detailConfig: "" };
+  const ok = editorStore.updateNode(node.id, patch);
+  if (!ok) {
+    applyNodePatch(node.id, patch);
+  }
+  docVersion.value += 1;
+  editorStore.saveCurrentPageDraft?.();
+}
+
 /**
  * 同步折叠项标识变更到直接子组件的 collapseKey。
  * @param {{id: string, props: Record<string, unknown>}[]} patches - 子组件 props 补丁列表
  */
 function handleCollapseChildPatches(patches: AnyArray) {
+  patches.forEach((item) => {
+    if (!item?.id || !item.props) return;
+    const patch = { props: item.props };
+    const ok = editorStore.updateNode(item.id, patch);
+    if (!ok) {
+      applyNodePatch(item.id, patch);
+    }
+  });
+  editorStore.saveCurrentPageDraft?.();
+}
+
+function handleTabsChildPatches(patches: AnyArray) {
   patches.forEach((item) => {
     if (!item?.id || !item.props) return;
     const patch = { props: item.props };
@@ -5832,33 +6499,9 @@ function openConfigDialog(type: "style" | "detail") {
   if (configDialogType.value === "detail") {
     const node = selectedNode.value;
     if (node?.type === "EChart") {
-      const rawOption = node?.props?.option || "";
-      if (!rawOption) {
-        const preset = echartDetailPresets[0];
-        const nextContent = preset?.content || "";
-        configDraft.value = nextContent;
-        if (nextContent) {
-          editorStore.updateNode(node.id, {
-            props: { ...(node.props || {}), option: nextContent },
-          });
-        }
-      } else {
-        configDraft.value = String(rawOption || "");
-      }
+      configDraft.value = String(node?.props?.option || "");
     } else {
-      const rawDetail = node.detailConfig || "";
-      if (!rawDetail && isElementPlusType(node.type)) {
-        const presets = resolveElementPlusDetailPresets(node.type);
-        const basicId = buildPresetId(node.type, "basic");
-        const preset = presets.find((item) => item.id === basicId) || presets[0];
-        const nextContent = preset?.content || "";
-        configDraft.value = nextContent;
-        if (nextContent) {
-          editorStore.updateNode(node.id, { detailConfig: nextContent });
-        }
-      } else {
-        configDraft.value = String(rawDetail || "");
-      }
+      configDraft.value = String(node.detailConfig || "");
     }
   } else {
     configDraft.value = selectedNode.value.styleConfig || "";
@@ -5882,6 +6525,11 @@ function saveConfigDialog(): void {
   } else if (!isEChart.value) {
     content = normalizeDetailConfigBindings(content);
     configDraft.value = content;
+    if (!content.trim()) {
+      resetNodeDetailToDefault(node);
+      configDialogVisible.value = false;
+      return;
+    }
     const validation = validateDetailConfig(content);
     if (!validation.valid) {
       ElMessage.warning({
@@ -5985,7 +6633,7 @@ function clearConfigDialog() {
         props: { ...(node.props || {}), option: "" },
       });
     } else {
-      editorStore.updateNode(node.id, { detailConfig: "" });
+      resetNodeDetailToDefault(node);
     }
   } else {
     editorStore.updateNode(node.id, { styleConfig: "" });
@@ -6434,7 +7082,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
         v-model:description="elementDescription"
         :element-type="elementType"
         :element-id="elementId"
-        :current-style="currentStyle"
+        :current-style="currentPositionStyle"
         @label-commit="handleLabelChange"
         @description-commit="handleDescriptionChange"
       />
@@ -6490,6 +7138,13 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
         :child-nodes="collapseChildNodes"
         @props-change="handleCollapsePropsChange"
         @child-patches="handleCollapseChildPatches"
+      />
+      <TabsItemsEditor
+        v-else-if="isTabsNode"
+        :node-props="selectedNode?.props || {}"
+        :child-nodes="tabsChildNodes"
+        @props-change="handleTabsPropsChange"
+        @child-patches="handleTabsChildPatches"
       />
       <template v-else-if="layoutForceProps.length > 0">
         <PropertyPanelLayoutForceSection

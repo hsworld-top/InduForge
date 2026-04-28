@@ -46,9 +46,16 @@ export const manifest: ComponentManifest = {
       type: "number",
       label: "间距",
       group: "布局",
-      defaultValue: 10,
+      defaultValue: 0,
       min: 0,
       max: 100,
+    },
+    {
+      name: "showBorder",
+      type: "boolean",
+      label: "显示边框",
+      group: "样式",
+      defaultValue: false,
     },
   ],
 };

@@ -266,6 +266,7 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
       $event: event,
       $global: globals,
       customScripts,
+      components: instance || {},
       console,
     };
 
@@ -310,6 +311,7 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
         $event: { type: "detail" },
         $global: globals,
         customScripts,
+        components: instance || {},
         console,
       };
       const keys = Object.keys(context);
@@ -330,8 +332,9 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
   const scheduleDetailConfig = (force = false): void => {
     const code = detailConfigText?.value;
     if (!code) return;
-    // Collapse 的面板结构已迁移到可视化 props.items；旧 detailConfig 自动重放会覆盖用户配置。
+    // Collapse/Tabs 的结构已迁移到可视化 props；旧 detailConfig 自动重放会覆盖用户配置。
     if (node.value?.type === "Collapse" && Array.isArray(node.value?.props?.items)) return;
+    if (node.value?.type === "Tabs" && Array.isArray(node.value?.props?.tabs)) return;
     const key = `${node.value?.id || ""}::${code}`;
     if (!force && key === lastDetailConfigKey) return;
     lastDetailConfigKey = key;
@@ -361,6 +364,9 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
       if (!payload || payload.nodeId !== node.value?.id) return;
       const code = String(payload.code || "").trim();
       if (!code) return;
+      // Collapse/Tabs 的结构配置由属性面板直接落到 props，避免事件重放把 DSL 顶层字段写回 props。
+      if (node.value?.type === "Collapse" && Array.isArray(node.value?.props?.items)) return;
+      if (node.value?.type === "Tabs" && Array.isArray(node.value?.props?.tabs)) return;
       void runDetailConfigScript(code);
     };
     window.addEventListener("designer:detail-config", detailConfigListener);

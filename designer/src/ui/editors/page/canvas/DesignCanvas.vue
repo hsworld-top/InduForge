@@ -23,6 +23,8 @@ import IconEpPlus from "~icons/ep/plus";
 import IconEpRefreshLeft from "~icons/ep/refresh-left";
 import IconEpRefreshRight from "~icons/ep/refresh-right";
 import IconEpTop from "~icons/ep/top";
+import IconLucidePin from "~icons/lucide/pin";
+import IconLucidePinOff from "~icons/lucide/pin-off";
 import { isContainerType } from "@/editor-core/descriptors/registry";
 import { createSelectableElement } from "@/editor-core/document/types";
 import { resolvePlacement } from "@/editor-core/utils/placement-resolver";
@@ -368,6 +370,23 @@ const hasSelection = computed(() => {
   return (selection.value?.getSelectedElements?.() ?? []).length > 0;
 });
 
+const selectedLockTargets = computed(() => {
+  void selectionVersion.value;
+  void docVersion.value;
+  const rootId = currentPage.value?.rootNodeId;
+  return (selection.value?.getSelectedElements?.() ?? [])
+    .filter((item) => item.kind === "node" && item.id !== rootId)
+    .map((item) => doc.value?.getNode?.(item.id))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+});
+
+const canToggleSelectedLock = computed(() => selectedLockTargets.value.length > 0);
+
+const selectedNodesAllLocked = computed(() => {
+  const targets = selectedLockTargets.value;
+  return targets.length > 0 && targets.every((item) => Boolean(item.locked));
+});
+
 const isElColSelected = computed(() => {
   void selectionVersion.value;
   const primary = selection.value?.getPrimarySelection?.();
@@ -625,6 +644,14 @@ function handleMoveToBottom() {
 }
 
 /**
+ * 切换选中节点的位置锁定状态
+ */
+function handleToggleSelectedLock() {
+  editorStore.toggleSelectedNodesLock();
+  closeContextMenu();
+}
+
+/**
  * 在选中列左侧插入一列
  */
 function handleInsertColLeft() {
@@ -690,7 +717,23 @@ function handleClickOutside(_event: MouseEvent): void {
 function isEditableInputTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+  return Boolean(
+    target.closest(
+      [
+        "input",
+        "textarea",
+        "select",
+        '[contenteditable="true"]',
+        ".monaco-editor",
+        ".monaco-editor-container",
+        ".monaco-editor-context-menu",
+        ".el-dialog",
+        ".el-overlay",
+        ".el-select__popper",
+        ".el-picker__popper",
+      ].join(", "),
+    ),
+  );
 }
 
 /**
@@ -741,6 +784,8 @@ onBeforeUnmount(() => {
  * @param {KeyboardEvent} event - 键盘事件
  */
 function handleKeyDown(event: KeyboardEvent): void {
+  if (isEditableInputTarget(event.target)) return;
+
   // 方向键移动选中节点，Shift 微调 1px
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
     event.preventDefault();
@@ -820,10 +865,7 @@ function handleKeyDown(event: KeyboardEvent): void {
   // Ctrl+L 切换锁定/解锁
   if ((event.ctrlKey || event.metaKey) && event.key === "l") {
     event.preventDefault();
-    const primary = selection.value?.getPrimaryElement();
-    if (primary && primary.kind === "node") {
-      editorStore.toggleNodeLock(primary.id);
-    }
+    editorStore.toggleSelectedNodesLock();
     return;
   }
 
@@ -886,6 +928,13 @@ function handleKeyDown(event: KeyboardEvent): void {
           <span>删除</span>
           <span class="shortcut">Del</span>
         </div>
+        <div v-if="canToggleSelectedLock" class="menu-item" @click="handleToggleSelectedLock">
+          <IconLucidePinOff v-if="selectedNodesAllLocked" />
+          <IconLucidePin v-else />
+          <span>{{ selectedNodesAllLocked ? "解锁位置" : "锁定位置" }}</span>
+          <span class="shortcut">Ctrl+L</span>
+        </div>
+        <div v-if="hasSelection" class="menu-divider"></div>
         <div v-if="hasSelection" class="menu-item" @click="handleMoveUp">
           <IconEpTop />
           <span>上移一层</span>
