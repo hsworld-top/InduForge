@@ -72,6 +72,28 @@
           connection.mqttConfig.cleanSession ? t("common.yes") : t("common.no")
         }}</el-descriptions-item>
       </template>
+      <template
+        v-if="
+          [
+            'kafka',
+            'http',
+            'websocket',
+            'redis',
+            'opcua',
+            's7',
+            'modbus',
+            'tdengine',
+          ].includes(connection.type) && connection.config
+        "
+      >
+        <el-descriptions-item
+          v-for="item in protocolConfigRows"
+          :key="item.label"
+          :label="item.label"
+        >
+          {{ item.value }}
+        </el-descriptions-item>
+      </template>
       <el-descriptions-item :label="t('connection.createdAt')">{{
         formatDate(connection.createdAt)
       }}</el-descriptions-item>
@@ -119,12 +141,90 @@ const getConnectionTypeLabel = (type) => {
   const labels = {
     relational: t("connection.relational"),
     mqtt: "MQTT",
+    kafka: "Kafka",
     websocket: "WebSocket",
+    redis: "Redis",
     opcua: "OPC UA",
     http: "HTTP",
+    s7: "Siemens S7",
+    modbus: "Modbus",
+    tdengine: "TDengine",
   };
   return labels[type] || type;
 };
+
+const protocolConfigRows = computed(() => {
+  const config = props.connection?.config || {};
+  switch (props.connection?.type) {
+    case "kafka":
+      return [
+        { label: "Broker", value: config.brokers || "-" },
+        { label: "Topic", value: config.topic || "-" },
+        { label: "Consumer Group", value: config.consumerGroup || "-" },
+      ];
+    case "http":
+      return [
+        { label: "Method", value: config.method || "GET" },
+        { label: "URL", value: config.baseUrl || "-" },
+      ];
+    case "websocket":
+      return [
+        { label: "URL", value: config.url || "-" },
+        { label: "Topic", value: config.topic || "-" },
+      ];
+    case "redis":
+      return [
+        { label: "Mode", value: config.mode || "standalone" },
+        { label: "Address", value: config.address || "-" },
+        { label: "Key Pattern", value: config.keyPattern || "*" },
+      ];
+    case "opcua":
+      return [
+        { label: "Endpoint", value: config.endpoint || "-" },
+        { label: "Security Policy", value: config.securityPolicy || "None" },
+        { label: "Security Mode", value: config.securityMode || "none" },
+        { label: "Auth Type", value: config.authType || "anonymous" },
+        {
+          label: "Sampling",
+          value: config.samplingMs ? `${config.samplingMs}ms` : "-",
+        },
+      ];
+    case "s7":
+      return [
+        { label: "Host", value: config.host || "-" },
+        { label: "Port", value: config.port || 102 },
+        { label: "Rack", value: config.rack ?? 0 },
+        { label: "Slot", value: config.slot ?? 1 },
+        {
+          label: "Poll Interval",
+          value: config.pollIntervalMs ? `${config.pollIntervalMs}ms` : "-",
+        },
+      ];
+    case "modbus":
+      return [
+        { label: "Mode", value: config.mode || "tcp" },
+        {
+          label: "Host",
+          value: config.mode === "rtu" ? "RTU 串口" : config.host || "-",
+        },
+        {
+          label: "Port",
+          value: config.mode === "rtu" ? "-" : config.port || 502,
+        },
+        { label: "Slave ID", value: config.slaveId ?? 1 },
+        { label: "Address", value: config.startAddress ?? 0 },
+        { label: "Quantity", value: config.quantity ?? 1 },
+      ];
+    case "tdengine":
+      return [
+        { label: "DSN", value: config.dsn || "-" },
+        { label: "Database", value: config.database || "-" },
+        { label: "Timezone", value: config.timezone || "-" },
+      ];
+    default:
+      return [];
+  }
+});
 
 const getStatusLabel = (status) => {
   const normalized = ["connected", "disconnected", "error"].includes(status)

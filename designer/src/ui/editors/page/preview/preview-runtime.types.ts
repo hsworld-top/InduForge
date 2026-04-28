@@ -116,6 +116,7 @@ export interface UsePreviewDatacenterApi {
 export interface UsePreviewNodeShape {
   id?: string;
   type?: string;
+  props?: Record<string, unknown>;
   events?: Record<string, unknown[]>;
 }
 

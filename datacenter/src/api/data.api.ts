@@ -39,6 +39,86 @@ export const testConnection = (projectId, data) => {
   });
 };
 
+export const createKafkaConfig = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/kafka/configs`,
+    method: "post",
+    data,
+  });
+};
+
+export const createHttpConfig = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/http/configs`,
+    method: "post",
+    data,
+  });
+};
+
+export const createWebSocketConfig = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/websocket/configs`,
+    method: "post",
+    data,
+  });
+};
+
+export const createRedisConfig = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/redis/configs`,
+    method: "post",
+    data,
+  });
+};
+
+export const createOpcuaConfig = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/configs`,
+    method: "post",
+    data,
+  });
+};
+
+export const createS7Config = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/configs`,
+    method: "post",
+    data,
+  });
+};
+
+export const createModbusConfig = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/configs`,
+    method: "post",
+    data,
+  });
+};
+
+export const createTdengineConfig = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/tdengine/configs`,
+    method: "post",
+    data,
+  });
+};
+
+export const validateOpcdaContract = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/opcda/contracts/validate`,
+    method: "post",
+    data,
+  });
+};
+
+export const previewProtocol = (projectId, connectionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/protocols/${connectionId}/preview`,
+    method: "post",
+    data,
+  });
+};
+
 export const getConnectionTables = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
@@ -221,6 +301,20 @@ export const getDataPoints = (projectId, params = {}) => {
     url: `/data/projects/${projectId}/datapoints`,
     method: "get",
     params,
+  });
+};
+
+/**
+ * 更新数据点
+ * @param {string} projectId - 工程ID
+ * @param {string} datapointId - 数据点ID
+ * @param {object} data - 数据点更新数据
+ */
+export const updateDataPoint = (projectId, datapointId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}`,
+    method: "put",
+    data,
   });
 };
 
@@ -693,6 +787,16 @@ export default {
   getConnections,
   createConnection,
   testConnection,
+  createKafkaConfig,
+  createHttpConfig,
+  createWebSocketConfig,
+  createRedisConfig,
+  createOpcuaConfig,
+  createS7Config,
+  createModbusConfig,
+  createTdengineConfig,
+  validateOpcdaContract,
+  previewProtocol,
   getConnectionTables,
   getTableData,
   getTableStructure,
@@ -702,6 +806,7 @@ export default {
   getQueries,
   createQuery,
   updateQuery,
+  updateDataPoint,
   executeQuery,
   executeSql,
   deleteQuery,

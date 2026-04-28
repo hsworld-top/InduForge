@@ -206,7 +206,7 @@ export function useNodeRendererDerivations({
   });
 
   const collapseItems = computed(() => {
-    return normalizeOptions(node.value?.props?.items, fallbackCollapseItems, {
+    return normalizeOptions(_collapseItems.value, fallbackCollapseItems, {
       fallbackWhenEmpty: true,
     });
   });

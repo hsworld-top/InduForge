@@ -80,9 +80,12 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
   display: flex;
   flex-direction: column;
   gap: var(--designer-gap-md, 12px);
+  min-width: 0;
 }
 
 .panel-section {
+  box-sizing: border-box;
+  min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--designer-border-color);
   border-radius: var(--designer-radius-md);
@@ -103,6 +106,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
   display: flex;
   flex-direction: column;
   gap: var(--designer-gap-xs);
+  min-width: 0;
 }
 
 .config-entry {
@@ -110,6 +114,9 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
   align-items: center;
   justify-content: center;
   gap: var(--designer-gap-xs);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   height: 28px;
   padding: 0 10px;
   border: 1px solid var(--designer-border-color);

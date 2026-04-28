@@ -696,9 +696,11 @@ async function handleRefreshPreviewUsers(): Promise<void> {
   }
 }
 
-function handlePreview() {
+async function handlePreview() {
+  await nextTick();
+  editorStore.saveCurrentPageDraft();
   const projectId = (route.meta as DesignerRouteProjectMeta).project?.id;
-  router.push({
+  await router.push({
     path: "/preview",
     query: {
       pid: projectId,
@@ -1169,7 +1171,14 @@ watch(
 async function loadProject() {
   const project = (route.meta as DesignerRouteProjectMeta).project;
   if (!project?.id) return;
+  const targetPageId = String(route.query.pageId || "");
   if (editorStore.projectId === project.id && editorStore.doc) {
+    if (
+      targetPageId &&
+      (targetPageId !== currentPageId.value || editorStore.getPageDraft?.(targetPageId))
+    ) {
+      await editorStore.loadPage(targetPageId);
+    }
     await handleRefreshPreviewUsers();
     restorePreviewRuntimeUser(project.id);
     ensureDefaultPreviewRuntimeUser();
@@ -1182,9 +1191,8 @@ async function loadProject() {
   }
   restorePreviewRuntimeUser(project.id);
   ensureDefaultPreviewRuntimeUser();
-  const targetPageId = String(route.query.pageId || "");
   if (targetPageId) {
-    await editorStore.setCurrentPage(targetPageId);
+    await editorStore.loadPage(targetPageId);
   }
 }
 

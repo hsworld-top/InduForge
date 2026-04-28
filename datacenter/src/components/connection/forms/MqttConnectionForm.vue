@@ -3,7 +3,7 @@
     ref="formRef"
     :model="formData"
     :rules="rules"
-    label-width="140px"
+    label-position="top"
     class="mqtt-connection-form"
   >
     <!-- 基础信息 -->
@@ -18,32 +18,32 @@
         />
       </el-form-item>
 
-      <el-form-item :label="t('connection.brokerUrl')" prop="brokerUrl">
-        <el-input
-          v-model="formData.brokerUrl"
-          placeholder="例如: broker.emqx.io"
-          clearable
-        >
-          <template #prepend>
-            <el-select v-model="formData.protocol" style="width: 90px">
-              <el-option label="mqtt://" value="mqtt" />
-              <el-option label="mqtts://" value="mqtts" />
-              <el-option label="ws://" value="ws" />
-              <el-option label="wss://" value="wss" />
-            </el-select>
-          </template>
-        </el-input>
-      </el-form-item>
+      <div class="mqtt-connection-form__grid">
+        <el-form-item :label="t('connection.brokerUrl')" prop="brokerUrl">
+          <el-input
+            v-model="formData.brokerUrl"
+            placeholder="例如: broker.emqx.io"
+            clearable
+          >
+            <template #prepend>
+              <el-select v-model="formData.protocol" style="width: 90px">
+                <el-option label="mqtt://" value="mqtt" />
+                <el-option label="mqtts://" value="mqtts" />
+                <el-option label="ws://" value="ws" />
+                <el-option label="wss://" value="wss" />
+              </el-select>
+            </template>
+          </el-input>
+        </el-form-item>
 
-      <el-form-item :label="t('connection.port')" prop="port">
-        <el-input-number
-          v-model="formData.port"
-          :min="1"
-          :max="65535"
-          :placeholder="t('connection.port')"
-          style="width: 100%"
-        />
-      </el-form-item>
+        <el-form-item :label="t('connection.port')" prop="port">
+          <el-input
+            v-model.number="formData.port"
+            inputmode="numeric"
+            :placeholder="t('connection.port')"
+          />
+        </el-form-item>
+      </div>
 
       <el-form-item :label="t('connection.clientId')" prop="clientId">
         <el-input
@@ -64,25 +64,27 @@
     <div class="form-section">
       <div class="form-section-title">{{ t("connection.authInfo") }}</div>
 
-      <el-form-item :label="t('connection.username')">
-        <el-input
-          v-model="formData.username"
-          :placeholder="t('connection.optional')"
-          clearable
-          autocomplete="off"
-        />
-      </el-form-item>
+      <div class="mqtt-connection-form__grid">
+        <el-form-item :label="t('connection.username')">
+          <el-input
+            v-model="formData.username"
+            :placeholder="t('connection.optional')"
+            clearable
+            autocomplete="off"
+          />
+        </el-form-item>
 
-      <el-form-item :label="t('connection.password')">
-        <el-input
-          v-model="formData.password"
-          type="password"
-          :placeholder="t('connection.optional')"
-          clearable
-          show-password
-          autocomplete="new-password"
-        />
-      </el-form-item>
+        <el-form-item :label="t('connection.password')">
+          <el-input
+            v-model="formData.password"
+            type="password"
+            :placeholder="t('connection.optional')"
+            clearable
+            show-password
+            autocomplete="new-password"
+          />
+        </el-form-item>
+      </div>
     </div>
 
     <!-- 连接参数 -->
@@ -97,16 +99,27 @@
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item :label="t('connection.keepAlive')">
-        <el-input-number
-          v-model="formData.keepalive"
-          :min="10"
-          :max="300"
-          :placeholder="t('common.seconds')"
-          style="width: 100%"
-        />
-        <span class="form-item-tip">{{ t("connection.keepAliveHint") }}</span>
-      </el-form-item>
+      <div class="mqtt-connection-form__grid">
+        <el-form-item :label="t('connection.keepAlive')">
+          <el-input
+            v-model.number="formData.keepalive"
+            inputmode="numeric"
+            placeholder="60"
+          >
+            <template #append>{{ t("common.seconds") }}</template>
+          </el-input>
+        </el-form-item>
+
+        <el-form-item :label="t('connection.connectionTimeout')">
+          <el-input
+            v-model.number="formData.connectTimeout"
+            inputmode="numeric"
+            placeholder="30000"
+          >
+            <template #append>{{ t("common.milliseconds") }}</template>
+          </el-input>
+        </el-form-item>
+      </div>
 
       <el-form-item :label="t('connection.cleanSession')">
         <el-switch v-model="formData.cleanSession" />
@@ -115,28 +128,14 @@
         </span>
       </el-form-item>
 
-      <el-form-item :label="t('connection.connectionTimeout')">
-        <el-input-number
-          v-model="formData.connectTimeout"
-          :min="1000"
-          :max="60000"
-          :step="1000"
-          :placeholder="t('common.milliseconds')"
-          style="width: 100%"
-        />
-        <span class="form-item-tip">{{ t("connection.timeoutHint") }}</span>
-      </el-form-item>
-
       <el-form-item :label="t('connection.reconnectPeriod')">
-        <el-input-number
-          v-model="formData.reconnectPeriod"
-          :min="1000"
-          :max="60000"
-          :step="1000"
-          :placeholder="t('common.milliseconds')"
-          style="width: 100%"
-        />
-        <span class="form-item-tip">{{ t("connection.timeoutHint") }}</span>
+        <el-input
+          v-model.number="formData.reconnectPeriod"
+          inputmode="numeric"
+          placeholder="5000"
+        >
+          <template #append>{{ t("common.milliseconds") }}</template>
+        </el-input>
       </el-form-item>
     </div>
 
@@ -455,6 +454,16 @@ defineExpose({
   margin-left: 8px;
 }
 
+.mqtt-connection-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.mqtt-connection-form__grid > .el-form-item {
+  min-width: 0;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -469,5 +478,11 @@ defineExpose({
 
 :deep(.el-radio) {
   margin-right: 20px;
+}
+
+@media (max-width: 760px) {
+  .mqtt-connection-form__grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

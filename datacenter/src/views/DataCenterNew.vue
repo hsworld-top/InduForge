@@ -4,30 +4,38 @@
     :modules="datacenterModules"
   >
     <template #actions="{ activeModule: currentModule }">
-      <div class="flex flex-wrap justify-end gap-2">
-        <el-button size="small" @click="showDataContractCheckDialog = true">
-          <IconTablerShieldCheck class="mr-1 h-4 w-4" />
-          数据契约检查
-        </el-button>
+      <div class="datacenter-side-actions">
+        <button
+          type="button"
+          class="datacenter-side-action"
+          title="数据契约检查"
+          aria-label="数据契约检查"
+          @click="showDataContractCheckDialog = true"
+        >
+          <IconTablerShieldCheck class="h-5 w-5" />
+          <span>数据契约检查</span>
+        </button>
         <template v-if="currentModule === 'access-sources'">
-          <el-button
-            v-if="showAccessSourceLegacyWorkbench"
-            size="small"
-            @click="showAccessSourceLegacyWorkbench = false"
+          <button
+            type="button"
+            class="datacenter-side-action"
+            :title="t('actions.refresh')"
+            :aria-label="t('actions.refresh')"
+            @click="loadConnections"
           >
-            接入源概览
-          </el-button>
-          <el-button size="small" @click="loadConnections">
-            {{ t("actions.refresh") }}
-          </el-button>
-          <el-button
-            type="primary"
-            size="small"
+            <IconTablerRefresh class="h-5 w-5" />
+            <span>{{ t("actions.refresh") }}</span>
+          </button>
+          <button
+            type="button"
+            class="datacenter-side-action is-primary"
+            :title="t('actions.createConnection')"
+            :aria-label="t('actions.createConnection')"
             @click="openCreateConnectionDialog"
           >
-            <IconTablerPlus class="mr-1 h-4 w-4" />
-            {{ t("actions.createConnection") }}
-          </el-button>
+            <IconTablerPlus class="h-5 w-5" />
+            <span>{{ t("actions.createConnection") }}</span>
+          </button>
         </template>
       </div>
     </template>
@@ -39,16 +47,31 @@
 
     <template v-else-if="activeModule === 'access-sources'">
       <AccessSourceWorkspace
-        v-if="!showAccessSourceLegacyWorkbench && projectId"
+        v-if="!showAccessSourceLegacyWorkbench"
         :connections="connections"
         :selected-connection-id="selectedConnectionId"
         :project-id="projectId"
         @create="openCreateConnectionDialog"
         @refresh="loadConnections"
         @open="handleAccessSourceOpen"
+        @edit="handleEditConnection"
       />
 
-      <!-- 旧连接树与统一标签页仍完整保留；从新工作区打开连接后进入这里。 -->
+      <SqlQueryWorkbench
+        v-else-if="sqlWorkbenchConnection && projectId"
+        :project-id="projectId"
+        :connection="sqlWorkbenchConnection"
+        @back="returnToAccessSourceOverview"
+      />
+
+      <MqttWorkbench
+        v-else-if="mqttWorkbenchConnection && projectId"
+        :project-id="projectId"
+        :connection="mqttWorkbenchConnection"
+        @back="returnToAccessSourceOverview"
+      />
+
+      <!-- MQTT 等非 SQL 工作台仍复用原标签页能力。 -->
       <div v-else class="data-center h-full flex overflow-hidden">
         <!-- 左侧连接面板 -->
         <ConnectionList
@@ -77,221 +100,226 @@
           @alarmunit-open="handleOpenAlarmUnitList"
         />
 
-    <!-- 右侧内容区域 - 统一标签页系统 -->
-    <div
-      class="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden"
-    >
-      <template v-if="tabs.length > 0">
-        <el-tabs
-          ref="tabsRef"
-          v-model="activeTabId"
-          closable
-          class="query-tabs flex-1 flex flex-col overflow-hidden"
-          @tab-remove="handleCloseTab"
-          @tab-click="handleTabClick"
+        <!-- 右侧内容区域 - 统一标签页系统 -->
+        <div
+          class="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden"
         >
-          <el-tab-pane
-            v-for="tab in tabs"
-            :key="tab.id"
-            :name="tab.id"
-            :closable="tab.closable"
-            class="flex-1 flex flex-col overflow-hidden"
-          >
-            <template #label>
-              <span class="flex items-center">
-                <component
-                  :is="tab.icon"
-                  v-if="tab.icon"
-                  class="mr-1 w-4 h-4"
-                />
-                <span>{{ tab.label }}</span>
-                <IconTablerAlertCircle
-                  v-if="tab.modified"
-                  class="ml-1 text-orange-500 w-3 h-3"
-                />
-              </span>
-            </template>
-
-            <!-- 表列表内容 -->
-            <div
-              v-if="tab.type === 'table-list'"
-              class="flex-1 flex flex-col overflow-hidden"
+          <template v-if="tabs.length > 0">
+            <el-tabs
+              ref="tabsRef"
+              v-model="activeTabId"
+              closable
+              class="query-tabs flex-1 flex flex-col overflow-hidden"
+              @tab-remove="handleCloseTab"
+              @tab-click="handleTabClick"
             >
-              <div
-                class="table-toolbar flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              <el-tab-pane
+                v-for="tab in tabs"
+                :key="tab.id"
+                :name="tab.id"
+                :closable="tab.closable"
+                class="flex-1 flex flex-col overflow-hidden"
               >
-                <div class="text-sm text-gray-700 dark:text-gray-300">
-                  {{ tab.connection.name }} - {{ t("tabs.tableList") }}
-                </div>
-                <div class="space-x-2">
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click="createNewQuery(tab.connection)"
+                <template #label>
+                  <span class="flex items-center">
+                    <component
+                      :is="tab.icon"
+                      v-if="tab.icon"
+                      class="mr-1 w-4 h-4"
+                    />
+                    <span>{{ tab.label }}</span>
+                    <IconTablerAlertCircle
+                      v-if="tab.modified"
+                      class="ml-1 text-orange-500 w-3 h-3"
+                    />
+                  </span>
+                </template>
+
+                <!-- 表列表内容 -->
+                <div
+                  v-if="tab.type === 'table-list'"
+                  class="flex-1 flex flex-col overflow-hidden"
+                >
+                  <div
+                    class="table-toolbar flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
                   >
-                    <IconTablerPlus class="mr-1 w-4 h-4" />
-                    {{ t("actions.newQuery") }}
-                  </el-button>
+                    <div class="text-sm text-gray-700 dark:text-gray-300">
+                      {{ tab.connection.name }} - {{ t("tabs.tableList") }}
+                    </div>
+                    <div class="space-x-2">
+                      <el-button
+                        type="primary"
+                        size="small"
+                        @click="createNewQuery(tab.connection)"
+                      >
+                        <IconTablerPlus class="mr-1 w-4 h-4" />
+                        {{ t("actions.newQuery") }}
+                      </el-button>
+                    </div>
+                  </div>
+                  <div class="flex-1 overflow-y-auto p-4 min-h-0">
+                    <MysqlTableList
+                      v-if="tab.connection.relationalConfig?.dbType === 'mysql'"
+                      :connection-id="tab.connection.id"
+                      @table-select="
+                        (tableName) =>
+                          createQueryFromTable(tab.connection, tableName)
+                      "
+                    />
+                    <PostgresTableList
+                      v-else-if="
+                        tab.connection.relationalConfig?.dbType === 'postgresql'
+                      "
+                      :connection-id="tab.connection.id"
+                      @table-select="
+                        (tableName) =>
+                          createQueryFromTable(tab.connection, tableName)
+                      "
+                    />
+                    <SqlServerTableList
+                      v-else-if="
+                        tab.connection.relationalConfig?.dbType === 'sqlserver'
+                      "
+                      :connection-id="tab.connection.id"
+                      @table-select="
+                        (tableName) =>
+                          createQueryFromTable(tab.connection, tableName)
+                      "
+                    />
+                  </div>
                 </div>
-              </div>
-              <div class="flex-1 overflow-y-auto p-4 min-h-0">
-                <MysqlTableList
-                  v-if="tab.connection.relationalConfig?.dbType === 'mysql'"
-                  :connection-id="tab.connection.id"
-                  @table-select="
-                    (tableName) =>
-                      createQueryFromTable(tab.connection, tableName)
-                  "
-                />
-                <PostgresTableList
-                  v-else-if="
-                    tab.connection.relationalConfig?.dbType === 'postgresql'
-                  "
-                  :connection-id="tab.connection.id"
-                  @table-select="
-                    (tableName) =>
-                      createQueryFromTable(tab.connection, tableName)
-                  "
-                />
-                <SqlServerTableList
-                  v-else-if="
-                    tab.connection.relationalConfig?.dbType === 'sqlserver'
-                  "
-                  :connection-id="tab.connection.id"
-                  @table-select="
-                    (tableName) =>
-                      createQueryFromTable(tab.connection, tableName)
-                  "
-                />
-              </div>
-            </div>
 
-            <!-- 数据点列表 -->
-            <div
-              v-else-if="tab.type === 'datapoints'"
-              class="flex-1 flex flex-col overflow-hidden"
-            >
-              <DataPointList
-                :ref="(el) => setDataPointListRef(tab.id, el)"
-                :project-id="projectId"
-              />
-            </div>
+                <!-- 数据点列表 -->
+                <div
+                  v-else-if="tab.type === 'datapoints'"
+                  class="flex-1 flex flex-col overflow-hidden"
+                >
+                  <DataPointList
+                    :ref="(el) => setDataPointListRef(tab.id, el)"
+                    :project-id="projectId"
+                  />
+                </div>
 
-            <!-- 计算单元 -->
-            <div
-              v-else-if="tab.type === 'calc-units'"
-              class="flex-1 flex flex-col overflow-hidden"
-            >
-              <ComputeUnitPanel :project-id="projectId" />
-            </div>
+                <!-- 计算单元 -->
+                <div
+                  v-else-if="tab.type === 'calc-units'"
+                  class="flex-1 flex flex-col overflow-hidden"
+                >
+                  <ComputeUnitPanel :project-id="projectId" />
+                </div>
 
-            <!-- 报警单元 -->
-            <div
-              v-else-if="tab.type === 'alarm-units'"
-              class="module-card flex-1 overflow-hidden p-5"
-            >
-              <AlarmWorkspace v-if="projectId" :project-id="projectId" />
-            </div>
+                <!-- 报警单元 -->
+                <div
+                  v-else-if="tab.type === 'alarm-units'"
+                  class="module-card flex-1 overflow-hidden p-5"
+                >
+                  <AlarmWorkspace v-if="projectId" :project-id="projectId" />
+                </div>
 
-            <!-- SQL 查询编辑器 -->
-            <div
-              v-else-if="tab.type === 'query'"
-              class="flex-1 flex flex-col overflow-y-auto p-4"
-            >
-              <MysqlQueryEditor
-                v-if="tab.connection.relationalConfig?.dbType === 'mysql'"
-                :tab="tab"
-                @execute="handleQueryExecute"
-                @save="handleQuerySave"
-              />
-              <PostgresQueryEditor
-                v-else-if="
-                  tab.connection.relationalConfig?.dbType === 'postgresql'
-                "
-                :tab="tab"
-                @execute="handleQueryExecute"
-                @save="handleQuerySave"
-              />
-              <SqlServerQueryEditor
-                v-else-if="
-                  tab.connection.relationalConfig?.dbType === 'sqlserver'
-                "
-                :tab="tab"
-                @execute="handleQueryExecute"
-                @save="handleQuerySave"
-              />
-            </div>
+                <!-- SQL 查询编辑器 -->
+                <div
+                  v-else-if="tab.type === 'query'"
+                  class="flex-1 flex flex-col overflow-y-auto p-4"
+                >
+                  <MysqlQueryEditor
+                    v-if="tab.connection.relationalConfig?.dbType === 'mysql'"
+                    :tab="tab"
+                    @execute="handleQueryExecute"
+                    @save="handleQuerySave"
+                  />
+                  <PostgresQueryEditor
+                    v-else-if="
+                      tab.connection.relationalConfig?.dbType === 'postgresql'
+                    "
+                    :tab="tab"
+                    @execute="handleQueryExecute"
+                    @save="handleQuerySave"
+                  />
+                  <SqlServerQueryEditor
+                    v-else-if="
+                      tab.connection.relationalConfig?.dbType === 'sqlserver'
+                    "
+                    :tab="tab"
+                    @execute="handleQueryExecute"
+                    @save="handleQuerySave"
+                  />
+                </div>
 
-            <!-- MQTT订阅列表 -->
-            <div
-              v-else-if="tab.type === 'mqtt-subscriptions'"
-              class="flex-1 flex flex-col overflow-hidden"
-            >
-              <MqttSubscriptionList
-                :ref="(el) => setSubscriptionListRef(tab.id, el)"
-                :connection-id="tab.connectionId"
-                :project-id="projectId"
-                @view-messages="
-                  (subscription) =>
-                    openMqttMessageViewer(tab.connection, subscription)
-                "
-                @manage-tags="
-                  (subscription) =>
-                    openMqttTagManager(tab.connection, subscription)
-                "
-                @subscription-deleted="
-                  (subscription) =>
-                    handleMqttSubscriptionDeleted(tab.connection, subscription)
-                "
-              />
-            </div>
+                <!-- MQTT订阅列表 -->
+                <div
+                  v-else-if="tab.type === 'mqtt-subscriptions'"
+                  class="flex-1 flex flex-col overflow-hidden"
+                >
+                  <MqttSubscriptionList
+                    :ref="(el) => setSubscriptionListRef(tab.id, el)"
+                    :connection-id="tab.connectionId"
+                    :project-id="projectId"
+                    @view-messages="
+                      (subscription) =>
+                        openMqttMessageViewer(tab.connection, subscription)
+                    "
+                    @manage-tags="
+                      (subscription) =>
+                        openMqttTagManager(tab.connection, subscription)
+                    "
+                    @subscription-deleted="
+                      (subscription) =>
+                        handleMqttSubscriptionDeleted(
+                          tab.connection,
+                          subscription,
+                        )
+                    "
+                  />
+                </div>
 
-            <!-- MQTT消息查看器 -->
-            <div
-              v-else-if="tab.type === 'mqtt-messages'"
-              class="flex-1 flex flex-col overflow-hidden"
-            >
-              <MqttMessageViewer
-                :ref="(el) => setMessageViewerRef(tab.id, el)"
-                :subscription="tab.subscription"
-                :project-id="projectId"
-                :connection-id="tab.connectionId"
-              />
-            </div>
+                <!-- MQTT消息查看器 -->
+                <div
+                  v-else-if="tab.type === 'mqtt-messages'"
+                  class="flex-1 flex flex-col overflow-hidden"
+                >
+                  <MqttMessageViewer
+                    :ref="(el) => setMessageViewerRef(tab.id, el)"
+                    :subscription="tab.subscription"
+                    :project-id="projectId"
+                    :connection-id="tab.connectionId"
+                  />
+                </div>
 
-            <!-- MQTT Tag管理 -->
-            <div
-              v-else-if="tab.type === 'mqtt-tags'"
-              class="flex-1 flex overflow-hidden"
-            >
-              <div class="w-1/2 border-r min-w-0">
-                <MqttTagList
-                  :project-id="projectId"
-                  :subscription-id="tab.subscriptionId"
-                  :preview-session-id="previewSessionId"
-                />
-              </div>
-              <div class="w-1/2 min-w-0">
-                <MqttTagMonitor
-                  :project-id="projectId"
-                  :subscription-id="tab.subscriptionId"
-                  :preview-session-id="previewSessionId"
-                />
-              </div>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
-      </template>
+                <!-- MQTT Tag管理 -->
+                <div
+                  v-else-if="tab.type === 'mqtt-tags'"
+                  class="flex-1 flex overflow-hidden"
+                >
+                  <div class="w-1/2 border-r min-w-0">
+                    <MqttTagList
+                      :project-id="projectId"
+                      :subscription-id="tab.subscriptionId"
+                      :preview-session-id="previewSessionId"
+                    />
+                  </div>
+                  <div class="w-1/2 min-w-0">
+                    <MqttTagMonitor
+                      :project-id="projectId"
+                      :subscription-id="tab.subscriptionId"
+                      :preview-session-id="previewSessionId"
+                    />
+                  </div>
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </template>
 
-      <!-- 默认提示 -->
-      <div v-else class="h-full flex items-center justify-center text-gray-500">
-        <div class="text-center">
-          <IconTablerDatabase class="text-6xl mb-4 w-24 h-24 mx-auto" />
-          <div class="text-lg">{{ t("states.emptyHint") }}</div>
+          <!-- 默认提示 -->
+          <div
+            v-else
+            class="h-full flex items-center justify-center text-gray-500"
+          >
+            <div class="text-center">
+              <IconTablerDatabase class="text-6xl mb-4 w-24 h-24 mx-auto" />
+              <div class="text-lg">{{ t("states.emptyHint") }}</div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-
       </div>
     </template>
 
@@ -316,60 +344,60 @@
   />
 
   <!-- 连接右键菜单 -->
-    <ConnectionContextMenu
-      v-model:visible="showContextMenu"
-      :position="contextMenuPosition"
-      :connection="contextMenuConnection"
-      @open="handleOpenConnection"
-      @disconnect="handleDisconnectConnection"
-      @view-details="handleViewConnectionDetails"
-      @edit="handleEditConnection"
-      @delete="handleDeleteConnection"
-    />
+  <ConnectionContextMenu
+    v-model:visible="showContextMenu"
+    :position="contextMenuPosition"
+    :connection="contextMenuConnection"
+    @open="handleOpenConnection"
+    @disconnect="handleDisconnectConnection"
+    @view-details="handleViewConnectionDetails"
+    @edit="handleEditConnection"
+    @delete="handleDeleteConnection"
+  />
 
-    <!-- 表右键菜单 -->
-    <TableContextMenu
-      v-model:visible="showTableContextMenu"
-      :position="tableContextMenuPosition"
-      :connection="tableContextMenuConnection"
-      :table="tableContextMenuTable"
-      @view-structure="handleViewTableStructure"
-      @query-table="handleQueryTable"
-    />
+  <!-- 表右键菜单 -->
+  <TableContextMenu
+    v-model:visible="showTableContextMenu"
+    :position="tableContextMenuPosition"
+    :connection="tableContextMenuConnection"
+    :table="tableContextMenuTable"
+    @view-structure="handleViewTableStructure"
+    @query-table="handleQueryTable"
+  />
 
-    <!-- 查询右键菜单 -->
-    <QueryContextMenu
-      v-model:visible="showQueryContextMenu"
-      :position="queryContextMenuPosition"
-      :connection="queryContextMenuConnection"
-      :query="queryContextMenuQuery"
-      @view-details="handleViewQueryDetails"
-      @open="handleQueryDblClick"
-      @delete="handleDeleteQueryFromMenu"
-    />
+  <!-- 查询右键菜单 -->
+  <QueryContextMenu
+    v-model:visible="showQueryContextMenu"
+    :position="queryContextMenuPosition"
+    :connection="queryContextMenuConnection"
+    :query="queryContextMenuQuery"
+    @view-details="handleViewQueryDetails"
+    @open="handleQueryDblClick"
+    @delete="handleDeleteQueryFromMenu"
+  />
 
-    <!-- 新建/编辑连接对话框 -->
-    <ConnectionDialog
-      v-model="showConnectionDialog"
-      :mode="connectionDialogMode"
-      :connection="currentConnection"
-      @submit="handleConnectionSubmit"
-      @test="handleConnectionTest"
-    />
+  <!-- 新建/编辑连接对话框 -->
+  <ConnectionDialog
+    v-model="showConnectionDialog"
+    :mode="connectionDialogMode"
+    :connection="currentConnection"
+    :project-id="projectId"
+    @submit="handleConnectionSubmit"
+  />
 
-    <!-- 查看连接详情对话框 -->
-    <ConnectionDetailsDialog
-      v-model="showDetailsDialog"
-      :connection="currentConnection"
-    />
+  <!-- 查看连接详情对话框 -->
+  <ConnectionDetailsDialog
+    v-model="showDetailsDialog"
+    :connection="currentConnection"
+  />
 
-    <!-- 表结构查看对话框 -->
-    <TableStructureDialog
-      v-model="showTableStructureDialog"
-      :project-id="projectId"
-      :connection-id="currentTableConnectionId"
-      :table-name="currentTableName"
-    />
+  <!-- 表结构查看对话框 -->
+  <TableStructureDialog
+    v-model="showTableStructureDialog"
+    :project-id="projectId"
+    :connection-id="currentTableConnectionId"
+    :table-name="currentTableName"
+  />
 </template>
 
 <script setup lang="ts">
@@ -391,6 +419,7 @@ import IconTablerAlertCircle from "~icons/tabler/alert-circle";
 import IconTablerCalculator from "~icons/tabler/calculator";
 import IconTablerBell from "~icons/tabler/bell";
 import IconTablerShieldCheck from "~icons/tabler/shield-check";
+import IconTablerRefresh from "~icons/tabler/refresh";
 import ConnectionList from "@/components/connection/ConnectionList.vue";
 import ConnectionContextMenu from "@/components/connection/ConnectionContextMenu.vue";
 import TableContextMenu from "@/components/connection/TableContextMenu.vue";
@@ -404,10 +433,12 @@ import PostgresTableList from "@/components/database/postgres/PostgresTableList.
 import PostgresQueryEditor from "@/components/database/postgres/PostgresQueryEditor.vue";
 import SqlServerTableList from "@/components/database/sqlserver/SqlServerTableList.vue";
 import SqlServerQueryEditor from "@/components/database/sqlserver/SqlServerQueryEditor.vue";
+import SqlQueryWorkbench from "@/components/database/SqlQueryWorkbench.vue";
 import MqttSubscriptionList from "@/components/mqtt/MqttSubscriptionList.vue";
 import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
 import MqttTagList from "@/components/mqtt/MqttTagList.vue";
 import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
+import MqttWorkbench from "@/components/mqtt/MqttWorkbench.vue";
 import AccessSourceWorkspace from "@/components/access-source/AccessSourceWorkspace.vue";
 import DataPointList from "@/components/datapoint/DataPointList.vue";
 import DataPointWorkspace from "@/components/datapoint/DataPointWorkspace.vue";
@@ -434,6 +465,8 @@ import { getApiErrorMessage } from "@/utils/request";
 const route = useRoute();
 const activeModule = ref<DatacenterModuleId>("datapoints");
 const showAccessSourceLegacyWorkbench = ref(false);
+const sqlWorkbenchConnection = ref(null);
+const mqttWorkbenchConnection = ref(null);
 const project = computed(() => {
   const projectId =
     route.query.pid || route.query.id || route.meta?.project?.id;
@@ -460,7 +493,6 @@ const {
   createConnection,
   updateConnection,
   deleteConnection,
-  testConnection,
   updateConnectionStatus,
   selectConnection,
 } = useConnection(projectId);
@@ -1016,13 +1048,49 @@ const handleSelectConnection = (connection) => {
   selectConnection(connection.id);
 };
 
+const sqlWorkbenchTypes = ["mysql", "postgresql", "sqlserver", "tdengine"];
+
+const resolveConnectionDbType = (connection) => {
+  if (!connection) return "";
+  if (connection.type === "relational") {
+    return connection.relationalConfig?.dbType || "";
+  }
+  return connection.type || connection.config?.dbType || "";
+};
+
+const isSqlWorkbenchConnection = (connection) =>
+  sqlWorkbenchTypes.includes(resolveConnectionDbType(connection));
+
+const isMqttWorkbenchConnection = (connection) => connection?.type === "mqtt";
+
+const returnToAccessSourceOverview = () => {
+  showAccessSourceLegacyWorkbench.value = false;
+  sqlWorkbenchConnection.value = null;
+  mqttWorkbenchConnection.value = null;
+};
+
 /**
- * 新接入源工作区进入旧工作台。
- * 旧连接树依然负责加载表、查询和 MQTT 订阅，因此先切回旧布局再复用原双击流程。
+ * 新接入源工作区进入对应工作台。
+ * SQL 类接入源直接进入单连接查询工作台；其他类型仍复用原有标签页能力。
  */
 const handleAccessSourceOpen = async (connection) => {
   showAccessSourceLegacyWorkbench.value = true;
   selectConnection(connection.id);
+
+  if (isSqlWorkbenchConnection(connection)) {
+    sqlWorkbenchConnection.value = connection;
+    mqttWorkbenchConnection.value = null;
+    return;
+  }
+
+  if (isMqttWorkbenchConnection(connection)) {
+    mqttWorkbenchConnection.value = connection;
+    sqlWorkbenchConnection.value = null;
+    return;
+  }
+
+  sqlWorkbenchConnection.value = null;
+  mqttWorkbenchConnection.value = null;
   await nextTick();
   await handleConnectionDblClick(connection);
 
@@ -1262,11 +1330,27 @@ const openCreateConnectionDialog = () => {
 const handleConnectionSubmit = async (data) => {
   try {
     if (connectionDialogMode.value === "create") {
-      await createConnection({
-        name: data.name,
-        type: data.type,
-        config: data.config,
-      });
+      const protocolCreator = protocolCreateHandlers[data.type];
+      if (protocolCreator) {
+        await protocolCreator(projectId.value, {
+          name: data.name,
+          status: "disconnected",
+          ...data.config,
+        });
+        ElMessage({
+          type: "success",
+          message: "接入源创建成功",
+          offset: 60,
+          duration: 3000,
+        });
+        await loadConnections();
+      } else {
+        await createConnection({
+          name: data.name,
+          type: data.type,
+          config: data.config,
+        });
+      }
     } else {
       await updateConnection(currentConnection.value.id, {
         name: data.name,
@@ -1280,15 +1364,15 @@ const handleConnectionSubmit = async (data) => {
   }
 };
 
-/**
- * 测试连接
- */
-const handleConnectionTest = async (data) => {
-  try {
-    await testConnection(data.type, data.config);
-  } catch (error) {
-    console.error("测试连接失败:", error);
-  }
+const protocolCreateHandlers = {
+  kafka: dataAPI.createKafkaConfig,
+  http: dataAPI.createHttpConfig,
+  websocket: dataAPI.createWebSocketConfig,
+  redis: dataAPI.createRedisConfig,
+  opcua: dataAPI.createOpcuaConfig,
+  s7: dataAPI.createS7Config,
+  modbus: dataAPI.createModbusConfig,
+  tdengine: dataAPI.createTdengineConfig,
 };
 
 /**
@@ -1709,6 +1793,89 @@ watch(datacenterLocale, () => {
 </script>
 
 <style scoped>
+.datacenter-side-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.datacenter-side-action {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.datacenter-side-action:hover {
+  border-color: var(--dc-border);
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+  transform: translateY(-1px);
+}
+
+.datacenter-side-action.is-primary {
+  border-color: rgba(29, 78, 216, 0.28);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.datacenter-side-action span {
+  position: absolute;
+  z-index: 10;
+  left: calc(100% + 8px);
+  top: 50%;
+  max-width: 140px;
+  padding: 6px 9px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-popover);
+  color: var(--dc-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+  white-space: nowrap;
+}
+
+.datacenter-side-action:hover span,
+.datacenter-side-action:focus-visible span {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.dark .datacenter-side-action {
+  color: rgba(226, 232, 240, 0.76);
+}
+
+.dark .datacenter-side-action:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+}
+
+.dark .datacenter-side-action span {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #1e293b;
+  color: #f8fafc;
+}
+
 .data-center {
   min-height: 400px;
   border: 1px solid var(--dc-border);

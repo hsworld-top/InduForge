@@ -36,6 +36,25 @@
     --dc-shadow-surface: 0 2px 6px rgba(15, 23, 42, 0.08);
     --dc-shadow-popover: 0 12px 24px rgba(15, 23, 42, 0.12);
     --dc-control-height: 32px;
+    --dc-connection-card-bg: #ffffff;
+    --dc-connection-card-border: #e4e9f2;
+    --dc-connection-card-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    --dc-connection-card-hover-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
+    --dc-connection-card-create-border: #d9e2ef;
+    --dc-connection-status-online-bg: #eaf8ef;
+    --dc-connection-status-online-text: #1f9a4f;
+    --dc-connection-status-offline-bg: #eef2f7;
+    --dc-connection-status-offline-text: #66758a;
+    --dc-connection-status-degraded-bg: #fff4d8;
+    --dc-connection-status-degraded-text: #b7791f;
+    --dc-connection-status-unknown-bg: #f1f5f9;
+    --dc-connection-status-unknown-text: #64748b;
+    --dc-connection-icon-database-bg: #eef6ff;
+    --dc-connection-icon-database-text: #0f66d0;
+    --dc-connection-icon-stream-bg: #fff4e8;
+    --dc-connection-icon-stream-text: #ea580c;
+    --dc-connection-icon-industrial-bg: #f5edff;
+    --dc-connection-icon-industrial-text: #8a2be2;
   }
 
   html {

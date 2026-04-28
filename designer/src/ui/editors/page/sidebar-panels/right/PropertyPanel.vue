@@ -50,6 +50,7 @@ import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { getManifest } from "@/materials/manifests";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePanelState } from "../composables/use-panel-state";
+import CollapseItemsEditor from "./CollapseItemsEditor.vue";
 import MultiInspectorPanel from "./MultiInspectorPanel.vue";
 import PageInspectorPanel from "./PageInspectorPanel.vue";
 import PropEditor from "./PropEditor.vue";
@@ -4759,6 +4760,7 @@ watch(
   () => {
     const node = currentElement.value;
     if (!node || !isElementPlusType(node.type)) return;
+    if (node.type === "Collapse") return;
     const rawDetail = String(node.detailConfig || "").trim();
     if (rawDetail) return;
     const presets = resolveElementPlusDetailPresets(node.type);
@@ -4944,6 +4946,15 @@ const operableSchemeId = computed<string>({
 
 const isElContainer = computed<boolean>(() => elementType.value === "ElContainer");
 const isEChart = computed<boolean>(() => elementType.value === "EChart");
+const isCollapseNode = computed<boolean>(() => elementType.value === "Collapse" && !!selectedNode.value);
+const collapseChildNodes = computed<AnyArray>(() => {
+  const node = selectedNode.value;
+  if (!node?.id || !doc.value?.getChildren) return [];
+  return doc.value.getChildren(node.id).map((child: AnyRecord) => ({
+    id: child.id,
+    props: { ...(child.props || {}) },
+  }));
+});
 const regionPropRows = computed<AnyArray>(() => [
   {
     key: "header",
@@ -5778,6 +5789,40 @@ function handleStyleChange(newStyle: AnyRecord) {
 }
 
 /**
+ * 更新折叠面板专用属性，保持运行态字段仍落在 props 中。
+ * @param {Record<string, unknown>} propsPatch - 折叠面板 props 补丁
+ */
+function handleCollapsePropsChange(propsPatch: AnyRecord) {
+  const node = selectedNode.value;
+  if (!node || elementType.value !== "Collapse") return;
+  const nextProps = { ...(node.props || {}), ...(propsPatch || {}) };
+  // Collapse 已由可视化表单接管结构配置，旧 detailConfig DSL 会在预览/刷新时重放并覆盖 props。
+  const patch = { props: nextProps, detailConfig: "" };
+  const ok = editorStore.updateNode(node.id, patch);
+  if (!ok) {
+    applyNodePatch(node.id, patch);
+  }
+  docVersion.value += 1;
+  editorStore.saveCurrentPageDraft?.();
+}
+
+/**
+ * 同步折叠项标识变更到直接子组件的 collapseKey。
+ * @param {{id: string, props: Record<string, unknown>}[]} patches - 子组件 props 补丁列表
+ */
+function handleCollapseChildPatches(patches: AnyArray) {
+  patches.forEach((item) => {
+    if (!item?.id || !item.props) return;
+    const patch = { props: item.props };
+    const ok = editorStore.updateNode(item.id, patch);
+    if (!ok) {
+      applyNodePatch(item.id, patch);
+    }
+  });
+  editorStore.saveCurrentPageDraft?.();
+}
+
+/**
  * 打开配置弹窗
  * @param {"style" | "detail"} type - 配置类型
  */
@@ -6439,7 +6484,14 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
       </div>
 
       <!-- 属性表单：根据 Manifest 生成 -->
-      <template v-if="layoutForceProps.length > 0">
+      <CollapseItemsEditor
+        v-if="isCollapseNode"
+        :node-props="selectedNode?.props || {}"
+        :child-nodes="collapseChildNodes"
+        @props-change="handleCollapsePropsChange"
+        @child-patches="handleCollapseChildPatches"
+      />
+      <template v-else-if="layoutForceProps.length > 0">
         <PropertyPanelLayoutForceSection
           :visible-props="visibleLayoutForceProps"
           :should-show-bind-button="shouldShowBindButton"
@@ -6866,16 +6918,20 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
   display: flex;
   flex-direction: column;
   gap: var(--designer-gap-md);
+  min-width: 0;
 }
 
 .property-panel-root {
   display: flex;
   flex-direction: column;
   gap: var(--designer-gap-md);
+  min-width: 0;
 }
 
 .panel-section,
 .prop-section {
+  box-sizing: border-box;
+  min-width: 0;
   border: 1px solid var(--designer-border-color);
   border-radius: var(--designer-radius-md);
   background: var(--designer-shell-surface);
@@ -6929,6 +6985,7 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
   display: flex;
   flex-direction: column;
   gap: var(--designer-gap-xs);
+  min-width: 0;
 }
 
 .prop-section {

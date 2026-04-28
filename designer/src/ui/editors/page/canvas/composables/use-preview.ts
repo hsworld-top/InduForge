@@ -330,6 +330,8 @@ export function usePreview(deps: UsePreviewDeps): UsePreviewReturn {
   const scheduleDetailConfig = (force = false): void => {
     const code = detailConfigText?.value;
     if (!code) return;
+    // Collapse 的面板结构已迁移到可视化 props.items；旧 detailConfig 自动重放会覆盖用户配置。
+    if (node.value?.type === "Collapse" && Array.isArray(node.value?.props?.items)) return;
     const key = `${node.value?.id || ""}::${code}`;
     if (!force && key === lastDetailConfigKey) return;
     lastDetailConfigKey = key;

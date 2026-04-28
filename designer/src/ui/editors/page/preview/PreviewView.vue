@@ -391,10 +391,38 @@ const routeProjectMeta = computed(
 async function loadProject() {
   const pid = routeProjectMeta.value?.id;
   if (!pid) return;
+  const targetPageId = queryPageIdFromRoute();
+  if (
+    targetPageId &&
+    editorStore.projectId === pid &&
+    editorStore.getPageDraft(targetPageId)
+  ) {
+    await editorStore.loadPage(targetPageId);
+    if (routePreviewUserId.value) {
+      editorStore.setSelectedPreviewRuntimeUserId(routePreviewUserId.value);
+    }
+    return;
+  }
+  if (
+    targetPageId &&
+    editorStore.projectId === pid &&
+    doc.value?.getPage?.(targetPageId)?.rootNodeId
+  ) {
+    if (routePreviewUserId.value) {
+      editorStore.setSelectedPreviewRuntimeUserId(routePreviewUserId.value);
+    }
+    return;
+  }
   if (editorStore.projectId === pid && currentPage.value?.rootNodeId) {
+    if (targetPageId && targetPageId !== currentPageId.value) {
+      await editorStore.loadPage(targetPageId);
+    }
     return;
   }
   await editorStore.loadProject(pid);
+  if (targetPageId) {
+    await editorStore.loadPage(targetPageId);
+  }
   if (routePreviewUserId.value) {
     editorStore.setSelectedPreviewRuntimeUserId(routePreviewUserId.value);
   }

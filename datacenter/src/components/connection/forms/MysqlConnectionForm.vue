@@ -1,66 +1,74 @@
 <template>
-  <el-form ref="formRef" :model="formData" :rules="rules" label-width="120px">
+  <el-form
+    ref="formRef"
+    :model="formData"
+    :rules="rules"
+    label-position="top"
+    class="database-connection-form"
+  >
     <el-form-item :label="t('connection.name')" prop="name">
       <el-input v-model="formData.name" :placeholder="t('connection.name')" />
     </el-form-item>
 
-    <el-form-item :label="t('connection.host')" prop="host">
-      <el-input v-model="formData.host" placeholder="localhost" />
-    </el-form-item>
+    <div class="database-connection-form__grid">
+      <el-form-item :label="t('connection.host')" prop="host">
+        <el-input v-model="formData.host" placeholder="localhost" />
+      </el-form-item>
 
-    <el-form-item :label="t('connection.port')" prop="port">
-      <el-input-number
-        v-model="formData.port"
-        :min="1"
-        :max="65535"
-        class="w-full"
-      />
-    </el-form-item>
+      <el-form-item :label="t('connection.port')" prop="port">
+        <el-input
+          v-model.number="formData.port"
+          inputmode="numeric"
+          placeholder="3306"
+        />
+      </el-form-item>
+    </div>
 
-    <el-form-item :label="t('connection.database')" prop="database">
-      <el-input
-        v-model="formData.database"
-        :placeholder="t('connection.database')"
-      />
-    </el-form-item>
+    <div class="database-connection-form__grid">
+      <el-form-item :label="t('connection.database')" prop="database">
+        <el-input
+          v-model="formData.database"
+          :placeholder="t('connection.database')"
+        />
+      </el-form-item>
 
-    <el-form-item :label="t('connection.username')" prop="username">
-      <el-input v-model="formData.username" placeholder="root" />
-    </el-form-item>
+      <el-form-item :label="t('connection.charset')">
+        <el-select
+          v-model="formData.charset"
+          :placeholder="t('connection.charset')"
+          class="w-full"
+        >
+          <el-option label="utf8mb4" value="utf8mb4" />
+          <el-option label="utf8" value="utf8" />
+          <el-option label="latin1" value="latin1" />
+          <el-option label="gbk" value="gbk" />
+        </el-select>
+      </el-form-item>
+    </div>
 
-    <el-form-item :label="t('connection.password')" prop="password">
-      <el-input
-        v-model="formData.password"
-        type="password"
-        :placeholder="t('connection.password')"
-        show-password
-      />
-    </el-form-item>
+    <div class="database-connection-form__grid">
+      <el-form-item :label="t('connection.username')" prop="username">
+        <el-input v-model="formData.username" placeholder="root" />
+      </el-form-item>
 
-    <el-form-item :label="t('connection.charset')">
-      <el-select
-        v-model="formData.charset"
-        :placeholder="t('connection.charset')"
-        class="w-full"
-      >
-        <el-option label="utf8mb4" value="utf8mb4" />
-        <el-option label="utf8" value="utf8" />
-        <el-option label="latin1" value="latin1" />
-        <el-option label="gbk" value="gbk" />
-      </el-select>
-    </el-form-item>
+      <el-form-item :label="t('connection.password')" prop="password">
+        <el-input
+          v-model="formData.password"
+          type="password"
+          :placeholder="t('connection.password')"
+          show-password
+        />
+      </el-form-item>
+    </div>
 
     <el-form-item :label="t('connection.queryTimeout')">
-      <el-input-number
-        v-model="formData.queryTimeout"
-        :min="1000"
-        :max="300000"
-        :step="1000"
-        class="w-full"
-      />
-      <span class="text-xs text-gray-500 ml-2">{{
-        t("common.milliseconds")
-      }}</span>
+      <el-input
+        v-model.number="formData.queryTimeout"
+        inputmode="numeric"
+        placeholder="30000"
+      >
+        <template #append>{{ t("common.milliseconds") }}</template>
+      </el-input>
     </el-form-item>
   </el-form>
 </template>
@@ -205,3 +213,21 @@ defineExpose({
   formData,
 });
 </script>
+
+<style scoped>
+.database-connection-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.database-connection-form__grid > .el-form-item {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .database-connection-form__grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -4,22 +4,13 @@
       :modules="modules"
       :active-module="activeModule"
       @update:activeModule="$emit('update:activeModule', $event)"
-    />
+    >
+      <template #actions>
+        <slot name="actions" :active-module="activeModule" />
+      </template>
+    </DataCenterNavRail>
 
     <section class="datacenter-shell__surface">
-      <header class="datacenter-shell__header">
-        <div>
-          <div class="datacenter-shell__eyebrow">数据中心工作台</div>
-          <h1 class="datacenter-shell__title">{{ activeMeta?.label }}</h1>
-          <p class="datacenter-shell__description">
-            {{ activeMeta?.description }}
-          </p>
-        </div>
-        <div class="datacenter-shell__actions">
-          <slot name="actions" :active-module="activeModule" />
-        </div>
-      </header>
-
       <main class="datacenter-shell__body">
         <slot />
       </main>
@@ -28,14 +19,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import DataCenterNavRail from "@/components/layout/DataCenterNavRail.vue";
 import type {
   DatacenterModuleId,
   DatacenterModuleMeta,
 } from "@/config/datacenterModules";
 
-const props = defineProps<{
+defineProps<{
   modules: DatacenterModuleMeta[];
   activeModule: DatacenterModuleId;
 }>();
@@ -44,9 +34,6 @@ defineEmits<{
   (event: "update:activeModule", value: DatacenterModuleId): void;
 }>();
 
-const activeMeta = computed(() =>
-  props.modules.find((item) => item.id === props.activeModule),
-);
 </script>
 
 <style scoped>
@@ -65,47 +52,6 @@ const activeMeta = computed(() =>
   display: flex;
   flex-direction: column;
   padding: 12px;
-  gap: 12px;
-}
-
-.datacenter-shell__header {
-  min-height: 58px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 14px;
-  border: 1px solid var(--dc-border);
-  border-radius: 8px;
-  background: var(--dc-surface-raised);
-  box-shadow: var(--dc-shadow-surface);
-}
-
-.datacenter-shell__eyebrow {
-  color: var(--dc-primary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.datacenter-shell__title {
-  margin: 2px 0 1px;
-  color: var(--dc-text);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.datacenter-shell__description {
-  margin: 0;
-  max-width: 74ch;
-  color: var(--dc-text-secondary);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.datacenter-shell__actions {
-  flex: 0 0 auto;
 }
 
 .datacenter-shell__body {
@@ -158,12 +104,6 @@ const activeMeta = computed(() =>
 @media (max-width: 768px) {
   .datacenter-shell__surface {
     padding: 10px;
-  }
-
-  .datacenter-shell__header {
-    align-items: flex-start;
-    flex-direction: column;
-    border-radius: 8px;
   }
 }
 </style>

@@ -13,6 +13,20 @@ export const manifest: ComponentManifest = {
   defaultSize: { width: 360, height: 200 },
   props: [
     {
+      name: "modelValue",
+      type: "array",
+      label: "默认展开",
+      group: "状态",
+      defaultValue: ["1"],
+    },
+    {
+      name: "accordion",
+      type: "boolean",
+      label: "手风琴",
+      group: "状态",
+      defaultValue: false,
+    },
+    {
       name: "items",
       type: "array",
       label: "面板",

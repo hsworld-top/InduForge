@@ -92,7 +92,7 @@ const overflow = computed(() => props.modelValue.overflow || "visible");
   align-items: center;
   min-height: 30px;
   padding: 0 10px;
-  margin: calc(var(--designer-gap-md) * -1) calc(var(--designer-gap-md) * -1) 0;
+  margin: -8px -10px 0;
   background: var(--designer-group-surface);
   border-bottom: 1px solid var(--designer-border-soft);
   color: var(--designer-text-secondary);
