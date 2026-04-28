@@ -518,6 +518,8 @@
 | `POST` | `/api/v1/data/projects/{projectId}/tdengine/configs` | 创建 TDengine 配置 |
 | `POST` | `/api/v1/data/projects/{projectId}/opcda/contracts/validate` | 校验 OPC DA 合同 |
 
+Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tdengine` 保存连接配置，`opcda` 校验合约字段；工业协议真实连接、轮询采集和运行态诊断由节点侧运行器负责。
+
 ### 5.8 预览会话与计算
 
 #### 预览

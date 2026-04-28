@@ -25,7 +25,7 @@
 - `websocket`：正式纳入 Phase 1，提供配置能力、artifact 输出与短连接 WebSocket 消息 preview。
 - `redis`：正式纳入 Phase 1，提供配置能力、artifact 输出与有限 key/value preview。
 
-### 非 Phase 1 正式范围
+### Phase 2 工业协议配置范围
 
 - `opcua`
 - `s7`
@@ -33,13 +33,14 @@
 - `tdengine`
 - `opcda`
 
-这些协议和校验入口当前只保留 Phase 2 的接口边界与规划占位，不再作为 Phase 1 正式可交付能力对外宣称。若调用对应接口，服务端会显式返回“未纳入 Phase 1 正式范围”的错误，而不是继续落库形成误导。
+这些协议已进入平台侧配置阶段：`opcua/s7/modbus/tdengine` 支持通过专用接口创建连接配置并进入 artifact 契约，`opcda` 当前提供发布合约字段校验。data_service 不承担工业协议长连接、轮询采集或节点侧驱动运行；真实连通、采集和诊断由后续节点侧运行器接管。
 
 ### 产物与 preview 边界
 
-- `artifact v1` 的正式协议区块只包含 `mqtt` 与 `protocols.kafka/http/websocket/redis`。
+- `artifact v1` 输出平台侧配置契约，包含 `mqtt`、`protocols.kafka/http/websocket/redis` 与工业协议配置。
 - `preview socket`、预览会话与统一协议 preview 只服务开发态调试，不承担长期采集。
 - `kafka/http/websocket/redis` 的统一协议 preview 是一次性短任务，请求结束即释放连接，不创建节点侧运行任务。
+- `opcua/s7/modbus/tdengine` 本轮只保存配置与 artifact，不在 data_service 内做真实工业协议 preview。
 
 ## 正式边界
 
