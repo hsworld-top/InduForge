@@ -36,9 +36,7 @@ export function useNodeRendererTypeFlags(
 
   const isElLayoutFamily = computed(() => EL_LAYOUT_FAMILY.has(type.value));
 
-  const suppressReadonlyEmptyHint = computed(
-    () => readonly.value && (Boolean(isRegionContainer.value) || isElLayoutFamily.value),
-  );
+  const suppressReadonlyEmptyHint = computed(() => readonly.value);
 
   return {
     type,

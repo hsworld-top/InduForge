@@ -12,7 +12,17 @@ import type {
 } from "./canvas-internal.types";
 import type { ComponentNode } from "@/editor-core/document/types";
 import { storeToRefs } from "pinia";
-import { computed, onBeforeUnmount, onMounted, provide, ref, toRef, toRefs, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  provide,
+  ref,
+  toRef,
+  toRefs,
+  watch,
+} from "vue";
 import {
   canAcceptChildByDescriptor,
   getDescriptor,
@@ -33,7 +43,10 @@ import {
 import CanvasInsertLineOverlay from "./CanvasInsertLineOverlay.vue";
 import CanvasRulerLayer from "./CanvasRulerLayer.vue";
 import { useCanvasRulerPointer } from "./composables/use-canvas-ruler-pointer";
-import { useCanvasViewportPlacement } from "./composables/use-canvas-viewport-placement";
+import {
+  type CanvasViewportZoomAnchor,
+  useCanvasViewportPlacement,
+} from "./composables/use-canvas-viewport-placement";
 import { useCanvasZoomWheel } from "./composables/use-canvas-zoom-wheel";
 import { endDrag, useDragState } from "./composables/use-drag-state";
 import DesignCanvas from "./DesignCanvas.vue";
@@ -49,9 +62,19 @@ type CanvasContainerHost = HTMLElement & {
   __rulerObserver?: ResizeObserver | null;
 };
 
+const NODE_POINTER_DRAG_FREEZE_START_EVENT = "designer:node-pointer-drag-freeze-start";
+const NODE_POINTER_DRAG_FREEZE_END_EVENT = "designer:node-pointer-drag-freeze-end";
+
 interface DropTargetResolution {
   nodeId: string;
   element: HTMLElement | null;
+}
+
+interface CanvasContentBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
 }
 
 const props = defineProps({
@@ -89,14 +112,10 @@ const emit = defineEmits(["zoomChange"]);
 
 const { width, height, zoom } = toRefs(props);
 
-const { handleZoomWheel } = useCanvasZoomWheel({
-  zoom,
-  onZoomChange: (next) => emit("zoomChange", next),
-});
-
 const containerRef = ref<HTMLElement | null>(null);
 const wrapperRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLElement | null>(null);
+const zoomAnchor = ref<CanvasViewportZoomAnchor | null>(null);
 const editorStore = useEditorStore();
 const { doc, selection, pages, currentPageId, currentPage, docVersion } = storeToRefs(editorStore);
 const dragState = useDragState();
@@ -132,6 +151,31 @@ const insertLineStyle = ref<CanvasInsertLineStyle | null>(null);
 const insertLineBox = ref<CanvasInsertLineBox | null>(null);
 const rowInsertSnapshot = ref<CanvasRowInsertTarget | null>(null);
 const layoutInsertSnapshot = ref<CanvasLayoutInsertTarget | null>(null);
+
+function captureWheelZoomAnchor(event: WheelEvent): void {
+  const wrapper = wrapperRef.value;
+  const canvas = canvasRef.value;
+  if (!wrapper || !canvas || !zoom.value) {
+    zoomAnchor.value = null;
+    return;
+  }
+  const wrapperRect = wrapper.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+  zoomAnchor.value = {
+    viewportX: event.clientX - wrapperRect.left,
+    viewportY: event.clientY - wrapperRect.top,
+    canvasX: (event.clientX - canvasRect.left) / zoom.value,
+    canvasY: (event.clientY - canvasRect.top) / zoom.value,
+  };
+}
+
+const { handleZoomWheel } = useCanvasZoomWheel({
+  zoom,
+  onZoomChange: (next, event) => {
+    captureWheelZoomAnchor(event);
+    emit("zoomChange", next);
+  },
+});
 
 /**
  * 拖拽结束时清理插入线
@@ -230,6 +274,123 @@ const showWorkbenchGrid = computed(() => props.showGrid);
 const pointerXOnRuler = computed(() => Math.max(0, pointerX.value - rulerInset.value));
 const pointerYOnRuler = computed(() => Math.max(0, pointerY.value - rulerInset.value));
 
+function parseFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/px$/i, "");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveAbsoluteBounds(node: ComponentNode): CanvasContentBounds | null {
+  const abs = node.absolutePos || node.layoutItem?.free?.abs || null;
+  const isAbsolute = node.positioning === "absolute" || node.layoutItem?.free?.mode === "abs";
+  if (!isAbsolute && !abs) return null;
+  const style = node.style || {};
+  const x = parseFiniteNumber(abs?.x) ?? parseFiniteNumber(style.left) ?? 0;
+  const y = parseFiniteNumber(abs?.y) ?? parseFiniteNumber(style.top) ?? 0;
+  const w = Math.max(1, parseFiniteNumber(abs?.w) ?? parseFiniteNumber(style.width) ?? 120);
+  const h = Math.max(1, parseFiniteNumber(abs?.h) ?? parseFiniteNumber(style.height) ?? 40);
+  return {
+    minX: x,
+    minY: y,
+    maxX: x + w,
+    maxY: y + h,
+  };
+}
+
+const canvasContentBounds = computed<CanvasContentBounds>(() => {
+  void docVersion.value;
+  const base: CanvasContentBounds = {
+    minX: 0,
+    minY: 0,
+    maxX: width.value,
+    maxY: height.value,
+  };
+  const model = doc.value;
+  const rootNode = rootNodeId.value ? model?.getNode(rootNodeId.value) : null;
+  if (!model || !rootNode) return base;
+  for (const childId of rootNode.children || []) {
+    const child = model.getNode(childId);
+    if (!child) continue;
+    const bounds = resolveAbsoluteBounds(child);
+    if (!bounds) continue;
+    base.minX = Math.min(base.minX, bounds.minX);
+    base.minY = Math.min(base.minY, bounds.minY);
+    base.maxX = Math.max(base.maxX, bounds.maxX);
+    base.maxY = Math.max(base.maxY, bounds.maxY);
+  }
+  return base;
+});
+
+const canvasOverflowOrigin = ref({ left: 0, top: 0 });
+
+watch(
+  () => [canvasContentBounds.value.minX, canvasContentBounds.value.minY] as const,
+  ([minX, minY]) => {
+    const requiredLeft = Math.max(0, -minX);
+    const requiredTop = Math.max(0, -minY);
+    const nextLeft = Math.max(canvasOverflowOrigin.value.left, requiredLeft);
+    const nextTop = Math.max(canvasOverflowOrigin.value.top, requiredTop);
+    if (nextLeft === canvasOverflowOrigin.value.left && nextTop === canvasOverflowOrigin.value.top) {
+      return;
+    }
+    // 编辑态滚动世界只自动扩张，不随拖拽自动收缩，避免远距离拖动时画布原点回弹。
+    canvasOverflowOrigin.value = { left: nextLeft, top: nextTop };
+  },
+  { immediate: true },
+);
+
+const canvasOverflowOffset = computed(() => ({
+  left: Math.ceil(canvasOverflowOrigin.value.left * zoom.value),
+  top: Math.ceil(canvasOverflowOrigin.value.top * zoom.value),
+}));
+
+const frozenCanvasOverflowOffset = ref<{ left: number; top: number } | null>(null);
+const activeCanvasOverflowOffset = computed(
+  () => frozenCanvasOverflowOffset.value || canvasOverflowOffset.value,
+);
+
+function freezeCanvasOverflowOffset(): void {
+  if (frozenCanvasOverflowOffset.value) return;
+  frozenCanvasOverflowOffset.value = { ...canvasOverflowOffset.value };
+}
+
+function releaseCanvasOverflowOffset(): void {
+  frozenCanvasOverflowOffset.value = null;
+}
+
+watch(
+  () => dragState.dragType,
+  (dragType) => {
+    if (dragType) {
+      freezeCanvasOverflowOffset();
+      return;
+    }
+    if (!dragType && frozenCanvasOverflowOffset.value) {
+      releaseCanvasOverflowOffset();
+    }
+  },
+  { flush: "sync" },
+);
+
+watch(
+  () => [activeCanvasOverflowOffset.value.left, activeCanvasOverflowOffset.value.top] as const,
+  ([nextLeft, nextTop], [prevLeft, prevTop]) => {
+    const deltaLeft = nextLeft - prevLeft;
+    const deltaTop = nextTop - prevTop;
+    if (deltaLeft <= 0 && deltaTop <= 0) return;
+    // 只在滚动世界向左/上扩张时补偿滚动；收缩不自动补偿，避免拖回页面时按钮被拉回顶部。
+    void nextTick(() => {
+      const wrapper = wrapperRef.value;
+      if (!wrapper) return;
+      if (deltaLeft > 0) wrapper.scrollLeft += deltaLeft;
+      if (deltaTop > 0) wrapper.scrollTop += deltaTop;
+    });
+  },
+);
+
 /**
  * 插入节点（拖入场景）：禁止自动选中新建节点
  * @param {string} type - 组件类型
@@ -258,6 +419,9 @@ useCanvasViewportPlacement({
   zoom,
   translateX,
   translateY,
+  canvasOverflowOffset: activeCanvasOverflowOffset,
+  wrapperRef,
+  zoomAnchor,
   defaultPageMarginX,
   defaultPageMarginY,
   rootNodeId,
@@ -285,8 +449,8 @@ const canvasStyle = computed((): Record<string, string> => {
   const style: Record<string, string> = {
     width: `${width.value}px`,
     height: `${height.value}px`,
-    transform: `translate(${translateX.value + rulerInset.value}px, ${
-      translateY.value + rulerInset.value
+    transform: `translate(${translateX.value + rulerInset.value + activeCanvasOverflowOffset.value.left}px, ${
+      translateY.value + rulerInset.value + activeCanvasOverflowOffset.value.top
     }px) scale(${zoom.value})`,
     backgroundColor: "var(--designer-shell-surface)",
     border: "1px solid rgba(148, 163, 184, 0.45)",
@@ -334,8 +498,9 @@ const canvasStyle = computed((): Record<string, string> => {
  * 计算滚动内容尺寸，确保缩放后能触发滚动条
  */
 const scrollContentStyle = computed(() => {
-  const scaledWidth = width.value * zoom.value;
-  const scaledHeight = height.value * zoom.value;
+  const bounds = canvasContentBounds.value;
+  const scaledWidth = Math.max(width.value, bounds.maxX) * zoom.value;
+  const scaledHeight = Math.max(height.value, bounds.maxY) * zoom.value;
   const viewportWidth = Math.max(0, (containerSize.value.width || 0) - rulerInset.value);
   const viewportHeight = Math.max(0, (containerSize.value.height || 0) - rulerInset.value);
   // 右/下编辑扩展区保持“可编辑但不过度”，避免滚动后空白区域喧宾夺主
@@ -343,8 +508,8 @@ const scrollContentStyle = computed(() => {
   const workspaceExtraBottom = Math.max(28, Math.min(76, Math.round(viewportHeight * 0.1)));
   const coverageX = scaledWidth / Math.max(1, viewportWidth);
   const coverageY = scaledHeight / Math.max(1, viewportHeight);
-  const pageStartX = rulerInset.value + translateX.value;
-  const pageStartY = rulerInset.value + translateY.value;
+  const pageStartX = rulerInset.value + translateX.value + activeCanvasOverflowOffset.value.left;
+  const pageStartY = rulerInset.value + translateY.value + activeCanvasOverflowOffset.value.top;
   const offsetX = Math.max(rulerInset.value, pageStartX);
   const offsetY = Math.max(rulerInset.value, pageStartY);
   const baseWidth = Math.ceil(scaledWidth + offsetX);
@@ -368,9 +533,12 @@ const scrollContentStyle = computed(() => {
         : coverageY >= 1.2
           ? Math.round(workspaceExtraBottom * 0.28)
           : workspaceExtraBottom;
+  // 当存在页面左/上方的负坐标节点时，需要保留足够的滚动范围回到页面本体位置。
+  const originScrollReserveWidth = minWidth + activeCanvasOverflowOffset.value.left;
+  const originScrollReserveHeight = minHeight + activeCanvasOverflowOffset.value.top;
   return {
-    width: `${Math.max(minWidth, baseWidth + effectiveExtraRight)}px`,
-    height: `${Math.max(minHeight, baseHeight + effectiveExtraBottom)}px`,
+    width: `${Math.max(minWidth, baseWidth + effectiveExtraRight, originScrollReserveWidth)}px`,
+    height: `${Math.max(minHeight, baseHeight + effectiveExtraBottom, originScrollReserveHeight)}px`,
   };
 });
 
@@ -1256,6 +1424,8 @@ onMounted(() => {
   window.addEventListener("mouseup", handleGlobalMouseUp);
   window.addEventListener("designer:node-transform", handleNodeTransform);
   window.addEventListener("designer:node-transform-end", handleNodeTransformEnd);
+  window.addEventListener(NODE_POINTER_DRAG_FREEZE_START_EVENT, freezeCanvasOverflowOffset);
+  window.addEventListener(NODE_POINTER_DRAG_FREEZE_END_EVENT, releaseCanvasOverflowOffset);
   if (containerRef.value && typeof ResizeObserver !== "undefined") {
     const host = containerRef.value as CanvasContainerHost;
     const observer = new ResizeObserver((entries) => {
@@ -1275,6 +1445,8 @@ onBeforeUnmount(() => {
   window.removeEventListener("mouseup", handleGlobalMouseUp);
   window.removeEventListener("designer:node-transform", handleNodeTransform);
   window.removeEventListener("designer:node-transform-end", handleNodeTransformEnd);
+  window.removeEventListener(NODE_POINTER_DRAG_FREEZE_START_EVENT, freezeCanvasOverflowOffset);
+  window.removeEventListener(NODE_POINTER_DRAG_FREEZE_END_EVENT, releaseCanvasOverflowOffset);
   const host = containerRef.value as CanvasContainerHost | null;
   if (host?.__rulerObserver) {
     host.__rulerObserver.disconnect();
@@ -1348,6 +1520,7 @@ onBeforeUnmount(() => {
 
 .canvas-wrapper {
   position: relative;
+  display: block !important;
   width: 100%;
   height: 100%;
   min-height: 0;

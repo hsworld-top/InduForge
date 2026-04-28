@@ -23,9 +23,21 @@ export interface CollapseChildKeyPatch {
 export type CollapseModelValue = string | string[];
 
 const GENERATED_ITEM_PREFIX = "panel";
+const CHINESE_NUMBER_MAP: Record<string, number> = {
+  一: 1,
+  二: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+  十: 10,
+};
 const FALLBACK_COLLAPSE_ITEMS: CollapsePanelItem[] = [
-  { name: "1", title: "面板一", disabled: false, content: "内容一" },
-  { name: "2", title: "面板二", disabled: false, content: "内容二" },
+  { name: "1", title: "面板1", disabled: false, content: "内容1" },
+  { name: "2", title: "面板2", disabled: false, content: "内容2" },
 ];
 
 function normalizeText(value: unknown): string {
@@ -38,7 +50,48 @@ function getItemKey(item: Partial<CollapsePanelItem> | Record<string, unknown>):
 
 function getItemTitle(item: Partial<CollapsePanelItem> | Record<string, unknown>, index: number) {
   const title = normalizeText(item.title ?? item.label);
-  return title || `面板 ${index + 1}`;
+  return normalizeGeneratedPanelTitle(title) || `面板${index + 1}`;
+}
+
+function normalizeGeneratedPanelTitle(title: string): string {
+  const numericMatch = title.match(/^面板\s*(\d+)$/);
+  if (numericMatch) return `面板${Number(numericMatch[1])}`;
+  const chineseMatch = title.match(/^面板\s*([一二三四五六七八九十])$/);
+  if (chineseMatch) return `面板${CHINESE_NUMBER_MAP[chineseMatch[1]!] || chineseMatch[1]}`;
+  return title;
+}
+
+function getGeneratedItemIndex(value: string): number {
+  const normalized = normalizeText(value);
+  const numericMatch = normalized.match(/^(\d+)$/);
+  if (numericMatch) return Number(numericMatch[1]);
+  const generatedMatch = normalized.match(/^panel(\d+)$/);
+  if (generatedMatch) return Number(generatedMatch[1]);
+  return 0;
+}
+
+function getGeneratedTitleIndex(value: string): number {
+  const normalized = normalizeGeneratedPanelTitle(value);
+  const match = normalized.match(/^面板(\d+)$/);
+  return match ? Number(match[1]) : 0;
+}
+
+function getNextGeneratedItemIndex(items: unknown[]): number {
+  let maxIndex = 0;
+  let validCount = 0;
+
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const key = getItemKey(record);
+    if (key) {
+      validCount += 1;
+      maxIndex = Math.max(maxIndex, getGeneratedItemIndex(key));
+    }
+    maxIndex = Math.max(maxIndex, getGeneratedTitleIndex(normalizeText(record.title ?? record.label)));
+  }
+
+  return Math.max(maxIndex, validCount) + 1;
 }
 
 export function createUniqueCollapseItemName(items: unknown, preferred?: string): string {
@@ -52,8 +105,8 @@ export function createUniqueCollapseItemName(items: unknown, preferred?: string)
   if (normalizedPreferred && !used.has(normalizedPreferred)) {
     return normalizedPreferred;
   }
-  let index = 1;
-  while (used.has(`${GENERATED_ITEM_PREFIX}${index}`)) {
+  let index = getNextGeneratedItemIndex(list);
+  while (used.has(`${GENERATED_ITEM_PREFIX}${index}`) || used.has(String(index))) {
     index += 1;
   }
   return `${GENERATED_ITEM_PREFIX}${index}`;
@@ -88,10 +141,11 @@ export function normalizeCollapseItems(input: unknown): CollapsePanelItem[] {
 export function createCollapseItem(items: unknown, title?: string): CollapsePanelItem {
   const normalizedItems = normalizeCollapseItems(items);
   const name = createUniqueCollapseItemName(normalizedItems);
-  const suffix = name.replace(GENERATED_ITEM_PREFIX, "");
+  const suffix = Number(name.replace(GENERATED_ITEM_PREFIX, ""));
+  const fallbackIndex = Number.isFinite(suffix) && suffix > 0 ? suffix : normalizedItems.length + 1;
   return {
     name,
-    title: normalizeText(title) || `面板 ${suffix || normalizedItems.length + 1}`,
+    title: normalizeText(title) || `面板${fallbackIndex}`,
     disabled: false,
     content: "",
   };

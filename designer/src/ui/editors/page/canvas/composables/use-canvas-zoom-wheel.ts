@@ -5,7 +5,7 @@ import type { Ref } from "vue";
  */
 export function useCanvasZoomWheel(opts: {
   zoom: Ref<number>;
-  onZoomChange: (next: number) => void;
+  onZoomChange: (next: number, event: WheelEvent) => void;
 }) {
   function handleZoomWheel(event: WheelEvent) {
     if (!event.ctrlKey) return;
@@ -16,7 +16,7 @@ export function useCanvasZoomWheel(opts: {
     const nextZoom = Math.min(5, Math.max(0.1, opts.zoom.value + step * direction));
     if (nextZoom === opts.zoom.value) return;
 
-    opts.onZoomChange(Number(nextZoom.toFixed(2)));
+    opts.onZoomChange(Number(nextZoom.toFixed(2)), event);
   }
 
   return { handleZoomWheel };

@@ -86,6 +86,18 @@ function isAutoSizeValue(value: unknown): boolean {
   return typeof value === "string" && value.trim().toLowerCase() === "auto";
 }
 
+function isDefaultPanelLayoutPadding(value: unknown): boolean {
+  if (typeof value === "number") return value === 8;
+  if (typeof value !== "string") return value === undefined || value === null;
+  return value.trim().toLowerCase() === "8px";
+}
+
+function isDefaultPanelLayoutMinHeight(value: unknown): boolean {
+  if (typeof value === "number") return value === 40;
+  if (typeof value !== "string") return false;
+  return value.trim().toLowerCase() === "40px";
+}
+
 /**
  * 折叠面板/选项卡内的水平、垂直布局默认跟随内容高度，避免旧数据中的 100% 高度撑出空白。
  */
@@ -101,10 +113,16 @@ function shouldAutoSizePanelLayout(
   );
 }
 
-function applyPanelLayoutAutoSize(style: StyleMap, customStyle: StyleMap): void {
+function applyPanelLayoutAutoSize(
+  style: StyleMap,
+  customStyle: StyleMap,
+  options: { editing: boolean; hasChildren?: boolean } = { editing: false },
+): void {
   const hasFixedWidth = isExplicitNumericSize(customStyle.width);
   const hasFixedHeight = isExplicitNumericSize(customStyle.height);
   const hasFixedMinHeight = isExplicitNumericSize(customStyle.minHeight);
+  const hasUserFixedMinHeight =
+    hasFixedMinHeight && !isDefaultPanelLayoutMinHeight(customStyle.minHeight);
   if (!hasFixedWidth) {
     style.width = "100%";
     style.maxWidth = "100%";
@@ -112,11 +130,14 @@ function applyPanelLayoutAutoSize(style: StyleMap, customStyle: StyleMap): void 
   style.boxSizing = "border-box";
   style.alignSelf = "stretch";
   style.flex = "0 0 auto";
-  if (!hasFixedMinHeight) {
-    style.minHeight = "0";
+  if (!hasUserFixedMinHeight) {
+    style.minHeight = options.editing && !options.hasChildren ? "60px" : "0";
   }
   if (!hasFixedHeight) {
     style.height = "auto";
+  }
+  if (isDefaultPanelLayoutPadding(customStyle.padding)) {
+    style.padding = "0";
   }
   if (!style.display) {
     style.display = "block";
@@ -716,7 +737,10 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
       const isAutoPanelLayout = shouldAutoSizePanelLayout(nodeRef.value, parentNode);
       if (parentNode?.type === "Tabs") {
         if (isAutoPanelLayout) {
-          applyPanelLayoutAutoSize(style, customStyle);
+          applyPanelLayoutAutoSize(style, customStyle, {
+            editing: !props.readonly,
+            hasChildren: Boolean(nodeRef.value.children?.length),
+          });
         } else {
           style.width = "100%";
           style.height = "100%";
@@ -729,7 +753,10 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
         }
       }
       if (parentNode?.type === "Collapse" && isAutoPanelLayout) {
-        applyPanelLayoutAutoSize(style, customStyle);
+        applyPanelLayoutAutoSize(style, customStyle, {
+          editing: !props.readonly,
+          hasChildren: Boolean(nodeRef.value.children?.length),
+        });
       }
       if (parentNode?.type === "ElCol" && isMovableRef.value) {
         style.width = "100%";
@@ -1130,6 +1157,22 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
       if (isContainerRef.value && isMovableRef.value) {
         if (!hasCustomWidth && !style.width) style.width = "100%";
         if (!hasCustomHeight && !style.height) style.height = "100%";
+      }
+      if (shouldAutoSizePanelLayout(nodeRef.value, parentNode)) {
+        const hasUserFixedMinHeight =
+          isExplicitNumericSize(customStyle.minHeight) &&
+          !isDefaultPanelLayoutMinHeight(customStyle.minHeight);
+        if (!hasCustomWidth) {
+          style.width = "100%";
+        }
+        if (!hasCustomHeight) {
+          style.height = "auto";
+        }
+        if (!hasUserFixedMinHeight) {
+          style.minHeight =
+            !props.readonly && !nodeRef.value.children?.length ? "60px" : "0";
+        }
+        style.flex = "0 0 auto";
       }
       return style;
     });

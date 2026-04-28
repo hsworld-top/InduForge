@@ -31,6 +31,8 @@ const rowInsertEdgeThreshold = 8;
 const colInsertEdgeThreshold = 8;
 /** 元素对齐吸附的画布坐标阈值 */
 const alignmentSnapThreshold = 6;
+const NODE_POINTER_DRAG_FREEZE_START_EVENT = "designer:node-pointer-drag-freeze-start";
+const NODE_POINTER_DRAG_FREEZE_END_EVENT = "designer:node-pointer-drag-freeze-end";
 
 interface AbsoluteLayoutLike {
   h: number;
@@ -427,6 +429,9 @@ export function useNodePointer(deps: UseNodePointerDeps): {
 
     event.preventDefault();
     event.stopPropagation();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(NODE_POINTER_DRAG_FREEZE_START_EVENT));
+    }
 
     if (selection.value) {
       // 捕获阶段避免破坏 Ctrl/Meta/Shift 多选逻辑，交由 click 阶段统一处理
@@ -1729,6 +1734,9 @@ export function useNodePointer(deps: UseNodePointerDeps): {
           }
         }
       } finally {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent(NODE_POINTER_DRAG_FREEZE_END_EVENT));
+        }
         endDrag();
         clearDropTarget();
         showInsertLine.value = false;

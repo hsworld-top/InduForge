@@ -32,6 +32,14 @@ function getDefaultStyle(type: string): Record<string, string | number> {
     minHeight: "40px",
   };
 
+  if (type === "HorizontalLayout" || type === "VerticalLayout") {
+    return {
+      ...baseStyle,
+      width: "100%",
+      padding: "0",
+    };
+  }
+
   if (type === "ElHeader" || type === "ElFooter") {
     return {
       ...baseStyle,

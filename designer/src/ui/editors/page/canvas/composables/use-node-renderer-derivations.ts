@@ -51,8 +51,8 @@ const fallbackTimelineItems = [
 ];
 const fallbackStepsItems = [{ title: "步骤一" }, { title: "步骤二" }, { title: "步骤三" }];
 const fallbackCollapseItems = [
-  { name: "1", title: "面板一", content: "内容一" },
-  { name: "2", title: "面板二", content: "内容二" },
+  { name: "1", title: "面板1", content: "内容1" },
+  { name: "2", title: "面板2", content: "内容2" },
 ];
 const fallbackCarouselItems = [{ label: "轮播一" }, { label: "轮播二" }];
 const fullWidthCommaPattern = /，/g;

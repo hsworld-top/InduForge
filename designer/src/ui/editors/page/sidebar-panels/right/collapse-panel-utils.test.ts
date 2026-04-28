@@ -11,16 +11,16 @@ import {
 describe("collapse-panel-utils", () => {
   it("为空或异常 items 生成可编辑的默认面板项", () => {
     expect(normalizeCollapseItems(null)).toEqual([
-      { name: "1", title: "面板一", disabled: false, content: "内容一" },
-      { name: "2", title: "面板二", disabled: false, content: "内容二" },
+      { name: "1", title: "面板1", disabled: false, content: "内容1" },
+      { name: "2", title: "面板2", disabled: false, content: "内容2" },
     ]);
     expect(normalizeCollapseItems([])).toEqual([
-      { name: "1", title: "面板一", disabled: false, content: "内容一" },
-      { name: "2", title: "面板二", disabled: false, content: "内容二" },
+      { name: "1", title: "面板1", disabled: false, content: "内容1" },
+      { name: "2", title: "面板2", disabled: false, content: "内容2" },
     ]);
     expect(normalizeCollapseItems("collapseItems")).toEqual([
-      { name: "1", title: "面板一", disabled: false, content: "内容一" },
-      { name: "2", title: "面板二", disabled: false, content: "内容二" },
+      { name: "1", title: "面板1", disabled: false, content: "内容1" },
+      { name: "2", title: "面板2", disabled: false, content: "内容2" },
     ]);
   });
 
@@ -32,10 +32,27 @@ describe("collapse-panel-utils", () => {
 
     expect(next).toMatchObject({
       name: "panel3",
-      title: "面板 3",
+      title: "面板3",
       disabled: false,
       content: "",
     });
+  });
+
+  it("默认数字标识面板新增时从面板3开始", () => {
+    const next = createCollapseItem([
+      { name: "1", title: "面板1" },
+      { name: "2", title: "面板2" },
+    ]);
+
+    expect(next).toMatchObject({
+      name: "panel3",
+      title: "面板3",
+    });
+  });
+
+  it("标准化旧的自动生成标题为阿拉伯数字格式", () => {
+    expect(normalizeCollapseItems([{ name: "panel1", title: "面板一" }])[0]?.title).toBe("面板1");
+    expect(normalizeCollapseItems([{ name: "panel2", title: "面板 2" }])[0]?.title).toBe("面板2");
   });
 
   it("切换手风琴模式时把展开值转换为单值或数组", () => {

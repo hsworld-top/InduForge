@@ -561,6 +561,43 @@ function isActiveCollapseItem(item: any): boolean {
   return key === String(activeCollapseName.value || "").trim();
 }
 
+const activeCollapseDropKey = ref("");
+
+function isCollapsePaneDropActive(item: any): boolean {
+  if (!isDropActive.value) return false;
+  const key = resolveCollapseItemKey(item);
+  if (!key) return false;
+  return activeCollapseDropKey.value ? activeCollapseDropKey.value === key : isActiveCollapseItem(item);
+}
+
+function handleCollapsePaneDragOver(event: DragEvent, item: any): void {
+  const key = resolveCollapseItemKey(item);
+  if (key) {
+    activeCollapseDropKey.value = key;
+  }
+  handleDragOver(event);
+}
+
+function handleCollapsePaneDragLeave(event: DragEvent, item: any): void {
+  const currentTarget = event.currentTarget instanceof Element ? event.currentTarget : null;
+  const relatedTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+  if (currentTarget && relatedTarget && currentTarget.contains(relatedTarget)) return;
+
+  if (activeCollapseDropKey.value === resolveCollapseItemKey(item)) {
+    activeCollapseDropKey.value = "";
+  }
+  handleDragLeave();
+}
+
+function handleCollapsePaneDrop(event: DragEvent, item: any): void {
+  const key = resolveCollapseItemKey(item);
+  if (key) {
+    activeCollapseDropKey.value = key;
+  }
+  handleDrop(event);
+  activeCollapseDropKey.value = "";
+}
+
 function handleCollapseChange(value: unknown): void {
   if (Array.isArray(value)) {
     const firstKey = String(value[0] ?? "").trim();
@@ -1026,7 +1063,14 @@ function handleDragLeave(): void {
             @dragleave="handleDragLeave"
             @drop.prevent="handleDrop"
           >
-            <template v-if="isContainer && getTabChildIds(tab).length === 0 && !props.isRoot">
+            <template
+              v-if="
+                isContainer &&
+                getTabChildIds(tab).length === 0 &&
+                !props.isRoot &&
+                !suppressReadonlyEmptyHint
+              "
+            >
               <div class="empty-container-hint">
                 <span v-if="isDropActive">释放以添加组件</span>
                 <span v-else>拖拽组件到此处</span>
@@ -1057,17 +1101,27 @@ function handleDragLeave(): void {
         >
           <div
             class="collapse-pane-body"
-            :class="{ 'is-drop-active': isDropActive && isActiveCollapseItem(item) }"
+            :class="{
+              'is-drop-active': isCollapsePaneDropActive(item),
+              'is-empty': !props.readonly && getCollapseChildIds(item).length === 0,
+            }"
             :data-node-id="node.id"
             :data-node-type="node.type"
             :data-collapse-key="resolveCollapseItemKey(item)"
-            @dragover.prevent="handleDragOver"
-            @dragleave="handleDragLeave"
-            @drop.prevent="handleDrop"
+            @dragover.prevent="handleCollapsePaneDragOver($event, item)"
+            @dragleave="handleCollapsePaneDragLeave($event, item)"
+            @drop.prevent="handleCollapsePaneDrop($event, item)"
           >
-            <template v-if="isContainer && getCollapseChildIds(item).length === 0 && !props.isRoot">
+            <template
+              v-if="
+                isContainer &&
+                getCollapseChildIds(item).length === 0 &&
+                !props.isRoot &&
+                !suppressReadonlyEmptyHint
+              "
+            >
               <div class="empty-container-hint">
-                <span v-if="isDropActive">释放以添加组件</span>
+                <span v-if="isCollapsePaneDropActive(item)">释放以添加组件</span>
                 <span v-else>拖拽组件到此处</span>
               </div>
             </template>
@@ -1370,6 +1424,13 @@ function handleDragLeave(): void {
   flex: 1 1 auto;
 }
 
+.tabs-pane-body > .designer-node.is-container[data-node-type="HorizontalLayout"],
+.tabs-pane-body > .designer-node.is-container[data-node-type="VerticalLayout"],
+.collapse-pane-body > .designer-node.is-container[data-node-type="HorizontalLayout"],
+.collapse-pane-body > .designer-node.is-container[data-node-type="VerticalLayout"] {
+  min-height: 0;
+}
+
 .tabs-pane-body.is-drop-active .empty-container-hint {
   border-color: #3b82f6;
   color: #3b82f6;
@@ -1388,6 +1449,18 @@ function handleDragLeave(): void {
   align-items: stretch;
   min-height: 40px;
   overflow: visible;
+}
+
+.designer-node[data-node-type="Collapse"] :deep(.el-collapse-item__content) {
+  padding-bottom: 0;
+}
+
+.designer-node.is-preview .collapse-pane-body {
+  min-height: 0;
+}
+
+.collapse-pane-body.is-empty {
+  min-height: 88px;
 }
 
 .collapse-pane-body .designer-node {
@@ -1527,6 +1600,12 @@ function handleDragLeave(): void {
   border-color: #3b82f6;
   color: #3b82f6;
   background-color: rgba(59, 130, 246, 0.05);
+}
+
+.drag-over .collapse-pane-body:not(.is-drop-active) .empty-container-hint {
+  border-color: #bcc3ce;
+  color: #9ca3af;
+  background-color: rgba(148, 163, 184, 0.06);
 }
 
 .designer-node.layout-container-visible:not(.is-preview) > div {

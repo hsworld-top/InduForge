@@ -32,8 +32,8 @@ export const manifest: ComponentManifest = {
       label: "面板",
       group: "数据",
       defaultValue: [
-        { name: "1", title: "面板一", content: "内容一" },
-        { name: "2", title: "面板二", content: "内容二" },
+        { name: "1", title: "面板1", content: "内容1" },
+        { name: "2", title: "面板2", content: "内容2" },
       ],
     },
   ],
