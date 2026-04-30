@@ -48,6 +48,7 @@ import IconEpLink from "~icons/ep/link";
 import IconEpList from "~icons/ep/list";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { getManifest } from "@/materials/manifests";
+import { resolveButtonShapeProps } from "@/editor-core/descriptors/button-props";
 import { useEditorStore } from "@/stores/editor-store";
 import { getMenuDefaultProps } from "@/stores/editor/normalize-settings";
 import { usePanelState } from "../composables/use-panel-state";
@@ -298,8 +299,7 @@ const propertyPanelPresetLabelMap: Record<string, string> = {
   "btn-size": "Size Variants",
   "btn-round": "Rounded / Circle",
   "btn-icon": "Icon Button",
-  "btn-native": "Form Submit Button",
-  "btn-block": "Block Button (block/width)",
+  "btn-loading": "Loading Button",
   "btn-confirm": "Confirmation Button",
   "btn-throttle": "Throttle",
   "btn-debounce": "Debounce",
@@ -370,7 +370,11 @@ watch(
     const nextProps = { ...props };
     Object.entries(defaults).forEach(([key, value]) => {
       if (nextProps[key] === undefined) {
-        nextProps[key] = value;
+        if (type === "Button" && key === "shape") {
+          nextProps[key] = props.circle ? "circle" : props.round ? "round" : value;
+        } else {
+          nextProps[key] = value;
+        }
         changed = true;
       }
     });
@@ -1981,7 +1985,7 @@ const buttonDetailPresets: AnyArray = [
     id: "btn-full",
     label: "通用模板（全字段）",
     content:
-      "this.button({\n  text: '按钮',\n  type: 'default',\n  size: 'small',\n  plain: false,\n  round: false,\n  circle: false,\n  loading: false,\n  disabled: false,\n  autofocus: false,\n  nativeType: 'button',\n\n  icon: '',\n  'prefix-icon': '',\n  'suffix-icon': '',\n\n  click: 'onClick',\n  confirm: '',\n  confirmType: 'warning',\n  confirmTitle: '提示',\n  throttle: 0,\n  debounce: 0,\n  perms: '',\n  show: true,\n  if: true,\n\n  block: false,\n  width: null,\n});",
+      "this.button({\n  text: '按钮',\n  type: 'default',\n  size: 'small',\n  plain: false,\n  round: false,\n  circle: false,\n  loading: false,\n  disabled: false,\n  autofocus: false,\n\n  icon: '',\n  'prefix-icon': '',\n  'suffix-icon': '',\n\n  click: 'onClick',\n  confirm: '',\n  confirmType: 'warning',\n  confirmTitle: '提示',\n  throttle: 0,\n  debounce: 0,\n  perms: '',\n  show: true,\n  if: true,\n\n  block: false,\n  width: null,\n});",
   },
   {
     id: "btn-basic",
@@ -2030,15 +2034,10 @@ const buttonDetailPresets: AnyArray = [
       "this.button({\n  text: '新增',\n  type: 'primary',\n  icon: 'el-icon-plus',\n  click: 'onAdd',\n})\n\n// 示例: text='下载' type='success' icon='el-icon-download' click='onDownload'",
   },
   {
-    id: "btn-native",
-    label: "表单提交按钮",
-    content: "this.button({\n  text: '提交表单',\n  type: 'primary',\n  nativeType: 'submit',\n})",
-  },
-  {
-    id: "btn-block",
-    label: "块级按钮（block/width）",
+    id: "btn-loading",
+    label: "加载状态按钮",
     content:
-      "this.button({\n  text: '立即支付',\n  type: 'primary',\n  block: true,\n  click: 'payNow',\n})\n\n// 示例: width=120 text='固定宽度' click='onFixedWidth'",
+      "this.button({\n  text: '提交中',\n  type: 'primary',\n  loading: true,\n  click: 'onSubmit',\n})\n\n// 示例: text='保存' type='success' loading=true click='onSave'",
   },
   {
     id: "btn-confirm",
@@ -6387,6 +6386,7 @@ const hasStyleConfig = computed(() => {
  */
 function shouldHideProp(propDef: AnyRecord): boolean {
   if (!propDef || !propDef.name) return false;
+  if (propDef.hidden === true) return true;
   const nodeType = elementTypeName(selectedNode.value?.type);
   if (nodeType === "Tabs" && propDef.name === "tabs") return true;
   if (nodeType === "Menu" && propDef.name === "items") return true;
@@ -7039,8 +7039,14 @@ function handlePropChange(propName: string, value: any): void {
 
   const newProps: AnyRecord = { ...(el.props || {}), [propName]: value };
   const isTextComponent = elementTypeName(el.type) === "Text";
+  const isButtonComponent = elementTypeName(el.type) === "Button";
   let nextStyle: AnyRecord = {};
   let shouldPatchStyle = false;
+  if (isButtonComponent) {
+    if (propName === "shape") {
+      Object.assign(newProps, resolveButtonShapeProps(value));
+    }
+  }
   if (isTextComponent) {
     nextStyle = { ...(el.style || {}) };
     shouldPatchStyle = true;

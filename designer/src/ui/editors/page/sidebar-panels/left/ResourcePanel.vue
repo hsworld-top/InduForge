@@ -5,7 +5,7 @@
 <script setup lang="ts">
 import type { AssetFolder, AssetItem } from "@/types/api";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import IconEpGrid from "~icons/ep/grid";
 import IconEpList from "~icons/ep/list";
@@ -21,6 +21,14 @@ import { normalizeAssetExt, resolveAssetTypeLabel } from "@/ui/shared/helpers/as
 
 interface TreeFilterableLike {
   filter?: (value: string) => void;
+}
+
+interface ScrollbarLike {
+  wrapRef?: HTMLElement | null;
+}
+
+interface ResourceScrollState {
+  scrollTop: number;
 }
 
 interface ResourceFolderNode extends AssetFolder {
@@ -60,11 +68,14 @@ const folderSearch = ref("");
 const assetSearch = ref("");
 const folderTreeRef = ref<TreeFilterableLike | null>(null);
 const moveTreeRef = ref<TreeFilterableLike | null>(null);
+const assetScrollRef = ref<ScrollbarLike | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const folders = ref<AssetFolder[]>([]);
 const assets = ref<AssetItem[]>([]);
 const selectedFolderId = ref("root");
 const viewMode = ref<"grid" | "list">("grid");
+const ASSET_BATCH_SIZE = 40;
+const visibleAssetLimit = ref(ASSET_BATCH_SIZE);
 
 const previewVisible = ref(false);
 const previewAsset = ref<ResourceAssetView | null>(null);
@@ -263,6 +274,45 @@ const filteredAssets = computed<ResourceAssetView[]>(() => {
   }
   return list;
 });
+
+const visibleAssets = computed<ResourceAssetView[]>(() =>
+  filteredAssets.value.slice(0, visibleAssetLimit.value),
+);
+
+const hasMoreAssets = computed(() => visibleAssetLimit.value < filteredAssets.value.length);
+
+function loadNextAssetBatch(): void {
+  if (!hasMoreAssets.value) return;
+  visibleAssetLimit.value = Math.min(
+    visibleAssetLimit.value + ASSET_BATCH_SIZE,
+    filteredAssets.value.length,
+  );
+}
+
+async function ensureAssetScrollFilled(): Promise<void> {
+  await nextTick();
+  let wrap = assetScrollRef.value?.wrapRef;
+  while (wrap && hasMoreAssets.value && wrap.scrollHeight <= wrap.clientHeight + 24) {
+    loadNextAssetBatch();
+    await nextTick();
+    wrap = assetScrollRef.value?.wrapRef;
+  }
+}
+
+function resetAssetLazyLoad(): void {
+  visibleAssetLimit.value = ASSET_BATCH_SIZE;
+  void ensureAssetScrollFilled();
+}
+
+function handleAssetScroll({ scrollTop }: ResourceScrollState): void {
+  const wrap = assetScrollRef.value?.wrapRef;
+  if (!wrap || !hasMoreAssets.value) return;
+  const distanceToBottom = wrap.scrollHeight - scrollTop - wrap.clientHeight;
+  if (distanceToBottom <= 160) {
+    loadNextAssetBatch();
+    void ensureAssetScrollFilled();
+  }
+}
 
 function handleFolderClick(data: ResourceFolderNode | null | undefined): void {
   if (!data) return;
@@ -573,6 +623,8 @@ watch(projectId, (value) => {
     loadAssets();
   }
 });
+
+watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: "post" });
 </script>
 
 <template>
@@ -620,7 +672,27 @@ watch(projectId, (value) => {
       <div class="resource-assets">
         <div class="asset-header">
           <div class="asset-title">
-            <span>{{ selectedFolderLabel }}</span>
+            <div class="asset-title-line">
+              <span class="asset-title-text">{{ selectedFolderLabel }}</span>
+              <div class="view-toggle">
+                <el-button
+                  circle
+                  size="small"
+                  :type="viewMode === 'grid' ? 'primary' : 'default'"
+                  @click="viewMode = 'grid'"
+                >
+                  <el-icon><IconEpGrid /></el-icon>
+                </el-button>
+                <el-button
+                  circle
+                  size="small"
+                  :type="viewMode === 'list' ? 'primary' : 'default'"
+                  @click="viewMode = 'list'"
+                >
+                  <el-icon><IconEpList /></el-icon>
+                </el-button>
+              </div>
+            </div>
           </div>
           <div class="asset-body">
             <el-input
@@ -643,10 +715,10 @@ watch(projectId, (value) => {
           {{ t("resourcePanel.uploadHint") }}
         </div>
 
-        <el-scrollbar class="asset-scroll">
+        <el-scrollbar ref="assetScrollRef" class="asset-scroll" @scroll="handleAssetScroll">
           <div v-if="viewMode === 'grid'" class="asset-grid">
             <div
-              v-for="asset in filteredAssets"
+              v-for="asset in visibleAssets"
               :key="asset.id"
               class="asset-card"
               draggable="true"
@@ -681,7 +753,7 @@ watch(projectId, (value) => {
               <span class="col-size">{{ t("resourcePanel.size") }}</span>
             </div>
             <div
-              v-for="asset in filteredAssets"
+              v-for="asset in visibleAssets"
               :key="asset.id"
               class="asset-table-row"
               draggable="true"
@@ -695,25 +767,6 @@ watch(projectId, (value) => {
             </div>
           </div>
         </el-scrollbar>
-
-        <div class="view-toggle">
-          <el-button
-            circle
-            size="small"
-            :type="viewMode === 'grid' ? 'primary' : 'default'"
-            @click="viewMode = 'grid'"
-          >
-            <el-icon><IconEpGrid /></el-icon>
-          </el-button>
-          <el-button
-            circle
-            size="small"
-            :type="viewMode === 'list' ? 'primary' : 'default'"
-            @click="viewMode = 'list'"
-          >
-            <el-icon><IconEpList /></el-icon>
-          </el-button>
-        </div>
       </div>
     </div>
 
@@ -876,9 +929,9 @@ watch(projectId, (value) => {
   display: flex;
   flex-direction: column;
   border-bottom: 1px solid var(--designer-border-soft);
-  padding-bottom: 10px;
+  padding-bottom: 8px;
   min-height: 0;
-  flex: 0 0 42%;
+  flex: 0 0 clamp(132px, 28%, 180px);
 }
 
 .resource-assets {
@@ -929,6 +982,7 @@ watch(projectId, (value) => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  width: 100%;
 }
 
 .asset-count {
@@ -1045,9 +1099,9 @@ watch(projectId, (value) => {
 
 .view-toggle {
   display: flex;
-  gap: 6px;
+  flex: 0 0 auto;
+  gap: 4px;
   justify-content: flex-end;
-  padding-top: 8px;
 }
 
 .hidden-input {
@@ -1165,10 +1219,15 @@ watch(projectId, (value) => {
 
 .asset-title-line {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .asset-title-text {
   display: inline-block;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;

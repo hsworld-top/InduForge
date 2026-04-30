@@ -1395,6 +1395,24 @@ function handleDragLeave(): void {
   min-height: 40px;
 }
 
+.designer-node[data-node-type="Button"] :deep(.el-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+
+.designer-node[data-node-type="Button"] :deep(.el-button .el-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.designer-node[data-node-type="Button"] :deep(.el-button .el-icon svg) {
+  display: block;
+}
+
 .menu-item-icon {
   margin-right: 6px;
 }

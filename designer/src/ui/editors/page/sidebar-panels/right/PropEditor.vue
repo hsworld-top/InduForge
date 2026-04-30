@@ -54,9 +54,27 @@ const colorProxy = computed<string>({
 });
 
 const isCodeEditor = computed(() => props.prop?.editor === "code");
+const isIconEditor = computed(() => props.prop?.editor === "icon");
 const isJsonType = computed(() => ["object", "array"].includes(props.prop?.type ?? ""));
 const jsonDraft = ref<string>("");
 const codeDraft = ref<string>("");
+const iconDraft = ref<string>("");
+
+const iconOptions = computed(() =>
+  (props.prop?.options || []).map((option) => ({
+    label: String(option.label || option.value || ""),
+    value: String(option.value || ""),
+  })),
+);
+
+const iconProxy = computed<string>({
+  get: () => iconDraft.value,
+  set: (value: string) => {
+    iconDraft.value = value;
+    const matchedOption = findIconOptionByLabel(value);
+    emit("update:modelValue", matchedOption?.value ?? value);
+  },
+});
 
 /**
  * 同步 JSON 草稿
@@ -102,6 +120,11 @@ watch([() => props.modelValue, () => props.prop?.editor], syncCodeDraft, {
   immediate: true,
 });
 
+watch([() => props.modelValue, () => props.prop?.options, isIconEditor], syncIconDraft, {
+  immediate: true,
+  deep: true,
+});
+
 /**
  * 处理代码输入
  * @param {string} value - 新值
@@ -134,6 +157,42 @@ function commitJsonDraft() {
     ElMessage.warning("请输入合法的 JSON" as never);
   }
 }
+
+function findIconOptionByValue(value: string) {
+  return iconOptions.value.find((option) => option.value === value);
+}
+
+function findIconOptionByLabel(label: string) {
+  return iconOptions.value.find((option) => option.label === label);
+}
+
+function syncIconDraft() {
+  if (!isIconEditor.value) return;
+  const value = typeof props.modelValue === "string" ? props.modelValue : "";
+  iconDraft.value = findIconOptionByValue(value)?.label ?? value;
+}
+
+/**
+ * 按当前语言下的图标名称过滤候选项，同时保留手动输入能力。
+ */
+function queryIconSuggestions(query: string, callback: (items: Array<{ label: string; value: string }>) => void) {
+  const keyword = String(query || "").trim().toLowerCase();
+  const matched = iconOptions.value.filter((option) => {
+    if (!keyword) return true;
+    return option.label.toLowerCase().includes(keyword);
+  });
+  callback(matched);
+}
+
+function handleIconSelect(item: { label?: string; value?: string }) {
+  iconDraft.value = String(item?.label || item?.value || "");
+  emit("update:modelValue", String(item?.value || ""));
+}
+
+function handleIconClear() {
+  iconDraft.value = "";
+  emit("update:modelValue", "");
+}
 </script>
 
 <template>
@@ -145,6 +204,26 @@ function commitJsonDraft() {
       :height="prop.height || '220px'"
       @update:model-value="handleCodeChange"
     />
+
+    <!-- 图标类型：常用图标可搜索选择，同时允许手动输入自定义图标名 -->
+    <el-autocomplete
+      v-else-if="isIconEditor"
+      v-model="iconProxy"
+      :fetch-suggestions="queryIconSuggestions"
+      :placeholder="prop.placeholder || '选择或输入图标名'"
+      value-key="label"
+      size="small"
+      clearable
+      :trigger-on-focus="true"
+      @select="handleIconSelect"
+      @clear="handleIconClear"
+    >
+      <template #default="{ item }">
+        <div class="icon-option">
+          <span class="icon-option__label">{{ item.label }}</span>
+        </div>
+      </template>
+    </el-autocomplete>
 
     <!-- 字符串类型 -->
     <el-input
@@ -216,9 +295,17 @@ function commitJsonDraft() {
   width: 100%;
 }
 
+.prop-editor :deep(.el-autocomplete) {
+  width: 100%;
+}
+
 .prop-editor :deep(.monaco-editor-container) {
   border: 1px solid var(--designer-border-color);
   border-radius: var(--designer-radius-md);
   overflow: hidden;
+}
+
+.icon-option__label {
+  color: var(--designer-text-primary);
 }
 </style>

@@ -3,6 +3,7 @@
  */
 
 import type { ComponentDescriptor } from "./registry";
+import { normalizeButtonRenderProps } from "./button-props";
 
 export const descriptor: ComponentDescriptor = {
   /** 渲染为 Element Plus el-button */
@@ -27,10 +28,7 @@ export const descriptor: ComponentDescriptor = {
   displayContent: (node, resolvedProps) => String(resolvedProps?.text ?? node?.label ?? "按钮"),
 
   /** 过滤/转换传给 renderTag 的 props */
-  propsFilter: (resolvedProps) => {
-    const { text: _t, ...elProps } = resolvedProps ?? {};
-    return elProps;
-  },
+  propsFilter: (resolvedProps) => normalizeButtonRenderProps(resolvedProps ?? {}),
 
   /** 默认尺寸 */
   defaultSize: { width: 120, height: 36 },
