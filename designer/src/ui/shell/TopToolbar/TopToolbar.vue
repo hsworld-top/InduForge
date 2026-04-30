@@ -303,10 +303,7 @@ function handleMoreCommand(command: string) {
         <span class="page-chip__name">{{ pageName || t("toolbar.untitledPage") }}</span>
         <span v-if="isDirty" class="page-chip__dirty">●</span>
       </div>
-      <el-tooltip
-        :content="isLocked ? t('toolbar.unlockPage') : t('toolbar.lockPage')"
-        placement="bottom"
-      >
+      <el-tooltip :content="isLocked ? t('toolbar.unlockPage') : t('toolbar.lockPage')" placement="bottom">
         <el-button class="icon-btn" @click="handleToggleLock">
           <IconLucideLock v-if="isLocked" />
           <IconLucideLockOpen v-else />
@@ -327,18 +324,10 @@ function handleMoreCommand(command: string) {
               <IconLucideClipboardPaste />
             </el-button>
           </el-tooltip>
-          <el-tooltip
-            :content="
-              selectedNodeLocked ? t('toolbar.unlockNodePosition') : t('toolbar.lockNodePosition')
-            "
-            placement="bottom"
-          >
-            <el-button
-              class="icon-btn"
-              :class="{ 'is-active': selectedNodeLocked }"
-              :disabled="!canToggleNodeLock"
-              @click="handleToggleNodeLock"
-            >
+          <el-tooltip :content="selectedNodeLocked ? t('toolbar.unlockNodePosition') : t('toolbar.lockNodePosition')
+            " placement="bottom">
+            <el-button class="icon-btn" :class="{ 'is-active': selectedNodeLocked }" :disabled="!canToggleNodeLock"
+              @click="handleToggleNodeLock">
               <IconLucidePinOff v-if="selectedNodeLocked" />
               <IconLucidePin v-else />
             </el-button>
@@ -350,12 +339,7 @@ function handleMoreCommand(command: string) {
           </el-tooltip>
         </div>
         <div class="toolbar-group toolbar-group--canvas toolbar-center-middle">
-          <el-popover
-            trigger="click"
-            placement="bottom"
-            popper-class="designer-size-popper"
-            :width="272"
-          >
+          <el-popover trigger="click" placement="bottom" popper-class="designer-size-popper" :width="272">
             <template #reference>
               <el-button class="view-btn view-btn--selector">
                 <IconLucideMonitor class="view-selector__icon" />
@@ -366,16 +350,9 @@ function handleMoreCommand(command: string) {
               <div class="size-panel__section">
                 <div class="size-panel__title">{{ t("toolbar.presetSize") }}</div>
                 <div class="size-preset-list">
-                  <button
-                    v-for="item in viewItems"
-                    :key="item.key"
-                    type="button"
-                    class="size-preset-item"
-                    :class="{
-                      'is-active': item.key === activeViewKey && !isCustomView,
-                    }"
-                    @click="handleViewChange(item.key)"
-                  >
+                  <button v-for="item in viewItems" :key="item.key" type="button" class="size-preset-item" :class="{
+                    'is-active': item.key === activeViewKey && !isCustomView,
+                  }" @click="handleViewChange(item.key)">
                     <span class="size-preset-item__label">{{ item.label }}</span>
                     <span class="size-preset-item__meta">{{ item.width }} x {{ item.height }}</span>
                   </button>
@@ -386,25 +363,13 @@ function handleMoreCommand(command: string) {
                 <div class="custom-size-grid">
                   <label class="custom-size-field">
                     <span class="custom-size-field__label">{{ t("toolbar.width") }}</span>
-                    <el-input-number
-                      v-model="localCustomSize.width"
-                      :min="120"
-                      :max="7680"
-                      :step="10"
-                      controls-position="right"
-                      @change="handleApplyCustomSize"
-                    />
+                    <el-input-number v-model="localCustomSize.width" :min="120" :max="7680" :step="10"
+                      controls-position="right" @change="handleApplyCustomSize" />
                   </label>
                   <label class="custom-size-field">
                     <span class="custom-size-field__label">{{ t("toolbar.height") }}</span>
-                    <el-input-number
-                      v-model="localCustomSize.height"
-                      :min="120"
-                      :max="4320"
-                      :step="10"
-                      controls-position="right"
-                      @change="handleApplyCustomSize"
-                    />
+                    <el-input-number v-model="localCustomSize.height" :min="120" :max="4320" :step="10"
+                      controls-position="right" @change="handleApplyCustomSize" />
                   </label>
                 </div>
               </div>
@@ -412,19 +377,13 @@ function handleMoreCommand(command: string) {
           </el-popover>
           <div class="zoom-group">
             <el-tooltip :content="t('toolbar.zoomOut')" placement="bottom">
-              <el-button
-                class="icon-btn icon-btn--subtle zoom-btn zoom-btn--out"
-                @click="handleZoomOut"
-              >
+              <el-button class="icon-btn icon-btn--subtle zoom-btn zoom-btn--out" @click="handleZoomOut">
                 <IconLucideZoomOut />
               </el-button>
             </el-tooltip>
             <span class="zoom-pill">{{ Math.round(zoom * 100) }}%</span>
             <el-tooltip :content="t('toolbar.zoomIn')" placement="bottom">
-              <el-button
-                class="icon-btn icon-btn--subtle zoom-btn zoom-btn--in"
-                @click="handleZoomIn"
-              >
+              <el-button class="icon-btn icon-btn--subtle zoom-btn zoom-btn--in" @click="handleZoomIn">
                 <IconLucideZoomIn />
               </el-button>
             </el-tooltip>
@@ -471,16 +430,9 @@ function handleMoreCommand(command: string) {
     <div class="toolbar-section toolbar-right">
       <div class="toolbar-group toolbar-group--primary">
         <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
-        <el-dropdown
-          class="preview-action"
-          trigger="click"
-          placement="bottom-end"
-          popper-class="preview-menu-popper"
-          split-button
-          :hide-on-click="false"
-          @click="handlePreview"
-          @visible-change="handlePreviewDropdownVisibleChange"
-        >
+        <el-dropdown class="preview-action" trigger="click" placement="bottom-end" popper-class="preview-menu-popper"
+          split-button :hide-on-click="false" @click="handlePreview"
+          @visible-change="handlePreviewDropdownVisibleChange">
           <span class="split-action__text">
             <IconLucidePlay />
             <span>{{ t("toolbar.preview") }}</span>
@@ -490,21 +442,11 @@ function handleMoreCommand(command: string) {
               <div class="preview-settings-panel__title">{{ t("toolbar.previewIdentity") }}</div>
               <div class="preview-settings-panel__row">
                 <span class="preview-settings-panel__label">{{ t("toolbar.previewUser") }}</span>
-                <el-select
-                  v-model="selectedPreviewUser"
-                  class="preview-settings-panel__select"
-                  size="small"
-                  filterable
-                  popper-class="preview-user-select-popper"
-                  :empty-text="t('toolbar.previewUserEmpty')"
-                  placeholder="未选择用户"
-                >
-                  <el-option
-                    v-for="item in previewUserOptions"
-                    :key="item.value"
-                    :label="item.description ? `${item.label} ${item.description}` : item.label"
-                    :value="item.value"
-                  >
+                <el-select v-model="selectedPreviewUser" class="preview-settings-panel__select" size="small" filterable
+                  popper-class="preview-user-select-popper" :empty-text="t('toolbar.previewUserEmpty')"
+                  placeholder="未选择用户">
+                  <el-option v-for="item in previewUserOptions" :key="item.value"
+                    :label="item.description ? `${item.label} ${item.description}` : item.label" :value="item.value">
                     <div class="preview-user-option">
                       <span class="preview-user-option__name">{{ item.label }}</span>
                       <span v-if="item.description" class="preview-user-option__desc">
@@ -517,14 +459,8 @@ function handleMoreCommand(command: string) {
             </div>
           </template>
         </el-dropdown>
-        <el-dropdown
-          class="save-action"
-          trigger="click"
-          placement="bottom-end"
-          popper-class="save-settings-popper"
-          split-button
-          @click="handleSave"
-        >
+        <el-dropdown class="save-action" trigger="click" placement="bottom-end" popper-class="save-settings-popper"
+          split-button @click="handleSave">
           <span class="split-action__text">
             <IconLucideSave />
             <span>{{ t("toolbar.save") }}</span>
@@ -533,26 +469,15 @@ function handleMoreCommand(command: string) {
             <div class="save-settings-panel" @click.stop>
               <div class="save-settings-panel__title">{{ t("toolbar.saveSettings") }}</div>
               <div class="save-settings-panel__row save-settings-panel__row--check">
-                <el-checkbox
-                  v-model="localSaveSettings.autoSave"
-                  @change="handleSaveSettingsChange"
-                />
+                <el-checkbox v-model="localSaveSettings.autoSave" @change="handleSaveSettingsChange" />
                 <span class="save-settings-panel__label">{{ t("toolbar.autoSave") }}</span>
               </div>
               <div class="save-settings-panel__row">
                 <span class="save-settings-panel__label">{{ t("toolbar.saveInterval") }}</span>
-                <el-select
-                  v-model="localSaveSettings.intervalMinutes"
-                  class="save-settings-panel__select"
-                  :disabled="!localSaveSettings.autoSave"
-                  @change="handleSaveSettingsChange"
-                >
-                  <el-option
-                    v-for="item in saveIntervalOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
+                <el-select v-model="localSaveSettings.intervalMinutes" class="save-settings-panel__select"
+                  :disabled="!localSaveSettings.autoSave" @change="handleSaveSettingsChange">
+                  <el-option v-for="item in saveIntervalOptions" :key="item.value" :label="item.label"
+                    :value="item.value" />
                 </el-select>
               </div>
             </div>
@@ -613,12 +538,8 @@ function handleMoreCommand(command: string) {
 
 .toolbar-center {
   position: absolute;
-  left: calc(
-    var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
-  );
-  right: calc(
-    var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
-  );
+  left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+  right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
   top: 0;
   bottom: 0;
   display: flex;
@@ -681,7 +602,6 @@ function handleMoreCommand(command: string) {
 
 .toolbar-center-right {
   justify-self: end;
-  margin-right: 12px;
 }
 
 .page-chip {
@@ -1221,12 +1141,8 @@ function handleMoreCommand(command: string) {
 
 @media (max-width: 1360px) {
   .toolbar-center {
-    left: calc(
-      var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
-    );
-    right: calc(
-      var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
-    );
+    left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+    right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
   }
 
   .toolbar-center-shell {
@@ -1240,12 +1156,8 @@ function handleMoreCommand(command: string) {
   }
 
   .toolbar-center {
-    left: calc(
-      var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
-    );
-    right: calc(
-      var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
-    );
+    left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+    right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
   }
 
   .toolbar-center-shell {
