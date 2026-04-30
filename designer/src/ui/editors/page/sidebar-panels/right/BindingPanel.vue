@@ -13,6 +13,11 @@ import IconEpGrid from "~icons/ep/grid";
 import IconEpList from "~icons/ep/list";
 import IconEpPlus from "~icons/ep/plus";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
+import {
+  resolvePageVariableSnippet,
+  resolveProjectVariableSnippet,
+  resolveProjectVariableSourceLabel,
+} from "@/services/data-variable-mapping";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/helpers/component-methods";
 import { usePanelState } from "../composables/use-panel-state";
@@ -81,6 +86,7 @@ interface VariableRowLike {
   description: string;
   groupId?: string | null;
   mapped?: boolean;
+  sourceLabel?: string;
   defaultValue?: string;
 }
 
@@ -135,15 +141,11 @@ const scriptSearch = ref("");
 const componentSearch = ref("");
 const componentTreeRef = ref<any>(null);
 const variableEnumVisible = ref(false);
-const enumTab = ref("project");
 const projectVarSearch = ref("");
 const pageVarSearch = ref("");
 const enumProjectTreeRef = ref<any>(null);
-const enumPageTreeRef = ref<any>(null);
 const enumSelectedProjectGroupId = ref<string | null>(null);
-const enumSelectedPageGroupId = ref("page-root");
 const enumSelectedProjectVar = ref<VariableRowLike | null>(null);
-const enumSelectedPageVar = ref<VariableRowLike | null>(null);
 const activeLifecycleKey = ref("");
 const lifecycleToggleState = ref<Record<string, boolean>>({});
 const activeItemType = ref<"" | "lifecycle" | "timer" | "variableChanges">("");
@@ -353,6 +355,9 @@ const projectVariableRows = computed<VariableRowLike[]>(() => {
     type: detail?.type || "string",
     description: detail?.description || "",
     mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+    sourceLabel: resolveProjectVariableSourceLabel(detail)
+      ? `来自数据点：${resolveProjectVariableSourceLabel(detail)}`
+      : "",
   }));
   return items
     .filter((item) => {
@@ -368,10 +373,6 @@ const projectVariableRows = computed<VariableRowLike[]>(() => {
         .includes(keyword);
     });
 });
-
-const pageGroupTree = computed<SidebarTreeNodeLike[]>(() => [
-  { id: "page-root", label: "页面变量", type: "group", children: [] },
-]);
 
 const pageVariableRows = computed<VariableRowLike[]>(() => {
   const keyword = String(pageVarSearch.value || "").toLowerCase();
@@ -595,14 +596,15 @@ function handleComponentInsert(data: SidebarTreeNodeLike): void {
   editorRef.value?.insertText?.(`components.${data.componentName}`);
 }
 
+function handlePageVariableInsert(row: VariableRowLike): void {
+  if (!row?.name) return;
+  editorRef.value?.insertText?.(resolvePageVariableSnippet(row.name));
+}
+
 function openVariableEnum() {
   projectVarSearch.value = "";
-  pageVarSearch.value = "";
-  enumTab.value = "project";
   enumSelectedProjectGroupId.value = null;
-  enumSelectedPageGroupId.value = "page-root";
   enumSelectedProjectVar.value = null;
-  enumSelectedPageVar.value = null;
   variableEnumVisible.value = true;
 }
 
@@ -615,25 +617,12 @@ function handleProjectGroupSelect(data: { id?: string } | null | undefined): voi
     data.id === "all" ? null : ((data.id as string | null) ?? null);
 }
 
-function handlePageGroupSelect(data: { id?: string } | null | undefined): void {
-  enumSelectedPageGroupId.value = data?.id || "page-root";
-}
-
 function handleProjectRowClick(row: VariableRowLike | null | undefined): void {
   enumSelectedProjectVar.value = row || null;
 }
 
-function handlePageRowClick(row: VariableRowLike | null | undefined): void {
-  enumSelectedPageVar.value = row || null;
-}
-
 function handleProjectRowDblClick(row: VariableRowLike | null | undefined): void {
   enumSelectedProjectVar.value = row || null;
-  confirmEnumInsert();
-}
-
-function handlePageRowDblClick(row: VariableRowLike | null | undefined): void {
-  enumSelectedPageVar.value = row || null;
   confirmEnumInsert();
 }
 
@@ -642,19 +631,9 @@ function enumProjectRowClass({ row }: { row: VariableRowLike }): string {
   return "";
 }
 
-function enumPageRowClass({ row }: { row: VariableRowLike }): string {
-  if (enumSelectedPageVar.value?.name === row.name) return "is-selected";
-  return "";
-}
-
 function confirmEnumInsert(): void {
-  if (enumTab.value === "page" && enumSelectedPageVar.value?.name) {
-    editorRef.value?.insertText?.(`$vars.${enumSelectedPageVar.value.name}`);
-    variableEnumVisible.value = false;
-    return;
-  }
   if (enumSelectedProjectVar.value?.name) {
-    editorRef.value?.insertText?.(`$global.${enumSelectedProjectVar.value.name}`);
+    editorRef.value?.insertText?.(resolveProjectVariableSnippet(enumSelectedProjectVar.value.name));
     variableEnumVisible.value = false;
   }
 }
@@ -1058,6 +1037,24 @@ watch(
           </div>
         </div>
         <div class="sidebar-section">
+          <div class="sidebar-title">页面变量</div>
+          <el-input v-model="pageVarSearch" size="small" placeholder="搜索页面变量" clearable />
+          <div class="sidebar-scroll page-var-list">
+            <div
+              v-for="row in pageVariableRows"
+              :key="row.name"
+              class="page-var-item"
+              @click="handlePageVariableInsert(row)"
+            >
+              <el-icon class="node-icon icon-variable">
+                <IconEpList />
+              </el-icon>
+              <span class="node-label">{{ row.name }}</span>
+              <span class="page-var-type">{{ row.type }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-section">
           <div class="sidebar-title">页面组件</div>
           <el-input v-model="componentSearch" size="small" placeholder="搜索组件/分组" clearable />
           <div class="sidebar-scroll">
@@ -1099,107 +1096,49 @@ watch(
     :close-on-click-modal="false"
     :lock-scroll="false"
   >
-    <el-tabs v-model="enumTab">
-      <el-tab-pane label="工程变量" name="project">
-        <div class="enum-layout">
-          <div class="enum-left">
-            <div class="sidebar-title">分组</div>
-            <el-tree
-              ref="enumProjectTreeRef"
-              :data="projectGroupTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterSidebarNode"
-              @node-click="handleProjectGroupSelect"
-            >
-              <template #default="{ data }">
-                <div class="tree-node node-group">
-                  <el-icon class="node-icon icon-variable">
-                    <IconEpFolder />
-                  </el-icon>
-                  <span class="node-label is-group">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-          <div class="enum-right">
-            <el-input
-              v-model="projectVarSearch"
-              size="small"
-              placeholder="搜索工程变量"
-              clearable
-            />
-            <el-table
-              :data="projectVariableRows"
-              size="small"
-              height="320"
-              highlight-current-row
-              :row-class-name="enumProjectRowClass"
-              @row-click="handleProjectRowClick"
-              @row-dblclick="handleProjectRowDblClick"
-            >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="description" label="描述" min-width="160" />
-              <el-table-column prop="mapped" label="映射" width="70">
-                <template #default="{ row }">
-                  {{ row.mapped ? "是" : "" }}
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </div>
-      </el-tab-pane>
-      <el-tab-pane label="页面变量" name="page">
-        <div class="enum-layout">
-          <div class="enum-left">
-            <div class="sidebar-title">分组</div>
-            <el-tree
-              ref="enumPageTreeRef"
-              :data="pageGroupTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              @node-click="handlePageGroupSelect"
-            >
-              <template #default="{ data }">
-                <div class="tree-node node-group">
-                  <el-icon class="node-icon icon-variable">
-                    <IconEpFolder />
-                  </el-icon>
-                  <span class="node-label is-group">{{ data.label }}</span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
-          <div class="enum-right">
-            <el-input v-model="pageVarSearch" size="small" placeholder="搜索页面变量" clearable />
-            <el-table
-              :data="pageVariableRows"
-              size="small"
-              height="320"
-              highlight-current-row
-              :row-class-name="enumPageRowClass"
-              @row-click="handlePageRowClick"
-              @row-dblclick="handlePageRowDblClick"
-            >
-              <el-table-column prop="name" label="变量名" min-width="160" />
-              <el-table-column prop="type" label="类型" width="90" />
-              <el-table-column prop="defaultValue" label="初始值" min-width="160" />
-              <el-table-column prop="description" label="描述" min-width="160" />
-            </el-table>
-          </div>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
+    <div class="enum-layout">
+      <div class="enum-left">
+        <div class="sidebar-title">分组</div>
+        <el-tree
+          ref="enumProjectTreeRef"
+          :data="projectGroupTree"
+          node-key="id"
+          :default-expand-all="true"
+          :expand-on-click-node="false"
+          :filter-node-method="filterSidebarNode"
+          @node-click="handleProjectGroupSelect"
+        >
+          <template #default="{ data }">
+            <div class="tree-node node-group">
+              <el-icon class="node-icon icon-variable">
+                <IconEpFolder />
+              </el-icon>
+              <span class="node-label is-group">{{ data.label }}</span>
+            </div>
+          </template>
+        </el-tree>
+      </div>
+      <div class="enum-right">
+        <el-input v-model="projectVarSearch" size="small" placeholder="搜索工程变量" clearable />
+        <el-table
+          :data="projectVariableRows"
+          size="small"
+          height="320"
+          highlight-current-row
+          :row-class-name="enumProjectRowClass"
+          @row-click="handleProjectRowClick"
+          @row-dblclick="handleProjectRowDblClick"
+        >
+          <el-table-column prop="name" label="变量名" min-width="150" />
+          <el-table-column prop="type" label="类型" width="90" />
+          <el-table-column prop="description" label="描述" min-width="140" />
+          <el-table-column prop="sourceLabel" label="来源" min-width="150" />
+        </el-table>
+      </div>
+    </div>
     <template #footer>
       <el-button @click="variableEnumVisible = false">取消</el-button>
-      <el-button
-        type="primary"
-        :disabled="!enumSelectedProjectVar && !enumSelectedPageVar"
-        @click="confirmEnumInsert"
-      >
+      <el-button type="primary" :disabled="!enumSelectedProjectVar" @click="confirmEnumInsert">
         插入
       </el-button>
     </template>
@@ -1455,6 +1394,32 @@ watch(
 
 .tree-node:hover {
   background: #f5f7fa;
+}
+
+.page-var-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-var-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.page-var-item:hover {
+  background: #f5f7fa;
+}
+
+.page-var-type {
+  margin-left: auto;
+  color: #909399;
+  font-size: 12px;
 }
 
 .node-icon {

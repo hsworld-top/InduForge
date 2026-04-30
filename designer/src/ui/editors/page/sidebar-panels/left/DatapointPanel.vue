@@ -6,7 +6,7 @@
 import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import * as XLSX from "xlsx";
 import IconEpEditPen from "~icons/ep/edit-pen";
@@ -14,10 +14,16 @@ import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
 import { TIME_FORMAT } from "@/constants";
 import { datacenterApi } from "@/services";
+import {
+  buildProjectVariableFromDataPoint,
+  findMappedProjectVariableName,
+  normalizeProjectVariableName,
+} from "@/services/data-variable-mapping";
+import { dataServiceApi } from "@/services/dataServiceApi";
 import { useEditorStore } from "@/stores/editor-store";
 import { unwrapApiData } from "@/types/api";
 import VariableGroupFormDialog from "@/ui/shared/tool-panels/VariableGroupFormDialog.vue";
-import { requireConnectionsPayload, requireDatapointsPagePayload } from "@/utils/datapoint-payload";
+import { requireConnectionsPayload } from "@/utils/datapoint-payload";
 import DatapointPanelContextMenu from "./DatapointPanelContextMenu.vue";
 import DatapointPanelToolbar from "./DatapointPanelToolbar.vue";
 import DatapointQuickAddDialog from "./DatapointQuickAddDialog.vue";
@@ -100,6 +106,12 @@ interface DatapointFieldLike {
   sourceLabel: string;
   type: string;
   typeLabel: string;
+  description: string;
+  status: string;
+  statusLabel: string;
+  statusType: "success" | "info" | "warning";
+  mappingLabel: string;
+  mappedName: string;
   updatedAtLabel: string;
 }
 
@@ -189,6 +201,9 @@ const quickLoading = ref(false);
 const quickPage = ref(1);
 const quickPageSize = ref(200);
 const quickTotal = ref(0);
+const quickStatusFilter = ref("");
+const quickTypeFilter = ref("");
+const quickSourceIdFilter = ref("");
 
 const isEditorType = computed(() =>
   ["function", "array", "object", "set", "map"].includes(editType.value),
@@ -1062,6 +1077,55 @@ function normalizeDatapointType(type: string): string {
   return "string";
 }
 
+function normalizeDatapointStatus(status: unknown): string {
+  return String(status || "active").toLowerCase();
+}
+
+function getQuickStatusLabel(status: string): string {
+  const normalized = normalizeDatapointStatus(status);
+  if (normalized === "active" || normalized === "online") {
+    return t("datapointPanel.quickAddDialog.statusActive");
+  }
+  if (normalized === "invalid" || normalized === "inactive" || normalized === "deleted") {
+    return t("datapointPanel.quickAddDialog.statusInvalid");
+  }
+  if (normalized === "disabled") {
+    return t("datapointPanel.quickAddDialog.statusDisabled");
+  }
+  return status || t("datapointPanel.sourceUnknown");
+}
+
+function isQuickDatapointInvalid(field: Pick<DatapointFieldLike, "status">): boolean {
+  return ["invalid", "disabled", "inactive", "deleted"].includes(
+    normalizeDatapointStatus(field.status),
+  );
+}
+
+function resolveQuickMappedName(
+  field: Pick<DatapointFieldLike, "id" | "path" | "name">,
+  variables: VariableMapLike = (projectVariables.value || {}) as VariableMapLike,
+): string {
+  return findMappedProjectVariableName(field, variables) || "";
+}
+
+function buildQuickMappingLabel(field: Pick<DatapointFieldLike, "status" | "mappedName">): string {
+  if (field.mappedName) {
+    return t("datapointPanel.quickAddDialog.mappedTo", { name: field.mappedName });
+  }
+  if (isQuickDatapointInvalid(field)) {
+    return t("datapointPanel.quickAddDialog.invalid");
+  }
+  return t("datapointPanel.quickAddDialog.unmapped");
+}
+
+function resolveQuickStatusType(
+  field: Pick<DatapointFieldLike, "status" | "mappedName">,
+): "success" | "info" | "warning" {
+  if (field.mappedName) return "success";
+  if (isQuickDatapointInvalid(field)) return "warning";
+  return "info";
+}
+
 function formatDatapointTime(value: unknown): string {
   if (!value) return "";
   const date = dayjs(value as any);
@@ -1076,26 +1140,45 @@ async function loadDatapoints() {
   }
   quickLoading.value = true;
   try {
-    const result = await datacenterApi.getDataPoints(projectId.value, {
+    const { datapoints, pagination } = await dataServiceApi.listDataPoints(projectId.value, {
       page: quickPage.value,
       pageSize: quickPageSize.value,
+      search: searchKey.value.trim(),
+      status: quickStatusFilter.value,
+      type: quickTypeFilter.value.trim(),
+      sourceId: quickSourceIdFilter.value.trim(),
     });
-    const { datapoints, pagination } = requireDatapointsPagePayload(unwrapApiData(result));
     quickTotal.value = Number(pagination.total || datapoints.length || 0);
     if (!Array.isArray(datapoints) || datapoints.length === 0) {
       showWarning(t("datapointPanel.noDatapoints"));
     }
-    fields.value = (datapoints as Array<Record<string, unknown>>).map((item) => ({
-      id: String(item.id || ""),
-      name: String(item.name || item.path || item.id || ""),
-      path: String(item.path || item.name || item.id || ""),
-      sourceType: String(item.sourceType || ""),
-      sourceId: String(item.sourceId || ""),
-      sourceLabel: getDatapointSourceLabel(String(item.sourceType || "")),
-      type: normalizeDatapointType(String(item.dataType || item.type || "")),
-      typeLabel: String(item.dataType || item.type || "string"),
-      updatedAtLabel: formatDatapointTime(item.updated_at || item.updatedAt),
-    }));
+    fields.value = (datapoints as Array<Record<string, unknown>>).map((item) => {
+      const status = normalizeDatapointStatus(item.status);
+      const fieldBase = {
+        id: String(item.id || item.datapointId || item.path || ""),
+        name: String(item.name || item.path || item.id || ""),
+        path: String(item.path || item.name || item.id || ""),
+        sourceType: String(item.sourceType || ""),
+        sourceId: String(item.sourceId || ""),
+        sourceLabel: getDatapointSourceLabel(String(item.sourceType || "")),
+        type: normalizeDatapointType(String(item.dataType || item.type || "")),
+        typeLabel: String(item.dataType || item.type || "string"),
+        description: String(item.description || ""),
+        status,
+        statusLabel: getQuickStatusLabel(status),
+        mappedName: "",
+        mappingLabel: "",
+        statusType: "info" as const,
+        updatedAtLabel: formatDatapointTime(item.updated_at || item.updatedAt),
+      } satisfies DatapointFieldLike;
+      const mappedName = resolveQuickMappedName(fieldBase);
+      const field = { ...fieldBase, mappedName };
+      return {
+        ...field,
+        mappingLabel: buildQuickMappingLabel(field),
+        statusType: resolveQuickStatusType(field),
+      };
+    });
   } catch {
     fields.value = [];
     quickTotal.value = 0;
@@ -1105,9 +1188,7 @@ async function loadDatapoints() {
   }
 }
 
-const filteredFields = computed(() =>
-  fields.value.filter((field) => field.name.toLowerCase().includes(searchKey.value.toLowerCase())),
-);
+const filteredFields = computed(() => fields.value);
 
 function handleQuickPageChange(page: number): void {
   quickPage.value = page;
@@ -1124,14 +1205,33 @@ function onSelectFields(rows: any): void {
   selectedFields.value = (rows || []) as DatapointFieldLike[];
 }
 
-function buildVarName(field: string): string {
+function buildRawVarName(field: string): string {
   let name = field;
   if (replaceFrom.value) name = name.replace(replaceFrom.value, replaceTo.value);
   return `${prefix.value}${name}${suffix.value}`;
 }
 
-function buildMappedExpression(field: string): string {
-  return field || "";
+function buildVarName(field: string): string {
+  return normalizeProjectVariableName(
+    buildRawVarName(field),
+    Object.keys((projectVariables.value || {}) as VariableMapLike),
+  );
+}
+
+function isQuickFieldSelectable(field: {
+  name: string;
+  id?: unknown;
+  path?: unknown;
+  status?: unknown;
+  [key: string]: unknown;
+}): boolean {
+  const normalizedField = {
+    id: String(field.id || ""),
+    name: String(field.name || ""),
+    path: String(field.path || ""),
+    status: normalizeDatapointStatus(field.status),
+  };
+  return !isQuickDatapointInvalid(normalizedField) && !resolveQuickMappedName(normalizedField);
 }
 
 async function confirmQuickAdd() {
@@ -1141,27 +1241,30 @@ async function confirmQuickAdd() {
   }
 
   const targetGroupId = selectedGroup.value?.id || null;
-  const nextVariables = { ...(projectVariables.value || {}) };
+  const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
+  let addedCount = 0;
 
   selectedFields.value.forEach((field) => {
-    const name = buildVarName(field.name);
-    if (nextVariables[name]) return;
+    if (!isQuickFieldSelectable(field)) return;
+    if (findMappedProjectVariableName(field, nextVariables)) return;
 
-    const type = field.type || "object";
-    nextVariables[name] = {
-      type,
-      default: parseEditValue(type, defaultEditValue(type)),
-      mapped: true,
-      source: {
-        type: "dataCenter",
-        path: buildMappedExpression(field.path),
-        sourceType: field.sourceType || "",
-        sourceId: field.sourceId || "",
-        datapointId: field.id || "",
-      },
+    const built = buildProjectVariableFromDataPoint(field, {
+      existingNames: Object.keys(nextVariables),
+      name: buildRawVarName(field.name),
+      type: field.type || "object",
       groupId: targetGroupId,
-    };
+      defaultValue: parseEditValue(field.type || "object", defaultEditValue(field.type || "object")),
+      description: field.description,
+    });
+    nextVariables[built.name] = built.definition;
+    addedCount += 1;
   });
+
+  if (!addedCount) {
+    quickVisible.value = false;
+    showSuccess(t("datapointPanel.quickAddDialog.allSelectedMapped"));
+    return;
+  }
 
   projectVariables.value = nextVariables;
   quickVisible.value = false;
@@ -1471,6 +1574,13 @@ function handleEditValueMarkers(markers: unknown): void {
   );
 }
 
+watch([searchKey, quickStatusFilter, quickTypeFilter, quickSourceIdFilter], () => {
+  if (!quickVisible.value) return;
+  quickPage.value = 1;
+  selectedFields.value = [];
+  void loadDatapoints();
+});
+
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
 });
@@ -1595,6 +1705,9 @@ onUnmounted(() => {
     <DatapointQuickAddDialog
       v-model="quickVisible"
       v-model:search-key="searchKey"
+      v-model:status-filter="quickStatusFilter"
+      v-model:type-filter="quickTypeFilter"
+      v-model:source-id-filter="quickSourceIdFilter"
       v-model:prefix="prefix"
       v-model:suffix="suffix"
       v-model:replace-from="replaceFrom"
@@ -1605,6 +1718,7 @@ onUnmounted(() => {
       :quick-total="quickTotal"
       :quick-page="quickPage"
       :build-var-name="buildVarName"
+      :is-field-selectable="isQuickFieldSelectable"
       @selection-change="onSelectFields"
       @page-change="handleQuickPageChange"
       @size-change="handleQuickSizeChange"
