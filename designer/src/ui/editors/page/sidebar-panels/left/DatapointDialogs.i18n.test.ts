@@ -69,7 +69,7 @@ describe("Datapoint dialogs i18n", () => {
     });
 
     expect(wrapper.text()).toContain("快速添加数据点");
-    expect(wrapper.text()).toContain("搜索");
+    expect(wrapper.text()).toContain("批量命名规则");
     expect(wrapper.text()).toContain("变量名");
     expect(wrapper.html()).toContain("搜索名称或路径");
 
@@ -77,7 +77,7 @@ describe("Datapoint dialogs i18n", () => {
     await nextTick();
 
     expect(wrapper.text()).toContain("Quick Add Datapoints");
-    expect(wrapper.text()).toContain("Search");
+    expect(wrapper.text()).toContain("Batch Naming Rule");
     expect(wrapper.text()).toContain("Variable Name");
     expect(wrapper.html()).toContain("Search by name or path");
   });
