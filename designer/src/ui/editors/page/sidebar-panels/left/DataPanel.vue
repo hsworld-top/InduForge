@@ -1,9 +1,8 @@
 <!--
-  DataPanel - 数据面板容器
-  包装 DatapointPanel，提供数据点/变量管理的入口
+  DataPanel - 数据与变量面板容器
+  常驻区只保留工程变量管理，数据点映射入口收敛到“快速添加数据点”弹窗。
 -->
 <script setup lang="ts">
-/** 数据面板：包装 DatapointPanel */
 import DatapointPanel from "./DatapointPanel.vue";
 </script>
 

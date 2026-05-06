@@ -49,6 +49,11 @@ import IconEpList from "~icons/ep/list";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { getManifest } from "@/materials/manifests";
 import { resolveButtonShapeProps } from "@/editor-core/descriptors/button-props";
+import {
+  resolvePageVariableSnippet,
+  resolveProjectVariableSnippet,
+  resolveProjectVariableSourceLabel,
+} from "@/services/data-variable-mapping";
 import { useEditorStore } from "@/stores/editor-store";
 import { getMenuDefaultProps } from "@/stores/editor/normalize-settings";
 import { usePanelState } from "../composables/use-panel-state";
@@ -407,21 +412,19 @@ const bindingEditorRef = ref<any>(null);
 const bindingProp = ref<{ name: string; label?: string } | null>(null);
 const bindingScriptSearch = ref<string>("");
 const bindingComponentSearch = ref<string>("");
+const bindingPageContextSearch = ref<string>("");
 const bindingCustomTreeRef = ref<any>(null);
 const bindingComponentTreeRef = ref<any>(null);
 const configScriptSearch = ref<string>("");
 const configComponentSearch = ref<string>("");
+const configPageContextSearch = ref<string>("");
 const configCustomTreeRef = ref<any>(null);
 const configComponentTreeRef = ref<any>(null);
 const enumInsertTarget = ref<"binding" | "config">("binding");
 const bindingVariableEnumVisible = ref(false);
-const bindingEnumTab = ref<"project" | "page">("project");
 const bindingProjectVarSearch = ref<string>("");
-const bindingPageVarSearch = ref<string>("");
 const bindingEnumSelectedProjectGroupId = ref<string | null>(null);
-const bindingEnumSelectedPageGroupId = ref<string>("page-root");
 const bindingEnumSelectedProjectVar = ref<BindingRowLike | null>(null);
-const bindingEnumSelectedPageVar = ref<BindingRowLike | null>(null);
 
 /**
  * 应用本地补丁（用于设计态强制刷新）
@@ -5763,6 +5766,9 @@ const bindingProjectVariableRows = computed<AnyArray>(() => {
       type: detail?.type || "string",
       description: detail?.description || "",
       mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+      sourceLabel: resolveProjectVariableSourceLabel(detail)
+        ? `来自数据点：${resolveProjectVariableSourceLabel(detail)}`
+        : "",
     }),
   );
   return items
@@ -5780,30 +5786,31 @@ const bindingProjectVariableRows = computed<AnyArray>(() => {
     });
 });
 
-const bindingPageGroupTree = computed<AnyArray>(() => [
-  {
-    id: "page-root",
-    label: t("propertyPanel.bindingVarEnum.pageRoot"),
-    type: "group",
-    children: [],
-  },
-]);
+const pageVariableRows = computed<AnyArray>(() =>
+  (Object.entries(pageVars.value || {}) as Array<[string, AnyRecord]>).map(([name, detail]) => ({
+    name,
+    type: detail?.type || "string",
+    description: detail?.description || "",
+  })),
+);
 
-const bindingPageVariableRows = computed<AnyArray>(() => {
-  const keyword = String(bindingPageVarSearch.value || "").toLowerCase();
-  return (Object.entries(pageVars.value || {}) as Array<[string, AnyRecord]>)
-    .map(([name, detail]) => ({
-      name,
-      type: detail?.type || "string",
-      description: detail?.description || "",
-    }))
-    .filter((item) => {
-      if (!keyword) return true;
-      return String(item.name || "")
-        .toLowerCase()
-        .includes(keyword);
-    });
-});
+function filterPageVariableRows(keywordValue: string): AnyArray {
+  const keyword = String(keywordValue || "").toLowerCase();
+  return pageVariableRows.value.filter((item) => {
+    if (!keyword) return true;
+    return String(item.name || "")
+      .toLowerCase()
+      .includes(keyword);
+  });
+}
+
+const bindingPageVariableRows = computed<AnyArray>(() =>
+  filterPageVariableRows(bindingPageContextSearch.value),
+);
+
+const configPageVariableRows = computed<AnyArray>(() =>
+  filterPageVariableRows(configPageContextSearch.value),
+);
 
 const bindingPageComponentTree = computed<AnyArray>(() => {
   void docVersion.value;
@@ -6847,6 +6854,11 @@ function handleBindingComponentInsert(data: SidebarNodeLike) {
   bindingEditorRef.value?.insertText?.(`components.${data.componentName}`);
 }
 
+function handleBindingPageVariableInsert(row: BindingRowLike) {
+  if (!row?.name) return;
+  bindingEditorRef.value?.insertText?.(resolvePageVariableSnippet(row.name));
+}
+
 /**
  * 插入自定义脚本到详细配置
  * @param {{ type?: string, label?: string, params?: string }} data - 节点数据
@@ -6867,18 +6879,19 @@ function handleConfigComponentInsert(data: SidebarNodeLike) {
   configEditorRef.value?.insertText?.(`components.${data.componentName}`);
 }
 
+function handleConfigPageVariableInsert(row: BindingRowLike) {
+  if (!row?.name) return;
+  configEditorRef.value?.insertText?.(resolvePageVariableSnippet(row.name));
+}
+
 /**
  * 打开变量枚举
  */
 function openBindingVariableEnum(target: "binding" | "config" = "binding") {
   enumInsertTarget.value = target;
   bindingProjectVarSearch.value = "";
-  bindingPageVarSearch.value = "";
-  bindingEnumTab.value = "project";
   bindingEnumSelectedProjectGroupId.value = null;
-  bindingEnumSelectedPageGroupId.value = "page-root";
   bindingEnumSelectedProjectVar.value = null;
-  bindingEnumSelectedPageVar.value = null;
   bindingVariableEnumVisible.value = true;
 }
 
@@ -6897,16 +6910,8 @@ function handleBindingProjectGroupSelect(data: AnyRecord | null) {
   bindingEnumSelectedProjectGroupId.value = data.id === "all" ? null : data.id;
 }
 
-function handleBindingPageGroupSelect(data: AnyRecord | null) {
-  bindingEnumSelectedPageGroupId.value = data?.id || "page-root";
-}
-
 function handleBindingProjectRowClick(row: BindingRowLike | null) {
   bindingEnumSelectedProjectVar.value = row || null;
-}
-
-function handleBindingPageRowClick(row: BindingRowLike | null) {
-  bindingEnumSelectedPageVar.value = row || null;
 }
 
 function handleBindingProjectRowDblClick(row: BindingRowLike | null) {
@@ -6914,20 +6919,9 @@ function handleBindingProjectRowDblClick(row: BindingRowLike | null) {
   confirmBindingEnumInsert();
 }
 
-function handleBindingPageRowDblClick(row: BindingRowLike | null) {
-  bindingEnumSelectedPageVar.value = row || null;
-  confirmBindingEnumInsert();
-}
-
 function bindingEnumProjectRowClass(...args: unknown[]): string {
   const [{ row }] = args as [{ row: BindingRowLike }];
   if (bindingEnumSelectedProjectVar.value?.name === row.name) return "is-selected";
-  return "";
-}
-
-function bindingEnumPageRowClass(...args: unknown[]): string {
-  const [{ row }] = args as [{ row: BindingRowLike }];
-  if (bindingEnumSelectedPageVar.value?.name === row.name) return "is-selected";
   return "";
 }
 
@@ -6939,13 +6933,8 @@ function confirmBindingEnumInsert(): void {
     }
     bindingEditorRef.value?.insertText?.(text);
   };
-  if (bindingEnumTab.value === "page" && bindingEnumSelectedPageVar.value?.name) {
-    insertText(`$vars.${bindingEnumSelectedPageVar.value.name}`);
-    bindingVariableEnumVisible.value = false;
-    return;
-  }
   if (bindingEnumSelectedProjectVar.value?.name) {
-    insertText(`$global.${bindingEnumSelectedProjectVar.value.name}`);
+    insertText(resolveProjectVariableSnippet(bindingEnumSelectedProjectVar.value.name));
     bindingVariableEnumVisible.value = false;
   }
 }
@@ -7606,6 +7595,29 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
           </div>
         </div>
         <div class="sidebar-section">
+          <div class="sidebar-title">{{ t("propertyPanel.bindingVarEnum.pageVars") }}</div>
+          <ElInput
+            v-model="configPageContextSearch"
+            size="small"
+            :placeholder="t('propertyPanel.bindingVarEnum.searchPageVars')"
+            clearable
+          />
+          <div class="sidebar-scroll page-var-list">
+            <div
+              v-for="row in configPageVariableRows"
+              :key="row.name"
+              class="page-var-item"
+              @click="handleConfigPageVariableInsert(row)"
+            >
+              <el-icon class="node-icon icon-variable">
+                <IconEpLink />
+              </el-icon>
+              <span class="node-label">{{ row.name }}</span>
+              <span class="page-var-type">{{ row.type }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-section">
           <div class="sidebar-title">{{ t("propertyPanel.configDialog.pageComponents") }}</div>
           <ElInput
             v-model="configComponentSearch"
@@ -7716,6 +7728,29 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
           </div>
         </div>
         <div class="sidebar-section">
+          <div class="sidebar-title">{{ t("propertyPanel.bindingVarEnum.pageVars") }}</div>
+          <ElInput
+            v-model="bindingPageContextSearch"
+            size="small"
+            :placeholder="t('propertyPanel.bindingVarEnum.searchPageVars')"
+            clearable
+          />
+          <div class="sidebar-scroll page-var-list">
+            <div
+              v-for="row in bindingPageVariableRows"
+              :key="row.name"
+              class="page-var-item"
+              @click="handleBindingPageVariableInsert(row)"
+            >
+              <el-icon class="node-icon icon-variable">
+                <IconEpLink />
+              </el-icon>
+              <span class="node-label">{{ row.name }}</span>
+              <span class="page-var-type">{{ row.type }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-section">
           <div class="sidebar-title">{{ t("propertyPanel.bindingDialog.pageComponents") }}</div>
           <ElInput
             v-model="bindingComponentSearch"
@@ -7761,23 +7796,15 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 
   <PropertyPanelBindingVarEnumDialog
     v-model="bindingVariableEnumVisible"
-    v-model:binding-enum-tab="bindingEnumTab"
     v-model:binding-project-var-search="bindingProjectVarSearch"
-    v-model:binding-page-var-search="bindingPageVarSearch"
     :binding-project-group-tree="bindingProjectGroupTree"
-    :binding-page-group-tree="bindingPageGroupTree"
     :binding-project-variable-rows="bindingProjectVariableRows"
-    :binding-page-variable-rows="bindingPageVariableRows"
     :filter-binding-sidebar-node="filterBindingSidebarNode as any"
     :binding-enum-project-row-class="bindingEnumProjectRowClass as any"
-    :binding-enum-page-row-class="bindingEnumPageRowClass as any"
-    :can-confirm-insert="Boolean(bindingEnumSelectedProjectVar || bindingEnumSelectedPageVar)"
+    :can-confirm-insert="Boolean(bindingEnumSelectedProjectVar)"
     @project-group-select="handleBindingProjectGroupSelect as any"
-    @page-group-select="handleBindingPageGroupSelect as any"
     @project-row-click="handleBindingProjectRowClick as any"
-    @page-row-click="handleBindingPageRowClick as any"
     @project-row-dblclick="handleBindingProjectRowDblClick as any"
-    @page-row-dblclick="handleBindingPageRowDblClick as any"
     @confirm-insert="confirmBindingEnumInsert as any"
     @cancel="bindingVariableEnumVisible = false"
   />
@@ -8430,6 +8457,32 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
 
 .tree-node:hover {
   background: var(--designer-hover-surface);
+}
+
+.page-var-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-var-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: var(--designer-radius-sm);
+  cursor: pointer;
+}
+
+.page-var-item:hover {
+  background: var(--designer-hover-surface);
+}
+
+.page-var-type {
+  margin-left: auto;
+  color: var(--designer-text-muted);
+  font-size: var(--designer-font-sm);
 }
 
 .node-icon {

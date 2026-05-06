@@ -6,7 +6,7 @@
 import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import * as XLSX from "xlsx";
 import IconEpEditPen from "~icons/ep/edit-pen";
@@ -14,10 +14,16 @@ import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
 import { TIME_FORMAT } from "@/constants";
 import { datacenterApi } from "@/services";
+import {
+  buildProjectVariableFromDataPoint,
+  findMappedProjectVariableName,
+  normalizeProjectVariableName,
+} from "@/services/data-variable-mapping";
+import { dataServiceApi } from "@/services/dataServiceApi";
 import { useEditorStore } from "@/stores/editor-store";
 import { unwrapApiData } from "@/types/api";
 import VariableGroupFormDialog from "@/ui/shared/tool-panels/VariableGroupFormDialog.vue";
-import { requireConnectionsPayload, requireDatapointsPagePayload } from "@/utils/datapoint-payload";
+import { requireConnectionsPayload } from "@/utils/datapoint-payload";
 import DatapointPanelContextMenu from "./DatapointPanelContextMenu.vue";
 import DatapointPanelToolbar from "./DatapointPanelToolbar.vue";
 import DatapointQuickAddDialog from "./DatapointQuickAddDialog.vue";
@@ -100,6 +106,12 @@ interface DatapointFieldLike {
   sourceLabel: string;
   type: string;
   typeLabel: string;
+  description: string;
+  status: string;
+  statusLabel: string;
+  statusType: "success" | "info" | "warning";
+  mappingLabel: string;
+  mappedName: string;
   updatedAtLabel: string;
 }
 
@@ -170,6 +182,9 @@ const mappedSourceLabel = ref("");
 const importInputRef = ref<HTMLInputElement | null>(null);
 const importType = ref<"json" | "csv" | "xlsx">("json");
 const editValueHasErrors = ref(false);
+const variableSearchKey = ref("");
+const variableKindFilter = ref<"" | "project" | "mapped">("");
+const variableDataTypeFilter = ref("");
 
 const groupVisible = ref(false);
 const groupEditMode = ref(false);
@@ -189,6 +204,15 @@ const quickLoading = ref(false);
 const quickPage = ref(1);
 const quickPageSize = ref(200);
 const quickTotal = ref(0);
+const quickStatusFilter = ref("");
+const quickTypeFilter = ref("");
+const quickSourceIdFilter = ref("");
+const quickActiveField = ref<DatapointFieldLike | null>(null);
+const quickSingleName = ref("");
+const quickSingleType = ref("string");
+const quickSingleGroupId = ref(ROOT_GROUP_ID);
+const quickSingleDefaultValue = ref("");
+const quickSingleDescription = ref("");
 
 const isEditorType = computed(() =>
   ["function", "array", "object", "set", "map"].includes(editType.value),
@@ -206,6 +230,15 @@ const groupParentOptions = computed(() => {
   return groupOptions.value.filter(
     (group) => group.id !== groupId.value && !isDescendantGroup(group.id, groupId.value),
   );
+});
+
+const variableDataTypeOptions = computed(() => {
+  const typeSet = new Set<string>();
+  Object.values((projectVariables.value || {}) as VariableMapLike).forEach((detail) => {
+    const type = String(detail?.type || "string");
+    if (type) typeSet.add(type);
+  });
+  return Array.from(typeSet).sort();
 });
 
 const selectedVariable = computed(() => {
@@ -234,12 +267,32 @@ const selectedGroupId = computed(() => {
   return null;
 });
 
+const quickSelectedCount = computed(() => selectedFields.value.length);
+const quickSelectedMappableCount = computed(
+  () => selectedFields.value.filter((field) => isQuickFieldSelectable(field)).length,
+);
+const quickSelectedKeys = computed(() =>
+  selectedFields.value.map((field) => resolveQuickFieldKey(field)),
+);
+const quickSourceOptions = computed(() => {
+  const sourceMap = new Map<string, string>();
+  fields.value.forEach((field) => {
+    if (!field.sourceId) return;
+    sourceMap.set(field.sourceId, field.sourceLabel || field.sourceId);
+  });
+  return Array.from(sourceMap, ([id, label]) => ({ id, label }));
+});
+
 const variableTree = computed(() =>
   buildTree(
     (projectVariableGroups.value || []) as any[] as VariableGroupLike[],
     (projectVariables.value || {}) as any as VariableMapLike,
   ),
 );
+
+const filteredVariableTree = computed(() => filterVariableTree(variableTree.value));
+const filteredVariableNodes = computed(() => collectVariableNodes(filteredVariableTree.value));
+const filteredVariableCount = computed(() => filteredVariableNodes.value.length);
 
 const contextMenuStyle = computed(() => ({
   left: `${contextMenuPosition.value.x}px`,
@@ -277,6 +330,24 @@ const canDeleteSelection = computed(() => {
   const types = new Set(selectedNodes.value.map((node) => node.type));
   return types.size <= 1;
 });
+
+// ---- 工具栏状态 ----
+const toolbarHasSelection = computed(() => selectedNodes.value.length > 0);
+const toolbarSelectionType = computed<"variable" | "group" | "mixed" | "none">(() => {
+  if (!selectedNodes.value.length) return "none";
+  const types = new Set(selectedNodes.value.map((node) => node.type));
+  if (types.size > 1) return "mixed";
+  return types.has("group") ? "group" : "variable";
+});
+const toolbarCanEdit = computed(() => {
+  if (!selectedNodes.value.length) return false;
+  return canEditSelection.value;
+});
+const toolbarCanDelete = computed(() => {
+  if (!selectedNodes.value.length) return false;
+  return canDeleteSelection.value;
+});
+const toolbarSelectedCount = computed(() => selectedNodes.value.length);
 
 const importAccept = computed(() => {
   if (importType.value === "csv") return ".csv";
@@ -327,6 +398,78 @@ function buildTree(groups: VariableGroupLike[], variables: VariableMapLike): Tre
   });
 
   return roots;
+}
+
+function isMappedVariableNode(node: TreeNodeLike): boolean {
+  return node.type === "variable" && Boolean(node.meta?.mapped);
+}
+
+function getVariableKindLabel(node: TreeNodeLike): string {
+  if (node.type === "group") return t("datapointPanel.variableKindGroup");
+  return isMappedVariableNode(node)
+    ? t("datapointPanel.variableKindMapped")
+    : t("datapointPanel.variableKindProject");
+}
+
+function getVariableMappingPath(node: TreeNodeLike): string {
+  if (node.type !== "variable") return "";
+  return String(node.meta?.source?.path || "");
+}
+
+function resolveVariableTableRowClass({ row }: { row: TreeNodeLike }): string {
+  const classes = [`node-${row.type}`];
+  if (isNodeSelected(row)) classes.push("is-selected");
+  return classes.join(" ");
+}
+
+function matchesVariableNode(node: TreeNodeLike, ignoreSearch = false): boolean {
+  if (node.type !== "variable") return false;
+  const search = variableSearchKey.value.trim().toLowerCase();
+  const type = String(node.meta?.type || "string");
+  const kindMatched =
+    !variableKindFilter.value ||
+    (variableKindFilter.value === "mapped" && isMappedVariableNode(node)) ||
+    (variableKindFilter.value === "project" && !isMappedVariableNode(node));
+  const typeMatched = !variableDataTypeFilter.value || type === variableDataTypeFilter.value;
+  const searchMatched =
+    ignoreSearch ||
+    !search ||
+    node.label.toLowerCase().includes(search) ||
+    String(node.meta?.description || "")
+      .toLowerCase()
+      .includes(search) ||
+    String(node.meta?.source?.path || "")
+      .toLowerCase()
+      .includes(search);
+  return kindMatched && typeMatched && searchMatched;
+}
+
+function filterVariableTree(nodes: TreeNodeLike[], ancestorSearchMatched = false): TreeNodeLike[] {
+  const search = variableSearchKey.value.trim().toLowerCase();
+  return nodes
+    .map((node) => {
+      if (node.type === "variable") {
+        return matchesVariableNode(node, ancestorSearchMatched) ? node : null;
+      }
+      const groupSearchMatched = Boolean(search && node.label.toLowerCase().includes(search));
+      const children = filterVariableTree(
+        node.children || [],
+        ancestorSearchMatched || groupSearchMatched,
+      );
+      if (!children.length) return null;
+      return {
+        ...node,
+        children,
+      };
+    })
+    .filter(Boolean) as TreeNodeLike[];
+}
+
+function collectVariableNodes(nodes: TreeNodeLike[]): TreeNodeLike[] {
+  return nodes.flatMap((node) => {
+    if (node.type === "variable") return [node];
+    return collectVariableNodes(node.children || []);
+  });
 }
 
 function isNodeSelected(data: TreeNodeLike): boolean {
@@ -427,6 +570,89 @@ function openGroupEditFromMenu() {
 function openGroupCreateFromMenu() {
   closeContextMenu();
   openGroupCreate();
+}
+
+/** 工具栏编辑按钮：根据选中类型分发到变量编辑或分组编辑 */
+function handleToolbarEdit(): void {
+  if (!canEditSelection.value) return;
+  if (selectedVariable.value) {
+    openEdit();
+  } else if (selectedGroup.value) {
+    openGroupEdit();
+  }
+}
+
+/** 双击节点：直接打开编辑弹窗 */
+function handleNodeDblClick(_event: MouseEvent, data: TreeNodeLike): void {
+  if (contextMenuVisible.value) closeContextMenu();
+  // 确保选中状态一致
+  selectedNodes.value = [data];
+  selectedNode.value = data;
+  treeRef.value?.setCurrentKey?.(data.id);
+  if (data.type === "variable") {
+    openEdit();
+  } else if (data.type === "group") {
+    openGroupEdit();
+  }
+}
+
+/** checkbox 切换：只作用于变量节点，勾选加入多选，取消则移除 */
+function handleCheckboxChange(data: TreeNodeLike, checked: boolean): void {
+  if (data.type !== "variable") return;
+  if (checked) {
+    if (!isNodeSelected(data)) {
+      selectedNodes.value = [...selectedNodes.value, data];
+    }
+  } else {
+    selectedNodes.value = selectedNodes.value.filter((node) => node.id !== data.id);
+  }
+  selectedNode.value = checked
+    ? data
+    : (selectedNodes.value[selectedNodes.value.length - 1] ?? null);
+}
+
+function resolveGroupVariableNodes(data: TreeNodeLike): TreeNodeLike[] {
+  if (data.type !== "group") return [];
+  return collectVariableNodes(data.children || []);
+}
+
+function getGroupSelectionState(data: TreeNodeLike): { checked: boolean; indeterminate: boolean } {
+  const variables = resolveGroupVariableNodes(data);
+  if (!variables.length) return { checked: false, indeterminate: false };
+  const selectedCount = variables.filter((node) => isNodeSelected(node)).length;
+  return {
+    checked: selectedCount === variables.length,
+    indeterminate: selectedCount > 0 && selectedCount < variables.length,
+  };
+}
+
+function mergeVariableSelection(nodes: TreeNodeLike[], checked: boolean): void {
+  const targetIds = new Set(nodes.map((node) => node.id));
+  const retained = selectedNodes.value.filter(
+    (node) => node.type !== "variable" || !targetIds.has(node.id),
+  );
+  selectedNodes.value = checked ? [...retained, ...nodes] : retained;
+  selectedNode.value = selectedNodes.value[selectedNodes.value.length - 1] ?? null;
+}
+
+function handleGroupCheckboxChange(data: TreeNodeLike, checked: boolean): void {
+  const variables = resolveGroupVariableNodes(data);
+  mergeVariableSelection(variables, checked);
+  if (contextMenuVisible.value) closeContextMenu();
+}
+
+function selectFilteredVariables(): void {
+  selectedNodes.value = filteredVariableNodes.value;
+  selectedNode.value = selectedNodes.value[selectedNodes.value.length - 1] ?? null;
+  if (selectedNode.value) treeRef.value?.setCurrentKey?.(selectedNode.value.id);
+  if (contextMenuVisible.value) closeContextMenu();
+}
+
+function clearSelectedNodes(): void {
+  selectedNodes.value = [];
+  selectedNode.value = null;
+  treeRef.value?.setCurrentKey?.("");
+  if (contextMenuVisible.value) closeContextMenu();
 }
 
 function handleMoveTo(groupIdValue: string | null): void {
@@ -1030,6 +1256,7 @@ async function openQuickAdd() {
   quickVisible.value = true;
   fields.value = [];
   selectedFields.value = [];
+  quickActiveField.value = null;
   quickPage.value = 1;
   await loadDatapoints();
 }
@@ -1062,6 +1289,55 @@ function normalizeDatapointType(type: string): string {
   return "string";
 }
 
+function normalizeDatapointStatus(status: unknown): string {
+  return String(status || "active").toLowerCase();
+}
+
+function getQuickStatusLabel(status: string): string {
+  const normalized = normalizeDatapointStatus(status);
+  if (normalized === "active" || normalized === "online") {
+    return t("datapointPanel.quickAddDialog.statusActive");
+  }
+  if (normalized === "invalid" || normalized === "inactive" || normalized === "deleted") {
+    return t("datapointPanel.quickAddDialog.statusInvalid");
+  }
+  if (normalized === "disabled") {
+    return t("datapointPanel.quickAddDialog.statusDisabled");
+  }
+  return status || t("datapointPanel.sourceUnknown");
+}
+
+function isQuickDatapointInvalid(field: Pick<DatapointFieldLike, "status">): boolean {
+  return ["invalid", "disabled", "inactive", "deleted"].includes(
+    normalizeDatapointStatus(field.status),
+  );
+}
+
+function resolveQuickMappedName(
+  field: Pick<DatapointFieldLike, "id" | "path" | "name">,
+  variables: VariableMapLike = (projectVariables.value || {}) as VariableMapLike,
+): string {
+  return findMappedProjectVariableName(field, variables) || "";
+}
+
+function buildQuickMappingLabel(field: Pick<DatapointFieldLike, "status" | "mappedName">): string {
+  if (field.mappedName) {
+    return t("datapointPanel.quickAddDialog.mappedTo", { name: field.mappedName });
+  }
+  if (isQuickDatapointInvalid(field)) {
+    return t("datapointPanel.quickAddDialog.invalid");
+  }
+  return t("datapointPanel.quickAddDialog.unmapped");
+}
+
+function resolveQuickStatusType(
+  field: Pick<DatapointFieldLike, "status" | "mappedName">,
+): "success" | "info" | "warning" {
+  if (field.mappedName) return "success";
+  if (isQuickDatapointInvalid(field)) return "warning";
+  return "info";
+}
+
 function formatDatapointTime(value: unknown): string {
   if (!value) return "";
   const date = dayjs(value as any);
@@ -1076,26 +1352,42 @@ async function loadDatapoints() {
   }
   quickLoading.value = true;
   try {
-    const result = await datacenterApi.getDataPoints(projectId.value, {
+    const { datapoints, pagination } = await dataServiceApi.listDataPoints(projectId.value, {
       page: quickPage.value,
       pageSize: quickPageSize.value,
+      search: searchKey.value.trim(),
+      status: quickStatusFilter.value,
+      type: quickTypeFilter.value.trim(),
+      sourceId: quickSourceIdFilter.value.trim(),
     });
-    const { datapoints, pagination } = requireDatapointsPagePayload(unwrapApiData(result));
     quickTotal.value = Number(pagination.total || datapoints.length || 0);
-    if (!Array.isArray(datapoints) || datapoints.length === 0) {
-      showWarning(t("datapointPanel.noDatapoints"));
-    }
-    fields.value = (datapoints as Array<Record<string, unknown>>).map((item) => ({
-      id: String(item.id || ""),
-      name: String(item.name || item.path || item.id || ""),
-      path: String(item.path || item.name || item.id || ""),
-      sourceType: String(item.sourceType || ""),
-      sourceId: String(item.sourceId || ""),
-      sourceLabel: getDatapointSourceLabel(String(item.sourceType || "")),
-      type: normalizeDatapointType(String(item.dataType || item.type || "")),
-      typeLabel: String(item.dataType || item.type || "string"),
-      updatedAtLabel: formatDatapointTime(item.updated_at || item.updatedAt),
-    }));
+    fields.value = (datapoints as Array<Record<string, unknown>>).map((item) => {
+      const status = normalizeDatapointStatus(item.status);
+      const fieldBase = {
+        id: String(item.id || item.datapointId || item.path || ""),
+        name: String(item.name || item.path || item.id || ""),
+        path: String(item.path || item.name || item.id || ""),
+        sourceType: String(item.sourceType || ""),
+        sourceId: String(item.sourceId || ""),
+        sourceLabel: getDatapointSourceLabel(String(item.sourceType || "")),
+        type: normalizeDatapointType(String(item.dataType || item.type || "")),
+        typeLabel: String(item.dataType || item.type || "string"),
+        description: String(item.description || ""),
+        status,
+        statusLabel: getQuickStatusLabel(status),
+        mappedName: "",
+        mappingLabel: "",
+        statusType: "info" as const,
+        updatedAtLabel: formatDatapointTime(item.updated_at || item.updatedAt),
+      } satisfies DatapointFieldLike;
+      const mappedName = resolveQuickMappedName(fieldBase);
+      const field = { ...fieldBase, mappedName };
+      return {
+        ...field,
+        mappingLabel: buildQuickMappingLabel(field),
+        statusType: resolveQuickStatusType(field),
+      };
+    });
   } catch {
     fields.value = [];
     quickTotal.value = 0;
@@ -1105,9 +1397,7 @@ async function loadDatapoints() {
   }
 }
 
-const filteredFields = computed(() =>
-  fields.value.filter((field) => field.name.toLowerCase().includes(searchKey.value.toLowerCase())),
-);
+const filteredFields = computed(() => fields.value);
 
 function handleQuickPageChange(page: number): void {
   quickPage.value = page;
@@ -1121,47 +1411,216 @@ function handleQuickSizeChange(size: number): void {
 }
 
 function onSelectFields(rows: any): void {
-  selectedFields.value = (rows || []) as DatapointFieldLike[];
+  const selectedInCurrentPage = new Map<string, DatapointFieldLike>(
+    ((rows || []) as DatapointFieldLike[]).map((field) => [resolveQuickFieldKey(field), field]),
+  );
+  const currentPageKeys = new Set(fields.value.map((field) => resolveQuickFieldKey(field)));
+  const selectedMap = new Map<string, DatapointFieldLike>(
+    selectedFields.value.map((field) => [resolveQuickFieldKey(field), field]),
+  );
+
+  currentPageKeys.forEach((key) => {
+    if (!selectedInCurrentPage.has(key)) {
+      selectedMap.delete(key);
+    }
+  });
+  selectedInCurrentPage.forEach((field, key) => {
+    selectedMap.set(key, field);
+  });
+  selectedFields.value = Array.from(selectedMap.values());
 }
 
-function buildVarName(field: string): string {
+function buildRawVarName(field: string): string {
   let name = field;
   if (replaceFrom.value) name = name.replace(replaceFrom.value, replaceTo.value);
   return `${prefix.value}${name}${suffix.value}`;
 }
 
-function buildMappedExpression(field: string): string {
-  return field || "";
+function buildVarName(field: string): string {
+  return normalizeProjectVariableName(
+    buildRawVarName(field),
+    Object.keys((projectVariables.value || {}) as VariableMapLike),
+  );
+}
+
+function isQuickFieldSelectable(field: {
+  name: string;
+  id?: unknown;
+  path?: unknown;
+  status?: unknown;
+  [key: string]: unknown;
+}): boolean {
+  const normalizedField = {
+    id: String(field.id || ""),
+    name: String(field.name || ""),
+    path: String(field.path || ""),
+    status: normalizeDatapointStatus(field.status),
+  };
+  return !isQuickDatapointInvalid(normalizedField) && !resolveQuickMappedName(normalizedField);
+}
+
+function resolveQuickFieldKey(field: Pick<DatapointFieldLike, "id" | "path" | "name">): string {
+  return String(field.id || field.path || field.name || "");
+}
+
+function resetQuickSingleDefaultValue(type: string): void {
+  quickSingleDefaultValue.value = String(defaultEditValue(type) ?? "");
+}
+
+function parseQuickDefaultValue(type: string, value: string): unknown {
+  if (type === "boolean") {
+    return value === "true";
+  }
+  if (["array", "object", "set", "map"].includes(type)) {
+    try {
+      return JSON.parse(value || (type === "object" ? "{}" : "[]"));
+    } catch {
+      return type === "object" ? {} : [];
+    }
+  }
+  return parseEditValue(type, value);
+}
+
+function openQuickSingleMapping(field: {
+  id?: unknown;
+  name: string;
+  path?: unknown;
+  sourceType?: unknown;
+  sourceId?: unknown;
+  sourceLabel?: unknown;
+  type?: unknown;
+  typeLabel?: unknown;
+  description?: unknown;
+  status?: unknown;
+  statusLabel?: unknown;
+  statusType?: unknown;
+  mappingLabel?: unknown;
+  mappedName?: unknown;
+  updatedAtLabel?: unknown;
+  [key: string]: unknown;
+}): void {
+  const normalizedField: DatapointFieldLike = {
+    id: String(field.id || ""),
+    name: String(field.name || ""),
+    path: String(field.path || field.name || ""),
+    sourceType: String(field.sourceType || ""),
+    sourceId: String(field.sourceId || ""),
+    sourceLabel: String(field.sourceLabel || ""),
+    type: String(field.type || "string"),
+    typeLabel: String(field.typeLabel || field.type || "string"),
+    description: String(field.description || ""),
+    status: normalizeDatapointStatus(field.status),
+    statusLabel: String(field.statusLabel || getQuickStatusLabel(String(field.status || "active"))),
+    statusType: (field.statusType as DatapointFieldLike["statusType"]) || "info",
+    mappingLabel: String(field.mappingLabel || ""),
+    mappedName: String(field.mappedName || ""),
+    updatedAtLabel: String(field.updatedAtLabel || ""),
+  };
+  const mappedName = resolveQuickMappedName(normalizedField);
+  if (mappedName) {
+    showSuccess(t("datapointPanel.quickAddDialog.mappedTo", { name: mappedName }));
+    return;
+  }
+  if (isQuickDatapointInvalid(normalizedField)) {
+    showWarning(t("datapointPanel.quickAddDialog.invalid"));
+    return;
+  }
+  const type = normalizedField.type || "string";
+  quickActiveField.value = normalizedField;
+  quickSingleName.value = buildVarName(normalizedField.name);
+  quickSingleType.value = type;
+  quickSingleGroupId.value = selectedGroup.value?.id || ROOT_GROUP_ID;
+  resetQuickSingleDefaultValue(type);
+  quickSingleDescription.value = normalizedField.description || "";
+}
+
+function closeQuickSingleMapping(): void {
+  quickActiveField.value = null;
+}
+
+function handleQuickSingleTypeChange(type: string): void {
+  quickSingleType.value = type;
+  resetQuickSingleDefaultValue(type);
+}
+
+function markQuickFieldMapped(field: DatapointFieldLike, mappedNameValue: string): void {
+  const key = resolveQuickFieldKey(field);
+  fields.value = fields.value.map((item) => {
+    if (resolveQuickFieldKey(item) !== key) return item;
+    const mappedField = { ...item, mappedName: mappedNameValue };
+    return {
+      ...mappedField,
+      mappingLabel: buildQuickMappingLabel(mappedField),
+      statusType: resolveQuickStatusType(mappedField),
+    };
+  });
+  selectedFields.value = selectedFields.value.filter((item) => resolveQuickFieldKey(item) !== key);
+}
+
+async function confirmQuickSingleMapping(): Promise<void> {
+  const field = quickActiveField.value;
+  if (!field) return;
+  if (!quickSingleName.value.trim()) {
+    showWarning(t("datapointPanel.variableNameRequired"));
+    return;
+  }
+  const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
+  if (findMappedProjectVariableName(field, nextVariables)) {
+    markQuickFieldMapped(field, resolveQuickMappedName(field, nextVariables));
+    quickActiveField.value = null;
+    showSuccess(t("datapointPanel.quickAddDialog.allSelectedMapped"));
+    return;
+  }
+  const built = buildProjectVariableFromDataPoint(field, {
+    existingNames: Object.keys(nextVariables),
+    name: quickSingleName.value,
+    type: quickSingleType.value || field.type || "string",
+    groupId: quickSingleGroupId.value === ROOT_GROUP_ID ? null : quickSingleGroupId.value,
+    defaultValue: parseQuickDefaultValue(quickSingleType.value, quickSingleDefaultValue.value),
+    description: quickSingleDescription.value,
+  });
+  nextVariables[built.name] = built.definition;
+  projectVariables.value = nextVariables;
+  await persistProjectGlobals();
+  markQuickFieldMapped(field, built.name);
+  quickActiveField.value = null;
+  showSuccess(t("datapointPanel.quickAddDialog.singleSaved", { name: built.name }));
 }
 
 async function confirmQuickAdd() {
-  if (!selectedFields.value.length) {
-    quickVisible.value = false;
+  if (!quickSelectedMappableCount.value) {
+    showWarning(t("datapointPanel.quickAddDialog.selectMappableFirst"));
     return;
   }
 
   const targetGroupId = selectedGroup.value?.id || null;
-  const nextVariables = { ...(projectVariables.value || {}) };
+  const nextVariables: VariableMapLike = { ...((projectVariables.value || {}) as VariableMapLike) };
+  let addedCount = 0;
 
   selectedFields.value.forEach((field) => {
-    const name = buildVarName(field.name);
-    if (nextVariables[name]) return;
+    if (!isQuickFieldSelectable(field)) return;
+    if (findMappedProjectVariableName(field, nextVariables)) return;
 
-    const type = field.type || "object";
-    nextVariables[name] = {
-      type,
-      default: parseEditValue(type, defaultEditValue(type)),
-      mapped: true,
-      source: {
-        type: "dataCenter",
-        path: buildMappedExpression(field.path),
-        sourceType: field.sourceType || "",
-        sourceId: field.sourceId || "",
-        datapointId: field.id || "",
-      },
+    const built = buildProjectVariableFromDataPoint(field, {
+      existingNames: Object.keys(nextVariables),
+      name: buildRawVarName(field.name),
+      type: field.type || "object",
       groupId: targetGroupId,
-    };
+      defaultValue: parseEditValue(
+        field.type || "object",
+        defaultEditValue(field.type || "object"),
+      ),
+      description: field.description,
+    });
+    nextVariables[built.name] = built.definition;
+    addedCount += 1;
   });
+
+  if (!addedCount) {
+    quickVisible.value = false;
+    showSuccess(t("datapointPanel.quickAddDialog.allSelectedMapped"));
+    return;
+  }
 
   projectVariables.value = nextVariables;
   quickVisible.value = false;
@@ -1471,6 +1930,18 @@ function handleEditValueMarkers(markers: unknown): void {
   );
 }
 
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+watch([searchKey, quickStatusFilter, quickTypeFilter, quickSourceIdFilter], () => {
+  if (!quickVisible.value) return;
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    quickPage.value = 1;
+    selectedFields.value = [];
+    quickActiveField.value = null;
+    void loadDatapoints();
+  }, 300);
+});
+
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
 });
@@ -1483,7 +1954,17 @@ onUnmounted(() => {
 <template>
   <div class="global-vars">
     <DatapointPanelToolbar
+      :has-selection="toolbarHasSelection"
+      :selection-type="toolbarSelectionType"
+      :selected-count="toolbarSelectedCount"
+      :can-edit="toolbarCanEdit"
+      :can-delete="toolbarCanDelete"
+      @create-var="openCreate"
+      @create-group="openGroupCreate"
       @quick-add="openQuickAdd"
+      @edit-selected="handleToolbarEdit"
+      @delete-selected="removeVar"
+      @clear-selection="clearSelectedNodes"
       @export-vars="handleExport"
       @import-vars="handleImport"
     />
@@ -1494,49 +1975,139 @@ onUnmounted(() => {
       :accept="importAccept"
       @change="handleFileChange"
     />
+    <div class="variable-filter">
+      <el-input
+        v-model="variableSearchKey"
+        class="variable-filter__search"
+        size="small"
+        clearable
+        :placeholder="t('datapointPanel.variableSearchPlaceholder')"
+      />
+      <div class="variable-filter__row">
+        <el-select
+          v-model="variableKindFilter"
+          class="variable-filter__select"
+          size="small"
+          :placeholder="t('datapointPanel.variableKindAll')"
+        >
+          <el-option :label="t('datapointPanel.variableKindAll')" value="" />
+          <el-option :label="t('datapointPanel.variableKindProject')" value="project" />
+          <el-option :label="t('datapointPanel.variableKindMapped')" value="mapped" />
+        </el-select>
+        <el-select
+          v-model="variableDataTypeFilter"
+          class="variable-filter__select"
+          size="small"
+          clearable
+          :placeholder="t('datapointPanel.variableDataTypeAll')"
+        >
+          <el-option
+            v-for="type in variableDataTypeOptions"
+            :key="type"
+            :label="type"
+            :value="type"
+          />
+        </el-select>
+      </div>
+      <div class="variable-filter__summary">
+        <span>{{ t("datapointPanel.variableResultCount", { count: filteredVariableCount }) }}</span>
+        <el-button
+          size="small"
+          text
+          :disabled="!filteredVariableCount"
+          @click="selectFilteredVariables"
+        >
+          {{ t("datapointPanel.selectCurrentResults") }}
+        </el-button>
+      </div>
+    </div>
     <div class="tree-wrap" @contextmenu="handleBlankContextMenu">
-      <el-tree
+      <el-table
         ref="treeRef"
-        :data="variableTree"
-        node-key="id"
+        :data="filteredVariableTree"
+        row-key="id"
+        class="variable-table"
+        height="100%"
+        size="small"
+        :row-class-name="resolveVariableTableRowClass"
         :default-expand-all="true"
-        highlight-current
-        :expand-on-click-node="false"
-        draggable
-        :allow-drop="allowDrop"
-        :allow-drag="allowDrag"
-        @node-contextmenu="handleContextMenu"
-        @node-dblclick="() => contextMenuVisible && closeContextMenu()"
-        @node-drop="handleNodeDrop"
+        :tree-props="{ children: 'children' }"
+        @row-click="
+          (row: TreeNodeLike, _column: unknown, event: MouseEvent) => handleNodeClick(row, event)
+        "
+        @row-contextmenu="
+          (row: TreeNodeLike, _column: unknown, event: MouseEvent) => handleContextMenu(event, row)
+        "
+        @row-dblclick="
+          (row: TreeNodeLike, _column: unknown, event: MouseEvent) => handleNodeDblClick(event, row)
+        "
       >
-        <template #default="{ data }">
-          <div
-            class="tree-node"
-            :class="[{ 'is-selected': isNodeSelected(data) }, `node-${data.type}`]"
-            @click.stop="(event) => handleNodeClick(data, event)"
-          >
-            <el-icon
-              class="node-icon"
-              :class="{
-                'is-mapped': data.type === 'variable' && data.meta?.mapped,
-                'is-unmapped': data.type === 'variable' && !data.meta?.mapped,
-              }"
-            >
-              <IconEpFolder v-if="data.type === 'group'" />
-              <IconEpLink v-else-if="data.meta?.mapped" />
-              <IconEpEditPen v-else />
-            </el-icon>
-            <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
-              {{ data.label }}
+        <el-table-column :label="t('datapointPanel.variableColumnName')" min-width="220">
+          <template #default="{ row }">
+            <div class="variable-name-cell">
+              <el-checkbox
+                class="node-checkbox"
+                :model-value="
+                  row.type === 'group' ? getGroupSelectionState(row).checked : isNodeSelected(row)
+                "
+                :indeterminate="row.type === 'group' && getGroupSelectionState(row).indeterminate"
+                @click.stop
+                @change="
+                  (val: boolean) =>
+                    row.type === 'group'
+                      ? handleGroupCheckboxChange(row, val)
+                      : handleCheckboxChange(row, val)
+                "
+              />
+              <el-icon
+                class="node-icon"
+                :class="{
+                  'is-mapped': row.type === 'variable' && row.meta?.mapped,
+                  'is-unmapped': row.type === 'variable' && !row.meta?.mapped,
+                }"
+              >
+                <IconEpFolder v-if="row.type === 'group'" />
+                <IconEpLink v-else-if="row.meta?.mapped" />
+                <IconEpEditPen v-else />
+              </el-icon>
+              <span class="node-label" :class="{ 'is-group': row.type === 'group' }">
+                {{ row.label }}
+              </span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('datapointPanel.variableColumnKind')" width="112">
+          <template #default="{ row }">
+            <span class="variable-kind">{{ getVariableKindLabel(row) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('datapointPanel.variableColumnType')" width="90">
+          <template #default="{ row }">
+            <span v-if="row.type === 'variable'" class="node-meta">
+              {{ row.meta?.type || "string" }}
             </span>
-            <span v-if="data.type === 'variable'" class="node-meta">
-              {{ data.meta?.type || "string" }}
+            <span v-else class="node-meta">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          :label="t('datapointPanel.variableColumnMapping')"
+          min-width="180"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            <span class="mapping-path">
+              {{ getVariableMappingPath(row) || t("datapointPanel.variableMappingNone") }}
             </span>
-          </div>
-        </template>
-      </el-tree>
-      <div v-if="!variableTree.length" class="tree-empty">
-        <el-empty :description="t('datapointPanel.empty')" :image-size="60" />
+          </template>
+        </el-table-column>
+      </el-table>
+      <div v-if="!filteredVariableTree.length" class="tree-empty">
+        <el-empty
+          :description="
+            variableTree.length ? t('datapointPanel.noVariableResults') : t('datapointPanel.empty')
+          "
+          :image-size="60"
+        />
       </div>
     </div>
     <DatapointPanelContextMenu
@@ -1595,19 +2166,41 @@ onUnmounted(() => {
     <DatapointQuickAddDialog
       v-model="quickVisible"
       v-model:search-key="searchKey"
+      v-model:status-filter="quickStatusFilter"
+      v-model:type-filter="quickTypeFilter"
+      v-model:source-id-filter="quickSourceIdFilter"
       v-model:prefix="prefix"
       v-model:suffix="suffix"
       v-model:replace-from="replaceFrom"
       v-model:replace-to="replaceTo"
+      v-model:single-name="quickSingleName"
+      v-model:single-type="quickSingleType"
+      v-model:single-group-id="quickSingleGroupId"
+      v-model:single-default-value="quickSingleDefaultValue"
+      v-model:single-description="quickSingleDescription"
       :quick-loading="quickLoading"
       :filtered-fields="filteredFields"
       :quick-page-size="quickPageSize"
       :quick-total="quickTotal"
       :quick-page="quickPage"
+      :selected-count="quickSelectedCount"
+      :selected-mappable-count="quickSelectedMappableCount"
+      :selected-keys="quickSelectedKeys"
+      :active-field="quickActiveField"
+      :types="types"
+      :source-options="quickSourceOptions"
+      :group-options="groupOptions"
+      :root-group-id="ROOT_GROUP_ID"
       :build-var-name="buildVarName"
+      :is-field-selectable="isQuickFieldSelectable"
+      @refresh="loadDatapoints"
       @selection-change="onSelectFields"
       @page-change="handleQuickPageChange"
       @size-change="handleQuickSizeChange"
+      @status-click="openQuickSingleMapping"
+      @single-close="closeQuickSingleMapping"
+      @single-type-change="handleQuickSingleTypeChange"
+      @single-confirm="confirmQuickSingleMapping"
       @confirm="confirmQuickAdd"
     />
   </div>
@@ -1628,9 +2221,45 @@ onUnmounted(() => {
   display: none;
 }
 
+.variable-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: 10px;
+  background: var(--designer-shell-surface);
+}
+
+.variable-filter__search,
+.variable-filter__select {
+  width: 100%;
+}
+
+.variable-filter__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+
+.variable-filter__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  font-size: 12px;
+  color: var(--designer-text-muted);
+}
+
+.variable-filter__summary :deep(.el-button) {
+  height: 24px;
+  padding: 0 4px;
+}
+
 .tree-wrap {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--designer-border-color);
   border-radius: 10px;
   position: relative;
@@ -1648,15 +2277,41 @@ onUnmounted(() => {
   background: var(--designer-shell-surface);
 }
 
-.tree-node {
+.variable-table {
+  height: 100%;
+  border-radius: 10px;
+}
+
+.variable-table :deep(.el-table__header th) {
+  height: 34px;
+  background: var(--designer-shell-muted);
+  color: var(--designer-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.variable-table :deep(.el-table__row) {
+  cursor: default;
+}
+
+.variable-table :deep(.el-table__row.is-selected > td) {
+  background: var(--designer-primary-soft) !important;
+}
+
+.variable-table :deep(.el-table__row.node-group > td) {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.variable-table :deep(.el-table__cell) {
+  padding: 5px 0;
+}
+
+.variable-name-cell {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   width: 100%;
-  padding: 6px 8px;
-  border-radius: 6px;
-  transition: background-color 0.2s;
 }
 
 .node-icon {
@@ -1680,17 +2335,6 @@ onUnmounted(() => {
   color: var(--designer-text-muted);
 }
 
-.tree-node:hover {
-  background: var(--designer-hover-surface);
-}
-
-.tree-node.is-selected {
-  background: linear-gradient(90deg, var(--designer-primary-soft), rgba(59, 130, 246, 0.06));
-  color: var(--designer-primary-text);
-  border: 1px solid rgba(59, 130, 246, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);
-}
-
 .node-label {
   font-size: 13px;
   color: var(--designer-text-primary);
@@ -1708,13 +2352,25 @@ onUnmounted(() => {
   color: var(--designer-text-muted);
 }
 
-:deep(.tree-wrap .el-tree) {
-  padding: 10px;
-  min-height: 100%;
+.variable-kind,
+.mapping-path {
+  font-size: 12px;
+  color: var(--designer-text-muted);
 }
 
-:deep(.tree-wrap .el-tree-node__content) {
-  height: 38px;
+.node-checkbox {
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+:deep(.node-checkbox .el-checkbox__label) {
+  display: none;
+}
+
+:deep(.node-checkbox .el-checkbox__inner) {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
 }
 
 .edit-value-block {
@@ -1723,7 +2379,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
 }
-
 .edit-value-actions {
   display: flex;
   justify-content: flex-end;

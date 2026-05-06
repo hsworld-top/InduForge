@@ -34,17 +34,14 @@ describe("PropertyPanel binding variable enum i18n", () => {
     i18n.global.locale.value = "zh";
   });
 
-  it("会随 locale 切换更新绑定变量枚举文案", async () => {
+  it("变量枚举只展示工程变量，不展示页面变量入口", async () => {
     const wrapper = mount(PropertyPanelBindingVarEnumDialog, {
       props: {
         modelValue: true,
         bindingProjectGroupTree: [],
-        bindingPageGroupTree: [],
         bindingProjectVariableRows: [],
-        bindingPageVariableRows: [],
         filterBindingSidebarNode: () => true,
         bindingEnumProjectRowClass: () => "",
-        bindingEnumPageRowClass: () => "",
         canConfirmInsert: true,
       },
       global: {
@@ -55,7 +52,7 @@ describe("PropertyPanel binding variable enum i18n", () => {
 
     expect(wrapper.text()).toContain("变量枚举");
     expect(wrapper.text()).toContain("工程变量");
-    expect(wrapper.text()).toContain("页面变量");
+    expect(wrapper.text()).not.toContain("页面变量");
     expect(wrapper.html()).toContain("搜索工程变量");
 
     i18n.global.locale.value = "en";
@@ -63,7 +60,7 @@ describe("PropertyPanel binding variable enum i18n", () => {
 
     expect(wrapper.text()).toContain("Variable Enum");
     expect(wrapper.text()).toContain("Project Variables");
-    expect(wrapper.text()).toContain("Page Variables");
+    expect(wrapper.text()).not.toContain("Page Variables");
     expect(wrapper.html()).toContain("Search project variables");
   });
 });

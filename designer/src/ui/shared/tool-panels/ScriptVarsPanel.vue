@@ -12,6 +12,11 @@ import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpList from "~icons/ep/list";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
+import {
+  resolvePageVariableSnippet,
+  resolveProjectVariableSnippet,
+  resolveProjectVariableSourceLabel,
+} from "@/services/data-variable-mapping";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/helpers/component-methods";
 import ScriptVarsCustomSection from "./ScriptVarsCustomSection.vue";
@@ -121,6 +126,7 @@ const variableGroups = computed<Array<any>>(
 const scriptSearch = ref("");
 const customScriptTreeRef = ref<any>(null);
 const pageSearch = ref("");
+const pageVariableSearch = ref("");
 const pageTreeRef = ref<any>(null);
 const variableEnumVisible = ref(false);
 const enumVariableSearch = ref("");
@@ -165,6 +171,28 @@ const customScriptSidebarTree = computed(() =>
   buildScriptTree(customScriptGroups.value, customScripts.value),
 );
 const pageSidebarTree = computed(() => buildPageTree(pages.value || []));
+const pageVars = computed<Record<string, any>>(() => {
+  void docVersion.value;
+  const pageId = currentPage.value?.id;
+  if (!pageId || !doc.value) return {};
+  const vars = (doc.value as any).vars?.pages?.[pageId];
+  return vars && typeof vars === "object" ? vars : {};
+});
+const pageVariableRows = computed<Array<any>>(() => {
+  const keyword = String(pageVariableSearch.value || "").toLowerCase();
+  return Object.entries(pageVars.value)
+    .map(([name, detail]: [string, any]) => ({
+      name,
+      type: detail?.type || "string",
+      description: detail?.description || "",
+    }))
+    .filter((item) => {
+      if (!keyword) return true;
+      return String(item.name || "")
+        .toLowerCase()
+        .includes(keyword);
+    });
+});
 const enumGroupTree = computed(() => [
   {
     id: "all",
@@ -193,6 +221,9 @@ const enumVariableRows = computed<Array<any>>(() => {
       type: item.meta?.type || "string",
       description: item.meta?.description || "",
       mapped: !!item.meta?.mapped,
+      sourceLabel: resolveProjectVariableSourceLabel(item.meta)
+        ? `来自数据点：${resolveProjectVariableSourceLabel(item.meta)}`
+        : "",
     }));
 });
 
@@ -609,6 +640,11 @@ function handlePageInsert(data: any) {
   insertText(`components.pages["${name}"]`);
 }
 
+function handlePageVariableInsert(row: any) {
+  if (!row?.name) return;
+  insertText(resolvePageVariableSnippet(row.name));
+}
+
 function handleEnumGroupSelect(data: any) {
   if (!data) {
     enumSelectedGroupId.value = null;
@@ -648,7 +684,7 @@ function openVariableEnum() {
 
 function confirmEnumInsert() {
   if (!enumSelectedVar.value?.name) return;
-  insertText(`$global.${enumSelectedVar.value.name}`);
+  insertText(resolveProjectVariableSnippet(enumSelectedVar.value.name));
   variableEnumVisible.value = false;
 }
 
@@ -1462,10 +1498,12 @@ onUnmounted(() => {
       v-model:system-code="systemCode"
       v-model:script-search="scriptSearch"
       v-model:page-search="pageSearch"
+      v-model:page-variable-search="pageVariableSearch"
       :dialog-title="`${selectedSystemLabel}${t('scriptPanel.editor.genericScript')}`"
       :meta-title="selectedSystemLabel"
       :custom-script-sidebar-tree="customScriptSidebarTree"
       :page-sidebar-tree="pageSidebarTree"
+      :page-variable-rows="pageVariableRows"
       :js-completions="jsCompletions"
       :filter-sidebar-node="filterSidebarNode"
       :before-close="handleSystemBeforeClose"
@@ -1473,6 +1511,7 @@ onUnmounted(() => {
       @save="saveSystemScript"
       @custom-insert="handleCustomScriptInsert"
       @page-insert="handlePageInsert"
+      @page-variable-insert="handlePageVariableInsert"
     />
     <el-dialog
       v-model="scriptEditorVisible"
@@ -1538,6 +1577,29 @@ onUnmounted(() => {
                   </div>
                 </template>
               </el-tree>
+            </div>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-title">{{ t("scriptPanel.editor.pageVariables") }}</div>
+            <el-input
+              v-model="pageVariableSearch"
+              size="small"
+              :placeholder="t('scriptPanel.editor.searchPageVariables')"
+              clearable
+            />
+            <div class="sidebar-scroll page-var-list">
+              <div
+                v-for="row in pageVariableRows"
+                :key="row.name"
+                class="page-var-item"
+                @click="handlePageVariableInsert(row)"
+              >
+                <el-icon class="node-icon icon-variable">
+                  <IconEpList />
+                </el-icon>
+                <span class="node-label">{{ row.name }}</span>
+                <span class="page-var-type">{{ row.type }}</span>
+              </div>
             </div>
           </div>
           <div class="sidebar-section">
@@ -1623,11 +1685,7 @@ onUnmounted(() => {
             <el-table-column prop="name" :label="t('scriptPanel.variableEnum.name')" min-width="160" />
             <el-table-column prop="type" :label="t('scriptPanel.variableEnum.type')" width="90" />
             <el-table-column prop="description" :label="t('scriptPanel.variableEnum.description')" min-width="160" />
-            <el-table-column prop="mapped" :label="t('scriptPanel.variableEnum.mapped')" width="70">
-              <template #default="{ row }">
-                {{ row.mapped ? t("scriptPanel.variableEnum.yes") : "" }}
-              </template>
-            </el-table-column>
+            <el-table-column prop="sourceLabel" :label="t('scriptPanel.variableEnum.source')" min-width="150" />
           </el-table>
         </div>
       </div>
@@ -1945,6 +2003,32 @@ onUnmounted(() => {
 
 .tree-node:hover {
   background: var(--designer-hover-surface);
+}
+
+.page-var-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-var-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: var(--designer-radius-sm);
+  cursor: pointer;
+}
+
+.page-var-item:hover {
+  background: var(--designer-hover-surface);
+}
+
+.page-var-type {
+  margin-left: auto;
+  color: var(--designer-text-muted);
+  font-size: 12px;
 }
 
 .tree-node.is-selected {

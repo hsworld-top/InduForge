@@ -28,6 +28,7 @@ const sharedStubs = {
     props: ["label"],
     template: "<th>{{ label }}</th>",
   },
+  "el-tag": { template: "<span><slot /></span>" },
   "el-pagination": { template: "<div>pagination</div>" },
   "el-select": {
     props: ["placeholder"],
@@ -62,22 +63,23 @@ describe("Datapoint dialogs i18n", () => {
       },
       global: {
         plugins: [i18n],
+        directives: { loading: {} },
         stubs: sharedStubs,
       },
     });
 
     expect(wrapper.text()).toContain("快速添加数据点");
-    expect(wrapper.text()).toContain("搜索");
+    expect(wrapper.text()).toContain("批量命名规则");
     expect(wrapper.text()).toContain("变量名");
-    expect(wrapper.html()).toContain("字段名搜索");
+    expect(wrapper.html()).toContain("搜索名称或路径");
 
     i18n.global.locale.value = "en";
     await nextTick();
 
     expect(wrapper.text()).toContain("Quick Add Datapoints");
-    expect(wrapper.text()).toContain("Search");
+    expect(wrapper.text()).toContain("Batch Naming Rule");
     expect(wrapper.text()).toContain("Variable Name");
-    expect(wrapper.html()).toContain("Search by field name");
+    expect(wrapper.html()).toContain("Search by name or path");
   });
 
   it("变量编辑对话框会随 locale 切换更新文案", async () => {
@@ -91,6 +93,7 @@ describe("Datapoint dialogs i18n", () => {
       },
       global: {
         plugins: [i18n],
+        directives: { loading: {} },
         stubs: sharedStubs,
       },
     });

@@ -16,20 +16,33 @@ interface SidebarNodeLike {
   type: string;
 }
 
+interface PageVariableRowLike {
+  name: string;
+  type?: string;
+}
+
 defineProps<{
   dialogTitle: string;
   metaTitle: string;
   customScriptSidebarTree?: SidebarNodeLike[];
   pageSidebarTree?: SidebarNodeLike[];
+  pageVariableRows?: PageVariableRowLike[];
   jsCompletions?: unknown[];
   filterSidebarNode: (value: string, data: SidebarNodeLike) => boolean;
   beforeClose?: (...args: unknown[]) => void;
 }>();
-const emit = defineEmits(["openVariableEnum", "save", "customInsert", "pageInsert"]);
+const emit = defineEmits([
+  "openVariableEnum",
+  "save",
+  "customInsert",
+  "pageInsert",
+  "pageVariableInsert",
+]);
 const visible = defineModel<boolean>({ default: false });
 const systemCode = defineModel<string>("systemCode", { default: "" });
 const scriptSearch = defineModel<string>("scriptSearch", { default: "" });
 const pageSearch = defineModel<string>("pageSearch", { default: "" });
+const pageVariableSearch = defineModel<string>("pageVariableSearch", { default: "" });
 
 interface TreeFilterLike {
   filter?: (value: string) => void;
@@ -64,6 +77,10 @@ function handleCustomInsert(data: SidebarNodeLike) {
 
 function handlePageInsert(data: SidebarNodeLike) {
   emit("pageInsert", data);
+}
+
+function handlePageVariableInsert(row: PageVariableRowLike) {
+  emit("pageVariableInsert", row);
 }
 </script>
 
@@ -131,6 +148,29 @@ function handlePageInsert(data: SidebarNodeLike) {
           </div>
         </div>
         <div class="sidebar-section">
+          <div class="sidebar-title">{{ t("scriptPanel.editor.pageVariables") }}</div>
+          <el-input
+            v-model="pageVariableSearch"
+            size="small"
+            :placeholder="t('scriptPanel.editor.searchPageVariables')"
+            clearable
+          />
+          <div class="sidebar-scroll page-var-list">
+            <div
+              v-for="row in pageVariableRows"
+              :key="row.name"
+              class="page-var-item"
+              @click="handlePageVariableInsert(row)"
+            >
+              <el-icon class="node-icon icon-page">
+                <IconEpList />
+              </el-icon>
+              <span class="node-label">{{ row.name }}</span>
+              <span class="page-var-type">{{ row.type || 'string' }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-section">
           <div class="sidebar-title">{{ t("scriptPanel.editor.pages") }}</div>
           <el-input v-model="pageSearch" size="small" :placeholder="t('scriptPanel.editor.searchPages')" clearable />
           <div class="sidebar-scroll">
@@ -169,3 +209,31 @@ function handlePageInsert(data: SidebarNodeLike) {
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.page-var-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-var-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: var(--designer-radius-sm);
+  cursor: pointer;
+}
+
+.page-var-item:hover {
+  background: var(--designer-hover-surface);
+}
+
+.page-var-type {
+  margin-left: auto;
+  color: var(--designer-text-muted);
+  font-size: 12px;
+}
+</style>
