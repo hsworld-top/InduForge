@@ -1,6 +1,4 @@
-# Codex Agent 忽略文件
-# 由 scripts/ai-rules/sync-ignore-files.mjs 自动生成，请勿手改。
-# 用于减少 Codex 索引与上下文检索体积。
+# Claude Code 忽略文件
 
 # Node.js 依赖
 node_modules/
@@ -42,3 +40,12 @@ docker/
 docker/images/
 minio/data*/
 dev_core/artifacts/
+
+# Claude 本地配置
+.claude/settings.local.json
+
+# 临时目录
+.superpower/
+.superpowers/
+.worktrees/
+.cache/
