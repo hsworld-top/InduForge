@@ -1,21 +1,25 @@
 <template>
   <div class="datapoint-list" :class="`datapoint-list--${mode}`">
+    <!-- 工具栏 -->
     <div v-if="showToolbar" class="datapoint-list__toolbar">
       <div class="datapoint-list__toolbar-left">
+        <!-- 搜索：名称 / 路径，300ms 防抖 -->
         <el-input
           v-model="searchText"
           size="small"
           class="datapoint-list__search"
           clearable
           :prefix-icon="Search"
-          placeholder="搜索名称、路径或来源"
+          placeholder="搜索名称、路径"
         />
-        <el-popover placement="bottom-start" :width="160" trigger="click">
+
+        <!-- 状态筛选 pill -->
+        <el-popover placement="bottom-start" :width="150" trigger="click">
           <template #reference>
-            <button type="button" class="datapoint-list__pill-button">
-              <Filter />
-              <span>{{ currentStatusLabel }}</span>
-            </button>
+            <PillButton :active="statusFilter !== ''">
+              <template #icon><Filter /></template>
+              {{ currentStatusLabel }}
+            </PillButton>
           </template>
           <div class="datapoint-list__popover-menu">
             <button
@@ -30,6 +34,38 @@
             </button>
           </div>
         </el-popover>
+
+        <!-- 来源类型筛选 pill（动态来自当前列表） -->
+        <el-popover placement="bottom-start" :width="180" trigger="click">
+          <template #reference>
+            <PillButton :active="sourceFilter !== ''">
+              <template #icon><Connection /></template>
+              {{ currentSourceLabel }}
+            </PillButton>
+          </template>
+          <div class="datapoint-list__popover-menu">
+            <button
+              type="button"
+              class="datapoint-list__popover-item"
+              :class="{ 'is-active': sourceFilter === '' }"
+              @click="sourceFilter = ''"
+            >
+              全部来源
+            </button>
+            <button
+              v-for="option in dynamicSourceOptions"
+              :key="option.value"
+              type="button"
+              class="datapoint-list__popover-item"
+              :class="{ 'is-active': sourceFilter === option.value }"
+              @click="sourceFilter = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </el-popover>
+
+        <!-- 标签筛选 popover（保留原有实现） -->
         <div ref="tagFilterRootRef" class="datapoint-tag-filter">
           <button
             type="button"
@@ -95,11 +131,13 @@
             </div>
           </Transition>
         </div>
-        <el-popover placement="bottom-start" :width="160" trigger="click">
+
+        <!-- 排序字段 pill -->
+        <el-popover placement="bottom-start" :width="150" trigger="click">
           <template #reference>
-            <button type="button" class="datapoint-list__pill-button">
-              <span>{{ currentSortFieldLabel }}</span>
-            </button>
+            <PillButton>
+              {{ currentSortFieldLabel }}
+            </PillButton>
           </template>
           <div class="datapoint-list__popover-menu">
             <button
@@ -114,16 +152,17 @@
             </button>
           </div>
         </el-popover>
-        <button
-          type="button"
-          class="datapoint-list__pill-button"
-          @click="toggleSortOrder"
-        >
-          <SortDown v-if="sortOrder === 'desc'" />
-          <SortUp v-else />
-          <span>{{ currentSortOrderLabel }}</span>
-        </button>
+
+        <!-- 排序方向 pill -->
+        <PillButton @click="toggleSortOrder">
+          <template #icon>
+            <SortDown v-if="sortOrder === 'desc'" />
+            <SortUp v-else />
+          </template>
+          {{ currentSortOrderLabel }}
+        </PillButton>
       </div>
+
       <div class="datapoint-list__toolbar-right">
         <el-tooltip content="刷新数据点" placement="bottom">
           <button
@@ -135,13 +174,13 @@
             <Refresh />
           </button>
         </el-tooltip>
-        <el-tooltip content="清理选中的失效数据点" placement="bottom">
+        <el-tooltip content="批量清理失效数据点" placement="bottom">
           <button
             type="button"
             class="datapoint-list__icon-button is-danger"
             :class="{ 'is-disabled': selectedInvalidRows.length === 0 }"
             :disabled="selectedInvalidRows.length === 0"
-            aria-label="清理选中的失效数据点"
+            aria-label="批量清理失效数据点"
             @click="handleBatchDelete"
           >
             <Delete />
@@ -150,6 +189,7 @@
       </div>
     </div>
 
+    <!-- 主面板 -->
     <div class="datapoint-list__panel">
       <div class="datapoint-list__content">
         <el-table
@@ -162,28 +202,76 @@
           @row-click="handleRowClick"
           @selection-change="handleSelectionChange"
         >
+          <!-- 选择列 -->
           <el-table-column type="selection" width="56" fixed="left" align="center" />
+
+          <!-- 名称列 -->
           <el-table-column label="名称" width="220" fixed="left">
             <template #default="{ row }">
               <div class="datapoint-list__name-cell">
-                <span class="datapoint-list__name" :title="row.name">
-                  {{ row.name || "-" }}
+                <el-tooltip :content="row.name || '-'" placement="top" :show-after="400">
+                  <span class="datapoint-list__name">
+                    {{ row.name || "-" }}
+                  </span>
+                </el-tooltip>
+              </div>
+            </template>
+          </el-table-column>
+
+          <!-- 路径列 -->
+          <el-table-column label="路径" min-width="280">
+            <template #default="{ row }">
+              <div class="datapoint-list__path-cell">
+                <el-tooltip :content="row.path || '-'" placement="top" :show-after="300">
+                  <span class="datapoint-list__path">{{ row.path || "-" }}</span>
+                </el-tooltip>
+              </div>
+            </template>
+          </el-table-column>
+
+          <!-- 来源列：图标 + 文字 -->
+          <el-table-column label="来源" width="130">
+            <template #default="{ row }">
+              <div class="datapoint-list__source-cell">
+                <component
+                  :is="getSourceIcon(row.sourceType)"
+                  class="datapoint-list__source-icon"
+                  aria-hidden="true"
+                />
+                <span class="datapoint-list__source-text">
+                  {{ formatSourceType(row.sourceType) }}
                 </span>
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="来源" width="110">
-            <template #default="{ row }">
-              <span class="datapoint-list__source-text">
-                {{ formatSourceType(row.sourceType) }}
-              </span>
-            </template>
-          </el-table-column>
+
+          <!-- 类型列 -->
           <el-table-column label="类型" width="100">
             <template #default="{ row }">
               <span class="datapoint-list__mono">{{ row.dataType || "-" }}</span>
             </template>
           </el-table-column>
+
+          <!-- 状态列：v2 StatusBadge -->
+          <el-table-column label="状态" width="96" align="center" header-align="center">
+            <template #default="{ row }">
+              <StatusBadge
+                :tone="resolveStatusTone(row.status)"
+                :text="formatStatus(row.status)"
+              />
+            </template>
+          </el-table-column>
+
+          <!-- 引用列（D2 完整实现，D1 占位显示 `-`） -->
+          <el-table-column label="引用" width="96" align="center" header-align="center">
+            <template #default="{ row }">
+              <span class="datapoint-list__ref-count">
+                {{ resolveRefCount(row) }}
+              </span>
+            </template>
+          </el-table-column>
+
+          <!-- 标签列 -->
           <el-table-column label="标签" width="160">
             <template #default="{ row }">
               <div class="datapoint-list__tags-cell">
@@ -216,49 +304,21 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="96" align="center" header-align="center">
-            <template #default="{ row }">
-              <span
-                class="datapoint-list__status-badge"
-                :class="{ 'is-invalid': row.status === 'invalid' }"
-              >
-                {{ formatStatus(row.status) }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column label="写权限" width="240">
-            <template #default="{ row }">
-              <span class="datapoint-list__permission">
-                {{ summarizeRuntimeGrant(getWriteRuntimeGrant(row)) }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column label="创建时间" width="190">
-            <template #default="{ row }">
-              <span class="datapoint-list__time">
-                {{ formatTime(getCreatedAt(row)) }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column label="更新时间" width="190">
+
+          <!-- 更新时间列 -->
+          <el-table-column label="更新时间" width="170">
             <template #default="{ row }">
               <span class="datapoint-list__time">
                 {{ formatTime(getUpdatedAt(row)) }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="路径" min-width="280" show-overflow-tooltip>
-            <template #default="{ row }">
-              <div class="datapoint-list__path-cell">
-                <el-tooltip :content="row.path || '-'" placement="top">
-                  <span class="datapoint-list__path">{{ row.path || "-" }}</span>
-                </el-tooltip>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="184" fixed="right" align="center" header-align="center">
+
+          <!-- 操作列（4 个按钮） -->
+          <el-table-column label="操作" width="200" fixed="right" align="center" header-align="center">
             <template #default="{ row }">
               <div class="datapoint-list__row-actions">
+                <!-- 查看详情 -->
                 <el-tooltip content="查看详情" placement="top">
                   <button
                     type="button"
@@ -269,26 +329,18 @@
                     <View />
                   </button>
                 </el-tooltip>
-                <el-tooltip content="标签管理" placement="top">
+                <!-- 跳转来源（D1 先做按钮，D2 完整实现 LinkChip 跳转） -->
+                <el-tooltip content="跳转来源" placement="top">
                   <button
                     type="button"
                     class="datapoint-list__table-action"
-                    aria-label="标签管理"
-                    @click.stop="openTagDialog(row)"
+                    aria-label="跳转来源"
+                    @click.stop="handleJumpToSource(row)"
                   >
-                    <PriceTag />
+                    <Connection />
                   </button>
                 </el-tooltip>
-                <el-tooltip content="写权限" placement="top">
-                  <button
-                    type="button"
-                    class="datapoint-list__table-action"
-                    aria-label="编辑写权限"
-                    @click.stop="openPermissionDialog(row)"
-                  >
-                    <User />
-                  </button>
-                </el-tooltip>
+                <!-- 复制路径 -->
                 <el-tooltip content="复制路径" placement="top">
                   <button
                     type="button"
@@ -299,6 +351,7 @@
                     <CopyDocument />
                   </button>
                 </el-tooltip>
+                <!-- 清理失效（仅 invalid 行可见） -->
                 <el-tooltip
                   v-if="row.status === 'invalid'"
                   content="清理失效数据点"
@@ -316,12 +369,36 @@
               </div>
             </template>
           </el-table-column>
+
           <template #empty>
             <el-empty description="暂无匹配的数据点" />
           </template>
         </el-table>
       </div>
 
+      <!-- 批量操作条（选中 ≥ 1 时浮现，位于分页栏上方） -->
+      <BulkActionBar
+        :selected-count="selectedRows.length"
+        @clear="selectedRows = []"
+      >
+        <button
+          type="button"
+          class="datapoint-list__bulk-action-btn"
+          @click="openBatchTagDialog"
+        >
+          打标签
+        </button>
+        <button
+          type="button"
+          class="datapoint-list__bulk-action-btn is-danger"
+          :disabled="selectedInvalidRows.length === 0"
+          @click="handleBatchDelete"
+        >
+          清理失效
+        </button>
+      </BulkActionBar>
+
+      <!-- 分页栏 -->
       <div v-if="isManagementMode" class="datapoint-list__pagination-bar">
         <p class="datapoint-list__pagination-summary">
           {{ paginationSummary }}
@@ -378,6 +455,7 @@
       </div>
     </div>
 
+    <!-- 标签 dialog（保留 D2 前实现，不动） -->
     <el-dialog
       v-model="tagDialogVisible"
       :title="tagDialogTitle"
@@ -449,6 +527,7 @@
       </template>
     </el-dialog>
 
+    <!-- 写权限 dialog（保留 D2 前实现，不动） -->
     <el-dialog
       v-model="permissionDialogVisible"
       :title="`写权限：${currentPermissionDatapoint?.name || '-'}`"
@@ -503,6 +582,7 @@
       </template>
     </el-dialog>
 
+    <!-- 详情抽屉（保留 D2 前实现，不动） -->
     <el-drawer
       v-model="detailDrawerVisible"
       size="420px"
@@ -602,17 +682,19 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  Bell,
   Close,
   CollectionTag,
+  Connection,
   CopyDocument,
+  Cpu,
+  DataLine,
   Delete,
   Filter,
-  PriceTag,
   Refresh,
   Search,
   SortDown,
   SortUp,
-  User,
   View,
 } from "@element-plus/icons-vue";
 import dayjs from "dayjs";
@@ -623,10 +705,13 @@ import {
   summarizeRuntimeGrant,
 } from "@/utils/runtime-permission-grants";
 import { getApiErrorMessage } from "@/utils/request";
+import PillButton from "@/components/shared/PillButton.vue";
+import StatusBadge from "@/components/shared/StatusBadge.vue";
+import BulkActionBar from "@/components/shared/BulkActionBar.vue";
 
 type RuntimeGrant = ReturnType<typeof normalizeRuntimeGrantPayload>;
 type DataPointListMode = "embedded" | "management";
-type SortField = "createdAt" | "updatedAt" | "name" | "path";
+type SortField = "updatedAt" | "name" | "path";
 type SortOrder = "asc" | "desc";
 
 interface DataPointRow {
@@ -650,6 +735,8 @@ interface DataPointRow {
   updated_at?: string;
   createdAt?: string;
   created_at?: string;
+  /** 引用数（后端暂未返回，D2 补全） */
+  refCount?: number;
 }
 
 const props = withDefaults(
@@ -660,6 +747,20 @@ const props = withDefaults(
     search?: string;
     showToolbar?: boolean;
     mode?: DataPointListMode;
+    /** Workspace 通过 URL query 注入的搜索词 */
+    filterQ?: string;
+    /** Workspace 通过 URL query 注入的状态筛选 */
+    filterStatus?: string;
+    /** Workspace 通过 URL query 注入的来源类型筛选 */
+    filterSource?: string;
+    /** Workspace 通过 URL query 注入的标签筛选 */
+    filterTags?: string[];
+    /** Workspace 通过 URL query 注入的排序字段 */
+    sortField?: string;
+    /** Workspace 通过 URL query 注入的排序方向 */
+    sortOrder?: string;
+    /** Workspace 通过 URL query 注入的页码 */
+    page?: number;
   }>(),
   {
     sourceType: undefined,
@@ -667,87 +768,132 @@ const props = withDefaults(
     search: undefined,
     showToolbar: true,
     mode: "embedded",
+    filterQ: "",
+    filterStatus: "",
+    filterSource: "",
+    filterTags: () => [],
+    sortField: "updatedAt",
+    sortOrder: "desc",
+    page: 1,
   },
 );
 
 const emit = defineEmits<{
   select: [row: DataPointRow];
+  /** 筛选 / 排序 / 搜索变化时通知 Workspace 更新 URL */
+  "update:filter": [params: Record<string, unknown>];
 }>();
+
+// ── 本地状态 ──────────────────────────────────────────────────────────────
 
 const loading = ref(false);
 const datapoints = ref<DataPointRow[]>([]);
-const searchText = ref("");
-const typeFilter = ref("");
-const moduleFilter = ref("");
-const tagFilterValues = ref<string[]>([]);
+
+/* 搜索文本 */
+const searchText = ref(props.filterQ || "");
+/* 状态筛选（'' = 全部） */
+const statusFilter = ref(props.filterStatus || "");
+/* 来源类型筛选 */
+const sourceFilter = ref(props.filterSource || "");
+
+/* 标签筛选 */
+const tagFilterValues = ref<string[]>(props.filterTags || []);
 const tagFilterVisible = ref(false);
 const tagFilterKeyword = ref("");
 const groupByTags = ref(false);
 const tagFilterRootRef = ref<HTMLElement | null>(null);
-const statusFilter = ref("");
-const sortField = ref<SortField>("createdAt");
-const sortOrder = ref<SortOrder>("desc");
-const debounceTimer = ref<number | null>(null);
+
+/* 排序 */
+const sortFieldValue = ref<SortField>(
+  (["updatedAt", "name", "path"].includes(props.sortField || "") ? props.sortField : "updatedAt") as SortField,
+);
+const sortOrderValue = ref<SortOrder>(
+  (props.sortOrder === "asc" ? "asc" : "desc") as SortOrder,
+);
+
+/* 分页 */
 const pagination = ref({
-  page: 1,
-  pageSize: 20,
+  page: props.page || 1,
+  pageSize: 50,
 });
+const debounceTimer = ref<number | null>(null);
+
+/* 选中行 */
 const selectedRows = ref<DataPointRow[]>([]);
+
+/* 写权限 dialog 状态（保留 D2 前实现） */
 const permissionDialogVisible = ref(false);
 const permissionSaving = ref(false);
 const currentPermissionDatapoint = ref<DataPointRow | null>(null);
 const permissionForm = ref<RuntimeGrant>(normalizeRuntimeGrantPayload());
 const allowRolesInput = ref("");
 const denyRolesInput = ref("");
+
+/* 标签 dialog 状态（保留 D2 前实现） */
 const tagDialogVisible = ref(false);
 const tagSaving = ref(false);
 const tagDraft = ref<string[]>([]);
 const tagCreateInput = ref("");
 const tagEditMode = ref<"single" | "batch">("single");
 const currentTagDatapoint = ref<DataPointRow | null>(null);
+
+/* 详情抽屉状态（保留 D2 前实现） */
 const detailDrawerVisible = ref(false);
 const detailDatapoint = ref<DataPointRow | null>(null);
 
-const sourceTypeOptions = [
-  { label: "数据库查询", value: "db.query" },
-  { label: "MQTT 变量", value: "mqtt.tag" },
-  { label: "MQTT 订阅", value: "mqtt.subscription" },
-  { label: "计算输出", value: "calc.output" },
-  { label: "静态变量", value: "static.var" },
-];
+// ── 静态配置 ─────────────────────────────────────────────────────────────
 
+/** 状态选项（v2 规格：全部/活跃/失效/错误） */
 const statusOptions = [
   { label: "全部", value: "" },
-  { label: "有效", value: "active" },
+  { label: "活跃", value: "active" },
   { label: "失效", value: "invalid" },
+  { label: "错误", value: "error" },
 ];
+
+/** 排序字段选项（v2 规格：更新时间/名称/路径） */
 const sortFieldOptions: Array<{ label: string; value: SortField }> = [
-  { label: "创建时间", value: "createdAt" },
   { label: "更新时间", value: "updatedAt" },
   { label: "名称", value: "name" },
   { label: "路径", value: "path" },
 ];
-const pageSizeOptions = [10, 20, 50, 100];
 
-const isManagementMode = computed(() => props.mode === "management");
+const pageSizeOptions = [20, 50, 100];
 
-const sourceTypeLabels = sourceTypeOptions.reduce<Record<string, string>>(
-  (result, item) => {
-    result[item.value] = item.label;
-    return result;
-  },
-  {},
-);
+/** 来源类型标签映射 */
+const sourceTypeLabels: Record<string, string> = {
+  "db.query": "数据库查询",
+  "mqtt.tag": "MQTT 变量",
+  "mqtt.subscription": "MQTT 订阅",
+  "calc.output": "计算输出",
+  "static.var": "静态变量",
+};
 
-const tagDialogTitle = computed(() =>
-  tagEditMode.value === "batch"
-    ? `标签管理（${selectedRows.value.length} 项）`
-    : `标签管理：${currentTagDatapoint.value?.name || "-"}`,
-);
+// ── 来源图标映射 ──────────────────────────────────────────────────────────
 
-const selectedInvalidRows = computed(() =>
-  selectedRows.value.filter((item) => item.status === "invalid"),
-);
+function getSourceIcon(sourceType?: string) {
+  if (!sourceType) return DataLine;
+  if (sourceType.startsWith("mqtt")) return Connection;
+  if (sourceType.startsWith("db")) return DataLine;
+  if (sourceType.startsWith("calc")) return Cpu;
+  if (sourceType.startsWith("alarm")) return Bell;
+  return DataLine;
+}
+
+// ── 动态来源类型（从当前列表提取，去重） ─────────────────────────────────
+
+const dynamicSourceOptions = computed(() => {
+  const seen = new Set<string>();
+  datapoints.value.forEach((item) => {
+    if (item.sourceType) seen.add(item.sourceType);
+  });
+  return Array.from(seen).sort().map((v) => ({
+    value: v,
+    label: sourceTypeLabels[v] || v,
+  }));
+});
+
+// ── 标签选项（从当前数据点列表提取） ─────────────────────────────────────
 
 const tagOptions = computed(() => {
   const tags = new Map<string, number>();
@@ -768,9 +914,7 @@ const tagOptions = computed(() => {
 
 const filteredTagOptions = computed(() => {
   const keyword = tagFilterKeyword.value.trim().toLowerCase();
-  if (!keyword) {
-    return tagOptions.value;
-  }
+  if (!keyword) return tagOptions.value;
   return tagOptions.value.filter((tag) =>
     tag.name.toLowerCase().includes(keyword),
   );
@@ -778,96 +922,92 @@ const filteredTagOptions = computed(() => {
 
 const selectedTagSet = computed(() => new Set(tagFilterValues.value));
 
-const tagFilterLabel = computed(() =>
-  tagFilterValues.value.length > 0
-    ? `标签筛选 (${tagFilterValues.value.length})`
-    : "标签筛选",
-);
+// ── 计算属性：label ───────────────────────────────────────────────────────
+
+const isManagementMode = computed(() => props.mode === "management");
 
 const currentStatusLabel = computed(
   () =>
-    statusOptions.find((option) => option.value === statusFilter.value)?.label ||
-    "全部",
+    statusOptions.find((o) => o.value === statusFilter.value)?.label || "全部",
 );
+
+const currentSourceLabel = computed(() => {
+  if (!sourceFilter.value) return "来源";
+  return sourceTypeLabels[sourceFilter.value] || sourceFilter.value;
+});
 
 const currentSortFieldLabel = computed(
   () =>
-    sortFieldOptions.find((option) => option.value === sortField.value)?.label ||
-    "创建时间",
+    sortFieldOptions.find((o) => o.value === sortFieldValue.value)?.label || "更新时间",
 );
 
 const currentSortOrderLabel = computed(() =>
-  sortOrder.value === "desc" ? "降序" : "升序",
+  sortOrderValue.value === "desc" ? "降序" : "升序",
 );
 
-const moduleOptions = computed(() => {
-  const modules = new Map<string, number>();
-  datapoints.value.forEach((item) => {
-    const moduleName = resolveModuleName(item);
-    modules.set(moduleName, (modules.get(moduleName) || 0) + 1);
-  });
-  return Array.from(modules.entries())
-    .sort((a, b) => a[0].localeCompare(b[0], "zh-Hans-CN"))
-    .map(([value, count]) => ({
-      value,
-      label: `${value} (${count})`,
-    }));
-});
+const tagFilterLabel = computed(() =>
+  tagFilterValues.value.length > 0
+    ? `标签 (${tagFilterValues.value.length})`
+    : "标签",
+);
 
-const getSortValue = (row: DataPointRow, field: SortField) => {
-  if (field === "createdAt") {
-    return row.createdAt || row.created_at || "";
-  }
-  if (field === "updatedAt") {
-    return row.updatedAt || row.updated_at || row.createdAt || row.created_at || "";
-  }
-  return String(row[field] || "");
-};
+const tagDialogTitle = computed(() =>
+  tagEditMode.value === "batch"
+    ? `标签管理（${selectedRows.value.length} 项）`
+    : `标签管理：${currentTagDatapoint.value?.name || "-"}`,
+);
 
-const compareDataPointRows = (left: DataPointRow, right: DataPointRow) => {
-  const leftValue = getSortValue(left, sortField.value);
-  const rightValue = getSortValue(right, sortField.value);
-  let result = 0;
+const selectedInvalidRows = computed(() =>
+  selectedRows.value.filter((item) => item.status === "invalid"),
+);
 
-  if (sortField.value === "createdAt" || sortField.value === "updatedAt") {
-    result = dayjs(leftValue).valueOf() - dayjs(rightValue).valueOf();
-  } else {
-    result = String(leftValue).localeCompare(String(rightValue), "zh-Hans-CN");
-  }
-
-  return sortOrder.value === "desc" ? -result : result;
-};
+// ── 数据过滤 / 排序 / 分页（前端层，补充标签 / 分组排序） ────────────────
 
 const visibleDataPoints = computed(() => {
-  const filtered = datapoints.value.filter((item) => {
-    if (moduleFilter.value && resolveModuleName(item) !== moduleFilter.value) {
-      return false;
-    }
-    if (
-      tagFilterValues.value.length > 0 &&
-      !tagFilterValues.value.every((tag) => normalizeTags(item.tags).includes(tag))
-    ) {
-      return false;
-    }
-    return true;
-  });
+  let list = datapoints.value;
 
-  const sorted = [...filtered].sort(compareDataPointRows);
-
-  if (!groupByTags.value) {
-    return sorted;
+  /* 标签过滤（前端层，后端只按搜索/状态/来源拉数据） */
+  if (tagFilterValues.value.length > 0) {
+    list = list.filter((item) =>
+      tagFilterValues.value.every((tag) => normalizeTags(item.tags).includes(tag)),
+    );
   }
 
-  return sorted.sort((left, right) => {
-    const leftGroup = normalizeTags(left.tags)[0] || "未设置";
-    const rightGroup = normalizeTags(right.tags)[0] || "未设置";
-    const groupDelta = leftGroup.localeCompare(rightGroup, "zh-Hans-CN");
-    if (groupDelta !== 0) return groupDelta;
-    return String(left.name || left.path || "").localeCompare(
-      String(right.name || right.path || ""),
-      "zh-Hans-CN",
-    );
+  /* 来源筛选（前端二次过滤；后端已支持时可移除） */
+  if (sourceFilter.value) {
+    list = list.filter((item) => item.sourceType === sourceFilter.value);
+  }
+
+  /* 排序 */
+  list = [...list].sort((a, b) => {
+    let delta = 0;
+    if (sortFieldValue.value === "updatedAt") {
+      delta =
+        dayjs(getUpdatedAt(a)).valueOf() - dayjs(getUpdatedAt(b)).valueOf();
+    } else {
+      delta = String(a[sortFieldValue.value] || "").localeCompare(
+        String(b[sortFieldValue.value] || ""),
+        "zh-Hans-CN",
+      );
+    }
+    return sortOrderValue.value === "desc" ? -delta : delta;
   });
+
+  /* 按标签分组 */
+  if (groupByTags.value) {
+    list = list.sort((a, b) => {
+      const ag = normalizeTags(a.tags)[0] || "未设置";
+      const bg = normalizeTags(b.tags)[0] || "未设置";
+      const gd = ag.localeCompare(bg, "zh-Hans-CN");
+      if (gd !== 0) return gd;
+      return String(a.name || a.path || "").localeCompare(
+        String(b.name || b.path || ""),
+        "zh-Hans-CN",
+      );
+    });
+  }
+
+  return list;
 });
 
 const totalVisibleCount = computed(() => visibleDataPoints.value.length);
@@ -913,29 +1053,19 @@ const canNextPage = computed(
   () => totalPages.value > 0 && currentPage.value < totalPages.value,
 );
 
-/**
- * 外部工作区和列表内置工具栏共用同一个请求构造逻辑。
- * 搜索、来源和状态走后端过滤，模块与标签基于当前页做轻量前端过滤。
- */
-const buildDataPointQueryParams = () => {
-  const selectedSourceType = props.sourceType ?? typeFilter.value;
-  const selectedStatus = props.status ?? statusFilter.value;
-  const selectedSearch = props.search ?? searchText.value;
+// ── 数据加载 ──────────────────────────────────────────────────────────────
+
+const buildQueryParams = () => {
   const params: Record<string, unknown> = {
     page: 1,
-    pageSize: 200,
+    pageSize: 500,
   };
-
-  if (selectedSourceType) {
-    params.type = selectedSourceType;
-  }
-  if (selectedStatus) {
-    params.status = selectedStatus;
-  }
-  if (selectedSearch) {
-    params.search = selectedSearch;
-  }
-
+  const q = props.search ?? searchText.value;
+  const st = props.status ?? statusFilter.value;
+  const src = props.sourceType ?? sourceFilter.value;
+  if (q) params.search = q;
+  if (st) params.status = st;
+  if (src) params.type = src;
   return params;
 };
 
@@ -943,9 +1073,7 @@ const loadDataPoints = async () => {
   if (!props.projectId) return;
   loading.value = true;
   try {
-    const response = await dataAPI.getDataPoints(props.projectId, {
-      ...buildDataPointQueryParams(),
-    });
+    const response = await dataAPI.getDataPoints(props.projectId, buildQueryParams());
     datapoints.value = response.data?.datapoints || [];
     selectedRows.value = [];
   } catch (error) {
@@ -961,6 +1089,8 @@ const handleRefresh = async () => {
   await loadDataPoints();
   ElMessage.success("数据点已刷新");
 };
+
+// ── 分页 ──────────────────────────────────────────────────────────────────
 
 const handleSelectionChange = (selection: DataPointRow[]) => {
   selectedRows.value = selection || [];
@@ -981,25 +1111,24 @@ const handlePageSizeChange = (pageSize: number) => {
   pagination.value.page = 1;
 };
 
+// ── 排序 ──────────────────────────────────────────────────────────────────
+
 const toggleSortOrder = () => {
-  sortOrder.value = sortOrder.value === "desc" ? "asc" : "desc";
+  sortOrderValue.value = sortOrderValue.value === "desc" ? "asc" : "desc";
   pagination.value.page = 1;
 };
 
+// ── 标签过滤面板 ──────────────────────────────────────────────────────────
+
 const toggleTagFilterPanel = () => {
   tagFilterVisible.value = !tagFilterVisible.value;
-  if (tagFilterVisible.value) {
-    tagFilterKeyword.value = "";
-  }
+  if (tagFilterVisible.value) tagFilterKeyword.value = "";
 };
 
 const toggleTagFilter = (tag: string) => {
   const next = new Set(tagFilterValues.value);
-  if (next.has(tag)) {
-    next.delete(tag);
-  } else {
-    next.add(tag);
-  }
+  if (next.has(tag)) next.delete(tag);
+  else next.add(tag);
   tagFilterValues.value = [...next];
   pagination.value.page = 1;
 };
@@ -1007,11 +1136,11 @@ const toggleTagFilter = (tag: string) => {
 const handleDocumentClick = (event: MouseEvent) => {
   if (!tagFilterVisible.value) return;
   const target = event.target as Node | null;
-  if (target && tagFilterRootRef.value?.contains(target)) {
-    return;
-  }
+  if (target && tagFilterRootRef.value?.contains(target)) return;
   tagFilterVisible.value = false;
 };
+
+// ── 行操作 ────────────────────────────────────────────────────────────────
 
 const openDetailDrawer = (row: DataPointRow) => {
   detailDatapoint.value = row;
@@ -1020,9 +1149,16 @@ const openDetailDrawer = (row: DataPointRow) => {
 };
 
 const handleRowClick = (row: DataPointRow) => {
-  if (!isManagementMode.value) {
-    emit("select", row);
+  if (!isManagementMode.value) emit("select", row);
+};
+
+/** 跳转来源（D1 占位，D2 实现完整 LinkChip 跳转逻辑） */
+const handleJumpToSource = (row: DataPointRow) => {
+  if (!row.sourceType || !row.sourceId) {
+    ElMessage.info("该数据点暂无来源信息");
+    return;
   }
+  ElMessage.info(`跳转来源：${formatSourceType(row.sourceType)}（D2 完整实现）`);
 };
 
 const handleDelete = async (datapoint: DataPointRow) => {
@@ -1030,11 +1166,7 @@ const handleDelete = async (datapoint: DataPointRow) => {
     await ElMessageBox.confirm(
       `确认清理失效数据点「${datapoint.name || datapoint.path || "-"}」？`,
       "清理失效数据点",
-      {
-        confirmButtonText: "清理",
-        cancelButtonText: "取消",
-        type: "warning",
-      },
+      { confirmButtonText: "清理", cancelButtonText: "取消", type: "warning" },
     );
     await dataAPI.deleteDataPoint(props.projectId, datapoint.id);
     ElMessage.success("数据点已清理");
@@ -1054,11 +1186,7 @@ const handleBatchDelete = async () => {
     await ElMessageBox.confirm(
       `确认清理 ${selectedInvalidRows.value.length} 个失效数据点？`,
       "批量清理失效项",
-      {
-        confirmButtonText: "批量清理",
-        cancelButtonText: "取消",
-        type: "warning",
-      },
+      { confirmButtonText: "批量清理", cancelButtonText: "取消", type: "warning" },
     );
     const response = await dataAPI.deleteDataPointsBatch(
       props.projectId,
@@ -1077,6 +1205,8 @@ const handleBatchDelete = async () => {
     }
   }
 };
+
+// ── 标签 dialog（保留 D2 前实现） ─────────────────────────────────────────
 
 const openTagDialog = (row: DataPointRow) => {
   currentTagDatapoint.value = row;
@@ -1112,11 +1242,7 @@ const handleDeleteTagOption = async (tag: string) => {
     await ElMessageBox.confirm(
       `确认从 ${affectedRows.length} 个数据点中移除标签「${tag}」？`,
       "删除标签",
-      {
-        confirmButtonText: "删除",
-        cancelButtonText: "取消",
-        type: "warning",
-      },
+      { confirmButtonText: "删除", cancelButtonText: "取消", type: "warning" },
     );
     await Promise.all(
       affectedRows.map((row) =>
@@ -1147,9 +1273,7 @@ const saveTags = async () => {
       await dataAPI.updateDataPoint(
         props.projectId,
         currentTagDatapoint.value.id,
-        {
-          tags: normalizedTags,
-        },
+        { tags: normalizedTags },
       );
       ElMessage.success("标签已保存");
     } else {
@@ -1174,6 +1298,8 @@ const saveTags = async () => {
   }
 };
 
+// ── 写权限 dialog（保留 D2 前实现） ──────────────────────────────────────
+
 const parseRoleInput = (value: string) => {
   return String(value || "")
     .split(/[\n,，]/)
@@ -1182,17 +1308,10 @@ const parseRoleInput = (value: string) => {
 };
 
 const getWriteRuntimeGrant = (row: DataPointRow) => {
-  const runtimePermissions = row?.runtimePermissions as
-    | { write?: unknown }
-    | undefined;
-  const runtimePermissionGrants = row?.runtimePermissionGrants as
-    | { write?: unknown }
-    | undefined;
+  const rp = row?.runtimePermissions as { write?: unknown } | undefined;
+  const rpg = row?.runtimePermissionGrants as { write?: unknown } | undefined;
   return normalizeRuntimeGrantPayload(
-    runtimePermissions?.write ||
-      runtimePermissionGrants?.write ||
-      row?.writePermission ||
-      {},
+    rp?.write || rpg?.write || row?.writePermission || {},
   );
 };
 
@@ -1214,10 +1333,7 @@ const openPermissionDialog = (row: DataPointRow) => {
 };
 
 const handlePermissionSave = async () => {
-  if (!props.projectId || !currentPermissionDatapoint.value?.id) {
-    return;
-  }
-
+  if (!props.projectId || !currentPermissionDatapoint.value?.id) return;
   const writeGrant = draftWriteRuntimeGrant.value;
   permissionSaving.value = true;
   try {
@@ -1239,6 +1355,8 @@ const handlePermissionSave = async () => {
   }
 };
 
+// ── 工具函数 ──────────────────────────────────────────────────────────────
+
 const copyPath = async (path?: string) => {
   if (!path) return;
   try {
@@ -1254,24 +1372,37 @@ const formatTime = (value?: string) => {
   return dayjs(value).format(TIME_FORMAT);
 };
 
-const getUpdatedAt = (row: DataPointRow) => {
-  return (
-    row.updatedAt || row.updated_at || row.createdAt || row.created_at || ""
-  );
-};
+const getUpdatedAt = (row: DataPointRow) =>
+  row.updatedAt || row.updated_at || row.createdAt || row.created_at || "";
 
-const getCreatedAt = (row: DataPointRow) => {
-  return row.createdAt || row.created_at || "";
-};
+/** 状态 badge tone 映射（v2 规格） */
+function resolveStatusTone(
+  status?: string,
+): "success" | "danger" | "warning" | "muted" {
+  switch (status) {
+    case "active":
+      return "success";
+    case "invalid":
+      return "danger";
+    case "error":
+      return "warning";
+    default:
+      return "muted";
+  }
+}
 
 const formatStatus = (status?: string) => {
   switch (status) {
+    case "active":
+      return "活跃";
     case "invalid":
       return "失效";
+    case "error":
+      return "错误";
     case "inactive":
       return "停用";
     default:
-      return "有效";
+      return "未知";
   }
 };
 
@@ -1294,9 +1425,7 @@ const formatQuality = (quality?: string) => {
 const formatLastValue = (value: unknown) => {
   if (value === undefined || value === null || value === "") return "-";
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
   try {
     return JSON.stringify(value);
   } catch {
@@ -1316,10 +1445,15 @@ const formatSourceConfig = (value?: Record<string, unknown>) => {
 const resolveModuleName = (row: DataPointRow) => {
   const path = String(row.path || "");
   const parts = path.split(/[./:]/).filter(Boolean);
-  if (parts.length >= 2) {
-    return parts[1];
-  }
+  if (parts.length >= 2) return parts[1];
   return parts[0] || "未分组";
+};
+
+/** 引用数（D2 完整实现；D1 全部显示 `-`） */
+const resolveRefCount = (row: DataPointRow) => {
+  const count = (row as DataPointRow & { refCount?: number }).refCount;
+  if (typeof count === "number" && count > 0) return count;
+  return "-";
 };
 
 const normalizeTags = (value: unknown): string[] => {
@@ -1334,39 +1468,62 @@ const normalizeTags = (value: unknown): string[] => {
       label = String(record.label || record.name || record.value || "");
     }
     const normalized = label.trim();
-    if (normalized && !result.includes(normalized)) {
-      result.push(normalized);
-    }
+    if (normalized && !result.includes(normalized)) result.push(normalized);
   });
   return result;
 };
 
-const mergeTags = (left: string[], right: string[]) => {
-  return Array.from(
-    new Set([...left, ...right].map((item) => item.trim())),
-  ).filter(Boolean);
-};
+const mergeTags = (left: string[], right: string[]) =>
+  Array.from(new Set([...left, ...right].map((item) => item.trim()))).filter(Boolean);
 
-const getVisibleTags = (row: DataPointRow) => normalizeTags(row.tags).slice(0, 3);
-
-const getHiddenTags = (row: DataPointRow) => normalizeTags(row.tags).slice(3);
-
+const getVisibleTags = (row: DataPointRow) => normalizeTags(row.tags).slice(0, 2);
+const getHiddenTags = (row: DataPointRow) => normalizeTags(row.tags).slice(2);
 const getHiddenTagCount = (row: DataPointRow) => getHiddenTags(row).length;
 
-watch([searchText, typeFilter, statusFilter], () => {
+// ── URL 同步：向 Workspace 推送变化 ──────────────────────────────────────
+
+function emitFilterUpdate() {
+  emit("update:filter", {
+    q: searchText.value,
+    status: statusFilter.value,
+    source: sourceFilter.value,
+    tags: tagFilterValues.value,
+    sort: sortFieldValue.value,
+    order: sortOrderValue.value,
+    page: pagination.value.page,
+  });
+}
+
+// ── Watch ─────────────────────────────────────────────────────────────────
+
+/* 搜索、状态、来源：300ms 防抖后重新拉数据 + 同步 URL */
+watch([searchText, statusFilter, sourceFilter], () => {
   pagination.value.page = 1;
-  if (debounceTimer.value) {
-    window.clearTimeout(debounceTimer.value);
-  }
+  if (debounceTimer.value) window.clearTimeout(debounceTimer.value);
   debounceTimer.value = window.setTimeout(() => {
     void loadDataPoints();
+    emitFilterUpdate();
   }, 300);
 });
 
-watch([moduleFilter, tagFilterValues, groupByTags, sortField, sortOrder], () => {
+/* 排序变化：重新排序 + 同步 URL */
+watch([sortFieldValue, sortOrderValue], () => {
   pagination.value.page = 1;
+  emitFilterUpdate();
 });
 
+/* 标签 / 分组：前端层，不触发请求，只同步 URL */
+watch([tagFilterValues, groupByTags], () => {
+  pagination.value.page = 1;
+  emitFilterUpdate();
+});
+
+/* 页码变化：同步 URL */
+watch(() => pagination.value.page, () => {
+  emitFilterUpdate();
+});
+
+/* 翻页越界保护 */
 watch([totalVisibleCount, totalPages], () => {
   if (totalPages.value === 0) {
     pagination.value.page = 1;
@@ -1377,18 +1534,19 @@ watch([totalVisibleCount, totalPages], () => {
   }
 });
 
+/* 外部 props 注入（Workspace URL → 列表）：只在首次挂载前已通过默认值写入 */
 watch(
   () => [props.sourceType, props.status, props.search],
   () => {
     pagination.value.page = 1;
-    if (debounceTimer.value) {
-      window.clearTimeout(debounceTimer.value);
-    }
+    if (debounceTimer.value) window.clearTimeout(debounceTimer.value);
     debounceTimer.value = window.setTimeout(() => {
       void loadDataPoints();
     }, 300);
   },
 );
+
+// ── 生命周期 ──────────────────────────────────────────────────────────────
 
 onMounted(() => {
   document.addEventListener("click", handleDocumentClick);
@@ -1397,13 +1555,12 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleDocumentClick);
-  if (debounceTimer.value) {
-    window.clearTimeout(debounceTimer.value);
-  }
+  if (debounceTimer.value) window.clearTimeout(debounceTimer.value);
 });
 
 defineExpose({
   refresh: loadDataPoints,
+  openPermissionDialog,
 });
 </script>
 
@@ -1428,6 +1585,8 @@ defineExpose({
   background: transparent;
   box-shadow: none;
 }
+
+/* ── 工具栏 ── */
 
 .datapoint-list__toolbar {
   position: relative;
@@ -1472,23 +1631,9 @@ defineExpose({
   box-shadow: 0 0 0 3px var(--dc-primary-soft);
 }
 
-.datapoint-list--management .datapoint-list__toolbar :deep(.el-select .el-input__wrapper) {
-  height: 32px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.04);
-  box-shadow: none;
-  font-size: 13px;
-}
-
-.datapoint-list--management .datapoint-list__toolbar :deep(.el-select .el-input__wrapper:hover) {
-  background: rgba(0, 0, 0, 0.08);
-}
-
 .datapoint-list--management .datapoint-list__search {
-  width: 176px;
-  flex: 0 0 176px;
+  width: 200px;
+  flex: 0 0 200px;
   --el-input-bg-color: var(--dc-surface-muted);
   --el-input-border-color: var(--dc-border);
   --el-input-hover-border-color: var(--dc-primary);
@@ -1515,12 +1660,17 @@ defineExpose({
   color: var(--dc-text-muted);
 }
 
+.datapoint-list__search {
+  width: 176px;
+  flex: 0 0 176px;
+}
+
 .datapoint-list__toolbar-left,
 .datapoint-list__toolbar-right {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1533,51 +1683,7 @@ defineExpose({
   margin-left: auto;
 }
 
-.datapoint-list__search {
-  width: 176px;
-  flex: 0 0 176px;
-}
-
-.datapoint-list__select {
-  width: 126px;
-  flex: 0 0 126px;
-}
-
-.datapoint-list__status {
-  flex: 0 0 auto;
-}
-
-.datapoint-list__pill-button {
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--dc-text-secondary);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 400;
-  white-space: nowrap;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
-}
-
-.datapoint-list__pill-button:hover,
-.datapoint-list__pill-button:focus-visible {
-  background: rgba(0, 0, 0, 0.08);
-  color: var(--dc-text);
-  outline: 0;
-}
-
-.datapoint-list__pill-button svg {
-  width: 16px;
-  height: 16px;
-}
+/* ── 菜单 ── */
 
 .datapoint-list__popover-menu {
   display: flex;
@@ -1613,6 +1719,8 @@ defineExpose({
   font-weight: 600;
 }
 
+/* ── 标签过滤面板（保留原有实现） ── */
+
 .datapoint-tag-filter {
   position: relative;
   display: inline-flex;
@@ -1620,34 +1728,36 @@ defineExpose({
 }
 
 .datapoint-tag-filter__trigger {
-  height: 32px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.04);
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: 12px;
+  background: var(--dc-surface-raised);
   color: var(--dc-text-secondary);
   cursor: pointer;
   font-family: inherit;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 600;
   white-space: nowrap;
   transition:
     background-color 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .datapoint-tag-filter__trigger:hover,
 .datapoint-tag-filter__trigger.is-active {
-  background: rgba(0, 0, 0, 0.08);
-  color: var(--dc-text);
+  border-color: rgba(29, 78, 216, 0.26);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .datapoint-tag-filter__trigger svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .datapoint-tag-filter__panel {
@@ -1775,27 +1885,7 @@ defineExpose({
   transform: translateY(-4px);
 }
 
-.datapoint-list__count {
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 10px;
-  border: 1px solid var(--dc-border);
-  border-radius: 10px;
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.datapoint-list--management .datapoint-list__count {
-  border: 0;
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--dc-text-secondary);
-  font-size: 13px;
-  font-weight: 400;
-}
+/* ── icon-button ── */
 
 .datapoint-list__icon-button {
   width: 32px;
@@ -1823,13 +1913,6 @@ defineExpose({
   box-shadow: var(--dc-shadow-surface);
 }
 
-.datapoint-list--management .datapoint-list__icon-button:hover {
-  transform: translateY(-1px);
-  border-color: var(--dc-border);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text);
-}
-
 .datapoint-list__icon-button svg {
   width: 16px;
   height: 16px;
@@ -1855,18 +1938,7 @@ defineExpose({
   box-shadow: none;
 }
 
-.datapoint-list--management .datapoint-list__icon-button:hover {
-  transform: translateY(-1px);
-  border-color: var(--dc-border);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text);
-}
-
-.datapoint-list--management .datapoint-list__icon-button.is-danger:hover {
-  border-color: rgba(220, 38, 38, 0.26);
-  background: rgba(220, 38, 38, 0.08);
-  color: var(--dc-danger);
-}
+/* ── 主面板 ── */
 
 .datapoint-list__panel {
   position: relative;
@@ -1899,8 +1971,10 @@ defineExpose({
 
 .datapoint-list__table {
   width: 100%;
-  min-width: 1360px;
+  min-width: 1400px;
 }
+
+/* ── 单元格 ── */
 
 .datapoint-list__name-cell {
   min-width: 0;
@@ -1908,72 +1982,78 @@ defineExpose({
   align-items: center;
 }
 
-.datapoint-list__name-row,
-.datapoint-list__tag-row,
-.datapoint-list__path-cell,
-.datapoint-list__module {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .datapoint-list__name {
   min-width: 0;
   overflow: hidden;
-  color: var(--dc-text);
-  font-size: 13px;
-  font-weight: 700;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.datapoint-list--management .datapoint-list__name {
-  color: #2563eb;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.datapoint-list__tag-row {
-  min-height: 22px;
-  flex-wrap: wrap;
-}
-
-.datapoint-list__inline-action,
-.datapoint-list__copy {
-  display: inline-flex;
+.datapoint-list__path-cell {
+  min-width: 0;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  border: 0;
-  background: transparent;
+}
+
+.datapoint-list__path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #64748b;
+  font-family: var(--dc-font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 来源：图标 + 文字 */
+.datapoint-list__source-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.datapoint-list__source-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   color: var(--dc-text-muted);
-  cursor: pointer;
+}
+
+.datapoint-list__source-text {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datapoint-list__mono {
+  color: #475569;
+  font-family: var(--dc-font-mono);
   font-size: 12px;
 }
 
-.datapoint-list__inline-action {
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 6px;
+.datapoint-list__time {
+  color: #475569;
+  font-family: var(--dc-font-mono);
+  font-size: 12px;
 }
 
-.datapoint-list__inline-action svg,
-.datapoint-list__copy svg,
-.datapoint-list__module svg {
-  width: 14px;
-  height: 14px;
+/* 引用数 */
+.datapoint-list__ref-count {
+  color: var(--dc-text-muted);
+  font-size: 13px;
 }
 
-.datapoint-list__inline-action:hover,
-.datapoint-list__copy:hover {
-  background: var(--dc-primary-soft);
-  color: var(--dc-primary);
-}
-
-.datapoint-list__inline-action.is-danger:hover {
-  color: var(--dc-danger);
-}
+/* ── 标签单元格 ── */
 
 .datapoint-list__tags-cell {
   min-height: 28px;
@@ -2013,11 +2093,6 @@ defineExpose({
   line-height: 1;
 }
 
-.datapoint-list__tag-empty {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
 .datapoint-list__add-tag {
   height: 22px;
   display: inline-flex;
@@ -2037,99 +2112,7 @@ defineExpose({
   color: var(--dc-primary);
 }
 
-.datapoint-list__source-text {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.datapoint-list__module {
-  overflow: hidden;
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.datapoint-list__mono,
-.datapoint-list__time,
-.datapoint-list__path,
-.datapoint-list__value {
-  color: var(--dc-text-secondary);
-  font-family: var(--dc-font-mono);
-  font-size: 12px;
-}
-
-.datapoint-list--management .datapoint-list__mono,
-.datapoint-list--management .datapoint-list__time,
-.datapoint-list--management .datapoint-list__path,
-.datapoint-list--management .datapoint-list__permission {
-  color: #475569;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 400;
-}
-
-.datapoint-list__value {
-  display: inline-block;
-  max-width: 140px;
-  overflow: hidden;
-  color: var(--dc-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.datapoint-list__value.is-muted {
-  color: var(--dc-text-muted);
-}
-
-.datapoint-list__permission {
-  display: inline-block;
-  max-width: none;
-  overflow: visible;
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  text-align: left;
-  text-overflow: clip;
-  white-space: nowrap;
-}
-
-.datapoint-list__status-badge {
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: var(--dc-success-soft);
-  color: var(--dc-success);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.datapoint-list--management .datapoint-list__status-badge {
-  border-color: rgba(34, 197, 94, 0.2);
-  background: rgba(34, 197, 94, 0.1);
-  color: #15803d;
-  font-weight: 500;
-}
-
-.datapoint-list__status-badge.is-invalid {
-  background: var(--dc-danger-soft);
-  color: var(--dc-danger);
-}
-
-.datapoint-list--management .datapoint-list__status-badge.is-invalid {
-  border-color: rgba(239, 68, 68, 0.22);
-  background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
-}
+/* ── 行操作 ── */
 
 .datapoint-list__row-actions {
   display: flex;
@@ -2161,297 +2144,80 @@ defineExpose({
 }
 
 .datapoint-list__table-action:hover {
-  border-color: rgba(37, 99, 235, 0.2);
-  background: var(--dc-primary-soft);
-  color: var(--dc-primary);
-}
-
-.datapoint-list--management .datapoint-list__table-action:hover {
   border-color: transparent;
   background: transparent;
   color: #64748b;
 }
 
-.datapoint-list__table-action.is-danger:hover,
-.datapoint-list--management .datapoint-list__table-action.is-danger:hover {
+.datapoint-list__table-action.is-danger:hover {
   border-color: transparent;
   background: rgba(220, 38, 38, 0.08);
   color: var(--dc-danger);
 }
 
-.datapoint-list__path {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: var(--dc-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* ── 批量操作按钮 ── */
+
+.datapoint-list__bulk-action-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: 8px;
+  background: var(--dc-surface-raised);
+  color: var(--dc-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
 }
 
-.datapoint-list--management .datapoint-list__path {
-  max-width: 100%;
-  color: #64748b;
+.datapoint-list__bulk-action-btn:hover:not(:disabled) {
+  border-color: rgba(29, 78, 216, 0.26);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
+
+.datapoint-list__bulk-action-btn.is-danger:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.26);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--dc-danger);
+}
+
+.datapoint-list__bulk-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* ── 复制按钮 ── */
 
 .datapoint-list__copy {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  border-radius: var(--dc-radius-sm);
-}
-
-.datapoint-list__copy:hover {
-  background: var(--dc-primary-soft);
-}
-
-.datapoint-list__tag-dialog,
-.permission-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-:deep(.datapoint-list__tag-modal) {
-  border-radius: 14px;
-}
-
-:deep(.datapoint-list__tag-modal .el-dialog__header) {
-  margin: 0;
-  padding: 0;
-}
-
-:deep(.datapoint-list__tag-modal .el-dialog__body) {
-  padding: 32px 36px 30px;
-}
-
-:deep(.datapoint-list__tag-modal .el-dialog__footer) {
-  padding: 0 36px 34px;
-}
-
-.datapoint-list__dialog-head {
-  min-height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 0 36px;
-  border-radius: 14px 14px 0 0;
-  background: rgba(248, 250, 252, 0.86);
-}
-
-.datapoint-list__dialog-head h3 {
-  margin: 0;
-  color: var(--dc-text);
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.datapoint-list__dialog-close {
-  width: 30px;
-  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--dc-radius-sm);
   background: transparent;
   color: var(--dc-text-muted);
   cursor: pointer;
 }
 
-.datapoint-list__dialog-close:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--dc-text);
+.datapoint-list__copy svg {
+  width: 14px;
+  height: 14px;
 }
 
-.datapoint-list__dialog-close svg {
-  width: 18px;
-  height: 18px;
+.datapoint-list__copy:hover {
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
-.datapoint-list__tag-dialog {
-  gap: 22px;
-  padding-bottom: 34px;
-  border-bottom: 1px solid var(--dc-border);
-}
-
-.datapoint-list__tag-form-row {
-  display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  align-items: center;
-  gap: 14px;
-}
-
-.datapoint-list__tag-form-row > label {
-  color: var(--dc-text-secondary);
-  font-size: 14px;
-  font-weight: 600;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.datapoint-list__tag-create {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 112px;
-  gap: 10px;
-}
-
-.datapoint-list__tag-create-button {
-  height: 32px;
-  border: 1px solid rgba(64, 158, 255, 0.42);
-  border-radius: var(--dc-radius-md);
-  background: rgba(64, 158, 255, 0.08);
-  color: #409eff;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.datapoint-list__tag-create-button:hover {
-  background: rgba(64, 158, 255, 0.14);
-}
-
-.datapoint-list__tag-form-row :deep(.el-select),
-.datapoint-list__tag-form-row :deep(.el-input) {
-  width: 100%;
-}
-
-.datapoint-list__dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.datapoint-list__dialog-footer :deep(.el-button) {
-  min-width: 76px;
-  height: 32px;
-  border-radius: var(--dc-radius-md);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.permission-dialog__hint {
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.datapoint-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  color: var(--dc-text);
-}
-
-.datapoint-detail__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--dc-border);
-}
-
-.datapoint-detail__name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.datapoint-detail__path {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-secondary);
-  font-family: var(--dc-font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.datapoint-detail__path span {
-  min-width: 0;
-  flex: 1;
-}
-
-.datapoint-detail__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 0;
-}
-
-.datapoint-detail__grid > div {
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface);
-}
-
-.datapoint-detail__grid dt {
-  margin: 0 0 5px;
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.datapoint-detail__grid dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--dc-text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.datapoint-detail__section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.datapoint-detail__section-title {
-  color: var(--dc-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.datapoint-detail__tags {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.datapoint-detail__muted {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.datapoint-detail__code {
-  max-height: 240px;
-  overflow: auto;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-secondary);
-  font-family: var(--dc-font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
+/* ── 分页 ── */
 
 .datapoint-list__pagination-bar {
   flex-shrink: 0;
@@ -2590,231 +2356,269 @@ defineExpose({
   font-weight: 600;
 }
 
+/* ── 标签 dialog ── */
+
+:deep(.datapoint-list__tag-modal) {
+  border-radius: 14px;
+}
+
+:deep(.datapoint-list__tag-modal .el-dialog__header) {
+  margin: 0;
+  padding: 0;
+}
+
+:deep(.datapoint-list__tag-modal .el-dialog__body) {
+  padding: 32px 36px 30px;
+}
+
+:deep(.datapoint-list__tag-modal .el-dialog__footer) {
+  padding: 0 36px 34px;
+}
+
+.datapoint-list__dialog-head {
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 36px;
+  border-radius: 14px 14px 0 0;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.datapoint-list__dialog-head h3 {
+  margin: 0;
+  color: var(--dc-text);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.datapoint-list__dialog-close {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dc-text-muted);
+  cursor: pointer;
+}
+
+.datapoint-list__dialog-close:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--dc-text);
+}
+
+.datapoint-list__dialog-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.datapoint-list__tag-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-bottom: 34px;
+  border-bottom: 1px solid var(--dc-border);
+}
+
+.datapoint-list__tag-form-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.datapoint-list__tag-form-row > label {
+  color: var(--dc-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.datapoint-list__tag-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 10px;
+}
+
+.datapoint-list__tag-create-button {
+  height: 32px;
+  border: 1px solid rgba(64, 158, 255, 0.42);
+  border-radius: var(--dc-radius-md);
+  background: rgba(64, 158, 255, 0.08);
+  color: #409eff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.datapoint-list__tag-create-button:hover {
+  background: rgba(64, 158, 255, 0.14);
+}
+
+.datapoint-list__tag-form-row :deep(.el-select),
+.datapoint-list__tag-form-row :deep(.el-input) {
+  width: 100%;
+}
+
+.datapoint-list__dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.datapoint-list__dialog-footer :deep(.el-button) {
+  min-width: 76px;
+  height: 32px;
+  border-radius: var(--dc-radius-md);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── 写权限 dialog ── */
+
+.permission-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.permission-dialog__hint {
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ── 详情抽屉 ── */
+
+.datapoint-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--dc-text);
+}
+
+.datapoint-detail__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--dc-border);
+}
+
+.datapoint-detail__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.datapoint-detail__path {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
+  font-family: var(--dc-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.datapoint-detail__path span {
+  min-width: 0;
+  flex: 1;
+}
+
+.datapoint-detail__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0;
+}
+
+.datapoint-detail__grid > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface);
+}
+
+.datapoint-detail__grid dt {
+  margin: 0 0 5px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+}
+
+.datapoint-detail__grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.datapoint-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.datapoint-detail__section-title {
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.datapoint-detail__tags {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.datapoint-detail__muted {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+}
+
+.datapoint-detail__code {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
+  font-family: var(--dc-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── 全局 el-input 样式（非 management 模式） ── */
+
 :deep(.el-input__wrapper),
 :deep(.el-select .el-input__wrapper) {
   border-radius: var(--dc-radius-md);
   box-shadow: none;
   border: 1px solid var(--dc-border);
   background: var(--dc-surface-muted);
-}
-
-:deep(.el-input__wrapper:hover),
-:deep(.el-select .el-input__wrapper:hover) {
-  border-color: rgba(37, 99, 235, 0.22);
-}
-
-:deep(.el-input__wrapper.is-focus),
-:deep(.el-input__wrapper:focus-within),
-:deep(.el-select .el-input__wrapper.is-focus) {
-  border-color: var(--dc-primary);
-  box-shadow: 0 0 0 3px var(--dc-primary-soft);
-}
-
-:deep(.el-segmented) {
-  --el-segmented-bg-color: var(--dc-surface-muted);
-  --el-segmented-item-selected-bg-color: var(--dc-surface);
-  --el-segmented-item-selected-color: var(--dc-primary);
-  --el-segmented-item-hover-bg-color: var(--dc-surface);
-  border: 1px solid var(--dc-border);
-  border-radius: 10px;
-  padding: 3px;
-}
-
-:deep(.el-segmented__item) {
-  min-width: 48px;
-  height: 26px;
-  border-radius: 8px;
-}
-
-:deep(.el-table) {
-  --el-table-header-bg-color: var(--dc-surface-muted);
-  --el-table-tr-bg-color: var(--dc-surface-raised);
-  --el-table-row-hover-bg-color: var(--dc-surface-subtle);
-  color: var(--dc-text-secondary);
-}
-
-:deep(.el-table th.el-table__cell) {
-  color: var(--dc-text-secondary);
-  font-weight: 800;
-}
-
-:deep(.el-table th.el-table__cell .cell) {
-  height: 38px;
-  display: flex;
-  align-items: center;
-}
-
-:deep(.el-table .el-table__cell) {
-  border-bottom-color: var(--dc-border);
-}
-
-:deep(.el-table__body .el-table__cell) {
-  height: 48px;
-  padding: 8px 0;
-}
-
-:deep(.el-table__row) {
-  cursor: default;
-}
-
-:deep(.el-table .cell) {
-  line-height: 1.45;
-}
-
-.datapoint-list--management :deep(.el-segmented) {
-  --el-segmented-bg-color: rgba(0, 0, 0, 0.04);
-  --el-segmented-item-selected-bg-color: #ffffff;
-  --el-segmented-item-selected-color: var(--dc-primary);
-  --el-segmented-item-hover-bg-color: rgba(255, 255, 255, 0.5);
-  border: 0;
-}
-
-.datapoint-list--management :deep(.el-table) {
-  --el-table-header-bg-color: #f4f6f9;
-  --el-table-row-hover-bg-color: rgba(15, 23, 42, 0.04);
-  --el-table-border-color: #e5e7eb;
-  --el-table-fixed-left-column: 4px 0 10px rgba(15, 23, 42, 0.04);
-  --el-table-fixed-right-column: -4px 0 10px rgba(15, 23, 42, 0.04);
-  background: transparent;
-  color: #475569;
-  font-size: 14px;
-}
-
-.datapoint-list--management :deep(.el-table th.el-table__cell) {
-  color: var(--dc-text-secondary);
-  font-weight: 700;
-}
-
-.datapoint-list--management :deep(.el-table__header th) {
-  background: #f4f6f9;
-  color: #1f2937;
-  font-weight: 700;
-}
-
-.datapoint-list--management :deep(.el-table th.el-table__cell .cell) {
-  height: 52px;
-  align-items: center;
-  padding: 0 12px;
-  font-size: 14px;
-}
-
-.datapoint-list--management :deep(.el-table__body .el-table__cell) {
-  height: 72px;
-  padding: 18px 0;
-}
-
-.datapoint-list--management :deep(.el-table__body .cell) {
-  overflow: hidden;
-  padding: 0 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.datapoint-list--management :deep(.el-table__inner-wrapper::before) {
-  display: none;
-}
-
-.datapoint-list--management :deep(.el-table__header-wrapper) {
-  border-radius: 8px 8px 0 0;
-  overflow: hidden;
-}
-
-.datapoint-list--management :deep(.el-table__body td) {
-  color: #475569;
-}
-
-.datapoint-list--management :deep(.el-table__fixed),
-.datapoint-list--management :deep(.el-table__fixed-right),
-.datapoint-list--management :deep(.el-table__fixed-left),
-.datapoint-list--management :deep(.el-table-fixed-column--left),
-.datapoint-list--management :deep(.el-table-fixed-column--right) {
-  background: var(--dc-surface-raised);
-}
-
-.datapoint-list--management :deep(.el-table__body tr:hover > td),
-.datapoint-list--management :deep(.el-table__body tr:hover > td.el-table-fixed-column--left),
-.datapoint-list--management :deep(.el-table__body tr:hover > td.el-table-fixed-column--right) {
-  background: rgba(15, 23, 42, 0.04);
-}
-
-.datapoint-list--management :deep(.el-table__header th.el-table-fixed-column--left),
-.datapoint-list--management :deep(.el-table__header th.el-table-fixed-column--right) {
-  background: #f4f6f9;
-}
-
-.datapoint-list--management :deep(.el-table__header th.el-table-fixed-column--right .cell),
-.datapoint-list--management :deep(.el-table__body td.el-table-fixed-column--right .cell) {
-  display: flex;
-  justify-content: center;
-  padding-right: 12px;
-  padding-left: 12px;
-}
-
-.datapoint-list--management .datapoint-list__name-cell,
-.datapoint-list--management .datapoint-list__path-cell,
-.datapoint-list--management .datapoint-list__tags-cell,
-.datapoint-list--management .datapoint-list__row-actions {
-  flex-wrap: nowrap;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.datapoint-list--management .datapoint-list__tags-cell {
-  min-height: 24px;
-}
-
-.datapoint-list--management .datapoint-list__row-actions {
-  width: 100%;
-  justify-content: center;
-}
-
-.datapoint-list--management .datapoint-list__time {
-  display: inline-block;
-  min-width: 148px;
-  white-space: nowrap;
-}
-
-.datapoint-list--management .datapoint-list__tag {
-  max-width: 84px;
-  --el-tag-bg-color: #f3f4f6;
-  --el-tag-border-color: #e5e7eb;
-  --el-tag-text-color: #64748b;
-  border-radius: 6px;
-  font-weight: 500;
-}
-
-.datapoint-list--management .datapoint-list__table-action {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  color: #94a3b8;
-}
-
-.datapoint-list--management .datapoint-list__table-action svg {
-  width: 16px;
-  height: 16px;
-}
-
-@media (max-width: 900px) {
-  .datapoint-list__toolbar-left,
-  .datapoint-list__toolbar-right {
-    width: 100%;
-  }
-
-  .datapoint-list__search,
-  .datapoint-list__select,
-  .datapoint-tag-filter {
-    flex: 1 1 160px;
-    width: auto;
-  }
-
-  .datapoint-tag-filter__trigger {
-    width: 100%;
-  }
-
-  .datapoint-list__pagination-bar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 </style>
