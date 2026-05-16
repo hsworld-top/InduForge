@@ -2,6 +2,8 @@
   <DataCenterShell
     v-model:active-module="activeModule"
     :modules="datacenterModules"
+    :preview-session-active="previewSessionActive"
+    :preview-session-state="previewSessionState"
   >
     <template #actions="{ activeModule: currentModule }">
       <div class="datacenter-side-actions">
@@ -15,7 +17,7 @@
           <IconTablerShieldCheck class="h-5 w-5" />
           <span>数据契约检查</span>
         </button>
-        <template v-if="currentModule === 'access-sources'">
+        <template v-if="currentModule === 'access-source'">
           <button
             type="button"
             class="datacenter-side-action"
@@ -41,11 +43,11 @@
     </template>
 
     <DataPointWorkspace
-      v-if="activeModule === 'datapoints' && projectId"
+      v-if="activeModule === 'datapoint' && projectId"
       :project-id="projectId"
     />
 
-    <template v-else-if="activeModule === 'access-sources'">
+    <template v-else-if="activeModule === 'access-source'">
       <AccessSourceWorkspace
         v-if="!showAccessSourceLegacyWorkbench"
         :connections="connections"
@@ -324,14 +326,14 @@
     </template>
 
     <div
-      v-else-if="activeModule === 'compute-units'"
+      v-else-if="activeModule === 'compute'"
       class="module-card h-full overflow-hidden p-5"
     >
       <ComputeWorkspace v-if="projectId" :project-id="projectId" />
     </div>
 
     <div
-      v-else-if="activeModule === 'alarm-units'"
+      v-else-if="activeModule === 'alarm'"
       class="module-card h-full overflow-hidden p-5"
     >
       <AlarmWorkspace v-if="projectId" :project-id="projectId" />
@@ -410,7 +412,7 @@ import {
   nextTick,
   watch,
 } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import IconTablerDatabase from "~icons/tabler/database";
 import IconTablerTable from "~icons/tabler/table";
@@ -448,13 +450,18 @@ import ComputeWorkspace from "@/components/compute/ComputeWorkspace.vue";
 import DataContractCheckDialog from "@/components/contract/DataContractCheckDialog.vue";
 import DataCenterShell from "@/components/layout/DataCenterShell.vue";
 import { useConnection } from "@/composables/useConnection";
+import { useConfirm } from "@/composables/useConfirm";
+import { onBeforeRouteLeave } from "vue-router";
 import { usePreviewSession } from "@/composables/usePreviewSession";
+import { usePreviewSessionStore } from "@/stores/preview-session.store";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import {
   datacenterModules,
   type DatacenterModuleId,
 } from "@/config/datacenterModules";
+import { type V2ModuleId, DEFAULT_MODULE } from "@/router/route-config";
 import { datacenterLocale, t } from "@/i18n/runtime";
+import { useProjectStore } from "@/stores/project.store";
 import dataAPI from "@/api/data.api";
 import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";
@@ -463,7 +470,46 @@ import { getApiErrorMessage } from "@/utils/request";
 
 // 从路由获取 project 信息
 const route = useRoute();
-const activeModule = ref<DatacenterModuleId>("datapoints");
+const router = useRouter();
+const projectStore = useProjectStore();
+
+// ---- 路由同步：从 URL 读 module/objectId/tab ----
+// 有效的 v2 模块 ID 集合，用于安全降级
+const VALID_MODULES = new Set<V2ModuleId>([
+  "datapoint",
+  "access-source",
+  "compute",
+  "alarm",
+]);
+
+/** 从路由 params 解析当前模块，无效时回退默认值 */
+const resolveModuleFromRoute = (): DatacenterModuleId => {
+  const m = route.params.module as string | undefined;
+  if (m && VALID_MODULES.has(m as V2ModuleId)) {
+    return m as DatacenterModuleId;
+  }
+  return DEFAULT_MODULE;
+};
+
+const activeModule = ref<DatacenterModuleId>(resolveModuleFromRoute());
+
+/** 监听路由变化，同步 activeModule（如从 NavRail 外部 push 路由时） */
+watch(
+  () => route.params.module,
+  (m) => {
+    const next = (m && VALID_MODULES.has(m as V2ModuleId) ? m : DEFAULT_MODULE) as DatacenterModuleId;
+    if (activeModule.value !== next) {
+      activeModule.value = next;
+    }
+  },
+);
+
+/** 切换模块时更新 URL（由 NavRail 双向绑定触发） */
+watch(activeModule, (newModule, oldModule) => {
+  if (newModule === oldModule) return;
+  // 切换模块时清空 objectId/tab，保留 query string
+  router.replace({ path: `/${newModule}`, query: route.query });
+});
 const showAccessSourceLegacyWorkbench = ref(false);
 const sqlWorkbenchConnection = ref(null);
 const mqttWorkbenchConnection = ref(null);
@@ -484,6 +530,14 @@ const { sessionId: previewSessionId, ensureSession: ensurePreviewSession } =
   usePreviewSession(projectId, {
     autoStart: false,
   });
+
+// 预览会话 store（用于 NavRail 徽标条件出现）
+const previewSessionStore = usePreviewSessionStore();
+const previewSessionActive = computed(() => previewSessionStore.active);
+// NavRail 只需要 connected/disconnected 两态；store 暂未暴露 socket state，默认 connected
+const previewSessionState = computed(() =>
+  previewSessionStore.active ? ("connected" as const) : ("disconnected" as const),
+);
 
 // 使用 composable
 const {
@@ -1025,11 +1079,85 @@ watch(
   { immediate: false },
 );
 
-// 组件挂载时加载数据
+// ---- 草稿保护 ----
+const { confirmDraftAction } = useConfirm();
+
+/**
+ * 子模块可通过 provide 注入此函数来注册草稿状态检测器。
+ * 检测器返回 true 表示当前有未保存草稿。
+ */
+const draftCheckers = ref<Array<() => boolean>>([]);
+
+/**
+ * 提供给子模块注册草稿检测器。
+ * 子模块在自己的 setup 里调用：inject('registerDraftChecker')(fn)
+ */
+provide("registerDraftChecker", (checker: () => boolean) => {
+  draftCheckers.value.push(checker);
+  // 返回注销函数
+  return () => {
+    const idx = draftCheckers.value.indexOf(checker);
+    if (idx !== -1) draftCheckers.value.splice(idx, 1);
+  };
+});
+
+/** 检测是否有任意模块存在未保存草稿 */
+const hasPendingDraft = (): boolean => {
+  return draftCheckers.value.some((fn) => fn());
+};
+
+// 路由离开守卫：有草稿时弹三选一
+onBeforeRouteLeave(async (_to, _from, next) => {
+  if (!hasPendingDraft()) {
+    next();
+    return;
+  }
+
+  const action = await confirmDraftAction();
+  if (action === "cancel") {
+    // 用户取消，不离开
+    next(false);
+  } else if (action === "keep") {
+    // 用户选择保留草稿，正常离开（草稿已在模块内写入 localStorage）
+    next();
+  } else {
+    // 用户丢弃，清除草稿（由子模块监听 clearDraft 事件自行处理）
+    draftCheckers.value = [];
+    next();
+  }
+});
+
+// 浏览器关闭 / 刷新时提示（不支持三选一，只能给标准提示）
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (hasPendingDraft()) {
+    e.preventDefault();
+    // 标准做法：设置 returnValue 触发浏览器默认提示
+    e.returnValue = "";
+  }
+};
+
+/** 同步 project.store：将路由/Storage 的上下文注入 store */
+const syncProjectStore = () => {
+  if (project.value?.id) {
+    projectStore.bootstrap({
+      projectId: String(project.value.id),
+      tenantId: project.value.tenantId ? String(project.value.tenantId) : undefined,
+    });
+  }
+};
+
+// 组件挂载时：同步 project.store 并加载数据，挂载 beforeunload 监听
 onMounted(() => {
+  syncProjectStore();
   if (projectId.value) {
     loadConnections();
   }
+  window.addEventListener("beforeunload", handleBeforeUnload);
+});
+
+// 路由中 project 变化时（如正式入口 bootstrap 完成后路由元数据更新）也同步
+watch(() => project.value?.id, (newId) => {
+  if (newId) syncProjectStore();
 });
 
 // 组件卸载时清理
@@ -1039,6 +1167,8 @@ onBeforeUnmount(() => {
   }
   // 清理所有消息查看器引用
   mqttMessageViewerRefs.value.clear();
+  // 移除 beforeunload 监听
+  window.removeEventListener("beforeunload", handleBeforeUnload);
 });
 
 /**

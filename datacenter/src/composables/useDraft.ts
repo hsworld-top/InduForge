@@ -1,6 +1,7 @@
 import { Storage } from "@/utils/storage";
 
 // 草稿读写，key 由 projectId + module + objectId 拼接，存 localStorage
+// token / refreshToken 不进草稿，只存业务内容
 // 用法：const draft = useDraft('project-1', 'alarm', 'rule-42')
 
 export function useDraft<T>(projectId: string, module: string, objectId: string) {
@@ -19,5 +20,10 @@ export function useDraft<T>(projectId: string, module: string, objectId: string)
     Storage.remove(storageKey);
   }
 
-  return { read, write, clear };
+  /** 判断草稿是否存在（非 null/undefined） */
+  function hasDraft(): boolean {
+    return read() != null;
+  }
+
+  return { read, write, clear, hasDraft };
 }

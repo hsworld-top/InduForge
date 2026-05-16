@@ -1,8 +1,7 @@
-export type DatacenterModuleId =
-  | "datapoints"
-  | "access-sources"
-  | "compute-units"
-  | "alarm-units";
+import type { V2ModuleId } from "@/router/route-config";
+
+// v2 模块 ID 即 V2ModuleId，这里重导出方便内部复用
+export type DatacenterModuleId = V2ModuleId;
 
 export interface DatacenterModuleMeta {
   id: DatacenterModuleId;
@@ -11,29 +10,29 @@ export interface DatacenterModuleMeta {
 }
 
 /**
- * 数据中心一级模块定义。
- * 这里使用中文 label，避免首版壳层依赖尚未补齐的 i18n key。
+ * 数据中心一级模块定义（v2 模块 ID）。
+ * label 使用中文，避免首版壳层依赖尚未补齐的 i18n key。
  */
 export const datacenterModules: DatacenterModuleMeta[] = [
   {
-    id: "datapoints",
+    id: "datapoint",
     label: "数据点",
     description: "统一查看查询、MQTT、计算等来源沉淀的数据点。",
   },
   {
-    id: "access-sources",
+    id: "access-source",
     label: "接入源",
-    description: "维护数据库与 MQTT 连接，并继续承载旧查询工作台。",
+    description: "维护数据库与 MQTT 连接，并承载接入源二级工作台。",
   },
   {
-    id: "compute-units",
+    id: "compute",
     label: "计算单元",
     description: "构建可调度脚本任务，支持输出数据点或执行写库、发布、请求等动作。",
   },
   {
-    id: "alarm-units",
+    id: "alarm",
     label: "报警单元",
-    description: "管理报警规则配置与运行态契约预览，首版先保留规则构建入口。",
+    description: "管理报警规则配置与运行态契约预览。",
   },
 ];
 
