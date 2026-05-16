@@ -1,13 +1,18 @@
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import vue from "@vitejs/plugin-vue";
-import Icons from "unplugin-icons/vite";
 import { defineConfig, loadEnv } from "vite";
+
+const require = createRequire(import.meta.url);
+const Icons = require("unplugin-icons/vite").default;
+
+const rootDir = fileURLToPath(new URL(".", import.meta.url));
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 从项目根目录加载环境变量
-  const env = loadEnv(mode, path.resolve(__dirname, "../"), "");
+  const env = loadEnv(mode, path.resolve(rootDir, "../"), "");
 
   return {
     base: "/designer/", // 部署到 /designer/ 路径
