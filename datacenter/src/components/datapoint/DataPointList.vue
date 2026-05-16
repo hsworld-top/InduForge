@@ -455,223 +455,37 @@
       </div>
     </div>
 
-    <!-- 标签 dialog（保留 D2 前实现，不动） -->
-    <el-dialog
-      v-model="tagDialogVisible"
-      :title="tagDialogTitle"
-      width="520px"
-      class="datapoint-list__tag-modal"
-      destroy-on-close
-      :show-close="false"
-    >
-      <template #header>
-        <div class="datapoint-list__dialog-head">
-          <h3>{{ tagDialogTitle }}</h3>
-          <button
-            type="button"
-            class="datapoint-list__dialog-close"
-            aria-label="关闭标签管理"
-            @click="tagDialogVisible = false"
-          >
-            <Close />
-          </button>
-        </div>
-      </template>
-      <div class="datapoint-list__tag-dialog">
-        <div class="datapoint-list__tag-form-row">
-          <label>新建标签</label>
-          <div class="datapoint-list__tag-create">
-            <el-input
-              v-model="tagCreateInput"
-              placeholder="请输入标签名称"
-              @keyup.enter="appendTagDraft"
-            />
-            <button
-              type="button"
-              class="datapoint-list__tag-create-button"
-              @click="appendTagDraft"
-            >
-              新建标签
-            </button>
-          </div>
-        </div>
+    <!-- 标签 dialog（从 DataPointList 拆出到独立组件） -->
+    <DataPointTagDialog
+      :visible="tagDialogVisible"
+      :datapoint="currentTagDatapoint"
+      :project-id="projectId"
+      :tag-options="tagOptions"
+      :batch-rows="tagEditMode === 'batch' ? selectedRows : undefined"
+      :saving="tagSaving"
+      @submit="handleTagDialogSubmit"
+      @cancel="tagDialogVisible = false"
+    />
 
-        <div class="datapoint-list__tag-form-row">
-          <label>标签筛选</label>
-          <el-select
-            v-model="tagDraft"
-            multiple
-            filterable
-            allow-create
-            default-first-option
-            collapse-tags
-            collapse-tags-tooltip
-            placeholder="请选择或输入标签"
-          >
-            <el-option
-              v-for="item in tagOptions"
-              :key="item.value"
-              :label="item.name"
-              :value="item.value"
-            />
-          </el-select>
-        </div>
-      </div>
-      <template #footer>
-        <div class="datapoint-list__dialog-footer">
-          <el-button @click="tagDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="tagSaving" @click="saveTags">
-            保存
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
+    <!-- 写权限 dialog（从 DataPointList 拆出到独立组件） -->
+    <RuntimePermissionDialog
+      :visible="permissionDialogVisible"
+      :datapoint="currentPermissionDatapoint"
+      :project-id="projectId"
+      :saving="permissionSaving"
+      @submit="handlePermissionDialogSubmit"
+      @cancel="permissionDialogVisible = false"
+    />
 
-    <!-- 写权限 dialog（保留 D2 前实现，不动） -->
-    <el-dialog
-      v-model="permissionDialogVisible"
-      :title="`写权限：${currentPermissionDatapoint?.name || '-'}`"
-      width="520px"
-      destroy-on-close
-    >
-      <div class="permission-dialog">
-        <div class="permission-dialog__hint">
-          运行态写权限只影响节点运行时是否允许写入该数据点，不改变开发态管理权限。
-        </div>
-
-        <el-form label-position="top">
-          <el-form-item label="当前摘要">
-            <el-tag type="info">
-              {{ summarizeRuntimeGrant(draftWriteRuntimeGrant) }}
-            </el-tag>
-          </el-form-item>
-
-          <el-form-item label="继承工程默认规则">
-            <el-switch v-model="permissionForm.inherit" />
-          </el-form-item>
-
-          <el-form-item label="允许写入的角色">
-            <el-input
-              v-model="allowRolesInput"
-              type="textarea"
-              :rows="4"
-              placeholder="每行一个角色，也可用逗号分隔"
-            />
-          </el-form-item>
-
-          <el-form-item label="禁止写入的角色">
-            <el-input
-              v-model="denyRolesInput"
-              type="textarea"
-              :rows="4"
-              placeholder="每行一个角色，也可用逗号分隔"
-            />
-          </el-form-item>
-        </el-form>
-      </div>
-
-      <template #footer>
-        <el-button @click="permissionDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="permissionSaving"
-          @click="handlePermissionSave"
-        >
-          保存
-        </el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 详情抽屉（保留 D2 前实现，不动） -->
-    <el-drawer
+    <!-- 详情抽屉（v2 DataPointDetailDrawer） -->
+    <DataPointDetailDrawer
       v-model="detailDrawerVisible"
-      size="420px"
-      title="数据点详情"
-      destroy-on-close
-    >
-      <div v-if="detailDatapoint" class="datapoint-detail">
-        <div class="datapoint-detail__header">
-          <div class="datapoint-detail__name">
-            {{ detailDatapoint.name || "-" }}
-          </div>
-          <el-tag
-            size="small"
-            :type="detailDatapoint.status === 'invalid' ? 'info' : 'success'"
-          >
-            {{ formatStatus(detailDatapoint.status) }}
-          </el-tag>
-        </div>
-        <div class="datapoint-detail__path">
-          <span>{{ detailDatapoint.path || "-" }}</span>
-          <button
-            type="button"
-            class="datapoint-list__copy"
-            aria-label="复制数据点路径"
-            @click="copyPath(detailDatapoint.path)"
-          >
-            <CopyDocument />
-          </button>
-        </div>
-
-        <dl class="datapoint-detail__grid">
-          <div>
-            <dt>来源</dt>
-            <dd>{{ formatSourceType(detailDatapoint.sourceType) }}</dd>
-          </div>
-          <div>
-            <dt>模块</dt>
-            <dd>{{ resolveModuleName(detailDatapoint) }}</dd>
-          </div>
-          <div>
-            <dt>数据类型</dt>
-            <dd>{{ detailDatapoint.dataType || "-" }}</dd>
-          </div>
-          <div>
-            <dt>质量</dt>
-            <dd>{{ formatQuality(detailDatapoint.quality) }}</dd>
-          </div>
-          <div>
-            <dt>当前值</dt>
-            <dd>{{ formatLastValue(detailDatapoint.lastValue) }}</dd>
-          </div>
-          <div>
-            <dt>写权限</dt>
-            <dd>{{ summarizeRuntimeGrant(getWriteRuntimeGrant(detailDatapoint)) }}</dd>
-          </div>
-          <div>
-            <dt>更新时间</dt>
-            <dd>{{ formatTime(getUpdatedAt(detailDatapoint)) }}</dd>
-          </div>
-        </dl>
-
-        <div class="datapoint-detail__section">
-          <div class="datapoint-detail__section-title">标签</div>
-          <div class="datapoint-detail__tags">
-            <el-tag
-              v-for="tag in normalizeTags(detailDatapoint.tags)"
-              :key="tag"
-              size="small"
-              effect="plain"
-            >
-              {{ tag }}
-            </el-tag>
-            <span
-              v-if="normalizeTags(detailDatapoint.tags).length === 0"
-              class="datapoint-detail__muted"
-            >
-              未设置
-            </span>
-          </div>
-        </div>
-
-        <div class="datapoint-detail__section">
-          <div class="datapoint-detail__section-title">来源配置</div>
-          <pre class="datapoint-detail__code">{{
-            formatSourceConfig(detailDatapoint.sourceConfig)
-          }}</pre>
-        </div>
-      </div>
-    </el-drawer>
+      :datapoint="detailDatapoint"
+      :project-id="projectId"
+      :tag-options="tagOptions"
+      @updated="loadDataPoints"
+      @navigate="handleDrawerNavigate"
+    />
   </div>
 </template>
 
@@ -683,7 +497,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Bell,
-  Close,
   CollectionTag,
   Connection,
   CopyDocument,
@@ -700,16 +513,14 @@ import {
 import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";
 import dataAPI from "@/api/data.api";
-import {
-  normalizeRuntimeGrantPayload,
-  summarizeRuntimeGrant,
-} from "@/utils/runtime-permission-grants";
 import { getApiErrorMessage } from "@/utils/request";
 import PillButton from "@/components/shared/PillButton.vue";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import BulkActionBar from "@/components/shared/BulkActionBar.vue";
+import DataPointTagDialog from "./DataPointTagDialog.vue";
+import RuntimePermissionDialog from "./RuntimePermissionDialog.vue";
+import DataPointDetailDrawer from "./DataPointDetailDrawer.vue";
 
-type RuntimeGrant = ReturnType<typeof normalizeRuntimeGrantPayload>;
 type DataPointListMode = "embedded" | "management";
 type SortField = "updatedAt" | "name" | "path";
 type SortOrder = "asc" | "desc";
@@ -761,6 +572,8 @@ const props = withDefaults(
     sortOrder?: string;
     /** Workspace 通过 URL query 注入的页码 */
     page?: number;
+    /** Workspace 通过 URL path 注入的详情对象 ID，刷新后自动打开抽屉 */
+    detailObjectId?: string;
   }>(),
   {
     sourceType: undefined,
@@ -775,6 +588,7 @@ const props = withDefaults(
     sortField: "updatedAt",
     sortOrder: "desc",
     page: 1,
+    detailObjectId: "",
   },
 );
 
@@ -782,6 +596,12 @@ const emit = defineEmits<{
   select: [row: DataPointRow];
   /** 筛选 / 排序 / 搜索变化时通知 Workspace 更新 URL */
   "update:filter": [params: Record<string, unknown>];
+  /** 打开详情抽屉，通知 Workspace 同步 URL objectId */
+  "open-detail": [row: DataPointRow];
+  /** 关闭详情抽屉，通知 Workspace 清除 URL objectId */
+  "close-detail": [];
+  /** LinkChip 跳转，通知 Workspace 做路由跳转 */
+  navigate: [payload: { module: string; objectId: string }];
 }>();
 
 // ── 本地状态 ──────────────────────────────────────────────────────────────
@@ -821,23 +641,18 @@ const debounceTimer = ref<number | null>(null);
 /* 选中行 */
 const selectedRows = ref<DataPointRow[]>([]);
 
-/* 写权限 dialog 状态（保留 D2 前实现） */
+/* 写权限 dialog 状态 */
 const permissionDialogVisible = ref(false);
 const permissionSaving = ref(false);
 const currentPermissionDatapoint = ref<DataPointRow | null>(null);
-const permissionForm = ref<RuntimeGrant>(normalizeRuntimeGrantPayload());
-const allowRolesInput = ref("");
-const denyRolesInput = ref("");
 
-/* 标签 dialog 状态（保留 D2 前实现） */
+/* 标签 dialog 状态 */
 const tagDialogVisible = ref(false);
 const tagSaving = ref(false);
-const tagDraft = ref<string[]>([]);
-const tagCreateInput = ref("");
 const tagEditMode = ref<"single" | "batch">("single");
 const currentTagDatapoint = ref<DataPointRow | null>(null);
 
-/* 详情抽屉状态（保留 D2 前实现） */
+/* 详情抽屉状态 */
 const detailDrawerVisible = ref(false);
 const detailDatapoint = ref<DataPointRow | null>(null);
 
@@ -949,12 +764,6 @@ const tagFilterLabel = computed(() =>
   tagFilterValues.value.length > 0
     ? `标签 (${tagFilterValues.value.length})`
     : "标签",
-);
-
-const tagDialogTitle = computed(() =>
-  tagEditMode.value === "batch"
-    ? `标签管理（${selectedRows.value.length} 项）`
-    : `标签管理：${currentTagDatapoint.value?.name || "-"}`,
 );
 
 const selectedInvalidRows = computed(() =>
@@ -1146,19 +955,23 @@ const openDetailDrawer = (row: DataPointRow) => {
   detailDatapoint.value = row;
   detailDrawerVisible.value = true;
   emit("select", row);
+  emit("open-detail", row);
 };
 
 const handleRowClick = (row: DataPointRow) => {
   if (!isManagementMode.value) emit("select", row);
 };
 
-/** 跳转来源（D1 占位，D2 实现完整 LinkChip 跳转逻辑） */
+/** 跳转来源：根据 sourceType 切换到对应模块 */
 const handleJumpToSource = (row: DataPointRow) => {
   if (!row.sourceType || !row.sourceId) {
     ElMessage.info("该数据点暂无来源信息");
     return;
   }
-  ElMessage.info(`跳转来源：${formatSourceType(row.sourceType)}（D2 完整实现）`);
+  let module = "access-source";
+  if (row.sourceType.startsWith("calc")) module = "compute";
+  else if (row.sourceType.startsWith("alarm")) module = "alarm";
+  emit("navigate", { module, objectId: String(row.sourceId) });
 };
 
 const handleDelete = async (datapoint: DataPointRow) => {
@@ -1211,8 +1024,6 @@ const handleBatchDelete = async () => {
 const openTagDialog = (row: DataPointRow) => {
   currentTagDatapoint.value = row;
   tagEditMode.value = "single";
-  tagDraft.value = normalizeTags(row.tags);
-  tagCreateInput.value = "";
   tagDialogVisible.value = true;
 };
 
@@ -1220,16 +1031,7 @@ const openBatchTagDialog = () => {
   if (selectedRows.value.length === 0) return;
   currentTagDatapoint.value = null;
   tagEditMode.value = "batch";
-  tagDraft.value = [];
-  tagCreateInput.value = "";
   tagDialogVisible.value = true;
-};
-
-const appendTagDraft = () => {
-  const tag = tagCreateInput.value.trim();
-  if (!tag) return;
-  tagDraft.value = mergeTags(tagDraft.value, [tag]);
-  tagCreateInput.value = "";
 };
 
 const handleDeleteTagOption = async (tag: string) => {
@@ -1252,7 +1054,6 @@ const handleDeleteTagOption = async (tag: string) => {
       ),
     );
     tagFilterValues.value = tagFilterValues.value.filter((item) => item !== tag);
-    tagDraft.value = tagDraft.value.filter((item) => item !== tag);
     ElMessage.success("标签已删除");
     await loadDataPoints();
   } catch (error) {
@@ -1264,25 +1065,20 @@ const handleDeleteTagOption = async (tag: string) => {
   }
 };
 
-const saveTags = async () => {
-  const normalizedTags = normalizeTags(tagDraft.value);
+// ── 标签 dialog 新回调（对接独立组件） ────────────────────────────────────
+
+const handleTagDialogSubmit = async (tags: string[], mode: "single" | "batch") => {
   tagSaving.value = true;
   try {
-    if (tagEditMode.value === "single") {
+    if (mode === "single") {
       if (!currentTagDatapoint.value?.id) return;
-      await dataAPI.updateDataPoint(
-        props.projectId,
-        currentTagDatapoint.value.id,
-        { tags: normalizedTags },
-      );
+      await dataAPI.updateDataPoint(props.projectId, currentTagDatapoint.value.id, { tags });
       ElMessage.success("标签已保存");
     } else {
       await Promise.all(
         selectedRows.value.map((row) => {
-          const nextTags = mergeTags(normalizeTags(row.tags), normalizedTags);
-          return dataAPI.updateDataPoint(props.projectId, row.id, {
-            tags: nextTags,
-          });
+          const nextTags = Array.from(new Set([...normalizeTags(row.tags), ...tags]));
+          return dataAPI.updateDataPoint(props.projectId, row.id, { tags: nextTags });
         }),
       );
       ElMessage.success(`已为 ${selectedRows.value.length} 个数据点更新标签`);
@@ -1290,69 +1086,42 @@ const saveTags = async () => {
     tagDialogVisible.value = false;
     await loadDataPoints();
   } catch (error) {
-    ElMessage.error(
-      "保存标签失败：" + getApiErrorMessage(error, "保存标签失败"),
-    );
+    ElMessage.error("保存标签失败：" + getApiErrorMessage(error, "保存标签失败"));
   } finally {
     tagSaving.value = false;
   }
 };
 
-// ── 写权限 dialog（保留 D2 前实现） ──────────────────────────────────────
+// ── 权限 dialog 新回调（对接独立组件） ────────────────────────────────────
 
-const parseRoleInput = (value: string) => {
-  return String(value || "")
-    .split(/[\n,，]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-};
-
-const getWriteRuntimeGrant = (row: DataPointRow) => {
-  const rp = row?.runtimePermissions as { write?: unknown } | undefined;
-  const rpg = row?.runtimePermissionGrants as { write?: unknown } | undefined;
-  return normalizeRuntimeGrantPayload(
-    rp?.write || rpg?.write || row?.writePermission || {},
-  );
-};
-
-const draftWriteRuntimeGrant = computed(() =>
-  normalizeRuntimeGrantPayload({
-    allowRoles: parseRoleInput(allowRolesInput.value),
-    denyRoles: parseRoleInput(denyRolesInput.value),
-    inherit: permissionForm.value.inherit,
-  }),
-);
-
-const openPermissionDialog = (row: DataPointRow) => {
-  const currentGrant = getWriteRuntimeGrant(row);
-  currentPermissionDatapoint.value = row;
-  permissionForm.value = currentGrant;
-  allowRolesInput.value = currentGrant.allowRoles.join("\n");
-  denyRolesInput.value = currentGrant.denyRoles.join("\n");
-  permissionDialogVisible.value = true;
-};
-
-const handlePermissionSave = async () => {
+const handlePermissionDialogSubmit = async (grant: Record<string, unknown>) => {
   if (!props.projectId || !currentPermissionDatapoint.value?.id) return;
-  const writeGrant = draftWriteRuntimeGrant.value;
   permissionSaving.value = true;
   try {
     await dataAPI.updateDatapointRuntimePermissions(
       props.projectId,
       currentPermissionDatapoint.value.id,
-      { write: writeGrant },
+      { write: grant },
     );
-    permissionForm.value = writeGrant;
     ElMessage.success("写权限已保存");
     permissionDialogVisible.value = false;
     await loadDataPoints();
   } catch (error) {
-    ElMessage.error(
-      "保存运行态权限失败：" + getApiErrorMessage(error, "保存运行态权限失败"),
-    );
+    ElMessage.error("保存运行态权限失败：" + getApiErrorMessage(error, "保存运行态权限失败"));
   } finally {
     permissionSaving.value = false;
   }
+};
+
+// ── 抽屉 navigate 回调 ─────────────────────────────────────────────────────
+
+const handleDrawerNavigate = (payload: { module: string; objectId: string }) => {
+  emit("navigate", payload);
+};
+
+const openPermissionDialog = (row: DataPointRow) => {
+  currentPermissionDatapoint.value = row;
+  permissionDialogVisible.value = true;
 };
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────
@@ -1411,44 +1180,6 @@ const formatSourceType = (sourceType?: string) => {
   return sourceTypeLabels[sourceType] || sourceType;
 };
 
-const formatQuality = (quality?: string) => {
-  switch (quality) {
-    case "good":
-      return "良好";
-    case "bad":
-      return "异常";
-    default:
-      return "未知";
-  }
-};
-
-const formatLastValue = (value: unknown) => {
-  if (value === undefined || value === null || value === "") return "-";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-};
-
-const formatSourceConfig = (value?: Record<string, unknown>) => {
-  if (!value || Object.keys(value).length === 0) return "{}";
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return "{}";
-  }
-};
-
-const resolveModuleName = (row: DataPointRow) => {
-  const path = String(row.path || "");
-  const parts = path.split(/[./:]/).filter(Boolean);
-  if (parts.length >= 2) return parts[1];
-  return parts[0] || "未分组";
-};
-
 /** 引用数（D2 完整实现；D1 全部显示 `-`） */
 const resolveRefCount = (row: DataPointRow) => {
   const count = (row as DataPointRow & { refCount?: number }).refCount;
@@ -1473,8 +1204,6 @@ const normalizeTags = (value: unknown): string[] => {
   return result;
 };
 
-const mergeTags = (left: string[], right: string[]) =>
-  Array.from(new Set([...left, ...right].map((item) => item.trim()))).filter(Boolean);
 
 const getVisibleTags = (row: DataPointRow) => normalizeTags(row.tags).slice(0, 2);
 const getHiddenTags = (row: DataPointRow) => normalizeTags(row.tags).slice(2);
@@ -1544,6 +1273,32 @@ watch(
       void loadDataPoints();
     }, 300);
   },
+);
+
+/**
+ * URL 上有 objectId 时（直接进入 /datapoint/:id 或刷新），
+ * 数据加载完成后自动匹配并打开详情抽屉。
+ * 当前页找不到的行静默忽略，留待用户切换筛选 / 翻页或后端单查支持。
+ */
+watch(
+  [() => props.detailObjectId, datapoints],
+  ([id, list]) => {
+    if (!id) {
+      // URL 上没有 objectId 时关闭抽屉（避免用户后退后抽屉残留）
+      if (detailDrawerVisible.value) {
+        detailDrawerVisible.value = false;
+        detailDatapoint.value = null;
+      }
+      return;
+    }
+    if (detailDatapoint.value && String(detailDatapoint.value.id) === id) return;
+    const row = list.find((d) => String(d.id) === id);
+    if (row) {
+      detailDatapoint.value = row;
+      detailDrawerVisible.value = true;
+    }
+  },
+  { immediate: true },
 );
 
 // ── 生命周期 ──────────────────────────────────────────────────────────────
@@ -2354,262 +2109,6 @@ defineExpose({
   background: rgba(29, 78, 216, 0.12);
   color: var(--dc-primary);
   font-weight: 600;
-}
-
-/* ── 标签 dialog ── */
-
-:deep(.datapoint-list__tag-modal) {
-  border-radius: 14px;
-}
-
-:deep(.datapoint-list__tag-modal .el-dialog__header) {
-  margin: 0;
-  padding: 0;
-}
-
-:deep(.datapoint-list__tag-modal .el-dialog__body) {
-  padding: 32px 36px 30px;
-}
-
-:deep(.datapoint-list__tag-modal .el-dialog__footer) {
-  padding: 0 36px 34px;
-}
-
-.datapoint-list__dialog-head {
-  min-height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 0 36px;
-  border-radius: 14px 14px 0 0;
-  background: rgba(248, 250, 252, 0.86);
-}
-
-.datapoint-list__dialog-head h3 {
-  margin: 0;
-  color: var(--dc-text);
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.datapoint-list__dialog-close {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dc-text-muted);
-  cursor: pointer;
-}
-
-.datapoint-list__dialog-close:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--dc-text);
-}
-
-.datapoint-list__dialog-close svg {
-  width: 18px;
-  height: 18px;
-}
-
-.datapoint-list__tag-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  padding-bottom: 34px;
-  border-bottom: 1px solid var(--dc-border);
-}
-
-.datapoint-list__tag-form-row {
-  display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  align-items: center;
-  gap: 14px;
-}
-
-.datapoint-list__tag-form-row > label {
-  color: var(--dc-text-secondary);
-  font-size: 14px;
-  font-weight: 600;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.datapoint-list__tag-create {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 112px;
-  gap: 10px;
-}
-
-.datapoint-list__tag-create-button {
-  height: 32px;
-  border: 1px solid rgba(64, 158, 255, 0.42);
-  border-radius: var(--dc-radius-md);
-  background: rgba(64, 158, 255, 0.08);
-  color: #409eff;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.datapoint-list__tag-create-button:hover {
-  background: rgba(64, 158, 255, 0.14);
-}
-
-.datapoint-list__tag-form-row :deep(.el-select),
-.datapoint-list__tag-form-row :deep(.el-input) {
-  width: 100%;
-}
-
-.datapoint-list__dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.datapoint-list__dialog-footer :deep(.el-button) {
-  min-width: 76px;
-  height: 32px;
-  border-radius: var(--dc-radius-md);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-/* ── 写权限 dialog ── */
-
-.permission-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.permission-dialog__hint {
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-/* ── 详情抽屉 ── */
-
-.datapoint-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  color: var(--dc-text);
-}
-
-.datapoint-detail__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--dc-border);
-}
-
-.datapoint-detail__name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.datapoint-detail__path {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-secondary);
-  font-family: var(--dc-font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.datapoint-detail__path span {
-  min-width: 0;
-  flex: 1;
-}
-
-.datapoint-detail__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 0;
-}
-
-.datapoint-detail__grid > div {
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface);
-}
-
-.datapoint-detail__grid dt {
-  margin: 0 0 5px;
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.datapoint-detail__grid dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--dc-text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.datapoint-detail__section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.datapoint-detail__section-title {
-  color: var(--dc-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.datapoint-detail__tags {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.datapoint-detail__muted {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.datapoint-detail__code {
-  max-height: 240px;
-  overflow: auto;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-secondary);
-  font-family: var(--dc-font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 /* ── 全局 el-input 样式（非 management 模式） ── */

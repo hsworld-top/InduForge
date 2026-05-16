@@ -10,17 +10,21 @@
       :sort-field="sortField"
       :sort-order="sortOrder"
       :page="page"
+      :detail-object-id="detailObjectId"
       @update:filter="handleFilterUpdate"
+      @open-detail="handleOpenDetail"
+      @close-detail="handleCloseDetail"
+      @navigate="handleNavigate"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import DataPointList from "@/components/datapoint/DataPointList.vue";
 
-defineProps<{
+const props = defineProps<{
   projectId: string;
 }>();
 
@@ -42,6 +46,7 @@ const page = computed(() => {
   const n = Number(route.query.page);
   return n > 0 ? n : 1;
 });
+const detailObjectId = computed(() => String(route.params.objectId || ""));
 
 /* 列表发出筛选变化时同步到 URL */
 function handleFilterUpdate(params: Record<string, unknown>) {
@@ -55,7 +60,34 @@ function handleFilterUpdate(params: Record<string, unknown>) {
   if (params.sort && params.sort !== "updatedAt") query.sort = String(params.sort);
   if (params.order && params.order !== "desc") query.order = String(params.order);
   if (params.page && Number(params.page) > 1) query.page = String(params.page);
+  // 保留 objectId 参数（打开详情时）
+  if (route.params.objectId) {
+    // objectId 在 path 里，不在 query 里，保持不动
+  }
   void router.replace({ query });
+}
+
+/* 打开详情抽屉 → 加 objectId 到路径 */
+function handleOpenDetail(row: { id: string }) {
+  void router.replace({
+    params: { ...route.params, objectId: row.id },
+    query: route.query,
+  });
+}
+
+/* 关闭详情抽屉 → 去掉 objectId */
+function handleCloseDetail() {
+  const params = { ...route.params };
+  delete params.objectId;
+  void router.replace({ params, query: route.query });
+}
+
+/* LinkChip 跳转：切换到对应模块 + 打开目标对象 */
+function handleNavigate(payload: { module: string; objectId: string }) {
+  // 找到当前路由的 debug 前缀
+  const isDebug = route.path.startsWith("/debug/");
+  const base = isDebug ? "/debug" : "";
+  void router.push(`${base}/${payload.module}/${payload.objectId}`);
 }
 </script>
 

@@ -32,6 +32,18 @@ export async function getDatapoints(
   return datapointListSchema.parse(res);
 }
 
+/** 获取单个数据点详情 */
+export async function getDatapoint(
+  projectId: string,
+  datapointId: string,
+): Promise<Datapoint> {
+  const res = await request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}`,
+    method: "get",
+  });
+  return DatapointSchema.parse(res);
+}
+
 /** 更新数据点 */
 export async function updateDatapoint(
   projectId: string,

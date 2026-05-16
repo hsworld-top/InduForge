@@ -11,12 +11,15 @@ interface UiPrefs {
   pageSize: number;
   // 侧边栏是否折叠
   sidebarCollapsed: boolean;
+  // 详情抽屉是否处于钉住（旁路面板）状态
+  pinnedDrawer: boolean;
 }
 
 const DEFAULT_PREFS: UiPrefs = {
   drawerWidth: 480,
   pageSize: 20,
   sidebarCollapsed: false,
+  pinnedDrawer: false,
 };
 
 function loadFromStorage(): UiPrefs {
@@ -49,6 +52,10 @@ export const useUiPrefsStore = defineStore("uiPrefs", () => {
     prefs.value.sidebarCollapsed = collapsed;
   }
 
+  function setPinnedDrawer(pinned: boolean) {
+    prefs.value.pinnedDrawer = pinned;
+  }
+
   function reset() {
     prefs.value = { ...DEFAULT_PREFS };
   }
@@ -58,6 +65,7 @@ export const useUiPrefsStore = defineStore("uiPrefs", () => {
     setDrawerWidth,
     setPageSize,
     setSidebarCollapsed,
+    setPinnedDrawer,
     reset,
   };
 });
