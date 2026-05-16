@@ -179,7 +179,7 @@ InduForge 使用轻量层次，而不是厚重阴影。默认界面通过边框�
 - **Shape:** 轻微圆角，图标按钮和普通按钮使用中圆角 (`12px`)，表格操作按钮可使用 `6-8px`。
 - **Primary:** 主操作使用蓝色或主渐变，尺寸通常为 `32px` 高。每个工具栏只保留一个最强主操作。
 - **Hover / Focus:** hover 可轻微上移 `1px` 或改变背景；focus 使用主色边框和弱主色 ring。
-- **Icon Buttons:** 高频工具按钮使用 `32px * 32px`，必须有 tooltip 或 `aria-label`。
+- **Icon Buttons:** 高频工具按钮使用 `32px * 32px`，必须有 tooltip 或 `aria-label`；表格操作列使用 Icon Action Button 的 `24px * 24px` 行内小尺寸变体。
 - **Danger:** 删除和危险操作使用危险色 hover，不使用常态大面积红底。
 
 ### Chips
@@ -214,6 +214,55 @@ InduForge 使用轻量层次，而不是厚重阴影。默认界面通过边框�
 ### Project Card
 
 项目卡片是 `dev_ide` 的标志性工作台组件。结构包含项目名、可见性、描述、运行模式、部署状态、节点 chip、标签、更新时间和操作按钮。卡片最小高度约 `200px`，长文本必须截断。
+
+### Pill Button
+
+- **Style:** 数据中心 v2 的药丸筛选 / 排序按钮使用圆角 `12px`、高度 `28px`、padding `0 10px`、字体 `13px`。数据中心 v2 子应用以 `--dc-*` 局部 token 为准。
+- **State:** 支持 default / hover / active。active 使用 `--dc-primary-soft` 弱底和主色文字，hover 使用弱底或边框增强。
+- **Size:** 可选前置 `14px` icon + 文本，图标和文字保持紧凑间距。
+
+### Status Badge
+
+- **Style:** 状态徽标用于 success / warning / danger / info / muted 五类状态，必须使用文本 + 颜色双重表达，禁止仅颜色。
+- **State:** 不同状态使用对应语义色和弱背景，禁用或未知状态使用 muted。
+- **Size:** 高度 `22px`，圆角 `6px`，字体 `12px`，内容保持单行。
+
+### Icon Action Button
+
+- **Style:** 行内操作按钮用于表格操作列，作为工具栏 `32px * 32px` 图标按钮的紧凑变体。
+- **State:** 支持 default / hover / disabled / danger。危险操作仅在 hover 或确认流程中强化危险色。
+- **Size:** 行内小尺寸为 `24px * 24px`，图标通常为 `14px`，必须有 tooltip 或 `aria-label`。
+
+### Drawer
+
+- **Style:** 数据中心 v2 抽屉默认宽度 `480px`，最大 `720px`，支持拖拽调整宽度。数据中心 v2 子应用以 `--dc-*` 局部 token 为准。
+- **Header:** 头部包含 title 字号标题、操作图标群和关闭按钮，标题与操作区保持清晰分组。
+- **Content:** 内容区可滚动，padding `16px`。优先单页滚动，Tab 仅在内容分量大且互斥时使用。
+- **State:** 钉住模式去掉边阴影，嵌入主区右侧成为第三栏，不再表现为浮层。
+
+### Bulk Action Bar
+
+- **Style:** 批量操作浮动条在列表选中 `>= 1` 行时出现，浮在底部分页栏上方。
+- **Content:** 内容包含选中计数、主要批量动作和清空选择。
+- **State:** 无选中项时隐藏；批量动作需要按权限、加载和禁用状态给出明确反馈。
+
+### Link Chip
+
+- **Style:** 跨模块跳转芯片使用圆角 `8px`、高度 `24px`、字体 `12px`，用于关联对象的轻量入口。
+- **Content:** 内部包含模块图标、对象名和跳转箭头，长对象名需要截断。
+- **State:** hover 增加弱底色；点击后切换模块并打开目标对象详情。
+
+### Empty State
+
+- **Style:** 空状态基于 `el-empty` 包装，保持文案简洁，并可附带一个辅助动作。
+- **Content:** 文案说明当前为空的业务原因；辅助动作通常为创建或刷新。
+- **State:** 权限不足、能力未启用和筛选无结果应使用不同文案，不混用通用空状态。
+
+### Loading State
+
+- **Style:** 列表加载使用 `v-loading`，详情区域使用骨架屏，骨架屏按需引入。
+- **State:** 加载态不应清空已有上下文；刷新列表时保持分页和筛选位置稳定。
+- **Size:** 骨架屏尺寸应贴合详情布局，避免加载完成后产生明显跳动。
 
 ## 6. Do's and Don'ts
 
