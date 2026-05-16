@@ -491,7 +491,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
+import { useConfirm } from "@/composables/useConfirm";
 import {
   ArrowDown,
   ArrowLeft,
@@ -524,6 +525,9 @@ import DataPointDetailDrawer from "./DataPointDetailDrawer.vue";
 type DataPointListMode = "embedded" | "management";
 type SortField = "updatedAt" | "name" | "path";
 type SortOrder = "asc" | "desc";
+
+/** 批量打标签时，条目超过此数量才弹二次确认 */
+const BATCH_TAG_CONFIRM_THRESHOLD = 20;
 
 interface DataPointRow {
   id: string;
@@ -603,6 +607,8 @@ const emit = defineEmits<{
   /** LinkChip 跳转，通知 Workspace 做路由跳转 */
   navigate: [payload: { module: string; objectId: string }];
 }>();
+
+const { confirm } = useConfirm();
 
 // ── 本地状态 ──────────────────────────────────────────────────────────────
 
@@ -975,32 +981,31 @@ const handleJumpToSource = (row: DataPointRow) => {
 };
 
 const handleDelete = async (datapoint: DataPointRow) => {
+  const ok = await confirm(
+    `确认清理失效数据点「${datapoint.name || datapoint.path || "-"}」？此操作不可恢复。`,
+    { title: "清理失效数据点", confirmText: "清理", type: "warning" },
+  );
+  if (!ok) return;
   try {
-    await ElMessageBox.confirm(
-      `确认清理失效数据点「${datapoint.name || datapoint.path || "-"}」？`,
-      "清理失效数据点",
-      { confirmButtonText: "清理", cancelButtonText: "取消", type: "warning" },
-    );
     await dataAPI.deleteDataPoint(props.projectId, datapoint.id);
     ElMessage.success("数据点已清理");
     await loadDataPoints();
   } catch (error) {
-    if (error !== "cancel") {
-      ElMessage.error(
-        "删除数据点失败：" + getApiErrorMessage(error, "删除数据点失败"),
-      );
-    }
+    ElMessage.error(
+      "删除数据点失败：" + getApiErrorMessage(error, "删除数据点失败"),
+    );
   }
 };
 
 const handleBatchDelete = async () => {
-  if (selectedInvalidRows.value.length === 0) return;
+  const invalidCount = selectedInvalidRows.value.length;
+  if (invalidCount === 0) return;
+  const ok = await confirm(
+    `将清理 ${invalidCount} 个失效数据点，此操作不可恢复。非失效行不受影响。`,
+    { title: "批量清理失效项", confirmText: "批量清理", type: "warning" },
+  );
+  if (!ok) return;
   try {
-    await ElMessageBox.confirm(
-      `确认清理 ${selectedInvalidRows.value.length} 个失效数据点？`,
-      "批量清理失效项",
-      { confirmButtonText: "批量清理", cancelButtonText: "取消", type: "warning" },
-    );
     const response = await dataAPI.deleteDataPointsBatch(
       props.projectId,
       selectedInvalidRows.value.map((item) => item.id),
@@ -1010,12 +1015,10 @@ const handleBatchDelete = async () => {
     selectedRows.value = [];
     await loadDataPoints();
   } catch (error) {
-    if (error !== "cancel") {
-      ElMessage.error(
-        "批量删除数据点失败：" +
-          getApiErrorMessage(error, "批量删除数据点失败"),
-      );
-    }
+    ElMessage.error(
+      "批量删除数据点失败：" +
+        getApiErrorMessage(error, "批量删除数据点失败"),
+    );
   }
 };
 
@@ -1027,8 +1030,16 @@ const openTagDialog = (row: DataPointRow) => {
   tagDialogVisible.value = true;
 };
 
-const openBatchTagDialog = () => {
+const openBatchTagDialog = async () => {
   if (selectedRows.value.length === 0) return;
+  // 选中条目超过阈值时给二次确认，避免误操作
+  if (selectedRows.value.length >= BATCH_TAG_CONFIRM_THRESHOLD) {
+    const ok = await confirm(
+      `即将为 ${selectedRows.value.length} 个数据点批量添加标签，确认继续？`,
+      { title: "批量打标签", confirmText: "继续", type: "warning" },
+    );
+    if (!ok) return;
+  }
   currentTagDatapoint.value = null;
   tagEditMode.value = "batch";
   tagDialogVisible.value = true;

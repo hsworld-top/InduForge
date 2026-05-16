@@ -23,6 +23,11 @@
     </template>
 
     <div class="dp-tag-dialog__body">
+      <!-- 批量模式说明 -->
+      <p v-if="isBatch" class="dp-tag-dialog__batch-tip">
+        将为 {{ batchRows?.length ?? 0 }} 个数据点合并以下标签（已有标签保留，不覆盖）。
+      </p>
+
       <!-- 新建标签 -->
       <div class="dp-tag-dialog__row">
         <label>新建标签</label>
@@ -274,6 +279,16 @@ function handleVisibleChange(val: boolean) {
 
 .dp-tag-dialog__row :deep(.el-select) {
   width: 100%;
+}
+
+.dp-tag-dialog__batch-tip {
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  border-radius: var(--dc-radius-md);
+  background: rgba(29, 78, 216, 0.06);
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .dp-tag-dialog__footer {

@@ -134,13 +134,13 @@
           </div>
           <p v-else class="dpd__muted">无来源信息</p>
 
-          <!-- 失效原因（仅 invalid 且有 invalidReason 时显示） -->
+          <!-- 失效原因（仅 invalid 时显示；无 invalidReason 时给兜底文案） -->
           <div
-            v-if="datapoint?.status === 'invalid' && (datapoint as DataPointExtended)?.invalidReason"
+            v-if="datapoint?.status === 'invalid'"
             class="dpd__invalid-reason"
           >
             <span class="dpd__invalid-label">失效原因：</span>
-            {{ (datapoint as DataPointExtended).invalidReason }}
+            {{ (datapoint as DataPointExtended)?.invalidReason || '该数据点已失效，但后端未提供原因' }}
           </div>
 
           <!-- 配置 JSON 折叠区 -->
@@ -156,18 +156,41 @@
             <pre v-if="configExpanded" class="dpd__code">{{ formatSourceConfig((datapoint as DataPointExtended)?.sourceConfig) }}</pre>
           </div>
 
-          <!-- 测试取值（D3 实现，D2 占位 disabled） -->
+          <!-- 测试取值 -->
           <div class="dpd__test-value-row">
-            <el-tooltip content="测试取值将在 D3 阶段实现" placement="top">
+            <el-tooltip :content="testBtnTooltip" placement="top" :disabled="canTest && !testDisabledByCapability">
               <button
                 type="button"
                 class="dpd__test-btn"
-                disabled
-                aria-label="测试取值（暂未开放）"
+                :class="{ 'dpd__test-btn--active': canTest && !testDisabledByCapability }"
+                :disabled="!canTest || testTesting || testDisabledByCapability"
+                :aria-label="canTest ? '测试取值' : testBtnTooltip"
+                @click="handleTestValue"
               >
-                测试取值
+                {{ testTesting ? '测试中…' : '测试取值' }}
               </button>
             </el-tooltip>
+
+            <!-- 测试结果区块 -->
+            <div v-if="testResult" class="dpd__test-result">
+              <template v-if="testResult.ok">
+                <div class="dpd__test-result-row">
+                  <span class="dpd__test-result-label">值：</span>
+                  <pre
+                    v-if="isLongValue(testResult.value)"
+                    class="dpd__test-result-pre"
+                  >{{ formatTestValue(testResult.value) }}</pre>
+                  <span v-else class="dpd__test-result-value dpd__mono">{{ formatTestValue(testResult.value) }}</span>
+                </div>
+                <div class="dpd__test-result-row">
+                  <span class="dpd__test-result-label">时间：</span>
+                  <span class="dpd__test-result-value dpd__mono">{{ testResult.at }}</span>
+                </div>
+              </template>
+              <template v-else>
+                <div class="dpd__test-result-error">{{ testResult.message }}</div>
+              </template>
+            </div>
           </div>
         </section>
 
@@ -261,6 +284,8 @@ import {
   summarizeRuntimeGrant,
 } from "@/utils/runtime-permission-grants";
 import { useUiPrefsStore } from "@/stores/ui-prefs.store";
+import { useDataCatalogStore } from "@/stores/data-catalog.store";
+import type { TestValueResult } from "@/stores/data-catalog.store";
 import DcDrawer from "@/components/shared/DcDrawer.vue";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import LinkChip from "@/components/shared/LinkChip.vue";
@@ -324,9 +349,36 @@ const emit = defineEmits<{
 }>();
 
 const uiPrefs = useUiPrefsStore();
+const catalog = useDataCatalogStore();
 
 // 来源配置折叠状态
 const configExpanded = ref(false);
+
+// 测试取值状态（drawer 本地，切换数据点时重置）
+const testTesting = ref(false);
+const testResult = ref<TestValueResult | null>(null);
+// 因"能力未启用"临时禁用按钮（仅本次会话内）
+const testDisabledByCapability = ref(false);
+const testCapabilityMsg = ref("");
+
+/** 支持测试取值的 sourceType 列表 */
+const TEST_SUPPORTED_TYPES = ["db.query", "mqtt.tag", "calc.output"] as const;
+
+const canTest = computed(() => {
+  const t = props.datapoint?.sourceType;
+  return !!t && (TEST_SUPPORTED_TYPES as readonly string[]).includes(t);
+});
+
+const testBtnTooltip = computed(() => {
+  if (testDisabledByCapability.value) return testCapabilityMsg.value;
+  if (!canTest.value) {
+    const t = props.datapoint?.sourceType;
+    if (t === "alarm.state") return "报警状态不支持测试取值";
+    if (t === "mqtt.subscription") return "MQTT 订阅暂不支持单点测试取值";
+    return "该来源类型暂不支持测试取值";
+  }
+  return "";
+});
 
 // 标签 dialog
 const tagDialogVisible = ref(false);
@@ -351,6 +403,10 @@ watch(
   () => props.datapoint?.id,
   () => {
     configExpanded.value = false;
+    // 切换数据点时重置测试取值状态
+    testResult.value = null;
+    testDisabledByCapability.value = false;
+    testCapabilityMsg.value = "";
   },
 );
 
@@ -546,6 +602,46 @@ async function handlePermSubmit(grant: Record<string, unknown>) {
   } finally {
     permSaving.value = false;
   }
+}
+
+// ── 测试取值 ──────────────────────────────────────────────────────────────
+
+async function handleTestValue() {
+  if (!props.datapoint || testTesting.value) return;
+  testTesting.value = true;
+  testResult.value = null;
+  const dp = props.datapoint as DataPointExtended;
+  const result = await catalog.testDatapointValue(props.projectId, {
+    id: String(dp.id),
+    sourceType: dp.sourceType,
+    sourceId: dp.sourceId ?? null,
+    sourceConfig: dp.sourceConfig,
+  });
+  testTesting.value = false;
+  testResult.value = result;
+  // 能力未启用：临时禁用按钮
+  if (!result.ok && result.reason === "capability-disabled") {
+    testDisabledByCapability.value = true;
+    testCapabilityMsg.value = result.message;
+  }
+}
+
+/** 判断值是否超过两行（简单判定：字符数 > 80 或含换行） */
+function isLongValue(value: unknown): boolean {
+  const s = formatTestValue(value);
+  return s.length > 80 || s.includes("\n");
+}
+
+function formatTestValue(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
 // ── LinkChip 跳转 ──────────────────────────────────────────────────────────
@@ -836,6 +932,78 @@ function handleLinkChipClick(payload: { module: LinkChipModule; objectId: string
   font-size: 13px;
   font-weight: 600;
   opacity: 0.55;
+  transition: background 0.18s, border-color 0.18s, color 0.18s, opacity 0.18s;
+}
+
+.dpd__test-btn--active {
+  border-color: rgba(29, 78, 216, 0.32);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  cursor: pointer;
+  opacity: 1;
+}
+
+.dpd__test-btn--active:hover {
+  border-color: var(--dc-primary);
+}
+
+.dpd__test-btn--active:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.dpd__test-result {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dpd__test-result-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.dpd__test-result-row:last-child {
+  margin-bottom: 0;
+}
+
+.dpd__test-result-label {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--dc-text-muted);
+}
+
+.dpd__test-result-value {
+  color: var(--dc-text);
+  overflow-wrap: anywhere;
+}
+
+.dpd__test-result-pre {
+  max-height: 160px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: 6px;
+  background: var(--dc-surface);
+  color: var(--dc-text-secondary);
+  font-family: var(--dc-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+
+.dpd__test-result-error {
+  color: var(--dc-danger, #dc2626);
+  font-weight: 500;
 }
 
 /* ── 引用区块 ── */

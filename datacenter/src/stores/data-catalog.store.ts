@@ -1,7 +1,25 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
+import dayjs from "dayjs";
+import { ZodError } from "zod";
 import { getDatapoints, getDatapoint } from "@/api/datapoint.api";
+import { debugComputeUnit } from "@/api/compute.api";
 import type { Datapoint } from "@/api/schemas/datapoint.schema";
+import { ApiBusinessError } from "@/utils/request";
+import dataAPI from "@/api/data.api";
+
+/** 测试取值的最小入参，不污染 Datapoint schema */
+interface DataPointLike {
+  id: string;
+  sourceType?: string;
+  sourceId?: string | null;
+  sourceConfig?: Record<string, unknown>;
+}
+
+/** 测试取值返回值 */
+export type TestValueResult =
+  | { ok: true; value: unknown; raw?: unknown; at: string }
+  | { ok: false; reason: "unsupported" | "capability-disabled" | "error"; message: string };
 
 // 数据点目录缓存，支持增量更新
 export const useDataCatalogStore = defineStore("dataCatalog", () => {
@@ -80,6 +98,87 @@ export const useDataCatalogStore = defineStore("dataCatalog", () => {
     }
   }
 
+  /**
+   * 测试取值：根据 sourceType 路由到对应 API，统一返回结构化结果。
+   * 不在此处 toast，让调用方决定展示策略。
+   */
+  async function testDatapointValue(
+    projectId: string,
+    datapoint: DataPointLike,
+  ): Promise<TestValueResult> {
+    const { sourceType, sourceId } = datapoint;
+
+    try {
+      switch (sourceType) {
+        case "db.query": {
+          if (!sourceId) {
+            return { ok: false, reason: "unsupported", message: "该数据点缺少查询 ID，无法测试取值" };
+          }
+          const raw = await dataAPI.executeQuery(sourceId, {});
+          const rows = (raw as Record<string, unknown>)?.rows;
+          let value: unknown = raw;
+          if (Array.isArray(rows) && rows.length > 0) {
+            const firstRow = rows[0] as Record<string, unknown>;
+            const firstKey = Object.keys(firstRow).find((k) => firstRow[k] != null);
+            value = firstKey ? firstRow[firstKey] : JSON.stringify(firstRow);
+          }
+          return { ok: true, value, raw, at: dayjs().format("YYYY-MM-DD HH:mm:ss") };
+        }
+
+        case "mqtt.tag": {
+          if (!sourceId) {
+            return { ok: false, reason: "unsupported", message: "该数据点缺少标签 ID，无法测试取值" };
+          }
+          const raw = await dataAPI.getMqttTagValue(projectId, sourceId);
+          const r = raw as Record<string, unknown>;
+          const value = r?.value;
+          const at = typeof r?.timestamp === "string"
+            ? dayjs(r.timestamp).format("YYYY-MM-DD HH:mm:ss")
+            : dayjs().format("YYYY-MM-DD HH:mm:ss");
+          return { ok: true, value, raw, at };
+        }
+
+        case "mqtt.subscription":
+          return { ok: false, reason: "unsupported", message: "MQTT 订阅暂不支持单点测试取值" };
+
+        case "calc.output": {
+          if (!sourceId) {
+            return { ok: false, reason: "unsupported", message: "该数据点缺少计算单元 ID，无法测试取值" };
+          }
+          const raw = await debugComputeUnit(projectId, sourceId, {});
+          const value = raw?.output;
+          return { ok: true, value, raw, at: dayjs().format("YYYY-MM-DD HH:mm:ss") };
+        }
+
+        case "alarm.state":
+          return { ok: false, reason: "unsupported", message: "报警状态不支持测试取值" };
+
+        default:
+          return { ok: false, reason: "unsupported", message: "该来源类型暂不支持测试取值" };
+      }
+    } catch (err: unknown) {
+      // 判断是否为"能力未启用"类业务错误
+      if (err instanceof ApiBusinessError) {
+        const msg = err.message || "";
+        const isCapabilityDisabled =
+          /未启用|not enabled|not supported/i.test(msg);
+        if (isCapabilityDisabled) {
+          return {
+            ok: false,
+            reason: "capability-disabled",
+            message: err.message,
+          };
+        }
+        return { ok: false, reason: "error", message: err.message };
+      }
+      if (err instanceof ZodError) {
+        return { ok: false, reason: "error", message: "数据格式异常" };
+      }
+      const e = err as Error | undefined;
+      return { ok: false, reason: "error", message: e?.message || "测试取值失败" };
+    }
+  }
+
   return {
     items,
     detailById,
@@ -95,5 +194,6 @@ export const useDataCatalogStore = defineStore("dataCatalog", () => {
     reset,
     fetchAll,
     fetchDetail,
+    testDatapointValue,
   };
 });
