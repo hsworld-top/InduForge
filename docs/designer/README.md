@@ -60,6 +60,7 @@
 - [测试与质量策略](../测试与质量策略.md)
 - [发布态 Schema 契约](../contracts/designer-publish-schema.md)
 - [编辑器主题与国际化同步](./editor-shell-theme-i18n.md)
+- [低代码页面国际化设计](./低代码页面国际化设计.md)
 - [组件开发](./component-development.md)
 - [层级约定](./layer-order-convention.md)
 - [放置与堆叠](./placement-and-stacking.md)
