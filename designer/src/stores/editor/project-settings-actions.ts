@@ -3,8 +3,10 @@
  */
 
 import type { Ref } from "vue";
+import type { ProjectI18nSettings } from "@/editor-core/document/types";
 import { unwrapApiData } from "@/types/api";
 import { normalizeGlobalScripts, normalizeGlobalVariables } from "./normalize-settings";
+import { normalizeProjectI18nSettings } from "@/editor-core/i18n/project-i18n";
 
 export interface ProjectSettingsApi {
   getProjectSettings: (projectId: string) => Promise<unknown>;
@@ -16,12 +18,14 @@ export interface ProjectSettingsStateRefs {
   projectVariables: Ref<Record<string, unknown>>;
   projectVariableGroups: Ref<unknown[]>;
   globalScripts: Ref<unknown>;
+  projectI18n: Ref<ProjectI18nSettings>;
 }
 
 export interface ProjectSettingsSnapshot {
   projectVariables: Record<string, unknown>;
   projectVariableGroups: unknown[];
   globalScripts: ReturnType<typeof normalizeGlobalScripts>;
+  projectI18n: ProjectI18nSettings;
 }
 
 export async function fetchProjectSettingsForStore(
@@ -33,6 +37,7 @@ export async function fetchProjectSettingsForStore(
       projectVariables: {},
       projectVariableGroups: [],
       globalScripts: normalizeGlobalScripts({}),
+      projectI18n: normalizeProjectI18nSettings(null),
     };
   }
 
@@ -53,6 +58,7 @@ export async function fetchProjectSettingsForStore(
     projectVariables: normalizedVariables.definitions as Record<string, unknown>,
     projectVariableGroups: normalizedVariables.groups,
     globalScripts: normalizeGlobalScripts((sr.globalScripts as Record<string, unknown>) || {}),
+    projectI18n: normalizeProjectI18nSettings(sr.i18n),
   };
 }
 
@@ -65,6 +71,7 @@ export async function loadProjectSettingsForStore(
   out.projectVariables.value = snapshot.projectVariables;
   out.projectVariableGroups.value = snapshot.projectVariableGroups;
   out.globalScripts.value = snapshot.globalScripts;
+  out.projectI18n.value = snapshot.projectI18n;
 }
 
 export async function saveProjectSettingsForStore(
@@ -82,6 +89,7 @@ export async function saveProjectSettingsForStore(
       groups: state.projectVariableGroups.value,
     },
     globalScripts: state.globalScripts.value,
+    i18n: state.projectI18n.value,
   };
 
   try {
@@ -112,6 +120,9 @@ export async function saveProjectSettingsForStore(
         state.globalScripts.value = normalizeGlobalScripts(
           body.globalScripts as Record<string, unknown>,
         );
+      }
+      if (body.i18n) {
+        state.projectI18n.value = normalizeProjectI18nSettings(body.i18n);
       }
     }
 

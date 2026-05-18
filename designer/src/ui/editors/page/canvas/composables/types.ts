@@ -1,5 +1,6 @@
 import type { ComputedRef, Ref, ShallowRef } from "vue";
 import type { ComponentNode, SelectableElement } from "@/editor-core/document/types";
+import type { ProjectI18nSettings } from "@/editor-core/document/types";
 
 export type MaybeRef<T> = Ref<T> | ComputedRef<T>;
 
@@ -45,6 +46,8 @@ export interface UseNodePropsDeps {
   doc: ComputedRef<CanvasDocLike | null | undefined>;
   currentPage: ComputedRef<{ id?: string | null } | null | undefined>;
   projectVariables: ComputedRef<Record<string, unknown> | null | undefined>;
+  projectI18n: ComputedRef<ProjectI18nSettings | null | undefined>;
+  projectRuntimeLocale: ComputedRef<string | null | undefined>;
   docVersion: ComputedRef<number>;
   readonly: ComputedRef<boolean>;
 }

@@ -10,6 +10,7 @@ import { descriptor as FormLayoutDescriptor } from "./FormLayout";
 import { descriptor as FreeContainerDescriptor } from "./FreeContainer";
 import { descriptor as HorizontalLayoutDescriptor } from "./HorizontalLayout";
 import { descriptor as ImageDescriptor } from "./Image";
+import { descriptor as LanguageSwitcherDescriptor } from "./LanguageSwitcher";
 import { descriptor as TabsDescriptor } from "./Tabs";
 import { descriptor as VerticalLayoutDescriptor } from "./VerticalLayout";
 import { descriptor as VideoDescriptor } from "./Video";
@@ -40,6 +41,7 @@ export function registerAllDescriptors() {
   registerDescriptor("Image", ImageDescriptor);
   registerDescriptor("Video", VideoDescriptor);
   registerDescriptor("DownloadLink", DownloadLinkDescriptor);
+  registerDescriptor("LanguageSwitcher", LanguageSwitcherDescriptor);
 }
 
 export {

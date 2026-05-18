@@ -40,6 +40,7 @@ import type {
   PageLockState,
   PageNode,
   ProjectSchema,
+  ProjectI18nSettings,
 } from "@/editor-core/document/types";
 import { defineStore } from "pinia";
 import { computed, markRaw, ref, shallowRef } from "vue";
@@ -139,6 +140,10 @@ import {
   type RuntimeUserRecord,
 } from "./editor/project-runtime-role-actions";
 import { unwrapApiData } from "@/types/api";
+import {
+  cloneProjectI18nSettings,
+  normalizeProjectI18nSettings,
+} from "@/editor-core/i18n/project-i18n";
 
 const UUID_DASH_REGEX = /-/g;
 const EL_CONTAINER_REGION_PRESET_TOP_MAIN = "top-main";
@@ -213,6 +218,8 @@ export const useEditorStore = defineStore("editor", () => {
   const projectVariables = ref<Record<string, unknown>>({});
   const projectVariableGroups = ref<unknown[]>([]);
   const globalScripts = ref(getDefaultGlobalScripts());
+  const projectI18n = ref<ProjectI18nSettings>(normalizeProjectI18nSettings(null));
+  const projectRuntimeLocale = ref(projectI18n.value.defaultLocale);
   const runtimeRoleCodes = ref<string[]>([]);
   const runtimeRoles = ref<RuntimeRoleRecord[]>([]);
   const runtimeUsers = ref<RuntimeUserRecord[]>([]);
@@ -465,6 +472,9 @@ export const useEditorStore = defineStore("editor", () => {
     projectVariables.value = snapshot.projectVariables;
     projectVariableGroups.value = snapshot.projectVariableGroups;
     globalScripts.value = snapshot.globalScripts;
+    projectI18n.value = snapshot.projectI18n;
+    projectRuntimeLocale.value =
+      snapshot.projectI18n.currentLocale || snapshot.projectI18n.defaultLocale;
   };
 
   /**
@@ -555,7 +565,28 @@ export const useEditorStore = defineStore("editor", () => {
       projectVariables,
       projectVariableGroups,
       globalScripts,
+      projectI18n,
     });
+  };
+
+  const setProjectI18n = (settings: ProjectI18nSettings) => {
+    projectI18n.value = cloneProjectI18nSettings(settings);
+    const enabledLocales = projectI18n.value.locales.filter((item) => item.enabled);
+    const exists = enabledLocales.some((item) => item.code === projectRuntimeLocale.value);
+    if (!exists) {
+      projectRuntimeLocale.value = projectI18n.value.defaultLocale;
+    }
+  };
+
+  const setProjectRuntimeLocale = (locale: string) => {
+    const code = String(locale || "").trim();
+    if (!code) return;
+    const matched = projectI18n.value.locales.find((item) => item.code === code && item.enabled);
+    projectRuntimeLocale.value = matched?.code || projectI18n.value.defaultLocale;
+    projectI18n.value = {
+      ...projectI18n.value,
+      currentLocale: projectRuntimeLocale.value,
+    };
   };
 
   /**
@@ -2693,6 +2724,8 @@ export const useEditorStore = defineStore("editor", () => {
     projectVariables,
     projectVariableGroups,
     globalScripts,
+    projectI18n,
+    projectRuntimeLocale,
     runtimeRoleCodes,
     runtimeRoles,
     runtimeUsers,
@@ -2720,6 +2753,8 @@ export const useEditorStore = defineStore("editor", () => {
     loadProjectRuntimeRoles,
     loadProjectRuntimeUsers,
     saveProjectSettings,
+    setProjectI18n,
+    setProjectRuntimeLocale,
     setSelectedPreviewRuntimeUserId,
     loadProjectSettings,
     loadPage,

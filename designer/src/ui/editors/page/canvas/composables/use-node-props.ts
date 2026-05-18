@@ -14,6 +14,7 @@ import { getPropsFilter } from "@/editor-core/descriptors/registry";
 import { evaluate, evaluateTemplate } from "@/data/ExpressionEngine";
 import { buildVarValuesFromDefinitions } from "@/editor-core/utils/variable-utils";
 import { getPreviewRuntime } from "@/ui/editors/page/preview/previewRuntime";
+import { translatePropsWithI18n } from "@/editor-core/i18n/project-i18n";
 
 /**
  * 构建表达式上下文
@@ -105,7 +106,16 @@ function resolveExprBindings(
  * @returns {object} 返回 resolvedNodeProps、resolvedProps、filteredProps
  */
 export function useNodeProps(deps: UseNodePropsDeps) {
-  const { node, doc, currentPage, projectVariables, docVersion, readonly } = deps;
+  const {
+    node,
+    doc,
+    currentPage,
+    projectVariables,
+    projectI18n,
+    projectRuntimeLocale,
+    docVersion,
+    readonly,
+  } = deps;
 
   // 表达式绑定依赖
   const exprDeps: ExpressionContextDeps = { doc, currentPage, projectVariables };
@@ -118,8 +128,14 @@ export function useNodeProps(deps: UseNodePropsDeps) {
     if (!node.value) return {};
     const baseProps = node.value.props || {};
     const bindingValues = resolveExprBindings(node.value.bindings, baseProps, exprDeps);
-    if (Object.keys(bindingValues).length === 0) return baseProps;
-    return { ...baseProps, ...bindingValues };
+    const withBindings =
+      Object.keys(bindingValues).length === 0 ? baseProps : { ...baseProps, ...bindingValues };
+    return translatePropsWithI18n(
+      withBindings,
+      node.value,
+      projectI18n.value,
+      projectRuntimeLocale.value,
+    );
   });
 
   /**

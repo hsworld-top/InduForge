@@ -47,6 +47,7 @@ import { CanvasContainer } from "@/ui/editors/page/canvas";
 import SelectionToolbar from "@/ui/editors/page/canvas/SelectionToolbar.vue";
 import { MaterialPanel, OutlineTree } from "@/ui/editors/page/sidebar-panels/left";
 import { I18nPanel } from "@/ui/shared/tool-panels";
+import I18nResourceDialog from "@/ui/shared/tool-panels/I18nResourceDialog.vue";
 import { DockPanel } from "@/ui/shell/DockPanel";
 import { ToolRail } from "@/ui/shell/ToolRail";
 import { TopToolbar } from "@/ui/shell/TopToolbar";
@@ -1526,6 +1527,8 @@ onBeforeUnmount(() => {
         @select="handleRightSelect"
       />
     </div>
+
+    <I18nResourceDialog />
   </div>
 </template>
 

@@ -86,6 +86,8 @@ const {
   history,
   projectId,
   projectVariables,
+  projectI18n,
+  projectRuntimeLocale,
   globalScripts,
   currentPage,
   error,
@@ -205,6 +207,8 @@ const nodeProps: any = useNodeProps({
   doc: doc as any,
   currentPage: currentPage as any,
   projectVariables: projectVariables as any,
+  projectI18n: projectI18n as any,
+  projectRuntimeLocale: projectRuntimeLocale as any,
   docVersion: docVersion as any,
   readonly: computed(() => props.readonly),
 } as any);
@@ -1067,7 +1071,7 @@ function handleDragLeave(): void {
         :is="customRendererComponent"
         v-else-if="customRendererComponent"
         :node="node"
-        :resolved-props="resolvedNodeProps"
+        :resolved-props="resolvedProps"
       />
       <template v-if="isSelectType">
         <el-option

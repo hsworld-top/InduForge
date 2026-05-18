@@ -1046,6 +1046,41 @@ export interface ExprBinding {
 
 export type Binding = DatapointBinding | VarBinding | ExprBinding;
 
+export interface ProjectI18nLocale {
+  code: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface ProjectI18nResourceTarget {
+  pageId: string;
+  pageName?: string;
+  nodeId: string;
+  nodeLabel?: string;
+  nodeType?: string;
+  fieldPath: string;
+}
+
+export interface ProjectI18nResource {
+  key: string;
+  sourceText: string;
+  values: Record<string, string>;
+  target: ProjectI18nResourceTarget;
+  updatedAt?: string;
+}
+
+export interface ProjectI18nSettings {
+  enabled: boolean;
+  defaultLocale: string;
+  currentLocale: string;
+  locales: ProjectI18nLocale[];
+  resources: Record<string, ProjectI18nResource>;
+}
+
+export interface ComponentNodeI18n {
+  props?: Record<string, string>;
+}
+
 export type GraphicType =
   | "Canvas.Line"
   | "Canvas.Rect"
@@ -1111,6 +1146,7 @@ export interface ComponentNode {
   absolutePos?: AbsolutePosition;
   flowLayout?: FlexLayoutItem | GridLayoutItem;
   bindings: Record<string, Binding>;
+  i18n?: ComponentNodeI18n;
   permissions: PermissionConfig;
   events: Record<string, Action[]>;
   animations?: unknown[];
@@ -1168,6 +1204,7 @@ export interface ProjectSchema {
   graphicsById: Record<string, GraphicNode>;
   symbolsById: Record<string, SymbolDef>;
   diagramsById?: Record<string, DiagramData>;
+  i18n?: ProjectI18nSettings;
 }
 
 export type SelectableElement = { kind: "node"; id: string } | { kind: "graphic"; id: string };

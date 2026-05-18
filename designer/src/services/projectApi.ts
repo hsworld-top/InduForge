@@ -16,6 +16,7 @@ export interface CreatePageBody {
 export interface ProjectSettingsPayload {
   globalVariables?: unknown;
   globalScripts?: unknown;
+  i18n?: unknown;
 }
 
 export interface ProjectRuntimeRoleItem {

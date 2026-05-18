@@ -59,6 +59,8 @@ export type EditorStorePreviewShell = Pick<
   | "docVersion"
   | "projectVariables"
   | "globalScripts"
+  | "projectI18n"
+  | "projectRuntimeLocale"
 >;
 
 /** Designer 壳层常用窄接口（随实际引用可继续扩展 Pick） */

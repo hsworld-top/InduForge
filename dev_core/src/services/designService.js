@@ -158,6 +158,13 @@ const normalizeGlobalScripts = (raw) => {
   };
 };
 
+const normalizeProjectI18n = (raw) => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+  return raw;
+};
+
 const toPathSegment = (value) => {
   const normalized = String(value || "").trim().replace(/\s+/g, "-");
   const sanitized = normalized.replace(/[/?#\\%]+/g, "-");
@@ -256,7 +263,7 @@ class DesignService {
   }
 
   /**
-   * 获取工程级别设置（全局变量/脚本）
+   * 获取工程级别设置（全局变量/脚本/国际化）
    * @param {string} projectId - 项目ID
    * @returns {Promise<Object>}
    */
@@ -278,6 +285,7 @@ class DesignService {
 
     const parsedVariables = parseJsonField(row?.globalVariables);
     const parsedScripts = parseJsonField(row?.globalScripts);
+    const parsedI18n = parseJsonField(row?.i18n);
     const normalizedVariables = normalizeGlobalVariables(
       parsedVariables,
       project.projectVariables || {}
@@ -286,11 +294,12 @@ class DesignService {
     return {
       globalVariables: normalizedVariables,
       globalScripts: normalizeGlobalScripts(parsedScripts),
+      i18n: normalizeProjectI18n(parsedI18n),
     };
   }
 
   /**
-   * 更新工程级别设置（全局变量/脚本）
+   * 更新工程级别设置（全局变量/脚本/国际化）
    * @param {string} projectId - 项目ID
    * @param {Object} settings - 设置数据
    * @param {string} userId - 更新者用户ID
@@ -310,6 +319,7 @@ class DesignService {
       project.projectVariables || {}
     );
     const normalizedScripts = normalizeGlobalScripts(settings?.globalScripts);
+    const normalizedI18n = normalizeProjectI18n(settings?.i18n);
 
     await project.update({
       projectVariables: normalizedVariables.definitions,
@@ -321,6 +331,7 @@ class DesignService {
       schemaVersion: "1.0.0",
       globalVariables: normalizedVariables,
       globalScripts: normalizedScripts,
+      i18n: normalizedI18n,
       updatedBy: userId,
       updatedAt: new Date(),
     });
@@ -328,6 +339,7 @@ class DesignService {
     return {
       globalVariables: normalizedVariables,
       globalScripts: normalizedScripts,
+      i18n: normalizedI18n,
     };
   }
   /**

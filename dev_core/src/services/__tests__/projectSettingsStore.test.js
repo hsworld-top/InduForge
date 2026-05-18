@@ -16,6 +16,7 @@ describe("projectSettingsStore", () => {
     const expectedRow = {
       globalVariables: { definitions: { a: 1 }, groups: [] },
       globalScripts: { system: {} },
+      i18n: { enabled: true },
     };
     sequelize.query.mockResolvedValue([expectedRow]);
 
@@ -42,6 +43,7 @@ describe("projectSettingsStore", () => {
       schemaVersion: "1.0.0",
       globalVariables: { definitions: { a: 1 }, groups: [] },
       globalScripts: { system: {} },
+      i18n: { enabled: true },
       updatedBy: "user-1",
       updatedAt: new Date("2026-04-20T10:00:00.000Z"),
     });
@@ -54,6 +56,7 @@ describe("projectSettingsStore", () => {
           "1.0.0",
           JSON.stringify({ definitions: { a: 1 }, groups: [] }),
           JSON.stringify({ system: {} }),
+          JSON.stringify({ enabled: true }),
           "user-1",
           new Date("2026-04-20T10:00:00.000Z"),
         ],
