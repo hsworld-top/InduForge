@@ -30,42 +30,20 @@
       </div>
     </template>
 
-    <!-- Step 2：三栏布局（create 可返回，edit 直接进入） -->
+    <!-- Step 2：两栏布局（表单 + inspector），顶部展示当前协议 -->
     <template v-else>
     <div class="connection-dialog__body">
-      <aside class="connection-dialog__rail">
-        <section class="connection-dialog__section">
-          <div class="connection-dialog__section-title">接入类型</div>
-          <el-tooltip
-            v-for="source in sourceOptions"
-            :key="source.value"
-            :content="source.description"
-            placement="right"
-            :show-after="220"
-          >
-            <span class="connection-dialog__source-wrap">
-              <button
-                class="connection-dialog__source"
-                :class="{ 'is-active': connectionType === source.value }"
-                :disabled="mode === 'edit'"
-                type="button"
-                @click="selectSource(source.value)"
-              >
-                <component
-                  :is="source.icon"
-                  class="connection-dialog__source-icon"
-                />
-                <strong>{{ source.label }}</strong>
-              </button>
-            </span>
-          </el-tooltip>
-        </section>
-      </aside>
-
       <main class="connection-dialog__form-panel">
         <div class="connection-dialog__form-heading">
-          <div>
-            <div class="connection-dialog__eyebrow">连接参数</div>
+          <div class="connection-dialog__heading-main">
+            <span class="connection-dialog__heading-chip">
+              <component
+                v-if="activeSource.icon"
+                :is="activeSource.icon"
+                class="connection-dialog__heading-chip-icon"
+              />
+              <span>{{ activeSource.label }}</span>
+            </span>
             <h3>{{ activeFormTitle }}</h3>
           </div>
           <el-button
@@ -1675,15 +1653,39 @@ const formatTimeout = (timeout) => {
   color: color-mix(in oklch, var(--dc-primary) 72%, transparent);
 }
 
-/* ── Step 2：三栏布局（现有样式不动）── */
+/* ── Step 2：两栏布局（表单 + inspector） ── */
 .connection-dialog__body {
   display: grid;
-  grid-template-columns: 188px minmax(0, 1fr) 232px;
+  grid-template-columns: minmax(0, 1fr) 232px;
   min-height: 520px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
   overflow: hidden;
+}
+
+/* 顶部协议徽标 */
+.connection-dialog__heading-main {
+  min-width: 0;
+}
+
+.connection-dialog__heading-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  margin-bottom: 6px;
+  border-radius: 999px;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.connection-dialog__heading-chip-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .connection-dialog__rail,
@@ -2063,26 +2065,15 @@ const formatTimeout = (timeout) => {
   }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 760px) {
   .connection-dialog__body {
-    grid-template-columns: 160px minmax(0, 1fr);
+    grid-template-columns: 1fr;
   }
 
   .connection-dialog__inspector {
     grid-column: 1 / -1;
     border-top: 1px solid var(--dc-border);
     border-left: 0;
-  }
-}
-
-@media (max-width: 760px) {
-  .connection-dialog__body {
-    grid-template-columns: 1fr;
-  }
-
-  .connection-dialog__rail {
-    border-right: 0;
-    border-bottom: 1px solid var(--dc-border);
   }
 
   .connection-dialog__footer {
