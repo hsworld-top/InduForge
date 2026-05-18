@@ -15,9 +15,11 @@ test("生产态不会注册 datacenter debug 路由", () => {
   assert.equal(routes.length, 3);
 
   // 根路径 redirect
-  assert.deepEqual(routes[0], {
-    path: "/",
-    redirect: { path: "/datapoint" },
+  assert.equal(routes[0].path, "/");
+  assert.equal(typeof routes[0].redirect, "function");
+  assert.deepEqual(routes[0].redirect({ query: { handoff: "handoff-1" } }), {
+    path: "/datapoint",
+    query: { handoff: "handoff-1" },
   });
 
   // 正式模块路由

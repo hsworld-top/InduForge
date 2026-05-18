@@ -62,7 +62,10 @@ export function createDatacenterRoutes({
     // 根路径重定向到默认模块
     {
       path: "/",
-      redirect: { path: `/${DEFAULT_MODULE}` },
+      redirect: (to: { query?: Record<string, unknown> }) => ({
+        path: `/${DEFAULT_MODULE}`,
+        query: to.query,
+      }),
     },
     // v2 正式模块路由
     {

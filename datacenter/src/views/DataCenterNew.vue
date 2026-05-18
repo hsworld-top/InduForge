@@ -459,6 +459,7 @@ import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";
 import { resolveDatacenterTabLabel } from "@/utils/tabTitle";
 import { getApiErrorMessage } from "@/utils/request";
+import { stripHandoffQuery } from "@/router/handoff-query";
 
 // 从路由获取 project 信息
 const route = useRoute();
@@ -500,7 +501,7 @@ watch(
 watch(activeModule, (newModule, oldModule) => {
   if (newModule === oldModule) return;
   // 切换模块时清空 objectId/tab，保留 query string
-  router.replace({ path: `/${newModule}`, query: route.query });
+  router.replace({ path: `/${newModule}`, query: stripHandoffQuery(route.query) });
 });
 const project = computed(() => {
   const projectId =

@@ -7,6 +7,7 @@ import { Storage } from "@/utils/storage";
 import { datacenterLocale, getDatacenterRouteTitle } from "@/i18n/runtime";
 // import DataCenter from "../views/DataCenter.vue"; // 原版本
 import DataCenter from "../views/DataCenterNew.vue"; // 重构版本
+import { buildRouteRuntimeUrl } from "./entrypoint-url";
 import { resolveDatacenterDebugProjectMeta } from "./debug-project";
 import { createDatacenterRoutes } from "./route-config";
 import {
@@ -29,32 +30,6 @@ const router = createRouter({
   history: createWebHistory("/datacenter/"),
   routes,
 });
-
-/**
- * 根据目标路由拼出当前浏览器里实际会出现的 pathname。
- * 这样即便当前 href 仍停留在正式入口，程序化跳到 `/debug` 时也不会被旧 pathname 误判。
- * @param {string} routePath - Vue Router 路由 path
- * @returns {string} 浏览器 pathname
- */
-const resolveRoutePathname = (routePath) => {
-  if (!routePath || routePath === "/") {
-    return "/datacenter/";
-  }
-
-  return `/datacenter${routePath}`.replace(/\/{2,}/g, "/");
-};
-
-/**
- * 将当前 URL 与目标路由合并，得到本次守卫应当依据的入口地址。
- * @param {string} currentUrl - 当前浏览器地址
- * @param {string} routePath - 目标路由 path
- * @returns {URL} 目标入口 URL
- */
-const buildRouteRuntimeUrl = (currentUrl, routePath) => {
-  const nextUrl = new URL(currentUrl);
-  nextUrl.pathname = resolveRoutePathname(routePath);
-  return nextUrl;
-};
 
 export function registerDatacenterBeforeEachGuard(
   targetRouter,

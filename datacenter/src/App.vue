@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onBeforeUnmount } from "vue";
+import { ref, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { elementPlusLocale, t } from "./i18n/runtime";
 
@@ -28,11 +28,6 @@ let loadingStartAt = Date.now();
 const minLoadingMs = 500;
 const router = useRouter();
 const elementLocale = elementPlusLocale;
-
-const startLoading = () => {
-  loadingStartAt = Date.now();
-  loading.value = true;
-};
 
 const stopLoading = async () => {
   const elapsed = Date.now() - loadingStartAt;
@@ -44,23 +39,8 @@ const stopLoading = async () => {
   loading.value = false;
 };
 
-const removeBefore = router.beforeEach((to, from, next) => {
-  startLoading();
-  next();
-});
-const removeAfter = router.afterEach(() => {
-  stopLoading();
-});
-const removeError = router.onError(() => {
+router.isReady().then(() => stopLoading()).catch(() => {
   loading.value = false;
-});
-
-router.isReady().then(() => stopLoading());
-
-onBeforeUnmount(() => {
-  removeBefore();
-  removeAfter();
-  removeError?.();
 });
 </script>
 
