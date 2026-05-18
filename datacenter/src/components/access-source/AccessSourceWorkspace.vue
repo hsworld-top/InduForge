@@ -104,6 +104,17 @@
         @create="$emit('create')"
       />
     </section>
+
+    <!-- 详情抽屉：由 URL objectId 驱动 -->
+    <AccessSourceDetailDrawer
+      v-model="drawerVisible"
+      :connection="activeConnection"
+      :project-id="String(projectId ?? '')"
+      @close="clearObjectId"
+      @edit="(conn) => emit('edit', conn)"
+      @deleted="onConnectionDeleted"
+      @navigate-datapoints="onNavigateDatapoints"
+    />
   </div>
 </template>
 
@@ -115,6 +126,7 @@ import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
 import dataAPI from "@/api/data.api";
 import AccessSourceList from "./AccessSourceList.vue";
+import AccessSourceDetailDrawer from "./AccessSourceDetailDrawer.vue";
 import PillButton from "@/components/shared/PillButton.vue";
 
 /* Search 图标赋值给变量，传给 el-input prefix-icon */
@@ -358,8 +370,45 @@ const filteredConnections = computed(() => {
   return list;
 });
 
+/* ── 抽屉状态 ── */
+
+/* 基于 URL objectId 找到当前激活的 connection */
+const activeConnection = computed<AccessSourceConnection | null>(() => {
+  const id = String(route.params.objectId || "");
+  if (!id) return null;
+  return props.connections.find((c) => c.id === id) ?? null;
+});
+
+/* 抽屉可见性：有 objectId 且能找到 connection 时显示 */
+const drawerVisible = computed({
+  get: () => !!activeConnection.value,
+  set: (val: boolean) => {
+    if (!val) clearObjectId();
+  },
+});
+
+/* 清除 URL 中的 objectId */
+function clearObjectId() {
+  const params = { ...route.params };
+  delete params["objectId"];
+  void router.replace({ params, query: route.query });
+}
+
+/* 删除成功后：清 URL + 通知父刷新列表 */
+function onConnectionDeleted() {
+  clearObjectId();
+  emit("refresh");
+}
+
+/* 跳转关联数据点 */
+function onNavigateDatapoints(connection: AccessSourceConnection) {
+  const isDebug = route.path.startsWith("/debug/");
+  const base = isDebug ? "/debug" : "";
+  void router.push({ path: `${base}/datapoint`, query: { sourceId: connection.id } });
+}
+
 /* ── 事件处理 ── */
-/* open-detail：写 URL，A2 抽屉将监听 objectId；A1 仅高亮 */
+/* open-detail：写 URL，抽屉监听 objectId 打开 */
 const handleOpenDetail = (connection: AccessSourceConnection) => {
   void router.replace({
     params: { ...route.params, objectId: connection.id },

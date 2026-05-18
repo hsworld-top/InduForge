@@ -6,6 +6,32 @@
     :close-on-click-modal="false"
     @close="handleClose"
   >
+    <!-- Step 1：仅 create 模式，选择接入类型 -->
+    <template v-if="step === 1">
+      <div class="connection-dialog__step1">
+        <div class="connection-dialog__step1-header">
+          <h3 class="connection-dialog__step1-title">选择接入类型</h3>
+          <p class="connection-dialog__step1-sub">先选择协议，再填写配置参数</p>
+        </div>
+        <div class="connection-dialog__step1-grid">
+          <button
+            v-for="source in sourceOptions"
+            :key="source.value"
+            type="button"
+            class="connection-dialog__step1-card"
+            :class="{ 'is-active': connectionType === source.value }"
+            @click="selectSourceAndAdvance(source.value)"
+          >
+            <component :is="source.icon" class="connection-dialog__step1-icon" />
+            <strong>{{ source.label }}</strong>
+            <span class="connection-dialog__step1-desc">{{ source.description }}</span>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Step 2：三栏布局（create 可返回，edit 直接进入） -->
+    <template v-else>
     <div class="connection-dialog__body">
       <aside class="connection-dialog__rail">
         <section class="connection-dialog__section">
@@ -536,20 +562,32 @@
       </aside>
     </div>
 
+    </template>
+
+    <!-- footer：step 1 只有取消，step 2 完整操作 -->
     <template #footer>
       <div class="connection-dialog__footer">
         <div class="connection-dialog__footer-actions">
-          <el-button @click="handleClose">{{ t("actions.cancel") }}</el-button>
-          <el-button @click="handleTest" :loading="testing">
-            {{ t("actions.testConnection") }}
-          </el-button>
-          <el-button type="primary" @click="handleSubmit" :loading="submitting">
-            {{
-              mode === "create"
-                ? t("actions.createConnection")
-                : t("actions.saveChanges")
-            }}
-          </el-button>
+          <template v-if="step === 1">
+            <el-button @click="handleClose">{{ t("actions.cancel") }}</el-button>
+          </template>
+          <template v-else>
+            <!-- 返回上一步：仅 create 模式可见 -->
+            <el-button v-if="mode === 'create'" @click="goBackToStep1">
+              ← 返回上一步
+            </el-button>
+            <el-button @click="handleClose">{{ t("actions.cancel") }}</el-button>
+            <el-button @click="handleTest" :loading="testing">
+              {{ t("actions.testConnection") }}
+            </el-button>
+            <el-button type="primary" @click="handleSubmit" :loading="submitting">
+              {{
+                mode === "create"
+                  ? t("actions.createConnection")
+                  : t("actions.saveChanges")
+              }}
+            </el-button>
+          </template>
         </div>
       </div>
     </template>
@@ -603,6 +641,22 @@ const visible = computed({
   get: () => props.modelValue,
   set: (val) => emit("update:modelValue", val),
 });
+
+// step 状态机：create 从 1 开始，edit 直接 2
+const step = ref<1 | 2>(props.mode === "edit" ? 2 : 1);
+
+// 点击协议卡进入 Step 2
+const selectSourceAndAdvance = (value: string) => {
+  selectSource(value);
+  step.value = 2;
+};
+
+// 返回上一步：清空表单与测试状态，保留协议高亮
+const goBackToStep1 = () => {
+  formData.value = {};
+  resetTestState();
+  step.value = 1;
+};
 
 const connectionType = ref("mysql");
 const dbType = ref("mysql");
@@ -1011,16 +1065,20 @@ watch(
   { immediate: true },
 );
 
-// 监听对话框打开（创建模式）
+// 监听对话框打开
 watch(
   () => props.modelValue,
   (isOpen) => {
     if (isOpen && props.mode === "create") {
-      // 重置为默认值
+      // create 打开时回到 step 1 并重置
+      step.value = 1;
       connectionType.value = "mysql";
       dbType.value = "mysql";
       formData.value = getDefaultConfig("mysql");
       resetTestState();
+    } else if (isOpen && props.mode === "edit") {
+      // edit 模式直接进入 step 2
+      step.value = 2;
     }
   },
 );
@@ -1537,6 +1595,87 @@ const formatTimeout = (timeout) => {
 </script>
 
 <style scoped>
+/* ── Step 1：选择接入类型 ── */
+.connection-dialog__step1 {
+  padding: 24px 20px 8px;
+}
+
+.connection-dialog__step1-header {
+  margin-bottom: 20px;
+}
+
+.connection-dialog__step1-title {
+  margin: 0 0 4px;
+  color: var(--dc-text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.connection-dialog__step1-sub {
+  margin: 0;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+}
+
+.connection-dialog__step1-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.connection-dialog__step1-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.connection-dialog__step1-card:hover,
+.connection-dialog__step1-card.is-active {
+  border-color: color-mix(in oklch, var(--dc-primary) 36%, var(--dc-border));
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.connection-dialog__step1-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--dc-text-muted);
+  flex-shrink: 0;
+}
+
+.connection-dialog__step1-card:hover .connection-dialog__step1-icon,
+.connection-dialog__step1-card.is-active .connection-dialog__step1-icon {
+  color: var(--dc-primary);
+}
+
+.connection-dialog__step1-card strong {
+  display: block;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.connection-dialog__step1-desc {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.connection-dialog__step1-card:hover .connection-dialog__step1-desc,
+.connection-dialog__step1-card.is-active .connection-dialog__step1-desc {
+  color: color-mix(in oklch, var(--dc-primary) 72%, transparent);
+}
+
+/* ── Step 2：三栏布局（现有样式不动）── */
 .connection-dialog__body {
   display: grid;
   grid-template-columns: 188px minmax(0, 1fr) 232px;
