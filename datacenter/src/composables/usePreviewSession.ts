@@ -1,11 +1,14 @@
 // @ts-nocheck
 import { ref, watch, onBeforeUnmount, unref } from "vue";
+import dayjs from "dayjs";
+import { TIME_FORMAT } from "@/constants";
 import {
   createPreviewSession,
   heartbeatPreviewSession,
   deletePreviewSession,
 } from "@/api/data.api";
 import { getApiErrorMessage } from "@/utils/request";
+import { usePreviewSessionStore } from "@/stores/preview-session.store";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -33,6 +36,8 @@ export function usePreviewSession(projectIdSource, options = {}) {
   const sessionId = ref("");
   const loading = ref(false);
   const error = ref(null);
+  // NavRail 徽标依赖 store，session 生命周期内同步状态
+  const previewStore = usePreviewSessionStore();
 
   let heartbeatTimer = null;
   let createPromise = null;
@@ -50,6 +55,7 @@ export function usePreviewSession(projectIdSource, options = {}) {
   const stopSession = () => {
     clearHeartbeatTimer();
     sessionId.value = "";
+    previewStore.close();
   };
 
   const readProjectId = () => resolveValue(projectIdSource) || "";
@@ -90,6 +96,7 @@ export function usePreviewSession(projectIdSource, options = {}) {
 
     clearHeartbeatTimer();
     sessionId.value = "";
+    previewStore.close();
 
     if (!currentSessionId) {
       return;
@@ -155,6 +162,11 @@ export function usePreviewSession(projectIdSource, options = {}) {
         }
 
         sessionId.value = nextSessionId;
+        previewStore.open({
+          sessionId: nextSessionId,
+          projectId: currentProjectId,
+          createdAt: dayjs().format(TIME_FORMAT),
+        });
         startHeartbeat();
         return nextSessionId;
       })
