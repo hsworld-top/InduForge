@@ -417,8 +417,13 @@ const handleOpenDetail = (connection: AccessSourceConnection) => {
 };
 
 const handleOpen = (connection: AccessSourceConnection) => {
-  /* 不动 URL，上抛给 DataCenterNew 走旧 SqlWorkbench/MqttWorkbench */
-  emit("open", connection);
+  /* 直接 router.push 到 v2 workbench 路由，保留筛选 query */
+  const isDebug = route.path.startsWith("/debug/");
+  const base = isDebug ? "/debug" : "";
+  void router.push({
+    path: `${base}/access-source/${connection.id}/workbench`,
+    query: route.query,
+  });
 };
 
 const handleEdit = (connection: AccessSourceConnection) => {

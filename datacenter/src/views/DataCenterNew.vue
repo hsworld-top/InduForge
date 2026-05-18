@@ -48,8 +48,16 @@
     />
 
     <template v-else-if="activeModule === 'access-source'">
+      <!-- v2 workbench 路由：tab === 'workbench' 时挂新容器 -->
+      <AccessSourceWorkbench
+        v-if="activeWorkbenchConnection && projectId"
+        :connection="activeWorkbenchConnection"
+        :project-id="String(projectId)"
+        @back="handleWorkbenchBack"
+      />
+
       <AccessSourceWorkspace
-        v-if="!showAccessSourceLegacyWorkbench"
+        v-else-if="!showAccessSourceLegacyWorkbench"
         :connections="connections"
         :selected-connection-id="selectedConnectionId"
         :project-id="projectId"
@@ -442,6 +450,7 @@ import MqttTagList from "@/components/mqtt/MqttTagList.vue";
 import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
 import MqttWorkbench from "@/components/mqtt/MqttWorkbench.vue";
 import AccessSourceWorkspace from "@/components/access-source/AccessSourceWorkspace.vue";
+import AccessSourceWorkbench from "@/components/access-source/AccessSourceWorkbench.vue";
 import DataPointList from "@/components/datapoint/DataPointList.vue";
 import DataPointWorkspace from "@/components/datapoint/DataPointWorkspace.vue";
 import AlarmWorkspace from "@/components/alarm/AlarmWorkspace.vue";
@@ -1197,6 +1206,21 @@ const returnToAccessSourceOverview = () => {
   showAccessSourceLegacyWorkbench.value = false;
   sqlWorkbenchConnection.value = null;
   mqttWorkbenchConnection.value = null;
+};
+
+/* v2 workbench：当 tab === 'workbench' 且找到对应 connection 时激活 */
+const activeWorkbenchConnection = computed(() => {
+  if (route.params.tab !== "workbench") return null;
+  const id = String(route.params.objectId || "");
+  if (!id) return null;
+  return connections.value.find((c) => String(c.id) === id) ?? null;
+});
+
+/* 从 workbench 返回接入源列表，保留筛选 query */
+const handleWorkbenchBack = () => {
+  const isDebug = route.path.startsWith("/debug/");
+  const base = isDebug ? "/debug" : "";
+  void router.push({ path: `${base}/access-source`, query: route.query });
 };
 
 /**
