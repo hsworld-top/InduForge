@@ -57,32 +57,17 @@
       />
 
       <AccessSourceWorkspace
-        v-else-if="!showAccessSourceLegacyWorkbench"
+        v-else
         :connections="connections"
         :selected-connection-id="selectedConnectionId"
         :project-id="projectId"
         @create="openCreateConnectionDialog"
         @refresh="loadConnections"
-        @open="handleAccessSourceOpen"
         @edit="handleEditConnection"
       />
 
-      <SqlQueryWorkbench
-        v-else-if="sqlWorkbenchConnection && projectId"
-        :project-id="projectId"
-        :connection="sqlWorkbenchConnection"
-        @back="returnToAccessSourceOverview"
-      />
-
-      <MqttWorkbench
-        v-else-if="mqttWorkbenchConnection && projectId"
-        :project-id="projectId"
-        :connection="mqttWorkbenchConnection"
-        @back="returnToAccessSourceOverview"
-      />
-
-      <!-- MQTT 等非 SQL 工作台仍复用原标签页能力。 -->
-      <div v-else class="data-center h-full flex overflow-hidden">
+      <!-- 旧标签页能力入口，已被 v2 接管，保留代码备用。 -->
+      <div v-if="false" class="data-center h-full flex overflow-hidden">
         <!-- 左侧连接面板 -->
         <ConnectionList
           ref="connectionListRef"
@@ -443,12 +428,10 @@ import PostgresTableList from "@/components/database/postgres/PostgresTableList.
 import PostgresQueryEditor from "@/components/database/postgres/PostgresQueryEditor.vue";
 import SqlServerTableList from "@/components/database/sqlserver/SqlServerTableList.vue";
 import SqlServerQueryEditor from "@/components/database/sqlserver/SqlServerQueryEditor.vue";
-import SqlQueryWorkbench from "@/components/database/SqlQueryWorkbench.vue";
 import MqttSubscriptionList from "@/components/mqtt/MqttSubscriptionList.vue";
 import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
 import MqttTagList from "@/components/mqtt/MqttTagList.vue";
 import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
-import MqttWorkbench from "@/components/mqtt/MqttWorkbench.vue";
 import AccessSourceWorkspace from "@/components/access-source/AccessSourceWorkspace.vue";
 import AccessSourceWorkbench from "@/components/access-source/AccessSourceWorkbench.vue";
 import DataPointList from "@/components/datapoint/DataPointList.vue";
@@ -519,9 +502,6 @@ watch(activeModule, (newModule, oldModule) => {
   // 切换模块时清空 objectId/tab，保留 query string
   router.replace({ path: `/${newModule}`, query: route.query });
 });
-const showAccessSourceLegacyWorkbench = ref(false);
-const sqlWorkbenchConnection = ref(null);
-const mqttWorkbenchConnection = ref(null);
 const project = computed(() => {
   const projectId =
     route.query.pid || route.query.id || route.meta?.project?.id;
@@ -1187,27 +1167,6 @@ const handleSelectConnection = (connection) => {
   selectConnection(connection.id);
 };
 
-const sqlWorkbenchTypes = ["mysql", "postgresql", "sqlserver", "tdengine"];
-
-const resolveConnectionDbType = (connection) => {
-  if (!connection) return "";
-  if (connection.type === "relational") {
-    return connection.relationalConfig?.dbType || "";
-  }
-  return connection.type || connection.config?.dbType || "";
-};
-
-const isSqlWorkbenchConnection = (connection) =>
-  sqlWorkbenchTypes.includes(resolveConnectionDbType(connection));
-
-const isMqttWorkbenchConnection = (connection) => connection?.type === "mqtt";
-
-const returnToAccessSourceOverview = () => {
-  showAccessSourceLegacyWorkbench.value = false;
-  sqlWorkbenchConnection.value = null;
-  mqttWorkbenchConnection.value = null;
-};
-
 /* v2 workbench：当 tab === 'workbench' 且找到对应 connection 时激活 */
 const activeWorkbenchConnection = computed(() => {
   if (route.params.tab !== "workbench") return null;
@@ -1221,36 +1180,6 @@ const handleWorkbenchBack = () => {
   const isDebug = route.path.startsWith("/debug/");
   const base = isDebug ? "/debug" : "";
   void router.push({ path: `${base}/access-source`, query: route.query });
-};
-
-/**
- * 新接入源工作区进入对应工作台。
- * SQL 类接入源直接进入单连接查询工作台；其他类型仍复用原有标签页能力。
- */
-const handleAccessSourceOpen = async (connection) => {
-  showAccessSourceLegacyWorkbench.value = true;
-  selectConnection(connection.id);
-
-  if (isSqlWorkbenchConnection(connection)) {
-    sqlWorkbenchConnection.value = connection;
-    mqttWorkbenchConnection.value = null;
-    return;
-  }
-
-  if (isMqttWorkbenchConnection(connection)) {
-    mqttWorkbenchConnection.value = connection;
-    sqlWorkbenchConnection.value = null;
-    return;
-  }
-
-  sqlWorkbenchConnection.value = null;
-  mqttWorkbenchConnection.value = null;
-  await nextTick();
-  await handleConnectionDblClick(connection);
-
-  if (connection.type === "relational") {
-    openTableListTab(connection);
-  }
 };
 
 /**

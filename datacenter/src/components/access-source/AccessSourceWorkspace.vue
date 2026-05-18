@@ -165,7 +165,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "create"): void;
   (event: "refresh"): void;
-  (event: "open", connection: AccessSourceConnection): void;
   (event: "edit", connection: AccessSourceConnection): void;
 }>();
 
