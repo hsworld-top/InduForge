@@ -9,6 +9,7 @@
       <el-tooltip content="即将由 A3·2 接入" placement="top">
         <el-button size="small" disabled>查看配置</el-button>
       </el-tooltip>
+      <el-button size="small" @click="$emit('back')">返回接入源列表</el-button>
     </EmptyState>
   </div>
 </template>
@@ -19,6 +20,10 @@ import EmptyState from "@/components/shared/EmptyState.vue";
 defineProps<{
   connection: Record<string, any>;
   projectId: string;
+}>();
+
+defineEmits<{
+  (event: "back"): void;
 }>();
 </script>
 

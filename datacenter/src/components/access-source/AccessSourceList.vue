@@ -1,17 +1,6 @@
 <template>
   <div class="access-source-list">
-    <AccessSourceCard
-      v-for="connection in connections"
-      :key="connection.id"
-      :connection="connection"
-      :active="selectedConnectionId === connection.id"
-      :is-phase2="isPhase2Type(connection.type)"
-      @open-detail="$emit('open-detail', $event)"
-      @open="$emit('open', $event)"
-      @edit="$emit('edit', $event)"
-    />
-
-    <!-- 新增连接占位卡 -->
+    <!-- 新增连接占位卡放第一 -->
     <button
       type="button"
       class="access-source-card access-source-card--create"
@@ -25,6 +14,17 @@
         <span>连接数据库、MQTT、HTTP 或工业协议源。</span>
       </div>
     </button>
+
+    <AccessSourceCard
+      v-for="connection in connections"
+      :key="connection.id"
+      :connection="connection"
+      :active="selectedConnectionId === connection.id"
+      :is-phase2="isPhase2Type(connection.type)"
+      @open="$emit('open', $event)"
+      @edit="$emit('edit', $event)"
+      @delete-connection="$emit('delete-connection', $event)"
+    />
 
     <!-- 空状态：连接列表为空时显示 -->
     <div v-if="connections.length === 0" class="access-source-list__empty-wrap">
@@ -72,9 +72,9 @@ defineProps<{
 }>();
 
 defineEmits<{
-  (event: "open-detail", connection: AccessSourceConnection): void;
   (event: "open", connection: AccessSourceConnection): void;
   (event: "edit", connection: AccessSourceConnection): void;
+  (event: "delete-connection", connection: AccessSourceConnection): void;
   (event: "create"): void;
 }>();
 

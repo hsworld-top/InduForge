@@ -1,13 +1,8 @@
 <template>
   <div class="access-source-workspace">
     <section class="access-source-workspace__panel">
-      <!-- 头部：标题 + 右侧 toolbar -->
+      <!-- 头部：单行 toolbar 撑满 -->
       <header class="access-source-workspace__head">
-        <div class="access-source-workspace__head-title">
-          <h2>接入源</h2>
-          <p>通过卡片打开工作台或查看详情。</p>
-        </div>
-
         <div class="access-source-workspace__toolbar">
           <!-- 搜索框 -->
           <el-input
@@ -98,35 +93,27 @@
       <AccessSourceList
         :connections="filteredConnections"
         :selected-connection-id="activeConnectionId"
-        @open-detail="handleOpenDetail"
         @open="handleOpen"
         @edit="handleEdit"
+        @delete-connection="handleDeleteConnection"
         @create="$emit('create')"
       />
     </section>
-
-    <!-- 详情抽屉：由 URL objectId 驱动 -->
-    <AccessSourceDetailDrawer
-      v-model="drawerVisible"
-      :connection="activeConnection"
-      :project-id="String(projectId ?? '')"
-      @close="clearObjectId"
-      @edit="(conn) => emit('edit', conn)"
-      @deleted="onConnectionDeleted"
-      @navigate-datapoints="onNavigateDatapoints"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 import { Search } from "@element-plus/icons-vue";
 import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
 import dataAPI from "@/api/data.api";
+import { deleteAccessSource } from "@/api/access-source.api";
+import { useConfirm } from "@/composables/useConfirm";
+import { getApiErrorMessage } from "@/utils/request";
 import AccessSourceList from "./AccessSourceList.vue";
-import AccessSourceDetailDrawer from "./AccessSourceDetailDrawer.vue";
 import PillButton from "@/components/shared/PillButton.vue";
 
 /* Search 图标赋值给变量，传给 el-input prefix-icon */
@@ -170,6 +157,7 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const router = useRouter();
+const { confirm } = useConfirm();
 
 /* ── URL 同步：从 query 读取初始筛选值 ── */
 const filterQ = ref(String(route.query.q || ""));
@@ -369,52 +357,7 @@ const filteredConnections = computed(() => {
   return list;
 });
 
-/* ── 抽屉状态 ── */
-
-/* 基于 URL objectId 找到当前激活的 connection */
-const activeConnection = computed<AccessSourceConnection | null>(() => {
-  const id = String(route.params.objectId || "");
-  if (!id) return null;
-  return props.connections.find((c) => c.id === id) ?? null;
-});
-
-/* 抽屉可见性：有 objectId 且能找到 connection 时显示 */
-const drawerVisible = computed({
-  get: () => !!activeConnection.value,
-  set: (val: boolean) => {
-    if (!val) clearObjectId();
-  },
-});
-
-/* 清除 URL 中的 objectId */
-function clearObjectId() {
-  const params = { ...route.params };
-  delete params["objectId"];
-  void router.replace({ params, query: route.query });
-}
-
-/* 删除成功后：清 URL + 通知父刷新列表 */
-function onConnectionDeleted() {
-  clearObjectId();
-  emit("refresh");
-}
-
-/* 跳转关联数据点 */
-function onNavigateDatapoints(connection: AccessSourceConnection) {
-  const isDebug = route.path.startsWith("/debug/");
-  const base = isDebug ? "/debug" : "";
-  void router.push({ path: `${base}/datapoint`, query: { sourceId: connection.id } });
-}
-
 /* ── 事件处理 ── */
-/* open-detail：写 URL，抽屉监听 objectId 打开 */
-const handleOpenDetail = (connection: AccessSourceConnection) => {
-  void router.replace({
-    params: { ...route.params, objectId: connection.id },
-    query: route.query,
-  });
-};
-
 const handleOpen = (connection: AccessSourceConnection) => {
   /* 直接 router.push 到 v2 workbench 路由，保留筛选 query */
   const isDebug = route.path.startsWith("/debug/");
@@ -427,6 +370,23 @@ const handleOpen = (connection: AccessSourceConnection) => {
 
 const handleEdit = (connection: AccessSourceConnection) => {
   emit("edit", connection);
+};
+
+/* 删除接入源：二次确认后调用 API，成功后通知父刷新 */
+const handleDeleteConnection = async (connection: AccessSourceConnection) => {
+  if (!props.projectId) return;
+  const ok = await confirm(
+    `将删除接入源「${connection.name || connection.id}」。后端引用检查未启用，相关数据点可能受影响。`,
+    { title: "删除接入源", confirmText: "删除", type: "error" },
+  );
+  if (!ok) return;
+  try {
+    await deleteAccessSource(String(props.projectId), connection.id);
+    ElMessage.success("接入源已删除");
+    emit("refresh");
+  } catch (err) {
+    ElMessage.error(getApiErrorMessage(err, "删除失败"));
+  }
 };
 </script>
 
@@ -450,30 +410,14 @@ const handleEdit = (connection: AccessSourceConnection) => {
   box-shadow: var(--dc-shadow-surface);
 }
 
-/* 头部：标题在左，toolbar 在右 */
+/* 头部：单行 toolbar，固定 56px */
 .access-source-workspace__head {
-  flex: 0 0 auto;
+  flex: 0 0 56px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 20px 14px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-raised);
-}
-
-.access-source-workspace__head-title h2 {
-  margin: 0;
-  color: var(--dc-text);
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.access-source-workspace__head-title p {
-  margin: 4px 0 0;
-  color: var(--dc-text-secondary);
-  font-size: 13px;
 }
 
 /* toolbar：搜索 + pill + 刷新 + 新增 */
@@ -482,11 +426,11 @@ const handleEdit = (connection: AccessSourceConnection) => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  flex: 0 0 auto;
+  width: 100%;
 }
 
 .access-source-workspace__search {
-  width: 200px;
+  width: 240px;
 }
 
 /* 刷新图标按钮 */
@@ -577,17 +521,10 @@ const handleEdit = (connection: AccessSourceConnection) => {
   font-weight: 700;
 }
 
-@media (max-width: 1120px) {
-  .access-source-workspace__head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-
 @media (max-width: 760px) {
   .access-source-workspace__head {
-    padding-left: 14px;
-    padding-right: 14px;
+    height: auto;
+    padding: 10px 14px;
   }
 
   .access-source-workspace__toolbar {

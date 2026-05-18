@@ -2,7 +2,6 @@
   <article
     class="access-source-card"
     :class="{ 'is-active': active }"
-    @click="handleCardClick"
   >
     <div class="access-source-card__top">
       <span
@@ -43,8 +42,8 @@
 
     <div class="access-source-card__divider-line"></div>
 
-    <!-- 底部按钮区：click.stop 阻止冒泡到卡片的 handleCardClick -->
-    <div class="access-source-card__bottom" @click.stop>
+    <!-- 底部按钮区：3 个按钮，左：打开工作台，中：编辑，右：删除 -->
+    <div class="access-source-card__bottom">
       <button
         type="button"
         class="access-source-card__open"
@@ -62,6 +61,15 @@
       >
         <IconTablerSettings />
       </button>
+      <button
+        type="button"
+        class="access-source-card__delete"
+        :aria-label="`删除连接 ${connection.name || ''}`"
+        :title="`删除连接 ${connection.name || ''}`"
+        @click="$emit('delete-connection', connection)"
+      >
+        <IconTablerTrash />
+      </button>
     </div>
   </article>
 </template>
@@ -72,6 +80,7 @@ import IconTablerBuildingFactory2 from "~icons/tabler/building-factory-2";
 import IconTablerDatabase from "~icons/tabler/database";
 import IconTablerMessages from "~icons/tabler/messages";
 import IconTablerSettings from "~icons/tabler/settings";
+import IconTablerTrash from "~icons/tabler/trash";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 
 type AccessSourceConnection = {
@@ -105,18 +114,14 @@ const props = defineProps<{
   isPhase2?: boolean;
 }>();
 
-const emit = defineEmits<{
-  /** 单击卡片空白区域：A2 抽屉将监听，A1 仅写 URL 高亮 */
-  (event: "open-detail", connection: AccessSourceConnection): void;
+defineEmits<{
   /** 单击「打开工作台」按钮 */
   (event: "open", connection: AccessSourceConnection): void;
   /** 单击编辑按钮 */
   (event: "edit", connection: AccessSourceConnection): void;
+  /** 单击删除按钮 */
+  (event: "delete-connection", connection: AccessSourceConnection): void;
 }>();
-
-function handleCardClick() {
-  emit("open-detail", props.connection);
-}
 
 const databaseTypes = new Set([
   "relational",
@@ -280,7 +285,6 @@ const resolveStatusText = (status?: string) =>
   box-shadow: var(--dc-connection-card-shadow);
   color: var(--dc-text);
   text-align: left;
-  cursor: pointer;
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
@@ -476,7 +480,9 @@ const resolveStatusText = (status?: string) =>
   flex: 0 0 auto;
 }
 
-.access-source-card__edit {
+/* 编辑和删除按钮共用基础样式 */
+.access-source-card__edit,
+.access-source-card__delete {
   width: 34px;
   height: 34px;
   flex: 0 0 auto;
@@ -492,7 +498,8 @@ const resolveStatusText = (status?: string) =>
     color 0.18s ease;
 }
 
-.access-source-card__edit svg {
+.access-source-card__edit svg,
+.access-source-card__delete svg {
   width: 22px;
   height: 22px;
 }
@@ -500,6 +507,12 @@ const resolveStatusText = (status?: string) =>
 .access-source-card__edit:hover {
   background: var(--dc-surface-muted);
   color: var(--dc-primary);
+}
+
+/* 删除按钮 hover 时变红 */
+.access-source-card__delete:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--dc-danger, #dc2626);
 }
 
 @media (max-width: 760px) {

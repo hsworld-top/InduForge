@@ -1,9 +1,10 @@
 <template>
-  <el-dialog
+  <DcDialog
     v-model="visible"
     class="connection-dialog"
     width="920px"
     :close-on-click-modal="false"
+    :body-max-height="'none'"
     @close="handleClose"
   >
     <!-- Step 1：仅 create 模式，选择接入类型 -->
@@ -569,7 +570,7 @@
         </div>
       </div>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
@@ -592,6 +593,7 @@ import MysqlConnectionForm from "../connection/forms/MysqlConnectionForm.vue";
 import PostgresConnectionForm from "../connection/forms/PostgresConnectionForm.vue";
 import SqlServerConnectionForm from "../connection/forms/SqlServerConnectionForm.vue";
 import MqttConnectionForm from "../connection/forms/MqttConnectionForm.vue";
+import DcDialog from "@/components/shared/DcDialog.vue";
 
 const props = defineProps({
   modelValue: {
