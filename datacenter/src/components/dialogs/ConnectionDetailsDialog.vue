@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <DcDialog
     v-model="visible"
     :title="t('connection.detailsTitle')"
     width="600px"
@@ -104,11 +104,12 @@
     <template #footer>
       <el-button @click="visible = false">{{ t("actions.close") }}</el-button>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
+import DcDialog from "@/components/shared/DcDialog.vue";
 import { getConnectionTypeConfig } from "@/config/connectionTypes";
 import dayjs from "dayjs";
 import { TIME_FORMAT } from "@/constants";

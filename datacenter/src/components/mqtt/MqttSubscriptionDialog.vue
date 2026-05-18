@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <DcDialog
     v-model="visible"
     :title="
       mode === 'create' ? t('subscription.create') : t('subscription.edit')
@@ -80,12 +80,13 @@
         </el-button>
       </div>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
 import { ElMessage } from "element-plus";
+import DcDialog from "@/components/shared/DcDialog.vue";
 import IconTablerQuestionMark from "~icons/tabler/question-mark";
 import dataAPI from "@/api/data.api";
 import { Storage } from "@/utils/storage";

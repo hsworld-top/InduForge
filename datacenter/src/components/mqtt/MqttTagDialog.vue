@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <DcDialog
     :model-value="visible"
     :title="dialogTitle"
     width="800px"
@@ -165,12 +165,13 @@
         </el-button>
       </span>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage } from "element-plus";
+import DcDialog from "@/components/shared/DcDialog.vue";
 import { createMqttTag, updateMqttTag } from "@/api/data.api";
 import { Folder } from "@element-plus/icons-vue";
 

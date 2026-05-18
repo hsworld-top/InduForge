@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <DcDialog
     v-model="visible"
     :title="t('tableStructure.title', { tableName })"
     width="900px"
@@ -182,11 +182,12 @@
     <template #footer>
       <el-button @click="handleClose">{{ t("actions.close") }}</el-button>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
+import DcDialog from "@/components/shared/DcDialog.vue";
 import { ElMessage } from "element-plus";
 import dataAPI from "@/api/data.api";
 import { t } from "@/i18n/runtime";

@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <DcDialog
     :model-value="visible"
     :title="dialogTitle"
     width="520px"
@@ -78,12 +78,13 @@
         </el-button>
       </div>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { Close } from "@element-plus/icons-vue";
+import DcDialog from "@/components/shared/DcDialog.vue";
 
 interface DataPointRow {
   id: string;

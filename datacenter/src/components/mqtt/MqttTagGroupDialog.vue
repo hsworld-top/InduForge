@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <DcDialog
     :model-value="visible"
     :title="dialogTitle"
     width="600px"
@@ -56,11 +56,12 @@
         {{ mode === "create" ? "创建" : "更新" }}
       </el-button>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import DcDialog from "@/components/shared/DcDialog.vue";
 import { ElMessage } from "element-plus";
 import { createMqttTagGroup, updateMqttTagGroup } from "@/api/data.api";
 import { getApiErrorMessage } from "@/utils/request";

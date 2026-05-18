@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <DcDialog
     :model-value="visible"
     :title="`写权限：${datapoint?.name || '-'}`"
     width="520px"
@@ -46,11 +46,12 @@
         保存
       </el-button>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import DcDialog from "@/components/shared/DcDialog.vue";
 import {
   normalizeRuntimeGrantPayload,
   summarizeRuntimeGrant,

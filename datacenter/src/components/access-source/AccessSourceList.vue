@@ -1,20 +1,5 @@
 <template>
   <div class="access-source-list">
-    <!-- 新增连接占位卡放第一 -->
-    <button
-      type="button"
-      class="access-source-card access-source-card--create"
-      @click="$emit('create')"
-    >
-      <span class="access-source-card__create-icon">
-        <IconTablerPlus />
-      </span>
-      <div>
-        <strong>新增连接</strong>
-        <span>连接数据库、MQTT、HTTP 或工业协议源。</span>
-      </div>
-    </button>
-
     <AccessSourceCard
       v-for="connection in connections"
       :key="connection.id"
@@ -38,7 +23,6 @@
 </template>
 
 <script setup lang="ts">
-import IconTablerPlus from "~icons/tabler/plus";
 import AccessSourceCard from "./AccessSourceCard.vue";
 import EmptyState from "@/components/shared/EmptyState.vue";
 
@@ -106,67 +90,6 @@ const isPhase2Type = (type?: string) => PHASE2_TYPES.has(type || "");
   padding: 20px;
 }
 
-/* 新增占位卡样式（从旧 List 保留） */
-.access-source-card--create {
-  min-height: 190px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 18px;
-  border: 2px dashed var(--dc-connection-card-create-border);
-  border-radius: var(--dc-radius-md);
-  background: rgba(255, 255, 255, 0.46);
-  box-shadow: none;
-  color: var(--dc-text);
-  text-align: center;
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease;
-}
-
-.access-source-card--create:hover {
-  border-color: color-mix(in oklch, var(--dc-primary) 34%, var(--dc-border));
-  background: var(--dc-surface-raised);
-}
-
-.access-source-card__create-icon {
-  width: 54px;
-  height: 54px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-raised);
-  box-shadow: var(--dc-shadow-surface);
-  color: var(--dc-primary);
-}
-
-.access-source-card__create-icon svg {
-  width: 28px;
-  height: 28px;
-}
-
-.access-source-card--create strong,
-.access-source-card--create span {
-  display: block;
-}
-
-.access-source-card--create strong {
-  color: var(--dc-text);
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.access-source-card--create span {
-  max-width: 230px;
-  margin-top: 8px;
-  color: var(--dc-text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
 /* 空状态占满整行 */
 .access-source-list__empty-wrap {
   grid-column: 1 / -1;
@@ -181,11 +104,6 @@ const isPhase2Type = (type?: string) => PHASE2_TYPES.has(type || "");
     grid-template-columns: 1fr;
     gap: 12px;
     padding: 14px;
-  }
-
-  .access-source-card--create {
-    min-height: 178px;
-    padding: 15px;
   }
 }
 </style>

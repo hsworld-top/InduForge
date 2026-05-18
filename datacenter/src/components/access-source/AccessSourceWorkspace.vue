@@ -4,6 +4,13 @@
       <!-- 头部：单行 toolbar 撑满 -->
       <header class="access-source-workspace__head">
         <div class="access-source-workspace__toolbar">
+          <!-- 概览数字：总数 / 在线 / 异常 -->
+          <div class="access-source-workspace__overview">
+            <span class="access-source-workspace__overview-text">
+              共 {{ overviewTotal }} · 在线 {{ overviewOnline }}<template v-if="overviewError > 0"> · 异常 {{ overviewError }}</template>
+            </span>
+          </div>
+
           <!-- 搜索框 -->
           <el-input
             v-model="searchInputValue"
@@ -154,6 +161,16 @@ const emit = defineEmits<{
   (event: "refresh"): void;
   (event: "edit", connection: AccessSourceConnection): void;
 }>();
+
+/* ── toolbar 概览计算属性 ── */
+const overviewTotal = computed(() => props.connections.length);
+const overviewOnline = computed(() =>
+  props.connections.filter((c) => c.status === "connected").length,
+);
+const overviewError = computed(() =>
+  props.connections.filter((c) => c.status === "error" || c.status === "degraded")
+    .length,
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -487,6 +504,13 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
 .access-source-workspace__action-icon {
   width: 16px;
   height: 16px;
+}
+
+/* toolbar 左侧概览文字 */
+.access-source-workspace__overview-text {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* popover 内选项列表 */

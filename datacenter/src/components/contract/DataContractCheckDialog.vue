@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <DcDialog
     v-model="visible"
     width="860px"
     class="data-contract-dialog"
@@ -69,11 +69,12 @@
         <el-button type="primary" @click="visible = false">知道了</el-button>
       </div>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
+import DcDialog from "@/components/shared/DcDialog.vue";
 import {
   dataContractCheckItems,
   dataContractCheckStatusText,

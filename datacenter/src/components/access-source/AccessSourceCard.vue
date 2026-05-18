@@ -42,7 +42,7 @@
 
     <div class="access-source-card__divider-line"></div>
 
-    <!-- 底部按钮区：3 个按钮，左：打开工作台，中：编辑，右：删除 -->
+    <!-- 底部按钮区：左：打开工作台（outline），右：编辑+删除组合按钮 -->
     <div class="access-source-card__bottom">
       <button
         type="button"
@@ -52,24 +52,27 @@
         <span>打开工作台</span>
         <IconTablerArrowRight class="access-source-card__open-icon" />
       </button>
-      <button
-        type="button"
-        class="access-source-card__edit"
-        :aria-label="`编辑连接 ${connection.name || ''}`"
-        :title="`编辑连接 ${connection.name || ''}`"
-        @click="$emit('edit', connection)"
-      >
-        <IconTablerSettings />
-      </button>
-      <button
-        type="button"
-        class="access-source-card__delete"
-        :aria-label="`删除连接 ${connection.name || ''}`"
-        :title="`删除连接 ${connection.name || ''}`"
-        @click="$emit('delete-connection', connection)"
-      >
-        <IconTablerTrash />
-      </button>
+      <div class="access-source-card__actions">
+        <button
+          type="button"
+          class="access-source-card__edit"
+          :aria-label="`编辑连接 ${connection.name || ''}`"
+          :title="`编辑连接 ${connection.name || ''}`"
+          @click="$emit('edit', connection)"
+        >
+          <IconTablerSettings />
+        </button>
+        <span class="access-source-card__actions-divider" aria-hidden="true"></span>
+        <button
+          type="button"
+          class="access-source-card__delete"
+          :aria-label="`删除连接 ${connection.name || ''}`"
+          :title="`删除连接 ${connection.name || ''}`"
+          @click="$emit('delete-connection', connection)"
+        >
+          <IconTablerTrash />
+        </button>
+      </div>
     </div>
   </article>
 </template>
@@ -275,10 +278,10 @@ const resolveStatusText = (status?: string) =>
 
 <style scoped>
 .access-source-card {
-  min-height: 190px;
+  min-height: 132px;
   display: flex;
   flex-direction: column;
-  padding: 18px;
+  padding: 14px;
   border: 1px solid var(--dc-connection-card-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-connection-card-bg);
@@ -286,14 +289,12 @@ const resolveStatusText = (status?: string) =>
   color: var(--dc-text);
   text-align: left;
   transition:
-    transform 0.18s ease,
     border-color 0.18s ease,
     box-shadow 0.18s ease;
 }
 
 .access-source-card:hover,
 .access-source-card.is-active {
-  transform: translateY(-2px);
   border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
   box-shadow: var(--dc-connection-card-hover-shadow);
 }
@@ -319,80 +320,65 @@ const resolveStatusText = (status?: string) =>
 }
 
 .access-source-card__icon {
-  width: 48px;
-  height: 48px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--dc-radius-sm);
+  /* 去掉三色背景，统一中性色 */
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
 }
 
 .access-source-card__icon svg {
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
 }
 
-.access-source-card__icon.is-database {
-  background: var(--dc-connection-icon-database-bg);
-  color: var(--dc-connection-icon-database-text);
-}
-
-.access-source-card__icon.is-stream {
-  background: var(--dc-connection-icon-stream-bg);
-  color: var(--dc-connection-icon-stream-text);
-}
-
-.access-source-card__icon.is-industrial {
-  background: var(--dc-connection-icon-industrial-bg);
-  color: var(--dc-connection-icon-industrial-text);
-}
-
+/* 状态徽标：单色圆点 + 灰色文字，去掉胶囊背景 */
 .access-source-card__status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--dc-connection-status-unknown-bg);
-  color: var(--dc-connection-status-unknown-text);
+  color: var(--dc-text-secondary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .access-source-card__status-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
   border-radius: 999px;
   background: currentColor;
 }
 
-.access-source-card__status.is-connected {
-  background: var(--dc-connection-status-online-bg);
-  color: var(--dc-connection-status-online-text);
+/* 圆点颜色按状态切换；文字始终是 dc-text-secondary */
+.access-source-card__status.is-connected .access-source-card__status-dot {
+  color: var(--dc-success);
 }
 
-.access-source-card__status.is-disconnected {
-  background: var(--dc-connection-status-offline-bg);
-  color: var(--dc-connection-status-offline-text);
+.access-source-card__status.is-disconnected .access-source-card__status-dot,
+.access-source-card__status.is-unknown .access-source-card__status-dot {
+  color: var(--dc-text-muted);
 }
 
-.access-source-card__status.is-degraded {
-  background: var(--dc-connection-status-degraded-bg);
-  color: var(--dc-connection-status-degraded-text);
+.access-source-card__status.is-degraded .access-source-card__status-dot {
+  color: var(--dc-danger);
 }
 
 .access-source-card__body {
   min-width: 0;
-  margin-top: 28px;
+  margin-top: 12px;
 }
 
 .access-source-card__name {
   overflow: hidden;
   color: var(--dc-text);
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -405,7 +391,7 @@ const resolveStatusText = (status?: string) =>
   gap: 7px;
   margin-top: 10px;
   color: var(--dc-text-secondary);
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -430,7 +416,7 @@ const resolveStatusText = (status?: string) =>
 
 .access-source-card__divider-line {
   height: 1px;
-  margin: auto 0 16px;
+  margin: auto 0 12px;
   background: var(--dc-border);
   opacity: 0.6;
 }
@@ -442,24 +428,24 @@ const resolveStatusText = (status?: string) =>
   gap: 12px;
 }
 
+/* 「打开工作台」改为 outline 风格 */
 .access-source-card__open {
   min-width: 0;
-  min-height: 36px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 15px;
+  padding: 0 12px;
   border: 1px solid var(--dc-primary);
   border-radius: var(--dc-radius-sm);
-  background: var(--dc-primary);
-  color: var(--dc-surface-raised);
+  background: transparent;
+  color: var(--dc-primary);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   transition:
     background-color 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.18s ease;
+    color 0.18s ease;
 }
 
 .access-source-card__open span {
@@ -469,9 +455,8 @@ const resolveStatusText = (status?: string) =>
 }
 
 .access-source-card__open:hover {
-  transform: translateY(-1px);
-  border-color: var(--dc-primary-hover);
-  background: var(--dc-primary-hover);
+  background: var(--dc-primary);
+  color: var(--dc-surface-raised);
 }
 
 .access-source-card__open-icon {
@@ -480,36 +465,71 @@ const resolveStatusText = (status?: string) =>
   flex: 0 0 auto;
 }
 
-/* 编辑和删除按钮共用基础样式 */
-.access-source-card__edit,
-.access-source-card__delete {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
+/* 编辑+删除操作组：边框容器 */
+.access-source-card__actions {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  overflow: hidden;
+  background: var(--dc-surface-raised);
+  flex-shrink: 0;
+}
+
+/* 中间竖向分隔线 */
+.access-source-card__actions-divider {
+  width: 1px;
+  height: 100%;
+  background: var(--dc-border);
+  flex-shrink: 0;
+}
+
+/* 编辑按钮 */
+.access-source-card__edit {
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
-  border-radius: var(--dc-radius-sm);
+  border: 0;
   background: transparent;
-  color: #8a9aaf;
+  color: var(--dc-text-secondary);
   transition:
     background-color 0.18s ease,
     color 0.18s ease;
 }
 
-.access-source-card__edit svg,
-.access-source-card__delete svg {
-  width: 22px;
-  height: 22px;
+.access-source-card__edit svg {
+  width: 15px;
+  height: 15px;
 }
 
 .access-source-card__edit:hover {
-  background: var(--dc-surface-muted);
+  background: var(--dc-primary-soft);
   color: var(--dc-primary);
 }
 
-/* 删除按钮 hover 时变红 */
+/* 删除按钮：默认比编辑视觉略轻，hover 强调危险色 */
+.access-source-card__delete {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--dc-text-muted);
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.access-source-card__delete svg {
+  width: 15px;
+  height: 15px;
+}
+
 .access-source-card__delete:hover {
   background: rgba(220, 38, 38, 0.08);
   color: var(--dc-danger, #dc2626);
@@ -517,16 +537,16 @@ const resolveStatusText = (status?: string) =>
 
 @media (max-width: 760px) {
   .access-source-card {
-    min-height: 178px;
-    padding: 15px;
+    min-height: 120px;
+    padding: 12px;
   }
 
   .access-source-card__name {
-    font-size: 18px;
+    font-size: 14px;
   }
 
   .access-source-card__type {
-    font-size: 13px;
+    font-size: 12px;
   }
 }
 </style>
